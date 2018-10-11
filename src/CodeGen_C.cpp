@@ -181,7 +181,7 @@ public:
     using IRGraphVisitor::include;
     using IRGraphVisitor::visit;
 
-    void include(const Expr &e) {
+    void include(const Expr &e) override {
         if (e.type().is_vector()) {
             if (e.type().is_bool()) {
                 // bool vectors are always emitted as uint8 in the C++ backend
@@ -202,12 +202,12 @@ public:
 
     // GCC's __builtin_shuffle takes an integer vector of
     // the size of its input vector. Make sure this type exists.
-    void visit(const Shuffle *op) {
+    void visit(const Shuffle *op) override {
         vector_types_used.insert(Int(32, op->vectors[0].type().lanes()));
         IRGraphVisitor::visit(op);
     }
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         for_types_used.insert(op->for_type);
         IRGraphVisitor::visit(op);
     }
@@ -1271,7 +1271,7 @@ class ExternCallPrototypes : public IRGraphVisitor {
 
     using IRGraphVisitor::visit;
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         IRGraphVisitor::visit(op);
 
         if (!processed.count(op->name)) {
@@ -1298,7 +1298,7 @@ class ExternCallPrototypes : public IRGraphVisitor {
         }
     }
 
-    void visit(const Allocate *op) {
+    void visit(const Allocate *op) override {
         IRGraphVisitor::visit(op);
         if (!op->free_function.empty()) {
             destructors.insert(op->free_function);

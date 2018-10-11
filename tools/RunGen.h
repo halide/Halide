@@ -495,6 +495,29 @@ inline Halide::Tools::FormatInfo best_save_format(const Buffer<> &b, const std::
     return best;
 }
 
+inline std::string scalar_to_string(const halide_type_t &type,
+                                    const halide_scalar_value_t &value) {
+    std::ostringstream o;
+    switch (halide_type_code((halide_type_code_t) type.code, type.bits)) {
+    case halide_type_code(halide_type_float, 32):  o << value.u.f32; break;
+    case halide_type_code(halide_type_float, 64):  o << value.u.f64; break;
+    case halide_type_code(halide_type_int, 8):     o << (int) value.u.i8; break;
+    case halide_type_code(halide_type_int, 16):    o << value.u.i16; break;
+    case halide_type_code(halide_type_int, 32):    o << value.u.i32; break;
+    case halide_type_code(halide_type_int, 64):    o << value.u.i64; break;
+    case halide_type_code(halide_type_uint, 1):    o << (value.u.b ? "true" : "false"); break;
+    case halide_type_code(halide_type_uint, 8):    o << (int) value.u.u8; break;
+    case halide_type_code(halide_type_uint, 16):   o << value.u.u16; break;
+    case halide_type_code(halide_type_uint, 32):   o << value.u.u32; break;
+    case halide_type_code(halide_type_uint, 64):   o << value.u.u64; break;
+    case halide_type_code(halide_type_handle, 64): o << (uint64_t) value.u.handle; break;
+    default:
+        fail() << "Unsupported type: " << type << "\n";
+        break;
+    }
+    return o.str();
+}
+
 struct ArgData {
     size_t index{0};
     std::string name;
@@ -686,8 +709,68 @@ public:
         it->second.raw_string = value;
     }
 
+    void experimental_guess_missing_inputs() {
+        for (auto &arg_pair : args) {
+            auto &arg = arg_pair.second;
+            if (!arg.raw_string.empty()) {
+                continue;
+            }
+            auto *md = arg.metadata;
+            switch (arg.metadata->kind) {
+            case halide_argument_kind_input_scalar: {
+                if (md->def) {
+                    arg.raw_string = scalar_to_string(md->type, *md->def);
+                    info() << "Guess for Input \"" << arg.name << "\": use default value of " << arg.raw_string;
+                } else if (md->min) {
+                    arg.raw_string = scalar_to_string(md->type, *md->min);
+                    info() << "Guess for Input \"" << arg.name << "\": use min value of " << arg.raw_string;
+                } else if (md->max) {
+                    arg.raw_string = scalar_to_string(md->type, *md->max);
+                    info() << "Guess for Input \"" << arg.name << "\": use max value of " << arg.raw_string;
+                } else {
+                    if (md->type == halide_type_of<bool>()) {
+                        arg.raw_string = "false";
+                    } else if (md->type == halide_type_of<void*>()) {
+                        arg.raw_string = "nullptr";
+                    } else {
+                        arg.raw_string = "0";
+                    }
+                    info() << "Guess for Input \"" << arg.name << "\": use zero-ish value of " << arg.raw_string;
+                }
+                break;
+            }
+            case halide_argument_kind_input_buffer: {
+                const bool is_float = (md->type == halide_type_of<float>() || md->type == halide_type_of<double>());
+                if (md->dimensions == 2 && is_float) {
+                    // Assume it's a matrix-like input
+                    arg.raw_string = "identity:[3, 3]";
+                    info() << "Guess for Input \"" << arg.name << "\": use identity value of " << arg.raw_string;
+                } else {
+                    arg.raw_string = "random:0:[";
+                    for (int i = 0; i < md->dimensions; ++i) {
+                        int extent = 1000;
+                        if (i == 2 && md->dimensions == 3) {
+                            extent = 3;
+                        }
+                        if (i > 0) {
+                            arg.raw_string += ",";
+                        }
+                        arg.raw_string += std::to_string(extent);
+                    }
+                    arg.raw_string += "]";
+                }
+                info() << "Guess for Input \"" << arg.name << "\": use " << arg.raw_string;
+                break;
+            }
+            case halide_argument_kind_output_buffer:
+                // nothing
+                break;
+            }
+        }
+    }
+
     void validate(const std::set<std::string> &seen_args,
-                   bool ok_to_omit_outputs) const {
+                  bool ok_to_omit_outputs) const {
         std::ostringstream o;
         for (auto &s : seen_args) {
             if (args.find(s) == args.end()) {
@@ -824,6 +907,36 @@ public:
 
     double megapixels_out() const {
         return (double) pixels_out() / (1024.0 * 1024.0);
+    }
+
+    uint64_t elements_out() const {
+        uint64_t elements_out = 0;
+        for (const auto &arg_pair : args) {
+            const auto &arg = arg_pair.second;
+            switch (arg.metadata->kind) {
+                case halide_argument_kind_output_buffer: {
+                    elements_out += arg.buffer_value.number_of_elements();
+                    break;
+                }
+            }
+        }
+        return elements_out;
+    }
+
+    uint64_t bytes_out() const {
+        uint64_t bytes_out = 0;
+        for (const auto &arg_pair : args) {
+            const auto &arg = arg_pair.second;
+            switch (arg.metadata->kind) {
+                case halide_argument_kind_output_buffer: {
+                    // size_in_bytes() is not necessarily the same, since
+                    // it may include unused space for padding.
+                    bytes_out += arg.buffer_value.number_of_elements() * arg.buffer_value.type().bytes();
+                    break;
+                }
+            }
+        }
+        return bytes_out;
     }
 
     // Run a bounds-query call with the given args, and return the shapes

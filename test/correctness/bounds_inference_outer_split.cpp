@@ -9,7 +9,7 @@ class CheckAllocationSize : public IRVisitor {
 
     using IRVisitor::visit;
 
-    void visit(const Allocate *op) {
+    void visit(const Allocate *op) override {
         if (op->name == "input_cpy") {
             result = op->extents[0];
         } else {
