@@ -1337,6 +1337,7 @@ protected:
     void set_inputs(const std::vector<StubInput> &inputs);
 
     virtual void set_def_min_max();
+    virtual Expr get_def_expr() const;
 
     void verify_internals() override;
 
@@ -1687,8 +1688,13 @@ protected:
     using TBase = typename Super::TBase;
 
     const TBase def_{TBase()};
+    const Expr def_expr_;
 
 protected:
+    Expr get_def_expr() const override {
+        return def_expr_;
+    }
+
     void set_def_min_max() override {
         for (Parameter &p : this->parameters_) {
             p.set_scalar<TBase>(def_);
@@ -1699,16 +1705,36 @@ protected:
         return "Expr";
     }
 
+    // Expr() doesn't accept a pointer type in its ctor; add a SFINAE adapter
+    // so that pointer (aka handle) Inputs will get cast to uint64.
+    template <typename TBase2 = TBase, typename std::enable_if<!std::is_pointer<TBase2>::value>::type * = nullptr>
+    static Expr TBaseToExpr(const TBase2 &value) {
+        return Expr(value);
+    }
+
+    template <typename TBase2 = TBase, typename std::enable_if<std::is_pointer<TBase2>::value>::type * = nullptr>
+    static Expr TBaseToExpr(const TBase2 &value) {
+        return Expr((uint64_t) value);
+    }
+
 public:
-    explicit GeneratorInput_Scalar(const std::string &name,
-                                   const TBase &def = static_cast<TBase>(0))
-        : Super(name, IOKind::Scalar, {type_of<TBase>()}, 0), def_(def) {
+    explicit GeneratorInput_Scalar(const std::string &name)
+        : Super(name, IOKind::Scalar, {type_of<TBase>()}, 0), def_(static_cast<TBase>(0)), def_expr_(Expr()) {
+    }
+
+    GeneratorInput_Scalar(const std::string &name, const TBase &def)
+        : Super(name, IOKind::Scalar, {type_of<TBase>()}, 0), def_(def), def_expr_(TBaseToExpr(def)) {
+    }
+
+    GeneratorInput_Scalar(size_t array_size,
+                          const std::string &name)
+        : Super(array_size, name, IOKind::Scalar, {type_of<TBase>()}, 0), def_(static_cast<TBase>(0)), def_expr_(Expr()) {
     }
 
     GeneratorInput_Scalar(size_t array_size,
                           const std::string &name,
-                          const TBase &def = static_cast<TBase>(0))
-        : Super(array_size, name, IOKind::Scalar, {type_of<TBase>()}, 0), def_(def) {
+                          const TBase &def)
+        : Super(array_size, name, IOKind::Scalar, {type_of<TBase>()}, 0), def_(def), def_expr_(TBaseToExpr(def)) {
     }
 
     /** You can use this Input as an expression in a halide
@@ -1741,7 +1767,7 @@ protected:
 
 protected:
     void set_def_min_max() override {
-        GeneratorInput_Scalar<T>::set_def_min_max();
+        Super::set_def_min_max();
         // Don't set min/max for bool
         if (!std::is_same<TBase, bool>::value) {
             for (Parameter &p : this->parameters_) {
@@ -1752,14 +1778,23 @@ protected:
     }
 
 public:
-    explicit GeneratorInput_Arithmetic(const std::string &name,
-                                       const TBase &def = static_cast<TBase>(0))
+    explicit GeneratorInput_Arithmetic(const std::string &name)
+        : Super(name), min_(Expr()), max_(Expr()) {
+    }
+
+    GeneratorInput_Arithmetic(const std::string &name,
+                              const TBase &def)
         : Super(name, def), min_(Expr()), max_(Expr()) {
     }
 
     GeneratorInput_Arithmetic(size_t array_size,
+                              const std::string &name)
+        : Super(array_size, name), min_(Expr()), max_(Expr()) {
+    }
+
+    GeneratorInput_Arithmetic(size_t array_size,
                               const std::string &name,
-                              const TBase &def = static_cast<TBase>(0))
+                              const TBase &def)
         : Super(array_size, name, def), min_(Expr()), max_(Expr()) {
     }
 

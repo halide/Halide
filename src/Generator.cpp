@@ -123,10 +123,10 @@ Outputs compute_outputs(const Target &target,
     return output_files;
 }
 
-Argument to_argument(const Internal::Parameter &param) {
+Argument to_argument(const Internal::Parameter &param, const Expr &default_value) {
     Expr def, min, max;
     if (!param.is_buffer()) {
-        def = param.scalar_expr();
+        def = default_value; // *not* param.scalar_expr();
         min = param.min_value();
         max = param.max_value();
     }
@@ -1421,11 +1421,11 @@ Module GeneratorBase::build_module(const std::string &function_name,
     ParamInfo &pi = param_info();
     std::vector<Argument> filter_arguments;
     for (auto rp : pi.filter_params) {
-        filter_arguments.push_back(to_argument(*rp));
+        filter_arguments.push_back(to_argument(*rp, rp->is_buffer() ? Expr() : rp->scalar_expr()));
     }
     for (auto input : pi.filter_inputs) {
         for (const auto &p : input->parameters_) {
-            filter_arguments.push_back(to_argument(p));
+            filter_arguments.push_back(to_argument(p, p.is_buffer() ? Expr() : input->get_def_expr()));
         }
     }
 
@@ -1672,6 +1672,10 @@ void GeneratorInputBase::check_value_writable() const {
 
 void GeneratorInputBase::set_def_min_max() {
     // nothing
+}
+
+Expr GeneratorInputBase::get_def_expr() const {
+    return Expr();
 }
 
 Parameter GeneratorInputBase::parameter() const {
