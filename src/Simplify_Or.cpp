@@ -8,16 +8,8 @@ Expr Simplify::visit(const Or *op, ConstBounds *bounds) {
         return const_true(op->type.lanes());
     }
 
-    // An appropriately rewritten version of the And mutator.
-    Expr a, b;
-    {
-        auto fact = scoped_falsehood(op->b);
-        a = mutate(op->a, nullptr);
-    }
-    {
-        auto fact = scoped_falsehood(a);
-        b = mutate(op->b, nullptr);
-    }
+    Expr a = mutate(op->a, nullptr);
+    Expr b = mutate(op->b, nullptr);
 
     if (should_commute(a, b)) {
         std::swap(a, b);

@@ -8,24 +8,8 @@ Expr Simplify::visit(const And *op, ConstBounds *bounds) {
         return const_false(op->type.lanes());
     }
 
-    // Exploit the assumed truth of the second side while mutating
-    // the first. Then assume the mutated first side while
-    // mutating the second.
-    Expr a, b;
-    {
-        auto fact = scoped_truth(op->b);
-        a = mutate(op->a, nullptr);
-    }
-    {
-        // Note that we assume the *mutated* a here. The transformation
-        // A && B == A && (B | A) is legal (where | means "given")
-        // As is
-        // A && B = (A | B) && B
-        // But the transformation
-        // A && B == (A | B) && (B | A) is not
-        auto fact = scoped_truth(a);
-        b = mutate(op->b, nullptr);
-    }
+    Expr a = mutate(op->a, nullptr);
+    Expr b = mutate(op->b, nullptr);
 
     // Order commutative operations by node type
     if (should_commute(a, b)) {
