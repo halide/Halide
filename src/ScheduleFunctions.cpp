@@ -80,7 +80,6 @@ class ContainsImpureCall : public IRVisitor {
 
 public:
     bool result = false;
-    ContainsImpureCall() = default;
 };
 
 bool contains_impure_call(const Expr &expr) {
@@ -358,8 +357,8 @@ Stmt build_provide_loop_nest(const map<string, Function> &env, const string &pre
 
     // Default schedule/values if there is no specialization
     Stmt stmt = build_provide_loop_nest_helper(
-            func_name, prefix, start_fuse, dims, site, values,
-            def.split_predicate(), f_sched, def.schedule(), is_update);
+        func_name, prefix, start_fuse, dims, site, values,
+        def.split_predicate(), f_sched, def.schedule(), is_update);
     stmt = inject_placeholder_prefetch(stmt, env, prefix, def.schedule().prefetches());
 
     // Make any specialized copies
@@ -376,10 +375,10 @@ Stmt build_provide_loop_nest(const map<string, Function> &env, const string &pre
             // specialize_fail() should only be possible on the final specialization
             internal_assert(i == specializations.size());
             Expr specialize_fail_error =
-                    Internal::Call::make(Int(32),
-                                         "halide_error_specialize_fail",
-                                         {StringImm::make(s.failure_message)},
-                                         Internal::Call::Extern);
+                Internal::Call::make(Int(32),
+                                     "halide_error_specialize_fail",
+                                     {StringImm::make(s.failure_message)},
+                                     Internal::Call::Extern);
             then_case = AssertStmt::make(const_false(), specialize_fail_error);
         }
         stmt = IfThenElse::make(c, then_case, stmt);
@@ -1228,14 +1227,14 @@ private:
             const auto &iter = std::find_if(dims.begin(), dims.end(),
                                             [&pair](const Dim &d) { return var_name_match(d.var, pair.var_name); });
             internal_assert(iter != dims.end());
-            start_fuse = std::min(start_fuse, (size_t) (iter - dims.begin()));
+            start_fuse = std::min(start_fuse, (size_t)(iter - dims.begin()));
             // Should ignore the __outermost dummy dimension.
             for (size_t i = (size_t)(iter - dims.begin()); i < dims.size() - 1; ++i) {
                 string var_orig = pair.func_1 + ".s" + std::to_string(pair.stage_1) + "." + dims[i].var;
                 Expr val = Variable::make(Int(32), var_orig);
 
                 int dim2_idx = (int)(dims_2.size() - (dims.size() - i));
-                internal_assert(dim2_idx < (int) dims_2.size());
+                internal_assert(dim2_idx < (int)dims_2.size());
                 string var = pair.func_2 + ".s" + std::to_string(pair.stage_2) + "." + dims_2[dim2_idx].var;
 
                 replacements.emplace(var + ".loop_extent", make_const(Int(32), 1));
@@ -1307,8 +1306,7 @@ private:
         string prefix = f.name() + ".s0";
         const Definition &def = f.definition();
 
-        if(!def.defined())
-        {
+        if (!def.defined()) {
             return produce;
         }
 
@@ -1326,8 +1324,9 @@ private:
             const auto &f2_it = env.find(pair.func_2);
             internal_assert(f2_it != env.end());
             const vector<Dim> &dims_2 =
-                    (pair.stage_2 == 0) ? f2_it->second.definition().schedule().dims() :
-                    f2_it->second.update((int)(pair.stage_2 - 1)).schedule().dims();
+                pair.stage_2 == 0 ?
+                f2_it->second.definition().schedule().dims() :
+                f2_it->second.update((int)(pair.stage_2 - 1)).schedule().dims();
 
             const auto &iter = std::find_if(dims.begin(), dims.end(),
                                             [&pair](const Dim &d) { return var_name_match(d.var, pair.var_name); });
@@ -1368,8 +1367,8 @@ private:
                 replacements[var_1 + ".loop_min"] = simplify(min(min_1, min_2));
                 replacements[var_1 + ".loop_max"] = simplify(max(max_1, max_2));
                 replacements[var_1 + ".loop_extent"] =
-                        simplify((replacements[var_1 + ".loop_max"] + 1) -
-                                 replacements[var_1 + ".loop_min"]);
+                    simplify((replacements[var_1 + ".loop_max"] + 1) -
+                             replacements[var_1 + ".loop_min"]);
             }
         }
 
@@ -1383,14 +1382,14 @@ private:
         map<string, bool> skip;
 
         size_t num_skipped = 0;
-        bool skipLastFunc = false;
+        bool skip_last_func = false;
         bool found_parent = false;
         auto parent_index = funcs.size(); // The last function in the group that is not skipped
         for (size_t i = 0; i < funcs.size(); ++i) {
-            skipLastFunc = function_is_already_realized_in_stmt(funcs[i], consumer) ||
+            skip_last_func = function_is_already_realized_in_stmt(funcs[i], consumer) ||
                               !(function_is_used_in_stmt(funcs[i], consumer) || is_output_list[i]);
-            skip[funcs[i].name()] = skipLastFunc;
-            if (skipLastFunc) {
+            skip[funcs[i].name()] = skip_last_func;
+            if (skip_last_func) {
                 num_skipped += 1;
             } else {
                 parent_index = i;
@@ -1403,7 +1402,7 @@ private:
             return consumer;
         }
 
-        user_assert(!skipLastFunc)
+        user_assert(!skip_last_func)
         << "Invalid compute_with: the 'parent' function \"" << funcs[funcs.size() - 1].name()
         << "\" in fused group " << funcs << " is not used at the compute_at level "
         << compute_level.to_string() << ".\n";
@@ -1483,7 +1482,7 @@ private:
         }
 
         // Add the consumer nodes.
-        for (auto i = 0u; i < funcs.size(); i++) {
+        for (size_t i = 0; i < funcs.size(); i++) {
             if (!skip[funcs[i].name()] && !is_output_list[i]) {
                 consumer = ProducerConsumer::make_consume(funcs[i].name(), consumer);
             }
@@ -1935,8 +1934,7 @@ void validate_fused_group_schedule_helper(const string &fn, size_t stage_index, 
 
         const Function &func_1 = iter1->second;
         const Function &func_2 = iter2->second;
-        const Definition &def_2 =
-            (p.stage_2 == 0) ? func_2.definition() : func_2.update((int)(p.stage_2 - 1));
+        const Definition &def_2 = (p.stage_2 == 0) ? func_2.definition() : func_2.update((int)(p.stage_2 - 1));
         internal_assert(def_2.defined());
 
         // f2.compute_with(f1, var) is allowed only if f2 has no specializations.
@@ -2052,10 +2050,10 @@ class RemoveLoopsOverOutermost : public IRMutator2 {
 };
 
 bool group_should_be_inlined(const vector<Function> &funcs) {
-    return funcs.size() == 1
-           && (funcs[0].has_extern_definition() || (funcs[0].definition().schedule().fused_pairs().empty()))
-           && funcs[0].can_be_inlined()
-           && funcs[0].schedule().compute_level().is_inlined();
+    return funcs.size() == 1 &&
+           (funcs[0].has_extern_definition() || funcs[0].definition().schedule().fused_pairs().empty()) &&
+           funcs[0].can_be_inlined() &&
+           funcs[0].schedule().compute_level().is_inlined();
 }
 
 Stmt schedule_functions(const vector<Function> &outputs, const vector<vector<string>> &fused_groups,
@@ -2072,7 +2070,7 @@ Stmt schedule_functions(const vector<Function> &outputs, const vector<vector<str
         vector<Function> funcs;
         vector<bool> is_output_list;
 
-        for (const string &name: group) {
+        for (const string &name : group) {
             Function f = env.find(name)->second;
 
             bool is_output = false;
