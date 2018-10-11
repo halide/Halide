@@ -17,12 +17,7 @@ private:
         if (op->for_type != ForType::Extern) {
             return IRMutator2::visit(op);
         }
-        Stmt body = mutate(op->body);
-        Expr min = op->min;
-        Expr extent = op->extent;
-        body = LetStmt::make(op->name + ".min", min, body);
-        body = LetStmt::make(op->name + ".max", (min + extent) - 1, body);
-        return body;
+        return mutate(op->body);
     }
 };
 
