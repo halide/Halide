@@ -25,7 +25,7 @@ public:
     GeneratorParam<int> seed{"seed", 1};
     // The approximate max number of stages to generate in the random pipeline.
     GeneratorParam<int> max_stages{"max_stages", 20};
-    GeneratorParam<int> max_channels{"max_channels", 2048};
+    GeneratorParam<int> max_channels{"max_channels", 512};
 
     Input<Buffer<float>>  input{"input", 3};
     Output<Buffer<float>> output{"output", 3};
@@ -114,7 +114,8 @@ public:
 
     // 50% chance of returning a pooling stage 50% chance returning 2D convolution
     Stage convolve_or_pool(Stage f, int kernel_min, int kernel_max) {
-        if (rand_int(0,1) && f.w > 20 && f.h > 20) { // don't downsample if image too small
+        int pool = rand_int(0,1);
+        if (pool && f.w > 20 && f.h > 20) { // don't downsample if image too small
             int pool_type = rand_int(0,2);
             if (pool_type == 0) return pool2D(f);
             if (pool_type == 1) return pool2D_w(f);
@@ -157,7 +158,7 @@ public:
 
     // Generate a 3x3 pool with stride 2 of f using a reduction.
     Stage pool2D_r(Stage f) {
-        std::cout << "Pooling 3x3 stride 2\n";
+        std::cout << "Pooling 3x3 stride 2 using reduction\n";
         vector<Var> args = f.func.args();
         Func pooled2D_r("pool2D_r_" + args[0].name() + args[1].name());
 
@@ -266,7 +267,8 @@ public:
 
         Func conv("conv2D_w_" + args[0].name() + args[1].name());
         RDom r(kernel_min, kernel_max - kernel_min + 1,
-               kernel_min, kernel_max - kernel_min + 1);
+               kernel_min, kernel_max - kernel_min + 1,
+               0, f.c);
         vector<Expr> coords = make_arguments(f.func.args());
         coords[0] += r.x;
         coords[1] += r.y;
@@ -325,14 +327,19 @@ public:
         int op_type = rand_int(0, 4); // + , -, *, /, %
         if (op_type == 0) {
             binary(f.func.args()) = f.func(f.func.args()) + g.func(f.func.args());
+            std::cout << "Binary op: + \n";
         } else if (op_type == 1) {
             binary(f.func.args()) = f.func(f.func.args()) - g.func(f.func.args());
+            std::cout << "Binary op: - \n";
         } else if (op_type == 2) {
             binary(f.func.args()) = f.func(f.func.args()) * g.func(f.func.args());
+            std::cout << "Binary op: * \n";
         } else if (op_type == 3) {
             binary(f.func.args()) = f.func(f.func.args()) / max(1, g.func(f.func.args()));
+            std::cout << "Binary op: / \n";
         } else {
             binary(f.func.args()) = f.func(f.func.args()) % g.func(f.func.args());
+            std::cout << "Binary op: % \n";
         }
         return {binary, f.w, f.h, f.c};
     }
@@ -340,16 +347,20 @@ public:
     Stage unary_op(Stage f) {
         Func unary("unary_op");
         vector<Expr> coords = make_arguments(f.func.args());
-
         int op_type = rand_int(0,3); // exp, log, sqrt, sin
+        
         if (op_type == 0) {
             unary(f.func.args()) = exp(f.func(coords));
+            std::cout << "Unary op: exp\n";
         } else if (op_type == 1) {
             unary(f.func.args()) = log(f.func(coords));
+            std::cout << "Unary op: log\n";
         } else if (op_type == 2) {
             unary(f.func.args()) = sqrt(f.func(coords));
+            std::cout << "Unary op: sqrt\n";
         } else {
             unary(f.func.args()) = sin(f.func(coords));
+            std::cout << "Unary op: sin\n";
         }
         return {unary, f.w, f.h, f.c};
     }
@@ -435,7 +446,7 @@ public:
         int i2 = m > 0 ? rand_int(0, m - 1) : 0;
         int i1 = m > 0 ? rand_int(i2 + 1, m) : 0;
         Stage f = s[i1], g = s[i2];
-        int stage_type = rand_int(0, 11);
+        int stage_type = rand_int(0, 16);
         if (stage_type == 0) {
             int dim = rand_int(0, 1);
             int kernel_min = rand_int(-3, 0);
@@ -451,13 +462,13 @@ public:
             int kernel_min = rand_int(-10, 0);
             int kernel_max = rand_int(0, 10);
             return convolve_w(f, dim, kernel_min, kernel_max);
-        } else if (stage_type == 3) {
+        } else if (stage_type >= 3 && stage_type <= 8) {
             int dim1 = rand_int(0, 1);
             int dim2 = 1 - dim1;
             int kernel_min = rand_int(-3, 0);
             int kernel_max = rand_int(0, 3);
             return convolve_or_pool(f, kernel_min, kernel_max);
-        } else if (stage_type == 4) {
+        } else if (stage_type == 9) {
             // For now, only upsample dimensions 0 or 1.
             int dim = rand_int(0, 1);
             int factor = 2;
@@ -466,7 +477,7 @@ public:
             } else {
                 return random_stage(s);
             }
-        } else if (stage_type == 5) {
+        } else if (stage_type == 10) {
             // For now, only downsample dimensions 0 or 1.
             int dim = rand_int(0, 1);
             int factor = 2;
@@ -475,22 +486,34 @@ public:
             } else {
                 return random_stage(s);
             }
-        } else if (stage_type == 6) {
+        } else if (stage_type == 11) {
             int dim = 2;
-            return all_to_all(f, dim);
-        } else if (stage_type == 7) {
+            if (f.c <= 3) {
+              return all_to_all(f, dim);
+            } else {
+              return random_stage(s);
+            }
+        } else if (stage_type == 12) {
             int dim = 2;
-            return all_to_all_r(f, dim);
-        } else if (stage_type == 8) {
+            if (f.c <= 3) {
+              return all_to_all_r(f, dim);
+            } else {
+              return random_stage(s);
+            }
+        } else if (stage_type == 13) {
             int dim = 2;
-            return all_to_all_w(f, dim);
-        } else if (stage_type == 9) {
+            if (f.c <= 3) {
+              return all_to_all_w(f, dim);
+            } else {
+              return random_stage(s);
+            }
+        } else if (stage_type == 14) {
             int dim = rand_int(0, 2);
             return scan(f, dim);
-        } else if (stage_type == 10 && false) {
+        } else if (stage_type == 15 && false) {
             // TODO: transpose disabled for now because f(x, y) + f(y, x) totally breaks the bounds inference done by the autoscheduler.
             return transpose(f);
-        } else if (stage_type == 11) {
+        } else if (stage_type == 16) {
             return unary_op(f);
         } else if (i1 != i2) {
             // binary op two equal resolution stages
