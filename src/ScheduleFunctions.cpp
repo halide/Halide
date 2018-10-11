@@ -971,6 +971,17 @@ public:
     }
 };
 
+struct PlaceholderPrefetch {
+    const string &name;
+    const vector<Type> &types;
+    const PrefetchDirective &prefetch;
+
+    PlaceholderPrefetch(const string &name, const vector<Type> &types, const PrefetchDirective &prefetch)
+        : name(name),
+          types(types),
+          prefetch(prefetch) {}
+};
+
 class InjectFunctionRealization : public IRMutator2 {
 public:
     InjectFunctionRealization(const vector<Function> &funcs,
@@ -998,7 +1009,7 @@ protected:
         Stmt body = for_loop->body;
 
         // Dig through any placeholder prefetches
-        vector<tuple<string, vector<Type>, PrefetchDirective>> placeholder_prefetches;
+        vector<PlaceholderPrefetch> placeholder_prefetches;
         while (const auto *p = body.as<Prefetch>()) {
             placeholder_prefetches.emplace_back(p->name, p->types, p->prefetch);
             body = p->body;
@@ -1058,10 +1069,10 @@ protected:
 
         // Reinstate the placeholder prefetches
         for (size_t i = placeholder_prefetches.size(); i > 0; i--) {
-            body = Prefetch::make(std::get<0>(placeholder_prefetches[i - 1]),
-                                  std::get<1>(placeholder_prefetches[i - 1]),
+            body = Prefetch::make(placeholder_prefetches[i - 1].name,
+                                  placeholder_prefetches[i - 1].types,
                                   Region(),
-                                  std::get<2>(placeholder_prefetches[i - 1]),
+                                  placeholder_prefetches[i - 1].prefetch,
                                   const_true(),
                                   body);
         }
