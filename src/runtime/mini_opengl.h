@@ -198,6 +198,7 @@ typedef void (*PFNDRAWBUFFERS)(GLsizei n, const GLenum *bufs);
 #define GL_WRITE_ONLY         0x88B9
 
 #define GL_MAP_READ_BIT       0x0001
+#define GL_MAP_WRITE_BIT      0x0002
 
 #define GL_SHADER_STORAGE_BUFFER 0x90D2
 
