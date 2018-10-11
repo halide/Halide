@@ -7,7 +7,9 @@
 // Define the pipeline that we'll be producing as a nullptr, because
 // we're going to be linking to most libHalide with that pipeline
 // missing
-extern "C" void *halide_autoscheduler_cost_model = nullptr;
+extern "C" {
+void *halide_autoscheduler_cost_model = nullptr;
+}
 
 using namespace Halide;
 
