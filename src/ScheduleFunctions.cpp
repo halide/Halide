@@ -129,10 +129,8 @@ Stmt build_loop_nest(Stmt body,
     // Put the desired loop nest into the containers vector.
     for (int i = (int)stage_s.dims().size() - 1; i >= 0; i--) {
         const Dim &dim = stage_s.dims()[i];
-        if (dim.for_type != ForType::Extern) {
-            Container c = {Container::For, i, prefix + dim.var, Expr()};
-            nest.push_back(c);
-        }
+        Container c = {Container::For, i, prefix + dim.var, Expr()};
+        nest.push_back(c);
     }
 
     vector<Container> pred_container;

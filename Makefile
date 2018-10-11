@@ -448,6 +448,7 @@ SOURCE_FILES = \
   Reduction.cpp \
   RegionCosts.cpp \
   RemoveDeadAllocations.cpp \
+  RemoveExternLoops.cpp \
   RemoveTrivialForLoops.cpp \
   RemoveUndef.cpp \
   Schedule.cpp \
@@ -619,6 +620,7 @@ HEADER_FILES = \
   Reduction.h \
   RegionCosts.h \
   RemoveDeadAllocations.h \
+  RemoveExternLoops.h \
   RemoveTrivialForLoops.h \
   RemoveUndef.h \
   Schedule.h \
