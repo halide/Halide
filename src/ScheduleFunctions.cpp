@@ -595,13 +595,7 @@ Stmt build_extern_produce(const map<string, Function> &env, Function f, const Ta
                     Evaluate::make(Call::make(Int(32), "halide_msan_annotate_memory_is_initialized",
                                               {shape, shape_size}, Call::Extern));
 
-            bool mark_buffer_is_op = !is_no_op(mark_buffer);
-            bool mark_shape_is_op = !is_no_op(mark_shape);
-            if (mark_buffer_is_op && mark_shape_is_op) {
-                mark_buffer = Block::make(mark_buffer, mark_shape);
-            } else if (!mark_buffer_is_op) {
-                mark_buffer = mark_shape;
-            }
+            mark_buffer = Block::make(mark_buffer, mark_shape);
 
             if (!is_no_op(annotate)) {
                 annotate = Block::make(annotate, mark_buffer);
@@ -709,12 +703,7 @@ Stmt inject_explicit_bounds(Stmt body, Function func) {
             Expr error_msg = Call::make(Int(32), "halide_error_explicit_bounds_too_small",
                                         {b.var, func.name(), min_val, max_val, min_var, max_var},
                                         Call::Extern);
-            const Stmt &assertStmt = AssertStmt::make(check, error_msg);
-            if (is_no_op(body)) {
-                body = assertStmt;
-            } else {
-                body = Block::make(assertStmt, body);
-            }
+            body = Block::make(AssertStmt::make(check, error_msg), body);
         }
     }
 
@@ -791,13 +780,7 @@ private:
         Stmt body = mutate(for_loop->body);
 
         if (level.match(for_loop->name)) {
-            bool body_is_op = !is_no_op(body);
-            bool injected_stmt_is_op = !is_no_op(injected_stmt);
-            if (body_is_op && injected_stmt_is_op) {
-                body = Block::make(body, injected_stmt);
-            } else if (injected_stmt_is_op) {
-                body = injected_stmt;
-            }
+            body = Block::make(body, injected_stmt);
             found_level = true;
         }
 
@@ -823,14 +806,7 @@ Stmt inject_stmt(Stmt root, Stmt injected, const LoopLevel &level) {
         return root;
     }
     if (level.is_inlined() || level.is_root()) {
-        bool root_is_op = !is_no_op(root);
-        bool injected_is_op = !is_no_op(injected);
-        if (root_is_op && injected_is_op) {
-            return Block::make(root, injected);
-        } else if (root_is_op) {
-            return root;
-        }
-        return injected;
+        return Block::make(root, injected);
     }
     InjectStmt injector(injected, level);
     root = injector.mutate(root);
@@ -1512,14 +1488,12 @@ private:
             }
         }
 
-        bool producer_is_op = !is_no_op(producer);
-        bool consumer_is_op = !is_no_op(consumer);
-        if (producer_is_op && consumer_is_op) {
-            return Block::make(producer, consumer);
-        } else if (producer_is_op) {
+        if (is_no_op(consumer)) {
+            // For the very first output to be scheduled, the consumer
+            // Stmt can be a no-op. No point in preserving it.
             return producer;
         } else {
-            return consumer;
+            return Block::make(producer, consumer);
         }
     }
 
