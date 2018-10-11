@@ -446,7 +446,7 @@ public:
         int i2 = m > 0 ? rand_int(0, m - 1) : 0;
         int i1 = m > 0 ? rand_int(i2 + 1, m) : 0;
         Stage f = s[i1], g = s[i2];
-        int stage_type = rand_int(0, 16);
+        int stage_type = rand_int(0, 18);
         if (stage_type == 0) {
             int dim = rand_int(0, 1);
             int kernel_min = rand_int(-3, 0);
@@ -462,13 +462,13 @@ public:
             int kernel_min = rand_int(-10, 0);
             int kernel_max = rand_int(0, 10);
             return convolve_w(f, dim, kernel_min, kernel_max);
-        } else if (stage_type >= 3 && stage_type <= 8) {
+        } else if (stage_type >= 3 && stage_type <= 10) {
             int dim1 = rand_int(0, 1);
             int dim2 = 1 - dim1;
             int kernel_min = rand_int(-3, 0);
             int kernel_max = rand_int(0, 3);
             return convolve_or_pool(f, kernel_min, kernel_max);
-        } else if (stage_type == 9) {
+        } else if (stage_type == 11) {
             // For now, only upsample dimensions 0 or 1.
             int dim = rand_int(0, 1);
             int factor = 2;
@@ -477,7 +477,7 @@ public:
             } else {
                 return random_stage(s);
             }
-        } else if (stage_type == 10) {
+        } else if (stage_type == 12) {
             // For now, only downsample dimensions 0 or 1.
             int dim = rand_int(0, 1);
             int factor = 2;
@@ -486,34 +486,34 @@ public:
             } else {
                 return random_stage(s);
             }
-        } else if (stage_type == 11) {
+        } else if (stage_type == 13) {
             int dim = 2;
             if (f.c <= 3) {
               return all_to_all(f, dim);
             } else {
               return random_stage(s);
             }
-        } else if (stage_type == 12) {
+        } else if (stage_type == 14) {
             int dim = 2;
             if (f.c <= 3) {
               return all_to_all_r(f, dim);
             } else {
               return random_stage(s);
             }
-        } else if (stage_type == 13) {
+        } else if (stage_type == 15) {
             int dim = 2;
             if (f.c <= 3) {
               return all_to_all_w(f, dim);
             } else {
               return random_stage(s);
             }
-        } else if (stage_type == 14) {
+        } else if (stage_type == 16) {
             int dim = rand_int(0, 2);
             return scan(f, dim);
-        } else if (stage_type == 15 && false) {
+        } else if (stage_type == 17 && false) {
             // TODO: transpose disabled for now because f(x, y) + f(y, x) totally breaks the bounds inference done by the autoscheduler.
             return transpose(f);
-        } else if (stage_type == 16) {
+        } else if (stage_type == 18) {
             return unary_op(f);
         } else if (i1 != i2) {
             // binary op two equal resolution stages
