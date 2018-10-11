@@ -1908,7 +1908,7 @@ void CodeGen_Hexagon::visit(const Call *op) {
 
     if (op->is_intrinsic() && op->name == "gather") {
         internal_assert(op->args.size() == 5);
-        internal_assert(op->type.bits() != 8);
+        internal_assert(op->type.bits() == 16 || op->type.bits() == 32);
         int index_lanes = op->type.lanes();
         int intrin_lanes = native_vector_bits()/op->type.bits();
 
@@ -1935,7 +1935,7 @@ void CodeGen_Hexagon::visit(const Call *op) {
         return;
     } else if (op->is_intrinsic() && (op->name == "scatter" || op->name == "scatter_acc")) {
         internal_assert(op->args.size() == 4);
-        internal_assert(op->type.bits() != 8);
+        internal_assert(op->type.bits() == 16 || op->type.bits() == 32);
         int index_lanes = op->type.lanes();
         int intrin_lanes = native_vector_bits()/op->type.bits();
 
