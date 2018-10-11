@@ -94,10 +94,16 @@ bool contains_impure_call(const Expr &expr) {
  * @param dims The pure dimensions
  * @return The loop nest containing the provide node for the given func/stage
  */
-Stmt build_provide_loop_nest_helper(const string &func_name, const string &prefix, int start_fuse,
-                                    const vector<string> &dims, const vector<Expr> &site, const vector<Expr> &values,
-                                    const vector<Expr> &predicates, const FuncSchedule &func_s,
-                                    const StageSchedule &stage_s, bool is_update) {
+Stmt build_provide_loop_nest_helper(const string &func_name,
+                                    const string &prefix,
+                                    int start_fuse,
+                                    const vector<string> &dims,
+                                    const vector<Expr> &site,
+                                    const vector<Expr> &values,
+                                    const vector<Expr> &predicates,
+                                    const FuncSchedule &func_s,
+                                    const StageSchedule &stage_s,
+                                    bool is_update) {
     // We'll build it from inside out, starting from a store node,
     // then wrapping it in for loops.
 
@@ -331,9 +337,14 @@ Stmt build_provide_loop_nest_helper(const string &func_name, const string &prefi
 }
 
 // Build a loop nest about a provide node using a schedule
-Stmt build_provide_loop_nest(const map<string, Function> &env, const string &prefix, const string &func_name,
-                             const vector<string> &dims, const FuncSchedule &f_sched, const Definition &def,
-                             int start_fuse, bool is_update) {
+Stmt build_provide_loop_nest(const map<string, Function> &env,
+                             const string &prefix,
+                             const string &func_name,
+                             const vector<string> &dims,
+                             const FuncSchedule &f_sched,
+                             const Definition &def,
+                             int start_fuse,
+                             bool is_update) {
 
     internal_assert(!is_update == def.is_init());
 
@@ -962,14 +973,16 @@ public:
 
 class InjectFunctionRealization : public IRMutator2 {
 public:
-    InjectFunctionRealization(const vector<Function> &funcs, const vector<bool> &is_output_list, const Target &target,
+    InjectFunctionRealization(const vector<Function> &funcs,
+                              const vector<bool> &is_output_list,
+                              const Target &target,
                               const map<string, Function> &env)
-            : funcs(funcs)
-            , is_output_list(is_output_list)
-            , target(target)
-            , env(env)
-            , compute_level(funcs[0].schedule().compute_level())
-            , store_level(funcs[0].schedule().store_level()) { }
+        : funcs(funcs),
+          is_output_list(is_output_list),
+          target(target),
+          env(env),
+          compute_level(funcs[0].schedule().compute_level()),
+          store_level(funcs[0].schedule().store_level()) {}
 
     bool found_compute_level() const { return _found_compute_level; }
     bool found_store_level() const { return _found_store_level; }
@@ -1922,7 +1935,9 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
     return true;
 }
 
-void validate_fused_group_schedule_helper(const string &fn, size_t stage_index, const Definition &def_1,
+void validate_fused_group_schedule_helper(const string &fn,
+                                          size_t stage_index,
+                                          const Definition &def_1,
                                           const map<string, Function> &env) {
     internal_assert(def_1.defined());
     for (const auto &p : def_1.schedule().fused_pairs()) {
@@ -2050,14 +2065,17 @@ class RemoveLoopsOverOutermost : public IRMutator2 {
 };
 
 bool group_should_be_inlined(const vector<Function> &funcs) {
-    return funcs.size() == 1 &&
-           (funcs[0].has_extern_definition() || funcs[0].definition().schedule().fused_pairs().empty()) &&
-           funcs[0].can_be_inlined() &&
-           funcs[0].schedule().compute_level().is_inlined();
+    return (funcs.size() == 1 &&
+            (funcs[0].has_extern_definition() || funcs[0].definition().schedule().fused_pairs().empty()) &&
+            funcs[0].can_be_inlined() &&
+            funcs[0].schedule().compute_level().is_inlined());
 }
 
-Stmt schedule_functions(const vector<Function> &outputs, const vector<vector<string>> &fused_groups,
-                        const map<string, Function> &env, const Target &target, bool &any_memoized) {
+Stmt schedule_functions(const vector<Function> &outputs,
+                        const vector<vector<string>> &fused_groups,
+                        const map<string, Function> &env,
+                        const Target &target,
+                        bool &any_memoized) {
     string root_var = LoopLevel::root().lock().to_string();
     Stmt s = For::make(root_var, 0, 1, ForType::Serial, DeviceAPI::Host, Evaluate::make(0));
 
