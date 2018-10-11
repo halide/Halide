@@ -17,7 +17,8 @@ private:
         if (op->for_type != ForType::Extern) {
             return IRMutator2::visit(op);
         }
-        return mutate(op->body);
+        // Replace the for with it's first iteration (implemented with a let).
+        return LetStmt::make(op->name, op->min, mutate(op->body));
     }
 };
 
