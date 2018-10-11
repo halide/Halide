@@ -13,7 +13,7 @@ public:
 protected:
     using IRVisitor::visit;
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         if (op->name == "halide_gpu_thread_barrier") {
             count++;
         }

@@ -21,11 +21,11 @@ namespace {
 class ExprDependsOnVar : public IRVisitor {
     using IRVisitor::visit;
 
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         if (op->name == var) result = true;
     }
 
-    void visit(const Let *op) {
+    void visit(const Let *op) override {
         op->value.accept(this);
         // The name might be hidden within the body of the let, in
         // which case there's no point descending.

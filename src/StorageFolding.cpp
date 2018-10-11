@@ -29,7 +29,7 @@ using std::vector;
 class CountProducers : public IRVisitor {
     const std::string &name;
 
-    void visit(const ProducerConsumer *op) {
+    void visit(const ProducerConsumer *op) override {
         if (op->is_producer && (op->name == name)) {
             count++;
         } else {
@@ -60,7 +60,7 @@ class FoldStorageOfFunction : public IRMutator2 {
 
     using IRMutator2::visit;
 
-    Expr visit(const Call *op) {
+    Expr visit(const Call *op) override {
         Expr expr = IRMutator2::visit(op);
         op = expr.as<Call>();
         internal_assert(op);
@@ -135,7 +135,7 @@ class FoldStorageOfFunction : public IRMutator2 {
         return expr;
     }
 
-    Stmt visit(const Provide *op) {
+    Stmt visit(const Provide *op) override {
         Stmt stmt = IRMutator2::visit(op);
         op = stmt.as<Provide>();
         internal_assert(op);
@@ -163,7 +163,7 @@ class InjectFoldingCheck : public IRMutator2 {
     const StorageDim &storage_dim;
     using IRMutator2::visit;
 
-    Stmt visit(const ProducerConsumer *op) {
+    Stmt visit(const ProducerConsumer *op) override {
         if (op->name == func.name()) {
             Stmt body = op->body;
             if (op->is_producer) {
@@ -302,7 +302,7 @@ class InjectFoldingCheck : public IRMutator2 {
         }
     }
 
-    Stmt visit(const LetStmt *op) {
+    Stmt visit(const LetStmt *op) override {
         if (starts_with(op->name, func.name() + ".") &&
             ends_with(op->name, ".tmp_buffer")) {
 
@@ -408,7 +408,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator2 {
 
     using IRMutator2::visit;
 
-    Stmt visit(const ProducerConsumer *op) {
+    Stmt visit(const ProducerConsumer *op) override {
         if (op->name == func.name()) {
             // Can't proceed into the pipeline for this func
             return op;
@@ -417,7 +417,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator2 {
         }
     }
 
-    Stmt visit(const For *op) {
+    Stmt visit(const For *op) override {
         if (op->for_type != ForType::Serial && op->for_type != ForType::Unrolled) {
             // We can't proceed into a parallel for loop.
 

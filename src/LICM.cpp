@@ -21,7 +21,7 @@ using std::vector;
 class CanLift : public IRVisitor {
     using IRVisitor::visit;
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         if (!op->is_pure()) {
             result = false;
         } else {
@@ -29,11 +29,11 @@ class CanLift : public IRVisitor {
         }
     }
 
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         result = false;
     }
 
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         if (varying.contains(op->name)) {
             result = false;
         }
@@ -227,7 +227,7 @@ class LICM : public IRMutator2 {
             // Track the set of variables used by the inner loop
             class CollectVars : public IRVisitor {
                 using IRVisitor::visit;
-                void visit(const Variable *op) {
+                void visit(const Variable *op) override {
                     vars.insert(op->name);
                 }
             public:
@@ -293,7 +293,7 @@ class GroupLoopInvariants : public IRMutator2 {
         using IRVisitor::visit;
         const Scope<int> &depth;
 
-        void visit(const Variable *op) {
+        void visit(const Variable *op) override {
             if (depth.contains(op->name)) {
                 result = std::max(result, depth.get(op->name));
             }

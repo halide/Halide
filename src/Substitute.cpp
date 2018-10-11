@@ -113,7 +113,7 @@ public:
 
     using IRMutator2::mutate;
 
-    Expr mutate(const Expr &e) {
+    Expr mutate(const Expr &e) override {
         if (equal(e, find)) {
             return replacement;
         } else {

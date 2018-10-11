@@ -846,7 +846,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
     class FindSharedAllocations : public IRVisitor
     {
         using IRVisitor::visit;
-        void visit(const Allocate *op)
+        void visit(const Allocate *op) override
         {
             op->body.accept(this);
             if (starts_with(op->name, "__shared")) {
@@ -966,7 +966,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
     struct FindThreadGroupSize : public IRVisitor
     {
         using IRVisitor::visit;
-        void visit(const For *loop)
+        void visit(const For *loop) override
         {
             if (!is_gpu_var(loop->name))
                 return loop->body.accept(this);

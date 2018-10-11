@@ -15,23 +15,23 @@ class MonotonicVisitor : public IRVisitor {
 
     Scope<Monotonic> scope;
 
-    void visit(const IntImm *) {
+    void visit(const IntImm *) override {
         result = Monotonic::Constant;
     }
 
-    void visit(const UIntImm *) {
+    void visit(const UIntImm *) override {
         result = Monotonic::Constant;
     }
 
-    void visit(const FloatImm *) {
+    void visit(const FloatImm *) override {
         result = Monotonic::Constant;
     }
 
-    void visit(const StringImm *) {
+    void visit(const StringImm *) override {
         internal_error << "Monotonic on String\n";
     }
 
-    void visit(const Cast *op) {
+    void visit(const Cast *op) override {
         op->value.accept(this);
 
         if (op->type.can_represent(op->value.type())) {
@@ -51,7 +51,7 @@ class MonotonicVisitor : public IRVisitor {
         }
     }
 
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         if (op->name == var) {
             result = Monotonic::Increasing;
         } else if (scope.contains(op->name)) {
@@ -89,7 +89,7 @@ class MonotonicVisitor : public IRVisitor {
         return Monotonic::Unknown;
     }
 
-    void visit(const Add *op) {
+    void visit(const Add *op) override {
         op->a.accept(this);
         Monotonic ra = result;
         op->b.accept(this);
@@ -97,7 +97,7 @@ class MonotonicVisitor : public IRVisitor {
         result = unify(ra, rb);
     }
 
-    void visit(const Sub *op) {
+    void visit(const Sub *op) override {
         op->a.accept(this);
         Monotonic ra = result;
         op->b.accept(this);
@@ -105,7 +105,7 @@ class MonotonicVisitor : public IRVisitor {
         result = unify(ra, flip(rb));
     }
 
-    void visit(const Mul *op) {
+    void visit(const Mul *op) override {
         op->a.accept(this);
         Monotonic ra = result;
         op->b.accept(this);
@@ -127,7 +127,7 @@ class MonotonicVisitor : public IRVisitor {
 
     }
 
-    void visit(const Div *op) {
+    void visit(const Div *op) override {
         op->a.accept(this);
         Monotonic ra = result;
         op->b.accept(this);
@@ -144,11 +144,11 @@ class MonotonicVisitor : public IRVisitor {
         }
     }
 
-    void visit(const Mod *op) {
+    void visit(const Mod *op) override {
         result = Monotonic::Unknown;
     }
 
-    void visit(const Min *op) {
+    void visit(const Min *op) override {
         op->a.accept(this);
         Monotonic ra = result;
         op->b.accept(this);
@@ -156,7 +156,7 @@ class MonotonicVisitor : public IRVisitor {
         result = unify(ra, rb);
     }
 
-    void visit(const Max *op) {
+    void visit(const Max *op) override {
         op->a.accept(this);
         Monotonic ra = result;
         op->b.accept(this);
@@ -176,11 +176,11 @@ class MonotonicVisitor : public IRVisitor {
         }
     }
 
-    void visit(const EQ *op) {
+    void visit(const EQ *op) override {
         visit_eq(op->a, op->b);
     }
 
-    void visit(const NE *op) {
+    void visit(const NE *op) override {
         visit_eq(op->a, op->b);
     }
 
@@ -192,23 +192,23 @@ class MonotonicVisitor : public IRVisitor {
         result = unify(flip(ra), rb);
     }
 
-    void visit(const LT *op) {
+    void visit(const LT *op) override {
         visit_lt(op->a, op->b);
     }
 
-    void visit(const LE *op) {
+    void visit(const LE *op) override {
         visit_lt(op->a, op->b);
     }
 
-    void visit(const GT *op) {
+    void visit(const GT *op) override {
         visit_lt(op->b, op->a);
     }
 
-    void visit(const GE *op) {
+    void visit(const GE *op) override {
         visit_lt(op->b, op->a);
     }
 
-    void visit(const And *op) {
+    void visit(const And *op) override {
         op->a.accept(this);
         Monotonic ra = result;
         op->b.accept(this);
@@ -216,7 +216,7 @@ class MonotonicVisitor : public IRVisitor {
         result = unify(ra, rb);
     }
 
-    void visit(const Or *op) {
+    void visit(const Or *op) override {
         op->a.accept(this);
         Monotonic ra = result;
         op->b.accept(this);
@@ -224,12 +224,12 @@ class MonotonicVisitor : public IRVisitor {
         result = unify(ra, rb);
     }
 
-    void visit(const Not *op) {
+    void visit(const Not *op) override {
         op->a.accept(this);
         result = flip(result);
     }
 
-    void visit(const Select *op) {
+    void visit(const Select *op) override {
         op->condition.accept(this);
         Monotonic rcond = result;
 
@@ -271,22 +271,22 @@ class MonotonicVisitor : public IRVisitor {
         }
     }
 
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         op->index.accept(this);
         if (result != Monotonic::Constant) {
             result = Monotonic::Unknown;
         }
     }
 
-    void visit(const Ramp *op) {
+    void visit(const Ramp *op) override {
         internal_error << "Monotonic of vector\n";
     }
 
-    void visit(const Broadcast *op) {
+    void visit(const Broadcast *op) override {
         internal_error << "Monotonic of vector\n";
     }
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         // Some functions are known to be monotonic
         if (op->is_intrinsic(Call::likely) ||
             op->is_intrinsic(Call::likely_if_innermost) ||
@@ -305,7 +305,7 @@ class MonotonicVisitor : public IRVisitor {
         result = Monotonic::Constant;
     }
 
-    void visit(const Let *op) {
+    void visit(const Let *op) override {
         op->value.accept(this);
 
         if (result == Monotonic::Constant) {
@@ -319,7 +319,7 @@ class MonotonicVisitor : public IRVisitor {
         }
     }
 
-    void visit(const Shuffle *op) {
+    void visit(const Shuffle *op) override {
         for (size_t i = 0; i < op->vectors.size(); i++) {
             op->vectors[i].accept(this);
             if (result != Monotonic::Constant) {
@@ -330,63 +330,63 @@ class MonotonicVisitor : public IRVisitor {
         result = Monotonic::Constant;
     }
 
-    void visit(const LetStmt *op) {
+    void visit(const LetStmt *op) override {
         internal_error << "Monotonic of statement\n";
     }
 
-    void visit(const AssertStmt *op) {
+    void visit(const AssertStmt *op) override {
         internal_error << "Monotonic of statement\n";
     }
 
-    void visit(const ProducerConsumer *op) {
+    void visit(const ProducerConsumer *op) override {
         internal_error << "Monotonic of statement\n";
     }
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         internal_error << "Monotonic of statement\n";
     }
 
-    void visit(const Acquire *op) {
+    void visit(const Acquire *op) override {
         internal_error << "Monotonic of statement\n";
     }
 
-    void visit(const Store *op) {
+    void visit(const Store *op) override {
         internal_error << "Monotonic of statement\n";
     }
 
-    void visit(const Provide *op) {
+    void visit(const Provide *op) override {
         internal_error << "Monotonic of statement\n";
     }
 
-    void visit(const Allocate *op) {
+    void visit(const Allocate *op) override {
         internal_error << "Monotonic of statement\n";
     }
 
-    void visit(const Free *op) {
+    void visit(const Free *op) override {
         internal_error << "Monotonic of statement\n";
     }
 
-    void visit(const Realize *op) {
+    void visit(const Realize *op) override {
         internal_error << "Monotonic of statement\n";
     }
 
-    void visit(const Block *op) {
+    void visit(const Block *op) override {
         internal_error << "Monotonic of statement\n";
     }
 
-    void visit(const Fork *op) {
+    void visit(const Fork *op) override {
         internal_error << "Monotonic of statement\n";
     }
 
-    void visit(const IfThenElse *op) {
+    void visit(const IfThenElse *op) override {
         internal_error << "Monotonic of statement\n";
     }
 
-    void visit(const Evaluate *op) {
+    void visit(const Evaluate *op) override {
         internal_error << "Monotonic of statement\n";
     }
 
-    void visit(const Prefetch *op) {
+    void visit(const Prefetch *op) override {
         internal_error << "Monotonic of statement\n";
     }
 
