@@ -89,17 +89,16 @@ bool contains_impure_call(const Expr &expr) {
     return is_not_pure.result;
 }
 
-// Build a loop nest about a provide node using a schedule
-Stmt build_provide_loop_nest_helper(const string &func_name,
-                                    const string &prefix,
-                                    int start_fuse, // Fuse the dims starting from start_fuse to outermost (if not negative)
-                                    const vector<string> &dims, // The pure dims
-                                    const vector<Expr> &site,
-                                    const vector<Expr> &values,
-                                    const vector<Expr> &predicates,
-                                    const FuncSchedule &func_s,
-                                    const StageSchedule &stage_s,
-                                    bool is_update) {
+/**
+ *  Build a loop nest about a provide node using a schedule
+ * @param start_fuse The index of the dimension in \p dims, or the length of \p dims if not fusing
+ * @param dims The pure dimensions
+ * @return The loop nest containing the provide node for the given func/stage
+ */
+Stmt build_provide_loop_nest_helper(const string &func_name, const string &prefix, int start_fuse,
+                                    const vector<string> &dims, const vector<Expr> &site, const vector<Expr> &values,
+                                    const vector<Expr> &predicates, const FuncSchedule &func_s,
+                                    const StageSchedule &stage_s, bool is_update) {
     // We'll build it from inside out, starting from a store node,
     // then wrapping it in for loops.
 
@@ -964,19 +963,14 @@ public:
 
 class InjectFunctionRealization : public IRMutator2 {
 public:
-    InjectFunctionRealization(
-            const vector<Function> &funcs,
-            const vector<bool> &is_output_list,
-            const Target &target,
-            const map<string, Function> &env)
+    InjectFunctionRealization(const vector<Function> &funcs, const vector<bool> &is_output_list, const Target &target,
+                              const map<string, Function> &env)
             : funcs(funcs)
             , is_output_list(is_output_list)
             , target(target)
             , env(env)
             , compute_level(funcs[0].schedule().compute_level())
-            , store_level(funcs[0].schedule().store_level())
-    {
-    }
+            , store_level(funcs[0].schedule().store_level()) { }
 
     bool found_compute_level() const { return _found_compute_level; }
     bool found_store_level() const { return _found_store_level; }
@@ -1137,10 +1131,8 @@ private:
 
     // Compute the shift factor required to align iteration of
     // a function stage with its fused parent loop nest.
-    static void compute_shift_factor(const map<string, bool> &skip, const Function &f,
-                                     const string &prefix, const Definition &def,
-                                     map<string, Expr> &bounds,
-                                     map<string, Expr> &shifts) {
+    static void compute_shift_factor(const map<string, bool> &skip, const Function &f, const string &prefix,
+                                     const Definition &def, map<string, Expr> &bounds, map<string, Expr> &shifts) {
         if (!def.defined()) {
             return;
         }
@@ -1202,14 +1194,9 @@ private:
         }
     }
 
-    Stmt build_produce_definition(
-            const map<string, bool> &skip,
-            const Function &f,
-            const string &prefix,
-            const Definition &def,
-            bool is_update,
-            map<string, Expr> &replacements,
-            vector<pair<string, Expr>> &add_lets) {
+    Stmt build_produce_definition(const map<string, bool> &skip, const Function &f, const string &prefix,
+                                  const Definition &def, bool is_update, map<string, Expr> &replacements,
+                                  vector<pair<string, Expr>> &add_lets) {
         const vector<Dim> &dims = def.schedule().dims(); // From inner to outer
         const LoopLevel &fuse_level = def.schedule().fuse_level().level;
 
@@ -1272,9 +1259,8 @@ private:
     }
 
 
-    void collect_all_dependence_helper(const map<string, bool> &skip, const string &prefix,
-                                       const Definition &def, const FusedPair &p,
-                                       vector<FusedPair> &dependence, set<string> &visited) {
+    void collect_all_dependence_helper(const map<string, bool> &skip, const string &prefix, const Definition &def,
+                                       const FusedPair &p, vector<FusedPair> &dependence, set<string> &visited) {
         visited.insert(prefix);
         dependence.push_back(p);
         for (const FusedPair &pair : def.schedule().fused_pairs()) {
@@ -1318,8 +1304,8 @@ private:
 
     // Replace the bounds of the parent fused loop (i.e. the first one to be
     // realized in the group) with union of the bounds of the fused group.
-    Stmt replace_parent_bound_with_union_bound(const map<string, bool> &skip, const Function &f,
-                                               Stmt produce, const map<string, Expr> &bounds) {
+    Stmt replace_parent_bound_with_union_bound(const map<string, bool> &skip, const Function &f, Stmt produce,
+                                               const map<string, Expr> &bounds) {
         string prefix = f.name() + ".s0";
         const Definition &def = f.definition();
 
@@ -1601,9 +1587,7 @@ private:
     }
 };
 
-string schedule_to_source(const Function &f,
-                          const LoopLevel &store_at,
-                          const LoopLevel &compute_at) {
+string schedule_to_source(const Function &f, const LoopLevel &store_at, const LoopLevel &compute_at) {
     std::ostringstream ss;
     ss << f.name();
     if (compute_at.is_inlined()) {
@@ -1941,8 +1925,7 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
     return true;
 }
 
-void validate_fused_group_schedule_helper(const string &fn, size_t stage_index,
-                                          const Definition &def_1,
+void validate_fused_group_schedule_helper(const string &fn, size_t stage_index, const Definition &def_1,
                                           const map<string, Function> &env) {
     internal_assert(def_1.defined());
     for (const auto &p : def_1.schedule().fused_pairs()) {
@@ -2077,11 +2060,8 @@ bool group_should_be_inlined(const vector<Function> &funcs) {
            && funcs[0].schedule().compute_level().is_inlined();
 }
 
-Stmt schedule_functions(const vector<Function> &outputs,
-                        const vector<vector<string>> &fused_groups,
-                        const map<string, Function> &env,
-                        const Target &target,
-                        bool &any_memoized) {
+Stmt schedule_functions(const vector<Function> &outputs, const vector<vector<string>> &fused_groups,
+                        const map<string, Function> &env, const Target &target, bool &any_memoized) {
     string root_var = LoopLevel::root().lock().to_string();
     Stmt s = For::make(root_var, 0, 1, ForType::Serial, DeviceAPI::Host, Evaluate::make(0));
 
