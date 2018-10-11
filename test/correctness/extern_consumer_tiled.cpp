@@ -49,14 +49,15 @@ int main(int argc, char **argv) {
     const int extern_tile_size = 10;
 
     Func output;
-    output.compute_root().define_extern("copy_plus_xcoord", {input, extern_tile_size, extern_tile_size}, Int(32), {x, y});
-
-    input.compute_root();
+    output.define_extern("copy_plus_xcoord", {input, extern_tile_size, extern_tile_size}, Int(32), {x, y});
 
     Var xo, yo;
-    output.tile(x, y, xo, yo, x, y, extern_tile_size, extern_tile_size);
-    output.serial(xo);
-    output.serial(yo);
+    output.compute_root()
+        .tile(x, y, xo, yo, x, y, extern_tile_size, extern_tile_size)
+        .serial(xo)  // Change loop from extern to serial.
+        .serial(yo);
+
+    input.compute_at(output, xo);
 
     Buffer<int32_t> buf = output.realize(100, 100);
 
