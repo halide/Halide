@@ -192,7 +192,7 @@ Stmt build_provide_loop_nest_helper(const string &func_name, const string &prefi
         pred = qualify(prefix, pred);
         pred_container.emplace_back(Container::If, 0, "", likely(pred));
     }
-    int n_predicates = static_cast<int>(pred_container.size());
+    int n_predicates = (int)(pred_container.size());
 
     nest.insert(nest.end(), pred_container.begin(), pred_container.end());
 
@@ -1150,7 +1150,7 @@ private:
                                                         return var_name_match(d.var, fuse_level.var().name());
                                                     });
                     internal_assert(iter != dims.end());
-                    start_fuse = static_cast<int>(iter - dims.begin());
+                    start_fuse = (int)(iter - dims.begin());
                 }
                 for (int i = start_fuse; i < (int) dims.size() - 1; ++i) {
                     const string &var = dims[i].var;
@@ -1208,7 +1208,7 @@ private:
                                                     return var_name_match(d.var, fuse_level.var().name());
                                                 });
                 internal_assert(iter != dims.end());
-                start_fuse = static_cast<size_t>(iter - dims.begin());
+                start_fuse = (size_t)(iter - dims.begin());
             }
         }
 
@@ -1223,18 +1223,18 @@ private:
             internal_assert(f2_it != env.end());
             const vector<Dim> &dims_2 =
                     (pair.stage_2 == 0) ? f2_it->second.definition().schedule().dims() :
-                    f2_it->second.update(static_cast<int>(pair.stage_2 - 1)).schedule().dims();
+                    f2_it->second.update((int)(pair.stage_2 - 1)).schedule().dims();
 
             const auto &iter = std::find_if(dims.begin(), dims.end(),
                                             [&pair](const Dim &d) { return var_name_match(d.var, pair.var_name); });
             internal_assert(iter != dims.end());
             start_fuse = std::min(start_fuse, (size_t) (iter - dims.begin()));
             // Should ignore the __outermost dummy dimension.
-            for (size_t i = static_cast<size_t>(iter - dims.begin()); i < dims.size() - 1; ++i) {
+            for (size_t i = (size_t)(iter - dims.begin()); i < dims.size() - 1; ++i) {
                 string var_orig = pair.func_1 + ".s" + std::to_string(pair.stage_1) + "." + dims[i].var;
                 Expr val = Variable::make(Int(32), var_orig);
 
-                int dim2_idx = static_cast<int>(dims_2.size() - (dims.size() - i));
+                int dim2_idx = (int)(dims_2.size() - (dims.size() - i));
                 internal_assert(dim2_idx < (int) dims_2.size());
                 string var = pair.func_2 + ".s" + std::to_string(pair.stage_2) + "." + dims_2[dim2_idx].var;
 
@@ -1246,7 +1246,7 @@ private:
 
         Stmt produce = build_provide_loop_nest(env, prefix, f.name(), f.args(),
                                                f.schedule(),
-                                               def, static_cast<int>(start_fuse), is_update);
+                                               def, (int)(start_fuse), is_update);
 
         // Strip off the containing lets. The bounds of the parent fused loop
         // (i.e. the union bounds) might refer to them, so we need to move them
@@ -1272,8 +1272,7 @@ private:
             const Function &f = iter->second;
             string prefix_2 = pair.func_2 + ".s" + std::to_string(pair.stage_2) + "." + pair.var_name;
             if (visited.find(prefix_2) == visited.end()) {
-                const Definition &def_2 = (pair.stage_2 == 0) ? f.definition() : f.update(
-                        static_cast<int>(pair.stage_2 - 1));
+                const Definition &def_2 = (pair.stage_2 == 0) ? f.definition() : f.update((int)(pair.stage_2 - 1));
                 collect_all_dependence_helper(skip, prefix_2, def_2, pair, dependence, visited);
             }
         }
@@ -1293,8 +1292,7 @@ private:
             const Function &f = iter->second;
             string prefix = pair.func_2 + ".s" + std::to_string(pair.stage_2) + "." + pair.var_name;
             if (visited.find(prefix) == visited.end()) {
-                const Definition &def_2 = (pair.stage_2 == 0) ? f.definition() : f.update(
-                        static_cast<int>(pair.stage_2 - 1));
+                const Definition &def_2 = (pair.stage_2 == 0) ? f.definition() : f.update((int)(pair.stage_2 - 1));
                 collect_all_dependence_helper(skip, prefix, def_2, pair, dependence, visited);
             }
         }
@@ -1329,18 +1327,18 @@ private:
             internal_assert(f2_it != env.end());
             const vector<Dim> &dims_2 =
                     (pair.stage_2 == 0) ? f2_it->second.definition().schedule().dims() :
-                    f2_it->second.update(static_cast<int>(pair.stage_2 - 1)).schedule().dims();
+                    f2_it->second.update((int)(pair.stage_2 - 1)).schedule().dims();
 
             const auto &iter = std::find_if(dims.begin(), dims.end(),
                                             [&pair](const Dim &d) { return var_name_match(d.var, pair.var_name); });
             internal_assert(iter != dims.end());
 
             // Should ignore the __outermost dummy dimension.
-            for (size_t i = static_cast<size_t>(iter - dims.begin()); i < dims.size() - 1; ++i) {
+            for (size_t i = (size_t)(iter - dims.begin()); i < dims.size() - 1; ++i) {
                 // The child's dim might have slightly different name from
                 // the parent, e.g. y.yi and yi.
-                int dim2_idx = static_cast<int>(dims_2.size() - (dims.size() - i));
-                internal_assert(dim2_idx < (int) dims_2.size());
+                int dim2_idx = (int)(dims_2.size() - (dims.size() - i));
+                internal_assert(dim2_idx < (int)dims_2.size());
 
                 string var_2 = pair.func_2 + ".s" + std::to_string(pair.stage_2) +
                                "." + dims_2[dim2_idx].var;
@@ -1747,7 +1745,7 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
     }
     if (any_scheduled) {
         for (size_t i = 0; i < f.updates().size(); i++) {
-            const Definition &r = f.update(static_cast<int>(i));
+            const Definition &r = f.update((int)i);
             if (!r.schedule().touched()) {
                 user_warning << "Warning: Update step " << i
                              << " of function " << f.name()
@@ -1938,7 +1936,7 @@ void validate_fused_group_schedule_helper(const string &fn, size_t stage_index, 
         const Function &func_1 = iter1->second;
         const Function &func_2 = iter2->second;
         const Definition &def_2 =
-            (p.stage_2 == 0) ? func_2.definition() : func_2.update(static_cast<int>(p.stage_2 - 1));
+            (p.stage_2 == 0) ? func_2.definition() : func_2.update((int)(p.stage_2 - 1));
         internal_assert(def_2.defined());
 
         // f2.compute_with(f1, var) is allowed only if f2 has no specializations.
@@ -1986,10 +1984,10 @@ void validate_fused_group_schedule_helper(const string &fn, size_t stage_index, 
             << p.func_2 << ".s" << p.stage_2 << "\n";
 
         // Verify that their dimensions up to "var_name" are the same.
-        size_t start_fuse_1 = static_cast<size_t>(iter_1 - dims_1.begin());
-        size_t start_fuse_2 = static_cast<size_t>(iter_2 - dims_2.begin());
+        size_t start_fuse_1 = (size_t)(iter_1 - dims_1.begin());
+        size_t start_fuse_2 = (size_t)(iter_2 - dims_2.begin());
 
-        int n_fused = static_cast<int>(dims_1.size() - start_fuse_1 - 1); // Ignore __outermost
+        int n_fused = (int)(dims_1.size() - start_fuse_1 - 1); // Ignore __outermost
         user_assert(n_fused == (int)(dims_2.size() - start_fuse_2 - 1))
             << "Invalid compute_with: # of fused dims of " << p.func_1 << ".s"
             << p.stage_1 << " and " << p.func_2 << ".s" << p.stage_2 << " do not match.\n";
