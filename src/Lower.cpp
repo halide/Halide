@@ -165,7 +165,7 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     s = bounds_inference(s, outputs, order, fused_groups, env, func_bounds, t);
     debug(2) << "Lowering after computation bounds inference:\n" << s << '\n';
 
-    debug(1) << "Removing extern loops\n";
+    debug(1) << "Removing extern loops...\n";
     s = remove_extern_loops(s);
     debug(2) << "Lowering after removing extern loops:\n" << s << '\n';
 

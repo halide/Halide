@@ -400,6 +400,8 @@ Stmt build_produce(const map<string, Function> &env, Function f, const Target &t
 
         const string &extern_name = f.extern_function_name();
 
+        // We need to generate crops of the input and output buffers
+        // if the extern stage has some non-extern loops.
         bool needs_crops =
             f.definition().schedule().dims().back().for_type != ForType::Extern;
 

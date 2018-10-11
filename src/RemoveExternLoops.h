@@ -4,14 +4,13 @@
 #include "IR.h"
 
 /** \file
- * Defines a lowering pass that elides stores that depend on unitialized values.
+ * Defines a lowering pass that removes placeholder loops for extern stages.
  */
 
 namespace Halide {
 namespace Internal {
 
-/** Removes stores that depend on undef values, and statements that
- * only contain such stores. */
+  /** Removes placeholder loops for extern stages. */
 Stmt remove_extern_loops(Stmt s);
 
 }  // namespace Internal

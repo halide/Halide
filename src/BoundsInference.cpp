@@ -953,7 +953,9 @@ public:
             lets.push_back({ let->name, let->value });
         }
 
-        // If there are no pipelines at this loop level, we can skip most of the work.
+        // If there are no pipelines at this loop level, we can skip
+        // most of the work.  Consider 'extern' for loops as pipelines
+        // (we aren't recursing into these loops above).
         bool no_pipelines =
             body.as<For>() != nullptr &&
             body.as<For>()->for_type != ForType::Extern;
@@ -1027,7 +1029,8 @@ public:
                 }
             }
 
-            // And the current bounds on its reduction variables.
+            // And the current bounds on its reduction variables, and
+            // variables from extern for loops.
             if (producing >= 0) {
                 const Stage &s = stages[producing];
                 vector<string> vars;

@@ -1,5 +1,4 @@
 #include "RemoveExternLoops.h"
-#include "Bounds.h"
 #include "IRMutator.h"
 
 namespace Halide {
@@ -8,8 +7,6 @@ namespace Internal {
 using std::vector;
 
 class RemoveExternLoops : public IRMutator2 {
-public:
-    Expr predicate;
 private:
     using IRMutator2::visit;
 
