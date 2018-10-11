@@ -1043,11 +1043,9 @@ public:
                     string var = s.stage_prefix + i;
                     Interval in = bounds_of_inner_var(var, body);
                     if (in.is_bounded()) {
-                        debug(0) << var << " " << in.min << " " << in.max << "\n";
                         body = LetStmt::make(var + ".min", in.min, body);
                         body = LetStmt::make(var + ".max", in.max, body);
                     } else {
-                        debug(0) << var << " unbounded\n" << body << "\n";
                         // If it's not found, we're already in the
                         // scope of the injected let. The let was
                         // probably lifted to an outer level.
