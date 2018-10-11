@@ -125,7 +125,7 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     debug(1) << "Creating initial loop nests...\n";
     bool any_memoized = false;
     Stmt s = schedule_functions(outputs, fused_groups, env, t, any_memoized);
-    debug(0) << "Lowering after creating initial loop nests:\n" << s << '\n';
+    debug(2) << "Lowering after creating initial loop nests:\n" << s << '\n';
 
     debug(1) << "Canonicalizing GPU var names...\n";
     s = canonicalize_gpu_vars(s);
@@ -156,18 +156,18 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     // inference.
     debug(1) << "Adding checks for images\n";
     s = add_image_checks(s, outputs, t, order, env, func_bounds);
-    debug(0) << "Lowering after injecting image checks:\n" << s << '\n';
-
-    debug(1) << "Removing extern loops\n";
-    s = remove_extern_loops(s);
-    debug(0) << "Lowering after removing extern loops:\n" << s << '\n';
+    debug(2) << "Lowering after injecting image checks:\n" << s << '\n';
 
     // This pass injects nested definitions of variable names, so we
     // can't simplify statements from here until we fix them up. (We
     // can still simplify Exprs).
     debug(1) << "Performing computation bounds inference...\n";
     s = bounds_inference(s, outputs, order, fused_groups, env, func_bounds, t);
-    debug(0) << "Lowering after computation bounds inference:\n" << s << '\n';
+    debug(2) << "Lowering after computation bounds inference:\n" << s << '\n';
+
+    debug(1) << "Removing extern loops\n";
+    s = remove_extern_loops(s);
+    debug(2) << "Lowering after removing extern loops:\n" << s << '\n';
 
     debug(1) << "Performing sliding window optimization...\n";
     s = sliding_window(s, env);

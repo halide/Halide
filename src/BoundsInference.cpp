@@ -929,6 +929,12 @@ public:
     using IRMutator2::visit;
 
     Stmt visit(const For *op) override {
+        // Don't recurse inside loops marked 'Extern', they will be
+        // removed later.
+        if (op->for_type == ForType::Extern) {
+            return op;
+        }
+
         set<string> old_inner_productions;
         inner_productions.swap(old_inner_productions);
 
@@ -948,7 +954,9 @@ public:
         }
 
         // If there are no pipelines at this loop level, we can skip most of the work.
-        bool no_pipelines = body.as<For>() != nullptr;
+        bool no_pipelines =
+            body.as<For>() != nullptr &&
+            body.as<For>()->for_type != ForType::Extern;
 
         // Figure out which stage of which function we're producing
         int producing = -1;
@@ -1020,15 +1028,26 @@ public:
             }
 
             // And the current bounds on its reduction variables.
-            if (producing >= 0 && stages[producing].stage > 0) {
+            if (producing >= 0) {
                 const Stage &s = stages[producing];
-                for (const ReductionVariable &rv : s.rvars) {
-                    string var = s.stage_prefix + rv.var;
+                vector<string> vars;
+                if (s.func.has_extern_definition()) {
+                    vars = s.func.args();
+                }
+                if (stages[producing].stage > 0) {
+                    for (const ReductionVariable &rv : s.rvars) {
+                        vars.push_back(rv.var);
+                    }
+                }
+                for (const string& i : vars) {
+                    string var = s.stage_prefix + i;
                     Interval in = bounds_of_inner_var(var, body);
                     if (in.is_bounded()) {
+                        debug(0) << var << " " << in.min << " " << in.max << "\n";
                         body = LetStmt::make(var + ".min", in.min, body);
                         body = LetStmt::make(var + ".max", in.max, body);
                     } else {
+                        debug(0) << var << " unbounded\n" << body << "\n";
                         // If it's not found, we're already in the
                         // scope of the injected let. The let was
                         // probably lifted to an outer level.

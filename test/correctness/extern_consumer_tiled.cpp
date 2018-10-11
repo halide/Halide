@@ -12,7 +12,7 @@ using namespace Halide;
 #endif
 
 extern "C" DLLEXPORT
-int copy_plus_xcoord(halide_buffer_t *input, halide_buffer_t *output) {
+int copy_plus_xcoord(halide_buffer_t *input, int tile_extent_x, int tile_extent_y, halide_buffer_t *output) {
     // Note the final output buffer argument is unused.
     if (input->is_bounds_query()) {
         for (int d = 0; d < 2; d++) {
@@ -25,7 +25,9 @@ int copy_plus_xcoord(halide_buffer_t *input, halide_buffer_t *output) {
         int max_x = min_x + output->dim[0].extent - 1;
         int min_y = output->dim[1].min;
         int max_y = min_y + output->dim[1].extent - 1;
-        printf("[%d %d] x [%d %d]\n", min_x, max_x, min_y, max_y);
+        assert(output->dim[0].extent == tile_extent_x);
+        assert(output->dim[1].extent == tile_extent_y);
+        printf("[%d %d] [%d %d]\n", min_x, max_x, min_y, max_y);
         for (int y = min_y; y <= max_y; y++) {
             for (int x = min_x; x <= max_x; x++) {
                 int coords[2] = { x, y };
@@ -42,21 +44,21 @@ int main(int argc, char **argv) {
     Var x, y;
     input(x, y) = x*y;
 
+    // We pass the tile size of the extern stage to the extern stage
+    // only to test that it is in fact being tiled.
+    const int extern_tile_size = 10;
+
     Func output;
-    output.compute_root().define_extern("copy_plus_xcoord", {input}, Int(32), {x, y});
+    output.compute_root().define_extern("copy_plus_xcoord", {input, extern_tile_size, extern_tile_size}, Int(32), {x, y});
 
     input.compute_root();
 
     Var xo, yo;
-    output.tile(x, y, xo, yo, x, y, 10, 10);
+    output.tile(x, y, xo, yo, x, y, extern_tile_size, extern_tile_size);
     output.serial(xo);
     output.serial(yo);
 
-    Func output2;
-    output2(x, y) = output(x, y);
-    output2.compute_root();
-    
-    Buffer<int32_t> buf = output2.realize(100, 100);
+    Buffer<int32_t> buf = output.realize(100, 100);
 
     for (int y = 0; y < buf.height(); y++) {
         for (int x = 0; x < buf.width(); x++) {
