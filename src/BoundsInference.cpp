@@ -967,7 +967,7 @@ public:
 
         // Figure out how much of it we're producing
         Box box;
-        if (!no_pipelines && producing >= 0) {
+        if (!no_pipelines && producing >= 0 && !f.has_extern_definition()) {
             Scope<Interval> empty_scope;
             box = box_provided(body, stages[producing].name, empty_scope, func_bounds);
             internal_assert((int)box.size() == f.dimensions());

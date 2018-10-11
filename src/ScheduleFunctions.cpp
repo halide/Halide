@@ -73,21 +73,17 @@ bool contains_impure_call(const Expr &expr) {
 }
 
 // Build a loop nest about a provide node using a schedule
-Stmt build_provide_loop_nest_helper(string func_name,
-                                    string prefix,
-                                    int start_fuse, // Fuse the dims starting from start_fuse to outermost (if not negative)
-                                    const vector<string> &dims, // The pure dims
-                                    const vector<Expr> &site,
-                                    const vector<Expr> &values,
-                                    const vector<Expr> &predicates,
-                                    const FuncSchedule &func_s,
-                                    const StageSchedule &stage_s,
-                                    bool is_update) {
-    // We'll build it from inside out, starting from a store node,
+Stmt build_loop_nest(Stmt body,
+                     string prefix,
+                     int start_fuse, // Fuse the dims starting from start_fuse to outermost (if not negative)
+                     const vector<string> &dims, // The pure dims
+                     const vector<Expr> &predicates,
+                     const FuncSchedule &func_s,
+                     const StageSchedule &stage_s,
+                     bool is_update) {
+    // We'll build it from inside out, starting from the body,
     // then wrapping it in for loops.
-
-    // Make the (multi-dimensional multi-valued) store node.
-    Stmt stmt = Provide::make(func_name, values, site);
+    Stmt stmt = body;
 
     // A map of the dimensions for which we know the extent is a
     // multiple of some Expr. This can happen due to a bound, or
@@ -133,13 +129,15 @@ Stmt build_provide_loop_nest_helper(string func_name,
     // Put the desired loop nest into the containers vector.
     for (int i = (int)stage_s.dims().size() - 1; i >= 0; i--) {
         const Dim &dim = stage_s.dims()[i];
-        Container c = {Container::For, i, prefix + dim.var, Expr()};
-        nest.push_back(c);
+        if (dim.for_type != ForType::Extern) {
+            Container c = {Container::For, i, prefix + dim.var, Expr()};
+            nest.push_back(c);
+        }
     }
 
     vector<Container> pred_container;
     // Strip off the lets/ifs into the containers vector.
-    while (true) {
+    while (!stmt.same_as(body)) {
         const LetStmt *let = stmt.as<LetStmt>();
         const IfThenElse *if_else = stmt.as<IfThenElse>();
         if (let) {
@@ -351,9 +349,12 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
         debug(3) << "Site " << i << " = " << s << "\n";
     }
 
+    // Make the (multi-dimensional multi-valued) store node.
+    Stmt body = Provide::make(func_name, values, site);
+
     // Default schedule/values if there is no specialization
-    Stmt stmt = build_provide_loop_nest_helper(
-        func_name, prefix, start_fuse, dims, site, values,
+    Stmt stmt = build_loop_nest(
+        body, prefix, start_fuse, dims,
         def.split_predicate(), f_sched, def.schedule(), is_update);
     stmt = inject_placeholder_prefetch(stmt, env, prefix, def.schedule().prefetches());
 
@@ -413,7 +414,7 @@ Stmt build_produce(const map<string, Function> &env, Function f, const Target &t
                 extern_call_args.push_back(arg.expr);
             } else if (arg.is_func()) {
                 Function input(arg.func);
-                if (input.schedule().store_level() == input.schedule().compute_level()) {
+                if (false && input.schedule().store_level() == input.schedule().compute_level()) {
                     for (int k = 0; k < input.outputs(); k++) {
                         string buf_name = input.name();
                         if (input.outputs() > 1) {
@@ -502,7 +503,7 @@ Stmt build_produce(const map<string, Function> &env, Function f, const Target &t
         // it's the output to the pipeline then it will similarly be
         // in the symbol table.
         vector<pair<Expr, Expr>> cropped_buffers;
-        if (f.schedule().store_level() == f.schedule().compute_level()) {
+        if (false && f.schedule().store_level() == f.schedule().compute_level()) {
             for (int j = 0; j < f.outputs(); j++) {
                 string buf_name = f.name();
                 if (f.outputs() > 1) {
@@ -651,11 +652,7 @@ Stmt build_produce(const map<string, Function> &env, Function f, const Target &t
             check = Block::make(annotate, check);
         }
 
-        // Add the dummy outermost loop.
-        string outermost = f.name() + ".s0." + Var::outermost().name();
-        check = For::make(outermost, 0, 1, ForType::Serial, DeviceAPI::None, check);
-
-        return check;
+        return build_loop_nest(check, f.name() + ".s0.", -1, f.args(), {}, f.schedule(), f.definition().schedule(), false);
     } else {
 
         string prefix = f.name() + ".s0.";
