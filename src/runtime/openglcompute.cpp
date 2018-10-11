@@ -355,7 +355,7 @@ __attribute__((always_inline)) void converting_copy_memory_helper(const device_c
         }
     } else {
         for (uint64_t i = 0; i < copy.extent[d]; i++) {
-            converting_copy_memory_helper<Dest, Source>(copy, d - 1, src_off, dst_off);
+            converting_copy_memory_helper<Source, Dest>(copy, d - 1, src_off, dst_off);
             src_off += copy.src_stride_bytes[d];
             dst_off += copy.dst_stride_bytes[d];
         }
@@ -401,6 +401,10 @@ WEAK int halide_openglcompute_copy_to_device(void *user_context, halide_buffer_t
         if (buf->type.bits == 8) {
           converting_copy_memory_helper<int8_t, float>(dev_copy, MAX_COPY_DIMS-1, dev_copy.src_begin, 0);
         } else if (buf->type.bits == 16) {
+            // Convert chunk_size in bytes to the number of items to be copied.
+            // This doesn't happen for the 8-bit case because it would be a division by one,
+            // and it doesn't happen for the 32-bit case as there is no data conversion and memcpy
+            // is used.
             dev_copy.chunk_size /= 2;
             converting_copy_memory_helper<int16_t, float>(dev_copy, MAX_COPY_DIMS-1, dev_copy.src_begin, 0);
         } else if (buf->type.bits == 32) {
@@ -413,6 +417,10 @@ WEAK int halide_openglcompute_copy_to_device(void *user_context, halide_buffer_t
         if (buf->type.bits == 8) {
             converting_copy_memory_helper<uint8_t, float>(dev_copy, MAX_COPY_DIMS-1, dev_copy.src_begin, 0);
         } else if (buf->type.bits == 16) {
+            // Convert chunk_size in bytes to the number of items to be copied.
+            // This doesn't happen for the 8-bit case because it would be a division by one,
+            // and it doesn't happen for the 32-bit case as there is no data conversion and memcpy
+            // is used.
             dev_copy.chunk_size /= 2;
             converting_copy_memory_helper<uint16_t, float>(dev_copy, MAX_COPY_DIMS-1, dev_copy.src_begin, 0);
         } else if (buf->type.bits == 32) {
@@ -478,6 +486,10 @@ WEAK int halide_openglcompute_copy_to_host(void *user_context, halide_buffer_t *
         if (buf->type.bits == 8) {
             converting_copy_memory_helper<float, int8_t>(dev_copy, MAX_COPY_DIMS-1, 0, dev_copy.src_begin);
         } else if (buf->type.bits == 16) {
+            // Convert chunk_size in bytes to the number of items to be copied.
+            // This doesn't happen for the 8-bit case because it would be a division by one,
+            // and it doesn't happen for the 32-bit case as there is no data conversion and memcpy
+            // is used.
             dev_copy.chunk_size /= 2;
             converting_copy_memory_helper<float, int16_t>(dev_copy, MAX_COPY_DIMS-1, 0, dev_copy.src_begin);
         } else if (buf->type.bits == 32) {
@@ -490,6 +502,10 @@ WEAK int halide_openglcompute_copy_to_host(void *user_context, halide_buffer_t *
         if (buf->type.bits == 8) {
             converting_copy_memory_helper<float, uint8_t>(dev_copy, MAX_COPY_DIMS-1, 0, dev_copy.src_begin);
         } else if (buf->type.bits == 16) {
+            // Convert chunk_size in bytes to the number of items to be copied.
+            // This doesn't happen for the 8-bit case because it would be a division by one,
+            // and it doesn't happen for the 32-bit case as there is no data conversion and memcpy
+            // is used.
             dev_copy.chunk_size /= 2;
             converting_copy_memory_helper<float, uint16_t>(dev_copy, MAX_COPY_DIMS-1, 0, dev_copy.src_begin);
         } else if (buf->type.bits == 32) {
