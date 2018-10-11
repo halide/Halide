@@ -402,6 +402,7 @@ Stmt build_produce(const map<string, Function> &env, Function f, const Target &t
 
         // We need to generate crops of the input and output buffers
         // if the extern stage has some non-extern loops.
+        internal_assert(!f.definition().schedule().dims().empty());
         bool needs_crops =
             f.definition().schedule().dims().back().for_type != ForType::Extern;
 
@@ -1860,6 +1861,7 @@ bool validate_schedule(Function f, Stmt s, const Target &target, bool is_output,
         // inside any extern loops, and all loop types are supported
         // for extern stages.
         const vector<Dim>& dims = f.definition().schedule().dims();
+        internal_assert(!dims.empty());
         bool is_extern = dims.front().for_type == ForType::Extern;
         for (const Dim& i : dims) {
             switch (i.for_type) {
