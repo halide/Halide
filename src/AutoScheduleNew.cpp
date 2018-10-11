@@ -689,6 +689,9 @@ struct FunctionDAG {
                 }
                 for (int j = 0; j < consumer.dimensions(); j++) {
                     Interval in = bounds_of_expr_in_scope(def.args()[j], stage_scope);
+                    internal_assert(in.is_bounded())
+                        << "Region computed of " << consumer.name()
+                        << " is unbounded: [" << in.min << " " << in.max << "]\n";
                     if (s == 0) {
                         node.region_computed[j].in = in;
                     } else {
@@ -873,8 +876,17 @@ struct FunctionDAG {
 
                 node.stages.emplace_back(std::move(stage));
 
+                exprs = apply_param_estimates.mutate(exprs);
+
+                FuncValueBounds func_value_bounds = compute_function_value_bounds(order, env);
+                for (auto &p : func_value_bounds) {
+                    p.second.min = apply_param_estimates.mutate(p.second.min);
+                    p.second.max = apply_param_estimates.mutate(p.second.max);
+                }
+
                 // Now create the edges that lead to this func
-                for (auto p : boxes_required(exprs, stage_scope)) {
+                auto boxes = boxes_required(exprs, stage_scope, func_value_bounds);
+                for (auto &p : boxes) {
                     auto it = env.find(p.first);
                     if (it != env.end() && p.first != consumer.name()) {
                         // Discard loads from input images and self-loads
@@ -883,9 +895,14 @@ struct FunctionDAG {
                         edge.consumer_stage = s;
                         edge.producer = node_map.at(env[p.first]);
                         edge.all_bounds_affine = true;
-                        for (Interval &i : p.second.bounds) {
-                            Edge::BoundInfo min(simplify(apply_param_estimates.mutate(i.min)), edge.consumer->stages[s]);
-                            Edge::BoundInfo max(simplify(apply_param_estimates.mutate(i.max)), edge.consumer->stages[s]);
+
+                        for (Interval &in : p.second.bounds) {
+                            // Whenever a relationship is unbounded, we must inline
+                            internal_assert(in.is_bounded())
+                                << "Unbounded producer->consumer relationship: "
+                                << edge.producer->func.name() << " -> " << edge.consumer->func.name() << "\n";
+                            Edge::BoundInfo min(simplify(in.min), edge.consumer->stages[s]);
+                            Edge::BoundInfo max(simplify(in.max), edge.consumer->stages[s]);
                             edge.bounds.emplace_back(std::move(min), std::move(max));
                             edge.all_bounds_affine &= edge.bounds.back().first.affine;
                             edge.all_bounds_affine &= edge.bounds.back().second.affine;
@@ -2804,7 +2821,10 @@ struct State {
             // Perform any quick rejection tests before enqueuing this
             for (auto it = features.begin(); it != features.end(); it++) {
                 auto &feat = it.value();
-                if (feat.points_computed_total + feat.inlined_calls > 1.5 * feat.points_computed_minimum) return false;
+                if (feat.points_computed_total + feat.inlined_calls > 10 * feat.points_computed_minimum) {
+                    cost = 1e50;
+                    return true;
+                }
             }
 
             int num_stages = (int)features.size();
