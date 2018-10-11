@@ -498,8 +498,9 @@ private:
             Expr ramp_base;
             LoadCompare(Expr e) : ramp_base(e) {}
             bool operator()(const MulExpr &m1, const MulExpr &m2) {
-                if (!m1.first.defined() || !m2.first.defined())
+                if (!m1.first.defined() || !m2.first.defined()) {
                     return false;
+                }
                 const Load *m1_load = m1.first.as<Load>();
                 const Load *m2_load = m2.first.as<Load>();
                 internal_assert(m1_load && m2_load);
@@ -526,7 +527,7 @@ private:
                 }
             }
             std::stable_sort(mpys.begin(), mpys.end(),
-                             [&](const MulExpr &m1, const MulExpr &m2) {
+                             [](const MulExpr &m1, const MulExpr &m2) {
                                  return m1.first.as<Shuffle>()->slice_begin() < m2.first.as<Shuffle>()->slice_begin();
                              });
             return;
