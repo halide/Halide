@@ -400,6 +400,9 @@ Stmt build_produce(const map<string, Function> &env, Function f, const Target &t
 
         const string &extern_name = f.extern_function_name();
 
+        bool needs_crops =
+            f.definition().schedule().dims().back().for_type != ForType::Extern;
+
         vector<pair<string, Expr>> lets;
 
         // Iterate through all of the input args to the extern
@@ -412,7 +415,7 @@ Stmt build_produce(const map<string, Function> &env, Function f, const Target &t
                 extern_call_args.push_back(arg.expr);
             } else if (arg.is_func()) {
                 Function input(arg.func);
-                if (false && input.schedule().store_level() == input.schedule().compute_level()) {
+                if (!needs_crops && input.schedule().store_level() == input.schedule().compute_level()) {
                     for (int k = 0; k < input.outputs(); k++) {
                         string buf_name = input.name();
                         if (input.outputs() > 1) {
@@ -501,7 +504,7 @@ Stmt build_produce(const map<string, Function> &env, Function f, const Target &t
         // it's the output to the pipeline then it will similarly be
         // in the symbol table.
         vector<pair<Expr, Expr>> cropped_buffers;
-        if (false && f.schedule().store_level() == f.schedule().compute_level()) {
+        if (!needs_crops && f.schedule().store_level() == f.schedule().compute_level()) {
             for (int j = 0; j < f.outputs(); j++) {
                 string buf_name = f.name();
                 if (f.outputs() > 1) {
@@ -1848,6 +1851,33 @@ bool validate_schedule(Function f, Stmt s, const Target &target, bool is_output,
                         << "Func " << g.name() << " cannot be scheduled to be computed inline, "
                         << "because it is used in the externally-computed function " << f.name() << "\n";
                 }
+            }
+        }
+
+        // Check that extern stages do not have any non-extern loops
+        // inside any extern loops, and all loop types are supported
+        // for extern stages.
+        const vector<Dim>& dims = f.definition().schedule().dims();
+        bool is_extern = dims.front().for_type == ForType::Extern;
+        for (const Dim& i : dims) {
+            switch (i.for_type) {
+            case ForType::Extern:
+                if (!is_extern) {
+                  user_error
+                      << "Externally defined Func " << f.name()
+                      << " cannot have extern loop " << i.var
+                      << " outside a non-extern loop.\n";
+                }
+                break;
+            case ForType::Serial:
+            case ForType::Parallel:
+            case ForType::Unrolled:
+                is_extern = false;
+                break;
+            default:
+                user_error
+                    << "Externally defined Func " << f.name()
+                    << " cannot have loop type " << i.for_type << " (" << i.var << ")\n";
             }
         }
     }
