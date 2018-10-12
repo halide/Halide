@@ -77,14 +77,19 @@ bool contains_impure_call(const Expr &expr) {
 }
 
 // Build a loop nest about a provide node using a schedule
-Stmt build_loop_nest(Stmt body,
-                     string prefix,
-                     int start_fuse, // Fuse the dims starting from start_fuse to outermost (if not negative)
-                     const vector<string> &dims, // The pure dims
-                     const vector<Expr> &predicates,
-                     const FuncSchedule &func_s,
-                     const StageSchedule &stage_s,
-                     bool is_update) {
+//func.args(), func.schedule(), def.split_predicate(), def.schedule(),
+Stmt build_loop_nest(
+        const Stmt &body,
+        const string &prefix,
+        int start_fuse,
+        const Function &func,
+        const Definition &def,
+        bool is_update) {
+    const auto& dims = func.args();
+    const auto& func_s = func.schedule();
+    const auto& stage_s = def.schedule();
+    const auto& predicates = def.split_predicate();
+
     // We'll build it from inside out, starting from the body,
     // then wrapping it in for loops.
     Stmt stmt = body;
@@ -318,9 +323,7 @@ Stmt build_loop_nest(Stmt body,
 // Build a loop nest about a provide node using a schedule
 Stmt build_provide_loop_nest(const map<string, Function> &env,
                              const string &prefix,
-                             const string &func_name,
-                             const vector<string> &dims,
-                             const FuncSchedule &f_sched,
+                             const Function &func,
                              const Definition &def,
                              int start_fuse,
                              bool is_update) {
@@ -346,25 +349,21 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
     }
 
     // Make the (multi-dimensional multi-valued) store node.
-    Stmt body = Provide::make(func_name, values, site);
+    Stmt body = Provide::make(func.name(), values, site);
 
     // Default schedule/values if there is no specialization
-    Stmt stmt = build_loop_nest(
-        body, prefix, start_fuse, dims,
-        def.split_predicate(), f_sched, def.schedule(), is_update);
+    Stmt stmt = build_loop_nest(body, prefix, start_fuse, func, def, is_update);
     stmt = inject_placeholder_prefetch(stmt, env, prefix, def.schedule().prefetches());
 
     // Make any specialized copies
     const vector<Specialization> &specializations = def.specializations();
     for (size_t i = specializations.size(); i > 0; i--) {
         const Specialization &s = specializations[i - 1];
-        Expr c = s.condition;
-        const Definition &s_def = s.definition;
         Stmt then_case;
         if (s.failure_message.empty()) {
-            then_case = build_provide_loop_nest(env, prefix, func_name, dims, f_sched, s_def, start_fuse, is_update);
+            then_case = build_provide_loop_nest(env, prefix, func, s.definition, start_fuse, is_update);
         } else {
-            internal_assert(equal(c, const_true()));
+            internal_assert(equal(s.condition, const_true()));
             // specialize_fail() should only be possible on the final specialization
             internal_assert(i == specializations.size());
             Expr specialize_fail_error =
@@ -374,7 +373,7 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
                                      Internal::Call::Extern);
             then_case = AssertStmt::make(const_false(), specialize_fail_error);
         }
-        stmt = IfThenElse::make(c, then_case, stmt);
+        stmt = IfThenElse::make(s.condition, then_case, stmt);
     }
 
     return stmt;
@@ -663,7 +662,9 @@ Stmt build_extern_produce(const map<string, Function> &env, Function f, const Ta
         check = LetStmt::make(let.first, let.second, check);
     }
 
-    return build_loop_nest(check, f.name() + ".s0.", -1, f.args(), {}, f.schedule(), f.definition().schedule(), false);
+    Definition f_def_no_pred = f.definition().get_copy();
+    f_def_no_pred.predicate() = const_true();
+    return build_loop_nest(check, f.name() + ".s0.", -1, f, f_def_no_pred, false);
 }
 
 // A schedule may include explicit bounds on some dimension. This
@@ -1233,9 +1234,7 @@ private:
             }
         }
 
-        Stmt produce = build_provide_loop_nest(env, prefix, f.name(), f.args(),
-                                               f.schedule(),
-                                               def, (int)(start_fuse), is_update);
+        Stmt produce = build_provide_loop_nest(env, prefix, f, def, (int)(start_fuse), is_update);
 
         // Strip off the containing lets. The bounds of the parent fused loop
         // (i.e. the union bounds) might refer to them, so we need to move them
