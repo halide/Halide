@@ -650,7 +650,7 @@ Stmt build_produce(const map<string, Function> &env, Function f, const Target &t
             const char *fn = (cropped_buffers.size() == 1 ?
                               "_halide_buffer_retire_crop_after_extern_stage" :
                               "_halide_buffer_retire_crops_after_extern_stage");
-            check = Allocate::make(destructor_name, Handle(), MemoryType::Stack, {},
+            check = Allocate::make(destructor_name, Handle(), MemoryType::Heap, {},
                                    const_true(), check, cleanup_struct, fn);
         }
 
