@@ -20,6 +20,11 @@ void make_pipeline(Func &A, Func &B) {
 }
 
 int main(int argc, char **argv) {
+#ifdef _WIN32
+    // Disabled for now: https://github.com/halide/Halide/issues/3358
+    printf("Skipping correctness_async_copy_chain on Windows for now.\n");
+    return 0;
+#else
     // Make a list of extern pipeline stages (just copies) all async
     // and connected by double buffers, then try various nestings of
     // them. This is a stress test of the async extern storage folding
@@ -154,4 +159,5 @@ int main(int argc, char **argv) {
 
     printf("Success!\n");
     return 0;
+#endif
 }
