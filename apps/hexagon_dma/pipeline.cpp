@@ -10,16 +10,10 @@ public:
     void generate() {
         Var x{"x"}, y{"y"};
 
-        // We need a wrapper for the output so we can schedule the
-        // multiply update in tiles.
-        Func input_copy("copy");
-        Func output_copy("copy");
-        Func work("copy");
+        Func work("work");
+        work(x, y) = input(x, y) * 2;
 
-        input_copy(x, y) = input(x, y);
-        work(x, y) = input_copy(x, y) * 2;
-        output_copy(x, y) = work(x, y);
-        output(x, y) = output_copy(x, y);
+        output(x, y) = work(x, y);
 
         Var tx("tx"), ty("ty");
 
@@ -29,24 +23,18 @@ public:
 
         Expr fac = output.dim(1).extent()/2;
 
-
+        // The output is a tiled DMA write.
         output.compute_root()
-              .tile(x, y, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp);
-        Stage(output)
-            .set_dim_device_api(tx, DeviceAPI::HexagonDma);
+            .copy_to_device()
+            .tile(x, y, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp);
 
-        // Schedule the copy to be computed at tiles with a
-        // circular buffer of two tiles.
-        input_copy.compute_at(output, tx)
-                  .copy_to_host();
-
+        // Schedule the work to be computed at tiles of the output.
         work.compute_at(output, tx);
 
-        output_copy.compute_at(output, tx)
-                   .copy_to_device();
-
+        // Read the input with a DMA read.
+        input.in().compute_at(output, tx)
+            .copy_to_host();
     }
-
 };
 
 HALIDE_REGISTER_GENERATOR(DmaPipeline, dma_pipeline)
