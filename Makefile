@@ -687,6 +687,8 @@ RUNTIME_CPP_COMPONENTS = \
   float16_t \
   gpu_device_selection \
   hexagon_cpu_features \
+  hexagon_dma_pool \
+  hexagon_dma \
   hexagon_host \
   ios_io \
   linux_clock \
@@ -748,7 +750,8 @@ RUNTIME_CPP_COMPONENTS = \
   windows_threads_tsan \
   windows_yield \
   write_debug_image \
-  x86_cpu_features
+  x86_cpu_features \
+  hexagon_cache_allocator \
 
 RUNTIME_LL_COMPONENTS = \
   aarch64 \
@@ -770,6 +773,7 @@ RUNTIME_LL_COMPONENTS = \
 RUNTIME_EXPORTED_INCLUDES = $(INCLUDE_DIR)/HalideRuntime.h \
                             $(INCLUDE_DIR)/HalideRuntimeD3D12Compute.h \
                             $(INCLUDE_DIR)/HalideRuntimeCuda.h \
+                            $(INCLUDE_DIR)/HalideRuntimeHexagonDma.h \
                             $(INCLUDE_DIR)/HalideRuntimeHexagonHost.h \
                             $(INCLUDE_DIR)/HalideRuntimeOpenCL.h \
                             $(INCLUDE_DIR)/HalideRuntimeOpenGL.h \
