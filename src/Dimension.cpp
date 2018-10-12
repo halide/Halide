@@ -71,8 +71,10 @@ Dimension Dimension::set_bounds_estimate(Expr min, Expr extent) {
     // (This matters mainly for OutputImageParams.)
     // Note that while it's possible/legal for a Dimension to have an undefined
     // Func, you shouldn't ever call set_bounds_estimate on such an instance.
-    internal_assert(f.defined());
-    f.estimate(f.args()[d], min, extent);
+    // (But don't fail: we might need to do this when using dimensions_and_alignment())
+    if (f.defined()) {
+        f.estimate(f.args()[d], min, extent);
+    }
     return *this;
 }
 

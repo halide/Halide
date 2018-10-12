@@ -88,6 +88,35 @@ public:
     void schedule() {
         intermediate.compute_at(intermediate_level);
         intermediate.specialize(vectorize).vectorize(x, natural_vector_size<float>());
+
+        typed_buffer_input.dim(2).set_bounds(0, 5);
+
+        // When AOT-compiling, set constraints on the Buffer for this input:
+        // - require that we have 7 'channels'
+        simple_input.dimensions_and_alignment().dim(2).set_bounds(0, 7);
+        // - require that the width is an even multiple of 32
+        simple_input.dimensions_and_alignment().dim(0).set_extent(
+            simple_input.dimensions_and_alignment().dim(0).extent()/32*32);
+
+        // Ditto for array inputs
+        for (size_t i = 0; i < array_input.size(); ++i) {
+            array_input.dimensions_and_alignment(i).dim(2).set_bounds(0, (int)(9 + i * 2));
+            array_input.dimensions_and_alignment(i).dim(0).set_extent(
+                array_input.dimensions_and_alignment(i).dim(0).extent()/32*32);
+        }
+
+        // Also set some constraints on Output<Func> for aot-only
+        // - require that we have 5 'channels'
+        simple_output.dimensions_and_alignment().dim(2).set_bounds(0, 5);
+        // - require that the width is an even multiple of 32
+        simple_output.dimensions_and_alignment().dim(0).set_extent(
+            simple_output.dimensions_and_alignment().dim(0).extent()/32*32);
+
+        // Ditto for array outputs
+        for (size_t i = 0; i < array_output.size(); ++i) {
+            array_output.dimensions_and_alignment(i).dim(0).set_extent(
+                array_output.dimensions_and_alignment(i).dim(0).extent()/32*32);
+        }
     }
 
 private:

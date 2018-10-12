@@ -11,6 +11,8 @@
 namespace Halide {
 namespace Internal {
 
+class DimensionsAndAlignment;
+
 class Dimension {
 public:
     /** Get an expression representing the minimum coordinates of this image
@@ -87,6 +89,7 @@ public:
 
 private:
     friend class ::Halide::OutputImageParam;
+    friend class ::Halide::Internal::DimensionsAndAlignment;
 
     /** Construct a Dimension representing dimension d of some
      * Internal::Parameter p. Only friends may construct
