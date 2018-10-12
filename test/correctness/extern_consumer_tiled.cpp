@@ -53,8 +53,7 @@ int main(int argc, char **argv) {
     Var xo, yo;
     output.compute_root()
         .tile(x, y, xo, yo, x, y, extern_tile_size, extern_tile_size)
-        .serial(xo)  // Change loop from extern to serial.
-        .serial(yo);
+        .parallel(yo);
 
     input.compute_at(output, xo);
 
