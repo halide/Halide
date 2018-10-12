@@ -416,9 +416,10 @@ enum class ForType {
     Parallel,
     Vectorized,
     Unrolled,
+    Extern,
     GPUBlock,
     GPUThread,
-    GPULane
+    GPULane,
 };
 
 
