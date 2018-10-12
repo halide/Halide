@@ -19,7 +19,7 @@ protected:
 
     using IRMutator2::visit;
 
-    Stmt visit(const LetStmt *op) {
+    Stmt visit(const LetStmt *op) override {
         Stmt body = mutate(op->body);
         if (is_no_op(body)) {
             return body;
@@ -28,7 +28,7 @@ protected:
         }
     }
 
-    Stmt visit(const For *op) {
+    Stmt visit(const For *op) override {
         Stmt body = mutate(op->body);
         if (is_no_op(body)) {
             return body;
@@ -37,7 +37,7 @@ protected:
         }
     }
 
-    Stmt visit(const Block *op) {
+    Stmt visit(const Block *op) override {
         Stmt first = mutate(op->first);
         Stmt rest = mutate(op->rest);
         if (is_no_op(first)) {
@@ -49,7 +49,7 @@ protected:
         }
     }
 
-    Stmt visit(const Fork *op) {
+    Stmt visit(const Fork *op) override {
         Stmt first = mutate(op->first);
         Stmt rest = mutate(op->rest);
         if (is_no_op(first)) {
@@ -61,7 +61,7 @@ protected:
         }
     }
 
-    Stmt visit(const Realize *op) {
+    Stmt visit(const Realize *op) override {
         Stmt body = mutate(op->body);
         if (is_no_op(body)) {
             return body;
@@ -71,7 +71,7 @@ protected:
         }
     }
 
-    Stmt visit(const Allocate *op) {
+    Stmt visit(const Allocate *op) override {
         Stmt body = mutate(op->body);
         if (is_no_op(body)) {
             return body;
@@ -82,7 +82,7 @@ protected:
         }
     }
 
-    Stmt visit(const IfThenElse *op) {
+    Stmt visit(const IfThenElse *op) override {
         Stmt then_case = mutate(op->then_case);
         Stmt else_case = mutate(op->else_case);
         if (is_no_op(then_case) && is_no_op(else_case)) {
@@ -100,7 +100,7 @@ class GenerateProducerBody : public NoOpCollapsingMutator {
     using NoOpCollapsingMutator::visit;
 
     // Preserve produce nodes and add synchronization
-    Stmt visit(const ProducerConsumer *op) {
+    Stmt visit(const ProducerConsumer *op) override {
         if (op->name == func && op->is_producer) {
             // Add post-synchronization
             internal_assert(!sema.empty()) << "Duplicate produce node: " << op->name << "\n";
@@ -122,15 +122,15 @@ class GenerateProducerBody : public NoOpCollapsingMutator {
     }
 
     // Other stmt leaves get replaced with no-ops
-    Stmt visit(const Evaluate *) {
+    Stmt visit(const Evaluate *) override {
         return Evaluate::make(0);
     }
 
-    Stmt visit(const Provide *) {
+    Stmt visit(const Provide *) override {
         return Evaluate::make(0);
     }
 
-    Stmt visit(const Store *op) {
+    Stmt visit(const Store *op) override {
         if (starts_with(op->name, func + ".folding_semaphore.") && ends_with(op->name, ".head")) {
             // This is a counter associated with the producer side of a storage-folding semaphore. Keep it.
             return op;
@@ -139,15 +139,15 @@ class GenerateProducerBody : public NoOpCollapsingMutator {
         }
     }
 
-    Stmt visit(const AssertStmt *) {
+    Stmt visit(const AssertStmt *) override {
         return Evaluate::make(0);
     }
 
-    Stmt visit(const Prefetch *) {
+    Stmt visit(const Prefetch *) override {
         return Evaluate::make(0);
     }
 
-    Stmt visit(const Acquire *op) {
+    Stmt visit(const Acquire *op) override {
         Stmt body = mutate(op->body);
         const Variable *var = op->semaphore.as<Variable>();
         internal_assert(var);
@@ -165,7 +165,7 @@ class GenerateProducerBody : public NoOpCollapsingMutator {
         }
     }
 
-    Expr visit(const Call *op) {
+    Expr visit(const Call *op) override {
         if (op->name == "halide_semaphore_init") {
             internal_assert(op->args.size() == 2);
             const Variable *var = op->args[0].as<Variable>();
@@ -190,7 +190,7 @@ class GenerateConsumerBody : public NoOpCollapsingMutator {
 
     using NoOpCollapsingMutator::visit;
 
-    Stmt visit(const ProducerConsumer *op) {
+    Stmt visit(const ProducerConsumer *op) override {
         if (op->name == func) {
             if (op->is_producer) {
                 // Remove the work entirely
@@ -206,7 +206,7 @@ class GenerateConsumerBody : public NoOpCollapsingMutator {
         }
     }
 
-    Stmt visit(const Allocate *op) {
+    Stmt visit(const Allocate *op) override {
         // Don't want to keep the producer's storage-folding tracker - it's dead code on the consumer side
         if (starts_with(op->name, func + ".folding_semaphore.") && ends_with(op->name, ".head")) {
             return mutate(op->body);
@@ -215,7 +215,7 @@ class GenerateConsumerBody : public NoOpCollapsingMutator {
         }
     }
 
-    Stmt visit(const Store *op) {
+    Stmt visit(const Store *op) override {
         if (starts_with(op->name, func + ".folding_semaphore.") && ends_with(op->name, ".head")) {
             return Evaluate::make(0);
         } else {
@@ -223,7 +223,7 @@ class GenerateConsumerBody : public NoOpCollapsingMutator {
         }
     }
 
-    Stmt visit(const Acquire *op) {
+    Stmt visit(const Acquire *op) override {
         // Don't want to duplicate any semaphore acquires.
         // Ones from folding should go to the producer side.
         const Variable *var = op->semaphore.as<Variable>();
@@ -246,7 +246,7 @@ class CloneAcquire : public IRMutator2 {
     const string &old_name;
     Expr new_var;
 
-    Stmt visit(const Evaluate *op) {
+    Stmt visit(const Evaluate *op) override {
         const Call *call = op->value.as<Call>();
         const Variable *var = ((call && !call->args.empty()) ?
                                call->args[0].as<Variable>() :
@@ -275,7 +275,7 @@ class CountConsumeNodes : public IRVisitor {
 
     using IRVisitor::visit;
 
-    void visit(const ProducerConsumer *op) {
+    void visit(const ProducerConsumer *op) override {
         if (op->name == func && !op->is_producer) {
             count++;
         }
@@ -293,7 +293,7 @@ class ForkAsyncProducers : public IRMutator2 {
 
     map<string, string> cloned_acquires;
 
-    Stmt visit(const Realize *op) {
+    Stmt visit(const Realize *op) override {
         auto it = env.find(op->name);
         internal_assert(it != env.end());
         Function f = it->second;
@@ -369,11 +369,22 @@ public:
 class InitializeSemaphores : public IRMutator2 {
     using IRMutator2::visit;
 
-    Stmt visit(const LetStmt *op) {
-        Stmt body = mutate(op->body);
-        if (op->value.type() == type_of<halide_semaphore_t *>()) {
+    const Type sema_type = type_of<halide_semaphore_t *>();
+
+    Stmt visit(const LetStmt *op) override {
+        vector<const LetStmt *> frames;
+
+        // Find first op that is of sema_type
+        while (op && op->value.type() != sema_type) {
+            frames.push_back(op);
+            op = op->body.as<LetStmt>();
+        }
+
+        Stmt body;
+        if (op) {
+            body = mutate(op->body);
+            // Peel off any enclosing let expressions from the value
             vector<pair<string, Expr>> lets;
-            // Peel off any enclosing lets
             Expr value = op->value;
             while (const Let *l = value.as<Let>()) {
                 lets.emplace_back(l->name, l->value);
@@ -383,25 +394,35 @@ class InitializeSemaphores : public IRMutator2 {
             if (call && call->name == "halide_make_semaphore") {
                 internal_assert(call->args.size() == 1);
 
-                Expr sema_var = Variable::make(type_of<halide_semaphore_t *>(), op->name);
+                Expr sema_var = Variable::make(sema_type, op->name);
                 Expr sema_init = Call::make(Int(32), "halide_semaphore_init",
                                             {sema_var, call->args[0]}, Call::Extern);
-                Expr sema_allocate = Call::make(type_of<halide_semaphore_t *>(), Call::alloca,
+                Expr sema_allocate = Call::make(sema_type, Call::alloca,
                                                 {(int)sizeof(halide_semaphore_t)}, Call::Intrinsic);
-                Stmt stmt = Block::make(Evaluate::make(sema_init), body);
-                stmt = LetStmt::make(op->name, sema_allocate, stmt);
+                body = Block::make(Evaluate::make(sema_init), std::move(body));
+                body = LetStmt::make(op->name, std::move(sema_allocate), std::move(body));
 
                 // Re-wrap any other lets
-                while (!lets.empty()) {
-                    stmt = LetStmt::make(lets.back().first, lets.back().second, stmt);
+                for (auto it = lets.rbegin(); it != lets.rend(); it++) {
+                    body = LetStmt::make(it->first, it->second, std::move(body));
                 }
-                return stmt;
+            }
+        } else {
+            body = mutate(frames.back()->body);
+        }
+
+        for (auto it = frames.rbegin(); it != frames.rend(); it++) {
+            Expr value = mutate((*it)->value);
+            if (value.same_as((*it)->value) && body.same_as((*it)->body)) {
+                body = *it;
+            } else {
+                body = LetStmt::make((*it)->name, std::move(value), std::move(body));
             }
         }
-        return LetStmt::make(op->name, op->value, body);
+        return body;
     }
 
-    Expr visit(const Call *op) {
+    Expr visit(const Call *op) override {
         internal_assert(op->name != "halide_make_semaphore")
             << "Call to halide_make_semaphore in unexpected place\n";
         return op;
@@ -447,7 +468,7 @@ class TightenProducerConsumerNodes : public IRMutator2 {
         }
     }
 
-    Stmt visit(const ProducerConsumer *op) {
+    Stmt visit(const ProducerConsumer *op) override {
         Stmt body = mutate(op->body);
         Scope<int> scope;
         scope.push(op->name, 0);
@@ -472,7 +493,7 @@ public:
 class ExpandAcquireNodes : public IRMutator2 {
     using IRMutator2::visit;
 
-    Stmt visit(const Block *op) {
+    Stmt visit(const Block *op) override {
         Stmt first = mutate(op->first), rest = mutate(op->rest);
         if (const Acquire *a = first.as<Acquire>()) {
             // May as well nest the rest stmt inside the acquire
@@ -484,7 +505,7 @@ class ExpandAcquireNodes : public IRMutator2 {
         }
     }
 
-    Stmt visit(const Realize *op) {
+    Stmt visit(const Realize *op) override {
         Stmt body = mutate(op->body);
         if (const Acquire *a = body.as<Acquire>()) {
             // Don't do the allocation until we have the
@@ -498,7 +519,7 @@ class ExpandAcquireNodes : public IRMutator2 {
         }
     }
 
-    Stmt visit(const LetStmt *op) {
+    Stmt visit(const LetStmt *op) override {
         Stmt body = mutate(op->body);
         const Acquire *a = body.as<Acquire>();
         if (a &&
@@ -511,7 +532,7 @@ class ExpandAcquireNodes : public IRMutator2 {
         }
     }
 
-    Stmt visit(const ProducerConsumer *op) {
+    Stmt visit(const ProducerConsumer *op) override {
         Stmt body = mutate(op->body);
         if (const Acquire *a = body.as<Acquire>()) {
             return Acquire::make(a->semaphore, a->count,
@@ -549,7 +570,7 @@ class TightenForkNodes : public IRMutator2 {
         }
     }
 
-    Stmt visit(const Fork *op) {
+    Stmt visit(const Fork *op) override {
         Stmt first, rest;
         {
             ScopedValue<bool> old_in_fork(in_fork, true);
@@ -567,7 +588,7 @@ class TightenForkNodes : public IRMutator2 {
     }
 
     // This is also a good time to nuke any dangling allocations and lets in the fork children.
-    Stmt visit(const Realize *op) {
+    Stmt visit(const Realize *op) override {
         Stmt body = mutate(op->body);
         if (in_fork && !stmt_uses_var(body, op->name) && !stmt_uses_var(body, op->name + ".buffer")) {
             return body;
@@ -577,7 +598,7 @@ class TightenForkNodes : public IRMutator2 {
         }
     }
 
-    Stmt visit(const LetStmt *op) {
+    Stmt visit(const LetStmt *op) override {
         Stmt body = mutate(op->body);
         if (in_fork && !stmt_uses_var(body, op->name)) {
             return body;

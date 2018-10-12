@@ -48,12 +48,12 @@ public:
         buffers.emplace(name, b);
     }
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         IRVisitor::visit(op);
         add_buffer_bounds(op->name, op->image, op->param, (int)op->args.size());
     }
 
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         if (op->param.defined() && op->param.is_buffer()) {
             add_buffer_bounds(op->name, Buffer<>(), op->param, op->param.dimensions());
         }

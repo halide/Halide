@@ -191,6 +191,27 @@ public:
      * the stage we are calling compute_with on should not have specializations,
      * e.g. f2.compute_with(f1, x) is allowed only if f2 has no specializations.
      *
+     * Also, if a producer is desired to be computed at the fused loop level,
+     * the function passed to the compute_at() needs to be the "parent". Consider
+     * the following code:
+     \code
+     input(x, y) = x + y;
+     f(x, y) = input(x, y);
+     f(x, y) += 5;
+     g(x, y) = x - y;
+     g(x, y) += 10;
+     f.compute_with(g, y);
+     f.update().compute_with(g.update(), y);
+     \endcode
+     *
+     * To compute 'input' at the fused loop level at dimension y, we specify
+     * input.compute_at(g, y) instead of input.compute_at(f, y) since 'g' is
+     * the "parent" for this fused loop (i.e. 'g' is computed first before 'f'
+     * is computed). On the other hand, to compute 'input' at the innermost
+     * dimension of 'f', we specify input.compute_at(f, x) instead of
+     * input.compute_at(g, x) since the x dimension of 'f' is not fused
+     * (only the y dimension is).
+     *
      * Given the constraints, this has a variety of uses. Consider the
      * following code:
      \code

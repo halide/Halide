@@ -1128,7 +1128,7 @@ public:
     string offending_var;
 protected:
     using IRGraphVisitor::visit;
-    void visit(const Variable *var) {
+    void visit(const Variable *var) override {
         if (!var->param.defined() && !var->image.defined()) {
             offending_var = var->name;
         }
@@ -2508,7 +2508,7 @@ public:
 
     using IRGraphVisitor::visit;
 
-    void visit(const Variable *v) {
+    void visit(const Variable *v) override {
         int index = Var::implicit_index(v->name);
         if (index != -1) {
             if (index >= count) count = index + 1;
