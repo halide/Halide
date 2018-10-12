@@ -650,12 +650,12 @@ Stmt build_produce(const map<string, Function> &env, Function f, const Target &t
             check = Block::make({Evaluate::make(register_destructor), check});
         }
 
-        for (size_t i = 0; i < lets.size(); i++) {
-            check = LetStmt::make(lets[i].first, lets[i].second, check);
-        }
-
         if (annotate.defined()) {
             check = Block::make(annotate, check);
+        }
+
+        for (size_t i = 0; i < lets.size(); i++) {
+            check = LetStmt::make(lets[i].first, lets[i].second, check);
         }
 
         return build_loop_nest(check, f.name() + ".s0.", -1, f.args(), {}, f.schedule(), f.definition().schedule(), false);
