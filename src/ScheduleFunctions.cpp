@@ -419,6 +419,7 @@ Stmt build_produce(const map<string, Function> &env, Function f, const Target &t
         // extern function call.
         vector<pair<Expr, int>> buffers_to_annotate;
         vector<Expr> buffers_contents_to_annotate;
+        vector<pair<Expr, Expr>> cropped_buffers;
         for (const ExternFuncArgument &arg : args) {
             if (arg.is_expr()) {
                 extern_call_args.push_back(arg.expr);
@@ -482,6 +483,7 @@ Stmt build_produce(const map<string, Function> &env, Function f, const Target &t
                         extern_call_args.push_back(Variable::make(type_of<struct halide_buffer_t *>(), buf_name));
                         buffers_to_annotate.push_back({extern_call_args.back(), input.dimensions()});
                         buffers_contents_to_annotate.push_back(cropped_input);
+                        cropped_buffers.push_back({extern_call_args.back(), src_buffer});
                         lets.push_back({ buf_name, cropped_input });
                     }
                 }
@@ -512,7 +514,6 @@ Stmt build_produce(const map<string, Function> &env, Function f, const Target &t
         // ones already injected by allocation bounds inference. If
         // it's the output to the pipeline then it will similarly be
         // in the symbol table.
-        vector<pair<Expr, Expr>> cropped_buffers;
         if (!needs_crops && f.schedule().store_level() == f.schedule().compute_level()) {
             for (int j = 0; j < f.outputs(); j++) {
                 string buf_name = f.name();
