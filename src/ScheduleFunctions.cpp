@@ -31,18 +31,6 @@ using std::tuple;
 using std::vector;
 
 namespace {
-std::ostream& operator<<(std::ostream& out, const std::vector<Function>& v) {
-    out << "{ ";
-    for (size_t i = 0; i < v.size(); ++i) {
-        out << v[i].name();
-        if (i != v.size() - 1) {
-            out << ", ";
-        }
-    }
-    out << " }";
-    return out;
-}
-
 // A structure representing a containing LetStmt, IfThenElse, or For
 // loop. Used in build_provide_loop_nest below. Both If and IfInner represent
 // IfThenElse stmts, however, IfInner should not be reordered to outside of
@@ -2054,6 +2042,18 @@ bool group_should_be_inlined(const vector<Function> &funcs) {
             (funcs[0].has_extern_definition() || funcs[0].definition().schedule().fused_pairs().empty()) &&
             funcs[0].can_be_inlined() &&
             funcs[0].schedule().compute_level().is_inlined());
+}
+
+std::ostream& operator<<(std::ostream& out, const std::vector<Function>& v) {
+    out << "{ ";
+    for (size_t i = 0; i < v.size(); ++i) {
+        out << v[i].name();
+        if (i != v.size() - 1) {
+            out << ", ";
+        }
+    }
+    out << " }";
+    return out;
 }
 
 Stmt schedule_functions(const vector<Function> &outputs,
