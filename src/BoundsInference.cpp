@@ -929,6 +929,12 @@ public:
     using IRMutator2::visit;
 
     Stmt visit(const For *op) override {
+        // Don't recurse inside loops marked 'Extern', they will be
+        // removed later.
+        if (op->for_type == ForType::Extern) {
+            return op;
+        }
+
         set<string> old_inner_productions;
         inner_productions.swap(old_inner_productions);
 
@@ -947,8 +953,12 @@ public:
             lets.push_back({ let->name, let->value });
         }
 
-        // If there are no pipelines at this loop level, we can skip most of the work.
-        bool no_pipelines = body.as<For>() != nullptr;
+        // If there are no pipelines at this loop level, we can skip
+        // most of the work.  Consider 'extern' for loops as pipelines
+        // (we aren't recursing into these loops above).
+        bool no_pipelines =
+            body.as<For>() != nullptr &&
+            body.as<For>()->for_type != ForType::Extern;
 
         // Figure out which stage of which function we're producing
         int producing = -1;
@@ -967,7 +977,7 @@ public:
 
         // Figure out how much of it we're producing
         Box box;
-        if (!no_pipelines && producing >= 0) {
+        if (!no_pipelines && producing >= 0 && !f.has_extern_definition()) {
             Scope<Interval> empty_scope;
             box = box_provided(body, stages[producing].name, empty_scope, func_bounds);
             internal_assert((int)box.size() == f.dimensions());
@@ -1019,11 +1029,21 @@ public:
                 }
             }
 
-            // And the current bounds on its reduction variables.
-            if (producing >= 0 && stages[producing].stage > 0) {
+            // And the current bounds on its reduction variables, and
+            // variables from extern for loops.
+            if (producing >= 0) {
                 const Stage &s = stages[producing];
-                for (const ReductionVariable &rv : s.rvars) {
-                    string var = s.stage_prefix + rv.var;
+                vector<string> vars;
+                if (s.func.has_extern_definition()) {
+                    vars = s.func.args();
+                }
+                if (stages[producing].stage > 0) {
+                    for (const ReductionVariable &rv : s.rvars) {
+                        vars.push_back(rv.var);
+                    }
+                }
+                for (const string& i : vars) {
+                    string var = s.stage_prefix + i;
                     Interval in = bounds_of_inner_var(var, body);
                     if (in.is_bounded()) {
                         body = LetStmt::make(var + ".min", in.min, body);

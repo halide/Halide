@@ -43,6 +43,7 @@
 #include "Qualify.h"
 #include "RealizationOrder.h"
 #include "RemoveDeadAllocations.h"
+#include "RemoveExternLoops.h"
 #include "RemoveTrivialForLoops.h"
 #include "RemoveUndef.h"
 #include "ScheduleFunctions.h"
@@ -163,6 +164,10 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     debug(1) << "Performing computation bounds inference...\n";
     s = bounds_inference(s, outputs, order, fused_groups, env, func_bounds, t);
     debug(2) << "Lowering after computation bounds inference:\n" << s << '\n';
+
+    debug(1) << "Removing extern loops...\n";
+    s = remove_extern_loops(s);
+    debug(2) << "Lowering after removing extern loops:\n" << s << '\n';
 
     debug(1) << "Performing sliding window optimization...\n";
     s = sliding_window(s, env);
