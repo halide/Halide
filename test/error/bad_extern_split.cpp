@@ -8,7 +8,7 @@ int main(int argc, char **argv) {
     Var x;
     f.define_extern("test", {}, Int(32), {x});
     Var xo;
-    f.split(x, xo, x, 8).serial(x);
+    f.split(x, xo, x, 8).reorder(xo, x);
 
     f.compile_jit();
     return 0;
