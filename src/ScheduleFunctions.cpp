@@ -77,7 +77,6 @@ bool contains_impure_call(const Expr &expr) {
 }
 
 // Build a loop nest about a provide node using a schedule
-//func.args(), func.schedule(), def.split_predicate(), def.schedule(),
 Stmt build_loop_nest(
         const Stmt &body,
         const string &prefix,
