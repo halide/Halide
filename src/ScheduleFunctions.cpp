@@ -638,15 +638,16 @@ Stmt build_produce(const map<string, Function> &env, Function f, const Target &t
                                              cleanup_args,
                                              Call::Intrinsic);
 
-            // We have to anticipate failures in the extern stage, so
-            // call this by registering a destructor before the extern
-            // call and triggering it afterwards using an Allocate node.
+            // We have to anticipate failures in the extern stage, so call this
+            // by registering a destructor before the extern call.
             string destructor_name = unique_name('d');
-            const char *fn = (cropped_buffers.size() == 1 ?
-                              "_halide_buffer_retire_crop_after_extern_stage" :
-                              "_halide_buffer_retire_crops_after_extern_stage");
-            check = Allocate::make(destructor_name, Handle(), MemoryType::Stack, {},
-                                   const_true(), check, cleanup_struct, fn);
+            const char *cleanup_fn =
+                (cropped_buffers.size() == 1 ?
+                 "_halide_buffer_retire_crop_after_extern_stage" :
+                 "_halide_buffer_retire_crops_after_extern_stage");
+            Expr register_destructor =
+                Call::make(Int(32), Call::register_destructor, {Expr(cleanup_fn), cleanup_struct}, Call::Intrinsic);
+            check = Block::make({Evaluate::make(register_destructor), check});
         }
 
         for (size_t i = 0; i < lets.size(); i++) {
