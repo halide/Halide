@@ -1868,10 +1868,10 @@ bool validate_schedule(Function f, Stmt s, const Target &target, bool is_output,
             switch (i.for_type) {
             case ForType::Extern:
                 if (!is_extern) {
-                  user_error
-                      << "Externally defined Func " << f.name()
-                      << " cannot have extern loop " << i.var
-                      << " outside a non-extern loop.\n";
+                    user_error
+                        << "Externally defined Func " << f.name()
+                        << " cannot have extern loop " << i.var
+                        << " outside a non-extern loop.\n";
                 }
                 break;
             case ForType::Serial:

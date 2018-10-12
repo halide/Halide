@@ -39,7 +39,7 @@ int copy_row_plus_xcoord(halide_buffer_t *input, halide_buffer_t *output) {
 }
 
 int main(int argc, char **argv) {
-  // Try making only one of each dimension of a 2D extern stage extern.
+    // Try making only one of each dimension of a 2D extern stage extern.
     for (int extern_dim = 0; extern_dim < 2; extern_dim++) {
         Func input;
         Var x, y;
