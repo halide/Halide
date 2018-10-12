@@ -1908,7 +1908,7 @@ void CodeGen_Hexagon::visit(const Call *op) {
 
     if (op->is_intrinsic() && op->name == "gather") {
         internal_assert(op->args.size() == 5);
-        internal_assert(op->type.bits() != 8);
+        internal_assert(op->type.bits() == 16 || op->type.bits() == 32);
         int index_lanes = op->type.lanes();
         int intrin_lanes = native_vector_bits()/op->type.bits();
 
@@ -1932,6 +1932,38 @@ void CodeGen_Hexagon::visit(const Call *op) {
             args.push_back(new_index);
             value = builder->CreateCall(fn, args);
         }
+        return;
+    } else if (op->is_intrinsic() && (op->name == "scatter" || op->name == "scatter_acc")) {
+        internal_assert(op->args.size() == 4);
+        internal_assert(op->type.bits() == 16 || op->type.bits() == 32);
+        int index_lanes = op->type.lanes();
+        int intrin_lanes = native_vector_bits()/op->type.bits();
+
+        string name = "halide.hexagon.vscatter";
+        name += (op->name == "scatter_acc") ? "_acc" : "";
+        name += (op->type.bits() == 16) ? ".h.h" : ".w.w";
+        llvm::Function *fn = module->getFunction(name);
+
+        Value *src_ptr = codegen(op->args[0]);
+        Value *size = codegen(op->args[1]);
+        Value *index = codegen(op->args[2]);
+        Value *val = codegen(op->args[3]);
+
+        Value* args[4];
+        args[0] = src_ptr;
+        args[1] = size;
+        // Cut up the indices into appropriately-sized pieces.
+        for (int start = 0; start < index_lanes; start += intrin_lanes) {
+            args[2] = slice_vector(index, start, intrin_lanes);
+            args[3] = slice_vector(val, start, intrin_lanes);
+            value = builder->CreateCall(fn, args);
+        }
+        return;
+    } else if (op->is_intrinsic("scatter_release")) {
+        internal_assert(op->args.size() == 1);
+        Value *ptr = codegen(op->args[0]);
+        llvm::Function *fn = module->getFunction("halide.hexagon.scatter.release");
+        value = builder->CreateCall(fn, {ptr});
         return;
     }
 
