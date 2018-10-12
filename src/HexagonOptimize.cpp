@@ -495,8 +495,6 @@ private:
     // all loads or all slice_vectors.
     static void sort_mpy_exprs(vector<MulExpr> &mpys) {
         struct LoadCompare {
-            Expr ramp_base;
-            LoadCompare(Expr e) : ramp_base(e) {}
             bool operator()(const MulExpr &m1, const MulExpr &m2) {
                 if (!m1.first.defined() || !m2.first.defined()) {
                     return false;
@@ -507,15 +505,7 @@ private:
                 const Ramp *m1_ramp = m1_load->index.as<Ramp>();
                 const Ramp *m2_ramp = m2_load->index.as<Ramp>();
                 internal_assert(m1_ramp && m2_ramp);
-                Expr diff_m1 = simplify(m1_ramp->base - ramp_base);
-                Expr diff_m2 = simplify(m2_ramp->base - ramp_base);
-                if (is_const(diff_m1) && is_const(diff_m2)) {
-                    const int64_t *diff_m1_ = as_const_int(diff_m1);
-                    const int64_t *diff_m2_ = as_const_int(diff_m2);
-                    return (*diff_m1_) < (*diff_m2_);
-                } else {
-                    return false;
-                }
+                return can_prove(m1_ramp->base < m2_ramp->base);
             }
         };
         const Shuffle *first_shuffle = mpys[0].first.as<Shuffle>();
@@ -544,7 +534,7 @@ private:
                     return;
                 }
             }
-            std::stable_sort(mpys.begin(), mpys.end(), LoadCompare(first_ramp->base));
+            std::stable_sort(mpys.begin(), mpys.end(), LoadCompare());
         }
     }
     Expr visit(const Add *op) override {
