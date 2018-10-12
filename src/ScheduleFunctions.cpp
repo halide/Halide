@@ -73,21 +73,17 @@ bool contains_impure_call(const Expr &expr) {
 }
 
 // Build a loop nest about a provide node using a schedule
-Stmt build_provide_loop_nest_helper(string func_name,
-                                    string prefix,
-                                    int start_fuse, // Fuse the dims starting from start_fuse to outermost (if not negative)
-                                    const vector<string> &dims, // The pure dims
-                                    const vector<Expr> &site,
-                                    const vector<Expr> &values,
-                                    const vector<Expr> &predicates,
-                                    const FuncSchedule &func_s,
-                                    const StageSchedule &stage_s,
-                                    bool is_update) {
-    // We'll build it from inside out, starting from a store node,
+Stmt build_loop_nest(Stmt body,
+                     string prefix,
+                     int start_fuse, // Fuse the dims starting from start_fuse to outermost (if not negative)
+                     const vector<string> &dims, // The pure dims
+                     const vector<Expr> &predicates,
+                     const FuncSchedule &func_s,
+                     const StageSchedule &stage_s,
+                     bool is_update) {
+    // We'll build it from inside out, starting from the body,
     // then wrapping it in for loops.
-
-    // Make the (multi-dimensional multi-valued) store node.
-    Stmt stmt = Provide::make(func_name, values, site);
+    Stmt stmt = body;
 
     // A map of the dimensions for which we know the extent is a
     // multiple of some Expr. This can happen due to a bound, or
@@ -139,7 +135,7 @@ Stmt build_provide_loop_nest_helper(string func_name,
 
     vector<Container> pred_container;
     // Strip off the lets/ifs into the containers vector.
-    while (true) {
+    while (!stmt.same_as(body)) {
         const LetStmt *let = stmt.as<LetStmt>();
         const IfThenElse *if_else = stmt.as<IfThenElse>();
         if (let) {
@@ -351,9 +347,12 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
         debug(3) << "Site " << i << " = " << s << "\n";
     }
 
+    // Make the (multi-dimensional multi-valued) store node.
+    Stmt body = Provide::make(func_name, values, site);
+
     // Default schedule/values if there is no specialization
-    Stmt stmt = build_provide_loop_nest_helper(
-        func_name, prefix, start_fuse, dims, site, values,
+    Stmt stmt = build_loop_nest(
+        body, prefix, start_fuse, dims,
         def.split_predicate(), f_sched, def.schedule(), is_update);
     stmt = inject_placeholder_prefetch(stmt, env, prefix, def.schedule().prefetches());
 
@@ -401,6 +400,18 @@ Stmt build_produce(const map<string, Function> &env, Function f, const Target &t
 
         const string &extern_name = f.extern_function_name();
 
+        // We need to generate crops of the input and output buffers if the
+        // extern stage has some non-extern loops, aside from the outermost
+        // placeholder.
+        bool needs_crops = false;
+        if (!f.definition().schedule().dims().empty()) {
+            size_t extern_count = 0;
+            for (const Dim& d : f.definition().schedule().dims()) {
+                extern_count += d.for_type == ForType::Extern ? 1 : 0;
+            }
+            needs_crops = extern_count + 1 < f.definition().schedule().dims().size();
+        }
+
         vector<pair<string, Expr>> lets;
 
         // Iterate through all of the input args to the extern
@@ -413,7 +424,7 @@ Stmt build_produce(const map<string, Function> &env, Function f, const Target &t
                 extern_call_args.push_back(arg.expr);
             } else if (arg.is_func()) {
                 Function input(arg.func);
-                if (input.schedule().store_level() == input.schedule().compute_level()) {
+                if (!needs_crops && input.schedule().store_level() == input.schedule().compute_level()) {
                     for (int k = 0; k < input.outputs(); k++) {
                         string buf_name = input.name();
                         if (input.outputs() > 1) {
@@ -502,7 +513,7 @@ Stmt build_produce(const map<string, Function> &env, Function f, const Target &t
         // it's the output to the pipeline then it will similarly be
         // in the symbol table.
         vector<pair<Expr, Expr>> cropped_buffers;
-        if (f.schedule().store_level() == f.schedule().compute_level()) {
+        if (!needs_crops && f.schedule().store_level() == f.schedule().compute_level()) {
             for (int j = 0; j < f.outputs(); j++) {
                 string buf_name = f.name();
                 if (f.outputs() > 1) {
@@ -639,23 +650,19 @@ Stmt build_produce(const map<string, Function> &env, Function f, const Target &t
             const char *fn = (cropped_buffers.size() == 1 ?
                               "_halide_buffer_retire_crop_after_extern_stage" :
                               "_halide_buffer_retire_crops_after_extern_stage");
-            check = Allocate::make(destructor_name, Handle(), MemoryType::Stack, {},
+            check = Allocate::make(destructor_name, Handle(), MemoryType::Heap, {},
                                    const_true(), check, cleanup_struct, fn);
-        }
-
-        for (size_t i = 0; i < lets.size(); i++) {
-            check = LetStmt::make(lets[i].first, lets[i].second, check);
         }
 
         if (annotate.defined()) {
             check = Block::make(annotate, check);
         }
 
-        // Add the dummy outermost loop.
-        string outermost = f.name() + ".s0." + Var::outermost().name();
-        check = For::make(outermost, 0, 1, ForType::Serial, DeviceAPI::None, check);
+        for (size_t i = 0; i < lets.size(); i++) {
+            check = LetStmt::make(lets[i].first, lets[i].second, check);
+        }
 
-        return check;
+        return build_loop_nest(check, f.name() + ".s0.", -1, f.args(), {}, f.schedule(), f.definition().schedule(), false);
     } else {
 
         string prefix = f.name() + ".s0.";
@@ -1853,6 +1860,33 @@ bool validate_schedule(Function f, Stmt s, const Target &target, bool is_output,
                         << "Func " << g.name() << " cannot be scheduled to be computed inline, "
                         << "because it is used in the externally-computed function " << f.name() << "\n";
                 }
+            }
+        }
+
+        // Check that extern stages do not have any non-extern loops
+        // inside any extern loops, and all loop types are supported
+        // for extern stages.
+        const vector<Dim>& dims = f.definition().schedule().dims();
+        bool is_extern = !dims.empty() ? dims.front().for_type == ForType::Extern : false;
+        for (const Dim& i : dims) {
+            switch (i.for_type) {
+            case ForType::Extern:
+                if (!is_extern) {
+                    user_error
+                        << "Externally defined Func " << f.name()
+                        << " cannot have extern loop " << i.var
+                        << " outside a non-extern loop.\n";
+                }
+                break;
+            case ForType::Serial:
+            case ForType::Parallel:
+            case ForType::Unrolled:
+                is_extern = false;
+                break;
+            default:
+                user_error
+                    << "Externally defined Func " << f.name()
+                    << " cannot have loop type " << i.for_type << " (" << i.var << ")\n";
             }
         }
     }

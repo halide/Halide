@@ -229,6 +229,9 @@ ostream &operator<<(ostream &out, const ForType &type) {
     case ForType::Vectorized:
         out << "vectorized";
         break;
+    case ForType::Extern:
+        out << "extern";
+        break;
     case ForType::GPUBlock:
         out << "gpu_block";
         break;
