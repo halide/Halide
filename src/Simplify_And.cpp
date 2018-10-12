@@ -22,6 +22,26 @@ Expr Simplify::visit(const And *op, ConstBounds *bounds) {
         (rewrite(x && true, a) ||
          rewrite(x && false, b) ||
          rewrite(x && x, a) ||
+
+         rewrite((x && y) && x, a) ||
+         rewrite(x && (x && y), b) ||
+         rewrite((x && y) && y, a) ||
+         rewrite(y && (x && y), b) ||
+
+         rewrite(((x && y) && z) && x, a) ||
+         rewrite(x && ((x && y) && z), b) ||
+         rewrite((z && (x && y)) && x, a) ||
+         rewrite(x && (z && (x && y)), b) ||
+         rewrite(((x && y) && z) && y, a) ||
+         rewrite(y && ((x && y) && z), b) ||
+         rewrite((z && (x && y)) && y, a) ||
+         rewrite(y && (z && (x && y)), b) ||
+
+         rewrite((x || y) && x, b) ||
+         rewrite(x && (x || y), a) ||
+         rewrite((x || y) && y, b) ||
+         rewrite(y && (x || y), a) ||
+
          rewrite(x != y && x == y, false) ||
          rewrite(x != y && y == x, false) ||
          rewrite((z && x != y) && x == y, false) ||
@@ -35,6 +55,7 @@ Expr Simplify::visit(const And *op, ConstBounds *bounds) {
          rewrite(x && !x, false) ||
          rewrite(!x && x, false) ||
          rewrite(y <= x && x < y, false) ||
+         rewrite(x != c0 && x == c1, b, c0 != c1) ||
          // Note: In the predicate below, if undefined overflow
          // occurs, the predicate counts as false. If well-defined
          // overflow occurs, the condition couldn't possibly
@@ -53,7 +74,33 @@ Expr Simplify::visit(const And *op, ConstBounds *bounds) {
         return rewrite.result;
     }
 
-    if (rewrite(broadcast(x) && broadcast(y), broadcast(x && y, op->type.lanes()))) {
+    if (rewrite(broadcast(x) && broadcast(y), broadcast(x && y, op->type.lanes())) ||
+
+        rewrite((x || (y && z)) && y, (x || z) && y) ||
+        rewrite((x || (z && y)) && y, (x || z) && y) ||
+        rewrite(y && (x || (y && z)), y && (x || z)) ||
+        rewrite(y && (x || (z && y)), y && (x || z)) ||
+
+        rewrite(((y && z) || x) && y, (z || x) && y) ||
+        rewrite(((z && y) || x) && y, (z || x) && y) ||
+        rewrite(y && ((y && z) || x), y && (z || x)) ||
+        rewrite(y && ((z && y) || x), y && (z || x)) ||
+
+        rewrite((x && (y || z)) && y, x && y) ||
+        rewrite((x && (z || y)) && y, x && y) ||
+        rewrite(y && (x && (y || z)), y && x) ||
+        rewrite(y && (x && (z || y)), y && x) ||
+
+        rewrite(((y || z) && x) && y, x && y) ||
+        rewrite(((z || y) && x) && y, x && y) ||
+        rewrite(y && ((y || z) && x), y && x) ||
+        rewrite(y && ((z || y) && x), y && x) ||
+
+        rewrite((x || y) && (x || z), x || (y && z)) ||
+        rewrite((x || y) && (z || x), x || (y && z)) ||
+        rewrite((y || x) && (x || z), x || (y && z)) ||
+        rewrite((y || x) && (z || x), x || (y && z))) {
+
         return mutate(std::move(rewrite.result), bounds);
     }
 
