@@ -21,8 +21,6 @@ public:
         const int tile_width = 256;
         const int tile_height = 128;
 
-        Expr fac = output.dim(1).extent()/2;
-
         // The output is a tiled DMA write.
         output.compute_root()
             .copy_to_device()
