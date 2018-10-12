@@ -711,7 +711,7 @@ Stmt inject_explicit_bounds(Stmt body, Function func) {
 }
 
 class IsUsedInStmt : public IRVisitor {
-    const string& func;
+    const string &func;
 
     using IRVisitor::visit;
 
