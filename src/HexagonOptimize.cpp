@@ -490,7 +490,53 @@ private:
     static Expr halide_hexagon_add_4mpy(Type result_type, string suffix, Expr v01, Expr c01) {
         return Call::make(result_type, "halide.hexagon.add_4mpy" + suffix, {v01, c01}, Call::PureExtern);
     }
-
+    // We'll try to sort the mpys based my mpys.first.
+    // But, for this all the mpy.first exprs should either be
+    // all loads or all slice_vectors.
+    static void sort_mpy_exprs(vector<MulExpr> &mpys) {
+        struct LoadCompare {
+            bool operator()(const MulExpr &m1, const MulExpr &m2) {
+                if (!m1.first.defined() || !m2.first.defined()) {
+                    return false;
+                }
+                const Load *m1_load = m1.first.as<Load>();
+                const Load *m2_load = m2.first.as<Load>();
+                internal_assert(m1_load && m2_load);
+                const Ramp *m1_ramp = m1_load->index.as<Ramp>();
+                const Ramp *m2_ramp = m2_load->index.as<Ramp>();
+                internal_assert(m1_ramp && m2_ramp);
+                return can_prove(m1_ramp->base < m2_ramp->base);
+            }
+        };
+        const Shuffle *first_shuffle = mpys[0].first.as<Shuffle>();
+        if (first_shuffle) {
+            for (MulExpr &m : mpys) {
+                const Shuffle *shuffle = m.first.as<Shuffle>();
+                if (!shuffle || !shuffle->is_slice()) {
+                    return;
+                }
+            }
+            std::stable_sort(mpys.begin(), mpys.end(),
+                             [](const MulExpr &m1, const MulExpr &m2) {
+                                 return m1.first.as<Shuffle>()->slice_begin() < m2.first.as<Shuffle>()->slice_begin();
+                             });
+            return;
+        } else if (const Load *first_load = mpys[0].first.as<Load>()) {
+            const Ramp *first_ramp = first_load->index.as<Ramp>();
+            if (!first_ramp) {
+                return;
+            }
+            for (MulExpr &m : mpys) {
+                const Load *load = m.first.as<Load>();
+                if (!load ||
+                    load->name != first_load->name ||
+                    !load->index.as<Ramp>()) {
+                    return;
+                }
+            }
+            std::stable_sort(mpys.begin(), mpys.end(), LoadCompare());
+        }
+    }
     Expr visit(const Add *op) override {
         // vmpa, vdmpy, and vrmpy instructions are hard to match with
         // patterns, do it manually here.
@@ -514,8 +560,13 @@ private:
             }
 
             if (mpy_count > 0 && mpys.size() == 4) {
-                // TODO: It's possible that permuting the order of the
+                // It's possible that permuting the order of the
                 // multiply operands can simplify the shuffle away.
+                // So, give yourself a fighting chance by ordering the
+                // mpys in the ascending order of their start lanes (if all
+                // are slice_vectors) or in the ascending order of their
+                // load indices if all are loads from the same buffer.
+                sort_mpy_exprs(mpys);
                 Expr a0123 = Shuffle::make_interleave({mpys[0].first, mpys[1].first, mpys[2].first, mpys[3].first});
                 a0123 = simplify(a0123);
 
@@ -554,8 +605,13 @@ private:
 
             // TODO: suffix = ".vub.vb"
             if (mpy_count > 0 && mpys.size() == 4) {
-                // TODO: It's possible that permuting the order of the
+                // It's possible that permuting the order of the
                 // multiply operands can simplify the shuffle away.
+                // So, give yourself a fighting chance by ordering the
+                // mpys in the ascending order of their start lanes (if all
+                // are slice_vectors) or in the ascending order of their
+                // load indices if all are loads from the same buffer.
+                sort_mpy_exprs(mpys);
                 Expr a0123 = Shuffle::make_interleave({mpys[0].first, mpys[1].first, mpys[2].first, mpys[3].first});
                 Expr b0123 = Shuffle::make_interleave({mpys[0].second, mpys[1].second, mpys[2].second, mpys[3].second});
                 a0123 = simplify(a0123);
@@ -601,6 +657,13 @@ private:
                 vdmpy_suffix = ".vh.b";
             }
             if (mpy_count > 0 && mpys.size() == 2) {
+                // It's possible that permuting the order of the
+                // multiply operands can simplify the shuffle away.
+                // So, give yourself a fighting chance by ordering the
+                // mpys in the ascending order of their start lanes (if all
+                // are slice_vectors) or in the ascending order of their
+                // load indices if all are loads from the same buffer.
+                sort_mpy_exprs(mpys);
                 Expr a01 = Shuffle::make_interleave({mpys[0].first, mpys[1].first});
                 a01 = simplify(a01);
                 // TODO: This requires the operands to be in a
