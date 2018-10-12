@@ -26,7 +26,7 @@ const int64_t unknown = std::numeric_limits<int64_t>::min();
 class FindAllCalls : public IRVisitor {
     using IRVisitor::visit;
 
-    void visit(const Call *call) {
+    void visit(const Call *call) override {
         if (call->call_type == Call::Halide || call->call_type == Call::Image) {
             funcs_called.insert(call->name);
             call_args.push_back(std::make_pair(call->name, call->args));

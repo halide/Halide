@@ -323,6 +323,15 @@ void check_metadata(const halide_filter_metadata_t &md, bool expect_ucon_at_0) {
           nullptr,
         },
         {
+          "no_default_value",
+          halide_argument_kind_input_scalar,
+          0,
+          halide_type_t(halide_type_int, 32),
+          nullptr,
+          nullptr,
+          nullptr,
+        },
+        {
           "b",
           halide_argument_kind_input_scalar,
           0,
@@ -498,7 +507,7 @@ void check_metadata(const halide_filter_metadata_t &md, bool expect_ucon_at_0) {
           halide_argument_kind_input_scalar,
           0,
           halide_type_t(halide_type_int, 8),
-          make_scalar<int8_t>(0),
+          nullptr,
           nullptr,
           nullptr,
         },
@@ -507,7 +516,7 @@ void check_metadata(const halide_filter_metadata_t &md, bool expect_ucon_at_0) {
           halide_argument_kind_input_scalar,
           0,
           halide_type_t(halide_type_int, 8),
-          make_scalar<int8_t>(0),
+          nullptr,
           nullptr,
           nullptr,
         },
@@ -516,7 +525,7 @@ void check_metadata(const halide_filter_metadata_t &md, bool expect_ucon_at_0) {
           halide_argument_kind_input_scalar,
           0,
           halide_type_t(halide_type_int, 8),
-          make_scalar<int8_t>(0),
+          nullptr,
           nullptr,
           nullptr,
         },
@@ -525,7 +534,7 @@ void check_metadata(const halide_filter_metadata_t &md, bool expect_ucon_at_0) {
           halide_argument_kind_input_scalar,
           0,
           halide_type_t(halide_type_int, 8),
-          make_scalar<int8_t>(0),
+          nullptr,
           nullptr,
           nullptr,
         },
@@ -1074,6 +1083,7 @@ int main(int argc, char **argv) {
         input,             // Input<Buffer<uint8_t>>
         input,             // Input<Buffer<>>(3)
         input,             // Input<Buffer<>>
+        0,                 // Input<i32>
         false,             // Input<bool>
         0,                 // Input<i8>
         0,                 // Input<i16>
@@ -1132,6 +1142,7 @@ int main(int argc, char **argv) {
         input,             // Input<Buffer<uint8_t>>
         input,             // Input<Buffer<>>(3)
         input,             // Input<Buffer<>>
+        0,                 // Input<i32>
         false,             // Input<bool>
         0,                 // Input<i8>
         0,                 // Input<i16>

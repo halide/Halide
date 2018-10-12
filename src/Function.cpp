@@ -189,13 +189,13 @@ struct CheckVars : public IRGraphVisitor {
 
     using IRVisitor::visit;
 
-    void visit(const Let *let) {
+    void visit(const Let *let) override {
         let->value.accept(this);
         ScopedBinding<> bind(defined_internally, let->name);
         let->body.accept(this);
     }
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         IRGraphVisitor::visit(op);
         if (op->name == name && op->call_type == Call::Halide) {
             for (size_t i = 0; i < op->args.size(); i++) {
@@ -211,7 +211,7 @@ struct CheckVars : public IRGraphVisitor {
         }
     }
 
-    void visit(const Variable *var) {
+    void visit(const Variable *var) override {
         // Is it a parameter?
         if (var->param.defined()) return;
 
@@ -254,7 +254,7 @@ class FreezeFunctions : public IRGraphVisitor {
 
     const string &func;
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         IRGraphVisitor::visit(op);
         if (op->call_type == Call::Halide &&
             op->func.defined() &&

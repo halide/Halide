@@ -1959,7 +1959,7 @@ class RearrangeExpressions : public IRMutator2 {
 private:
     using IRMutator2::visit;
 
-    Expr visit(const Mul *op) {
+    Expr visit(const Mul *op) override {
         if (!op->type.is_vector()) {
             // Only do this for vectors (where we have vmpa).
             return IRMutator2::visit(op);
@@ -2029,11 +2029,11 @@ class ScatterGatherGenerator : public IRMutator2 {
         return node;
     }
 
-    Expr visit(const Let *op) { return visit_let<Expr>(op); }
+    Expr visit(const Let *op) override { return visit_let<Expr>(op); }
 
-    Stmt visit(const LetStmt *op) { return visit_let<Stmt>(op); }
+    Stmt visit(const LetStmt *op) override { return visit_let<Stmt>(op); }
 
-    Stmt visit(const Allocate *op) {
+    Stmt visit(const Allocate *op) override {
         // Create a map of the allocation
         allocations[op->name] = op;
         return IRMutator2::visit(op);
@@ -2098,7 +2098,7 @@ class ScatterGatherGenerator : public IRMutator2 {
         return op->value;
     }
 
-    Stmt visit(const Store *op) {
+    Stmt visit(const Store *op) override {
         // HVX has only 16 or 32-bit gathers. Predicated vgathers are not
         // supported yet.
         Type ty = op->value.type();
@@ -2166,7 +2166,7 @@ class SyncronizationBarriers : public IRMutator2 {
 
     using IRMutator2::visit;
 
-    Expr visit(const Call *op) {
+    Expr visit(const Call *op) override {
         if (op->name == "scatter" || op->name == "scatter_acc" || op->name == "gather") {
             string name = op->args[0].as<Variable>()->name;
             // Check if the scatter-gather encountered conflicts with any
@@ -2177,7 +2177,7 @@ class SyncronizationBarriers : public IRMutator2 {
         return IRMutator2::visit(op);
     }
 
-    Stmt visit(const For *op) {
+    Stmt visit(const For *op) override {
         // Keep trail of the For blocks encoutered.
         curr_path.push_back(curr);
         Stmt s = IRMutator2::visit(op);
@@ -2211,13 +2211,13 @@ class SyncronizationBarriers : public IRMutator2 {
         in_flight.clear();
     }
 
-    Expr visit(const Load *op) {
+    Expr visit(const Load *op) override {
         // Resolve scatter-load hazard.
         check_hazard(op->name);
         return IRMutator2::visit(op);
     }
 
-    Stmt visit(const Store *op) {
+    Stmt visit(const Store *op) override {
         // Resolve scatter-store and gather-store hazards.
         check_hazard(op->name);
         return IRMutator2::visit(op);
@@ -2226,7 +2226,7 @@ class SyncronizationBarriers : public IRMutator2 {
 public:
     using IRMutator2::mutate;
 
-    Stmt mutate(const Stmt &s) {
+    Stmt mutate(const Stmt &s) override {
         curr = &s;
         Stmt new_s = IRMutator2::mutate(s);
         // Wrap the stmt with scatter-release if any hazard was detected.

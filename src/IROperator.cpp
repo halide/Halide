@@ -92,7 +92,7 @@ bool is_no_op(const Stmt &s) {
 class ExprIsPure : public IRVisitor {
     using IRVisitor::visit;
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         if (!op->is_pure()) {
             result = false;
         } else {
@@ -100,7 +100,7 @@ class ExprIsPure : public IRVisitor {
         }
     }
 
-    void visit(const Div *op) {
+    void visit(const Div *op) override {
         if (!op->type.is_float() && (!is_const(op->b) || is_zero(op->b))) {
             // Division by zero is a side-effect
             result = false;
@@ -109,7 +109,7 @@ class ExprIsPure : public IRVisitor {
         }
     }
 
-    void visit(const Mod *op) {
+    void visit(const Mod *op) override {
         if (!op->type.is_float() && (!is_const(op->b) || is_zero(op->b))) {
             // Mod by zero is a side-effect
             result = false;
@@ -118,7 +118,7 @@ class ExprIsPure : public IRVisitor {
         }
     }
 
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         if (!op->image.defined() && !op->param.defined()) {
             // It's a load from an internal buffer, which could
             // mutate.

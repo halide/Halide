@@ -16,7 +16,7 @@ there is an implicit `name.rungen` rule that generates an executable that wraps
 the Generator library:
 
 ```
-# In addition to defining a static library named "local_laplacian", this rule 
+# In addition to defining a static library named "local_laplacian", this rule
 # also implicitly defines an executable target named "local_laplacian.rungen"
 halide_library(
     local_laplacian
@@ -27,7 +27,7 @@ halide_library(
 You can build and run this like any other executable:
 
 ```
-$ make local_laplacian.rungen && ./bin/local_laplacian.rungen
+$ make bin/local_laplacian.rungen && ./bin/local_laplacian.rungen
 Usage: local_laplacian.rungen argument=value [argument=value... ] [flags]
 ...typical "usage" text...
 ```
@@ -37,7 +37,7 @@ locations for the output(s)) on the command line, of course. You can use the
 `--describe` flag to see the names and expected types:
 
 ```
-# ('make local_laplacian.rungen && ' prefix omitted henceforth for clarity)
+# ('make bin/local_laplacian.rungen && ' prefix omitted henceforth for clarity)
 $ ./bin/local_laplacian.rungen --describe
 Filter name: "local_laplacian"
   Input "input" is of type Buffer<uint16> with 3 dimensions
@@ -56,12 +56,12 @@ both bugs we intend to fix; see https://github.com/halide/Halide/issues/2194
 As a convenience, there is also an implicit target that builds-and-runs, named simply "NAME.run":
 
 ```
-# This is equivalent to "make local_laplacian.rungen && ./bin/local_laplacian.rungen"
-$ make local_laplacian.run
+# This is equivalent to "make bin/local_laplacian.rungen && ./bin/local_laplacian.rungen"
+$ make bin/local_laplacian.run
 Usage: local_laplacian.rungen argument=value [argument=value... ] [flags]
 
 # To pass arguments to local_laplacian.rungen, set the RUNARGS var:
-$ make local_laplacian.run RUNARGS=--describe
+$ make bin/local_laplacian.run RUNARGS=--describe
 Filter name: "local_laplacian"
   Input "input" is of type Buffer<uint16> with 3 dimensions
   Input "levels" is of type int32
@@ -75,7 +75,7 @@ the typical text form, while buffer inputs (and outputs) are specified via paths
 RunGen currently can read/write image files in any format supported by halide_image_io.h; at this time, that means .png, .jpg, .ppm, .pgm, and .tmp formats. (We plan to add .tiff and .mat (level 5) in the future.)
 
 ```
-$ ./bin/local_laplacian.rungen input=../apps/images/rgb_small16.png levels=8 alpha=1 beta=1 local_laplacian=/tmp/out.png
+$ ./bin/local_laplacian.rungen input=../images/rgb_small16.png levels=8 alpha=1 beta=1 output=/tmp/out.png
 $ display /tmp/out.png
 ```
 
@@ -88,7 +88,7 @@ way.
 
 ```
 # This filter expects a 16-bit RGB image as input, but we're giving it an 8-bit grayscale image:
-$ ./bin/local_laplacian.rungen input=../apps/images/gray.png levels=8 alpha=1 beta=1 local_laplacian=/tmp/out.png
+$ ./bin/local_laplacian.rungen input=../images/gray.png levels=8 alpha=1 beta=1 output=/tmp/out.png
 Warning: Image for Input "input" has 2 dimensions, but this argument requires at least 3 dimensions: adding dummy dimensions of extent 1.
 Warning: Image loaded for argument "input" is type uint8 but this argument expects type uint16; data loss may have occurred.
 ```
@@ -101,7 +101,7 @@ produce runtime errors.)
 
 ```
 # Constrain output extents to 100x200x3
-$ ./bin/local_laplacian.rungen --output_extents=[100,200,3] input=../apps/images/rgb_small16.png levels=8 alpha=1 beta=1 local_laplacian=/tmp/out.png
+$ ./bin/local_laplacian.rungen --output_extents=[100,200,3] input=../images/rgb_small16.png levels=8 alpha=1 beta=1 output=/tmp/out.png
 ```
 
 Sometimes you don't care what the particular element values for an input are
@@ -112,7 +112,19 @@ Generator, and inits every element to zero:
 ```
 # Input is a 3-dimensional image with extent 123, 456, and 3
 # (bluring an image of all zeroes isn't very interesting, of course)
-$ ./bin/local_laplacian.rungen --output_extents=[100,200,3] input=zero:[123,456,3] levels=8 alpha=1 beta=1 local_laplacian=/tmp/out.png
+$ ./bin/local_laplacian.rungen --output_extents=[100,200,3] input=zero:[123,456,3] levels=8 alpha=1 beta=1 output=/tmp/out.png
+```
+
+Similarly, you can create identity images where only the diagonal elements are
+1-s (rest are 0-s) by invoking `identity:[]`. Diagonal elements are defined as
+those whose first two coordinates are equal.
+
+There's also a `random:SEED:[]` pseudo-file, which fills the image with uniform
+noise based on a specific random-number seed:
+
+```
+# Input is a 3-dimensional image with extent 123, 456, and 3
+$ ./bin/local_laplacian.rungen --output_extents=[100,200,3] input=random:42:[123,456,3] levels=8 alpha=1 beta=1 output=/tmp/out.png
 ```
 
 ## Benchmarking
@@ -121,7 +133,7 @@ To run a benchmark, use the `--benchmark` flag:
 
 ```
 # When you specify the --benchmark flag, outputs become optional.
-$ ./bin/local_laplacian.rungen --benchmark input=zero:[1920,1080,3] levels=8 alpha=1 beta=1 
+$ ./bin/local_laplacian.rungen --benchmark input=zero:[1920,1080,3] levels=8 alpha=1 beta=1
 Benchmark for local_laplacian produces best case of 0.0494629 sec/iter, over 3 blocks of 10 iterations.
 Best output throughput is 39.9802 mpix/sec.
 ```
@@ -140,7 +152,7 @@ high-water-mark of CPU memory usage.
 
 ```
 # When you specify the --track_memory flag, outputs become optional.
-$ ./bin/local_laplacian.rungen --track_memory input=zero:[1920,1080,3] levels=8 alpha=1 beta=1 
+$ ./bin/local_laplacian.rungen --track_memory input=zero:[1920,1080,3] levels=8 alpha=1 beta=1
 Maximum Halide memory: 82688420 bytes for output of 1.97754 mpix.
 ```
 
@@ -154,12 +166,12 @@ To add support for RunGen to your Makefile, you need to add rules something like
 ```
 HALIDE_DISTRIB ?= /path/to/halide/distrib/folder
 
-$(BIN)/RunGen.o: $(HALIDE_DISTRIB)/tools/RunGen.cpp
+$(BIN)/RunGenMain.o: $(HALIDE_DISTRIB)/tools/RunGenMain.cpp
   @mkdir -p $(@D)
   @$(CXX) -c $< $(CXXFLAGS) $(LIBPNG_CXX_FLAGS) $(LIBJPEG_CXX_FLAGS) -I$(BIN) -o $@
 
 .PRECIOUS: $(BIN)/%.rungen
-$(BIN)/%.rungen: $(BIN)/%.a $(BIN)/RunGen.o $(HALIDE_DISTRIB)/tools/RunGenStubs.cpp
+$(BIN)/%.rungen: $(BIN)/%.a $(BIN)/RunGenMain.o $(HALIDE_DISTRIB)/tools/RunGenStubs.cpp
   $(CXX) $(CXXFLAGS) -DHL_RUNGEN_FILTER_HEADER=\"$*.h\" $^ -o $@ $(LIBPNG_LIBS) $(LIBJPEG_LIBS) $(LDFLAGS)
 
 RUNARGS ?=

@@ -282,7 +282,7 @@ bool can_prove(Expr e, const Scope<Interval> &bounds) {
         struct RenameVariables : public IRMutator2 {
             using IRMutator2::visit;
 
-            Expr visit(const Variable *op) {
+            Expr visit(const Variable *op) override {
                 auto it = vars.find(op->name);
                 if (lets.contains(op->name)) {
                     return Variable::make(op->type, lets.get(op->name));
@@ -296,7 +296,7 @@ bool can_prove(Expr e, const Scope<Interval> &bounds) {
                 }
             }
 
-            Expr visit(const Let *op) {
+            Expr visit(const Let *op) override {
                 std::string name = "v" + std::to_string(count++);
                 ScopedBinding<string> bind(lets, op->name, name);
                 return Let::make(name, mutate(op->value), mutate(op->body));

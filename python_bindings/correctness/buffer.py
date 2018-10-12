@@ -118,10 +118,16 @@ def test_bufferinfo_sharing():
     b0[56, 34] = 12
     assert b0[56, 34] == 12
 
+def test_float16():
+    array_in = np.zeros((256, 256, 3), dtype=np.float16, order='F')
+    hl_img = hl.Buffer(array_in)
+    array_out = np.array(hl_img, copy = False)
+
 if __name__ == "__main__":
     test_ndarray_to_buffer()
     test_buffer_to_ndarray()
     test_for_each_element()
     test_fill_all_equal()
     test_bufferinfo_sharing()
+    test_float16()
 
