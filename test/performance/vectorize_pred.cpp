@@ -16,6 +16,27 @@ const char *string_of_type();
 
 DECL_SOT(float);
 
+template<typename T>
+T tolerance() {
+    return 0;
+}
+
+template<>
+float tolerance<float>() {
+    return 1e-7f;
+}
+
+template<>
+double tolerance<double>() {
+    return 1e-14f;
+}
+
+template<typename T>
+bool equals(T a, T b, T epsilon = tolerance<T>()) {
+    T error = std::abs(a - b);
+    return error <= epsilon;
+}
+
 template<typename A>
 bool test(int vec_width) {
 
@@ -62,7 +83,7 @@ bool test(int vec_width) {
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
-            if (outputf(x, y) != outputg(x, y)) {
+            if (!equals(outputf(x, y), outputg(x, y))) {
                 printf("%s x %d failed at %d %d: %d vs %d\n",
                        string_of_type<A>(), vec_width,
                        x, y,
