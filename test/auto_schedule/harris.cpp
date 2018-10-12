@@ -107,6 +107,7 @@ double run_test(bool auto_schedule) {
 }
 
 int main(int argc, char **argv) {
+    const double slowdown_factor = 2.0;
     double manual_time = run_test(false);
     double auto_time = run_test(true);
 
@@ -116,7 +117,7 @@ int main(int argc, char **argv) {
     std::cout << "======================" << std::endl;
 
     if (!get_jit_target_from_environment().has_gpu_feature() &&
-        (2 * auto_time > manual_time)) {
+        (auto_time > slowdown_factor * manual_time)) {
         printf("Auto-scheduler is much much slower than it should be.\n");
         return -1;
     }

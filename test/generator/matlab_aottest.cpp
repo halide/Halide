@@ -48,13 +48,13 @@ class mxArrayImpl : public mxArray {
 public:
     mxArrayImpl(size_t M, size_t N) : data(M * N), dims({M, N}) {}
 
-    void *get_data() { return &data[0]; }
-    const void *get_data() const { return &data[0]; }
-    const size_t *get_dimensions() const { return &dims[0]; }
-    size_t get_number_of_dimensions() const { return dims.size(); }
-    mxClassID get_class_id() const { return ::get_class_id<T>(); }
-    double get_scalar() const { return data[0]; }
-    size_t get_element_size() const { return sizeof(T); }
+    void *get_data() override { return &data[0]; }
+    const void *get_data() const override { return &data[0]; }
+    const size_t *get_dimensions() const override { return &dims[0]; }
+    size_t get_number_of_dimensions() const override { return dims.size(); }
+    mxClassID get_class_id() const override { return ::get_class_id<T>(); }
+    double get_scalar() const override { return data[0]; }
+    size_t get_element_size() const override { return sizeof(T); }
 
     T &operator () (int i, int j) { return data[i * dims[0] + j]; }
     T operator () (int i, int j) const { return data[i * dims[0] + j]; }

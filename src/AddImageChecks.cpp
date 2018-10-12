@@ -29,7 +29,7 @@ public:
 
     using IRGraphVisitor::visit;
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         op->min.accept(this);
         op->extent.accept(this);
         bool old = in_device_loop;
@@ -41,7 +41,7 @@ public:
         in_device_loop = old;
     }
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         IRGraphVisitor::visit(op);
         if (op->image.defined()) {
             Result &r = buffers[op->name];
@@ -58,7 +58,7 @@ public:
         }
     }
 
-    void visit(const Provide *op) {
+    void visit(const Provide *op) override {
         IRGraphVisitor::visit(op);
         if (op->values.size() == 1) {
             auto it = buffers.find(op->name);
@@ -76,7 +76,7 @@ public:
         }
     }
 
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         if (op->param.defined() &&
             op->param.is_buffer() &&
             buffers.find(op->param.name()) == buffers.end()) {

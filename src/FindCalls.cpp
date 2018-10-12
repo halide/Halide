@@ -28,7 +28,7 @@ public:
         }
     }
 
-    void visit(const Call *call) {
+    void visit(const Call *call) override {
         IRVisitor::visit(call);
 
         if (call->call_type == Call::Halide && call->func.defined()) {

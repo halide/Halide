@@ -39,20 +39,20 @@ class FindBufferSymbols : public IRVisitor {
         }
     }
 
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         visit_param(op->name, op->param);
         visit_buffer(op->name, op->image);
         symbols.insert(op->name);
     }
 
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         visit_param(op->name, op->param);
         visit_buffer(op->name, op->image);
         symbols.insert(op->name);
         IRVisitor::visit(op);
     }
 
-    void visit(const Store *op) {
+    void visit(const Store *op) override {
         visit_param(op->name, op->param);
         symbols.insert(op->name);
         IRVisitor::visit(op);

@@ -26,8 +26,23 @@ std::string type_name<float>() {return "s";}
 template<>
 std::string type_name<double>() {return "d";}
 
+struct BenchmarksBase {
+    virtual void bench_copy(int N) = 0;
+    virtual void bench_scal(int N) = 0;
+    virtual void bench_axpy(int N) = 0;
+    virtual void bench_dot(int N) = 0;
+    virtual void bench_asum(int N) = 0;
+    virtual void bench_gemv_notrans(int N) = 0;
+    virtual void bench_gemv_trans(int N) = 0;
+    virtual void bench_ger(int N) = 0;
+    virtual void bench_gemm_notrans(int N) = 0;
+    virtual void bench_gemm_transA(int N) = 0;
+    virtual void bench_gemm_transB(int N) = 0;
+    virtual void bench_gemm_transAB(int N) = 0;
+};
+
 template<class T>
-struct Benchmarks {
+struct Benchmarks : BenchmarksBase {
     typedef T Scalar;
     typedef Eigen::Matrix<T, Eigen::Dynamic, 1> Vector;
     typedef Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> Matrix;
