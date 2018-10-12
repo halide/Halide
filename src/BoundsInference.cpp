@@ -31,14 +31,14 @@ bool var_name_match(string candidate, string var) {
 class DependsOnBoundsInference : public IRVisitor {
     using IRVisitor::visit;
 
-    void visit(const Variable *var) {
+    void visit(const Variable *var) override {
         if (ends_with(var->name, ".max") ||
             ends_with(var->name, ".min")) {
             result = true;
         }
     }
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         if (op->name == Call::buffer_get_min ||
             op->name == Call::buffer_get_max) {
             result = true;
@@ -80,7 +80,7 @@ private:
 
     using IRVisitor::visit;
 
-    void visit(const LetStmt *op) {
+    void visit(const LetStmt *op) override {
         Interval in = bounds_of_expr_in_scope(op->value, scope);
         if (op->name == var) {
             result = in;
@@ -90,7 +90,7 @@ private:
         }
     }
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         // At this stage of lowering, loop_min and loop_max
         // conveniently exist in scope.
         Interval in(Variable::make(Int(32), op->name + ".loop_min"),

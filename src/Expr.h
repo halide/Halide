@@ -137,16 +137,16 @@ struct BaseExprNode : public IRNode {
    a concrete instantiation of a unique IRNodeType per class. */
 template<typename T>
 struct ExprNode : public BaseExprNode {
-    void accept(IRVisitor *v) const;
-    Expr mutate_expr(IRMutator2 *v) const;
+    void accept(IRVisitor *v) const override;
+    Expr mutate_expr(IRMutator2 *v) const override;
     ExprNode() : BaseExprNode(T::_node_type) {}
     virtual ~ExprNode() {}
 };
 
 template<typename T>
 struct StmtNode : public BaseStmtNode {
-    void accept(IRVisitor *v) const;
-    Stmt mutate_stmt(IRMutator2 *v) const;
+    void accept(IRVisitor *v) const override;
+    Stmt mutate_stmt(IRMutator2 *v) const override;
     StmtNode() : BaseStmtNode(T::_node_type) {}
     virtual ~StmtNode() {}
 };

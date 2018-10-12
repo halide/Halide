@@ -11,6 +11,7 @@ public:
     Input<Buffer<uint8_t>> typed_input_buffer{ "typed_input_buffer", 3 };
     Input<Buffer<>> dim_only_input_buffer{ "dim_only_input_buffer", 3 };  // must be overridden to type=UInt(8)
     Input<Buffer<>> untyped_input_buffer{ "untyped_input_buffer" };  // must be overridden to {UInt(8), 3}
+    Input<int32_t> no_default_value{ "no_default_value" };
     Input<bool> b{ "b", true };
     Input<int8_t> i8{ "i8", 8, -8, 127 };
     Input<int16_t> i16{ "i16", 16, -16, 127 };

@@ -53,7 +53,7 @@ bool var_name_match(string v1, string v2) {
 class ContainsImpureCall : public IRVisitor {
     using IRVisitor::visit;
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         if (!op->is_pure()) {
             result = true;
         } else {
@@ -734,13 +734,13 @@ class IsUsedInStmt : public IRVisitor {
 
     using IRVisitor::visit;
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         IRVisitor::visit(op);
         if (op->name == func) result = true;
     }
 
     // A reference to the function's buffers counts as a use
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         if (op->type.is_handle() &&
             starts_with(op->name, func + ".") &&
             ends_with(op->name, ".buffer")) {
@@ -766,7 +766,7 @@ class IsRealizedInStmt : public IRVisitor {
 
     using IRVisitor::visit;
 
-    void visit(const Realize *op) {
+    void visit(const Realize *op) override {
         IRVisitor::visit(op);
         result = result || (op->name == func);
     }
@@ -1035,7 +1035,7 @@ public:
 private:
     using IRVisitor::visit;
 
-    void visit(const LetStmt *op) {
+    void visit(const LetStmt *op) override {
         if (ends_with(op->name, ".loop_min") ||
             ends_with(op->name, ".loop_max") ||
             ends_with(op->name, ".loop_extent")) {
@@ -1639,7 +1639,7 @@ private:
 
     const map<string, Function> &env;
 
-    void visit(const For *f) {
+    void visit(const For *f) override {
         f->min.accept(this);
         f->extent.accept(this);
         size_t first_dot = f->name.find('.');
@@ -1688,7 +1688,7 @@ private:
         }
     }
 
-    void visit(const Call *c) {
+    void visit(const Call *c) override {
         IRVisitor::visit(c);
 
         if (c->name == func.name()) {
@@ -1696,7 +1696,7 @@ private:
         }
     }
 
-    void visit(const Variable *v) {
+    void visit(const Variable *v) override {
         if (v->type.is_handle() &&
             starts_with(v->name, func.name() + ".") &&
             ends_with(v->name, ".buffer")) {
@@ -1741,13 +1741,13 @@ string schedule_to_source(Function f,
 class StmtUsesFunc : public IRVisitor {
     using IRVisitor::visit;
     string func;
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         if (op->name == func) {
             result = true;
         }
         IRVisitor::visit(op);
     }
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         if (op->type.is_handle() &&
             starts_with(op->name, func + ".") &&
             ends_with(op->name, ".buffer")) {
@@ -1774,7 +1774,7 @@ class PrintUsesOfFunc : public IRVisitor {
         }
     }
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         if (ends_with(op->name, Var::outermost().name()) ||
             ends_with(op->name, LoopLevel::root().lock().to_string())) {
             IRVisitor::visit(op);
@@ -1802,7 +1802,7 @@ class PrintUsesOfFunc : public IRVisitor {
         }
     }
 
-    void visit(const ProducerConsumer *op) {
+    void visit(const ProducerConsumer *op) override {
         if (op->is_producer) {
             string old_caller = caller;
             caller = op->name;
@@ -1813,7 +1813,7 @@ class PrintUsesOfFunc : public IRVisitor {
         }
     }
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         if (op->name == func) {
             do_indent();
             stream << caller << " uses " << func << "\n";
@@ -1823,7 +1823,7 @@ class PrintUsesOfFunc : public IRVisitor {
         }
     }
 
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         if (op->type.is_handle() &&
             starts_with(op->name, func + ".") &&
             ends_with(op->name, ".buffer")) {

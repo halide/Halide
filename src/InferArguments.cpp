@@ -127,19 +127,19 @@ private:
         args.push_back(a);
     }
 
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         IRGraphVisitor::visit(op);
         include_parameter(op->param);
         include_buffer(op->image);
     }
 
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         IRGraphVisitor::visit(op);
         include_parameter(op->param);
         include_buffer(op->image);
     }
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         IRGraphVisitor::visit(op);
         if (op->func.defined()) {
             Function fn(op->func);

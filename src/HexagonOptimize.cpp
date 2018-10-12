@@ -1956,7 +1956,7 @@ class RearrangeExpressions : public IRMutator2 {
 private:
     using IRMutator2::visit;
 
-    Expr visit(const Mul *op) {
+    Expr visit(const Mul *op) override {
         if (!op->type.is_vector()) {
             // Only do this for vectors (where we have vmpa).
             return IRMutator2::visit(op);
@@ -2026,11 +2026,11 @@ class ScatterGatherGenerator : public IRMutator2 {
         return node;
     }
 
-    Expr visit(const Let *op) { return visit_let<Expr>(op); }
+    Expr visit(const Let *op) override { return visit_let<Expr>(op); }
 
-    Stmt visit(const LetStmt *op) { return visit_let<Stmt>(op); }
+    Stmt visit(const LetStmt *op) override { return visit_let<Stmt>(op); }
 
-    Stmt visit(const Allocate *op) {
+    Stmt visit(const Allocate *op) override {
         // Create a map of the allocation
         allocations[op->name] = op;
         return IRMutator2::visit(op);
@@ -2079,7 +2079,7 @@ class ScatterGatherGenerator : public IRMutator2 {
                           Call::Intrinsic);
     }
 
-    Stmt visit(const Store *op) {
+    Stmt visit(const Store *op) override {
         // HVX has only 16 or 32-bit gathers. Predicated vgathers are not
         // supported yet.
         Type ty = op->value.type();

@@ -26,14 +26,14 @@ public:
 protected:
     using IRVisitor::visit;
 
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         if (!is_one(op->predicate)) {
             load_count++;
         }
         IRVisitor::visit(op);
     }
 
-    void visit(const Store *op) {
+    void visit(const Store *op) override {
         if (!is_one(op->predicate)) {
             store_count++;
         }
