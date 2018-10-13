@@ -79,6 +79,7 @@ public:
     Stage(Internal::Function f, Internal::Definition d, size_t stage_index,
           const std::vector<Var> &args)
             : function(f), definition(d), stage_index(stage_index), dim_vars(args) {
+        internal_assert(definition.defined());
         internal_assert(definition.args().size() == dim_vars.size());
         definition.schedule().touched() = true;
     }
@@ -86,6 +87,7 @@ public:
     Stage(Internal::Function f, Internal::Definition d, size_t stage_index,
           const std::vector<std::string> &args)
             : function(f), definition(d), stage_index(stage_index) {
+        internal_assert(definition.defined());
         definition.schedule().touched() = true;
 
         std::vector<Var> dim_vars(args.size());
