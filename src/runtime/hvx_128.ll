@@ -434,3 +434,42 @@ define weak_odr void @halide.hexagon.vgather.w.w(i8* %dst_base, i32 %dst_index, 
   call void @llvm.hexagon.V6.vgathermw.128B(i8* %dst_ptr, i32 %src, i32 %size, <32 x i32> %index)
   ret void
 }
+
+declare void @llvm.hexagon.V6.vscattermh.128B(i32, i32, <32 x i32>, <32 x i32>)
+declare void @llvm.hexagon.V6.vscattermw.128B(i32, i32, <32 x i32>, <32 x i32>)
+
+define weak_odr void @halide.hexagon.vscatter.h.h(i8* %buf_ptr, i32 %size, <64 x i16> %idx, <64 x i16> %val) nounwind uwtable writeonly {
+  %idx32 = bitcast <64 x i16> %idx to <32 x i32>
+  %val32 = bitcast <64 x i16> %val to <32 x i32>
+  %buf = ptrtoint i8* %buf_ptr to i32
+  call void @llvm.hexagon.V6.vscattermh.128B(i32 %buf, i32 %size, <32 x i32> %idx32, <32 x i32> %val32) nounwind writeonly
+  ret void
+}
+
+define weak_odr void @halide.hexagon.vscatter.w.w(i8* %buf_ptr, i32 %size, <32 x i32> %idx, <32 x i32> %val) nounwind uwtable writeonly {
+  %buf = ptrtoint i8* %buf_ptr to i32
+  call void @llvm.hexagon.V6.vscattermw.128B(i32 %buf, i32 %size, <32 x i32> %idx, <32 x i32> %val)
+  ret void
+}
+
+declare void @llvm.hexagon.V6.vscattermh.add.128B(i32, i32, <32 x i32>, <32 x i32>)
+declare void @llvm.hexagon.V6.vscattermw.add.128B(i32, i32, <32 x i32>, <32 x i32>)
+
+define weak_odr void @halide.hexagon.vscatter_acc.h.h(i8* %buf_ptr, i32 %size, <64 x i16> %idx, <64 x i16> %val) nounwind uwtable writeonly {
+  %idx32 = bitcast <64 x i16> %idx to <32 x i32>
+  %val32 = bitcast <64 x i16> %val to <32 x i32>
+  %buf = ptrtoint i8* %buf_ptr to i32
+  call void @llvm.hexagon.V6.vscattermh.add.128B(i32 %buf, i32 %size, <32 x i32> %idx32, <32 x i32> %val32) nounwind writeonly
+  ret void
+}
+
+define weak_odr void @halide.hexagon.vscatter_acc.w.w(i8* %buf_ptr, i32 %size, <32 x i32> %idx, <32 x i32> %val) nounwind uwtable writeonly {
+  %buf = ptrtoint i8* %buf_ptr to i32
+  call void @llvm.hexagon.V6.vscattermw.add.128B(i32 %buf, i32 %size, <32 x i32> %idx, <32 x i32> %val)
+  ret void
+}
+
+define weak_odr void @halide.hexagon.scatter.release(i8* %ptr) nounwind uwtable {
+  call void asm sideeffect "vmem($0 + #0):scatter_release\0A; v1 = vmem($0 + #0)\0A", "=*m,*m,~{v1}"(i8* %ptr, i8* %ptr)
+  ret void
+}
