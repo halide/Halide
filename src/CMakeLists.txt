@@ -31,6 +31,7 @@ set(RUNTIME_CPP
   float16_t
   gpu_device_selection
   hexagon_cpu_features
+  hexagon_dma
   hexagon_host
   ios_io
   linux_clock
@@ -93,6 +94,8 @@ set(RUNTIME_CPP
   windows_yield
   write_debug_image
   x86_cpu_features
+  hexagon_cache_allocator
+  hexagon_dma_pool
 )
 
 set (RUNTIME_LL
