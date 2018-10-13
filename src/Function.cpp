@@ -705,6 +705,7 @@ void Function::define_extern(const std::string &function_name,
     contents->extern_uses_old_buffer_t = use_old_buffer_t;
 
     std::vector<Expr> values;
+    contents->output_buffers.clear();
     for (size_t i = 0; i < types.size(); i++) {
         string buffer_name = name();
         if (types.size() > 1) {

@@ -419,6 +419,7 @@ Stmt build_produce(const map<string, Function> &env, Function f, const Target &t
         // extern function call.
         vector<pair<Expr, int>> buffers_to_annotate;
         vector<Expr> buffers_contents_to_annotate;
+        vector<pair<Expr, Expr>> cropped_buffers;
         for (const ExternFuncArgument &arg : args) {
             if (arg.is_expr()) {
                 extern_call_args.push_back(arg.expr);
@@ -482,6 +483,7 @@ Stmt build_produce(const map<string, Function> &env, Function f, const Target &t
                         extern_call_args.push_back(Variable::make(type_of<struct halide_buffer_t *>(), buf_name));
                         buffers_to_annotate.push_back({extern_call_args.back(), input.dimensions()});
                         buffers_contents_to_annotate.push_back(cropped_input);
+                        cropped_buffers.push_back({extern_call_args.back(), src_buffer});
                         lets.push_back({ buf_name, cropped_input });
                     }
                 }
@@ -512,7 +514,6 @@ Stmt build_produce(const map<string, Function> &env, Function f, const Target &t
         // ones already injected by allocation bounds inference. If
         // it's the output to the pipeline then it will similarly be
         // in the symbol table.
-        vector<pair<Expr, Expr>> cropped_buffers;
         if (!needs_crops && f.schedule().store_level() == f.schedule().compute_level()) {
             for (int j = 0; j < f.outputs(); j++) {
                 string buf_name = f.name();
@@ -611,15 +612,12 @@ Stmt build_produce(const map<string, Function> &env, Function f, const Target &t
 
         // Make the extern call
         Expr e = f.make_call_to_extern_definition(extern_call_args, target);
-
         // Check if it succeeded
         string result_name = unique_name('t');
         Expr result = Variable::make(Int(32), result_name);
         Expr error = Call::make(Int(32), "halide_error_extern_stage_failed",
                                 {extern_name, result}, Call::Extern);
         Stmt check = AssertStmt::make(EQ::make(result, 0), error);
-        check = LetStmt::make(result_name, e, check);
-
         if (!cropped_buffers.empty()) {
             // We need to clean up the temporary crops we made for the
             // outputs in case any of them have device allocations.
@@ -643,16 +641,16 @@ Stmt build_produce(const map<string, Function> &env, Function f, const Target &t
                                              cleanup_args,
                                              Call::Intrinsic);
 
-            // We have to anticipate failures in the extern stage, so
-            // call this by registering a destructor before the extern
-            // call and triggering it afterwards using an Allocate node.
+            // Insert cleanup before checking the result of the extern stage.
             string destructor_name = unique_name('d');
             const char *fn = (cropped_buffers.size() == 1 ?
                               "_halide_buffer_retire_crop_after_extern_stage" :
                               "_halide_buffer_retire_crops_after_extern_stage");
-            check = Allocate::make(destructor_name, Handle(), MemoryType::Heap, {},
-                                   const_true(), check, cleanup_struct, fn);
+            Expr cleanup = Call::make(Int(32), fn, {cleanup_struct}, Call::Extern);
+            check = Block::make(Evaluate::make(cleanup), check);
         }
+
+        check = LetStmt::make(result_name, e, check);
 
         if (annotate.defined()) {
             check = Block::make(annotate, check);
