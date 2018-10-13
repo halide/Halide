@@ -394,18 +394,18 @@ Stmt build_extern_produce(const map<string, Function> &env, Function f, const Ta
     const string &extern_name = f.extern_function_name();
 
     // We need to generate crops of the input and output buffers if the
-        // extern stage has some non-extern loops, aside from the outermost
-        // placeholder.
-        bool needs_crops = false;
-        if (!f.definition().schedule().dims().empty()) {
-            size_t extern_count = 0;
-            for (const Dim& d : f.definition().schedule().dims()) {
-                extern_count += d.for_type == ForType::Extern ? 1 : 0;
-            }
-            needs_crops = extern_count + 1 < f.definition().schedule().dims().size();
+    // extern stage has some non-extern loops, aside from the outermost
+    // placeholder.
+    bool needs_crops = false;
+    if (!f.definition().schedule().dims().empty()) {
+        size_t extern_count = 0;
+        for (const Dim& d : f.definition().schedule().dims()) {
+            extern_count += d.for_type == ForType::Extern ? 1 : 0;
         }
+        needs_crops = extern_count + 1 < f.definition().schedule().dims().size();
+    }
 
-        vector<pair<string, Expr>> lets;
+    vector<pair<string, Expr>> lets;
 
     // Iterate through all of the input args to the extern
     // function building a suitable argument list for the
