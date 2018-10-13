@@ -4,10 +4,11 @@ using namespace Halide;
 
 class DmaPipeline : public Generator<DmaPipeline> {
 public:
-    Input<Buffer<uint8_t>> input_y{"input_y", 2};
-    Input<Buffer<uint8_t>> input_uv{"input_uv", 3};
-    Output<Buffer<uint8_t>> output_y{"output_y", 2};
-    Output<Buffer<uint8_t>> output_uv{"output_uv", 3};
+    // The type must be specified when building the generator, to be either uint8 or uint16.
+    Input<Buffer<>> input_y{"input_y", 2};
+    Input<Buffer<>> input_uv{"input_uv", 3};
+    Output<Buffer<>> output_y{"output_y", 2};
+    Output<Buffer<>> output_uv{"output_uv", 3};
 
     enum class UserOptions { Basic, Fold, Async, Split, Split_Fold };
     GeneratorParam<UserOptions> options{"options",
@@ -21,6 +22,10 @@ public:
              { "split_fold", UserOptions::Split_Fold }}};
 
     void generate() {
+        // Y and UV need to be the same type (?).
+        assert(input_y.type() == input_uv.type());
+        assert(output_y.type() == output_uv.type());
+
         Var x{"x"}, y{"y"}, c{"c"};
 
         // We could use 'in' to generate the input copies, but we can't name the variables that way.
@@ -57,7 +62,8 @@ public:
         output_uv.dim(2).set_stride(1).set_bounds(0, 2);
 
         // Break the output into tiles.
-        const int tile_width = 128;
+        const int bytes_per_pixel = std::max(input_y.type().bytes(), output_y.type().bytes());
+        const int tile_width = 128 / bytes_per_pixel;
         const int tile_height = 32;
 
         switch ((UserOptions)options) {
@@ -193,4 +199,4 @@ public:
     }
 };
 
-HALIDE_REGISTER_GENERATOR(DmaPipeline, pipeline_nv12_linear_rw_basic)
+HALIDE_REGISTER_GENERATOR(DmaPipeline, pipeline_yuv_linear_rw_basic)
