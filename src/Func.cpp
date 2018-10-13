@@ -923,6 +923,10 @@ void Stage::split(const string &old, const string &outer, const string &inner, E
             dims.insert(dims.begin() + i, dims[i]);
             dims[i].var = inner_name;
             dims[i+1].var = outer_name;
+            if (dims[i].for_type == ForType::Extern) {
+                // If we split an extern loop, mark the outer loop serial.
+                dims[i+1].for_type = ForType::Serial;
+            }
         }
     }
 

@@ -376,6 +376,7 @@ set(HEADER_FILES
   Reduction.h
   RegionCosts.h
   RemoveDeadAllocations.h
+  RemoveExternLoops.h
   RemoveTrivialForLoops.h
   RemoveUndef.h
   Schedule.h
@@ -534,6 +535,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Reduction.cpp
   RegionCosts.cpp
   RemoveDeadAllocations.cpp
+  RemoveExternLoops.cpp
   RemoveTrivialForLoops.cpp
   RemoveUndef.cpp
   Schedule.cpp

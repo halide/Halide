@@ -704,6 +704,8 @@ void Function::define_extern(const std::string &function_name,
     contents->extern_function_device_api = device_api;
     contents->extern_uses_old_buffer_t = use_old_buffer_t;
 
+    std::vector<Expr> values;
+    contents->output_buffers.clear();
     for (size_t i = 0; i < types.size(); i++) {
         string buffer_name = name();
         if (types.size() > 1) {
@@ -711,14 +713,28 @@ void Function::define_extern(const std::string &function_name,
         }
         Parameter output(types[i], true, (int)args.size(), buffer_name);
         contents->output_buffers.push_back(output);
+
+        values.push_back(undef(types[i]));
     }
+
+    std::vector<Expr> arg_exprs;
+    for (size_t i = 0; i < args.size(); i++) {
+        arg_exprs.push_back(args[i]);
+    }
+
+    contents->init_def = Definition(arg_exprs, values, ReductionDomain(), true);
 
     // Reset the storage dims to match the pure args
     contents->func_schedule.storage_dims().clear();
+    contents->init_def.schedule().dims().clear();
     for (size_t i = 0; i < args.size(); i++) {
         contents->func_schedule.storage_dims().push_back(StorageDim {args[i]});
+        contents->init_def.schedule().dims().push_back(
+            Dim{args[i], ForType::Extern, DeviceAPI::None, Dim::Type::PureVar});
     }
-
+    // Add the dummy outermost dim
+    contents->init_def.schedule().dims().push_back(
+        Dim{Var::outermost().name(), ForType::Serial, DeviceAPI::None, Dim::Type::PureVar});
 }
 
 void Function::accept(IRVisitor *visitor) const {
@@ -738,10 +754,12 @@ const std::string &Function::origin_name() const {
 }
 
 Definition &Function::definition() {
+    internal_assert(contents->init_def.defined());
     return contents->init_def;
 }
 
 const Definition &Function::definition() const {
+    internal_assert(contents->init_def.defined());
     return contents->init_def;
 }
 
