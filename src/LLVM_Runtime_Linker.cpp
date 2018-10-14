@@ -726,7 +726,6 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                     modules.push_back(get_initmod_posix_threads(c, bits_64, debug));
                 }
             } else if (t.os == Target::QuRT) {
-                modules.push_back(get_initmod_hexagon_cache_allocator(c, bits_64, debug));
                 modules.push_back(get_initmod_qurt_allocator(c, bits_64, debug));
                 modules.push_back(get_initmod_qurt_yield(c, bits_64, debug));
                 if (tsan) {
@@ -743,7 +742,6 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 // still included below.
                 if (t.arch == Target::Hexagon) {
                     modules.push_back(get_initmod_qurt_allocator(c, bits_64, debug));
-                    modules.push_back(get_initmod_hexagon_cache_allocator(c, bits_64, debug));
                 }
                 modules.push_back(get_initmod_fake_thread_pool(c, bits_64, debug));
             }
@@ -975,6 +973,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             modules.push_back(get_initmod_hexagon_host(c, bits_64, debug));
         }
         if (t.has_feature(Target::HexagonDma)) {
+            modules.push_back(get_initmod_hexagon_cache_allocator(c, bits_64, debug));
             modules.push_back(get_initmod_hexagon_dma(c, bits_64, debug));
             modules.push_back(get_initmod_hexagon_dma_pool(c, bits_64, debug));
         }
