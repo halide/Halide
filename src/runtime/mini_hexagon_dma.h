@@ -1,11 +1,7 @@
-/**
- * This file has the necessary structures and APIs for Initiating, executing and finishing a Hexagon DMA transfer
- * The functions in this header file are the interfacing functions between Halide runtime and the Hexagon DMA driver
- * The functions in this file lead to the hexagon DMA driver calls in case of availability of DMA driver and hexagon DMA tools
- * In case of un availabilty of hexagon SDK tools and DMA drivers these function while mimic DMA with dummy transfers  */
+// This header declares the Hexagon DMA API, without depending on the Hexagon SDK.
 
-#ifndef _DMA_DEVICE_SHIM_H_
-#define _DMA_DEVICE_SHIM_H_
+#ifndef MINI_HEXAGON_DMA_H
+#define MINI_HEXAGON_DMA_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -18,7 +14,7 @@ typedef unsigned long addr_t;
 
 typedef unsigned int qurt_size_t;
 typedef unsigned int qurt_mem_pool_t;
-//ToDo: Change to uint32_t in later releases after DMA Driver API Change
+//TODO: Change to uint32_t in later releases after DMA Driver API Change
 #define HALIDE_HEXAGON_ENUM  enum __attribute__((aligned(4)))
 
 __inline static int align(int x,int a) {

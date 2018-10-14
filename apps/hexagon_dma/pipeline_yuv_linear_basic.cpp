@@ -2,6 +2,8 @@
 
 using namespace Halide;
 
+// Generate a pipeline that reads YUV data via DMA, scales the data
+// by 2, and (optionally) writes the YUV data back via DMA.
 class DmaPipeline : public Generator<DmaPipeline> {
 public:
     // The type must be specified when building the generator, to be either uint8 or uint16.
@@ -10,16 +12,16 @@ public:
     Output<Buffer<>> output_y{"output_y", 2};
     Output<Buffer<>> output_uv{"output_uv", 3};
 
-    enum class UserOptions { Basic, Fold, Async, Split, Split_Fold };
-    GeneratorParam<UserOptions> options{"options",
+    enum class Schedule { Basic, Fold, Async, Split, Split_Fold };
+    GeneratorParam<Schedule> schedule{"schedule",
             /* default value */
-             UserOptions::Basic,
+             Schedule::Basic,
             /* map from names to values */
-            {{ "none", UserOptions::Basic },
-             { "fold", UserOptions::Fold },
-             { "async", UserOptions::Async },
-             { "split", UserOptions::Split },
-             { "split_fold", UserOptions::Split_Fold }}};
+            {{ "none", Schedule::Basic },
+             { "fold", Schedule::Fold },
+             { "async", Schedule::Async },
+             { "split", Schedule::Split },
+             { "split_fold", Schedule::Split_Fold }}};
 
     GeneratorParam<bool> use_dma_for_output{"use_dma_for_output", true};
 
@@ -71,8 +73,8 @@ public:
         const int tile_width = 128 / bytes_per_pixel;
         const int tile_height = 32;
 
-        switch ((UserOptions)options) {
-            case UserOptions::Basic:
+        switch ((Schedule)schedule) {
+            case Schedule::Basic:
             default:
                 output_y
                     .tile(x, y, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp);
@@ -90,7 +92,7 @@ public:
                     .bound(c, 0, 2)
                     .reorder_storage(c, x, y);
             break;
-            case UserOptions::Fold:
+            case Schedule::Fold:
                 output_y
                     .tile(x, y, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp);
 
@@ -112,7 +114,7 @@ public:
                     .fold_storage(x, tile_width * 2);
 
             break;
-            case UserOptions::Async:
+            case Schedule::Async:
                 output_y
                     .tile(x, y, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp);
 
@@ -134,7 +136,7 @@ public:
                     .reorder_storage(c, x, y)
                     .fold_storage(x, tile_width * 2);
             break;
-            case UserOptions::Split: {
+            case Schedule::Split: {
                 Var yo, yi;
 
                 Expr fac_y = output_y.dim(1).extent()/2;
@@ -160,7 +162,7 @@ public:
                     .reorder_storage(c, x, y);
             }
             break;
-            case UserOptions::Split_Fold: {
+            case Schedule::Split_Fold: {
                 Var yo, yi;
 
                 Expr fac_y = output_y.dim(1).extent()/2;

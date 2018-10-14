@@ -19,11 +19,11 @@ WEAK halide_mutex hexagon_cache_mutex;
 
 }}}}
 
-extern "C" {
-
 using namespace Halide::Runtime::Internal::Hexagon;
 
-static inline void* free_unused_buffers(void* user_context) {
+namespace {
+
+inline void* free_unused_buffers(void* user_context) {
     // Walk the list and deallocate unused blocks.
     ScopedMutexLock lock(&hexagon_cache_mutex);
     pcache_pool temp2 = hexagon_cache_pool;
@@ -54,7 +54,7 @@ static inline void* free_unused_buffers(void* user_context) {
 
 // Retry logic if enabled will walk the list and deallocate unused blocks to make room for a larger block size
 // Once all unused blocks are deallocated it will try to allocate a larger block
-static inline void *hexagon_cache_pool_get (void *user_context, size_t size, bool retry) {
+inline void *hexagon_cache_pool_get (void *user_context, size_t size, bool retry) {
 
     pcache_pool prev = NULL;
     pcache_pool temp = hexagon_cache_pool;
@@ -109,7 +109,7 @@ static inline void *hexagon_cache_pool_get (void *user_context, size_t size, boo
     return (void*) temp->l2memory;
 }
 
-static inline void hexagon_cache_pool_put(void *user_context, void *cache_mem) {
+inline void hexagon_cache_pool_put(void *user_context, void *cache_mem) {
     ScopedMutexLock lock(&hexagon_cache_mutex);
     halide_assert(user_context, cache_mem);
     pcache_pool temp = hexagon_cache_pool;
@@ -122,7 +122,7 @@ static inline void hexagon_cache_pool_put(void *user_context, void *cache_mem) {
     }
 }
 
-static inline int hexagon_cache_pool_free(void *user_context) {
+inline int hexagon_cache_pool_free(void *user_context) {
     ScopedMutexLock lock(&hexagon_cache_mutex);
     pcache_pool temp = hexagon_cache_pool;
     pcache_pool prev = hexagon_cache_pool;
@@ -141,6 +141,10 @@ static inline int hexagon_cache_pool_free(void *user_context) {
     hexagon_cache_pool = NULL;
     return QURT_EOK;
 }
+
+}  // namespace
+
+extern "C" {
 
 WEAK void *halide_locked_cache_malloc(void *user_context, size_t size) {
     // TODO Currently option to retry allocation is disabled, we will have to decide if can be
@@ -165,4 +169,5 @@ WEAK int halide_hexagon_free_l2_pool(void *user_context) {
     halide_print(user_context, "halide_hexagon_free_l2_pool \n");
     return hexagon_cache_pool_free(user_context);
 }
+
 }

@@ -2098,11 +2098,11 @@ Value *CodeGen_Hexagon::codegen_cache_allocation_size(const std::string &name, T
     Expr overflow = make_zero(UInt(32));
     Expr total_size = make_const(UInt(32), type.lanes() * type.bytes());
 
-    // We'll multiply all the extents into the 64-bit value
-    // total_size. We'll also track (total_size >> 32) as a 64-bit
+    // We'll multiply all the extents into the 32-bit value
+    // total_size. We'll also track (total_size >> 24) as a 32-bit
     // value to check for overflow as we go. The loop invariant will
     // be that either the overflow Expr is non-zero, or total_size_hi
-    // only occupies the bottom 32-bits. Overflow could be more simply
+    // only occupies the bottom 8-bits. Overflow could be more simply
     // checked for using division, but that's slower at runtime. This
     // method generates much better assembly.
     Expr total_size_hi = make_zero(UInt(32));
@@ -2111,7 +2111,7 @@ Value *CodeGen_Hexagon::codegen_cache_allocation_size(const std::string &name, T
     for (size_t i = 0; i < extents.size(); i++) {
         Expr next_extent = cast(UInt(32), extents[i]);
 
-        // Update total_size >> 32. This math can't overflow due to
+        // Update total_size >> 24. This math can't overflow due to
         // the loop invariant:
         total_size_hi *= next_extent;
         // Deal with carry from the low bits. Still can't overflow.
@@ -2121,7 +2121,7 @@ Value *CodeGen_Hexagon::codegen_cache_allocation_size(const std::string &name, T
         total_size *= next_extent;
 
         // We can check for overflow by asserting that total_size_hi
-        // is still a 32-bit number.
+        // is still an 8-bit number.
         overflow = overflow | (total_size_hi >> 24);
     }
 
@@ -2163,8 +2163,8 @@ void CodeGen_Hexagon::visit(const Allocate *alloc) {
         Value *llvm_condition = codegen(alloc->condition);
         if (llvm_size != nullptr) {
             llvm_size = builder->CreateSelect(llvm_condition,
-                                          llvm_size,
-                                          ConstantInt::get(llvm_size->getType(), 0));
+                                              llvm_size,
+                                              ConstantInt::get(llvm_size->getType(), 0));
         }
 
         Allocation allocation;

@@ -1,9 +1,7 @@
-/**
- * This file simulates the actual hexagon DMA driver functions to run the DMA Examples on host machine
- * The definitions in this file are a weak reference so that these will be called only in case of unavailability of
- * actual DMA functions.
- * This file is needed only if there is no hexagon SDK support or NO hexagon DMA support, in either case we replace
- * the DMA operations with normal memory operations */
+// This file simulates the actual hexagon DMA driver functions to run
+// the DMA Examples on host machine. The definitions in this file are
+// a weak reference so that these will be called only in case of
+// unavailability of actual DMA functions.
 #define WEAK __attribute__((weak))
 #include "HalideRuntime.h"
 #include "../../src/runtime/mini_hexagon_dma.h"

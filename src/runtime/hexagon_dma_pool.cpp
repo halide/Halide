@@ -25,11 +25,17 @@ typedef struct {
     hexagon_dma_virtual_engine_t virtual_engine_list[MAX_NUMBER_OF_DMA_ENGINES];
 } hexagon_dma_pool_t;
 
-static hexagon_dma_pool_t *hexagon_dma_pool = NULL;
-static halide_mutex hexagon_dma_pool_mutex;
+WEAK hexagon_dma_pool_t *hexagon_dma_pool = NULL;
+WEAK halide_mutex hexagon_dma_pool_mutex;
+
+}}}}
+
+using namespace Halide::Runtime::Internal::HexagonDma;
+
+namespace {
 
 // In this function we pick the dma engine and assign it to a virtual engine
-static inline void *hexagon_dma_pool_get (void *user_context, void *virtual_engine_id) {
+inline void *hexagon_dma_pool_get (void *user_context, void *virtual_engine_id) {
     halide_assert(user_context, hexagon_dma_pool);
     halide_assert(user_context, virtual_engine_id);
     ScopedMutexLock lock(&hexagon_dma_pool_mutex);
@@ -62,8 +68,9 @@ static inline void *hexagon_dma_pool_get (void *user_context, void *virtual_engi
     halide_print(user_context, "Hexagon DMA: Error in assigning a dma engine to a virtual engine\n");
     return NULL;
 }
+
 // In this function we simply mark the dma engine as free
-static inline int hexagon_dma_pool_put(void *user_context, void *dma_engine, void *virtual_engine_id) {
+inline int hexagon_dma_pool_put(void *user_context, void *dma_engine, void *virtual_engine_id) {
     halide_assert(user_context, virtual_engine_id);
     ScopedMutexLock lock(&hexagon_dma_pool_mutex);
 
@@ -78,13 +85,12 @@ static inline int hexagon_dma_pool_put(void *user_context, void *dma_engine, voi
     return halide_error_code_generic_error;
 }
 
-}}}}
-
-using namespace Halide::Runtime::Internal::HexagonDma;
+}  // namespace
 
 extern "C" {
+
 // halide_hexagon_free_dma_resource
-int halide_hexagon_free_dma_resource(void *user_context, void *virtual_engine_id) {
+WEAK int halide_hexagon_free_dma_resource(void *user_context, void *virtual_engine_id) {
     halide_assert(user_context, hexagon_dma_pool);
     halide_assert(user_context, virtual_engine_id);
     // Free the Real DMA Engines
@@ -139,7 +145,7 @@ int halide_hexagon_free_dma_resource(void *user_context, void *virtual_engine_id
 }
 
 // halide_hexagon_create_dma_pool
-void *halide_hexagon_allocate_dma_resource(void *user_context) {
+WEAK void *halide_hexagon_allocate_dma_resource(void *user_context) {
     ScopedMutexLock lock(&hexagon_dma_pool_mutex);
 
     if (!hexagon_dma_pool) {
