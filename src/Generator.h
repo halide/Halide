@@ -1934,6 +1934,8 @@ public:
     HALIDE_FORWARD_METHOD(Func, compute_inline)
     HALIDE_FORWARD_METHOD(Func, compute_root)
     HALIDE_FORWARD_METHOD(Func, compute_with)
+    HALIDE_FORWARD_METHOD(Func, copy_to_device)
+    HALIDE_FORWARD_METHOD(Func, copy_to_host)
     HALIDE_FORWARD_METHOD(Func, define_extern)
     HALIDE_FORWARD_METHOD_CONST(Func, defined)
     HALIDE_FORWARD_METHOD(Func, estimate)
