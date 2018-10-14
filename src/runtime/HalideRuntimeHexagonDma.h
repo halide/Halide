@@ -35,44 +35,49 @@ typedef enum {
 
 extern const struct halide_device_interface_t *halide_hexagon_dma_device_interface();
 
-/** The device handle for Hexagon is simply a pointer and size, stored
- * in the dev field of the buffer_t. If the buffer is allocated in a
- * particular way (ion_alloc), the buffer will be shared with Hexagon
- * (not copied). The device field of the buffer_t must be NULL when this
- * routine is called. This call can fail due to running out of memory
- * or being passed an invalid device handle. The device and host
- * dirty bits are left unmodified. */
+/** This API is used to set up the DMA device interface to be used for DMA transfer. This also internally 
+ * creates the DMA device handle and populates all the Buffer releated parameters( width, height, stride)
+ * to be used for DMA configuration.
+ */
 extern int halide_hexagon_dma_device_wrap_native(void *user_context, struct halide_buffer_t *buf,
                                                  uint64_t mem);
 
-/** Disconnect this halide_buffer_t from the device handle it was
- * previously wrapped around. Should only be called for a
- * halide_buffer_t that halide_hexagon_wrap_device_handle was
- * previously called on. Frees any storage associated with the binding
- * of the halide_buffer_t and the device handle, but does not free the
- * device handle. The device field of the halide_buffer_t will be NULL
- * on return. */
+/** Detach the Input/Output Buffer from DMA device handle and deallocate the DMA device handle buffer allocation
+ * This API also free's up the DMA device and makes it available for another usage.
+ */
 extern int halide_hexagon_dma_device_detach_native(void *user_context, struct halide_buffer_t *buf);
 
-/** Before a buffer can be used in a copy operation (i.e. a DMA
- * operation), it must have a DMA engine allocated. */
+/** This API will allocate a DMA Engine needed for DMA RD/WR. This is the first step Before
+ * a buffer can be used in a copy operation (i.e. a DMA RD/WR operation).
+ */
 extern int halide_hexagon_dma_allocate_engine(void *user_context, void ** dma_engine);
 
-/** After a user program ends it is necessary to free up resources */
+/** This API free up the allocated DMA engine. This need to be called after a user program ends 
+ * all the DMA Operations and make it available for subsequent DMA transfers */
 extern int halide_hexagon_dma_deallocate_engine(void *user_context, void *dma_engine);
 
-/** Prepares a buffer for DMA Read Operation */
+/** This API Prepares a buffer for DMA Read Operation. This will setup the DMA format, direction (RD).
+ * Will also make necessary adjustments to the DMA frame parameters based on Image format provided.
+*/
 extern int halide_hexagon_dma_prepare_for_copy_to_host(void *user_context, struct halide_buffer_t *buf,
                                                        void *dma_engine, bool is_ubwc, halide_hexagon_image_fmt_t fmt);
 
-/* Prepares a buffer for DMA Write operation */
+/** This API Prepares a buffer for DMA Write Operation. This will setup the DMA format, direction ( WR).
+ * Will also make necessary adjustments to the DMA frame parameters based on Image format provided.
+*/
 extern int halide_hexagon_dma_prepare_for_copy_to_device(void *user_context, struct halide_buffer_t *buf,
                                                        void *dma_engine, bool is_ubwc, halide_hexagon_image_fmt_t fmt);
 
-/* Frees up DMA Resources associated with the buffer */
+/** This API is used to frees up the DMA Resources associated with the buffer. 
+ * TODO: Currently this API is dummy as all the necessary freeing is done in an another API.
+ * This will be used in future.
+ */
 extern int halide_hexagon_dma_unprepare(void *user_context, struct halide_buffer_t *buf);
 
-/* DMA Power Voting based on corner case */
+/** This API is used to setup the hexagon Operation modes. We will setup the necessary Operating frequency
+ * based on the power mode choosen. Check the structure halide_hexagon_power_mode_t defined in Halide HalideRuntimeHexagonHost.h
+ * for the supported power modes.
+ */
 extern int halide_hexagon_dma_power_mode_voting(void *user_context, halide_hexagon_power_mode_t cornercase);
 
 ///@}

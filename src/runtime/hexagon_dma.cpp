@@ -12,6 +12,10 @@ extern WEAK halide_device_interface_t hexagon_dma_device_interface;
 
 #define descriptor_size 64
 
+/** DMA device handle structure, which holds all the necessary frame related parameters.
+ * To be used for DMA transfer.
+*/
+
 struct dma_device_handle {
     uint8_t *buffer;
     uint16_t offset_rdx;
@@ -26,6 +30,10 @@ struct dma_device_handle {
     bool is_write;
     t_eDmaFmt fmt;
 };
+
+/** Allocating memory for DMA device handle. The life time of this memory is till the frame
+ * is active in DMA process.
+*/
 
 static dma_device_handle *malloc_device_handle() {
     dma_device_handle *dev = (dma_device_handle *)malloc(sizeof(dma_device_handle));
@@ -43,6 +51,8 @@ static dma_device_handle *malloc_device_handle() {
     dev->is_write = 0;
     return dev;
 }
+/** Data Structure for chaining of DMA descriptors.
+*/
 
 typedef struct desc_pool {
     void *descriptor;
@@ -53,6 +63,11 @@ typedef struct desc_pool {
 typedef desc_pool_t *pdesc_pool;
 
 static pdesc_pool dma_desc_pool = NULL;
+
+/** Core logic for DMA descriptor Pooling. The idea is to reuse the Allocated cache for descriptors,
+ * if it is free. In case of un availability of free descriptors, two new descriptors are allocated in the cache 
+ * and make them available in the pool (128B is the minimum cache size that can be locked)
+*/
 
 static void *desc_pool_get (void *user_context) {
     // TODO: Add Mutex locking for access to dma_desc_pool ( To be Thread safe )
@@ -114,7 +129,8 @@ static void desc_pool_put (void *user_context, void *desc) {
     }
 }
 
-// Two descriptors at a time
+/** DMA descriptor freeing logic, Two descriptors at a time will be freed.
+*/ 
 static void desc_pool_free (void *user_context) {
     // TODO: Add Mutex locking for access to dma_desc_pool ( To be Thread safe )
     pdesc_pool temp = dma_desc_pool;
@@ -132,7 +148,8 @@ static void desc_pool_free (void *user_context) {
         }
     }
 }
-
+/** User ptovided Image format to DMA format conversion.
+*/
 static inline t_eDmaFmt halide_hexagon_get_dma_format(void *user_context, const halide_hexagon_image_fmt_t format) {
     //A giant switch case to match image formats to dma formats 
     switch(format) {
@@ -166,7 +183,9 @@ static inline t_eDmaFmt halide_hexagon_get_dma_format(void *user_context, const 
             error(user_context) << "Hexagon DMA Format Mismatch" << format << "\n";
     }
 }
-
+/** The core logic of DMA Transfer. This API uses the DMA device handle populated prior to calling this
+ * and does the necessary steps for performing the DMA Operation.
+*/
 static int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_t *src,
                                        struct halide_buffer_t *dst) {
 
@@ -335,6 +354,8 @@ using namespace Halide::Runtime::Internal::HexagonDma;
 
 extern "C" {
 
+/** DMA device interface function which will allocate the device handle and initalize it with the frame parameters.
+*/
 WEAK int halide_hexagon_dma_device_malloc(void *user_context, halide_buffer_t *buf) {
     debug(user_context)
         << "Hexagon: halide_hexagon_dma_device_malloc (user_context: " << user_context
@@ -362,6 +383,8 @@ WEAK int halide_hexagon_dma_device_malloc(void *user_context, halide_buffer_t *b
 
     return halide_error_code_success;
 }
+/** DMA Device Interface function to free the Allocated DMA device handle.
+*/
 
 WEAK int halide_hexagon_dma_device_free(void *user_context, halide_buffer_t *buf) {
     debug(user_context)
@@ -378,6 +401,9 @@ WEAK int halide_hexagon_dma_device_free(void *user_context, halide_buffer_t *buf
     buf->set_device_dirty(false);
     return halide_error_code_success;
 }
+/** This API will allocate a DMA Engine needed for DMA RD/WR. This is the first step Before
+ * a buffer can be used in a copy operation (i.e. a DMA RD/WR operation).
+ */
 
 WEAK int halide_hexagon_dma_allocate_engine(void *user_context, void **dma_engine) {
     debug(user_context)
@@ -394,6 +420,9 @@ WEAK int halide_hexagon_dma_allocate_engine(void *user_context, void **dma_engin
 
     return halide_error_code_success;
 }
+
+/** This API free up the allocated DMA engine. This need to be called after a user program ends 
+ * all the DMA Operations and make it available for subsequent DMA transfers */
 
 WEAK int halide_hexagon_dma_deallocate_engine(void *user_context, void *dma_engine) {
     debug(user_context)
@@ -413,7 +442,8 @@ WEAK int halide_hexagon_dma_deallocate_engine(void *user_context, void *dma_engi
     return halide_error_code_success;
 }
 
-
+/** Wrapper function to setup the paramters for DMA transfer based on the User provided parameters.
+*/
 inline int dma_prepare_for_copy(void *user_context, struct halide_buffer_t *buf, void *dma_engine, bool is_ubwc, t_eDmaFmt fmt, bool is_write ) {
     halide_assert(user_context, dma_engine);
     dma_device_handle *dev = reinterpret_cast<dma_device_handle *>(buf->device);
@@ -432,6 +462,9 @@ inline int dma_prepare_for_copy(void *user_context, struct halide_buffer_t *buf,
     return halide_error_code_success;
 }
 
+/** This API Prepares a buffer for DMA Read Operation. This will setup the DMA format, direction ( RD).
+ * Will also make necessary adjustments to the DMA frame parameters based on Image format provided.
+*/
 
 WEAK int halide_hexagon_dma_prepare_for_copy_to_host(void *user_context, struct halide_buffer_t *buf,
                                                      void *dma_engine, bool is_ubwc, halide_hexagon_image_fmt_t fmt ) {
@@ -441,6 +474,9 @@ WEAK int halide_hexagon_dma_prepare_for_copy_to_host(void *user_context, struct 
     t_eDmaFmt format = halide_hexagon_get_dma_format(user_context, fmt);
     return dma_prepare_for_copy(user_context, buf, dma_engine, is_ubwc,  format, 0);
 }
+/** This API Prepares a buffer for DMA Write Operation. This will setup the DMA format, direction ( WR).
+ * Will also make necessary adjustments to the DMA frame parameters based on Image format provided.
+*/
 WEAK int halide_hexagon_dma_prepare_for_copy_to_device(void *user_context, struct halide_buffer_t *buf,
                                                      void *dma_engine, bool is_ubwc, halide_hexagon_image_fmt_t fmt ) {
     debug(user_context)
@@ -449,6 +485,10 @@ WEAK int halide_hexagon_dma_prepare_for_copy_to_device(void *user_context, struc
     t_eDmaFmt format = halide_hexagon_get_dma_format(user_context, fmt);
     return dma_prepare_for_copy(user_context, buf, dma_engine, is_ubwc,  format, 1);
 }
+/** This API is used to frees up the DMA Resources associated with the buffer. 
+ * TODO: Currently this API is dummy as all the necessary freeing is done in an another API.
+ * This will be used in future.
+ */
 
 WEAK int halide_hexagon_dma_unprepare(void *user_context, struct halide_buffer_t *buf) {
     debug(user_context)
@@ -457,6 +497,9 @@ WEAK int halide_hexagon_dma_unprepare(void *user_context, struct halide_buffer_t
     //TODO Since we are moving the call to finishframe to dma pool . Need to check what we can do here
     return halide_error_code_success;
 }
+/** The core DMA device interface function used for DMA RD/WR transfer.
+ * The Direction(RD/WR) of the transfer is decided based on the device interface parameters passed.
+*/
 
 WEAK int halide_hexagon_dma_buffer_copy(void *user_context, struct halide_buffer_t *src,
                                         const struct halide_device_interface_t *dst_device_interface,
@@ -504,6 +547,8 @@ WEAK int halide_hexagon_dma_buffer_copy(void *user_context, struct halide_buffer
    
     return nRet;
 }
+/** NOTE: This API is not used in the current DMA transfer implementation.
+*/
 
 WEAK int halide_hexagon_dma_copy_to_device(void *user_context, halide_buffer_t *buf) {
     debug(user_context)
@@ -514,6 +559,8 @@ WEAK int halide_hexagon_dma_copy_to_device(void *user_context, halide_buffer_t *
     error(user_context) << "halide_hexagon_dma_copy_to_device not implemented.\n";
     return halide_error_code_copy_to_device_failed;
 }
+/** This API is not used in the current DMA transfer implementation.
+*/
 
 WEAK int halide_hexagon_dma_copy_to_host(void *user_context, struct halide_buffer_t *buf) {
     debug(user_context)
@@ -605,6 +652,9 @@ WEAK int halide_hexagon_dma_copy_to_host(void *user_context, struct halide_buffe
     return halide_error_code_success;
 #endif
 }
+/** This API allocates the Destination side DMA device handle and pulates the destination side parameters.
+ * This also sets up the ROI offset in the frame based on the parameters received.
+*/
 
 WEAK int halide_hexagon_dma_device_crop(void *user_context,
                                         const struct halide_buffer_t *src,
@@ -668,6 +718,11 @@ WEAK int halide_hexagon_dma_device_sync(void *user_context, struct halide_buffer
     return halide_error_code_success;
 }
 
+/** This API is used to set up the DMA device interface to be used for DMA transfer. This also internally 
+ * creates the DMA device handle and populates all the Buffer releated parameters( width, height, stride)
+ * to be used for DMA configuration.
+ */
+
 WEAK int halide_hexagon_dma_device_wrap_native(void *user_context, struct halide_buffer_t *buf,
                                                uint64_t handle) {
     debug(user_context)
@@ -693,6 +748,9 @@ WEAK int halide_hexagon_dma_device_wrap_native(void *user_context, struct halide
 
     return halide_error_code_success;
 }
+/** Detach the Input/Output Buffer from DMA device handle and deallocate the DMA device handle buffer allocation
+ * This API also free's up the DMA device and makes it available for another usage.
+ */
 
 WEAK int halide_hexagon_dma_device_detach_native(void *user_context, struct halide_buffer_t *buf) {
     debug(user_context)
@@ -738,6 +796,10 @@ WEAK int halide_hexagon_dma_device_release(void *user_context) {
 
     return 0;
 }
+/** This API is used to setup the hexagon Operation modes. We will setup the necessary Operating frequency
+ * based on the power mode choosen. Check the structure halide_hexagon_power_mode_t defined in Halide HalideRuntimeHexagonHost.h
+ * for the supported power modes.
+ */
 
 WEAK int halide_hexagon_dma_power_mode_voting(void *user_context, halide_hexagon_power_mode_t cornercase) {
     debug(user_context)
