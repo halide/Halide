@@ -61,7 +61,7 @@ public:
         }
 
         bool may_increase_size() const {
-            return size() < max_size;
+            return size() < max_size && w <= 8000 && h <= 8000 && c <= 512;
         }
 
         bool may_reduce_size() const {
@@ -86,7 +86,7 @@ public:
 
         int random_out_channels() const {
             int min = (min_size + w * h - 1) / (w * h);
-            int max = max_size / (w * h);
+            int max = std::min(512, max_size / (w * h));
             if (min >= max) return min;
             return rand_int(min, max);
         }
@@ -178,6 +178,9 @@ public:
 
         Expr def = cast(f.func.value().type(), 0);
 
+        // Avoid huge unrolled loops
+        if (extent >= 4) return pool2D_r(f);
+
         // assuming input is 3d: w, h, c
         for (int i = min; i < min + extent; i++) {
             for (int j = min; j < min + extent; j++) {
@@ -245,6 +248,9 @@ public:
         vector<Var> args = f.func.args();
 
         Expr def = cast(f.func.value().type(), 0);
+
+        // Avoid huge unrolled loops
+        if (f.c >= 4) return convolve2D_r(f, kernel_min, kernel_max);
 
         // assuming input is 3d: w, h, c
         for (int c = 0; c < f.c; c++)  {
@@ -483,7 +489,7 @@ public:
     }
 
     Stage resample_to(Stage f, int w, int h, int c) {
-        std::cerr << "Resampling from " << f.w << ", " << f.h << ", " << f.c << " to " << w << ", " << h << ", " << c << "\n";
+        std::cout << "Resampling from " << f.w << ", " << f.h << ", " << f.c << " to " << w << ", " << h << ", " << c << "\n";
         Stage out = f;
         // First decrease any sizes that need decreasing
         if (out.w > w) {
@@ -553,7 +559,7 @@ public:
         } else if (stage_type == 17 && false) {
             // TODO: transpose disabled for now because f(x, y) + f(y, x) totally breaks the bounds inference done by the autoscheduler.
             return transpose(f);
-        } else if (stage_type == 18) {
+        } else if (stage_type == 18 && f.size() < 10000) {
             return unary_op(f);
         } else if (i1 != i2) {
             return binary_op(f, g);
