@@ -2141,10 +2141,18 @@ check("v*.w += vrmpy(v*.b,v*.b)", hvx_width, i32_1 + i32(i8_1)*i8_1 + i32(i8_2)*
 int main(int argc, char **argv) {
     Test test;
 
+    // Check if we have a filter, from either the environment or command line.
+    const char* filter = getenv("FILTER");
     if (argc > 1) {
-        test.filter = argv[1];
+        filter = argv[1];
+    }
+
+    if (filter) {
+        printf("Filtering for instructions '%s'\n", filter);
+        test.filter = filter;
         num_threads = 1;
     }
+
 
     if (argc > 2) {
         // Don't forget: if you want to run the standard tests to a specific output
