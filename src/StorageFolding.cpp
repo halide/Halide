@@ -29,7 +29,7 @@ using std::vector;
 class CountProducers : public IRVisitor {
     const std::string &name;
 
-    void visit(const ProducerConsumer *op) {
+    void visit(const ProducerConsumer *op) override {
         if (op->is_producer && (op->name == name)) {
             count++;
         } else {
@@ -52,16 +52,16 @@ int count_producers(Stmt in, const std::string &name) {
 }
 
 // Fold the storage of a function in a particular dimension by a particular factor
-class FoldStorageOfFunction : public IRMutator {
+class FoldStorageOfFunction : public IRMutator2 {
     string func;
     int dim;
     Expr factor;
     string dynamic_footprint;
 
-    using IRMutator::visit;
+    using IRMutator2::visit;
 
-    void visit(const Call *op) {
-        IRMutator::visit(op);
+    Expr visit(const Call *op) override {
+        Expr expr = IRMutator2::visit(op);
         op = expr.as<Call>();
         internal_assert(op);
         if (op->name == func && op->call_type == Call::Halide) {
@@ -132,11 +132,11 @@ class FoldStorageOfFunction : public IRMutator {
                                   {expr, dim, old_min, old_extent}, Call::Extern);
             }
         }
-
+        return expr;
     }
 
-    void visit(const Provide *op) {
-        IRMutator::visit(op);
+    Stmt visit(const Provide *op) override {
+        Stmt stmt = IRMutator2::visit(op);
         op = stmt.as<Provide>();
         internal_assert(op);
         if (op->name == func) {
@@ -144,6 +144,7 @@ class FoldStorageOfFunction : public IRMutator {
             args[dim] = is_one(factor) ? 0 : (args[dim] % factor);
             stmt = Provide::make(op->name, op->values, args);
         }
+        return stmt;
     }
 
 
@@ -153,16 +154,16 @@ public:
 };
 
 // Inject dynamic folding checks against a tracked live range.
-class InjectFoldingCheck : public IRMutator {
+class InjectFoldingCheck : public IRMutator2 {
     Function func;
     string head, tail, loop_var;
     Expr sema_var;
     int dim;
     bool in_produce;
     const StorageDim &storage_dim;
-    using IRMutator::visit;
+    using IRMutator2::visit;
 
-    void visit(const ProducerConsumer *op) {
+    Stmt visit(const ProducerConsumer *op) override {
         if (op->name == func.name()) {
             Stmt body = op->body;
             if (op->is_producer) {
@@ -295,14 +296,13 @@ class InjectFoldingCheck : public IRMutator {
                 }
             }
 
-
-            stmt = ProducerConsumer::make(op->name, op->is_producer, body);
+            return ProducerConsumer::make(op->name, op->is_producer, body);
         } else {
-            IRMutator::visit(op);
+            return IRMutator2::visit(op);
         }
     }
 
-    void visit(const LetStmt *op) {
+    Stmt visit(const LetStmt *op) override {
         if (starts_with(op->name, func.name() + ".") &&
             ends_with(op->name, ".tmp_buffer")) {
 
@@ -377,9 +377,9 @@ class InjectFoldingCheck : public IRMutator {
                 }
             }
 
-            stmt = LetStmt::make(op->name, op->value, body);
+            return LetStmt::make(op->name, op->value, body);
         } else {
-            IRMutator::visit(op);
+            return IRMutator2::visit(op);
         }
 
     }
@@ -402,22 +402,22 @@ struct Semaphore {
 };
 
 // Attempt to fold the storage of a particular function in a statement
-class AttemptStorageFoldingOfFunction : public IRMutator {
+class AttemptStorageFoldingOfFunction : public IRMutator2 {
     Function func;
     bool explicit_only;
 
-    using IRMutator::visit;
+    using IRMutator2::visit;
 
-    void visit(const ProducerConsumer *op) {
+    Stmt visit(const ProducerConsumer *op) override {
         if (op->name == func.name()) {
             // Can't proceed into the pipeline for this func
-            stmt = op;
+            return op;
         } else {
-            IRMutator::visit(op);
+            return IRMutator2::visit(op);
         }
     }
 
-    void visit(const For *op) {
+    Stmt visit(const For *op) override {
         if (op->for_type != ForType::Serial && op->for_type != ForType::Unrolled) {
             // We can't proceed into a parallel for loop.
 
@@ -425,10 +425,10 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             // by the threads as this loop counter varies
             // (i.e. there's no cross-talk between threads), then it's
             // safe to proceed.
-            stmt = op;
-            return;
+            return op;
         }
 
+        Stmt stmt;
         Stmt body = op->body;
 
         Box provided = box_provided(body, func.name());
@@ -722,7 +722,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                 }
                 dims_folded.back().semaphore = sema;
             }
-  
+
             if (!dynamic_footprint.empty()) {
                 if (func.schedule().async()) {
                     dims_folded.back().head = dynamic_footprint + ".head";
@@ -787,6 +787,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             Stmt reset_tail = Store::make(dynamic_footprint + ".tail_next", tail - step, 0, Parameter(), const_true());
             stmt = Block::make({stmt, reset_head, reset_tail});
         }
+        return stmt;
     }
 
 public:

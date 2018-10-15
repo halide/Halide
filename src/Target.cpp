@@ -16,6 +16,10 @@
 #include <sys/auxv.h>
 #endif
 
+#ifdef  _MSC_VER
+#include <intrin.h>
+#endif  // _MSC_VER
+
 namespace Halide {
 
 using std::string;
@@ -278,6 +282,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"mingw", Target::MinGW},
     {"c_plus_plus_name_mangling", Target::CPlusPlusMangling},
     {"large_buffers", Target::LargeBuffers},
+    {"hexagon_dma", Target::HexagonDma},
     {"hvx_64", Target::HVX_64},
     {"hvx_128", Target::HVX_128},
     {"hvx_v62", Target::HVX_v62},
@@ -675,6 +680,7 @@ bool Target::supports_device_api(DeviceAPI api) const {
     case DeviceAPI::Host:        return true;
     case DeviceAPI::Default_GPU: return has_gpu_feature() || has_feature(Target::OpenGLCompute);
     case DeviceAPI::Hexagon:     return has_feature(Target::HVX_64) || has_feature(Target::HVX_128);
+    case DeviceAPI::HexagonDma:  return has_feature(Target::HexagonDma);
     default:                     return has_feature(target_feature_for_device_api(api));
     }
 }

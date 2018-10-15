@@ -140,6 +140,8 @@ double run_test_3(bool auto_schedule) {
 }
 
 int main(int argc, char **argv) {
+    const double slowdown_factor = 5.0;
+
     {
         std::cout << "Test 1:" << std::endl;
         double manual_time = run_test_1(false);
@@ -150,7 +152,7 @@ int main(int argc, char **argv) {
         std::cout << "Auto time: " << auto_time << "ms" << std::endl;
         std::cout << "======================" << std::endl;
 
-        if (auto_time > manual_time * 3) {
+        if (auto_time > manual_time * slowdown_factor) {
             printf("Auto-scheduler is much much slower than it should be.\n");
             return -1;
         }
@@ -166,7 +168,7 @@ int main(int argc, char **argv) {
         std::cout << "Auto time: " << auto_time << "ms" << std::endl;
         std::cout << "======================" << std::endl;
 
-        if (auto_time > manual_time * 3) {
+        if (auto_time > manual_time * slowdown_factor) {
             printf("Auto-scheduler is much much slower than it should be.\n");
             return -1;
         }
@@ -182,7 +184,7 @@ int main(int argc, char **argv) {
         std::cout << "Auto time: " << auto_time << "ms" << std::endl;
         std::cout << "======================" << std::endl;
 
-        if (auto_time > manual_time * 3) {
+        if (auto_time > manual_time * slowdown_factor) {
             printf("Auto-scheduler is much much slower than it should be.\n");
             return -1;
         }

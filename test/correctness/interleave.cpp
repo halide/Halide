@@ -13,7 +13,7 @@ public:
 
     using IRVisitor::visit;
 
-    void visit(const Shuffle *op) {
+    void visit(const Shuffle *op) override {
         if (op->is_interleave()) {
             result++;
         }

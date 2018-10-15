@@ -23,14 +23,14 @@ class FindLoads : public IRVisitor {
 
     const string &func;
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         if (op->name == func && op->call_type == Call::Halide) {
             loads.push_back(op->args);
         }
         IRVisitor::visit(op);
     }
 
-    void visit(const Let *op) {
+    void visit(const Let *op) override {
         IRVisitor::visit(op);
         for (size_t i = 0; i < loads.size(); i++) {
             for (size_t j = 0; j < loads[i].size(); j++) {

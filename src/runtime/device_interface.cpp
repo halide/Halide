@@ -465,7 +465,7 @@ WEAK int halide_buffer_copy_already_locked(void *user_context, struct halide_buf
     debug(user_context) << "halide_buffer_copy_already_locked called.\n";
     int err = 0;
 
-    if (dst->device_interface &&
+    if (dst_device_interface && dst->device_interface &&
         dst_device_interface != dst->device_interface) {
         halide_error(user_context, "halide_buffer_copy does not support switching device interfaces");
         return halide_error_code_incompatible_device_interface;
@@ -509,6 +509,10 @@ WEAK int halide_buffer_copy_already_locked(void *user_context, struct halide_buf
     const bool from_host_valid = from_host_exists &&
                                  (!src->device_dirty() || (src->device_interface == NULL));
     const bool to_host_exists = dst->host != NULL;
+
+    if (to_host && !to_host_exists) {
+        return halide_error_code_host_is_null;
+    }
 
     // If a device to device copy is requested, try to do it directly.
     err = halide_error_code_incompatible_device_interface;

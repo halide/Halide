@@ -32,6 +32,7 @@ set(RUNTIME_CPP
   float16_t
   gpu_device_selection
   hexagon_cpu_features
+  hexagon_dma
   hexagon_host
   ios_io
   linux_clock
@@ -73,6 +74,7 @@ set(RUNTIME_CPP
   profiler_inlined
   qurt_allocator
   qurt_hvx
+  qurt_hvx_vtcm
   qurt_init_fini
   qurt_threads
   qurt_threads_tsan
@@ -94,6 +96,8 @@ set(RUNTIME_CPP
   windows_yield
   write_debug_image
   x86_cpu_features
+  hexagon_cache_allocator
+  hexagon_dma_pool
 )
 
 set (RUNTIME_LL
@@ -374,6 +378,7 @@ set(HEADER_FILES
   Reduction.h
   RegionCosts.h
   RemoveDeadAllocations.h
+  RemoveExternLoops.h
   RemoveTrivialForLoops.h
   RemoveUndef.h
   Schedule.h
@@ -532,6 +537,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Reduction.cpp
   RegionCosts.cpp
   RemoveDeadAllocations.cpp
+  RemoveExternLoops.cpp
   RemoveTrivialForLoops.cpp
   RemoveUndef.cpp
   Schedule.cpp
