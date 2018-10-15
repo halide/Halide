@@ -13,7 +13,7 @@ ImageParam::ImageParam(Type t, int d)
 
 ImageParam::ImageParam(Type t, int d, const std::string &n)
         : OutputImageParam(
-            Internal::Parameter(t, true, d, n, /* is_explicit_name */ true),
+            Internal::Parameter(t, true, d, n),
             Argument::InputBuffer,
             Func()) {
     // We must call create_func() after the super-ctor has completed.
