@@ -7,7 +7,6 @@ import simplestub
 # test alternate-but-legal syntax
 from complexstub import generate as complexstub
 
-import buildmethod
 import partialbuildmethod
 import nobuildmethod
 
@@ -242,22 +241,6 @@ def test_complexstub():
                 assert expected == actual, "Expected %s Actual %s" % (expected, actual)
 
 
-def test_buildmethod():
-    x, y, c = hl.Var(), hl.Var(), hl.Var()
-    target = hl.get_jit_target_from_environment()
-
-    b_in = hl.Buffer(hl.Float(32), [2, 2])
-    b_in.fill(123)
-
-    b_out = hl.Buffer(hl.Int(32), [2, 2])
-
-    try:
-        f = buildmethod.generate(target, b_in, 1)
-    except RuntimeError as e:
-        assert "Generators that use ImageParam/Param (instead of Input<>) are not supported in the Python bindings." in str(e)
-    else:
-        assert False, 'Did not see expected exception!'
-
 def test_partialbuildmethod():
     x, y, c = hl.Var(), hl.Var(), hl.Var()
     target = hl.get_jit_target_from_environment()
@@ -292,6 +275,5 @@ if __name__ == "__main__":
     test_simplestub()
     test_looplevel()
     test_complexstub()
-    test_buildmethod()
     test_partialbuildmethod()
     test_nobuildmethod()

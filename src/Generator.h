@@ -1972,6 +1972,8 @@ public:
     HALIDE_FORWARD_METHOD(Func, compute_inline)
     HALIDE_FORWARD_METHOD(Func, compute_root)
     HALIDE_FORWARD_METHOD(Func, compute_with)
+    HALIDE_FORWARD_METHOD(Func, copy_to_device)
+    HALIDE_FORWARD_METHOD(Func, copy_to_host)
     HALIDE_FORWARD_METHOD(Func, define_extern)
     HALIDE_FORWARD_METHOD_CONST(Func, defined)
     HALIDE_FORWARD_METHOD(Func, estimate)
@@ -2854,13 +2856,7 @@ private:
         std::vector<Internal::GeneratorParamBase *> generator_params;
 
         // Ordered-list of non-null ptrs to Input<> fields.
-        // Only one of filter_inputs and filter_params may be nonempty.
         std::vector<Internal::GeneratorInputBase *> filter_inputs;
-
-        // Ordered-list of non-null ptrs to Param<> or ImageParam<> fields.
-        // Must be empty if the Generator has a build() method rather than generate()/schedule().
-        // Only one of filter_inputs and filter_params may be nonempty.
-        std::vector<Internal::RegisteredParameter *> filter_params;
 
         // Ordered-list of non-null ptrs to Output<> fields; empty if old-style Generator.
         std::vector<Internal::GeneratorOutputBase *> filter_outputs;
@@ -3332,7 +3328,7 @@ public:
     }
 
     struct Names {
-        std::vector<std::string> generator_params, filter_params, inputs, outputs;
+        std::vector<std::string> generator_params, inputs, outputs;
     };
     Names get_names() const;
 
