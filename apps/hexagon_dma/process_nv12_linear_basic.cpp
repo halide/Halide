@@ -3,6 +3,11 @@
 #include <assert.h>
 #include <stdlib.h>
 #include "halide_benchmark.h"
+#include "pipeline_nv12_linear_ro_basic.h"
+#include "pipeline_nv12_linear_ro_async.h"
+#include "pipeline_nv12_linear_ro_fold.h"
+#include "pipeline_nv12_linear_ro_split.h"
+#include "pipeline_nv12_linear_ro_split_fold.h"
 #include "pipeline_nv12_linear_rw_basic.h"
 #include "pipeline_nv12_linear_rw_fold.h"
 #include "pipeline_nv12_linear_rw_async.h"
@@ -15,13 +20,14 @@ int main(int argc, char **argv) {
     int ret = 0;
 
     if (argc < 4) {
-        printf("Usage: %s width height func {basic, fold, async, split, split_fold} \n", argv[0]);
+        printf("Usage: %s width height schedule {basic, fold, async, split, split_fold} read_write {ro, rw}\n", argv[0]);
         return ret;
     }
 
     const int width = atoi(argv[1]);
     const int height = atoi(argv[2]);
     const char *schedule = argv[3];
+    const char *read_write = argv[4];
 
     // Fill the input buffer with random test data. This is just a plain old memory buffer
     const int buf_size = (width * height * 3) / 2;
@@ -35,7 +41,7 @@ int main(int argc, char **argv) {
 
     // Setup Halide input buffer with the test buffer
     Halide::Runtime::Buffer<uint8_t> input_validation(data_in, width, height, 2);
-    Halide::Runtime::Buffer<uint8_t> input(nullptr, width, (3*height) / 2);
+    Halide::Runtime::Buffer<uint8_t> input(nullptr, width, (3 * height) / 2);
     Halide::Runtime::Buffer<uint8_t> input_y = input.cropped(1, 0, height);             // Luma plane only
     Halide::Runtime::Buffer<uint8_t> input_uv = input.cropped(1, height, height / 2);   // Chroma plane only, with reduced height
 
@@ -47,7 +53,7 @@ int main(int argc, char **argv) {
     input_uv.raw_buffer()->dim[0].extent = width / 2;
 
     // Setup Halide output buffer
-    Halide::Runtime::Buffer<uint8_t> output(width, (3*height) / 2);
+    Halide::Runtime::Buffer<uint8_t> output(width, (3 * height) / 2);
     Halide::Runtime::Buffer<uint8_t> output_y = output.cropped(1, 0, height);               // Luma plane only
     Halide::Runtime::Buffer<uint8_t> output_uv = output.cropped(1, height, (height / 2));   // Chroma plane only, with reduced height
 
@@ -60,19 +66,17 @@ int main(int argc, char **argv) {
     output_uv.raw_buffer()->dim[0].extent = width / 2;
 
     // DMA_step 1: Assign buffer to DMA interface
-    input_y.device_wrap_native(halide_hexagon_dma_device_interface(),
-                               reinterpret_cast<uint64_t>(data_in));
-    input_uv.device_wrap_native(halide_hexagon_dma_device_interface(),
-                                reinterpret_cast<uint64_t>(data_in));
+    input_y.device_wrap_native(halide_hexagon_dma_device_interface(), reinterpret_cast<uint64_t>(data_in));
+    input_uv.device_wrap_native(halide_hexagon_dma_device_interface(), reinterpret_cast<uint64_t>(data_in));
     input_y.set_device_dirty();
     input_uv.set_device_dirty();
 
-    output_y.device_wrap_native(halide_hexagon_dma_device_interface(),
-                                reinterpret_cast<uint64_t>(data_out));
-    output_uv.device_wrap_native(halide_hexagon_dma_device_interface(),
-                                 reinterpret_cast<uint64_t>(data_out));
-    output_y.set_device_dirty();
-    output_uv.set_device_dirty();
+    if (!strcmp(read_write, "rw")) {
+        output_y.device_wrap_native(halide_hexagon_dma_device_interface(), reinterpret_cast<uint64_t>(data_out));
+        output_uv.device_wrap_native(halide_hexagon_dma_device_interface(), reinterpret_cast<uint64_t>(data_out));
+        output_y.set_device_dirty();
+        output_uv.set_device_dirty();
+    }
 
     // DMA_step 2: Allocate a DMA engine
     void *dma_engine = nullptr;
@@ -81,24 +85,46 @@ int main(int argc, char **argv) {
     // DMA_step 3: Associate buffer to DMA engine, and prepare for copying to host (DMA read) and device (DMA write)
     halide_hexagon_dma_prepare_for_copy_to_host(nullptr, input_y, dma_engine, false, halide_hexagon_fmt_NV12_Y);
     halide_hexagon_dma_prepare_for_copy_to_host(nullptr, input_uv, dma_engine, false, halide_hexagon_fmt_NV12_UV);
-    halide_hexagon_dma_prepare_for_copy_to_device(nullptr, output_y, dma_engine, false, halide_hexagon_fmt_NV12_Y);
-    halide_hexagon_dma_prepare_for_copy_to_device(nullptr, output_uv, dma_engine, false, halide_hexagon_fmt_NV12_UV);
+    if (!strcmp(read_write, "rw")) {
+        halide_hexagon_dma_prepare_for_copy_to_device(nullptr, output_y, dma_engine, false, halide_hexagon_fmt_NV12_Y);
+        halide_hexagon_dma_prepare_for_copy_to_device(nullptr, output_uv, dma_engine, false, halide_hexagon_fmt_NV12_UV);
+    }
 
     if (!strcmp(schedule,"basic")) {
         printf("Basic pipeline\n");
-        ret = pipeline_nv12_linear_rw_basic(input_y, input_uv, output_y, output_uv);
+        if (!strcmp(read_write, "rw")) {
+            ret = pipeline_nv12_linear_rw_basic(input_y, input_uv, output_y, output_uv);
+        } else {
+            ret = pipeline_nv12_linear_ro_basic(input_y, input_uv, output_y, output_uv);
+        }
     } else if (!strcmp(schedule,"fold")) {
         printf("Fold pipeline\n");
-        ret = pipeline_nv12_linear_rw_fold(input_y, input_uv, output_y, output_uv);
+        if (!strcmp(read_write, "rw")) {
+            ret = pipeline_nv12_linear_rw_fold(input_y, input_uv, output_y, output_uv);
+        } else {
+            ret = pipeline_nv12_linear_ro_fold(input_y, input_uv, output_y, output_uv);
+        }
     } else if (!strcmp(schedule,"async")) {
         printf("Async pipeline\n");
-        ret = pipeline_nv12_linear_rw_async(input_y, input_uv, output_y, output_uv);
+        if (!strcmp(read_write, "rw")) {
+            ret = pipeline_nv12_linear_rw_async(input_y, input_uv, output_y, output_uv);
+        } else {
+            ret = pipeline_nv12_linear_ro_async(input_y, input_uv, output_y, output_uv);
+        }
     } else if (!strcmp(schedule,"split")) {
         printf("Split pipeline\n");
-        ret = pipeline_nv12_linear_rw_split(input_y, input_uv, output_y, output_uv);
+        if (!strcmp(read_write, "rw")) {
+            ret = pipeline_nv12_linear_rw_split(input_y, input_uv, output_y, output_uv);
+        } else {
+            ret = pipeline_nv12_linear_ro_split(input_y, input_uv, output_y, output_uv);
+        }
     } else if (!strcmp(schedule,"split_fold")) {
         printf("Split Fold pipeline\n");
-        ret = pipeline_nv12_linear_rw_split_fold(input_y, input_uv, output_y, output_uv);
+        if (!strcmp(read_write, "rw")) {
+            ret = pipeline_nv12_linear_rw_split_fold(input_y, input_uv, output_y, output_uv);
+        } else {
+            ret = pipeline_nv12_linear_ro_split_fold(input_y, input_uv, output_y, output_uv);
+        }
     } else {
         printf("Incorrect input Correct options: basic, fold, async, split, split_fold\n");
         ret = -1;
@@ -109,10 +135,10 @@ int main(int argc, char **argv) {
     } else {
         // verify result by comparing to expected values
         int error_count = 0;
-        for (int y = 0; y < (3*height) / 2; y++) {
+        for (int y = 0; y < (3 * height) / 2; y++) {
             for (int x = 0; x < width; x++) {
                 uint8_t correct = data_in[x + y * width] * 2;
-                uint8_t result = data_out[x + y * width] ;
+                uint8_t result = (!strcmp(read_write, "rw")) ? data_out[x + y * width] : output(x, y);
                 if (correct != result) {
                     printf("Mismatch at x=%d y=%d : %d != %d\n", x, y, correct, result);
                     if (++error_count > 20) abort();
@@ -127,8 +153,10 @@ int main(int argc, char **argv) {
     halide_hexagon_dma_unprepare(nullptr, input_y);
     halide_hexagon_dma_unprepare(nullptr, input_uv);
  
-    halide_hexagon_dma_unprepare(nullptr, output_y);
-    halide_hexagon_dma_unprepare(nullptr, output_uv);
+    if (!strcmp(read_write, "rw")) {
+        halide_hexagon_dma_unprepare(nullptr, output_y);
+        halide_hexagon_dma_unprepare(nullptr, output_uv);
+    }
 
     // DMA_step 5: Processing is completed and ready to exit, deallocate the DMA engine
     halide_hexagon_dma_deallocate_engine(nullptr, dma_engine);
