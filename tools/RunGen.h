@@ -893,7 +893,7 @@ public:
                     Shape shape = get_shape(arg.buffer_value);
                     if (shape.size() >= 2) {
                         pixels_out += shape[0].extent * shape[1].extent;
-                    } else if (shape.size()) {
+                    } else if (!shape.empty()) {
                         pixels_out += shape[0].extent;
                     } else {
                         pixels_out += 1;
