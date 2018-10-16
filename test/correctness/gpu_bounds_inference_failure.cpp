@@ -2,6 +2,8 @@
 
 #include "Halide.h"
 
+using namespace Halide;
+
 int main(int argc, char *argv[]) {
 
   Var x, y, p, d;
