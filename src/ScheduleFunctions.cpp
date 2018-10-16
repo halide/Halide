@@ -466,8 +466,8 @@ Stmt build_extern_produce(const map<string, Function> &env, Function f, const Ta
                         mins.push_back(min);
                         extents.push_back(max - min + 1);
                     }
-                    args[3] = Call::make(Handle(), Call::make_struct, mins, Call::Intrinsic);
-                    args[4] = Call::make(Handle(), Call::make_struct, extents, Call::Intrinsic);
+                    args[3] = Call::make(type_of<const int *>(), Call::make_struct, mins, Call::Intrinsic);
+                    args[4] = Call::make(type_of<const int *>(), Call::make_struct, extents, Call::Intrinsic);
 
                     cropped_input = Call::make(type_of<struct halide_buffer_t *>(), Call::buffer_crop,
                                                args, Call::Extern);
@@ -552,8 +552,8 @@ Stmt build_extern_produce(const map<string, Function> &env, Function f, const Ta
                 mins.push_back(min);
                 extents.push_back(max - min + 1);
             }
-            args[3] = Call::make(Handle(), Call::make_struct, mins, Call::Intrinsic);
-            args[4] = Call::make(Handle(), Call::make_struct, extents, Call::Intrinsic);
+            args[3] = Call::make(type_of<const int *>(), Call::make_struct, mins, Call::Intrinsic);
+            args[4] = Call::make(type_of<const int *>(), Call::make_struct, extents, Call::Intrinsic);
 
             output_buffer_t = Call::make(type_of<struct halide_buffer_t *>(), Call::buffer_crop, args,
                                          Call::Extern);
