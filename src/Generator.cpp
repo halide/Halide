@@ -1681,7 +1681,7 @@ Parameter GIOBase::get_aot_parameter(int index) {
     if (it != aot_parameters_.end()) {
         return it->second;
     }
-    auto p = Parameter(type(), kind() != IOKind::Scalar, dims(), array_name(index), false);
+    auto p = Parameter(type(), kind() != IOKind::Scalar, dims(), array_name(index));
     aot_parameters_[index] = p;
     return p;
 }
