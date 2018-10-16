@@ -377,7 +377,8 @@ public:
             binary(f.func.args()) = f.func(f.func.args()) + g.func(f.func.args());
             std::cout << "Binary op: + \n";
         } else if (op_type == 1) {
-            binary(f.func.args()) = f.func(f.func.args()) - g.func(f.func.args());
+            // 2 * in case f and g are the same function (except with a wrapper around one)
+            binary(f.func.args()) = 2 * f.func(f.func.args()) - g.func(f.func.args());
             std::cout << "Binary op: - \n";
         } else if (op_type == 2) {
             binary(f.func.args()) = f.func(f.func.args()) * g.func(f.func.args());
@@ -438,7 +439,7 @@ public:
         RDom r(0, f.c);
         reduction_coords[dim] = r;
         Func all("all_r");
-        all(f.func.args()) += f.func(reduction_coords) * r * (f.func.args()[dim] + 1);
+        all(f.func.args()) += f.func(reduction_coords) * (r + 1) * (f.func.args()[dim] + 1);
 
         return {all, f.w, f.h, f.random_out_channels()};
     }
@@ -451,7 +452,7 @@ public:
         RDom r(0, f.c);
         reduction_coords[dim] = r;
         Func all("all_w");
-        all(f.func.args()) = sum(f.func(reduction_coords) * r * (f.func.args()[dim] + 1));
+        all(f.func.args()) = sum(f.func(reduction_coords) * (r + 1) * (f.func.args()[dim] + 1));
 
         return {all, f.w, f.h, f.random_out_channels()};
      }
@@ -507,7 +508,7 @@ public:
             out = upsample(out, 0, (w + out.w - 1) / out.w);
         }
         if (out.h < h) {
-            out = upsample(out, 0, (h + out.h - 1) / out.h);
+            out = upsample(out, 1, (h + out.h - 1) / out.h);
         }
         return out;
     }

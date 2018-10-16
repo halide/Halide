@@ -1301,7 +1301,12 @@ vector<vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, int fa
     if (d == -1) {
         result.push_back(vector<int64_t>());
     } else {
-        auto v = generate_tilings(s, d - 1, factor, allow_splits, vector_dim, vector_size);
+        vector<vector<int64_t>> v;
+        for (int f = factor;; f *= 2) {
+            v = generate_tilings(s, d - 1, f, allow_splits, vector_dim, vector_size);
+            if (v.size() < 100) break;
+        }
+
         for (auto t : v) {
             bool is_full = false, is_one = false;
             // Skip trivial tilings
@@ -3102,44 +3107,64 @@ struct State {
         for (auto &p : vars_map) {
             Stage stage(p.first->stage);
 
-            // Do all the reorders
-            vector<VarOrRVar> vars;
+            // Do all the reorders and pick which vars to
+            // parallelize. First we trim down to the vars that
+            // actually exist.
+            vector<pair<VarOrRVar, int64_t>> vars;
             for (auto &v : p.second.vars) {
-                if (v.exists) vars.push_back(v.var);
+                if (v.exists) {
+                    vars.emplace_back(v.var, v.extent);
+                }
             }
 
-            stage.reorder(vars);
-
-            // Parallelize a loop and pull it outermost
             vector<VarOrRVar> parallel_vars;
             double num_cores = p.second.num_cores;
-            for (int i = (int)p.second.vars.size() - 1; i >= 0 && num_cores > 1; i--) {
-                auto &v = p.second.vars[i];
-                if (!v.exists || v.var.is_rvar) continue;
-                int64_t extent = v.extent;
+
+            // Stop parallelizing when we soak up our cores, or when we hit the vector var.
+            while (vars.size() > 1 && num_cores > 1) {
+                int64_t extent = vars.back().second;
+                auto v = vars.back().first;
+
+                if (v.is_rvar) {
+                    // We may have slid something over this loop. Better stop.
+                    break;
+                }
+
                 num_cores /= extent;
-                if (num_cores > 1) {
-                    debug(0) << "Parallelizing " << v.var.var.name() << " entirely\n";
-                    stage.parallel(vars.back());
-                    parallel_vars.push_back(vars.back());
+                // Enqueue at most 128 x num_cores parallel tasks
+                const int max_tasks_per_core = 128;
+                if (num_cores >= 1.0 / max_tasks_per_core) {
+                    debug(0) << "Parallelizing " << v.name() << " entirely\n";
+                    stage.parallel(v);
+                    parallel_vars.push_back(v);
                     vars.pop_back();
                     continue;
                 }
 
                 int task_size = 1;
-                // Enqueue at most 128 x num_cores parallel tasks
-                while (num_cores < 1.0 / 128) {
+                while (num_cores < 1.0 / max_tasks_per_core) {
                     num_cores *= 2;
                     task_size *= 2;
                 }
-                debug(0) << "Task size for " << stage.name() << ": " << task_size << '\n';
-                Var outer;
+
+                Var outer(v.var.name() + "_par");
                 stage.split(v.var, outer, v.var, task_size).parallel(outer);
                 // Reorder the parallel portion outermost
-                vars.push_back(outer);
                 parallel_vars.push_back(outer);
-                stage.reorder(vars);
             }
+
+            if (num_cores > 1) {
+                debug(0) << "Insufficient parallelism in " << stage.name() << " : " << num_cores << "\n";
+            }
+
+            vector<VarOrRVar> ordered_vars;
+
+            for (const auto &v : vars) {
+                ordered_vars.push_back(v.first);
+            }
+            ordered_vars.insert(ordered_vars.end(), parallel_vars.rbegin(), parallel_vars.rend());
+
+            stage.reorder(ordered_vars);
 
             // Fuse the parallel vars
             /*
@@ -3320,6 +3345,14 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
 
         internal_assert(!pending.empty());
 
+        if ((int)pending.size() > beam_size * 10000) {
+            debug(0) << "Huge number of states generated. Bailing out:\n";
+            // Wat?
+            while (!pending.empty()) {
+                pending.pop()->dump();
+            }
+        }
+
         expanded = 0;
         while (expanded < beam_size && !pending.empty()) {
 
@@ -3375,7 +3408,8 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
                 auto best = state;
 
                 // Bless the reasonable stuff in the beam as permissible states to visit again
-                while (state->cost <= 2 * best->cost) {
+                int blessed = 0;
+                while (state->cost <= 1.2 * best->cost && blessed < beam_size) {
                     const State *s = state.get();
                     while (s) {
                         uint64_t h1 = s->structural_hash(pass_idx, params.parallelism);
@@ -3384,6 +3418,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
                     }
                     if (pending.empty()) break;
                     state = pending.pop();
+                    blessed++;
                 }
 
                 return best;
