@@ -122,4 +122,4 @@ public:
     }
 };
 
-HALIDE_REGISTER_GENERATOR(DmaPipeline, pipeline_raw_linear_ro_basic_interleaved)
+HALIDE_REGISTER_GENERATOR(DmaPipeline, pipeline_raw_linear_interleaved_ro_basic)

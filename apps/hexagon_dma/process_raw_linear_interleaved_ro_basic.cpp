@@ -3,11 +3,11 @@
 #include <assert.h>
 #include <stdlib.h>
 #include "halide_benchmark.h"
-#include "pipeline_raw_linear_ro_basic_interleaved.h"
-#include "pipeline_raw_linear_ro_fold_interleaved.h"
-#include "pipeline_raw_linear_ro_async_interleaved.h"
-#include "pipeline_raw_linear_ro_split_interleaved.h"
-#include "pipeline_raw_linear_ro_split_fold_interleaved.h"
+#include "pipeline_raw_linear_interleaved_ro_basic.h"
+#include "pipeline_raw_linear_interleaved_ro_fold.h"
+#include "pipeline_raw_linear_interleaved_ro_async.h"
+#include "pipeline_raw_linear_interleaved_ro_split.h"
+#include "pipeline_raw_linear_interleaved_ro_split_fold.h"
 #include "HalideRuntimeHexagonDma.h"
 #include "HalideBuffer.h"
 
@@ -54,19 +54,19 @@ int main(int argc, char **argv) {
 
     if (!strcmp(str,"basic")) {
         printf("Basic pipeline\n");
-        ret = pipeline_raw_linear_ro_basic_interleaved(input, output);
+        ret = pipeline_raw_linear_interleaved_ro_basic(input, output);
     } else if (!strcmp(str,"fold")) {
         printf("Fold pipeline\n");
-        ret = pipeline_raw_linear_ro_fold_interleaved(input, output);
+        ret = pipeline_raw_linear_interleaved_ro_fold(input, output);
     } else if (!strcmp(str,"async")) {
         printf("Async pipeline\n");
-        ret = pipeline_raw_linear_ro_async_interleaved(input, output);
+        ret = pipeline_raw_linear_interleaved_ro_async(input, output);
     } else if (!strcmp(str,"split")) {
         printf("Split pipeline\n");
-        ret = pipeline_raw_linear_ro_split_interleaved(input, output);
+        ret = pipeline_raw_linear_interleaved_ro_split(input, output);
     } else if (!strcmp(str,"split_fold")) {
         printf("Split Fold pipeline\n");
-        ret = pipeline_raw_linear_ro_split_fold_interleaved(input, output);
+        ret = pipeline_raw_linear_interleaved_ro_split_fold(input, output);
     } else {
         printf("Incorrect input Correct options: basic, fold, async, split, split_fold\n");
         ret = -1;

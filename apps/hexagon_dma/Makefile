@@ -31,12 +31,12 @@ BIN ?= bin
 
 all: $(BIN)/process_nv12_linear_basic-host \
      $(BIN)/process_p010_linear_basic-host \
-     $(BIN)/process_raw_linear_ro_basic_interleaved-host \
+     $(BIN)/process_raw_linear_interleaved_ro_basic-host \
 
 $(BIN)/pipeline_yuv_linear_basic: pipeline_yuv_linear_basic.cpp $(GENERATOR_DEPS)
 	mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
-$(BIN)/pipeline_raw_linear_ro_basic_interleaved: pipeline_raw_linear_ro_basic_interleaved.cpp $(GENERATOR_DEPS)
+$(BIN)/pipeline_raw_linear_interleaved_ro_basic: pipeline_raw_linear_interleaved_ro_basic.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
@@ -47,94 +47,92 @@ OUTPUT_YUV_16BIT = output_y.type=uint16 output_uv.type=uint16
 
 $(BIN)/%/pipeline_nv12_linear_ro_async.o: $(BIN)/pipeline_yuv_linear_basic
 	@mkdir -p $(@D)
-	$^ -g $(<F) -o $(BIN)/$* -e o,h,html -f $(subst .o,,$(@F)) target=$*-hexagon_dma schedule=async $(INPUT_YUV_8BIT) $(OUTPUT_YUV_8BIT) use_dma_for_output=false
+	$^ -g $(<F) -o $(BIN)/$* -e o,h,html -f $(subst .o,,$(@F)) target=$*-hexagon_dma schedule=async      $(INPUT_YUV_8BIT)  $(OUTPUT_YUV_8BIT)  use_dma_for_output=false
 $(BIN)/%/pipeline_nv12_linear_ro_basic.o: $(BIN)/pipeline_yuv_linear_basic
 	@mkdir -p $(@D)
-	$^ -g $(<F) -o $(BIN)/$* -e o,h,html -f $(subst .o,,$(@F)) target=$*-hexagon_dma schedule=none $(INPUT_YUV_8BIT) $(OUTPUT_YUV_8BIT) use_dma_for_output=false
+	$^ -g $(<F) -o $(BIN)/$* -e o,h,html -f $(subst .o,,$(@F)) target=$*-hexagon_dma schedule=none       $(INPUT_YUV_8BIT)  $(OUTPUT_YUV_8BIT)  use_dma_for_output=false
 $(BIN)/%/pipeline_nv12_linear_ro_fold.o: $(BIN)/pipeline_yuv_linear_basic
 	@mkdir -p $(@D)
-	$^ -g $(<F) -o $(BIN)/$* -e o,h,html -f $(subst .o,,$(@F)) target=$*-hexagon_dma schedule=fold $(INPUT_YUV_8BIT) $(OUTPUT_YUV_8BIT) use_dma_for_output=false
+	$^ -g $(<F) -o $(BIN)/$* -e o,h,html -f $(subst .o,,$(@F)) target=$*-hexagon_dma schedule=fold       $(INPUT_YUV_8BIT)  $(OUTPUT_YUV_8BIT)  use_dma_for_output=false
 $(BIN)/%/pipeline_nv12_linear_ro_split.o: $(BIN)/pipeline_yuv_linear_basic
 	@mkdir -p $(@D)
-	$^ -g $(<F) -o $(BIN)/$* -e o,h,html -f $(subst .o,,$(@F)) target=$*-hexagon_dma schedule=split $(INPUT_YUV_8BIT) $(OUTPUT_YUV_8BIT) use_dma_for_output=false
+	$^ -g $(<F) -o $(BIN)/$* -e o,h,html -f $(subst .o,,$(@F)) target=$*-hexagon_dma schedule=split      $(INPUT_YUV_8BIT)  $(OUTPUT_YUV_8BIT)  use_dma_for_output=false
 $(BIN)/%/pipeline_nv12_linear_ro_split_fold.o: $(BIN)/pipeline_yuv_linear_basic
 	@mkdir -p $(@D)
-	$^ -g $(<F) -o $(BIN)/$* -e o,h,html -f $(subst .o,,$(@F)) target=$*-hexagon_dma schedule=split_fold $(INPUT_YUV_8BIT) $(OUTPUT_YUV_8BIT) use_dma_for_output=false
+	$^ -g $(<F) -o $(BIN)/$* -e o,h,html -f $(subst .o,,$(@F)) target=$*-hexagon_dma schedule=split_fold $(INPUT_YUV_8BIT)  $(OUTPUT_YUV_8BIT)  use_dma_for_output=false
 $(BIN)/%/pipeline_nv12_linear_rw_async.o: $(BIN)/pipeline_yuv_linear_basic
 	@mkdir -p $(@D)
-	$^ -g $(<F) -o $(BIN)/$* -e o,h,html -f $(subst .o,,$(@F)) target=$*-hexagon_dma schedule=async $(INPUT_YUV_8BIT) $(OUTPUT_YUV_8BIT) use_dma_for_output=true
+	$^ -g $(<F) -o $(BIN)/$* -e o,h,html -f $(subst .o,,$(@F)) target=$*-hexagon_dma schedule=async      $(INPUT_YUV_8BIT)  $(OUTPUT_YUV_8BIT)  use_dma_for_output=true
 $(BIN)/%/pipeline_nv12_linear_rw_fold.o: $(BIN)/pipeline_yuv_linear_basic
 	@mkdir -p $(@D)
-	$^ -g $(<F) -o $(BIN)/$* -e o,h,html -f $(subst .o,,$(@F)) target=$*-hexagon_dma schedule=fold $(INPUT_YUV_8BIT) $(OUTPUT_YUV_8BIT) use_dma_for_output=true
+	$^ -g $(<F) -o $(BIN)/$* -e o,h,html -f $(subst .o,,$(@F)) target=$*-hexagon_dma schedule=fold       $(INPUT_YUV_8BIT)  $(OUTPUT_YUV_8BIT)  use_dma_for_output=true
 $(BIN)/%/pipeline_nv12_linear_rw_basic.o: $(BIN)/pipeline_yuv_linear_basic
 	@mkdir -p $(@D)
-	$^ -g $(<F) -o $(BIN)/$* -e o,h,html -f $(subst .o,,$(@F)) target=$*-hexagon_dma schedule=none $(INPUT_YUV_8BIT) $(OUTPUT_YUV_8BIT) use_dma_for_output=true
+	$^ -g $(<F) -o $(BIN)/$* -e o,h,html -f $(subst .o,,$(@F)) target=$*-hexagon_dma schedule=none       $(INPUT_YUV_8BIT)  $(OUTPUT_YUV_8BIT)  use_dma_for_output=true
 $(BIN)/%/pipeline_nv12_linear_rw_split.o: $(BIN)/pipeline_yuv_linear_basic
 	@mkdir -p $(@D)
-	$^ -g $(<F) -o $(BIN)/$* -e o,h,html -f $(subst .o,,$(@F)) target=$*-hexagon_dma schedule=split $(INPUT_YUV_8BIT) $(OUTPUT_YUV_8BIT) use_dma_for_output=true
+	$^ -g $(<F) -o $(BIN)/$* -e o,h,html -f $(subst .o,,$(@F)) target=$*-hexagon_dma schedule=split      $(INPUT_YUV_8BIT)  $(OUTPUT_YUV_8BIT)  use_dma_for_output=true
 $(BIN)/%/pipeline_nv12_linear_rw_split_fold.o: $(BIN)/pipeline_yuv_linear_basic
 	@mkdir -p $(@D)
-	$^ -g $(<F) -o $(BIN)/$* -e o,h,html -f $(subst .o,,$(@F)) target=$*-hexagon_dma schedule=split_fold $(INPUT_YUV_8BIT) $(OUTPUT_YUV_8BIT) use_dma_for_output=true
+	$^ -g $(<F) -o $(BIN)/$* -e o,h,html -f $(subst .o,,$(@F)) target=$*-hexagon_dma schedule=split_fold $(INPUT_YUV_8BIT)  $(OUTPUT_YUV_8BIT)  use_dma_for_output=true
 $(BIN)/%/pipeline_p010_linear_ro_async.o: $(BIN)/pipeline_yuv_linear_basic
 	@mkdir -p $(@D)
-	$^ -g $(<F) -o $(BIN)/$* -e o,h,html -f $(subst .o,,$(@F)) target=$*-hexagon_dma schedule=async $(INPUT_YUV_16BIT) $(OUTPUT_YUV_16BIT) use_dma_for_output=false
+	$^ -g $(<F) -o $(BIN)/$* -e o,h,html -f $(subst .o,,$(@F)) target=$*-hexagon_dma schedule=async      $(INPUT_YUV_16BIT) $(OUTPUT_YUV_16BIT) use_dma_for_output=false
 $(BIN)/%/pipeline_p010_linear_ro_basic.o: $(BIN)/pipeline_yuv_linear_basic
 	@mkdir -p $(@D)
-	$^ -g $(<F) -o $(BIN)/$* -e o,h,html -f $(subst .o,,$(@F)) target=$*-hexagon_dma schedule=none $(INPUT_YUV_16BIT) $(OUTPUT_YUV_16BIT) use_dma_for_output=false
+	$^ -g $(<F) -o $(BIN)/$* -e o,h,html -f $(subst .o,,$(@F)) target=$*-hexagon_dma schedule=none       $(INPUT_YUV_16BIT) $(OUTPUT_YUV_16BIT) use_dma_for_output=false
 $(BIN)/%/pipeline_p010_linear_ro_fold.o: $(BIN)/pipeline_yuv_linear_basic
 	@mkdir -p $(@D)
-	$^ -g $(<F) -o $(BIN)/$* -e o,h,html -f $(subst .o,,$(@F)) target=$*-hexagon_dma schedule=fold $(INPUT_YUV_16BIT) $(OUTPUT_YUV_16BIT) use_dma_for_output=false
+	$^ -g $(<F) -o $(BIN)/$* -e o,h,html -f $(subst .o,,$(@F)) target=$*-hexagon_dma schedule=fold       $(INPUT_YUV_16BIT) $(OUTPUT_YUV_16BIT) use_dma_for_output=false
 $(BIN)/%/pipeline_p010_linear_ro_split_fold.o: $(BIN)/pipeline_yuv_linear_basic
 	@mkdir -p $(@D)
 	$^ -g $(<F) -o $(BIN)/$* -e o,h,html -f $(subst .o,,$(@F)) target=$*-hexagon_dma schedule=split_fold $(INPUT_YUV_16BIT) $(OUTPUT_YUV_16BIT) use_dma_for_output=false
 $(BIN)/%/pipeline_p010_linear_ro_split.o: $(BIN)/pipeline_yuv_linear_basic
 	@mkdir -p $(@D)
-	$^ -g $(<F) -o $(BIN)/$* -e o,h,html -f $(subst .o,,$(@F)) target=$*-hexagon_dma schedule=split $(INPUT_YUV_16BIT) $(OUTPUT_YUV_16BIT) use_dma_for_output=false
+	$^ -g $(<F) -o $(BIN)/$* -e o,h,html -f $(subst .o,,$(@F)) target=$*-hexagon_dma schedule=split      $(INPUT_YUV_16BIT) $(OUTPUT_YUV_16BIT) use_dma_for_output=false
 $(BIN)/%/pipeline_p010_linear_rw_async.o: $(BIN)/pipeline_yuv_linear_basic
 	@mkdir -p $(@D)
-	$^ -g $(<F) -o $(BIN)/$* -e o,h,html -f $(subst .o,,$(@F)) target=$*-hexagon_dma schedule=async $(INPUT_YUV_16BIT) $(OUTPUT_YUV_16BIT) use_dma_for_output=true
+	$^ -g $(<F) -o $(BIN)/$* -e o,h,html -f $(subst .o,,$(@F)) target=$*-hexagon_dma schedule=async      $(INPUT_YUV_16BIT) $(OUTPUT_YUV_16BIT) use_dma_for_output=true
 $(BIN)/%/pipeline_p010_linear_rw_fold.o: $(BIN)/pipeline_yuv_linear_basic
 	@mkdir -p $(@D)
-	$^ -g $(<F) -o $(BIN)/$* -e o,h,html -f $(subst .o,,$(@F)) target=$*-hexagon_dma schedule=fold $(INPUT_YUV_16BIT) $(OUTPUT_YUV_16BIT) use_dma_for_output=true
+	$^ -g $(<F) -o $(BIN)/$* -e o,h,html -f $(subst .o,,$(@F)) target=$*-hexagon_dma schedule=fold       $(INPUT_YUV_16BIT) $(OUTPUT_YUV_16BIT) use_dma_for_output=true
 $(BIN)/%/pipeline_p010_linear_rw_basic.o: $(BIN)/pipeline_yuv_linear_basic
 	@mkdir -p $(@D)
-	$^ -g $(<F) -o $(BIN)/$* -e o,h,html -f $(subst .o,,$(@F)) target=$*-hexagon_dma schedule=none $(INPUT_YUV_16BIT) $(OUTPUT_YUV_16BIT) use_dma_for_output=true
+	$^ -g $(<F) -o $(BIN)/$* -e o,h,html -f $(subst .o,,$(@F)) target=$*-hexagon_dma schedule=none       $(INPUT_YUV_16BIT) $(OUTPUT_YUV_16BIT) use_dma_for_output=true
 $(BIN)/%/pipeline_p010_linear_rw_split.o: $(BIN)/pipeline_yuv_linear_basic
 	@mkdir -p $(@D)
-	$^ -g $(<F) -o $(BIN)/$* -e o,h,html -f $(subst .o,,$(@F)) target=$*-hexagon_dma schedule=split $(INPUT_YUV_16BIT) $(OUTPUT_YUV_16BIT) use_dma_for_output=true
+	$^ -g $(<F) -o $(BIN)/$* -e o,h,html -f $(subst .o,,$(@F)) target=$*-hexagon_dma schedule=split      $(INPUT_YUV_16BIT) $(OUTPUT_YUV_16BIT) use_dma_for_output=true
 $(BIN)/%/pipeline_p010_linear_rw_split_fold.o: $(BIN)/pipeline_yuv_linear_basic
 	@mkdir -p $(@D)
 	$^ -g $(<F) -o $(BIN)/$* -e o,h,html -f $(subst .o,,$(@F)) target=$*-hexagon_dma schedule=split_fold $(INPUT_YUV_16BIT) $(OUTPUT_YUV_16BIT) use_dma_for_output=true
-$(BIN)/%/pipeline_raw_linear_ro_async_interleaved.o: $(BIN)/pipeline_raw_linear_ro_basic_interleaved
+$(BIN)/%/pipeline_raw_linear_interleaved_ro_async.o: $(BIN)/pipeline_raw_linear_interleaved_ro_basic
 	@mkdir -p $(@D)
 	$^ -g $(<F) -o $(BIN)/$* -e o,h,html -f $(subst .o,,$(@F)) target=$*-hexagon_dma schedule=async
-$(BIN)/%/pipeline_raw_linear_ro_basic_interleaved.o: $(BIN)/pipeline_raw_linear_ro_basic_interleaved
+$(BIN)/%/pipeline_raw_linear_interleaved_ro_basic.o: $(BIN)/pipeline_raw_linear_interleaved_ro_basic
 	@mkdir -p $(@D)
 	$^ -g $(<F) -o $(BIN)/$* -e o,h,html -f $(subst .o,,$(@F)) target=$*-hexagon_dma schedule=none
-$(BIN)/%/pipeline_raw_linear_ro_fold_interleaved.o: $(BIN)/pipeline_raw_linear_ro_basic_interleaved
+$(BIN)/%/pipeline_raw_linear_interleaved_ro_fold.o: $(BIN)/pipeline_raw_linear_interleaved_ro_basic
 	@mkdir -p $(@D)
 	$^ -g $(<F) -o $(BIN)/$* -e o,h,html -f $(subst .o,,$(@F)) target=$*-hexagon_dma schedule=fold
-$(BIN)/%/pipeline_raw_linear_ro_split_interleaved.o: $(BIN)/pipeline_raw_linear_ro_basic_interleaved
+$(BIN)/%/pipeline_raw_linear_interleaved_ro_split.o: $(BIN)/pipeline_raw_linear_interleaved_ro_basic
 	@mkdir -p $(@D)
 	$^ -g $(<F) -o $(BIN)/$* -e o,h,html -f $(subst .o,,$(@F)) target=$*-hexagon_dma schedule=split
-$(BIN)/%/pipeline_raw_linear_ro_split_fold_interleaved.o: $(BIN)/pipeline_raw_linear_ro_basic_interleaved
+$(BIN)/%/pipeline_raw_linear_interleaved_ro_split_fold.o: $(BIN)/pipeline_raw_linear_interleaved_ro_basic
 	@mkdir -p $(@D)
 	$^ -g $(<F) -o $(BIN)/$* -e o,h,html -f $(subst .o,,$(@F)) target=$*-hexagon_dma schedule=split_fold
 
 NV12_PIPE=pipeline_nv12_linear
 NV12_RO=$(BIN)/%/$(NV12_PIPE)_ro_basic.o $(BIN)/%/$(NV12_PIPE)_ro_fold.o $(BIN)/%/$(NV12_PIPE)_ro_async.o $(BIN)/%/$(NV12_PIPE)_ro_split.o $(BIN)/%/$(NV12_PIPE)_ro_split_fold.o
-NV12_RW=$(BIN)/%/$(NV12_PIPE)_rw_basic.o $(BIN)/%/$(NV12_PIPE)_rw_fold.o $(BIN)/%/$(NV12_PIPE)_rw_async.o $(BIN)/%/$(NV12_PIPE)_rw_split.o $(BIN)/%/$(NV12_PIPE)_rw_split_fold.o
-P010_PIPE=pipeline_p010_linear
-P010_RO=$(BIN)/%/$(P010_PIPE)_ro_basic.o $(BIN)/%/$(P010_PIPE)_ro_fold.o $(BIN)/%/$(P010_PIPE)_ro_async.o $(BIN)/%/$(P010_PIPE)_ro_split.o $(BIN)/%/$(P010_PIPE)_ro_split_fold.o
-P010_RW=$(BIN)/%/$(P010_PIPE)_rw_basic.o $(BIN)/%/$(P010_PIPE)_rw_fold.o $(BIN)/%/$(P010_PIPE)_rw_async.o $(BIN)/%/$(P010_PIPE)_rw_split.o $(BIN)/%/$(P010_PIPE)_rw_split_fold.o
-RAW_PIPE=pipeline_raw_linear
-RAW_RO= $(BIN)/%/$(RAW_PIPE)_ro_basic_interleaved.o $(BIN)/%/$(RAW_PIPE)_ro_fold_interleaved.o $(BIN)/%/$(RAW_PIPE)_ro_split_interleaved.o $(BIN)/%/$(RAW_PIPE)_ro_split_fold_interleaved.o $(BIN)/%/$(RAW_PIPE)_ro_async_interleaved.o
+NV12_RW=$(subst _ro_,_rw_,$(NV12_RO))
+P010_RO=$(subst nv12,p010,$(NV12_RO))
+P010_RW=$(subst nv12,p010,$(NV12_RW))
+RAW_RO=$(subst nv12_linear,raw_linear_interleaved,$(NV12_RO))
 
 $(BIN)/process_nv12_linear_basic-%: process_nv12_linear_basic.cpp $(NV12_RO) $(NV12_RW) mock_dma_implementation.cpp
 	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 $^ -o $@ $(LDFLAGS-$*)
 $(BIN)/process_p010_linear_basic-%: process_p010_linear_basic.cpp $(P010_RO) $(P010_RW) mock_dma_implementation.cpp
 	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 $^ -o $@ $(LDFLAGS-$*)
-$(BIN)/process_raw_linear_ro_basic_interleaved-%: process_raw_linear_ro_basic_interleaved.cpp $(RAW_RO) mock_dma_implementation.cpp
+$(BIN)/process_raw_linear_interleaved_ro_basic-%: process_raw_linear_interleaved_ro_basic.cpp $(RAW_RO) mock_dma_implementation.cpp
 	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 $^ -o $@ $(LDFLAGS-$*)
 
 clean:
