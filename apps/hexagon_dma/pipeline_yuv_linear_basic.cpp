@@ -89,7 +89,6 @@ public:
                 input_uv_copy
                     .compute_at(output_uv, tx)
                     .copy_to_host()
-                    .bound(c, 0, 2)
                     .reorder_storage(c, x, y);
             break;
             case Schedule::Fold:
@@ -97,7 +96,6 @@ public:
                     .tile(x, y, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp);
 
                 output_uv
-                    .reorder(c, x, y)   // to handle UV interleave, with 'c' inner most loop, as DMA'd into buffer
                     .tile(x, y, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp);
 
                 input_y_copy
@@ -158,7 +156,6 @@ public:
                 input_uv_copy
                     .copy_to_host()
                     .compute_at(output_uv, tx)
-                    .bound(c, 0, 2)
                     .reorder_storage(c, x, y);
             }
             break;
@@ -189,7 +186,6 @@ public:
                     .compute_at(output_uv, tx)
                     .store_at(output_uv, ty)
                     .async()
-                    .bound(c, 0, 2)
                     .reorder_storage(c, x, y)
                     .fold_storage(x, tile_width * 2);
             }

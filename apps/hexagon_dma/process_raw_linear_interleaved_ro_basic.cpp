@@ -15,13 +15,13 @@ int main(int argc, char **argv) {
     int ret = 0;
 
     if (argc < 4) {
-        printf("Usage: %s width height func {basic, fold, async, split, split_fold} \n", argv[0]);
+        printf("Usage: %s width height schedule {basic, fold, async, split, split_fold} \n", argv[0]);
         return ret;
     }
 
     const int width = atoi(argv[1]);
     const int height = atoi(argv[2]);
-    const char *str = argv[3];
+    const char *schedule = argv[3];
 
     // Fill the input buffer with random test data. This is just a plain old memory buffer
     const int buf_size = width * height * 4;
@@ -52,19 +52,19 @@ int main(int argc, char **argv) {
 
     output = output.make_interleaved(width, height, 4);
 
-    if (!strcmp(str,"basic")) {
+    if (!strcmp(schedule,"basic")) {
         printf("Basic pipeline\n");
         ret = pipeline_raw_linear_interleaved_ro_basic(input, output);
-    } else if (!strcmp(str,"fold")) {
+    } else if (!strcmp(schedule,"fold")) {
         printf("Fold pipeline\n");
         ret = pipeline_raw_linear_interleaved_ro_fold(input, output);
-    } else if (!strcmp(str,"async")) {
+    } else if (!strcmp(schedule,"async")) {
         printf("Async pipeline\n");
         ret = pipeline_raw_linear_interleaved_ro_async(input, output);
-    } else if (!strcmp(str,"split")) {
+    } else if (!strcmp(schedule,"split")) {
         printf("Split pipeline\n");
         ret = pipeline_raw_linear_interleaved_ro_split(input, output);
-    } else if (!strcmp(str,"split_fold")) {
+    } else if (!strcmp(schedule,"split_fold")) {
         printf("Split Fold pipeline\n");
         ret = pipeline_raw_linear_interleaved_ro_split_fold(input, output);
     } else {
@@ -77,14 +77,14 @@ int main(int argc, char **argv) {
     }
     else {
         // verify result by comparing to expected values
+        int error_count = 0;
         for (int y=0; y < height; y++) {
             for (int x=0; x < width; x++) {
                 for (int z=0; z < 4; z++) {      
                     uint8_t correct = data_in[x*4 + z + y*width*4] * 2;
                     if (correct != output(x, y, z)) {
-                        static int cnt = 0;
                         printf("Mismatch at x=%d y=%d z=%d: %d != %d\n", x, y, z, correct, output(x, y, z));
-                        if (++cnt > 20) abort();
+                        if (++error_count > 20) abort();
                     }
                 }
             }
