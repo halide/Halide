@@ -477,7 +477,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                                 0,
                                 num_args));
 
-        GlobalVariable *arg_types_array_storage;
+        GlobalVariable *arg_types_array_storage = nullptr;
         if (runtime_run_takes_types) {
             arg_types_array_storage = new GlobalVariable(
                               *module,
