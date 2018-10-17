@@ -484,7 +484,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator2 {
             // Find the StorageDim corresponding to dim.
             const std::vector<StorageDim>& storage_dims = func.schedule().storage_dims();
             auto storage_dim_i = std::find_if(storage_dims.begin(), storage_dims.end(),
-                                              [&](const StorageDim& i) { return i.var == func.args()[dim]; });
+                                              [&](const StorageDim &i) { return i.var == func.args()[dim]; });
             internal_assert(storage_dim_i != storage_dims.end());
             const StorageDim &storage_dim = *storage_dim_i;
 
