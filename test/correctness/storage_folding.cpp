@@ -373,8 +373,8 @@ int main(int argc, char **argv) {
         f.store_root().compute_at(g, y).fold_storage(y, 3);
 
         if (interleave) {
-          f.reorder(c, x, y).reorder_storage(c, x, y);
-          g.reorder(c, x, y).reorder_storage(c, x, y);
+            f.reorder(c, x, y).reorder_storage(c, x, y);
+            g.reorder(c, x, y).reorder_storage(c, x, y);
         }
 
         // Make sure we can explicitly fold something with an outer
