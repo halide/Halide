@@ -347,6 +347,7 @@ enum class DeviceAPI {
     OpenGLCompute,
     Metal,
     Hexagon,
+    HexagonDma,
     D3D12Compute,
 };
 
@@ -361,6 +362,7 @@ const DeviceAPI all_device_apis[] = {DeviceAPI::None,
                                      DeviceAPI::OpenGLCompute,
                                      DeviceAPI::Metal,
                                      DeviceAPI::Hexagon,
+                                     DeviceAPI::HexagonDma,
                                      DeviceAPI::D3D12Compute};
 
 /** An enum describing different address spaces to be used with Func::store_in. */
@@ -389,6 +391,8 @@ enum class MemoryType {
      * across GPU threads within the same block. */
     GPUShared,
 
+    /** Allocate Locked Cache Memory to act as local memory */
+    LockedCache,
     /** Vector Tightly Coupled Memory. HVX (Hexagon) local memory available on
      * v65+. This memory has higher performance and lower power. Ideal for
      * intermediate buffers. Necessary for vgather-vscatter instructions
@@ -412,9 +416,10 @@ enum class ForType {
     Parallel,
     Vectorized,
     Unrolled,
+    Extern,
     GPUBlock,
     GPUThread,
-    GPULane
+    GPULane,
 };
 
 
