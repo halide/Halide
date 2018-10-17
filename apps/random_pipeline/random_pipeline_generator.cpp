@@ -210,9 +210,9 @@ public:
         RDom r(min, extent, min, extent);
 
         vector<Expr> coords = make_arguments(f.func.args());
-        coords[0] = (coords[0] * factor + r.x) / scale;
-        coords[1] = (coords[1] * factor + r.y) / scale;
-        pooled2D_r(args) += f.func(coords);
+        coords[0] = coords[0] * factor + r.x;
+        coords[1] = coords[1] * factor + r.y;
+        pooled2D_r(args) += f.func(coords) / scale;
 
         return {pooled2D_r, (f.w + factor - 1) / factor, (f.h + factor - 1) / factor, f.c};
     }
@@ -231,9 +231,9 @@ public:
         RDom r(min, extent, min, extent);
 
         vector<Expr> coords = make_arguments(f.func.args());
-        coords[0] = (coords[0] * factor + r.x) / scale;
-        coords[1] = (coords[1] * factor + r.y) / scale;
-        pooled2D_w(args) = sum(f.func(coords));
+        coords[0] = (coords[0] * factor + r.x);
+        coords[1] = (coords[1] * factor + r.y);
+        pooled2D_w(args) = sum(f.func(coords)) / scale;
 
         return {pooled2D_w, (f.w + factor - 1) / factor, (f.h + factor - 1) / factor, f.c};
     }
@@ -571,6 +571,7 @@ public:
         // Adapt channel count with an all-to-all
         if (out.c != c) {
             out = all_to_all_r(out, 2);
+            out.c = c;
         }
         // Increase any sizes that need increasing
         if (out.w < w) {
@@ -579,6 +580,7 @@ public:
         if (out.h < h) {
             out = upsample(out, 1, (h + out.h - 1) / out.h);
         }
+        std::cout << "Resulting size: " << out.w << ", " << out.h << ", " << out.c << "\n";
         return out;
     }
 
