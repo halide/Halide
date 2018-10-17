@@ -11,20 +11,11 @@
 namespace Halide {
 namespace Internal {
 
-using FuncBounds = std::vector<std::pair<Expr, Expr>>;
-
-/**
- * Return true if expr depends on the variable
- */
-bool has_variable(const Expr &expr, const std::string &name);
-/**
- * Return true if expr has a Let operation defining the variable
- */
-bool has_let_defined(const Expr &expr, const std::string &name);
 /**
  * Remove all let definitions of expr
  */
 Expr remove_let_definitions(const Expr &expr);
+
 /**
  * Return a list of variables that expr depends on and are in the filter
  */
@@ -58,9 +49,9 @@ std::vector<Expr> sort_expressions(const Expr &expr);
  * Compute the bounds of funcs
  */
 std::map<std::string, Box> inference_bounds(const std::vector<Func> &funcs,
-                                            const std::vector<FuncBounds> &output_bounds);
+                                            const std::vector<Box> &output_bounds);
 std::map<std::string, Box> inference_bounds(const Func &func,
-                                            const FuncBounds &output_bounds);
+                                            const Box &output_bounds);
 /**
  * Convert Box to vector of (min, extent)
  */

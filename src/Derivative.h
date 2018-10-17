@@ -9,20 +9,20 @@
 #include "Func.h"
 #include "Module.h"
 
-#include <set>
 #include <map>
+#include <string>
 #include <vector>
 
 namespace Halide {
-
-// function name & update_id, for initialization update_id == -1
-using FuncKey = std::pair<std::string, int>;
 
 /**
  *  Helper structure storing the adjoints Func.
  *  Use d(func) or d(buffer) to obtain the derivative Func.
  */
 struct Derivative {
+    // function name & update_id, for initialization update_id == -1
+    using FuncKey = std::pair<std::string, int>;
+
     std::map<FuncKey, Func> adjoints;
 
     Func operator()(const Func &func, int update_id = -1, bool bounded = true) const {
@@ -82,16 +82,6 @@ Derivative propagate_adjoints(const Func &output,
  *  to all dependent Funcs, buffers, and parameters.
  */
 Derivative propagate_adjoints(const Func &output);
-/**
- *  Given a Func and the tangents of inputs, (forward-)propagate the derivatives
- *  to the output.
- */
-Func propagate_tangents(const Func &output,
-                        const std::map<std::string, Func> &tangents);
-
-namespace Internal {
-
-}
 
 }  // namespace Halide
 

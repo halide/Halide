@@ -1,6 +1,11 @@
-#include "DerivativeUtils.h"
+#include <map>
+#include <set>
+#include <string>
+#include <vector>
 
+#include "DerivativeUtils.h"
 #include "CSE.h"
+#include "ExprUsesVar.h"
 #include "FindCalls.h"
 #include "IREquality.h"
 #include "IRMutator.h"
@@ -15,111 +20,49 @@
 namespace Halide {
 namespace Internal {
 
-class VariableFinder : public IRGraphVisitor {
+using std::pair;
+using std::map;
+using std::set;
+using std::string;
+using std::vector;
+
+class StripLets : public IRMutator2 {
 public:
-    using IRGraphVisitor::visit;
-    bool find(const Expr &expr, const std::string &_var_name) {
-        var_name = _var_name;
-        found = false;
-        expr.accept(this);
-        return found;
-    }
-
-    void visit(const Variable *op) {
-        if (op->name == var_name) {
-            found = true;
-        }
-    }
-
-private:
-    std::string var_name;
-    bool found;
-};
-
-bool has_variable(const Expr &expr, const std::string &name) {
-    VariableFinder finder;
-    return finder.find(expr, name);
-}
-
-class LetFinder : public IRGraphVisitor {
-public:
-    using IRGraphVisitor::visit;
-    bool find(const Expr &expr, const std::string &_var_name) {
-        var_name = _var_name;
-        found = false;
-        expr.accept(this);
-        return found;
-    }
-
-    void visit(const Let *op) {
-        if (op->name == var_name) {
-            found = true;
-        }
-        op->value->accept(this);
-        op->body->accept(this);
-    }
-
-private:
-    std::string var_name;
-    bool found;
-};
-
-bool has_let_defined(const Expr &expr, const std::string &name) {
-    LetFinder finder;
-    return finder.find(expr, name);
-}
-
-class LetRemover : public IRMutator {
-public:
-    using IRMutator::visit;
-
-    Expr remove(const Expr &expr) {
-        return mutate(expr);
-    }
-
-    void visit(const Let *op) {
-        expr = mutate(op->body);
+    using IRMutator2::visit;
+    Expr visit(const Let *op) override {
+        return mutate(op->body);
     }
 };
 
-Expr remove_let_definitions(const Expr &expr) {
-    LetRemover remover;
-    return remover.remove(expr);
-}
+vector<string> gather_variables(const Expr &expr,
+                                const vector<string> &filter) {
 
-class VariableGatherer : public IRGraphVisitor {
-public:
-    using IRGraphVisitor::visit;
-    std::vector<std::string> gather(const Expr &expr,
-                                    const std::vector<std::string> &_filter) {
-        filter = _filter;
-        variables.clear();
-        expr.accept(this);
-        return variables;
-    }
+    class GatherVariables : public IRGraphVisitor {
+    public:
+        using IRGraphVisitor::visit;
 
-    void visit(const Variable *op) {
-        for (const auto &pv : filter) {
-            if (op->name == pv) {
-                variables.push_back(op->name);
+        void visit(const Variable *op) override {
+            for (const auto &pv : filter) {
+                if (op->name == pv) {
+                    variables.push_back(op->name);
+                }
             }
         }
-    }
 
-private:
-    std::vector<std::string> variables;
-    std::vector<std::string> filter;
-};
+        GatherVariables(const vector<string> &f) : filter(f) {}
 
-std::vector<std::string> gather_variables(const Expr &expr,
-                                          const std::vector<std::string> &filter) {
-    VariableGatherer gatherer;
-    return gatherer.gather(expr, filter);
+        vector<string> variables;
+        const vector<string> &filter;
+    } gatherer(filter);
+
+    expr.accept(&gatherer);
+
+    return gatherer.variables;
 }
 
-std::vector<std::string> gather_variables(const Expr &expr,
-                                          const std::vector<Var> &filter) {
-    std::vector<std::string> str_filter;
+vector<string> gather_variables(const Expr &expr,
+                                const vector<Var> &filter) {
+    vector<string> str_filter;
     str_filter.reserve(filter.size());
     for (const auto &var : filter) {
         str_filter.push_back(var.name());
@@ -127,65 +70,58 @@ std::vector<std::string> gather_variables(const Expr &expr,
     return gather_variables(expr, str_filter);
 }
 
-class RVarGatherer : public IRGraphVisitor {
-public:
-    using IRGraphVisitor::visit;
-    std::map<std::string, ReductionVariableInfo> gather(const Expr &expr) {
-        expr.accept(this);
-        return rvar_map;
-    }
+map<string, ReductionVariableInfo> gather_rvariables(Tuple tuple) {
 
-    std::map<std::string, ReductionVariableInfo> get_rvar_map() const {
-        return rvar_map;
-    }
+    class GatherRVars : public IRGraphVisitor {
+    public:
+        using IRGraphVisitor::visit;
 
-    void visit(const Variable *op) {
-        if (op->reduction_domain.defined()) {
-            const std::vector<ReductionVariable> &domain =
-                op->reduction_domain.domain();
-            for (int i = 0; i < (int) domain.size(); i++) {
-                const ReductionVariable &rv = domain[i];
-                if (rv.var == op->name) {
-                    rvar_map[op->name] = ReductionVariableInfo{
-                        rv.min, rv.extent, i, op->reduction_domain, op->name
-                    };
-                    return;
+        void visit(const Variable *op) override {
+            if (op->reduction_domain.defined()) {
+                const vector<ReductionVariable> &domain =
+                    op->reduction_domain.domain();
+                for (int i = 0; i < (int) domain.size(); i++) {
+                    const ReductionVariable &rv = domain[i];
+                    if (rv.var == op->name) {
+                        rvar_map[op->name] = ReductionVariableInfo{
+                            rv.min, rv.extent, i, op->reduction_domain, op->name
+                        };
+                        return;
+                    }
                 }
+                internal_error << "Unknown reduction variable encountered";
             }
-            internal_error << "Unknown reduction variable encountered";
         }
+
+        map<string, ReductionVariableInfo> rvar_map;
+    } gatherer;
+
+    for (const auto &expr : tuple.as_vector()) {
+        expr.accept(&gatherer);
     }
+    return gatherer.rvar_map;
+}
 
-private:
-    std::map<std::string, ReductionVariableInfo> rvar_map;
-};
-
-std::map<std::string, ReductionVariableInfo> gather_rvariables(Expr expr) {
+map<string, ReductionVariableInfo> gather_rvariables(Expr expr) {
     return gather_rvariables(Tuple(expr));
 }
 
-std::map<std::string, ReductionVariableInfo> gather_rvariables(Tuple tuple) {
-    RVarGatherer gatherer;
-    for (const auto &expr : tuple.as_vector()) {
-        gatherer.gather(expr);
-    }
-    return gatherer.get_rvar_map();
-}
-
 Expr add_let_expression(const Expr &expr,
-                        const std::map<std::string, Expr> &let_var_mapping,
-                        const std::vector<std::string> &let_variables) {
+                        const map<string, Expr> &let_var_mapping,
+                        const vector<string> &let_variables) {
     // TODO: find a faster way to do this
-    Expr ret = expr;
-    ret = remove_let_definitions(ret);
+    Expr ret = StripLets().mutate(expr);
     bool changed = true;
+    vector<bool> injected(let_variables.size(), false);
     while (changed) {
         changed = false;
-        for (const auto &let_variable : let_variables) {
-            if (has_variable(ret, let_variable) &&
-                !has_let_defined(ret, let_variable)) {
+        for (size_t i = 0; i < let_variables.size(); i++) {
+            const auto &let_variable = let_variables[i];
+            if (!injected[i] &&
+                expr_uses_var(ret, let_variable)) {
                 auto value = let_var_mapping.find(let_variable)->second;
                 ret = Let::make(let_variable, value, ret);
+                injected[i] = true;
                 changed = true;
             }
         }
@@ -200,23 +136,23 @@ public:
     using IRGraphVisitor::include;
     using IRGraphVisitor::visit;
 
-    std::vector<Expr> sort(const Expr &expr);
+    vector<Expr> sort(const Expr &expr);
 
-    void visit(const Call *op);
-    void visit(const Let *op);
-    void visit(const Variable *op);
-    void visit(const Select *op);
+    void visit(const Call *op) override;
+    void visit(const Let *op) override;
+    void visit(const Variable *op) override;
+    void visit(const Select *op) override;
 
 protected:
-    void include(const Expr &e);
+    void include(const Expr &e) override;
 
 private:
-    std::set<const IRNode *> visited_exprs;
-    std::vector<Expr> expr_list;
-    std::map<std::string, Expr> let_var_mapping;
+    set<const IRNode *> visited_exprs;
+    vector<Expr> expr_list;
+    map<string, Expr> let_var_mapping;
 };
 
-std::vector<Expr> ExpressionSorter::sort(const Expr &e) {
+vector<Expr> ExpressionSorter::sort(const Expr &e) {
     e.accept(this);
     expr_list.push_back(e);
     return expr_list;
@@ -261,23 +197,23 @@ void ExpressionSorter::include(const Expr &e) {
     }
 }
 
-std::vector<Expr> sort_expressions(const Expr &expr) {
+vector<Expr> sort_expressions(const Expr &expr) {
     ExpressionSorter sorter;
     return sorter.sort(expr);
 }
 
-std::map<std::string, Box> inference_bounds(const std::vector<Func> &funcs,
-                                            const std::vector<FuncBounds> &output_bounds) {
+map<string, Box> inference_bounds(const vector<Func> &funcs,
+                                  const vector<Box> &output_bounds) {
     assert(funcs.size() == output_bounds.size());
     // Obtain all dependencies
-    std::vector<Function> functions;
+    vector<Function> functions;
     functions.reserve(funcs.size());
     for (const auto &func : funcs) {
         functions.push_back(func.function());
     }
-    std::map<std::string, Function> env;
+    map<string, Function> env;
     for (const auto &func : functions) {
-        std::map<std::string, Function> local_env = find_transitive_calls(func);
+        map<string, Function> local_env = find_transitive_calls(func);
         env.insert(local_env.begin(), local_env.end());
     }
     // Reduction variable scopes
@@ -285,7 +221,7 @@ std::map<std::string, Box> inference_bounds(const std::vector<Func> &funcs,
     for (const auto &it : env) {
         Func func = Func(it.second);
         for (int i = 0; i < func.num_update_definitions(); i++) {
-            std::map<std::string, ReductionVariableInfo> rvars =
+            map<string, ReductionVariableInfo> rvars =
                 gather_rvariables(func.update_values(i));
             for (const auto &it : rvars) {
                 Interval interval(it.second.min, it.second.min + it.second.extent - 1);
@@ -294,19 +230,13 @@ std::map<std::string, Box> inference_bounds(const std::vector<Func> &funcs,
         }
     }
     // Sort functions
-    std::vector<std::string> order = realization_order(functions, env).first;
+    vector<string> order = realization_order(functions, env).first;
 
-    std::map<std::string, Box> bounds;
+    map<string, Box> bounds;
     // Set up bounds for outputs
     for (int i = 0; i < (int) funcs.size(); i++) {
         const Func &func = funcs[i];
-        const FuncBounds &func_bounds = output_bounds[i];
-        std::vector<Interval> func_bounds_interval;
-        for (const auto &b : func_bounds) {
-            func_bounds_interval.push_back(Interval(b.first, b.second));
-        }
-        Box func_bounds_box(func_bounds_interval);
-        bounds[func.name()] = func_bounds_box;
+        bounds[func.name()] = output_bounds[i];
     }
     // Traverse from the consumers to the producers
     for (auto it = order.rbegin(); it != order.rend(); it++) {
@@ -317,7 +247,7 @@ std::map<std::string, Box> inference_bounds(const std::vector<Func> &funcs,
         assert(func.args().size() == current_bounds.size());
         // We know the range for each argument of this function
         for (int i = 0; i < (int) current_bounds.size(); i++) {
-            std::string arg = func.args()[i].name();
+            string arg = func.args()[i].name();
             scope.push(arg, current_bounds[i]);
         }
         // Propagate the bounds
@@ -327,7 +257,7 @@ std::map<std::string, Box> inference_bounds(const std::vector<Func> &funcs,
             for (const auto &expr : tuple.as_vector()) {
                 // For all the immediate dependencies of this expression,
                 // find the required ranges
-                std::map<std::string, Box> update_bounds =
+                map<string, Box> update_bounds =
                     boxes_required(expr, scope);
                 // Loop over the dependencies
                 for (const auto &it : update_bounds) {
@@ -356,14 +286,14 @@ std::map<std::string, Box> inference_bounds(const std::vector<Func> &funcs,
     return bounds;
 }
 
-std::map<std::string, Box> inference_bounds(const Func &func,
-                                            const FuncBounds &output_bounds) {
-    return inference_bounds(std::vector<Func>{ func },
-                            std::vector<FuncBounds>{ output_bounds });
+map<string, Box> inference_bounds(const Func &func,
+                                  const Box &output_bounds) {
+    return inference_bounds(vector<Func>{ func },
+                            vector<Box>{ output_bounds });
 }
 
-std::vector<std::pair<Expr, Expr>> box_to_vector(const Box &bounds) {
-    std::vector<std::pair<Expr, Expr>> ret;
+vector<pair<Expr, Expr>> box_to_vector(const Box &bounds) {
+    vector<pair<Expr, Expr>> ret;
     ret.reserve(bounds.size());
     for (const auto &b : bounds.bounds) {
         ret.push_back({ b.min, b.max - b.min + 1 });
@@ -384,8 +314,8 @@ bool equal(const RDom &bounds0, const RDom &bounds1) {
     return true;
 }
 
-std::vector<std::string> vars_to_strings(const std::vector<Var> &vars) {
-    std::vector<std::string> ret;
+vector<string> vars_to_strings(const vector<Var> &vars) {
+    vector<string> ret;
     ret.reserve(vars.size());
     for (const auto &var : vars) {
         ret.push_back(var.name());
@@ -401,7 +331,7 @@ public:
         return rdom;
     }
 
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         if (op->reduction_domain.defined()) {
             rdom = op->reduction_domain;
         }
@@ -416,13 +346,13 @@ ReductionDomain extract_rdom(const Expr &expr) {
     return extractor.gather(expr);
 }
 
-std::pair<bool, Expr> solve_inverse(Expr expr,
-                                    const std::string &new_var,
-                                    const std::string &var) {
+pair<bool, Expr> solve_inverse(Expr expr,
+                               const string &new_var,
+                               const string &var) {
     expr = substitute_in_all_lets(simplify(expr));
     Interval interval = solve_for_outer_interval(expr, var);
     if (!interval.is_bounded()) {
-        return std::make_pair(false, Expr());
+        return {false, Expr()};
     }
     Expr rmin = simplify(interval.min);
     Expr rmax = simplify(interval.max);
@@ -430,12 +360,12 @@ std::pair<bool, Expr> solve_inverse(Expr expr,
 
     const int64_t *extent_int = as_const_int(rextent);
     if (extent_int == nullptr) {
-        return std::make_pair(false, Expr());
+        return {false, Expr()};
     }
 
     // For some reason interval.is_single_point() doesn't work
     if (extent_int != nullptr && *extent_int == 1) {
-        return std::make_pair(true, rmin);
+        return {true, rmin};
     }
 
     // Create a RDom to loop over the interval
@@ -443,15 +373,15 @@ std::pair<bool, Expr> solve_inverse(Expr expr,
     Expr cond = substitute(var, rmin + r.x, expr.as<EQ>()->b);
     cond = substitute(new_var, Var(var), cond) == Var(var);
     r.where(cond);
-    return std::make_pair(true, rmin + r.x);
+    return {true, rmin + r.x};
 }
 
 struct BufferDimensionsFinder : public IRGraphVisitor {
 public:
     using IRGraphVisitor::visit;
-    std::map<std::string, BufferInfo> find(const Func &func) {
+    map<string, BufferInfo> find(const Func &func) {
         buffer_calls.clear();
-        std::vector<Expr> vals = func.values().as_vector();
+        vector<Expr> vals = func.values().as_vector();
         for (Expr val : vals) {
             val.accept(this);
         }
@@ -464,7 +394,7 @@ public:
         return buffer_calls;
     }
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         IRGraphVisitor::visit(op);
         if (op->call_type == Call::Image) {
             if (op->image.defined()) {
@@ -482,10 +412,10 @@ public:
         }
     }
 
-    std::map<std::string, BufferInfo> buffer_calls;
+    map<string, BufferInfo> buffer_calls;
 };
 
-std::map<std::string, BufferInfo> find_buffer_calls(const Func &func) {
+map<string, BufferInfo> find_buffer_calls(const Func &func) {
     BufferDimensionsFinder finder;
     return finder.find(func);
 }
@@ -493,38 +423,38 @@ std::map<std::string, BufferInfo> find_buffer_calls(const Func &func) {
 struct ImplicitVariablesFinder : public IRGraphVisitor {
 public:
     using IRGraphVisitor::visit;
-    std::set<std::string> find(Expr expr) {
+    set<string> find(Expr expr) {
         implicit_variables.clear();
         expr.accept(this);
         return implicit_variables;
     }
 
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         IRGraphVisitor::visit(op);
         if (Var::is_implicit(op->name)) {
             implicit_variables.insert(op->name);
         }
     }
 
-    std::set<std::string> implicit_variables;
+    set<string> implicit_variables;
 };
 
-std::set<std::string> find_implicit_variables(Expr expr) {
+set<string> find_implicit_variables(Expr expr) {
     ImplicitVariablesFinder finder;
     return finder.find(expr);
 }
 
 Expr substitute_rdom_predicate(
-    const std::string &name, const Expr &replacement, const Expr &expr) {
+    const string &name, const Expr &replacement, const Expr &expr) {
     Expr substituted = substitute(name, replacement, expr);
-    std::map<std::string, ReductionVariableInfo> rvars =
+    map<string, ReductionVariableInfo> rvars =
         gather_rvariables(substituted);
-    std::set<ReductionDomain, ReductionDomain::Compare> rdoms_set;
+    set<ReductionDomain, ReductionDomain::Compare> rdoms_set;
     for (const auto &it : rvars) {
         rdoms_set.insert(it.second.domain);
     }
-    std::vector<ReductionDomain> rdoms;
-    std::copy(rdoms_set.begin(), rdoms_set.end(), std::back_inserter(rdoms));
+    vector<ReductionDomain> rdoms;
+    copy(rdoms_set.begin(), rdoms_set.end(), back_inserter(rdoms));
     for (auto &r : rdoms) {
         Expr predicate = r.predicate();
         predicate = substitute(name, replacement, predicate);
@@ -536,9 +466,9 @@ Expr substitute_rdom_predicate(
 struct FunctionCallFinder : public IRGraphVisitor {
 public:
     using IRGraphVisitor::visit;
-    bool find(const std::string &func_name_,
+    bool find(const string &func_name_,
               const Expr &expr,
-              const std::map<std::string, Expr> &let_var_mapping_) {
+              const map<string, Expr> &let_var_mapping_) {
         func_name = func_name_;
         let_var_mapping = &let_var_mapping_;
         found = false;
@@ -547,7 +477,7 @@ public:
     }
 
     bool find(const Expr &expr,
-              const std::map<std::string, Expr> &let_var_mapping_) {
+              const map<string, Expr> &let_var_mapping_) {
         func_name = "";
         let_var_mapping = &let_var_mapping_;
         found = false;
@@ -555,7 +485,7 @@ public:
         return found;
     }
 
-    void visit(const Variable *var) {
+    void visit(const Variable *var) override {
         if (!found) {
             auto it = let_var_mapping->find(var->name);
             if (it != let_var_mapping->end()) {
@@ -564,7 +494,7 @@ public:
         }
     }
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         if (op->call_type == Call::Image || op->call_type == Call::Halide) {
             if (func_name == "" || op->name == func_name) {
                 found = true;
@@ -575,21 +505,21 @@ public:
         }
     }
 
-    std::string func_name;
-    std::map<std::string, Expr> const *let_var_mapping;
+    string func_name;
+    map<string, Expr> const *let_var_mapping;
     bool found;
 };
 
 bool is_calling_function(
-    const std::string &func_name, const Expr &expr,
-    const std::map<std::string, Expr> &let_var_mapping) {
+    const string &func_name, const Expr &expr,
+    const map<string, Expr> &let_var_mapping) {
     FunctionCallFinder finder;
     return finder.find(func_name, expr, let_var_mapping);
 }
 
 bool is_calling_function(
     const Expr &expr,
-    const std::map<std::string, Expr> &let_var_mapping) {
+    const map<string, Expr> &let_var_mapping) {
     FunctionCallFinder finder;
     return finder.find(expr, let_var_mapping);
 }

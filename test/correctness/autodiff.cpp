@@ -234,7 +234,6 @@ void test_1d_box() {
     Func f_loss("f_loss");
     f_loss() += blur(r.x) * blur(r.x);
     Derivative d = propagate_adjoints(f_loss);
-    std::map<FuncKey, Func> adjoints = d.adjoints;
 
     Buffer<float> blur_buf = blur.realize(2);
     // d loss / d blur = 2 * blur(x)
@@ -810,7 +809,6 @@ void test_tuple() {
     Func loss("loss");
     loss() += reduce(r.x);
     Derivative d = propagate_adjoints(loss);
-    std::map<FuncKey, Func> adjoints = d.adjoints;
     // tuple(0) = {1, 2}
     // tuple(1) = {2, 3}
     // reduce(0) = 3
@@ -1009,80 +1007,6 @@ void test_rdom_predicate() {
     }
 }
 
-void test_forward() {
-    Var x("x");
-    Buffer<float> input(10);
-    for (int i = 0; i < 10; i++) {
-        input(i) = float(i);
-    }
-    Func output("output");
-    RDom r(0, 2);
-    output(x) += input(x + r);
-    Func d_input("d_input");
-    d_input(x) = 1.f;
-    Func d_output = propagate_tangents(output, { { input.name(), d_input } });
-    // d_output(x) = \sum d_input(x + r)
-    Buffer<float> d_output_buf = d_output.realize(5);
-
-    for (int i = 0; i < 5; i++) {
-        check(__LINE__, d_output_buf(i), 2.f);
-    }
-}
-
-void test_reverse_forward() {
-    Var x("x");
-    Buffer<float> input(10, "input");
-    for (int i = 0; i < 10; i++) {
-        input(i) = float(i);
-    }
-    Buffer<float> target(10, "target");
-    for (int i = 0; i < 10; i++) {
-        target(i) = float(i + 1);
-    }
-    Buffer<float> kernel(2, "kernel");
-    kernel(0) = kernel(1) = 1.f;
-    Func input_re = BoundaryConditions::repeat_edge(input);
-    Func output("output");
-    RDom r(0, 2);
-    output(x) = 0.f;
-    output(x) += input_re(x + r) * kernel(r);
-    RDom ro(0, 9);
-    Func loss("loss");
-    loss() = 0.f;
-    Expr diff = output(ro) - target(ro);
-    loss() += diff * diff;
-    Derivative d = propagate_adjoints(loss);
-    Buffer<float> output_buf = output.realize(9);
-    Func d_output = d(output);
-    // d_output(x) = 2 * (output(x) - target(x))
-    Buffer<float> d_output_buf = d_output.realize(9);
-    for (int i = 0; i < 9; i++) {
-        check(__LINE__, d_output_buf(i), 2.f * (output_buf(i) - target(i)));
-    }
-    Func d_input = d(input);
-    Buffer<float> d_input_buf = d_input.realize(10);
-    // d_input(x) = d_output(x) + d_output(x - 1)
-    check(__LINE__, d_input_buf(0), d_output_buf(0));
-    for (int i = 1; i < 9; i++) {
-        check(__LINE__, d_input_buf(i), d_output_buf(i) + d_output_buf(i - 1));
-    }
-    check(__LINE__, d_input_buf(9), d_output_buf(8));
-    Func d2_output = propagate_tangents(d_output, { { input.name(), d_input } });
-    Buffer<float> d2_output_buf = d2_output.realize(9);
-    // d2_output(x) = 2 * (d_input(x) + d_input(x + 1))
-    for (int i = 0; i < 9; i++) {
-        check(__LINE__, d2_output_buf(i), 2.f * (d_input_buf(i) + d_input_buf(i + 1)));
-    }
-    Func d2_input = propagate_tangents(d_input, { { input.name(), d_input } });
-    Buffer<float> d2_input_buf = d2_input.realize(10);
-    // d2_input(x) = d2_output(x) + d2_output(x - 1)
-    check(__LINE__, d2_input_buf(0), d2_output_buf(0));
-    for (int i = 1; i < 9; i++) {
-        check(__LINE__, d2_input_buf(i), d2_output_buf(i) + d2_output_buf(i - 1));
-    }
-    check(__LINE__, d2_input_buf(9), d2_output_buf(8));
-}
-
 int main(int argc, char **argv) {
     test_scalar<float>();
     test_scalar<double>();
@@ -1111,7 +1035,5 @@ int main(int argc, char **argv) {
     test_transpose();
     test_change_var();
     test_rdom_predicate();
-    test_forward();
-    test_reverse_forward();
     printf("Success!\n");
 }
