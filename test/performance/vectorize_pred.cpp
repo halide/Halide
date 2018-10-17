@@ -84,11 +84,11 @@ bool test(int vec_width) {
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
             if (!equals(outputf(x, y), outputg(x, y))) {
-                printf("%s x %d failed at %d %d: %d vs %d\n",
+                printf("%s x %d failed at %d %d: %f vs %f\n",
                        string_of_type<A>(), vec_width,
                        x, y,
-                       (int) outputf(x, y),
-                       (int) outputg(x, y));
+                       outputf(x, y),
+                       outputg(x, y));
                 printf("Failure!\n");
                 exit(1);
                 return false;
