@@ -323,11 +323,26 @@ public:
 
         if (factor == 0) factor = f.random_size_increase_factor();
 
-        vector<Expr> resampled_coords = make_arguments(f.func.args());
-        resampled_coords[dim] = resampled_coords[dim] / factor;
+        Func resampled;
 
-        Func resampled("upsampled_" + f.func.args()[dim].name());
-        resampled(f.func.args()) = f.func(resampled_coords);
+        if (rand_bool()) {
+            // Nearest neighbour
+            resampled = Func("upsampled_nn_" + f.func.args()[dim].name());
+            vector<Expr> resampled_coords = make_arguments(f.func.args());
+            resampled_coords[dim] = resampled_coords[dim] / factor;
+            resampled(f.func.args()) = f.func(resampled_coords);
+        } else {
+            // Linear interpolation
+            resampled = Func("upsampled_linear_" + f.func.args()[dim].name());
+            vector<Expr> resampled_coords = make_arguments(f.func.args());
+            Expr x = cast<float>(resampled_coords[dim]) / factor;
+            resampled_coords[dim] = cast<int>(floor(x));
+            Expr s1 = f.func(resampled_coords);
+            resampled_coords[dim] += 1;
+            Expr s2 = f.func(resampled_coords);
+            Expr fx = x - floor(x);
+            resampled(f.func.args()) = lerp(s1, s2, fx);
+        }
 
         Stage s {resampled, f.w, f.h, f.c};
         if (dim == 0) {
@@ -345,11 +360,25 @@ public:
 
         if (factor == 0) factor = f.random_size_reduce_factor();
 
-        vector<Expr> resampled_coords = make_arguments(f.func.args());
-        resampled_coords[dim] = resampled_coords[dim] * factor;
-
-        Func resampled("downsampled_" + f.func.args()[dim].name());
-        resampled(f.func.args()) = f.func(resampled_coords);
+        Func resampled;
+        if (rand_bool()) {
+            // Nearest neighbour
+            resampled = Func("downsampled_nn_" + f.func.args()[dim].name());
+            vector<Expr> resampled_coords = make_arguments(f.func.args());
+            resampled_coords[dim] = resampled_coords[dim] * factor;
+            resampled(f.func.args()) = f.func(resampled_coords);
+        } else {
+            // Averaging down
+            resampled = Func("downsampled_box_" + f.func.args()[dim].name());
+            vector<Expr> resampled_coords = make_arguments(f.func.args());
+            resampled_coords[dim] = resampled_coords[dim] * factor;
+            Expr e = cast(f.func.value().type(), 0);
+            for (int i = 0; i < factor; i++) {
+                resampled_coords[dim] += 1;
+                e += f.func(resampled_coords);
+            }
+            resampled(f.func.args()) = e;
+        }
 
         Stage s {resampled, f.w, f.h, f.c};
         if (dim == 0) {
@@ -486,7 +515,47 @@ public:
         transpose(coords) = f.func(swizzled_coords);
 
         return {transpose, f.h, f.w, f.c};
+    }
 
+    Stage slice(Stage f, Stage g) {
+        if (f.c > g.c) {
+            std::swap(f, g);
+        }
+
+        // Index g's channels using f
+
+        f = resample_to(f, g.w, g.h, 1);
+
+        Func sliced("sliced");
+        vector<Expr> coords = make_arguments(f.func.args());
+        coords.back() = clamp(cast<int>(f.func(f.func.args())), 0, g.c - 1);
+        sliced(f.func.args()) = g.func(coords);
+
+        return {sliced, f.w, f.h, f.c};
+    }
+
+    Stage tiled_histogram(Stage f) {
+        // Make a histogram of NxN patches of f, preserving total size
+
+        int old_c = f.c;
+        f = resample_to(f, f.w, f.h, 1);
+
+        int box_size = rand_int(2, 8);
+        int histogram_buckets = box_size * box_size * old_c;
+
+        RDom r(0, box_size, 0, box_size);
+        vector<Expr> from_coords = make_arguments(f.func.args());
+        vector<Expr> to_coords = from_coords;
+
+        Func hist("hist");
+        hist(f.func.args()) = 0.0f;
+        from_coords[0] = to_coords[0] * box_size + r.x;
+        from_coords[1] = to_coords[1] * box_size + r.y;
+        from_coords[2] = 0;
+        to_coords[2] = clamp(cast<int>(f.func(from_coords) * histogram_buckets), 0, histogram_buckets - 1);
+        hist(to_coords) += 1;
+
+        return {hist, f.w / box_size, f.h / box_size, histogram_buckets};
     }
 
     Stage resample_to(Stage f, int w, int h, int c) {
@@ -519,7 +588,7 @@ public:
         int i2 = m > 0 ? rand_int(0, m - 1) : 0;
         int i1 = m > 0 ? rand_int(i2 + 1, m) : 0;
         Stage f = s[i1], g = s[i2];
-        int stage_type = rand_int(0, 20);
+        int stage_type = rand_int(0, 24);
         if (stage_type == 0) {
             int dim = rand_int(0, 1);
             int kernel_min = rand_int(-3, 0);
@@ -562,6 +631,10 @@ public:
             return transpose(f);
         } else if (stage_type == 18 && f.size() < 10000) {
             return unary_op(f);
+        } else if (stage_type == 19 && f.w > 16 && f.h > 16) {
+            return tiled_histogram(f);
+        } else if (stage_type == 20) {
+            return slice(f, g);
         } else if (i1 != i2) {
             return binary_op(f, g);
         } else {
