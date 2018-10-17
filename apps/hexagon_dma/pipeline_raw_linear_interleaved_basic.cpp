@@ -20,6 +20,8 @@ public:
              { "split", Schedule::Split },
              { "split_fold", Schedule::Split_Fold }}};
 
+    GeneratorParam<bool> use_dma_for_output{"use_dma_for_output", true};
+
     void generate() {
         Var x{"x"}, y{"y"}, c{"c"};
 
@@ -27,13 +29,17 @@ public:
         // multiply update in tiles.
         Func input_copy("input_copy");
 
+        Func work("work");
         input_copy(x, y, c) = input(x, y, c);
-
-        output(x, y, c) = input_copy(x, y, c) * 2;
-
+        work(x, y, c) = input_copy(x, y, c) * 2;
+        output(x, y, c) = work(x, y, c);
 
         Var tx("tx"), ty("ty");
 
+        // Do some common scheduling here.
+        if (use_dma_for_output) {
+            output.copy_to_device();
+        }
 
         output
             .compute_root()
@@ -42,7 +48,8 @@ public:
         input.dim(0).set_stride(4);
         output.dim(0).set_stride(4);  
         // Break the output into tiles.
-        const int tile_width = 128;
+        const int bytes_per_pixel = std::max(input.type().bytes(), output.type().bytes());
+        const int tile_width = 128 / bytes_per_pixel;
         const int tile_height = 32;
 
         switch ((Schedule)schedule) {
@@ -54,7 +61,6 @@ public:
                 input_copy
                     .compute_at(output, tx)
                     .copy_to_host()
-                    .bound(c, 0, 4)
                     .reorder_storage(c, x, y);
             break;
             case Schedule::Fold:
@@ -65,7 +71,6 @@ public:
                     .copy_to_host()
                     .compute_at(output, tx)
                     .store_at(output, ty)
-                    .bound(c, 0, 4)
                     .reorder_storage(c, x, y)
                     .fold_storage(x, tile_width * 2);
             break;
@@ -78,7 +83,6 @@ public:
                     .async()
                     .compute_at(output, tx)
                     .store_at(output, ty)
-                    .bound(c, 0, 4)
                     .reorder_storage(c, x, y)
                     .fold_storage(x, tile_width * 2);
             break;
@@ -93,7 +97,6 @@ public:
                 input_copy
                     .copy_to_host()
                     .compute_at(output, tx)
-                    .bound(c, 0, 4)
                     .reorder_storage(c, x, y);
             }
             break;
@@ -110,13 +113,18 @@ public:
                     .compute_at(output, tx)
                     .store_at(output, ty)
                     .async()
-                    .bound(c, 0, 4)
                     .reorder_storage(c, x, y)
                     .fold_storage(x, tile_width * 2);
             }
             break;
         }
+
+        // Schedule the work in tiles (same for all DMA schedules).
+        work
+            .compute_at(output, tx)
+            .bound(c, 0, 4)
+            .reorder_storage(c, x, y);
     }
 };
 
-HALIDE_REGISTER_GENERATOR(DmaPipeline, pipeline_raw_linear_interleaved_ro_basic)
+HALIDE_REGISTER_GENERATOR(DmaPipeline, pipeline_raw_linear_interleaved_basic)
