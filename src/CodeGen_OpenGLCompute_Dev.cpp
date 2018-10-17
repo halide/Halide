@@ -36,6 +36,10 @@ Type map_type(const Type &type) {
             result = Bool();
         } else if (type == Int(32) || type == UInt(32)) {
             // Keep unchanged
+        } else if (type.bits() <= 16) {
+            // Embed all other ints in a GLSL float. Probably not actually
+            // valid for uint16 on systems with low float precision.
+            result = Float(32);
         } else {
             user_error << "GLSL: Can't represent type '"<< type << "'.\n";
         }
@@ -255,7 +259,7 @@ namespace {
 class FindSharedAllocations : public IRVisitor {
     using IRVisitor::visit;
 
-    void visit(const Allocate *op) {
+    void visit(const Allocate *op) override {
         op->body.accept(this);
         if (starts_with(op->name, "__shared_")) {
             allocs.push_back(op);

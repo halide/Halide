@@ -285,4 +285,9 @@ WEAK int halide_error_buffer_is_null(void *user_context, const char *routine) {
     return halide_error_code_buffer_is_null;
 }
 
+WEAK int halide_error_integer_division_by_zero(void *user_context) {
+    error(user_context) << "Integer division or modulo by zero.\n";
+    return halide_error_code_integer_division_by_zero;
+}
+
 }  // extern "C"

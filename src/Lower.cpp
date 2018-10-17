@@ -8,6 +8,7 @@
 #include "AddImageChecks.h"
 #include "AddParameterChecks.h"
 #include "AllocationBoundsInference.h"
+#include "AsyncProducers.h"
 #include "BoundSmallAllocations.h"
 #include "Bounds.h"
 #include "BoundsInference.h"
@@ -36,11 +37,13 @@
 #include "LowerWarpShuffles.h"
 #include "Memoization.h"
 #include "PartitionLoops.h"
+#include "PurifyIndexMath.h"
 #include "Prefetch.h"
 #include "Profiling.h"
 #include "Qualify.h"
 #include "RealizationOrder.h"
 #include "RemoveDeadAllocations.h"
+#include "RemoveExternLoops.h"
 #include "RemoveTrivialForLoops.h"
 #include "RemoveUndef.h"
 #include "ScheduleFunctions.h"
@@ -124,10 +127,6 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     Stmt s = schedule_functions(outputs, fused_groups, env, t, any_memoized);
     debug(2) << "Lowering after creating initial loop nests:\n" << s << '\n';
 
-    debug(1) << "Canonicalizing GPU var names...\n";
-    s = canonicalize_gpu_vars(s);
-    debug(2) << "Lowering after canonicalizing GPU var names:\n" << s << '\n';
-
     if (any_memoized) {
         debug(1) << "Injecting memoization...\n";
         s = inject_memoization(s, env, pipeline_name, outputs);
@@ -162,6 +161,10 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     s = bounds_inference(s, outputs, order, fused_groups, env, func_bounds, t);
     debug(2) << "Lowering after computation bounds inference:\n" << s << '\n';
 
+    debug(1) << "Removing extern loops...\n";
+    s = remove_extern_loops(s);
+    debug(2) << "Lowering after removing extern loops:\n" << s << '\n';
+
     debug(1) << "Performing sliding window optimization...\n";
     s = sliding_window(s, env);
     debug(2) << "Lowering after sliding window:\n" << s << '\n';
@@ -182,7 +185,7 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     debug(2) << "Lowering after uniquifying variable names:\n" << s << "\n\n";
 
     debug(1) << "Simplifying...\n";
-    s = simplify(s, false); // Keep dead lets. Storage flattening needs them.
+    s = simplify(s, false); // Storage folding needs .loop_max symbols
     debug(2) << "Lowering after first simplification:\n" << s << "\n\n";
 
     debug(1) << "Performing storage folding optimization...\n";
@@ -200,6 +203,10 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     debug(1) << "Dynamically skipping stages...\n";
     s = skip_stages(s, order);
     debug(2) << "Lowering after dynamically skipping stages:\n" << s << "\n\n";
+
+    debug(1) << "Forking asynchronous producers...\n";
+    s = fork_async_producers(s, env);
+    debug(2) << "Lowering after forking asynchronous producers:\n" << s << '\n';
 
     debug(1) << "Destructuring tuple-valued realizations...\n";
     s = split_tuples(s, env);
@@ -224,7 +231,12 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     if (t.has_gpu_feature() ||
         t.has_feature(Target::OpenGLCompute) ||
         t.has_feature(Target::OpenGL) ||
+        t.has_feature(Target::HexagonDma) ||
         (t.arch != Target::Hexagon && (t.features_any_of({Target::HVX_64, Target::HVX_128})))) {
+        debug(1) << "Canonicalizing GPU var names...\n";
+        s = canonicalize_gpu_vars(s);
+        debug(2) << "Lowering after canonicalizing GPU var names:\n" << s << '\n';
+
         debug(1) << "Selecting a GPU API for GPU loops...\n";
         s = select_gpu_api(s, t);
         debug(2) << "Lowering after selecting a GPU API:\n" << s << "\n\n";
@@ -242,13 +254,6 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
         debug(1) << "Injecting OpenGL texture intrinsics...\n";
         s = inject_opengl_intrinsics(s);
         debug(2) << "Lowering after OpenGL intrinsics:\n" << s << "\n\n";
-    }
-
-    if (t.has_gpu_feature() ||
-        t.has_feature(Target::OpenGLCompute)) {
-        debug(1) << "Injecting per-block gpu synchronization...\n";
-        s = fuse_gpu_thread_loops(s);
-        debug(2) << "Lowering after injecting per-block gpu synchronization:\n" << s << "\n\n";
     }
 
     debug(1) << "Simplifying...\n";
@@ -270,6 +275,13 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     s = vectorize_loops(s, t);
     s = simplify(s);
     debug(2) << "Lowering after vectorizing:\n" << s << "\n\n";
+
+    if (t.has_gpu_feature() ||
+        t.has_feature(Target::OpenGLCompute)) {
+        debug(1) << "Injecting per-block gpu synchronization...\n";
+        s = fuse_gpu_thread_loops(s);
+        debug(2) << "Lowering after injecting per-block gpu synchronization:\n" << s << "\n\n";
+    }
 
     debug(1) << "Detecting vector interleavings...\n";
     s = rewrite_interleavings(s);

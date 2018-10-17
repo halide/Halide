@@ -26,14 +26,14 @@ public:
 protected:
     using IRVisitor::visit;
 
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         if (!is_one(op->predicate)) {
             load_count++;
         }
         IRVisitor::visit(op);
     }
 
-    void visit(const Store *op) {
+    void visit(const Store *op) override {
         if (!is_one(op->predicate)) {
             store_count++;
         }
@@ -153,7 +153,7 @@ int multiple_vectorized_predicate_test(const Target &t) {
         f.update(0).hexagon().vectorize(r.x, 32);
     } else if (t.arch == Target::X86) {
         f.update(0).vectorize(r.x, 32);
-        f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(5, 10));
+        f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(3, 6));
     }
 
     Buffer<int> im = f.realize(size, size);
@@ -185,7 +185,7 @@ int scalar_load_test(const Target &t) {
         f.update(0).hexagon().vectorize(r.x, 32);
     } else if (t.arch == Target::X86) {
         f.update(0).vectorize(r.x, 32);
-        f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(3, 6));
+        f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(1, 2));
     }
 
     Buffer<int> im = f.realize(160, 160);
@@ -219,7 +219,7 @@ int scalar_store_test(const Target &t) {
         f.update(0).hexagon().vectorize(r.x, 32);
     } else if (t.arch == Target::X86) {
         f.update(0).vectorize(r.x, 32);
-        f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(3, 3));
+        f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(1, 1));
     }
 
     Buffer<int> im = f.realize(160, 160);

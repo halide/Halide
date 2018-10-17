@@ -215,7 +215,7 @@ public:
 class UsesGPUVars : public IRVisitor {
 private:
     using IRVisitor::visit;
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         if (CodeGen_GPU_Dev::is_gpu_var(op->name)) {
             debug(3) << "Found gpu loop var: " << op->name << "\n";
             uses_gpu = true;

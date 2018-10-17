@@ -27,16 +27,46 @@ class ExprUsesVars : public IRGraphVisitor {
         }
     }
 
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         visit_name(op->name);
     }
 
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         visit_name(op->name);
         IRGraphVisitor::visit(op);
     }
 
-    void visit(const Store *op) {
+    void visit(const Store *op) override {
+        visit_name(op->name);
+        IRGraphVisitor::visit(op);
+    }
+
+    void visit(const Call *op) override {
+        visit_name(op->name);
+        IRGraphVisitor::visit(op);
+    }
+
+    void visit(const Provide *op) override {
+        visit_name(op->name);
+        IRGraphVisitor::visit(op);
+    }
+
+    void visit(const LetStmt *op) override {
+        visit_name(op->name);
+        IRGraphVisitor::visit(op);
+    }
+
+    void visit(const Let *op) override {
+        visit_name(op->name);
+        IRGraphVisitor::visit(op);
+    }
+
+    void visit(const Realize *op) override {
+        visit_name(op->name);
+        IRGraphVisitor::visit(op);
+    }
+
+    void visit(const Allocate *op) override {
         visit_name(op->name);
         IRGraphVisitor::visit(op);
     }
@@ -47,9 +77,9 @@ public:
     bool result;
 };
 
-/** Test if a statement or expression references any of the variables
- *  in a scope, additionally considering variables bound to Expr's in
- *  the scope provided in the final argument.
+/** Test if a statement or expression references or defines any of the
+ *  variables in a scope, additionally considering variables bound to
+ *  Expr's in the scope provided in the final argument.
  */
 template<typename StmtOrExpr, typename T>
 inline bool stmt_or_expr_uses_vars(StmtOrExpr e, const Scope<T> &v,
@@ -59,9 +89,9 @@ inline bool stmt_or_expr_uses_vars(StmtOrExpr e, const Scope<T> &v,
     return uses.result;
 }
 
-/** Test if a statement or expression references the given variable,
- *  additionally considering variables bound to Expr's in the scope
- *  provided in the final argument.
+/** Test if a statement or expression references or defines the given
+ * variable, additionally considering variables bound to Expr's in the
+ * scope provided in the final argument.
  */
 template<typename StmtOrExpr>
 inline bool stmt_or_expr_uses_var(StmtOrExpr e, const std::string &v,
@@ -71,7 +101,7 @@ inline bool stmt_or_expr_uses_var(StmtOrExpr e, const std::string &v,
     return stmt_or_expr_uses_vars<StmtOrExpr, void>(e, vars, s);
 }
 
-/** Test if an expression references the given variable,
+/** Test if an expression references or defines the given variable,
  *  additionally considering variables bound to Expr's in the scope
  *  provided in the final argument.
  */
@@ -80,7 +110,7 @@ inline bool expr_uses_var(Expr e, const std::string &v,
     return stmt_or_expr_uses_var(e, v, s);
 }
 
-/** Test if a statement references the given variable,
+/** Test if a statement references or defines the given variable,
  *  additionally considering variables bound to Expr's in the scope
  *  provided in the final argument.
  */
@@ -89,9 +119,9 @@ inline bool stmt_uses_var(Stmt stmt, const std::string &v,
     return stmt_or_expr_uses_var(stmt, v, s);
 }
 
-/** Test if an expression references any of the variables in a scope,
- *  additionally considering variables bound to Expr's in the scope
- *  provided in the final argument.
+/** Test if an expression references or defines any of the variables
+ *  in a scope, additionally considering variables bound to Expr's in
+ *  the scope provided in the final argument.
  */
 template<typename T>
 inline bool expr_uses_vars(Expr e, const Scope<T> &v,
@@ -99,9 +129,9 @@ inline bool expr_uses_vars(Expr e, const Scope<T> &v,
     return stmt_or_expr_uses_vars(e, v, s);
 }
 
-/** Test if a statement references any of the variables in a scope,
- *  additionally considering variables bound to Expr's in the scope
- *  provided in the final argument.
+/** Test if a statement references or defines any of the variables in
+ *  a scope, additionally considering variables bound to Expr's in the
+ *  scope provided in the final argument.
  */
 template<typename T>
 inline bool stmt_uses_vars(Stmt stmt, const Scope<T> &v,

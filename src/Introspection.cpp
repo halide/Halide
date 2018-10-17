@@ -862,6 +862,27 @@ public:
 
     }
 
+    bool dump_stack_frame(void *ptr) {
+        FunctionInfo *fi = find_containing_function(ptr);
+        if (fi == nullptr) {
+            debug(0) << "Failed to find function containing " << ptr << " in debug info\n";
+            return false;
+        }
+
+        debug(0) << fi->name << ":\n";
+        for (const LocalVariable &v : fi->variables) {
+            TypeInfo *t = v.type;
+            debug(0) << " ";
+            if (t) {
+                debug(0) << t->name << " ";
+            } else {
+                debug(0) << "(unknown type) ";
+            }
+            debug(0) << v.name << " @ " << v.stack_offset << "\n";
+        }
+        return true;
+    }
+
 private:
 
     void load_and_parse_object_file(const std::string &binary) {
@@ -2100,8 +2121,6 @@ private:
 
     }
 
-
-
     FunctionInfo *find_containing_function(void *addr) {
         uint64_t address = (uint64_t)addr;
         debug(5) << "Searching for function containing address " << addr << "\n";
@@ -2169,6 +2188,14 @@ private:
 
 namespace {
 DebugSections *debug_sections = nullptr;
+}
+
+bool dump_stack_frame() {
+    if (!debug_sections || !debug_sections->working) {
+        return false;
+    }
+    void *ptr = __builtin_return_address(0);
+    return debug_sections->dump_stack_frame(ptr);
 }
 
 std::string get_variable_name(const void *var, const std::string &expected_type) {
@@ -2253,8 +2280,6 @@ void test_compilation_unit(bool (*test)(bool (*)(const void *, const std::string
 
         debug(5) << "Test passed\n";
     }
-
-    //debug_sections->dump();
 
     #endif
 }

@@ -308,7 +308,6 @@ void CodeGen_ARM::visit(const Cast *op) {
         }
     }
 
-
     // Catch extract-high-half-of-signed integer pattern and convert
     // it to extract-high-half-of-unsigned-integer. llvm peephole
     // optimization recognizes logical shift right but not arithemtic
