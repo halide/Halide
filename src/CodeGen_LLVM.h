@@ -177,7 +177,7 @@ protected:
         *argument_t_type,
         *scalar_value_t_type,
         *device_interface_t_type,
-        *pseudostack_slot_t_type
+        *pseudostack_slot_t_type,
         *semaphore_t_type,
         *semaphore_acquire_t_type,
         *parallel_task_t_type;
