@@ -28,6 +28,8 @@ $(BIN)/opengl_test: opengl_test.cpp $(BIN)/halide_blur_glsl.a $(BIN)/halide_ycc_
 run: $(BIN)/opengl_test
 	LD_LIBRARY_PATH=../../bin $(BIN)/opengl_test
 
+test: run
+
 .PHONY: clean
 clean:
 	rm -rf $(BIN)
