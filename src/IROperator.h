@@ -1952,8 +1952,8 @@ inline Expr likely_if_innermost(Expr e) {
 }
 
 /** Cast an expression to the halide type corresponding to the C++
- * type T clamping to the minimum and maximum values of the result
- * type. */
+ * type T. As part of the cast, clamp to the minimum and maximum
+ * values of the result type. */
 template <typename T>
 Expr saturating_cast(Expr e) {
     return saturating_cast(type_of<T>(), std::move(e));

@@ -97,6 +97,9 @@ ostream &operator<<(ostream &out, const DeviceAPI &api) {
     case DeviceAPI::Hexagon:
         out << "<Hexagon>";
         break;
+    case DeviceAPI::HexagonDma:
+        out << "<HexagonDma>";
+        break;
     case DeviceAPI::D3D12Compute:
         out << "<D3D12Compute>";
         break;
@@ -120,6 +123,9 @@ std::ostream &operator<<(std::ostream &out, const MemoryType &t) {
         break;
     case MemoryType::GPUShared:
         out << "GPUShared";
+        break;
+    case MemoryType::LockedCache:
+        out << "LockedCache";
         break;
     case MemoryType::VTCM:
         out << "VTCM";
@@ -228,6 +234,9 @@ ostream &operator<<(ostream &out, const ForType &type) {
         break;
     case ForType::Vectorized:
         out << "vectorized";
+        break;
+    case ForType::Extern:
+        out << "extern";
         break;
     case ForType::GPUBlock:
         out << "gpu_block";

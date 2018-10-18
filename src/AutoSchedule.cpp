@@ -2629,7 +2629,7 @@ void Partitioner::reorder_dims(Stage f_handle, int stage_num, Definition def,
 class FindVarsUsingVar : public IRVisitor {
     using IRVisitor::visit;
 
-    void visit(const Let *let) {
+    void visit(const Let *let) override {
         if (expr_uses_vars(let->value, vars)) {
             vars.push(let->name);
         }

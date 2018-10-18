@@ -84,13 +84,13 @@ ifneq (, $(findstring metal,$(HL_TARGET)))
   LDFLAGS += -framework Metal -framework Foundation
 endif
 
-$(BIN)/RunGen.o: $(HALIDE_DISTRIB_PATH)/tools/RunGen.cpp
+$(BIN)/RunGenMain.o: $(HALIDE_DISTRIB_PATH)/tools/RunGenMain.cpp $(HALIDE_DISTRIB_PATH)/tools/RunGen.h
 	@mkdir -p $(@D)
 	@$(CXX) -c $< $(CXXFLAGS) $(IMAGE_IO_CXX_FLAGS) -I$(BIN) -o $@
 
 # Really, .SECONDARY is what we want, but it won't accept wildcards
 .PRECIOUS: $(BIN)/%.rungen
-$(BIN)/%.rungen: $(BIN)/%.a $(BIN)/RunGen.o $(HALIDE_DISTRIB_PATH)/tools/RunGenStubs.cpp
+$(BIN)/%.rungen: $(BIN)/%.a $(BIN)/RunGenMain.o $(HALIDE_DISTRIB_PATH)/tools/RunGenStubs.cpp
 	$(CXX) $(CXXFLAGS) -I$(BIN) -DHL_RUNGEN_FILTER_HEADER=\"$*.h\" $^ -o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS)
 
 RUNARGS ?=
