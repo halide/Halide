@@ -385,7 +385,10 @@ int halide_hexagon_remote_poll_profiler_state(int *func, int *threads) {
     *threads = halide_profiler_get_state()->active_threads;
     return 0;
 }
-
+int halide_hexagon_remote_profiler_set_current_func(int current_func) {
+    halide_profiler_get_state()->current_func = current_func;
+    return 0;
+}
 halide_profiler_state *halide_profiler_get_state() {
     static halide_profiler_state hvx_profiler_state;
     return &hvx_profiler_state;

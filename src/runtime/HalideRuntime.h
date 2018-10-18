@@ -96,15 +96,21 @@ struct halide_mutex {
     uintptr_t _private[1];
 };
 
+/** Cross platform condition variable. Must be initialized to 0. */
+struct halide_cond {
+    uintptr_t _private[1];
+};
+
 /** A basic set of mutex and condition variable functions, which call
  * platform specific code for mutual exclusion. Equivalent to posix
- * calls. Mutexes should initially be set to zero'd memory. Any
- * resources required are created on first lock. Calling destroy
- * re-zeros the memory.
- */
+ * calls. */
 //@{
 extern void halide_mutex_lock(struct halide_mutex *mutex);
 extern void halide_mutex_unlock(struct halide_mutex *mutex);
+extern void halide_cond_signal(struct halide_cond *cond);
+extern void halide_cond_broadcast(struct halide_cond *cond);
+extern void halide_cond_signal(struct halide_cond *cond);
+extern void halide_cond_wait(struct halide_cond *cond, struct halide_mutex *mutex);
 //@}
 
 /** Define halide_do_par_for to replace the default thread pool
@@ -130,6 +136,93 @@ extern void halide_shutdown_thread_pool();
 typedef int (*halide_do_par_for_t)(void *, halide_task_t, int, int, uint8_t*);
 extern halide_do_par_for_t halide_set_custom_do_par_for(halide_do_par_for_t do_par_for);
 
+/** An opaque struct representing a semaphore. Used by the task system for async tasks. */
+struct halide_semaphore_t {
+    uint64_t _private[2];
+};
+
+/** A struct representing a semaphore and a number of items that must
+ * be acquired from it. Used in halide_parallel_task_t below. */
+struct halide_semaphore_acquire_t {
+    struct halide_semaphore_t *semaphore;
+    int count;
+};
+extern int halide_semaphore_init(struct halide_semaphore_t *, int n);
+extern int halide_semaphore_release(struct halide_semaphore_t *, int n);
+extern bool halide_semaphore_try_acquire(struct halide_semaphore_t *, int n);
+typedef int (*halide_semaphore_init_t)(struct halide_semaphore_t *, int);
+typedef int (*halide_semaphore_release_t)(struct halide_semaphore_t *, int);
+typedef bool (*halide_semaphore_try_acquire_t)(struct halide_semaphore_t *, int);
+
+
+/** A task representing a serial for loop evaluated over some range.
+ * Note that task_parent is a pass through argument that should be
+ * passed to any dependent taks that are invokved using halide_do_parallel_tasks
+ * underneath this call. */
+typedef int (*halide_loop_task_t)(void *user_context, int min, int extent,
+                                  uint8_t *closure, void *task_parent);
+
+/** A parallel task to be passed to halide_do_parallel_tasks. This
+ * task may recursively call halide_do_parallel_tasks, and there may
+ * be complex dependencies between seemingly unrelated tasks expressed
+ * using semaphores. If you are using a custom task system, care must
+ * be taken to avoid potential deadlock. This can be done by carefully
+ * respecting the static metadata at the end of the task struct.*/
+struct halide_parallel_task_t {
+    // The function to call. It takes a user context, a min and
+    // extent, a closure, and a task system pass through argument.
+    halide_loop_task_t fn;
+
+    // The closure to pass it
+    uint8_t *closure;
+
+    // The name of the function to be called. For debugging purposes only.
+    const char *name;
+
+    // An array of semaphores that must be acquired before the
+    // function is called. Must be reacquired for every call made.
+    struct halide_semaphore_acquire_t *semaphores;
+    int num_semaphores;
+
+    // The entire range the function should be called over. This range
+    // may be sliced up and the function called multiple times.
+    int min, extent;
+
+    // A parallel task provides several pieces of metadata to prevent
+    // unbounded resource usage or deadlock.
+
+    // The first is the minimum number of execution contexts (call
+    // stacks or threads) necessary for the function to run to
+    // completion. This may be greater than one when there is nested
+    // parallelism with internal producer-consumer relationships
+    // (calling the function recursively spawns and blocks on parallel
+    // sub-tasks that communicate with each other via semaphores). If
+    // a parallel runtime calls the function when fewer than this many
+    // threads are idle, it may need to create more threads to
+    // complete the task, or else risk deadlock due to committing all
+    // threads to tasks that cannot complete without more.
+    //
+    // FIXME: Note that extern stages are assumed to only require a
+    // single thread to complete. If the extern stage is itself a
+    // Halide pipeline, this may be an underestimate.
+    int min_threads;
+
+    // The calls to the function should be in serial order from min to min+extent-1, with only
+    // one executing at a time. If false, any order is fine, and
+    // concurrency is fine.
+    bool serial;
+};
+
+/** Enqueue some number of the tasks described above and wait for them
+ * to complete. While waiting, the calling threads assists with either
+ * the tasks enqueued, or other non-blocking tasks in the task
+ * system. Note that task_parent should be NULL for top-level calls
+ * and the pass through argument if this call is being made from
+ * another task. */
+extern int halide_do_parallel_tasks(void *user_context, int num_tasks,
+                                    struct halide_parallel_task_t *tasks,
+                                    void *task_parent);
+
 /** If you use the default do_par_for, you can still set a custom
  * handler to perform each individual task. Returns the old handler. */
 //@{
@@ -139,14 +232,52 @@ extern int halide_do_task(void *user_context, halide_task_t f, int idx,
                           uint8_t *closure);
 //@}
 
-/** The default versions of do_task and do_par_for. Can be convenient
- * to call from overrides in certain circumstances. */
+/** The version of do_task called for loop tasks. By default calls the
+ * loop task with the same arguments. */
+// @{
+  typedef int (*halide_do_loop_task_t)(void *, halide_loop_task_t, int, int, uint8_t *, void *);
+extern halide_do_loop_task_t halide_set_custom_do_loop_task(halide_do_loop_task_t do_task);
+extern int halide_do_loop_task(void *user_context, halide_loop_task_t f, int min, int extent,
+                               uint8_t *closure, void *task_parent);
+//@}
+
+/** Provide an entire custom tasking runtime via function
+ * pointers. Note that do_task and semaphore_try_acquire are only ever
+ * called by halide_default_do_par_for and
+ * halide_default_do_parallel_tasks, so it's only necessary to provide
+ * those if you are mixing in the default implementations of
+ * do_par_for and do_parallel_tasks. */
+// @{
+typedef int (*halide_do_parallel_tasks_t)(void *, int, struct halide_parallel_task_t *,
+                                          void *task_parent);
+extern void halide_set_custom_parallel_runtime(
+    halide_do_par_for_t,
+    halide_do_task_t,
+    halide_do_loop_task_t,
+    halide_do_parallel_tasks_t,
+    halide_semaphore_init_t,
+    halide_semaphore_try_acquire_t,
+    halide_semaphore_release_t
+    );
+// @}
+
+/** The default versions of the parallel runtime functions. */
 // @{
 extern int halide_default_do_par_for(void *user_context,
                                      halide_task_t task,
                                      int min, int size, uint8_t *closure);
+extern int halide_default_do_parallel_tasks(void *user_context,
+                                            int num_tasks,
+                                            struct halide_parallel_task_t *tasks,
+                                            void *task_parent);
 extern int halide_default_do_task(void *user_context, halide_task_t f, int idx,
                                   uint8_t *closure);
+extern int halide_default_do_loop_task(void *user_context, halide_loop_task_t f,
+                                       int min, int extent,
+                                       uint8_t *closure, void *task_parent);
+extern int halide_default_semaphore_init(struct halide_semaphore_t *, int n);
+extern int halide_default_semaphore_release(struct halide_semaphore_t *, int n);
+extern bool halide_default_semaphore_try_acquire(struct halide_semaphore_t *, int n);
 // @}
 
 struct halide_thread;
@@ -1144,7 +1275,8 @@ typedef enum halide_target_feature_t {
     halide_target_feature_asan = 53, ///< Enable hooks for ASAN support.
     halide_target_feature_d3d12compute = 54, ///< Enable Direct3D 12 Compute runtime.
     halide_target_feature_check_unsafe_promises = 55, ///< Insert assertions for promises.
-    halide_target_feature_end = 56 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
+    halide_target_feature_hexagon_dma = 56, ///< Enable Hexagon DMA buffers.
+    halide_target_feature_end = 57 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 
 /** This function is called internally by Halide in some situations to determine

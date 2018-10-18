@@ -16,6 +16,6 @@
 
 
 int main(int argc, char **argv) {
-    printf("Success!");
+    printf("Success!\n");
     return 0;
 }

@@ -451,12 +451,11 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store *op)
     // __shared[x] is always uint(32): must reinterpret/pack bits...
     if (op->name == "__shared") {
         internal_assert(value_type.bits() <= 32);
-        Type promoted = value_type.with_bits(32);
-                ostringstream rhs;
+        ostringstream rhs;
         rhs << print_name(op->name)
             << "[" << print_expr(op->index) << "]"
             << " = "
-            << print_reinterpret(promoted, op->value)
+            << print_reinterpret(UInt(32), op->value)
             << ";\n";
         do_indent();
         stream << rhs.str();
@@ -847,7 +846,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
     class FindSharedAllocations : public IRVisitor
     {
         using IRVisitor::visit;
-        void visit(const Allocate *op)
+        void visit(const Allocate *op) override
         {
             op->body.accept(this);
             if (starts_with(op->name, "__shared")) {
@@ -967,7 +966,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
     struct FindThreadGroupSize : public IRVisitor
     {
         using IRVisitor::visit;
-        void visit(const For *loop)
+        void visit(const For *loop) override
         {
             if (!is_gpu_var(loop->name))
                 return loop->body.accept(this);

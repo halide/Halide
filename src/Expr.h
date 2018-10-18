@@ -58,12 +58,14 @@ enum class IRNodeType {
     AssertStmt,
     ProducerConsumer,
     For,
+    Acquire,
     Store,
     Provide,
     Allocate,
     Free,
     Realize,
     Block,
+    Fork,
     IfThenElse,
     Evaluate,
     Prefetch,
@@ -135,16 +137,16 @@ struct BaseExprNode : public IRNode {
    a concrete instantiation of a unique IRNodeType per class. */
 template<typename T>
 struct ExprNode : public BaseExprNode {
-    void accept(IRVisitor *v) const;
-    Expr mutate_expr(IRMutator2 *v) const;
+    void accept(IRVisitor *v) const override;
+    Expr mutate_expr(IRMutator2 *v) const override;
     ExprNode() : BaseExprNode(T::_node_type) {}
     virtual ~ExprNode() {}
 };
 
 template<typename T>
 struct StmtNode : public BaseStmtNode {
-    void accept(IRVisitor *v) const;
-    Stmt mutate_stmt(IRMutator2 *v) const;
+    void accept(IRVisitor *v) const override;
+    Stmt mutate_stmt(IRMutator2 *v) const override;
     StmtNode() : BaseStmtNode(T::_node_type) {}
     virtual ~StmtNode() {}
 };
@@ -345,6 +347,7 @@ enum class DeviceAPI {
     OpenGLCompute,
     Metal,
     Hexagon,
+    HexagonDma,
     D3D12Compute,
 };
 
@@ -359,6 +362,7 @@ const DeviceAPI all_device_apis[] = {DeviceAPI::None,
                                      DeviceAPI::OpenGLCompute,
                                      DeviceAPI::Metal,
                                      DeviceAPI::Hexagon,
+                                     DeviceAPI::HexagonDma,
                                      DeviceAPI::D3D12Compute};
 
 /** An enum describing different address spaces to be used with Func::store_in. */
@@ -386,6 +390,14 @@ enum class MemoryType {
      * "local" in OpenCL, and "threadgroup" in metal. Can be shared
      * across GPU threads within the same block. */
     GPUShared,
+
+    /** Allocate Locked Cache Memory to act as local memory */
+    LockedCache,
+    /** Vector Tightly Coupled Memory. HVX (Hexagon) local memory available on
+     * v65+. This memory has higher performance and lower power. Ideal for
+     * intermediate buffers. Necessary for vgather-vscatter instructions
+     * on Hexagon */
+    VTCM,
 };
 
 namespace Internal {
@@ -404,9 +416,10 @@ enum class ForType {
     Parallel,
     Vectorized,
     Unrolled,
+    Extern,
     GPUBlock,
     GPUThread,
-    GPULane
+    GPULane,
 };
 
 

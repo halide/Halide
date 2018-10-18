@@ -14,7 +14,7 @@ all: $(OUTPUTS)
 
 $(BIN)/auto_viz_demo.generator: auto_viz_demo_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
+	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 $(BIN)/auto_viz_demo_%.a: $(BIN)/auto_viz_demo.generator
 	@mkdir -p $(@D)

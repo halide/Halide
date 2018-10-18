@@ -171,6 +171,8 @@ HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_buffer_t);
 HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_dimension_t);
 HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_device_interface_t);
 HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_filter_metadata_t);
+HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_semaphore_t);
+HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_parallel_task_t);
 
 // You can make arbitrary user-defined types be "Known" using the
 // macro above. This is useful for making Param<> arguments for

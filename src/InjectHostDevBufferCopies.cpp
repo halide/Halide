@@ -31,14 +31,14 @@ namespace {
 class FindBufferUsage : public IRVisitor {
     using IRVisitor::visit;
 
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         IRVisitor::visit(op);
         if (op->name == buffer) {
             devices_touched.insert(current_device_api);
         }
     }
 
-    void visit(const Store *op) {
+    void visit(const Store *op) override {
         IRVisitor::visit(op);
         if (op->name == buffer) {
             devices_touched.insert(current_device_api);
@@ -51,7 +51,7 @@ class FindBufferUsage : public IRVisitor {
         return var && (var->name == buffer + ".buffer");
     }
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         if (op->is_intrinsic(Call::image_load)) {
             internal_assert(op->args.size() >= 1);
             if (is_buffer_var(op->args[1])) {
@@ -105,7 +105,7 @@ class FindBufferUsage : public IRVisitor {
         }
     }
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         internal_assert(op->device_api != DeviceAPI::Default_GPU)
             << "A GPU API should have been selected by this stage in lowering\n";
         DeviceAPI old = current_device_api;
@@ -332,7 +332,11 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator2 {
     // leaf.
 
     Stmt visit(const For *op) override {
-        // All copies happen at the same loop level as the allocation
+        // All copies happen at the same loop level as the allocation.
+        return do_copies(op);
+    }
+
+    Stmt visit(const Fork *op) override {
         return do_copies(op);
     }
 
@@ -361,7 +365,7 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator2 {
     // transitions).
     class HasLoops : public IRVisitor {
         using IRVisitor::visit;
-        void visit(const For *op) {
+        void visit(const For *op) override {
             result = true;
         }
     public:
@@ -603,7 +607,7 @@ class InjectBufferCopies : public IRMutator2 {
 class FindOutermostProduce : public IRVisitor {
     using IRVisitor::visit;
 
-    void visit(const Block *op) {
+    void visit(const Block *op) override {
         op->first.accept(this);
         if (result.defined()) {
             result = op;
@@ -612,7 +616,7 @@ class FindOutermostProduce : public IRVisitor {
         }
     }
 
-    void visit(const ProducerConsumer *op) {
+    void visit(const ProducerConsumer *op) override {
         result = op;
     }
 
@@ -641,18 +645,18 @@ class InjectBufferCopiesForInputsAndOutputs : public IRMutator2 {
             }
         }
 
-        void visit(const Variable *op) {
+        void visit(const Variable *op) override {
             include(op->param);
             include(op->image);
         }
 
-        void visit(const Load *op) {
+        void visit(const Load *op) override {
             include(op->param);
             include(op->image);
             IRVisitor::visit(op);
         }
 
-        void visit(const Store *op) {
+        void visit(const Store *op) override {
             include(op->param);
             IRVisitor::visit(op);
         }

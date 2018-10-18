@@ -13,7 +13,7 @@ public:
 protected:
     using IRVisitor::visit;
 
-    void visit(const Store *op) {
+    void visit(const Store *op) override {
         count++;
     }
 };

@@ -151,7 +151,7 @@ $(BIN)/ext/%.so: $(BIN)/%.py.o $(BIN)/%.o $(BIN)/runtime.a
 test_correctness_addconstant_test: addconstant.run ;
 test_correctness_bit_test: bit.run ;
 test_correctness_user_context_test: user_context.run ;
-test_correctness_pystub: $(BIN)/simplestub.so $(BIN)/complexstub.so $(BIN)/buildmethod.so $(BIN)/partialbuildmethod.so $(BIN)/nobuildmethod.so
+test_correctness_pystub: $(BIN)/simplestub.so $(BIN)/complexstub.so $(BIN)/partialbuildmethod.so $(BIN)/nobuildmethod.so
 
 APPS = $(shell ls $(ROOT_DIR)/apps/*.py)
 CORRECTNESS = $(shell ls $(ROOT_DIR)/correctness/*.py)

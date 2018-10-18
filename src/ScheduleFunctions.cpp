@@ -1,3 +1,7 @@
+#include <algorithm>
+#include <utility>
+#include <memory>
+
 #include "ScheduleFunctions.h"
 #include "ApplySplit.h"
 #include "CodeGen_GPU_Dev.h"
@@ -15,8 +19,6 @@
 #include "Target.h"
 #include "Var.h"
 #include "Prefetch.h"
-
-#include <algorithm>
 
 namespace Halide {
 namespace Internal {
@@ -40,9 +42,12 @@ struct Container {
     int dim_idx;
     string name;
     Expr value;
+
+    Container(Type type, int dim_idx, string name, Expr value) :
+            type(type), dim_idx(dim_idx), name(std::move(name)), value(std::move(value)) {}
 };
 
-bool var_name_match(string v1, string v2) {
+bool var_name_match(const string &v1, const string &v2) {
     return ((v1 == v2) ||
             Internal::ends_with(v1, "." + v2) ||
             Internal::ends_with(v2, "." + v1));
@@ -53,7 +58,7 @@ bool var_name_match(string v1, string v2) {
 class ContainsImpureCall : public IRVisitor {
     using IRVisitor::visit;
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         if (!op->is_pure()) {
             result = true;
         } else {
@@ -63,7 +68,6 @@ class ContainsImpureCall : public IRVisitor {
 
 public:
     bool result = false;
-    ContainsImpureCall() {}
 };
 
 bool contains_impure_call(const Expr &expr) {
@@ -73,21 +77,21 @@ bool contains_impure_call(const Expr &expr) {
 }
 
 // Build a loop nest about a provide node using a schedule
-Stmt build_provide_loop_nest_helper(string func_name,
-                                    string prefix,
-                                    int start_fuse, // Fuse the dims starting from start_fuse to outermost (if not negative)
-                                    const vector<string> &dims, // The pure dims
-                                    const vector<Expr> &site,
-                                    const vector<Expr> &values,
-                                    const vector<Expr> &predicates,
-                                    const FuncSchedule &func_s,
-                                    const StageSchedule &stage_s,
-                                    bool is_update) {
-    // We'll build it from inside out, starting from a store node,
-    // then wrapping it in for loops.
+Stmt build_loop_nest(
+        const Stmt &body,
+        const string &prefix,
+        int start_fuse,
+        const Function &func,
+        const Definition &def,
+        bool is_update) {
+    const auto& dims = func.args();
+    const auto& func_s = func.schedule();
+    const auto& stage_s = def.schedule();
+    const auto& predicates = def.split_predicate();
 
-    // Make the (multi-dimensional multi-valued) store node.
-    Stmt stmt = Provide::make(func_name, values, site);
+    // We'll build it from inside out, starting from the body,
+    // then wrapping it in for loops.
+    Stmt stmt = body;
 
     // A map of the dimensions for which we know the extent is a
     // multiple of some Expr. This can happen due to a bound, or
@@ -133,22 +137,19 @@ Stmt build_provide_loop_nest_helper(string func_name,
     // Put the desired loop nest into the containers vector.
     for (int i = (int)stage_s.dims().size() - 1; i >= 0; i--) {
         const Dim &dim = stage_s.dims()[i];
-        Container c = {Container::For, i, prefix + dim.var, Expr()};
-        nest.push_back(c);
+        nest.emplace_back(Container::For, i, prefix + dim.var, Expr());
     }
 
     vector<Container> pred_container;
     // Strip off the lets/ifs into the containers vector.
-    while (true) {
-        const LetStmt *let = stmt.as<LetStmt>();
-        const IfThenElse *if_else = stmt.as<IfThenElse>();
+    while (!stmt.same_as(body)) {
+        const auto *let = stmt.as<LetStmt>();
+        const auto *if_else = stmt.as<IfThenElse>();
         if (let) {
-            Container c = {Container::Let, 0, let->name, let->value};
-            nest.push_back(c);
+            nest.emplace_back(Container::Let, 0, let->name, let->value);
             stmt = let->body;
         } else if (if_else && !if_else->else_case.defined()) {
-            Container c = {Container::If, 0, "", if_else->condition};
-            pred_container.push_back(c);
+            pred_container.emplace_back(Container::If, 0, "", if_else->condition);
             stmt = if_else->then_case;
         } else {
             break;
@@ -169,20 +170,17 @@ Stmt build_provide_loop_nest_helper(string func_name,
         // Use 'var', the variable which bounds we're constraining as the
         // container name, so that we can use it later to check if a LetStmt
         // value depends on 'var'.
-        Container c1 = {Container::IfInner, 0, dim_var, likely(var >= min)};
-        Container c2 = {Container::IfInner, 0, dim_var, likely(var <= max)};
-        nest.push_back(c1);
-        nest.push_back(c2);
+        nest.emplace_back(Container::IfInner, 0, dim_var, likely(var >= min));
+        nest.emplace_back(Container::IfInner, 0, dim_var, likely(var <= max));
         n_predicates_inner += 2;
     }
 
     // Put all the reduction domain predicates into the containers vector.
     for (Expr pred : predicates) {
         pred = qualify(prefix, pred);
-        Container c = {Container::If, 0, "", likely(pred)};
-        pred_container.push_back(c);
+        pred_container.emplace_back(Container::If, 0, "", likely(pred));
     }
-    int n_predicates = pred_container.size();
+    int n_predicates = (int)(pred_container.size());
 
     nest.insert(nest.end(), pred_container.begin(), pred_container.end());
 
@@ -282,8 +280,8 @@ Stmt build_provide_loop_nest_helper(string func_name,
         const Split &split = splits[i-1];
 
         vector<std::pair<string, Expr>> let_stmts = compute_loop_bounds_after_split(split, prefix);
-        for (size_t j = 0; j < let_stmts.size(); j++) {
-            stmt = LetStmt::make(let_stmts[j].first, let_stmts[j].second, stmt);
+        for (const auto &let_stmt : let_stmts) {
+            stmt = LetStmt::make(let_stmt.first, let_stmt.second, stmt);
         }
     }
 
@@ -323,12 +321,10 @@ Stmt build_provide_loop_nest_helper(string func_name,
 
 // Build a loop nest about a provide node using a schedule
 Stmt build_provide_loop_nest(const map<string, Function> &env,
-                             string func_name,
-                             string prefix,
-                             int start_fuse,
-                             const vector<string> &dims,
-                             const FuncSchedule &f_sched,
+                             const string &prefix,
+                             const Function &func,
                              const Definition &def,
+                             int start_fuse,
                              bool is_update) {
 
     internal_assert(!is_update == def.is_init());
@@ -351,24 +347,22 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
         debug(3) << "Site " << i << " = " << s << "\n";
     }
 
+    // Make the (multi-dimensional multi-valued) store node.
+    Stmt body = Provide::make(func.name(), values, site);
+
     // Default schedule/values if there is no specialization
-    Stmt stmt = build_provide_loop_nest_helper(
-        func_name, prefix, start_fuse, dims, site, values,
-        def.split_predicate(), f_sched, def.schedule(), is_update);
+    Stmt stmt = build_loop_nest(body, prefix, start_fuse, func, def, is_update);
     stmt = inject_placeholder_prefetch(stmt, env, prefix, def.schedule().prefetches());
 
     // Make any specialized copies
     const vector<Specialization> &specializations = def.specializations();
     for (size_t i = specializations.size(); i > 0; i--) {
-        const Specialization &s = specializations[i-1];
-        Expr c = s.condition;
-        const Definition &s_def = s.definition;
+        const Specialization &s = specializations[i - 1];
         Stmt then_case;
         if (s.failure_message.empty()) {
-            then_case = build_provide_loop_nest(env, func_name, prefix, start_fuse, dims,
-                                                f_sched, s_def, is_update);
+            then_case = build_provide_loop_nest(env, prefix, func, s.definition, start_fuse, is_update);
         } else {
-            internal_assert(equal(c, const_true()));
+            internal_assert(equal(s.condition, const_true()));
             // specialize_fail() should only be possible on the final specialization
             internal_assert(i == specializations.size());
             Expr specialize_fail_error =
@@ -378,7 +372,7 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
                                      Internal::Call::Extern);
             then_case = AssertStmt::make(const_false(), specialize_fail_error);
         }
-        stmt = IfThenElse::make(c, then_case, stmt);
+        stmt = IfThenElse::make(s.condition, then_case, stmt);
     }
 
     return stmt;
@@ -390,305 +384,286 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
 // which it should be realized. It will compute at least those
 // bounds (depending on splits, it may compute more). This loop
 // won't do any allocation.
-Stmt build_produce(const map<string, Function> &env, Function f, const Target &target) {
+Stmt build_extern_produce(const map<string, Function> &env, Function f, const Target &target) {
+    // Call the external function
 
-    if (f.has_extern_definition()) {
-        // Call the external function
+    // Build an argument list
+    vector<Expr> extern_call_args;
+    const vector<ExternFuncArgument> &args = f.extern_arguments();
 
-        // Build an argument list
-        vector<Expr> extern_call_args;
-        const vector<ExternFuncArgument> &args = f.extern_arguments();
+    const string &extern_name = f.extern_function_name();
 
-        const string &extern_name = f.extern_function_name();
+    // We need to generate crops of the input and output buffers if the
+    // extern stage has some non-extern loops, aside from the outermost
+    // placeholder.
+    bool needs_crops = false;
+    if (!f.definition().schedule().dims().empty()) {
+        size_t extern_count = 0;
+        for (const Dim& d : f.definition().schedule().dims()) {
+            extern_count += d.for_type == ForType::Extern ? 1 : 0;
+        }
+        needs_crops = extern_count + 1 < f.definition().schedule().dims().size();
+    }
 
-        vector<pair<string, Expr>> lets;
+    vector<pair<string, Expr>> lets;
 
-        // Iterate through all of the input args to the extern
-        // function building a suitable argument list for the
-        // extern function call.
-        vector<pair<Expr, int>> buffers_to_annotate;
-        vector<Expr> buffers_contents_to_annotate;
-        for (const ExternFuncArgument &arg : args) {
-            if (arg.is_expr()) {
-                extern_call_args.push_back(arg.expr);
-            } else if (arg.is_func()) {
-                Function input(arg.func);
-                if (input.schedule().store_level() == input.schedule().compute_level()) {
-                    for (int k = 0; k < input.outputs(); k++) {
-                        string buf_name = input.name();
-                        if (input.outputs() > 1) {
-                            buf_name += "." + std::to_string(k);
-                        }
-                        buf_name += ".buffer";
-                        Expr buffer = Variable::make(type_of<struct halide_buffer_t *>(), buf_name);
-                        extern_call_args.push_back(buffer);
-                        buffers_to_annotate.push_back({buffer, input.dimensions()});
-                        buffers_contents_to_annotate.push_back(buffer);
+    // Iterate through all of the input args to the extern
+    // function building a suitable argument list for the
+    // extern function call.
+    vector<pair<Expr, int>> buffers_to_annotate;
+    vector<Expr> buffers_contents_to_annotate;
+    vector<pair<Expr, Expr>> cropped_buffers;
+    for (const ExternFuncArgument &arg : args) {
+        if (arg.is_expr()) {
+            extern_call_args.push_back(arg.expr);
+        } else if (arg.is_func()) {
+            Function input(arg.func);
+            if (!needs_crops && input.schedule().store_level() == input.schedule().compute_level()) {
+                for (int k = 0; k < input.outputs(); k++) {
+                    string buf_name = input.name();
+                    if (input.outputs() > 1) {
+                        buf_name += "." + std::to_string(k);
                     }
-                } else {
-                    // Make a local crop of just the region required,
-                    // in case the input was folded. We have no
-                    // protocol for passing folded buffers to extern
-                    // stages, so if the fold does indeed occur, we'll
-                    // assert later that the crop doesn't cross over a
-                    // fold.
-                    string stage_name = input.name() + ".s" + std::to_string(input.updates().size()) + ".";
-                    const vector<string> input_args = input.args();
-                    for (int k = 0; k < input.outputs(); k++) {
-                        string src_buf_name = input.name();
-                        if (input.outputs() > 1) {
-                            src_buf_name += "." + std::to_string(k);
-                        }
-                        src_buf_name += ".buffer";
-                        Expr src_buffer = Variable::make(type_of<struct halide_buffer_t *>(), src_buf_name);
-
-                        Expr alloca_size = Call::make(Int(32), Call::size_of_halide_buffer_t, {}, Call::Intrinsic);
-                        Expr cropped_input = Call::make(type_of<struct halide_buffer_t *>(), Call::alloca,
-                                                          {alloca_size}, Call::Intrinsic);
-
-                        vector<Expr> args(5);
-                        args[0] = cropped_input;
-                        args[1] = Call::make(type_of<struct halide_dimension_t *>(), Call::alloca,
-                                             {(int)sizeof(halide_dimension_t) * input.dimensions()}, Call::Intrinsic);
-                        args[2] = src_buffer;
-
-                        vector<Expr> mins, extents;
-                        internal_assert(input.dimensions() == (int)input.args().size());
-                        for (const string arg : input.args()) {
-                            string var = stage_name + arg;
-                            Expr min = Variable::make(Int(32), var + ".min");
-                            Expr max = Variable::make(Int(32), var + ".max");
-                            mins.push_back(min);
-                            extents.push_back(max - min + 1);
-                        }
-                        args[3] = Call::make(Handle(), Call::make_struct, mins, Call::Intrinsic);
-                        args[4] = Call::make(Handle(), Call::make_struct, extents, Call::Intrinsic);
-
-                        cropped_input = Call::make(type_of<struct halide_buffer_t *>(), Call::buffer_crop,
-                                                   args, Call::Extern);
-
-                        string buf_name = input.name() + "." + std::to_string(k) + ".tmp_buffer";
-                        extern_call_args.push_back(Variable::make(type_of<struct halide_buffer_t *>(), buf_name));
-                        buffers_to_annotate.push_back({extern_call_args.back(), input.dimensions()});
-                        buffers_contents_to_annotate.push_back(cropped_input);
-                        lets.push_back({ buf_name, cropped_input });
-                    }
+                    buf_name += ".buffer";
+                    Expr buffer = Variable::make(type_of<struct halide_buffer_t *>(), buf_name);
+                    extern_call_args.push_back(buffer);
+                    buffers_to_annotate.emplace_back(buffer, input.dimensions());
+                    buffers_contents_to_annotate.push_back(buffer);
                 }
-            } else if (arg.is_buffer()) {
-                Buffer<> b = arg.buffer;
-                Parameter p(b.type(), true, b.dimensions(), b.name());
-                p.set_buffer(b);
-                Expr buf = Variable::make(type_of<struct halide_buffer_t *>(), b.name() + ".buffer", p);
-                extern_call_args.push_back(buf);
-                buffers_to_annotate.push_back({buf, b.dimensions()});
-                buffers_contents_to_annotate.push_back(buf);
-            } else if (arg.is_image_param()) {
-                Parameter p = arg.image_param;
-                Expr buf = Variable::make(type_of<struct halide_buffer_t *>(), p.name() + ".buffer", p);
-                extern_call_args.push_back(buf);
-                // Do not annotate ImageParams: both the buffer_t itself,
-                // and the contents it points to, should be filled by the caller;
-                // if we mark it here, we might mask a missed initialization.
-                // buffers_to_annotate.push_back(buf);
-                // buffers_contents_to_annotate.push_back(buf);
             } else {
-                internal_error << "Bad ExternFuncArgument type\n";
-            }
-        }
+                // Make a local crop of just the region required,
+                // in case the input was folded. We have no
+                // protocol for passing folded buffers to extern
+                // stages, so if the fold does indeed occur, we'll
+                // assert later that the crop doesn't cross over a
+                // fold.
+                string stage_name = input.name() + ".s" + std::to_string(input.updates().size()) + ".";
+                const vector<string> &input_args = input.args();
+                for (int k = 0; k < input.outputs(); k++) {
+                    string src_buf_name = input.name();
+                    if (input.outputs() > 1) {
+                        src_buf_name += "." + std::to_string(k);
+                    }
+                    src_buf_name += ".buffer";
+                    Expr src_buffer = Variable::make(type_of<struct halide_buffer_t *>(), src_buf_name);
 
-        // Grab the halide_buffer_t's representing the output. If the
-        // store level matches the compute level, then we can use the
-        // ones already injected by allocation bounds inference. If
-        // it's the output to the pipeline then it will similarly be
-        // in the symbol table.
-        vector<pair<Expr, Expr>> cropped_buffers;
-        if (f.schedule().store_level() == f.schedule().compute_level()) {
-            for (int j = 0; j < f.outputs(); j++) {
-                string buf_name = f.name();
-                if (f.outputs() > 1) {
-                    buf_name += "." + std::to_string(j);
+                    Expr alloca_size = Call::make(Int(32), Call::size_of_halide_buffer_t, {}, Call::Intrinsic);
+                    Expr cropped_input = Call::make(type_of<struct halide_buffer_t *>(), Call::alloca,
+                                                    {alloca_size}, Call::Intrinsic);
+
+                    vector<Expr> args(5);
+                    args[0] = cropped_input;
+                    args[1] = Call::make(type_of<struct halide_dimension_t *>(), Call::alloca,
+                                         {(int) sizeof(halide_dimension_t) * input.dimensions()}, Call::Intrinsic);
+                    args[2] = src_buffer;
+
+                    vector<Expr> mins, extents;
+                    internal_assert(input.dimensions() == (int) input_args.size());
+                    for (const string &arg : input_args) {
+                        string var = stage_name + arg;
+                        Expr min = Variable::make(Int(32), var + ".min");
+                        Expr max = Variable::make(Int(32), var + ".max");
+                        mins.push_back(min);
+                        extents.push_back(max - min + 1);
+                    }
+                    args[3] = Call::make(type_of<const int *>(), Call::make_struct, mins, Call::Intrinsic);
+                    args[4] = Call::make(type_of<const int *>(), Call::make_struct, extents, Call::Intrinsic);
+
+                    cropped_input = Call::make(type_of<struct halide_buffer_t *>(), Call::buffer_crop,
+                                               args, Call::Extern);
+
+                    string buf_name = input.name() + "." + std::to_string(k) + ".tmp_buffer";
+                    extern_call_args.push_back(Variable::make(type_of<struct halide_buffer_t *>(), buf_name));
+                    buffers_to_annotate.emplace_back(extern_call_args.back(), input.dimensions());
+                    buffers_contents_to_annotate.push_back(cropped_input);
+                    cropped_buffers.emplace_back(extern_call_args.back(), src_buffer);
+                    lets.emplace_back(buf_name, cropped_input);
                 }
-                buf_name += ".buffer";
-                Expr buffer = Variable::make(type_of<struct halide_buffer_t *>(), buf_name);
-                extern_call_args.push_back(buffer);
-                // Since this is a temporary, internal-only buffer, make sure it's marked.
-                // (but not the contents! callee is expected to fill that in.)
-                buffers_to_annotate.push_back({buffer, f.dimensions()});
             }
+        } else if (arg.is_buffer()) {
+            Buffer<> b = arg.buffer;
+            Parameter p(b.type(), true, b.dimensions(), b.name());
+            p.set_buffer(b);
+            Expr buf = Variable::make(type_of<struct halide_buffer_t *>(), b.name() + ".buffer", p);
+            extern_call_args.push_back(buf);
+            buffers_to_annotate.emplace_back(buf, b.dimensions());
+            buffers_contents_to_annotate.push_back(buf);
+        } else if (arg.is_image_param()) {
+            Parameter p = arg.image_param;
+            Expr buf = Variable::make(type_of<struct halide_buffer_t *>(), p.name() + ".buffer", p);
+            extern_call_args.push_back(buf);
+            // Do not annotate ImageParams: both the buffer_t itself,
+            // and the contents it points to, should be filled by the caller;
+            // if we mark it here, we might mask a missed initialization.
+            // buffers_to_annotate.push_back(buf);
+            // buffers_contents_to_annotate.push_back(buf);
         } else {
-            // Store level doesn't match compute level. Make an output
-            // buffer just for this subregion.
-            string stage_name = f.name() + ".s0.";
-            const vector<string> f_args = f.args();
-            for (int j = 0; j < f.outputs(); j++) {
-                string src_buf_name = f.name();
-                if (f.outputs() > 1) {
-                    src_buf_name += "." + std::to_string(j);
-                }
-                src_buf_name += ".buffer";
-                Expr src_buffer = Variable::make(type_of<struct halide_buffer_t *>(), src_buf_name);
-
-                Expr alloca_size = Call::make(Int(32), Call::size_of_halide_buffer_t, {}, Call::Intrinsic);
-                Expr output_buffer_t = Call::make(type_of<struct halide_buffer_t *>(), Call::alloca,
-                                                  {alloca_size}, Call::Intrinsic);
-
-                vector<Expr> args(5);
-                args[0] = output_buffer_t;
-                args[1] = Call::make(type_of<struct halide_dimension_t *>(), Call::alloca,
-                                     {(int)sizeof(halide_dimension_t) * f.dimensions()}, Call::Intrinsic);
-                args[2] = src_buffer;
-
-                vector<Expr> mins, extents;
-                internal_assert(f.dimensions() == (int)f.args().size());
-                for (const string arg : f.args()) {
-                    string var = stage_name + arg;
-                    Expr min = Variable::make(Int(32), var + ".min");
-                    Expr max = Variable::make(Int(32), var + ".max");
-                    mins.push_back(min);
-                    extents.push_back(max - min + 1);
-                }
-                args[3] = Call::make(Handle(), Call::make_struct, mins, Call::Intrinsic);
-                args[4] = Call::make(Handle(), Call::make_struct, extents, Call::Intrinsic);
-
-                output_buffer_t = Call::make(type_of<struct halide_buffer_t *>(), Call::buffer_crop, args, Call::Extern);
-
-                string buf_name = f.name() + "." + std::to_string(j) + ".tmp_buffer";
-                extern_call_args.push_back(Variable::make(type_of<struct halide_buffer_t *>(), buf_name));
-                // Since this is a temporary, internal-only buffer, make sure it's marked.
-                // (but not the contents! callee is expected to fill that in.)
-                buffers_to_annotate.push_back({extern_call_args.back(), f.dimensions()});
-                cropped_buffers.push_back({extern_call_args.back(), src_buffer});
-                lets.push_back({ buf_name, output_buffer_t });
-            }
+            internal_error << "Bad ExternFuncArgument type\n";
         }
+    }
 
-        Stmt annotate;
-        if (target.has_feature(Target::MSAN)) {
-            // Mark the buffers as initialized before calling out.
-            for (const auto &p: buffers_to_annotate) {
-                Expr buffer = p.first;
-                int dimensions = p.second;
-                // Return type is really 'void', but no way to represent that in our IR.
-                // Precedent (from halide_print, etc) is to use Int(32) and ignore the result.
-                Expr sizeof_buffer_t = cast<uint64_t>(Call::make(Int(32), Call::size_of_halide_buffer_t, {}, Call::Intrinsic));
-                Stmt mark_buffer =
+    // Grab the halide_buffer_t's representing the output. If the
+    // store level matches the compute level, then we can use the
+    // ones already injected by allocation bounds inference. If
+    // it's the output to the pipeline then it will similarly be
+    // in the symbol table.
+    if (!needs_crops && f.schedule().store_level() == f.schedule().compute_level()) {
+        for (int j = 0; j < f.outputs(); j++) {
+            string buf_name = f.name();
+            if (f.outputs() > 1) {
+                buf_name += "." + std::to_string(j);
+            }
+            buf_name += ".buffer";
+            Expr buffer = Variable::make(type_of<struct halide_buffer_t *>(), buf_name);
+            extern_call_args.push_back(buffer);
+            // Since this is a temporary, internal-only buffer, make sure it's marked.
+            // (but not the contents! callee is expected to fill that in.)
+            buffers_to_annotate.emplace_back(buffer, f.dimensions());
+        }
+    } else {
+        // Store level doesn't match compute level. Make an output
+        // buffer just for this subregion.
+        string stage_name = f.name() + ".s0.";
+        const vector<string> &f_args = f.args();
+        for (int j = 0; j < f.outputs(); j++) {
+            string src_buf_name = f.name();
+            if (f.outputs() > 1) {
+                src_buf_name += "." + std::to_string(j);
+            }
+            src_buf_name += ".buffer";
+            Expr src_buffer = Variable::make(type_of<struct halide_buffer_t *>(), src_buf_name);
+
+            Expr alloca_size = Call::make(Int(32), Call::size_of_halide_buffer_t, {}, Call::Intrinsic);
+            Expr output_buffer_t = Call::make(type_of<struct halide_buffer_t *>(), Call::alloca,
+                                              {alloca_size}, Call::Intrinsic);
+
+            vector<Expr> args(5);
+            args[0] = output_buffer_t;
+            args[1] = Call::make(type_of<struct halide_dimension_t *>(), Call::alloca,
+                                 {(int) sizeof(halide_dimension_t) * f.dimensions()}, Call::Intrinsic);
+            args[2] = src_buffer;
+
+            vector<Expr> mins, extents;
+            internal_assert(f.dimensions() == (int) f_args.size());
+            for (const string &arg : f_args) {
+                string var = stage_name + arg;
+                Expr min = Variable::make(Int(32), var + ".min");
+                Expr max = Variable::make(Int(32), var + ".max");
+                mins.push_back(min);
+                extents.push_back(max - min + 1);
+            }
+            args[3] = Call::make(type_of<const int *>(), Call::make_struct, mins, Call::Intrinsic);
+            args[4] = Call::make(type_of<const int *>(), Call::make_struct, extents, Call::Intrinsic);
+
+            output_buffer_t = Call::make(type_of<struct halide_buffer_t *>(), Call::buffer_crop, args,
+                                         Call::Extern);
+
+            string buf_name = f.name() + "." + std::to_string(j) + ".tmp_buffer";
+            extern_call_args.push_back(Variable::make(type_of<struct halide_buffer_t *>(), buf_name));
+            // Since this is a temporary, internal-only buffer, make sure it's marked.
+            // (but not the contents! callee is expected to fill that in.)
+            buffers_to_annotate.emplace_back(extern_call_args.back(), f.dimensions());
+            cropped_buffers.emplace_back(extern_call_args.back(), src_buffer);
+            lets.emplace_back(buf_name, output_buffer_t);
+        }
+    }
+
+    Stmt annotate;
+    if (target.has_feature(Target::MSAN)) {
+        // Mark the buffers as initialized before calling out.
+        for (const auto &p: buffers_to_annotate) {
+            Expr buffer = p.first;
+            int dimensions = p.second;
+            // Return type is really 'void', but no way to represent that in our IR.
+            // Precedent (from halide_print, etc) is to use Int(32) and ignore the result.
+            Expr sizeof_buffer_t = cast<uint64_t>(
+                    Call::make(Int(32), Call::size_of_halide_buffer_t, {}, Call::Intrinsic));
+            Stmt mark_buffer =
                     Evaluate::make(Call::make(Int(32), "halide_msan_annotate_memory_is_initialized",
                                               {buffer, sizeof_buffer_t}, Call::Extern));
-                Expr shape = Call::make(type_of<halide_dimension_t *>(), Call::buffer_get_shape, {buffer}, Call::Extern);
-                Expr shape_size = Expr((uint64_t)(sizeof(halide_dimension_t) * dimensions));
-                Stmt mark_shape =
+            Expr shape = Call::make(type_of<halide_dimension_t *>(), Call::buffer_get_shape, {buffer},
+                                    Call::Extern);
+            Expr shape_size = Expr((uint64_t) (sizeof(halide_dimension_t) * dimensions));
+            Stmt mark_shape =
                     Evaluate::make(Call::make(Int(32), "halide_msan_annotate_memory_is_initialized",
                                               {shape, shape_size}, Call::Extern));
-                mark_buffer = Block::make(mark_buffer, mark_shape);
-                if (annotate.defined()) {
-                    annotate = Block::make(annotate, mark_buffer);
-                } else {
-                    annotate = mark_buffer;
-                }
-            }
-            for (const auto &buffer: buffers_contents_to_annotate) {
-                // Return type is really 'void', but no way to represent that in our IR.
-                // Precedent (from halide_print, etc) is to use Int(32) and ignore the result.
-                Stmt mark_contents = Evaluate::make(Call::make(Int(32), "halide_msan_annotate_buffer_is_initialized", {buffer}, Call::Extern));
-                if (annotate.defined()) {
-                    annotate = Block::make(annotate, mark_contents);
-                } else {
-                    annotate = mark_contents;
-                }
+
+            mark_buffer = Block::make(mark_buffer, mark_shape);
+
+            if (!is_no_op(annotate)) {
+                annotate = Block::make(annotate, mark_buffer);
+            } else {
+                annotate = mark_buffer;
             }
         }
-
-        // Make the extern call
-        Expr e = f.make_call_to_extern_definition(extern_call_args, target);
-
-        // Check if it succeeded
-        string result_name = unique_name('t');
-        Expr result = Variable::make(Int(32), result_name);
-        Expr error = Call::make(Int(32), "halide_error_extern_stage_failed",
-                                {extern_name, result}, Call::Extern);
-        Stmt check = AssertStmt::make(EQ::make(result, 0), error);
-        check = LetStmt::make(result_name, e, check);
-
-        if (!cropped_buffers.empty()) {
-            // We need to clean up the temporary crops we made for the
-            // outputs in case any of them have device allocations.
-            vector<Expr> cleanup_args;
-
-            // Make a struct with the buffers and their uncropped parents
-            for (auto p : cropped_buffers) {
-                // The cropped buffer_t
-                cleanup_args.push_back(p.first);
-                // Its parent
-                cleanup_args.push_back(p.second);
+        for (const auto &buffer: buffers_contents_to_annotate) {
+            // Return type is really 'void', but no way to represent that in our IR.
+            // Precedent (from halide_print, etc) is to use Int(32) and ignore the result.
+            Stmt mark_contents = Evaluate::make(
+                    Call::make(Int(32), "halide_msan_annotate_buffer_is_initialized", {buffer}, Call::Extern));
+            if (!is_no_op(annotate)) {
+                annotate = Block::make(annotate, mark_contents);
+            } else {
+                annotate = mark_contents;
             }
-
-            if (cropped_buffers.size() > 1) {
-                // NULL-terminate it
-                cleanup_args.push_back(make_zero(type_of<struct halide_buffer_t *>()));
-            }
-
-            Expr cleanup_struct = Call::make(Handle(),
-                                             Call::make_struct,
-                                             cleanup_args,
-                                             Call::Intrinsic);
-
-            // We have to anticipate failures in the extern stage, so
-            // call this by registering a destructor before the extern
-            // call and triggering it afterwards using an Allocate node.
-            string destructor_name = unique_name('d');
-            const char *fn = (cropped_buffers.size() == 1 ?
-                              "_halide_buffer_retire_crop_after_extern_stage" :
-                              "_halide_buffer_retire_crops_after_extern_stage");
-            check = Allocate::make(destructor_name, Handle(), MemoryType::Stack, {},
-                                   const_true(), check, cleanup_struct, fn);
         }
-
-        for (size_t i = 0; i < lets.size(); i++) {
-            check = LetStmt::make(lets[i].first, lets[i].second, check);
-        }
-
-        if (annotate.defined()) {
-            check = Block::make(annotate, check);
-        }
-
-        // Add the dummy outermost loop.
-        string outermost = f.name() + ".s0." + Var::outermost().name();
-        check = For::make(outermost, 0, 1, ForType::Serial, DeviceAPI::None, check);
-
-        return check;
-    } else {
-
-        string prefix = f.name() + ".s0.";
-        vector<string> dims = f.args();
-        return build_provide_loop_nest(env, f.name(), prefix, -1, dims, f.schedule(), f.definition(), false);
-    }
-}
-
-// Build the loop nests that update a function (assuming it's a reduction).
-vector<Stmt> build_update(const map<string, Function> &env, Function f) {
-
-    vector<Stmt> updates;
-
-    for (size_t i = 0; i < f.updates().size(); i++) {
-        const Definition &def = f.update(i);
-
-        string prefix = f.name() + ".s" + std::to_string(i+1) + ".";
-
-        vector<string> dims = f.args();
-        Stmt loop = build_provide_loop_nest(env, f.name(), prefix, -1, dims, f.schedule(), def, true);
-        updates.push_back(loop);
     }
 
-    return updates;
-}
+    // Make the extern call
+    Expr e = f.make_call_to_extern_definition(extern_call_args, target);
 
-pair<Stmt, Stmt> build_production(const map<string, Function> &env, Function func, const Target &target) {
-    Stmt produce = build_produce(env, func, target);
-    vector<Stmt> updates = build_update(env, func);
+    // Check if it succeeded
+    string result_name = unique_name('t');
+    Expr result = Variable::make(Int(32), result_name);
+    Expr error = Call::make(Int(32), "halide_error_extern_stage_failed",
+                            {extern_name, result}, Call::Extern);
+    Stmt check = AssertStmt::make(EQ::make(result, 0), error);
 
-    // Combine the update steps
-    Stmt merged_updates = Block::make(updates);
-    return { produce, merged_updates };
+    if (!cropped_buffers.empty()) {
+        // We need to clean up the temporary crops we made for the
+        // outputs in case any of them have device allocations.
+        vector<Expr> cleanup_args;
+
+        // Make a struct with the buffers and their uncropped parents
+        for (const auto &p : cropped_buffers) {
+            // The cropped buffer_t
+            cleanup_args.push_back(p.first);
+            // Its parent
+            cleanup_args.push_back(p.second);
+        }
+
+        if (cropped_buffers.size() > 1) {
+            // NULL-terminate it
+            cleanup_args.push_back(make_zero(type_of<struct halide_buffer_t *>()));
+        }
+
+        Expr cleanup_struct = Call::make(Handle(),
+                                         Call::make_struct,
+                                         cleanup_args,
+                                         Call::Intrinsic);
+
+        // Insert cleanup before checking the result of the extern stage.
+        string destructor_name = unique_name('d');
+        const char *fn = (cropped_buffers.size() == 1 ?
+                          "_halide_buffer_retire_crop_after_extern_stage" :
+                          "_halide_buffer_retire_crops_after_extern_stage");
+        Expr cleanup = Call::make(Int(32), fn, {cleanup_struct}, Call::Extern);
+        check = Block::make(Evaluate::make(cleanup), check);
+    }
+
+    check = LetStmt::make(result_name, e, check);
+
+    if (annotate.defined()) {
+        check = Block::make(annotate, check);
+    }
+
+    for (const auto &let : lets) {
+        check = LetStmt::make(let.first, let.second, check);
+    }
+
+    Definition f_def_no_pred = f.definition().get_copy();
+    f_def_no_pred.predicate() = const_true();
+    return build_loop_nest(check, f.name() + ".s0.", -1, f, f_def_no_pred, false);
 }
 
 // A schedule may include explicit bounds on some dimension. This
@@ -697,8 +672,7 @@ pair<Stmt, Stmt> build_production(const map<string, Function> &env, Function fun
 Stmt inject_explicit_bounds(Stmt body, Function func) {
     const FuncSchedule &s = func.schedule();
     for (size_t stage = 0; stage <= func.updates().size(); stage++) {
-        for (size_t i = 0; i < s.bounds().size(); i++) {
-            Bound b = s.bounds()[i];
+        for (auto b : s.bounds()) {
             string prefix = func.name() + ".s" + std::to_string(stage) + "." + b.var;
             string min_name = prefix + ".min_unbounded";
             string max_name = prefix + ".max_unbounded";
@@ -727,17 +701,17 @@ Stmt inject_explicit_bounds(Stmt body, Function func) {
 }
 
 class IsUsedInStmt : public IRVisitor {
-    string func;
+    const string &func;
 
     using IRVisitor::visit;
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         IRVisitor::visit(op);
         if (op->name == func) result = true;
     }
 
     // A reference to the function's buffers counts as a use
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         if (op->type.is_handle() &&
             starts_with(op->name, func + ".") &&
             ends_with(op->name, ".buffer")) {
@@ -747,238 +721,44 @@ class IsUsedInStmt : public IRVisitor {
 
 public:
     bool result;
-    IsUsedInStmt(Function f) : func(f.name()), result(false) {}
-
+    explicit IsUsedInStmt(const Function &f) : func(f.name()), result(false) {}
 };
 
 // Check if function 'f' is ever used in Stmt 's'.
-bool function_is_used_in_stmt(Function f, Stmt s) {
+bool function_is_used_in_stmt(const Function &f, const Stmt &s) {
     IsUsedInStmt is_called(f);
     s.accept(&is_called);
     return is_called.result;
 }
 
 class IsRealizedInStmt : public IRVisitor {
-    string func;
+    const string &func;
 
     using IRVisitor::visit;
 
-    void visit(const Realize *op) {
+    void visit(const Realize *op) override {
         IRVisitor::visit(op);
         result = result || (op->name == func);
     }
 
 public:
     bool result;
-    IsRealizedInStmt(Function f) : func(f.name()), result(false) {}
+
+    explicit IsRealizedInStmt(const Function &f) : func(f.name()), result(false) {}
 };
 
 // Check if function 'f' is already realized in Stmt 's'.
-bool function_is_already_realized_in_stmt(Function f, Stmt s) {
+bool function_is_already_realized_in_stmt(const Function &f, const Stmt &s) {
     IsRealizedInStmt is_realized(f);
     s.accept(&is_realized);
     return is_realized.result;
 }
 
-// Inject the allocation and realization of a function into an
-// existing loop nest using its schedule
-class InjectRealization : public IRMutator2 {
-public:
-    const Function &func;
-    bool is_output, found_store_level, found_compute_level;
-    const Target &target;
-    const map<string, Function> &env;
-
-    InjectRealization(const Function &f, bool o, const Target &t,
-                      const map<string, Function> &env)
-        : func(f), is_output(o), found_store_level(false),
-          found_compute_level(false), target(t), env(env) {}
-
-private:
-    Stmt build_pipeline(Stmt consumer) {
-        pair<Stmt, Stmt> realization = build_production(env, func, target);
-
-        Stmt producer;
-        if (realization.first.defined() && realization.second.defined()) {
-            producer = Block::make(realization.first, realization.second);
-        } else if (realization.first.defined()) {
-            producer = realization.first;
-        } else {
-            internal_assert(realization.second.defined());
-            producer = realization.second;
-        }
-        producer = ProducerConsumer::make_produce(func.name(), producer);
-
-        // Outputs don't have consume nodes
-        if (!is_output) {
-            consumer = ProducerConsumer::make_consume(func.name(), consumer);
-        }
-
-        if (is_no_op(consumer)) {
-            // For the very first output to be scheduled, the consumer
-            // Stmt will be a no-op. No point in preserving it.
-            return producer;
-        } else {
-            return Block::make(producer, consumer);
-        }
-    }
-
-    Stmt build_realize(Stmt s) {
-        if (!is_output) {
-            Region bounds;
-            string name = func.name();
-            const vector<string> func_args = func.args();
-            for (int i = 0; i < func.dimensions(); i++) {
-                const string &arg = func_args[i];
-                Expr min = Variable::make(Int(32), name + "." + arg + ".min_realized");
-                Expr extent = Variable::make(Int(32), name + "." + arg + ".extent_realized");
-                bounds.push_back(Range(min, extent));
-            }
-
-            s = Realize::make(name, func.output_types(), func.schedule().memory_type(), bounds, const_true(), s);
-        }
-
-        // This is also the point at which we inject explicit bounds
-        // for this realization.
-        if (target.has_feature(Target::NoAsserts)) {
-            return s;
-        } else {
-            return inject_explicit_bounds(s, func);
-        }
-    }
-
-    using IRMutator2::visit;
-
-    Stmt visit(const For *for_loop) override {
-        debug(3) << "InjectRealization of " << func.name() << " entering for loop over " << for_loop->name << "\n";
-        const LoopLevel &compute_level = func.schedule().compute_level();
-        const LoopLevel &store_level = func.schedule().store_level();
-
-        Stmt body = for_loop->body;
-
-        // Dig through any placeholder prefetches
-        vector<tuple<string, vector<Type>, PrefetchDirective>> placeholder_prefetches;
-        while (const Prefetch *p = body.as<Prefetch>()) {
-            placeholder_prefetches.push_back(std::make_tuple(p->name, p->types, p->prefetch));
-            body = p->body;
-        }
-
-        // Dig through any let statements
-        vector<pair<string, Expr>> lets;
-        while (const LetStmt *l = body.as<LetStmt>()) {
-            if (!is_pure(l->value)) {
-                // The consumer of the Func we're injecting may be an
-                // extern stage, which shows up in the IR as a let
-                // stmt with a side-effecty RHS. We need to take care
-                // not to blow past it and risk injecting the producer
-                // *after* the consumer. In general it seems unwise to
-                // reorder the computation of a Func past something
-                // side-effecty, so we stop here.
-                break;
-            }
-            lets.push_back({ l->name, l->value });
-            body = l->body;
-        }
-
-        // Can't schedule extern things inside a vector for loop
-        if (func.has_extern_definition() &&
-            func.schedule().compute_level().is_inlined() &&
-            for_loop->for_type == ForType::Vectorized &&
-            !function_is_already_realized_in_stmt(func, for_loop) &&
-            function_is_used_in_stmt(func, for_loop)) {
-
-            // If we're trying to inline an extern function, schedule it here and bail out
-            debug(2) << "Injecting realization of " << func.name() << " around node " << Stmt(for_loop) << "\n";
-            Stmt stmt = build_realize(build_pipeline(for_loop));
-            found_store_level = found_compute_level = true;
-            return stmt;
-        }
-
-        body = mutate(body);
-
-        if (compute_level.match(for_loop->name)) {
-            debug(3) << "Found compute level\n";
-            if (!function_is_already_realized_in_stmt(func, body) &&
-                (function_is_used_in_stmt(func, body) || is_output)) {
-                body = build_pipeline(body);
-            }
-            found_compute_level = true;
-        }
-
-        if (store_level.match(for_loop->name)) {
-            debug(3) << "Found store level\n";
-            internal_assert(found_compute_level)
-                << "The compute loop level was not found within the store loop level!\n";
-
-            if (!function_is_already_realized_in_stmt(func, body) &&
-                (function_is_used_in_stmt(func, body) || is_output)) {
-                body = build_realize(body);
-            }
-
-            found_store_level = true;
-        }
-
-        // Reinstate the let statements
-        for (size_t i = lets.size(); i > 0; i--) {
-            body = LetStmt::make(lets[i - 1].first, lets[i - 1].second, body);
-        }
-
-        // Reinstate the placeholder prefetches
-        for (size_t i = placeholder_prefetches.size(); i > 0; i--) {
-            body = Prefetch::make(std::get<0>(placeholder_prefetches[i - 1]),
-                                  std::get<1>(placeholder_prefetches[i - 1]),
-                                  Region(),
-                                  std::get<2>(placeholder_prefetches[i - 1]),
-                                  const_true(),
-                                  body);
-        }
-
-        if (body.same_as(for_loop->body)) {
-            return for_loop;
-        } else {
-            return For::make(for_loop->name,
-                             for_loop->min,
-                             for_loop->extent,
-                             for_loop->for_type,
-                             for_loop->device_api,
-                             body);
-        }
-    }
-
-    // If we're an inline update or extern, we may need to inject a realization here
-    Stmt visit(const Provide *op) override {
-        if (op->name != func.name() &&
-            !func.is_pure() &&
-            func.schedule().compute_level().is_inlined() &&
-            function_is_used_in_stmt(func, op)) {
-
-            // Prefix all calls to func in op
-            Stmt stmt = build_realize(build_pipeline(op));
-            found_store_level = found_compute_level = true;
-            return stmt;
-        } else {
-            return op;
-        }
-    }
-};
-
-std::ostream& operator<<(std::ostream& out, const std::vector<Function>& v) {
-    out << "{ ";
-    for (size_t i = 0; i < v.size(); ++i) {
-        out << v[i].name();
-        if (i != v.size() - 1) {
-            out << ", ";
-        }
-    }
-    out << " }";
-    return out;
-}
-
 class InjectStmt : public IRMutator2 {
 public:
-    Stmt injected_stmt;
+    const Stmt &injected_stmt;
     bool found_level;
-    LoopLevel level;
+    const LoopLevel &level;
 
     InjectStmt(const Stmt &s, const LoopLevel &level)
         : injected_stmt(s), found_level(false), level(level) {}
@@ -1027,12 +807,19 @@ Stmt inject_stmt(Stmt root, Stmt injected, const LoopLevel &level) {
 // Collect all let stmts that define the loop min, max, and extent.
 class CollectBounds : public IRVisitor {
 public:
-    map<string, Expr> bounds;
+    template<typename T>
+    static map<string, Expr> collect_bounds(const T& node) {
+        CollectBounds bounds;
+        node.accept(&bounds);
+        return bounds.bounds;
+    }
 
 private:
+    map<string, Expr> bounds;
+
     using IRVisitor::visit;
 
-    void visit(const LetStmt *op) {
+    void visit(const LetStmt *op) override {
         if (ends_with(op->name, ".loop_min") ||
             ends_with(op->name, ".loop_max") ||
             ends_with(op->name, ".loop_extent")) {
@@ -1045,14 +832,14 @@ private:
 class SubstituteFusedBounds : public IRMutator2 {
 public:
     const map<string, Expr> &replacements;
-    SubstituteFusedBounds(const map<string, Expr> &r) : replacements(r) {}
+    explicit SubstituteFusedBounds(const map<string, Expr> &r) : replacements(r) {}
 
 private:
     using IRMutator2::visit;
 
     Stmt visit(const For *op) override {
-        const Variable *min_var = op->min.as<Variable>();
-        const Variable *extent_var = op->extent.as<Variable>();
+        const auto *min_var = op->min.as<Variable>();
+        const auto *extent_var = op->extent.as<Variable>();
         if (min_var && extent_var) {
             Expr min_val, extent_val;
             {
@@ -1110,7 +897,7 @@ private:
 // loop is also renamed by adding '.fused' in the original name before the
 // variable name.
 Stmt substitute_fused_bounds(Stmt s, const map<string, Expr> &replacements) {
-    if (!s.defined()) {
+    if (!s.defined() || replacements.empty()) {
         return s;
     } else {
         return SubstituteFusedBounds(replacements).mutate(s);
@@ -1138,149 +925,223 @@ class ShiftLoopNest : public IRMutator2 {
     }
 
 public:
-    ShiftLoopNest(const map<string, Expr> &s) : shifts(s) {}
+    explicit ShiftLoopNest(const map<string, Expr> &s) : shifts(s) {}
+
+    template<typename T>
+    static T apply_shift(const map<string, Expr> &shifts, const T &node) {
+        if (shifts.empty()) {
+            return node;
+        }
+        ShiftLoopNest visitor(shifts);
+        return visitor.mutate(node);
+    }
 };
 
-// Inject the allocation and realization of a group of functions which are
-// to be fused into an existing loop nest using its schedule.
-class InjectGroupRealization : public IRMutator2 {
+struct PlaceholderPrefetch {
+    const string &name;
+    const vector<Type> &types;
+    const PrefetchDirective &prefetch;
+
+    PlaceholderPrefetch(const string &name, const vector<Type> &types, const PrefetchDirective &prefetch)
+        : name(name),
+          types(types),
+          prefetch(prefetch) {}
+};
+
+class InjectFunctionRealization : public IRMutator2 {
 public:
-    // Member of the fused loop starting from the first to be realized to the last.
-    const vector<Function> &group;
-    // List of booleans indicating if group[i] is an output
-    const vector<bool> &is_output_list;
-    bool found_store_level, found_compute_level;
-    const Target &target;
-    const map<string, Function> &env;
-    LoopLevel compute_level;
-    LoopLevel store_level;
+    InjectFunctionRealization(const vector<Function> &funcs,
+                              const vector<bool> &is_output_list,
+                              const Target &target,
+                              const map<string, Function> &env)
+        : funcs(funcs),
+          is_output_list(is_output_list),
+          target(target),
+          env(env),
+          compute_level(funcs[0].schedule().compute_level()),
+          store_level(funcs[0].schedule().store_level()) {}
 
-    InjectGroupRealization(const vector<Function> &g, const vector<bool> &o,
-                           const Target &t, const map<string, Function> &env)
-            : group(g), is_output_list(o), found_store_level(false),
-              found_compute_level(false), target(t), env(env) {
-        internal_assert(!group.empty());
-        internal_assert(group.size() == is_output_list.size());
+    bool found_compute_level() const { return _found_compute_level; }
+    bool found_store_level() const { return _found_store_level; }
 
-        compute_level = group[0].schedule().compute_level();
-        store_level = group[0].schedule().store_level();
-        internal_assert(!compute_level.is_inlined());
+protected:
+    bool _found_compute_level{};
+    bool _found_store_level{};
+
+    using IRMutator2::visit;
+
+    Stmt visit(const For *for_loop) override {
+        debug(3) << "Injecting " << funcs << " entering for-loop over " << for_loop->name << "\n";
+        Stmt body = for_loop->body;
+
+        // Dig through any placeholder prefetches
+        vector<PlaceholderPrefetch> placeholder_prefetches;
+        while (const auto *p = body.as<Prefetch>()) {
+            placeholder_prefetches.emplace_back(p->name, p->types, p->prefetch);
+            body = p->body;
+        }
+
+        // Dig through any let statements
+        vector<pair<string, Expr>> lets;
+        while (const auto *l = body.as<LetStmt>()) {
+            if (!is_pure(l->value)) {
+                // The consumer of the Func we're injecting may be an
+                // extern stage, which shows up in the IR as a let
+                // stmt with a side-effecty RHS. We need to take care
+                // not to blow past it and risk injecting the producer
+                // *after* the consumer. In general it seems unwise to
+                // reorder the computation of a Func past something
+                // side-effecty, so we stop here.
+                break;
+            }
+            lets.emplace_back(l->name, l->value);
+            body = l->body;
+        }
+
+        // Fused pairs (compute_with) cannot have extern definitions. Thus this condition is only true when funcs
+        // contains a single function to be lowered. Can't schedule extern things inside a vector for loop.
+        if (funcs[0].has_extern_definition() &&
+            funcs[0].schedule().compute_level().is_inlined() &&
+            for_loop->for_type == ForType::Vectorized &&
+            !function_is_already_realized_in_stmt(funcs[0], for_loop) &&
+            function_is_used_in_stmt(funcs[0], for_loop)) {
+
+            // If we're trying to inline an extern function, schedule it here and bail out
+            debug(2) << "Injecting realization of " << funcs[0].name() << " around node " << Stmt(for_loop) << "\n";
+            Stmt stmt = build_realize(build_pipeline_group(for_loop), funcs[0], is_output_list[0]);
+            _found_store_level = _found_compute_level = true;
+            return stmt;
+        }
+
+        body = mutate(body);
+
+        if (compute_level.match(for_loop->name)) {
+            debug(3) << "Found compute level at " << for_loop->name << "\n";
+            body = build_pipeline_group(body);
+            _found_compute_level = true;
+        }
+
+        if (store_level.match(for_loop->name)) {
+            debug(3) << "Found store level at " << for_loop->name << "\n";
+            internal_assert(_found_compute_level) << "The compute loop level was not found within the store loop level!\n";
+            body = build_realize_group(body);
+            _found_store_level = true;
+        }
+
+        // Reinstate the let statements
+        for (size_t i = lets.size(); i > 0; i--) {
+            body = LetStmt::make(lets[i - 1].first, lets[i - 1].second, body);
+        }
+
+        // Reinstate the placeholder prefetches
+        for (size_t i = placeholder_prefetches.size(); i > 0; i--) {
+            body = Prefetch::make(placeholder_prefetches[i - 1].name,
+                                  placeholder_prefetches[i - 1].types,
+                                  Region(),
+                                  placeholder_prefetches[i - 1].prefetch,
+                                  const_true(),
+                                  body);
+        }
+
+        // Skips pointless allocation
+        if (body.same_as(for_loop->body)) {
+            return for_loop;
+        } else {
+            return For::make(for_loop->name,
+                             for_loop->min,
+                             for_loop->extent,
+                             for_loop->for_type,
+                             for_loop->device_api,
+                             body);
+        }
+    }
+
+    // If we're an inline update or extern, we may need to inject a realization here
+    Stmt visit(const Provide *op) override {
+        // none of the functions in a fused group can be inlined, so this will only
+        // happen when we're lowering a single func.
+        if (op->name != funcs[0].name() &&
+            !funcs[0].is_pure() &&
+            funcs[0].schedule().compute_level().is_inlined() &&
+            function_is_used_in_stmt(funcs[0], op)) {
+
+            // Prefix all calls to func in op
+            Stmt stmt = build_realize(build_pipeline_group(op), funcs[0], is_output_list[0]);
+            _found_store_level = _found_compute_level = true;
+            return stmt;
+        }
+
+        return op;
     }
 
 private:
+    const vector<Function> &funcs;
+    const vector<bool> &is_output_list;
+    const Target &target;
+    const map<string, Function> &env;
+    const LoopLevel &compute_level;
+    const LoopLevel &store_level;
 
-    Stmt build_pipeline_group(Stmt s) {
-        map<string, bool> skip;
-        size_t num_skipped = 0;
-        for (size_t i = 0; i < group.size(); ++i) {
-            if (function_is_used_in_stmt(group[i], s) || is_output_list[i]) {
-                skip[group[i].name()] = false;
-            } else {
-                skip[group[i].name()] = true;
-                num_skipped += 1;
+    Stmt build_realize(Stmt s, const Function &func, bool is_output) {
+        if (!is_output) {
+            Region bounds;
+            const string &name = func.name();
+            const vector<string> &func_args = func.args();
+            for (int i = 0; i < func.dimensions(); i++) {
+                const string &arg = func_args[i];
+                Expr min = Variable::make(Int(32), name + "." + arg + ".min_realized");
+                Expr extent = Variable::make(Int(32), name + "." + arg + ".extent_realized");
+                bounds.emplace_back(min, extent);
             }
+
+            s = Realize::make(name, func.output_types(), func.schedule().memory_type(), bounds, const_true(), s);
         }
 
-        if (num_skipped == group.size()) {
-            // All producers are skipped.
+        // This is also the point at which we inject explicit bounds
+        // for this realization.
+        if (target.has_feature(Target::NoAsserts)) {
             return s;
+        } else {
+            return inject_explicit_bounds(s, func);
         }
+    }
 
-        user_assert(!skip[group[group.size()-1].name()])
-            << "Invalid compute_with: the 'parent' function \"" << group[group.size()-1].name()
-            << "\" in fused group " << group << " is not used at the compute_at level "
-            << compute_level.to_string() << ".\n";
-
-        // Add the consumer nodes.
-        Stmt consume = s;
-        for (size_t i = 0; i < group.size(); ++i) {
-            if (!skip[group[i].name()]) {
-                consume = ProducerConsumer::make(group[i].name(), false, consume);
+    Stmt build_realize_group(Stmt s) {
+        for (size_t i = 0; i < funcs.size(); ++i) {
+            if (function_is_already_realized_in_stmt(funcs[i], s)) {
+                continue;
+            }
+            if (function_is_used_in_stmt(funcs[i], s) || is_output_list[i]) {
+                s = build_realize(s, funcs[i], is_output_list[i]);
             }
         }
-
-        // Build the loops.
-        map<string, Expr> replacements;
-
-        int parent_index = -1; // The first function in the group that is not skipped
-        vector<pair<string, Expr>> add_lets;
-        Stmt produce;
-        for (int i = (int)group.size() - 1; i >= 0; --i) {
-            if (!skip[group[i].name()]) {
-                produce = build_produce(skip, group[i], produce, replacements, add_lets);
-                if (parent_index == -1) {
-                    parent_index = i;
-                }
-            }
-        }
-        internal_assert((parent_index >= 0) && (parent_index < (int)group.size()));
-
-        // Rewrap the loop in the containing lets.
-        for (size_t i = add_lets.size(); i > 0; --i) {
-            const auto &b = add_lets[i-1];
-            produce = LetStmt::make(b.first, b.second, produce);
-        }
-
-        // The original bounds of the loop nests (without any loop-fusion)
-        CollectBounds subs;
-        produce.accept(&subs);
-
-        // Compute the shift factors based on the alignment strategies
-        // starting from the the parent (root loop) to the children. The root
-        // loop bounds should remain unchanged.
-        map<string, Expr> shifts;
-        for (int i = (int)group.size() - 1; i >= 0; --i) {
-            if (!skip[group[i].name()]) {
-                const Function &f = group[i];
-                compute_shift_factor(skip, f, f.name() + ".s0.", f.definition(), subs.bounds, shifts);
-                for (size_t j = 0; j < f.updates().size(); ++j) {
-                    string prefix = f.name() + ".s" + std::to_string(j+1) + ".";
-                    compute_shift_factor(skip, f, prefix, f.updates()[j], subs.bounds, shifts);
-                }
-            }
-        }
-        // Shift the loops.
-        produce = ShiftLoopNest(shifts).mutate(produce);
-
-        // Replace all the child fused loops with the appropriate bounds
-        // (i.e. the min/max should refer to the parent loop vars and the
-        // extent should be one).
-        produce = substitute_fused_bounds(produce, replacements);
-
-        // Replace the bounds of parent fused loop with union of bounds of
-        // the fused loops.
-        produce = replace_parent_bound_with_union_bound(skip, group[parent_index], produce, subs.bounds);
-
-        // Add the producer nodes.
-        for (size_t i = 0; i < group.size(); ++i) {
-            if (!skip[group[i].name()]) {
-                produce = ProducerConsumer::make(group[i].name(), true, produce);
-            }
-        }
-
-        return Block::make(produce, consume);
+        return s;
     }
 
     // Compute the shift factor required to align iteration of
     // a function stage with its fused parent loop nest.
-    void compute_shift_factor(const map<string, bool> &skip, const Function &f,
-                              const string &prefix, const Definition &def,
-                              map<string, Expr> &bounds,
-                              map<string, Expr> &shifts) {
+    static void compute_shift_factor(const map<string, bool> &skip, const Function &f, const string &prefix,
+                                     const Definition &def, map<string, Expr> &bounds, map<string, Expr> &shifts) {
+        if (!def.defined()) {
+            return;
+        }
+
         const vector<Dim> &dims = def.schedule().dims(); // From inner to outer
         const LoopLevel &fuse_level = def.schedule().fuse_level().level;
         const map<string, LoopAlignStrategy> &align_strategy = def.schedule().fuse_level().align;
 
-        int start_fuse = (int)dims.size();
+        int start_fuse;
         if (!fuse_level.is_inlined() && !fuse_level.is_root()) {
             if (!skip.find(fuse_level.func())->second) {
                 {
                     const auto &iter = std::find_if(dims.begin(), dims.end(),
-                        [&fuse_level](const Dim &d) { return var_name_match(d.var, fuse_level.var().name()); });
+                                                    [&fuse_level](const Dim &d) {
+                                                        return var_name_match(d.var, fuse_level.var().name());
+                                                    });
                     internal_assert(iter != dims.end());
-                    start_fuse = iter - dims.begin();
+                    start_fuse = (int)(iter - dims.begin());
                 }
-                for (int i = start_fuse; i < (int)dims.size()-1; ++i) {
+                for (int i = start_fuse; i < (int) dims.size() - 1; ++i) {
                     const string &var = dims[i].var;
                     Expr shift_val;
 
@@ -1322,28 +1183,8 @@ private:
         }
     }
 
-    Stmt build_produce(const map<string, bool> &skip, const Function &f, Stmt produce,
-                       map<string, Expr> &replacements, vector<pair<string, Expr>> &add_lets) {
-        string prefix = f.name() + ".s0.";
-        produce = inject_stmt(produce,
-                              build_produce_definition(skip, f, prefix, f.definition(),
-                                                       false, replacements, add_lets),
-                              f.definition().schedule().fuse_level().level);
-
-        for (size_t j = 0; j < f.updates().size(); ++j) {
-            const Definition &def = f.updates()[j];
-            string prefix = f.name() + ".s" + std::to_string(j+1) + ".";
-            produce = inject_stmt(produce,
-                                  build_produce_definition(skip, f, prefix, def, true,
-                                                           replacements, add_lets),
-                                  def.schedule().fuse_level().level);
-        }
-        return produce;
-    }
-
-    Stmt build_produce_definition(const map<string, bool> &skip, const Function &f,
-                                  const string &prefix, const Definition &def,
-                                  bool is_update, map<string, Expr> &replacements,
+    Stmt build_produce_definition(const map<string, bool> &skip, const Function &f, const string &prefix,
+                                  const Definition &def, bool is_update, map<string, Expr> &replacements,
                                   vector<pair<string, Expr>> &add_lets) {
         const vector<Dim> &dims = def.schedule().dims(); // From inner to outer
         const LoopLevel &fuse_level = def.schedule().fuse_level().level;
@@ -1352,9 +1193,11 @@ private:
         if (!fuse_level.is_inlined() && !fuse_level.is_root()) {
             if (!skip.find(fuse_level.func())->second) {
                 const auto &iter = std::find_if(dims.begin(), dims.end(),
-                    [&fuse_level](const Dim &d) { return var_name_match(d.var, fuse_level.var().name()); });
+                                                [&fuse_level](const Dim &d) {
+                                                    return var_name_match(d.var, fuse_level.var().name());
+                                                });
                 internal_assert(iter != dims.end());
-                start_fuse = iter - dims.begin();
+                start_fuse = (size_t)(iter - dims.begin());
             }
         }
 
@@ -1368,19 +1211,19 @@ private:
             const auto &f2_it = env.find(pair.func_2);
             internal_assert(f2_it != env.end());
             const vector<Dim> &dims_2 =
-                (pair.stage_2 == 0) ? f2_it->second.definition().schedule().dims() :
-                                      f2_it->second.update(pair.stage_2-1).schedule().dims();
+                    (pair.stage_2 == 0) ? f2_it->second.definition().schedule().dims() :
+                    f2_it->second.update((int)(pair.stage_2 - 1)).schedule().dims();
 
             const auto &iter = std::find_if(dims.begin(), dims.end(),
-                [&pair](const Dim &d) { return var_name_match(d.var, pair.var_name); });
+                                            [&pair](const Dim &d) { return var_name_match(d.var, pair.var_name); });
             internal_assert(iter != dims.end());
             start_fuse = std::min(start_fuse, (size_t)(iter - dims.begin()));
             // Should ignore the __outermost dummy dimension.
-            for (size_t i = iter - dims.begin(); i < dims.size() - 1; ++i) {
+            for (size_t i = (size_t)(iter - dims.begin()); i < dims.size() - 1; ++i) {
                 string var_orig = pair.func_1 + ".s" + std::to_string(pair.stage_1) + "." + dims[i].var;
                 Expr val = Variable::make(Int(32), var_orig);
 
-                int dim2_idx = dims_2.size() - (dims.size() - i);
+                int dim2_idx = (int)(dims_2.size() - (dims.size() - i));
                 internal_assert(dim2_idx < (int)dims_2.size());
                 string var = pair.func_2 + ".s" + std::to_string(pair.stage_2) + "." + dims_2[dim2_idx].var;
 
@@ -1390,23 +1233,20 @@ private:
             }
         }
 
-        const vector<string> f_args = f.args();
-        Stmt produce = build_provide_loop_nest(env, f.name(), prefix, start_fuse, f_args,
-                                               f.schedule(), def, is_update);
+        Stmt produce = build_provide_loop_nest(env, prefix, f, def, (int)(start_fuse), is_update);
 
         // Strip off the containing lets. The bounds of the parent fused loop
         // (i.e. the union bounds) might refer to them, so we need to move them
         // to the topmost position.
-        while (const LetStmt *let = produce.as<LetStmt>()) {
-            add_lets.push_back(std::make_pair(let->name, let->value));
+        while (const auto *let = produce.as<LetStmt>()) {
+            add_lets.emplace_back(let->name, let->value);
             produce = let->body;
         }
         return produce;
     }
 
-    void collect_all_dependence_helper(const map<string, bool> &skip, const string &prefix,
-                                       const Definition &def, const FusedPair &p,
-                                       vector<FusedPair> &dependence, set<string> &visited) {
+    void collect_all_dependence_helper(const map<string, bool> &skip, const string &prefix, const Definition &def,
+                                       const FusedPair &p, vector<FusedPair> &dependence, set<string> &visited) {
         visited.insert(prefix);
         dependence.push_back(p);
         for (const FusedPair &pair : def.schedule().fused_pairs()) {
@@ -1418,7 +1258,7 @@ private:
             const Function &f = iter->second;
             string prefix_2 = pair.func_2 + ".s" + std::to_string(pair.stage_2) + "." + pair.var_name;
             if (visited.find(prefix_2) == visited.end()) {
-                const Definition &def_2 = (pair.stage_2 == 0) ? f.definition() : f.update(pair.stage_2 - 1);
+                const Definition &def_2 = (pair.stage_2 == 0) ? f.definition() : f.update((int)(pair.stage_2 - 1));
                 collect_all_dependence_helper(skip, prefix_2, def_2, pair, dependence, visited);
             }
         }
@@ -1438,7 +1278,7 @@ private:
             const Function &f = iter->second;
             string prefix = pair.func_2 + ".s" + std::to_string(pair.stage_2) + "." + pair.var_name;
             if (visited.find(prefix) == visited.end()) {
-                const Definition &def_2 = (pair.stage_2 == 0) ? f.definition() : f.update(pair.stage_2 - 1);
+                const Definition &def_2 = (pair.stage_2 == 0) ? f.definition() : f.update((int)(pair.stage_2 - 1));
                 collect_all_dependence_helper(skip, prefix, def_2, pair, dependence, visited);
             }
         }
@@ -1447,10 +1287,15 @@ private:
 
     // Replace the bounds of the parent fused loop (i.e. the first one to be
     // realized in the group) with union of the bounds of the fused group.
-    Stmt replace_parent_bound_with_union_bound(const map<string, bool> &skip, const Function &f,
-                                               Stmt produce, const map<string, Expr> &bounds) {
+    Stmt replace_parent_bound_with_union_bound(const map<string, bool> &skip, const Function &f, Stmt produce,
+                                               const map<string, Expr> &bounds) {
         string prefix = f.name() + ".s0";
         const Definition &def = f.definition();
+
+        if (!def.defined()) {
+            return produce;
+        }
+
         const vector<Dim> &dims = def.schedule().dims(); // From inner to outer
 
         map<string, Expr> replacements;
@@ -1465,18 +1310,19 @@ private:
             const auto &f2_it = env.find(pair.func_2);
             internal_assert(f2_it != env.end());
             const vector<Dim> &dims_2 =
-                (pair.stage_2 == 0) ? f2_it->second.definition().schedule().dims() :
-                                      f2_it->second.update(pair.stage_2-1).schedule().dims();
+                pair.stage_2 == 0 ?
+                f2_it->second.definition().schedule().dims() :
+                f2_it->second.update((int)(pair.stage_2 - 1)).schedule().dims();
 
             const auto &iter = std::find_if(dims.begin(), dims.end(),
-                [&pair](const Dim &d) { return var_name_match(d.var, pair.var_name); });
+                                            [&pair](const Dim &d) { return var_name_match(d.var, pair.var_name); });
             internal_assert(iter != dims.end());
 
             // Should ignore the __outermost dummy dimension.
-            for (size_t i = iter - dims.begin(); i < dims.size() - 1; ++i) {
+            for (size_t i = (size_t)(iter - dims.begin()); i < dims.size() - 1; ++i) {
                 // The child's dim might have slightly different name from
                 // the parent, e.g. y.yi and yi.
-                int dim2_idx = dims_2.size() - (dims.size() - i);
+                int dim2_idx = (int)(dims_2.size() - (dims.size() - i));
                 internal_assert(dim2_idx < (int)dims_2.size());
 
                 string var_2 = pair.func_2 + ".s" + std::to_string(pair.stage_2) +
@@ -1493,18 +1339,17 @@ private:
                 internal_assert(bounds.count(var_1 + ".loop_max"));
                 internal_assert(bounds.count(var_1 + ".loop_extent"));
 
-                Expr min_1, max_1, extent_1;
+                Expr min_1, max_1;
                 const auto &it = replacements.find(var_1 + ".loop_min");
                 if (it == replacements.end()) {
                     min_1 = bounds.find(var_1 + ".loop_min")->second;
                     max_1 = bounds.find(var_1 + ".loop_max")->second;
-                    extent_1 = bounds.find(var_1 + ".loop_extent")->second;
                 } else {
                     min_1 = replacements.find(var_1 + ".loop_min")->second;
                     max_1 = replacements.find(var_1 + ".loop_max")->second;
-                    extent_1 = replacements.find(var_1 + ".loop_extent")->second;
                 }
 
+                // Extent is computed from min/max, so we don't find() it earlier.
                 replacements[var_1 + ".loop_min"] = simplify(min(min_1, min_2));
                 replacements[var_1 + ".loop_max"] = simplify(max(max_1, max_2));
                 replacements[var_1 + ".loop_extent"] =
@@ -1518,101 +1363,123 @@ private:
         return produce;
     }
 
-    Stmt build_realize_group(Stmt s) {
-        for (size_t i = 0; i < group.size(); ++i) {
-            if (function_is_used_in_stmt(group[i], s) || is_output_list[i]) {
-                s = build_realize(s, group[i], is_output_list[i]);
+
+    Stmt build_pipeline_group(Stmt consumer) {
+        map<string, bool> skip;
+
+        size_t num_skipped = 0;
+        bool skip_last_func = false;
+        bool found_parent = false;
+        auto parent_index = funcs.size(); // The last function in the group that is not skipped
+        for (size_t i = 0; i < funcs.size(); ++i) {
+            skip_last_func = function_is_already_realized_in_stmt(funcs[i], consumer) ||
+                              !(function_is_used_in_stmt(funcs[i], consumer) || is_output_list[i]);
+            skip[funcs[i].name()] = skip_last_func;
+            if (skip_last_func) {
+                num_skipped += 1;
+            } else {
+                parent_index = i;
+                found_parent = true;
             }
         }
-        return s;
-    }
 
-    Stmt build_realize(Stmt s, Function func, bool is_output) {
-        if (!is_output) {
-            Region bounds;
-            string name = func.name();
-            const vector<string> func_args = func.args();
-            for (int i = 0; i < func.dimensions(); i++) {
-                const string &arg = func_args[i];
-                Expr min = Variable::make(Int(32), name + "." + arg + ".min_realized");
-                Expr extent = Variable::make(Int(32), name + "." + arg + ".extent_realized");
-                bounds.push_back(Range(min, extent));
+        if (num_skipped == funcs.size()) {
+            // All producers are skipped.
+            return consumer;
+        }
+
+        user_assert(!skip_last_func)
+        << "Invalid compute_with: the 'parent' function \"" << funcs[funcs.size() - 1].name()
+        << "\" in fused group " << funcs << " is not used at the compute_at level "
+        << compute_level.to_string() << ".\n";
+
+        internal_assert(found_parent);
+
+        // Build the loops.
+        Stmt producer;
+        map<string, Expr> replacements;
+        vector<pair<string, Expr>> add_lets;
+
+        for (auto iter = funcs.rbegin(); iter != funcs.rend(); iter++) {
+            const auto &f = *iter;
+            if (skip[f.name()]) {
+                continue;
             }
 
-            s = Realize::make(name, func.output_types(), func.schedule().memory_type(), bounds, const_true(), s);
+            if (f.has_extern_definition()) {
+                const Stmt &produceDef = Internal::build_extern_produce(env, f, target);
+                producer = inject_stmt(producer, produceDef, LoopLevel::inlined().lock());
+            } else {
+                const Stmt &produceDef = build_produce_definition(skip, f, f.name() + ".s0.", f.definition(), false,
+                                                                  replacements, add_lets);
+                producer = inject_stmt(producer, produceDef, f.definition().schedule().fuse_level().level);
+            }
+
+            for (size_t j = 0; j < f.updates().size(); ++j) {
+                string defPrefix = f.name() + ".s" + std::to_string(j + 1) + ".";
+                const Definition &def = f.updates()[j];
+                const Stmt &updateDef = build_produce_definition(skip, f, defPrefix, def, true, replacements, add_lets);
+                producer = inject_stmt(producer, updateDef, def.schedule().fuse_level().level);
+            }
         }
 
-        // This is also the point at which we inject explicit bounds
-        // for this realization.
-        if (target.has_feature(Target::NoAsserts)) {
-            return s;
+        internal_assert(producer.defined());
+
+        // Rewrap the loop in the containing lets.
+        for (size_t i = add_lets.size(); i > 0; --i) {
+            const auto &b = add_lets[i - 1];
+            producer = LetStmt::make(b.first, b.second, producer);
+        }
+
+        // The original bounds of the loop nests (without any loop-fusion)
+        auto bounds = CollectBounds::collect_bounds(producer);
+
+        // Compute the shift factors based on the alignment strategies
+        // starting from the the parent (root loop) to the children. The root
+        // loop bounds should remain unchanged.
+        map<string, Expr> shifts;
+        for (auto i = funcs.size(); i-- > 0;) {
+            const auto& func = funcs[i];
+            if (!skip[func.name()]) {
+                compute_shift_factor(skip, func, func.name() + ".s0.", func.definition(), bounds, shifts);
+                for (size_t j = 0; j < func.updates().size(); ++j) {
+                    string prefix = func.name() + ".s" + std::to_string(j + 1) + ".";
+                    compute_shift_factor(skip, func, prefix, func.updates()[j], bounds, shifts);
+                }
+            }
+        }
+        // Shift the loops.
+        producer = ShiftLoopNest::apply_shift(shifts, producer);
+
+        // Replace all the child fused loops with the appropriate bounds
+        // (i.e. the min/max should refer to the parent loop vars and the
+        // extent should be one).
+        producer = substitute_fused_bounds(producer, replacements);
+
+        // Replace the bounds of parent fused loop with union of bounds of
+        // the fused loops.
+        producer = replace_parent_bound_with_union_bound(skip, funcs[parent_index], producer, bounds);
+
+        // Add the producer nodes.
+        for (const auto &i : funcs) {
+            if (!skip[i.name()]) {
+                producer = ProducerConsumer::make_produce(i.name(), producer);
+            }
+        }
+
+        // Add the consumer nodes.
+        for (size_t i = 0; i < funcs.size(); i++) {
+            if (!skip[funcs[i].name()] && !is_output_list[i]) {
+                consumer = ProducerConsumer::make_consume(funcs[i].name(), consumer);
+            }
+        }
+
+        if (is_no_op(consumer)) {
+            // For the very first output to be scheduled, the consumer
+            // Stmt can be a no-op. No point in preserving it.
+            return producer;
         } else {
-            return inject_explicit_bounds(s, func);
-        }
-    }
-
-    using IRMutator2::visit;
-
-    Stmt visit(const For *for_loop) override {
-        debug(3) << "InjectGroupRealization of " << group << " entering for-loop over "
-                 << for_loop->name << "\n";
-
-        Stmt body = for_loop->body;
-
-        // Dig through any placeholder prefetches
-        vector<tuple<string, vector<Type>, PrefetchDirective>> placeholder_prefetches;
-        while (const Prefetch *p = body.as<Prefetch>()) {
-            placeholder_prefetches.push_back(std::make_tuple(p->name, p->types, p->prefetch));
-            body = p->body;
-        }
-
-        // Dig through any let statements
-        vector<pair<string, Expr>> lets;
-        while (const LetStmt *l = body.as<LetStmt>()) {
-            lets.push_back(make_pair(l->name, l->value));
-            body = l->body;
-        }
-
-        body = mutate(body);
-
-        if (compute_level.match(for_loop->name)) {
-            debug(3) << "Found compute level at " << for_loop->name << "\n";
-            body = build_pipeline_group(body);
-            found_compute_level = true;
-        }
-
-        if (store_level.match(for_loop->name)) {
-            debug(3) << "Found store level at " << for_loop->name << "\n";
-            internal_assert(found_compute_level)
-                << "The compute loop level was not found within the store loop level!\n";
-            body = build_realize_group(body);
-            found_store_level = true;
-        }
-
-        // Reinstate the let statements
-        for (size_t i = lets.size(); i > 0; i--) {
-            body = LetStmt::make(lets[i - 1].first, lets[i - 1].second, body);
-        }
-
-        // Reinstate the placeholder prefetches
-        for (size_t i = placeholder_prefetches.size(); i > 0; i--) {
-            body = Prefetch::make(std::get<0>(placeholder_prefetches[i - 1]),
-                                  std::get<1>(placeholder_prefetches[i - 1]),
-                                  Region(),
-                                  std::get<2>(placeholder_prefetches[i - 1]),
-                                  const_true(),
-                                  body);
-        }
-
-        if (body.same_as(for_loop->body)) {
-            return for_loop;
-        } else {
-            return For::make(for_loop->name,
-                             for_loop->min,
-                             for_loop->extent,
-                             for_loop->for_type,
-                             for_loop->device_api,
-                             body);
+            return Block::make(producer, consumer);
         }
     }
 };
@@ -1626,7 +1493,7 @@ public:
     vector<Site> sites_allowed;
     bool found;
 
-    ComputeLegalSchedules(Function f, const map<string, Function> &env) : found(false), func(f), env(env) {}
+    ComputeLegalSchedules(Function f, const map<string, Function> &env) : found(false), func(std::move(f)), env(env) {}
 
 private:
     using IRVisitor::visit;
@@ -1636,7 +1503,7 @@ private:
 
     const map<string, Function> &env;
 
-    void visit(const For *f) {
+    void visit(const For *f) override {
         f->min.accept(this);
         f->extent.accept(this);
         size_t first_dot = f->name.find('.');
@@ -1656,9 +1523,7 @@ private:
         // Since we are now in the lowering phase, we expect all LoopLevels to be locked;
         // thus any new ones we synthesize we must explicitly lock.
         loop_level.lock();
-        Site s = {f->is_parallel() ||
-                  f->for_type == ForType::Vectorized,
-                  loop_level};
+        Site s = {f->is_parallel() || f->for_type == ForType::Vectorized, loop_level};
         sites.push_back(s);
         f->body.accept(this);
         sites.pop_back();
@@ -1685,7 +1550,7 @@ private:
         }
     }
 
-    void visit(const Call *c) {
+    void visit(const Call *c) override {
         IRVisitor::visit(c);
 
         if (c->name == func.name()) {
@@ -1693,7 +1558,7 @@ private:
         }
     }
 
-    void visit(const Variable *v) {
+    void visit(const Variable *v) override {
         if (v->type.is_handle() &&
             starts_with(v->name, func.name() + ".") &&
             ends_with(v->name, ".buffer")) {
@@ -1702,9 +1567,7 @@ private:
     }
 };
 
-string schedule_to_source(Function f,
-                          LoopLevel store_at,
-                          LoopLevel compute_at) {
+string schedule_to_source(const Function &f, const LoopLevel &store_at, const LoopLevel &compute_at) {
     std::ostringstream ss;
     ss << f.name();
     if (compute_at.is_inlined()) {
@@ -1737,14 +1600,14 @@ string schedule_to_source(Function f,
 
 class StmtUsesFunc : public IRVisitor {
     using IRVisitor::visit;
-    string func;
-    void visit(const Call *op) {
+    const string &func;
+    void visit(const Call *op) override {
         if (op->name == func) {
             result = true;
         }
         IRVisitor::visit(op);
     }
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         if (op->type.is_handle() &&
             starts_with(op->name, func + ".") &&
             ends_with(op->name, ".buffer")) {
@@ -1754,7 +1617,7 @@ class StmtUsesFunc : public IRVisitor {
     }
 public:
     bool result = false;
-    StmtUsesFunc(string f) : func(f) {}
+    explicit StmtUsesFunc(const string &f) : func(f) {}
 };
 
 class PrintUsesOfFunc : public IRVisitor {
@@ -1771,7 +1634,7 @@ class PrintUsesOfFunc : public IRVisitor {
         }
     }
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         if (ends_with(op->name, Var::outermost().name()) ||
             ends_with(op->name, LoopLevel::root().lock().to_string())) {
             IRVisitor::visit(op);
@@ -1799,7 +1662,7 @@ class PrintUsesOfFunc : public IRVisitor {
         }
     }
 
-    void visit(const ProducerConsumer *op) {
+    void visit(const ProducerConsumer *op) override {
         if (op->is_producer) {
             string old_caller = caller;
             caller = op->name;
@@ -1810,7 +1673,7 @@ class PrintUsesOfFunc : public IRVisitor {
         }
     }
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         if (op->name == func) {
             do_indent();
             stream << caller << " uses " << func << "\n";
@@ -1820,7 +1683,7 @@ class PrintUsesOfFunc : public IRVisitor {
         }
     }
 
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         if (op->type.is_handle() &&
             starts_with(op->name, func + ".") &&
             ends_with(op->name, ".buffer")) {
@@ -1833,14 +1696,14 @@ class PrintUsesOfFunc : public IRVisitor {
     }
 
 public:
-    PrintUsesOfFunc(string f, std::ostream &s) : func(f), stream(s) {}
+    PrintUsesOfFunc(string f, std::ostream &s) : func(std::move(f)), stream(s) {}
 };
 
 // Check a schedule is legal, throwing an error if it is not. Returns
 // whether or not a realization of the Func should be injected. Unused
 // intermediate Funcs that somehow made it into the Func DAG can be
 // discarded.
-bool validate_schedule(Function f, Stmt s, const Target &target, bool is_output, const map<string, Function> &env) {
+bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_output, const map<string, Function> &env) {
 
     // If f is extern, check that none of its inputs are scheduled inline.
     if (f.has_extern_definition()) {
@@ -1855,6 +1718,33 @@ bool validate_schedule(Function f, Stmt s, const Target &target, bool is_output,
                 }
             }
         }
+
+        // Check that extern stages do not have any non-extern loops
+        // inside any extern loops, and all loop types are supported
+        // for extern stages.
+        const vector<Dim>& dims = f.definition().schedule().dims();
+        bool is_extern = !dims.empty() ? dims.front().for_type == ForType::Extern : false;
+        for (const Dim& i : dims) {
+            switch (i.for_type) {
+            case ForType::Extern:
+                if (!is_extern) {
+                    user_error
+                        << "Externally defined Func " << f.name()
+                        << " cannot have extern loop " << i.var
+                        << " outside a non-extern loop.\n";
+                }
+                break;
+            case ForType::Serial:
+            case ForType::Parallel:
+            case ForType::Unrolled:
+                is_extern = false;
+                break;
+            default:
+                user_error
+                    << "Externally defined Func " << f.name()
+                    << " cannot have loop type " << i.for_type << " (" << i.var << ")\n";
+            }
+        }
     }
 
     // Emit a warning if only some of the steps have been scheduled.
@@ -1864,7 +1754,7 @@ bool validate_schedule(Function f, Stmt s, const Target &target, bool is_output,
     }
     if (any_scheduled) {
         for (size_t i = 0; i < f.updates().size(); i++) {
-            const Definition &r = f.update(i);
+            const Definition &r = f.update((int)i);
             if (!r.schedule().touched()) {
                 user_warning << "Warning: Update step " << i
                              << " of function " << f.name()
@@ -2029,8 +1919,8 @@ bool validate_schedule(Function f, Stmt s, const Target &target, bool is_output,
         err << "Func \"" << f.name() << "\" is computed at the following invalid location:\n"
             << "  " << schedule_to_source(f, store_at, compute_at) << "\n"
             << "Legal locations for this function are:\n";
-        for (size_t i = 0; i < sites.size(); i++) {
-            err << "  " << schedule_to_source(f, sites[i].loop_level, sites[i].loop_level) << "\n";
+        for (const auto &site : sites) {
+            err << "  " << schedule_to_source(f, site.loop_level, site.loop_level) << "\n";
         }
         err << "\"" << f.name() << "\" is used in the following places:\n";
         PrintUsesOfFunc printer(f.name(), err);
@@ -2042,7 +1932,8 @@ bool validate_schedule(Function f, Stmt s, const Target &target, bool is_output,
     return true;
 }
 
-void validate_fused_group_schedule_helper(const string &fn, size_t stage_index,
+void validate_fused_group_schedule_helper(const string &fn,
+                                          size_t stage_index,
                                           const Definition &def_1,
                                           const map<string, Function> &env) {
     internal_assert(def_1.defined());
@@ -2055,8 +1946,7 @@ void validate_fused_group_schedule_helper(const string &fn, size_t stage_index,
 
         const Function &func_1 = iter1->second;
         const Function &func_2 = iter2->second;
-        const Definition &def_2 =
-            (p.stage_2 == 0) ? func_2.definition() : func_2.update(p.stage_2-1);
+        const Definition &def_2 = (p.stage_2 == 0) ? func_2.definition() : func_2.update((int)(p.stage_2 - 1));
         internal_assert(def_2.defined());
 
         // f2.compute_with(f1, var) is allowed only if f2 has no specializations.
@@ -2104,10 +1994,10 @@ void validate_fused_group_schedule_helper(const string &fn, size_t stage_index,
             << p.func_2 << ".s" << p.stage_2 << "\n";
 
         // Verify that their dimensions up to "var_name" are the same.
-        size_t start_fuse_1 = iter_1 - dims_1.begin();
-        size_t start_fuse_2 = iter_2 - dims_2.begin();
+        size_t start_fuse_1 = (size_t)(iter_1 - dims_1.begin());
+        size_t start_fuse_2 = (size_t)(iter_2 - dims_2.begin());
 
-        int n_fused = dims_1.size() - start_fuse_1 - 1; // Ignore __outermost
+        int n_fused = (int)(dims_1.size() - start_fuse_1 - 1); // Ignore __outermost
         user_assert(n_fused == (int)(dims_2.size() - start_fuse_2 - 1))
             << "Invalid compute_with: # of fused dims of " << p.func_1 << ".s"
             << p.stage_1 << " and " << p.func_2 << ".s" << p.stage_2 << " do not match.\n";
@@ -2128,8 +2018,7 @@ void validate_fused_group_schedule_helper(const string &fn, size_t stage_index,
     }
 }
 
-void validate_fused_groups_schedule(const vector<vector<string>> &fused_groups,
-                                    const map<string, Function> &env) {
+void validate_fused_groups_schedule(const vector<vector<string>> &fused_groups, const map<string, Function> &env) {
     for (const vector<string> &group : fused_groups) {
         for (const auto &fn : group) {
             const auto &iter = env.find(fn);
@@ -2172,12 +2061,30 @@ class RemoveLoopsOverOutermost : public IRMutator2 {
     }
 };
 
+bool group_should_be_inlined(const vector<Function> &funcs) {
+    return (funcs.size() == 1 &&
+            (funcs[0].has_extern_definition() || funcs[0].definition().schedule().fused_pairs().empty()) &&
+            funcs[0].can_be_inlined() &&
+            funcs[0].schedule().compute_level().is_inlined());
+}
+
+std::ostream& operator<<(std::ostream& out, const std::vector<Function>& v) {
+    out << "{ ";
+    for (size_t i = 0; i < v.size(); ++i) {
+        out << v[i].name();
+        if (i != v.size() - 1) {
+            out << ", ";
+        }
+    }
+    out << " }";
+    return out;
+}
+
 Stmt schedule_functions(const vector<Function> &outputs,
                         const vector<vector<string>> &fused_groups,
                         const map<string, Function> &env,
                         const Target &target,
                         bool &any_memoized) {
-
     string root_var = LoopLevel::root().lock().to_string();
     Stmt s = For::make(root_var, 0, 1, ForType::Serial, DeviceAPI::Host, Evaluate::make(0));
 
@@ -2189,51 +2096,40 @@ Stmt schedule_functions(const vector<Function> &outputs,
         const vector<string> &group = fused_groups[i-1];
         vector<Function> funcs;
         vector<bool> is_output_list;
-        for (const string &name: group) {
+
+        for (const string &name : group) {
             Function f = env.find(name)->second;
 
             bool is_output = false;
-            for (Function o : outputs) {
+            for (const Function &o : outputs) {
                 is_output = is_output | o.same_as(f);
             }
 
-            bool necessary = validate_schedule(f, s, target, is_output, env);
-            if (!necessary) {
-                // The way in which the function was referred to in the
-                // function DAG must not actually result in a use in the
-                // code. This can happen if you inline a Tuple function,
-                // ignoring one of the Tuple elements, and that Tuple
-                // element is the sole call to a function with an update
-                // definition.
-                continue;
+            // The way in which the function was referred to in the
+            // function DAG might not actually result in a use in the
+            // code. This can happen if you inline a Tuple function,
+            // ignoring one of the Tuple elements, and that Tuple
+            // element is the sole call to a function with an update
+            // definition.
+            if (validate_schedule(f, s, target, is_output, env)) {
+                any_memoized = any_memoized || f.schedule().memoized();
+                funcs.push_back(f);
+                is_output_list.push_back(is_output);
             }
-            any_memoized = any_memoized || f.schedule().memoized();
-            funcs.push_back(f);
-            is_output_list.push_back(is_output);
         }
+
         if (funcs.empty()) {
             continue;
         }
 
-        if ((funcs.size() == 1) &&
-            (funcs[0].has_extern_definition() || (funcs[0].definition().schedule().fused_pairs().empty()))) {
-            // There is only one function in the group and either there is
-            // no loop fusion among its definition or the function is
-            // an extern function
-            if (funcs[0].can_be_inlined() &&
-                funcs[0].schedule().compute_level().is_inlined()) {
-                debug(1) << "Inlining " << funcs[0].name() << '\n';
-                s = inline_function(s, funcs[0]);
-            } else {
-                debug(1) << "Injecting realization of " << funcs[0].name() << '\n';
-                InjectRealization injector(funcs[0], is_output_list[0], target, env);
-                s = injector.mutate(s);
-                internal_assert(injector.found_store_level && injector.found_compute_level);
-            }
+        if (group_should_be_inlined(funcs)) {
+            debug(1) << "Inlining " << funcs[0].name() << '\n';
+            s = inline_function(s, funcs[0]);
         } else {
-            InjectGroupRealization injector(funcs, is_output_list, target, env);
+            debug(1) << "Injecting realization of " << funcs << '\n';
+            InjectFunctionRealization injector(funcs, is_output_list, target, env);
             s = injector.mutate(s);
-            internal_assert(injector.found_store_level && injector.found_compute_level);
+            internal_assert(injector.found_store_level() && injector.found_compute_level());
         }
 
         debug(2) << s << '\n';

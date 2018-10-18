@@ -10,6 +10,7 @@ enum { QURT_EOK = 0 };
 
 extern "C" {
 typedef unsigned int qurt_thread_t;
+
 /*
    Macros for QuRT thread attributes.
  */
@@ -233,5 +234,8 @@ typedef enum {
 extern int qurt_hvx_lock(qurt_hvx_mode_t lock_mode);
 extern int qurt_hvx_unlock(void);
 extern int qurt_hvx_get_mode(void);
+
+typedef unsigned int qurt_size_t;
+typedef unsigned int qurt_mem_pool_t;
 
 }
