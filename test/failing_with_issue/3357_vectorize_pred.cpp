@@ -5,17 +5,6 @@
 using namespace Halide;
 using namespace Halide::Tools;
 
-template<typename A>
-const char *string_of_type();
-
-#define DECL_SOT(name)                   \
-    template<>                           \
-    const char *string_of_type<name>() { \
-        return #name;                    \
-    }
-
-DECL_SOT(float);
-
 template<typename T>
 T tolerance() {
     return 0;
@@ -28,7 +17,7 @@ float tolerance<float>() {
 
 template<>
 double tolerance<double>() {
-    return 1e-14f;
+    return 1e-14;
 }
 
 template<typename T>
@@ -84,11 +73,10 @@ bool test(int vec_width) {
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
             if (!equals(outputf(x, y), outputg(x, y))) {
-                printf("%s x %d failed at %d %d: %f vs %f\n",
-                       string_of_type<A>(), vec_width,
-                       x, y,
-                       outputf(x, y),
-                       outputg(x, y));
+                std::cout << type_of<A>() << " x " << vec_width << " failed at "
+                          << x << " " << y << ": "
+                          << outputf(x, y) << " vs " << outputg(x, y)
+                          << std::endl;
                 printf("Failure!\n");
                 exit(1);
                 return false;
