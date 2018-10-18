@@ -481,7 +481,12 @@ class AttemptStorageFoldingOfFunction : public IRMutator2 {
             Expr extent = Max::make(extent_initial, extent_steady);
             extent = simplify(common_subexpression_elimination(extent), true, bounds);
 
-            const StorageDim &storage_dim = func.schedule().storage_dims()[dim];
+            // Find the StorageDim corresponding to dim.
+            const std::vector<StorageDim>& storage_dims = func.schedule().storage_dims();
+            auto storage_dim_i = std::find_if(storage_dims.begin(), storage_dims.end(),
+                                              [&](const StorageDim &i) { return i.var == func.args()[dim]; });
+            internal_assert(storage_dim_i != storage_dims.end());
+            const StorageDim &storage_dim = *storage_dim_i;
 
             Expr explicit_factor;
             if (!is_pure(min) ||
