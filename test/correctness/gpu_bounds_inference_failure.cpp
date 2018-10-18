@@ -6,6 +6,7 @@ using namespace Halide;
 
 int main(int argc, char *argv[]) {
 
+    Target t = get_jit_target_from_environment();
     if (!t.has_feature(Target::CUDA)) {
         printf("Not running test because cuda not enabled\n");
         return 0;
