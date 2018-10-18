@@ -3,11 +3,13 @@
 #include <assert.h>
 #include <stdlib.h>
 #include "halide_benchmark.h"
+#ifdef SCHEDULE_INCLUDE_RO
 #include "pipeline_raw_linear_interleaved_ro_basic.h"
 #include "pipeline_raw_linear_interleaved_ro_async.h"
 #include "pipeline_raw_linear_interleaved_ro_fold.h"
 #include "pipeline_raw_linear_interleaved_ro_split.h"
 #include "pipeline_raw_linear_interleaved_ro_split_fold.h"
+#endif
 #include "pipeline_raw_linear_interleaved_rw_basic.h"
 #include "pipeline_raw_linear_interleaved_rw_fold.h"
 #include "pipeline_raw_linear_interleaved_rw_async.h"
@@ -15,6 +17,53 @@
 #include "pipeline_raw_linear_interleaved_rw_split_fold.h"
 #include "HalideRuntimeHexagonDma.h"
 #include "HalideBuffer.h"
+
+
+enum {
+    SCHEDULE_BASIC,
+    SCHEDULE_FOLD,
+    SCHEDULE_ASYNC,
+    SCHEDULE_SPLIT,
+    SCHEDULE_SPLIT_FOLD,
+    SCHEDULE_MAX
+};
+
+enum {
+    DIRECTION_RW,
+    DIRECTION_RO,
+    DIRECTION_MAX
+};
+
+typedef struct {
+    const char *schedule_name;
+    int (*schedule_call)(struct halide_buffer_t *in, struct halide_buffer_t *out);
+} ScheduleList;
+
+#define _SCHEDULE_STR(s) #s
+#define _SCHEDULE_NAME(data, direction, schedule)       pipeline_##data##_##direction##_##schedule
+#define _SCHEDULE_PAIR(data, direction, schedule)       {_SCHEDULE_STR(scheduled-pipeline(data, direction, schedule)), _SCHEDULE_NAME(data, direction, schedule)}
+#define _SCHEDULE_DUMMY_PAIR                            {NULL, NULL}
+#define SCHEDULE_FUNCTION_RW(schedule)                  _SCHEDULE_PAIR(raw_linear_interleaved, rw, schedule)
+
+#ifdef SCHEDULE_INCLUDE_RO
+#define SCHEDULE_FUNCTION_RO(schedule)                  _SCHEDULE_PAIR(raw_linear_interleaved, ro, schedule)
+#else
+#define SCHEDULE_FUNCTION_RO(schedule)                  _SCHEDULE_DUMMY_PAIR
+#endif
+
+static ScheduleList schedule_list[DIRECTION_MAX][SCHEDULE_MAX] = {{
+    SCHEDULE_FUNCTION_RW(basic),
+    SCHEDULE_FUNCTION_RW(fold),
+    SCHEDULE_FUNCTION_RW(async),
+    SCHEDULE_FUNCTION_RW(split),
+    SCHEDULE_FUNCTION_RW(fold)
+    },{
+    SCHEDULE_FUNCTION_RO(basic),
+    SCHEDULE_FUNCTION_RO(fold),
+    SCHEDULE_FUNCTION_RO(async),
+    SCHEDULE_FUNCTION_RO(split),
+    SCHEDULE_FUNCTION_RO(fold)
+}};
 
 int main(int argc, char **argv) {
     int ret = 0;
@@ -68,40 +117,26 @@ int main(int argc, char **argv) {
         halide_hexagon_dma_prepare_for_copy_to_device(nullptr, output, dma_engine, false, halide_hexagon_fmt_RawData);
     }
 
+    int my_direction = (!strcmp(dma_direction, "rw")) ? DIRECTION_RW : DIRECTION_RO;
+    int my_schedule = SCHEDULE_MAX;
     if (!strcmp(schedule,"basic")) {
-        printf("Basic pipeline\n");
-        if (!strcmp(dma_direction, "rw")) {
-            ret = pipeline_raw_linear_interleaved_rw_basic(input, output);
-        } else {
-            ret = pipeline_raw_linear_interleaved_ro_basic(input, output);
-        }
+        my_schedule = SCHEDULE_BASIC;
     } else if (!strcmp(schedule,"fold")) {
-        printf("Fold pipeline\n");
-        if (!strcmp(dma_direction, "rw")) {
-            ret = pipeline_raw_linear_interleaved_rw_fold(input, output);
-        } else {
-            ret = pipeline_raw_linear_interleaved_ro_fold(input, output);
-        }
+        my_schedule = SCHEDULE_FOLD;
     } else if (!strcmp(schedule,"async")) {
-        printf("Async pipeline\n");
-        if (!strcmp(dma_direction, "rw")) {
-            ret = pipeline_raw_linear_interleaved_rw_async(input, output);
-        } else {
-            ret = pipeline_raw_linear_interleaved_ro_async(input, output);
-        }
+        my_schedule = SCHEDULE_ASYNC;
     } else if (!strcmp(schedule,"split")) {
-        printf("Split pipeline\n");
-        if (!strcmp(dma_direction, "rw")) {
-            ret = pipeline_raw_linear_interleaved_rw_split(input, output);
-        } else {
-            ret = pipeline_raw_linear_interleaved_ro_split(input, output);
-        }
+        my_schedule = SCHEDULE_SPLIT;
     } else if (!strcmp(schedule,"split_fold")) {
-        printf("Split Fold pipeline\n");
-        if (!strcmp(dma_direction, "rw")) {
-            ret = pipeline_raw_linear_interleaved_rw_split_fold(input, output);
+        my_schedule = SCHEDULE_SPLIT_FOLD;
+    }
+    if (my_schedule < SCHEDULE_MAX) {
+        if (schedule_list[my_direction][my_schedule].schedule_name != NULL) {
+            printf("%s\n", schedule_list[my_direction][my_schedule].schedule_name);
+            ret = (*schedule_list[my_direction][my_schedule].schedule_call)(input, output);
         } else {
-            ret = pipeline_raw_linear_interleaved_ro_split_fold(input, output);
+            printf("Schedule pipeline test not built-in (%s, %s)\n", dma_direction, schedule);
+            ret = -2;
         }
     } else {
         printf("Incorrect input Correct schedule: basic, fold, async, split, split_fold\n");
