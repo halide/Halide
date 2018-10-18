@@ -688,6 +688,7 @@ RUNTIME_CPP_COMPONENTS = \
   fake_thread_pool \
   float16_t \
   gpu_device_selection \
+  hexagon_cache_allocator \
   hexagon_cpu_features \
   hexagon_dma_pool \
   hexagon_dma \
@@ -753,7 +754,6 @@ RUNTIME_CPP_COMPONENTS = \
   windows_yield \
   write_debug_image \
   x86_cpu_features \
-  hexagon_cache_allocator \
 
 RUNTIME_LL_COMPONENTS = \
   aarch64 \
@@ -1049,6 +1049,7 @@ GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/multitarget.rungen,$
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/nested_externs.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/old_buffer_t.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/tiled_blur.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
+GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/extern_output.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
 test_rungen: $(GENERATOR_BUILD_RUNGEN_TESTS)
 
 test_generator: $(GENERATOR_AOT_TESTS) $(GENERATOR_AOTCPP_TESTS) $(GENERATOR_JIT_TESTS) $(GENERATOR_BUILD_RUNGEN_TESTS)

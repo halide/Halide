@@ -98,8 +98,6 @@ py::object generate_impl(FactoryFunc factory, const GeneratorContext &context, p
         return factory(context);
     });
     auto names = stub.get_names();
-    _halide_user_assert(names.filter_params.empty())
-        << "Generators that use ImageParam/Param (instead of Input<>) are not supported in the Python bindings.";
     _halide_user_assert(!names.outputs.empty())
         << "Generators that use build() (instead of generate()+Output<>) are not supported in the Python bindings.";
     std::map<std::string, size_t> input_name_to_pos;
