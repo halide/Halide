@@ -11,6 +11,7 @@
 #include "Lambda.h"
 #include "Func.h"
 #include "IR.h"
+#include "Lambda.h"
 #include "Util.h"
 
 namespace Halide {
