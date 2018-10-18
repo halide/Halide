@@ -4,8 +4,6 @@
 namespace Halide {
 namespace Internal {
 
-using std::vector;
-
 class RemoveExternLoops : public IRMutator2 {
 private:
     using IRMutator2::visit;
