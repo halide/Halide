@@ -312,7 +312,7 @@ vector<Argument> Pipeline::infer_arguments(Stmt body) {
     // (we'll embed those in the binary by default), and minus the user_context arg.
     vector<Argument> result;
     for (const InferredArgument &arg : contents->inferred_args) {
-        debug(1) << "Inferred argument: " << arg.arg.type << " " << arg.arg.name << "\n";
+        debug(2) << "Inferred argument: " << arg.arg.type << " " << arg.arg.name << "\n";
         if (!arg.buffer.defined() &&
             arg.arg.name != contents->user_context_arg.arg.name) {
             result.push_back(arg.arg);
@@ -742,19 +742,19 @@ void Pipeline::prepare_jit_call_arguments(RealizationArg &outputs, const Target 
                         // Unbound
                         args_result.store[arg_index++] = nullptr;
                     }
-                    debug(1) << "JIT input ImageParam argument ";
+                    debug(2) << "JIT input ImageParam argument ";
                 } else {
                     args_result.store[arg_index++] = p.scalar_address();
-                    debug(1) << "JIT input scalar argument ";
+                    debug(2) << "JIT input scalar argument ";
                 }
             }
         } else {
-            debug(1) << "JIT input Image argument ";
+            debug(2) << "JIT input Image argument ";
             internal_assert(arg.buffer.defined());
             args_result.store[arg_index++] = arg.buffer.raw_buffer();
         }
         const void *ptr = args_result.store[arg_index - 1];
-        debug(1) << arg.arg.name << " @ " << ptr << "\n";
+        debug(2) << arg.arg.name << " @ " << ptr << "\n";
     }
 
     // Then the outputs
@@ -762,16 +762,16 @@ void Pipeline::prepare_jit_call_arguments(RealizationArg &outputs, const Target 
         for (size_t i = 0; i < outputs.r->size(); i++) {
             const halide_buffer_t *buf = (*outputs.r)[i].raw_buffer();
             args_result.store[arg_index++] = buf;
-            debug(1) << "JIT output buffer @ " << (const void *)buf << ", " << (const void *)buf->host << "\n";
+            debug(2) << "JIT output buffer @ " << (const void *)buf << ", " << (const void *)buf->host << "\n";
         }
     } else if (outputs.buf) {
         args_result.store[arg_index++] = outputs.buf;
-        debug(1) << "JIT output buffer @ " << (const void *)outputs.buf << ", " << (const void *)outputs.buf->host << "\n";
+        debug(2) << "JIT output buffer @ " << (const void *)outputs.buf << ", " << (const void *)outputs.buf->host << "\n";
     } else {
         for (const Buffer<> &buffer : *outputs.buffer_list) {
             const halide_buffer_t *buf = buffer.raw_buffer();
             args_result.store[arg_index++] = buf;
-            debug(1) << "JIT output buffer @ " << (const void *)buf << ", " << (const void *)buf->host << "\n";
+            debug(2) << "JIT output buffer @ " << (const void *)buf << ", " << (const void *)buf->host << "\n";
         }
     }
 
@@ -995,7 +995,7 @@ void Pipeline::infer_input_bounds(RealizationArg outputs, const ParamMap &param_
 
     // No need to query if all the inputs are bound already.
     if (query_indices.empty()) {
-        debug(1) << "All inputs are bound. No need for bounds inference\n";
+        debug(2) << "All inputs are bound. No need for bounds inference\n";
         return;
     }
 
@@ -1036,7 +1036,7 @@ void Pipeline::infer_input_bounds(RealizationArg outputs, const ParamMap &param_
         << " didn't converge after " << max_iters
         << " iterations. There may be unsatisfiable constraints\n";
 
-    debug(1) << "Bounds inference converged after " << iter << " iterations\n";
+    debug(2) << "Bounds inference converged after " << iter << " iterations\n";
 
     // Now allocate the resulting buffers
     for (size_t i : query_indices) {

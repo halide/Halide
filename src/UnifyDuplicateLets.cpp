@@ -1,6 +1,7 @@
 #include "UnifyDuplicateLets.h"
 #include "IREquality.h"
 #include "IRMutator.h"
+#include "Simplify.h"
 #include <map>
 
 namespace Halide {
@@ -25,7 +26,12 @@ public:
             if (iter != scope.end()) {
                 return Variable::make(e.type(), iter->second);
             } else {
-                return IRMutator2::mutate(e);
+                Expr m = simplify(IRMutator2::mutate(e));
+                if (!equal(m, e)) {
+                    return mutate(m);
+                } else {
+                    return m;
+                }
             }
         } else {
             return Expr();
@@ -75,7 +81,10 @@ protected:
         bool should_pop = false;
         bool should_erase = false;
 
-        if (!is_impure) {
+        if (const Variable *v = value.as<Variable>()) {
+            rewrites[op->name] = v->name;
+            should_erase = true;
+        } else if (!is_impure) {
             map<Expr, string, IRDeepCompare>::iterator iter = scope.find(value);
             if (iter == scope.end()) {
                 scope[value] = op->name;
@@ -96,7 +105,9 @@ protected:
             rewrites.erase(op->name);
         }
 
-        if (value.same_as(op->value) && body.same_as(op->body)) {
+        if (should_erase) {
+            return body;
+        } else if (value.same_as(op->value) && body.same_as(op->body)) {
             return op;
         } else {
             return LetStmtOrLet::make(op->name, value, body);
