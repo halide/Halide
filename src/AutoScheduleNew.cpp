@@ -1302,7 +1302,7 @@ vector<vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, int fa
         result.push_back(vector<int64_t>());
     } else {
         vector<vector<int64_t>> v;
-        for (int f = factor;; f *= 2) {
+        for (int f = factor; f < 1024; f *= 2) {
             v = generate_tilings(s, d - 1, f, allow_splits, vector_dim, vector_size);
             if (v.size() < 100) break;
         }
