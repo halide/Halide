@@ -20,14 +20,14 @@ int main(int argc, char **argv) {
     int ret = 0;
 
     if (argc < 4) {
-        printf("Usage: %s width height schedule {basic, fold, async, split, split_fold} read_write {ro, rw}\n", argv[0]);
+        printf("Usage: %s width height schedule {basic, fold, async, split, split_fold} dma_direction {ro, rw}\n", argv[0]);
         return ret;
     }
 
     const int width = atoi(argv[1]);
     const int height = atoi(argv[2]);
     const char *schedule = argv[3];
-    const char *read_write = argv[4];
+    const char *dma_direction = argv[4];
 
     // Fill the input buffer with random test data. This is just a plain old memory buffer
     const int buf_size = (width * height * 3) / 2;
@@ -71,7 +71,7 @@ int main(int argc, char **argv) {
     input_y.set_device_dirty();
     input_uv.set_device_dirty();
 
-    if (!strcmp(read_write, "rw")) {
+    if (!strcmp(dma_direction, "rw")) {
         output_y.device_wrap_native(halide_hexagon_dma_device_interface(), reinterpret_cast<uint64_t>(data_out));
         output_uv.device_wrap_native(halide_hexagon_dma_device_interface(), reinterpret_cast<uint64_t>(data_out));
         output_y.set_device_dirty();
@@ -85,48 +85,48 @@ int main(int argc, char **argv) {
     // DMA_step 3: Associate buffer to DMA engine, and prepare for copying to host (DMA read) and device (DMA write)
     halide_hexagon_dma_prepare_for_copy_to_host(nullptr, input_y, dma_engine, false, halide_hexagon_fmt_P010_Y);
     halide_hexagon_dma_prepare_for_copy_to_host(nullptr, input_uv, dma_engine, false, halide_hexagon_fmt_P010_UV);
-    if (!strcmp(read_write, "rw")) {
+    if (!strcmp(dma_direction, "rw")) {
         halide_hexagon_dma_prepare_for_copy_to_device(nullptr, output_y, dma_engine, false, halide_hexagon_fmt_P010_Y);
         halide_hexagon_dma_prepare_for_copy_to_device(nullptr, output_uv, dma_engine, false, halide_hexagon_fmt_P010_UV);
     }
 
     if (!strcmp(schedule,"basic")) {
         printf("Basic pipeline\n");
-        if (!strcmp(read_write, "rw")) {
+        if (!strcmp(dma_direction, "rw")) {
             ret = pipeline_p010_linear_rw_basic(input_y, input_uv, output_y, output_uv);
         } else {
             ret = pipeline_p010_linear_ro_basic(input_y, input_uv, output_y, output_uv);
         }
     } else if (!strcmp(schedule,"fold")) {
         printf("Fold pipeline\n");
-        if (!strcmp(read_write, "rw")) {
+        if (!strcmp(dma_direction, "rw")) {
             ret = pipeline_p010_linear_rw_fold(input_y, input_uv, output_y, output_uv);
         } else {
             ret = pipeline_p010_linear_ro_fold(input_y, input_uv, output_y, output_uv);
         }
     } else if (!strcmp(schedule,"async")) {
         printf("Async pipeline\n");
-        if (!strcmp(read_write, "rw")) {
+        if (!strcmp(dma_direction, "rw")) {
             ret = pipeline_p010_linear_rw_async(input_y, input_uv, output_y, output_uv);
         } else {
             ret = pipeline_p010_linear_ro_async(input_y, input_uv, output_y, output_uv);
         }
     } else if (!strcmp(schedule,"split")) {
         printf("Split pipeline\n");
-        if (!strcmp(read_write, "rw")) {
+        if (!strcmp(dma_direction, "rw")) {
             ret = pipeline_p010_linear_rw_split(input_y, input_uv, output_y, output_uv);
         } else {
             ret = pipeline_p010_linear_ro_split(input_y, input_uv, output_y, output_uv);
         }
     } else if (!strcmp(schedule,"split_fold")) {
         printf("Split Fold pipeline\n");
-        if (!strcmp(read_write, "rw")) {
+        if (!strcmp(dma_direction, "rw")) {
             ret = pipeline_p010_linear_rw_split_fold(input_y, input_uv, output_y, output_uv);
         } else {
             ret = pipeline_p010_linear_ro_split_fold(input_y, input_uv, output_y, output_uv);
         }
     } else {
-        printf("Incorrect input Correct options: basic, fold, async, split, split_fold\n");
+        printf("Incorrect input Correct schedule: basic, fold, async, split, split_fold\n");
         ret = -1;
     }
 
@@ -138,7 +138,7 @@ int main(int argc, char **argv) {
         for (int y = 0; y < (3 * height) / 2; y++) {
             for (int x = 0; x < width; x++) {
                 uint16_t correct = data_in[x + y * width] * 2;
-                uint16_t result = (!strcmp(read_write, "rw")) ? data_out[x + y * width] : output(x, y);
+                uint16_t result = (!strcmp(dma_direction, "rw")) ? data_out[x + y * width] : output(x, y);
                 if (correct != result) {
                     printf("Mismatch at x=%d y=%d : %d != %d\n", x, y, correct, result);
                     if (++error_count > 20) abort();
@@ -153,7 +153,7 @@ int main(int argc, char **argv) {
     halide_hexagon_dma_unprepare(nullptr, input_y);
     halide_hexagon_dma_unprepare(nullptr, input_uv);
  
-    if (!strcmp(read_write, "rw")) {
+    if (!strcmp(dma_direction, "rw")) {
         halide_hexagon_dma_unprepare(nullptr, output_y);
         halide_hexagon_dma_unprepare(nullptr, output_uv);
     }

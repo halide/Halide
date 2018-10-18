@@ -110,7 +110,6 @@ public:
                     .store_at(output_uv, ty)
                     .reorder_storage(c, x, y)
                     .fold_storage(x, tile_width * 2);
-
             break;
             case Schedule::Async:
                 output_y

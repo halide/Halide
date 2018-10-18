@@ -3,7 +3,7 @@
 using namespace Halide;
 
 // Generate a pipeline that reads 4-channel data via DMA, scales it by
-// 2, and writes it back (without DMA).
+// 2, and (optionally) writes it back via DMA.
 class DmaPipeline : public Generator<DmaPipeline> {
 public:
     Input<Buffer<uint8_t>> input{"input", 3};
