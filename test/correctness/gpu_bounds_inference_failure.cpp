@@ -6,6 +6,10 @@ using namespace Halide;
 
 int main(int argc, char *argv[]) {
 
+  if (!t.has_feature(Target::CUDA)) {
+    printf("Not running test because cuda not enabled\n");
+  }
+
   Var x, y, p, d;
 
   Func f1, f2;
