@@ -1,3 +1,4 @@
+#include <iterator>
 #include <map>
 #include <set>
 #include <string>
@@ -454,7 +455,7 @@ Expr substitute_rdom_predicate(
         rdoms_set.insert(it.second.domain);
     }
     vector<ReductionDomain> rdoms;
-    copy(rdoms_set.begin(), rdoms_set.end(), back_inserter(rdoms));
+    copy(rdoms_set.begin(), rdoms_set.end(), std::back_inserter(rdoms));
     for (auto &r : rdoms) {
         Expr predicate = r.predicate();
         predicate = substitute(name, replacement, predicate);

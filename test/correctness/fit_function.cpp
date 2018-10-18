@@ -1,3 +1,5 @@
+#include <math.h>
+
 #include "Halide.h"
 
 using namespace Halide;
