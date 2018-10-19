@@ -9,7 +9,7 @@ include ../support/Makefile.inc
 #$ build/tools/make-standalone-toolchain.sh --arch=arm --platform=android-21 --install-dir=$ANDROID_ARM_TOOLCHAIN
 
 #to run the specialized tests optional arguments are
-#$(BIN)/process_nv12_linear_basic-host  width height schedule {where pipeline schedule is: basic, fold, async, split, split_async} dma_direction {ro, rw} 
+#$(BIN)/process_yuv_linear_basic-host  width height schedule {where pipeline schedule is: basic, fold, async, split, split_async} dma_direction {ro, rw}
 CXX-host ?= $(CXX)
 CXX-arm-64-android ?= $(ANDROID_ARM64_TOOLCHAIN)/bin/aarch64-linux-android-c++
 CXX-arm-32-android ?= $(ANDROID_ARM_TOOLCHAIN)/bin/arm-linux-androideabi-c++
@@ -47,8 +47,7 @@ OPTION := none
 
 BIN ?= bin
 
-all: $(BIN)/process_nv12_linear_basic-host \
-	 $(BIN)/process_p010_linear_basic-host \
+all: $(BIN)/process_yuv_linear_basic-host \
 	 $(BIN)/process_raw_linear_interleaved_basic-host \
 
 $(BIN)/pipeline_yuv_linear_basic: pipeline_yuv_linear_basic.cpp $(GENERATOR_DEPS)
@@ -171,9 +170,7 @@ P010_RO=
 RAW_RO=
 endif
 
-$(BIN)/process_nv12_linear_basic-%: process_nv12_linear_basic.cpp $(NV12_RO) $(NV12_RW) mock_dma_implementation.cpp
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 $^ -o $@ $(LDFLAGS-$*)
-$(BIN)/process_p010_linear_basic-%: process_p010_linear_basic.cpp $(P010_RO) $(P010_RW) mock_dma_implementation.cpp
+$(BIN)/process_yuv_linear_basic-%: process_yuv_linear_basic.cpp $(NV12_RO) $(NV12_RW) $(P010_RO) $(P010_RW) mock_dma_implementation.cpp
 	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 $^ -o $@ $(LDFLAGS-$*)
 $(BIN)/process_raw_linear_interleaved_basic-%: process_raw_linear_interleaved_basic.cpp $(RAW_RO) $(RAW_RW) mock_dma_implementation.cpp
 	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 $^ -o $@ $(LDFLAGS-$*)
