@@ -114,13 +114,23 @@ int main(int argc, char **argv) {
     }
     // DMA_step 2: Allocate a DMA engine
     void *dma_engine = nullptr;
+    void *dma_engine_write = nullptr;
     halide_hexagon_dma_allocate_engine(nullptr, &dma_engine);
 
+    if ((!strcmp(schedule,"async") || !strcmp(schedule,"split_async")) && !strcmp(dma_direction, "rw")) {
+        printf("A separate engine for DMA write\n");
+        halide_hexagon_dma_allocate_engine(nullptr, &dma_engine_write);
+    }
     // DMA_step 3: Associate buffer to DMA engine, and prepare for copying to host (DMA read) and device (DMA write)
     halide_hexagon_dma_prepare_for_copy_to_host(nullptr, input, dma_engine, false, halide_hexagon_fmt_RawData);
 
     if (!strcmp(dma_direction, "rw")) {
-        halide_hexagon_dma_prepare_for_copy_to_device(nullptr, output, dma_engine, false, halide_hexagon_fmt_RawData);
+        if (!strcmp(schedule,"async") || !strcmp(schedule,"split_async")) {
+            printf("Use separate engine for DMA output\n");
+            halide_hexagon_dma_prepare_for_copy_to_device(nullptr, output, dma_engine_write, false, halide_hexagon_fmt_RawData);
+        } else {
+            halide_hexagon_dma_prepare_for_copy_to_device(nullptr, output, dma_engine, false, halide_hexagon_fmt_RawData);
+        }
     }
 
     int my_direction = (!strcmp(dma_direction, "rw")) ? DIRECTION_RW : DIRECTION_RO;
@@ -179,6 +189,10 @@ int main(int argc, char **argv) {
 
     // DMA_step 5: Processing is completed and ready to exit, deallocate the DMA engine
     halide_hexagon_dma_deallocate_engine(nullptr, dma_engine);
+
+    if ((!strcmp(schedule,"async") || !strcmp(schedule,"split_async")) && !strcmp(dma_direction, "rw")) {
+        halide_hexagon_dma_deallocate_engine(nullptr, dma_engine_write);
+    }
 
     free(data_in);
     free(data_out);

@@ -160,7 +160,13 @@ inline int process_pipeline(T const &type, const int width, const int height,
 
     // DMA_step 2: Allocate a DMA engine
     void *dma_engine = nullptr;
+    void *dma_engine_write = nullptr;
     halide_hexagon_dma_allocate_engine(nullptr, &dma_engine);
+
+    if ((!strcmp(schedule,"async") || !strcmp(schedule,"split_async")) && !strcmp(dma_direction, "rw")) {
+        printf("A separate engine for DMA write\n");
+        halide_hexagon_dma_allocate_engine(nullptr, &dma_engine_write);
+    }
 
     halide_hexagon_image_fmt_t fmt_y = (sizeof(type)==1) ? halide_hexagon_fmt_NV12_Y : halide_hexagon_fmt_P010_Y;
     halide_hexagon_image_fmt_t fmt_uv = (sizeof(type)==1) ? halide_hexagon_fmt_NV12_UV : halide_hexagon_fmt_P010_UV;
@@ -169,8 +175,14 @@ inline int process_pipeline(T const &type, const int width, const int height,
     halide_hexagon_dma_prepare_for_copy_to_host(nullptr, input_y, dma_engine, false, fmt_y);
     halide_hexagon_dma_prepare_for_copy_to_host(nullptr, input_uv, dma_engine, false, fmt_uv);
     if (!strcmp(dma_direction, "rw")) {
-        halide_hexagon_dma_prepare_for_copy_to_device(nullptr, output_y, dma_engine, false, fmt_y);
-        halide_hexagon_dma_prepare_for_copy_to_device(nullptr, output_uv, dma_engine, false, fmt_uv);
+        if (!strcmp(schedule,"async") || !strcmp(schedule,"split_async")) {
+            printf("Use separate engine for DMA output\n");
+            halide_hexagon_dma_prepare_for_copy_to_device(nullptr, output_y, dma_engine_write, false, fmt_y);
+            halide_hexagon_dma_prepare_for_copy_to_device(nullptr, output_uv, dma_engine_write, false, fmt_uv);
+        } else {
+            halide_hexagon_dma_prepare_for_copy_to_device(nullptr, output_y, dma_engine, false, fmt_y);
+            halide_hexagon_dma_prepare_for_copy_to_device(nullptr, output_uv, dma_engine, false, fmt_uv);
+        }
     }
 
     int my_direction = (!strcmp(dma_direction, "rw")) ? DIRECTION_RW : DIRECTION_RO;
@@ -229,6 +241,10 @@ inline int process_pipeline(T const &type, const int width, const int height,
 
     // DMA_step 5: Processing is completed and ready to exit, deallocate the DMA engine
     halide_hexagon_dma_deallocate_engine(nullptr, dma_engine);
+
+    if ((!strcmp(schedule,"async") || !strcmp(schedule,"split_async")) && !strcmp(dma_direction, "rw")) {
+        halide_hexagon_dma_deallocate_engine(nullptr, dma_engine_write);
+    }
 
     free(data_in);
     free(data_out);
