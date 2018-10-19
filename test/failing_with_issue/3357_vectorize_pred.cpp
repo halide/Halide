@@ -1,29 +1,41 @@
 #include "Halide.h"
-#include <cstdio>
 #include "halide_benchmark.h"
+#include <cstdio>
 
 using namespace Halide;
 using namespace Halide::Tools;
 
-template<typename A>
-const char *string_of_type();
+template<typename T>
+T tolerance() {
+    return 0;
+}
 
-#define DECL_SOT(name)                                          \
-    template<>                                                  \
-    const char *string_of_type<name>() {return #name;}
+template<>
+float tolerance<float>() {
+    return 1e-7f;
+}
 
-DECL_SOT(float);
+template<>
+double tolerance<double>() {
+    return 1e-14;
+}
+
+template<typename T>
+bool equals(T a, T b, T epsilon = tolerance<T>()) {
+    T error = std::abs(a - b);
+    return error <= epsilon;
+}
 
 template<typename A>
 bool test(int vec_width) {
 
-    int W = vec_width*1;
+    int W = vec_width * 1;
     int H = 50000;
 
-    Buffer<A> input(W, H+20);
-    for (int y = 0; y < H+20; y++) {
+    Buffer<A> input(W, H + 20);
+    for (int y = 0; y < H + 20; y++) {
         for (int x = 0; x < W; x++) {
-            input(x, y) = (A)((rand() & 0xffff)*0.125 + 1.0);
+            input(x, y) = (A)((rand() & 0xffff) * 0.125 + 1.0);
         }
     }
 
@@ -31,15 +43,15 @@ bool test(int vec_width) {
     Func f, g;
 
     RDom r(0, W, 0, H);
-    r.where((r.x*r.y) % 8 < 7);
+    r.where((r.x * r.y) % 8 < 7);
 
     Expr e = input(r.x, r.y);
     for (int i = 1; i < 5; i++) {
-        e = e + input(r.x, r.y+i);
+        e = e + input(r.x, r.y + i);
     }
 
     for (int i = 5; i >= 0; i--) {
-        e = e + input(r.x, r.y+i);
+        e = e + input(r.x, r.y + i);
     }
 
     f(x, y) = undef<A>();
@@ -60,13 +72,13 @@ bool test(int vec_width) {
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
-            if (outputf(x, y) != outputg(x, y)) {
-                printf("%s x %d failed at %d %d: %d vs %d\n",
-                       string_of_type<A>(), vec_width,
-                       x, y,
-                       (int)outputf(x, y),
-                       (int)outputg(x, y)
-                    );
+            if (!equals(outputf(x, y), outputg(x, y))) {
+                std::cout << type_of<A>() << " x " << vec_width << " failed at "
+                          << x << " " << y << ": "
+                          << outputf(x, y) << " vs " << outputg(x, y)
+                          << std::endl;
+                printf("Failure!\n");
+                exit(1);
                 return false;
             }
         }
