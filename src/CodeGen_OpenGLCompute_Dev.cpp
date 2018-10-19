@@ -284,6 +284,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::add_kernel(Stmt s,
     } else {
         stream << "#version 430\n";
     }
+    stream << "#define inf_f32 (1.0/0.0)\n"; 
     stream << "float float_from_bits(int x) { return intBitsToFloat(int(x)); }\n";
 
     for (size_t i = 0; i < args.size(); i++) {
