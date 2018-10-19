@@ -9,7 +9,7 @@ public:
     Input<Buffer<uint8_t>> input{"input", 3};
     Output<Buffer<uint8_t>> output{"output", 3};
 
-    enum class Schedule { Basic, Fold, Async, Split, Split_Fold };
+    enum class Schedule { Basic, Fold, Async, Split, Split_Async };
     GeneratorParam<Schedule> schedule{"schedule",
             /* default value */
              Schedule::Basic,
@@ -18,7 +18,7 @@ public:
              { "fold", Schedule::Fold },
              { "async", Schedule::Async },
              { "split", Schedule::Split },
-             { "split_fold", Schedule::Split_Fold }}};
+             { "split_async", Schedule::Split_Async }}};
 
     GeneratorParam<bool> use_dma_for_output{"use_dma_for_output", true};
 
@@ -85,6 +85,17 @@ public:
                     .store_at(output, ty)
                     .reorder_storage(c, x, y)
                     .fold_storage(x, tile_width * 2);
+
+#if 0
+// Async on tiled output is not working (hangs); possibly DMA task is waiting for semaphore
+// to be released by the processing task (causing dead-locking)
+//
+// TODO: enable this schedule when fix is available
+                work_y
+                    .async()
+                    .store_at(output_y, ty)
+                    .fold_storage(x, tile_width * 2);
+#endif
             break;
             case Schedule::Split: {
                 Var yo, yi;
@@ -100,7 +111,8 @@ public:
                     .reorder_storage(c, x, y);
             }
             break;
-            case Schedule::Split_Fold: {
+            case Schedule::Split_Async: {
+// TODO: enhance with async() with fold_storage() for DMA write, when fix (see above) is available
                 Var yo, yi;
                 Expr fac = output.dim(1).extent()/2;
                 output

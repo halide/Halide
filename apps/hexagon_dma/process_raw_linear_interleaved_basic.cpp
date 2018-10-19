@@ -3,18 +3,19 @@
 #include <assert.h>
 #include <stdlib.h>
 #include "halide_benchmark.h"
-#ifdef SCHEDULE_INCLUDE_RO
+#ifdef SCHEDULE_ALL
 #include "pipeline_raw_linear_interleaved_ro_basic.h"
-#include "pipeline_raw_linear_interleaved_ro_async.h"
 #include "pipeline_raw_linear_interleaved_ro_fold.h"
+#include "pipeline_raw_linear_interleaved_ro_async.h"
 #include "pipeline_raw_linear_interleaved_ro_split.h"
-#include "pipeline_raw_linear_interleaved_ro_split_fold.h"
-#endif
+#include "pipeline_raw_linear_interleaved_ro_split_async.h"
+
 #include "pipeline_raw_linear_interleaved_rw_basic.h"
 #include "pipeline_raw_linear_interleaved_rw_fold.h"
+#endif
 #include "pipeline_raw_linear_interleaved_rw_async.h"
 #include "pipeline_raw_linear_interleaved_rw_split.h"
-#include "pipeline_raw_linear_interleaved_rw_split_fold.h"
+#include "pipeline_raw_linear_interleaved_rw_split_async.h"
 #include "HalideRuntimeHexagonDma.h"
 #include "HalideBuffer.h"
 
@@ -24,7 +25,7 @@ enum {
     SCHEDULE_FOLD,
     SCHEDULE_ASYNC,
     SCHEDULE_SPLIT,
-    SCHEDULE_SPLIT_FOLD,
+    SCHEDULE_SPLIT_ASYNC,
     SCHEDULE_MAX
 };
 
@@ -45,24 +46,29 @@ typedef struct {
 #define _SCHEDULE_DUMMY_PAIR                            {NULL, NULL}
 #define SCHEDULE_FUNCTION_RW(schedule)                  _SCHEDULE_PAIR(raw_linear_interleaved, rw, schedule)
 
-#ifdef SCHEDULE_INCLUDE_RO
+#ifdef SCHEDULE_ALL
 #define SCHEDULE_FUNCTION_RO(schedule)                  _SCHEDULE_PAIR(raw_linear_interleaved, ro, schedule)
 #else
 #define SCHEDULE_FUNCTION_RO(schedule)                  _SCHEDULE_DUMMY_PAIR
 #endif
 
 static ScheduleList schedule_list[DIRECTION_MAX][SCHEDULE_MAX] = {{
+#ifdef SCHEDULE_ALL
     SCHEDULE_FUNCTION_RW(basic),
     SCHEDULE_FUNCTION_RW(fold),
+#else
+    SCHEDULE_FUNCTION_RO(basic),    // dummy
+    SCHEDULE_FUNCTION_RO(fold),     // dummy
+#endif
     SCHEDULE_FUNCTION_RW(async),
     SCHEDULE_FUNCTION_RW(split),
-    SCHEDULE_FUNCTION_RW(fold)
+    SCHEDULE_FUNCTION_RW(split_async)
     },{
     SCHEDULE_FUNCTION_RO(basic),
     SCHEDULE_FUNCTION_RO(fold),
     SCHEDULE_FUNCTION_RO(async),
     SCHEDULE_FUNCTION_RO(split),
-    SCHEDULE_FUNCTION_RO(fold)
+    SCHEDULE_FUNCTION_RO(split_async)
 }};
 
 int main(int argc, char **argv) {
@@ -127,8 +133,8 @@ int main(int argc, char **argv) {
         my_schedule = SCHEDULE_ASYNC;
     } else if (!strcmp(schedule,"split")) {
         my_schedule = SCHEDULE_SPLIT;
-    } else if (!strcmp(schedule,"split_fold")) {
-        my_schedule = SCHEDULE_SPLIT_FOLD;
+    } else if (!strcmp(schedule,"split_async")) {
+        my_schedule = SCHEDULE_SPLIT_ASYNC;
     }
     if (my_schedule < SCHEDULE_MAX) {
         if (schedule_list[my_direction][my_schedule].schedule_name != NULL) {
@@ -139,14 +145,13 @@ int main(int argc, char **argv) {
             ret = -2;
         }
     } else {
-        printf("Incorrect input Correct schedule: basic, fold, async, split, split_fold\n");
+        printf("Incorrect input Correct schedule: basic, fold, async, split, split_async\n");
         ret = -1;
     }
 
     if (ret != 0) {
         printf("pipeline failed! %d\n", ret);
-    }
-    else {
+    } else {
         // verify result by comparing to expected values
         int error_count = 0;
         for (int y=0; y < height; y++) {
