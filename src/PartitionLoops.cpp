@@ -95,7 +95,7 @@ class RemoveLikelyTags : public IRMutator2 {
 class HasLikelyTag : public IRVisitor {
 protected:
     using IRVisitor::visit;
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         if (op->is_intrinsic(Call::likely)) {
             result = true;
         } else {
@@ -110,9 +110,9 @@ class HasUncapturedLikelyTag : public HasLikelyTag {
     using HasLikelyTag::visit;
 
     // Any likelies buried inside the following ops are captured the by respective ops
-    void visit(const Select *op) {}
-    void visit(const Min *op) {}
-    void visit(const Max *op) {}
+    void visit(const Select *op) override {}
+    void visit(const Min *op) override {}
+    void visit(const Max *op) override {}
 };
 
 // The goal of loop partitioning is to split loops up into a prologue,
@@ -227,7 +227,7 @@ class ExprUsesInvalidBuffers : public IRVisitor {
 
     const Scope<> &invalid_buffers;
 
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         if (invalid_buffers.contains(op->name)) {
             invalid = true;
         } else {
@@ -253,7 +253,7 @@ class FindSimplifications : public IRVisitor {
     Scope<> depends_on_loop_var;
     Scope<> buffers;
 
-    void visit(const Allocate *op) {
+    void visit(const Allocate *op) override {
         buffers.push(op->name);
         IRVisitor::visit(op);
     }
@@ -283,7 +283,7 @@ class FindSimplifications : public IRVisitor {
         simplifications.push_back(s);
     }
 
-    void visit(const Min *op) {
+    void visit(const Min *op) override {
         bool likely_a = has_uncaptured_likely_tag(op->a);
         bool likely_b = has_uncaptured_likely_tag(op->b);
 
@@ -310,7 +310,7 @@ class FindSimplifications : public IRVisitor {
         }
     }
 
-    void visit(const Max *op) {
+    void visit(const Max *op) override {
         bool likely_a = has_uncaptured_likely_tag(op->a);
         bool likely_b = has_uncaptured_likely_tag(op->b);
 
@@ -333,7 +333,7 @@ class FindSimplifications : public IRVisitor {
         }
     }
 
-    void visit(const Select *op) {
+    void visit(const Select *op) override {
         op->condition.accept(this);
 
         bool likely_t = has_uncaptured_likely_tag(op->true_value);
@@ -358,7 +358,7 @@ class FindSimplifications : public IRVisitor {
         }
     }
 
-    void visit(const IfThenElse *op) {
+    void visit(const IfThenElse *op) override {
         // For select statements, mins, and maxes, you can mark the
         // likely branch with likely. For if statements there's no way
         // to mark the likely stmt. So if the condition of an if
@@ -371,7 +371,7 @@ class FindSimplifications : public IRVisitor {
         }
     }
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         vector<Simplification> old;
         old.swap(simplifications);
         IRVisitor::visit(op);
@@ -416,11 +416,11 @@ class FindSimplifications : public IRVisitor {
         }
     }
 
-    void visit(const LetStmt *op) {
+    void visit(const LetStmt *op) override {
         visit_let(op);
     }
 
-    void visit(const Let *op) {
+    void visit(const Let *op) override {
         visit_let(op);
     }
 public:
@@ -459,7 +459,7 @@ public:
 
 protected:
     using IRVisitor::visit;
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         if (op->name == "halide_gpu_thread_barrier") {
             result = true;
         } else {
@@ -467,7 +467,7 @@ protected:
         }
     }
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         if (op->for_type == ForType::GPULane) {
             result = true;
         } else {
@@ -475,7 +475,7 @@ protected:
         }
     }
 
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
     }
 };
 
@@ -681,8 +681,8 @@ class PartitionLoops : public IRMutator2 {
         }
 
         Stmt stmt;
-        // Bust serial for loops up into three.
-        if (op->for_type == ForType::Serial) {
+        // Bust simple serial for loops up into three.
+        if (op->for_type == ForType::Serial && !op->body.as<Acquire>()) {
             stmt = For::make(op->name, min_steady, max_steady - min_steady,
                              op->for_type, op->device_api, simpler_body);
 
@@ -697,9 +697,18 @@ class PartitionLoops : public IRMutator2 {
                 stmt = Block::make(stmt, epilogue);
             }
         } else {
-            // We don't have task parallelism. So for parallel for
-            // loops just put an if-then-else in the loop body. It
-            // should branch-predict to the steady state pretty well.
+            // For parallel for loops we could use a Fork node here,
+            // but that would introduce the more complicated parallel
+            // runtime into code that doesn't use async(), which may
+            // interfere with legacy overrides of
+            // halide_do_par_for. So for parallel for loops just put
+            // an if-then-else in the loop body. It should
+            // branch-predict to the steady state pretty well.
+            //
+            // Simple serial for loops that contain an Acquire node go
+            // into the task system as a single entity, but Block
+            // nodes do not, so we get a flatter task graph if we do
+            // the same trick.
             Expr loop_var = Variable::make(Int(32), op->name);
             stmt = simpler_body;
             if (make_epilogue && make_prologue && equal(prologue, epilogue)) {
@@ -747,7 +756,7 @@ class PartitionLoops : public IRMutator2 {
 class ExprContainsLoad : public IRVisitor {
     using IRVisitor::visit;
 
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         result = true;
     }
 
@@ -994,7 +1003,7 @@ class CollapseSelects : public IRMutator2 {
 
 class ContainsLoop : public IRVisitor {
     using IRVisitor::visit;
-    void visit(const For *op) {
+    void visit(const For *op) override {
         result = true;
     }
 public:

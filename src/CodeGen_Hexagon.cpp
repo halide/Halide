@@ -200,7 +200,7 @@ private:
     //
     // When we move up to the enclosing scope we substitute the value of uses_hvx
     // into the IR that should convert the conditionals to constants.
-    Stmt visit(const For *op) {
+    Stmt visit(const For *op) override {
         if (op->for_type == ForType::Parallel) {
             bool old_uses_hvx = uses_hvx;
             uses_hvx = false;
@@ -263,19 +263,19 @@ private:
         }
         return IRMutator2::visit(op);
     }
-    Expr visit(const Variable *op) {
+    Expr visit(const Variable *op) override {
         uses_hvx = uses_hvx || op->type.is_vector();
         return op;
     }
-    Expr visit(const Ramp *op) {
+    Expr visit(const Ramp *op) override {
         uses_hvx = uses_hvx || op->type.is_vector();
         return op;
     }
-    Expr visit(const Broadcast *op) {
+    Expr visit(const Broadcast *op) override {
         uses_hvx = uses_hvx || op->lanes > 1;
         return op;
     }
-    Expr visit(const Call *op) {
+    Expr visit(const Call *op) override {
         uses_hvx = uses_hvx || op->type.is_vector();
         return op;
     }
@@ -308,6 +308,12 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
     body = sloppy_unpredicate_loads(body);
     body = unpredicate_loads_stores(body);
     debug(2) << "Lowering after unpredicating loads/stores:\n" << body << "\n\n";
+
+    if (target.has_feature(Target::HVX_v65)) {
+        // Generate vscatter-vgathers before optimize_hexagon_shuffles.
+        debug(1) << "Looking for vscatter-vgather...\n";
+        body = scatter_gather_generator(body);
+    }
 
     debug(1) << "Optimizing shuffles...\n";
     // vlut always indexes 64 bytes of the LUT at a time, even in 128 byte mode.
@@ -1900,6 +1906,67 @@ void CodeGen_Hexagon::visit(const Call *op) {
         return;
     }
 
+    if (op->is_intrinsic() && op->name == "gather") {
+        internal_assert(op->args.size() == 5);
+        internal_assert(op->type.bits() == 16 || op->type.bits() == 32);
+        int index_lanes = op->type.lanes();
+        int intrin_lanes = native_vector_bits()/op->type.bits();
+
+        string name = "halide.hexagon.vgather";
+        name += (op->type.bits() == 16) ? ".h.h" : ".w.w";
+        llvm::Function *fn = module->getFunction(name);
+
+        Value *dst_buffer = codegen(op->args[0]);
+        Value *src_ptr = codegen(op->args[2]);
+        Value *size = codegen(op->args[3]);
+        Value *index = codegen(op->args[4]);
+
+        // Cut up the indices into appropriately-sized pieces.
+        for (int start = 0; start < index_lanes; start += intrin_lanes) {
+            vector<Value *> args;
+            Value *new_index = slice_vector(index, start, intrin_lanes);
+            args.push_back(dst_buffer);
+            args.push_back(codegen(op->args[1] + start));
+            args.push_back(src_ptr);
+            args.push_back(size);
+            args.push_back(new_index);
+            value = builder->CreateCall(fn, args);
+        }
+        return;
+    } else if (op->is_intrinsic() && (op->name == "scatter" || op->name == "scatter_acc")) {
+        internal_assert(op->args.size() == 4);
+        internal_assert(op->type.bits() == 16 || op->type.bits() == 32);
+        int index_lanes = op->type.lanes();
+        int intrin_lanes = native_vector_bits()/op->type.bits();
+
+        string name = "halide.hexagon.vscatter";
+        name += (op->name == "scatter_acc") ? "_acc" : "";
+        name += (op->type.bits() == 16) ? ".h.h" : ".w.w";
+        llvm::Function *fn = module->getFunction(name);
+
+        Value *src_ptr = codegen(op->args[0]);
+        Value *size = codegen(op->args[1]);
+        Value *index = codegen(op->args[2]);
+        Value *val = codegen(op->args[3]);
+
+        Value* args[4];
+        args[0] = src_ptr;
+        args[1] = size;
+        // Cut up the indices into appropriately-sized pieces.
+        for (int start = 0; start < index_lanes; start += intrin_lanes) {
+            args[2] = slice_vector(index, start, intrin_lanes);
+            args[3] = slice_vector(val, start, intrin_lanes);
+            value = builder->CreateCall(fn, args);
+        }
+        return;
+    } else if (op->is_intrinsic("scatter_release")) {
+        internal_assert(op->args.size() == 1);
+        Value *ptr = codegen(op->args[0]);
+        llvm::Function *fn = module->getFunction("halide.hexagon.scatter.release");
+        value = builder->CreateCall(fn, {ptr});
+        return;
+    }
+
     CodeGen_Posix::visit(op);
 }
 
@@ -2022,6 +2089,171 @@ void CodeGen_Hexagon::visit(const NE *op) {
         eq.accept(this);
     } else {
         CodeGen_Posix::visit(op);
+    }
+}
+
+Value *CodeGen_Hexagon::codegen_cache_allocation_size(const std::string &name, Type type, const std::vector<Expr> &extents) {
+    // Compute size from list of extents checking for overflow.
+
+    Expr overflow = make_zero(UInt(32));
+    Expr total_size = make_const(UInt(32), type.lanes() * type.bytes());
+
+    // We'll multiply all the extents into the 32-bit value
+    // total_size. We'll also track (total_size >> 24) as a 32-bit
+    // value to check for overflow as we go. The loop invariant will
+    // be that either the overflow Expr is non-zero, or total_size_hi
+    // only occupies the bottom 8-bits. Overflow could be more simply
+    // checked for using division, but that's slower at runtime. This
+    // method generates much better assembly.
+    Expr total_size_hi = make_zero(UInt(32));
+
+    Expr low_mask = make_const(UInt(32), (uint32_t)(0xfffff));
+    for (size_t i = 0; i < extents.size(); i++) {
+        Expr next_extent = cast(UInt(32), extents[i]);
+
+        // Update total_size >> 24. This math can't overflow due to
+        // the loop invariant:
+        total_size_hi *= next_extent;
+        // Deal with carry from the low bits. Still can't overflow.
+        total_size_hi += ((total_size & low_mask) * next_extent) >> 24;
+
+        // Update total_size. This may overflow.
+        total_size *= next_extent;
+
+        // We can check for overflow by asserting that total_size_hi
+        // is still an 8-bit number.
+        overflow = overflow | (total_size_hi >> 24);
+    }
+
+    Expr max_size = make_const(UInt(32), target.maximum_buffer_size());
+    Expr size_check = (overflow == 0) && (total_size <= max_size);
+
+    // For constant-sized allocations this check should simplify away.
+    size_check = common_subexpression_elimination(simplify(size_check));
+    if (!is_one(size_check)) {
+        create_assertion(codegen(size_check),
+                         Call::make(Int(32), "halide_error_buffer_allocation_too_large",
+                                    {name, Cast::make(UInt(64), total_size), Cast::make(UInt(64), max_size)}, Call::Extern));
+    }
+
+    total_size = simplify(total_size);
+    return codegen(total_size);
+}
+
+void CodeGen_Hexagon::visit(const Allocate *alloc) {
+    if (sym_exists(alloc->name)) {
+        user_error << "Can't have two different buffers with the same name: "
+                   << alloc->name << "\n";
+    }
+
+    if (alloc->memory_type == MemoryType::LockedCache) {
+        // We are not allowing Customized memory allocation for Locked Cache 
+        user_assert(!alloc->new_expr.defined()) << "Custom Expression not allowed for Memory Type Locked Cache\n";
+
+        Value *llvm_size = nullptr;
+        int32_t constant_bytes = Allocate::constant_allocation_size(alloc->extents, alloc->name);
+        if (constant_bytes > 0) {
+            constant_bytes *= alloc->type.bytes();
+            llvm_size = codegen(Expr(constant_bytes));
+        } else {
+            llvm_size = codegen_cache_allocation_size(alloc->name, alloc->type, alloc->extents);
+        }
+ 
+        // Only allocate memory if the condition is true, otherwise 0.
+        Value *llvm_condition = codegen(alloc->condition);
+        if (llvm_size != nullptr) {
+            llvm_size = builder->CreateSelect(llvm_condition,
+                                              llvm_size,
+                                              ConstantInt::get(llvm_size->getType(), 0));
+        }
+
+        Allocation allocation;
+        allocation.constant_bytes = constant_bytes;
+        allocation.stack_bytes = 0;
+        allocation.type = alloc->type;
+        allocation.ptr = nullptr;
+        allocation.destructor = nullptr;
+        allocation.destructor_function = nullptr;
+        allocation.name = alloc->name;
+
+        // Call Halide_Locked_Cache_Alloc
+        llvm::Function *alloc_fn = module->getFunction("halide_locked_cache_malloc");
+        internal_assert(alloc_fn) << "Could not find halide_locked_cache_malloc in module\n";
+
+        llvm::Function::arg_iterator arg_iter = alloc_fn->arg_begin();
+        ++arg_iter;  // skip the user context *
+        llvm_size = builder->CreateIntCast(llvm_size, arg_iter->getType(), false);
+
+        debug(4) << "Creating call to halide_locked_cache_malloc for allocation " << alloc->name
+                 << " of size " << alloc->type.bytes();
+        for (Expr e : alloc->extents) {
+            debug(4) << " x " << e;
+        }
+        debug(4) << "\n";
+        Value *args[2] = { get_user_context(), llvm_size };
+
+        Value *call = builder->CreateCall(alloc_fn, args);
+
+        // Fix the type to avoid pointless bitcasts later
+        call = builder->CreatePointerCast(call, llvm_type_of(alloc->type)->getPointerTo());
+        allocation.ptr = call;
+
+        // Assert that the allocation worked.
+        Value *check = builder->CreateIsNotNull(allocation.ptr);
+        if (llvm_size) {
+            Value *zero_size = builder->CreateIsNull(llvm_size);
+            check = builder->CreateOr(check, zero_size);
+        }
+        create_assertion(check, Call::make(Int(32), "halide_error_out_of_memory",
+                                           std::vector<Expr>(), Call::Extern));
+
+        std::string free_function_string;
+        // Register a destructor for this allocation.
+        if (alloc->free_function.empty()) {
+            free_function_string = "halide_locked_cache_free";
+        }
+        llvm::Function *free_fn = module->getFunction(free_function_string);
+        internal_assert(free_fn) << "Could not find " << alloc->free_function << " in module.\n";
+        allocation.destructor = register_destructor(free_fn, allocation.ptr, OnError);
+        allocation.destructor_function = free_fn;
+
+        // Push the allocation base pointer onto the symbol table
+        debug(3) << "Pushing allocation called " << alloc->name << " onto the symbol table\n";
+        allocations.push(alloc->name, allocation);
+
+        sym_push(alloc->name, allocation.ptr);
+
+        codegen(alloc->body);
+
+        // If there was no early free, free it now.
+        if (allocations.contains(alloc->name)) {
+            Allocation alloc_obj = allocations.get(alloc->name);
+            internal_assert(alloc_obj.destructor);
+            trigger_destructor(alloc_obj.destructor_function, alloc_obj.destructor);
+
+            allocations.pop(alloc->name);
+            sym_pop(alloc->name);
+        }
+    } else if (alloc->memory_type == MemoryType::VTCM && !alloc->new_expr.defined()) {
+        if (!target.has_feature(Target::HVX_v65)) {
+            user_error << "VTCM store_in requires hvx_v65 target feature.\n";
+        }
+        // Calculate size of allocation.
+        Expr size = alloc->type.bytes();
+        for (size_t i = 0; i < alloc->extents.size(); i++) {
+            size *= alloc->extents[i];
+        }
+        size += allocation_padding(alloc->type);
+        Expr new_expr = Call::make(Handle(), "halide_vtcm_malloc", {size},
+                                   Call::Extern);
+        string free_function = "halide_vtcm_free";
+        Stmt new_alloc = Allocate::make(alloc->name, alloc->type, alloc->memory_type,
+                                        alloc->extents, alloc->condition, alloc->body,
+                                        new_expr, free_function);
+        new_alloc.accept(this);
+    } else {
+        // For all other memory types
+        CodeGen_Posix::visit(alloc);
     }
 }
 

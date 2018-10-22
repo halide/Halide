@@ -490,7 +490,53 @@ private:
     static Expr halide_hexagon_add_4mpy(Type result_type, string suffix, Expr v01, Expr c01) {
         return Call::make(result_type, "halide.hexagon.add_4mpy" + suffix, {v01, c01}, Call::PureExtern);
     }
-
+    // We'll try to sort the mpys based my mpys.first.
+    // But, for this all the mpy.first exprs should either be
+    // all loads or all slice_vectors.
+    static void sort_mpy_exprs(vector<MulExpr> &mpys) {
+        struct LoadCompare {
+            bool operator()(const MulExpr &m1, const MulExpr &m2) {
+                if (!m1.first.defined() || !m2.first.defined()) {
+                    return false;
+                }
+                const Load *m1_load = m1.first.as<Load>();
+                const Load *m2_load = m2.first.as<Load>();
+                internal_assert(m1_load && m2_load);
+                const Ramp *m1_ramp = m1_load->index.as<Ramp>();
+                const Ramp *m2_ramp = m2_load->index.as<Ramp>();
+                internal_assert(m1_ramp && m2_ramp);
+                return can_prove(m1_ramp->base < m2_ramp->base);
+            }
+        };
+        const Shuffle *first_shuffle = mpys[0].first.as<Shuffle>();
+        if (first_shuffle) {
+            for (MulExpr &m : mpys) {
+                const Shuffle *shuffle = m.first.as<Shuffle>();
+                if (!shuffle || !shuffle->is_slice()) {
+                    return;
+                }
+            }
+            std::stable_sort(mpys.begin(), mpys.end(),
+                             [](const MulExpr &m1, const MulExpr &m2) {
+                                 return m1.first.as<Shuffle>()->slice_begin() < m2.first.as<Shuffle>()->slice_begin();
+                             });
+            return;
+        } else if (const Load *first_load = mpys[0].first.as<Load>()) {
+            const Ramp *first_ramp = first_load->index.as<Ramp>();
+            if (!first_ramp) {
+                return;
+            }
+            for (MulExpr &m : mpys) {
+                const Load *load = m.first.as<Load>();
+                if (!load ||
+                    load->name != first_load->name ||
+                    !load->index.as<Ramp>()) {
+                    return;
+                }
+            }
+            std::stable_sort(mpys.begin(), mpys.end(), LoadCompare());
+        }
+    }
     Expr visit(const Add *op) override {
         // vmpa, vdmpy, and vrmpy instructions are hard to match with
         // patterns, do it manually here.
@@ -514,8 +560,13 @@ private:
             }
 
             if (mpy_count > 0 && mpys.size() == 4) {
-                // TODO: It's possible that permuting the order of the
+                // It's possible that permuting the order of the
                 // multiply operands can simplify the shuffle away.
+                // So, give yourself a fighting chance by ordering the
+                // mpys in the ascending order of their start lanes (if all
+                // are slice_vectors) or in the ascending order of their
+                // load indices if all are loads from the same buffer.
+                sort_mpy_exprs(mpys);
                 Expr a0123 = Shuffle::make_interleave({mpys[0].first, mpys[1].first, mpys[2].first, mpys[3].first});
                 a0123 = simplify(a0123);
 
@@ -554,8 +605,13 @@ private:
 
             // TODO: suffix = ".vub.vb"
             if (mpy_count > 0 && mpys.size() == 4) {
-                // TODO: It's possible that permuting the order of the
+                // It's possible that permuting the order of the
                 // multiply operands can simplify the shuffle away.
+                // So, give yourself a fighting chance by ordering the
+                // mpys in the ascending order of their start lanes (if all
+                // are slice_vectors) or in the ascending order of their
+                // load indices if all are loads from the same buffer.
+                sort_mpy_exprs(mpys);
                 Expr a0123 = Shuffle::make_interleave({mpys[0].first, mpys[1].first, mpys[2].first, mpys[3].first});
                 Expr b0123 = Shuffle::make_interleave({mpys[0].second, mpys[1].second, mpys[2].second, mpys[3].second});
                 a0123 = simplify(a0123);
@@ -601,6 +657,13 @@ private:
                 vdmpy_suffix = ".vh.b";
             }
             if (mpy_count > 0 && mpys.size() == 2) {
+                // It's possible that permuting the order of the
+                // multiply operands can simplify the shuffle away.
+                // So, give yourself a fighting chance by ordering the
+                // mpys in the ascending order of their start lanes (if all
+                // are slice_vectors) or in the ascending order of their
+                // load indices if all are loads from the same buffer.
+                sort_mpy_exprs(mpys);
                 Expr a01 = Shuffle::make_interleave({mpys[0].first, mpys[1].first});
                 a01 = simplify(a01);
                 // TODO: This requires the operands to be in a
@@ -1348,6 +1411,9 @@ class EliminateInterleaves : public IRMutator2 {
             "halide.hexagon.deinterleave.vb",
             "halide.hexagon.deinterleave.vh",
             "halide.hexagon.deinterleave.vw",
+            "gather",
+            "scatter",
+            "scatter_acc",
         };
         if (not_interleavable.count(op->name) != 0) return false;
 
@@ -1956,7 +2022,7 @@ class RearrangeExpressions : public IRMutator2 {
 private:
     using IRMutator2::visit;
 
-    Expr visit(const Mul *op) {
+    Expr visit(const Mul *op) override {
         if (!op->type.is_vector()) {
             // Only do this for vectors (where we have vmpa).
             return IRMutator2::visit(op);
@@ -2001,6 +2067,241 @@ private:
     }
 };
 
+// Try generating vgathers instead of shuffles.
+// At present, we request VTCM memory with single page allocation flag for all
+// store_in allocations. So it's always safe to generate a vgather.
+// Expressions which generate vgathers are of the form:
+//     out(x) = lut(foo(x))
+// For vgathers out and lut should be in VTCM in a single page.
+class ScatterGatherGenerator : public IRMutator2 {
+    Scope<Interval> bounds;
+    std::unordered_map<string, const Allocate *> allocations;
+
+    using IRMutator2::visit;
+
+    template <typename NodeType, typename T>
+    NodeType visit_let(const T *op) {
+        // We only care about vector lets.
+        if (op->value.type().is_vector()) {
+            bounds.push(op->name, bounds_of_expr_in_scope(op->value, bounds));
+        }
+        NodeType node = IRMutator2::visit(op);
+        if (op->value.type().is_vector()) {
+            bounds.pop(op->name);
+        }
+        return node;
+    }
+
+    Expr visit(const Let *op) override { return visit_let<Expr>(op); }
+
+    Stmt visit(const LetStmt *op) override { return visit_let<Stmt>(op); }
+
+    Stmt visit(const Allocate *op) override {
+        // Create a map of the allocation
+        allocations[op->name] = op;
+        return IRMutator2::visit(op);
+    }
+
+    // Try to match expressions of the form:
+    //     out(x) = lut(foo(x))
+    // to generate vgathers. Here, out and lut should have
+    // store_in(MemoryType::VTCM) directive. If a vgather is found return Call
+    // Expr to vgather, otherwise Expr().
+    Expr make_gather(const Load *op, Expr dst_base, Expr dst_index) {
+        Type ty = op->type;
+        const Allocate *alloc = allocations[op->name];
+        // The lut should be in VTCM.
+        if (!alloc || alloc->memory_type != MemoryType::VTCM) {
+            return Expr();
+        }
+        // HVX has only 16 or 32-bit gathers. Predicated vgathers are not
+        // supported yet.
+        if (op->index.as<Ramp>() || !is_one(op->predicate) || !ty.is_vector() ||
+            ty.bits() == 8) {
+            return Expr();
+        }
+        Expr index = mutate(ty.bytes() * op->index);
+        Interval index_bounds = bounds_of_expr_in_scope(index, bounds);
+        if (ty.bits() == 16 && index_bounds.is_bounded()) {
+            Expr index_span = span_of_bounds(index_bounds);
+            index_span = common_subexpression_elimination(index_span);
+            index_span = simplify(index_span);
+            // We need to downcast the index values to 16 bit signed. So all the
+            // the indices must be less than 1 << 15.
+            if (!can_prove(index_span < std::numeric_limits<int16_t>::max())) {
+                return Expr();
+            }
+        }
+        // Calculate the size of the buffer lut in bytes.
+        Expr size = ty.bytes();
+        for (size_t i = 0; i < alloc->extents.size(); i++) {
+            size *= alloc->extents[i];
+        }
+        Expr src = Variable::make(Handle(), op->name);
+        Expr new_index = mutate(cast(ty.with_code(Type::Int), index));
+        dst_index = mutate(dst_index);
+
+        return Call::make(ty, "gather", {dst_base, dst_index, src, size-1, new_index},
+                          Call::Intrinsic);
+    }
+
+    // Checks if the Store node can be replaced with a scatter_accumulate.
+    // If yes, return new_value to be used for scatter-accumulate, else return
+    // the input parameter value.
+    Expr is_scatter_acc(const Store *op) {
+        Expr lhs = Load::make(op->value.type(), op->name, op->index, Buffer<>(),
+                              Parameter(), const_true(op->value.type().lanes()));
+        Expr wild = Variable::make(op->value.type(), "*");
+        vector<Expr> matches;
+        if (expr_match(lhs + wild, op->value, matches) ||
+            expr_match(wild + lhs, op->value, matches)) {
+            // Scatter accumulate found.
+            return matches[0];
+        }
+        return op->value;
+    }
+
+    Stmt visit(const Store *op) override {
+        // HVX has only 16 or 32-bit gathers. Predicated vgathers are not
+        // supported yet.
+        Type ty = op->value.type();
+        if (!is_one(op->predicate) || !ty.is_vector() || ty.bits() == 8) {
+            return IRMutator2::visit(op);
+        }
+        // To use vgathers, the destination address must be VTCM memory.
+        const Allocate *alloc = allocations[op->name];
+        if (!alloc || alloc->memory_type != MemoryType::VTCM) {
+            return IRMutator2::visit(op);
+        }
+        // The source for a gather must also be a buffer in VTCM.
+        if (op->index.as<Ramp>() && op->value.as<Load>()) {
+            // Check for vgathers
+            Expr dst_base = Variable::make(Handle(), op->name);
+            Expr dst_index = op->index.as<Ramp>()->base;
+            Expr value = make_gather(op->value.as<Load>(), dst_base, dst_index);
+            if (value.defined()) {
+                // Found a vgather.
+                // Function make_gather already mutates all the call arguements,
+                // so no need to mutate again.
+                return Evaluate::make(value);
+            }
+        }
+        // Check for scatter/scatter-accumulate.
+        if (op->index.as<Ramp>()) {
+            return IRMutator2::visit(op);
+        }
+        // Calculate the size of the buffer in bytes.
+        Expr size = ty.bytes();
+        for (size_t i = 0; i < alloc->extents.size(); i++) {
+            size *= alloc->extents[i];
+        }
+        // Check for scatter-acc.
+        Expr value = is_scatter_acc(op);
+        string intrinsic = "scatter";
+        if (!value.same_as(op->value)) {
+            // It's a scatter-accumulate
+            intrinsic = "scatter_acc";
+        }
+        Expr buffer = Variable::make(Handle(), op->name);
+        Expr index = mutate(cast(ty.with_code(Type::Int), ty.bytes() * op->index));
+        value = mutate(value);
+        Stmt scatter = Evaluate::make(Call::make(ty, intrinsic,
+                              {buffer, size-1, index, value}, Call::Intrinsic));
+        return scatter;
+    }
+};
+
+// Scatter-Gather instructions on Hexagon are asynchronous and hence require a
+// scatter-release store followed by a vector load from the same address. This
+// stalls the pipeline untill all previous scatter-gather operations have
+// finished. The operations are not ordered with respect to load and store
+// operations as well.
+class SyncronizationBarriers : public IRMutator2 {
+    // Keep track of all scatter-gather operations in flight which could cause
+    // a hazard in the future.
+    std::map<string, vector<const Stmt *>> in_flight;
+    // Trail of For Blocks to reach a stmt.
+    vector<const Stmt *> curr_path;
+    // Current Stmt being mutated.
+    const Stmt *curr = NULL;
+    // Track where the Stmt generated a scatter-release.
+    std::map<const Stmt *, Expr> sync;
+
+    using IRMutator2::visit;
+
+    Expr visit(const Call *op) override {
+        if (op->name == "scatter" || op->name == "scatter_acc" || op->name == "gather") {
+            string name = op->args[0].as<Variable>()->name;
+            // Check if the scatter-gather encountered conflicts with any
+            // previous operation. If yes, insert a scatter-release.
+            check_hazard(name);
+            in_flight[name] = curr_path;
+        }
+        return IRMutator2::visit(op);
+    }
+
+    Stmt visit(const For *op) override {
+        // Keep trail of the For blocks encoutered.
+        curr_path.push_back(curr);
+        Stmt s = IRMutator2::visit(op);
+        curr_path.pop_back();
+        return s;
+    }
+
+    // Creates entry in sync map for the stmt requiring a
+    // scatter-release instruction before it.
+    void check_hazard(string name) {
+        if (in_flight.find(name) == in_flight.end()) {
+            return;
+        }
+        // Sync Needed. Add the scatter-release before the first different For
+        // loop lock between the curr_path and the hazard src location.
+        size_t min_size = std::min(in_flight[name].size(), curr_path.size());
+        size_t i = 0;
+        // Find the first different For loop block.
+        for (; i < min_size; i++) {
+            if (in_flight[name][i] != curr_path[i]) {
+                break;
+            }
+        }
+        if (i < curr_path.size()) {
+            // Place scatter-release before the first different For loop block.
+            sync[curr_path[i]] = Variable::make(Handle(), name);
+        } else {
+            // Need to add the scatter-release before the curr stmt.
+            sync[curr] = Variable::make(Handle(), name);
+        }
+        in_flight.clear();
+    }
+
+    Expr visit(const Load *op) override {
+        // Resolve scatter-load hazard.
+        check_hazard(op->name);
+        return IRMutator2::visit(op);
+    }
+
+    Stmt visit(const Store *op) override {
+        // Resolve scatter-store and gather-store hazards.
+        check_hazard(op->name);
+        return IRMutator2::visit(op);
+    }
+
+public:
+    using IRMutator2::mutate;
+
+    Stmt mutate(const Stmt &s) override {
+        curr = &s;
+        Stmt new_s = IRMutator2::mutate(s);
+        // Wrap the stmt with scatter-release if any hazard was detected.
+        if (sync.find(&s) != sync.end()) {
+            Stmt scatter_sync = Evaluate::make(Call::make(Int(32), "scatter_release",
+                                               {sync[&s]}, Call::Intrinsic));
+            return Block::make(scatter_sync, new_s);
+        }
+        return new_s;
+    }
+};
+
 }  // namespace
 
 Stmt optimize_hexagon_shuffles(Stmt s, int lut_alignment) {
@@ -2014,6 +2315,13 @@ Stmt vtmpy_generator(Stmt s) {
     s = substitute_in_all_lets(s);
     s = VtmpyGenerator().mutate(s);
     s = common_subexpression_elimination(s);
+    return s;
+}
+
+Stmt scatter_gather_generator(Stmt s) {
+    // Generate vscatter-vgather instruction if target >= v65
+    s = ScatterGatherGenerator().mutate(s);
+    s = SyncronizationBarriers().mutate(s);
     return s;
 }
 

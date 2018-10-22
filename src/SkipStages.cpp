@@ -62,13 +62,13 @@ private:
     Scope<> local_buffers;
 
 
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         bool this_varies = varying.contains(op->name);
 
         varies |= this_varies;
     }
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         op->min.accept(this);
         bool min_varies = varies;
         op->extent.accept(this);
@@ -105,15 +105,15 @@ private:
         }
     }
 
-    void visit(const LetStmt *op) {
+    void visit(const LetStmt *op) override {
         visit_let(op->name, op->value, op->body);
     }
 
-    void visit(const Let *op) {
+    void visit(const Let *op) override {
         visit_let(op->name, op->value, op->body);
     }
 
-    void visit(const ProducerConsumer *op) {
+    void visit(const ProducerConsumer *op) override {
         ScopedBinding<> bind(in_pipeline, op->name);
         if (op->is_producer && op->name == buffer) {
             ScopedValue<bool> sv(in_produce, true);
@@ -203,7 +203,7 @@ private:
         varies = varies || old_varies;
     }
 
-    void visit(const Select *op) {
+    void visit(const Select *op) override {
         if (treat_selects_as_guards) {
             visit_conditional(op->condition, op->true_value, op->false_value);
         } else {
@@ -211,11 +211,11 @@ private:
         }
     }
 
-    void visit(const IfThenElse *op) {
+    void visit(const IfThenElse *op) override {
         visit_conditional(op->condition, op->then_case, op->else_case);
     }
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         varies |= in_pipeline.contains(op->name);
 
         IRVisitor::visit(op);
@@ -225,19 +225,19 @@ private:
         }
     }
 
-    void visit(const Provide *op) {
+    void visit(const Provide *op) override {
         IRVisitor::visit(op);
         if (in_produce && op->name != buffer && !local_buffers.contains(op->name)) {
             predicate = const_true();
         }
     }
 
-    void visit(const Realize *op) {
+    void visit(const Realize *op) override {
         ScopedBinding<> bind(local_buffers, op->name);
         IRVisitor::visit(op);
     }
 
-    void visit(const Allocate *op) {
+    void visit(const Allocate *op) override {
         // This code works to ensure expressions depending on an
         // allocation don't get moved outside the allocation and are
         // marked as varying if predicate depends on the value of the
@@ -430,14 +430,14 @@ class MightBeSkippable : public IRVisitor {
 
     bool in_conditional_stmt{false};
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         IRVisitor::visit(op);
         if (op->call_type == Call::Halide) {
             unconditionally_used.insert(op->name);
         }
     }
 
-    void visit(const IfThenElse *op) {
+    void visit(const IfThenElse *op) override {
         op->condition.accept(this);
 
         std::set<string> old;
@@ -460,7 +460,7 @@ class MightBeSkippable : public IRVisitor {
         unconditionally_used.swap(old);
     }
 
-    void visit(const Select *op) {
+    void visit(const Select *op) override {
         op->condition.accept(this);
 
         std::set<string> old;
@@ -480,7 +480,7 @@ class MightBeSkippable : public IRVisitor {
         unconditionally_used.swap(old);
     }
 
-    void visit(const ProducerConsumer *op) {
+    void visit(const ProducerConsumer *op) override {
         if (!op->is_producer) {
             op->body.accept(this);
             if (!unconditionally_used.count(op->name) || in_conditional_stmt) {

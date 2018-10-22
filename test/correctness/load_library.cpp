@@ -62,7 +62,7 @@ void *my_get_library_symbol_impl(void *lib, const char *name) {
 int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
     if (!target.has_feature(Target::OpenCL)) {
-        printf("This test requires opencl");
+        printf("This test requires opencl.\n");
         return 0;
     }
 

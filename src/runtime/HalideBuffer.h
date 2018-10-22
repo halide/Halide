@@ -1484,11 +1484,18 @@ public:
 
     /** Methods for managing any GPU allocation. */
     // @{
+    // Set the host dirty flag. Called by every operator()
+    // access. Must be inlined so it can be hoisted out of loops.
+    HALIDE_ALWAYS_INLINE
     void set_host_dirty(bool v = true) {
         assert((!v || !device_dirty()) && "Cannot set host dirty when device is already dirty.");
         buf.set_host_dirty(v);
     }
 
+    // Check if the device allocation is dirty. Called by
+    // set_host_dirty, which is called by every accessor. Must be
+    // inlined so it can be hoisted out of loops.
+    HALIDE_ALWAYS_INLINE
     bool device_dirty() const {
         return buf.device_dirty();
     }

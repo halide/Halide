@@ -36,7 +36,7 @@ public:
               Target target,
               OutputKind output_kind = CImplementation,
               const std::string &include_guard = "");
-    ~CodeGen_C();
+    ~CodeGen_C() override;
 
     /** Emit the declarations contained in the module as C code. */
     void compile(const Module &module);
@@ -160,47 +160,49 @@ protected:
 
     using IRPrinter::visit;
 
-    void visit(const Variable *);
-    void visit(const IntImm *);
-    void visit(const UIntImm *);
-    void visit(const StringImm *);
-    void visit(const FloatImm *);
-    void visit(const Cast *);
-    void visit(const Add *);
-    void visit(const Sub *);
-    void visit(const Mul *);
-    void visit(const Div *);
-    void visit(const Mod *);
-    void visit(const Max *);
-    void visit(const Min *);
-    void visit(const EQ *);
-    void visit(const NE *);
-    void visit(const LT *);
-    void visit(const LE *);
-    void visit(const GT *);
-    void visit(const GE *);
-    void visit(const And *);
-    void visit(const Or *);
-    void visit(const Not *);
-    void visit(const Call *);
-    void visit(const Select *);
-    void visit(const Load *);
-    void visit(const Store *);
-    void visit(const Let *);
-    void visit(const LetStmt *);
-    void visit(const AssertStmt *);
-    void visit(const ProducerConsumer *);
-    void visit(const For *);
-    void visit(const Ramp *);
-    void visit(const Broadcast *);
-    void visit(const Provide *);
-    void visit(const Allocate *);
-    void visit(const Free *);
-    void visit(const Realize *);
-    void visit(const IfThenElse *);
-    void visit(const Evaluate *);
-    void visit(const Shuffle *);
-    void visit(const Prefetch *);
+    void visit(const Variable *) override;
+    void visit(const IntImm *) override;
+    void visit(const UIntImm *) override;
+    void visit(const StringImm *) override;
+    void visit(const FloatImm *) override;
+    void visit(const Cast *) override;
+    void visit(const Add *) override;
+    void visit(const Sub *) override;
+    void visit(const Mul *) override;
+    void visit(const Div *) override;
+    void visit(const Mod *) override;
+    void visit(const Max *) override;
+    void visit(const Min *) override;
+    void visit(const EQ *) override;
+    void visit(const NE *) override;
+    void visit(const LT *) override;
+    void visit(const LE *) override;
+    void visit(const GT *) override;
+    void visit(const GE *) override;
+    void visit(const And *) override;
+    void visit(const Or *) override;
+    void visit(const Not *) override;
+    void visit(const Call *) override;
+    void visit(const Select *) override;
+    void visit(const Load *) override;
+    void visit(const Store *) override;
+    void visit(const Let *) override;
+    void visit(const LetStmt *) override;
+    void visit(const AssertStmt *) override;
+    void visit(const ProducerConsumer *) override;
+    void visit(const For *) override;
+    void visit(const Ramp *) override;
+    void visit(const Broadcast *) override;
+    void visit(const Provide *) override;
+    void visit(const Allocate *) override;
+    void visit(const Free *) override;
+    void visit(const Realize *) override;
+    void visit(const IfThenElse *) override;
+    void visit(const Evaluate *) override;
+    void visit(const Shuffle *) override;
+    void visit(const Prefetch *) override;
+    void visit(const Fork *) override;
+    void visit(const Acquire *) override;
 
     void visit_binop(Type t, Expr a, Expr b, const char *op);
 

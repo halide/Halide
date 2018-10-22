@@ -70,7 +70,7 @@ public:
         return bits_matches && lanes_matches && code_matches;
     }
 
-    void visit(const IntImm *op) {
+    void visit(const IntImm *op) override {
         const IntImm *e = expr.as<IntImm>();
         if (!e ||
             e->value != op->value ||
@@ -79,7 +79,7 @@ public:
         }
     }
 
-    void visit(const UIntImm *op) {
+    void visit(const UIntImm *op) override {
         const UIntImm *e = expr.as<UIntImm>();
         if (!e ||
             e->value != op->value ||
@@ -88,7 +88,7 @@ public:
         }
     }
 
-    void visit(const FloatImm *op) {
+    void visit(const FloatImm *op) override {
         const FloatImm *e = expr.as<FloatImm>();
         // Note we use uint64_t equality instead of double equality to
         // catch NaNs. We're checking for the same bits.
@@ -100,7 +100,7 @@ public:
         }
     }
 
-    void visit(const Cast *op) {
+    void visit(const Cast *op) override {
         const Cast *e = expr.as<Cast>();
         if (result && e && types_match(op->type, e->type)) {
             expr = e->value;
@@ -110,7 +110,7 @@ public:
         }
     }
 
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         if (!result) {
             return;
         }
@@ -147,23 +147,23 @@ public:
         }
     }
 
-    void visit(const Add *op) {visit_binary_operator(op);}
-    void visit(const Sub *op) {visit_binary_operator(op);}
-    void visit(const Mul *op) {visit_binary_operator(op);}
-    void visit(const Div *op) {visit_binary_operator(op);}
-    void visit(const Mod *op) {visit_binary_operator(op);}
-    void visit(const Min *op) {visit_binary_operator(op);}
-    void visit(const Max *op) {visit_binary_operator(op);}
-    void visit(const EQ *op) {visit_binary_operator(op);}
-    void visit(const NE *op) {visit_binary_operator(op);}
-    void visit(const LT *op) {visit_binary_operator(op);}
-    void visit(const LE *op) {visit_binary_operator(op);}
-    void visit(const GT *op) {visit_binary_operator(op);}
-    void visit(const GE *op) {visit_binary_operator(op);}
-    void visit(const And *op) {visit_binary_operator(op);}
-    void visit(const Or *op) {visit_binary_operator(op);}
+    void visit(const Add *op) override {visit_binary_operator(op);}
+    void visit(const Sub *op) override {visit_binary_operator(op);}
+    void visit(const Mul *op) override {visit_binary_operator(op);}
+    void visit(const Div *op) override {visit_binary_operator(op);}
+    void visit(const Mod *op) override {visit_binary_operator(op);}
+    void visit(const Min *op) override {visit_binary_operator(op);}
+    void visit(const Max *op) override {visit_binary_operator(op);}
+    void visit(const EQ *op) override {visit_binary_operator(op);}
+    void visit(const NE *op) override {visit_binary_operator(op);}
+    void visit(const LT *op) override {visit_binary_operator(op);}
+    void visit(const LE *op) override {visit_binary_operator(op);}
+    void visit(const GT *op) override {visit_binary_operator(op);}
+    void visit(const GE *op) override {visit_binary_operator(op);}
+    void visit(const And *op) override {visit_binary_operator(op);}
+    void visit(const Or *op) override {visit_binary_operator(op);}
 
-    void visit(const Not *op) {
+    void visit(const Not *op) override {
         const Not *e = expr.as<Not>();
         if (result && e) {
             expr = e->a;
@@ -173,7 +173,7 @@ public:
         }
     }
 
-    void visit(const Select *op) {
+    void visit(const Select *op) override {
         const Select *e = expr.as<Select>();
         if (result && e) {
             expr = e->condition;
@@ -187,7 +187,7 @@ public:
         }
     }
 
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         const Load *e = expr.as<Load>();
         if (result && e && types_match(op->type, e->type) && e->name == op->name) {
             expr = e->predicate;
@@ -199,7 +199,7 @@ public:
         }
     }
 
-    void visit(const Ramp *op) {
+    void visit(const Ramp *op) override {
         const Ramp *e = expr.as<Ramp>();
         if (result && e && e->lanes == op->lanes) {
             expr = e->base;
@@ -211,7 +211,7 @@ public:
         }
     }
 
-    void visit(const Broadcast *op) {
+    void visit(const Broadcast *op) override {
         const Broadcast *e = expr.as<Broadcast>();
         if (result && e && types_match(op->type, e->type)) {
             expr = e->value;
@@ -221,7 +221,7 @@ public:
         }
     }
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         const Call *e = expr.as<Call>();
         if (result && e &&
             types_match(op->type, e->type) &&
@@ -238,7 +238,7 @@ public:
         }
     }
 
-    void visit(const Let *op) {
+    void visit(const Let *op) override {
         const Let *e = expr.as<Let>();
         if (result && e && e->name == op->name) {
             expr = e->value;
@@ -389,12 +389,14 @@ bool equal_helper(const BaseExprNode &a, const BaseExprNode &b) noexcept {
     case IRNodeType::AssertStmt:
     case IRNodeType::ProducerConsumer:
     case IRNodeType::For:
+    case IRNodeType::Acquire:
     case IRNodeType::Store:
     case IRNodeType::Provide:
     case IRNodeType::Allocate:
     case IRNodeType::Free:
     case IRNodeType::Realize:
     case IRNodeType::Block:
+    case IRNodeType::Fork:
     case IRNodeType::IfThenElse:
     case IRNodeType::Evaluate:
     case IRNodeType::Prefetch:
