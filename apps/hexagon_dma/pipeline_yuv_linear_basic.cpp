@@ -142,6 +142,14 @@ public:
                     .async()
                     .store_at(output_y, ty)
                     .fold_storage(x, tile_width * 2);
+
+#endif
+#if 0
+// TODO: work_uv enhance with async() with fold_storage() for DMA write, when fix (see above) is available
+                work_uv
+                    .async()
+                    .store_at(output_uv, ty)
+                    .fold_storage(x, tile_width * 2);
 #endif
             break;
             case Schedule::Split: {

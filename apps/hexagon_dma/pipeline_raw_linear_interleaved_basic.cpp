@@ -91,9 +91,9 @@ public:
 // to be released by the processing task (causing dead-locking)
 //
 // TODO: enable this schedule when fix is available
-                work_y
+                work
                     .async()
-                    .store_at(output_y, ty)
+                    .store_at(output, ty)
                     .fold_storage(x, tile_width * 2);
 #endif
             break;
