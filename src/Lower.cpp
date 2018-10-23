@@ -36,6 +36,7 @@
 #include "LoopCarry.h"
 #include "LowerWarpShuffles.h"
 #include "Memoization.h"
+#include "OutputImageParam.h"
 #include "PartitionLoops.h"
 #include "PurifyIndexMath.h"
 #include "Prefetch.h"
@@ -102,6 +103,60 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     // Output functions should all be computed and stored at root.
     for (Function f: outputs) {
         Func(f).compute_root().store_root();
+
+        auto output_buffer = Func(f).output_buffers()[0];
+        
+        // Add constraints based on the storage scheduling for f.
+        const vector<StorageDim> &storage_dims = f.schedule().storage_dims();
+
+        std::vector<Expr> extents(f.args().size());
+        for (int i = 0; i < (int)extents.size(); i++) {
+          extents[i] = output_buffer.dim(i).extent();
+        }
+        for (size_t i = 0; i < f.args().size(); i++) {
+          for (const Bound &b : f.schedule().bounds()) {
+            if (b.var == f.args()[i]) {
+              Expr min = output_buffer.dim(i).min();
+              if (b.min.defined()) {
+                min = b.min;
+              }
+              if (b.extent.defined()) { 
+                extents[i] = b.extent;
+              }
+              if (b.modulus.defined()) {
+                Expr max_plus_one = min + extents[i];
+                min = (min / b.modulus) * b.modulus;
+                max_plus_one = (max_plus_one / b.modulus) * b.modulus;
+                extents[i] = max_plus_one - min;
+                min = min + b.remainder;
+              }
+              output_buffer.dim(i).set_min(min);
+              output_buffer.dim(i).set_extent(extents[i]);
+              break;
+            }
+          }
+        }
+
+        Expr stride = 1;
+        for (size_t i = 0; i < storage_dims.size(); i++) {
+          for (size_t dim = 0; dim < f.args().size(); dim++) {
+            if (f.args()[dim] == storage_dims[i].var) {
+              if (stride.defined()) {
+                if (storage_dims[i].alignment.defined()) {
+                  stride = (stride / storage_dims[i].alignment) / storage_dims[i].alignment;
+                }
+                output_buffer.dim(dim).set_stride(stride);
+                Expr extent = extents[dim];
+                if (is_const(extent)) {
+                  stride = simplify(stride * extent);
+                } else {
+                  stride = Expr();
+                }
+              }
+              break;
+            }
+          }
+        }
     }
 
     // Finalize all the LoopLevels
