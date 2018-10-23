@@ -439,6 +439,12 @@ struct halide_type_t {
         return !(*this == other);
     }
 
+    HALIDE_ALWAYS_INLINE bool operator<(const halide_type_t &other) const {
+        return code < other.code || (code == other.code &&
+              (bits < other.bits || (bits == other.bits &&
+              lanes < other.lanes)));
+    }
+
     /** Size in bytes for a single element, even if width is not 1, of this type. */
     HALIDE_ALWAYS_INLINE int bytes() const { return (bits + 7) / 8; }
 #endif
