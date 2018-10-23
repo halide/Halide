@@ -37,7 +37,7 @@ int main(int argc, char *argv[]) {
     for (int y = 0; y < input.height(); y++) {
         for (int x = 0; x < input.width(); x++) {
             for (int c = 0; c < input.channels(); c++) {
-                float correct = (input(2*x, y, 2) < x + y) ? x + y : y + c;
+                float correct = (input(std::min(2*x, input.width()-1), y, 2) < x + y) ? x + y : y + c;
                 if (im(x, y, c) != correct) {
                     printf("im(%d, %d, %d) = %f instead of %f\n",
                            x, y, c, im(x, y, c), correct);

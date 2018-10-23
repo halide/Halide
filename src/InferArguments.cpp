@@ -2,8 +2,8 @@
 #include <string>
 #include <vector>
 
-#include "InferArguments.h"
 #include "IRVisitor.h"
+#include "InferArguments.h"
 
 namespace Halide {
 namespace Internal {
@@ -127,19 +127,19 @@ private:
         args.push_back(a);
     }
 
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         IRGraphVisitor::visit(op);
         include_parameter(op->param);
         include_buffer(op->image);
     }
 
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         IRGraphVisitor::visit(op);
         include_parameter(op->param);
         include_buffer(op->image);
     }
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         IRGraphVisitor::visit(op);
         if (op->func.defined()) {
             Function fn(op->func);
@@ -150,7 +150,7 @@ private:
     }
 };
 
-}
+}  // namespace
 
 vector<InferredArgument> infer_arguments(Stmt body, const vector<Function> &outputs) {
     vector<InferredArgument> inferred_args;
@@ -166,5 +166,5 @@ vector<InferredArgument> infer_arguments(Stmt body, const vector<Function> &outp
     return inferred_args;
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

@@ -365,12 +365,17 @@ int main(int argc, char **argv) {
 
     }
 
-    {
+    for (bool interleave : {false, true}) {
         Func f, g;
 
         f(x, y, c) = x;
         g(x, y, c) = f(x-1, y+1, c) + f(x, y-1, c);
         f.store_root().compute_at(g, y).fold_storage(y, 3);
+
+        if (interleave) {
+            f.reorder(c, x, y).reorder_storage(c, x, y);
+            g.reorder(c, x, y).reorder_storage(c, x, y);
+        }
 
         // Make sure we can explicitly fold something with an outer
         // loop.
@@ -379,7 +384,12 @@ int main(int argc, char **argv) {
 
         Buffer<int> im = g.realize(100, 1000, 3);
 
-        size_t expected_size = 101*3*sizeof(int) + sizeof(int);
+        size_t expected_size;
+        if (interleave) {
+            expected_size = 101*3*3*sizeof(int) + sizeof(int);
+        } else {
+            expected_size = 101*3*sizeof(int) + sizeof(int);
+        }
         if (custom_malloc_size == 0 || custom_malloc_size != expected_size) {
             printf("Scratch space allocated was %d instead of %d\n", (int)custom_malloc_size, (int)expected_size);
             return -1;
@@ -496,6 +506,42 @@ int main(int argc, char **argv) {
         h.compute_root().split(y, y, yi, 4);
 
         realize_and_expect_error(h, 64, 7);
+    }
+
+
+    {
+        // Check a case which used to be problematic
+        Func input, a, b, c, output;
+        Var xo, yo, line, chunk;
+
+        input(x, y) = x;
+        a(x, y) = input(x, y);
+        b(x, y) = select(y % 2 == 0, a(x, y / 2), a(x, y / 2 + 1));
+
+        c = lambda(x, y, b(x, y));
+
+        output(x, y) = c(x, y);
+
+
+        output
+            .bound(y, 0, 64)
+            .compute_root()
+            .split(y, line, y, 2, TailStrategy::RoundUp)
+            .split(line, chunk, line, 32, TailStrategy::RoundUp);
+
+        c
+            .tile(x, y, xo, yo, x, y, 2, 2, TailStrategy::RoundUp)
+            .compute_at(output, line)
+            .store_at(output, chunk);
+
+        a
+            .tile(x, y, xo, yo, x, y, 2, 2, TailStrategy::RoundUp)
+            .compute_at(c, yo)
+            .store_at(output, chunk)
+            .fold_storage(y, 4)  // <<-- this should be OK, but previously it sometimes wanted 6.
+            .align_bounds(y, 2);
+
+        Buffer<int> im = output.realize(64, 64);
     }
 
     printf("Success!\n");

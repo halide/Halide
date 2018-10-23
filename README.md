@@ -1,7 +1,9 @@
 Halide is a programming language designed to make it easier to write
 high-performance image processing code on modern machines. Halide
-currently targets X86, ARM, CUDA, OpenCL, and OpenGL on OS X, Linux,
-and Windows.
+currently targets:
+  * CPU architectures: X86, ARM, MIPS, Hexagon, PowerPC
+  * Operating systems: Linux, Windows, Mac OS X, Android, iOS, Qualcomm QuRT
+  * GPU Compute APIs: CUDA, OpenCL, OpenGL, OpenGL Compute Shaders, Apple Metal, Microsoft Direct X 12
 
 Rather than being a standalone programming language, Halide is
 embedded in C++. This means you write C++ code that builds an
@@ -33,26 +35,26 @@ Building Halide
 
 #### TL;DR
 
-Have llvm-4.0 or greater installed and run 'make' in the root
+Have llvm-5.0 or greater installed and run 'make' in the root
 directory of the repository (where this README is).
 
 #### Acquiring LLVM
 
-Building halide requires at least llvm 4.0, along with the matching
+Building halide requires at least llvm 5.0, along with the matching
 version of clang. llvm-config and clang must be somewhere in the
-path. If your OS does not have packages for llvm-4.0, you can find
+path. If your OS does not have packages for llvm-5.0, you can find
 binaries for it at http://llvm.org/releases/download.html. Download an
 appropriate package and then either install it, or at least put the
 bin subdirectory in your path. (This works well on OS X and Ubuntu.)
 
 If you want to build it yourself, first check it out from subversion:
 
-    % svn co https://llvm.org/svn/llvm-project/llvm/branches/release_40 llvm4.0
-    % svn co https://llvm.org/svn/llvm-project/cfe/branches/release_40 llvm4.0/tools/clang
+    % svn co https://llvm.org/svn/llvm-project/llvm/branches/release_50 llvm5.0
+    % svn co https://llvm.org/svn/llvm-project/cfe/branches/release_50 llvm5.0/tools/clang
 
 Then build it like so:
 
-    % cd llvm4.0
+    % cd llvm5.0
     % mkdir build
     % cd build
     % cmake -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX;AArch64;Mips;PowerPC" -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=Release ..
@@ -151,12 +153,9 @@ compiling. Higher numbers will print more detail.
 HL_NUM_THREADS=... specifies the size of the thread pool. This has no
 effect on OS X or iOS, where we just use grand central dispatch.
 
-HL_TRACE=1 injects print statements into compiled Halide code that
-will describe what the program is doing at runtime. Higher values
-print more detail.
-
 HL_TRACE_FILE=... specifies a binary target file to dump tracing data
-into. The output can be parsed programmatically by starting from the
+into (ignored unless at least one `trace_` feature is enabled in HL_TARGET or
+HL_JIT_TARGET). The output can be parsed programmatically by starting from the
 code in utils/HalideTraceViz.cpp
 
 
@@ -309,8 +308,8 @@ Planned features:
 
   * Support for integer textures and arithmetic
 
-  * Compute shaders
-
+(Note that OpenGL Compute Shaders are supported with a separate
+OpenGLCompute backend.)
 
 Halide for Hexagon HVX
 ======================
@@ -332,14 +331,14 @@ For examples of using the `hexagon` scheduling directive on both the simulator a
 Hexagon DSP, see the blur example app.
 
 To build and run an example app using the Hexagon target,
-  1. Obtain and build LLVM and Clang v4.0 or later from llvm.org
+  1. Obtain and build LLVM and Clang v5.0 or later from llvm.org
   2. Download and install the Hexagon SDK and version 8.0 Hexagon Tools
   3. Build and run an example for Hexagon HVX
 
-#### 1. Obtain and build LLVM and clang v4.0 or later from llvm.org
-The Hexagon backend is currently under development. So it's best to use trunk llvm. 
-These are the same instructions as above for building Clang/LLVM, but for trunk 
-Clang/LLVM instead of 4.0.
+#### 1. Obtain and build LLVM and clang v5.0 or later from llvm.org
+The Hexagon backend is currently under development. So it's best to use trunk llvm.
+These are the same instructions as above for building Clang/LLVM, but for trunk
+Clang/LLVM instead of 5.0.
 
     cd <path to llvm>
     svn co http://llvm.org/svn/llvm-project/llvm/trunk .

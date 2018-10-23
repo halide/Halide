@@ -6,10 +6,10 @@
  * generated halide pipeline
  */
 
+#include "Buffer.h"
 #include "Error.h"
 #include "Expr.h"
 #include "Type.h"
-#include "Buffer.h"
 #include "runtime/HalideRuntime.h"
 
 namespace Halide {
@@ -98,6 +98,6 @@ struct Argument {
     }
 };
 
-}
+}  // namespace Halide
 
 #endif

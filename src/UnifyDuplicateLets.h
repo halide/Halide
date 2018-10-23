@@ -14,7 +14,7 @@ namespace Internal {
  * ones just reuse the symbol names of the earlier ones. */
 Stmt unify_duplicate_lets(Stmt s);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

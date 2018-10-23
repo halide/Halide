@@ -1,19 +1,19 @@
 #include "SlidingWindow.h"
+#include "Bounds.h"
+#include "Debug.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "Scope.h"
-#include "Debug.h"
-#include "Substitute.h"
 #include "IRPrinter.h"
-#include "Simplify.h"
 #include "Monotonic.h"
-#include "Bounds.h"
+#include "Scope.h"
+#include "Simplify.h"
+#include "Substitute.h"
 
 namespace Halide {
 namespace Internal {
 
-using std::string;
 using std::map;
+using std::string;
 
 namespace {
 
@@ -21,11 +21,11 @@ namespace {
 class ExprDependsOnVar : public IRVisitor {
     using IRVisitor::visit;
 
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         if (op->name == var) result = true;
     }
 
-    void visit(const Let *op) {
+    void visit(const Let *op) override {
         op->value.accept(this);
         // The name might be hidden within the body of the let, in
         // which case there's no point descending.
@@ -394,7 +394,8 @@ class SlidingWindow : public IRMutator2 {
         if (new_body.same_as(op->body)) {
             return op;
         } else {
-            return Realize::make(op->name, op->types, op->bounds, op->condition, new_body);
+            return Realize::make(op->name, op->types, op->memory_type,
+                                 op->bounds, op->condition, new_body);
         }
     }
 public:
@@ -406,5 +407,5 @@ Stmt sliding_window(Stmt s, const map<string, Function> &env) {
     return SlidingWindow(env).mutate(s);
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

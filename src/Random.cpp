@@ -1,12 +1,12 @@
 #include "Random.h"
-#include "IROperator.h"
 #include "IRMutator.h"
+#include "IROperator.h"
 
 namespace Halide {
 namespace Internal {
 
-using std::vector;
 using std::string;
+using std::vector;
 
 namespace {
 
@@ -60,7 +60,6 @@ Expr rng32(Expr x) {
 
     return (((C2 * x) + C1) * x) + C0;
 }
-
 }
 
 Expr random_int(const vector<Expr> &e) {
@@ -116,6 +115,7 @@ class LowerRandom : public IRMutator2 {
     }
 
     vector<Expr> extra_args;
+
 public:
     LowerRandom(const vector<string> &free_vars, int tag) {
         extra_args.push_back(tag);
@@ -131,5 +131,5 @@ Expr lower_random(Expr e, const vector<string> &free_vars, int tag) {
     return r.mutate(e);
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

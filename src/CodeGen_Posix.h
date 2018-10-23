@@ -26,8 +26,8 @@ protected:
      * on the stack. The rest go on the heap by calling "halide_malloc"
      * and "halide_free" in the standard library. */
     // @{
-    void visit(const Allocate *);
-    void visit(const Free *);
+    void visit(const Allocate *) override;
+    void visit(const Free *) override;
     // @}
 
     /** It can be convenient for backends to assume there is extra
@@ -68,7 +68,7 @@ protected:
      * we enter a new function. */
     Scope<Allocation> allocations;
 
-    std::string get_allocation_name(const std::string &n);
+    std::string get_allocation_name(const std::string &n) override;
 
 private:
 
@@ -100,16 +100,16 @@ private:
      *
      * When the allocation can be freed call 'free_allocation', and
      * when it goes out of scope call 'destroy_allocation'. */
-    Allocation create_allocation(const std::string &name, Type type,
+    Allocation create_allocation(const std::string &name, Type type, MemoryType memory_type,
                                  const std::vector<Expr> &extents,
                                  Expr condition, Expr new_expr, std::string free_function);
 
     /** Free an allocation previously allocated with
      * create_allocation */
     void free_allocation(const std::string &name);
-
 };
 
-}}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

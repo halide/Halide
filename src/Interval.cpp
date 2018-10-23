@@ -1,6 +1,6 @@
 #include "Interval.h"
-#include "IROperator.h"
 #include "IREquality.h"
+#include "IROperator.h"
 
 namespace Halide {
 namespace Internal {
@@ -116,7 +116,6 @@ Interval Interval::make_intersection(const Interval &a, const Interval &b) {
 Expr Interval::pos_inf = Variable::make(Handle(), "pos_inf");
 Expr Interval::neg_inf = Variable::make(Handle(), "neg_inf");
 
-
 namespace {
 void check(Interval result, Interval expected, int line) {
     internal_assert(equal(result.min, expected.min) &&
@@ -125,7 +124,7 @@ void check(Interval result, Interval expected, int line) {
         << "  Expected [" << expected.min << ", " << expected.max << "]\n"
         << "  Got      [" << result.min << ", " << result.max << "]\n";
 }
-}
+}  // namespace
 
 void interval_test() {
     Interval e = Interval::everything();
@@ -199,6 +198,5 @@ void interval_test() {
     std::cout << "Interval test passed" << std::endl;
 }
 
-
-}
-}
+}  // namespace Internal
+}  // namespace Halide

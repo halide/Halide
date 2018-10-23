@@ -80,7 +80,7 @@ def main():
     # templatized image type we can use. We'll make an 800 x 600
     # image.
     output = gradient.realize(800, 600)
-    assert type(output) == hl.Buffer_int32
+    assert output.type() == hl.Int(32)
 
     # Halide does type inference for you. hl.Var objects represent
     # 32-bit integers, so the hl.Expr object 'x + y' also represents a
@@ -95,10 +95,10 @@ def main():
         for i in range(output.width()):
             # We can access a pixel of an hl.Buffer object using similar
             # syntax to defining and using functions.
-            if (output(i, j) != i + j):
+            if (output[i, j] != i + j):
                 print("Something went wrong!\n"
                        "Pixel %d, %d was supposed to be %d, but instead it's %d\n"
-                        % (i, j, i+j, output(i, j)))
+                        % (i, j, i+j, output[i, j]))
                 return -1
 
 

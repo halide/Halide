@@ -1,37 +1,45 @@
 #include "HalideRuntime.h"
 #include "runtime_internal.h"
 
-// TODO: This code currently doesn't work on OS X (Darwin) as we
-// require that locking a zero-initialized mutex works.  The fix is
-// probably to use a pthread_once type mechanism to call
-// pthread_mutex_init, but that requires the once initializer which
-// might not be zero and is platform dependent. Thus we need our own
-// portable once implementation. For now, threadpool only works on
-// platforms where PTHREAD_MUTEX_INITIALIZER is zero.
+// TODO: consider getting rid of this
+#define MAX_THREADS 256
 
 extern "C" {
 
-// On posix platforms, there's a 1-to-1 correspondence between
-// halide_* threading functions and the pthread_* functions. We take
-// some liberties with the types of the opaque pointer objects to
-// avoid a bunch of pointer casts.
+// This code cannot depend on system headers, hence we choose a data size which will
+// be large enough for all systems we care about.
+// 64 bytes covers this for both mutex and condvar. Using int64_t ensures alignment.
+struct pthread_mutex_t {
+    uint64_t _private[8];
+};
+
+struct pthread_cond_t {
+    uint64_t _private[8];
+};
 
 typedef long pthread_t;
 extern int pthread_create(pthread_t *, const void * attr,
                           void *(*start_routine)(void *), void * arg);
 extern int pthread_join(pthread_t thread, void **retval);
-extern int pthread_cond_init(halide_cond *cond, const void *attr);
-extern int pthread_cond_wait(halide_cond *cond, halide_mutex *mutex);
-extern int pthread_cond_broadcast(halide_cond *cond);
-extern int pthread_cond_destroy(halide_cond *cond);
-extern int pthread_mutex_init(halide_mutex *mutex, const void *attr);
-extern int pthread_mutex_lock(halide_mutex *mutex);
-extern int pthread_mutex_unlock(halide_mutex *mutex);
-extern int pthread_mutex_destroy(halide_mutex *mutex);
+extern int pthread_cond_init(pthread_cond_t *cond, const void *attr);
+extern int pthread_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex);
+extern int pthread_cond_signal(pthread_cond_t *cond);
+extern int pthread_cond_destroy(pthread_cond_t *cond);
+extern int pthread_mutex_init(pthread_mutex_t *mutex, const void *attr);
+extern int pthread_mutex_lock(pthread_mutex_t *mutex);
+extern int pthread_mutex_unlock(pthread_mutex_t *mutex);
+extern int pthread_mutex_destroy(pthread_mutex_t *mutex);
+
+typedef unsigned int pthread_key_t;
+
+extern int pthread_key_create(pthread_key_t *key, void (*destructor)(void*));
+extern int pthread_setspecific(pthread_key_t key, const void *value);
+extern void *pthread_getspecific(pthread_key_t key);
 
 } // extern "C"
 
 namespace Halide { namespace Runtime { namespace Internal {
+
 struct spawned_thread {
     void (*f)(void *);
     void *closure;
@@ -42,10 +50,13 @@ WEAK void *spawn_thread_helper(void *arg) {
     t->f(t->closure);
     return NULL;
 }
+
 }}} // namespace Halide::Runtime::Internal
 
 extern "C" {
 
+using namespace Halide::Runtime::Internal;
+  
 WEAK struct halide_thread *halide_spawn_thread(void (*f)(void *), void *closure) {
     spawned_thread *t = (spawned_thread *)malloc(sizeof(spawned_thread));
     t->f = f;
@@ -62,33 +73,66 @@ WEAK void halide_join_thread(struct halide_thread *thread_arg) {
     free(t);
 }
 
-WEAK void halide_mutex_lock(halide_mutex *mutex) {
-    pthread_mutex_lock(mutex);
 }
 
-WEAK void halide_mutex_unlock(halide_mutex *mutex) {
-    pthread_mutex_unlock(mutex);
-}
+namespace Halide { namespace Runtime { namespace Internal {
 
-WEAK void halide_mutex_destroy(halide_mutex *mutex) {
-    pthread_mutex_destroy(mutex);
-    memset(mutex, 0, sizeof(halide_mutex));
-}
+namespace Synchronization {
 
-WEAK void halide_cond_init(struct halide_cond *cond) {
-    pthread_cond_init(cond, NULL);
-}
+// There is code to cache the parking object in a thread local. Other
+// packages do this, but it did not seem to make a difference for
+// performance on Linux and Mac OS X as initializing a mutex and
+// condvar is cheap.  This code can be found in commit
+// 6a1ea6d2c883353f51f62fec4c2bce129649e2a7.
 
-WEAK void halide_cond_destroy(struct halide_cond *cond) {
-    pthread_cond_destroy(cond);
-}
+struct thread_parker {
+    pthread_mutex_t mutex;
+    pthread_cond_t condvar;
+    bool should_park;
 
-WEAK void halide_cond_broadcast(struct halide_cond *cond) {
-    pthread_cond_broadcast(cond);
-}
+#if __cplusplus >= 201103L
+    thread_parker(const thread_parker &) = delete;
+#endif
 
-WEAK void halide_cond_wait(struct halide_cond *cond, struct halide_mutex *mutex) {
-    pthread_cond_wait(cond, mutex);
-}
+    __attribute__((always_inline)) thread_parker() : should_park(false) {
+        pthread_mutex_init(&mutex, NULL);
+        pthread_cond_init(&condvar, NULL);
+        should_park = false;
+    }
 
-} // extern "C"
+    __attribute__((always_inline)) ~thread_parker() {
+        pthread_cond_destroy(&condvar);
+        pthread_mutex_destroy(&mutex);
+    }
+
+    __attribute__((always_inline)) void prepare_park() {
+        should_park = true;
+    }
+
+    __attribute__((always_inline)) void park() {
+        pthread_mutex_lock(&mutex);
+        while (should_park) {
+            pthread_cond_wait(&condvar, &mutex);
+        }
+        pthread_mutex_unlock(&mutex);
+    }
+
+    __attribute__((always_inline)) void unpark_start() {
+        pthread_mutex_lock(&mutex);
+    }
+
+    __attribute__((always_inline)) void unpark() {
+        should_park = false;
+        pthread_cond_signal(&condvar);
+    }
+
+    __attribute__((always_inline)) void unpark_finish() {
+        pthread_mutex_unlock(&mutex);
+    }
+};
+
+}}}} // namespace Halide::Runtime::Internal::Synchronization
+
+#include "synchronization_common.h"
+
+#include "thread_pool_common.h"

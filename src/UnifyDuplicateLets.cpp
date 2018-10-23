@@ -1,6 +1,6 @@
 #include "UnifyDuplicateLets.h"
-#include "IRMutator.h"
 #include "IREquality.h"
+#include "IRMutator.h"
 #include <map>
 
 namespace Halide {
@@ -50,8 +50,7 @@ protected:
     }
 
     Expr visit(const Load *op) override {
-        is_impure |= ((op->name == producing) ||
-                      starts_with(op->name + ".", producing));
+        is_impure = true;
         return IRMutator2::visit(op);
     }
 
@@ -67,10 +66,11 @@ protected:
         }
     }
 
-    Stmt visit(const LetStmt *op) override {
+    template<typename LetStmtOrLet>
+    auto visit_let(const LetStmtOrLet *op) -> decltype(op->body) {
         is_impure = false;
         Expr value = mutate(op->value);
-        Stmt body = op->body;
+        auto body = op->body;
 
         bool should_pop = false;
         bool should_erase = false;
@@ -99,8 +99,16 @@ protected:
         if (value.same_as(op->value) && body.same_as(op->body)) {
             return op;
         } else {
-            return LetStmt::make(op->name, value, body);
+            return LetStmtOrLet::make(op->name, value, body);
         }
+    }
+
+    Expr visit(const Let *op) override {
+        return visit_let(op);
+    }
+
+    Stmt visit(const LetStmt *op) override {
+        return visit_let(op);
     }
 };
 
@@ -108,5 +116,5 @@ Stmt unify_duplicate_lets(Stmt s) {
     return UnifyDuplicateLets().mutate(s);
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

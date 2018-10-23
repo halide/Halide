@@ -15,33 +15,33 @@ class Dimension {
 public:
     /** Get an expression representing the minimum coordinates of this image
      * parameter in the given dimension. */
-    EXPORT Expr min() const;
+    Expr min() const;
 
     /** Get an expression representing the extent of this image
      * parameter in the given dimension */
-    EXPORT Expr extent() const;
+    Expr extent() const;
 
     /** Get an expression representing the maximum coordinates of
      * this image parameter in the given dimension. */
-    EXPORT Expr max() const;
+    Expr max() const;
 
     /** Get an expression representing the stride of this image in the
      * given dimension */
-    EXPORT Expr stride() const;
+    Expr stride() const;
 
     /** Get the estimate of the minimum coordinate of this image parameter
      * in the given dimension. Return an undefined expr if the estimate is
      * never specified. */
-    EXPORT Expr min_estimate() const;
+    Expr min_estimate() const;
 
     /** Get the estimate of the extent of this image parameter in the given
      * dimension. Return an undefined expr if the estimate is never specified. */
-    EXPORT Expr extent_estimate() const;
+    Expr extent_estimate() const;
 
     /** Set the min in a given dimension to equal the given
      * expression. Setting the mins to zero may simplify some
      * addressing math. */
-    EXPORT Dimension set_min(Expr min);
+    Dimension set_min(Expr min);
 
     /** Set the extent in a given dimension to equal the given
      * expression. Images passed in that fail this check will generate
@@ -64,40 +64,34 @@ public:
      im.dim(0).set_extent((im.dim(0).extent()/32)*32);
      \endcode
      * tells the compiler that the extent is a multiple of 32. */
-    EXPORT Dimension set_extent(Expr extent);
+    Dimension set_extent(Expr extent);
 
     /** Set the stride in a given dimension to equal the given
      * value. This is particularly helpful to set when
      * vectorizing. Known strides for the vectorized dimension
      * generate better code. */
-    EXPORT Dimension set_stride(Expr stride);
+    Dimension set_stride(Expr stride);
 
     /** Set the min and extent in one call. */
-    EXPORT Dimension set_bounds(Expr min, Expr extent);
+    Dimension set_bounds(Expr min, Expr extent);
 
     /** Set the min and extent estimates in one call. These values are only
      * used by the auto-scheduler. */
-    EXPORT Dimension set_bounds_estimate(Expr min, Expr extent);
+    Dimension set_bounds_estimate(Expr min, Expr extent);
 
     /** Get a different dimension of the same buffer */
     // @{
-    EXPORT Dimension dim(int i);
-    EXPORT const Dimension dim(int i) const;
+    Dimension dim(int i);
+    const Dimension dim(int i) const;
     // @}
 
 private:
     friend class ::Halide::OutputImageParam;
-    template<typename T2> friend class GeneratorInput_Buffer;
-    template<typename T2> friend class GeneratorOutput_Buffer;
 
     /** Construct a Dimension representing dimension d of some
      * Internal::Parameter p. Only friends may construct
      * these. */
-    EXPORT Dimension(const Internal::Parameter &p, int d, Func f);
-
-    /** Only friends may copy these, too. This prevents
-     * users removing constness by making a non-const copy. */
-    Dimension(const Dimension &) = default;
+    Dimension(const Internal::Parameter &p, int d, Func f);
 
     Parameter param;
     int d;

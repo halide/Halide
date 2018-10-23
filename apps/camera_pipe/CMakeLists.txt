@@ -1,3 +1,9 @@
+if(WIN32)
+    # Building this app for x86 in VS seems to have issues
+    # https://github.com/halide/Halide/pull/2740
+    return()
+endif()
+
 add_executable(camera_pipe_process process.cpp)
 halide_use_image_io(camera_pipe_process)
 

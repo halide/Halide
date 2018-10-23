@@ -29,7 +29,7 @@ public:
 
         ParamMapping(const ImageParam &p, Buffer<> &buf) : image_param(&p), buf(buf), buf_out_param(nullptr) {
         }
-        
+
         template <typename T>
         ParamMapping(const ImageParam &p, Buffer<T> &buf) : image_param(&p), buf(buf), buf_out_param(nullptr) {
         }
@@ -49,7 +49,7 @@ private:
 
         ParamArg() : buf_out_param(nullptr) { }
         ParamArg(const ParamMapping &pm)
-            : mapped_param(pm.parameter->type(), false, 0, pm.parameter->name(), pm.parameter->is_explicit_name(), false),
+            : mapped_param(pm.parameter->type(), false, 0, pm.parameter->name()),
                buf_out_param(nullptr) {
               mapped_param.set_scalar(pm.parameter->type(), pm.value);
         }
@@ -58,15 +58,15 @@ private:
     };
     mutable std::map<const Internal::Parameter, ParamArg> mapping;
 
-    EXPORT void set(const ImageParam &p, Buffer<> &buf, Buffer<> *buf_out_param);
+    void set(const ImageParam &p, Buffer<> &buf, Buffer<> *buf_out_param);
 
 public:
     ParamMap() { }
 
-    EXPORT ParamMap(const std::initializer_list<ParamMapping> &init);
+    ParamMap(const std::initializer_list<ParamMapping> &init);
 
     template <typename T> void set(const Param<T> &p, T val) {
-        Internal::Parameter v(p.type(), false, 0, p.name(), p.is_explicit_name(), false);
+        Internal::Parameter v(p.type(), false, 0, p.name());
         v.set_scalar<T>(val);
         ParamArg pa;
         pa.mapped_param = v;
@@ -89,12 +89,20 @@ public:
     /** If there is an entry in the ParamMap for this Parameter, return it.
      * Otherwise return the parameter itself. */
     // @{
-    EXPORT const Internal::Parameter &map(const Internal::Parameter &p, Buffer<> *&buf_out_param) const;
+    const Internal::Parameter &map(const Internal::Parameter &p, Buffer<> *&buf_out_param) const;
 
-    EXPORT Internal::Parameter &map(Internal::Parameter &p, Buffer<> *&buf_out_param) const;
+    Internal::Parameter &map(Internal::Parameter &p, Buffer<> *&buf_out_param) const;
     // @}
+
+    /** A const ref to an empty ParamMap. Useful for default function
+     * arguments, which would otherwise require a copy constructor
+     * (with llvm in c++98 mode) */
+    static const ParamMap &empty_map() {
+        static ParamMap empty_param_map;
+        return empty_param_map;
+    }
 };
 
-}
+}  // namespace Halide
 
 #endif

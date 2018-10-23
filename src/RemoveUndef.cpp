@@ -1,8 +1,8 @@
 #include "RemoveUndef.h"
-#include "IRMutator.h"
-#include "Scope.h"
-#include "IROperator.h"
 #include "IREquality.h"
+#include "IRMutator.h"
+#include "IROperator.h"
+#include "Scope.h"
 #include "Substitute.h"
 
 namespace Halide {
@@ -385,7 +385,8 @@ private:
             new_expr.same_as(op->new_expr)) {
             return op;
         } else {
-            return Allocate::make(op->name, op->type, new_extents, condition, body, new_expr, op->free_function);
+            return Allocate::make(op->name, op->type, op->memory_type,
+                                  new_extents, condition, body, new_expr, op->free_function);
         }
     }
 
@@ -425,7 +426,7 @@ private:
             condition.same_as(op->condition)) {
             return op;
         } else {
-            return Realize::make(op->name, op->types, new_bounds, condition, body);
+            return Realize::make(op->name, op->types, op->memory_type, new_bounds, condition, body);
         }
     }
 
@@ -492,5 +493,5 @@ Stmt remove_undef(Stmt s) {
     return s;
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

@@ -23,13 +23,11 @@ struct ParameterContents {
     std::vector<Expr> extent_constraint_estimate;
     Expr min_value, max_value;
     Expr estimate;
-
     const bool is_buffer;
-    const bool is_explicit_name;
-    const bool is_registered;
-    ParameterContents(Type t, bool b, int d, const std::string &n, bool e, bool r)
+
+    ParameterContents(Type t, bool b, int d, const std::string &n)
         : type(t), dimensions(d), name(n), buffer(Buffer<>()), data(0),
-          host_alignment(t.bytes()), is_buffer(b), is_explicit_name(e), is_registered(r) {
+          host_alignment(t.bytes()), is_buffer(b) {
 
         min_constraint.resize(dimensions);
         extent_constraint.resize(dimensions);
@@ -47,10 +45,10 @@ struct ParameterContents {
 };
 
 template<>
-EXPORT RefCount &ref_count<Halide::Internal::ParameterContents>(const ParameterContents *p) {return p->ref_count;}
+RefCount &ref_count<Halide::Internal::ParameterContents>(const ParameterContents *p) {return p->ref_count;}
 
 template<>
-EXPORT void destroy<Halide::Internal::ParameterContents>(const ParameterContents *p) {delete p;}
+void destroy<Halide::Internal::ParameterContents>(const ParameterContents *p) {delete p;}
 
 void Parameter::check_defined() const {
     user_assert(defined()) << "Parameter is undefined\n";
@@ -71,55 +69,14 @@ void Parameter::check_dim_ok(int dim) const {
         << "Dimension " << dim << " is not in the range [0, " << dimensions() - 1 << "]\n";
 }
 
-Parameter::Parameter() : contents(nullptr) {
-    // Undefined Parameters are never registered.
-}
-
 Parameter::Parameter(Type t, bool is_buffer, int d) :
-    contents(new ParameterContents(t, is_buffer, d, unique_name('p'), false, true)) {
+    contents(new ParameterContents(t, is_buffer, d, unique_name('p'))) {
     internal_assert(is_buffer || d == 0) << "Scalar parameters should be zero-dimensional";
-    // Note that is_registered is always true here; this is just using a parallel code structure for clarity.
-    if (contents.defined() && contents->is_registered) {
-        ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this, nullptr);
-    }
 }
 
-Parameter::Parameter(Type t, bool is_buffer, int d, const std::string &name, bool is_explicit_name, bool register_instance) :
-    contents(new ParameterContents(t, is_buffer, d, name, is_explicit_name, register_instance)) {
+Parameter::Parameter(Type t, bool is_buffer, int d, const std::string &name) :
+    contents(new ParameterContents(t, is_buffer, d, name)) {
     internal_assert(is_buffer || d == 0) << "Scalar parameters should be zero-dimensional";
-    if (contents.defined() && contents->is_registered) {
-        ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this, nullptr);
-    }
-}
-
-Parameter::Parameter(const Parameter& that) : contents(that.contents) {
-    if (contents.defined() && contents->is_registered) {
-        ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this, nullptr);
-    }
-}
-
-Parameter& Parameter::operator=(const Parameter& that) {
-    bool was_registered = contents.defined() && contents->is_registered;
-    contents = that.contents;
-    bool should_be_registered = contents.defined() && contents->is_registered;
-    if (should_be_registered && !was_registered) {
-        // This can happen if you do:
-        // Parameter p; // undefined
-        // p = make_interesting_parameter();
-        ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this, nullptr);
-    } else if (!should_be_registered && was_registered) {
-        // This can happen if you do:
-        // Parameter p = make_interesting_parameter();
-        // p = Parameter();
-        ObjectInstanceRegistry::unregister_instance(this);
-    }
-    return *this;
-}
-
-Parameter::~Parameter() {
-    if (contents.defined() && contents->is_registered) {
-        ObjectInstanceRegistry::unregister_instance(this);
-    }
 }
 
 Type Parameter::type() const {
@@ -135,11 +92,6 @@ int Parameter::dimensions() const {
 const std::string &Parameter::name() const {
     check_defined();
     return contents->name;
-}
-
-bool Parameter::is_explicit_name() const {
-    check_defined();
-    return contents->is_explicit_name;
 }
 
 bool Parameter::is_buffer() const {
@@ -184,6 +136,11 @@ Expr Parameter::scalar_expr() const {
 Buffer<> Parameter::buffer() const {
     check_is_buffer();
     return contents->buffer;
+}
+
+const halide_buffer_t *Parameter::raw_buffer() const {
+    if (!is_buffer()) return nullptr;
+    return contents->buffer.raw_buffer();
 }
 
 void Parameter::set_buffer(Buffer<> b) {
@@ -346,7 +303,67 @@ void check_call_arg_types(const std::string &name, std::vector<Expr> *args, int 
     }
 }
 
-
-
+void RegisteredParameter::register_if_needed() {
+    if (defined()) {
+        ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this, nullptr);
+    }
 }
+
+void RegisteredParameter::unregister_if_needed() {
+    if (defined()) {
+        // This will assert-fail if not registered.
+        ObjectInstanceRegistry::unregister_instance(this);
+    }
 }
+
+RegisteredParameter::RegisteredParameter(Type t, bool is_buffer, int d, const std::string &name)
+    : Parameter(t, is_buffer, d, name) {
+    register_if_needed();
+}
+
+RegisteredParameter::RegisteredParameter(const Parameter& param) : Parameter(param) {
+    register_if_needed();
+}
+
+RegisteredParameter& RegisteredParameter::operator=(const Parameter& param) {
+    unregister_if_needed();
+    Parameter::operator=(param);
+    register_if_needed();
+    return *this;
+}
+
+RegisteredParameter::RegisteredParameter(const RegisteredParameter& param) : Parameter(param) {
+    register_if_needed();
+}
+
+RegisteredParameter& RegisteredParameter::operator=(const RegisteredParameter& param) {
+    unregister_if_needed();
+    Parameter::operator=(param);
+    register_if_needed();
+    return *this;
+}
+
+RegisteredParameter::RegisteredParameter(RegisteredParameter&& that) {
+    that.unregister_if_needed();
+    this->contents = std::move(that.contents);
+    that.contents = nullptr;
+    this->register_if_needed();
+}
+
+RegisteredParameter& RegisteredParameter::operator=(RegisteredParameter&& that) {
+    that.unregister_if_needed();
+    this->unregister_if_needed();
+
+    this->contents = std::move(that.contents);
+    that.contents = nullptr;
+
+    this->register_if_needed();
+    return *this;
+}
+
+RegisteredParameter::~RegisteredParameter() {
+    unregister_if_needed();
+}
+
+}  // namespace Internal
+}  // namespace Halide

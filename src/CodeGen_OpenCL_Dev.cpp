@@ -1,20 +1,20 @@
-#include <sstream>
 #include <algorithm>
+#include <sstream>
 
-#include "CodeGen_OpenCL_Dev.h"
 #include "CodeGen_Internal.h"
+#include "CodeGen_OpenCL_Dev.h"
 #include "Debug.h"
-#include "IROperator.h"
-#include "IRMutator.h"
 #include "EliminateBoolVectors.h"
+#include "IRMutator.h"
+#include "IROperator.h"
 
 namespace Halide {
 namespace Internal {
 
 using std::ostringstream;
+using std::sort;
 using std::string;
 using std::vector;
-using std::sort;
 
 CodeGen_OpenCL_Dev::CodeGen_OpenCL_Dev(Target t) :
     clc(src_stream, t) {
@@ -109,7 +109,7 @@ string simt_intrinsic(const string &name) {
     internal_error << "simt_intrinsic called on bad variable name: " << name << "\n";
     return "";
 }
-}
+}  // namespace
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const For *loop) {
     if (is_gpu_var(loop->name)) {
@@ -153,10 +153,9 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Broadcast *op) {
 
 namespace {
 // Mapping of integer vector indices to OpenCL ".s" syntax.
-const char * vector_elements = "0123456789ABCDEF";
+const char *vector_elements = "0123456789ABCDEF";
 
-}
-
+}  // namespace
 
 string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::get_memory_space(const string &buf) {
     return "__address_space_" + print_name(buf);
@@ -529,7 +528,7 @@ struct BufferSize {
         return size < r.size;
     }
 };
-}
+}  // namespace
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
                                                       const string &name,
@@ -778,4 +777,5 @@ std::string CodeGen_OpenCL_Dev::print_gpu_name(const std::string &name) {
     return name;
 }
 
-}}
+}  // namespace Internal
+}  // namespace Halide

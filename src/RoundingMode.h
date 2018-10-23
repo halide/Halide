@@ -11,5 +11,5 @@ enum class RoundingMode {
     TowardNegativeInfinity ///< Round towards negative infinity (IEEE754 2008 4.3.2)
 };
 
-}
+}  // namespace Halide
 #endif

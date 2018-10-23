@@ -1,6 +1,6 @@
 #include "ObjectInstanceRegistry.h"
-#include "Introspection.h"
 #include "Error.h"
+#include "Introspection.h"
 
 namespace Halide {
 namespace Internal {

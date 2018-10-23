@@ -6,7 +6,7 @@
 namespace Halide {
 namespace PythonBindings {
 
-void define_rdom();
+void define_rdom(py::module &m);
 
 }  // namespace PythonBindings
 }  // namespace Halide

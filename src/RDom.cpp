@@ -1,11 +1,11 @@
 #include "RDom.h"
-#include "Util.h"
-#include "ImageParam.h"
+#include "Generator.h"
 #include "IREquality.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
+#include "ImageParam.h"
 #include "Simplify.h"
-#include "Generator.h"
+#include "Util.h"
 
 namespace Halide {
 
@@ -100,14 +100,14 @@ class CheckRDomBounds : public IRGraphVisitor {
 
     using IRGraphVisitor::visit;
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         IRGraphVisitor::visit(op);
         if (op->call_type == Call::Halide) {
             offending_func = op->name;
         }
     }
 
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         if (!op->param.defined() && !op->image.defined()) {
             offending_free_var = op->name;
         }
@@ -120,7 +120,7 @@ public:
 
 void RDom::initialize_from_ranges(const std::vector<std::pair<Expr, Expr>> &ranges, string name) {
     if (name.empty()) {
-        name = make_entity_name(this, "Halide::RDom", 'r');
+        name = make_entity_name(this, "Halide:.*:RDom", 'r');
     }
 
     std::vector<ReductionVariable> vars;
@@ -238,4 +238,4 @@ std::ostream &operator<<(std::ostream &stream, RDom dom) {
     return stream;
 }
 
-}
+}  // namespace Halide

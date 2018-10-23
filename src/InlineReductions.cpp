@@ -1,16 +1,16 @@
 #include "InlineReductions.h"
-#include "Func.h"
-#include "Scope.h"
-#include "IROperator.h"
-#include "IRMutator.h"
-#include "Debug.h"
 #include "CSE.h"
+#include "Debug.h"
+#include "Func.h"
+#include "IRMutator.h"
+#include "IROperator.h"
+#include "Scope.h"
 
 namespace Halide {
 
+using std::ostringstream;
 using std::string;
 using std::vector;
-using std::ostringstream;
 
 namespace Internal {
 
@@ -101,7 +101,7 @@ private:
         return expr;
     }
 };
-}
+}  // namespace Internal
 
 Expr sum(Expr e, const std::string &name) {
     return sum(RDom(), e, name);
@@ -222,4 +222,4 @@ Tuple argmin(RDom r, Expr e, const std::string &name) {
     return f(v.call_args);
 }
 
-}
+}  // namespace Halide

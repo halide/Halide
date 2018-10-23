@@ -26,7 +26,7 @@ namespace Internal {
  */
 Stmt storage_folding(Stmt s, const std::map<std::string, Function> &env);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

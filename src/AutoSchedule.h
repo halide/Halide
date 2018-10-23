@@ -26,13 +26,13 @@ struct MachineParams {
         : parallelism(parallelism), last_level_cache_size(llc), balance(balance) {}
 
     /** Default machine parameters for generic CPU architecture. */
-    EXPORT static MachineParams generic();
+    static MachineParams generic();
 
     /** Convert the MachineParams into canonical string form. */
-    EXPORT std::string to_string() const;
+    std::string to_string() const;
 
     /** Reconstruct a MachineParams from canonical string form. */
-    EXPORT explicit MachineParams(const std::string &s);
+    explicit MachineParams(const std::string &s);
 };
 
 namespace Internal {
@@ -42,11 +42,11 @@ namespace Internal {
  * into account user-defined schedules or specializations. This applies the
  * schedules and returns a string representation of the schedules. The target
  * architecture is specified by 'target'. */
-EXPORT std::string generate_schedules(const std::vector<Function> &outputs,
-                                      const Target &target,
-                                      const MachineParams &arch_params);
+std::string generate_schedules(const std::vector<Function> &outputs,
+                               const Target &target,
+                               const MachineParams &arch_params);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

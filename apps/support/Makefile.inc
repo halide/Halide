@@ -1,10 +1,12 @@
-HALIDE_BIN_PATH ?= ../..
-HALIDE_SRC_PATH ?= ../..
+HALIDE_DISTRIB_PATH ?= ../../distrib
 LDFLAGS ?=
 BIN ?= ./bin
 IMAGES ?= ../images
 HL_TARGET ?= host
 UNAME ?= $(shell uname)
+
+# This pulls in the definition of HALIDE_SYSTEM_LIBS
+include $(HALIDE_DISTRIB_PATH)/halide_config.make
 
 ifeq ($(OS), Windows_NT)
 # Flags for mingw environment
@@ -16,8 +18,8 @@ endif
 CXX ?= g++
 GXX ?= g++
 
-CFLAGS += -I $(HALIDE_BIN_PATH)/include/ -I $(HALIDE_SRC_PATH)/tools/ -I $(HALIDE_SRC_PATH)/apps/support/
-CXXFLAGS += -std=c++11 -I $(HALIDE_BIN_PATH)/include/ -I $(HALIDE_SRC_PATH)/tools/ -I $(HALIDE_SRC_PATH)/apps/support/
+CFLAGS += -I $(HALIDE_DISTRIB_PATH)/include/ -I $(HALIDE_DISTRIB_PATH)/tools/ -I $(HALIDE_DISTRIB_PATH)/apps/support/
+CXXFLAGS += -std=c++11 -I $(HALIDE_DISTRIB_PATH)/include/ -I $(HALIDE_DISTRIB_PATH)/tools/
 
 ifeq ($(UNAME), Darwin)
 CXXFLAGS += -fvisibility=hidden
@@ -39,27 +41,9 @@ LDFLAGS-host ?= $(LDFLAGS)
 LDFLAGS-arm-64-android ?= -llog -fPIE -pie
 LDFLAGS-arm-32-android ?= -llog -fPIE -pie
 
-LIB_HALIDE = $(HALIDE_BIN_PATH)/lib/libHalide.a
+LIB_HALIDE = $(HALIDE_DISTRIB_PATH)/lib/libHalide.a
 
-GENERATOR_DEPS ?= $(HALIDE_BIN_PATH)/lib/libHalide.a $(HALIDE_BIN_PATH)/include/Halide.h $(HALIDE_SRC_PATH)/tools/GenGen.cpp
-
-LLVM_CONFIG ?= llvm-config
-LLVM_VERSION_TIMES_10 = $(shell $(LLVM_CONFIG) --version | cut -b 1,3)
-HALIDE_SYSTEM_LDFLAGS = $(shell $(LLVM_CONFIG) --system-libs)
-LLVM_LDFLAGS = $(shell $(LLVM_CONFIG) --ldflags) $(HALIDE_SYSTEM_LDFLAGS)
-
-LLVM_CONFIG ?= llvm-config
-LLVM_FULL_VERSION = $(shell $(LLVM_CONFIG) --version)
-LLVM_LIBDIR = $(shell $(LLVM_CONFIG) --libdir)
-
-ifeq ($(USE_LLVM_SHARED_LIB), )
-LLVM_STATIC_LIBS = -L $(LLVM_LIBDIR) $(shell $(LLVM_CONFIG) --libs bitwriter bitreader linker ipo mcjit $(LLVM_OLD_JIT_COMPONENT) $(X86_LLVM_CONFIG_LIB) $(ARM_LLVM_CONFIG_LIB) $(OPENCL_LLVM_CONFIG_LIB) $(PTX_LLVM_CONFIG_LIB) $(AARCH64_LLVM_CONFIG_LIB) $(MIPS_LLVM_CONFIG_LIB))
-LLVM_SHARED_LIBS =
-else
-LLVM_STATIC_LIBS =
-LLVM_SHARED_LIBS = -L $(LLVM_LIBDIR) -lLLVM-$(LLVM_FULL_VERSION)
-endif
-
+GENERATOR_DEPS ?= $(HALIDE_DISTRIB_PATH)/lib/libHalide.a $(HALIDE_DISTRIB_PATH)/include/Halide.h $(HALIDE_DISTRIB_PATH)/tools/GenGen.cpp
 
 LIBPNG_LIBS_DEFAULT = $(shell libpng-config --ldflags)
 LIBPNG_CXX_FLAGS ?= $(shell libpng-config --cflags)
@@ -100,13 +84,13 @@ ifneq (, $(findstring metal,$(HL_TARGET)))
   LDFLAGS += -framework Metal -framework Foundation
 endif
 
-$(BIN)/RunGen.o: $(HALIDE_SRC_PATH)/tools/RunGen.cpp
+$(BIN)/RunGenMain.o: $(HALIDE_DISTRIB_PATH)/tools/RunGenMain.cpp $(HALIDE_DISTRIB_PATH)/tools/RunGen.h
 	@mkdir -p $(@D)
 	@$(CXX) -c $< $(CXXFLAGS) $(IMAGE_IO_CXX_FLAGS) -I$(BIN) -o $@
 
 # Really, .SECONDARY is what we want, but it won't accept wildcards
 .PRECIOUS: $(BIN)/%.rungen
-$(BIN)/%.rungen: $(BIN)/%.a $(BIN)/RunGen.o $(HALIDE_SRC_PATH)/tools/RunGenStubs.cpp
+$(BIN)/%.rungen: $(BIN)/%.a $(BIN)/RunGenMain.o $(HALIDE_DISTRIB_PATH)/tools/RunGenStubs.cpp
 	$(CXX) $(CXXFLAGS) -I$(BIN) -DHL_RUNGEN_FILTER_HEADER=\"$*.h\" $^ -o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS)
 
 RUNARGS ?=
@@ -117,3 +101,10 @@ RUNARGS ?=
 #
 $(BIN)/%.run: $(BIN)/%.rungen
 	@$(CURDIR)/$< $(RUNARGS)
+
+# Utility to convert raw video -> h264. HL_AVCONV=ffmpeg will work too.
+HL_AVCONV ?= avconv
+
+# Utility to show h264 video
+HL_VIDEOPLAYER ?= mplayer
+

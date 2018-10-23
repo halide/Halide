@@ -1,16 +1,12 @@
 #ifndef HALIDE_PYTHON_BINDINGS_PYHALIDE_H
 #define HALIDE_PYTHON_BINDINGS_PYHALIDE_H
 
-// Include all Boost.Python headers here
-#include <boost/python.hpp>
-#include <boost/python/operators.hpp>
-#include <boost/python/raw_function.hpp>
-#include <boost/python/self.hpp>
-#include <boost/python/stl_iterator.hpp>
-#include <boost/python/tuple.hpp>
+#include <pybind11/pybind11.h>
+#include <pybind11/numpy.h>
+#include <pybind11/operators.h>
+#include <pybind11/stl.h>
 
 // Some very-commonly-used headers here, to simplify things.
-// (<string> must come after the boost headers in some configs.)
 #include <iostream>
 #include <string>
 #include <vector>
@@ -21,7 +17,20 @@
 namespace Halide {
 namespace PythonBindings {
 
-namespace py = boost::python;
+namespace py = pybind11;
+
+template<typename T>
+std::vector<T> args_to_vector(const py::args &args, size_t start_offset = 0, size_t end_offset = 0) {
+    if (args.size() < start_offset + end_offset) {
+        throw py::value_error("Not enough arguments");
+    }
+    std::vector<T> v;
+    v.reserve(args.size() - (start_offset + end_offset));
+    for (size_t i = start_offset; i < args.size() - end_offset; ++i) {
+        v.push_back(args[i].cast<T>());
+    }
+    return v;
+}
 
 }  // namespace PythonBindings
 }  // namespace Halide

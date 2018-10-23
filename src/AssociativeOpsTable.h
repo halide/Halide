@@ -5,8 +5,8 @@
  * Tables listing associative operators and their identities.
  */
 
-#include "IROperator.h"
 #include "IREquality.h"
+#include "IROperator.h"
 
 #include <iostream>
 #include <vector>
@@ -61,7 +61,7 @@ struct AssociativePattern {
 
 const std::vector<AssociativePattern> &get_ops_table(const std::vector<Expr> &exprs);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

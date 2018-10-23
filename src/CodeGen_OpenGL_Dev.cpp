@@ -1,22 +1,22 @@
 #include "CodeGen_OpenGL_Dev.h"
+#include "Debug.h"
+#include "Deinterleave.h"
 #include "IRMatch.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "Debug.h"
-#include "Deinterleave.h"
 #include "Simplify.h"
 #include "VaryingAttributes.h"
 #include <iomanip>
-#include <map>
 #include <limits>
+#include <map>
 
 namespace Halide {
 namespace Internal {
 
+using std::map;
 using std::ostringstream;
 using std::string;
 using std::vector;
-using std::map;
 
 namespace {
 
@@ -84,7 +84,7 @@ Expr call_builtin(const Type &result_type, const string &func,
     return simplify(Cast::make(result_type, val));
 }
 
-}
+}  // namespace
 
 CodeGen_OpenGL_Dev::CodeGen_OpenGL_Dev(const Target &target)
     : target(target) {
@@ -354,8 +354,8 @@ void CodeGen_GLSL::visit(const Cast *op) {
     if (map_type(op->type) == map_type(value_type)) {
         Expr value = op->value;
         if (value_type.code() == Type::Float) {
-            // float->int conversions may need explicit truncation if the
-            // integer types is embedded into floats.  (Note: overflows are
+            // float->int conversions may need explicit truncation if an
+            // integer type is embedded into a float. (Note: overflows are
             // considered undefined behavior, so we do nothing about values
             // that are out of range of the target type.)
             if (op->type.code() == Type::UInt) {
@@ -741,14 +741,14 @@ namespace {
 class AllAccessConstant : public IRVisitor {
     using IRVisitor::visit;
 
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         if (op->name == buf && !is_const(op->index)) {
             result = false;
         }
         IRVisitor::visit(op);
     }
 
-    void visit(const Store *op) {
+    void visit(const Store *op) override {
         if (op->name == buf && !is_const(op->index)) {
             result = false;
         }
@@ -1121,4 +1121,5 @@ void CodeGen_GLSL::test() {
     std::cout << "CodeGen_GLSL test passed\n";
 }
 
-}}
+}  // namespace Internal
+}  // namespace Halide

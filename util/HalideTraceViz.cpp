@@ -1,99 +1,200 @@
-#include <stdio.h>
-#include <stdint.h>
-#include <assert.h>
-#include <stdlib.h>
-#include <string.h>
-
-#include <map>
-#include <vector>
-#include <array>
-#include <string>
-#include <queue>
-#include <iostream>
 #include <algorithm>
+#include <cassert>
+#include <cmath>
+#include <cstring>
+#include <iostream>
+#include <list>
+#include <map>
+#include <memory>
+#include <set>
+#include <string>
+#include <vector>
+
 #ifdef _MSC_VER
 #include <io.h>
-typedef int64_t ssize_t;
+#ifndef STDIN_FILENO
+#define STDIN_FILENO 0
+#endif
+#ifndef STDOUT_FILENO
+#define STDOUT_FILENO 1
+#endif
 #else
 #include <unistd.h>
 #endif
-#include <string.h>
 
 #include "inconsolata.h"
 #include "HalideRuntime.h"
-#include "HalideTraceUtils.h"
+
+#include "halide_trace_config.h"
 
 using namespace Halide;
-using namespace Internal;
+using namespace Halide::Trace;
 
 namespace {
 
-using std::map;
-using std::vector;
-using std::string;
-using std::queue;
-using std::array;
-using std::pair;
+// -------------------------------------------------------------
 
-// A struct specifying a text label that will appear on the screen at some point.
-struct Label {
-    const char *text;
-    int x, y, n;
+bool verbose = false;
+
+// Log informational output to stderr, but only in verbose mode
+struct info {
+    std::ostringstream msg;
+
+    template<typename T>
+    info &operator<<(const T &x) {
+        if (verbose) {
+            msg << x;
+        }
+        return *this;
+    }
+
+    ~info() {
+        if (verbose) {
+            if (msg.str().back() != '\n') {
+                msg << '\n';
+            }
+            std::cerr << msg.str();
+        }
+    }
 };
+
+// Log warnings to stderr
+struct warn {
+    std::ostringstream msg;
+
+    template<typename T>
+    warn &operator<<(const T &x) {
+        msg << x;
+        return *this;
+    }
+
+    ~warn() {
+        if (msg.str().back() != '\n') {
+            msg << '\n';
+        }
+        std::cerr << "Warning: " << msg.str();
+    }
+};
+
+// Log unrecoverable errors to stderr, then exit
+struct fail {
+    std::ostringstream msg;
+
+    template<typename T>
+    fail &operator<<(const T &x) {
+        msg << x;
+        return *this;
+    }
+
+    #ifdef _MSC_VER
+    #pragma warning(push)
+    #pragma warning(disable:4722)  // destructor never returns, potential memory leak
+    #endif
+    ~fail() {
+        if (msg.str().back() != '\n') {
+            msg << '\n';
+        }
+        std::cerr << msg.str();
+        exit(1);
+    }
+    #ifdef _MSC_VER
+    #pragma warning(pop)
+    #endif
+};
+
+// -------------------------------------------------------------
+
+// Combine type-and-code into a single integer to avoid nested switches.
+// Must be constexpr to allow use in case clauses.
+inline static constexpr int halide_type_code(halide_type_code_t code, int bits) {
+    return (((int) code) << 8) | bits;
+}
+
+template<typename T>
+T value_as(const halide_type_t &type, const halide_scalar_value_t& value) {
+    switch (halide_type_code((halide_type_code_t) type.code, type.bits)) {
+        case halide_type_code(halide_type_int, 8):    return (T) value.u.i8;
+        case halide_type_code(halide_type_int, 16):   return (T) value.u.i16;
+        case halide_type_code(halide_type_int, 32):   return (T) value.u.i32;
+        case halide_type_code(halide_type_int, 64):   return (T) value.u.i64;
+        case halide_type_code(halide_type_uint, 1):   return (T) value.u.b;
+        case halide_type_code(halide_type_uint, 8):   return (T) value.u.u8;
+        case halide_type_code(halide_type_uint, 16):  return (T) value.u.u16;
+        case halide_type_code(halide_type_uint, 32):  return (T) value.u.u32;
+        case halide_type_code(halide_type_uint, 64):  return (T) value.u.u64;
+        case halide_type_code(halide_type_float, 32): return (T) value.u.f32;
+        case halide_type_code(halide_type_float, 64): return (T) value.u.f64;
+        default:
+            fail() << "Can't convert packet with type: " << (int) type.code << "bits: " << type.bits;
+            return (T) 0;
+    }
+}
+
+template<typename T>
+T get_value_as(const halide_trace_packet_t &p, int idx) {
+    const uint8_t *val = (const uint8_t *)(p.value()) + idx * p.type.bytes();
+    // 'val' may not be aligned: memcpy it to an aligned local
+    // so that value_as<>() won't complain under sanitizers.
+    halide_scalar_value_t aligned_value;
+    // Only copy the number of bytes in the type: the stream isn't guaranteed
+    // to be padded to sizeof(halide_scalar_value_t).
+    memcpy(&aligned_value, val, p.type.bits / 8);
+    return value_as<double>(p.type, aligned_value);
+}
+
+struct PacketAndPayload : public halide_trace_packet_t {
+    uint8_t payload[4096];
+
+    static bool read_or_die(void *buf, size_t count) {
+        char *p = (char *)buf;
+        char *p_end = p + count;
+        while (p < p_end) {
+            int64_t bytes_read = ::read(STDIN_FILENO, p, p_end - p);
+            if (bytes_read == 0) {
+                return false;  // EOF
+            } else if (bytes_read < 0) {
+                fail() << "Unable to read packet";
+            }
+            p += bytes_read;
+        }
+        assert(p == p_end);
+        return true;
+    }
+
+    bool read() {
+        constexpr size_t header_size = sizeof(halide_trace_packet_t);
+        if (!read_or_die(this, header_size)) {
+            return false;  // EOF
+        }
+
+        const size_t payload_size = this->size - header_size;
+        if (payload_size > sizeof(this->payload) || !read_or_die(this->payload, payload_size)) {
+            // Shouldn't ever get EOF here
+            fail() << "Unable to read packet payload of size " << payload_size;
+        }
+        return true;
+    }
+};
+
+// -------------------------------------------------------------
 
 // A struct specifying how a single Func will get visualized.
 struct FuncInfo {
 
-    bool configured = false;
+    // Info about Funcs type and touched-extent, emitted
+    // by the tracing code.
+    FuncTypeAndDim type_and_dim;
+    bool type_and_dim_valid = false;
+    int layout_order = -1;
 
     // Configuration for how the func should be drawn
-    struct Config {
-        int zoom = 0;
-        int load_cost = 0;
-        int store_cost = 0;
-        int dims = 0;
-        int x, y = 0;
-        int x_stride[16];
-        int y_stride[16];
-        int color_dim = 0;
-        float min = 0.0f, max = 0.0f;
-        vector<Label> labels;
-        bool blank_on_end_realization = false;
-        uint32_t uninitialized_memory_color = 0xff000000;
-
-        void dump(const char *name) {
-            fprintf(stderr,
-                    "Func %s:\n"
-                    " min: %f max: %f\n"
-                    " color_dim: %d\n"
-                    " blank: %d\n"
-                    " dims: %d\n"
-                    " zoom: %d\n"
-                    " load cost: %d\n"
-                    " store cost: %d\n"
-                    " x: %d y: %d\n"
-                    " x_stride: %d %d %d %d\n"
-                    " y_stride: %d %d %d %d\n",
-                    name,
-                    min, max,
-                    color_dim,
-                    blank_on_end_realization,
-                    dims,
-                    zoom, load_cost, store_cost, x, y,
-                    x_stride[0], x_stride[1], x_stride[2], x_stride[3],
-                    y_stride[0], y_stride[1], y_stride[2], y_stride[3]);
-        }
-
-        Config() {
-            memset(x_stride, 0, sizeof(x_stride));
-            memset(y_stride, 0, sizeof(y_stride));
-        }
-    } config;
+    FuncConfig config;
+    bool config_valid = false;
 
     // Information about actual observed values gathered while parsing the trace
     struct Observed {
-        string qualified_name;
-        int first_draw_time = 0, first_packet_idx = 0;
+        std::string qualified_name;
+        int first_draw_time = -1, first_packet_idx = -1;
         double min_value = 0.0, max_value = 0.0;
         int min_coord[16];
         int max_coord[16];
@@ -105,20 +206,21 @@ struct FuncInfo {
             memset(max_coord, 0, sizeof(max_coord));
         }
 
-        void observe_load(const Packet &p) {
+        void observe_load(const halide_trace_packet_t &p) {
             observe_load_or_store(p);
             loads += p.type.lanes;
         }
 
-        void observe_store(const Packet &p) {
+        void observe_store(const halide_trace_packet_t &p) {
             observe_load_or_store(p);
             stores += p.type.lanes;
         }
 
-        void observe_load_or_store(const Packet &p) {
+        void observe_load_or_store(const halide_trace_packet_t &p) {
+            const int *coords = p.coordinates();
             for (int i = 0; i < std::min(16, p.dimensions / p.type.lanes); i++) {
                 for (int lane = 0; lane < p.type.lanes; lane++) {
-                    int coord = p.get_coord(i*p.type.lanes + lane);
+                    int coord = coords[i*p.type.lanes + lane];
                     if (loads + stores == 0 && lane == 0) {
                         min_coord[i] = coord;
                         max_coord[i] = coord + 1;
@@ -130,7 +232,7 @@ struct FuncInfo {
             }
 
             for (int i = 0; i < p.type.lanes; i++) {
-                double value = p.get_value_as<double>(i);
+                double value = get_value_as<double>(p, i);
                 if (stores + loads == 0) {
                     min_value = value;
                     max_value = value;
@@ -142,83 +244,41 @@ struct FuncInfo {
         }
 
         void report() {
-            fprintf(stderr,
-                    "Func %s:\n"
-                    " bounds of domain: ", qualified_name.c_str());
+            std::ostringstream o;
             for (int i = 0; i < 16; i++) {
-                if (min_coord[i] == 0 && max_coord[i] == 0) break;
-                if (i > 0) {
-                    fprintf(stderr, " x ");
+                if (min_coord[i] == 0 && max_coord[i] == 0) {
+                    break;
                 }
-                fprintf(stderr, "[%d, %d)", min_coord[i], max_coord[i]);
+                if (i > 0) {
+                    o << " x ";
+                }
+                o << "[" << min_coord[i] << ", " << max_coord[i] << ")";
             }
-            // TODO: Convert this file to using std::cerr so I don't
-            // have to struggle with cross-platform printf format
-            // specifiers. (stores and loads below really shouldn't be a double)
-            fprintf(stderr,
-                    "\n"
-                    " range of values: [%f, %f]\n"
-                    " number of realizations: %d\n"
-                    " number of productions: %d\n"
-                    " number of loads: %g\n"
-                    " number of stores: %g\n",
-                    min_value, max_value,
-                    num_realizations, num_productions,
-                    (double)loads,
-                    (double)stores);
+            info()
+                << "Func " << qualified_name << ":\n"
+                << o.str() << "\n"
+                << " range of values: [" << min_value << ", " << max_value << "]\n"
+                << " number of realizations: " << num_realizations << "\n"
+                << " number of productions: " << num_productions << "\n"
+                << " number of loads: " << loads << "\n"
+                << " number of stores: " << stores << "\n";
         }
 
     } stats;
 };
 
-// Composite a single pixel of b over a single pixel of a, writing the result into dst
-void composite(uint8_t *a, uint8_t *b, uint8_t *dst) {
-    uint8_t alpha = b[3];
-    // alpha is almost always 0 or 255.
-    if (alpha == 0) {
-        ((uint32_t *)dst)[0] = ((uint32_t *)a)[0];
-    } else if (alpha == 255) {
-        ((uint32_t *)dst)[0] = ((uint32_t *)b)[0];
-    } else {
-        dst[0] = (alpha * b[0] + (255 - alpha) * a[0]) / 255;
-        dst[1] = (alpha * b[1] + (255 - alpha) * a[1]) / 255;
-        dst[2] = (alpha * b[2] + (255 - alpha) * a[2]) / 255;
-        dst[3] = 255 - (((255 - a[3]) * (255 - alpha)) / 255);
-    }
-}
+struct VizState {
+    GlobalConfig globals;
+    std::map<std::string, FuncInfo> funcs;
+};
 
-#define FONT_W 12
-#define FONT_H 32
-void draw_text(const char *text, int x, int y, uint32_t color, uint32_t *dst, int dst_width, int dst_height) {
-    // The font array contains 96 characters of FONT_W * FONT_H letters.
-    assert(inconsolata_raw_len == 96 * FONT_W * FONT_H);
+// -------------------------------------------------------------
 
-    // Drop any alpha component of color
-    color &= 0xffffff;
 
-    for (int c = 0; ; c++) {
-        int chr = text[c];
-        if (chr == 0) return;
+// -------------------------------------------------------------
 
-        // We only handle a subset of ascii
-        if (chr < 32 || chr > 127) chr = 32;
-        chr -= 32;
-
-        uint8_t *font_ptr = inconsolata_raw + chr * (FONT_W * FONT_H);
-        for (int fy = 0; fy < FONT_H; fy++) {
-            for (int fx = 0; fx < FONT_W; fx++) {
-                int px = x + FONT_W*c + fx;
-                int py = y - FONT_H + fy + 1;
-                if (px < 0 || px >= dst_width ||
-                    py < 0 || py >= dst_height) continue;
-                dst[py * dst_width + px] = (font_ptr[fy * FONT_W + fx] << 24) | color;
-            }
-        }
-    }
-}
-
-void usage() {
-    fprintf(stderr,
+std::string usage() {
+    return
             R"USAGE(
 HalideTraceViz accepts Halide-generated binary tracing packets from
 stdin, and outputs them as raw 8-bit rgba32 pixel values to
@@ -226,7 +286,7 @@ stdout. You should pipe the output of HalideTraceViz into a video
 encoder or player.
 
 E.g. to encode a video:
- HL_TARGET=host-trace_stores-trace_loads-trace_realizations <command to make pipeline> && \
+ HL_TARGET=host-trace_all <command to make pipeline> && \
  HL_TRACE_FILE=/dev/stdout <command to run pipeline> | \
  HalideTraceViz -s 1920 1080 -t 10000 <the -f args> | \
  avconv -f rawvideo -pix_fmt bgr32 -s 1920x1080 -i /dev/stdin -c:v h264 output.avi
@@ -279,7 +339,7 @@ Funcs.
      screen. This is the default
 
  --zoom factor: Each value of a Func will draw as a factor x factor
-     box in the output.
+     box in the output. Fractional values are allowed.
 
  --load time: Each load from a Func costs the given number of ticks.
 
@@ -321,147 +381,337 @@ Funcs.
      appears with its bottom left corner at the current coordinates
      and fades in over n frames.
 
-)USAGE");
+ --rlabel func label dx dy n: Like "--label", but relative to the Func's
+     position, using dx and dy as an offset.
+
+))USAGE";
 }
 
-// If the condition is false, print usage and exit with error.
-void expect(bool cond, int i) {
-    if (!cond) {
-        if (i) {
-            fprintf(stderr, "Argument parsing failed at argument %d\n", i);
+// Calculate the maximum 2d rendered size for a given Box and stride, assuming
+// a zoom factor of 1. This uses the same recursive approach as fill_realization()
+// for simplicity.
+void calc_2d_size(const std::vector<Range> &dims, const std::vector<Point> &strides, Range *x, Range *y,
+                      int current_dimension = 0, int x_off = 0, int y_off = 0) {
+    if (current_dimension == 0) {
+        x->min = 2147483647;
+        x->extent = -2147483647;
+        y->min = 2147483647;
+        y->extent = -2147483647;
+    }
+    if (current_dimension == (int)dims.size()) {
+        x->min = std::min(x->min, x_off);
+        x->extent = std::max(x->extent, x_off);
+        y->min = std::min(y->min, y_off);
+        y->extent = std::max(y->extent, y_off);
+    } else {
+        const auto &m = dims.at(current_dimension);
+        const Point &stride = strides.at(current_dimension);
+        x_off += stride.x * m.min;
+        y_off += stride.y * m.min;
+        for (int i = 0; i < m.extent; i++) {
+            calc_2d_size(dims, strides, x, y, current_dimension + 1, x_off, y_off);
+            x_off += stride.x;
+            y_off += stride.y;
         }
-        usage();
-        exit(-1);
+    }
+    if (current_dimension == 0) {
+        x->extent = std::max(1, x->extent - x->min + 1);
+        y->extent = std::max(1, y->extent - y->min + 1);
     }
 }
 
-// See all boxes corresponding to positions in a Func's allocation to
-// the given color. Recursive to handle arbitrary
-// dimensionalities. Used by begin and end realization events.
-void fill_realization(uint32_t *image, int image_width, int image_height, uint32_t color, const FuncInfo &fi,
-                      Packet &p, int current_dimension = 0, int x_off = 0, int y_off = 0) {
-    assert(p.dimensions >= 2 * fi.config.dims);
-    if (2 * current_dimension == p.dimensions) {
-        int x_min = x_off * fi.config.zoom + fi.config.x;
-        int y_min = y_off * fi.config.zoom + fi.config.y;
-        for (int y = 0; y < fi.config.zoom; y++) {
-            if (y_min + y < 0 || y_min + y >= image_height) continue;
-            for (int x = 0; x < fi.config.zoom; x++) {
-                if (x_min + x < 0 || x_min + x >= image_width) continue;
-                int idx = (y_min + y) * image_width + (x_min + x);
-                image[idx] = color;
+// -------------------------------------------------------------
+
+// Given a FuncConfig, check each field for "use some reasonable default"
+// value and fill in something reasonable.
+void finalize_func_config_values(const GlobalConfig &globals, FuncInfo &fi) {
+    // Make a FuncConfig with 'safe' defaults for everything,
+    // then merge the existing cfg into it.
+    FuncConfig safe;
+    safe.zoom = 1.f;
+    safe.load_cost = 0;
+    safe.store_cost = 1;
+    safe.pos = {0, 0};
+    safe.strides = { {1, 0}, {0, 1} };
+    safe.color_dim = -1;
+    safe.min = 0.0;
+    safe.max = 1.0;
+    safe.labels = {};
+    safe.blank_on_end_realization = 0;
+    safe.uninitialized_memory_color = globals.default_uninitialized_memory_color;
+
+    if (fi.type_and_dim_valid) {
+        // Try to choose better values for min and max based on type.
+        // TODO: only considers the first type given; in general,
+        // HTV doesn't deal with Tuple-valued Funcs very well.
+        const halide_type_t &type = fi.type_and_dim.types.at(0);
+        if (type.code == halide_type_uint) {
+            safe.max = (double) ((1 << type.bits) - 1);
+        } else if (type.code == halide_type_int) {
+            double d = (double) (1 << (type.bits - 1));
+            safe.max = d - 1;
+            // safe.min = -d;
+            // In practice, assuming a min of zero (rather then -INT_MIN)
+            // for signed types produces less-weird results.
+            safe.min = 0.0;
+        }
+    }
+
+    safe.merge_from(fi.config);
+    safe.uninitialized_memory_color |= 0xff000000;
+    fi.config = safe;
+}
+
+// Given a FuncConfig, check each field for "use some reasonable default"
+// value and fill in something reasonable.
+void finalize_func_config_values(const GlobalConfig &globals, std::map<std::string, FuncInfo> &funcs) {
+    for (auto &p : funcs) {
+        auto &fi = p.second;
+
+        finalize_func_config_values(globals, fi);
+    }
+}
+
+void do_auto_layout(const GlobalConfig &globals, const std::string &func_name, FuncInfo &fi) {
+    assert(fi.type_and_dim_valid);
+
+    const Point &pad = globals.auto_layout_pad;
+    Point cell_size = {
+        globals.frame_size.x / globals.auto_layout_grid.x,
+        globals.frame_size.y / globals.auto_layout_grid.y
+    };
+    info() << "cell_size is " << cell_size << "\n";
+    info() << "auto_layout_pad is " << pad << "\n";
+
+    int row = fi.layout_order / globals.auto_layout_grid.x;
+    int col = fi.layout_order % globals.auto_layout_grid.x;
+
+    if (fi.config.color_dim < -1) {
+        // If color_dim is unspecified and it looks like a 2d RGB Func, make it one
+        const auto &dims = fi.type_and_dim.dims;
+        if (dims.size() == 3) {
+            if ((dims[2].extent == 3 || dims[2].extent == 4)) {
+                fi.config.color_dim = 2;
+            } else if ((dims[0].extent == 3 || dims[0].extent == 4)) {
+                fi.config.color_dim = 0;
+                if (fi.config.strides.empty()) {
+                    fi.config.strides = { {0, 0}, {1, 0}, {0, 1} };
+                }
             }
         }
-    } else {
-        int min = p.get_coord(current_dimension * 2 + 0);
-        int extent = p.get_coord(current_dimension * 2 + 1);
-        x_off += fi.config.x_stride[current_dimension] * min;
-        y_off += fi.config.y_stride[current_dimension] * min;
-        for (int i = min; i < min + extent; i++) {
-            fill_realization(image, image_width, image_height, color, fi, p, current_dimension + 1, x_off, y_off);
-            x_off += fi.config.x_stride[current_dimension];
-            y_off += fi.config.y_stride[current_dimension];
+    }
+
+    if (fi.config.zoom < 0.f) {
+        // Ensure that all of the FuncInfos have strides that match
+        // the number of dimensions expected by FuncTypeAndDim, adding
+        // zero-stride pairs as needed (this simplifies rendering checks
+        // later on)
+        if (fi.config.strides.empty()) {
+            fi.config.strides = { {1, 0}, {0, 1} };
         }
+        while (fi.config.strides.size() < fi.type_and_dim.dims.size()) {
+            fi.config.strides.push_back({0, 0});
+        }
+
+        // Calc the 2d size that this would render at (including stride-stretching) for zoom=1
+        Range xr, yr;
+        calc_2d_size(fi.type_and_dim.dims, fi.config.strides, &xr, &yr);
+        info() << "calc_2d_size for " << func_name << " is " << xr << ", " << yr << "\n";
+
+        // Use that size to calculate the zoom we need -- this chooses
+        // a zoom that maximizes the size within the cell.
+        float zoom_x = (float) (cell_size.x - pad.x) / (float) xr.extent;
+        float zoom_y = (float) (cell_size.y - pad.y) / (float) yr.extent;
+        fi.config.zoom = std::min(zoom_x, zoom_y);
+
+        // Try to choose an even-multiple zoom for better display
+        // and just less weirdness.
+        if (fi.config.zoom > 100.f) {
+            // Zooms this large are usually for things like input matrices.
+            // Perhaps clamp at something smaller?
+            fi.config.zoom = floor(fi.config.zoom / 100.f) * 100.f;
+        } else if (fi.config.zoom > 10.f) {
+            fi.config.zoom = floor(fi.config.zoom / 10.f) * 10.f;
+        } else if (fi.config.zoom > 1.f) {
+            fi.config.zoom = floor(fi.config.zoom * 2.f) / 2.f;
+        } else if (fi.config.zoom < 1.f) {
+            fi.config.zoom = ceil(fi.config.zoom * 20.f) / 20.f;
+        }
+        info() << "zoom for " << func_name << " is " << zoom_x  << " " << zoom_y << " -> " << fi.config.zoom << "\n";
+    }
+
+    // Put the image at the top-left of the cell. (Should we try to
+    // center within the cell?)
+    if (fi.config.pos.x < 0 && fi.config.pos.y < 0) {
+        fi.config.pos.x = col * cell_size.x + pad.x;
+        fi.config.pos.y = row * cell_size.y + pad.y;
+    }
+    info() << "pos for " << func_name << " is " << fi.config.pos.x  << " " << fi.config.pos.y << "\n";
+
+    if (fi.config.labels.empty()) {
+        std::string label = func_name + " (" + std::to_string((int) (fi.config.zoom * 100)) + "%)";
+        const int label_width = label.size() * inconsolata_char_width;
+        const int label_space = cell_size.x - pad.x*2;
+        float h_scale = 1.f;
+        if (label_width > label_space) {
+            h_scale = std::max(0.25f, std::min(1.f, (float) label_space / (float) label_width));
+            info() << "h_scale for label (" << label << " is " << h_scale << "\n";
+        }
+        fi.config.labels.push_back({label, {0, 0}, 10, h_scale});
+    }
+
+    fi.config_valid = true;
+}
+
+void do_auto_layout(VizState &state) {
+    if (!state.globals.auto_layout) {
+        return;
+    }
+
+    for (auto &p : state.funcs) {
+        const auto &func_name = p.first;
+        auto &fi = p.second;
+        do_auto_layout(state.globals, func_name, fi);
     }
 }
 
-int run(int argc, char **argv) {
-    if (argc == 1) {
-        usage();
-        return 0;
-    }
+float calc_side_length(int min_cells, int width, int height) {
+    const float aspect_ratio = (float) width / (float) height;
+    const float p = ceil(sqrt(min_cells * aspect_ratio));
+    const float par = p / aspect_ratio;
+    const float s = floor(par) * p < min_cells ?
+                height / ceil(par) :
+                width / p;
+    return s;
+}
 
-    // State that determines how different funcs get drawn
-    int frame_width = 1920, frame_height = 1080;
-    float decay_factor[2] = {1, 2};
-    map<string, FuncInfo> func_info;
+// Calculate the 'best' cell size such that we can fit at least min_cells
+// into the given width x height. Currently this calculates perfectly
+// square cells, which is OK but a little wasteful (eg for min_cells=20
+// and size 1920x1080, it calculates a grid of 7x4 which wastes 8 cells).
+// We could probably do better if we just tried to keep the cells 'nearly'
+// square (aspect ratio <= 1.25).
+Point best_cell_size(int min_cells, int width, int height) {
+    const float sx = calc_side_length(min_cells, width, height);
+    const float sy = calc_side_length(min_cells, height, width);
+    const int edge = floor(std::max(sx, sy));
+    return {edge, edge};
+}
 
-    int timestep = 10000;
-    int hold_frames = 250;
+// -------------------------------------------------------------
 
-    FuncInfo::Config config;
-    config.x = config.y = 0;
-    config.zoom = 1;
-    config.color_dim = -1;
-    config.min = 0;
-    config.max = 1;
-    config.store_cost = 1;
-    config.load_cost = 0;
-    config.blank_on_end_realization = false;
-    config.dims = 2;
-    config.x_stride[0] = 1;
-    config.y_stride[0] = 0;
-    config.x_stride[1] = 0;
-    config.y_stride[1] = 1;
-    config.uninitialized_memory_color = 255 << 24;
+void process_args(int argc, char **argv, VizState *state) {
+    GlobalConfig &globals = state->globals;
+    std::map<std::string, FuncInfo> &funcs = state->funcs;
 
-    vector<pair<int, int>> pos_stack;
+    // The struct's default values are what we want
+    FuncConfig config;
+    std::vector<Point> pos_stack;
+    std::set<std::string> labels_seen;
+
+    // If the condition is false, print usage and exit with error.
+    const auto expect = [](bool cond, int i) {
+        if (!cond) {
+            if (i) {
+                fail() << "Argument parsing failed at argument " << i << "\n" << usage();
+            } else {
+                fail() << usage();
+            }
+        }
+    };
+
+    const auto parse_int = [](const char *str) -> int {
+        char *endptr = nullptr;
+        errno = 0;
+        long result = strtol(str, &endptr, 0);
+        if (errno == ERANGE || str == endptr) {
+            fail() << "Unable to parse '" << str << "' as an int\n" << usage();
+        }
+        return (int) result;
+    };
+
+    const auto parse_float = [](const char *str) -> float {
+        char *endptr = nullptr;
+        errno = 0;
+        float result = strtof(str, &endptr);
+        if (errno == ERANGE || str == endptr) {
+            fail() << "Unable to parse '" << str << "' as a float\n" << usage();
+        }
+        return result;
+    };
+
+    const auto parse_double = [](const char *str) -> double {
+        char *endptr = nullptr;
+        errno = 0;
+        double result = strtod(str, &endptr);
+        if (errno == ERANGE || str == endptr) {
+            fail() << "Unable to parse '" << str << "' as a double\n" << usage();
+        }
+        return result;
+    };
 
     // Parse command line args
     int i = 1;
     while (i < argc) {
-        string next = argv[i];
+        std::string next = argv[i];
         if (next == "--size") {
             expect(i + 2 < argc, i);
-            frame_width = atoi(argv[++i]);
-            frame_height = atoi(argv[++i]);
+            globals.frame_size.x = parse_int(argv[++i]);
+            globals.frame_size.y = parse_int(argv[++i]);
         } else if (next == "--func") {
             expect(i + 1 < argc, i);
             const char *func = argv[++i];
-            FuncInfo &fi = func_info[func];
-            fi.config.labels.swap(config.labels);
-            fi.config = config;
-            fi.config.dump(func);
-            fi.configured = true;
+            FuncInfo &fi = funcs[func];
+            fi.config.merge_from(config);
+            fi.config_valid = true;
         } else if (next == "--min") {
             expect(i + 1 < argc, i);
-            config.min = atof(argv[++i]);
+            config.min = parse_double(argv[++i]);
         } else if (next == "--max") {
             expect(i + 1 < argc, i);
-            config.max = atof(argv[++i]);
+            config.max = parse_double(argv[++i]);
         } else if (next == "--move") {
             expect(i + 2 < argc, i);
-            config.x = atoi(argv[++i]);
-            config.y = atoi(argv[++i]);
+            config.pos.x = parse_int(argv[++i]);
+            config.pos.y = parse_int(argv[++i]);
         } else if (next == "--left") {
             expect(i + 1 < argc, i);
-            config.x -= atoi(argv[++i]);
+            config.pos.x -= parse_int(argv[++i]);
         } else if (next == "--right") {
             expect(i + 1 < argc, i);
-            config.x += atoi(argv[++i]);
+            config.pos.x += parse_int(argv[++i]);
         } else if (next == "--up") {
             expect(i + 1 < argc, i);
-            config.y -= atoi(argv[++i]);
+            config.pos.y -= parse_int(argv[++i]);
         } else if (next == "--down") {
             expect(i + 1 < argc, i);
-            config.y += atoi(argv[++i]);
+            config.pos.y += parse_int(argv[++i]);
         } else if (next == "--push") {
-            pos_stack.push_back({config.x, config.y});
+            pos_stack.push_back(config.pos);
         } else if (next == "--pop") {
             expect(!pos_stack.empty(), i);
-            config.x = pos_stack.back().first;
-            config.y = pos_stack.back().second;
+            config.pos = pos_stack.back();
             pos_stack.pop_back();
         } else if (next == "--rgb") {
             expect(i + 1 < argc, i);
-            config.color_dim = atoi(argv[++i]);
+            config.color_dim = parse_int(argv[++i]);
         } else if (next == "--gray") {
             config.color_dim = -1;
         } else if (next == "--blank") {
-            config.blank_on_end_realization = true;
+            config.blank_on_end_realization = 1;
         } else if (next == "--no-blank") {
-            config.blank_on_end_realization = false;
+            config.blank_on_end_realization = 0;
         } else if (next == "--zoom") {
             expect(i + 1 < argc, i);
-            config.zoom = atoi(argv[++i]);
+            config.zoom = parse_float(argv[++i]);
         } else if (next == "--load") {
             expect(i + 1 < argc, i);
-            config.load_cost = atoi(argv[++i]);
+            config.load_cost = parse_int(argv[++i]);
         } else if (next == "--store") {
             expect(i + 1 < argc, i);
-            config.store_cost = atoi(argv[++i]);
+            config.store_cost = parse_int(argv[++i]);
         } else if (next == "--strides") {
-            config.dims = 0;
+            config.strides.clear();
             while (i + 1 < argc) {
                 const char *next_arg = argv[i + 1];
                 if (next_arg[0] == '-' &&
@@ -469,139 +719,432 @@ int run(int argc, char **argv) {
                     break;
                 }
                 expect(i + 2 < argc, i);
-                config.x_stride[config.dims] = atoi(argv[++i]);
-                config.y_stride[config.dims] = atoi(argv[++i]);
-                config.dims++;
+                int x = parse_int(argv[++i]);
+                int y = parse_int(argv[++i]);
+                config.strides.push_back({x, y});
             }
         } else if (next == "--label") {
             expect(i + 3 < argc, i);
             char *func = argv[++i];
             char *text = argv[++i];
-            int n = atoi(argv[++i]);
-            Label l = {text, config.x, config.y, n};
-            func_info[func].config.labels.push_back(l);
+            int n = parse_int(argv[++i]);
+            FuncInfo &fi = funcs[func];
+            // A Label's position is relative to its Func's position;
+            // the --label flag has always expected an absolute position,
+            // so convert it to an offset.
+            Point offset = { config.pos.x - fi.config.pos.x, config.pos.y - fi.config.pos.y };
+            if (!labels_seen.count(func)) {
+                // If there is at least one --label specified for a Func,
+                // it overrides the entire previous std::set of labels, rather
+                // than simply appending.
+                fi.config.labels.clear();
+                labels_seen.insert(func);
+            }
+            fi.config.labels.push_back({text, offset, n});
+        } else if (next == "--rlabel") {
+            expect(i + 5 < argc, i);
+            char *func = argv[++i];
+            char *text = argv[++i];
+            int dx = parse_int(argv[++i]);
+            int dy = parse_int(argv[++i]);
+            int n = parse_int(argv[++i]);
+            FuncInfo &fi = funcs[func];
+            Point offset = { dx, dy };
+            if (!labels_seen.count(func)) {
+                // If there is at least one --label specified for a Func,
+                // it overrides the entire previous std::set of labels, rather
+                // than simply appending.
+                fi.config.labels.clear();
+                labels_seen.insert(func);
+            }
+            fi.config.labels.push_back({text, offset, n});
         } else if (next == "--timestep") {
             expect(i + 1 < argc, i);
-            timestep = atoi(argv[++i]);
+            globals.timestep = parse_int(argv[++i]);
         } else if (next == "--decay") {
             expect(i + 2 < argc, i);
-            decay_factor[0] = atof(argv[++i]);
-            decay_factor[1] = atof(argv[++i]);
+            globals.decay_factor_during_compute = parse_int(argv[++i]);
+            globals.decay_factor_after_compute = parse_int(argv[++i]);
         } else if (next == "--hold") {
             expect(i + 1 < argc, i);
-            hold_frames = atoi(argv[++i]);
+            globals.hold_frames = parse_int(argv[++i]);
         } else if (next == "--uninit") {
             expect(i + 3 < argc, i);
-            int r = atoi(argv[++i]);
-            int g = atoi(argv[++i]);
-            int b = atoi(argv[++i]);
-            config.uninitialized_memory_color = (255 << 24) | ((b & 255) << 16) | ((g & 255) << 8) | (r & 255);
+            int r = parse_int(argv[++i]);
+            int g = parse_int(argv[++i]);
+            int b = parse_int(argv[++i]);
+            config.uninitialized_memory_color = ((b & 255) << 16) | ((g & 255) << 8) | (r & 255);
+        } else if (next == "--auto_layout") {
+            globals.auto_layout = true;
+        } else if (next == "--no-auto_layout") {
+            globals.auto_layout = false;
+        } else if (next == "--auto_layout_grid") {
+            expect(i + 2 < argc, i);
+            globals.auto_layout_grid.x = parse_int(argv[++i]);
+            globals.auto_layout_grid.y = parse_int(argv[++i]);
+        } else if (next == "--uninit_default") {
+            expect(i + 3 < argc, i);
+            int r = parse_int(argv[++i]);
+            int g = parse_int(argv[++i]);
+            int b = parse_int(argv[++i]);
+            globals.default_uninitialized_memory_color = ((b & 255) << 16) | ((g & 255) << 8) | (r & 255);
+        } else if (next == "--ignore_tags" || next == "--no-ignore_tags") {
+            // Already processed, just continue
+        } else if (next == "--verbose" || next == "--no-verbose") {
+            // Already processed, just continue
         } else {
             expect(false, i);
         }
         i++;
     }
+}
+
+// There are three layers - image data, an animation on top of
+// it, and text labels. These layers get composited.
+struct Surface {
+    const Point frame_size;
+    std::vector<uint32_t> image, anim, anim_decay, text_buf, blend;
+
+    // Composite a single pixel of 'over' over a single pixel of 'under', writing the result into dst.
+    // Note that under or over might be dst.
+    static void composite_one(const uint32_t *under, const uint32_t *over, uint32_t *dst) {
+        const uint32_t o = *over;
+        const uint8_t alpha = o >> 24;
+        // alpha is almost always 0 or 255.
+        if (alpha == 0) {
+            *dst = *under;
+        } else if (alpha == 255) {
+            *dst = o;
+        } else {
+            // TODO: this could be done using 64-bit ops more simply
+            const uint8_t *a = (const uint8_t*)under;
+            const uint8_t *b = (const uint8_t*)over;
+            uint8_t *d = (uint8_t*)dst;
+            d[0] = (alpha * b[0] + (255 - alpha) * a[0]) / 255;
+            d[1] = (alpha * b[1] + (255 - alpha) * a[1]) / 255;
+            d[2] = (alpha * b[2] + (255 - alpha) * a[2]) / 255;
+            d[3] = 255 - (((255 - a[3]) * (255 - alpha)) / 255);
+        }
+    }
+
+    void do_decay(int decay_factor, uint32_t *dst) {
+        if (decay_factor != 1) {
+            const uint32_t inv_d1 = (1 << 24) / std::max(1, decay_factor);
+            for (uint32_t *dst_end = dst + frame_elems(); dst < dst_end; ++dst) {
+                uint32_t color = *dst;
+                uint32_t rgb = color & 0x00ffffff;
+                uint32_t alpha = (color >> 24);
+                alpha *= inv_d1;
+                alpha &= 0xff000000;
+                *dst = alpha | rgb;
+            }
+        }
+    }
+
+    // TODO this doesn't bounds-check against frame_size
+    void do_draw_pixel(const float zoom, const int x, const int y, const uint32_t color, uint32_t *dst) {
+        const int izoom = (int) ceil(zoom);
+        const int y_advance = frame_size.x - izoom;
+        dst += frame_size.x * y + x;
+        for (int dy = 0; dy < izoom; dy++) {
+            for (int dx = 0; dx < izoom; dx++) {
+                *dst++ = color;
+            }
+            dst += y_advance;
+        }
+    }
+
+    // Fill a rectangle in dst with color.
+    // opaque RGB(1,1,1) is a "magic" color that means "fill with checkerboard".
+    // dst is assumed to point to the start of a frame_size buffer.
+    void fill_rect(int left, int top, int width, int height, uint32_t color, uint32_t *dst) {
+        const int x_min = std::max(left, 0);
+        const int x_end = std::min(left + width, frame_size.x);
+        const int y_min = std::max(top, 0);
+        const int y_end = std::min(top + height, frame_size.y);
+        const int y_stride = frame_size.x - (x_end - x_min);
+        dst += y_min * frame_size.x + x_min;
+        if (color == 0xff010101) {
+            for (int y = y_min; y < y_end; y++) {
+                for (int x = x_min; x < x_end; x++) {
+                    const int check = ((x / 16) % 2) ^ ((y / 16) % 2);
+                    *dst++ = check ? 0xff808080 : 0xffffffff;
+                }
+                dst += y_stride;
+            }
+        } else {
+            for (int y = y_min; y < y_end; y++) {
+                for (int x = x_min; x < x_end; x++) {
+                    *dst++ = color;
+                }
+                dst += y_stride;
+            }
+        }
+    }
+
+    // Set all boxes corresponding to positions in a Func's allocation to
+    // the given color. Recursive to handle arbitrary
+    // dimensionalities. Used by begin and end realization events.
+    void do_fill_realization(uint32_t *dst, uint32_t color,
+                             const FuncInfo &fi, const halide_trace_packet_t &p,
+                             int current_dimension = 0, int x_off = 0, int y_off = 0) {
+        if (2 * current_dimension == p.dimensions) {
+            const int x_min = x_off * fi.config.zoom + fi.config.pos.x;
+            const int y_min = y_off * fi.config.zoom + fi.config.pos.y;
+            const int izoom = (int) ceil(fi.config.zoom);
+            fill_rect(x_min, y_min, izoom, izoom, color, dst);
+        } else {
+            const int *coords = p.coordinates();
+            const int min = coords[current_dimension * 2 + 0];
+            const int extent = coords[current_dimension * 2 + 1];
+            // If we don't have enough strides, assume subsequent dimensions have stride (0, 0)
+            const Point pt = current_dimension < (int)fi.config.strides.size() ? fi.config.strides.at(current_dimension) : Point{0, 0};
+            x_off += pt.x * min;
+            y_off += pt.y * min;
+            for (int i = 0; i < extent; i++) {
+                do_fill_realization(dst, color, fi, p, current_dimension + 1, x_off, y_off);
+                x_off += pt.x;
+                y_off += pt.y;
+            }
+        }
+    }
+
+
+public:
+    Surface(const Point &fs)
+        : frame_size(fs),
+          image(frame_elems()),
+          anim(frame_elems()),
+          anim_decay(frame_elems()),
+          text_buf(frame_elems()),
+          blend(frame_elems()) {}
+
+    Surface(const Surface &) = delete;
+    void operator=(const Surface &) = delete;
+
+    size_t frame_elems() const {
+        return frame_size.x * frame_size.y;
+    }
+
+    const uint32_t *frame_data() const {
+        return this->blend.data();
+    }
+
+    uint32_t get_image_pixel(const int x, const int y) const {
+        return image[frame_size.x * y + x];
+    }
+
+    void draw_text(const std::string &text, const Point &pos, uint32_t color, float h_scale = 1.0f) {
+        uint32_t *dst = text_buf.data();
+
+        // Drop any alpha component of color
+        color &= 0xffffff;
+
+        int c = -1;
+        for (int chr : text) {
+            ++c;
+
+            // We only handle a subset of ascii
+            if (chr < 32 || chr >= 32 + inconsolata_char_count) {
+                chr = 32;
+            }
+            chr -= 32;
+
+            const uint8_t *font_ptr = inconsolata_raw + chr * (inconsolata_char_width * inconsolata_char_height);
+            const int h_scale_numerator = std::ceil(std::min(1.f, h_scale) * 256);
+            for (int fy = 0; fy < inconsolata_char_height; fy++) {
+                for (int fx = 0; fx < inconsolata_char_width; fx++) {
+                    int px = pos.x + (((inconsolata_char_width*c + fx) * h_scale_numerator) >> 8);
+                    int py = pos.y - inconsolata_char_height + fy + 1;
+                    if (px < 0 || px >= frame_size.x ||
+                        py < 0 || py >= frame_size.y) continue;
+                    dst[py * frame_size.x + px] = (font_ptr[fy * inconsolata_char_width + fx] << 24) | color;
+                }
+            }
+        }
+    }
+
+    void draw_anim_pixel(const float zoom, int x, int y, uint32_t color) {
+        do_draw_pixel(zoom, x, y, color, anim.data());
+    }
+
+    void draw_image_pixel(const float zoom, int x, int y, uint32_t color) {
+        do_draw_pixel(zoom, x, y, color, image.data());
+    }
+
+    void fill_realization(uint32_t color, const FuncInfo &fi, const halide_trace_packet_t &p) {
+        do_fill_realization(image.data(), color, fi, p);
+    }
+
+    void composite() {
+        // Composite text over anim over image
+        uint32_t *anim_decay_px  = anim_decay.data();
+        uint32_t *anim_px  = anim.data();
+        uint32_t *image_px = image.data();
+        uint32_t *text_px  = text_buf.data();
+        uint32_t *blend_px = blend.data();
+        for (size_t i = 0; i < image.size(); i++) {
+            // anim over anim_decay -> anim_decay
+            composite_one(anim_decay_px, anim_px, anim_decay_px);
+            // anim_decay over image -> blend
+            composite_one(image_px, anim_decay_px, blend_px);
+            // text over blend -> blend
+            composite_one(blend_px, text_px, blend_px);
+            anim_decay_px++;
+            anim_px++;
+            image_px++;
+            text_px++;
+            blend_px++;
+        }
+    }
+
+    void decay_animations(int decay_factor_after_compute, int decay_factor_during_compute) {
+        // Decay the anim_decay
+        do_decay(decay_factor_after_compute, anim_decay.data());
+
+        // Also decay the anim
+        do_decay(decay_factor_during_compute, anim.data());
+    }
+
+    void clear_animations() {
+        std::fill(anim.begin(), anim.end(), 0);
+    }
+};
+
+
+using FlagProcessor = std::function<void(VizState *state)>;
+
+int run(bool ignore_trace_tags, FlagProcessor flag_processor) {
+    // State that determines how different funcs get drawn
+    VizState state;
 
     // halide_clock counts halide events. video_clock counts how many
     // of these events have been output. When halide_clock gets ahead
     // of video_clock, we emit a new frame.
     size_t halide_clock = 0, video_clock = 0;
+    bool is_state_finalized = false;
+    bool seen_global_config_tag = false;
 
-    // There are three layers - image data, an animation on top of
-    // it, and text labels. These layers get composited.
-    uint32_t *image = new uint32_t[frame_width * frame_height];
-    memset(image, 0, 4 * frame_width * frame_height);
+    std::unique_ptr<Surface> surface;
 
-    uint32_t *anim = new uint32_t[frame_width * frame_height];
-    memset(anim, 0, 4 * frame_width * frame_height);
+    const std::function<void()> finalize_state = [&]() -> void {
+        if (is_state_finalized) return;
 
-    uint32_t *anim_decay = new uint32_t[frame_width * frame_height];
-    memset(anim_decay, 0, 4 * frame_width * frame_height);
+        is_state_finalized = true;
 
-    uint32_t *text = new uint32_t[frame_width * frame_height];
-    memset(text, 0, 4 * frame_width * frame_height);
+        if (verbose) {
+            std::ostringstream dumps;
+            for (const auto &p : state.funcs) {
+                const auto &fi = p.second;
+                assert(fi.type_and_dim_valid);
+                fi.type_and_dim.dump(dumps, p.first);
+            }
+            info() << dumps.str();
+        }
 
-    uint32_t *blend = new uint32_t[frame_width * frame_height];
-    memset(blend, 0, 4 * frame_width * frame_height);
+        // We wait until now to process the cmd-line args;
+        // this allows us to override trace-tag specifications
+        // via the commandline, which is handy for experimentations.
+        flag_processor(&state);
 
-    struct PipelineInfo {
-        string name;
-        int32_t id;
+        // allocate the surface after all tags and flags are processed
+        surface = std::unique_ptr<Surface>(new Surface(state.globals.frame_size));
+
+        if (state.globals.auto_layout_grid.x < 0 || state.globals.auto_layout_grid.y < 0) {
+            int cells_needed = 0;
+            for (const auto &p : state.funcs) {
+                if (p.second.type_and_dim_valid) cells_needed++;
+            }
+            Point cell_size = best_cell_size(cells_needed, state.globals.frame_size.x, state.globals.frame_size.y);
+            state.globals.auto_layout_grid.x = state.globals.frame_size.x / cell_size.x;
+            state.globals.auto_layout_grid.y = state.globals.frame_size.y / cell_size.y;
+            assert(state.globals.auto_layout_grid.x * state.globals.auto_layout_grid.y >= cells_needed);
+            info() << "For cells_needed = " << cells_needed
+                << " using " << state.globals.auto_layout_grid.x << "x" << state.globals.auto_layout_grid.y << " grid"
+                << " with cells of size " << cell_size.x << "x" << cell_size.y;
+        }
+
+        // If globals.default_uninitialized_memory_color was never set, init to black or checkerboard.
+        if (state.globals.default_uninitialized_memory_color & 0xff000000) {
+            if (state.globals.auto_layout) {
+                // auto-layout defaults to checkerboard.
+                state.globals.default_uninitialized_memory_color = 0x00010101;
+            } else {
+                // non-auto-layout defaults to black, to preserve existing look.
+                state.globals.default_uninitialized_memory_color = 0x00000000;
+            }
+        }
+
+        do_auto_layout(state);
+        finalize_func_config_values(state.globals, state.funcs);
     };
 
-    map<uint32_t, PipelineInfo> pipeline_info;
 
+    struct PipelineInfo {
+        std::string name;
+        int32_t id;
+    };
+    std::map<uint32_t, PipelineInfo> pipeline_info;
+
+    int layout_order = 0;
+    std::list<std::pair<Label, int>> labels_being_drawn;
     size_t end_counter = 0;
     size_t packet_clock = 0;
     for (;;) {
         // Hold for some number of frames once the trace has finished.
         if (end_counter) {
-            halide_clock += timestep;
-            if (end_counter == (size_t)hold_frames) {
+            halide_clock += state.globals.timestep;
+            if (end_counter >= (size_t) state.globals.hold_frames) {
                 break;
             }
         }
 
-        if (halide_clock >= video_clock) {
-            const ssize_t frame_bytes = 4 * frame_width * frame_height;
+        if (halide_clock > video_clock) {
+            assert(is_state_finalized);
 
-            while (halide_clock >= video_clock) {
-                // Composite text over anim over image
-                for (int i = 0; i < frame_width * frame_height; i++) {
-                    uint8_t *anim_decay_px  = (uint8_t *)(anim_decay + i);
-                    uint8_t *anim_px  = (uint8_t *)(anim + i);
-                    uint8_t *image_px = (uint8_t *)(image + i);
-                    uint8_t *text_px  = (uint8_t *)(text + i);
-                    uint8_t *blend_px = (uint8_t *)(blend + i);
-                    // anim over anim_decay
-                    composite(anim_decay_px, anim_px, anim_decay_px);
-                    // anim_decay over image
-                    composite(image_px, anim_decay_px, blend_px);
-                    // text over image
-                    composite(blend_px, text_px, blend_px);
-                }
+            const int64_t frame_bytes = surface->frame_elems() * sizeof(uint32_t);
 
-                // Dump the frame
-                ssize_t bytes_written = write(1, blend, frame_bytes);
-                if (bytes_written < frame_bytes) {
-                    fprintf(stderr, "Could not write frame to stdout.\n");
-                    return -1;
-                }
-
-                video_clock += timestep;
-
-                // Decay the anim_decay
-                if (decay_factor[1] != 1) {
-                    const uint32_t inv_d1 = (1 << 24) / decay_factor[1];
-                    for (int i = 0; i < frame_width * frame_height; i++) {
-                        uint32_t color = anim_decay[i];
-                        uint32_t rgb = color & 0x00ffffff;
-                        uint32_t alpha = (color >> 24);
-                        alpha *= inv_d1;
-                        alpha &= 0xff000000;
-                        anim_decay[i] = alpha | rgb;
+            while (halide_clock > video_clock) {
+                // Always render text last, since it's on top of everything
+                // and there's no need to re-render for every packet.
+                for (auto it = labels_being_drawn.begin(); it != labels_being_drawn.end(); ) {
+                    const Label &label = it->first;
+                    int first_draw_clock = it->second;
+                    int frames_since_first_draw = (halide_clock - first_draw_clock) / state.globals.timestep;
+                    if (frames_since_first_draw < label.fade_in_frames) {
+                        uint32_t color = ((1 + frames_since_first_draw) * 255) / std::max(1, label.fade_in_frames);
+                        if (color > 255) color = 255;
+                        color *= 0x10101;
+                        surface->draw_text(label.text, label.pos, color, label.h_scale);
+                        ++it;
+                    } else {
+                        // Once we reach or exceed the final frame, draw at 100% opacity, then remove
+                        surface->draw_text(label.text, label.pos, 0xffffff, label.h_scale);
+                        it = labels_being_drawn.erase(it);
                     }
                 }
 
-                // Also decay the anim
-                const uint32_t inv_d0 = (1 << 24) / decay_factor[0];
-                for (int i = 0; i < frame_width * frame_height; i++) {
-                    uint32_t color = anim[i];
-                    uint32_t rgb = color & 0x00ffffff;
-                    uint32_t alpha = (color >> 24);
-                    alpha *= inv_d0;
-                    alpha &= 0xff000000;
-                    anim[i] = alpha | rgb;
+                // Composite text over anim over image
+                surface->composite();
+
+                // Dump the frame
+                int64_t bytes_written = write(STDOUT_FILENO, surface->frame_data(), frame_bytes);
+                if (bytes_written < frame_bytes) {
+                    fail() << "Could not write frame to stdout.";
                 }
+
+                video_clock += state.globals.timestep;
+
+                surface->decay_animations(state.globals.decay_factor_after_compute, state.globals.decay_factor_during_compute);
             }
 
             // Blank anim
-            memset(anim, 0, frame_bytes);
+            surface->clear_animations();
         }
 
         // Read a tracing packet
-        Packet p;
-        if (!p.read_from_stdin()) {
+        PacketAndPayload p;
+        if (!p.read()) {
             end_counter++;
             continue;
         }
@@ -612,58 +1155,96 @@ int run(int argc, char **argv) {
             pipeline_info[p.id] = {p.func(), p.id};
             continue;
         } else if (p.event == halide_trace_end_pipeline) {
+            assert(pipeline_info.count(p.parent_id));
             pipeline_info.erase(p.parent_id);
+            continue;
+        } else if (p.event == halide_trace_tag) {
+            // If there are trace tags, they will come immediately after the pipeline's
+            // halide_trace_begin_pipeline but before any realizations.
+            if (halide_clock != 0 || video_clock != 0) {
+                // Messing with timestamp, framesize, etc partway thru
+                // a visualization would be bad, but let's just warn
+                // rather than fail.
+                // TODO: May need to check parent_id here, as nested
+                // pipelines called via define_extern could emit these.
+                warn() << "trace_tags are only expected at the start of a visualization:"
+                    << " (" << p.trace_tag() << ") for func (" << p.func() << ")";
+            }
+            if (FuncConfig::match(p.trace_tag())) {
+                if (ignore_trace_tags) {
+                    continue;
+                }
+                FuncConfig cfg(p.trace_tag());
+                auto &fi = state.funcs[p.func()];
+                fi.config = cfg;
+                fi.config_valid = true;
+            } else if (GlobalConfig::match(p.trace_tag())) {
+                if (ignore_trace_tags) {
+                    continue;
+                }
+                if (seen_global_config_tag) {
+                    warn() << "saw multiple GlobalConfig trace_tags, some will be ignored.";
+                }
+                state.globals = GlobalConfig(p.trace_tag());
+                seen_global_config_tag = true;
+            } else if (FuncTypeAndDim::match(p.trace_tag())) {
+                auto &fi = state.funcs[p.func()];
+                fi.type_and_dim = FuncTypeAndDim(p.trace_tag());
+                fi.type_and_dim_valid = true;
+                fi.layout_order = layout_order++;
+            } else {
+                warn() << "Ignoring trace_tag: (" << p.trace_tag() << ") for func (" << p.func() << ")";
+            }
             continue;
         }
 
-        PipelineInfo pipeline = pipeline_info[p.parent_id];
+        finalize_state();
+
+        const PipelineInfo pipeline = pipeline_info[p.parent_id];
 
         if (p.event == halide_trace_begin_realization ||
             p.event == halide_trace_produce ||
             p.event == halide_trace_consume) {
+            assert(!pipeline_info.count(p.id));
             pipeline_info[p.id] = pipeline;
         } else if (p.event == halide_trace_end_realization ||
                    p.event == halide_trace_end_produce ||
                    p.event == halide_trace_end_consume) {
+            assert(pipeline_info.count(p.parent_id));
             pipeline_info.erase(p.parent_id);
         }
 
-        string qualified_name = pipeline.name + ":" + p.func();
-
-        if (func_info.find(qualified_name) == func_info.end()) {
-            if (func_info.find(p.func()) != func_info.end()) {
-                func_info[qualified_name] = func_info[p.func()];
-                func_info.erase(p.func());
+        std::string qualified_name = pipeline.name + ":" + p.func();
+        if (state.funcs.find(qualified_name) == state.funcs.end()) {
+            if (state.funcs.find(p.func()) != state.funcs.end()) {
+                state.funcs[qualified_name] = state.funcs[p.func()];
+                state.funcs.erase(p.func());
             } else {
-                fprintf(stderr, "Warning: ignoring func %s event %d    \n", qualified_name.c_str(), p.event);
-                fprintf(stderr, "Parent event %d %s\n", p.parent_id, pipeline.name.c_str());
+                warn() << "ignoring func " << qualified_name << " event " << p.event <<
+                          "; parent event " << p.parent_id << " " << pipeline.name;
             }
         }
 
         // Draw the event
-        FuncInfo &fi = func_info[qualified_name];
-        if (!fi.configured) continue;
+        FuncInfo &fi = state.funcs[qualified_name];
+        if (!fi.config_valid) continue;
 
-        if (fi.stats.first_draw_time == 0) {
+        if (fi.stats.first_draw_time < 0) {
             fi.stats.first_draw_time = halide_clock;
+
+            for (const auto &label : fi.config.labels) {
+                // Convert offset to absolute position before enqueuing
+                Label l = label;
+                l.pos.x += fi.config.pos.x;
+                l.pos.y += fi.config.pos.y;
+                labels_being_drawn.push_back({l, halide_clock});
+            }
         }
 
-        if (fi.stats.first_packet_idx == 0) {
+
+        if (fi.stats.first_packet_idx < 0) {
             fi.stats.first_packet_idx = packet_clock;
             fi.stats.qualified_name = qualified_name;
-        }
-
-        int frames_since_first_draw = (halide_clock - fi.stats.first_draw_time) / timestep;
-
-        for (size_t i = 0; i < fi.config.labels.size(); i++) {
-            const Label &label = fi.config.labels[i];
-            if (frames_since_first_draw <= label.n) {
-                uint32_t color = ((1 + frames_since_first_draw) * 255) / label.n;
-                if (color > 255) color = 255;
-                color *= 0x10101;
-
-                draw_text(label.text, label.x, label.y, color, text, frame_width, frame_height);
-            }
         }
 
         switch (p.event) {
@@ -680,90 +1261,77 @@ int run(int argc, char **argv) {
                 fi.stats.observe_load(p);
             }
 
-            // Check the tracing packet contained enough information
-            // given the number of dimensions the user claims this
-            // Func has.
-            assert(p.dimensions >= p.type.lanes * fi.config.dims);
-            if (p.dimensions >= p.type.lanes * fi.config.dims) {
-                for (int lane = 0; lane < p.type.lanes; lane++) {
-
-                    // Compute the screen-space x, y coord to draw this.
-                    int x = fi.config.x;
-                    int y = fi.config.y;
-                    const int z = fi.config.zoom;
-                    for (int d = 0; d < fi.config.dims; d++) {
-                        int a = p.get_coord(d * p.type.lanes + lane);
-                        x += fi.config.zoom * fi.config.x_stride[d] * a;
-                        y += fi.config.zoom * fi.config.y_stride[d] * a;
-                    }
-
-                    // The box to draw must be entirely on-screen
-                    if (y < 0 || y >= frame_height ||
-                        x < 0 || x >= frame_width ||
-                        y + z - 1 < 0 || y + z - 1 >= frame_height ||
-                        x + z - 1 < 0 || x + z - 1 >= frame_width) {
-                        continue;
-                    }
-
-                    // Stores are orange, loads are blue.
-                    uint32_t color = p.event == halide_trace_load ? 0xffffdd44 : 0xff44ddff;
-
-                    uint32_t image_color;
-                    bool update_image = false;
-
-                    // Update one or more of the color channels of the
-                    // image layer in case it's a store or a load from
-                    // the input.
-                    if (p.event == halide_trace_store ||
-                        fi.stats.num_realizations == 0 /* load from an input */) {
-                        update_image = true;
-                        // Get the old color, in case we're only
-                        // updating one of the color channels.
-                        image_color = image[frame_width * y + x];
-
-                        double value = p.get_value_as<double>(lane);
-
-                        // Normalize it.
-                        value = 255 * (value - fi.config.min) / (fi.config.max - fi.config.min);
-                        if (value < 0) value = 0;
-                        if (value > 255) value = 255;
-
-                        // Convert to 8-bit color.
-                        uint8_t int_value = (uint8_t)value;
-
-                        if (fi.config.color_dim < 0) {
-                            // Grayscale
-                            image_color = (int_value * 0x00010101) | 0xff000000;
-                        } else {
-                            // Color
-                            uint32_t channel = p.get_coord(fi.config.color_dim * p.type.lanes + lane);
-                            uint32_t mask = ~(255 << (channel * 8));
-                            image_color &= mask;
-                            image_color |= int_value << (channel * 8);
-                        }
-                    }
-
-                    // Draw the pixel
-                    for (int dy = 0; dy < fi.config.zoom; dy++) {
-                        for (int dx = 0; dx < fi.config.zoom; dx++) {
-                            int px = frame_width * (y + dy) + x + dx;
-                            anim[px] = color;
-                            if (update_image) {
-                                image[px] = image_color;
-                            }
-                        }
-                    }
+            // zero- or one-dimensional Funcs can have dimensions < strides.size().
+            // This may seem confusing, so keep in mind:
+            // fi.config.strides are provided by the --stride flag, so it can contain anything; i
+            // if you don't specify them at all, they default to {{1,0},{0,1} (aka size=2).
+            // So if we have excess strides, just ignore them.
+            const int dims = std::min(p.dimensions/p.type.lanes, (int) fi.config.strides.size());
+            const int *coords = p.coordinates();
+            for (int lane = 0; lane < p.type.lanes; lane++) {
+                // Compute the screen-space x, y coord to draw this.
+                int x = fi.config.pos.x;
+                int y = fi.config.pos.y;
+                const float z = fi.config.zoom;
+                for (int d = 0; d < dims; d++) {
+                    const int coord = d * p.type.lanes + lane;
+                    assert(coord < p.dimensions);
+                    const int a = coords[coord];
+                    const auto &stride = fi.config.strides[d];
+                    x += z * stride.x * a;
+                    y += z * stride.y * a;
                 }
+
+                // The box to draw must be entirely on-screen
+                if (y < 0 || y >= state.globals.frame_size.y ||
+                    x < 0 || x >= state.globals.frame_size.x ||
+                    y + z - 1 < 0 || y + z - 1 >= state.globals.frame_size.y ||
+                    x + z - 1 < 0 || x + z - 1 >= state.globals.frame_size.x) {
+                    continue;
+                }
+
+                // Update one or more of the color channels of the
+                // image layer in case it's a store or a load from
+                // the input.
+                if (p.event == halide_trace_store || fi.stats.num_realizations == 0 /* load from an input */) {
+                    // Get the old color, in case we're only
+                    // updating one of the color channels.
+                    uint32_t image_color = surface->get_image_pixel(x, y);
+                    double value = get_value_as<double>(p, lane);
+
+                    // Normalize it.
+                    value = std::max(0.0, std::min(255.0, 255.0 * (value - fi.config.min) /
+                                                          (fi.config.max - fi.config.min)));
+
+                    // Convert to 8-bit color.
+                    uint8_t int_value = (uint8_t)value;
+
+                    if (fi.config.color_dim < 0) {
+                        // Grayscale
+                        image_color = (int_value * 0x00010101) | 0xff000000;
+                    } else {
+                        // Color
+                        uint32_t channel = coords[fi.config.color_dim * p.type.lanes + lane];
+                        uint32_t mask = ~(255 << (channel * 8));
+                        image_color &= mask;
+                        image_color |= int_value << (channel * 8);
+                    }
+                    surface->draw_image_pixel(fi.config.zoom, x, y, image_color);
+                }
+
+                // Stores are orange, loads are blue.
+                uint32_t color = p.event == halide_trace_load ? 0xffffdd44 : 0xff44ddff;
+                surface->draw_anim_pixel(fi.config.zoom, x, y, color);
             }
             break;
         }
         case halide_trace_begin_realization:
             fi.stats.num_realizations++;
-            fill_realization(image, frame_width, frame_height, fi.config.uninitialized_memory_color, fi, p);
+            surface->fill_realization(0xff000000 | fi.config.uninitialized_memory_color, fi, p);
             break;
         case halide_trace_end_realization:
-            if (fi.config.blank_on_end_realization) {
-                fill_realization(image, frame_width, frame_height, 0, fi, p);
+            if (fi.config.blank_on_end_realization > 0) {
+                surface->fill_realization(0, fi, p);
             }
             break;
         case halide_trace_produce:
@@ -772,32 +1340,47 @@ int run(int argc, char **argv) {
         case halide_trace_end_produce:
         case halide_trace_consume:
         case halide_trace_end_consume:
+        // Note that you can get nested pipeline begin/end events when you trace
+        // something that has extern stages that are also Halide-being-traced;
+        // these should just be ignored.
         case halide_trace_begin_pipeline:
         case halide_trace_end_pipeline:
+        case halide_trace_tag:
             break;
         default:
-            fprintf(stderr, "Unknown tracing event code: %d\n", p.event);
-            exit(-1);
+            fail() << "Unknown tracing event code: " << p.event;
         }
-
     }
 
-    fprintf(stderr, "Total number of Funcs: %d\n", (int)func_info.size());
+    if (verbose) {
+        info() << "Total number of Funcs: " << state.funcs.size();
 
-    // Print stats about the Func gleaned from the trace.
-    vector<std::pair<std::string, FuncInfo> > funcs;
-    for (std::pair<std::string, FuncInfo> p : func_info) {
-        funcs.push_back(p);
-    }
-    struct by_first_packet_idx {
-        bool operator()(const std::pair<std::string, FuncInfo> &a,
-                        const std::pair<std::string, FuncInfo> &b) const {
-            return a.second.stats.first_packet_idx < b.second.stats.first_packet_idx;
+        // Dump this info at the end, since some is determined as we go
+        std::ostringstream dumps;
+        state.globals.dump(dumps);
+        for (const auto &p : state.funcs) {
+            const auto &fi = p.second;
+            if (fi.config_valid) {
+                fi.config.dump(dumps, p.first);
+            }
         }
-    };
-    std::sort(funcs.begin(), funcs.end(), by_first_packet_idx());
-    for (std::pair<std::string, FuncInfo> p : funcs) {
-        p.second.stats.report();
+        info() << dumps.str();
+
+        // Print stats about the Func gleaned from the trace.
+        std::vector<std::pair<std::string, FuncInfo> > funcs;
+        for (std::pair<std::string, FuncInfo> p : state.funcs) {
+            funcs.push_back(p);
+        }
+        struct by_first_packet_idx {
+            bool operator()(const std::pair<std::string, FuncInfo> &a,
+                            const std::pair<std::string, FuncInfo> &b) const {
+                return a.second.stats.first_packet_idx < b.second.stats.first_packet_idx;
+            }
+        };
+        std::sort(funcs.begin(), funcs.end(), by_first_packet_idx());
+        for (std::pair<std::string, FuncInfo> p : funcs) {
+            p.second.stats.report();
+        }
     }
 
     return 0;
@@ -806,5 +1389,27 @@ int run(int argc, char **argv) {
 }  // namespace
 
 int main(int argc, char **argv) {
-    run(argc, argv);
+    if (argc == 1) {
+        std::cerr << usage();
+        return 0;
+    }
+
+    bool ignore_trace_tags = false;
+    for (int i = 1; i < argc; ++i) {
+        if (!strcmp(argv[i], "--ignore_tags")) {
+            ignore_trace_tags = true;
+        } else if (!strcmp(argv[i], "--no-ignore_tags")) {
+            ignore_trace_tags = false;
+        } else if (!strcmp(argv[i], "--verbose")) {
+            verbose = true;
+        } else if (!strcmp(argv[i], "--no-verbose")) {
+            verbose = false;
+        }
+    }
+
+    FlagProcessor flag_processor = [argc, argv](VizState *state) -> void {
+        process_args(argc, argv, state);
+    };
+
+    run(ignore_trace_tags, flag_processor);
 }

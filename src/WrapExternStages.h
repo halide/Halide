@@ -20,7 +20,7 @@ void wrap_legacy_extern_stages(Module m);
  * upgrades them. */
 void add_legacy_wrapper(Module m, const LoweredFunc &fn);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

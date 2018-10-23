@@ -159,10 +159,10 @@ bool Type::can_represent(uint64_t x) const {
 
 bool Type::can_represent(double x) const {
     if (is_int()) {
-        int64_t i = x;
+        int64_t i = Internal::safe_numeric_cast<int64_t>(x);
         return (x >= min_int(bits())) && (x <= max_int(bits())) && (x == (double)i);
     } else if (is_uint()) {
-        uint64_t u = x;
+        uint64_t u = Internal::safe_numeric_cast<uint64_t>(x);
         return (x >= 0) && (x <= max_uint(bits())) && (x == (double)u);
     } else if (is_float()) {
         switch (bits()) {
@@ -202,4 +202,4 @@ bool Type::same_handle_type(const Type &other) const {
         first->reference_type == second->reference_type;
 }
 
-}
+}  // namespace Halide

@@ -1,25 +1,25 @@
 #include <algorithm>
 #include <numeric>
 
-#include "PartitionLoops.h"
+#include "CSE.h"
+#include "CodeGen_GPU_Dev.h"
+#include "ExprUsesVar.h"
+#include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "PartitionLoops.h"
 #include "Simplify.h"
 #include "Solve.h"
-#include "IREquality.h"
-#include "ExprUsesVar.h"
 #include "Substitute.h"
-#include "CodeGen_GPU_Dev.h"
 #include "Var.h"
-#include "CSE.h"
 
 namespace Halide {
 namespace Internal {
 
+using std::map;
+using std::pair;
 using std::string;
 using std::vector;
-using std::pair;
-using std::map;
 
 namespace {
 
@@ -93,8 +93,9 @@ class RemoveLikelyTags : public IRMutator2 {
 
 // Check if an expression or statement uses a likely tag
 class HasLikelyTag : public IRVisitor {
+protected:
     using IRVisitor::visit;
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         if (op->is_intrinsic(Call::likely)) {
             result = true;
         } else {
@@ -103,6 +104,15 @@ class HasLikelyTag : public IRVisitor {
     }
 public:
     bool result = false;
+};
+
+class HasUncapturedLikelyTag : public HasLikelyTag {
+    using HasLikelyTag::visit;
+
+    // Any likelies buried inside the following ops are captured the by respective ops
+    void visit(const Select *op) override {}
+    void visit(const Min *op) override {}
+    void visit(const Max *op) override {}
 };
 
 // The goal of loop partitioning is to split loops up into a prologue,
@@ -217,7 +227,7 @@ class ExprUsesInvalidBuffers : public IRVisitor {
 
     const Scope<> &invalid_buffers;
 
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         if (invalid_buffers.contains(op->name)) {
             invalid = true;
         } else {
@@ -243,7 +253,7 @@ class FindSimplifications : public IRVisitor {
     Scope<> depends_on_loop_var;
     Scope<> buffers;
 
-    void visit(const Allocate *op) {
+    void visit(const Allocate *op) override {
         buffers.push(op->name);
         IRVisitor::visit(op);
     }
@@ -273,10 +283,25 @@ class FindSimplifications : public IRVisitor {
         simplifications.push_back(s);
     }
 
-    void visit(const Min *op) {
-        IRVisitor::visit(op);
-        bool likely_a = has_likely_tag(op->a);
-        bool likely_b = has_likely_tag(op->b);
+    void visit(const Min *op) override {
+        bool likely_a = has_uncaptured_likely_tag(op->a);
+        bool likely_b = has_uncaptured_likely_tag(op->b);
+
+        // Prefer the side that has an uncaptured top-level likely
+        // call. If neither does, prefer the side that contains any
+        // likely call at all.
+        if (!likely_a && !likely_b) {
+            likely_a = has_likely_tag(op->a);
+            likely_b = has_likely_tag(op->b);
+        }
+
+        // Don't hunt for simplifications in unlikely paths
+        if (!likely_a) {
+            op->b.accept(this);
+        }
+        if (!likely_b) {
+            op->a.accept(this);
+        }
 
         if (likely_b && !likely_a) {
             new_simplification(op->b <= op->a, op, op->b, op->a);
@@ -285,10 +310,21 @@ class FindSimplifications : public IRVisitor {
         }
     }
 
-    void visit(const Max *op) {
-        IRVisitor::visit(op);
-        bool likely_a = has_likely_tag(op->a);
-        bool likely_b = has_likely_tag(op->b);
+    void visit(const Max *op) override {
+        bool likely_a = has_uncaptured_likely_tag(op->a);
+        bool likely_b = has_uncaptured_likely_tag(op->b);
+
+        if (!likely_a && !likely_b) {
+            likely_a = has_likely_tag(op->a);
+            likely_b = has_likely_tag(op->b);
+        }
+
+        if (!likely_a) {
+            op->b.accept(this);
+        }
+        if (!likely_b) {
+            op->a.accept(this);
+        }
 
         if (likely_b && !likely_a) {
             new_simplification(op->b >= op->a, op, op->b, op->a);
@@ -297,10 +333,23 @@ class FindSimplifications : public IRVisitor {
         }
     }
 
-    void visit(const Select *op) {
-        IRVisitor::visit(op);
-        bool likely_t = has_likely_tag(op->true_value);
-        bool likely_f = has_likely_tag(op->false_value);
+    void visit(const Select *op) override {
+        op->condition.accept(this);
+
+        bool likely_t = has_uncaptured_likely_tag(op->true_value);
+        bool likely_f = has_uncaptured_likely_tag(op->false_value);
+
+        if (!likely_t && !likely_f) {
+            likely_t = has_likely_tag(op->true_value);
+            likely_f = has_likely_tag(op->false_value);
+        }
+
+        if (!likely_t) {
+            op->false_value.accept(this);
+        }
+        if (!likely_f) {
+            op->true_value.accept(this);
+        }
 
         if (likely_t && !likely_f) {
             new_simplification(op->condition, op, op->true_value, op->false_value);
@@ -309,7 +358,7 @@ class FindSimplifications : public IRVisitor {
         }
     }
 
-    void visit(const IfThenElse *op) {
+    void visit(const IfThenElse *op) override {
         // For select statements, mins, and maxes, you can mark the
         // likely branch with likely. For if statements there's no way
         // to mark the likely stmt. So if the condition of an if
@@ -322,7 +371,7 @@ class FindSimplifications : public IRVisitor {
         }
     }
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         vector<Simplification> old;
         old.swap(simplifications);
         IRVisitor::visit(op);
@@ -367,11 +416,11 @@ class FindSimplifications : public IRVisitor {
         }
     }
 
-    void visit(const LetStmt *op) {
+    void visit(const LetStmt *op) override {
         visit_let(op);
     }
 
-    void visit(const Let *op) {
+    void visit(const Let *op) override {
         visit_let(op);
     }
 public:
@@ -404,22 +453,34 @@ public:
 
 };
 
-class ContainsThreadBarrier : public IRVisitor {
+class ContainsWarpSynchronousLogic : public IRVisitor {
 public:
     bool result = false;
 
 protected:
     using IRVisitor::visit;
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         if (op->name == "halide_gpu_thread_barrier") {
             result = true;
+        } else {
+            IRVisitor::visit(op);
         }
-        IRVisitor::visit(op);
+    }
+
+    void visit(const For *op) override {
+        if (op->for_type == ForType::GPULane) {
+            result = true;
+        } else {
+            IRVisitor::visit(op);
+        }
+    }
+
+    void visit(const Load *op) override {
     }
 };
 
-bool contains_thread_barrier(Stmt s) {
-    ContainsThreadBarrier c;
+bool contains_warp_synchronous_logic(Stmt s) {
+    ContainsWarpSynchronousLogic c;
     s.accept(&c);
     return c.result;
 }
@@ -430,26 +491,21 @@ class PartitionLoops : public IRMutator2 {
     bool in_gpu_loop = false;
 
     Stmt visit(const For *op) override {
-        Stmt stmt;
         Stmt body = op->body;
 
-        bool old_in_gpu_loop = in_gpu_loop;
-        in_gpu_loop |= CodeGen_GPU_Dev::is_gpu_var(op->name);
+        ScopedValue<bool> old_in_gpu_loop(in_gpu_loop, in_gpu_loop ||
+                                             CodeGen_GPU_Dev::is_gpu_var(op->name));
 
         // If we're inside GPU kernel, and the body contains thread
-        // barriers, it's not safe to duplicate code.
-        if (in_gpu_loop && contains_thread_barrier(body)) {
-            stmt = IRMutator2::visit(op);
-            in_gpu_loop = old_in_gpu_loop;
-            return stmt;
+        // barriers or warp shuffles, it's not safe to duplicate code.
+        if (in_gpu_loop && contains_warp_synchronous_logic(op)) {
+            return IRMutator2::visit(op);
         }
 
         // We shouldn't partition GLSL loops - they have control-flow
         // constraints.
         if (op->device_api == DeviceAPI::GLSL) {
-            stmt = op;
-            in_gpu_loop = old_in_gpu_loop;
-            return stmt;
+            return op;
         }
 
         // Find simplifications in this loop body
@@ -457,9 +513,7 @@ class PartitionLoops : public IRMutator2 {
         body.accept(&finder);
 
         if (finder.simplifications.empty()) {
-            stmt = IRMutator2::visit(op);
-            in_gpu_loop = old_in_gpu_loop;
-            return stmt;
+            return IRMutator2::visit(op);
         }
 
         debug(3) << "\n\n**** Partitioning loop over " << op->name << "\n";
@@ -626,8 +680,9 @@ class PartitionLoops : public IRMutator2 {
             internal_assert(!expr_uses_var(epilogue_val, op->name));
         }
 
-        // Bust serial for loops up into three.
-        if (op->for_type == ForType::Serial) {
+        Stmt stmt;
+        // Bust simple serial for loops up into three.
+        if (op->for_type == ForType::Serial && !op->body.as<Acquire>()) {
             stmt = For::make(op->name, min_steady, max_steady - min_steady,
                              op->for_type, op->device_api, simpler_body);
 
@@ -642,9 +697,18 @@ class PartitionLoops : public IRMutator2 {
                 stmt = Block::make(stmt, epilogue);
             }
         } else {
-            // We don't have task parallelism. So for parallel for
-            // loops just put an if-then-else in the loop body. It
-            // should branch-predict to the steady state pretty well.
+            // For parallel for loops we could use a Fork node here,
+            // but that would introduce the more complicated parallel
+            // runtime into code that doesn't use async(), which may
+            // interfere with legacy overrides of
+            // halide_do_par_for. So for parallel for loops just put
+            // an if-then-else in the loop body. It should
+            // branch-predict to the steady state pretty well.
+            //
+            // Simple serial for loops that contain an Acquire node go
+            // into the task system as a single entity, but Block
+            // nodes do not, so we get a flatter task graph if we do
+            // the same trick.
             Expr loop_var = Variable::make(Int(32), op->name);
             stmt = simpler_body;
             if (make_epilogue && make_prologue && equal(prologue, epilogue)) {
@@ -678,12 +742,8 @@ class PartitionLoops : public IRMutator2 {
         if (can_prove(epilogue_val <= prologue_val)) {
             // The steady state is empty. I've made a huge
             // mistake. Try to partition a loop further in.
-            stmt = IRMutator2::visit(op);
-            in_gpu_loop = old_in_gpu_loop;
-            return stmt;
+            return IRMutator2::visit(op);
         }
-
-        in_gpu_loop = old_in_gpu_loop;
 
         debug(3) << "Partition loop.\n"
                  << "Old: " << Stmt(op) << "\n"
@@ -696,7 +756,7 @@ class PartitionLoops : public IRMutator2 {
 class ExprContainsLoad : public IRVisitor {
     using IRVisitor::visit;
 
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         result = true;
     }
 
@@ -793,17 +853,17 @@ class RenormalizeGPULoops : public IRMutator2 {
             inner = For::make(f->name, f->min, f->extent, f->for_type, f->device_api, inner);
             return mutate(inner);
         } else if (a && in_gpu_loop && !in_thread_loop) {
-            internal_assert(a->name == "__shared" && a->extents.size() == 1);
+            internal_assert(a->extents.size() == 1);
             if (expr_uses_var(a->extents[0], op->name)) {
                 // This var depends on the block index, and is used to
                 // define the size of shared memory. Can't move it
                 // inwards or outwards. Codegen will have to deal with
-                // it when it deduces how much shared memory to
-                // allocate.
+                // it when it deduces how much shared or warp-level
+                // memory to allocate.
                 return IRMutator2::visit(op);
             } else {
                 Stmt inner = LetStmt::make(op->name, op->value, a->body);
-                inner = Allocate::make(a->name, a->type, a->extents, a->condition, inner);
+                inner = Allocate::make(a->name, a->type, a->memory_type, a->extents, a->condition, inner);
                 return mutate(inner);
             }
         } else {
@@ -834,11 +894,11 @@ class RenormalizeGPULoops : public IRMutator2 {
         const For *for_b = else_case.as<For>();
         const LetStmt *let_a = then_case.as<LetStmt>();
         const LetStmt *let_b = else_case.as<LetStmt>();
-        if (allocate_a && allocate_b &&
-            allocate_a->name == "__shared" &&
-            allocate_b->name == "__shared") {
+        if (allocate_a && allocate_b) {
             Stmt inner = IfThenElse::make(op->condition, allocate_a->body, allocate_b->body);
-            inner = Allocate::make(allocate_a->name, allocate_a->type, allocate_a->extents, allocate_a->condition, inner);
+            inner = Allocate::make(allocate_a->name, allocate_a->type,
+                                   allocate_a->memory_type, allocate_a->extents,
+                                   allocate_a->condition, inner);
             return mutate(inner);
         } else if (let_a && let_b && let_a->name == let_b->name) {
             string condition_name = unique_name('t');
@@ -943,7 +1003,7 @@ class CollapseSelects : public IRMutator2 {
 
 class ContainsLoop : public IRVisitor {
     using IRVisitor::visit;
-    void visit(const For *op) {
+    void visit(const For *op) override {
         result = true;
     }
 public:
@@ -978,6 +1038,12 @@ class LowerLikelyIfInnermost : public IRMutator2 {
     }
 };
 
+}  // namespace
+
+bool has_uncaptured_likely_tag(Expr e) {
+    HasUncapturedLikelyTag h;
+    e.accept(&h);
+    return h.result;
 }
 
 bool has_likely_tag(Expr e) {
@@ -997,5 +1063,5 @@ Stmt partition_loops(Stmt s) {
     return s;
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

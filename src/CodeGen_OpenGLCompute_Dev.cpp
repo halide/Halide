@@ -1,23 +1,22 @@
 #include "CodeGen_OpenGLCompute_Dev.h"
+#include "Debug.h"
+#include "Deinterleave.h"
 #include "IRMatch.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "Debug.h"
-#include "Deinterleave.h"
 #include "Simplify.h"
 #include "VaryingAttributes.h"
 #include <iomanip>
-#include <map>
 #include <limits>
+#include <map>
 
 namespace Halide {
 namespace Internal {
 
+using std::map;
 using std::ostringstream;
 using std::string;
 using std::vector;
-using std::map;
-
 
 CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_Dev(Target target)
     : glc(src_stream, target) {
@@ -37,6 +36,10 @@ Type map_type(const Type &type) {
             result = Bool();
         } else if (type == Int(32) || type == UInt(32)) {
             // Keep unchanged
+        } else if (type.bits() <= 16) {
+            // Embed all other ints in a GLSL float. Probably not actually
+            // valid for uint16 on systems with low float precision.
+            result = Float(32);
         } else {
             user_error << "GLSL: Can't represent type '"<< type << "'.\n";
         }
@@ -50,7 +53,7 @@ Type map_type(const Type &type) {
     }
     return result;
 }
-}
+}  // namespace
 
 string CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::print_type(Type type, AppendSpaceIfNeeded space) {
     Type mapped_type = map_type(type);
@@ -98,13 +101,28 @@ int thread_loop_workgroup_index(const string &name) {
      }
      return -1;
 }
-}
+}  // namespace
 
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Cast *op) {
     Type value_type = op->value.type();
     // If both types are represented by the same GLSL type, no explicit cast
     // is necessary.
-    if (map_type(op->type) != map_type(value_type)) {
+    if (map_type(op->type) == map_type(value_type)) {
+        Expr value = op->value;
+        if (value_type.code() == Type::Float) {
+            // float->int conversions may need explicit truncation if an
+            // integer type is embedded into a float. (Note: overflows are
+            // considered undefined behavior, so we do nothing about values
+            // that are out of range of the target type.)
+            if (op->type.code() == Type::UInt) {
+                value = simplify(floor(value));
+            } else if (op->type.code() == Type::Int) {
+                value = simplify(trunc(value));
+            }
+        }
+        value.accept(this);
+        return;
+    } else {
         Type target_type = map_type(op->type);
         print_assignment(target_type, print_type(target_type) + "(" + print_expr(op->value) + ")");
     }
@@ -117,7 +135,6 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Call *op) {
     } else {
         CodeGen_GLSLBase::visit(op);
     }
-
 }
 
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const For *loop) {
@@ -242,7 +259,7 @@ namespace {
 class FindSharedAllocations : public IRVisitor {
     using IRVisitor::visit;
 
-    void visit(const Allocate *op) {
+    void visit(const Allocate *op) override {
         op->body.accept(this);
         if (starts_with(op->name, "__shared_")) {
             allocs.push_back(op);
@@ -252,7 +269,7 @@ class FindSharedAllocations : public IRVisitor {
 public:
     vector<const Allocate *> allocs;
 };
-}
+}  // namespace
 
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::add_kernel(Stmt s,
                                                                     const string &name,
@@ -281,7 +298,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::add_kernel(Stmt s,
                    << print_type(args[i].type) << " data[]; } "
                    << print_name(args[i].name) << ";\n";
         } else {
-            stream << "uniform " << print_type(args[i].type)
+            stream << "layout(location = " << i << ") uniform " << print_type(args[i].type)
                    << " " << print_name(args[i].name) << ";\n";
         }
     }
@@ -387,4 +404,5 @@ std::string CodeGen_OpenGLCompute_Dev::print_gpu_name(const std::string &name) {
     return name;
 }
 
-}}
+}  // namespace Internal
+}  // namespace Halide

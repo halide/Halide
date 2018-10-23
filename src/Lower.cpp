@@ -1,16 +1,17 @@
+#include <algorithm>
 #include <iostream>
 #include <set>
 #include <sstream>
-#include <algorithm>
 
 #include "Lower.h"
 
 #include "AddImageChecks.h"
 #include "AddParameterChecks.h"
 #include "AllocationBoundsInference.h"
+#include "AsyncProducers.h"
+#include "BoundSmallAllocations.h"
 #include "Bounds.h"
 #include "BoundsInference.h"
-#include "BoundSmallAllocations.h"
 #include "CSE.h"
 #include "CanonicalizeGPUVars.h"
 #include "Debug.h"
@@ -24,39 +25,44 @@
 #include "FuseGPUThreadLoops.h"
 #include "FuzzFloatStores.h"
 #include "HexagonOffload.h"
+#include "IRMutator.h"
+#include "IROperator.h"
+#include "IRPrinter.h"
 #include "InferArguments.h"
 #include "InjectHostDevBufferCopies.h"
 #include "InjectOpenGLIntrinsics.h"
 #include "Inline.h"
-#include "IRMutator.h"
-#include "IROperator.h"
-#include "IRPrinter.h"
 #include "LICM.h"
 #include "LoopCarry.h"
+#include "LowerWarpShuffles.h"
 #include "Memoization.h"
 #include "PartitionLoops.h"
+#include "PurifyIndexMath.h"
 #include "Prefetch.h"
 #include "Profiling.h"
 #include "Qualify.h"
 #include "RealizationOrder.h"
 #include "RemoveDeadAllocations.h"
+#include "RemoveExternLoops.h"
 #include "RemoveTrivialForLoops.h"
 #include "RemoveUndef.h"
 #include "ScheduleFunctions.h"
 #include "SelectGPUAPI.h"
-#include "SkipStages.h"
-#include "SlidingWindow.h"
 #include "Simplify.h"
 #include "SimplifySpecializations.h"
+#include "SkipStages.h"
+#include "SlidingWindow.h"
 #include "SplitTuples.h"
 #include "StorageFlattening.h"
 #include "StorageFolding.h"
+#include "StrictifyFloat.h"
 #include "Substitute.h"
 #include "Tracing.h"
 #include "TrimNoOps.h"
 #include "UnifyDuplicateLets.h"
 #include "UniquifyVariableNames.h"
 #include "UnpackBuffers.h"
+#include "UnsafePromises.h"
 #include "UnrollLoops.h"
 #include "VaryingAttributes.h"
 #include "VectorizeLoops.h"
@@ -66,14 +72,14 @@
 namespace Halide {
 namespace Internal {
 
-using std::set;
+using std::map;
 using std::ostringstream;
+using std::set;
 using std::string;
 using std::vector;
-using std::map;
 
 Module lower(const vector<Function> &output_funcs, const string &pipeline_name, const Target &t,
-             const vector<Argument> &args, const Internal::LoweredFunc::LinkageType linkage_type,
+             const vector<Argument> &args, const LinkageType linkage_type,
              const vector<IRMutator2 *> &custom_passes) {
     std::vector<std::string> namespaces;
     std::string simple_pipeline_name = extract_namespaces(pipeline_name, namespaces);
@@ -89,6 +95,9 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     // Create a deep-copy of the entire graph of Funcs.
     vector<Function> outputs;
     std::tie(outputs, env) = deep_copy(output_funcs, env);
+
+    bool any_strict_float = strictify_float(env, t);
+    result_module.set_any_strict_float(any_strict_float);
 
     // Output functions should all be computed and stored at root.
     for (Function f: outputs) {
@@ -117,10 +126,6 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     bool any_memoized = false;
     Stmt s = schedule_functions(outputs, fused_groups, env, t, any_memoized);
     debug(2) << "Lowering after creating initial loop nests:\n" << s << '\n';
-
-    debug(1) << "Canonicalizing GPU var names...\n";
-    s = canonicalize_gpu_vars(s);
-    debug(2) << "Lowering after canonicalizing GPU var names:\n" << s << '\n';
 
     if (any_memoized) {
         debug(1) << "Injecting memoization...\n";
@@ -156,6 +161,10 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     s = bounds_inference(s, outputs, order, fused_groups, env, func_bounds, t);
     debug(2) << "Lowering after computation bounds inference:\n" << s << '\n';
 
+    debug(1) << "Removing extern loops...\n";
+    s = remove_extern_loops(s);
+    debug(2) << "Lowering after removing extern loops:\n" << s << '\n';
+
     debug(1) << "Performing sliding window optimization...\n";
     s = sliding_window(s, env);
     debug(2) << "Lowering after sliding window:\n" << s << '\n';
@@ -175,6 +184,10 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     s = uniquify_variable_names(s);
     debug(2) << "Lowering after uniquifying variable names:\n" << s << "\n\n";
 
+    debug(1) << "Simplifying...\n";
+    s = simplify(s, false); // Storage folding needs .loop_max symbols
+    debug(2) << "Lowering after first simplification:\n" << s << "\n\n";
+
     debug(1) << "Performing storage folding optimization...\n";
     s = storage_folding(s, env);
     debug(2) << "Lowering after storage folding:\n" << s << '\n';
@@ -182,10 +195,6 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     debug(1) << "Injecting debug_to_file calls...\n";
     s = debug_to_file(s, outputs, env);
     debug(2) << "Lowering after injecting debug_to_file calls:\n" << s << '\n';
-
-    debug(1) << "Simplifying...\n"; // without removing dead lets, because storage flattening needs the strides
-    s = simplify(s, false);
-    debug(2) << "Lowering after first simplification:\n" << s << "\n\n";
 
     debug(1) << "Injecting prefetches...\n";
     s = inject_prefetch(s, env);
@@ -195,9 +204,19 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     s = skip_stages(s, order);
     debug(2) << "Lowering after dynamically skipping stages:\n" << s << "\n\n";
 
+    debug(1) << "Forking asynchronous producers...\n";
+    s = fork_async_producers(s, env);
+    debug(2) << "Lowering after forking asynchronous producers:\n" << s << '\n';
+
     debug(1) << "Destructuring tuple-valued realizations...\n";
     s = split_tuples(s, env);
     debug(2) << "Lowering after destructuring tuple-valued realizations:\n" << s << "\n\n";
+
+    // OpenGL relies on GPU var canonicalization occurring before
+    // storage flattening
+    debug(1) << "Canonicalizing GPU var names...\n";
+    s = canonicalize_gpu_vars(s);
+    debug(2) << "Lowering after canonicalizing GPU var names:\n" << s << '\n';
 
     debug(1) << "Performing storage flattening...\n";
     s = storage_flattening(s, outputs, env, t);
@@ -218,6 +237,7 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     if (t.has_gpu_feature() ||
         t.has_feature(Target::OpenGLCompute) ||
         t.has_feature(Target::OpenGL) ||
+        t.has_feature(Target::HexagonDma) ||
         (t.arch != Target::Hexagon && (t.features_any_of({Target::HVX_64, Target::HVX_128})))) {
         debug(1) << "Selecting a GPU API for GPU loops...\n";
         s = select_gpu_api(s, t);
@@ -236,13 +256,6 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
         debug(1) << "Injecting OpenGL texture intrinsics...\n";
         s = inject_opengl_intrinsics(s);
         debug(2) << "Lowering after OpenGL intrinsics:\n" << s << "\n\n";
-    }
-
-    if (t.has_gpu_feature() ||
-        t.has_feature(Target::OpenGLCompute)) {
-        debug(1) << "Injecting per-block gpu synchronization...\n";
-        s = fuse_gpu_thread_loops(s);
-        debug(2) << "Lowering after injecting per-block gpu synchronization:\n" << s << "\n\n";
     }
 
     debug(1) << "Simplifying...\n";
@@ -264,6 +277,13 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     s = vectorize_loops(s, t);
     s = simplify(s);
     debug(2) << "Lowering after vectorizing:\n" << s << "\n\n";
+
+    if (t.has_gpu_feature() ||
+        t.has_feature(Target::OpenGLCompute)) {
+        debug(1) << "Injecting per-block gpu synchronization...\n";
+        s = fuse_gpu_thread_loops(s);
+        debug(2) << "Lowering after injecting per-block gpu synchronization:\n" << s << "\n\n";
+    }
 
     debug(1) << "Detecting vector interleavings...\n";
     s = rewrite_interleavings(s);
@@ -299,6 +319,12 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     s = bound_small_allocations(s);
     debug(2) << "Lowering after bounding small allocations:\n" << s << "\n\n";
 
+    if (t.has_feature(Target::CUDA)) {
+        debug(1) << "Injecting warp shuffles...\n";
+        s = lower_warp_shuffles(s);
+        debug(2) << "Lowering after injecting warp shuffles:\n" << s << "\n\n";
+    }
+
     debug(1) << "Simplifying...\n";
     s = common_subexpression_elimination(s);
 
@@ -311,6 +337,10 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
         s = setup_gpu_vertex_buffer(s);
         debug(2) << "Lowering after removing varying attributes:\n" << s << "\n\n";
     }
+
+    debug(1) << "Lowering unsafe promises...\n";
+    s = lower_unsafe_promises(s, t);
+    debug(2) << "Lowering after lowering unsafe promises:\n" << s << "\n\n";
 
     s = remove_dead_allocations(s);
     s = remove_trivial_for_loops(s);
@@ -430,8 +460,8 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     return result_module;
 }
 
-EXPORT Stmt lower_main_stmt(const std::vector<Function> &output_funcs, const std::string &pipeline_name,
-                            const Target &t, const std::vector<IRMutator2 *> &custom_passes) {
+Stmt lower_main_stmt(const std::vector<Function> &output_funcs, const std::string &pipeline_name,
+                     const Target &t, const std::vector<IRMutator2 *> &custom_passes) {
     // We really ought to start applying for appellation d'origine contrôlée
     // status on types representing arguments in the Halide compiler.
     vector<InferredArgument> inferred_args = infer_arguments(Stmt(), output_funcs);
@@ -442,10 +472,10 @@ EXPORT Stmt lower_main_stmt(const std::vector<Function> &output_funcs, const std
         }
     }
 
-    Module module = lower(output_funcs, pipeline_name, t, args, Internal::LoweredFunc::External, custom_passes);
+    Module module = lower(output_funcs, pipeline_name, t, args, LinkageType::External, custom_passes);
 
     return module.functions().front().body;
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

@@ -1,12 +1,12 @@
-#include "LLVM_Headers.h"
 #include "LLVM_Output.h"
-#include "LLVM_Runtime_Linker.h"
-#include "CodeGen_LLVM.h"
 #include "CodeGen_C.h"
 #include "CodeGen_Internal.h"
+#include "CodeGen_LLVM.h"
+#include "LLVM_Headers.h"
+#include "LLVM_Runtime_Linker.h"
 
-#include <iostream>
 #include <fstream>
+#include <iostream>
 
 #ifdef _WIN32
 #ifndef NOMINMAX
@@ -323,7 +323,11 @@ std::unique_ptr<llvm::Module> clone_module(const llvm::Module &module_in) {
     // Write the module to a buffer.
     llvm::SmallVector<char, 16> clone_buffer;
     llvm::raw_svector_ostream clone_ostream(clone_buffer);
+#if LLVM_VERSION >= 70
+    WriteBitcodeToFile(module_in, clone_ostream);
+#else
     WriteBitcodeToFile(&module_in, clone_ostream);
+#endif
 
     // Read it back in.
     llvm::MemoryBufferRef buffer_ref(llvm::StringRef(clone_buffer.data(), clone_buffer.size()), "clone_buffer");
@@ -374,7 +378,11 @@ void emit_file(const llvm::Module &module_in, Internal::LLVMOStream& out, llvm::
     target_machine->Options.MCOptions.AsmVerbose = true;
 
     // Ask the target to add backend passes as necessary.
+#if LLVM_VERSION < 70
     target_machine->addPassesToEmitFile(pass_manager, out, file_type);
+#else
+    target_machine->addPassesToEmitFile(pass_manager, out, nullptr, file_type);
+#endif
 
     pass_manager.run(*module);
 }
@@ -392,7 +400,11 @@ void compile_llvm_module_to_assembly(llvm::Module &module, Internal::LLVMOStream
 }
 
 void compile_llvm_module_to_llvm_bitcode(llvm::Module &module, Internal::LLVMOStream& out) {
+#if LLVM_VERSION >= 70
+    WriteBitcodeToFile(module, out);
+#else
     WriteBitcodeToFile(&module, out);
+#endif
 }
 
 void compile_llvm_module_to_llvm_assembly(llvm::Module &module, Internal::LLVMOStream& out) {
@@ -483,7 +495,7 @@ struct SetCwd {
     }
 };
 
-}
+}  // namespace
 
 void create_static_library(const std::vector<std::string> &src_files_in, const Target &target,
                            const std::string &dst_file_in, bool deterministic) {

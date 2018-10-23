@@ -2,16 +2,16 @@ include(CMakeParseArguments)
 
 cmake_minimum_required(VERSION 3.1.3)
 
-# ----------------------- Public Functions. 
+# ----------------------- Public Functions.
 # These are all documented in README_cmake.md.
 #
 # Note that certain CMake variables may need to be set correctly to use these rules:
 #
 # - If you are using a Halide distribution, simply set HALIDE_DISTRIB_DIR
-# to the path to the distrib directory. 
+# to the path to the distrib directory.
 #
 # - More complex usages (mainly, internal-to-Halide users) may, instead, set some combination
-# of HALIDE_TOOLS_DIR, HALIDE_INCLUDE_DIR, and HALIDE_COMPILER_LIB. 
+# of HALIDE_TOOLS_DIR, HALIDE_INCLUDE_DIR, and HALIDE_COMPILER_LIB.
 #
 
 # Add the include paths and link dependencies for halide_image_io.
@@ -66,7 +66,7 @@ function(halide_generator NAME)
     target_link_libraries("${GENLIB}" ${args_DEPS})
     target_include_directories("${GENLIB}" PRIVATE ${args_INCLUDES} "${HALIDE_INCLUDE_DIR}" "${HALIDE_TOOLS_DIR}")
     foreach(DEP ${args_DEPS})
-      target_include_directories("${GENLIB}" PRIVATE 
+      target_include_directories("${GENLIB}" PRIVATE
                                  $<TARGET_PROPERTY:${DEP},INTERFACE_INCLUDE_DIRECTORIES>)
     endforeach()
     # Ensure that Halide.h is built prior to any Generator
@@ -105,13 +105,13 @@ function(halide_generator NAME)
 
   if("${SRCSLEN}" GREATER 0)
     add_library("${NAME}" STATIC IMPORTED)
-    set_target_properties("${NAME}" PROPERTIES 
+    set_target_properties("${NAME}" PROPERTIES
       IMPORTED_LOCATION "${GENLIB_ACTUAL_PATH}")
   else()
     add_library("${NAME}" INTERFACE)
   endif()
   add_dependencies("${NAME}" "${NAME}_stub_gen")
-  set_target_properties("${NAME}" PROPERTIES 
+  set_target_properties("${NAME}" PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES "${GENFILES_DIR}")
 endfunction()
 
@@ -238,12 +238,12 @@ function(halide_library_from_generator BASENAME)
 
   add_library("${BASENAME}" STATIC IMPORTED)
   add_dependencies("${BASENAME}" "${BASENAME}_lib_gen" "${RUNTIME_NAME}")
-  set_target_properties("${BASENAME}" PROPERTIES 
+  set_target_properties("${BASENAME}" PROPERTIES
     IMPORTED_LOCATION "${GENFILES_DIR}/${BASENAME}${CMAKE_STATIC_LIBRARY_SUFFIX}"
     INTERFACE_INCLUDE_DIRECTORIES "${GENFILES_DIR}" ${args_INCLUDES}
     INTERFACE_LINK_LIBRARIES "${RUNTIME_NAME};${args_FILTER_DEPS};${CMAKE_DL_LIBS};${CMAKE_THREAD_LIBS_INIT}")
 
-  # A separate invocation for the generated .cpp file, 
+  # A separate invocation for the generated .cpp file,
   # since it's rarely used, and some code will fail at Generation
   # time at present (e.g. code with predicated loads or stores).
   set(ARGS_WITH_OUTPUTS "-e" "cpp" ${GENERATOR_EXEC_ARGS})
@@ -273,13 +273,13 @@ function(halide_library_from_generator BASENAME)
   set_target_properties("${RUNGEN}" PROPERTIES EXCLUDE_FROM_ALL TRUE)
 
   # BASENAME.run simply runs the BASENAME.rungen target
-  add_custom_target("${BASENAME}.run" 
+  add_custom_target("${BASENAME}.run"
                     COMMAND "${RUNGEN}" "${RUNARGS}"
                     DEPENDS "${RUNGEN}")
   set_target_properties("${BASENAME}.run" PROPERTIES EXCLUDE_FROM_ALL TRUE)
 endfunction()
 
-# Rule to build and use a Generator; it's convenient sugar around 
+# Rule to build and use a Generator; it's convenient sugar around
 # halide_generator() + halide_library_from_generator().
 function(halide_library NAME)
   set(oneValueArgs FUNCTION_NAME HALIDE_TARGET GENERATOR GENERATOR_NAME)
@@ -307,7 +307,7 @@ function(halide_library NAME)
                    EXTRA_OUTPUTS ${args_EXTRA_OUTPUTS})
 endfunction()
 
-# ----------------------- Private Functions. 
+# ----------------------- Private Functions.
 # All functions, properties, variables, etc. that being with an underscore
 # should be assumed to be private implementation details; don't rely on them externally.
 
@@ -351,7 +351,7 @@ function(_halide_add_target_features HALIDE_TARGET HALIDE_FEATURES OUTVAR)
       list(APPEND NEW_T ${F})
     endforeach()
     string(REPLACE ";" "-" NEW_T "${NEW_T}")
-    _halide_canonicalize_target("${NEW_T}" NEW_T)    
+    _halide_canonicalize_target("${NEW_T}" NEW_T)
     list(APPEND NEW_MULTITARGETS ${NEW_T})
   endforeach()
   string(REPLACE ";" "," NEW_MULTITARGETS "${NEW_MULTITARGETS}")
@@ -443,20 +443,71 @@ function(_halide_runtime_target_name HALIDE_TARGET OUTVAR)
     # Windows systems still have limits of 260-character pathnames in
     # lots of situations, and CMake can replicate project names multiple times
     # in the same path, so long target strings can cause us to overflow
-    # this limit, even if CMAKE_OBJECT_PATH_MAX is set. So here we make 
+    # this limit, even if CMAKE_OBJECT_PATH_MAX is set. So here we make
     # algorithmically-generated abbreviations for all the feature strings
     # and use those for external cmaketarget/filenames.
 
     # Halide Target Features we know about. (This need not be exact, but should
     # be close for best compression.)
-    list(APPEND KNOWN_FEATURES armv7s avx avx2 avx512 avx512_cannonlake avx512_knl 
-         avx512_skylake c_plus_plus_name_mangling cl_doubles cuda cuda_capability_30 
-         cuda_capability_32 cuda_capability_35 cuda_capability_50 cuda_capability_61 
-         debug f16c fma fma4 fuzz_float_stores hvx_128 hvx_64 hvx_shared_object 
-         hvx_v62 hvx_v65 hvx_v66 jit large_buffers matlab metal mingw msan no_asserts 
-         no_bounds_query no_neon no_runtime opencl opengl openglcompute 
-         power_arch_2_07 profile soft_float_abi sse41 trace_loads trace_realizations 
-         trace_stores user_context vsx)
+    list(APPEND KNOWN_FEATURES
+        jit
+        debug
+        no_asserts
+        no_bounds_query
+        sse41
+        avx
+        avx2
+        fma
+        fma4
+        f16c
+        armv7s
+        no_neon
+        vsx
+        power_arch_2_07
+        cuda
+        cuda_capability_30
+        cuda_capability_32
+        cuda_capability_35
+        cuda_capability_50
+        cuda_capability_61
+        opencl
+        cl_doubles
+        cl_half
+        opengl
+        openglcompute
+        user_context
+        matlab
+        profile
+        no_runtime
+        metal
+        mingw
+        c_plus_plus_name_mangling
+        large_buffers
+        hvx_64
+        hvx_128
+        hvx_v62
+        hvx_v65
+        hvx_v66
+        hvx_shared_object
+        fuzz_float_stores
+        soft_float_abi
+        msan
+        avx512
+        avx512_knl
+        avx512_skylake
+        avx512_cannonlake
+        trace_loads
+        trace_stores
+        trace_realizations
+        d3d12compute
+        strict_float
+        legacy_buffer_wrappers
+        tsan
+        asan
+        check_unsafe_promises
+        hexagon_dma
+        vulkan
+      )
     # Synthesize a one-or-two-char abbreviation based on the feature's position
     # in the KNOWN_FEATURES list.
     set(I 0)
@@ -515,11 +566,11 @@ function(_halide_library_runtime HALIDE_TARGET OUTVAR)
     )
 
     # By default, IMPORTED libraries are only visible to the declaration
-    # directories (and subdirectories); since runtime libraries are declared 
+    # directories (and subdirectories); since runtime libraries are declared
     # lazily, we need to ensure they are globally visible to avoid ordering issues.
     add_library("${RUNTIME_NAME}" STATIC IMPORTED GLOBAL)
     add_dependencies("${RUNTIME_NAME}" "${RUNTIME_NAME}_runtime_gen")
-    set_target_properties("${RUNTIME_NAME}" PROPERTIES 
+    set_target_properties("${RUNTIME_NAME}" PROPERTIES
       IMPORTED_LOCATION "${GENFILES_DIR}/${RUNTIME_LIB}")
 
     # It's hard to force specific system libraries to the end of link order
@@ -545,11 +596,11 @@ function(_halide_library_runtime HALIDE_TARGET OUTVAR)
       endif()
     endif()
 
-    set_target_properties("${RUNTIME_NAME}" PROPERTIES 
+    set_target_properties("${RUNTIME_NAME}" PROPERTIES
       INTERFACE_LINK_LIBRARIES "${RT_LIBS}")
 
   endif()
-  set(${OUTVAR} "${RUNTIME_NAME}" PARENT_SCOPE)  
+  set(${OUTVAR} "${RUNTIME_NAME}" PARENT_SCOPE)
 endfunction()
 
 function(_halide_add_exec_generator_target EXEC_TARGET)
@@ -569,13 +620,30 @@ function(_halide_add_exec_generator_target EXEC_TARGET)
 
   add_custom_target(${EXEC_TARGET} DEPENDS ${args_OUTPUTS})
 
-  # As of CMake 3.x, add_custom_command() recognizes executable target names in its COMMAND.
-  add_custom_command(
-    OUTPUT ${args_OUTPUTS}
-    DEPENDS ${args_GENERATOR_BINARY}
-    COMMAND ${args_GENERATOR_BINARY} ${args_GENERATOR_ARGS}
-    COMMENT "${EXTRA_OUTPUTS_COMMENT}"
-  )
+  # LLVM may leak memory during generator execution. If projects are built with address sanitizer enabled,
+  # this may cause generators to fail, making it hard to use Halide and address sanitizer at the same time.
+  # To work around this, we execute generators with an environment setting to disable leak checking.
+  set(RUN_WITHOUT_LEAKCHECK ${CMAKE_COMMAND} -E env "ASAN_OPTIONS=detect_leaks=0")
+
+  if(NOT WIN32)
+    add_custom_command(
+      OUTPUT ${args_OUTPUTS}
+      DEPENDS ${args_GENERATOR_BINARY}
+      COMMAND ${CMAKE_COMMAND} -E echo Running $<TARGET_FILE:${args_GENERATOR_BINARY}> ${args_GENERATOR_ARGS}
+      COMMAND ${RUN_WITHOUT_LEAKCHECK} $<TARGET_FILE:${args_GENERATOR_BINARY}> ${args_GENERATOR_ARGS}
+      COMMENT "${EXTRA_OUTPUTS_COMMENT}"
+    )
+  else()
+    add_custom_command(
+      OUTPUT ${args_OUTPUTS}
+      DEPENDS ${args_GENERATOR_BINARY}
+      COMMAND ${CMAKE_COMMAND} -E echo copying $<TARGET_FILE:${HALIDE_COMPILER_LIB}> to "$<TARGET_FILE_DIR:${args_GENERATOR_BINARY}>"
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:${HALIDE_COMPILER_LIB}> "$<TARGET_FILE_DIR:${args_GENERATOR_BINARY}>"
+      COMMAND ${CMAKE_COMMAND} -E echo Running $<TARGET_FILE:${args_GENERATOR_BINARY}> ${args_GENERATOR_ARGS}
+      COMMAND ${RUN_WITHOUT_LEAKCHECK} $<TARGET_FILE:${args_GENERATOR_BINARY}> ${args_GENERATOR_ARGS}
+      COMMENT "${EXTRA_OUTPUTS_COMMENT}"
+    )
+  endif()
   foreach(OUT ${args_OUTPUTS})
     set_source_files_properties(${OUT} PROPERTIES GENERATED TRUE)
   endforeach()
@@ -586,8 +654,8 @@ endfunction()
 # If paths to tools, include, and libHalide aren't specified, infer them
 # based on the path to the distrib folder. If the path to the distrib
 # folder isn't specified, fail.
-if("${HALIDE_TOOLS_DIR}" STREQUAL "" OR 
-    "${HALIDE_INCLUDE_DIR}" STREQUAL "" OR 
+if("${HALIDE_TOOLS_DIR}" STREQUAL "" OR
+    "${HALIDE_INCLUDE_DIR}" STREQUAL "" OR
     "${HALIDE_COMPILER_LIB}" STREQUAL "")
   if("${HALIDE_DISTRIB_DIR}" STREQUAL "")
     message(FATAL_ERROR "HALIDE_DISTRIB_DIR must point to the Halide distribution directory.")
@@ -595,18 +663,22 @@ if("${HALIDE_TOOLS_DIR}" STREQUAL "" OR
   set(HALIDE_INCLUDE_DIR "${HALIDE_DISTRIB_DIR}/include")
   set(HALIDE_TOOLS_DIR "${HALIDE_DISTRIB_DIR}/tools")
   if(${HALIDE_DISTRIB_USE_STATIC_LIBRARY})
-    message(STATUS "Using ${HALIDE_DISTRIB_DIR}/lib/libHalide${CMAKE_STATIC_LIBRARY_SUFFIX}")
+    message(STATUS "Using ${HALIDE_DISTRIB_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}Halide${CMAKE_STATIC_LIBRARY_SUFFIX}")
     add_library(_halide_compiler_lib STATIC IMPORTED)
-    set_target_properties(_halide_compiler_lib PROPERTIES 
-      IMPORTED_LOCATION "${HALIDE_DISTRIB_DIR}/lib/libHalide${CMAKE_STATIC_LIBRARY_SUFFIX}"
+    set_target_properties(_halide_compiler_lib PROPERTIES
+      IMPORTED_LOCATION "${HALIDE_DISTRIB_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}Halide${CMAKE_STATIC_LIBRARY_SUFFIX}"
       INTERFACE_INCLUDE_DIRECTORIES ${HALIDE_INCLUDE_DIR})
     set(HALIDE_COMPILER_LIB _halide_compiler_lib)
   else()
-    message(STATUS "Using ${HALIDE_DISTRIB_DIR}/bin/libHalide${CMAKE_SHARED_LIBRARY_SUFFIX}")
+    message(STATUS "Using ${HALIDE_DISTRIB_DIR}/bin/${CMAKE_SHARED_LIBRARY_PREFIX}Halide${CMAKE_SHARED_LIBRARY_SUFFIX}")
     add_library(_halide_compiler_lib SHARED IMPORTED)
-    set_target_properties(_halide_compiler_lib PROPERTIES 
-      IMPORTED_LOCATION "${HALIDE_DISTRIB_DIR}/bin/libHalide${CMAKE_SHARED_LIBRARY_SUFFIX}"
+    set_target_properties(_halide_compiler_lib PROPERTIES
+      IMPORTED_LOCATION "${HALIDE_DISTRIB_DIR}/bin/${CMAKE_SHARED_LIBRARY_PREFIX}Halide${CMAKE_SHARED_LIBRARY_SUFFIX}"
       INTERFACE_INCLUDE_DIRECTORIES ${HALIDE_INCLUDE_DIR})
+    if(WIN32)
+      set_target_properties(_halide_compiler_lib PROPERTIES
+        IMPORTED_IMPLIB "${HALIDE_DISTRIB_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}Halide${CMAKE_STATIC_LIBRARY_SUFFIX}")
+    endif()
     set(HALIDE_COMPILER_LIB _halide_compiler_lib)
   endif()
 endif()
@@ -626,8 +698,8 @@ define_property(TARGET PROPERTY _HALIDE_GENERATOR_NAME
                 BRIEF_DOCS "Internal use by Halide build rules: do not use externally"
                 FULL_DOCS "Internal use by Halide build rules: do not use externally")
 
-add_library(_halide_library_from_generator_rungen "${HALIDE_TOOLS_DIR}/RunGen.cpp")
-target_include_directories(_halide_library_from_generator_rungen PRIVATE "${HALIDE_INCLUDE_DIR}")
+add_library(_halide_library_from_generator_rungen "${HALIDE_TOOLS_DIR}/RunGenMain.cpp")
+target_include_directories(_halide_library_from_generator_rungen PRIVATE "${HALIDE_INCLUDE_DIR}" "${HALIDE_TOOLS_DIR}")
 halide_use_image_io(_halide_library_from_generator_rungen)
 _halide_set_cxx_options(_halide_library_from_generator_rungen)
 set_target_properties(_halide_library_from_generator_rungen PROPERTIES EXCLUDE_FROM_ALL TRUE)
