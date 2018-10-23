@@ -288,7 +288,7 @@ public:
         coords[0] += r.x;
         coords[1] += r.y;
         coords[2] = r.z;
-        conv(args) += rand_value(f.func.value().type()) * f.func(coords);
+        conv(args) += rand_value(f.func.value().type()) * (args[2] + 1) * f.func(coords);
 
         return {conv, f.w, f.h, f.random_out_channels()};
     }
@@ -310,7 +310,7 @@ public:
         coords[0] += r.x;
         coords[1] += r.y;
         coords[2] = r.z;
-        conv(args) = sum(rand_value(f.func.value().type()) * f.func(coords));
+        conv(args) = sum(rand_value(f.func.value().type()) * (1) * f.func(coords));
 
         // choose a channel output size - 0.5 prob of doubling channel dim
         return {conv, f.w, f.h, f.random_out_channels()};

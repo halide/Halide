@@ -2609,7 +2609,7 @@ struct LoopNest {
                     const auto &p = parent_bounds->loops(stage_idx, i);
                     fv.extent = p.second - p.first + 1;
                     fv.outermost = true;
-                    fv.parallel = false;
+                    fv.parallel = parent->is_root() && l.pure;
                     fv.exists = true;
                     vars.vars.push_back(fv);
                 }
@@ -2727,14 +2727,18 @@ struct LoopNest {
                             parent.extent = size[i];
                             v.var = inner;
                             v.extent = factor;
+                            v.parallel = false;
                         }
                         new_inner.push_back(v);
                     }
-                    for (int i = 0; i < node->func.dimensions(); i++) {
-                        if (!vars.vars[i].exists) continue;
-                        here = LoopLevel(node->func, vars.vars[i].var);
+                    bool found = false;
+                    for (const auto &v : vars.vars) {
+                        if (!v.exists) continue;
+                        here = LoopLevel(node->func, v.var);
+                        found = true;
                         break;
                     }
+                    internal_assert(found) << "Could not find appropriate compute_at location for children of " << node->func.name() << "\n";
                     vars.vars.insert(vars.vars.begin(), new_inner.begin(), new_inner.end());
                 }
             }
@@ -2746,6 +2750,7 @@ struct LoopNest {
             }
             for (auto &c : children) {
                 if (c->node != node) {
+                    debug(0) << "Compute_at: " << c->node->func.name() << " " << here.lock().to_string() << "\n";
                     Func(c->node->func).compute_at(here);
                 }
                 c->apply(here, vars_map, num_cores, depth + 1, this);
@@ -3125,7 +3130,7 @@ struct State {
                 int64_t extent = vars.back().second;
                 auto v = vars.back().first;
 
-                if (v.is_rvar) {
+                if (v.is_rvar && extent > 1) {
                     // We may have slid something over this loop. Better stop.
                     break;
                 }

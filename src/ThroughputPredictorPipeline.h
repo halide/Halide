@@ -7,6 +7,7 @@
 #include "Type.h"
 
 extern "C" int halide_autoscheduler_cost_model(int,
+                                               int,
                                                halide_buffer_t *,
                                                halide_buffer_t *,
                                                halide_buffer_t *,
@@ -305,6 +306,7 @@ public:
         Runtime::Buffer<float> dst = costs.cropped(0, 0, cursor);
 
         halide_autoscheduler_cost_model(num_stages,
+                                        cursor,
                                         pipeline_feat_queue,
                                         schedule_feat_queue,
                                         stats.pipeline_mean,

@@ -1,3 +1,5 @@
+#include <set>
+
 #include "RDom.h"
 #include "Generator.h"
 #include "IREquality.h"
@@ -13,6 +15,7 @@ using namespace Internal;
 
 using std::string;
 using std::vector;
+using std::set;
 
 namespace {
 
@@ -108,10 +111,18 @@ class CheckRDomBounds : public IRGraphVisitor {
     }
 
     void visit(const Variable *op) override {
-        if (!op->param.defined() && !op->image.defined()) {
+        if (!op->param.defined() &&
+            !op->image.defined() &&
+            internal_vars.count(op->name) == 0) {
             offending_free_var = op->name;
         }
     }
+
+    void visit(const Let *op) override {
+        internal_vars.insert(op->name);
+        IRGraphVisitor::visit(op);
+    }
+    set<string> internal_vars;
 public:
     string offending_func;
     string offending_free_var;
