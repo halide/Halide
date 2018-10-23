@@ -1276,8 +1276,9 @@ typedef enum halide_target_feature_t {
     halide_target_feature_d3d12compute = 54, ///< Enable Direct3D 12 Compute runtime.
     halide_target_feature_check_unsafe_promises = 55, ///< Insert assertions for promises.
     halide_target_feature_hexagon_dma = 56, ///< Enable Hexagon DMA buffers.
-    halide_target_feature_vulkan = 57, ///< Enable the Vulkan runtime.
-    halide_target_feature_end = 58 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
+    halide_target_feature_embed_bitcode = 57,  ///< Emulate clang -fembed-bitcode flag.
+    halide_target_feature_vulkan = 58, ///< Enable the Vulkan runtime.
+    halide_target_feature_end = 59 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 
 /** This function is called internally by Halide in some situations to determine
