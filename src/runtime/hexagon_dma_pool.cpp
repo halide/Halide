@@ -106,7 +106,7 @@ WEAK int halide_hexagon_free_dma_resource(void *user_context, void *virtual_engi
             hexagon_dma_pool->dma_engine_list[num].used = false;
             if (hexagon_dma_pool->dma_engine_list[num].engine_addr) {
                 //TODO Call DMAWrapperFinishFrame during write
-		nDmaWrapper_FinishFrame(hexagon_dma_pool->dma_engine_list[num].engine_addr);
+                nDmaWrapper_FinishFrame(hexagon_dma_pool->dma_engine_list[num].engine_addr);
             }
         }
         virtual_engine_addr->mapped_engines[j] = 0;
