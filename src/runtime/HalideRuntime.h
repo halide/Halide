@@ -448,7 +448,6 @@ struct halide_type_t {
 private:
     HALIDE_ALWAYS_INLINE uint32_t as_u32() const {
         uint32_t u;
-        static_assert(sizeof(u) == sizeof(*this), "Expected halide_type_t to be 32 bits");
         memcpy(&u, this, sizeof(u));
         return u;
     }
