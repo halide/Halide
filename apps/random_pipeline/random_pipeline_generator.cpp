@@ -26,7 +26,7 @@ float rand_float() { return rand_int(0, 1 << 30) / (float)(1 << 30); }
 
 Expr rand_value(Type t) {
     if (t.is_int()) {
-        return cast(t, rand_int(-128, 127));
+        return cast(t, rand_int(1, 127));
     } else if (t.is_float()) {
         return cast(t, rand_float());
     } else {
@@ -310,7 +310,7 @@ public:
         coords[0] += r.x;
         coords[1] += r.y;
         coords[2] = r.z;
-        conv(args) = sum(rand_value(f.func.value().type()) * (1) * f.func(coords));
+        conv(args) = sum(rand_value(f.func.value().type()) * (args[2] + 1) * f.func(coords));
 
         // choose a channel output size - 0.5 prob of doubling channel dim
         return {conv, f.w, f.h, f.random_out_channels()};
