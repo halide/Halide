@@ -430,9 +430,7 @@ struct halide_type_t {
 
     /** Compare two types for equality. */
     HALIDE_ALWAYS_INLINE bool operator==(const halide_type_t &other) const {
-        return (code == other.code &&
-                bits == other.bits &&
-                lanes == other.lanes);
+        return as_u32() == other.as_u32();
     }
 
     HALIDE_ALWAYS_INLINE bool operator!=(const halide_type_t &other) const {
@@ -440,13 +438,19 @@ struct halide_type_t {
     }
 
     HALIDE_ALWAYS_INLINE bool operator<(const halide_type_t &other) const {
-        return code < other.code || (code == other.code &&
-              (bits < other.bits || (bits == other.bits &&
-              lanes < other.lanes)));
+        return as_u32() < other.as_u32();
     }
 
     /** Size in bytes for a single element, even if width is not 1, of this type. */
     HALIDE_ALWAYS_INLINE int bytes() const { return (bits + 7) / 8; }
+
+private:
+    HALIDE_ALWAYS_INLINE uint32_t as_u32() const {
+        uint32_t u;
+        static_assert(sizeof(u) == sizeof(*this), "Expected halide_type_t to be 32 bits");
+        memcpy(&u, this, sizeof(u));
+        return u;
+    }
 #endif
 };
 
