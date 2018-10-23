@@ -139,6 +139,7 @@ void define_enums(py::module &m) {
         .value("ASAN", Target::Feature::ASAN)
         .value("CheckUnsafePromises", Target::Feature::CheckUnsafePromises)
         .value("HexagonDma", Target::Feature::HexagonDma)
+        .value("EmbedBitcode", Target::Feature::EmbedBitcode)
         .value("Vulkan", Target::Feature::Vulkan)
         .value("FeatureEnd", Target::Feature::FeatureEnd);
 
