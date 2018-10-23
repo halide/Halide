@@ -100,6 +100,7 @@ struct Target {
         TSAN = halide_target_feature_tsan,
         ASAN = halide_target_feature_asan,
         CheckUnsafePromises = halide_target_feature_check_unsafe_promises,
+        EmbedBitcode = halide_target_feature_embed_bitcode,
         NewAutoscheduler = halide_target_feature_new_autoscheduler,
         FeatureEnd = halide_target_feature_end
     };

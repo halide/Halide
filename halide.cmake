@@ -506,6 +506,7 @@ function(_halide_runtime_target_name HALIDE_TARGET OUTVAR)
         asan
         check_unsafe_promises
         hexagon_dma
+        embed_bitcode
         new_autoscheduler
       )
 
