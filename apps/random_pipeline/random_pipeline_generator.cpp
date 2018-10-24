@@ -310,7 +310,11 @@ public:
         coords[0] += r.x;
         coords[1] += r.y;
         coords[2] = r.z;
-        conv(args) = sum(rand_value(f.func.value().type()) * (args[2] + 1) * f.func(coords));
+        // sum() captures free vars in the order found, and the new
+        // autoscheduler isn't clever enough to do storage reordering
+        // yet, so make sure to put the term that depends on the
+        // output channel last.
+        conv(args) = sum(rand_value(f.func.value().type()) * f.func(coords) * (args[2] + 1));
 
         // choose a channel output size - 0.5 prob of doubling channel dim
         return {conv, f.w, f.h, f.random_out_channels()};
