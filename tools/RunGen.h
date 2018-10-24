@@ -468,6 +468,50 @@ private:
     }
 };
 
+template<typename T>
+struct FillWithScalar {
+public:
+    void operator()(Buffer<> &b_dynamic, const halide_scalar_value_t &value) {
+        Buffer<T> b = b_dynamic;
+        b.fill(as_T(value));
+    }
+
+private:
+    // Segregate into pointer and non-pointer clauses to avoid compiler warnings
+    // about casting from (e.g.) int8 to void*
+    template<typename T2 = T, typename std::enable_if<!std::is_pointer<T2>::value>::type * = nullptr>
+    T as_T(const halide_scalar_value_t& value) {
+        const halide_type_t type = halide_type_of<T>();
+        switch (halide_type_code((halide_type_code_t) type.code, type.bits)) {
+            case halide_type_code(halide_type_int, 8):    return (T) value.u.i8;
+            case halide_type_code(halide_type_int, 16):   return (T) value.u.i16;
+            case halide_type_code(halide_type_int, 32):   return (T) value.u.i32;
+            case halide_type_code(halide_type_int, 64):   return (T) value.u.i64;
+            case halide_type_code(halide_type_uint, 1):   return (T) value.u.b;
+            case halide_type_code(halide_type_uint, 8):   return (T) value.u.u8;
+            case halide_type_code(halide_type_uint, 16):  return (T) value.u.u16;
+            case halide_type_code(halide_type_uint, 32):  return (T) value.u.u32;
+            case halide_type_code(halide_type_uint, 64):  return (T) value.u.u64;
+            case halide_type_code(halide_type_float, 32): return (T) value.u.f32;
+            case halide_type_code(halide_type_float, 64): return (T) value.u.f64;
+            default:
+                fail() << "Can't convert value with type: " << (int) type.code << "bits: " << type.bits;
+                return (T) 0;
+        }
+    }
+
+    template<typename T2 = T, typename std::enable_if<std::is_pointer<T2>::value>::type * = nullptr>
+    T as_T(const halide_scalar_value_t& value) {
+        const halide_type_t type = halide_type_of<T>();
+        switch (halide_type_code((halide_type_code_t) type.code, type.bits)) {
+            case halide_type_code(halide_type_handle, 64): return (T) value.u.handle;
+            default:
+                fail() << "Can't convert value with type: " << (int) type.code << "bits: " << type.bits;
+                return (T) 0;
+        }
+    }
+};
+
 // This logic exists in Halide::Tools, but is Internal; we're going to replicate
 // it here for now since we may want slightly different logic in some cases
 // for this tool.
@@ -531,7 +575,7 @@ struct ArgData {
     ArgData(size_t index, const std::string &name, const halide_filter_argument_t * metadata)
         : index(index), name(name), metadata(metadata) {}
 
-    Buffer<> load_input_buffer() const {
+    Buffer<> load_buffer() const {
         std::vector<std::string> v = split_string(raw_string, ":");
         if (v.size() == 1 || v[0].size() == 1) {
             return load_input_from_file(raw_string, *metadata);
@@ -539,6 +583,15 @@ struct ArgData {
             auto shape = parse_extents(v[1]);
             Buffer<> b = allocate_buffer(metadata->type, shape);
             memset(b.data(), 0, b.size_in_bytes());
+            return b;
+        } else if (v[0] == "constant") {
+            halide_scalar_value_t value;
+            if (!parse_scalar(metadata->type, v[1], &value)) {
+              fail() << "Invalid value for constant value";
+            }
+            auto shape = parse_extents(v[2]);
+            Buffer<> b = allocate_buffer(metadata->type, shape);
+            dynamic_type_dispatch<FillWithScalar>(metadata->type, b, value);
             return b;
         } else if (v[0] == "identity") {
             auto shape = parse_extents(v[1]);
@@ -808,7 +861,7 @@ public:
                 break;
             }
             case halide_argument_kind_input_buffer: {
-                arg.buffer_value = arg.load_input_buffer();
+                arg.buffer_value = arg.load_buffer();
                 info() << "Input " << arg_name << ": Shape is " << get_shape(arg.buffer_value);
                 // If there was no default_output_shape specified, use the shape of
                 // the first input buffer (if any).
@@ -855,7 +908,7 @@ public:
                      << best.type << "; data loss may have occurred.";
                 b = Halide::Tools::ImageTypeConversion::convert_image(b, best.type);
             }
-            if (!Halide::Tools::save<Buffer<>, IOCheckFail>(b, arg.raw_string)) {
+            if (!Halide::Tools::save<Buffer<const void>, IOCheckFail>(b.as<const void>(), arg.raw_string)) {
                 fail() << "Unable to save output: " << arg.raw_string;
             }
         }
@@ -1024,12 +1077,31 @@ public:
               << "Best output throughput is " << (megapixels_out() / result.wall_time) << " mpix/sec.\n";
     }
 
-    void run_for_output() {
-        std::vector<void*> filter_argv = build_filter_argv();
+    struct Output {
+        std::string name;
+        Buffer<> actual;
+    };
+    std::vector<Output> run_for_output() {
+        std::vector<void *> filter_argv = build_filter_argv();
 
         info() << "Running filter...";
         // Ignore result since our halide_error() should catch everything.
-        (void) halide_argv_call(&filter_argv[0]);
+        (void)halide_argv_call(&filter_argv[0]);
+
+        std::vector<Output> v;
+        for (auto &arg_pair : args) {
+            const auto &arg_name = arg_pair.first;
+            const auto &arg = arg_pair.second;
+            if (arg.metadata->kind != halide_argument_kind_output_buffer) {
+                continue;
+            }
+            v.push_back({arg_name, arg.buffer_value});
+        }
+        return v;
+    }
+
+    Buffer<> get_expected_output(const std::string &output) {
+        return args.at(output).load_buffer();
     }
 
     void describe() const {

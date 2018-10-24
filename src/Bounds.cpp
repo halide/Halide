@@ -1936,6 +1936,65 @@ private:
 
 map<string, Box> boxes_touched(Expr e, Stmt s, bool consider_calls, bool consider_provides,
                                string fn, const Scope<Interval> &scope, const FuncValueBounds &fb) {
+    if (!fn.empty() && s.defined()) {
+        // Filter things down to the relevant sub-Stmts, so we don't spend a
+        // long time reasoning about lets and ifs that don't surround an
+        // access to the buffer in question.
+
+        class Filter : public IRMutator2 {
+            using IRMutator2::visit;
+            using IRMutator2::mutate;
+
+            bool relevant = false;
+
+            Expr visit(const Call *op) override {
+                if (op->name == fn) {
+                    relevant = true;
+                    return op;
+                } else {
+                    return IRMutator2::visit(op);
+                }
+            }
+
+            Stmt visit(const Provide *op) override {
+                if (op->name == fn) {
+                    relevant = true;
+                    return op;
+                } else {
+                    return IRMutator2::visit(op);
+                }
+            }
+
+            Expr visit(const Variable *op) override {
+                if (op->name == fn_buffer) {
+                    relevant = true;
+                }
+                return op;
+            }
+
+        public:
+
+            Stmt mutate(const Stmt &s) override {
+                bool old = relevant;
+                relevant = false;
+                Stmt s_new = IRMutator2::mutate(s);
+                if (!relevant) {
+                    relevant = old;
+                    return no_op;
+                } else {
+                    return s_new;
+                }
+            }
+
+            const string &fn;
+            const string fn_buffer;
+            Stmt no_op;
+            Filter(const string &fn) : fn(fn), fn_buffer(fn + ".buffer"), no_op(Evaluate::make(0)) {}
+        } filter(fn);
+
+        s = filter.mutate(s);
+    }
+
     // Move the innermost vars in an IfThenElse's condition as far to the left
     // as possible, so that BoxesTouched can prune the variable scope tighter
     // when encountering the IfThenElse.
