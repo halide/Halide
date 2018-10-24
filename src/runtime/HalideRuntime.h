@@ -5,6 +5,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <string.h>
 #else
 #include "runtime_internal.h"
 #endif
@@ -430,17 +431,26 @@ struct halide_type_t {
 
     /** Compare two types for equality. */
     HALIDE_ALWAYS_INLINE bool operator==(const halide_type_t &other) const {
-        return (code == other.code &&
-                bits == other.bits &&
-                lanes == other.lanes);
+        return as_u32() == other.as_u32();
     }
 
     HALIDE_ALWAYS_INLINE bool operator!=(const halide_type_t &other) const {
         return !(*this == other);
     }
 
+    HALIDE_ALWAYS_INLINE bool operator<(const halide_type_t &other) const {
+        return as_u32() < other.as_u32();
+    }
+
     /** Size in bytes for a single element, even if width is not 1, of this type. */
     HALIDE_ALWAYS_INLINE int bytes() const { return (bits + 7) / 8; }
+
+private:
+    HALIDE_ALWAYS_INLINE uint32_t as_u32() const {
+        uint32_t u;
+        memcpy(&u, this, sizeof(u));
+        return u;
+    }
 #endif
 };
 
@@ -1276,7 +1286,8 @@ typedef enum halide_target_feature_t {
     halide_target_feature_d3d12compute = 54, ///< Enable Direct3D 12 Compute runtime.
     halide_target_feature_check_unsafe_promises = 55, ///< Insert assertions for promises.
     halide_target_feature_hexagon_dma = 56, ///< Enable Hexagon DMA buffers.
-    halide_target_feature_end = 57 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
+    halide_target_feature_embed_bitcode = 57,  ///< Emulate clang -fembed-bitcode flag.
+    halide_target_feature_end = 58 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 
 /** This function is called internally by Halide in some situations to determine

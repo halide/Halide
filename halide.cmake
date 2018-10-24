@@ -505,6 +505,8 @@ function(_halide_runtime_target_name HALIDE_TARGET OUTVAR)
         tsan
         asan
         check_unsafe_promises
+        hexagon_dma
+        embed_bitcode
       )
     # Synthesize a one-or-two-char abbreviation based on the feature's position
     # in the KNOWN_FEATURES list.

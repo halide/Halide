@@ -692,6 +692,7 @@ RUNTIME_CPP_COMPONENTS = \
   fake_thread_pool \
   float16_t \
   gpu_device_selection \
+  hexagon_cache_allocator \
   hexagon_cpu_features \
   hexagon_dma_pool \
   hexagon_dma \
@@ -757,7 +758,6 @@ RUNTIME_CPP_COMPONENTS = \
   windows_yield \
   write_debug_image \
   x86_cpu_features \
-  hexagon_cache_allocator \
 
 RUNTIME_LL_COMPONENTS = \
   aarch64 \
