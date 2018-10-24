@@ -855,7 +855,7 @@ public:
                      << best.type << "; data loss may have occurred.";
                 b = Halide::Tools::ImageTypeConversion::convert_image(b, best.type);
             }
-            if (!Halide::Tools::save<Buffer<>, IOCheckFail>(b, arg.raw_string)) {
+            if (!Halide::Tools::save<Buffer<const void>, IOCheckFail>(b.as<const void>(), arg.raw_string)) {
                 fail() << "Unable to save output: " << arg.raw_string;
             }
         }
