@@ -592,6 +592,11 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
     // Optimize
     CodeGen_LLVM::optimize_module();
 
+    if (target.has_feature(Target::EmbedBitcode)) {
+        std::string halide_command = "halide target=" + target.to_string();
+        embed_bitcode(module.get(), halide_command);
+    }
+    
     input_module = nullptr;
 
     // Disown the module and return it.

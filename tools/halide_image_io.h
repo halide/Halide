@@ -352,7 +352,7 @@ void read_big_endian_row(const uint8_t *src, int y, ImageType *im) {
 // Multibyte elements are written in big-endian layout.
 template<typename ElemType, typename ImageType>
 void write_big_endian_row(const ImageType &im, int y, uint8_t *dst) {
-    auto im_typed = im.template as<ElemType>();
+    auto im_typed = im.template as<typename std::add_const<ElemType>::type>();
     const int xmin = im_typed.dim(0).min();
     const int xmax = im_typed.dim(0).max();
     if (im_typed.dimensions() > 2) {
@@ -808,7 +808,7 @@ template<typename ImageType>
 bool buffer_is_compact_planar(ImageType &im) {
     const halide_type_t im_type = im.type();
     const size_t elem_size = (im_type.bits / 8);
-    if (((uint8_t*)im.begin() + (im.number_of_elements() * elem_size)) != (uint8_t*) im.end()) {
+    if (((const uint8_t*)im.begin() + (im.number_of_elements() * elem_size)) != (const uint8_t*) im.end()) {
         return false;
     }
     for (int d = 1; d < im.dimensions(); ++d) {
@@ -890,7 +890,7 @@ bool write_planar_payload(ImageType &im, FileOpener &f) {
         // We have to do this the hard way.
         int d = im.dimensions() - 1;
         for (int i = im.dim(d).min(); i <= im.dim(d).max(); i++) {
-            ImageType slice = im.sliced(d, i);
+            auto slice = im.sliced(d, i);
             if (!write_planar_payload(slice, f)) {
                 return false;
             }
@@ -1306,30 +1306,44 @@ bool save_mat(ImageType &im, const std::string &filename) {
     return true;
 }
 
+// Given something like ImageType<Foo>, produce typedef ImageType<Bar>
+template<typename ImageType, typename ElemType>
+struct ImageTypeWithElemType {
+    using type = decltype(std::declval<ImageType>().template as<ElemType>());
+};
+
+// Given something like ImageType<Foo>, produce typedef ImageType<const Bar>
+template<typename ImageType, typename ElemType>
+struct ImageTypeWithConstElemType {
+    using type = decltype(std::declval<ImageType>().template as<typename std::add_const<ElemType>::type>());
+};
 
 template<typename ImageType, Internal::CheckFunc check>
 struct ImageIO {
+    using ConstImageType = typename ImageTypeWithConstElemType<ImageType, typename ImageType::ElemType>::type;
+
     std::function<bool(const std::string &, ImageType *)> load;
-    std::function<bool(ImageType &im, const std::string &)> save;
+    std::function<bool(ConstImageType &im, const std::string &)> save;
     std::function<const std::set<FormatInfo>&()> query;
 };
 
 template<typename ImageType, Internal::CheckFunc check>
 bool find_imageio(const std::string &filename, ImageIO<ImageType, check> *result) {
     static_assert(!ImageType::has_static_halide_type, "");
+    using ConstImageType = typename ImageTypeWithConstElemType<ImageType, typename ImageType::ElemType>::type;
 
     const std::map<std::string, ImageIO<ImageType, check>> m = {
 #ifndef HALIDE_NO_JPEG
-        {"jpeg", {load_jpg<ImageType, check>, save_jpg<ImageType, check>, query_jpg}},
-        {"jpg", {load_jpg<ImageType, check>, save_jpg<ImageType, check>, query_jpg}},
+        {"jpeg", {load_jpg<ImageType, check>, save_jpg<ConstImageType, check>, query_jpg}},
+        {"jpg", {load_jpg<ImageType, check>, save_jpg<ConstImageType, check>, query_jpg}},
 #endif
-        {"pgm", {load_pgm<ImageType, check>, save_pgm<ImageType, check>, query_pgm}},
+        {"pgm", {load_pgm<ImageType, check>, save_pgm<ConstImageType, check>, query_pgm}},
 #ifndef HALIDE_NO_PNG
-        {"png", {load_png<ImageType, check>, save_png<ImageType, check>, query_png}},
+        {"png", {load_png<ImageType, check>, save_png<ConstImageType, check>, query_png}},
 #endif
-        {"ppm", {load_ppm<ImageType, check>, save_ppm<ImageType, check>, query_ppm}},
-        {"tmp", {load_tmp<ImageType, check>, save_tmp<ImageType, check>, query_tmp}},
-        {"mat", {load_mat<ImageType, check>, save_mat<ImageType, check>, query_mat}}
+        {"ppm", {load_ppm<ImageType, check>, save_ppm<ConstImageType, check>, query_ppm}},
+        {"tmp", {load_tmp<ImageType, check>, save_tmp<ConstImageType, check>, query_tmp}},
+        {"mat", {load_mat<ImageType, check>, save_mat<ConstImageType, check>, query_mat}}
     };
     std::string ext = Internal::get_lowercase_extension(filename);
     auto it = m.find(ext);
@@ -1345,12 +1359,6 @@ bool find_imageio(const std::string &filename, ImageIO<ImageType, check> *result
     err += "\n";
     return check(false, err.c_str());
 }
-
-// Given something like ImageType<Foo>, produce typedef ImageType<Bar>
-template<typename ImageType, typename ElemType>
-struct ImageTypeWithElemType {
-    using type = decltype(std::declval<ImageType>().template as<ElemType>());
-};
 
 // Must be constexpr to allow use in case clauses.
 inline constexpr int halide_type_code(halide_type_code_t code, int bits) {
@@ -1605,7 +1613,7 @@ bool save(ImageType &im, const std::string &filename) {
 
     // Allow statically-typed images to be passed in, but quietly pass them on
     // as dynamically-typed images.
-    auto im_d = im.template as<void>();
+    auto im_d = im.template as<const void>();
     return imageio.save(im_d, filename);
 }
 
