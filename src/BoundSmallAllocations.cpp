@@ -56,9 +56,6 @@ class BoundSmallAllocations : public IRMutator2 {
             << "Only fixed-size allocations are supported on the gpu. "
             << "Try storing into shared memory instead.";
 
-        if (bound.defined()) {
-            bound = simplify(cast<int32_t>(bound));
-        }
         const int64_t *size_ptr = bound.defined() ? as_const_int(bound) : nullptr;
         int64_t size = size_ptr ? *size_ptr : 0;
 
@@ -71,9 +68,9 @@ class BoundSmallAllocations : public IRMutator2 {
              (op->memory_type == MemoryType::Stack && can_allocation_fit_on_stack(size)) ||
              op->memory_type == MemoryType::Register ||
              (op->memory_type == MemoryType::Auto && size <= malloc_overhead))) {
-            user_assert(size < (int64_t)1 << 31)
+            user_assert(size >= 0 && size < (int64_t)1 << 31)
                 << "Allocation " << op->name << " has a size greater than 2^31: " << bound << "\n";
-            return Allocate::make(op->name, op->type, op->memory_type, {bound}, op->condition,
+            return Allocate::make(op->name, op->type, op->memory_type, {(int32_t)size}, op->condition,
                                   mutate(op->body), op->new_expr, op->free_function);
         } else {
             return IRMutator2::visit(op);
