@@ -20,9 +20,7 @@ using std::vector;
 
 using namespace llvm;
 
-CodeGen_Posix::CodeGen_Posix(Target t) :
-  CodeGen_LLVM(t) {
-}
+CodeGen_Posix::CodeGen_Posix(Target t) : CodeGen_LLVM(t) {}
 
 Value *CodeGen_Posix::codegen_allocation_size(const std::string &name, Type type, const std::vector<Expr> &extents, Expr condition) {
     // Compute size from list of extents checking for overflow.
@@ -103,7 +101,6 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
         }
     } else {
         // Should have been caught in bound_small_allocations
-        // internal_assert(memory_type != MemoryType::Stack);
         internal_assert(memory_type != MemoryType::Register);
         llvm_size = codegen_allocation_size(name, type, extents, condition);
     }
@@ -125,9 +122,6 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
     allocation.constant_bytes = constant_bytes;
     allocation.stack_bytes = new_expr.defined() ? 0 : stack_bytes;
     allocation.type = type;
-    allocation.ptr = nullptr;
-    allocation.destructor = nullptr;
-    allocation.destructor_function = nullptr;
     allocation.name = name;
 
     if (!new_expr.defined() && extents.empty()) {
@@ -140,29 +134,33 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
     } else if (!new_expr.defined() && stack_bytes != 0) {
 
         // Try to find a free stack allocation we can use.
-        vector<Allocation>::iterator free = free_stack_allocs.end();
-        for (free = free_stack_allocs.begin(); free != free_stack_allocs.end(); ++free) {
-            AllocaInst *alloca_inst = dyn_cast<AllocaInst>(free->ptr);
+        vector<Allocation>::iterator it = free_stack_allocs.end();
+        for (it = free_stack_allocs.begin(); it != free_stack_allocs.end(); ++it) {
+            if (it->pseudostack_slot) {
+                // Don't merge with dynamic stack allocations
+                continue;
+            }
+            AllocaInst *alloca_inst = dyn_cast<AllocaInst>(it->ptr);
             llvm::Function *allocated_in = alloca_inst ? alloca_inst->getParent()->getParent() : nullptr;
             llvm::Function *current_func = builder->GetInsertBlock()->getParent();
 
             if (allocated_in == current_func &&
-                free->type == type &&
-                free->stack_bytes >= stack_bytes) {
+                it->type == type &&
+                it->stack_bytes >= stack_bytes) {
                 break;
             }
         }
-        if (free != free_stack_allocs.end()) {
-            debug(4) << "Reusing freed stack allocation of " << free->stack_bytes
+        if (it != free_stack_allocs.end()) {
+            debug(4) << "Reusing freed stack allocation of " << it->stack_bytes
                      << " bytes for allocation " << name
                      << " of " << stack_bytes << " bytes.\n";
             // Use a free alloc we found.
-            allocation.ptr = free->ptr;
-            allocation.stack_bytes = free->stack_bytes;
-            allocation.name = free->name;
+            allocation.ptr = it->ptr;
+            allocation.stack_bytes = it->stack_bytes;
+            allocation.name = it->name;
 
             // This allocation isn't free anymore.
-            free_stack_allocs.erase(free);
+            free_stack_allocs.erase(it);
         } else {
             debug(4) << "Allocating " << stack_bytes << " bytes on the stack for " << name << "\n";
             // We used to do the alloca locally and save and restore the
@@ -178,9 +176,39 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
         cur_stack_alloc_total += allocation.stack_bytes;
         debug(4) << "cur_stack_alloc_total += " << allocation.stack_bytes << " -> " << cur_stack_alloc_total << " for " << name << "\n";
     } else if (memory_type == MemoryType::Stack && !new_expr.defined()) {
-        // Stack allocation with a dynamic size
-        Value *slot = create_alloca_at_entry(pseudostack_slot_t_type, 1, true, name + ".pseudostack_slot");
+        // Try to find a free pseudostack allocation we can use.
+        vector<Allocation>::iterator it = free_stack_allocs.end();
+        for (it = free_stack_allocs.begin(); it != free_stack_allocs.end(); ++it) {
+            if (!it->pseudostack_slot) {
+                // Don't merge with static stack allocations
+                continue;
+            }
+            AllocaInst *alloca_inst = dyn_cast<AllocaInst>(it->pseudostack_slot);
+            llvm::Function *allocated_in = alloca_inst ? alloca_inst->getParent()->getParent() : nullptr;
+            llvm::Function *current_func = builder->GetInsertBlock()->getParent();
+            if (it->type == type &&
+                allocated_in == current_func) {
+                break;
+            }
+        }
+        Value *slot = nullptr;
+        if (it != free_stack_allocs.end()) {
+            debug(4) << "Reusing freed pseudostack allocation from " << it->name
+                     << " for " << name << "\n";
+            slot = it->pseudostack_slot;
+            allocation.name = it->name;
+            // We've already registered a destructor for this slot
+            allocation.destructor = it->destructor;
+            free_stack_allocs.erase(it);
+        } else {
+            // Stack allocation with a dynamic size
+            slot = create_alloca_at_entry(pseudostack_slot_t_type, 1, true, name + ".pseudostack_slot");
+            llvm::Function *free_fn = module->getFunction("pseudostack_free");
+            allocation.destructor = register_destructor(free_fn, slot, Always);
+        }
 
+        // Even if we're reusing a stack slot, we need to call
+        // pseudostack_alloc to potentially reallocate.
         llvm::Function *malloc_fn = module->getFunction("pseudostack_alloc");
         internal_assert(malloc_fn) << "Could not find pseudostack_alloc in module\n";
         #if LLVM_VERSION < 50
@@ -199,12 +227,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
 
         // Fix the type to avoid pointless bitcasts later
         allocation.ptr = builder->CreatePointerCast(call, llvm_type_of(type)->getPointerTo());
-
-        // We register a destructor but don't associate it with the
-        // allocation. We don't actually want to trigger it when we
-        // hit the Free node.
-        llvm::Function *free_fn = module->getFunction("pseudostack_free");
-        register_destructor(free_fn, slot, Always);
+        allocation.pseudostack_slot = slot;
     } else {
         if (new_expr.defined()) {
             allocation.ptr = codegen(new_expr);
@@ -279,6 +302,9 @@ void CodeGen_Posix::free_allocation(const std::string &name) {
         free_stack_allocs.push_back(alloc);
         cur_stack_alloc_total -= alloc.stack_bytes;
         debug(4) << "cur_stack_alloc_total -= " << alloc.stack_bytes << " -> " << cur_stack_alloc_total << " for " << name << "\n";
+    } else if (alloc.pseudostack_slot) {
+        // Don't call the destructor yet - the lifetime persists until function exit.
+        free_stack_allocs.push_back(alloc);
     } else if (alloc.destructor_function) {
         internal_assert(alloc.destructor);
         trigger_destructor(alloc.destructor_function, alloc.destructor);

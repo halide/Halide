@@ -39,24 +39,28 @@ protected:
     /** A struct describing heap or stack allocations. */
     struct Allocation {
         /** The memory */
-        llvm::Value *ptr;
+        llvm::Value *ptr = nullptr;
 
         /** Destructor stack slot for this allocation. */
-        llvm::Value *destructor;
+        llvm::Value *destructor = nullptr;
 
         /** Function to accomplish the destruction. */
-        llvm::Function *destructor_function;
+        llvm::Function *destructor_function = nullptr;
+
+        /** Pseudostack slot for this allocation. Non-null for
+         * allocations of type Stack with dynamic size. */
+        llvm::Value *pseudostack_slot = nullptr;
 
         /** The (Halide) type of the allocation. */
         Type type;
 
         /** How many bytes this allocation is, or 0 if not
          * constant. */
-        int constant_bytes;
+        int constant_bytes = 0;
 
         /** How many bytes of stack space used. 0 implies it was a
          * heap allocation. */
-        int stack_bytes;
+        int stack_bytes = 0;
 
         /** A unique name for this allocation. May not be equal to the
          * Allocate node name in cases where we detect multiple

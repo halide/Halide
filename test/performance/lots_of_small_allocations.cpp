@@ -10,28 +10,54 @@ int main(int argc, char **argv) {
 
     double t[3];
     for (int i = 0; i < 3; i++) {
-        Func f("f"), g("g");
         Var x("x");
 
-        f(x) = x;
-        g(x) = f(x);
+        Func in;
+        in(x) = x;
+
+        std::vector<Func> chain;
+        chain.push_back(in);
+        for (int j = 0; j < 50; j++) {
+            Func next;
+            // Iterate the Collatz conjecture
+            Expr prev = chain.back()(x);
+            next(x) = select(prev % 2 == 0, prev / 2, 3 * prev + 1);
+            chain.push_back(next);
+        }
 
         Var xo, xi;
-        g.split(x, xo, xi, p, TailStrategy::GuardWithIf);
-
-        f.compute_at(g, xo);
-        if (i != 0) {
-            f.store_in(MemoryType::Stack);
+        chain.back().split(x, xo, xi, p, TailStrategy::RoundUp);
+        for (size_t j = 0; j < chain.size() - 1; j++) {
+            chain[j].compute_at(chain.back(), xo);
+            if (i != 0) {
+                chain[j].store_in(MemoryType::Stack);
+            }
+            if (i == 2) {
+                chain[j].bound_extent(x, p);
+            }
+            // Vectorize. Otherwise llvm autovectorizes the stack version, confusing the results
+            chain[j].vectorize(x, 8, TailStrategy::RoundUp);
         }
+        // One of the problems with frequent heap allocations is that
+        // they can serialize in the allocator, so we should
+        // parallelize things too.
+        Var xoo;
         if (i == 2) {
-            f.bound_extent(x, p);
-            g.specialize(p == 8);
+            chain.back().specialize(p == 200).split(xo, xoo, xo, 100, TailStrategy::RoundUp).parallel(xoo);
+            chain.back().specialize_fail("Expected p == 200");
+        } else {
+            chain.back().split(xo, xoo, xo, 100, TailStrategy::RoundUp).parallel(xoo);
         }
+        chain.back().vectorize(xi, 8, TailStrategy::RoundUp);
 
-        p.set(8);
+        // Make it too large for llvm to promote into registers or
+        // bother unrolling. We're trying to compare stack to
+        // pseudostack, not stack to register.
+        p.set(200);
 
-        Buffer<int> out(1024 * 1024);
-        t[i] = Halide::Tools::benchmark([&] {g.realize(out);});
+        Buffer<int> out(16 * 1000 * 1000);
+        t[i] = Halide::Tools::benchmark([&] {chain.back().realize(out);});
+
         printf("Time using %s: %f\n", names[i], t[i]);
     }
 
