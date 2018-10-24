@@ -1382,8 +1382,8 @@ struct ScheduleFeatures {
     int64_t inlined_calls = 0; // For inlined Funcs, how many calls are made to this Func total
 
     // Logically these features should be grouped earlier, but the convnet currently doesn't know about them
-    int64_t bytes_read_per_realization = 0; // Number of bytes loaded from all inputs per production
-    int64_t lines_read_per_realization = 0; // Number of contiguous segments of memory loaded from all inputs per production
+    int64_t unique_bytes_read_per_realization = 0; // Number of unique bytes loaded from all inputs per production
+    int64_t unique_lines_read_per_realization = 0; // Number of unique contiguous segments of memory loaded from all inputs per production
     int64_t allocation_bytes_read_per_realization = 0; // The sum of the sizes of the allocations accessed per production. Gives a hint as to the likely locality of it.
 
     int64_t working_set = 0; // The sum of the sizes of the allocations within the production of this Func. Probably a good thing if it fits in cache.
@@ -1393,6 +1393,8 @@ struct ScheduleFeatures {
     int64_t rounded_innermost_pure_loop_extent = 0; // Innermost pure loop extend rounded up to the next multiple of the vector size
 
     int native_vector_size = 0; // The native vector size for the narrowest type used.
+
+    int64_t non_unique_bytes_read_per_realization = 0; // Number of bytes read per realization, counting reloads of the same memory.
 
     void dump() const {
         debug(0) << "    num_realizations:                      " << num_realizations << '\n'
@@ -1413,13 +1415,14 @@ struct ScheduleFeatures {
                  << "    innermost_bytes_at_root:               " << innermost_bytes_at_root << '\n'
                  << "    bytes_read_per_tile:                   " << bytes_read_per_tile << '\n'
                  << "    inlined_calls:                         " << inlined_calls << '\n'
-                 << "    bytes_read_per_realization:            " << bytes_read_per_realization << '\n'
-                 << "    lines_read_per_realization:            " << lines_read_per_realization << '\n'
+                 << "    unique_bytes_read_per_realization:     " << unique_bytes_read_per_realization << '\n'
+                 << "    unique_lines_read_per_realization:     " << unique_lines_read_per_realization << '\n'
                  << "    allocation_bytes_read_per_realization: " << allocation_bytes_read_per_realization << '\n'
                  << "    working_set:                           " << working_set << '\n'
                  << "    vector_size:                           " << vector_size << '\n'
                  << "    rounded_innermost_pure_loop_extent     " << rounded_innermost_pure_loop_extent << '\n'
-                 << "    native_vector_size:                    " << vector_size << '\n';
+                 << "    native_vector_size:                    " << vector_size << '\n'
+                 << "    non_unique_bytes_read_per_realization: " << non_unique_bytes_read_per_realization << '\n';
     }
 };
 
@@ -1954,6 +1957,12 @@ struct LoopNest {
                     innermost_storage_extent = bounds->region_computed(0).second - bounds->region_computed(0).first + 1;
                 }
                 feat.innermost_bytes_at_realization = node->bytes_per_point * innermost_storage_extent;
+
+                int64_t bytes_read_per_point = 0;
+                for (const auto *e : node->incoming_edges) {
+                    bytes_read_per_point += e->calls * e->producer->bytes_per_point;
+                }
+                feat.non_unique_bytes_read_per_realization = bytes_read_per_point * feat.points_computed_per_realization;
             }
         }
 
@@ -2147,15 +2156,18 @@ struct LoopNest {
         }
 
         if (at_production) {
-            feat.bytes_read_per_realization = bytes_loaded;
+            // Properties of the realization, but the values are
+            // computable at the production site because that's where
+            // the consumers are.
+            feat.unique_bytes_read_per_realization = bytes_loaded;
             feat.allocation_bytes_read_per_realization = allocation_bytes_loaded;
-            feat.lines_read_per_realization = lines_loaded;
+            feat.unique_lines_read_per_realization = lines_loaded;
 
             if (!at_pure_production) {
                 // Also pessimistically assume this update definition relies on the entirety of the produced region so far.
                 // TODO: This overbills scatters, or writes to a restriction region.
-                feat.bytes_read_per_realization += feat.bytes_at_production;
-                feat.lines_read_per_realization++; // It's accessed contiguously
+                feat.unique_bytes_read_per_realization += feat.bytes_at_production;
+                feat.unique_lines_read_per_realization++; // It's accessed contiguously (TODO: This is fishy. Should probably be lines_at_production)
                 feat.allocation_bytes_read_per_realization += feat.bytes_at_production;
             }
         }
@@ -2410,7 +2422,10 @@ struct LoopNest {
             while (vector_dim < (int)l.size() && !l[vector_dim].pure) vector_dim++;
         }
 
-        if (!innermost &&
+        bool force_only_output_compute_root = false; //true;
+
+        if ((!is_root() || f->is_output || !force_only_output_compute_root) &&
+            !innermost &&
             (!in_realization || size[vector_dim] == 1)) {
             // Place the computation inside this loop
             std::unique_ptr<LoopNest> r{new LoopNest};
@@ -2968,21 +2983,40 @@ struct State {
                     }
                 }
 
-                double cache_misses = 0, cost_of_miss = 0;
+                double cold_cache_misses = 0, cost_of_cold_miss = 0, capacity_cache_misses = 0, cost_of_capacity_miss = 0;
                 if (feat.inlined_calls == 0) {
-                    // Estimate the number of cache misses on the data that this reads from and their cost
+                    // Estimate the number of cold cache misses on the data that this reads from and their cost
                     // Cost dominated by lines not bytes due to streaming prefetchers
-                    cache_misses = feat.lines_read_per_realization + feat.bytes_read_per_realization * 1e-3;
-                    cache_misses *= feat.num_realizations;
+                    cold_cache_misses = (feat.unique_lines_read_per_realization +
+                                         feat.unique_bytes_read_per_realization * 1e-3);
+
+                    cold_cache_misses *= feat.num_realizations;
                     //int64_t footprint = std::min(feat.allocation_bytes_read_per_realization, feat.bytes_read_per_realization);
                     int64_t footprint = feat.allocation_bytes_read_per_realization;
                     //cost_of_miss = std::sqrt(footprint) * params.balance * 5e-3;
-                    cost_of_miss = footprint * params.balance * 1e-6;
+                    cost_of_cold_miss = footprint * params.balance * 1e-6;
+
+                    // Now estimate the number of capacity-related cache misses using the total number of bytes read.
+
+                    // We have a number of unique bytes read. Call the
+                    // cache level large enough to fit it L(n+1). The
+                    // next cache level in is Ln. How many misses will
+                    // we incur in Ln? If we load randomly within the
+                    // footprint, we'll miss some constant fraction of
+                    // the time. The cost of such a miss is the cost
+                    // of going out to cache level L(n+1). Note that
+                    // *cold* misses, by contrast, go out to the cache
+                    // level that fits the entire source allocation,
+                    // not just the footprint accessed of it.
+                    capacity_cache_misses = feat.non_unique_bytes_read_per_realization * 1e-2;
+                    cost_of_capacity_miss = feat.unique_bytes_read_per_realization * params.balance * 1e-6;
+
+                    // We'll assume multiway caches work well and ignore the other 'C' (conflict cache misses).
                 }
 
-                double memory_load_cost = cache_misses * cost_of_miss;
+                double memory_load_cost = cold_cache_misses * cost_of_cold_miss + capacity_cache_misses * cost_of_capacity_miss;
 
-                cache_misses = cost_of_miss = 0;
+                double cache_misses = 0, cost_of_miss = 0;
                 if (feat.inlined_calls == 0) {
                     // Estimate the number of cache misses on the data that this writes to and their cost
                     int64_t lines_written_per_realization = feat.bytes_at_realization / feat.innermost_bytes_at_realization;
