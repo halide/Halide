@@ -111,7 +111,7 @@ int main(int argc, char **argv) {
     // steps.
     learning_rate.set(0.00001);
     const int steps = 10000;
-    double initial_error;
+    double initial_error = 0.0;
     for (int i = 0; i <= steps; i++) {
         bool should_print = (i == 0 || i == steps/2 || i == steps);
         if (should_print) {
