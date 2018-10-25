@@ -2,6 +2,7 @@
 #include "mini_hexagon_dma.h"
 #include "scoped_mutex_lock.h"
 #include "hexagon_dma_pool.h"
+#include "printer.h"
 
 namespace Halide { namespace Runtime { namespace Internal { namespace HexagonDma {
 
@@ -65,7 +66,7 @@ inline void *hexagon_dma_pool_get (void *user_context, void *virtual_engine_id) 
             }
         }
     }
-    halide_print(user_context, "Hexagon DMA: Error in assigning a dma engine to a virtual engine\n");
+    error(user_context) << "Hexagon DMA: Error in assigning a dma engine to a virtual engine\n";
     return NULL;
 }
 
@@ -105,7 +106,6 @@ WEAK int halide_hexagon_free_dma_resource(void *user_context, void *virtual_engi
             hexagon_dma_pool->dma_engine_list[num].assigned = false;
             hexagon_dma_pool->dma_engine_list[num].used = false;
             if (hexagon_dma_pool->dma_engine_list[num].engine_addr) {
-                //TODO Call DMAWrapperFinishFrame during write
 		nDmaWrapper_FinishFrame(hexagon_dma_pool->dma_engine_list[num].engine_addr);
             }
         }
@@ -126,7 +126,7 @@ WEAK int halide_hexagon_free_dma_resource(void *user_context, void *virtual_engi
             if (hexagon_dma_pool->dma_engine_list[i].engine_addr) {
                 int err = nDmaWrapper_FreeDma((t_DmaWrapper_DmaEngineHandle)hexagon_dma_pool->dma_engine_list[i].engine_addr);
                 if (err != QURT_EOK) {
-                    halide_print(user_context, "Failure to Free DMA\n");
+                    debug(user_context) << "Hexagon: Failure to Free DMA.\n";
                     nRet = err;
                 }
             }
@@ -137,7 +137,7 @@ WEAK int halide_hexagon_free_dma_resource(void *user_context, void *virtual_engi
         // Free cache pool
         int err = halide_hexagon_free_l2_pool(user_context);
         if (err != 0) {
-            halide_print(user_context, "Freeing Cache Pool failed.\n");
+            debug(user_context) << "Hexagon: Failure to free Cache Pool.\n";
             nRet = err;
         }
     }
