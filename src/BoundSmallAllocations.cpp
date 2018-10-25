@@ -59,6 +59,12 @@ class BoundSmallAllocations : public IRMutator2 {
         const int64_t *size_ptr = bound.defined() ? as_const_int(bound) : nullptr;
         int64_t size = size_ptr ? *size_ptr : 0;
 
+        if (size_ptr && size == 0 && !op->new_expr.defined()) {
+            // This allocation is dead
+            return Allocate::make(op->name, op->type, op->memory_type, {0}, const_false(),
+                                  mutate(op->body), op->new_expr, op->free_function);
+        }
+
         // 128 bytes is a typical minimum allocation size in
         // halide_malloc. For now we are very conservative, and only
         // round sizes up to a constant if they're smaller than that.
