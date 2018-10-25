@@ -1332,7 +1332,7 @@ vector<vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, int fa
                     int inner = (s[d] + outer - 1) / outer;
                     if (is_one && outer == 1) continue;
                     if (is_full && outer == s[d]) continue;
-                    if (outer > inner || (d == vector_dim && inner < vector_size)) break;
+                    if (outer > inner || (d == vector_dim && outer > inner/vector_size)) break;
                     t.back() = outer;
                     result.push_back(t);
                 }
@@ -2415,14 +2415,15 @@ struct LoopNest {
             }
         }
 
-        int vector_size = is_root() ? 1 : stage->vector_size;
+        const int vector_size = is_root() ? 1 : stage->vector_size;
         int vector_dim = 0;
         if (!is_root()) {
             const auto &l = stage->loop;
             while (vector_dim < (int)l.size() && !l[vector_dim].pure) vector_dim++;
         }
 
-        bool force_only_output_compute_root = false; //true;
+        // HACK (when true)
+        const bool force_only_output_compute_root = false;
 
         if ((!is_root() || f->is_output || !force_only_output_compute_root) &&
             !innermost &&
@@ -2654,21 +2655,23 @@ struct LoopNest {
                 }
             }
 
-            // Pick a tail strategy for any splits
-            auto tail_strategy = TailStrategy::Auto;
-            if (stage_idx == 0 && !accesses_input_buffer() && !node->is_output) {
+            // Pick a tail strategy for any splits of pure vars. RVars always use guardwithif
+            auto pure_var_tail_strategy = TailStrategy::Auto;
+            if (!accesses_input_buffer() && !node->is_output) {
                 // Roundup is lowest overhead, provided it doesn't
                 // expand the bounds read on the input or written on
                 // the output. However, you can only really use it on
                 // pure stages that don't access the input anywhere in
                 // their loop nest.
-                tail_strategy = TailStrategy::RoundUp;
-            } else if (stage_idx > 0) {
-                // update stages use guardwithif
-                tail_strategy = TailStrategy::GuardWithIf;
-            } else {
+                pure_var_tail_strategy = TailStrategy::RoundUp;
+            } else if (stage_idx == 0) {
                 // Pure stages that access the input use shiftinwards
-                tail_strategy = TailStrategy::ShiftInwards;
+                pure_var_tail_strategy = TailStrategy::ShiftInwards;
+            } else {
+                // For pure vars in update stages that access the
+                // input, it's not safe to round up or redundantly
+                // recompute
+                pure_var_tail_strategy = TailStrategy::GuardWithIf;
             }
 
             if (!size.empty()) {
@@ -2703,11 +2706,17 @@ struct LoopNest {
                         }
                         if (split_factor > 1) {
                             VarOrRVar vec(Var(innermost_pure_var->var.name() + "_vec"));
+                            auto tail_strategy = pure_var_tail_strategy;
+                            if (stage_idx != 0 && !innermost_pure_var->outermost) {
+                                // Ugh, we'll be using vector predication
+                                tail_strategy = TailStrategy::GuardWithIf;
+                            }
                             s.split(innermost_pure_var->var, innermost_pure_var->var, vec, split_factor, tail_strategy)
                                 .vectorize(vec);
                             FuncVars::FuncVar v = *innermost_pure_var;
                             v.extent = split_factor;
                             v.var = vec;
+                            v.outermost = false;
                             innermost_pure_var->extent += split_factor - 1;
                             innermost_pure_var->extent /= split_factor;
                             vars.vars.insert(vars.vars.begin(), v);
@@ -2736,6 +2745,12 @@ struct LoopNest {
                                 inner = RVar(parent.var.name() + "i");
                             }
                             debug(0) << "Splitting " << parent.var.name() << " by " << factor << "\n";
+                            debug(0) << "Outermost: " << parent.outermost << " stage_idx: " << stage_idx << "\n";
+                            auto tail_strategy = pure_var_tail_strategy;
+                            // If it's an RVar, or not the outermost split and we're in an update, we need a guard with if instead.
+                            if (parent.var.is_rvar || (stage_idx != 0 && !parent.outermost)) {
+                                tail_strategy = TailStrategy::GuardWithIf;
+                            }
                             s.split(parent.var, outer, inner, (int)factor, tail_strategy);
                             v = parent;
                             parent.var = outer;
@@ -2743,6 +2758,7 @@ struct LoopNest {
                             v.var = inner;
                             v.extent = factor;
                             v.parallel = false;
+                            v.outermost = false;
                         }
                         new_inner.push_back(v);
                     }
@@ -2854,7 +2870,7 @@ struct State {
 
             int num_stages = (int)features.size();
 
-            const int schedule_feat_size = 25;
+            const int schedule_feat_size = 25; // TODO: now 26, but model not updated yet
 
             Runtime::Buffer<float> schedule_features;
 
@@ -2872,12 +2888,6 @@ struct State {
                     const int64_t *sched_stats = (const int64_t *)(&feat);
                     for (int i = 0; i < schedule_feat_size; i++) {
                         schedule_features(i, stage) = sched_stats[i];
-                    }
-
-                    // HACK: The current weights were trained with inlined Funcs not having parallelism features set
-                    if (feat.inlined_calls > 0) {
-                        schedule_features(8, stage) = 0;
-                        schedule_features(9, stage) = 0;
                     }
 
                     stage += 1;
@@ -2909,21 +2919,24 @@ struct State {
                     per_element_compute_cost += pipeline_feat[i];
                 }
 
-                // We can only compute in multiples of the vector size
-                /*
-                  if (feat.inlined_calls == 0) {
-                  int64_t vectors = (feat.innermost_pure_loop_extent + stage.vector_size - 1) / stage.vector_size;
-                  vectors *= feat.points_computed_total / feat.innermost_pure_loop_extent;
-                  compute_cost = per_element_compute_cost * vectors * stage.vector_size;
-                  // TODO: doesn't capture compute inflation on stages inlined into this one! Need vector overcompute as a feature, probably
-                  }
-                */
+                // Assume that narrow types are cheaper because they vectorize wider.
+                compute_cost *= 8.0 / feat.native_vector_size; // Relative to fp32
+
                 compute_cost = per_element_compute_cost * feat.points_computed_total;
 
                 // Figure out vector overcompute
                 const int native_vector_size = feat.native_vector_size;
                 const double idle_simd_lanes = (double)native_vector_size / feat.vector_size;
-                const double vector_recompute = (double)feat.rounded_innermost_pure_loop_extent / feat.innermost_pure_loop_extent;
+
+                // If ShiftInwards or RoundUp, rounding up to a whole
+                // number of vectors is a reasonable estimate of cost
+                // const double vector_recompute = (double)feat.rounded_innermost_pure_loop_extent / feat.innermost_pure_loop_extent;
+
+                // If GuardWithIf, we must assume the tail scalarized
+                // and that each element costs as much as an entire
+                // vector
+                const int tail = feat.innermost_pure_loop_extent + feat.vector_size - feat.rounded_innermost_pure_loop_extent;
+                const double vector_recompute = (double)(feat.innermost_pure_loop_extent - tail + tail * feat.vector_size) / feat.innermost_pure_loop_extent;
 
                 // Inlining saves a call node, which in our cost
                 // model costs...
