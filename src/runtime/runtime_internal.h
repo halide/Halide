@@ -155,6 +155,11 @@ WEAK int halide_trace_helper(void *user_context,
                              int parent_id, int value_index, int dimensions,
                              const char *trace_tag);
 
+struct halide_pseudostack_slot_t {
+    void *ptr;
+    size_t size;
+};
+
 }  // extern "C"
 
 /** A macro that calls halide_print if the supplied condition is

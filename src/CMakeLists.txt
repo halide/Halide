@@ -73,6 +73,7 @@ set(RUNTIME_CPP
   prefetch
   profiler
   profiler_inlined
+  pseudostack
   qurt_allocator
   qurt_hvx
   qurt_hvx_vtcm
