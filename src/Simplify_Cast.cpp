@@ -3,7 +3,7 @@
 namespace Halide {
 namespace Internal {
 
-Expr Simplify::visit(const Cast *op, ConstBounds *bounds) {
+Expr Simplify::visit(const Cast *op, ExprInfo *bounds) {
     // We don't try to reason about bounds through casts for now
     Expr value = mutate(op->value, nullptr);
 

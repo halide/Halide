@@ -117,7 +117,7 @@ Stmt Simplify::visit(const AssertStmt *op) {
 }
 
 Stmt Simplify::visit(const For *op) {
-    ConstBounds min_bounds, extent_bounds;
+    ExprInfo min_bounds, extent_bounds;
     Expr new_min = mutate(op->min, &min_bounds);
     Expr new_extent = mutate(op->extent, &extent_bounds);
 
@@ -126,13 +126,13 @@ Stmt Simplify::visit(const For *op) {
         min_bounds.max += extent_bounds.max - 1;
         min_bounds.max_defined &= extent_bounds.max_defined;
         bounds_tracked = true;
-        bounds_info.push(op->name, min_bounds);
+        bounds_and_alignment_info.push(op->name, min_bounds);
     }
 
     Stmt new_body = mutate(op->body);
 
     if (bounds_tracked) {
-        bounds_info.pop(op->name);
+        bounds_and_alignment_info.pop(op->name);
     }
 
     if (is_no_op(new_body)) {

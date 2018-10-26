@@ -3,7 +3,7 @@
 namespace Halide {
 namespace Internal {
 
-Expr Simplify::visit(const And *op, ConstBounds *bounds) {
+Expr Simplify::visit(const And *op, ExprInfo *bounds) {
     if (falsehoods.count(op)) {
         return const_false(op->type.lanes());
     }
