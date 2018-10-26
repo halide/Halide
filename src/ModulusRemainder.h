@@ -12,7 +12,7 @@ namespace Internal {
 
 /** The result of modulus_remainder analysis. These represent strided
  * subsets of the integers. A ModulusRemainder object m represents all
- * integers x such there exists y such that x == m.modulus * y +
+ * integers x such that there exists y such that x == m.modulus * y +
  * m.remainder. Note that under this definition a set containing a
  * single integer (a constant) is represented using a modulus of
  * zero. These sets can be combined with several mathematical
