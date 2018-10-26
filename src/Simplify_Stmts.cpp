@@ -125,6 +125,7 @@ Stmt Simplify::visit(const For *op) {
     if (min_bounds.min_defined || (min_bounds.max_defined && extent_bounds.max_defined)) {
         min_bounds.max += extent_bounds.max - 1;
         min_bounds.max_defined &= extent_bounds.max_defined;
+        min_bounds.alignment = ModulusRemainder{};
         bounds_tracked = true;
         bounds_and_alignment_info.push(op->name, min_bounds);
     }
