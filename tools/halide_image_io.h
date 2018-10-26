@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cstdarg>
+#include <cstddef>
 #include <cstdio>
 #include <cstdlib>
 #include <functional>
@@ -1444,7 +1445,7 @@ bool save_tiff(ImageType &im, const std::string &filename) {
     const char *c = (const char *)&MMII;
     header.byte_order_marker = (c[0] << 8) | c[1];
     header.version = 42;
-    header.ifd0_offset = __builtin_offsetof(halide_tiff_header, entry_count);
+    header.ifd0_offset = offsetof(halide_tiff_header, entry_count);
     header.entry_count = sizeof(header.entries) / sizeof(header.entries[0]);
 
     static_assert(sizeof(halide_tiff_tag) == 12, "Unexpected halide_tiff_tag packing");
@@ -1462,9 +1463,9 @@ bool save_tiff(ImageType &im, const std::string &filename) {
                         elements * bytes_per_element :
                         sizeof(header) + channels * sizeof(int32_t));  // for channels > 1, this is an offset
     tag++->assign32(282, 5, 1,
-                    __builtin_offsetof(halide_tiff_header, width_resolution));     // XResolution
+                    offsetof(halide_tiff_header, width_resolution));     // XResolution
     tag++->assign32(283, 5, 1,
-                    __builtin_offsetof(halide_tiff_header, height_resolution));    // YResolution
+                    offsetof(halide_tiff_header, height_resolution));    // YResolution
     tag++->assign16(284, 1, 2);                              // PlanarConfiguration -- planar
     tag++->assign16(296, 1, 1);                              // ResolutionUnit -- none
     tag++->assign16(339, 1, type_code_to_tiff_sample_type[im_type.code]);        // SampleFormat
