@@ -1021,13 +1021,8 @@ protected:
             _found_compute_level = true;
         }
 
-        if (_found_compute_level && store_level.match(for_loop->name)) { // See https://github.com/halide/Halide/issues/3388
+        if (_found_compute_level && store_level.match(for_loop->name)) {
             debug(3) << "Found store level at " << for_loop->name << "\n";
-            internal_assert(_found_compute_level)
-                << "The compute loop level was not found within the store loop level!\n"
-                << " Funcs: " << funcs << '\n'
-                << " compute_at: " << compute_level.to_string() << '\n'
-                << " store_at: " << store_level.to_string() << '\n';
             body = build_realize_group(body);
             _found_store_level = true;
         }
