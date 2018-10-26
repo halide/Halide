@@ -495,7 +495,7 @@ private:
     // all loads or all slice_vectors.
     static void sort_mpy_exprs(vector<MulExpr> &mpys) {
         struct LoadCompare {
-            bool operator()(const MulExpr &m1, const MulExpr &m2) {
+            bool operator()(const MulExpr &m1, const MulExpr &m2) const {
                 if (!m1.first.defined() || !m2.first.defined()) {
                     return false;
                 }
