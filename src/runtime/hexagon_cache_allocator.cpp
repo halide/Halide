@@ -33,7 +33,7 @@ inline void* free_unused_buffers(void* user_context) {
         if (temp2->used == false) {
             int err = HAP_cache_unlock(temp2->l2memory);
             if (err != 0) {
-                debug(user_context) << "Hexagon: HAP_cache_unlock failure\n";
+                error(user_context) << "Hexagon: HAP_cache_unlock failure\n";
                 return NULL;
             }
             // Set previous node details.
@@ -76,7 +76,7 @@ inline void *hexagon_cache_pool_get (void *user_context, size_t size, bool retry
     // If we are still here that means temp was null.
     temp = (pcache_pool) malloc(sizeof(hexagon_cache_pool_t));
     if (temp == NULL) {
-        debug(user_context) << "Hexagon: Cache Pool Allocation Failed.\n";
+        error(user_context) << "Hexagon: Cache Pool Allocation Failed.\n";
         return NULL;
     }
     uint8_t *mem = (uint8_t *)HAP_cache_lock(sizeof(char) * size, NULL);
@@ -87,11 +87,11 @@ inline void *hexagon_cache_pool_get (void *user_context, size_t size, bool retry
         prev = prev_node;
         if (mem == NULL) {
             free(temp);
-            debug(user_context) << "Hexagon: HAP_cache_lock failed.\n";
+            error(user_context) << "Hexagon: HAP_cache_lock failed.\n";
             return NULL;
         }
     } else if (mem == NULL) {
-        debug(user_context) << "Hexagon: HAP_cache_lock failed.\n";
+        error(user_context) << "Hexagon: HAP_cache_lock failed.\n";
         return NULL;
     }
     temp->l2memory = (void *)mem;

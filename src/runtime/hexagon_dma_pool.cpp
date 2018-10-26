@@ -126,7 +126,7 @@ WEAK int halide_hexagon_free_dma_resource(void *user_context, void *virtual_engi
             if (hexagon_dma_pool->dma_engine_list[i].engine_addr) {
                 int err = nDmaWrapper_FreeDma((t_DmaWrapper_DmaEngineHandle)hexagon_dma_pool->dma_engine_list[i].engine_addr);
                 if (err != QURT_EOK) {
-                    debug(user_context) << "Hexagon: Failure to Free DMA.\n";
+                    error(user_context) << "Hexagon: Failure to Free DMA.\n";
                     nRet = err;
                 }
             }
@@ -137,7 +137,7 @@ WEAK int halide_hexagon_free_dma_resource(void *user_context, void *virtual_engi
         // Free cache pool
         int err = halide_hexagon_free_l2_pool(user_context);
         if (err != 0) {
-            debug(user_context) << "Hexagon: Failure to free Cache Pool.\n";
+            error(user_context) << "Hexagon: Failure to free Cache Pool.\n";
             nRet = err;
         }
     }
