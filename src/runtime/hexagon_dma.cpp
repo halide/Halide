@@ -5,6 +5,7 @@
 #include "printer.h"
 #include "mini_hexagon_dma.h"
 #include "hexagon_dma_pool.h"
+#include "scoped_mutex_lock.h"
 
 namespace Halide { namespace Runtime { namespace Internal { namespace HexagonDma {
 
@@ -58,6 +59,7 @@ typedef struct desc_pool {
 typedef desc_pool_t *pdesc_pool;
 
 WEAK pdesc_pool dma_desc_pool = NULL;
+WEAK halide_mutex hexagon_desc_mutex;
 
 }}}}  // namespace Halide::Runtime::Internal::HexagonDma
 
@@ -69,7 +71,7 @@ namespace {
 // if it is free. In case of un availability of free descriptors, two new descriptors are allocated in the cache 
 // and make them available in the pool (128B is the minimum cache size that can be locked)
 void *desc_pool_get (void *user_context) {
-    // TODO: Add Mutex locking for access to dma_desc_pool ( To be Thread safe )
+    ScopedMutexLock lock(&hexagon_desc_mutex);
     pdesc_pool temp = dma_desc_pool;
     pdesc_pool prev = NULL;
     // Walk the list
@@ -118,11 +120,13 @@ void *desc_pool_get (void *user_context) {
 }
 
 void desc_pool_put (void *user_context, void *desc) {
+    ScopedMutexLock lock(&hexagon_desc_mutex);
     halide_assert(user_context, desc);
     pdesc_pool temp = dma_desc_pool;
     while (temp != NULL) {
         if (temp->descriptor == desc) {
             temp->used = false;
+            return;
         }
         temp = temp->next;
     }
@@ -130,7 +134,7 @@ void desc_pool_put (void *user_context, void *desc) {
 
 // DMA descriptor freeing logic, Two descriptors at a time will be freed. 
 void desc_pool_free (void *user_context) {
-    // TODO: Add Mutex locking for access to dma_desc_pool ( To be Thread safe )
+    ScopedMutexLock lock(&hexagon_desc_mutex);
     pdesc_pool temp = dma_desc_pool;
     while (temp != NULL) {
         pdesc_pool temp2 = temp;
@@ -252,13 +256,9 @@ int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_t *src,
         return halide_error_code_device_buffer_copy_failed;
     }
 
-    // Copy from Locked Cache to a temp DDR buffer
-    // TODO: This should be removed once the cache locking is addressed inside Halide Pipeline
     int buf_size = roi_stride * roi_height * src->type.bytes();
     debug(user_context) << " cache buffer size " << buf_size << "\n";
-    // TODO: Currently we can only handle 2-D RAW Format, Will revisit this later for > 2-D
-    // We need to make some adjustment to H, X and Y parameters for > 2-D RAW Format
-    // because DMA treat RAW as a flattened buffer
+
     t_StDmaWrapper_DmaTransferSetup stDmaTransferParm;
     stDmaTransferParm.eFmt                  = dev->fmt;
     stDmaTransferParm.u16FrameW             = dev->frame_width;
@@ -307,7 +307,7 @@ int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_t *src,
             << " W: " << stDmaTransferParm.u16RoiW << " H: " << stDmaTransferParm.u16RoiH << ")"
             << " dst->dim[1].min: " << dst->dim[1].min << "\n" ;
     }
-    // TODO Check for async
+
     void *dma_engine = halide_hexagon_allocate_from_dma_pool(user_context, dev->dma_engine);
     if (!dma_engine) {
         debug(user_context) << "Hexagon: Dma Engine Allocation Faliure\n";
@@ -329,7 +329,6 @@ int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_t *src,
         return halide_error_code_device_buffer_copy_failed;
     }
 
-    // TODO: separate out when Async feature (PR #2576) is ready and NUMA memory is addressed
     debug(user_context) << "Hexagon: " << dma_engine << " wait\n" ;
     nRet = nDmaWrapper_Wait(dma_engine);
     if (nRet != QURT_EOK) {
@@ -472,15 +471,14 @@ WEAK int halide_hexagon_dma_unprepare(void *user_context, struct halide_buffer_t
     debug(user_context)
         << "Hexagon: halide_hexagon_dma_unprepare (user_context: " << user_context
         << ", buf: " << *buf << ")\n";
-    //TODO Since we are moving the call to finishframe to dma pool . Need to check what we can do here
+    //TODO Now that FinishFrame is called by Hexagon DMA Pool Module, need to check if this function is redundant
     return halide_error_code_success;
 }
 
 WEAK int halide_hexagon_dma_buffer_copy(void *user_context, struct halide_buffer_t *src,
                                         const struct halide_device_interface_t *dst_device_interface,
                                         struct halide_buffer_t *dst) {
-    // We only handle copies to hexagon_dma or to host
-    // TODO: does device to device via DMA make sense?
+
     halide_assert(user_context, dst_device_interface == NULL ||
                   dst_device_interface == &hexagon_dma_device_interface);
 
@@ -504,8 +502,6 @@ WEAK int halide_hexagon_dma_buffer_copy(void *user_context, struct halide_buffer
     halide_assert(user_context, from_host || src->device);
     halide_assert(user_context, to_host || dst->device);
 
-    // For now only copy device to host.
-    // TODO: Figure out which other paths can be supported.
     halide_assert(user_context, (!from_host && to_host) || (from_host && !to_host));
 
     debug(user_context)
@@ -554,8 +550,6 @@ WEAK int halide_hexagon_dma_device_crop(void *user_context,
     dma_device_handle *dst_dev = malloc_device_handle();
     halide_assert(user_context, dst_dev);
     dst_dev->buffer = src_dev->buffer;
-    // TODO: It's messy to have both this offset and the buffer mins,
-    // try to reduce complexity here.
     dst_dev->offset_wrx = src_dev->offset_wrx + dst->dim[0].min - src->dim[0].min;
     dst_dev->offset_wry = src_dev->offset_wry + dst->dim[1].min - src->dim[1].min;
     dst_dev->dma_engine = src_dev->dma_engine;

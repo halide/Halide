@@ -60,6 +60,7 @@ inline void *hexagon_dma_pool_get (void *user_context, void *virtual_engine_id) 
                 virtual_engine_addr->mapped_engines[virtual_engine_addr->num_of_engines] = j+1;
                 if (!hexagon_dma_pool->dma_engine_list[j].engine_addr) {
                     hexagon_dma_pool->dma_engine_list[j].engine_addr = (void *)hDmaWrapper_AllocDma();
+                    halide_assert(user_context, hexagon_dma_pool->dma_engine_list[j].engine_addr);
                 }
                 virtual_engine_addr->num_of_engines++;
                 return  hexagon_dma_pool->dma_engine_list[j].engine_addr;
@@ -83,6 +84,7 @@ inline int hexagon_dma_pool_put(void *user_context, void *dma_engine, void *virt
             return halide_error_code_success;
         }
     }
+    error(user_context) << "Hexagon DMA: Error in freeing a dma engine from a virtual engine\n";
     return halide_error_code_generic_error;
 }
 
