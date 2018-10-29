@@ -69,7 +69,8 @@ int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
 
     if (target.has_feature(Target::Metal)) {
-        printf("Temporarily skipping correctness_convolution with Metal.\n");
+        // See issue https://github.com/halide/Halide/issues/3408
+        printf("Temporarily skipping correctness_convolution with Metal: https://github.com/halide/Halide/issues/3408\n");
         return 0;
     }
 
