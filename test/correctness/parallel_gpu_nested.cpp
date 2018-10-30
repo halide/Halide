@@ -9,6 +9,12 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    if (get_jit_target_from_environment().has_feature(Target::Metal)) {
+        // See issue https://github.com/halide/Halide/issues/3408
+        printf("Temporarily skipping correctness_parallel_gpu_nested with Metal: https://github.com/halide/Halide/issues/3408\n");
+        return 0;
+    }
+
     Var x, y, z;
     Func f;
 
