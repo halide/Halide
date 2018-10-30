@@ -155,7 +155,9 @@ string Pipeline::auto_schedule(const Target &target, const MachineParams &arch_p
     user_assert(target.arch == Target::X86 || target.arch == Target::ARM ||
                 target.arch == Target::POWERPC || target.arch == Target::MIPS)
         << "Automatic scheduling is currently supported only on these architectures.";
-    if (target.has_feature(Target::NewAutoscheduler)) {
+    if (target.has_feature(Target::Autotune)) {
+        return generate_schedules_autotune(contents->outputs, target, arch_params);
+    } else if (target.has_feature(Target::NewAutoscheduler)) {
         return generate_schedules_new(contents->outputs, target, arch_params);
     } else {
         return generate_schedules(contents->outputs, target, arch_params);
@@ -986,7 +988,7 @@ void Pipeline::infer_input_bounds(RealizationArg outputs, const ParamMap &param_
 
     vector<size_t> query_indices;
     for (size_t i = 0; i < contents->inferred_args.size(); i++) {
-        if (args.store[i] == nullptr) {
+        if (args.store[i] == nullptr) { // HACK: Always reallocate inputs
             query_indices.push_back(i);
             InferredArgument ia = contents->inferred_args[i];
             internal_assert(ia.param.defined() && ia.param.is_buffer());

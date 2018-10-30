@@ -22,6 +22,10 @@ std::string generate_schedules_new(const std::vector<Function> &outputs,
                                    const Target &target,
                                    const MachineParams &arch_params);
 
+std::string generate_schedules_autotune(const std::vector<Function> &output_funcs,
+                                        const Target &target,
+                                        const MachineParams &params);
+
 void autoschedule_test();
 
 }

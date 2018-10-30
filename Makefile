@@ -840,6 +840,7 @@ endif
 
 BUILTIN_GENERATORS = $(SRC_DIR)/CostModelGenerator.cpp
 BUILTIN_PIPELINES = halide_autoscheduler_cost_model
+BUILTIN_PIPELINES += halide_autoscheduler_train_cost_model
 BUILTIN_PIPELINE_STATIC_LIBS = ${BUILTIN_PIPELINES:%=$(BUILD_DIR)/builtin_pipeline/%.a} $(BIN_DIR)/$(BUILTIN_RUNTIME_TARGET)/runtime.a
 
 # Add the Hexagon simulator to the rpath on Linux. (Not supported elsewhere, so no else cases.)
@@ -979,10 +980,12 @@ $(BUILD_DIR)/builtin_pipeline/%.a: $(BIN_DIR)/builtin_pipelines.generator
 	$< -o $(BUILD_DIR)/builtin_pipeline -g $* -e static_library target=$(BUILTIN_PIPELINE_TARGET)
 
 # We need this generator to build libHalide, so it can't link to
-# it. Instead it links to all the constituent object files.
-$(BIN_DIR)/builtin_pipelines.generator: $(BUILD_DIR)/GenGen.o $(BUILTIN_GENERATORS) $(OBJECTS) $(INITIAL_MODULES) 
+# it. Instead it links to all the constituent object files. By default
+# we don't rebuild this generator if other files in libHalide change -
+# it slows things down too much.
+$(BIN_DIR)/builtin_pipelines.generator: $(BUILD_DIR)/GenGen.o $(BUILTIN_GENERATORS) | $(OBJECTS) $(INITIAL_MODULES) 
 	@mkdir -p $(@D)
-	$(CXX) $(GEN_AOT_CXX_FLAGS) $^ -o $@ $(LLVM_STATIC_LIBS) $(LLVM_SYSTEM_LIBS) $(COMMON_LD_FLAGS)
+	$(CXX) $(GEN_AOT_CXX_FLAGS) $^ $(OBJECTS) $(INITIAL_MODULES) -o $@ $(LLVM_STATIC_LIBS) $(LLVM_SYSTEM_LIBS) $(COMMON_LD_FLAGS)
 
 $(BIN_DIR)/binary2cpp: $(ROOT_DIR)/tools/binary2cpp.cpp
 	@mkdir -p $(@D)

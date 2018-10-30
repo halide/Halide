@@ -1288,7 +1288,8 @@ typedef enum halide_target_feature_t {
     halide_target_feature_hexagon_dma = 56, ///< Enable Hexagon DMA buffers.
     halide_target_feature_embed_bitcode = 57,  ///< Emulate clang -fembed-bitcode flag.
     halide_target_feature_new_autoscheduler = 58, ///< Use the prototype second-generation autoscheduler
-    halide_target_feature_end = 59 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
+    halide_target_feature_autotune = 59, ///< Use the prototype second-generation autoscheduler
+    halide_target_feature_end = 60 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 
 /** This function is called internally by Halide in some situations to determine

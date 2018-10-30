@@ -10,6 +10,7 @@
 #include "RealizationOrder.h"
 #include "Simplify.h"
 #include "Substitute.h"
+#include "ThreadPool.h"
 #include "Util.h"
 #include "PartitionLoops.h"
 #include "../tools/halide_benchmark.h"
@@ -57,10 +58,14 @@ uint64_t get_dropout_threshold() {
     }
 }
 
+static uint64_t random_dropout_threshold = 100;
+
 bool random_dropout() {
-    static uint64_t threshold = get_dropout_threshold();
+    static bool init =
+        []() {random_dropout_threshold = get_dropout_threshold(); return true;}();
+    (void)init;
     uint64_t r = rand();
-    bool drop_it = (r % 100) >= threshold;
+    bool drop_it = (r % 100) >= random_dropout_threshold;
     return drop_it;
 }
 
@@ -2870,7 +2875,7 @@ struct State {
 
             int num_stages = (int)features.size();
 
-            const int schedule_feat_size = 25; // TODO: now 26, but model not updated yet
+            const int schedule_feat_size = 26;
 
             Runtime::Buffer<float> schedule_features;
 
@@ -3515,7 +3520,8 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
     IntrusivePtr<State> best;
 
     std::unordered_set<uint64_t> permitted_hashes;
-    for (int i = 0; i < 5; i++) {
+    int num_passes = (beam_size == 1) ? 1 : 5;
+    for (int i = 0; i < num_passes; i++) {
         auto pass = optimal_schedule_pass(dag, outputs, params, throughput_predictor, beam_size, i, permitted_hashes);
         debug(0) << "\nPass " << i << " result:\n";
         pass->dump();
@@ -3604,6 +3610,174 @@ std::string generate_schedules_new(const std::vector<Function> &outputs,
     return "";
 }
 
+bool autotuner_errored = false;
+void autotuner_error_handler(void *, const char *msg) {
+    autotuner_errored = true;
+    debug(0) << "Error during autotuning: " << msg << "\n";
+}
+
+std::string generate_schedules_autotune(const std::vector<Function> &output_funcs,
+                                        const Target &target,
+                                        const MachineParams &params) {
+    const int beam_size = 50;
+
+    ThroughputPredictorPipeline tp;
+
+    struct Trial {
+        std::unique_ptr<FunctionDAG> dag;
+        IntrusivePtr<State> optimal;
+        vector<Function> outputs;
+        map<string, Function> env;
+        Pipeline p;
+    };
+
+    const int max_history = 1024;
+    const int batch_size = 2;
+    vector<std::shared_ptr<Trial>> history;
+    Runtime::Buffer<float> runtimes(max_history);
+    size_t cursor = 0;
+
+    // Compute an environment
+    map<string, Function> env;
+    for (Function f : output_funcs) {
+        populate_environment(f, env);
+    }
+
+    // Use a thread pool for compilation jobs. LLVM is slow.
+    ThreadPool<void> thread_pool;
+
+    float learning_rate = 0.00001f;
+
+    for (int iter = 0;; iter++) {
+
+        size_t batch_start = cursor;
+
+        // Make a batch of schedules
+        for (int b = 0; b < batch_size; b++) {
+            // Exploitation
+            int bs = (b == 0) ? beam_size : 1;
+            // Exploration
+            random_dropout_threshold = (b == 0) ? 100 : 90;
+
+            // Create a deep-copy of the entire graph of Funcs.
+            vector<Function> outputs;
+            map<string, Function> local_env;
+            std::tie(outputs, local_env) = deep_copy(output_funcs, env);
+
+            // Autoschedule it
+            std::unique_ptr<FunctionDAG> dag { new FunctionDAG {outputs, params, target} };
+            std::shared_ptr<Trial> t { new Trial {std::move(dag), nullptr, outputs, local_env} };
+            t->optimal = optimal_schedule(*(t->dag), outputs, params, &tp, bs);
+            if (cursor == history.size()) {
+                history.emplace_back(std::move(t));
+            } else if (cursor < history.size()) {
+                history[cursor] = std::move(t);
+            } else {
+                internal_error << "Bad cursor: " << cursor << " " << history.size() << "\n";
+            }
+
+            // Apply the schedule
+            history[cursor]->optimal->apply_schedule(params);
+            cursor = cursor + 1;
+            if (cursor == max_history) cursor = 0;
+        }
+
+        // Compile them
+        vector<std::future<void>> jobs(batch_size);
+        for (int b = 0; b < batch_size; b++) {
+            debug(0) << "Compiling batch member " << b << "\n";
+            Trial *t = history[(batch_start + b) % max_history].get();
+            internal_assert(t->outputs.size() == 1) << "Multiple outputs not yet supported\n";
+            Function o = t->outputs[0];
+            t->p = Pipeline(Func(o));
+            internal_assert(o.output_types().size() == 1) << "Tuple outputs not yet supported\n";
+            jobs[b] = thread_pool.async([=]() {t->p.compile_jit(target);});
+        }
+
+        for (int b = 0; b < batch_size; b++) {
+            jobs[b].wait();
+        }
+
+        int best = -1;
+        size_t best_cursor = 0;
+        double best_runtime = 1e20;
+
+        for (int b = 0; b < batch_size; b++) {
+            debug(0) << "Benchmarking batch member " << b << "\n";
+            Trial *t = history[(batch_start + b) % max_history].get();
+            Function o = t->outputs[0];
+
+            // Make output buffers and run
+            vector<int> sz;
+            sz.resize(o.dimensions());
+            for (const auto &b : o.schedule().estimates()) {
+                int dim = 0;
+                for (dim = 0; dim < o.dimensions(); dim++) {
+                    if (o.args()[dim] == b.var) break;
+                }
+                internal_assert(dim < o.dimensions());
+                const int64_t *sz_ptr = as_const_int(b.extent);
+                sz[dim] = *sz_ptr;
+            }
+            Runtime::Buffer<> buf(o.output_types()[0], sz);
+
+            // Make some input buffers
+            t->p.infer_input_bounds(buf);
+            t->p.set_error_handler(autotuner_error_handler);
+
+            // Benchmark it
+            autotuner_errored = false;
+            size_t c = (batch_start + b) % max_history;
+            double ms = 1e3 * Tools::benchmark(6, 6, [&]() {t->p.realize(buf);});
+            if (autotuner_errored) {
+                internal_assert(!history.empty()) << "The very first run errored out\n";
+                runtimes(c) = runtimes(0);
+                history[c] = history[0];
+            } else {
+                runtimes(c) = ms;
+            }
+
+            if (runtimes(c) < best_runtime) {
+                best_runtime = runtimes(c);
+                best = b;
+                best_cursor = c;
+            }
+
+            debug(0) << "Runtime " << b << ": " << runtimes(c) << "\n";
+        }
+
+        debug(0) << "Best runtime in batch was " << best << " " << best_runtime << "\n";
+        history[best_cursor]->optimal->dump();
+
+        // Update the model weights
+
+        tp.reset();
+
+        // Find a dummy schedule to paste over any that failed
+
+        // First we enqueue all the features
+        for (size_t i = 0; i < history.size(); i++) {
+            history[i]->optimal->calculate_cost(*(history[i]->dag), params, &tp, false);
+        }
+
+        // Then run the predictor in training mode
+        if (history.size() >= 64) {
+            float old_loss = 1e20;
+            int i = 0;
+            for (; i < 1000; i++) {
+                float loss = tp.backprop(runtimes.cropped(0, 0, history.size()), learning_rate, old_loss);
+                debug(0) << "Loss: " << loss << "\n";
+                if (loss >= old_loss) break;
+                old_loss = loss;
+            }
+            // We want to size the learning rate such that we take about 20 steps
+            if (i > 25) learning_rate *= 1.1f;
+            if (i < 15) learning_rate *= 0.9f;
+        }
+        tp.save_weights();
+    }
+}
+
 void test_convnet_correctness() {
     int n = 1;
     int stages = 10;
@@ -3631,7 +3805,7 @@ void test_convnet_correctness() {
     }
 
     for (int i = 0; i < n; i++) {
-        for (int j = 0; j < 25; j++) {
+        for (int j = 0; j < 26; j++) {
             for (int k = 0; k < stages; k++) {
                 float val = distribution(generator);
                 schedule_features(i, j, k) = val;
@@ -4050,7 +4224,6 @@ void autoschedule_test() {
         debug(0) << "Time per schedule considered: " << (1000000 * t) / cost_calcs << " us\n";
     }
 
-
     if (1) {
         // A gather that only uses a small portion of a potentially
         // large LUT. The number of points computed should be less
@@ -4075,6 +4248,36 @@ void autoschedule_test() {
         optimal->calculate_cost(dag, params, tpp, true);
         if (tpp) tpp->evaluate_costs();
         optimal->dump();
+    }
+
+    // Autotune a small-footprint convolution. Disabled by default because this test does not currently terminate.
+    if (0) {
+        Func f("f"), g("g"), h("h");
+        f(x, y) = (x + y) * (x + 2*y) * (x + 3*y);
+        h(x, y) = (f(x-1, y-1) + f(x, y-1) + f(x+1, y-1) +
+                   f(x-1, y  ) + f(x, y  ) + f(x+1, y  ) +
+                   f(x-1, y+1) + f(x, y+1) + f(x+1, y-1));
+
+        h.estimate(x, 0, 5000).estimate(y, 0, 5000);
+        generate_schedules_autotune({h.function()}, target, params);
+    }
+
+    // Autotune a stencil chain. Disabled by default because this test does not currently terminate.
+    if (0) {
+        const int N = 8;
+        Func f[N];
+        f[0](x, y) = (x + y) * (x + 2*y) * (x + 3*y);
+        for (int i = 1; i < N; i++) {
+            Expr e = 0;
+            for (int dy = -2; dy <= 2; dy++) {
+                for (int dx = -2; dx <= 2; dx++) {
+                    e += f[i-1](x + dx, y + dy);
+                }
+            }
+            f[i](x, y) = e;
+        }
+        f[N-1].estimate(x, 0, 2048).estimate(y, 0, 2048);
+        generate_schedules_autotune({f[N-1].function()}, target, params);
     }
 }
 

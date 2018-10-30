@@ -16,15 +16,16 @@ void *halide_autoscheduler_train_cost_model = nullptr;
 using namespace Halide;
 
 // A model weight is either just an input, or an input and an output
-// (the derivative) depending on whether we're doing inference or
-// training.
+// (the updated weights and the ADAM state) depending on whether we're
+// doing inference or training.
 template<bool training> struct ModelWeight;
 
 template<>
 struct ModelWeight<false> : public GeneratorInput<Buffer<float>> {
     ModelWeight(const std::string &name, int dim) : GeneratorInput<Buffer<float>>(name, dim) {}
-    void backprop(const Derivative &d) {}
+    void backprop(const Derivative &d, Expr learning_rate) {}
     void set_shape(int s0, int s1 = 0, int s2 = 0) {
+        dim(0).set_stride(Expr()).dim(dimensions() - 1).set_stride(1);
         dim(0).set_bounds(0, s0);
         if (s1) dim(1).set_bounds(0, s1);
         if (s2) dim(2).set_bounds(0, s2);
@@ -35,11 +36,39 @@ template<>
 struct ModelWeight<true> : public GeneratorInput<Buffer<float>> {
     GeneratorOutput<Buffer<float>> grad;
 
-    ModelWeight(const std::string &name, int dim) : GeneratorInput<Buffer<float>>(name, dim), grad("d_loss_d_" + name, dim) {}
-    void backprop(const Derivative &d) {
-        grad(_) = d(*this)(_);
+    ModelWeight(const std::string &name, int dim) : GeneratorInput<Buffer<float>>(name, dim), grad("updated_" + name, dim + 1) {}
+    void backprop(const Derivative &d, Expr learning_rate) {
+        std::vector<Expr> args(dimensions() + 1);
+        for (auto &e : args) e = Var();
+        grad(args) = undef<float>();
+
+        args.pop_back();
+        Expr current_weight = (*this)(args);
+        Expr deriv = d(*this)(args);
+
+        args.push_back(0);
+        FuncRef new_weight = grad(args);
+        args.back() = 1;
+        FuncRef smoothed_deriv = grad(args);
+        args.back() = 2;
+        FuncRef smoothed_second_moment = grad(args);
+
+        // Update the first and second moment estimates
+        smoothed_deriv = 0.9f * smoothed_deriv + 0.1f * deriv;
+        smoothed_second_moment = 0.999f * smoothed_second_moment + 0.001f * pow(deriv, 2);
+
+        // Note that we're missing the correction for early
+        // timesteps. Shouldn't matter in the long run.
+
+        // Update the weights
+        Expr step = learning_rate * smoothed_deriv;
+        step /= sqrt(smoothed_second_moment) + 1e-8f;
+
+        new_weight = current_weight - step;
     }
     void set_shape(int s0, int s1 = 0, int s2 = 0) {
+        dim(0).set_stride(Expr()).dim(dimensions() - 1).set_stride(1);
+        // grad.dim(0).set_stride(Expr()).dim(dimensions() - 1).set_stride(1);
         dim(0).set_bounds(0, s0);
         grad.dim(0).set_bounds(0, s0);
         grad.bound(grad.args()[0], 0, s0);
@@ -53,6 +82,7 @@ struct ModelWeight<true> : public GeneratorInput<Buffer<float>> {
             grad.dim(2).set_bounds(0, s2);
             grad.bound(grad.args()[2], 0, s2);
         }
+        grad.dim(dimensions()).set_bounds(0, 3);
     }
 };
 
@@ -98,6 +128,10 @@ public:
     Weight filter6{ "filter6", 1 };
     Weight bias6{ "bias6", 0 };
 
+    // Some extra inputs for training mode. Really should be conditional on 'training'.
+    Input<float> learning_rate{ "learning_rate" };
+    Input<Buffer<float>> true_runtime{ "true_runtime", 1 };
+
     // Either outputs a prediction per batch element or a loss
     // aggregated across the batch, depending on training or inference
     Output<Buffer<float>> output{ "output", training ? 0 : 1 };
@@ -110,22 +144,10 @@ public:
         return BoundaryConditions::constant_exterior(f, 0.0f, bounds);
     }
 
-    void set_weight_shape(Weight &w, int x, int y, int z) {
-        w.dim(0).set_bounds(0, x).dim(1).set_bounds(0, y).dim(2).set_bounds(0, z);
-        if (training) {
-
-        }
-    }
-
     void generate() {
         Var c("c"), w("w"), n("n"), i("i"), j("j"), s("s");
 
         // The memory layout of the weights and stats is matrix-style
-        for (auto *w : {&filter1, &filter2, &filter3, &filter4,
-                    &filter5, &filter6, &head1_filter, &head2_filter}) {
-            w->dim(0).set_stride(Expr()).dim(w->dimensions() - 1).set_stride(1);
-        }
-
         for (auto *b : {&pipeline_mean, &pipeline_std} ) {
             b->dim(0).set_stride(Expr()).dim(b->dimensions() - 1).set_stride(1);
         }
@@ -145,7 +167,7 @@ public:
             (fast_log(schedule_features(n, i, r_s - first_valid) + 1) - schedule_mean(i)) / schedule_std(i);
 
         const int head1_channels = 20, head1_w = 56, head1_h = 7;
-        const int head2_channels = 20, head2_w = 25;
+        const int head2_channels = 20, head2_w = 26;
         const int conv1_channels = 40;
         const int conv2_channels = 40;
         const int conv3_channels = 80;
@@ -286,13 +308,14 @@ public:
                 .parallel(n, 2);
 
         } else {
-            Expr correct_prediction = 37.0f; // TODO
+            Expr correct_prediction = true_runtime(n);
             Func err;
-            err(n) = pow(prediction - correct_prediction, 2);
+            Expr delta = prediction - correct_prediction;
+            err(n) = delta * delta;
             RDom r_batch(0, batch_size);
             Expr loss = sum(err(r_batch));
 
-            output() = loss;
+            output() = loss / batch_size;
 
             auto d_loss_d = propagate_adjoints(output);
 
@@ -306,7 +329,7 @@ public:
                                  &filter6, &bias6};
 
             for (Weight *w : weights) {
-                w->backprop(d_loss_d);
+                w->backprop(d_loss_d, learning_rate);
             }
 
             // A simple schedule. We'd like to autoschedule this, but
