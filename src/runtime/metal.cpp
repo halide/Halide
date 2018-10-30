@@ -813,6 +813,10 @@ WEAK int halide_metal_run(void *user_context,
 
     commit_command_buffer(command_buffer);
 
+    // We deliberately don't release the function here; this was causing
+    // crashes on Mojave (issues #3395 and #3408).
+    // We're still releasing the pipeline state object, as that seems to not
+    // cause zombied objects.
     release_ns_object(pipeline_state);
 
     #ifdef DEBUG_RUNTIME
