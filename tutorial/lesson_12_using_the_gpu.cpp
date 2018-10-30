@@ -112,6 +112,12 @@ public:
             return false;
         }
 
+        if (target.has_feature(Target::Metal)) {
+            // See issue https://github.com/halide/Halide/issues/3408
+            printf("Temporarily skipping tutorial_lesson_12_using_the_gpu with Metal: https://github.com/halide/Halide/issues/3408\n");
+            return false;
+        }
+
         // If you want to see all of the OpenCL, Metal, CUDA or D3D 12 API
         // calls done by the pipeline, you can also enable the Debug flag.
         // This is helpful for figuring out which stages are slow, or when
