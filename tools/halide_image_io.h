@@ -1502,7 +1502,17 @@ bool save_tiff(ImageType &im, const std::string &filename) {
         }
     }
 
-    // Reorder the data according to the strides.
+    // If image is dense, we can write it in one fell swoop
+    if (elements * bytes_per_element == im.size_in_bytes()) {
+        if (!check(f.write_bytes(im.data(), im.size_in_bytes()), "TIFF write failed")) {
+            return false;
+        }
+        return true;
+    }
+
+    // Otherwise, write it out via manual traversal. (We use this ugly bit of
+    // code, rather than for_each_value()/for_each_element(), to avoid needing
+    // to explicitly instantiate code for each possible type here.)
     const int TEMP_SIZE = 4 * 1024;
     uint8_t temp[TEMP_SIZE];
     const int max_elements = TEMP_SIZE / bytes_per_element;
