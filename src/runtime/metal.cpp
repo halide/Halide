@@ -710,6 +710,11 @@ WEAK int halide_metal_run(void *user_context,
         return -1;
     }
 
+    // Retaining the function appears to solve crashes outlined in #3395 and #3408.
+    // Using NSZombieEnabled=YES for debugging pointed to the function being zombied before use.
+    retain_ns_object((objc_id)function);
+
+
     mtl_compute_pipeline_state *pipeline_state = new_compute_pipeline_state_with_function(metal_context.device, function);
     if (pipeline_state == 0) {
         error(user_context) << "Metal: Could not allocate pipeline state.\n";
