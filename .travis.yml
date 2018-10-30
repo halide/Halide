@@ -5,8 +5,6 @@ compiler:
   - gcc
 env:
   global:
-    - BAZEL_VERSION="0.6.1"
-    - JDK=openjdk8
     # The Travis Ubuntu Trusty environment we run in currently promises 2 cores,
     # so running lengthy make steps with -j2 is almost certainly a win.
     - MAKEFLAGS=-j2
@@ -30,8 +28,6 @@ before_install:
   - export CC=${CC_}
   - sudo add-apt-repository --yes ppa:ubuntu-toolchain-r/test/
   - sudo apt-get update
-  - wget https://github.com/bazelbuild/bazel/releases/download/"${BAZEL_VERSION}"/bazel_"${BAZEL_VERSION}"-linux-x86_64.deb
-  - sudo dpkg -i bazel_"${BAZEL_VERSION}"-linux-x86_64.deb
 install:
   - sudo apt-get -y --force-yes install ${CXX} ${CC} libedit-dev
   # Make gcc4.8 the default gcc version
