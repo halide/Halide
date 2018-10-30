@@ -117,10 +117,16 @@ public:
 
     // This class isn't final (and is subclassed from the Python binding
     // code, at least) so it needs a virtual dtor.
-    virtual ~Buffer() {}
+    virtual ~Buffer() = default;
 
     /** Make a null Buffer, which points to no Runtime::Buffer */
-    Buffer() {}
+    Buffer() = default;
+
+     /** Trivial copy constructor. */
+    Buffer(const Buffer &that) = default;
+
+     /** Trivial copy assignment operator. */
+    Buffer &operator=(const Buffer &that) = default;
 
     /** Make a Buffer from a Buffer of a different type */
     template<typename T2>
