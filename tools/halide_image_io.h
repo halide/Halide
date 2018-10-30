@@ -55,6 +55,11 @@ struct FormatInfo {
 
 namespace Internal {
 
+// Must be constexpr to allow use in case clauses.
+inline constexpr int halide_type_code(halide_type_code_t code, int bits) {
+    return (((int) code) << 8) | bits;
+}
+
 typedef bool (*CheckFunc)(bool condition, const char* msg);
 
 inline bool CheckFail(bool condition, const char* msg) {
@@ -1382,6 +1387,37 @@ struct halide_tiff_header {
 
 #pragma pack(pop)
 
+template<typename ElemType, int BUFFER_SIZE = 1024>
+struct ElemWriter {
+    ElemWriter(FileOpener *f) : f(f), next(&buf[0]), ok(true) {}
+    ~ElemWriter() { flush(); }
+
+    void operator()(const ElemType &elem) {
+        if (!ok) return;
+
+        *next++ = elem;
+        if (next == &buf[BUFFER_SIZE]) {
+            flush();
+        }
+    }
+
+    void flush() {
+        if (!ok) return;
+
+        if (next > buf) {
+            if (!f->write_bytes(buf, (next - buf) * sizeof(ElemType))) {
+                ok = false;
+            }
+            next = buf;
+        }
+    }
+
+    FileOpener * const f;
+    ElemType buf[BUFFER_SIZE];
+    ElemType *next;
+    bool ok;
+};
+
 // Note that this is a fairly simpleminded TIFF writer that doesn't
 // do any compression. It would be desirable to (optionally) support using libtiff
 // here instead, which would also allow us to provide a useful implementation
@@ -1510,43 +1546,35 @@ bool save_tiff(ImageType &im, const std::string &filename) {
         return true;
     }
 
-    // Otherwise, write it out via manual traversal. (We use this ugly bit of
-    // code, rather than for_each_value()/for_each_element(), to avoid needing
-    // to explicitly instantiate code for each possible type here.)
-    const int TEMP_SIZE = 4 * 1024;
-    uint8_t temp[TEMP_SIZE];
-    const int max_elements = TEMP_SIZE / bytes_per_element;
-    int counter = 0;
-    const uint8_t *base = (const uint8_t*) im.data();
-    for (int32_t dim3 = shape[3].min; dim3 < shape[3].extent + shape[3].min; ++dim3) {
-        for (int32_t dim2 = shape[2].min; dim2 < shape[2].extent + shape[2].min; ++dim2) {
-            for (int32_t dim1 = shape[1].min; dim1 < shape[1].extent + shape[1].min; ++dim1) {
-                for (int32_t dim0 = shape[0].min; dim0 < shape[0].extent + shape[0].min; ++dim0) {
-                    const int idx[] = {dim0, dim1, dim2, dim3};
-                    ptrdiff_t offset = 0;
-                    for (int i = 0; i < 4; i++) {
-                        offset += shape[i].stride * (idx[i] - shape[i].min);
-                    }
-                    const uint8_t *src = base + offset * bytes_per_element;
-                    void *dst = temp + counter * bytes_per_element;
-                    memcpy(dst, src, bytes_per_element);
+    // Otherwise, write it out via manual traversal.
+#define HANDLE_CASE(CODE, BITS, TYPE) \
+    case halide_type_code(CODE, BITS): { \
+        ElemWriter<TYPE> ew(&f); \
+        im.template as<const TYPE>().for_each_value(ew); \
+        if (!check(ew.ok, "TIFF write failed")) { \
+            return false; \
+        } \
+        break; \
+    }
 
-                    counter++;
-                    if (counter == max_elements) {
-                        counter = 0;
-                        if (!check(f.write_bytes(temp, max_elements * bytes_per_element), "TIFF write failed")) {
-                            return false;
-                        }
-                    }
-                }
-            }
-        }
-    }
-    if (counter > 0) {
-        if (!check(f.write_bytes(temp, counter * bytes_per_element), "TIFF write failed")) {
+    switch (halide_type_code((halide_type_code_t) im_type.code, im_type.bits)) {
+        HANDLE_CASE(halide_type_float, 32, float)
+        HANDLE_CASE(halide_type_float, 64, double)
+        HANDLE_CASE(halide_type_int, 8, int8_t)
+        HANDLE_CASE(halide_type_int, 16, int16_t)
+        HANDLE_CASE(halide_type_int, 32, int32_t)
+        HANDLE_CASE(halide_type_int, 64, int64_t)
+        HANDLE_CASE(halide_type_uint, 1, bool)
+        HANDLE_CASE(halide_type_uint, 8, uint8_t)
+        HANDLE_CASE(halide_type_uint, 16, uint16_t)
+        HANDLE_CASE(halide_type_uint, 32, uint32_t)
+        HANDLE_CASE(halide_type_uint, 64, uint64_t)
+        // Note that we don't attempt to handle halide_type_handle here.
+        default:
+            assert(false && "Unsupported type");
             return false;
-        }
     }
+#undef HANDLE_CASE
 
     return true;
 }
@@ -1604,11 +1632,6 @@ bool find_imageio(const std::string &filename, ImageIO<ImageType, check> *result
     }
     err += "\n";
     return check(false, err.c_str());
-}
-
-// Must be constexpr to allow use in case clauses.
-inline constexpr int halide_type_code(halide_type_code_t code, int bits) {
-    return (((int) code) << 8) | bits;
 }
 
 template<typename ImageType>
