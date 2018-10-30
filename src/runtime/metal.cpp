@@ -710,15 +710,9 @@ WEAK int halide_metal_run(void *user_context,
         return -1;
     }
 
-    // Retaining the function appears to solve crashes outlined in #3395 and #3408.
-    // Using NSZombieEnabled=YES for debugging pointed to the function being zombied before use.
-    retain_ns_object((objc_id)function);
-
-
     mtl_compute_pipeline_state *pipeline_state = new_compute_pipeline_state_with_function(metal_context.device, function);
     if (pipeline_state == 0) {
         error(user_context) << "Metal: Could not allocate pipeline state.\n";
-        release_ns_object(function);
         return -1;
     }
     set_compute_pipeline_state(encoder, pipeline_state);
@@ -768,7 +762,6 @@ WEAK int halide_metal_run(void *user_context,
             if (args_buffer == 0) {
                 error(user_context) << "Metal: Could not allocate arguments buffer.\n";
                 release_ns_object(pipeline_state);
-                release_ns_object(function);
                 return -1;
             }
             args_ptr = (char *)buffer_contents(args_buffer);
@@ -821,7 +814,6 @@ WEAK int halide_metal_run(void *user_context,
     commit_command_buffer(command_buffer);
 
     release_ns_object(pipeline_state);
-    release_ns_object(function);
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
