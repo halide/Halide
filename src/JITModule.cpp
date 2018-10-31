@@ -197,6 +197,7 @@ public:
         return result;
     }
 
+#if LLVM_VERSION < 70
     void work_around_llvm_bugs() {
 
         for (auto p : code_pages) {
@@ -231,6 +232,8 @@ public:
 #endif
         }
     }
+#endif
+
 };
 
 }
@@ -332,7 +335,9 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
 
     debug(2) << "Finalizing object\n";
     ee->finalizeObject();
+#if LLVM_VERSION < 70
     memory_manager->work_around_llvm_bugs();
+#endif
 
     // Do any target-specific post-compilation module meddling
     for (size_t i = 0; i < listeners.size(); i++) {
