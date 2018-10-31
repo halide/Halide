@@ -1486,12 +1486,6 @@ private:
 
     template<typename LetOrLetStmt>
     void visit_let(const LetOrLetStmt *op) {
-        std::string named_buffer_let;
-        if (op->value.type() == type_of<struct halide_buffer_t *>()) {
-            named_buffer_let = op->name;
-            buffer_lets[named_buffer_let] = op->value;
-        }
-
         using is_let_stmt = typename std::is_same<LetOrLetStmt, LetStmt>;
 
         // LetStmts can be deeply stacked, and this visitor is called
@@ -1514,6 +1508,10 @@ private:
             frames.emplace_back(op);
             Frame &f = frames.back();
             push_var(op->name);
+
+            if (op->value.type() == type_of<struct halide_buffer_t *>()) {
+                buffer_lets[op->name] = op->value;
+            }
 
             if (is_let_stmt::value) {
                 f.vi = get_var_instance(op->name);
@@ -1570,6 +1568,10 @@ private:
             // Pop the value bounds
             scope.pop(it->op->name);
 
+            if (it->op->value.type() == type_of<struct halide_buffer_t *>()) {
+                buffer_lets.erase(it->op->name);
+            }
+
             if (!it->min_name.empty()) {
                 // We made up new names for the bounds of the
                 // value, and need to rewrap any boxes we're
@@ -1620,10 +1622,6 @@ private:
             }
 
             pop_var(it->op->name);
-        }
-
-        if (!named_buffer_let.empty()) {
-            buffer_lets.erase(named_buffer_let);
         }
     }
 
