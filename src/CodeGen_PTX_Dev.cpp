@@ -73,11 +73,7 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
     // Mark the buffer args as no alias
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer) {
-            #if LLVM_VERSION < 50
-            function->setDoesNotAlias(i+1);
-            #else
             function->addParamAttr(i, Attribute::NoAlias);
-            #endif
         }
     }
 
@@ -333,9 +329,6 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     internal_assert(target) << err_str << "\n";
 
     TargetOptions options;
-    #if LLVM_VERSION < 50
-    options.LessPreciseFPMADOption = true;
-    #endif
     options.PrintMachineCode = false;
     options.AllowFPOpFusion = FPOpFusion::Fast;
     options.UnsafeFPMath = true;
@@ -350,18 +343,12 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
         target_machine(target->createTargetMachine(triple.str(),
                                                    mcpu(), mattrs(), options,
                                                    llvm::Reloc::PIC_,
-#if LLVM_VERSION < 60
-                                                   llvm::CodeModel::Default,
-#else
                                                    llvm::CodeModel::Small,
-#endif
                                                    CodeGenOpt::Aggressive));
 
     internal_assert(target_machine.get()) << "Could not allocate target machine!";
 
-    #if LLVM_VERSION >= 60
     module->setDataLayout(target_machine->createDataLayout());
-    #endif
 
     // Set up passes
     llvm::SmallString<8> outstr;
@@ -391,11 +378,6 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     #define kDefaultDenorms 0
     #define kFTZDenorms     1
 
-    #if LLVM_VERSION <= 40
-    StringMap<int> reflect_mapping;
-    reflect_mapping[StringRef("__CUDA_FTZ")] = kFTZDenorms;
-    module_pass_manager.add(createNVVMReflectPass(reflect_mapping));
-    #else
     // Insert a module flag for the FTZ handling.
     module->addModuleFlag(llvm::Module::Override, "nvvm-reflect-ftz",
                           kFTZDenorms);
@@ -405,21 +387,14 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
             fn.addFnAttr("nvptx-f32ftz", "true");
         }
     }
-    #endif
 
     PassManagerBuilder b;
     b.OptLevel = 3;
-#if LLVM_VERSION >= 50
     b.Inliner = createFunctionInliningPass(b.OptLevel, 0, false);
-#else
-    b.Inliner = createFunctionInliningPass(b.OptLevel, 0);
-#endif
     b.LoopVectorize = true;
     b.SLPVectorize = true;
 
-    #if LLVM_VERSION > 40
     target_machine->adjustPassManager(b);
-    #endif
 
     b.populateFunctionPassManager(function_pass_manager);
     b.populateModulePassManager(module_pass_manager);
@@ -512,11 +487,7 @@ string CodeGen_PTX_Dev::get_current_kernel_name() {
 }
 
 void CodeGen_PTX_Dev::dump() {
-    #if LLVM_VERSION >= 50
     module->print(dbgs(), nullptr, false, true);
-    #else
-    module->dump();
-    #endif
 }
 
 std::string CodeGen_PTX_Dev::print_gpu_name(const std::string &name) {

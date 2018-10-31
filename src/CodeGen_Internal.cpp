@@ -402,9 +402,6 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
     get_md_bool(module.getModuleFlag("halide_per_instruction_fast_math_flags"), per_instruction_fast_math_flags);
 
     options = llvm::TargetOptions();
-    #if LLVM_VERSION < 50
-    options.LessPreciseFPMADOption = !per_instruction_fast_math_flags;
-    #endif
     options.AllowFPOpFusion = per_instruction_fast_math_flags ? llvm::FPOpFusion::Strict : llvm::FPOpFusion::Fast;
     options.UnsafeFPMath = !per_instruction_fast_math_flags;
     options.NoInfsFPMath = !per_instruction_fast_math_flags;
@@ -448,11 +445,7 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
     const llvm::Target *llvm_target = llvm::TargetRegistry::lookupTarget(module.getTargetTriple(), error_string);
     if (!llvm_target) {
         std::cout << error_string << std::endl;
-#if LLVM_VERSION < 60
-        llvm::TargetRegistry::printRegisteredTargetsForVersion();
-#else
         llvm::TargetRegistry::printRegisteredTargetsForVersion(llvm::outs());
-#endif
     }
     auto triple = llvm::Triple(module.getTargetTriple());
     internal_assert(llvm_target) << "Could not create LLVM target for " << triple.str() << "\n";
@@ -466,11 +459,7 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
                                                 mcpu, mattrs,
                                                 options,
                                                 llvm::Reloc::PIC_,
-#if LLVM_VERSION < 60
-                                                llvm::CodeModel::Default,
-#else
                                                 llvm::CodeModel::Small,
-#endif
                                                 llvm::CodeGenOpt::Aggressive));
 }
 

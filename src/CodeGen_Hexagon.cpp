@@ -47,14 +47,6 @@ CodeGen_Hexagon::CodeGen_Hexagon(Target t) : CodeGen_Posix(t) {
 #if !(WITH_HEXAGON)
     user_error << "hexagon not enabled for this build of Halide.\n";
 #endif
-#if LLVM_VERSION < 50
-    user_assert(!t.has_feature(Target::HVX_v62))
-        << "llvm 5.0 or later is required for Hexagon v62.\n";
-    user_assert(!t.has_feature(Target::HVX_v65))
-        << "llvm 5.0 or later is required for Hexagon v65.\n";
-    user_assert(!t.has_feature(Target::HVX_v66))
-        << "llvm 5.0 or later is required for Hexagon v66.\n";
-#endif
     user_assert(llvm_Hexagon_enabled) << "llvm build not configured with Hexagon target enabled.\n";
     if (target.has_feature(Halide::Target::HVX_v66)) {
         isa_version = 66;
@@ -430,9 +422,7 @@ void CodeGen_Hexagon::init_module() {
         // Downcast with saturation:
         { IPICK(is_128B, Intrinsic::hexagon_V6_vsathub),  u8v1,  "trunc_satub.vh",  {i16v2} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vsatwh),   i16v1, "trunc_sath.vw",   {i32v2} },
-#if LLVM_VERSION >= 50
         { IPICK(is_128B, Intrinsic::hexagon_V6_vsatuwuh), u16v1, "trunc_satuh.vuw",   {u32v2} },    // v62 or later
-#endif
 
         { IPICK(is_128B, Intrinsic::hexagon_V6_vroundhub), u8v1,  "trunc_satub_rnd.vh", {i16v2} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vroundhb),  i8v1,  "trunc_satb_rnd.vh",  {i16v2} },
@@ -485,16 +475,12 @@ void CodeGen_Hexagon::init_module() {
         // Adds/subtract of unsigned values with saturation.
         { IPICK(is_128B, Intrinsic::hexagon_V6_vaddubsat),    u8v1,  "satub_add.vub.vub",    {u8v1,  u8v1} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vadduhsat),    u16v1, "satuh_add.vuh.vuh",    {u16v1, u16v1} },
-#if LLVM_VERSION >= 50
         { IPICK(is_128B, Intrinsic::hexagon_V6_vadduwsat),    u32v1, "satuw_add.vuw.vuw",    {u32v1, u32v1} },  // v62 or later
-#endif
         { IPICK(is_128B, Intrinsic::hexagon_V6_vaddhsat),     i16v1, "sath_add.vh.vh",       {i16v1, i16v1} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vaddwsat),     i32v1, "satw_add.vw.vw",       {i32v1, i32v1} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vaddubsat_dv), u8v2,  "satub_add.vub.vub.dv", {u8v2,  u8v2} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vadduhsat_dv), u16v2, "satuh_add.vuh.vuh.dv", {u16v2, u16v2} },
-#if LLVM_VERSION >= 50
         { IPICK(is_128B, Intrinsic::hexagon_V6_vadduwsat_dv), u32v2, "satuw_add.vuw.vuw.dv", {u32v2, u32v2} },  // v62 or later
-#endif
         { IPICK(is_128B, Intrinsic::hexagon_V6_vaddhsat_dv),  i16v2, "sath_add.vh.vh.dv",    {i16v2, i16v2} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vaddwsat_dv),  i32v2, "satw_add.vw.vw.dv",    {i32v2, i32v2} },
 
@@ -510,9 +496,7 @@ void CodeGen_Hexagon::init_module() {
         // Absolute value:
         { IPICK(is_128B, Intrinsic::hexagon_V6_vabsh),   u16v1, "abs.vh", {i16v1} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vabsw),   u32v1, "abs.vw", {i32v1} },
-#if LLVM_VERSION >= 60
         { IPICK(is_128B, Intrinsic::hexagon_V6_vabsb),   u8v1, "abs.vb", {i8v1}, HvxIntrinsic::v65OrLater },
-#endif
 
         // Absolute difference:
         { IPICK(is_128B, Intrinsic::hexagon_V6_vabsdiffub),  u8v1,  "absd.vub.vub", {u8v1,  u8v1} },
@@ -534,10 +518,9 @@ void CodeGen_Hexagon::init_module() {
         { IPICK(is_128B, Intrinsic::hexagon_V6_vnavgub), i8v1,  "navg.vub.vub", {u8v1,  u8v1} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vnavgh),  i16v1, "navg.vh.vh",   {i16v1, i16v1} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vnavgw),  i32v1, "navg.vw.vw",   {i32v1, i32v1} },
-#if LLVM_VERSION >= 60
         { IPICK(is_128B, Intrinsic::hexagon_V6_vavgb),  i8v1,  "avg.vb.vb",   {i8v1, i8v1}, HvxIntrinsic::v65OrLater },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vavguw), u32v1, "avg.vuw.vuw", {u32v1, u32v1}, HvxIntrinsic::v65OrLater },
-#endif
+
         // Non-widening multiplication:
         { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyih),  i16v1, "mul.vh.vh",   {i16v1, i16v1} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyihb), i16v1, "mul.vh.b",    {i16v1, i8}, HvxIntrinsic::BroadcastScalarsToWords },
@@ -661,10 +644,8 @@ void CodeGen_Hexagon::init_module() {
         { IPICK(is_128B, Intrinsic::hexagon_V6_vaslw),  u32v1, "shl.vuw.uw", {u32v1, u32} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vaslh),  i16v1, "shl.vh.h",   {i16v1, i16} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vaslw),  i32v1, "shl.vw.w",   {i32v1, i32} },
-#if LLVM_VERSION >= 60
         { IPICK(is_128B, Intrinsic::hexagon_V6_vasrh_acc), i16v1, "add_shr.vh.vh.h", {i16v1, i16v1, i16}, HvxIntrinsic::BroadcastScalarsToWords | HvxIntrinsic::v65OrLater },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vaslh_acc), i16v1, "add_shl.vh.vh.h", {i16v1, i16v1, i16}, HvxIntrinsic::BroadcastScalarsToWords | HvxIntrinsic::v65OrLater },
-#endif
         { IPICK(is_128B, Intrinsic::hexagon_V6_vasrw_acc), i32v1, "add_shr.vw.vw.w", {i32v1, i32v1, i32} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vaslw_acc), i32v1, "add_shl.vw.vw.w", {i32v1, i32v1, i32} },
 
@@ -688,10 +669,8 @@ void CodeGen_Hexagon::init_module() {
         { IPICK(is_128B, Intrinsic::hexagon_V6_vnot),  u32v1, "not.vw",     {u32v1} },
 
         // Broadcasts
-#if LLVM_VERSION >= 50
         { IPICK(is_128B, Intrinsic::hexagon_V6_lvsplatb), u8v1,   "splat_v62.b", {u8}  },   // v62 or later
         { IPICK(is_128B, Intrinsic::hexagon_V6_lvsplath), u16v1,  "splat_v62.h", {u16} },   // v62 or later
-#endif
         { IPICK(is_128B, Intrinsic::hexagon_V6_lvsplatw), u32v1,  "splat.w", {u32} },
 
         // Bit counting
@@ -1627,23 +1606,11 @@ string CodeGen_Hexagon::mcpu() const {
 string CodeGen_Hexagon::mattrs() const {
     std::stringstream attrs;
     if (target.has_feature(Halide::Target::HVX_128)) {
-#if LLVM_VERSION < 60
-        attrs << "+hvx-double";
-#else
         attrs << "+hvx-length128b";
-#endif
     } else {
-#if LLVM_VERSION < 60
-        attrs << "+hvx";
-#else
         attrs << "+hvx-length64b";
-#endif
     }
-#if LLVM_VERSION >= 50
     attrs << ",+long-calls";
-#else
-    user_error << "LLVM version 5.0 or greater is required for the Hexagon backend";
-#endif
     return attrs.str();
 }
 
@@ -2147,7 +2114,7 @@ void CodeGen_Hexagon::visit(const Allocate *alloc) {
     }
 
     if (alloc->memory_type == MemoryType::LockedCache) {
-        // We are not allowing Customized memory allocation for Locked Cache 
+        // We are not allowing Customized memory allocation for Locked Cache
         user_assert(!alloc->new_expr.defined()) << "Custom Expression not allowed for Memory Type Locked Cache\n";
 
         Value *llvm_size = nullptr;
@@ -2158,7 +2125,7 @@ void CodeGen_Hexagon::visit(const Allocate *alloc) {
         } else {
             llvm_size = codegen_cache_allocation_size(alloc->name, alloc->type, alloc->extents);
         }
- 
+
         // Only allocate memory if the condition is true, otherwise 0.
         Value *llvm_condition = codegen(alloc->condition);
         if (llvm_size != nullptr) {

@@ -85,11 +85,7 @@ size_t finish_member_header(std::ostream &out, size_t size) {
 }
 
 std::string member_name(const llvm::NewArchiveMember &m) {
-#if LLVM_VERSION < 50
-    return llvm::sys::path::filename(m.Buf->getBufferIdentifier()).str();
-#else
     return m.MemberName.str();
-#endif
 }
 
 std::map<std::string, size_t> write_string_table(std::ostream &out,
@@ -145,11 +141,7 @@ void write_symbol_table(std::ostream &out,
 
     std::map<std::string, size_t> name_to_member_index;
 
-#if LLVM_VERSION < 50
-    const auto kFileMagicUnknown = llvm::sys::fs::file_magic::unknown;
-#else
     const auto kFileMagicUnknown = llvm::file_magic::unknown;
-#endif
 
     llvm::LLVMContext context;
     for (size_t i = 0, n = members.size(); i < n; ++i) {

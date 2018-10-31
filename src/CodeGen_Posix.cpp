@@ -212,11 +212,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
         // pseudostack_alloc to potentially reallocate.
         llvm::Function *malloc_fn = module->getFunction("pseudostack_alloc");
         internal_assert(malloc_fn) << "Could not find pseudostack_alloc in module\n";
-        #if LLVM_VERSION < 50
-        malloc_fn->setDoesNotAlias(0);
-        #else
         malloc_fn->setReturnDoesNotAlias();
-        #endif
 
         llvm::Function::arg_iterator arg_iter = malloc_fn->arg_begin();
         ++arg_iter;  // skip the user context *
@@ -236,11 +232,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
             // call malloc
             llvm::Function *malloc_fn = module->getFunction("halide_malloc");
             internal_assert(malloc_fn) << "Could not find halide_malloc in module\n";
-            #if LLVM_VERSION < 50
-            malloc_fn->setDoesNotAlias(0);
-            #else
             malloc_fn->setReturnDoesNotAlias();
-            #endif
 
             llvm::Function::arg_iterator arg_iter = malloc_fn->arg_begin();
             ++arg_iter;  // skip the user context *
