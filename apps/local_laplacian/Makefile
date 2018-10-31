@@ -24,6 +24,10 @@ $(BIN)/out.png: $(BIN)/process
 	@mkdir -p $(@D)
 	$(BIN)/process $(IMAGES)/rgb.png 8 1 1 10 $(BIN)/out.png
 
+$(BIN)/out.tiff: $(BIN)/process
+	@mkdir -p $(@D)
+	$(BIN)/process $(IMAGES)/rgb.png 8 1 1 10 $(BIN)/out.tiff
+
 # Build rules for generating a visualization of the pipeline using HalideTraceViz
 $(BIN)/viz/local_laplacian.a: $(BIN)/local_laplacian.generator
 	@mkdir -p $(@D)
@@ -43,7 +47,7 @@ $(BIN)/local_laplacian.mp4: $(BIN)/process_viz ../../bin/HalideTraceViz
 clean:
 	rm -rf $(BIN)
 
-test: $(BIN)/out.png
+test: $(BIN)/out.png $(BIN)/out.tiff
 
 viz: $(BIN)/local_laplacian.mp4
 	$(HL_VIDEOPLAYER) $^
