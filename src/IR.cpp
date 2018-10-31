@@ -911,6 +911,7 @@ Call::ConstString Call::strict_float = "strict_float";
 Call::ConstString Call::quiet_div = "quiet_div";
 Call::ConstString Call::quiet_mod = "quiet_mod";
 Call::ConstString Call::unsafe_promise_clamped = "unsafe_promise_clamped";
+Call::ConstString Call::gpu_thread_barrier = "gpu_thread_barrier";
 
 Call::ConstString Call::buffer_get_dimensions = "_halide_buffer_get_dimensions";
 Call::ConstString Call::buffer_get_min = "_halide_buffer_get_min";

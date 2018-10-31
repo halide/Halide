@@ -129,9 +129,10 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Cast *op) {
 }
 
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Call *op) {
-    if (op->name == "halide_gpu_thread_barrier") {
+    if (op->is_intrinsic(Call::gpu_thread_barrier)) {
         do_indent();
         stream << "barrier();\n";
+        print_assignment(op->type, "0");
     } else {
         CodeGen_GLSLBase::visit(op);
     }

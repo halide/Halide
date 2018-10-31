@@ -151,6 +151,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Evaluate *op)
     print_expr(op->value);
 }
 
+
 string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_extern_call(const Call *op) {
     internal_assert(!function_takes_user_context(op->name));
 
@@ -251,6 +252,20 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Broadcast *op
     rhs << ")";
 
     print_assignment(op->type.with_lanes(op->lanes), rhs.str());
+}
+
+void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Call *op) {
+    if (op->is_intrinsic(Call::gpu_thread_barrier)) {
+        // Halide only ever needs threadgroup memory fences:
+        // NOTE(marcos): using "WithGroupSync" here just to be safe, as a
+        // simple "GroupMemoryBarrier" is probably too relaxed for Halide
+        // (also note we need to return an integer)
+        do_indent();
+        stream << "GroupMemoryBarrierWithGroupSync();\n";
+        print_assignment(op->type, "0");
+    } else {
+        CodeGen_C::visit(op);
+    }
 }
 
 namespace {
@@ -1138,16 +1153,6 @@ void CodeGen_D3D12Compute_Dev::init_module() {
                << "#define atanh_f32(x) (log_f32((1+x)/(1-x))/2) \n"
                << "#define fast_inverse_f32      rcp   \n"
                << "#define fast_inverse_sqrt_f32 rsqrt \n"
-             // Halide only ever needs threadgroup memory fences:
-             // NOTE(marcos): using "WithGroupSync" here just to be safe, as a
-             // simple "GroupMemoryBarrier" is probably too relaxed for Halide
-             // (also note we need to return an integer)
-               << "\n"
-               << "int halide_gpu_thread_barrier() \n"
-                  "{ \n"
-                  "  GroupMemoryBarrierWithGroupSync(); \n"
-                  "  return 0; \n"
-                  "} \n"
                << "\n";
              //<< "}\n"; // close namespace
 
