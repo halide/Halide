@@ -150,6 +150,9 @@ void desc_pool_free (void *user_context) {
             free(temp2);
         }
     }
+
+    // Mark pool is empty, to avoid re-freeing
+    dma_desc_pool = NULL;
 }
 
 // User ptovided Image format to DMA format conversion.
@@ -418,6 +421,9 @@ WEAK int halide_hexagon_dma_deallocate_engine(void *user_context, void *dma_engi
         << ", dma_engine: " << dma_engine << ")\n";
 
     halide_assert(user_context, dma_engine);
+
+    // Its safe to free descriptors here, even on 1st engine of multi-engines deallocation, since its called outside of pipeline
+    // If descriptors are needed on pipeline re-entry, the pool will also re-populate
     desc_pool_free(user_context);
 
     // Free DMA Resources
