@@ -531,7 +531,8 @@ struct Call : public ExprNode<Call> {
         strict_float,
         quiet_div,
         quiet_mod,
-        unsafe_promise_clamped;
+        unsafe_promise_clamped,
+        gpu_thread_barrier;
 
     // We also declare some symbolic names for some of the runtime
     // functions that we want to construct Call nodes to here to avoid
