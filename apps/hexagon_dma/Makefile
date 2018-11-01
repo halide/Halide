@@ -28,6 +28,9 @@ $(info #################################)
 CXXFLAGS += -DSCHEDULE_ALL
 endif
 
+# un-comment to enable compiling with Address Sanitizer (ASAN)
+#CXXFLAGS += -fsanitize=address
+
 # default is no debug pipeline, for debugging must request via commandline DBG=n, where n is any number
 ifeq ($(DBG),)
 HEXAGON_DMA=hexagon_dma
