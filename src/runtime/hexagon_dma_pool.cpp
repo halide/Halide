@@ -67,7 +67,7 @@ inline void *hexagon_dma_pool_get (void *user_context, void *virtual_engine_id) 
             }
         }
     }
-    error(user_context) << "Hexagon DMA: Error in assigning a dma engine to a virtual engine\n";
+    error(user_context) << "Hexagon: Error in assigning a dma engine to a virtual engine\n";
     return NULL;
 }
 
@@ -84,7 +84,7 @@ inline int hexagon_dma_pool_put(void *user_context, void *dma_engine, void *virt
             return halide_error_code_success;
         }
     }
-    error(user_context) << "Hexagon DMA: Error in freeing a dma engine from a virtual engine\n";
+    error(user_context) << "Hexagon: Error in freeing a dma engine from a virtual engine\n";
     return halide_error_code_generic_error;
 }
 
@@ -108,7 +108,7 @@ WEAK int halide_hexagon_free_dma_resource(void *user_context, void *virtual_engi
             hexagon_dma_pool->dma_engine_list[num].assigned = false;
             hexagon_dma_pool->dma_engine_list[num].used = false;
             if (hexagon_dma_pool->dma_engine_list[num].engine_addr) {
-		nDmaWrapper_FinishFrame(hexagon_dma_pool->dma_engine_list[num].engine_addr);
+                nDmaWrapper_FinishFrame(hexagon_dma_pool->dma_engine_list[num].engine_addr);
             }
         }
         virtual_engine_addr->mapped_engines[j] = 0;
@@ -128,7 +128,7 @@ WEAK int halide_hexagon_free_dma_resource(void *user_context, void *virtual_engi
             if (hexagon_dma_pool->dma_engine_list[i].engine_addr) {
                 int err = nDmaWrapper_FreeDma((t_DmaWrapper_DmaEngineHandle)hexagon_dma_pool->dma_engine_list[i].engine_addr);
                 if (err != QURT_EOK) {
-                    error(user_context) << "Hexagon: Failure to Free DMA.\n";
+                    error(user_context) << "Hexagon: Failure to Free DMA\n";
                     nRet = err;
                 }
             }
@@ -139,7 +139,7 @@ WEAK int halide_hexagon_free_dma_resource(void *user_context, void *virtual_engi
         // Free cache pool
         int err = halide_hexagon_free_l2_pool(user_context);
         if (err != 0) {
-            error(user_context) << "Hexagon: Failure to free Cache Pool.\n";
+            error(user_context) << "Hexagon: Failure to free Cache Pool\n";
             nRet = err;
         }
     }
@@ -171,6 +171,8 @@ WEAK void *halide_hexagon_allocate_dma_resource(void *user_context) {
             return (void *) virtual_addr;
         }
     }
+
+    error(user_context) << "Hexagon: Failed to allocate engine\n";
     return NULL;
 }
 
