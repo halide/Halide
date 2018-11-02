@@ -1368,6 +1368,39 @@ private:
 
     using IRGraphVisitor::visit;
 
+    bool box_from_extended_crop(Expr e, Box &b) {
+        const Call *call_expr = e.as<Call>();
+        if (call_expr != nullptr) {
+            if (call_expr->name == Call::buffer_crop && call_expr->args.size() == 5) {
+                const Variable *in_buf = call_expr->args[2].as<Variable>();
+                const Call *mins_struct = call_expr->args[3].as<Call>();
+                const Call *extents_struct = call_expr->args[4].as<Call>();
+                if (in_buf != nullptr && mins_struct != nullptr && extents_struct != nullptr &&
+                    (in_buf->name == (func + ".buffer")) &&
+                    mins_struct->name == Call::make_struct && extents_struct->name == Call::make_struct) {
+                    b.resize(mins_struct->args.size());
+                    b.used = const_true();
+                    for (size_t i = 0; i < mins_struct->args.size(); i++) {
+                        Interval min_interval = bounds_of_expr_in_scope(mins_struct->args[i], scope, func_bounds);
+                        Interval max_interval = bounds_of_expr_in_scope(mins_struct->args[i] + extents_struct->args[i] - 1, scope, func_bounds);
+                        b[i] = Interval(min_interval.min, max_interval.max);
+                    }
+                    return true;
+                }
+            } else if (call_expr->name == Call::buffer_set_bounds && call_expr->args.size() == 4) {
+                const IntImm *dim = call_expr->args[1].as<IntImm>();
+                if (dim != nullptr && box_from_extended_crop(call_expr->args[0], b)) {
+                    internal_assert(dim->value >= 0 && dim->value < (int64_t)b.size()) << "box_from_extended_crop setting bounds for out of range dim.\n";
+                    Interval min_interval = bounds_of_expr_in_scope(call_expr->args[2], scope, func_bounds);
+                    Interval max_interval = bounds_of_expr_in_scope(call_expr->args[2] + call_expr->args[3] - 1, scope, func_bounds);
+                    b[dim->value] = Interval(min_interval.min, max_interval.max);
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     void visit(const Call *op) override {
         if (consider_calls) {
             if (op->is_intrinsic(Call::if_then_else)) {
@@ -1399,36 +1432,19 @@ private:
             }
         }
 
-        if (op->is_extern() && in_producer) {
+        if (op->is_extern() && (in_producer || consider_calls)) {
             if (op->name == "halide_buffer_copy") {
                 // Call doesn't yet have user_context inserted, so size is 3.
                 internal_assert(op->args.size() == 3) << "Unexpected arg list size for halide_buffer_copy\n";
-                if (equal(op->args[1], make_device_interface_call(DeviceAPI::Host))) {
-                    const Variable *var = op->args[2].as<Variable>();
-                    if (var != nullptr && var->type == type_of<halide_buffer_t *>()) {
-                        if (func.empty() || starts_with(var->name, func)) {
-                            const auto iter = buffer_lets.find(var->name);
-                            if (iter != buffer_lets.end()) {
-                                const Call *crop_call = iter->second.as<Call>();
-                                if (crop_call != nullptr && crop_call->name == Call::buffer_crop && crop_call->args.size() == 5) {
-                                    const Variable *in_buf = crop_call->args[2].as<Variable>();
-                                    const Call *mins_struct = crop_call->args[3].as<Call>();
-                                    const Call *extents_struct = crop_call->args[4].as<Call>();
-                                    if (in_buf != nullptr && mins_struct != nullptr && extents_struct != nullptr &&
-                                        (in_buf->name == (func + ".buffer")) &&
-                                        mins_struct->name == Call::make_struct && extents_struct->name == Call::make_struct) {
-                                        Box b(mins_struct->args.size());
-                                        b.used = const_true();
-                                        for (size_t i = 0; i < mins_struct->args.size(); i++) {
-                                            Interval min_interval = bounds_of_expr_in_scope(mins_struct->args[i], scope, func_bounds);
-                                            Interval max_interval = bounds_of_expr_in_scope(mins_struct->args[i] + extents_struct->args[i] - 1, scope, func_bounds);
-                                            b[i] = Interval(min_interval.min, max_interval.max);
-                                        }
-                                        merge_boxes(boxes[func], b);
-                                    }
-                                }
-
-
+                int var_index = consider_calls ? 0 : 2;
+                const Variable *var = op->args[var_index].as<Variable>();
+                if (var != nullptr && var->type == type_of<halide_buffer_t *>()) {
+                    if (func.empty() || starts_with(var->name, func)) {
+                        const auto iter = buffer_lets.find(var->name);
+                        if (iter != buffer_lets.end()) {
+                            Box b;
+                            if (box_from_extended_crop(iter->second, b)) {
+                                merge_boxes(boxes[func], b);
                             }
                         }
                     }
