@@ -85,17 +85,6 @@ public:
                     .store_at(output, ty)
                     .reorder_storage(c, x, y)
                     .fold_storage(x, tile_width * 2);
-
-#if 0
-// Async on tiled output is not working (hangs); possibly DMA task is waiting for semaphore
-// to be released by the processing task (causing dead-locking)
-//
-// TODO: enable this schedule when fix is available
-                work
-                    .async()
-                    .store_at(output, ty)
-                    .fold_storage(x, tile_width * 2);
-#endif
             break;
             case Schedule::Split: {
                 Var yo, yi;
@@ -112,7 +101,6 @@ public:
             }
             break;
             case Schedule::Split_Async: {
-// TODO: enhance with async() with fold_storage() for DMA write, when fix (see above) is available
                 Var yo, yi;
                 Expr fac = output.dim(1).extent()/2;
                 output
@@ -131,6 +119,16 @@ public:
             break;
         }
 
+#if 1
+// Async for output requires: https://github.com/halide/Halide/pull/3418
+//
+        if (use_dma_for_output && ((Schedule)schedule == Schedule::Async || (Schedule)schedule == Schedule::Split_Async)) {
+            work
+                .async()
+                .store_at(output, ty)
+                .fold_storage(x, tile_width * 2);
+        }
+#endif
         // Schedule the work in tiles (same for all DMA schedules).
         work
             .compute_at(output, tx)
