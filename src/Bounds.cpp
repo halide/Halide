@@ -1371,13 +1371,16 @@ private:
     bool box_from_extended_crop(Expr e, Box &b) {
         const Call *call_expr = e.as<Call>();
         if (call_expr != nullptr) {
-            if (call_expr->name == Call::buffer_crop && call_expr->args.size() == 5) {
+            if (call_expr->name == Call::buffer_crop) {
+                internal_assert(call_expr->args.size() == 5) << "Call::buffer_crop call with unexpected number of arguments.\n";
                 const Variable *in_buf = call_expr->args[2].as<Variable>();
                 const Call *mins_struct = call_expr->args[3].as<Call>();
                 const Call *extents_struct = call_expr->args[4].as<Call>();
-                if (in_buf != nullptr && mins_struct != nullptr && extents_struct != nullptr &&
-                    (in_buf->name == (func + ".buffer")) &&
-                    mins_struct->name == Call::make_struct && extents_struct->name == Call::make_struct) {
+                // Ignore crops that apply to a different buffer than the one being looked for.
+                if (in_buf != nullptr && (in_buf->name == (func + ".buffer"))) {
+                    internal_assert(mins_struct != nullptr && extents_struct != nullptr &&
+                                    mins_struct->name == Call::make_struct &&
+                                    extents_struct->name == Call::make_struct) << "BoxesTouched::box_from_extended_crop -- unexpected buffer_crop form.\n";
                     b.resize(mins_struct->args.size());
                     b.used = const_true();
                     for (size_t i = 0; i < mins_struct->args.size(); i++) {
@@ -1387,7 +1390,8 @@ private:
                     }
                     return true;
                 }
-            } else if (call_expr->name == Call::buffer_set_bounds && call_expr->args.size() == 4) {
+            } else if (call_expr->name == Call::buffer_set_bounds) {
+                internal_assert(call_expr->args.size() == 4) << "Call::buffer_set_bounds call with unexpected number of arguments.\n";
                 const IntImm *dim = call_expr->args[1].as<IntImm>();
                 if (dim != nullptr && box_from_extended_crop(call_expr->args[0], b)) {
                     internal_assert(dim->value >= 0 && dim->value < (int64_t)b.size()) << "box_from_extended_crop setting bounds for out of range dim.\n";
@@ -1436,15 +1440,27 @@ private:
             if (op->name == "halide_buffer_copy") {
                 // Call doesn't yet have user_context inserted, so size is 3.
                 internal_assert(op->args.size() == 3) << "Unexpected arg list size for halide_buffer_copy\n";
-                int var_index = consider_calls ? 0 : 2;
-                const Variable *var = op->args[var_index].as<Variable>();
-                if (var != nullptr && var->type == type_of<halide_buffer_t *>()) {
-                    if (func.empty() || starts_with(var->name, func)) {
-                        const auto iter = buffer_lets.find(var->name);
-                        if (iter != buffer_lets.end()) {
-                            Box b;
-                            if (box_from_extended_crop(iter->second, b)) {
-                                merge_boxes(boxes[func], b);
+                for (int i = 0; i < 2; i++) {
+                    // If considering calls, merge in the source bounds.
+                    // If considering provides, merge in the destination bounds.
+                    int var_index;
+                    if (i == 0 && consider_calls) {
+                        var_index = 0;
+                    } else if (i == 1 && consider_provides && in_producer) {
+                        var_index = 2;
+                    } else {
+                        continue;
+                    }
+                    
+                    const Variable *var = op->args[var_index].as<Variable>();
+                    if (var != nullptr && var->type == type_of<halide_buffer_t *>()) {
+                        if (func.empty() || starts_with(var->name, func)) {
+                            const auto iter = buffer_lets.find(var->name);
+                            if (iter != buffer_lets.end()) {
+                                Box b;
+                                if (box_from_extended_crop(iter->second, b)) {
+                                    merge_boxes(boxes[func], b);
+                                }
                             }
                         }
                     }
