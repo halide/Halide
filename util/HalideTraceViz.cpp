@@ -398,7 +398,7 @@ void calc_2d_size(const std::vector<Range> &dims, const std::vector<Point> &stri
         y->min = 2147483647;
         y->extent = -2147483647;
     }
-    if (current_dimension == dims.size()) {
+    if (current_dimension == (int)dims.size()) {
         x->min = std::min(x->min, x_off);
         x->extent = std::max(x->extent, x_off);
         y->min = std::min(y->min, y_off);
@@ -817,8 +817,8 @@ struct Surface {
             *dst = o;
         } else {
             // TODO: this could be done using 64-bit ops more simply
-            uint8_t *a = (uint8_t*)under;
-            uint8_t *b = (uint8_t*)over;
+            const uint8_t *a = (const uint8_t*)under;
+            const uint8_t *b = (const uint8_t*)over;
             uint8_t *d = (uint8_t*)dst;
             d[0] = (alpha * b[0] + (255 - alpha) * a[0]) / 255;
             d[1] = (alpha * b[1] + (255 - alpha) * a[1]) / 255;
@@ -898,7 +898,7 @@ struct Surface {
             const int min = coords[current_dimension * 2 + 0];
             const int extent = coords[current_dimension * 2 + 1];
             // If we don't have enough strides, assume subsequent dimensions have stride (0, 0)
-            const Point pt = current_dimension < fi.config.strides.size() ? fi.config.strides.at(current_dimension) : Point{0, 0};
+            const Point pt = current_dimension < (int)fi.config.strides.size() ? fi.config.strides.at(current_dimension) : Point{0, 0};
             x_off += pt.x * min;
             y_off += pt.y * min;
             for (int i = 0; i < extent; i++) {
@@ -983,7 +983,7 @@ public:
         uint32_t *image_px = image.data();
         uint32_t *text_px  = text_buf.data();
         uint32_t *blend_px = blend.data();
-        for (int i = 0; i < image.size(); i++) {
+        for (size_t i = 0; i < image.size(); i++) {
             // anim over anim_decay -> anim_decay
             composite_one(anim_decay_px, anim_px, anim_decay_px);
             // anim_decay over image -> blend

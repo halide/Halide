@@ -1,6 +1,5 @@
 from __future__ import print_function
 
-import addconstant
 import array
 import bit
 import sys

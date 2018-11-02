@@ -1337,6 +1337,7 @@ protected:
     void set_inputs(const std::vector<StubInput> &inputs);
 
     virtual void set_def_min_max();
+    virtual Expr get_def_expr() const;
 
     void verify_internals() override;
 
@@ -1687,8 +1688,13 @@ protected:
     using TBase = typename Super::TBase;
 
     const TBase def_{TBase()};
+    const Expr def_expr_;
 
 protected:
+    Expr get_def_expr() const override {
+        return def_expr_;
+    }
+
     void set_def_min_max() override {
         for (Parameter &p : this->parameters_) {
             p.set_scalar<TBase>(def_);
@@ -1699,16 +1705,36 @@ protected:
         return "Expr";
     }
 
+    // Expr() doesn't accept a pointer type in its ctor; add a SFINAE adapter
+    // so that pointer (aka handle) Inputs will get cast to uint64.
+    template <typename TBase2 = TBase, typename std::enable_if<!std::is_pointer<TBase2>::value>::type * = nullptr>
+    static Expr TBaseToExpr(const TBase2 &value) {
+        return Expr(value);
+    }
+
+    template <typename TBase2 = TBase, typename std::enable_if<std::is_pointer<TBase2>::value>::type * = nullptr>
+    static Expr TBaseToExpr(const TBase2 &value) {
+        return Expr((uint64_t) value);
+    }
+
 public:
-    explicit GeneratorInput_Scalar(const std::string &name,
-                                   const TBase &def = static_cast<TBase>(0))
-        : Super(name, IOKind::Scalar, {type_of<TBase>()}, 0), def_(def) {
+    explicit GeneratorInput_Scalar(const std::string &name)
+        : Super(name, IOKind::Scalar, {type_of<TBase>()}, 0), def_(static_cast<TBase>(0)), def_expr_(Expr()) {
+    }
+
+    GeneratorInput_Scalar(const std::string &name, const TBase &def)
+        : Super(name, IOKind::Scalar, {type_of<TBase>()}, 0), def_(def), def_expr_(TBaseToExpr(def)) {
+    }
+
+    GeneratorInput_Scalar(size_t array_size,
+                          const std::string &name)
+        : Super(array_size, name, IOKind::Scalar, {type_of<TBase>()}, 0), def_(static_cast<TBase>(0)), def_expr_(Expr()) {
     }
 
     GeneratorInput_Scalar(size_t array_size,
                           const std::string &name,
-                          const TBase &def = static_cast<TBase>(0))
-        : Super(array_size, name, IOKind::Scalar, {type_of<TBase>()}, 0), def_(def) {
+                          const TBase &def)
+        : Super(array_size, name, IOKind::Scalar, {type_of<TBase>()}, 0), def_(def), def_expr_(TBaseToExpr(def)) {
     }
 
     /** You can use this Input as an expression in a halide
@@ -1741,7 +1767,7 @@ protected:
 
 protected:
     void set_def_min_max() override {
-        GeneratorInput_Scalar<T>::set_def_min_max();
+        Super::set_def_min_max();
         // Don't set min/max for bool
         if (!std::is_same<TBase, bool>::value) {
             for (Parameter &p : this->parameters_) {
@@ -1752,14 +1778,23 @@ protected:
     }
 
 public:
-    explicit GeneratorInput_Arithmetic(const std::string &name,
-                                       const TBase &def = static_cast<TBase>(0))
+    explicit GeneratorInput_Arithmetic(const std::string &name)
+        : Super(name), min_(Expr()), max_(Expr()) {
+    }
+
+    GeneratorInput_Arithmetic(const std::string &name,
+                              const TBase &def)
         : Super(name, def), min_(Expr()), max_(Expr()) {
     }
 
     GeneratorInput_Arithmetic(size_t array_size,
+                              const std::string &name)
+        : Super(array_size, name), min_(Expr()), max_(Expr()) {
+    }
+
+    GeneratorInput_Arithmetic(size_t array_size,
                               const std::string &name,
-                              const TBase &def = static_cast<TBase>(0))
+                              const TBase &def)
         : Super(array_size, name, def), min_(Expr()), max_(Expr()) {
     }
 
@@ -1899,6 +1934,8 @@ public:
     HALIDE_FORWARD_METHOD(Func, compute_inline)
     HALIDE_FORWARD_METHOD(Func, compute_root)
     HALIDE_FORWARD_METHOD(Func, compute_with)
+    HALIDE_FORWARD_METHOD(Func, copy_to_device)
+    HALIDE_FORWARD_METHOD(Func, copy_to_host)
     HALIDE_FORWARD_METHOD(Func, define_extern)
     HALIDE_FORWARD_METHOD_CONST(Func, defined)
     HALIDE_FORWARD_METHOD(Func, estimate)
@@ -2074,18 +2111,21 @@ private:
 
         internal_assert(f.defined());
 
-        const auto &output_types = f.output_types();
-        user_assert(output_types.size() == 1)
-            << "Output " << this->name() << " should have size=1 but saw size=" << output_types.size() << "\n";
-
-        Buffer<> other(output_types.at(0), nullptr, std::vector<int>(f.dimensions(), 1));
-        user_assert(T::can_convert_from(other))
-            << "Cannot assign to the Output \"" << this->name()
-            << "\": the expression is not convertible to the same Buffer type and/or dimensions.\n";
+        if (TBase::has_static_halide_type) {
+            Buffer<> other(f.output_types().at(0), nullptr, std::vector<int>(f.dimensions(), 1));
+            user_assert(T::can_convert_from(other))
+                << "Cannot assign to the Output \"" << this->name()
+                << "\": the expression is not convertible to the same Buffer type and/or dimensions.\n";
+        }
 
         if (this->types_defined()) {
-            user_assert(output_types.at(0) == this->type())
-                << "Output " << this->name() << " should have type=" << this->type() << " but saw type=" << output_types.at(0) << "\n";
+            const auto &my_types = this->types();
+            user_assert(my_types.size() == f.output_types().size())
+                << "Output " << this->name() << " requires a Func with " << my_types.size() << " type(s) but tried to assign one with " << f.output_types().size() << " type(s)\n";
+            for (size_t i = 0; i < my_types.size(); i++) {
+                user_assert(my_types[i] == f.output_types().at(i))
+                    << "Output " << this->name() << " should have type[" << i << "]=" << my_types[i] << " but saw type[" << i << "]=" << f.output_types().at(i) << "\n";
+            }
         }
         if (this->dims_defined()) {
             user_assert(f.dimensions() == this->dims())
@@ -2100,19 +2140,21 @@ private:
 protected:
     using TBase = typename Super::TBase;
 
-    static std::vector<Type> my_types() {
-        return TBase::has_static_halide_type ? std::vector<Type>{ TBase::static_halide_type() } : std::vector<Type>{};
+    static std::vector<Type> my_types(const std::vector<Type> &t) {
+        if (TBase::has_static_halide_type) {
+            user_assert(t.empty()) << "Cannot pass a Type argument for an Output<Buffer> with a non-void static type\n";
+            return std::vector<Type>{ TBase::static_halide_type() };
+        }
+        return t;
     }
 
 protected:
     GeneratorOutput_Buffer(const std::string &name, const std::vector<Type> &t = {}, int d = -1)
-        : Super(name, IOKind::Buffer, my_types(), d) {
-        user_assert(t.empty()) << "You cannot specify a Type argument for Output<Buffer<>>\n";
+        : Super(name, IOKind::Buffer, my_types(t), d) {
     }
 
     GeneratorOutput_Buffer(size_t array_size, const std::string &name, const std::vector<Type> &t = {}, int d = -1)
-        : Super(array_size, name, IOKind::Buffer, my_types(), d) {
-        user_assert(t.empty()) << "You cannot specify a Type argument for Output<Buffer<>>\n";
+        : Super(array_size, name, IOKind::Buffer, my_types(t), d) {
     }
 
     HALIDE_NO_USER_CODE_INLINE std::string get_c_type() const override {
@@ -2772,13 +2814,7 @@ private:
         std::vector<Internal::GeneratorParamBase *> generator_params;
 
         // Ordered-list of non-null ptrs to Input<> fields.
-        // Only one of filter_inputs and filter_params may be nonempty.
         std::vector<Internal::GeneratorInputBase *> filter_inputs;
-
-        // Ordered-list of non-null ptrs to Param<> or ImageParam<> fields.
-        // Must be empty if the Generator has a build() method rather than generate()/schedule().
-        // Only one of filter_inputs and filter_params may be nonempty.
-        std::vector<Internal::RegisteredParameter *> filter_params;
 
         // Ordered-list of non-null ptrs to Output<> fields; empty if old-style Generator.
         std::vector<Internal::GeneratorOutputBase *> filter_outputs;
@@ -3250,7 +3286,7 @@ public:
     }
 
     struct Names {
-        std::vector<std::string> generator_params, filter_params, inputs, outputs;
+        std::vector<std::string> generator_params, inputs, outputs;
     };
     Names get_names() const;
 

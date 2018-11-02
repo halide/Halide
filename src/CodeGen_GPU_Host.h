@@ -32,7 +32,7 @@ public:
     virtual ~CodeGen_GPU_Host();
 
 protected:
-    void compile_func(const LoweredFunc &func, const std::string &simple_name, const std::string &extern_name);
+    void compile_func(const LoweredFunc &func, const std::string &simple_name, const std::string &extern_name) override;
 
     /** Declare members of the base class that must exist to help the
      * compiler do name lookup. Annoying but necessary, because the
@@ -49,7 +49,9 @@ protected:
     using CodeGen_CPU::get_user_context;
     using CodeGen_CPU::i32_t;
     using CodeGen_CPU::i64_t;
+    using CodeGen_CPU::i16_t;
     using CodeGen_CPU::i8_t;
+    using CodeGen_CPU::type_t_type;
     using CodeGen_CPU::init_module;
     using CodeGen_CPU::llvm_type_of;
     using CodeGen_CPU::module;
@@ -63,7 +65,7 @@ protected:
 
     /** Nodes for which we need to override default behavior for the GPU runtime */
     // @{
-    void visit(const For *);
+    void visit(const For *) override;
     // @}
 
     std::string function_name;

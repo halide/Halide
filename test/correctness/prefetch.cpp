@@ -14,7 +14,7 @@ class CollectPrefetches : public IRVisitor {
 private:
     using IRVisitor::visit;
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         if (op->is_intrinsic(Call::prefetch)) {
             prefetches.push_back(op->args);
         }
@@ -38,8 +38,8 @@ bool check(const vector<vector<Expr>> &expected, vector<vector<Expr>> &result) {
         }
         for (size_t j = 0; j < expected[i].size(); ++j) {
             if (!equal(expected[i][j], result[i][j])) {
-                std::cout << "Expect \"" << expected[i][j] << "\", got \""
-                          << result[i][j] << " instead\n";
+                std::cout << "Expect \"" << expected[i][j] << "\" at arg index "
+                          << j << ", got \"" << result[i][j] << " instead\n";
                 return false;
             }
         }
@@ -47,13 +47,22 @@ bool check(const vector<vector<Expr>> &expected, vector<vector<Expr>> &result) {
     return true;
 }
 
-int get_max_byte_size(const Target &t) {
+Expr get_max_byte_size(const Target &t) {
     // See \ref reduce_prefetch_dimension for max_byte_size
-    return (t.arch == Target::ARM) ? 32 : 64;
+    Expr max_byte_size;
+    if (t.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        max_byte_size = Expr();
+    } else if (t.arch == Target::ARM) {
+        max_byte_size = 32;
+    } else {
+        max_byte_size = 64;
+    }
+    return max_byte_size;
 }
 
-int get_stride(const Target &t, int elem_byte_size) {
-    return get_max_byte_size(t) / elem_byte_size;
+Expr get_stride(const Target &t, const Expr &elem_byte_size) {
+    Expr max_byte_size = get_max_byte_size(t);
+    return max_byte_size.defined() ? simplify(max_byte_size/elem_byte_size) : 1;
 }
 
 int test1(const Target &t) {
@@ -61,7 +70,7 @@ int test1(const Target &t) {
     Var x("x");
 
     f(x) = x;
-    g(x) = f(0) + f(1);
+    g(x) = f(0);
 
     f.compute_root();
     g.prefetch(f, x, 8);
@@ -84,7 +93,7 @@ int test2(const Target &t) {
     Var x("x");
 
     f(x) = x;
-    g(x) = f(0) + f(1);
+    g(x) = f(0);
 
     f.compute_root();
     g.specialize(p).prefetch(f, x, 8);
@@ -107,7 +116,7 @@ int test3(const Target &t) {
 
     f(x) = x;
     h(x) = f(x) + 1;
-    g(x) = h(0) + h(1);
+    g(x) = h(0);
 
     f.compute_root();
     g.split(x, xo, x, 32);
@@ -131,7 +140,7 @@ int test4(const Target &t) {
 
     f(x) = x;
     h(x) = f(x) + 1;
-    g(x) = h(0) + h(1);
+    g(x) = h(0);
 
     f.compute_root();
     h.compute_root();
@@ -150,7 +159,7 @@ int test4(const Target &t) {
     return 0;
 }
 
-}  // namespace
+}  // anonymous namespace
 
 int main(int argc, char **argv) {
     Target t = get_jit_target_from_environment();

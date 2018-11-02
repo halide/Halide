@@ -837,7 +837,7 @@ class InjectHexagonRpc : public IRMutator2 {
         params.push_back(module_state());
         params.push_back(pipeline_name);
         params.push_back(state_var_ptr(hex_name, type_of<int>()));
-        params.push_back(Call::make(type_of<size_t*>(), Call::make_struct, arg_sizes, Call::Intrinsic));
+        params.push_back(Call::make(type_of<uint64_t*>(), Call::make_struct, arg_sizes, Call::Intrinsic));
         params.push_back(Call::make(type_of<void**>(), Call::make_struct, arg_ptrs, Call::Intrinsic));
         params.push_back(Call::make(type_of<int*>(), Call::make_struct, arg_flags, Call::Intrinsic));
 
@@ -1032,7 +1032,8 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
         debug(1) << "Signing Hexagon code: " << input.pathname() << " -> " << output.pathname() << "\n";
 
         {
-            std::ofstream f(input.pathname());
+            std::ofstream f(input.pathname(), std::ios::out|std::ios::binary);
+
             f.write(shared_object.data(), shared_object.size());
             f.flush();
             internal_assert(f.good());
@@ -1047,7 +1048,7 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
             << " for cmd (" << cmd << ")";
 
         {
-            std::ifstream f(output.pathname());
+            std::ifstream f(output.pathname(), std::ios::in|std::ios::binary);
             f.seekg(0, std::ifstream::end);
             size_t signed_size = f.tellg();
             shared_object.resize(signed_size);

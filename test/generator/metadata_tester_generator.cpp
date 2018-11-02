@@ -11,6 +11,7 @@ public:
     Input<Buffer<uint8_t>> typed_input_buffer{ "typed_input_buffer", 3 };
     Input<Buffer<>> dim_only_input_buffer{ "dim_only_input_buffer", 3 };  // must be overridden to type=UInt(8)
     Input<Buffer<>> untyped_input_buffer{ "untyped_input_buffer" };  // must be overridden to {UInt(8), 3}
+    Input<int32_t> no_default_value{ "no_default_value" };
     Input<bool> b{ "b", true };
     Input<int8_t> i8{ "i8", 8, -8, 127 };
     Input<int16_t> i16{ "i16", 16, -16, 127 };
@@ -53,6 +54,7 @@ public:
     Output<Buffer<float>> type_only_output_buffer{ "type_only_output_buffer" };  // untyped outputs can have type and/or dimensions inferred
     Output<Buffer<>> dim_only_output_buffer{ "dim_only_output_buffer", 3 };  // untyped outputs can have type and/or dimensions inferred
     Output<Buffer<>> untyped_output_buffer{ "untyped_output_buffer" };  // untyped outputs can have type and/or dimensions inferred
+    Output<Buffer<>> tupled_output_buffer{ "tupled_output_buffer", { Float(32), Int(32) }, 3 };
     Output<float> output_scalar{ "output_scalar" };
     Output<Func[]> array_outputs{ "array_outputs", Float(32), 3 };  // must be overridden to size=2
     Output<Func[2]> array_outputs2{ "array_outputs2", { Float(32), Float(32) }, 3 };
@@ -100,6 +102,7 @@ public:
         typed_output_buffer(x, y, c) = f1(x, y, c);
         type_only_output_buffer(x, y, c) = f1(x, y, c);
         dim_only_output_buffer(x, y, c) = f1(x, y, c);
+        tupled_output_buffer(x, y, c) = Tuple(f2(x, y, c), cast<int32_t>(f2(x, y, c) + 1.5f));
         // verify that we can assign a Func to an Output<Buffer<>>
         untyped_output_buffer = f2;
         output_scalar() = 1234.25f;

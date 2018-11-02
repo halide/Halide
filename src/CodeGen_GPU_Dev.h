@@ -44,6 +44,12 @@ struct CodeGen_GPU_Dev {
      * during host codegen. */
     virtual std::string print_gpu_name(const std::string &name) = 0;
 
+    /** Allows the GPU device specific code to request halide_type_t
+     * values to be passed to the kernel_run routine rather than just
+     * argument type sizes.
+     */
+    virtual bool kernel_run_takes_types() const { return false; }
+
     static bool is_gpu_var(const std::string &name);
     static bool is_gpu_block_var(const std::string &name);
     static bool is_gpu_thread_var(const std::string &name);

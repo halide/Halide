@@ -100,14 +100,14 @@ class CheckRDomBounds : public IRGraphVisitor {
 
     using IRGraphVisitor::visit;
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         IRGraphVisitor::visit(op);
         if (op->call_type == Call::Halide) {
             offending_func = op->name;
         }
     }
 
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         if (!op->param.defined() && !op->image.defined()) {
             offending_free_var = op->name;
         }

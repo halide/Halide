@@ -67,12 +67,17 @@ if (BUILD_AOT_TUTORIAL)
   # so we can build the final executable.
   add_tutorial(lesson_10_aot_compilation_generate.cpp)
 
+  # LLVM may leak memory during Halide compilation. If projects are built with address sanitizer enabled,
+  # this may cause generators to fail, making it hard to use Halide and address sanitizer at the same time.
+  # To work around this, we execute generators with an environment setting to disable leak checking.
+  set(RUN_WITHOUT_LEAKCHECK ${CMAKE_COMMAND} -E env "ASAN_OPTIONS=detect_leaks=0")
+
   set(FILTER_H "lesson_10_halide.h")
   set(FILTER_LIB "lesson_10_halide${CMAKE_STATIC_LIBRARY_SUFFIX}")
   set(FILTER_DIR "${CMAKE_CURRENT_BINARY_DIR}")
   add_custom_command(OUTPUT "${FILTER_H}" "${FILTER_LIB}"
                      DEPENDS lesson_10_aot_compilation_generate
-                     COMMAND lesson_10_aot_compilation_generate
+                     COMMAND ${RUN_WITHOUT_LEAKCHECK} $<TARGET_FILE:lesson_10_aot_compilation_generate>
                      WORKING_DIRECTORY "${FILTER_DIR}"
                      COMMENT "generating stuff in ${FILTER_DIR}" )
   add_custom_target(exec_lesson_10_aot_compilation_generate

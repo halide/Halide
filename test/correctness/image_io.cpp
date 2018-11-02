@@ -25,10 +25,8 @@ void test_round_trip(Buffer<T> buf, std::string format) {
     // Check they're not too different.
     RDom r(reloaded);
     std::vector<Expr> args;
-    if (buf.dimensions() == 2) {
-        args = {r.x, r.y};
-    } else {
-        args = {r.x, r.y, r.z};
+    for (int i = 0; i < r.dimensions(); ++i) {
+        args.push_back(r[i]);
     }
     uint32_t diff = evaluate<uint32_t>(maximum(abs(cast<int>(buf(args)) - cast<int>(reloaded(args)))));
 
@@ -161,7 +159,7 @@ void do_test() {
 
     // Make some colored noise
     Func f;
-    Var x, y, c;
+    Var x, y, c, w;
     const float one = std::numeric_limits<T>::max();
     f(x, y, c) = cast<T>(clamp(make_noise(10)(x, y, c), 0.0f, 1.0f) * one);
 
@@ -200,7 +198,9 @@ void do_test() {
             test_round_trip(cb4, format);
 
             // Here we test matching strides
-            Buffer<T> funky_buf = f.realize(10, 10, 1, 3);
+            Func f2;
+            f2(x, y, c, w) = f(x, y, c);
+            Buffer<T> funky_buf = f2.realize(10, 10, 1, 3);
             funky_buf.fill(42);
 
             std::cout << "Testing format: " << format << " for " << halide_type_of<T>() << "x4\n";

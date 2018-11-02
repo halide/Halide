@@ -67,6 +67,7 @@ std::unique_ptr<llvm::Module> parse_bitcode_file(llvm::StringRef buf, llvm::LLVM
 // Universal CPP Initmods. Please keep sorted alphabetically.
 DECLARE_CPP_INITMOD(alignment_128)
 DECLARE_CPP_INITMOD(alignment_32)
+DECLARE_CPP_INITMOD(alignment_64)
 DECLARE_CPP_INITMOD(android_clock)
 DECLARE_CPP_INITMOD(android_host_cpu_count)
 DECLARE_CPP_INITMOD(android_io)
@@ -76,12 +77,20 @@ DECLARE_CPP_INITMOD(buffer_t)
 DECLARE_CPP_INITMOD(cache)
 DECLARE_CPP_INITMOD(can_use_target)
 DECLARE_CPP_INITMOD(cuda)
+#ifdef WITH_D3D12
+DECLARE_LL_INITMOD(d3d12_abi_patch_64)
+DECLARE_CPP_INITMOD(d3d12compute)
+#else
+DECLARE_NO_INITMOD(d3d12_abi_patch_64)
+DECLARE_NO_INITMOD(d3d12compute)
+#endif
 DECLARE_CPP_INITMOD(destructors)
 DECLARE_CPP_INITMOD(device_interface)
 DECLARE_CPP_INITMOD(errors)
 DECLARE_CPP_INITMOD(fake_thread_pool)
 DECLARE_CPP_INITMOD(float16_t)
 DECLARE_CPP_INITMOD(gpu_device_selection)
+DECLARE_CPP_INITMOD(hexagon_dma)
 DECLARE_CPP_INITMOD(hexagon_host)
 DECLARE_CPP_INITMOD(ios_io)
 DECLARE_CPP_INITMOD(linux_clock)
@@ -117,7 +126,10 @@ DECLARE_CPP_INITMOD(prefetch)
 DECLARE_CPP_INITMOD(profiler)
 DECLARE_CPP_INITMOD(profiler_inlined)
 DECLARE_CPP_INITMOD(qurt_allocator)
+DECLARE_CPP_INITMOD(hexagon_cache_allocator)
+DECLARE_CPP_INITMOD(hexagon_dma_pool)
 DECLARE_CPP_INITMOD(qurt_hvx)
+DECLARE_CPP_INITMOD(qurt_hvx_vtcm)
 DECLARE_CPP_INITMOD(qurt_init_fini)
 DECLARE_CPP_INITMOD(qurt_threads)
 DECLARE_CPP_INITMOD(qurt_threads_tsan)
@@ -662,6 +674,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                     modules.push_back(get_initmod_posix_threads(c, bits_64, debug));
                 }
                 modules.push_back(get_initmod_osx_get_symbol(c, bits_64, debug));
+                modules.push_back(get_initmod_osx_host_cpu_count(c, bits_64, debug));
             } else if (t.os == Target::Android) {
                 modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
@@ -772,6 +785,16 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 t.has_feature(Target::HVX_64) ||
                 t.has_feature(Target::HVX_128)) {
                 modules.push_back(get_initmod_alignment_128(c, bits_64, debug));
+            } else if (t.arch == Target::X86) {
+                // AVX-512 requires 64-byte alignment. Could only increase alignment
+                // if AVX-512 is in the target, but that falls afoul of linking
+                // multiple versions of a filter for different levels of x86 -- weak
+                // linking will pick one of the alignment modules unpredictably.
+                // Another way to go is to query the CPU features and align by
+                // 64 oonly if the procesor has AVX-512.
+                // The choice to go 64 all the time is for simplicity and on the idea
+                // that it won't be a noticeable cost in the majority of x86 usage.
+                modules.push_back(get_initmod_alignment_64(c, bits_64, debug));
             } else {
                 modules.push_back(get_initmod_alignment_32(c, bits_64, debug));
             }
@@ -834,6 +857,11 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 } else if (t.has_feature(Target::HVX_128)) {
                     modules.push_back(get_initmod_hvx_128_ll(c));
                 }
+                if (t.has_feature(Target::HVX_v65)) {
+                    modules.push_back(get_initmod_qurt_hvx_vtcm(c, bits_64,
+                                                                debug));
+                }
+
             } else {
                 modules.push_back(get_initmod_prefetch(c, bits_64, debug));
             }
@@ -934,9 +962,20 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 user_error << "Metal can only be used on ARM or X86 architectures.\n";
             }
         }
+        if (t.has_feature(Target::D3D12Compute)) {
+            user_assert(bits_64) << "D3D12Compute target only available on 64-bit targets for now.\n";
+            user_assert(t.os == Target::Windows) << "D3D12Compute target only available on Windows targets.\n";
+            modules.push_back(get_initmod_d3d12_abi_patch_64_ll(c));
+            modules.push_back(get_initmod_d3d12compute(c, bits_64, debug));
+        }
         if (t.arch != Target::Hexagon && t.features_any_of({Target::HVX_64, Target::HVX_128})) {
             modules.push_back(get_initmod_module_jit_ref_count(c, bits_64, debug));
             modules.push_back(get_initmod_hexagon_host(c, bits_64, debug));
+        }
+        if (t.has_feature(Target::HexagonDma)) {
+            modules.push_back(get_initmod_hexagon_cache_allocator(c, bits_64, debug));
+            modules.push_back(get_initmod_hexagon_dma(c, bits_64, debug));
+            modules.push_back(get_initmod_hexagon_dma_pool(c, bits_64, debug));
         }
     }
 

@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+
+	<UIVisualizer ServiceId="{A452AFEA-3DF6-46BB-9177-C0B08F318025}" Id="1" MenuName="Add to Image Watch"/>
+
+	<Type Name="halide_buffer_t">
+		<UIVisualizer ServiceId="{A452AFEA-3DF6-46BB-9177-C0B08F318025}" Id="1" />
+	</Type>
+
+	<Type Name="halide_buffer_t">
+		<Expand>
+			<Synthetic Name="[type]" Condition='type.code == 0'>
+				<DisplayString Condition='type.bits ==  8'>INT8</DisplayString>
+				<DisplayString Condition='type.bits == 16'>INT16</DisplayString>
+				<DisplayString Condition='type.bits == 32'>INT32</DisplayString>
+			</Synthetic>
+			<Synthetic Name="[type]" Condition='type.code == 1'>
+				<DisplayString Condition='type.bits ==  8'>UINT8</DisplayString>
+				<DisplayString Condition='type.bits == 16'>UINT16</DisplayString>
+				<DisplayString Condition='type.bits == 32'>UINT32</DisplayString>
+			</Synthetic>
+			<Synthetic Name="[type]" Condition='type.code == 2'>
+				<DisplayString Condition='type.bits == 16'>FLOAT16</DisplayString>
+				<DisplayString Condition='type.bits == 32'>FLOAT32</DisplayString>
+				<DisplayString Condition='type.bits == 64'>FLOAT64</DisplayString>
+			</Synthetic>
+			<Item Name="[channels]">dim[2].extent > 1 ? dim[2].extent : 1</Item>
+			<Item Name="[width]">dim[0].extent</Item>
+			<Item Name="[height]">dim[1].extent</Item>
+			<Item Name="[data]">host</Item>
+			<Item Name="[stride]">dim[1].stride * type.bits / 8</Item>
+		</Expand>
+	</Type>
+
+	<Type Name="Halide::Runtime::Buffer&lt;*&gt;">
+		<UIVisualizer ServiceId="{A452AFEA-3DF6-46BB-9177-C0B08F318025}" Id="1" />
+	</Type>
+	
+	<Type Name="Halide::Runtime::Buffer&lt;*&gt;">
+		<Expand>
+			<ExpandedItem>
+				buf
+			</ExpandedItem>
+		</Expand>
+	</Type>
+	
+	<Type Name="Halide::Buffer&lt;*&gt;">
+		<UIVisualizer ServiceId="{A452AFEA-3DF6-46BB-9177-C0B08F318025}" Id="1" />
+	</Type>
+	
+	<Type Name="Halide::Buffer&lt;*&gt;">
+		<Expand>
+			<ExpandedItem>
+				(Halide.dll!Halide::Internal::BufferContents*)contents.ptr
+			</ExpandedItem>
+		</Expand>
+	</Type>
+
+	<Type Name="Halide::Internal::BufferContents">
+		<Expand>
+			<ExpandedItem>
+				buf.buf
+			</ExpandedItem>
+		</Expand>
+	</Type>
+
+</AutoVisualizer>

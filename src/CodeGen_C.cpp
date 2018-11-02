@@ -30,6 +30,7 @@ extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeOpenCL_h[];
 extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeOpenGLCompute_h[];
 extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeOpenGL_h[];
 extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeQurt_h[];
+extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeD3D12Compute_h[];
 
 namespace {
 
@@ -118,6 +119,16 @@ inline float float_from_bits(uint32_t bits) {
 }
 
 template<typename T>
+inline uint8_t halide_count_leading_zeros(T v) {
+    int bits = sizeof(v) * 8;
+    while (v) {
+        v >>= 1;
+        bits--;
+    }
+    return bits;
+}
+
+template<typename T>
 inline T halide_cpp_max(const T &a, const T &b) {return (a > b) ? a : b;}
 
 template<typename T>
@@ -127,6 +138,16 @@ template<typename A, typename B>
 const B &return_second(const A &a, const B &b) {
     (void) a;
     return b;
+}
+
+template<typename A, typename B>
+inline auto quiet_div(const A &a, const B &b) -> decltype(a / b) {
+    return b == 0 ? static_cast<decltype(a / b)>(0) : (a / b);
+}
+
+template<typename A, typename B>
+inline auto quiet_mod(const A &a, const B &b) -> decltype(a % b) {
+    return b == 0 ? static_cast<decltype(a % b)>(0) : (a % b);
 }
 
 namespace {
@@ -160,7 +181,7 @@ public:
     using IRGraphVisitor::include;
     using IRGraphVisitor::visit;
 
-    void include(const Expr &e) {
+    void include(const Expr &e) override {
         if (e.type().is_vector()) {
             if (e.type().is_bool()) {
                 // bool vectors are always emitted as uint8 in the C++ backend
@@ -181,12 +202,12 @@ public:
 
     // GCC's __builtin_shuffle takes an integer vector of
     // the size of its input vector. Make sure this type exists.
-    void visit(const Shuffle *op) {
+    void visit(const Shuffle *op) override {
         vector_types_used.insert(Int(32, op->vectors[0].type().lanes()));
         IRGraphVisitor::visit(op);
     }
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         for_types_used.insert(op->for_type);
         IRGraphVisitor::visit(op);
     }
@@ -295,6 +316,9 @@ CodeGen_C::~CodeGen_C() {
             }
             if (target.has_feature(Target::OpenGL)) {
                 stream << halide_internal_runtime_header_HalideRuntimeOpenGL_h << '\n';
+            }
+            if (target.has_feature(Target::D3D12Compute)) {
+                stream << halide_internal_runtime_header_HalideRuntimeD3D12Compute_h << '\n';
             }
         }
         stream << "#endif\n";
@@ -1247,7 +1271,7 @@ class ExternCallPrototypes : public IRGraphVisitor {
 
     using IRGraphVisitor::visit;
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         IRGraphVisitor::visit(op);
 
         if (!processed.count(op->name)) {
@@ -1274,7 +1298,7 @@ class ExternCallPrototypes : public IRGraphVisitor {
         }
     }
 
-    void visit(const Allocate *op) {
+    void visit(const Allocate *op) override {
         IRGraphVisitor::visit(op);
         if (!op->free_function.empty()) {
             destructors.insert(op->free_function);
@@ -1954,6 +1978,10 @@ void CodeGen_C::visit(const Call *op) {
         string a0 = print_expr(op->args[0]);
         string a1 = print_expr(op->args[1]);
         rhs << a0 << " >> " << a1;
+    } else if (op->is_intrinsic(Call::count_leading_zeros)) {
+        internal_assert(op->args.size() == 1);
+        string a0 = print_expr(op->args[0]);
+        rhs << "halide_count_leading_zeros(" << a0 << ")";
     } else if (op->is_intrinsic(Call::lerp)) {
         internal_assert(op->args.size() == 3);
         Expr e = lower_lerp(op->args[0], op->args[1], op->args[2]);
@@ -2133,6 +2161,22 @@ void CodeGen_C::visit(const Call *op) {
         user_error << "Signed integer overflow occurred during constant-folding. Signed"
             " integer overflow for int32 and int64 is undefined behavior in"
             " Halide.\n";
+    } else if (op->is_intrinsic(Call::quiet_div)) {
+        internal_assert(op->args.size() == 2);
+        // Don't bother checking for zero denominator here; the quiet_div
+        // implementation will always do a runtime check and return zero
+        // (rather than failing at runtime).
+        string a = print_expr(op->args[0]);
+        string b = print_expr(op->args[1]);
+        rhs << "::quiet_div(" << a << ", " << b << ")";
+    } else if (op->is_intrinsic(Call::quiet_mod)) {
+        internal_assert(op->args.size() == 2);
+        // Don't bother checking for zero denominator here; the quiet_mod
+        // implementation will always do a runtime check and return zero
+        // (rather than failing at runtime).
+        string a = print_expr(op->args[0]);
+        string b = print_expr(op->args[1]);
+        rhs << "::quiet_mod(" << a << ", " << b << ")";
     } else if (op->is_intrinsic(Call::prefetch)) {
         user_assert((op->args.size() == 4) && is_one(op->args[2]))
             << "Only prefetch of 1 cache line is supported in C backend.\n";
@@ -2378,6 +2422,44 @@ void CodeGen_C::visit(const ProducerConsumer *op) {
         stream << "// consume " << op->name << '\n';
     }
     print_stmt(op->body);
+}
+
+void CodeGen_C::visit(const Fork *op) {
+    // TODO: This doesn't actually work with nested tasks
+    do_indent();
+    stream << "#pragma omp parallel\n";
+    open_scope();
+    do_indent();
+    stream << "#pragma omp single\n";
+    open_scope();
+    do_indent();
+    stream << "#pragma omp task\n";
+    open_scope();
+    print_stmt(op->first);
+    close_scope("");
+    do_indent();
+    stream << "#pragma omp task\n";
+    open_scope();
+    print_stmt(op->rest);
+    close_scope("");
+    do_indent();
+    stream << "#pragma omp taskwait\n";
+    close_scope("");
+    close_scope("");
+}
+
+void CodeGen_C::visit(const Acquire *op) {
+    string id_sem = print_expr(op->semaphore);
+    string id_count = print_expr(op->count);
+    open_scope();
+    do_indent();
+    stream << "while (!halide_semaphore_try_acquire(" << id_sem << ", " << id_count << "))\n";
+    open_scope();
+    do_indent();
+    stream << "#pragma omp taskyield\n";
+    close_scope("");
+    op->body.accept(this);
+    close_scope("");
 }
 
 void CodeGen_C::visit(const For *op) {

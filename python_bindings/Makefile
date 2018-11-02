@@ -5,7 +5,6 @@ ROOT_DIR = $(strip $(shell dirname $(THIS_MAKEFILE)))
 # These are set by Halide's Makefile when built via that path.
 HALIDE_PATH ?= $(ROOT_DIR)/..
 HALIDE_DISTRIB_PATH ?= $(HALIDE_PATH)/distrib
-HALIDE_RUNTIME ?= $(HALIDE_PATH)/bin/host/runtime.a
 BIN ?= $(ROOT_DIR)/bin
 # 'python' or 'python3'
 PYTHON ?= python3
@@ -72,6 +71,9 @@ $(MODULE): $(PY_OBJS) $(LIBHALIDE)
 	@mkdir -p $(@D)
 	$(CXX) $^ $(LDFLAGS) -shared -o $@
 
+# We don't want any of this auto-deleted
+.SECONDARY:
+
 $(BIN)/src/%.o: $(ROOT_DIR)/src/%.cpp
 	@mkdir -p $(@D)
 	$(CXX) $(CCFLAGS) -c $< -o $@
@@ -101,14 +103,30 @@ $(BIN)/%.so: $(BIN)/%_PyStub.o $(BIN)/PyStubImpl.o $(BIN)/%_generator.o $(LIBHAL
 	$(CXX) $^ $(LDFLAGS) -shared -o $@
 
 # Compile the generators:
-$(BIN)/%.gen: $(HALIDE_PATH)/tools/GenGen.cpp correctness/%_generator.cpp $(LIBHALIDE)
+$(BIN)/%.gen: $(HALIDE_DISTRIB_PATH)/tools/GenGen.cpp correctness/%_generator.cpp $(LIBHALIDE)
 	@mkdir -p $(@D)
 	$(CXX) $(CCFLAGS) $(LDFLAGS) $^ -o $@
+
+# Special generator for generating a runtime:
+$(BIN)/runtime.gen: $(HALIDE_DISTRIB_PATH)/tools/GenGen.cpp $(LIBHALIDE)
+	@mkdir -p $(@D)
+	$(CXX) $(CCFLAGS) $(LDFLAGS) $^ -o $@
+
+# Generate a runtime:
+$(BIN)/runtime.a: $(BIN)/runtime.gen
+	@mkdir -p $(@D)
+	$< -r runtime -o $(BIN) target=host
+
+# Which target features to use for which test targets.
+target_features_addconstant=-legacy_buffer_wrappers-no_runtime
+target_features_bit=-no_runtime
+target_features_user_context=-user_context-legacy_buffer_wrappers-no_runtime
 
 # Make the generator generate a Python extension:
 $(BIN)/%.py.c $(BIN)/%.cpp $(BIN)/%.h: $(BIN)/%.gen
 	LD_LIBRARY_PATH=$(HALIDE_DISTRIB_PATH)/bin $< -e h,cpp,py.c \
-	    -g $(notdir $(basename $<)) -o $(BIN) target=host
+	    -g $(notdir $(basename $<)) -o $(BIN) \
+	    target=host$(target_features_$(notdir $(basename $<)))
 
 # Compile the generated Python extension(s):
 $(BIN)/%.o: $(BIN)/%.cpp
@@ -119,9 +137,9 @@ $(BIN)/%.py.o: $(BIN)/%.py.c
 # The Python extension of the generator is already in $(BIN), and is named
 # the same, so put the Python extension of the function into ext/.
 # TODO: Python extensions of generators should have a _generator suffix.
-$(BIN)/ext/%.so: $(BIN)/%.py.o $(BIN)/%.o
+$(BIN)/ext/%.so: $(BIN)/%.py.o $(BIN)/%.o $(BIN)/runtime.a
 	@mkdir -p $(BIN)/ext
-	$(CXX) $(LDFLAGS) $^ $(HALIDE_RUNTIME) -shared -o $@
+	$(CXX) $(LDFLAGS) $^ -shared -o $@
 
 # Run the Python extension(s):
 %.run: $(ROOT_DIR)/correctness/%_test.py $(BIN)/ext/%.so
@@ -129,10 +147,11 @@ $(BIN)/ext/%.so: $(BIN)/%.py.o $(BIN)/%.o
 
 # TODO: In the optimal case, we'd do %.run on all our generators. Unfortunately,
 # every generator needs its own settings. See https://github.com/halide/Halide/issues/2977.
-.PHONY: test_correctness_bit_test test_correctness_addconstant_test test_correctness_pystub
+.PHONY: test_correctness_bit_test test_correctness_addconstant_test test_correctness_pystub test_correctness_user_context
 test_correctness_addconstant_test: addconstant.run ;
 test_correctness_bit_test: bit.run ;
-test_correctness_pystub: $(BIN)/simplestub.so $(BIN)/complexstub.so $(BIN)/buildmethod.so $(BIN)/partialbuildmethod.so $(BIN)/nobuildmethod.so
+test_correctness_user_context_test: user_context.run ;
+test_correctness_pystub: $(BIN)/simplestub.so $(BIN)/complexstub.so $(BIN)/partialbuildmethod.so $(BIN)/nobuildmethod.so
 
 APPS = $(shell ls $(ROOT_DIR)/apps/*.py)
 CORRECTNESS = $(shell ls $(ROOT_DIR)/correctness/*.py)

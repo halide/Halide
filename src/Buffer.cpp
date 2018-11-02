@@ -33,7 +33,13 @@ Expr buffer_accessor(const Buffer<> &buf, const std::vector<Expr> &args) {
             int_args.push_back(cast<int>(e));
         }
     }
-    return Call::make(buf, int_args);
+    Expr c = Call::make(buf, int_args);
+    user_assert(int_args.size() == (size_t)buf.dimensions())
+        << "Dimensionality mismatch accessing Buffer " << buf.name()
+        << ". There were " << int_args.size()
+        << " arguments, but the Buffer has " << buf.dimensions() << " dimensions:\n"
+        << "  " << c << "\n";
+    return c;
 }
 
 }  // namespace Internal

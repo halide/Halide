@@ -39,6 +39,14 @@ WEAK int halide_error_bad_type(void *user_context, const char *func_name,
     return halide_error_code_bad_type;
 }
 
+WEAK int halide_error_bad_dimensions(void *user_context, const char *func_name,
+                                     int32_t dimensions_given, int32_t correct_dimensions) {
+    error(user_context)
+        << func_name << " requires a buffer of exactly " << correct_dimensions
+        << " dimensions, but the buffer passed in has " << dimensions_given << " dimensions";
+    return halide_error_code_bad_dimensions;
+}
+
 WEAK int halide_error_access_out_of_bounds(void *user_context, const char *func_name,
                                            int dimension, int min_touched, int max_touched,
                                            int min_valid, int max_valid) {
@@ -275,6 +283,11 @@ WEAK int halide_error_host_and_device_dirty(void *user_context) {
 WEAK int halide_error_buffer_is_null(void *user_context, const char *routine) {
     error(user_context) << "Buffer pointer passed to " << routine << " is null.\n";
     return halide_error_code_buffer_is_null;
+}
+
+WEAK int halide_error_integer_division_by_zero(void *user_context) {
+    error(user_context) << "Integer division or modulo by zero.\n";
+    return halide_error_code_integer_division_by_zero;
 }
 
 }  // extern "C"

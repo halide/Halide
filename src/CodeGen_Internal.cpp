@@ -153,7 +153,9 @@ bool function_takes_user_context(const std::string &name) {
         "halide_device_and_host_malloc",
         "halide_device_sync",
         "halide_do_par_for",
+        "halide_do_loop_task",
         "halide_do_task",
+        "halide_do_async_consumer",
         "halide_error",
         "halide_free",
         "halide_malloc",
@@ -176,6 +178,7 @@ bool function_takes_user_context(const std::string &name) {
         "halide_opengl_run",
         "halide_openglcompute_run",
         "halide_metal_run",
+        "halide_d3d12compute_run",
         "halide_msan_annotate_buffer_is_initialized_as_destructor",
         "halide_msan_annotate_buffer_is_initialized",
         "halide_msan_annotate_memory_is_initialized",
@@ -190,11 +193,14 @@ bool function_takes_user_context(const std::string &name) {
         "halide_qurt_hvx_lock",
         "halide_qurt_hvx_unlock",
         "halide_qurt_hvx_unlock_as_destructor",
+        "halide_vtcm_malloc",
+        "halide_vtcm_free",
         "halide_cuda_initialize_kernels",
         "halide_opencl_initialize_kernels",
         "halide_opengl_initialize_kernels",
         "halide_openglcompute_initialize_kernels",
         "halide_metal_initialize_kernels",
+        "halide_d3d12compute_initialize_kernels",
         "halide_get_gpu_device",
         "halide_upgrade_buffer_t",
         "halide_downgrade_buffer_t",
@@ -463,9 +469,7 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
 #if LLVM_VERSION < 60
                                                 llvm::CodeModel::Default,
 #else
-                                                (triple.isArch64Bit() ?
-                                                 llvm::CodeModel::Large :
-                                                 llvm::CodeModel::Small),
+                                                llvm::CodeModel::Small,
 #endif
                                                 llvm::CodeGenOpt::Aggressive));
 }

@@ -7,7 +7,7 @@
 #include "ModulusRemainder.h"
 #include "Scope.h"
 #include "Simplify.h"
-
+#include "HexagonAlignment.h"
 using std::vector;
 
 namespace Halide {
@@ -21,17 +21,14 @@ namespace {
 // intended vector out of the aligned vector.
 class AlignLoads : public IRMutator2 {
 public:
-    AlignLoads(int alignment, const Scope<ModulusRemainder> &alignment_info)
-        : required_alignment(alignment) {
-        this->alignment_info.set_containing_scope(&alignment_info);
-    }
+    AlignLoads(int alignment, const Scope<ModulusRemainder>& alignment_info)
+        : alignment_analyzer(alignment, alignment_info), required_alignment(alignment) {}
 
 private:
-    // The desired alignment of a vector load.
-    int required_alignment;
+    HexagonAlignmentAnalyzer alignment_analyzer;
 
-    // Alignment info for variables in scope.
-    Scope<ModulusRemainder> alignment_info;
+    // Loads and stores should ideally be aligned to the vector width in bytes.
+    int required_alignment;
 
     using IRMutator2::visit;
 
@@ -66,30 +63,18 @@ private:
             // non-constant strides.
             return IRMutator2::visit(op);
         }
-        int lanes = ramp->lanes;
-        int native_lanes = required_alignment / op->type.bytes();
-
         if (!(*const_stride == 1 || *const_stride == 2 || *const_stride == 3)) {
-            // If the ramp isn't stride 1, 2, or 3, don't handle it.
-
-            // TODO: We should handle reverse vector loads (stride ==
-            // -1), maybe others as well.
+            // Handle ramps with stride 1, 2 or 3 only.
             return IRMutator2::visit(op);
         }
 
-        // If this is a parameter, the base_alignment should be
-        // host_alignment. Otherwise, this is an internal buffer,
-        // which we assume has been aligned to the required alignment.
         int aligned_offset = 0;
-        bool known_alignment = false;
-        int base_alignment =
-            op->param.defined() ? op->param.host_alignment() : required_alignment;
-        if (base_alignment % required_alignment == 0) {
-            // We know the base is aligned. Try to find out the offset
-            // of the ramp base from an aligned offset.
-            known_alignment = reduce_expr_modulo(ramp->base, native_lanes, &aligned_offset,
-                                                 alignment_info);
-        }
+        bool is_aligned = alignment_analyzer.is_aligned(op, &aligned_offset);
+        // We know the alignement_analyzer has been able to reason about alignment
+        // if the following is true.
+        bool known_alignment = is_aligned || (!is_aligned && aligned_offset != 0);
+        int lanes = ramp->lanes;
+        int native_lanes = required_alignment / op->type.bytes();
 
         int stride = static_cast<int>(*const_stride);
         if (stride != 1) {
@@ -134,7 +119,7 @@ private:
             return Shuffle::make_concat(slices);
         }
 
-        if (known_alignment && aligned_offset != 0) {
+        if (!is_aligned && aligned_offset != 0) {
             // We know the offset of this load from an aligned
             // address. Rewrite this is an aligned load of two
             // native vectors, followed by a shuffle.
@@ -150,14 +135,14 @@ private:
     template<typename NodeType, typename LetType>
     NodeType visit_let(const LetType *op) {
         if (op->value.type() == Int(32)) {
-            alignment_info.push(op->name, modulus_remainder(op->value, alignment_info));
+            alignment_analyzer.push(op->name, op->value);
         }
 
         Expr value = mutate(op->value);
         NodeType body = mutate(op->body);
 
         if (op->value.type() == Int(32)) {
-            alignment_info.pop(op->name);
+            alignment_analyzer.pop(op->name);
         }
 
         if (!value.same_as(op->value) || !body.same_as(op->body)) {
@@ -177,5 +162,5 @@ Stmt align_loads(Stmt s, int alignment, const Scope<ModulusRemainder> &alignment
     return AlignLoads(alignment, alignment_info).mutate(s);
 }
 
-}  // namespace Internal
-}  // namespace Halide
+} // namespace Internal
+} // namespace Halide

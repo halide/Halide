@@ -23,19 +23,21 @@ public:
     // CodeGen_GPU_Dev interface
     void add_kernel(Stmt stmt,
                     const std::string &name,
-                    const std::vector<DeviceArgument> &args);
+                    const std::vector<DeviceArgument> &args) override;
 
-    void init_module();
+    void init_module() override;
 
-    std::vector<char> compile_to_src();
+    std::vector<char> compile_to_src() override;
 
-    std::string get_current_kernel_name();
+    std::string get_current_kernel_name() override;
 
-    void dump();
+    void dump() override;
 
-    virtual std::string print_gpu_name(const std::string &name);
+    std::string print_gpu_name(const std::string &name) override;
 
-    std::string api_unique_name() { return "openglcompute"; }
+    std::string api_unique_name() override { return "openglcompute"; }
+    bool kernel_run_takes_types() const override { return true; }
+
 
 protected:
 
@@ -47,22 +49,22 @@ protected:
                         const std::vector<DeviceArgument> &args);
 
     protected:
-        std::string print_type(Type type, AppendSpaceIfNeeded space_option = DoNotAppendSpace);
+        std::string print_type(Type type, AppendSpaceIfNeeded space_option = DoNotAppendSpace) override;
 
         using CodeGen_C::visit;
-        void visit(const For *);
-        void visit(const Ramp *op);
-        void visit(const Broadcast *op);
-        void visit(const Load *op);
-        void visit(const Store *op);
-        void visit(const Cast *op);
-        void visit(const Call *op);
-        void visit(const Allocate *op);
-        void visit(const Free *op);
-        void visit(const Select *op);
-        void visit(const Evaluate *op);
-        void visit(const IntImm *op);
-        void visit(const UIntImm *op);
+        void visit(const For *) override;
+        void visit(const Ramp *op) override;
+        void visit(const Broadcast *op) override;
+        void visit(const Load *op) override;
+        void visit(const Store *op) override;
+        void visit(const Cast *op) override;
+        void visit(const Call *op) override;
+        void visit(const Allocate *op) override;
+        void visit(const Free *op) override;
+        void visit(const Select *op) override;
+        void visit(const Evaluate *op) override;
+        void visit(const IntImm *op) override;
+        void visit(const UIntImm *op) override;
 
     public:
         int workgroup_size[3];

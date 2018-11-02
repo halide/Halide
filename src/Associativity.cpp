@@ -757,7 +757,7 @@ void associativity_test() {
         check_associativity("f", {x}, {f_call_0*g_call_0 - f_call_1*g_call_1, f_call_0*g_call_1 + f_call_1*g_call_0},
                             AssociativeOp(
                               AssociativePattern(
-                                {xs[0]*ys[0] - xs[1]*ys[1], xs[1]*ys[0] + xs[0]*ys[1]},
+                                {xs[0]*ys[0] - ys[1]*xs[1], xs[1]*ys[0] + ys[1]*xs[0]},
                                 {make_const(ts[0], 1), make_const(ts[1], 0)},
                                 true),
                               {Replacement("x0", f_call_0), Replacement("x1", f_call_1)},

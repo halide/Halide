@@ -171,6 +171,12 @@ void IRVisitor::visit(const For *op) {
     op->body.accept(this);
 }
 
+void IRVisitor::visit(const Acquire *op) {
+    op->semaphore.accept(this);
+    op->count.accept(this);
+    op->body.accept(this);
+}
+
 void IRVisitor::visit(const Store *op) {
     op->predicate.accept(this);
     op->value.accept(this);
@@ -219,6 +225,13 @@ void IRVisitor::visit(const Prefetch *op) {
 }
 
 void IRVisitor::visit(const Block *op) {
+    op->first.accept(this);
+    if (op->rest.defined()) {
+        op->rest.accept(this);
+    }
+}
+
+void IRVisitor::visit(const Fork *op) {
     op->first.accept(this);
     if (op->rest.defined()) {
         op->rest.accept(this);
@@ -408,6 +421,12 @@ void IRGraphVisitor::visit(const For *op) {
     include(op->body);
 }
 
+void IRGraphVisitor::visit(const Acquire *op) {
+    include(op->semaphore);
+    include(op->count);
+    include(op->body);
+}
+
 void IRGraphVisitor::visit(const Store *op) {
     include(op->predicate);
     include(op->value);
@@ -457,7 +476,12 @@ void IRGraphVisitor::visit(const Prefetch *op) {
 
 void IRGraphVisitor::visit(const Block *op) {
     include(op->first);
-    if (op->rest.defined()) include(op->rest);
+    include(op->rest);
+}
+
+void IRGraphVisitor::visit(const Fork *op) {
+    include(op->first);
+    include(op->rest);
 }
 
 void IRGraphVisitor::visit(const IfThenElse *op) {

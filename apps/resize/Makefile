@@ -21,7 +21,7 @@ all: $(OUTPUTS)
 
 $(BIN)/resize.generator: resize_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
+	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 $(BIN)/resize_%.a: $(BIN)/resize.generator
 	@mkdir -p $(@D)

@@ -125,14 +125,15 @@ Buffer<Type> make_image() {
     return im;
 }
 
-template <typename InputType, typename OutputType>
-void verify(const Buffer<InputType> &input,
-            const Buffer<OutputType> &output0,
-            const Buffer<OutputType> &output1,
-            const Buffer<OutputType> &output_scalar,
-            const Buffer<OutputType> &output_array0,
-            const Buffer<OutputType> &output_array1,
-            const Buffer<OutputType> &untyped_output_buffer) {
+void verify(const Buffer<uint8_t> &input,
+            const Buffer<float> &output0,
+            const Buffer<float> &output1,
+            const Buffer<float> &output_scalar,
+            const Buffer<float> &output_array0,
+            const Buffer<float> &output_array1,
+            const Buffer<float> &untyped_output_buffer,
+            const Buffer<float> &tupled_output_buffer0,
+            const Buffer<int32_t> &tupled_output_buffer1) {
     if (output_scalar.dimensions() != 0) {
         fprintf(stderr, "output_scalar should be zero-dimensional\n");
         exit(-1);
@@ -144,9 +145,9 @@ void verify(const Buffer<InputType> &input,
     for (int x = 0; x < kSize; x++) {
         for (int y = 0; y < kSize; y++) {
             for (int c = 0; c < 3; c++) {
-                const OutputType expected0 = static_cast<OutputType>(input(x, y, c));
+                const float expected0 = static_cast<float>(input(x, y, c));
                 const float expected1 = expected0 + 1;
-                const OutputType actual0 = output0(x, y, c);
+                const float actual0 = output0(x, y, c);
                 const float actual1 = output1(x, y, c);
                 if (expected0 != actual0) {
                     fprintf(stderr, "img0[%d, %d, %d] = %f, expected %f\n", x, y, c, (double)actual0, (double)expected0);
@@ -166,6 +167,10 @@ void verify(const Buffer<InputType> &input,
                 }
                 if (untyped_output_buffer(x, y, c) != expected1) {
                     fprintf(stderr, "untyped_output_buffer[%d, %d, %d] = %f, expected %f\n", x, y, c, untyped_output_buffer(x, y, c), expected1);
+                    exit(-1);
+                }
+                if (tupled_output_buffer0(x, y, c) != expected1) {
+                    fprintf(stderr, "tupled_output_buffer0[%d, %d, %d] = %f, expected %f\n", x, y, c, tupled_output_buffer0(x, y, c), expected1);
                     exit(-1);
                 }
             }
@@ -313,6 +318,15 @@ void check_metadata(const halide_filter_metadata_t &md, bool expect_ucon_at_0) {
           halide_argument_kind_input_buffer,
           3,
           halide_type_t(halide_type_uint, 8),
+          nullptr,
+          nullptr,
+          nullptr,
+        },
+        {
+          "no_default_value",
+          halide_argument_kind_input_scalar,
+          0,
+          halide_type_t(halide_type_int, 32),
           nullptr,
           nullptr,
           nullptr,
@@ -493,7 +507,7 @@ void check_metadata(const halide_filter_metadata_t &md, bool expect_ucon_at_0) {
           halide_argument_kind_input_scalar,
           0,
           halide_type_t(halide_type_int, 8),
-          make_scalar<int8_t>(0),
+          nullptr,
           nullptr,
           nullptr,
         },
@@ -502,7 +516,7 @@ void check_metadata(const halide_filter_metadata_t &md, bool expect_ucon_at_0) {
           halide_argument_kind_input_scalar,
           0,
           halide_type_t(halide_type_int, 8),
-          make_scalar<int8_t>(0),
+          nullptr,
           nullptr,
           nullptr,
         },
@@ -511,7 +525,7 @@ void check_metadata(const halide_filter_metadata_t &md, bool expect_ucon_at_0) {
           halide_argument_kind_input_scalar,
           0,
           halide_type_t(halide_type_int, 8),
-          make_scalar<int8_t>(0),
+          nullptr,
           nullptr,
           nullptr,
         },
@@ -520,7 +534,7 @@ void check_metadata(const halide_filter_metadata_t &md, bool expect_ucon_at_0) {
           halide_argument_kind_input_scalar,
           0,
           halide_type_t(halide_type_int, 8),
-          make_scalar<int8_t>(0),
+          nullptr,
           nullptr,
           nullptr,
         },
@@ -813,6 +827,24 @@ void check_metadata(const halide_filter_metadata_t &md, bool expect_ucon_at_0) {
           nullptr,
         },
         {
+          "tupled_output_buffer.0",
+          halide_argument_kind_output_buffer,
+          3,
+          halide_type_t(halide_type_float, 32),
+          nullptr,
+          nullptr,
+          nullptr,
+        },
+        {
+          "tupled_output_buffer.1",
+          halide_argument_kind_output_buffer,
+          3,
+          halide_type_t(halide_type_int, 32),
+          nullptr,
+          nullptr,
+          nullptr,
+        },
+        {
           "output_scalar",
           halide_argument_kind_output_buffer,
           0,
@@ -1033,10 +1065,12 @@ int main(int argc, char **argv) {
     Buffer<float> type_only_output_buffer(kSize, kSize, 3);
     Buffer<float> dim_only_output_buffer(kSize, kSize, 3);
     Buffer<float> untyped_output_buffer(kSize, kSize, 3);
+    Buffer<float> tupled_output_buffer0(kSize, kSize, 3);
+    Buffer<int32_t> tupled_output_buffer1(kSize, kSize, 3);
     Buffer<float> output_scalar = Buffer<float>::make_scalar();
     Buffer<float> output_array[2] = {{kSize, kSize, 3}, {kSize, kSize, 3}};
     Buffer<float> output_array2[4] = {{kSize, kSize, 3}, {kSize, kSize, 3}, {kSize, kSize, 3}, {kSize, kSize, 3}};
-    Buffer<float> output_array3[2] = {Buffer<float>{1}, Buffer<float>{1}};
+    Buffer<float> output_array3[2] = {Buffer<float>::make_scalar(), Buffer<float>::make_scalar()};
     Buffer<float> output_array4[2] = {{kSize, kSize, 3}, {kSize, kSize, 3}};
     Buffer<float> output_array5[2] = {{kSize, kSize, 3}, {kSize, kSize, 3}};
     Buffer<float> output_array6[2] = {{kSize, kSize, 3}, {kSize, kSize, 3}};
@@ -1049,6 +1083,7 @@ int main(int argc, char **argv) {
         input,             // Input<Buffer<uint8_t>>
         input,             // Input<Buffer<>>(3)
         input,             // Input<Buffer<>>
+        0,                 // Input<i32>
         false,             // Input<bool>
         0,                 // Input<i8>
         0,                 // Input<i16>
@@ -1086,6 +1121,8 @@ int main(int argc, char **argv) {
         type_only_output_buffer,    // Output<Buffer<float>>
         dim_only_output_buffer,    // Output<Buffer<>>(3)
         untyped_output_buffer,  // Output<Buffer<>>
+        tupled_output_buffer0,  // Output<Buffer<>> with tuple type
+        tupled_output_buffer1,  // Output<Buffer<>> with tuple type
         output_scalar,     // Output<float>
         output_array[0], output_array[1],   // Output<Func[]>
         output_array2[0], output_array2[1], output_array2[2], output_array2[3], // Output<Func[2]>(Tuple)
@@ -1105,6 +1142,7 @@ int main(int argc, char **argv) {
         input,             // Input<Buffer<uint8_t>>
         input,             // Input<Buffer<>>(3)
         input,             // Input<Buffer<>>
+        0,                 // Input<i32>
         false,             // Input<bool>
         0,                 // Input<i8>
         0,                 // Input<i16>
@@ -1142,6 +1180,8 @@ int main(int argc, char **argv) {
         type_only_output_buffer,    // Output<Buffer<float>>
         dim_only_output_buffer,    // Output<Buffer<>>(3)
         untyped_output_buffer,  // Output<Buffer<>>
+        tupled_output_buffer0,  // Output<Buffer<>> with tuple type
+        tupled_output_buffer1,  // Output<Buffer<>> with tuple type
         output_scalar,     // Output<float>
         output_array[0], output_array[1],    // Output<Func[]>
         output_array2[0], output_array2[1], output_array2[2], output_array2[3], // Output<Func[2]>(Tuple)
@@ -1155,7 +1195,7 @@ int main(int argc, char **argv) {
     );
     EXPECT_EQ(0, result);
 
-    verify(input, output0, output1, output_scalar, output_array[0], output_array[1], untyped_output_buffer);
+    verify(input, output0, output1, output_scalar, output_array[0], output_array[1], untyped_output_buffer, tupled_output_buffer0, tupled_output_buffer1);
 
     check_metadata(*metadata_tester_metadata(), false);
     if (!strcmp(metadata_tester_metadata()->name, "metadata_tester_metadata")) {

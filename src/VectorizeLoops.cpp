@@ -215,7 +215,7 @@ public:
 class UsesGPUVars : public IRVisitor {
 private:
     using IRVisitor::visit;
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         if (CodeGen_GPU_Dev::is_gpu_var(op->name)) {
             debug(3) << "Found gpu loop var: " << op->name << "\n";
             uses_gpu = true;
@@ -322,7 +322,7 @@ class PredicateLoadStore : public IRMutator2 {
             return op;
         }
         vectorized = true;
-        return Store::make(op->name, value, op->index, op->param, predicate);
+        return Store::make(op->name, value, index, op->param, predicate);
     }
 
     Expr visit(const Call *op) override {

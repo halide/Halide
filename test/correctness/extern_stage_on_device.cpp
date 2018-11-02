@@ -1,6 +1,5 @@
 #include "Halide.h"
 #include "HalideRuntime.h"
-#include "HalideRuntimeCuda.h"
 #include <stdio.h>
 
 using namespace Halide;
@@ -50,10 +49,11 @@ extern "C" DLLEXPORT int extern_stage(int extern_on_device,
 int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
 
-    if (!target.has_gpu_feature() && !target.has_feature(Target::CUDA)) {
+    if (!target.has_gpu_feature()) {
         printf("This is a gpu-specific test. Skipping it\n");
         return 0;
     }
+    DeviceAPI device_api = get_default_device_api_for_target(target);
 
     Var x, y;
     Var xi, yi;
@@ -69,7 +69,7 @@ int main(int argc, char **argv) {
                                  Int(32),
                                  {x, y},
                                  NameMangling::Default,
-                                 extern_on_device ? Halide::DeviceAPI::CUDA : Halide::DeviceAPI::Host);
+                                 extern_on_device ? device_api : Halide::DeviceAPI::Host);
 
             Func sink("sink");
             sink(x, y) = source(x, y) - (x + y);
