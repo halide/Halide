@@ -12,6 +12,9 @@ void test_round_trip(Buffer<T> buf, std::string format) {
     std::string filename = o.str();
     Tools::save_image(buf, filename);
 
+    // TIFF is write-only for now.
+    if (format == "tiff") return;
+
     // Reload it
     Buffer<T> reloaded = Tools::load_image(filename);
 
@@ -179,7 +182,7 @@ void do_test() {
     luma_buf.copy_from(color_buf);
     luma_buf.slice(2);
 
-    std::vector<std::string> formats = {"ppm","pgm","tmp","mat"};
+    std::vector<std::string> formats = {"ppm","pgm","tmp","mat","tiff"};
 #ifndef HALIDE_NO_JPEG
     formats.push_back("jpg");
 #endif

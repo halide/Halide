@@ -197,43 +197,71 @@ int64_t mod(int64_t a, int64_t m) {
 void ComputeModulusRemainder::visit(const Add *op) {
     ModulusRemainder a = analyze(op->a);
     ModulusRemainder b = analyze(op->b);
-    modulus = gcd(a.modulus, b.modulus);
-    remainder = mod(a.remainder + b.remainder, modulus);
+    if (add_would_overflow(32, a.remainder, b.remainder)) {
+        modulus = 0;
+        remainder = 1;
+    } else {
+        modulus = gcd(a.modulus, b.modulus);
+        remainder = mod(a.remainder + b.remainder, modulus);
+    }
 }
 
 void ComputeModulusRemainder::visit(const Sub *op) {
     ModulusRemainder a = analyze(op->a);
     ModulusRemainder b = analyze(op->b);
-    modulus = gcd(a.modulus, b.modulus);
-    remainder = mod(a.remainder - b.remainder, modulus);
+    if (sub_would_overflow(32, a.remainder, b.remainder)) {
+        modulus = 0;
+        remainder = 1;
+    } else {
+        modulus = gcd(a.modulus, b.modulus);
+        remainder = mod(a.remainder - b.remainder, modulus);
+    }
 }
 
 void ComputeModulusRemainder::visit(const Mul *op) {
     ModulusRemainder a = analyze(op->a);
     ModulusRemainder b = analyze(op->b);
 
+    // Assume the nothing-interesting result until we are sure we don't have overflow
+    modulus = 0;
+    remainder = 1;
+
     if (a.modulus == 0) {
         // a is constant
-        modulus = a.remainder * b.modulus;
-        remainder = a.remainder * b.remainder;
+        if (!mul_would_overflow(32, a.remainder, b.modulus) && !mul_would_overflow(32, a.remainder, b.remainder)) {
+            modulus = a.remainder * b.modulus;
+            remainder = a.remainder * b.remainder;
+        }
     } else if (b.modulus == 0) {
         // b is constant
-        modulus = b.remainder * a.modulus;
-        remainder = a.remainder * b.remainder;
+        if (!mul_would_overflow(32, b.remainder, a.modulus) && !mul_would_overflow(32, a.remainder, b.remainder)) {
+            modulus = b.remainder * a.modulus;
+            remainder = a.remainder * b.remainder;
+        }
     } else if (a.remainder == 0 && b.remainder == 0) {
         // multiple times multiple
-        modulus = a.modulus * b.modulus;
-        remainder = 0;
+        if (!mul_would_overflow(32, a.modulus, b.modulus)) {
+            modulus = a.modulus * b.modulus;
+            remainder = 0;
+        }
     } else if (a.remainder == 0) {
-        modulus = a.modulus * gcd(b.modulus, b.remainder);
-        remainder = 0;
+        int g = gcd(b.modulus, b.remainder);
+        if (!mul_would_overflow(32, a.modulus, g)) {
+            modulus = a.modulus * g;
+            remainder = 0;
+        }
     } else if (b.remainder == 0) {
-        modulus = b.modulus * gcd(a.modulus, a.remainder);
-        remainder = 0;
+        int g = gcd(a.modulus, a.remainder);
+        if (!mul_would_overflow(32, b.modulus, g)) {
+            modulus = b.modulus * g;
+            remainder = 0;
+        }
     } else {
         // All our tricks failed. Convert them to the same modulus and multiply
-        modulus = gcd(a.modulus, b.modulus);
-        a.remainder = mod(a.remainder * b.remainder, modulus);
+        if (!mul_would_overflow(32, a.remainder, b.remainder)) {
+            modulus = gcd(a.modulus, b.modulus);
+            remainder = mod(a.remainder * b.remainder, modulus);
+        }
     }
 }
 

@@ -336,13 +336,13 @@ typedef HALIDE_HEXAGON_ENUM {
    * @description DMA power voting
    *
    * @input       cornercase:
-   *				#define PW_MIN_SVS 0
-   *				#define PW_SVS2 1
-   *				#define PW_SVS 2
-   *				#define PW_SVS_L1 3
-   *				#define PW_NORMAL 4
-   *				#define PW_NORMAL_L1 5
-   *				#define PW_TURBO 6
+   *                            #define PW_MIN_SVS 0
+   *                            #define PW_SVS2 1
+   *                            #define PW_SVS 2
+   *                            #define PW_SVS_L1 3
+   *                            #define PW_NORMAL 4
+   *                            #define PW_NORMAL_L1 5
+   *                            #define PW_TURBO 6
    * @return      Success: OK
    * @n           Failure: ERR
    */

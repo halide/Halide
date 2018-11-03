@@ -37,10 +37,14 @@ $(BIN)/out.png: $(BIN)/filter
 	@mkdir -p $(@D)
 	$(BIN)/filter $(IMAGES)/gray.png $(BIN)/out.png 0.1 10
 
+$(BIN)/out.tiff: $(BIN)/filter
+	@mkdir -p $(@D)
+	$(BIN)/filter $(IMAGES)/gray.png $(BIN)/out.tiff 0.1 10
+
 clean:
 	rm -rf $(BIN)
 
-test: $(BIN)/out.png
+test: $(BIN)/out.png $(BIN)/out.tiff
 
 viz: $(BIN)/bilateral_grid.mp4
 	$(HL_VIDEOPLAYER) $^
