@@ -123,7 +123,59 @@ def test_float16():
     hl_img = hl.Buffer(array_in)
     array_out = np.array(hl_img, copy = False)
 
+def test_make_interleaved():
+    w = 7
+    h = 13
+    c = 3
+
+    b = hl.Buffer.make_interleaved(type = hl.UInt(8), width = w, height = h, channels = c)
+
+    assert b.dim(0).min() == 0
+    assert b.dim(0).extent() == w
+    assert b.dim(0).stride() == c
+
+    assert b.dim(1).min() == 0
+    assert b.dim(1).extent() == h
+    assert b.dim(1).stride() == w * c
+
+    assert b.dim(2).min() == 0
+    assert b.dim(2).extent() == c
+    assert b.dim(2).stride() == 1
+
+    a = np.array(b, copy = False)
+    assert a.shape == (w, h, c)
+    assert a.strides == (c, w*c, 1)
+    assert a.dtype == np.uint8
+
+def test_interleaved_ndarray():
+    w = 7
+    h = 13
+    c = 3
+
+    a = np.ndarray(dtype=np.uint8, shape=(w, h, c), strides=(c, w*c, 1))
+
+    assert a.shape == (w, h, c)
+    assert a.strides == (c, w*c, 1)
+    assert a.dtype == np.uint8
+
+    b = hl.Buffer(a)
+    assert b.type() == hl.UInt(8)
+
+    assert b.dim(0).min() == 0
+    assert b.dim(0).extent() == w
+    assert b.dim(0).stride() == c
+
+    assert b.dim(1).min() == 0
+    assert b.dim(1).extent() == h
+    assert b.dim(1).stride() == w * c
+
+    assert b.dim(2).min() == 0
+    assert b.dim(2).extent() == c
+    assert b.dim(2).stride() == 1
+
 if __name__ == "__main__":
+    test_make_interleaved()
+    test_interleaved_ndarray()
     test_ndarray_to_buffer()
     test_buffer_to_ndarray()
     test_for_each_element()
