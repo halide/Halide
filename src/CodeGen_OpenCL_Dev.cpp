@@ -203,6 +203,10 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Call *op) {
         ostringstream rhs;
         rhs << "abs_diff(" << print_expr(op->args[0]) << ", " << print_expr(op->args[1]) << ")";
         print_assignment(op->type, rhs.str());
+    } else if (op->is_intrinsic(Call::gpu_thread_barrier)) {
+        do_indent();
+        stream << "barrier(CLK_LOCAL_MEM_FENCE);\n";
+        print_assignment(op->type, "0");
     } else {
         CodeGen_C::visit(op);
     }
@@ -681,11 +685,7 @@ void CodeGen_OpenCL_Dev::init_module() {
                << "#define tanh_f32 tanh \n"
                << "#define atanh_f32 atanh \n"
                << "#define fast_inverse_f32 native_recip \n"
-               << "#define fast_inverse_sqrt_f32 native_rsqrt \n"
-               << "inline int halide_gpu_thread_barrier() {\n"
-               << "  barrier(CLK_LOCAL_MEM_FENCE);\n" // Halide only ever needs local memory fences.
-               << "  return 0;\n"
-               << "}\n";
+               << "#define fast_inverse_sqrt_f32 native_rsqrt \n";
 
     // __shared always has address space __local.
     src_stream << "#define __address_space___shared __local\n";

@@ -15,6 +15,12 @@
 #include <stdint.h>
 #include <string.h>
 
+#if defined(__has_feature)
+#if __has_feature(memory_sanitizer)
+#include <sanitizer/msan_interface.h>
+#endif
+#endif
+
 #include "HalideRuntime.h"
 
 #ifdef _MSC_VER
@@ -2279,6 +2285,22 @@ public:
         return buf.is_bounds_query();
     }
 
+    /** Convenient check to verify that all of the interesting bytes in the Buffer
+     * are initialized under MSAN. Note that by default, we use for_each_value() here so that
+     * we skip any unused padding that isn't part of the Buffer; this isn't efficient,
+     * but in MSAN mode, it doesn't matter. (Pass true for the flag to force check
+     * the entire Buffer storage.) */
+    void msan_check_mem_is_initialized(bool entire = false) const {
+#if defined(__has_feature)
+#if __has_feature(memory_sanitizer)
+        if (entire) {
+            __msan_check_mem_is_initialized(data(), size_in_bytes());
+        } else {
+            for_each_value([](T &v) { __msan_check_mem_is_initialized(&v, sizeof(T)); ;});
+        }
+#endif
+#endif
+    }
 };
 
 }  // namespace Runtime
