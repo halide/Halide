@@ -9,7 +9,7 @@ namespace {
 
 struct Tensor {
     Func f;
-    std::vector<Int> shape;    
+    std::vector<int> shape;    
 };
 
 struct WeightShape {
@@ -122,8 +122,8 @@ public:
     /** Create architecture DAG here **/
     // handle conv1 section:
     Tensor input_t;
-    t.f = input;
-    t.shape = input_shape; 
+    input_t.f = input;
+    input_t.shape = input_shape; 
     
     Tensor conv1 = conv2D(input_t, conv1_ws, conv1_weights);
     Tensor scaled1 = scale_layer(conv1, conv1_gamma, conv1_beta); 
@@ -210,7 +210,7 @@ public:
         // create final 3 layers
         if (i == 15) {
             pool5 = avg_pool_layer(resunit_relu[i-1], pool5_ws);
-            fc1000 = fc_layer(pool5, fc1000_weights, fc1000_bias);
+            fc1000 = fc_layer(pool5, fc1000_ws, fc1000_weights, fc1000_bias);
             softmax_layer(fc1000, output, 1000);
         }
       }
@@ -269,8 +269,8 @@ private:
 
   void compute_shape(Tensor& in, Tensor& out, WeightShape& params) {
       assert(out.shape.empty());
-      int w = (1.0/params.stride) * (params.pad * 2 + in_shape.w - params.w + 1 + params.stride - 1);
-      int h = (1.0/params.stride) * (params.pad * 2 + in_shape.h - params.h + 1 + params.stride - 1);
+      int w = (1.0/params.stride) * (params.pad * 2 + in.shape[1] - params.w + 1 + params.stride - 1);
+      int h = (1.0/params.stride) * (params.pad * 2 + in.shape[2] - params.h + 1 + params.stride - 1);
       int c = params.c;
       
       int new_shape[3] = {c, w, h};
@@ -305,7 +305,7 @@ private:
 
       Tensor output;
       output.f = fc;
-      compute_shape(input, output, weigh_shape);
+      compute_shape(input, output, weight_shape);
       return output;
   }
   
@@ -357,7 +357,7 @@ private:
 
   Tensor norm_layer(Tensor& input, Func mu, Func sigma) {
     Func normed;
-    normed(c, i, j)  = (input.f(c, i, j) - mu(c)) / (1e-12 + sigma(c));
+    normed(c, i, j)  = (input.f(c, i, j) - mu(c)) / (1e-12f + sigma(c));
     Tensor output;
     output.f = normed;
     output.shape = input.shape;
