@@ -43,7 +43,7 @@ int main(int argc, char **argv) {
     // Passing 50 as the second arg violates the call to Func::bound
     // in the generator
     result = error_codes(&in, 50, &out);
-    correct = halide_error_code_explicit_bounds_too_small;
+    correct = halide_error_code_constraint_violated;
     check(result, correct);
 
     // Would read out of bounds on the input
@@ -103,7 +103,7 @@ int main(int argc, char **argv) {
 
     // The second argument is supposed to be between 0 and 64.
     result = error_codes(&in, -23, &out);
-    correct = halide_error_code_param_too_small;
+    correct = halide_error_code_constraint_violated;
     check(result, correct);
 
     shape[0].extent = 108;

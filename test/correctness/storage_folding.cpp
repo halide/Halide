@@ -372,17 +372,20 @@ int main(int argc, char **argv) {
         g(x, y, c) = f(x-1, y+1, c) + f(x, y-1, c);
         f.store_root().compute_at(g, y).fold_storage(y, 3);
 
+        Buffer<int> im;
         if (interleave) {
             f.reorder(c, x, y).reorder_storage(c, x, y);
             g.reorder(c, x, y).reorder_storage(c, x, y);
+            im = Buffer<int>::make_interleaved(100, 1000, 3);
+        } else {
+            im = Buffer<int>(100, 1000, 3);
         }
 
         // Make sure we can explicitly fold something with an outer
         // loop.
 
         g.set_custom_allocator(my_malloc, my_free);
-
-        Buffer<int> im = g.realize(100, 1000, 3);
+        g.realize(im);
 
         size_t expected_size;
         if (interleave) {

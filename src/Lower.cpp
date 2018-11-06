@@ -36,6 +36,7 @@
 #include "LoopCarry.h"
 #include "LowerWarpShuffles.h"
 #include "Memoization.h"
+#include "OutputImageParam.h"
 #include "PartitionLoops.h"
 #include "PurifyIndexMath.h"
 #include "Prefetch.h"
@@ -100,8 +101,11 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     result_module.set_any_strict_float(any_strict_float);
 
     // Output functions should all be computed and stored at root.
-    for (Function f: outputs) {
+    for (Function f : outputs) {
         Func(f).compute_root().store_root();
+        for (auto output_buffer : Func(f).output_buffers()) {
+            output_buffer.parameter().set_constraints_from_schedule(f);
+        }
     }
 
     // Finalize all the LoopLevels

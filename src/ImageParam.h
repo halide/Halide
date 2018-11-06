@@ -129,6 +129,21 @@ public:
 
     /** Add a trace tag to this ImageParam's Func. */
     ImageParam &add_trace_tag(const std::string &trace_tag);
+
+    // Forward scheduling methods that are relevant for storage
+    ImageParam &align_bounds(Var var, Expr modulus, Expr remainder = 0);
+    ImageParam &align_storage(Var dim, Expr alignment);
+    ImageParam &bound(Var var, Expr min, Expr extent);
+    ImageParam &bound_extent(Var var, Expr extent);
+    ImageParam &reorder_storage(const std::vector<Var> &dims);
+    ImageParam &reorder_storage(Var x, Var y);
+
+    template <typename... Args>
+    HALIDE_NO_USER_CODE_INLINE typename std::enable_if<Internal::all_are_convertible<Var, Args...>::value, ImageParam &>::type
+    reorder_storage(Var x, Var y, Args&&... args) {
+        std::vector<Var> collected_args{x, y, std::forward<Args>(args)...};
+        return reorder_storage(collected_args);
+    }
 };
 
 }  // namespace Halide

@@ -93,4 +93,46 @@ ImageParam &ImageParam::add_trace_tag(const std::string &trace_tag) {
     return *this;
 }
 
+ImageParam &ImageParam::align_bounds(Var var, Expr modulus, Expr remainder) {
+    internal_assert(func.defined());
+    func.align_bounds(var, modulus, remainder);
+    parameter().set_constraints_from_schedule(func.function());
+    return *this;
+}
+
+ImageParam &ImageParam::align_storage(Var dim, Expr alignment) {
+    internal_assert(func.defined());
+    func.align_storage(dim, alignment);
+    parameter().set_constraints_from_schedule(func.function());
+    return *this;
+}
+
+ImageParam &ImageParam::bound(Var var, Expr min, Expr extent) {
+    internal_assert(func.defined());
+    func.bound(var, min, extent);
+    parameter().set_constraints_from_schedule(func.function());
+    return *this;
+}
+
+ImageParam &ImageParam::bound_extent(Var var, Expr extent) {
+    internal_assert(func.defined());
+    func.bound_extent(var, extent);
+    parameter().set_constraints_from_schedule(func.function());
+    return *this;
+}
+
+ImageParam &ImageParam::reorder_storage(const std::vector<Var> &dims) {
+    internal_assert(func.defined());
+    func.reorder_storage(dims);
+    parameter().set_constraints_from_schedule(func.function());
+    return *this;
+}
+
+ImageParam &ImageParam::reorder_storage(Var x, Var y) {
+    internal_assert(func.defined());
+    func.reorder_storage(x, y);
+    parameter().set_constraints_from_schedule(func.function());
+    return *this;
+}
+
 }  // namespace Halide
