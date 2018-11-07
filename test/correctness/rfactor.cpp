@@ -45,7 +45,10 @@ int simple_rfactor_test(bool compile_module) {
             return -1;
         }
     } else {
-        Buffer<int> im = g.realize(80, 80);
+        Buffer<int> im(80, 80);
+        // Since we reordered the storage we must also reorder the output buffer
+        im.transpose(0, 1);
+        g.realize(im);
         auto func = [](int x, int y, int z) {
             return (10 <= x && x <= 29) && (30 <= y && y <= 69) ? std::max(40 + x + y, 40) : 40;
         };
