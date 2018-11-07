@@ -1051,11 +1051,6 @@ std::unique_ptr<llvm::Module> get_initial_module_for_ptx_device(Target target, l
         if (!f.isDeclaration() && !f.hasFnAttribute(llvm::Attribute::NoInline)) {
             f.setLinkage(llvm::GlobalValue::AvailableExternallyLinkage);
         }
-
-        // Also mark the halide_gpu_thread_barrier as noduplicate.
-        if (f.getName() == "halide_gpu_thread_barrier") {
-            f.addFnAttr(llvm::Attribute::NoDuplicate);
-        }
     }
 
     llvm::Triple triple("nvptx64--");
