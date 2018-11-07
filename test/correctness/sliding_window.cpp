@@ -82,7 +82,9 @@ int main(int argc, char **argv) {
 
         h.reorder(c, x).reorder_storage(c, x).bound(c, 0, 4).vectorize(c);
 
-        Buffer<int> im = h.realize(100, 4);
+        Buffer<int> im(4, 100);
+        im.transpose(0, 1);
+        h.realize(im);
         if (count != 404) {
             printf("f was called %d times instead of %d times\n", count, 404);
             return -1;
