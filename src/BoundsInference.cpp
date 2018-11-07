@@ -1046,6 +1046,15 @@ public:
                     string var = s.stage_prefix + i;
                     Interval in = bounds_of_inner_var(var, body);
                     if (in.is_bounded()) {
+                        // bounds_of_inner_var doesn't understand
+                        // GuardWithIf, but we know split rvars never
+                        // have inner bounds that exceed the outer
+                        // ones.
+                        if (!s.rvars.empty()) {
+                            in.min = max(in.min, Variable::make(Int(32), var + ".min"));
+                            in.max = min(in.max, Variable::make(Int(32), var + ".max"));
+                        }
+
                         body = LetStmt::make(var + ".min", in.min, body);
                         body = LetStmt::make(var + ".max", in.max, body);
                     } else {
