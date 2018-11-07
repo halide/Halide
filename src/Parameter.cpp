@@ -315,11 +315,9 @@ void Parameter::set_constraints_from_schedule(Function f) {
                     extents[dim] = simplify(max_plus_one - min);
                     min = simplify(min + b.remainder);
                 }
-                // TODO: these warnings should be upgraded into errors.
                 if (min_constraint(dim).defined() && !equal(min, simplify(min_constraint(dim)))) {
                     user_error << "Inferred value for parameter \"" << f.name() << "\" min[" << dim << "] does not match"
-                        " value explicitly specified; using the explicit value, but you should revise the schedule to"
-                        " avoid this warning. (inferred " << min << " vs explicit " << min_constraint(dim) << ")\n";
+                        " value explicitly specified (inferred " << min << " vs explicit " << min_constraint(dim) << ").\n";
                 } else {
                     if (debug::debug_level() >= D) {
                         o << "  min." << dim << " -> " << min << "\n";
@@ -328,8 +326,7 @@ void Parameter::set_constraints_from_schedule(Function f) {
                 }
                 if (extent_constraint(dim).defined() && !equal(extents[dim], simplify(extent_constraint(dim)))) {
                     user_error << "Inferred value for parameter \"" << f.name() << "\" extent[" << dim << "] does not match"
-                        " value explicitly specified; using the explicit value, but you should revise the schedule to"
-                        " avoid this warning. (inferred " << extents[dim] << " vs explicit " << extent_constraint(dim) << ")\n";
+                        " value explicitly specified (inferred " << extents[dim] << " vs explicit " << extent_constraint(dim) << ").\n";
                 } else {
                     if (debug::debug_level() >= D) {
                         o << "  extents." << dim << " -> " << extents[dim] << "\n";
@@ -356,8 +353,7 @@ void Parameter::set_constraints_from_schedule(Function f) {
                     Expr s = stride_constraint(dim);
                     if (!is_default(dim, s) && !equal(stride, simplify(s))) {
                         user_error << "Inferred value for parameter \"" << f.name() << "\" stride[" << dim << "] does not match"
-                            " value explicitly specified; using the explicit value, but you should revise the schedule to"
-                            " avoid this warning. (inferred " << stride << " vs explicit " << s << ")\n";
+                            " value explicitly specified (inferred " << stride << " vs explicit " << s << ").\n";
                     } else {
                         set_stride_constraint(dim, stride);
                         if (debug::debug_level() >= D) {
