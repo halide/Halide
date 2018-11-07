@@ -16,6 +16,7 @@ extern "C" DLLEXPORT int count(int x) {
 HalideExtern_1(int, count, int);
 
 int main(int argc, char **argv) {
+#if 0
     {
         // Split an rvar, compute something at the inner var, and make
         // sure the it's evaluated the right number of times.
@@ -31,6 +32,11 @@ int main(int argc, char **argv) {
         f.compute_at(g, ri);
 
         Buffer<int> im = g.realize(10);
+
+        if (call_counter != 10) {
+            printf("Wrong number of calls to f: %d\n", call_counter);
+            return -1;
+        }
 
         for (int i = 0; i < im.width(); i++) {
             if (im(i) != i) {
@@ -56,6 +62,11 @@ int main(int argc, char **argv) {
 
         Buffer<int> im = g.realize(10);
 
+        if (call_counter != 10) {
+            printf("Wrong number of calls to f: %d\n", call_counter);
+            return -1;
+        }
+
         for (int i = 0; i < im.width(); i++) {
             if (im(i) != i) {
                 printf("im(%d) = %d instead of %d\n", i, im(i), i);
@@ -79,6 +90,11 @@ int main(int argc, char **argv) {
         f.compute_at(g, ri);
 
         Buffer<int> im = g.realize(10);
+
+        if (call_counter != 10) {
+            printf("Wrong number of calls to f: %d\n", call_counter);
+            return -1;
+        }
 
         for (int i = 0; i < im.width(); i++) {
             if (im(i) != i) {
@@ -106,6 +122,11 @@ int main(int argc, char **argv) {
 
         Buffer<int> im = g.realize(10);
 
+        if (call_counter != 10) {
+            printf("Wrong number of calls to f: %d\n", call_counter);
+            return -1;
+        }
+
         for (int i = 0; i < im.width(); i++) {
             int correct = (i / 2) + ((i % 2 == 0) ? 0 : 5);
             if (im(i) != correct) {
@@ -131,6 +152,11 @@ int main(int argc, char **argv) {
 
         Buffer<int> im = g.realize(20);
 
+        if (call_counter != 20) {
+            printf("Wrong number of calls to f: %d\n", call_counter);
+            return -1;
+        }
+
         for (int i = 0; i < im.width(); i++) {
             int correct = i;
             if (im(i) != correct) {
@@ -139,6 +165,40 @@ int main(int argc, char **argv) {
             }
         }
         call_counter = 0;
+    }
+
+#endif
+
+    {
+        // Split by a non-factor and compute something at the split,
+        // to check if guardwithif is respected in the bounds
+        // relationship.
+        Func f, g;
+        Var x;
+        RDom r(0, 10);
+        RVar ri, ro;
+        f(x) = count(x);
+        g(x) = 0;
+        g(r) = f(r);
+
+        g.update().split(r, ro, ri, 3);
+        f.compute_at(g, ro);
+
+        Buffer<int> im = g.realize(10);
+
+        if (call_counter != 10) {
+            printf("Wrong number of calls to f: %d\n", call_counter);
+            return -1;
+        }
+
+        for (int i = 0; i < im.width(); i++) {
+            if (im(i) != i) {
+                printf("im(%d) = %d instead of %d\n", i, im(i), i);
+                return -1;
+            }
+        }
+        call_counter = 0;
+
     }
 
     printf("Success!\n");
