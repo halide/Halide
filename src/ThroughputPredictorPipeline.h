@@ -33,6 +33,7 @@ extern "C" int halide_autoscheduler_cost_model(int32_t num_stages,
                                                halide_buffer_t *bias6,
                                                // Unused
                                                float learning_rate,
+                                               int timestep,
                                                halide_buffer_t *true_runtime,
                                                // Output
                                                halide_buffer_t *prediction);
@@ -63,6 +64,7 @@ extern "C" int halide_autoscheduler_train_cost_model(int32_t _num_stages,
                                                      halide_buffer_t *filter6,
                                                      halide_buffer_t *bias6,
                                                      float learning_rate,
+                                                     int timestep,
                                                      halide_buffer_t *true_runtime,
                                                      // Outputs
                                                      halide_buffer_t *d_loss_d_head1_filter,
@@ -246,8 +248,9 @@ public:
         conv4_filter_update, conv4_bias_update,
         conv5_filter_update, conv5_bias_update,
         conv6_filter_update, conv6_bias_update;
+    int timestep = 0;
 
-    float backprop(Runtime::Buffer<const float> true_runtimes, float learning_rate, float accept_threshold) {
+    float backprop(Runtime::Buffer<const float> true_runtimes, float learning_rate) {
         internal_assert(cursor != 0);
         internal_assert(pipeline_feat_queue.data());
         internal_assert(schedule_feat_queue.data());
@@ -282,6 +285,7 @@ public:
             conv5_bias_update = weight_update_buffer(weights.conv5_bias);
             conv6_filter_update = weight_update_buffer(weights.conv6_filter);
             conv6_bias_update = weight_update_buffer(weights.conv6_bias);
+            timestep = 0;
         }
 
         halide_autoscheduler_train_cost_model(num_stages,
@@ -300,7 +304,8 @@ public:
                                               weights.conv4_filter, weights.conv4_bias,
                                               weights.conv5_filter, weights.conv5_bias,
                                               weights.conv6_filter, weights.conv6_bias,
-                                              learning_rate, true_runtimes,
+                                              learning_rate, timestep++,
+                                              true_runtimes,
                                               head1_filter_update, head1_bias_update,
                                               head2_filter_update, head2_bias_update,
                                               conv1_filter_update, conv1_bias_update,
@@ -311,25 +316,24 @@ public:
                                               conv6_filter_update, conv6_bias_update,
                                               loss);
 
-        if (loss() < accept_threshold) {
-            auto update_weight = [](const Runtime::Buffer<float> &src, Runtime::Buffer<float> &dst) {
-                dst.copy_from(src.sliced(src.dimensions()-1, 0));
-            };
-            update_weight(head1_filter_update, weights.head1_filter);
-            update_weight(head1_bias_update, weights.head1_bias);
-            update_weight(head2_filter_update, weights.head2_filter);
-            update_weight(head2_bias_update, weights.head2_bias);
-            update_weight(conv1_filter_update, weights.conv1_filter);
-            update_weight(conv1_bias_update, weights.conv1_bias);
-            update_weight(conv2_filter_update, weights.conv2_filter);
-            update_weight(conv2_bias_update, weights.conv2_bias);
-            update_weight(conv3_filter_update, weights.conv3_filter);
-            update_weight(conv3_bias_update, weights.conv3_bias);
-            update_weight(conv4_filter_update, weights.conv4_filter);
-            update_weight(conv4_bias_update, weights.conv4_bias);
-            update_weight(conv5_filter_update, weights.conv5_filter);
-            update_weight(conv5_bias_update, weights.conv5_bias);
-        }
+
+        auto update_weight = [](const Runtime::Buffer<float> &src, Runtime::Buffer<float> &dst) {
+            dst.copy_from(src.sliced(src.dimensions()-1, 0));
+        };
+        update_weight(head1_filter_update, weights.head1_filter);
+        update_weight(head1_bias_update, weights.head1_bias);
+        update_weight(head2_filter_update, weights.head2_filter);
+        update_weight(head2_bias_update, weights.head2_bias);
+        update_weight(conv1_filter_update, weights.conv1_filter);
+        update_weight(conv1_bias_update, weights.conv1_bias);
+        update_weight(conv2_filter_update, weights.conv2_filter);
+        update_weight(conv2_bias_update, weights.conv2_bias);
+        update_weight(conv3_filter_update, weights.conv3_filter);
+        update_weight(conv3_bias_update, weights.conv3_bias);
+        update_weight(conv4_filter_update, weights.conv4_filter);
+        update_weight(conv4_bias_update, weights.conv4_bias);
+        update_weight(conv5_filter_update, weights.conv5_filter);
+        update_weight(conv5_bias_update, weights.conv5_bias);
 
         return loss();
     }
@@ -358,7 +362,7 @@ public:
                                         weights.conv4_filter, weights.conv4_bias,
                                         weights.conv5_filter, weights.conv5_bias,
                                         weights.conv6_filter, weights.conv6_bias,
-                                        0.0f, nullptr,
+                                        0.0f, 0, nullptr,
                                         dst);
 
         for (int i = 0; i < cursor; i++) {
@@ -513,6 +517,123 @@ public:
         buffer_to_file(weights.conv6_filter, weights_dir + "/trunk_conv6_weight.data");
         buffer_to_file(weights.conv6_bias, weights_dir + "/trunk_conv6_bias.data");
     }
+
+
+    /*
+    std::string parameter_server_hostname{ "localhost" };
+    int parameter_server_port = 12345;
+    int parameter_server_experiment_id = 0;
+
+    struct TCPConnection {
+        int fd = 0;
+
+        Connection(const std::string &server, int port) {
+            sockaddr_in address {0};
+            sockaddr_in serv_addr {0};
+            int sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+            internal_assert(sock >= 0) << "Socket creation error";
+            fd = sock;
+
+            serv_addr.sin_family = AF_INET;
+            serv_addr.sin_port = htons(port);
+
+            // Convert IPv4 and IPv6 addresses from text to binary form
+            int err = inet_pton(AF_INET, server.c_str(), &serv_addr.sin_addr);
+            internal_assert(err == 0) << "Invalid address";
+
+            err = connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
+            internal_assert(err == 0) << "Connection failed";
+        }
+
+        void send(const uint8_t *data, size_t len) {
+            int sent = send(fd, data, len, 0);
+            internal_assert(sent == len) << "Failed to send everything: " << sent << "/" << len;
+        }
+
+        void recv(uint8_t *data, size_t len) {
+            ssize_t received = 0;
+            while (recieved < len) {
+                ssize_t r = recv(fd, buffer + received, len - received, 0);
+                internal_assert(r > 0) << "Failed to receive bytes: " << r;
+                recieved += r;
+            }
+        }
+
+        ~Connection() {
+            close(fd);
+        }
+    };
+
+    template<typename F>
+    void for_each_weight(F &f) {
+        f(weights.head1_filter);
+        f(weights.head1_bias);
+        f(weights.head2_filter);
+        f(weights.head2_bias);
+        f(weights.conv1_filter);
+        f(weights.conv1_bias);
+        f(weights.conv2_filter);
+        f(weights.conv2_bias);
+        f(weights.conv3_filter);
+        f(weights.conv3_bias);
+        f(weights.conv4_filter);
+        f(weights.conv4_bias);
+        f(weights.conv5_filter);
+        f(weights.conv5_bias);
+        f(weights.conv6_filter);
+        f(weights.conv6_bias);
+    }
+
+    void send_weights_to_parameter_server() {
+        auto conn = Connection(parameter_server_hostname, parameter_server_port);
+
+        size_t total_size_of_weights = 0;
+
+        for_each_weight([&](const Runtime::Buffer<float> &w) {
+                total_size_of_weights += w.size_in_bytes();
+            });
+
+        int header[4] = {7582946, 1, parameter_server_experiment_id, total_size_of_weights};
+        conn.send((const uint8_t *)header, sizeof(header));
+        for_each_weight([&](const Runtime::Buffer<float> &w) {
+                conn.send(w.data(), w.size_in_bytes());
+            });
+    }
+
+    void send_gradients_to_parameter_server() {
+        auto conn = Connection(parameter_server_hostname, parameter_server_port);
+
+        size_t total_size_of_weights = 0;
+
+        for_each_weight([&](const Runtime::Buffer<float> &w) {
+                total_size_of_weights += w.size_in_bytes();
+            });
+
+        int header[4] = {7582946, 2, parameter_server_experiment_id, total_size_of_weights};
+        conn.send((const uint8_t *)header, sizeof(header));
+        for_each_weight([&](const Runtime::Buffer<float> &w) {
+                // TODO: send gradient, not weight
+                conn.send(w.data(), w.size_in_bytes());
+            });
+    }
+
+    void get_weights_from_parameter_server() {
+        auto conn = Connection(parameter_server_hostname, parameter_server_port);
+
+        size_t total_size_of_weights = 0;
+
+        for_each_weight([&](const Runtime::Buffer<float> &w) {
+                total_size_of_weights += w.size_in_bytes();
+            });
+
+        int header[4] = {7582946, 0, parameter_server_experiment_id, total_size_of_weights};
+        conn.send((const uint8_t *)header, sizeof(header));
+        for_each_weight([&](Runtime::Buffer<float> &w) {
+                conn.recv(w.data(), w.size_in_bytes());
+            });
+
+    }
+    */
 
     // Discard any enqueued but unevaluated schedules
     void reset() {

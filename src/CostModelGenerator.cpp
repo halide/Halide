@@ -23,7 +23,7 @@ template<bool training> struct ModelWeight;
 template<>
 struct ModelWeight<false> : public GeneratorInput<Buffer<float>> {
     ModelWeight(const std::string &name, int dim) : GeneratorInput<Buffer<float>>(name, dim) {}
-    void backprop(const Derivative &d, Expr learning_rate) {}
+    void backprop(const Derivative &d, Expr learning_rate, Expr timestep) {}
     void set_shape(int s0, int s1 = 0, int s2 = 0) {
         dim(0).set_stride(Expr()).dim(dimensions() - 1).set_stride(1);
         dim(0).set_bounds(0, s0);
@@ -37,32 +37,34 @@ struct ModelWeight<true> : public GeneratorInput<Buffer<float>> {
     GeneratorOutput<Buffer<float>> grad;
 
     ModelWeight(const std::string &name, int dim) : GeneratorInput<Buffer<float>>(name, dim), grad("updated_" + name, dim + 1) {}
-    void backprop(const Derivative &d, Expr learning_rate) {
+    void backprop(const Derivative &d, Expr learning_rate, Expr timestep) {
         std::vector<Expr> args(dimensions() + 1);
         for (auto &e : args) e = Var();
         grad(args) = undef<float>();
 
-        args.pop_back();
-        Expr current_weight = (*this)(args);
-        Expr deriv = d(*this)(args);
-
-        args.push_back(0);
+        args.back() = 0;
         FuncRef new_weight = grad(args);
         args.back() = 1;
         FuncRef smoothed_deriv = grad(args);
         args.back() = 2;
         FuncRef smoothed_second_moment = grad(args);
 
+        args.pop_back();
+        Expr current_weight = (*this)(args);
+        Expr deriv = d(*this)(args);
+
         // Update the first and second moment estimates
         smoothed_deriv = 0.9f * smoothed_deriv + 0.1f * deriv;
         smoothed_second_moment = 0.999f * smoothed_second_moment + 0.001f * pow(deriv, 2);
 
-        // Note that we're missing the correction for early
-        // timesteps. Shouldn't matter in the long run.
+        // Correction to account for the fact that the smoothed_deriv
+        // and smoothed_second_moment start at zero when t == 0
+        Expr smoothed_deriv_correction = 1 / (1 - pow(0.9f, timestep + 1));
+        Expr smoothed_second_moment_correction = 1 / (1 - pow(0.999f, timestep + 1));
 
         // Update the weights
-        Expr step = learning_rate * smoothed_deriv;
-        step /= sqrt(smoothed_second_moment) + 1e-8f;
+        Expr step = learning_rate * smoothed_deriv * smoothed_deriv_correction;
+        step /= sqrt(smoothed_second_moment * smoothed_second_moment_correction) + 1e-8f;
 
         new_weight = current_weight - step;
     }
@@ -130,6 +132,7 @@ public:
 
     // Some extra inputs for training mode. Really should be conditional on 'training'.
     Input<float> learning_rate{ "learning_rate" };
+    Input<int> timestep{ "timestep" }; // Needed by ADAM
     Input<Buffer<float>> true_runtime{ "true_runtime", 1 };
 
     // Either outputs a prediction per batch element or a loss
@@ -329,7 +332,7 @@ public:
                                  &filter6, &bias6};
 
             for (Weight *w : weights) {
-                w->backprop(d_loss_d, learning_rate);
+                w->backprop(d_loss_d, learning_rate, timestep);
             }
 
             // A simple schedule. We'd like to autoschedule this, but
