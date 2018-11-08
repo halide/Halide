@@ -17,6 +17,14 @@ class UnrollLoops : public IRMutator2 {
             // Give it one last chance to simplify to an int
             Expr extent = simplify(for_loop->extent);
             const IntImm *e = extent.as<IntImm>();
+
+            if (e == nullptr) {
+                // Not constant. Just rewrite to serial.
+                Stmt body = mutate(for_loop->body);
+                return For::make(for_loop->name, for_loop->min, for_loop->extent,
+                                 ForType::Serial, for_loop->device_api, std::move(body));
+            }
+
             user_assert(e)
                 << "Can only unroll for loops over a constant extent.\n"
                 << "Loop over " << for_loop->name << " has extent " << extent << ".\n";
