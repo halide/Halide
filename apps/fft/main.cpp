@@ -153,6 +153,10 @@ int main(int argc, char **argv) {
     // locality.
     c2c_in(x, y, rep) = {re_in(x, y), im_in(x, y)};
     Func bench_c2c = fft2d_c2c(c2c_in, W, H, -1, target, fwd_desc);
+    // We must disable inference of buffer constraints for this Func,
+    // since we are going to use unorthodox strides later on. (We can
+    // still set buffer constraints manually.)
+    bench_c2c.infer_buffer_constraints(false);
     bench_c2c.compile_to_lowered_stmt(output_dir + "c2c.html", bench_c2c.infer_arguments(), HTML);
     Realization R_c2c = bench_c2c.realize(W, H, reps, target);
     // Write all reps to the same place in memory. This means the
@@ -184,6 +188,7 @@ int main(int argc, char **argv) {
     // All reps read from the same input. See notes on c2c_in.
     r2c_in(x, y, rep) = re_in(x, y);
     Func bench_r2c = fft2d_r2c(r2c_in, W, H, target, fwd_desc);
+    bench_r2c.infer_buffer_constraints(false);
     bench_r2c.compile_to_lowered_stmt(output_dir + "r2c.html", bench_r2c.infer_arguments(), HTML);
     Realization R_r2c = bench_r2c.realize(W, H/2 + 1, reps, target);
     // Write all reps to the same place in memory. See notes on R_c2c.
@@ -210,6 +215,7 @@ int main(int argc, char **argv) {
     // All reps read from the same input. See notes on c2c_in.
     c2r_in(x, y, rep) = {re_in(x, y), im_in(x, y)};
     Func bench_c2r = fft2d_c2r(c2r_in, W, H, target, inv_desc);
+    bench_c2r.infer_buffer_constraints(false);
     bench_c2r.compile_to_lowered_stmt(output_dir + "c2r.html", bench_c2r.infer_arguments(), HTML);
     Realization R_c2r = bench_c2r.realize(W, H, reps, target);
     // Write all reps to the same place in memory. See notes on R_c2c.

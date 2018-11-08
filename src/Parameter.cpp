@@ -287,11 +287,25 @@ Expr Parameter::estimate() const {
 // Add constraints to a buffer based on the storage scheduling for f.
 void Parameter::set_constraints_from_schedule(Function f) {
     constexpr int D = 1;
+    if (!f.infer_buffer_constraints()) {
+        debug(D) << "set_constraints_from_schedule(" << f.name() << "): ignored due to infer_buffer_constraints = false\n";
+        return;
+    }
+
     const std::string &param_name = this->name();
     const FuncSchedule &schedule = f.schedule();
     const std::vector<StorageDim> &storage_dims = schedule.storage_dims();
     const std::vector<std::string> &args = f.args();
+    const std::vector<int> storage_order = f.storage_order();
     std::ostringstream o;
+
+    const auto emit_error = [&f](int dim, const std::string &s, Expr inferred, Expr expl) -> void {
+        user_error << "Inferred value for " << f.name() << "." << s << "." << dim
+            << " does not match the value explicitly specified."
+            << " (In very unusual cases, you may want to use infer_buffer_constraints(false) to disable this.)\n"
+            << "  inferred:" << inferred << "\n"
+            << "  explicit: " << expl << "\n";
+    };
 
     std::vector<Expr> extents(args.size());
     for (size_t dim = 0; dim < args.size(); dim++) {
@@ -316,8 +330,7 @@ void Parameter::set_constraints_from_schedule(Function f) {
                     min = simplify(min + b.remainder);
                 }
                 if (min_constraint(dim).defined() && !equal(min, simplify(min_constraint(dim)))) {
-                    user_error << "Inferred value for parameter \"" << f.name() << "\" min[" << dim << "] does not match"
-                        " value explicitly specified (inferred " << min << " vs explicit " << min_constraint(dim) << ").\n";
+                    emit_error(dim, "min", min, min_constraint(dim));
                 } else {
                     if (debug::debug_level() >= D) {
                         o << "  min." << dim << " -> " << min << "\n";
@@ -325,8 +338,7 @@ void Parameter::set_constraints_from_schedule(Function f) {
                     set_min_constraint(dim, min);
                 }
                 if (extent_constraint(dim).defined() && !equal(extents[dim], simplify(extent_constraint(dim)))) {
-                    user_error << "Inferred value for parameter \"" << f.name() << "\" extent[" << dim << "] does not match"
-                        " value explicitly specified (inferred " << extents[dim] << " vs explicit " << extent_constraint(dim) << ").\n";
+                    emit_error(dim, "extent", extents[dim], extent_constraint(dim));
                 } else {
                     if (debug::debug_level() >= D) {
                         o << "  extents." << dim << " -> " << extents[dim] << "\n";
@@ -342,33 +354,29 @@ void Parameter::set_constraints_from_schedule(Function f) {
     const auto is_default = [](int dim, const Expr &e) -> bool {
         return (dim == 0) ? is_one(e) : !e.defined();
     };
+
     Expr stride = 1;
-    for (const StorageDim &storage_dim : storage_dims) {
-        for (size_t dim = 0; dim < args.size(); dim++) {
-            if (args[dim] == storage_dim.var) {
-                if (!is_default(dim, stride)) {
-                    if (storage_dim.alignment.defined()) {
-                        stride = (stride / storage_dim.alignment) / storage_dim.alignment;
-                    }
-                    Expr s = stride_constraint(dim);
-                    if (!is_default(dim, s) && !equal(stride, simplify(s))) {
-                        user_error << "Inferred value for parameter \"" << f.name() << "\" stride[" << dim << "] does not match"
-                            " value explicitly specified (inferred " << stride << " vs explicit " << s << ").\n";
-                    } else {
-                        set_stride_constraint(dim, stride);
-                        if (debug::debug_level() >= D) {
-                            o << "  stride." << dim << " -> " << stride << " (was " << s << ")\n";
-                        }
-                    }
-                }
-                Expr extent = extents[dim];
-                if (stride.defined() && is_const(extent)) {
-                    stride = simplify(stride * extent);
-                } else {
-                    stride = Expr();
-                }
-                break;
+    for (size_t i = 0; i < storage_order.size(); ++i) {
+        const int dim = storage_order[i];
+        if (!is_default(dim, stride)) {
+            const auto &storage_dim = storage_dims[i];
+            if (storage_dim.alignment.defined()) {
+                stride = (stride / storage_dim.alignment) / storage_dim.alignment;
             }
+            Expr s = stride_constraint(dim);
+            if (!is_default(dim, s) && !equal(stride, simplify(s))) {
+                emit_error(dim, "stride", stride, s);
+            } else {
+                if (debug::debug_level() >= D) {
+                    o << "  stride." << dim << " -> " << stride << " (was " << s << ")\n";
+                }
+                set_stride_constraint(dim, stride);
+            }
+        }
+        if (stride.defined() && is_const(extents[dim])) {
+            stride = simplify(stride * extents[dim]);
+        } else {
+            stride = Expr();
         }
     }
 

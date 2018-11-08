@@ -91,6 +91,7 @@ struct FunctionContents {
     std::vector<string> trace_tags;
 
     bool frozen = false;
+    bool infer_buffer_constraints = true;
 
     void accept(IRVisitor *visitor) const {
         func_schedule.accept(visitor);
@@ -343,6 +344,7 @@ void Function::deep_copy(FunctionPtr copy, DeepCopyMap &copied_map) const {
     copy->trace_realizations = contents->trace_realizations;
     copy->trace_tags = contents->trace_tags;
     copy->frozen = contents->frozen;
+    copy->infer_buffer_constraints = contents->infer_buffer_constraints;
     copy->output_buffers = contents->output_buffers;
     copy->func_schedule = contents->func_schedule.deep_copy(copied_map);
 
@@ -796,6 +798,24 @@ const FuncSchedule &Function::schedule() const {
     return contents->func_schedule;
 }
 
+std::vector<int> Function::storage_order() const {
+    const std::vector<StorageDim> &storage_dims = contents->func_schedule.storage_dims();
+    const std::vector<std::string> &args = contents->args;
+    internal_assert(storage_dims.size() == args.size());
+
+    std::vector<int> storage_order;
+    for (const auto &s : storage_dims) {
+        for (size_t a = 0; a < args.size(); ++a) {
+            if (args[a] == s.var) {
+                storage_order.push_back((int) a);
+                break;
+            }
+        }
+    }
+    internal_assert(storage_order.size() == args.size());
+    return storage_order;
+}
+
 const std::vector<Parameter> &Function::output_buffers() const {
     return contents->output_buffers;
 }
@@ -894,6 +914,14 @@ const std::string &Function::debug_file() const {
 
 std::string &Function::debug_file() {
     return contents->debug_file;
+}
+
+bool Function::infer_buffer_constraints() const {
+    return contents->infer_buffer_constraints;
+}
+
+bool &Function::infer_buffer_constraints() {
+    return contents->infer_buffer_constraints;
 }
 
 void Function::trace_loads() {

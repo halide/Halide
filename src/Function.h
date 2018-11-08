@@ -186,6 +186,11 @@ public:
     /** Get a const handle to the function-specific schedule for inspecting it. */
     const FuncSchedule &schedule() const;
 
+    /** Return a vector containing the order of storage for each argument,
+     * based on the scheduling directives. Each entry is an index into the args array.
+     */
+    std::vector<int> storage_order() const;
+
     /** Get a handle on the output buffer used for setting constraints
      * on it. */
     const std::vector<Parameter> &output_buffers() const;
@@ -266,6 +271,14 @@ public:
 
     /** Get a handle to the debug filename. */
     std::string &debug_file();
+
+    /** If true, attempt to infer constraints on the buffer shape based
+     * on the scheduling directives. (Default = true; it is very rare to
+     * need to disable this.) */
+    // @{
+    bool infer_buffer_constraints() const;
+    bool &infer_buffer_constraints();
+    // @}
 
     /** Use an an extern argument to another function. */
     operator ExternFuncArgument() const {
