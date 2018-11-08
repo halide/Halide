@@ -3,6 +3,7 @@
 #include <random>
 
 using namespace Halide;
+using namespace Halide::Internal;
 using std::vector;
 
 namespace {
@@ -24,11 +25,147 @@ int rand_int(int min, int max) { return (rng() % (max - min + 1)) + min; }
 bool rand_bool() { return rng() % 2 == 0; }
 float rand_float() { return rand_int(0, 1 << 30) / (float)(1 << 30); }
 
+// Generate random expressions
+// Given a vector of expresions and a tree depth, recursively
+// generates an expression by combining subexpressions.
+// At the base case where depth is 0, we just return a randomly
+// chosen input.
+
+Type expr_types[] = { UInt(1), UInt(8), UInt(16), UInt(32), Int(8), Int(16), Int(32), Float(32) };
+const int expr_type_count = sizeof(expr_types)/sizeof(expr_types[0]);
+
+typedef Expr (*make_bin_op_fn)(Expr, Expr);
+
+make_bin_op_fn make_bin_op[] = {
+    (make_bin_op_fn)operator+,
+    (make_bin_op_fn)operator-,
+    (make_bin_op_fn)operator*,
+    (make_bin_op_fn)min,
+    (make_bin_op_fn)max,
+    (make_bin_op_fn)operator/,
+    (make_bin_op_fn)operator%,
+ };
+
+make_bin_op_fn make_bool_bin_op[] = {
+		(make_bin_op_fn)operator&&,
+    (make_bin_op_fn)operator||,
+};
+
+make_bin_op_fn make_comp_bin_op[] = {
+    (make_bin_op_fn)operator==,
+    (make_bin_op_fn)operator!=,
+    (make_bin_op_fn)operator<,
+    (make_bin_op_fn)operator<=,
+    (make_bin_op_fn)operator>,
+    (make_bin_op_fn)operator>=
+};
+
+const int bin_op_count = sizeof(make_bin_op) / sizeof(make_bin_op[0]);
+const int bool_bin_op_count = sizeof(make_bool_bin_op) / sizeof(make_bool_bin_op[0]);
+const int comp_bin_op_count = sizeof(make_comp_bin_op) / sizeof(make_comp_bin_op[0]);
+
+Type random_type() {
+    Type T = expr_types[rng()%expr_type_count];
+    return T;
+}
+
+Expr random_expr(vector<Expr> inputs, int depth);
+
+Expr random_condition(vector<Expr> inputs, int depth) {
+    Expr a = random_expr(inputs, depth);
+    Expr b = random_expr(inputs, depth);
+    int op = rng() % comp_bin_op_count;
+    return make_comp_bin_op[op](a, b);
+}
+
+// takes a vector of inputs (points in functions) and an expected Type
+// if the chosen input is not of the given type, cast it to conform
+Expr make_leaf(vector<Expr> inputs) {
+		auto chosen_input = inputs[rand_int(0, inputs.size()-1)];
+		return chosen_input;
+}
+
+Expr random_expr(vector<Expr> inputs, int depth) {
+		const int op_count = bin_op_count + bool_bin_op_count + 8;
+    if (depth <= 0) {
+    		return make_leaf(inputs);
+		}
+
+   	// pick a random operation to combine exprs
+		int op = rng() % op_count; // ops need to be defined
+    switch(op) { 
+		case 0:  // casting
+      { // Get a random type
+        Type convertT = random_type();
+        auto e1 = random_expr(inputs, depth);
+        return Cast::make(convertT, e1);
+      }
+  	case 1: // select operation
+      { auto c = random_condition(inputs, depth-2); // arbitrarily chose to make condition expression shorter
+        auto e1 = random_expr(inputs, depth-1);
+        auto e2 = random_expr(inputs, depth-2);
+        // make sure e1 and e2 have the same type
+        if (e1.type() != e2.type()) {
+            e2 = Cast::make(e1.type(), e2);
+        }
+        return Select::make(c, e1, e2);
+      }
+		case 2: // unary boolean op
+      {
+        auto e1 = random_expr(inputs, depth-1);
+        if (e1.type().is_bool()) {
+            return !e1; 
+        }
+        break;
+      }
+    case 3: // sin
+      {
+        auto e1 = random_expr(inputs, depth-1);
+        return sin(e1);
+      }
+    case 4: // exp
+      {
+        auto e1 = random_expr(inputs, depth-1);
+        return exp(e1);
+      }
+    case 5: // sqrt
+      {
+        auto e1 = random_expr(inputs, depth-1);
+        return sqrt(e1);
+      }
+    case 6: // log
+      {
+        auto e1 = random_expr(inputs, depth-1);
+        return log(e1);
+      }
+    case 7: // condition
+      {
+        return random_condition(inputs, depth-1);
+      }
+		default: // binary op 
+        make_bin_op_fn maker;
+        auto e1 = random_expr(inputs, depth-1);
+        auto e2 = random_expr(inputs, depth-2);
+        if (e1.type().is_bool() && e2.type().is_bool()) {
+            maker = make_bool_bin_op[op % bool_bin_op_count];
+        } else {
+            maker = make_bin_op[op % bin_op_count];
+        }
+
+        return maker(e1, e2);
+		} 
+
+		// selected case did not return an expression, try again
+    return random_expr(inputs, depth);
+}
+
 Expr rand_value(Type t) {
     if (t.is_int()) {
         return cast(t, rand_int(1, 127));
     } else if (t.is_float()) {
         return cast(t, rand_float());
+    } else if (t.is_bool()) {
+        return cast(t, rand_int(0,1));
     } else {
         // Shouldn't get here.
         assert(false);
@@ -98,13 +235,26 @@ public:
                   << " with kernel [" << kernel_min << ", " << kernel_max << "]\n";
 
         vector<Var> args = f.func.args();
-
+				
+				/**
         Expr def = cast(f.func.value().type(), 0);
         for (int i = kernel_min; i <= kernel_max; i++) {
             vector<Expr> coords = make_arguments(f.func.args());
             coords[dim] += i;
             def = def + rand_value(f.func.value().type()) * f.func(coords);
         }
+				**/
+				
+				// generate random expression using potentially all values in the stencil
+				vector<Expr> inputs;
+        for (int i = kernel_min; i <= kernel_max; i++) {
+            vector<Expr> coords = make_arguments(f.func.args());
+            coords[dim] += i;
+						inputs.push_back(f.func(coords));
+        }
+				int min_depth = log(kernel_max - kernel_min + 1);
+				int max_depth = log(min_depth*2) + 1;
+				Expr def = random_expr(inputs, rand_int(min_depth, max_depth));
 
         Func conv("conv_" + args[dim].name());
         conv(args) = def;
@@ -246,12 +396,11 @@ public:
                   << " with kernel [" << kernel_min << ", " << kernel_max << "]\n";
 
         vector<Var> args = f.func.args();
-
-        Expr def = cast(f.func.value().type(), 0);
-
         // Avoid huge unrolled loops
         if (f.c >= 4) return convolve2D_r(f, kernel_min, kernel_max);
 
+				/**
+        Expr def = cast(f.func.value().type(), 0);
         // assuming input is 3d: w, h, c
         for (int c = 0; c < f.c; c++)  {
             for (int i = kernel_min; i <= kernel_max; i++) {
@@ -264,7 +413,25 @@ public:
                 }
             }
         }
+				**/
+				vector<Expr> inputs;
+        for (int c = 0; c < f.c; c++)  {
+            for (int i = kernel_min; i <= kernel_max; i++) {
+                for (int j = kernel_min; j <= kernel_max; j++) {
+                    vector<Expr> coords = make_arguments(f.func.args());
+                    coords[0] += i;
+                    coords[1] += j;
+                    coords[2] = c;
+										inputs.push_back(f.func(coords));
+                }
+            }
+        }
 
+				int kernel_width = kernel_max - kernel_min + 1; 
+				int min_depth = log(kernel_width * kernel_width * f.c);
+				int max_depth = log(min_depth*2) + 1;
+				
+				Expr def = random_expr(inputs, rand_int(min_depth, max_depth));	
         Func conv("conv2D_" + args[0].name() + args[1].name());
         conv(args) = def;
 
@@ -405,6 +572,12 @@ public:
         }
 
         Func binary("binary_op");
+
+        vector<Expr> inputs = {f.func(f.func.args()), g.func(f.func.args())};
+        int min_depth = 1;
+        int max_depth = 3;
+        binary(f.func.args()) = random_expr(inputs, rand_int(min_depth, max_depth));
+        /**
         int op_type = rand_int(0, 4); // + , -, *, /, %
         if (op_type == 0) {
             binary(f.func.args()) = f.func(f.func.args()) + g.func(f.func.args());
@@ -423,6 +596,7 @@ public:
             binary(f.func.args()) = f.func(f.func.args()) % g.func(f.func.args());
             std::cout << "Binary op: % \n";
         }
+        **/
         return {binary, f.w, f.h, std::min(f.c, g.c)};
     }
 
@@ -602,6 +776,12 @@ public:
         std::cout << "Resulting size: " << out.w << ", " << out.h << ", " << out.c << "\n";
         return out;
     }
+    
+    Stage cast_stage(Type t, Stage f) {
+        Func casted("casted");
+        casted(f.func.args()) = Cast::make(t, f.func(f.func.args()));
+        return {casted, f.w, f.h, f.c};
+    }
 
     // Generate a random stage using f as an input.
     Stage random_stage(const vector<Stage> &s) {
@@ -688,8 +868,8 @@ public:
 
         // Resample back to the correct resolution
         tail = resample_to(tail, 2000, 2000, 3);
-
-        output = tail.func;
+        Stage casted = cast_stage(output.type(), tail);
+        output = casted.func;
 
         if (!auto_schedule) {
             output.compute_root().reorder(x, c, y).vectorize(x, 8).parallel(y);
