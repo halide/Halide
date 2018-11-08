@@ -388,7 +388,7 @@ int main(int argc, char **argv) {
         assert(b.dim(2).stride() == b2.dim(0).stride());
         assert(b.dim(3).stride() == b2.dim(1).stride());
 
-        b2.reorder({2, 3, 0, 1});
+        b2.transpose({2, 3, 0, 1});
         assert(b.dim(0).extent() == b2.dim(0).extent());
         assert(b.dim(1).extent() == b2.dim(1).extent());
         assert(b.dim(2).extent() == b2.dim(2).extent());

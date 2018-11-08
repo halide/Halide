@@ -923,7 +923,7 @@ public:
      * to allocate an interleaved RGB buffer, you would pass {2, 0, 1} for storage_order. */
     Buffer(halide_type_t t, const std::vector<int> &sizes, const std::vector<int> &storage_order)
         : Buffer(t, make_ordered_sizes(sizes, storage_order)) {
-        reorder(storage_order);
+        transpose(storage_order);
     }
 
     Buffer(const std::vector<int> &sizes, const std::vector<int> &storage_order)
@@ -1396,11 +1396,11 @@ public:
         std::swap(buf.dim[d1], buf.dim[d2]);
     }
 
-    /** A generalization of transpose: instead of swapping two dimensions,
+    /** A generalized transpose: instead of swapping two dimensions,
      * pass a vector that lists each dimension index exactly once, in the desired order.
-     * For instance, to reorder a 3-dimensional planar image to be interleaved,
-     * pass {2, 0, 1} for storage_order */
-    void reorder(const std::vector<int> &order) {
+     * For instance, to transpose a 3-dimensional planar image to be interleaved,
+     * pass {2, 0, 1} for order */
+    void transpose(const std::vector<int> &order) {
         assert((int) order.size() == dimensions());
         if (dimensions() < 2) {
             // My, that was easy
@@ -1418,9 +1418,9 @@ public:
 
     /** Make an image which refers to the same data using a different
      * ordering of the dimensions. */
-    Buffer<T, D> reordered(const std::vector<int> &order) const {
+    Buffer<T, D> transposed(const std::vector<int> &order) const {
         Buffer<T, D> im = *this;
-        im.reorder(order);
+        im.transpose(order);
         return im;
     }
 
@@ -1685,7 +1685,7 @@ public:
      * known as packed or chunky) memory layouts. */
     static Buffer<void, D> make_interleaved(halide_type_t t, int width, int height, int channels) {
         Buffer<void, D> im(t, channels, width, height);
-        // Note that this is equivalent to calling reorder({2, 0, 1}),
+        // Note that this is equivalent to calling transpose({2, 0, 1}),
         // but slightly more efficient.
         im.transpose(0, 1);
         im.transpose(1, 2);

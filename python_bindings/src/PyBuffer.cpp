@@ -423,17 +423,16 @@ void define_buffer(py::module &m) {
             b.transpose(d1, d2);
         }, py::arg("d1"), py::arg("d2"))
 
-        // Present in Runtime::Buffer but not Buffer
-        // .def("transposed", [](Buffer<> &b, int d1, int d2) -> Buffer<> {
-        //     return b.transposed(d1, d2);
-        // }, py::arg("d1"), py::arg("d2"))
+        .def("transposed", [](Buffer<> &b, int d1, int d2) -> Buffer<> {
+            return b.transposed(d1, d2);
+        }, py::arg("d1"), py::arg("d2"))
 
-        .def("reorder", [](Buffer<> &b, const std::vector<int> &order) -> void {
-            b.reorder(order);
+        .def("transpose", [](Buffer<> &b, const std::vector<int> &order) -> void {
+            b.transpose(order);
         }, py::arg("order"))
 
-        .def("reordered", [](Buffer<> &b, const std::vector<int> &order) -> Buffer<> {
-            return b.reordered(order);
+        .def("transposed", [](Buffer<> &b, const std::vector<int> &order) -> Buffer<> {
+            return b.transposed(order);
         }, py::arg("order"))
 
         .def("dim", [](Buffer<> &b, int dimension) -> BufferDimension {
