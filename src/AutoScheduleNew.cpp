@@ -719,12 +719,16 @@ struct FunctionDAG {
                 const Definition &def = (s == 0) ? consumer.definition() : consumer.update(s - 1);
                 const StageSchedule &sched = def.schedule();
 
-                Scope<Interval> stage_scope;
-                stage_scope.set_containing_scope(&scope);
+                Scope<Interval> stage_scope_with_concrete_rvar_bounds, stage_scope_with_symbolic_rvar_bounds;
+                stage_scope_with_concrete_rvar_bounds.set_containing_scope(&scope);
+                stage_scope_with_symbolic_rvar_bounds.set_containing_scope(&scope);
                 for (const auto &rv : sched.rvars()) {
-                    Expr min = Variable::make(Int(32), consumer.name() + "." + rv.var + ".min");
-                    Expr max = Variable::make(Int(32), consumer.name() + "." + rv.var + ".max");
-                    stage_scope.push(rv.var, Interval(min, max));
+                    Expr min = simplify(apply_param_estimates.mutate(rv.min));
+                    Expr max = simplify(apply_param_estimates.mutate(rv.min + rv.extent - 1));
+                    stage_scope_with_concrete_rvar_bounds.push(rv.var, Interval(min, max));
+                    min = Variable::make(Int(32), consumer.name() + "." + rv.var + ".min");
+                    max = Variable::make(Int(32), consumer.name() + "." + rv.var + ".max");
+                    stage_scope_with_symbolic_rvar_bounds.push(rv.var, Interval(min, max));
                 }
 
                 // Figure out the region computed of the stage by taking bounds of the LHS Exprs
@@ -732,7 +736,8 @@ struct FunctionDAG {
                     node.region_computed.resize(consumer.dimensions());
                 }
                 for (int j = 0; j < consumer.dimensions(); j++) {
-                    Interval in = bounds_of_expr_in_scope(def.args()[j], stage_scope);
+                    // The region computed always uses the full extent of the rvars
+                    Interval in = bounds_of_expr_in_scope(def.args()[j], stage_scope_with_concrete_rvar_bounds);
                     internal_assert(in.is_bounded())
                         << "Region computed of " << consumer.name()
                         << " is unbounded: [" << in.min << " " << in.max << "]\n";
@@ -776,27 +781,16 @@ struct FunctionDAG {
                 stage.loop_nest_all_common_cases = true;
                 for (const auto &d : sched.dims()) {
                     // Skip synthetic loops like "__outermost"
-                    if (!stage_scope.contains(d.var)) continue;
+                    if (!stage_scope_with_symbolic_rvar_bounds.contains(d.var)) continue;
 
                     Node::Loop l;
                     l.var = d.var;
 
-                    if (d.is_rvar()) {
-                        l.pure = false;
-                        for (const auto &rv : sched.rvars()) {
-                            if (d.var == rv.var) {
-                                l.min = simplify(apply_param_estimates.mutate(rv.min));
-                                l.max = simplify(apply_param_estimates.mutate(rv.min + rv.extent - 1));
-                                break;
-                            }
-                        }
-                    } else {
-                        // We already have the right variable names in the stage scope
-                        Interval in = stage_scope.get(l.var);
-                        l.min = in.min;
-                        l.max = in.max;
-                        l.pure = true;
-                    }
+                    // We already have the right variable names in the stage scope
+                    Interval in = stage_scope_with_concrete_rvar_bounds.get(l.var);
+                    l.min = in.min;
+                    l.max = in.max;
+                    l.pure = true;
 
                     // Additional analysis to speed up evaluation of
                     // common cases. Loop bounds that are just one of
@@ -939,8 +933,10 @@ struct FunctionDAG {
                     p.second.max = apply_param_estimates.mutate(p.second.max);
                 }
 
+                // For this stage scope we want symbolic bounds for the rvars
+
                 // Now create the edges that lead to this func
-                auto boxes = boxes_required(exprs, stage_scope, func_value_bounds);
+                auto boxes = boxes_required(exprs, stage_scope_with_symbolic_rvar_bounds, func_value_bounds);
                 for (auto &p : boxes) {
                     auto it = env.find(p.first);
                     if (it != env.end() && p.first != consumer.name()) {
@@ -3273,6 +3269,13 @@ struct State {
                 }
             }
         }
+
+        if (num_children == 0) {
+            debug(0) << "Warning: Found no legal way to schedule "
+                     << node->func.name() << " in the following State:\n";
+            dump();
+            internal_error << "Aborted";
+        }
     }
 
     void dump() const {
@@ -3486,11 +3489,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
         internal_assert(!pending.empty());
 
         if ((int)pending.size() > beam_size * 10000) {
-            debug(0) << "Huge number of states generated. Bailing out:\n";
-            // Wat?
-            while (!pending.empty()) {
-                pending.pop()->dump();
-            }
+            debug(0) << "Warning: Huge number of states generated (" << pending.size() << ").\n";
         }
 
         expanded = 0;
@@ -3742,7 +3741,7 @@ std::string generate_schedules_autotune(const std::vector<Function> &output_func
     };
 
     const int max_history = 128;
-    const int batch_size = 8;
+    const int batch_size = 64;
     vector<std::shared_ptr<Trial>> history;
     Runtime::Buffer<float> runtimes(max_history);
 
@@ -3818,8 +3817,6 @@ std::string generate_schedules_autotune(const std::vector<Function> &output_func
         int best = -1;
         size_t best_cursor = 0;
         double best_runtime = 1e20;
-        double average_runtime = 0;
-        double average_square_runtime = 0;
 
         for (int b = 0; b < batch_size; b++) {
             debug(0) << "Benchmarking batch member " << b << "\n";
@@ -3870,19 +3867,6 @@ std::string generate_schedules_autotune(const std::vector<Function> &output_func
             }
 
             debug(0) << "Runtime " << b << ": " << runtimes(c) << "\n";
-            average_runtime += runtimes(c);
-            average_square_runtime += runtimes(c) * runtimes(c);
-        }
-        average_runtime /= batch_size;
-        average_square_runtime /= batch_size;
-
-        // We want the stdev of runtimes to hover around the average runtime / 4
-        double runtime_stdev = std::sqrt(average_square_runtime - average_runtime*average_runtime);
-        debug(0) << "Standard deviation of runtimes: " << runtime_stdev << "\n";
-        if (runtime_stdev > average_runtime / 2 && exploration_dropout < 90) {
-            exploration_dropout += 5;
-        } else if (runtime_stdev < average_runtime / 8 && exploration_dropout > 50) {
-            exploration_dropout -= 5;
         }
 
         debug(0) << "Best runtime in batch was " << best << " " << best_runtime << "\n";
@@ -3907,9 +3891,9 @@ std::string generate_schedules_autotune(const std::vector<Function> &output_func
             history[i]->optimal->calculate_cost(*(history[i]->dag), params, &tp, false);
         }
 
-        // Then run the predictor in training mode
-        {
-            for (int i = 0; i < 1; i++) {
+        // Then run the predictor in training mode once we have enough samples
+        if (history.size() >= max_history) {
+            for (int i = 0; i < 10; i++) {
                 float loss = tp.backprop(runtimes.cropped(0, 0, history.size()), learning_rate);
                 debug(0) << "RMS Loss: " << std::sqrt(loss) << "\n";
             }
@@ -4445,8 +4429,8 @@ void autoschedule_test() {
         generate_schedules_autotune({f[N-1].function()}, target, params);
     }
 
-    if (0) {
-        // Compute_at a split rvar
+    if (1) {
+        // A schedule where it's insane to not compute inside an rvar
         Func f("f"), g("g");
         f(x, y) = x;
         f(x, y) += 1;
