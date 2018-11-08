@@ -61,14 +61,14 @@ int main(int argc, char **argv) {
     float contrast = (float) atof(argv[4]);
     float sharpen = (float) atof(argv[5]);
     int timing_iterations = atoi(argv[6]);
-    int blackLevel = 25;
-    int whiteLevel = 1023;
+    int black_level = 25;
+    int white_level = 1023;
 
     double best;
 
     best = benchmark(timing_iterations, 1, [&]() {
         camera_pipe(input, matrix_3200, matrix_7000,
-                    color_temp, gamma, contrast, sharpen, blackLevel, whiteLevel,
+                    color_temp, gamma, contrast, sharpen, black_level, white_level,
                     output);
     });
     fprintf(stderr, "Halide (manual):\t%gus\n", best * 1e6);
@@ -76,7 +76,7 @@ int main(int argc, char **argv) {
     #ifndef NO_AUTO_SCHEDULE
     best = benchmark(timing_iterations, 1, [&]() {
         camera_pipe_auto_schedule(input, matrix_3200, matrix_7000,
-                                  color_temp, gamma, contrast, sharpen, blackLevel, whiteLevel,
+                                  color_temp, gamma, contrast, sharpen, black_level, white_level,
             output);
     });
     fprintf(stderr, "Halide (auto):\t%gus\n", best * 1e6);

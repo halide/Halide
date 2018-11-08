@@ -214,8 +214,8 @@ public:
     Input<float> gamma{"gamma"};
     Input<float> contrast{"contrast"};
     Input<float> sharpen_strength{"sharpen_strength"};
-    Input<int> blackLevel{"blackLevel"};
-    Input<int> whiteLevel{"whiteLevel"};
+    Input<int> black_level{"black_level"};
+    Input<int> white_level{"white_level"};
 
     Output<Buffer<uint8_t>> processed{"processed", 3};
 
@@ -283,8 +283,8 @@ Func CameraPipe::apply_curve(Func input) {
     // copied from FCam
     Func curve("curve");
 
-    Expr minRaw = 0 + blackLevel;
-    Expr maxRaw = whiteLevel;
+    Expr minRaw = 0 + black_level;
+    Expr maxRaw = white_level;
 
     // How much to upsample the LUT by when sampling it.
     int lutResample = 1;
@@ -419,11 +419,19 @@ void CameraPipe::generate() {
             .estimate(y, 0, 1968 - 48);
 
 
+        sharpen_strength.set_estimate(1.0f);
+        black_level.set_estimate(25);
+        white_level.set_estimate(1023);
+        gamma.set_estimate(2);
+        contrast.set_estimate(50);
+        color_temp.set_estimate(3200);
+
         // We can generate slightly better code if we know the output is even-size
         processed
             .bound(c, 0, 3)
             .bound(x, 0, ((processed.dim(0).extent())/2)*2)
             .bound(y, 0, ((processed.dim(1).extent())/2)*2);
+
     } else {
 
         Expr out_width = processed.width();
