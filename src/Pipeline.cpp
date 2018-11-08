@@ -540,11 +540,31 @@ Realization Pipeline::realize(vector<int32_t> sizes, const Target &target,
                               const ParamMap &param_map) {
     user_assert(defined()) << "Pipeline is undefined\n";
     vector<Buffer<>> bufs;
-    for (auto & out : contents->outputs) {
-        user_assert(out.has_pure_definition() || out.has_extern_definition()) <<
-            "Can't realize Pipeline with undefined output Func: " << out.name() << ".\n";
-        for (Type t : out.output_types()) {
-            bufs.emplace_back(t, sizes);
+    for (auto & f : contents->outputs) {
+        user_assert(f.has_pure_definition() || f.has_extern_definition()) <<
+            "Can't realize Pipeline with undefined output Func: " << f.name() << ".\n";
+
+        // Attempt to create a Buffer that has the storage laid out in the
+        // same order as that specified by our schedule.
+        std::vector<int> storage_order(sizes.size());
+        {
+            // Should this be moved into (say) Function::get_storage_order()?
+            const FuncSchedule &schedule = f.schedule();
+            const std::vector<StorageDim> &storage_dims = schedule.storage_dims();
+            const std::vector<std::string> &args = f.args();
+
+            for (size_t s = 0; s < storage_dims.size(); ++s) {
+                for (size_t a = 0; a < args.size(); ++a) {
+                    if (args[a] == storage_dims[s].var) {
+                        storage_order[s] = a;
+                        break;
+                    }
+                }
+            }
+        }
+
+        for (Type t : f.output_types()) {
+            bufs.emplace_back(t, sizes, storage_order);
         }
     }
     Realization r(bufs);
