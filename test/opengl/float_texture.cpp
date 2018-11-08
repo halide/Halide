@@ -22,10 +22,9 @@ int main() {
     Func g;
     g(x, y, c) = input(x, y, c);
 
-    Buffer<float> out(255, 255, 3);
     g.bound(c, 0, 3);
     g.glsl(x, y, c);
-    g.realize(out, target);
+    Buffer<float> out = g.realize(255, 255, 3, target);
     out.copy_to_host();
 
     if (!Testing::check_result<float>(out, [&](int x, int y, int c) { return input(x, y, c); })) {

@@ -14,9 +14,8 @@ int main() {
 
     f(x, y, c) = cast<uint8_t>(42);
 
-    Buffer<uint8_t> out(10, 10, 3);
     f.bound(c, 0, 3).glsl(x, y, c);
-    f.realize(out, target);
+    Buffer<uint8_t> out = f.realize(10, 10, 3, target);
 
     out.copy_to_host();
     if (!Testing::check_result<uint8_t>(out, [](int x, int y, int c) { return 42; })) {

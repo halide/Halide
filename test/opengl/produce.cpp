@@ -40,8 +40,7 @@ int test_lut1d() {
     f0.bound(c, 0, 3);
     f0.glsl(x, y, c);
 
-    Buffer<float> out0(8, 8, 3);
-    f0.realize(out0, target);
+    Buffer<float> out0 = f0.realize(8, 8, 3, target);
 
     out0.copy_to_host();
 

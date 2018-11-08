@@ -55,11 +55,9 @@ class CountVarying : public IRMutator2 {
 bool perform_test(const char *label, const Target target, Func f, int expected_nvarying, float tol, std::function<float(int x, int y, int c)> expected_val) {
     fprintf(stderr, "%s\n", label);
 
-    Buffer<float> out(8, 8, 3);
-
     varyings.clear();
     f.add_custom_lowering_pass(new CountVarying);
-    f.realize(out, target);
+    Buffer<float> out = f.realize(8, 8, 3, target);
 
     // Check for the correct number of varying attributes
     if ((int)varyings.size() != expected_nvarying) {

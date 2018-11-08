@@ -32,10 +32,12 @@ int main() {
     const int width = 255;
     const int height = 10;
 
-    Buffer<uint8_t> input(width, height, 3);
-    Buffer<uint8_t> out1(width, height, 3);
-    Buffer<uint8_t> out2(width, height, 3);
-    Buffer<uint8_t> out3(width, height, 3);
+    // Create with the interleaved storage order needed by GLSL
+    const std::vector<int> glsl_order{2, 0, 1};
+    Buffer<uint8_t> input({width, height, 3}, glsl_order);
+    Buffer<uint8_t> out1({width, height, 3}, glsl_order);
+    Buffer<uint8_t> out2({width, height, 3}, glsl_order);
+    Buffer<uint8_t> out3({width, height, 3}, glsl_order);
 
     Var x, y, c;
     Func g;

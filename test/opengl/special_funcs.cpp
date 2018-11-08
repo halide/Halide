@@ -35,7 +35,9 @@ bool test_exact(Expr r, Expr g, Expr b) {
                             b));
     const int W = 256, H = 256;
     Buffer<T> cpu_result(W, H, 3);
-    Buffer<T> gpu_result(W, H, 3);
+    // Create with the interleaved storage order needed by GLSL
+    const std::vector<int> glsl_order{2, 0, 1};
+    Buffer<T> gpu_result({W, H, 3}, glsl_order);
     test_function(e, cpu_result, gpu_result);
 
     for (int y = 0; y < gpu_result.height(); y++) {
@@ -64,7 +66,9 @@ bool test_approx(Expr r, Expr g, Expr b, double rms_error) {
     Expr e = cast<T>(select(c == 0, r, c == 1, g, b));
     const int W = 256, H = 256;
     Buffer<T> cpu_result(W, H, 3);
-    Buffer<T> gpu_result(W, H, 3);
+    // Create with the interleaved storage order needed by GLSL
+    const std::vector<int> glsl_order{2, 0, 1};
+    Buffer<T> gpu_result({W, H, 3}, glsl_order);
     test_function(e, cpu_result, gpu_result);
 
     double err = 0.0;
