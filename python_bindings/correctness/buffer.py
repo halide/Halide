@@ -173,6 +173,51 @@ def test_interleaved_ndarray():
     assert b.dim(2).extent() == c
     assert b.dim(2).stride() == 1
 
+def test_reorder():
+    W = 7
+    H = 5
+    C = 3
+    Z = 2
+
+    a = hl.Buffer(type = hl.UInt(8), sizes = [W, H, C], storage_order = [2, 0, 1])
+    assert a.dim(0).extent() == W
+    assert a.dim(1).extent() == H
+    assert a.dim(2).extent() == C
+    assert a.dim(2).stride() == 1
+    assert a.dim(0).stride() == C
+    assert a.dim(1).stride() == W * C
+
+    b = hl.Buffer(hl.UInt(8), [W, H, C, Z], [2, 3, 0, 1])
+    assert b.dim(0).extent() == W
+    assert b.dim(1).extent() == H
+    assert b.dim(2).extent() == C
+    assert b.dim(3).extent() == Z
+    assert b.dim(2).stride() == 1
+    assert b.dim(3).stride() == C
+    assert b.dim(0).stride() == C * Z
+    assert b.dim(1).stride() == W * C * Z
+
+    b2 = hl.Buffer(hl.UInt(8), [C, Z, W, H])
+    assert b.dim(0).extent() == b2.dim(2).extent()
+    assert b.dim(1).extent() == b2.dim(3).extent()
+    assert b.dim(2).extent() == b2.dim(0).extent()
+    assert b.dim(3).extent() == b2.dim(1).extent()
+    assert b.dim(0).stride() == b2.dim(2).stride()
+    assert b.dim(1).stride() == b2.dim(3).stride()
+    assert b.dim(2).stride() == b2.dim(0).stride()
+    assert b.dim(3).stride() == b2.dim(1).stride()
+
+    b2.reorder([2, 3, 0, 1])
+    assert b.dim(0).extent() == b2.dim(0).extent()
+    assert b.dim(1).extent() == b2.dim(1).extent()
+    assert b.dim(2).extent() == b2.dim(2).extent()
+    assert b.dim(3).extent() == b2.dim(3).extent()
+    assert b.dim(0).stride() == b2.dim(0).stride()
+    assert b.dim(1).stride() == b2.dim(1).stride()
+    assert b.dim(2).stride() == b2.dim(2).stride()
+    assert b.dim(3).stride() == b2.dim(3).stride()
+
+
 if __name__ == "__main__":
     test_make_interleaved()
     test_interleaved_ndarray()
@@ -182,4 +227,5 @@ if __name__ == "__main__":
     test_fill_all_equal()
     test_bufferinfo_sharing()
     test_float16()
+    test_reorder()
 

@@ -903,16 +903,31 @@ public:
     }
 
     /** Allocate a new image of known type using a vector of ints as the size. */
-    Buffer(const std::vector<int> &sizes) {
-        buf.type = static_halide_type();
-        buf.dimensions = (int)sizes.size();
-        make_shape_storage();
-        initialize_shape(sizes);
-        if (!any_zero(sizes)) {
-            check_overflow();
-            allocate();
+    explicit Buffer(const std::vector<int> &sizes) : Buffer(halide_type_of<T>(), sizes) {}
+
+private:
+    // Create a copy of the sizes vector, ordered as specified by order.
+    static std::vector<int> make_ordered_sizes(const std::vector<int> &sizes, const std::vector<int> &order) {
+        assert(order.size() == sizes.size());
+        std::vector<int32_t> ordered_sizes(sizes.size());
+        for (size_t i = 0; i < sizes.size(); ++i) {
+            ordered_sizes[i] = sizes.at(order[i]);
         }
+        return ordered_sizes;
     }
+
+public:
+    /** Allocate a new image of unknown type using a vector of ints as the size and
+     * a vector of indices indicating the storage order for each dimension. The
+     * length of the sizes vector and the storage-order vector must match. For instance,
+     * to allocate an interleaved RGB buffer, you would pass {2, 0, 1} for storage_order. */
+    Buffer(halide_type_t t, const std::vector<int> &sizes, const std::vector<int> &storage_order)
+        : Buffer(t, make_ordered_sizes(sizes, storage_order)) {
+        reorder(storage_order);
+    }
+
+    Buffer(const std::vector<int> &sizes, const std::vector<int> &storage_order)
+        : Buffer(halide_type_of<T>(), sizes, storage_order) {}
 
     /** Make an Buffer that refers to a statically sized array. Does not
      * take ownership of the data, and does not set the host_dirty flag. */
@@ -1381,6 +1396,34 @@ public:
         std::swap(buf.dim[d1], buf.dim[d2]);
     }
 
+    /** A generalization of transpose: instead of swapping two dimensions,
+     * pass a vector that lists each dimension index exactly once, in the desired order.
+     * For instance, to reorder a 3-dimensional planar image to be interleaved,
+     * pass {2, 0, 1} for storage_order */
+    void reorder(const std::vector<int> &order) {
+        assert((int) order.size() == dimensions());
+        if (dimensions() < 2) {
+            // My, that was easy
+            return;
+        }
+
+        std::vector<int> order_sorted = order;
+        for (size_t i = 1; i < order_sorted.size(); i++) {
+            for (size_t j = i; j > 0 && order_sorted[j-1] > order_sorted[j]; j--) {
+                std::swap(order_sorted[j], order_sorted[j-1]);
+                transpose(j, j-1);
+            }
+        }
+    }
+
+    /** Make an image which refers to the same data using a different
+     * ordering of the dimensions. */
+    Buffer<T, D> reordered(const std::vector<int> &order) const {
+        Buffer<T, D> im = *this;
+        im.reorder(order);
+        return im;
+    }
+
     /** Make a lower-dimensional image that refers to one slice of this image. */
     Buffer<T, D> sliced(int d, int pos) const {
         Buffer<T, D> im = *this;
@@ -1642,6 +1685,8 @@ public:
      * known as packed or chunky) memory layouts. */
     static Buffer<void, D> make_interleaved(halide_type_t t, int width, int height, int channels) {
         Buffer<void, D> im(t, channels, width, height);
+        // Note that this is equivalent to calling reorder({2, 0, 1}),
+        // but slightly more efficient.
         im.transpose(0, 1);
         im.transpose(1, 2);
         return im;
@@ -1654,10 +1699,7 @@ public:
      * generator has been compiled with support for interleaved (also
      * known as packed or chunky) memory layouts. */
     static Buffer<T, D> make_interleaved(int width, int height, int channels) {
-        Buffer<T, D> im(channels, width, height);
-        im.transpose(0, 1);
-        im.transpose(1, 2);
-        return im;
+        return make_interleaved(halide_type_of<T>(), width, height, channels);
     }
 
     /** Wrap an existing interleaved image. */
@@ -1671,10 +1713,7 @@ public:
 
     /** Wrap an existing interleaved image. */
     static Buffer<T, D> make_interleaved(T *data, int width, int height, int channels) {
-        Buffer<T, D> im(data, channels, width, height);
-        im.transpose(0, 1);
-        im.transpose(1, 2);
-        return im;
+        return make_interleaved(halide_type_of<T>(), data, width, height, channels);
     }
 
     /** Make a zero-dimensional Buffer */

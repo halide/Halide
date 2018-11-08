@@ -304,6 +304,10 @@ void define_buffer(py::module &m) {
             return Buffer<>(type, sizes, name);
         }), py::arg("type"), py::arg("sizes"), py::arg("name") = "")
 
+        .def(py::init([](Type type, const std::vector<int> &sizes, const std::vector<int> &storage_order, const std::string &name) -> Buffer<> {
+            return Buffer<>(type, sizes, storage_order, name);
+        }), py::arg("type"), py::arg("sizes"), py::arg("storage_order"), py::arg("name") = "")
+
         // Note that this exists solely to allow you to create a Buffer with a null host ptr;
         // this is necessary for some bounds-query operations (e.g. Func::infer_input_bounds).
         .def_static("make_bounds_query", [](Type type, const std::vector<int> &sizes, const std::string &name) -> Buffer<> {
@@ -423,6 +427,14 @@ void define_buffer(py::module &m) {
         // .def("transposed", [](Buffer<> &b, int d1, int d2) -> Buffer<> {
         //     return b.transposed(d1, d2);
         // }, py::arg("d1"), py::arg("d2"))
+
+        .def("reorder", [](Buffer<> &b, const std::vector<int> &order) -> void {
+            b.reorder(order);
+        }, py::arg("order"))
+
+        .def("reordered", [](Buffer<> &b, const std::vector<int> &order) -> Buffer<> {
+            return b.reordered(order);
+        }, py::arg("order"))
 
         .def("dim", [](Buffer<> &b, int dimension) -> BufferDimension {
             return b.dim(dimension);
