@@ -6,7 +6,6 @@ using namespace Halide;
 using namespace Halide::Internal;
 using std::vector;
 
-namespace {
 
 // Convert a vector of Vars to Exprs. Useful for generating references
 // to Funcs.
@@ -31,7 +30,7 @@ float rand_float() { return rand_int(0, 1 << 30) / (float)(1 << 30); }
 // At the base case where depth is 0, we just return a randomly
 // chosen input.
 
-Type expr_types[] = { UInt(1), UInt(8), UInt(16), UInt(32), Int(8), Int(16), Int(32), Float(32) };
+Type expr_types[] = { UInt(8), UInt(16), UInt(32), Int(8), Int(16), Int(32), Float(32) };
 const int expr_type_count = sizeof(expr_types)/sizeof(expr_types[0]);
 
 typedef Expr (*make_bin_op_fn)(Expr, Expr);
@@ -44,10 +43,10 @@ make_bin_op_fn make_bin_op[] = {
     (make_bin_op_fn)max,
     (make_bin_op_fn)operator/,
     (make_bin_op_fn)operator%,
- };
+};
 
 make_bin_op_fn make_bool_bin_op[] = {
-		(make_bin_op_fn)operator&&,
+    (make_bin_op_fn)operator&&,
     (make_bin_op_fn)operator||,
 };
 
@@ -81,68 +80,70 @@ Expr random_condition(vector<Expr> inputs, int depth) {
 // takes a vector of inputs (points in functions) and an expected Type
 // if the chosen input is not of the given type, cast it to conform
 Expr make_leaf(vector<Expr> inputs) {
-		auto chosen_input = inputs[rand_int(0, inputs.size()-1)];
-		return chosen_input;
+    auto chosen_input = inputs[rand_int(0, inputs.size()-1)];
+    return chosen_input;
 }
 
 Expr random_expr(vector<Expr> inputs, int depth) {
-		const int op_count = bin_op_count + bool_bin_op_count + 8;
+    const int op_count = bin_op_count + bool_bin_op_count + 8;
     if (depth <= 0) {
-    		return make_leaf(inputs);
-		}
+        return make_leaf(inputs);
+    }
 
-   	// pick a random operation to combine exprs
-		int op = rng() % op_count; // ops need to be defined
-    switch(op) { 
-		case 0:  // casting
-      { // Get a random type
+    // pick a random operation to combine exprs
+    int op = rng() % op_count; // ops need to be defined
+    switch(op) {
+    case 0:  // casting
+    {
+        // Get a random type
         Type convertT = random_type();
         auto e1 = random_expr(inputs, depth);
-        return Cast::make(convertT, e1);
-      }
-  	case 1: // select operation
-      { auto c = random_condition(inputs, depth-2); // arbitrarily chose to make condition expression shorter
+        return cast(convertT, e1);
+    }
+    case 1: // select operation
+    {
+        auto c = random_condition(inputs, depth-2); // arbitrarily chose to make condition expression shorter
         auto e1 = random_expr(inputs, depth-1);
         auto e2 = random_expr(inputs, depth-2);
         // make sure e1 and e2 have the same type
         if (e1.type() != e2.type()) {
-            e2 = Cast::make(e1.type(), e2);
+            e2 = cast(e1.type(), e2);
         }
-        return Select::make(c, e1, e2);
-      }
-		case 2: // unary boolean op
-      {
+        return select(c, e1, e2);
+    }
+    case 2: // unary boolean op
+    {
         auto e1 = random_expr(inputs, depth-1);
         if (e1.type().is_bool()) {
-            return !e1; 
+            return !e1;
         }
         break;
-      }
+    }
     case 3: // sin
-      {
+    {
         auto e1 = random_expr(inputs, depth-1);
         return sin(e1);
-      }
+    }
     case 4: // exp
-      {
+    {
         auto e1 = random_expr(inputs, depth-1);
         return exp(e1);
-      }
+    }
     case 5: // sqrt
-      {
+    {
         auto e1 = random_expr(inputs, depth-1);
         return sqrt(e1);
-      }
+    }
     case 6: // log
-      {
+    {
         auto e1 = random_expr(inputs, depth-1);
         return log(e1);
-      }
+    }
     case 7: // condition
-      {
+    {
         return random_condition(inputs, depth-1);
-      }
-		default: // binary op 
+    }
+    default: // binary op
         make_bin_op_fn maker;
         auto e1 = random_expr(inputs, depth-1);
         auto e2 = random_expr(inputs, depth-2);
@@ -153,9 +154,9 @@ Expr random_expr(vector<Expr> inputs, int depth) {
         }
 
         return maker(e1, e2);
-		} 
+    }
 
-		// selected case did not return an expression, try again
+    // selected case did not return an expression, try again
     return random_expr(inputs, depth);
 }
 
@@ -235,26 +236,27 @@ public:
                   << " with kernel [" << kernel_min << ", " << kernel_max << "]\n";
 
         vector<Var> args = f.func.args();
-				
-				/**
-        Expr def = cast(f.func.value().type(), 0);
+
+        /**
+           Expr def = cast(f.func.value().type(), 0);
+           for (int i = kernel_min; i <= kernel_max; i++) {
+           vector<Expr> coords = make_arguments(f.func.args());
+           coords[dim] += i;
+           def = def + rand_value(f.func.value().type()) * f.func(coords);
+           }
+        **/
+
+        // generate random expression using potentially all values in the stencil
+        vector<Expr> inputs;
         for (int i = kernel_min; i <= kernel_max; i++) {
             vector<Expr> coords = make_arguments(f.func.args());
             coords[dim] += i;
-            def = def + rand_value(f.func.value().type()) * f.func(coords);
+            inputs.push_back(f.func(coords));
         }
-				**/
-				
-				// generate random expression using potentially all values in the stencil
-				vector<Expr> inputs;
-        for (int i = kernel_min; i <= kernel_max; i++) {
-            vector<Expr> coords = make_arguments(f.func.args());
-            coords[dim] += i;
-						inputs.push_back(f.func(coords));
-        }
-				int min_depth = log(kernel_max - kernel_min + 1);
-				int max_depth = log(min_depth*2) + 1;
-				Expr def = random_expr(inputs, rand_int(min_depth, max_depth));
+        int min_depth = std::floor(std::log(kernel_max - kernel_min + 1));
+        int max_depth = min_depth + 1;
+        Expr def = random_expr(inputs, rand_int(min_depth, max_depth));
+        std::cerr << def << "\n";
 
         Func conv("conv_" + args[dim].name());
         conv(args) = def;
@@ -337,8 +339,16 @@ public:
                 vector<Expr> pooled_coords = make_arguments(f.func.args());
                 pooled_coords[0] = pooled_coords[0] * factor + i;
                 pooled_coords[1] = pooled_coords[1] * factor + j;
-                def = (def + f.func(pooled_coords)) / scale;
+                if (def.type().is_bool()) {
+                    def = def && f.func(pooled_coords);
+                } else {
+                    def = def + f.func(pooled_coords);
+                }
             }
+        }
+
+        if (!def.type().is_bool()) {
+            def /= scale;
         }
 
         pooled2D(args) = def;
@@ -360,9 +370,14 @@ public:
         RDom r(min, extent, min, extent);
 
         vector<Expr> coords = make_arguments(f.func.args());
+        Type ty = f.func.value().type();
         coords[0] = coords[0] * factor + r.x;
         coords[1] = coords[1] * factor + r.y;
-        pooled2D_r(args) += f.func(coords) / scale;
+        if (ty.is_bool()) {
+            pooled2D_r(args) = pooled2D_r(args) && f.func(coords);
+        } else {
+            pooled2D_r(args) += f.func(coords) / scale;
+        }
 
         return {pooled2D_r, (f.w + factor - 1) / factor, (f.h + factor - 1) / factor, f.c};
     }
@@ -383,7 +398,7 @@ public:
         vector<Expr> coords = make_arguments(f.func.args());
         coords[0] = (coords[0] * factor + r.x);
         coords[1] = (coords[1] * factor + r.y);
-        pooled2D_w(args) = sum(f.func(coords)) / scale;
+        pooled2D_w(args) = sum(cast<float>(f.func(coords))) / scale;
 
         return {pooled2D_w, (f.w + factor - 1) / factor, (f.h + factor - 1) / factor, f.c};
     }
@@ -399,9 +414,22 @@ public:
         // Avoid huge unrolled loops
         if (f.c >= 4) return convolve2D_r(f, kernel_min, kernel_max);
 
-				/**
-        Expr def = cast(f.func.value().type(), 0);
-        // assuming input is 3d: w, h, c
+        /**
+           Expr def = cast(f.func.value().type(), 0);
+           // assuming input is 3d: w, h, c
+           for (int c = 0; c < f.c; c++)  {
+           for (int i = kernel_min; i <= kernel_max; i++) {
+           for (int j = kernel_min; j <= kernel_max; j++) {
+           vector<Expr> coords = make_arguments(f.func.args());
+           coords[0] += i;
+           coords[1] += j;
+           coords[2] = c;
+           def = def + rand_value(f.func.value().type()) * f.func(coords);
+           }
+           }
+           }
+        **/
+        vector<Expr> inputs;
         for (int c = 0; c < f.c; c++)  {
             for (int i = kernel_min; i <= kernel_max; i++) {
                 for (int j = kernel_min; j <= kernel_max; j++) {
@@ -409,29 +437,18 @@ public:
                     coords[0] += i;
                     coords[1] += j;
                     coords[2] = c;
-                    def = def + rand_value(f.func.value().type()) * f.func(coords);
-                }
-            }
-        }
-				**/
-				vector<Expr> inputs;
-        for (int c = 0; c < f.c; c++)  {
-            for (int i = kernel_min; i <= kernel_max; i++) {
-                for (int j = kernel_min; j <= kernel_max; j++) {
-                    vector<Expr> coords = make_arguments(f.func.args());
-                    coords[0] += i;
-                    coords[1] += j;
-                    coords[2] = c;
-										inputs.push_back(f.func(coords));
+                    inputs.push_back(f.func(coords));
                 }
             }
         }
 
-				int kernel_width = kernel_max - kernel_min + 1; 
-				int min_depth = log(kernel_width * kernel_width * f.c);
-				int max_depth = log(min_depth*2) + 1;
-				
-				Expr def = random_expr(inputs, rand_int(min_depth, max_depth));	
+        int kernel_width = kernel_max - kernel_min + 1;
+        int min_depth = std::floor(std::log(kernel_width * kernel_width * f.c));
+        int max_depth = min_depth + 1;
+
+        Expr def = random_expr(inputs, rand_int(min_depth, max_depth));
+        std::cerr << def << "\n";
+
         Func conv("conv2D_" + args[0].name() + args[1].name());
         conv(args) = def;
 
@@ -576,27 +593,9 @@ public:
         vector<Expr> inputs = {f.func(f.func.args()), g.func(f.func.args())};
         int min_depth = 1;
         int max_depth = 3;
-        binary(f.func.args()) = random_expr(inputs, rand_int(min_depth, max_depth));
-        /**
-        int op_type = rand_int(0, 4); // + , -, *, /, %
-        if (op_type == 0) {
-            binary(f.func.args()) = f.func(f.func.args()) + g.func(f.func.args());
-            std::cout << "Binary op: + \n";
-        } else if (op_type == 1) {
-            // 2 * in case f and g are the same function (except with a wrapper around one)
-            binary(f.func.args()) = 2 * f.func(f.func.args()) - g.func(f.func.args());
-            std::cout << "Binary op: - \n";
-        } else if (op_type == 2) {
-            binary(f.func.args()) = f.func(f.func.args()) * g.func(f.func.args());
-            std::cout << "Binary op: * \n";
-        } else if (op_type == 3) {
-            binary(f.func.args()) = f.func(f.func.args()) / max(1, g.func(f.func.args()));
-            std::cout << "Binary op: / \n";
-        } else {
-            binary(f.func.args()) = f.func(f.func.args()) % g.func(f.func.args());
-            std::cout << "Binary op: % \n";
-        }
-        **/
+        Expr def = random_expr(inputs, rand_int(min_depth, max_depth));
+        std::cerr << def << "\n";
+        binary(f.func.args()) = def;
         return {binary, f.w, f.h, std::min(f.c, g.c)};
     }
 
@@ -662,7 +661,7 @@ public:
         all(f.func.args()) = sum(f.func(reduction_coords) * (r + 1) * (f.func.args()[dim] + 1));
 
         return {all, f.w, f.h, f.random_out_channels()};
-     }
+    }
 
     // Generate a forwards-then-backwards scan along a dimension
     Stage scan(Stage f, int dim) {
@@ -776,10 +775,10 @@ public:
         std::cout << "Resulting size: " << out.w << ", " << out.h << ", " << out.c << "\n";
         return out;
     }
-    
+
     Stage cast_stage(Type t, Stage f) {
         Func casted("casted");
-        casted(f.func.args()) = Cast::make(t, f.func(f.func.args()));
+        casted(f.func.args()) = cast(t, f.func(f.func.args()));
         return {casted, f.w, f.h, f.c};
     }
 
@@ -890,6 +889,6 @@ public:
     }
 };
 
-}  // namespace
+
 
 HALIDE_REGISTER_GENERATOR(RandomPipeline, random_pipeline)
