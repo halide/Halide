@@ -2707,7 +2707,7 @@ struct LoopNest {
             }
             auto &vars = vars_map[stage];
 
-            debug(0) << "Scheduling " << node->func.name() << " stage " << stage << '\n';
+            debug(0) << "Scheduling " << node->func.name() << " stage " << stage_idx << '\n';
             Stage s = Func(node->func);
             if (stage_idx > 0) {
                 s = Func(node->func).update(stage_idx - 1);
@@ -2753,7 +2753,7 @@ struct LoopNest {
                     // Find the innermost var, and the innermost pure var
                     FuncVars::FuncVar *innermost_var = nullptr, *innermost_pure_var = nullptr;
                     internal_assert(vars.vars.size() >= symbolic_loop.size());
-                    int product_of_pure_loops = 1;
+                    int64_t product_of_pure_loops = 1;
                     for (size_t i = 0; i < symbolic_loop.size(); i++) {
                         if (!vars.vars[i].exists) continue;
                         if (innermost_var == nullptr) {
@@ -2821,7 +2821,8 @@ struct LoopNest {
 
                         // Start at 1 to skip the vectorized var
                         size_t start = vectorized ? 1 : 0;
-                        size_t limit = symbolic_loop.size() + start;
+                        size_t end = symbolic_loop.size() + start;
+                        size_t limit = end;
 
                         for (size_t i = start; i < limit; i++) {
                             auto v = vars.vars[i];
@@ -2829,7 +2830,7 @@ struct LoopNest {
                                 if (v.var.is_rvar) {
                                     limit--;
                                     // Bubble the rvar to the end
-                                    for (size_t j = i; j < symbolic_loop.size(); j++) {
+                                    for (size_t j = i; j < end; j++) {
                                         std::swap(vars.vars[j], vars.vars[j+1]);
                                     }
                                     i--;
@@ -3740,7 +3741,7 @@ std::string generate_schedules_autotune(const std::vector<Function> &output_func
         float misprediction;
     };
 
-    const int max_history = 128;
+    const int max_history = 512;
     const int batch_size = 64;
     vector<std::shared_ptr<Trial>> history;
     Runtime::Buffer<float> runtimes(max_history);
