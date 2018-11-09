@@ -119,16 +119,14 @@ public:
             break;
         }
 
-#if 1
-// Async for output requires: https://github.com/halide/Halide/pull/3418
-//
+        // async tiled output
         if (use_dma_for_output && ((Schedule)schedule == Schedule::Async || (Schedule)schedule == Schedule::Split_Async)) {
             work
                 .async()
                 .store_at(output, ty)
                 .fold_storage(x, tile_width * 2);
         }
-#endif
+
         // Schedule the work in tiles (same for all DMA schedules).
         work
             .compute_at(output, tx)
