@@ -250,6 +250,10 @@ public:
         return Buffer<>(Runtime::Buffer<>::make_scalar(t), name);
     }
 
+    static Buffer<T> make_scalar(T *data, const std::string &name = "") {
+        return Buffer<T>(Runtime::Buffer<T>::make_scalar(data), name);
+    }
+
     static Buffer<T> make_interleaved(int width, int height, int channels, const std::string &name = "") {
         return Buffer<T>(Runtime::Buffer<T>::make_interleaved(width, height, channels),
                         name);
