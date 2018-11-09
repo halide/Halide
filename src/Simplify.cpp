@@ -1,6 +1,7 @@
 #include "Simplify.h"
 #include "Simplify_Internal.h"
 
+#include "CSE.h"
 #include "IRMutator.h"
 #include "Substitute.h"
 
@@ -274,7 +275,15 @@ bool can_prove(Expr e, const Scope<Interval> &bounds) {
     };
     e = RemoveLikelies().mutate(e);
 
+    e = common_subexpression_elimination(e);
+
+    Expr orig = e;
+
     e = simplify(e, true, bounds);
+
+    // When terms cancel, the simplifier doesn't always successfully
+    // kill the dead lets.
+    while (const Let *l = e.as<Let>()) e = l->body;
 
     // Take a closer look at all failed proof attempts to hunt for
     // simplifier weaknesses
@@ -335,6 +344,7 @@ bool can_prove(Expr e, const Scope<Interval> &bounds) {
         }
 
         debug(0) << "Failed to prove, but could not find a counter-example:\n " << e << "\n";
+        debug(0) << "Original expression:\n" << orig << "\n";
         return false;
     }
 
