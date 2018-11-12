@@ -1,11 +1,12 @@
 #include "Halide.h"
 #include <iostream>
 #include <random>
+#include <cstdlib>
 
 using namespace Halide;
 using namespace Halide::Internal;
 using std::vector;
-
+using std::unordered_map;
 
 // Convert a vector of Vars to Exprs. Useful for generating references
 // to Funcs.
@@ -23,6 +24,7 @@ std::mt19937 rng;
 int rand_int(int min, int max) { return (rng() % (max - min + 1)) + min; }
 bool rand_bool() { return rng() % 2 == 0; }
 float rand_float() { return rand_int(0, 1 << 30) / (float)(1 << 30); }
+float uniform_rand() { return static_cast <float>(rand()) / static_cast <float>(RAND_MAX); }
 
 // Generate random expressions
 // Given a vector of expresions and a tree depth, recursively
@@ -68,11 +70,11 @@ Type random_type() {
     return T;
 }
 
-Expr random_expr(vector<Expr> inputs, int depth);
+Expr random_expr(vector<Expr> inputs, int depth, int func_size);
 
-Expr random_condition(vector<Expr> inputs, int depth) {
-    Expr a = random_expr(inputs, depth);
-    Expr b = random_expr(inputs, depth);
+Expr random_condition(vector<Expr> inputs, int depth, int func_size) {
+    Expr a = random_expr(inputs, depth, func_size);
+    Expr b = random_expr(inputs, depth, func_size);
     int op = rng() % comp_bin_op_count;
     return make_comp_bin_op[op](a, b);
 }
@@ -84,8 +86,10 @@ Expr make_leaf(vector<Expr> inputs) {
     return chosen_input;
 }
 
-Expr random_expr(vector<Expr> inputs, int depth) {
-    const int op_count = bin_op_count + bool_bin_op_count + 8;
+Expr random_expr(vector<Expr> inputs, int depth, int func_size) {
+    const int op_count = bin_op_count + bool_bin_op_count + 9;
+    const int func_size_thresh = 1e4; // if input is too large do not use trig functions
+
     if (depth <= 0) {
         return make_leaf(inputs);
     }
@@ -97,14 +101,14 @@ Expr random_expr(vector<Expr> inputs, int depth) {
     {
         // Get a random type
         Type convertT = random_type();
-        auto e1 = random_expr(inputs, depth);
+        auto e1 = random_expr(inputs, depth, func_size);
         return cast(convertT, e1);
     }
     case 1: // select operation
     {
-        auto c = random_condition(inputs, depth-2); // arbitrarily chose to make condition expression shorter
-        auto e1 = random_expr(inputs, depth-1);
-        auto e2 = random_expr(inputs, depth-2);
+        auto c = random_condition(inputs, depth-2, func_size); // arbitrarily chose to make condition expression shorter
+        auto e1 = random_expr(inputs, depth-1, func_size);
+        auto e2 = random_expr(inputs, depth-2, func_size);
         // make sure e1 and e2 have the same type
         if (e1.type() != e2.type()) {
             e2 = cast(e1.type(), e2);
@@ -113,7 +117,7 @@ Expr random_expr(vector<Expr> inputs, int depth) {
     }
     case 2: // unary boolean op
     {
-        auto e1 = random_expr(inputs, depth-1);
+        auto e1 = random_expr(inputs, depth-1, func_size);
         if (e1.type().is_bool()) {
             return !e1;
         }
@@ -121,32 +125,41 @@ Expr random_expr(vector<Expr> inputs, int depth) {
     }
     case 3: // sin
     {
-        auto e1 = random_expr(inputs, depth-1);
+        if (func_size > func_size_thresh) 
+            break;
+        auto e1 = random_expr(inputs, depth-1, func_size);
         return sin(e1);
     }
-    case 4: // exp
+    case 4: // tanh
     {
-        auto e1 = random_expr(inputs, depth-1);
+        if (func_size > func_size_thresh)
+            break;
+        auto e1 = random_expr(inputs, depth-1, func_size);
+        return tanh(e1);
+    }
+    case 5: // exp
+    {
+        auto e1 = random_expr(inputs, depth-1, func_size);
         return exp(e1);
     }
-    case 5: // sqrt
+    case 6: // sqrt
     {
-        auto e1 = random_expr(inputs, depth-1);
+        auto e1 = random_expr(inputs, depth-1, func_size);
         return sqrt(e1);
     }
-    case 6: // log
+    case 7: // log
     {
-        auto e1 = random_expr(inputs, depth-1);
+        auto e1 = random_expr(inputs, depth-1, func_size);
         return log(e1);
     }
-    case 7: // condition
+    case 8: // condition
     {
-        return random_condition(inputs, depth-1);
+        return random_condition(inputs, depth-1, func_size);
     }
     default: // binary op
         make_bin_op_fn maker;
-        auto e1 = random_expr(inputs, depth-1);
-        auto e2 = random_expr(inputs, depth-2);
+        auto e1 = random_expr(inputs, depth-1, func_size);
+        auto e2 = random_expr(inputs, depth-2, func_size);
         if (e1.type().is_bool() && e2.type().is_bool()) {
             maker = make_bool_bin_op[op % bool_bin_op_count];
         } else {
@@ -157,7 +170,7 @@ Expr random_expr(vector<Expr> inputs, int depth) {
     }
 
     // selected case did not return an expression, try again
-    return random_expr(inputs, depth);
+    return random_expr(inputs, depth, func_size);
 }
 
 Expr rand_value(Type t) {
@@ -178,6 +191,7 @@ Expr rand_value(Type t) {
 // be solely a function of the seed and the number of stages.
 class RandomPipeline : public Halide::Generator<RandomPipeline> {
 public:
+    int num_stage_types = 18; 
     // The random seed to use to generate the pipeline.
     GeneratorParam<int> seed{"seed", 1};
     // The approximate max number of stages to generate in the random pipeline.
@@ -255,7 +269,7 @@ public:
         }
         int min_depth = std::floor(std::log(kernel_max - kernel_min + 1));
         int max_depth = min_depth + 1;
-        Expr def = random_expr(inputs, rand_int(min_depth, max_depth));
+        Expr def = random_expr(inputs, rand_int(min_depth, max_depth), f.size());
         std::cerr << def << "\n";
 
         Func conv("conv_" + args[dim].name());
@@ -301,24 +315,55 @@ public:
     /*****
      * convolutional net type layers
      *****/
+    Stage boundary(Stage f) {
+        std::vector<std::pair<Expr, Expr>> bounds(3); // assuming all stages have 3 dims
+        bounds.at(0).first = 0;
+        bounds.at(0).second = f.w;
+        bounds.at(1).first = 0;
+        bounds.at(1).second = f.h;
+        bounds.at(2).first = 0;
+        bounds.at(2).second = f.c;
+        return {BoundaryConditions::constant_exterior(f.func, 0.0f, bounds), f.w, f.h, f.c};
+    }
 
-    // 50% chance of returning a pooling stage 50% chance returning 2D convolution
-    Stage convolve_or_pool(Stage f, int kernel_min, int kernel_max) {
-        if (rand_bool() && f.may_reduce_size() && f.w >= 32 && f.h >= 32) {
-            int pool_type = rand_int(0,2);
-            if (pool_type == 0) return pool2D(f);
-            if (pool_type == 1) return pool2D_w(f);
-            else return pool2D_r(f);
-        } else {
-            int conv_type = rand_int(0,2);
-            if (conv_type == 0) return convolve2D(f, kernel_min, kernel_max);
-            if (conv_type == 1) return convolve2D_w(f, kernel_min, kernel_max);
-            else return convolve2D_r(f, kernel_min, kernel_max);
-        }
+    Stage convolve2D(Stage f, int kernel_min, int kernel_max) {
+        int conv_type = rand_int(0,2);
+        if (conv_type == 0) return convolve2D_unrolled(f, kernel_min, kernel_max);
+        if (conv_type == 1) return convolve2D_w(f, kernel_min, kernel_max);
+        else return convolve2D_r(f, kernel_min, kernel_max);
+    }
+
+    Stage pool2D(Stage f, int kernel_min, int kernel_max) {
+        int pool_type = rand_int(0,2);
+        if (pool_type == 0) return pool2D_unrolled(f);
+        if (pool_type == 1) return pool2D_w(f);
+        else return pool2D_r(f);
+    }
+
+    Stage activation(Stage f) {
+        int activation_type = rand_int(0,1);
+        if (activation_type == 0) return relu_layer(f);
+        else return tanh_layer(f);
+    }
+
+    Stage relu_layer(Stage f) {
+        std::cout << "Relu\n";
+        Func activation("relu");
+        vector<Expr> coords = make_arguments(f.func.args());
+        activation(f.func.args()) = max(0.0f, f.func(coords));
+        return {activation, f.w, f.h, f.c};
+    }
+
+    Stage tanh_layer(Stage f) {
+        std::cout << "Tanh\n";
+        Func activation("tanh");
+        vector<Expr> coords = make_arguments(f.func.args());
+        activation(f.func.args()) = tanh(f.func(coords));
+        return {activation, f.w, f.h, f.c}; 
     }
 
     /*** pooling stages ***/
-    Stage pool2D(Stage f) { // for now always do 3x3 pool with stride 2
+    Stage pool2D_unrolled(Stage f) { // for now always do 3x3 pool with stride 2
         std::cout << "Pooling 3x3 stride 2\n";
         vector<Var> args = f.func.args();
         Func pooled2D("pooled2D" + args[0].name() + args[1].name());
@@ -405,7 +450,7 @@ public:
 
     /******* set of 2 dimensional (non separable) convs *********/
     // Generate a random convolution of one dimension of f, statically unrolled.
-    Stage convolve2D(Stage f, int kernel_min, int kernel_max) {
+    Stage convolve2D_unrolled(Stage f, int kernel_min, int kernel_max) {
         std::cout << "Convolving 2D dimension 1: " << 0
                   << " dimension 2: " << 1
                   << " with kernel [" << kernel_min << ", " << kernel_max << "]\n";
@@ -441,18 +486,20 @@ public:
                 }
             }
         }
-
+        
+        int out_channels = f.random_out_channels();
         int kernel_width = kernel_max - kernel_min + 1;
         int min_depth = std::floor(std::log(kernel_width * kernel_width * f.c));
         int max_depth = min_depth + 1;
-
-        Expr def = random_expr(inputs, rand_int(min_depth, max_depth));
+        int func_size = f.w * f.h * out_channels;
+        
+        Expr def = random_expr(inputs, rand_int(min_depth, max_depth), func_size);
         std::cerr << def << "\n";
 
         Func conv("conv2D_" + args[0].name() + args[1].name());
         conv(args) = def;
 
-        return {conv, f.w, f.h, f.random_out_channels()};
+        return {conv, f.w, f.h, out_channels};
     }
 
     // Generate a random convolution of one dimension of f using a reduction.
@@ -503,7 +550,6 @@ public:
         // choose a channel output size - 0.5 prob of doubling channel dim
         return {conv, f.w, f.h, f.random_out_channels()};
     }
-
 
     // Generate an upsampling or downsampling of dimension dim by factor.
     Stage upsample(Stage f, int dim, int factor = 0) {
@@ -593,7 +639,8 @@ public:
         vector<Expr> inputs = {f.func(f.func.args()), g.func(f.func.args())};
         int min_depth = 1;
         int max_depth = 3;
-        Expr def = random_expr(inputs, rand_int(min_depth, max_depth));
+        int func_size = f.w * f.h * std::min(f.c, g.c);
+        Expr def = random_expr(inputs, rand_int(min_depth, max_depth), func_size);
         std::cerr << def << "\n";
         binary(f.func.args()) = def;
         return {binary, f.w, f.h, std::min(f.c, g.c)};
@@ -782,13 +829,91 @@ public:
         return {casted, f.w, f.h, f.c};
     }
 
+    struct TransitionCDF {
+        int num_states;
+        vector<float> cdf;
+
+        void initialize(int n) {
+            num_states = n;
+            for (int i = 0; i < n*n; i++) {
+                cdf.push_back(0.0f);
+            }  
+        }
+        
+        int size() {
+            return num_states * num_states;
+        }
+
+        float get(int i, int j) {
+            return cdf[i*num_states+j];
+        }
+
+        void set(int i, int j, float val) {
+            cdf[i*num_states+j] = val;
+        }
+
+        int sample_cdf(int state) {
+            int sample_val = uniform_rand();
+            for (int i = 0; i < num_states; i++) {
+                if (get(state, i) >= sample_val) {
+                    return i;
+                }
+            }
+        }
+    };
+
+    // helper function to generate probability transition matrix between stages
+    struct TransitionMatrix {
+        int num_states; // number of states
+        vector<float> probabilities;
+        
+        int size() {
+            return num_states * num_states;
+        }
+
+        float get(int i, int j) {
+            return probabilities[i*num_states+j];
+        }
+
+        void set(int i, int j, float val) {
+            probabilities[i*num_states+j] = val;
+        }
+        
+        void set_cdf(TransitionCDF& cdf) {
+            assert(cdf.size() == num_states * num_states);
+            assert(cdf.num_states == num_states);
+
+            for (int i = 0; i < num_states; i++) {
+                float sum = 0.0f;
+                for (int j = 0; j < num_states; j++) {
+                    sum += get(i,j);
+                    cdf.set(i,j,sum);  
+                }
+            }
+        }
+
+        void initialize(int n) {
+            num_states = n;
+            float val = 1.0f/(n*n);
+            for (int i = 0; i < n*n; i++) {
+                probabilities.push_back(val);
+            }  
+        }
+    };
+
+
     // Generate a random stage using f as an input.
-    Stage random_stage(const vector<Stage> &s) {
+    Stage random_stage(const vector<Stage> &s, TransitionCDF& CDF, int& curr_stage_id) {
         int m = (int)s.size() - 1;
         int i2 = m > 0 ? rand_int(0, m - 1) : 0;
         int i1 = m > 0 ? rand_int(i2 + 1, m) : 0;
         Stage f = s[i1], g = s[i2];
-        int stage_type = rand_int(0, 24);
+        //int stage_type = rand_int(0, 17);
+        // generate stage based on transition probabilities
+        int stage_type = CDF.sample_cdf(curr_stage_id);
+        // set current stage id to chosen stage for next iteration
+        curr_stage_id = stage_type; 
+
         if (stage_type == 0) {
             int dim = rand_int(0, 1);
             int kernel_min = rand_int(-3, 0);
@@ -804,45 +929,102 @@ public:
             int kernel_min = rand_int(-10, 0);
             int kernel_max = rand_int(0, 10);
             return convolve_w(f, dim, kernel_min, kernel_max);
-        } else if (stage_type >= 3 && stage_type <= 10) {
+        } else if (stage_type == 3) {
             int kernel_min = rand_int(-3, 0);
             int kernel_max = rand_int(0, 3);
-            return convolve_or_pool(f, kernel_min, kernel_max);
-        } else if (stage_type == 11 && f.may_increase_size()) {
+            return convolve2D(f, kernel_min, kernel_max);
+        } else if (stage_type == 4 && f.may_reduce_size() && f.w >= 32 && f.h >= 32) {
+            int kernel_min = rand_int(-3, 0);
+            int kernel_max = rand_int(0, 3);
+            return pool2D(f, kernel_min, kernel_max);
+        } else if (stage_type == 5) {
+            return activation(f);
+        } else if (stage_type == 6) {
+            return boundary(f);
+        } else if (stage_type == 7 && f.may_increase_size()) {
             // For now, only upsample dimensions 0 or 1.
             return upsample(f, rand_int(0, 1));
-        } else if (stage_type == 12 && f.may_reduce_size()) {
+        } else if (stage_type == 8 && f.may_reduce_size()) {
             // For now, only downsample dimensions 0 or 1.
             return downsample(f, rand_int(0, 1));
-        } else if (stage_type == 13) {
+        } else if (stage_type == 9) {
             int dim = 2;
             return all_to_all(f, dim);
-        } else if (stage_type == 14) {
+        } else if (stage_type == 10) {
             int dim = 2;
             return all_to_all_r(f, dim);
-        } else if (stage_type == 15) {
+        } else if (stage_type == 11) {
             int dim = 2;
             return all_to_all_w(f, dim);
-        } else if (stage_type == 16) {
+        } else if (stage_type == 12) {
             int dim = rand_int(0, 2);
             return scan(f, dim);
-        } else if (stage_type == 17 && false) {
+        } else if (stage_type == 13 && false) {
             // TODO: transpose disabled for now because f(x, y) + f(y, x) totally breaks the bounds inference done by the autoscheduler.
             return transpose(f);
-        } else if (stage_type == 18 && f.size() < 10000) {
+        } else if (stage_type == 14 && f.size() < 10000) {
             return unary_op(f);
-        } else if (stage_type == 19 && f.w > 32 && f.h > 32) {
+        } else if (stage_type == 15 && f.w > 32 && f.h > 32) {
             return tiled_histogram(f);
-        } else if (stage_type == 20) {
+        } else if (stage_type == 16) {
             return slice(f, g);
         } else if (i1 != i2) {
             return binary_op(f, g);
         } else {
-            return random_stage(s);
+            return random_stage(s, CDF, curr_stage_id);
+        }
+    }
+
+    // Insert transition probabilities for deep network type stages
+    void setup_transitions(TransitionMatrix& P) {
+        int conv2D_id = 3;
+        int pool2D_id = 4;
+        int activation_id = 5;
+        int boundary_id = 6;
+        // conv to activation
+        for (int i = 0; i < num_stage_types; i++) {
+            if (i == activation_id) {
+                P.set(conv2D_id, i, 0.8f);
+            } else {
+                P.set(conv2D_id, i, 0.2f/(num_stage_types-1));
+            }
+        }
+        // activation to pool or padding
+        for (int i = 0; i < num_stage_types; i++) {
+            if (i == boundary_id || i == pool2D_id) {
+                P.set(activation_id, i, 0.4f);
+            } else {
+                P.set(activation_id, i, 0.2f/(num_stage_types-1));
+            }
+        }
+        // padding to conv or pool
+        for (int i = 0; i < num_stage_types; i++) {
+            if (i == conv2D_id || i == pool2D_id) {
+                P.set(boundary_id, i, 0.4f);
+            } else {
+                P.set(boundary_id, i, 0.2f/(num_stage_types-1));
+            }    
+        }
+        // pool to conv 
+        for (int i = 0; i < num_stage_types; i++) {
+            if (i == conv2D_id) {
+                P.set(pool2D_id, i, 0.8f);
+            } else {
+                P.set(pool2D_id, i, 0.2f/(num_stage_types-1));
+            }
         }
     }
 
     void generate() {
+        // create transition matrix between stages
+        TransitionMatrix P;
+        P.initialize(num_stage_types);
+        setup_transitions(P);
+        TransitionCDF CDF;
+        CDF.initialize(num_stage_types);
+        P.set_cdf(CDF);
+
+        // TODO : SET TRANSITION PROBABILITIES. AND MAKE STAGES CHOSEN ACCORDINGLY 
         Var x("x"), y("y"), c("c");
 
         Func first;
@@ -853,10 +1035,12 @@ public:
         vector<Stage> stages;
         // Assume input starts at ~2000x2000
         stages.emplace_back(Stage{first, 2000, 2000, 3});
+        // set starting stage type to random stage
+        int curr_stage_id = rand_int(0, num_stage_types-1);
 
         for (int i = 0; i < max_stages - 2; i++) {
             std::cout << "Approx size: " << stages.back().w << ", " << stages.back().h << ", " << stages.back().c << "\n";
-            Stage next = random_stage(stages);
+            Stage next = random_stage(stages, CDF, curr_stage_id);
             stages.push_back(next);
             if (!auto_schedule) {
                 stages.back().func.compute_root().reorder(x, c, y).vectorize(x, 8).parallel(y, 8);
