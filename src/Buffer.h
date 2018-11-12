@@ -185,9 +185,20 @@ public:
                     const std::string &name = "") :
         Buffer(Runtime::Buffer<T>(t, sizes), name) {}
 
+    explicit Buffer(Type t,
+                    const std::vector<int> &sizes,
+                    const std::vector<int> &storage_order,
+                    const std::string &name = "") :
+        Buffer(Runtime::Buffer<T>(t, sizes, storage_order), name) {}
+
     explicit Buffer(const std::vector<int> &sizes,
                     const std::string &name = "") :
         Buffer(Runtime::Buffer<T>(sizes), name) {}
+
+    explicit Buffer(const std::vector<int> &sizes,
+                    const std::vector<int> &storage_order,
+                    const std::string &name = "") :
+        Buffer(Runtime::Buffer<T>(sizes, storage_order), name) {}
 
     template<typename Array, size_t N>
     explicit Buffer(Array (&vals)[N],
@@ -399,6 +410,7 @@ public:
     HALIDE_BUFFER_FORWARD(translate)
     HALIDE_BUFFER_FORWARD_INITIALIZER_LIST(translate, std::vector<int>)
     HALIDE_BUFFER_FORWARD(transpose)
+    HALIDE_BUFFER_FORWARD(transposed)
     HALIDE_BUFFER_FORWARD(add_dimension)
     HALIDE_BUFFER_FORWARD(copy_to_host)
     HALIDE_BUFFER_FORWARD(copy_to_device)
