@@ -4,8 +4,9 @@
 #include "FindCalls.h"
 #include "IntrusivePtr.h"
 #include "IREquality.h"
-#include "IRVisitor.h"
 #include "IRMutator.h"
+#include "IRPrinter.h"
+#include "IRVisitor.h"
 #include "OutputImageParam.h"
 #include "RealizationOrder.h"
 #include "Simplify.h"
@@ -790,7 +791,7 @@ struct FunctionDAG {
                     Interval in = stage_scope_with_concrete_rvar_bounds.get(l.var);
                     l.min = in.min;
                     l.max = in.max;
-                    l.pure = true;
+                    l.pure = d.is_pure();
 
                     // Additional analysis to speed up evaluation of
                     // common cases. Loop bounds that are just one of
@@ -2378,7 +2379,7 @@ struct LoopNest {
         if (is_root()) return false;
 
         auto check = [&](const FunctionDAG::Node *n) {
-            for (const auto &s : node->stages) {
+            for (const auto &s : n->stages) {
                 for (int t = 0; t < (int)PipelineFeatures::ScalarType::NumScalarTypes; t++) {
                     if (s.features.op_histogram[(int)PipelineFeatures::OpType::ImageCall][t] > 0) return true;
                 }
@@ -2663,7 +2664,7 @@ struct LoopNest {
             VarOrRVar orig;
             VarOrRVar var;
             int64_t extent = 0;
-            bool outermost = false, parallel = false, exists = false;
+            bool outermost = false, parallel = false, exists = false, pure = false;
             FuncVar() : orig(Var()), var(Var()) {}
         };
         vector<FuncVar> vars; // In order from innermost to outermost. Each group of d is one tiling.
@@ -2701,6 +2702,7 @@ struct LoopNest {
                     fv.outermost = true;
                     fv.parallel = parent->is_root() && l.pure;
                     fv.exists = true;
+                    fv.pure = l.pure;
                     vars.vars.push_back(fv);
                 }
                 vars_map[stage] = vars;
@@ -2762,7 +2764,7 @@ struct LoopNest {
                         if (innermost_pure_var == nullptr && symbolic_loop[i].pure) {
                             innermost_pure_var = &vars.vars[i];
                         }
-                        if (symbolic_loop[i].pure) {
+                        if (vars.vars[i].pure) {
                             product_of_pure_loops *= vars.vars[i].extent;
                         }
                     }
@@ -2822,21 +2824,14 @@ struct LoopNest {
                         // Start at 1 to skip the vectorized var
                         size_t start = vectorized ? 1 : 0;
                         size_t end = symbolic_loop.size() + start;
-                        size_t limit = end;
+                        std::stable_sort(vars.vars.begin() + start, vars.vars.begin() + end,
+                                         [](const FuncVars::FuncVar &a, const FuncVars::FuncVar &b) {
+                                             return a.pure && !b.pure;
+                                         });
 
-                        for (size_t i = start; i < limit; i++) {
-                            auto v = vars.vars[i];
-                            if (v.exists) {
-                                if (v.var.is_rvar) {
-                                    limit--;
-                                    // Bubble the rvar to the end
-                                    for (size_t j = i; j < end; j++) {
-                                        std::swap(vars.vars[j], vars.vars[j+1]);
-                                    }
-                                    i--;
-                                } else {
-                                    s.unroll(v.var);
-                                }
+                        for (size_t i = start; i < end; i++) {
+                            if (vars.vars[i].pure && vars.vars[i].exists) {
+                                s.unroll(vars.vars[i].var);
                             }
                         }
                     }
@@ -2866,13 +2861,18 @@ struct LoopNest {
                                 outer = RVar(parent.var.name() + "o");
                                 inner = RVar(parent.var.name() + "i");
                             }
-                            debug(0) << "Splitting " << parent.var.name() << " by " << factor << "\n";
-                            debug(0) << "Outermost: " << parent.outermost << " stage_idx: " << stage_idx << "\n";
                             auto tail_strategy = pure_var_tail_strategy;
                             // If it's an RVar, or not the outermost split and we're in an update, we need a guard with if instead.
                             if (parent.var.is_rvar || (stage_idx != 0 && !parent.outermost)) {
                                 tail_strategy = TailStrategy::GuardWithIf;
                             }
+                            debug(0) << "Splitting " << node->func.name()
+                                     << ".s" << stage_idx
+                                     << "." << parent.var.name()
+                                     << " = " << outer.name()
+                                     << " * " << factor
+                                     << " + " << inner.name()
+                                     << " using " << tail_strategy << "\n";
                             s.split(parent.var, outer, inner, (int)factor, tail_strategy);
                             v = parent;
                             parent.var = outer;
@@ -3902,25 +3902,17 @@ std::string generate_schedules_autotune(const std::vector<Function> &output_func
         }
 
         // Then dump some of history if we're out of space. Keep the
-        // best and worst of each quad of samples
+        // even-numbered samples, but make sure we also preserve the
+        // best sample of all time.
         if (history.size() >= max_history) {
-            for (size_t i = 0; i < history.size() - 3; i += 4) {
-                size_t best = 0, most_mispredicted = 0;
-                for (int j = 0; j < 4; j++) {
-                    if (runtimes(i+j) < runtimes(i + best)) {
-                        best = j;
-                    }
-                    if (history[i + j]->misprediction > history[i + most_mispredicted]->misprediction) {
-                        most_mispredicted = j;
-                    }
-                }
-                if (best_of_all_time == i + best) {
+            for (size_t i = 0; i < history.size(); i += 2) {
+                size_t keep = i;
+                if (i/2 == best_of_all_time/2) {
+                    keep = best_of_all_time;
                     best_of_all_time = i/2;
                 }
-                history[i/2] = history[i + best];
-                runtimes(i/2) = runtimes(i + best);
-                history[i/2 + 1] = history[i + most_mispredicted];
-                runtimes(i/2 + 1) = runtimes(i + most_mispredicted);
+                history[i/2] = history[keep];
+                runtimes(i/2) = runtimes(keep);
             }
             history.erase(history.begin() + max_history/2, history.end());
             internal_assert(history.size() == max_history/2);

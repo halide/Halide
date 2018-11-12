@@ -16,7 +16,6 @@ extern "C" DLLEXPORT int count(int x) {
 HalideExtern_1(int, count, int);
 
 int main(int argc, char **argv) {
-#if 0
     {
         // Split an rvar, compute something at the inner var, and make
         // sure the it's evaluated the right number of times.
@@ -166,8 +165,6 @@ int main(int argc, char **argv) {
         }
         call_counter = 0;
     }
-
-#endif
 
     {
         // Split by a non-factor and compute something at the split,
