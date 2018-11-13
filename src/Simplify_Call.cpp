@@ -233,7 +233,7 @@ Expr Simplify::visit(const Call *op, ConstBounds *bounds) {
         Expr arg = mutate(op->args[0], nullptr);
 
         if (const double *f = as_const_float(arg)) {
-            return FloatImm::make(arg.type(), std::sqrt(*f));
+            return make_const(arg.type(), std::sqrt(*f));
         } else if (!arg.same_as(op->args[0])) {
             return Call::make(op->type, op->name, {arg}, op->call_type);
         } else {
@@ -244,7 +244,7 @@ Expr Simplify::visit(const Call *op, ConstBounds *bounds) {
         Expr arg = mutate(op->args[0], nullptr);
 
         if (const double *f = as_const_float(arg)) {
-            return FloatImm::make(arg.type(), std::log(*f));
+            return make_const(arg.type(), std::log(*f));
         } else if (!arg.same_as(op->args[0])) {
             return Call::make(op->type, op->name, {arg}, op->call_type);
         } else {
@@ -255,7 +255,7 @@ Expr Simplify::visit(const Call *op, ConstBounds *bounds) {
         Expr arg = mutate(op->args[0], nullptr);
 
         if (const double *f = as_const_float(arg)) {
-            return FloatImm::make(arg.type(), std::exp(*f));
+            return make_const(arg.type(), std::exp(*f));
         } else if (!arg.same_as(op->args[0])) {
             return Call::make(op->type, op->name, {arg}, op->call_type);
         } else {
@@ -269,7 +269,7 @@ Expr Simplify::visit(const Call *op, ConstBounds *bounds) {
         const double *f0 = as_const_float(arg0);
         const double *f1 = as_const_float(arg1);
         if (f0 && f1) {
-            return FloatImm::make(arg0.type(), std::pow(*f0, *f1));
+            return make_const(arg0.type(), std::pow(*f0, *f1));
         } else if (!arg0.same_as(op->args[0]) || !arg1.same_as(op->args[1])) {
             return Call::make(op->type, op->name, {arg0, arg1}, op->call_type);
         } else {
@@ -284,13 +284,13 @@ Expr Simplify::visit(const Call *op, ConstBounds *bounds) {
         const Call *call = arg.as<Call>();
         if (const double *f = as_const_float(arg)) {
             if (op->name == "floor_f32") {
-                return FloatImm::make(arg.type(), std::floor(*f));
+                return make_const(arg.type(), std::floor(*f));
             } else if (op->name == "ceil_f32") {
-                return FloatImm::make(arg.type(), std::ceil(*f));
+                return make_const(arg.type(), std::ceil(*f));
             } else if (op->name == "round_f32") {
-                return FloatImm::make(arg.type(), std::nearbyint(*f));
+                return make_const(arg.type(), std::nearbyint(*f));
             } else if (op->name == "trunc_f32") {
-                return FloatImm::make(arg.type(), (*f < 0 ? std::ceil(*f) : std::floor(*f)));
+                return make_const(arg.type(), (*f < 0 ? std::ceil(*f) : std::floor(*f)));
             } else {
                 return op;
             }
