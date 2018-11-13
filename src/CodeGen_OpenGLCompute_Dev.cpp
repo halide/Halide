@@ -55,6 +55,11 @@ Type map_type(const Type &type) {
 }
 }  // namespace
 
+CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::CodeGen_OpenGLCompute_C(std::ostream &s, Target t)
+    : CodeGen_GLSLBase(s, t) {
+    builtin["trunc_f32"] = "trunc";
+}
+
 string CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::print_type(Type type, AppendSpaceIfNeeded space) {
     Type mapped_type = map_type(type);
     if (mapped_type.is_uint() && !mapped_type.is_bool()) {

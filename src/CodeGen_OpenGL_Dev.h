@@ -76,7 +76,6 @@ protected:
 
     void visit(const Shuffle *) override;
 
-private:
     std::map<std::string, std::string> builtin;
 };
 
@@ -84,7 +83,7 @@ private:
 /** Compile one statement into GLSL. */
 class CodeGen_GLSL : public CodeGen_GLSLBase {
 public:
-    CodeGen_GLSL(std::ostream &s, const Target &t) : CodeGen_GLSLBase(s, t) {}
+    CodeGen_GLSL(std::ostream &s, const Target &t);
 
     void add_kernel(Stmt stmt,
                     std::string name,
