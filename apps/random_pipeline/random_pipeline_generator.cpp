@@ -361,7 +361,9 @@ public:
         std::cout << "Tanh\n";
         Func activation("tanh");
         vector<Expr> coords = make_arguments(f.func.args());
-        activation(f.func.args()) = tanh(f.func(coords));
+        Expr exp_pos = exp(f.func(coords));
+        Expr exp_neg = exp(-f.func(coords));
+        activation(f.func.args()) = (exp_pos - exp_neg) / (exp_pos + exp_neg); //tanh(f.func(coords));
         return {activation, f.w, f.h, f.c};
     }
 
