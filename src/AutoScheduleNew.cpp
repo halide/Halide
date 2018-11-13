@@ -26,6 +26,7 @@
 #include <iostream>
 #include <random>
 #include <unordered_set>
+#include <fstream>
 
 // TODO: overview of algorithm
 
@@ -2959,18 +2960,27 @@ struct State {
                     debug(0) << "YYY ";
                     debug(0) << n.func.name() << ' ' << (stage_idx - 1) << ' ';
                     const int64_t *sched_stats = (const int64_t *)(&sched_feat);
+                    // binary file for features
+                    string feature_file = get_env_variable("HL_FEATURE_PATH");
+                    std::ofstream binfile(feature_file, std::ios::binary | std::ios_base::trunc);
                     for (size_t i = 0; i < sizeof(ScheduleFeatures) / sizeof(int64_t); i++) {
                         // The schedule-based features are all
                         // naturally multiplicative and have a very
                         // large dynamic range, so we emit them
                         // logged
-                        debug(0) << std::log(1 + sched_stats[i]) << ' ';
+                        float f = std::log(1 + sched_stats[i]);
+                        debug(0) << f << ' ';
+                        // also write feature to binary file
+                        binfile.write((char*) &f, sizeof(float));
                     }
                     const int *stats = (const int *)(&s.features);
                     for (size_t i = 0; i < sizeof(s.features) / sizeof(int); i++) {
                         debug(0) << stats[i] << ' ';
+                        float f = (float) stats[i];
+                        binfile.write((char*) &f, sizeof(float));
                     }
                     debug(0) << '\n';
+                    binfile.close();
                 }
             }
         }
