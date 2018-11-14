@@ -362,12 +362,21 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Allocate *o
     internal_assert(is_const(extent));
 
     if (!starts_with(op->name, "__shared_")) {
+        stream << "{\n";
+        indent += 2;
+        do_indent();
         // Shared allocations were already declared at global scope.
         stream << print_type(op->type) << " "
                << print_name(op->name) << "["
                << op->extents[0] << "];\n";
     }
     op->body.accept(this);
+
+    if (!starts_with(op->name, "__shared_")) {
+        indent -= 2;
+        do_indent();
+        stream << "}\n";
+    }
 }
 
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Free *op) {
