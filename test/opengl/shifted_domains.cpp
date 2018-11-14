@@ -23,14 +23,15 @@ int shifted_domains() {
     gradient.glsl(x, y, c);
 
     printf("Evaluating gradient from (0, 0) to (7, 7)\n");
-    Buffer<float> result(8, 8, 1);
-    gradient.realize(result, target);
+    Buffer<float> result = gradient.realize(8, 8, 1, target);
     result.copy_to_host();
 
     if (!Testing::check_result<float>(result, 5e-5f, [](int x, int y) { return float(x + y); }))
         errors++;
 
-    Buffer<float> shifted(5, 7, 1);
+    // Create with the interleaved storage order needed by GLSL
+    const std::vector<int> glsl_order{2, 0, 1};
+    Buffer<float> shifted({5, 7, 1}, glsl_order);
     shifted.set_min(100, 50);
 
     printf("Evaluating gradient from (100, 50) to (104, 56)\n");

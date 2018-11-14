@@ -134,19 +134,11 @@ int main(int argc, char **argv) {
 
         interleaved
             .reorder(y, x)
+            .reorder_storage(y, x)
             .bound(y, 0, 3)
             .bound(x, 0, 16)
             .fuse(y, x, xy)
             .vectorize(xy, 12);
-
-        interleaved
-            .output_buffer()
-            .dim(0)
-                .set_stride(3)
-            .dim(1)
-                .set_min(0)
-                .set_stride(1)
-                .set_extent(3);
 
         Buffer<float> buff3(3, 16);
         buff3.transpose(0, 1);
@@ -184,17 +176,10 @@ int main(int argc, char **argv) {
 
         output4
             .reorder(y, x)
+            .reorder_storage(y, x)
             .bound(y, 0, 4)
             .unroll(y)
             .vectorize(x, 4);
-
-        output4.output_buffer()
-            .dim(0)
-                .set_stride(4)
-            .dim(1)
-                .set_min(0)
-                .set_stride(1)
-                .set_extent(4);
 
         check_interleave_count(output4, 1);
 
@@ -224,18 +209,10 @@ int main(int argc, char **argv) {
 
         output5
             .reorder(y, x)
+            .reorder_storage(y, x)
             .bound(y, 0, 5)
             .unroll(y)
             .vectorize(x, 4);
-
-        output5.output_buffer()
-            .dim(0)
-                .set_stride(5)
-            .dim(1)
-                .set_min(0)
-                .set_stride(1)
-                .set_extent(5);
-
 
         check_interleave_count(output5, 1);
 
@@ -366,26 +343,6 @@ int main(int argc, char **argv) {
             .bound(y, 0, 8)
             .unroll(x)
             .vectorize(y);
-
-        trans1.output_buffer()
-            .dim(0)
-                .set_min(0)
-                .set_stride(1)
-                .set_extent(8)
-            .dim(1)
-                .set_min(0)
-                .set_stride(8)
-                .set_extent(8);
-
-        trans2.output_buffer()
-            .dim(0)
-                .set_min(0)
-                .set_stride(1)
-                .set_extent(8)
-            .dim(1)
-                .set_min(0)
-                .set_stride(8)
-                .set_extent(8);
 
         Buffer<uint16_t> result6(8, 8);
         Buffer<uint16_t> result7(8, 8);

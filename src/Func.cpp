@@ -2480,6 +2480,12 @@ Func &Func::add_trace_tag(const std::string &trace_tag) {
     return *this;
 }
 
+Func &Func::infer_buffer_constraints(bool infer) {
+    invalidate_cache();
+    func.infer_buffer_constraints() = infer;
+    return *this;
+}
+
 void Func::debug_to_file(const string &filename) {
     invalidate_cache();
     func.debug_file() = filename;

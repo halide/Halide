@@ -44,11 +44,9 @@ int test_lut1d() {
 
     f0(x, y, c) = lut1d(clamp(e, 0, 7), 0, c);
 
-    Buffer<float> out0(8, 8, 3);
-
     f0.bound(c, 0, 3);
     f0.glsl(x, y, c);
-    f0.realize(out0, target);
+    Buffer<float> out0 = f0.realize(8, 8, 3, target);
     out0.copy_to_host();
 
     if (!Testing::check_result<float>(out0, [](int x, int y, int c) {

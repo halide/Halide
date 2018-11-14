@@ -18,10 +18,9 @@ int main() {
     Func g;
     g(x, y, c) = input(x, y, c);
 
-    Buffer<uint8_t> out(255, 10, 3);
     g.bound(c, 0, 3);
     g.glsl(x, y, c);
-    g.realize(out, target);
+    Buffer<uint8_t> out = g.realize(255, 10, 3, target);
     out.copy_to_host();
 
     if (!Testing::check_result<uint8_t>(out, [&](int x, int y, int c) { return input(x, y, c); })) {

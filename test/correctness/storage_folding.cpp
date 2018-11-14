@@ -372,6 +372,7 @@ int main(int argc, char **argv) {
         g(x, y, c) = f(x-1, y+1, c) + f(x, y-1, c);
         f.store_root().compute_at(g, y).fold_storage(y, 3);
 
+        ;
         if (interleave) {
             f.reorder(c, x, y).reorder_storage(c, x, y);
             g.reorder(c, x, y).reorder_storage(c, x, y);
@@ -381,7 +382,6 @@ int main(int argc, char **argv) {
         // loop.
 
         g.set_custom_allocator(my_malloc, my_free);
-
         Buffer<int> im = g.realize(100, 1000, 3);
 
         size_t expected_size;

@@ -541,11 +541,15 @@ Realization Pipeline::realize(vector<int32_t> sizes, const Target &target,
                               const ParamMap &param_map) {
     user_assert(defined()) << "Pipeline is undefined\n";
     vector<Buffer<>> bufs;
-    for (auto & out : contents->outputs) {
-        user_assert(out.has_pure_definition() || out.has_extern_definition()) <<
-            "Can't realize Pipeline with undefined output Func: " << out.name() << ".\n";
-        for (Type t : out.output_types()) {
-            bufs.emplace_back(t, sizes);
+    for (auto & f : contents->outputs) {
+        user_assert(f.has_pure_definition() || f.has_extern_definition()) <<
+            "Can't realize Pipeline with undefined output Func: " << f.name() << ".\n";
+
+        // Attempt to create a Buffer that has the storage laid out in the
+        // same order as that specified by our schedule.
+        const std::vector<int> storage_order = f.storage_order();
+        for (Type t : f.output_types()) {
+            bufs.emplace_back(t, sizes, storage_order);
         }
     }
     Realization r(bufs);

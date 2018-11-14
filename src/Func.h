@@ -2301,6 +2301,12 @@ public:
      */
     Func &add_trace_tag(const std::string &trace_tag);
 
+    /** Specify whether constraints for the buffer underlying this function
+     * should be inferred from other scheduling directives (e.g. to determine
+     * storage layout, strides, etc). Defaults to true. It should be quite
+     * rare to need to disable this. */
+    Func &infer_buffer_constraints(bool infer);
+
     /** Get a handle on the internal halide function that this Func
      * represents. Useful if you want to do introspection on Halide
      * functions */

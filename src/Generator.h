@@ -1567,6 +1567,13 @@ public:
     HALIDE_FORWARD_METHOD_CONST(ImageParam, channels)
     HALIDE_FORWARD_METHOD_CONST(ImageParam, trace_loads)
     HALIDE_FORWARD_METHOD_CONST(ImageParam, add_trace_tag)
+
+    // Forward scheduling methods that are relevant for storage
+    HALIDE_FORWARD_METHOD(ImageParam, align_bounds)
+    HALIDE_FORWARD_METHOD(ImageParam, align_storage)
+    HALIDE_FORWARD_METHOD(ImageParam, bound)
+    HALIDE_FORWARD_METHOD(ImageParam, bound_extent)
+    HALIDE_FORWARD_METHOD(ImageParam, reorder_storage)
     // }@
 };
 
@@ -1644,6 +1651,18 @@ public:
         return ExternFuncArgument(this->parameters_.at(0));
     }
 
+    template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
+    Func operator[](size_t i) {
+        // TODO: we'd like to prevent doing foo[i]=somefunc, but need to allow foo[i].schedule()
+        return this->funcs()[i];
+    }
+
+    template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
+    Func at(size_t i) {
+        // TODO: we'd like to prevent doing foo[i]=somefunc, but need to allow foo[i].schedule()
+        return this->funcs().at(i);
+    }
+
     GeneratorInput_Func<T> &estimate(Var var, Expr min, Expr extent) {
         this->estimate_impl(var, min, extent);
         return *this;
@@ -1676,6 +1695,13 @@ public:
     HALIDE_FORWARD_METHOD_CONST(Func, update_values)
     HALIDE_FORWARD_METHOD_CONST(Func, value)
     HALIDE_FORWARD_METHOD_CONST(Func, values)
+
+    // Forward scheduling methods that are relevant for storage
+    HALIDE_FORWARD_METHOD(Func, align_bounds)
+    HALIDE_FORWARD_METHOD(Func, align_storage)
+    HALIDE_FORWARD_METHOD(Func, bound)
+    HALIDE_FORWARD_METHOD(Func, bound_extent)
+    HALIDE_FORWARD_METHOD(Func, reorder_storage)
     // }@
 };
 
@@ -2286,7 +2312,8 @@ public:
     // Allow Output<Func[]> = Func
     template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
     Func &operator[](size_t i) {
-        this->check_value_writable();
+        // TODO: we'd like to prevent doing foo[i]=somefunc, but need to allow foo[i].schedule()
+        // this->check_value_writable();
         return get_assignable_func_ref(i);
     }
 

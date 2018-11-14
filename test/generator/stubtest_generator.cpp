@@ -88,6 +88,29 @@ public:
     void schedule() {
         intermediate.compute_at(intermediate_level);
         intermediate.specialize(vectorize).vectorize(x, natural_vector_size<float>());
+
+        typed_buffer_input.bound(Halide::_2, 0, 5);
+
+        // When AOT-compiling, set constraints on the Buffer for this input:
+        // - require that we have 7 'channels'
+        // - require that the width is an even multiple of 32
+        simple_input.bound(Halide::_2, 0, 7).align_bounds(Halide::_0, 32);
+
+        // Ditto for array inputs
+        for (size_t i = 0; i < array_input.size(); ++i) {
+            array_input[i].bound(Halide::_2, 0, (int)(9 + i * 2)).align_bounds(Halide::_0, 32);
+        }
+
+        // Also set some constraints on Output<Func>
+        // - require that we have 5 'channels'
+        simple_output.bound(c, 0, 5);
+        // - require that the width is an even multiple of 32
+        simple_output.align_bounds(x, 32);
+
+        // Ditto for array outputs
+        for (size_t i = 0; i < array_output.size(); ++i) {
+            array_output[i].align_bounds(x, 32);
+        }
     }
 
 private:

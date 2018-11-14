@@ -458,6 +458,13 @@ public:
     /** Pass an IRMutator2 through to all Exprs referenced in the
      * Schedule. */
     void mutate(IRMutator2 *);
+
+    /** If emit_inliner_warnings is false, warnings about meaningless-when-inlined
+     * schedule issues should be suppressed. */
+    // @{
+    bool emit_inliner_warnings() const;
+    bool &emit_inliner_warnings();
+    // @}
 };
 
 

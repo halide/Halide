@@ -1,4 +1,5 @@
 #include "IR.h"
+#include "IREquality.h"
 #include "IROperator.h"
 #include "ObjectInstanceRegistry.h"
 #include "Parameter.h"
@@ -281,6 +282,107 @@ void Parameter::set_estimate(Expr e) {
 Expr Parameter::estimate() const {
     check_is_scalar();
     return contents->estimate;
+}
+
+// Add constraints to a buffer based on the storage scheduling for f.
+void Parameter::set_constraints_from_schedule(Function f) {
+    constexpr int D = 1;
+    if (!f.infer_buffer_constraints()) {
+        debug(D) << "set_constraints_from_schedule(" << f.name() << "): ignored due to infer_buffer_constraints = false\n";
+        return;
+    }
+
+    const std::string &param_name = this->name();
+    const FuncSchedule &schedule = f.schedule();
+    const std::vector<StorageDim> &storage_dims = schedule.storage_dims();
+    const std::vector<std::string> &args = f.args();
+    const std::vector<int> storage_order = f.storage_order();
+    std::ostringstream o;
+
+    const auto emit_error = [&f](int dim, const std::string &s, Expr inferred, Expr expl) -> void {
+        user_error << "Inferred value for " << f.name() << "." << s << "." << dim
+            << " does not match the value explicitly specified."
+            << " (In very unusual cases, you may want to use infer_buffer_constraints(false) to disable this.)\n"
+            << "  inferred:" << inferred << "\n"
+            << "  explicit: " << expl << "\n";
+    };
+
+    std::vector<Expr> extents(args.size());
+    for (size_t dim = 0; dim < args.size(); dim++) {
+        extents[dim] = Variable::make(Int(32), param_name + ".extent." + std::to_string(dim), *this);
+    }
+    for (size_t dim = 0; dim < args.size(); dim++) {
+        for (const Bound &b : schedule.bounds()) {
+            if (b.var == args[dim]) {
+                Expr min = Variable::make(Int(32), param_name + ".min." + std::to_string(dim), *this);
+                if (b.min.defined()) {
+                    min = b.min;
+                }
+                if (b.extent.defined()) {
+                    extents[dim] = b.extent;
+                }
+                if (b.modulus.defined()) {
+                    Expr max_plus_one = min + extents[dim];
+                    min = (min / b.modulus) * b.modulus;
+                    max_plus_one = (max_plus_one / b.modulus) * b.modulus;
+                    // simplify() mainly to strip out constant-zero remainders and the like
+                    extents[dim] = simplify(max_plus_one - min);
+                    min = simplify(min + b.remainder);
+                }
+                if (min_constraint(dim).defined() && !equal(min, simplify(min_constraint(dim)))) {
+                    emit_error(dim, "min", min, min_constraint(dim));
+                } else {
+                    if (debug::debug_level() >= D) {
+                        o << "  min." << dim << " -> " << min << "\n";
+                    }
+                    set_min_constraint(dim, min);
+                }
+                if (extent_constraint(dim).defined() && !equal(extents[dim], simplify(extent_constraint(dim)))) {
+                    emit_error(dim, "extent", extents[dim], extent_constraint(dim));
+                } else {
+                    if (debug::debug_level() >= D) {
+                        o << "  extents." << dim << " -> " << extents[dim] << "\n";
+                    }
+                    set_extent_constraint(dim, extents[dim]);
+                }
+                break;
+            }
+        }
+    }
+
+    // stride[0] defaults to 1, not Expr().
+    const auto is_default = [](int dim, const Expr &e) -> bool {
+        return (dim == 0) ? is_one(e) : !e.defined();
+    };
+
+    Expr stride = 1;
+    for (size_t i = 0; i < storage_order.size(); ++i) {
+        const int dim = storage_order[i];
+        if (!is_default(dim, stride)) {
+            const auto &storage_dim = storage_dims[i];
+            if (storage_dim.alignment.defined()) {
+                stride = (stride / storage_dim.alignment) / storage_dim.alignment;
+            }
+            Expr s = stride_constraint(dim);
+            if (!is_default(dim, s) && !equal(stride, simplify(s))) {
+                emit_error(dim, "stride", stride, s);
+            } else {
+                if (debug::debug_level() >= D) {
+                    o << "  stride." << dim << " -> " << stride << " (was " << s << ")\n";
+                }
+                set_stride_constraint(dim, stride);
+            }
+        }
+        if (stride.defined() && is_const(extents[dim])) {
+            stride = simplify(stride * extents[dim]);
+        } else {
+            stride = Expr();
+        }
+    }
+
+    if (!o.str().empty()) {
+        debug(D) << "set_constraints_from_schedule(" << f.name() << "):\n" << o.str();
+    }
 }
 
 void check_call_arg_types(const std::string &name, std::vector<Expr> *args, int dims) {

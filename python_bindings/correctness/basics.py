@@ -28,7 +28,7 @@ def test_runtime_error():
     try:
         f.realize(buf)
     except RuntimeError as e:
-        assert 'do not cover required region' in str(e)
+        assert 'Constraint violated' in str(e)
     else:
         assert False, 'Did not see expected exception!'
 

@@ -213,11 +213,11 @@ struct FuncScheduleContents {
     std::vector<Bound> estimates;
     std::map<std::string, Internal::FunctionPtr> wrappers;
     MemoryType memory_type;
-    bool memoized, async;
+    bool memoized, async, emit_inliner_warnings;
 
     FuncScheduleContents() :
         store_level(LoopLevel::inlined()), compute_level(LoopLevel::inlined()),
-        memory_type(MemoryType::Auto), memoized(false), async(false) {};
+        memory_type(MemoryType::Auto), memoized(false), async(false), emit_inliner_warnings(true) {};
 
     // Pass an IRMutator2 through to all Exprs referenced in the FuncScheduleContents
     void mutate(IRMutator2 *mutator) {
@@ -329,6 +329,7 @@ FuncSchedule FuncSchedule::deep_copy(
     copy.contents->memory_type = contents->memory_type;
     copy.contents->memoized = contents->memoized;
     copy.contents->async = contents->async;
+    copy.contents->emit_inliner_warnings = contents->emit_inliner_warnings;
 
     // Deep-copy wrapper functions.
     for (const auto &iter : contents->wrappers) {
@@ -354,6 +355,14 @@ bool &FuncSchedule::memoized() {
 
 bool FuncSchedule::memoized() const {
     return contents->memoized;
+}
+
+bool &FuncSchedule::emit_inliner_warnings() {
+    return contents->emit_inliner_warnings;
+}
+
+bool FuncSchedule::emit_inliner_warnings() const {
+    return contents->emit_inliner_warnings;
 }
 
 bool &FuncSchedule::async() {

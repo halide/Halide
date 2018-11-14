@@ -152,6 +152,7 @@ Func make_param_func(const Parameter &p, const std::string &name) {
         }
         f(args) = Internal::Call::make(p, args_expr);
     }
+    f.function().schedule().emit_inliner_warnings() = false;
     return f;
 }
 
@@ -1165,6 +1166,7 @@ Func GeneratorBase::get_output(const std::string &n) {
     user_assert(!output->is_array() && output->funcs().size() == 1) << "Output " << n << " must be accessed via get_array_output()\n";
     Func f = output->funcs().at(0);
     user_assert(f.defined()) << "Output " << n << " was not defined.\n";
+    f.function().schedule().emit_inliner_warnings() = false;
     return f;
 }
 
@@ -1175,6 +1177,7 @@ std::vector<Func> GeneratorBase::get_array_output(const std::string &n) {
     (void) output->array_size();
     for (const auto &f : output->funcs()) {
         user_assert(f.defined()) << "Output " << n << " was not fully defined.\n";
+        f.function().schedule().emit_inliner_warnings() = false;
     }
     return output->funcs();
 }
@@ -1390,6 +1393,14 @@ Module GeneratorBase::build_module(const std::string &function_name,
     ParamInfo &pi = param_info();
     std::vector<Argument> filter_arguments;
     for (auto input : pi.filter_inputs) {
+        if (input->kind() == IOKind::Function) {
+            internal_assert(input->parameters_.size() == input->funcs_.size());
+            for (size_t i = 0; i < input->parameters_.size(); ++i) {
+                Function f = input->funcs_.at(i).function();
+                // Transfer the constraints from the Function to the Parameter
+                input->parameters_.at(i).set_constraints_from_schedule(f);
+            }
+        }
         for (const auto &p : input->parameters_) {
             filter_arguments.push_back(to_argument(p, p.is_buffer() ? Expr() : input->get_def_expr()));
         }
@@ -1695,6 +1706,7 @@ void GeneratorInputBase::set_inputs(const std::vector<StubInput> &inputs) {
         if (kind() == IOKind::Function) {
             auto f = in.func();
             user_assert(f.defined()) << "The input for " << name() << " is an undefined Func. Please define it.\n";
+            f.function().schedule().emit_inliner_warnings() = false;
             check_matching_types(f.output_types());
             check_matching_dims(f.dimensions());
             funcs_.push_back(f);
@@ -1998,7 +2010,7 @@ void generator_test() {
         static_assert(std::is_same<decltype(tester_instance.expr_array_input[0]), const Expr &>::value, "type mismatch");
         static_assert(std::is_same<decltype(tester_instance.expr_array_output[0]), const Expr &>::value, "type mismatch");
 
-        static_assert(std::is_same<decltype(tester_instance.func_array_input[0]), const Func &>::value, "type mismatch");
+        static_assert(std::is_same<decltype(tester_instance.func_array_input[0]), Func>::value, "type mismatch");
         static_assert(std::is_same<decltype(tester_instance.func_array_output[0]), Func &>::value, "type mismatch");
 
         static_assert(std::is_same<decltype(tester_instance.buffer_array_input[0]), ImageParam>::value, "type mismatch");

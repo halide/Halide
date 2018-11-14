@@ -74,19 +74,21 @@ void validate_schedule_inlined_function(Function f) {
         }
     }
 
-    for (size_t i = 0; i < func_s.bounds().size(); i++) {
-        if (func_s.bounds()[i].min.defined()) {
-            user_warning << "It is meaningless to bound dimension "
-                         << func_s.bounds()[i].var << " of function "
-                         << f.name() << " to be within ["
-                         << func_s.bounds()[i].min << ", "
-                         << func_s.bounds()[i].extent << "] because the function is scheduled inline.\n";
-        } else if (func_s.bounds()[i].modulus.defined()) {
-            user_warning << "It is meaningless to align the bounds of dimension "
-                         << func_s.bounds()[i].var << " of function "
-                         << f.name() << " to have modulus/remainder ["
-                         << func_s.bounds()[i].modulus << ", "
-                         << func_s.bounds()[i].remainder << "] because the function is scheduled inline.\n";
+    if (func_s.emit_inliner_warnings()) {
+        for (size_t i = 0; i < func_s.bounds().size(); i++) {
+            if (func_s.bounds()[i].min.defined()) {
+                user_warning << "It is meaningless to bound dimension "
+                             << func_s.bounds()[i].var << " of function "
+                             << f.name() << " to be within ["
+                             << func_s.bounds()[i].min << ", "
+                             << func_s.bounds()[i].extent << "] because the function is scheduled inline.\n";
+            } else if (func_s.bounds()[i].modulus.defined()) {
+                user_warning << "It is meaningless to align the bounds of dimension "
+                             << func_s.bounds()[i].var << " of function "
+                             << f.name() << " to have modulus/remainder ["
+                             << func_s.bounds()[i].modulus << ", "
+                             << func_s.bounds()[i].remainder << "] because the function is scheduled inline.\n";
+            }
         }
     }
 }

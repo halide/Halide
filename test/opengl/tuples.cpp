@@ -24,11 +24,10 @@ int main() {
     Func h;
     h(x, y, c) = min(g(x, y, c)[0], g(x, y, c)[1]);
 
-    Buffer<uint8_t> out(255, 10, 3);
     g.compute_root();
     h.compute_root().bound(c, 0, 3).glsl(x, y, c);
 
-    h.realize(out, target);
+    Buffer<uint8_t> out = h.realize(255, 10, 3, target);
     out.copy_to_host();
 
     if (!Testing::check_result<uint8_t>(out, [&](int x, int y, int c) { return input(x, y, c) / 2; })) {

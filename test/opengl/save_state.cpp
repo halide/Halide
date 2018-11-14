@@ -305,14 +305,13 @@ int main() {
     KnownState known_state;
 
     Buffer<uint8_t> input(255, 10, 3);
-    Buffer<uint8_t> out(UInt(8), 255, 10, 3);
 
     Var x, y, c;
     Func g;
     g(x, y, c) = input(x, y, c);
     g.bound(c, 0, 3);
     g.glsl(x, y, c);
-    g.realize(out, target);  // let Halide initialize OpenGL
+    Buffer<uint8_t> out = g.realize(255, 10, 3, target);  // let Halide initialize OpenGL
 
     known_state.setup(true);
     g.realize(out, target);
