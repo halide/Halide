@@ -146,6 +146,12 @@ CodeGen_GLSLBase::CodeGen_GLSLBase(std::ostream &s, Target target) : CodeGen_C(s
     builtin["tan_f32"] = "tan";
     builtin["atan_f32"] = "atan";
     builtin["atan2_f32"] = "atan"; // also called atan in GLSL
+    builtin["sinh_f32"] = "sinh";
+    builtin["cosh_f32"] = "cosh";
+    builtin["tanh_f32"] = "tanh";
+    builtin["asinh_f32"] = "asinh";
+    builtin["acosh_f32"] = "acosh";
+    builtin["atanh_f32"] = "atanh";
     builtin["min"] = "min";
     builtin["max"] = "max";
     builtin["mix"] = "mix";
@@ -153,7 +159,6 @@ CodeGen_GLSLBase::CodeGen_GLSLBase(std::ostream &s, Target target) : CodeGen_C(s
     builtin["abs"] = "abs";
     builtin["isnan"] = "isnan";
     builtin["round_f32"] = "roundEven";
-    builtin["trunc_f32"] = "_trunc_f32";
 
     // functions that produce bvecs
     builtin["equal"] = "equal";
@@ -190,18 +195,63 @@ void CodeGen_GLSLBase::visit(const Mod *op) {
 }
 
 void CodeGen_GLSLBase::visit(const Call *op) {
-    ostringstream rhs;
-    if (builtin.count(op->name) == 0) {
-        user_error << "GLSL: unknown function '" << op->name << "' encountered.\n";
-    }
+    if (op->is_intrinsic(Call::lerp)) {
+        // Implement lerp using GLSL's mix() function, which always uses
+        // floating point arithmetic.
+        Expr zero_val = op->args[0];
+        Expr one_val = op->args[1];
+        Expr weight = op->args[2];
 
-    rhs << builtin[op->name] << "(";
-    for (size_t i = 0; i < op->args.size(); i++) {
-        if (i > 0) rhs << ", ";
-        rhs << print_expr(op->args[i]);
+        internal_assert(weight.type().is_uint() || weight.type().is_float());
+        if (weight.type().is_uint()) {
+            // Normalize integer weights to [0.0f, 1.0f] range.
+            internal_assert(weight.type().bits() < 32);
+            weight = Div::make(Cast::make(Float(32), weight),
+                               Cast::make(Float(32), weight.type().max()));
+        } else if (op->type.is_uint()) {
+            // Round float weights down to next multiple of (1/op->type.imax())
+            // to give same results as lerp based on integer arithmetic.
+            internal_assert(op->type.bits() < 32);
+            weight = floor(weight * op->type.max()) / op->type.max();
+        }
+
+        Type result_type = Float(32, op->type.lanes());
+        Expr e = call_builtin(result_type, "mix", {zero_val, one_val, weight});
+
+        if (!op->type.is_float()) {
+            // Mirror rounding implementation of Halide's integer lerp.
+            e = Cast::make(op->type, floor(e + 0.5f));
+        }
+        print_expr(e);
+        return;
+    } else if (op->is_intrinsic(Call::absd)) {
+        internal_assert(op->args.size() == 2);
+        Expr a = op->args[0];
+        Expr b = op->args[1];
+        Type t = Float(32);
+        Expr e = cast(t, select(a < b, b - a, a - b));
+        print_expr(e);
+        return;
+    } else if (op->is_intrinsic(Call::return_second)) {
+        internal_assert(op->args.size() == 2);
+        // Simply discard the first argument, which is generally a call to
+        // 'halide_printf'.
+        print_expr(op->args[1]);
+        return;
+    } else {
+        ostringstream rhs;
+        if (builtin.count(op->name) == 0) {
+            user_error << "GLSL: unknown function '" << op->name << "' encountered.\n";
+        }
+
+        rhs << builtin[op->name] << "(";
+        for (size_t i = 0; i < op->args.size(); i++) {
+            if (i > 0) rhs << ", ";
+            rhs << print_expr(op->args[i]);
+        }
+        rhs << ")";
+        print_assignment(op->type, rhs.str());
     }
-    rhs << ")";
-    print_assignment(op->type, rhs.str());
 }
 
 string CodeGen_GLSLBase::print_type(Type type, AppendSpaceIfNeeded space_option) {
@@ -320,6 +370,11 @@ string CodeGen_GLSLBase::print_name(const string &name) {
 //
 // CodeGen_GLSL
 //
+
+CodeGen_GLSL::CodeGen_GLSL(std::ostream &s, const Target &t) : CodeGen_GLSLBase(s, t) {
+    builtin["trunc_f32"] = "_trunc_f32";
+}
+
 void CodeGen_GLSL::visit(const FloatImm *op) {
     ostringstream oss;
     // Print integral numbers with trailing ".0". For fractional numbers use a
@@ -692,44 +747,6 @@ void CodeGen_GLSL::visit(const Call *op) {
         // Output the tagged expression.
         print_expr(op->args[1]);
         return;
-    } else if (op->is_intrinsic(Call::lerp)) {
-        // Implement lerp using GLSL's mix() function, which always uses
-        // floating point arithmetic.
-        Expr zero_val = op->args[0];
-        Expr one_val = op->args[1];
-        Expr weight = op->args[2];
-
-        internal_assert(weight.type().is_uint() || weight.type().is_float());
-        if (weight.type().is_uint()) {
-            // Normalize integer weights to [0.0f, 1.0f] range.
-            internal_assert(weight.type().bits() < 32);
-            weight = Div::make(Cast::make(Float(32), weight),
-                               Cast::make(Float(32), weight.type().max()));
-        } else if (op->type.is_uint()) {
-            // Round float weights down to next multiple of (1/op->type.imax())
-            // to give same results as lerp based on integer arithmetic.
-            internal_assert(op->type.bits() < 32);
-            weight = floor(weight * op->type.max()) / op->type.max();
-        }
-
-        Type result_type = Float(32, op->type.lanes());
-        Expr e = call_builtin(result_type, "mix", {zero_val, one_val, weight});
-
-        if (!op->type.is_float()) {
-            // Mirror rounding implementation of Halide's integer lerp.
-            e = Cast::make(op->type, floor(e + 0.5f));
-        }
-        print_expr(e);
-
-        return;
-    } else if (op->is_intrinsic(Call::abs)) {
-        print_expr(call_builtin(op->type, op->name, op->args));
-        return;
-    } else if (op->is_intrinsic(Call::return_second)) {
-        internal_assert(op->args.size() == 2);
-        // Simply discard the first argument, which is generally a call to
-        // 'halide_printf'.
-        rhs << print_expr(op->args[1]);
     } else {
         CodeGen_GLSLBase::visit(op);
         return;
@@ -920,7 +937,7 @@ void CodeGen_GLSL::add_kernel(Stmt stmt, string name,
         "float _trunc_f32(float x) {\n"
         "  return floor(abs(x)) * sign(x);\n"
         "}\n";
-
+    
     stream << "void main() {\n";
     indent += 2;
 

@@ -21,7 +21,7 @@ namespace Halide {
 template<typename T = void>
 class Param {
     /** A reference-counted handle on the internal parameter object */
-    Internal::RegisteredParameter param;
+    Internal::Parameter param;
 
     // This is a deliberately non-existent type that allows us to compile Param<>
     // but provide less-confusing error messages if you attempt to call get<> or set<>
