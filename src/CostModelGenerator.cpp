@@ -42,20 +42,27 @@ struct ModelWeight<true> : public GeneratorInput<Buffer<float>> {
         for (auto &e : args) e = Var();
         grad(args) = undef<float>();
 
+        // We'll report back the new weights and the loss gradients,
+        // and update the ADAM state. Depending on the mode the caller
+        // is in, it may use the new weights, or it may just send the
+        // loss gradients up to an ADAM server.
         args.back() = 0;
         FuncRef new_weight = grad(args);
         args.back() = 1;
         FuncRef smoothed_deriv = grad(args);
         args.back() = 2;
         FuncRef smoothed_second_moment = grad(args);
+        args.back() = 3;
+        FuncRef loss_gradient = grad(args);
 
         args.pop_back();
         Expr current_weight = (*this)(args);
-        Expr deriv = d(*this)(args);
+
+        loss_gradient = d(*this)(args);
 
         // Update the first and second moment estimates
-        smoothed_deriv = 0.9f * smoothed_deriv + 0.1f * deriv;
-        smoothed_second_moment = 0.999f * smoothed_second_moment + 0.001f * pow(deriv, 2);
+        smoothed_deriv = 0.9f * smoothed_deriv + 0.1f * loss_gradient;
+        smoothed_second_moment = 0.999f * smoothed_second_moment + 0.001f * pow(loss_gradient, 2);
 
         // Correction to account for the fact that the smoothed_deriv
         // and smoothed_second_moment start at zero when t == 0
@@ -84,7 +91,7 @@ struct ModelWeight<true> : public GeneratorInput<Buffer<float>> {
             grad.dim(2).set_bounds(0, s2);
             grad.bound(grad.args()[2], 0, s2);
         }
-        grad.dim(dimensions()).set_bounds(0, 3);
+        grad.dim(dimensions()).set_bounds(0, 4);
     }
 };
 
@@ -283,10 +290,11 @@ public:
 
         // reduce over a region that expands to 3x1 convs from the first two stages to the last two stages with zero padding
         RDom r_reduce(0, (padded_stages + 6) / 4);
-        Expr prediction = sum(relu6(n, r_reduce));
+        Func prediction;
+        prediction(n) = sum(relu6(n, r_reduce));
 
         if (!training) {
-            output(n) = prediction;
+            output(n) = prediction(n);
 
             // schedule
             output.bound(n, 0, batch_size);
@@ -311,11 +319,21 @@ public:
                 .parallel(n, 2);
 
         } else {
-            Expr correct_prediction = true_runtime(n);
-            Func err;
-            Expr delta = prediction - correct_prediction;
-            err(n) = delta * delta;
             RDom r_batch(0, batch_size);
+
+            /*
+            Func average_prediction, average_runtime;
+
+            average_prediction() += prediction(r_batch);
+            average_prediction() /= batch_size;
+            average_runtime() += true_runtime(r_batch);
+            average_runtime() /= batch_size;
+            */
+
+            Func err;
+            //Expr delta = (prediction(n) / average_prediction()) - (true_runtime(n) / average_runtime());
+            Expr delta = 1.0f/(prediction(n) + 0.0001f) - 1.0f/(true_runtime(n) + 0.0001f);
+            err(n) = delta * delta;
             Expr loss = sum(err(r_batch));
 
             output() = loss / batch_size;
@@ -355,6 +373,7 @@ public:
                         pool4, pool4_padded,
                         conv5, relu5, relu5_padded,
                         conv6, relu6,
+                        prediction,
                         err, Func(output)}) {
                 f.compute_root();
                 for (auto g : d_loss_d.funcs(f)) {

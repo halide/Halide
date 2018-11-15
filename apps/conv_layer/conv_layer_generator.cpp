@@ -13,12 +13,13 @@ public:
     Output<Buffer<float>> f_ReLU{"ReLU", 4};
 
     void generate() {
-        /* THE ALGORITHM */
+        // const int N = 4, CI = 64, CO = 64, W = 128, H = 128;
+        const int N = 5, CI = 120, CO = 24, W = 100, H = 80;
 
         Var x("x"), y("y"), c("c"), n("n");
 
         Func f_conv("conv");
-        RDom r(0, 64, 0, 3, 0, 3);
+        RDom r(0, CI, 0, 3, 0, 3);
 
         f_conv(c, x, y, n) = bias(c);
 
@@ -26,60 +27,49 @@ public:
 
         f_ReLU(c, x, y, n) = max(0, f_conv(c, x, y, n));
 
-        /*
-        Func f_conv("conv");
-        RDom r(0, 64, 0, 3, 0, 3);
-
-        f_conv(x, y, c, n) = bias(c);
-
-        f_conv(x, y, c, n) += filter(r.y, r.z, r.x, c) * input(x + r.y, y + r.z, r.x, n);
-
-        f_ReLU(x, y, c, n) = max(0, f_conv(x, y, c, n));
-        */
-
         /* THE SCHEDULE */
 
-        f_ReLU.bound(x, 0, 128)
-            .bound(y, 0, 128)
-            .bound(c, 0, 64)
-            .bound(n, 0, 4);
+        f_ReLU.bound(x, 0, W)
+            .bound(y, 0, H)
+            .bound(c, 0, CO)
+            .bound(n, 0, N);
 
-        f_ReLU.dim(0).set_bounds(0, 64).set_stride(1)
-            .dim(1).set_bounds(0, 128).set_stride(64)
-            .dim(2).set_bounds(0, 128).set_stride(64 * 128)
-            .dim(3).set_bounds(0, 4).set_stride(64 * 128 * 128);
+        f_ReLU.dim(0).set_bounds(0, CO).set_stride(1)
+            .dim(1).set_bounds(0, W).set_stride(CO)
+            .dim(2).set_bounds(0, H).set_stride(CO * W)
+            .dim(3).set_bounds(0, N).set_stride(CO * H * W);
 
-        input.dim(0).set_bounds(0, 64).set_stride(1)
-            .dim(1).set_bounds(0, 130).set_stride(64)
-            .dim(2).set_bounds(0, 130).set_stride(64 * 130)
-            .dim(3).set_bounds(0, 4).set_stride(64 * 130 * 130);
+        input.dim(0).set_bounds(0, CI).set_stride(1)
+            .dim(1).set_bounds(0, W + 2).set_stride(CI)
+            .dim(2).set_bounds(0, H + 2).set_stride(CI * (W + 2))
+            .dim(3).set_bounds(0, N).set_stride(CI * (W + 2) * (H + 2));
 
-        filter.dim(0).set_bounds(0, 64).set_stride(1)
-            .dim(1).set_bounds(0, 3).set_stride(64)
-            .dim(2).set_bounds(0, 3).set_stride(64 * 3)
-            .dim(3).set_bounds(0, 64).set_stride(64 * 3 * 3);
+        filter.dim(0).set_bounds(0, CO).set_stride(1)
+            .dim(1).set_bounds(0, 3).set_stride(CO)
+            .dim(2).set_bounds(0, 3).set_stride(CO * 3)
+            .dim(3).set_bounds(0, CI).set_stride(CO * 3 * 3);
 
-        bias.dim(0).set_bounds(0, 64).set_stride(1);
+        bias.dim(0).set_bounds(0, CO).set_stride(1);
 
         if (auto_schedule) {
             // Provide estimates on the input image
-            input.dim(0).set_bounds_estimate(0, 64);
-            input.dim(1).set_bounds_estimate(0, 128 + 2);
-            input.dim(2).set_bounds_estimate(0, 128 + 2);
-            input.dim(3).set_bounds_estimate(0, 4);
+            input.dim(0).set_bounds_estimate(0, CI);
+            input.dim(1).set_bounds_estimate(0, W + 2);
+            input.dim(2).set_bounds_estimate(0, H + 2);
+            input.dim(3).set_bounds_estimate(0, N);
 
-            filter.dim(0).set_bounds_estimate(0, 64);
+            filter.dim(0).set_bounds_estimate(0, CO);
             filter.dim(1).set_bounds_estimate(0, 3);
             filter.dim(2).set_bounds_estimate(0, 3);
-            filter.dim(3).set_bounds_estimate(0, 64);
+            filter.dim(3).set_bounds_estimate(0, CI);
 
-            bias.dim(0).set_bounds_estimate(0, 64);
+            bias.dim(0).set_bounds_estimate(0, CO);
 
             // Provide estimates on the pipeline f_ReLU
-            f_ReLU.estimate(x, 0, 128)
-                .estimate(y, 0, 128)
-                .estimate(c, 0, 64)
-                .estimate(n, 0, 4);
+            f_ReLU.estimate(x, 0, W)
+                .estimate(y, 0, H)
+                .estimate(c, 0, CO)
+                .estimate(n, 0, N);
 
 
 
@@ -104,7 +94,8 @@ public:
                 .gpu_threads(x, y, c);
         }*/ else {
 
-            // Best schedule
+            // Best schedule (optimized for N = 4, CI = 64, CO = 64, W = 128, H = 128)
+            /*
             Var co, ci, xo, xi, yo, yi, t;
             f_ReLU.split(c, co, ci, 16)
                 .split(x, xo, xi, 3)
@@ -117,6 +108,10 @@ public:
                 .reorder(c, x, y, r.x, r.y, r.z, n)
                 .vectorize(c).unroll(x).unroll(y).unroll(r.x, 2);
             filter.in().compute_at(f_conv, r.x).vectorize(_0);
+            */
+
+            // Sane schedule that should work for any size
+            f_ReLU.parallel(n).parallel(y).vectorize(c, 8);
 
             /* MKL uses the schedule below, but LLVM won't register-allocate it properly
             Var co, ci, cio, cii, xo, xi, yo, yi, t;

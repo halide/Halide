@@ -1,6 +1,11 @@
 #include <algorithm>
 #include <fstream>
 
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/ip.h>
+#include <arpa/inet.h>
+
 #include "Buffer.h"
 #include "Generator.h"
 #include "BoundaryConditions.h"
@@ -189,12 +194,25 @@ class ThroughputPredictorPipeline {
     Runtime::Buffer<float> schedule_feat_queue, pipeline_feat_queue, costs;
     Runtime::Buffer<double *> cost_ptrs;
     int cursor, num_stages;
-public:
+
+    std::string weights_server_hostname;
+    int weights_server_port = 0;
+    int weights_server_experiment_id = 0;
+
+ public:
 
     ThroughputPredictorPipeline() {
         weights_dir = get_env_variable("HL_WEIGHTS_DIR");
         load_weights();
         load_stats();
+
+        weights_server_hostname = get_env_variable("HL_WEIGHTS_SERVER_HOSTNAME");
+        if (!weights_server_hostname.empty()) {
+            weights_server_port = std::atoi(get_env_variable("HL_WEIGHTS_SERVER_PORT").c_str());
+            weights_server_experiment_id = std::atoi(get_env_variable("HL_WEIGHTS_SERVER_EXPERIMENT_ID").c_str());
+            debug(0) << "Using weights server " << weights_server_hostname << ":" << weights_server_port << "/" << weights_server_experiment_id << "\n";
+            send_weights_to_weights_server();
+        }
     }
 
     void set_pipeline_features(const Runtime::Buffer<float> &pipeline_feats) {
@@ -263,7 +281,7 @@ public:
                 for (int i = 0; i < w.dimensions(); i++) {
                     size.push_back(w.dim(i).extent());
                 }
-                size.push_back(3);
+                size.push_back(4);
                 auto buf = Runtime::Buffer<float>(size);
                 buf.fill(0.0f);
                 return buf;
@@ -317,23 +335,30 @@ public:
                                               loss);
 
 
-        auto update_weight = [](const Runtime::Buffer<float> &src, Runtime::Buffer<float> &dst) {
-            dst.copy_from(src.sliced(src.dimensions()-1, 0));
-        };
-        update_weight(head1_filter_update, weights.head1_filter);
-        update_weight(head1_bias_update, weights.head1_bias);
-        update_weight(head2_filter_update, weights.head2_filter);
-        update_weight(head2_bias_update, weights.head2_bias);
-        update_weight(conv1_filter_update, weights.conv1_filter);
-        update_weight(conv1_bias_update, weights.conv1_bias);
-        update_weight(conv2_filter_update, weights.conv2_filter);
-        update_weight(conv2_bias_update, weights.conv2_bias);
-        update_weight(conv3_filter_update, weights.conv3_filter);
-        update_weight(conv3_bias_update, weights.conv3_bias);
-        update_weight(conv4_filter_update, weights.conv4_filter);
-        update_weight(conv4_bias_update, weights.conv4_bias);
-        update_weight(conv5_filter_update, weights.conv5_filter);
-        update_weight(conv5_bias_update, weights.conv5_bias);
+        if (!weights_server_hostname.empty()) {
+            // Send gradients, receive new weights
+            send_gradients_to_weights_server();
+            get_weights_from_weights_server();
+        } else {
+            // Update weights locally
+            auto update_weight = [](const Runtime::Buffer<float> &src, Runtime::Buffer<float> &dst) {
+                dst.copy_from(src.sliced(src.dimensions()-1, 0));
+            };
+            update_weight(head1_filter_update, weights.head1_filter);
+            update_weight(head1_bias_update, weights.head1_bias);
+            update_weight(head2_filter_update, weights.head2_filter);
+            update_weight(head2_bias_update, weights.head2_bias);
+            update_weight(conv1_filter_update, weights.conv1_filter);
+            update_weight(conv1_bias_update, weights.conv1_bias);
+            update_weight(conv2_filter_update, weights.conv2_filter);
+            update_weight(conv2_bias_update, weights.conv2_bias);
+            update_weight(conv3_filter_update, weights.conv3_filter);
+            update_weight(conv3_bias_update, weights.conv3_bias);
+            update_weight(conv4_filter_update, weights.conv4_filter);
+            update_weight(conv4_bias_update, weights.conv4_bias);
+            update_weight(conv5_filter_update, weights.conv5_filter);
+            update_weight(conv5_bias_update, weights.conv5_bias);
+        }
 
         return loss();
     }
@@ -519,16 +544,10 @@ public:
     }
 
 
-    /*
-    std::string parameter_server_hostname{ "localhost" };
-    int parameter_server_port = 12345;
-    int parameter_server_experiment_id = 0;
-
     struct TCPConnection {
         int fd = 0;
 
-        Connection(const std::string &server, int port) {
-            sockaddr_in address {0};
+        TCPConnection(const std::string &server, int port) {
             sockaddr_in serv_addr {0};
             int sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
             internal_assert(sock >= 0) << "Socket creation error";
@@ -545,27 +564,27 @@ public:
             internal_assert(err == 0) << "Connection failed";
         }
 
-        void send(const uint8_t *data, size_t len) {
-            int sent = send(fd, data, len, 0);
+        void send(const uint8_t *data, ssize_t len) {
+            ssize_t sent = ::send(fd, data, len, 0);
             internal_assert(sent == len) << "Failed to send everything: " << sent << "/" << len;
         }
 
-        void recv(uint8_t *data, size_t len) {
+        void recv(uint8_t *data, ssize_t len) {
             ssize_t received = 0;
-            while (recieved < len) {
-                ssize_t r = recv(fd, buffer + received, len - received, 0);
+            while (received < len) {
+                ssize_t r = ::recv(fd, data + received, len - received, 0);
                 internal_assert(r > 0) << "Failed to receive bytes: " << r;
-                recieved += r;
+                received += r;
             }
         }
 
-        ~Connection() {
+        ~TCPConnection() {
             close(fd);
         }
     };
 
     template<typename F>
-    void for_each_weight(F &f) {
+    void for_each_weight(F f) {
         f(weights.head1_filter);
         f(weights.head1_bias);
         f(weights.head2_filter);
@@ -584,56 +603,82 @@ public:
         f(weights.conv6_bias);
     }
 
-    void send_weights_to_parameter_server() {
-        auto conn = Connection(parameter_server_hostname, parameter_server_port);
-
-        size_t total_size_of_weights = 0;
-
-        for_each_weight([&](const Runtime::Buffer<float> &w) {
-                total_size_of_weights += w.size_in_bytes();
-            });
-
-        int header[4] = {7582946, 1, parameter_server_experiment_id, total_size_of_weights};
-        conn.send((const uint8_t *)header, sizeof(header));
-        for_each_weight([&](const Runtime::Buffer<float> &w) {
-                conn.send(w.data(), w.size_in_bytes());
-            });
+    template<typename F>
+    void for_each_gradient(F f) {
+        auto slice_and_call_f = [&](const Runtime::Buffer<float> &buf) {
+            f(buf.sliced(buf.dimensions()-1, 3));
+        };
+        slice_and_call_f(head1_filter_update);
+        slice_and_call_f(head1_bias_update);
+        slice_and_call_f(head2_filter_update);
+        slice_and_call_f(head2_bias_update);
+        slice_and_call_f(conv1_filter_update);
+        slice_and_call_f(conv1_bias_update);
+        slice_and_call_f(conv2_filter_update);
+        slice_and_call_f(conv2_bias_update);
+        slice_and_call_f(conv3_filter_update);
+        slice_and_call_f(conv3_bias_update);
+        slice_and_call_f(conv4_filter_update);
+        slice_and_call_f(conv4_bias_update);
+        slice_and_call_f(conv5_filter_update);
+        slice_and_call_f(conv5_bias_update);
+        slice_and_call_f(conv6_filter_update);
+        slice_and_call_f(conv6_bias_update);
     }
 
-    void send_gradients_to_parameter_server() {
-        auto conn = Connection(parameter_server_hostname, parameter_server_port);
+    void send_weights_to_weights_server() {
+        debug(0) << "Sending weights to weights server...\n";
+        auto conn = TCPConnection(weights_server_hostname, weights_server_port);
 
-        size_t total_size_of_weights = 0;
+        ssize_t total_size_of_weights = 0;
 
         for_each_weight([&](const Runtime::Buffer<float> &w) {
                 total_size_of_weights += w.size_in_bytes();
             });
 
-        int header[4] = {7582946, 2, parameter_server_experiment_id, total_size_of_weights};
+        int header[4] = {7582946, 1, weights_server_experiment_id, (int)total_size_of_weights};
         conn.send((const uint8_t *)header, sizeof(header));
         for_each_weight([&](const Runtime::Buffer<float> &w) {
-                // TODO: send gradient, not weight
-                conn.send(w.data(), w.size_in_bytes());
+                conn.send((const uint8_t *)(w.data()), w.size_in_bytes());
             });
+        debug(0) << "Sent.\n";
     }
 
-    void get_weights_from_parameter_server() {
-        auto conn = Connection(parameter_server_hostname, parameter_server_port);
+    void send_gradients_to_weights_server() {
+        debug(0) << "Sending gradients to weights server...\n";
+        auto conn = TCPConnection(weights_server_hostname, weights_server_port);
 
-        size_t total_size_of_weights = 0;
+        ssize_t total_size_of_weights = 0;
+
+        for_each_gradient([&](const Runtime::Buffer<float> &w) {
+                total_size_of_weights += w.size_in_bytes();
+            });
+
+        int header[4] = {7582946, 2, weights_server_experiment_id, (int)total_size_of_weights};
+        conn.send((const uint8_t *)header, sizeof(header));
+        for_each_gradient([&](const Runtime::Buffer<float> &w) {
+                conn.send((const uint8_t *)(w.data()), w.size_in_bytes());
+            });
+        debug(0) << "Sent.\n";
+    }
+
+    void get_weights_from_weights_server() {
+        debug(0) << "Getting weights from weights server...\n";
+        auto conn = TCPConnection(weights_server_hostname, weights_server_port);
+
+        ssize_t total_size_of_weights = 0;
 
         for_each_weight([&](const Runtime::Buffer<float> &w) {
                 total_size_of_weights += w.size_in_bytes();
             });
 
-        int header[4] = {7582946, 0, parameter_server_experiment_id, total_size_of_weights};
+        int header[4] = {7582946, 0, weights_server_experiment_id, (int)total_size_of_weights};
         conn.send((const uint8_t *)header, sizeof(header));
         for_each_weight([&](Runtime::Buffer<float> &w) {
-                conn.recv(w.data(), w.size_in_bytes());
+                conn.recv((uint8_t *)(w.data()), w.size_in_bytes());
             });
-
+        debug(0) << "Received.\n";
     }
-    */
 
     // Discard any enqueued but unevaluated schedules
     void reset() {
