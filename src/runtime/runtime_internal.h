@@ -147,15 +147,6 @@ WEAK int halide_matlab_call_pipeline(void *user_context,
                                      int (*pipeline)(void **args), const halide_filter_metadata_t *metadata,
                                      int nlhs, mxArray **plhs, int nrhs, const mxArray **prhs);
 
-// Condition variables. Must be initialized with 0.
-struct halide_cond {
-    uintptr_t _private[1];
-};
-
-WEAK void halide_cond_signal(struct halide_cond *cond);
-WEAK void halide_cond_broadcast(struct halide_cond *cond);
-WEAK void halide_cond_wait(struct halide_cond *cond, struct halide_mutex *mutex);
-
 WEAK int halide_trace_helper(void *user_context,
                              const char *func,
                              void *value, int *coords,
@@ -163,6 +154,11 @@ WEAK int halide_trace_helper(void *user_context,
                              int code,
                              int parent_id, int value_index, int dimensions,
                              const char *trace_tag);
+
+struct halide_pseudostack_slot_t {
+    void *ptr;
+    size_t size;
+};
 
 }  // extern "C"
 

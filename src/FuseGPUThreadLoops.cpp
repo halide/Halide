@@ -69,8 +69,8 @@ class InjectThreadBarriers : public IRMutator2 {
 public:
     InjectThreadBarriers() : in_threads(false) {
         barrier =
-            Evaluate::make(Call::make(Int(32), "halide_gpu_thread_barrier",
-                                      vector<Expr>(), Call::Extern));
+            Evaluate::make(Call::make(Int(32), Call::gpu_thread_barrier,
+                                      vector<Expr>(), Call::Intrinsic));
     }
 };
 
@@ -89,7 +89,7 @@ class ExtractBlockSize : public IRVisitor {
         }
     }
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         for (int i = 0; i < 4; i++) {
             if (ends_with(op->name, thread_names[i])) {
                 found_for(i, op->extent);
@@ -99,9 +99,7 @@ class ExtractBlockSize : public IRVisitor {
         IRVisitor::visit(op);
 
         Scope<Interval> scope;
-        scope.push(op->name,
-                   Interval(Variable::make(Int(32), op->name + ".loop_min"),
-                            Variable::make(Int(32), op->name + ".loop_max")));
+        scope.push(op->name, Interval(op->min, simplify(op->min + op->extent - 1)));
         for (int i = 0; i < 4; i++) {
             if (block_extent[i].defined() &&
                 expr_uses_var(block_extent[i], op->name)) {
@@ -111,7 +109,7 @@ class ExtractBlockSize : public IRVisitor {
         }
     }
 
-    void visit(const LetStmt *op) {
+    void visit(const LetStmt *op) override {
         IRVisitor::visit(op);
         for (int i = 0; i < 4; i++) {
             if (block_extent[i].defined() &&
@@ -300,8 +298,7 @@ class ExtractSharedAllocations : public IRMutator2 {
 
             // Expand any new shared allocations found in the body using the loop bounds.
             Scope<Interval> scope;
-            scope.push(op->name, Interval(Variable::make(Int(32), op->name + ".loop_min"),
-                                          Variable::make(Int(32), op->name + ".loop_max")));
+            scope.push(op->name, Interval(op->min, simplify(op->min + op->extent - 1)));
 
             // Expand the inner allocations using the loop bounds.
             for (SharedAllocation &s : allocations) {
@@ -620,7 +617,7 @@ class ExtractRegisterAllocations : public IRMutator2 {
 
     bool in_lane_loop = false;
 
-    Stmt visit(const For *op) {
+    Stmt visit(const For *op) override {
         ScopedValue<string> old_loop_var(loop_var);
 
         if (op->for_type == ForType::GPULane) {
@@ -635,6 +632,11 @@ class ExtractRegisterAllocations : public IRMutator2 {
                 loop_var = op->name;
             }
 
+            // Hoisting an allocation out of a vectorized for loop
+            // would break here. We should already have hoisted
+            // vectorized allocations.
+            internal_assert(op->for_type != ForType::Vectorized);
+
             // Set aside the allocations we've found so far.
             vector<RegisterAllocation> old;
             old.swap(allocations);
@@ -644,8 +646,7 @@ class ExtractRegisterAllocations : public IRMutator2 {
 
             // Expand any new register allocations found in the body using the loop bounds.
             Scope<Interval> scope;
-            scope.push(op->name, Interval(Variable::make(Int(32), op->name + ".loop_min"),
-                                          Variable::make(Int(32), op->name + ".loop_max")));
+            scope.push(op->name, Interval(op->min, simplify(op->min + op->extent - 1)));
 
             // Expand the inner allocations using the loop bounds.
             for (RegisterAllocation &s : allocations) {
@@ -665,7 +666,7 @@ class ExtractRegisterAllocations : public IRMutator2 {
         }
     }
 
-    Stmt visit(const Allocate *op) {
+    Stmt visit(const Allocate *op) override {
         if (in_lane_loop) {
             return IRMutator2::visit(op);
         }
@@ -713,11 +714,11 @@ class ExtractRegisterAllocations : public IRMutator2 {
         }
     }
 
-    Expr visit(const Let *op) {
+    Expr visit(const Let *op) override {
         return visit_let<Expr>(op);
     }
 
-    Stmt visit(const LetStmt *op) {
+    Stmt visit(const LetStmt *op) override {
         return visit_let<Stmt>(op);
     }
 
@@ -891,7 +892,7 @@ class ValidateGPULoopNesting : public IRVisitor {
 
     using IRVisitor::visit;
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         ScopedValue<string> old_innermost_block_var(innermost_block_var);
         ScopedValue<string> old_innermost_thread_var(innermost_thread_var);
         ScopedValue<int> old_gpu_block_depth(gpu_block_depth);

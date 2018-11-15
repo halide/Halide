@@ -117,10 +117,16 @@ public:
 
     // This class isn't final (and is subclassed from the Python binding
     // code, at least) so it needs a virtual dtor.
-    virtual ~Buffer() {}
+    virtual ~Buffer() = default;
 
     /** Make a null Buffer, which points to no Runtime::Buffer */
-    Buffer() {}
+    Buffer() = default;
+
+     /** Trivial copy constructor. */
+    Buffer(const Buffer &that) = default;
+
+     /** Trivial copy assignment operator. */
+    Buffer &operator=(const Buffer &that) = default;
 
     /** Make a Buffer from a Buffer of a different type */
     template<typename T2>
@@ -179,9 +185,20 @@ public:
                     const std::string &name = "") :
         Buffer(Runtime::Buffer<T>(t, sizes), name) {}
 
+    explicit Buffer(Type t,
+                    const std::vector<int> &sizes,
+                    const std::vector<int> &storage_order,
+                    const std::string &name = "") :
+        Buffer(Runtime::Buffer<T>(t, sizes, storage_order), name) {}
+
     explicit Buffer(const std::vector<int> &sizes,
                     const std::string &name = "") :
         Buffer(Runtime::Buffer<T>(sizes), name) {}
+
+    explicit Buffer(const std::vector<int> &sizes,
+                    const std::vector<int> &storage_order,
+                    const std::string &name = "") :
+        Buffer(Runtime::Buffer<T>(sizes, storage_order), name) {}
 
     template<typename Array, size_t N>
     explicit Buffer(Array (&vals)[N],
@@ -242,6 +259,10 @@ public:
 
     static Buffer<> make_scalar(Type t, const std::string &name = "") {
         return Buffer<>(Runtime::Buffer<>::make_scalar(t), name);
+    }
+
+    static Buffer<T> make_scalar(T *data, const std::string &name = "") {
+        return Buffer<T>(Runtime::Buffer<T>::make_scalar(data), name);
     }
 
     static Buffer<T> make_interleaved(int width, int height, int channels, const std::string &name = "") {
@@ -389,6 +410,7 @@ public:
     HALIDE_BUFFER_FORWARD(translate)
     HALIDE_BUFFER_FORWARD_INITIALIZER_LIST(translate, std::vector<int>)
     HALIDE_BUFFER_FORWARD(transpose)
+    HALIDE_BUFFER_FORWARD(transposed)
     HALIDE_BUFFER_FORWARD(add_dimension)
     HALIDE_BUFFER_FORWARD(copy_to_host)
     HALIDE_BUFFER_FORWARD(copy_to_device)
@@ -406,15 +428,38 @@ public:
     HALIDE_BUFFER_FORWARD(device_deallocate)
     HALIDE_BUFFER_FORWARD(device_free)
     HALIDE_BUFFER_FORWARD_CONST(all_equal)
-    HALIDE_BUFFER_FORWARD(fill)
-    HALIDE_BUFFER_FORWARD_CONST(for_each_element)
 
 #undef HALIDE_BUFFER_FORWARD
 #undef HALIDE_BUFFER_FORWARD_CONST
 
     template<typename Fn, typename ...Args>
-    void for_each_value(Fn &&f, Args... other_buffers) {
-        return get()->for_each_value(std::forward<Fn>(f), (*std::forward<Args>(other_buffers).get())...);
+    Buffer<T> &for_each_value(Fn &&f, Args... other_buffers) {
+        get()->for_each_value(std::forward<Fn>(f), (*std::forward<Args>(other_buffers).get())...);
+        return *this;
+    }
+
+    template<typename Fn, typename ...Args>
+    const Buffer<T> &for_each_value(Fn &&f, Args... other_buffers) const {
+        get()->for_each_value(std::forward<Fn>(f), (*std::forward<Args>(other_buffers).get())...);
+        return *this;
+    }
+
+    template<typename Fn>
+    Buffer<T> &for_each_element(Fn &&f) {
+        get()->for_each_element(std::forward<Fn>(f));
+        return *this;
+    }
+
+    template<typename Fn>
+    const Buffer<T> &for_each_element(Fn &&f) const {
+        get()->for_each_element(std::forward<Fn>(f));
+        return *this;
+    }
+
+    template<typename FnOrValue>
+    Buffer<T> &fill(FnOrValue &&f) {
+        get()->fill(std::forward<FnOrValue>(f));
+        return *this;
     }
 
     static constexpr bool has_static_halide_type = Runtime::Buffer<T>::has_static_halide_type;

@@ -30,7 +30,10 @@ set(RUNTIME_CPP
   fake_thread_pool
   float16_t
   gpu_device_selection
+  hexagon_cache_allocator
   hexagon_cpu_features
+  hexagon_dma
+  hexagon_dma_pool
   hexagon_host
   ios_io
   linux_clock
@@ -70,8 +73,10 @@ set(RUNTIME_CPP
   prefetch
   profiler
   profiler_inlined
+  pseudostack
   qurt_allocator
   qurt_hvx
+  qurt_hvx_vtcm
   qurt_init_fini
   qurt_threads
   qurt_threads_tsan
@@ -263,6 +268,7 @@ set(HEADER_FILES
   Argument.h
   AssociativeOpsTable.h
   Associativity.h
+  AsyncProducers.h
   AutoSchedule.h
   AutoScheduleUtils.h
   BoundaryConditions.h
@@ -362,6 +368,7 @@ set(HEADER_FILES
   Pipeline.h
   Prefetch.h
   Profiling.h
+  PurifyIndexMath.h
   PythonExtensionGen.h
   Qualify.h
   Random.h
@@ -370,6 +377,7 @@ set(HEADER_FILES
   Reduction.h
   RegionCosts.h
   RemoveDeadAllocations.h
+  RemoveExternLoops.h
   RemoveTrivialForLoops.h
   RemoveUndef.h
   Schedule.h
@@ -429,6 +437,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   ApplySplit.cpp
   AssociativeOpsTable.cpp
   Associativity.cpp
+  AsyncProducers.cpp
   AutoSchedule.cpp
   AutoScheduleUtils.cpp
   BoundaryConditions.cpp
@@ -518,6 +527,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   PrintLoopNest.cpp
   Prefetch.cpp
   Profiling.cpp
+  PurifyIndexMath.cpp
   PythonExtensionGen.cpp
   Qualify.cpp
   RDom.cpp
@@ -526,12 +536,32 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Reduction.cpp
   RegionCosts.cpp
   RemoveDeadAllocations.cpp
+  RemoveExternLoops.cpp
   RemoveTrivialForLoops.cpp
   RemoveUndef.cpp
   Schedule.cpp
   ScheduleFunctions.cpp
   SelectGPUAPI.cpp
   Simplify.cpp
+  Simplify_Add.cpp
+  Simplify_And.cpp
+  Simplify_Call.cpp
+  Simplify_Cast.cpp
+  Simplify_Div.cpp
+  Simplify_EQ.cpp
+  Simplify_Exprs.cpp
+  Simplify_LT.cpp
+  Simplify_Let.cpp
+  Simplify_Max.cpp
+  Simplify_Min.cpp
+  Simplify_Mod.cpp
+  Simplify_Mul.cpp
+  Simplify_Not.cpp
+  Simplify_Or.cpp
+  Simplify_Select.cpp
+  Simplify_Shuffle.cpp
+  Simplify_Stmts.cpp
+  Simplify_Sub.cpp
   SimplifySpecializations.cpp
   SkipStages.cpp
   SlidingWindow.cpp
@@ -561,6 +591,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   ${HEADER_FILES}
   ${INITIAL_MODULES}
 )
+
 # Define Halide_SHARED or Halide_STATIC depending on library type
 target_compile_definitions(Halide PRIVATE "-DHalide_${HALIDE_LIBRARY_TYPE}")
 # Ensure that these tools are build first

@@ -309,18 +309,16 @@ struct Test {
             check("paddsb",  8*w, i8_sat(i16(i8_1) + i16(3)));
             check("psubsb",  8*w, i8_sat(i16(i8_1) - i16(i8_2)));
 
-            // TODO: re-enable after LLVM bug https://bugs.llvm.org/show_bug.cgi?id=38691
-            // is fixed.
-            std::cout << "Skipping tests for paddusb and psubusb\n";
-            // check("paddusb", 8*w, u8(min(u16(u8_1) + u16(u8_2), max_u8)));
-            // check("psubusb", 8*w, u8(max(i16(u8_1) - i16(u8_2), 0)));
+            // TODO: Re-enable this after fixing #3281
+            //check("paddusb", 8*w, u8(min(u16(u8_1) + u16(u8_2), max_u8)));
+            // TODO: Re-enable this after fixing #3281
+            //check("psubusb", 8*w, u8(max(i16(u8_1) - i16(u8_2), 0)));
             check("paddsw",  4*w, i16_sat(i32(i16_1) + i32(i16_2)));
             check("psubsw",  4*w, i16_sat(i32(i16_1) - i32(i16_2)));
-            // TODO: re-enable after LLVM bug https://bugs.llvm.org/show_bug.cgi?id=38691
-            // is fixed.
-            std::cout << "Skipping tests for paddusw and psubusw\n";
-            // check("paddusw", 4*w, u16(min(u32(u16_1) + u32(u16_2), max_u16)));
-            // check("psubusw", 4*w, u16(max(i32(u16_1) - i32(u16_2), 0)));
+            // TODO: Re-enable this after fixing #3281
+            //check("paddusw", 4*w, u16(min(u32(u16_1) + u32(u16_2), max_u16)));
+            // TODO: Re-enable this after fixing #3281
+            //check("psubusw", 4*w, u16(max(i32(u16_1) - i32(u16_2), 0)));
             check("pmulhw",  4*w, i16((i32(i16_1) * i32(i16_2)) / (256*256)));
             check("pmulhw",  4*w, i16((i32(i16_1) * i32(i16_2)) >> 16));
 
@@ -336,9 +334,8 @@ struct Test {
             check("pmulhuw", 4*w, i16_1 / 15);
 
 
-            // TODO: re-enable after LLVM bug https://bugs.llvm.org/show_bug.cgi?id=38691
-            // is fixed.
-            std::cout << "Skipping tests for pcmp*b and pcmp*w and pcmp*d\n";
+            // TODO: re-enable after LLVM bug https://bugs.llvm.org/show_bug.cgi?id=38916 is fixed.
+            std::cout << "Skipping tests for pcmp\n";
             // check("pcmp*b", 8*w, select(u8_1 == u8_2, u8(1), u8(2)));
             // check("pcmp*b", 8*w, select(u8_1 > u8_2, u8(1), u8(2)));
             // check("pcmp*w", 4*w, select(u16_1 == u16_2, u16(1), u16(2)));
@@ -572,20 +569,14 @@ struct Test {
             check("vpsubb*ymm", 32, u8_1 - u8_2);
             check("vpaddsb*ymm", 32, i8_sat(i16(i8_1) + i16(i8_2)));
             check("vpsubsb*ymm", 32, i8_sat(i16(i8_1) - i16(i8_2)));
-            // TODO: re-enable after LLVM bug https://bugs.llvm.org/show_bug.cgi?id=38691
-            // is fixed.
-            std::cout << "Skipping tests for vpaddusb*ymm and vpsubusb*ymm\n";
-            // check("vpaddusb*ymm", 32, u8(min(u16(u8_1) + u16(u8_2), max_u8)));
-            // check("vpsubusb*ymm", 32, u8(max(i16(u8_1) - i16(u8_2), 0)));
+            check("vpaddusb*ymm", 32, u8(min(u16(u8_1) + u16(u8_2), max_u8)));
+            check("vpsubusb*ymm", 32, u8(max(i16(u8_1) - i16(u8_2), 0)));
             check("vpaddw*ymm", 16, u16_1 + u16_2);
             check("vpsubw*ymm", 16, u16_1 - u16_2);
             check("vpaddsw*ymm", 16, i16_sat(i32(i16_1) + i32(i16_2)));
             check("vpsubsw*ymm", 16, i16_sat(i32(i16_1) - i32(i16_2)));
-            // TODO: re-enable after LLVM bug https://bugs.llvm.org/show_bug.cgi?id=38691
-            // is fixed.
-            std::cout << "Skipping tests for vpaddusw*ymm and vpsubusw*ymm\n";
-            // check("vpaddusw*ymm", 16, u16(min(u32(u16_1) + u32(u16_2), max_u16)));
-            // check("vpsubusw*ymm", 16, u16(max(i32(u16_1) - i32(u16_2), 0)));
+            check("vpaddusw*ymm", 16, u16(min(u32(u16_1) + u32(u16_2), max_u16)));
+            check("vpsubusw*ymm", 16, u16(max(i32(u16_1) - i32(u16_2), 0)));
             check("vpaddd*ymm", 8, i32_1 + i32_2);
             check("vpsubd*ymm", 8, i32_1 - i32_2);
             check("vpmulhw*ymm", 16, i16((i32(i16_1) * i32(i16_2)) / (256*256)));
@@ -1728,31 +1719,31 @@ struct Test {
         check("vmin(v*.w,v*.w)", hvx_width/4, min(i32_1, i32_2));
 
         check("vcmp.gt(v*.b,v*.b)", hvx_width/1, select(i8_1 < i8_2, i8_1, i8_2));
-        check("vcmp.gt(v*.ub,v*.ub)", hvx_width/1, select(u8_1 < u8_2, u8_1, u8_2));
-        check("vcmp.gt(v*.h,v*.h)", hvx_width/2, select(i16_1 < i16_2, i16_1, i16_2));
-        check("vcmp.gt(v*.uh,v*.uh)", hvx_width/2, select(u16_1 < u16_2, u16_1, u16_2));
-        check("vcmp.gt(v*.w,v*.w)", hvx_width/4, select(i32_1 < i32_2, i32_1, i32_2));
+        check("vcmp.gt(v*.ub,v*.ub)", hvx_width/1, select(u8_1 < u8_2, u8_3, u8_2));
+        check("vcmp.gt(v*.h,v*.h)", hvx_width/2, select(i16_1 < i16_2, i16_3, i16_2));
+        check("vcmp.gt(v*.uh,v*.uh)", hvx_width/2, select(u16_1 < u16_2, u16_3, u16_2));
+        check("vcmp.gt(v*.w,v*.w)", hvx_width/4, select(i32_1 < i32_2, i32_3, i32_2));
         check("vcmp.gt(v*.uw,v*.uw)", hvx_width/4, select(u32_1 < u32_2, u32_1, u32_2));
 
         check("vcmp.gt(v*.b,v*.b)", hvx_width/1, select(i8_1 > i8_2, i8_1, i8_2));
-        check("vcmp.gt(v*.ub,v*.ub)", hvx_width/1, select(u8_1 > u8_2, u8_1, u8_2));
-        check("vcmp.gt(v*.h,v*.h)", hvx_width/2, select(i16_1 > i16_2, i16_1, i16_2));
-        check("vcmp.gt(v*.uh,v*.uh)", hvx_width/2, select(u16_1 > u16_2, u16_1, u16_2));
-        check("vcmp.gt(v*.w,v*.w)", hvx_width/4, select(i32_1 > i32_2, i32_1, i32_2));
+        check("vcmp.gt(v*.ub,v*.ub)", hvx_width/1, select(u8_1 > u8_2, u8_3, u8_2));
+        check("vcmp.gt(v*.h,v*.h)", hvx_width/2, select(i16_1 > i16_2, i16_3, i16_2));
+        check("vcmp.gt(v*.uh,v*.uh)", hvx_width/2, select(u16_1 > u16_2, u16_3, u16_2));
+        check("vcmp.gt(v*.w,v*.w)", hvx_width/4, select(i32_1 > i32_2, i32_3, i32_2));
         check("vcmp.gt(v*.uw,v*.uw)", hvx_width/4, select(u32_1 > u32_2, u32_1, u32_2));
 
         check("vcmp.gt(v*.b,v*.b)", hvx_width/1, select(i8_1 <= i8_2, i8_1, i8_2));
-        check("vcmp.gt(v*.ub,v*.ub)", hvx_width/1, select(u8_1 <= u8_2, u8_1, u8_2));
-        check("vcmp.gt(v*.h,v*.h)", hvx_width/2, select(i16_1 <= i16_2, i16_1, i16_2));
-        check("vcmp.gt(v*.uh,v*.uh)", hvx_width/2, select(u16_1 <= u16_2, u16_1, u16_2));
-        check("vcmp.gt(v*.w,v*.w)", hvx_width/4, select(i32_1 <= i32_2, i32_1, i32_2));
+        check("vcmp.gt(v*.ub,v*.ub)", hvx_width/1, select(u8_1 <= u8_2, u8_3, u8_2));
+        check("vcmp.gt(v*.h,v*.h)", hvx_width/2, select(i16_1 <= i16_2, i16_3, i16_2));
+        check("vcmp.gt(v*.uh,v*.uh)", hvx_width/2, select(u16_1 <= u16_2, u16_3, u16_2));
+        check("vcmp.gt(v*.w,v*.w)", hvx_width/4, select(i32_1 <= i32_2, i32_3, i32_2));
         check("vcmp.gt(v*.uw,v*.uw)", hvx_width/4, select(u32_1 <= u32_2, u32_1, u32_2));
 
         check("vcmp.gt(v*.b,v*.b)", hvx_width/1, select(i8_1 >= i8_2, i8_1, i8_2));
-        check("vcmp.gt(v*.ub,v*.ub)", hvx_width/1, select(u8_1 >= u8_2, u8_1, u8_2));
-        check("vcmp.gt(v*.h,v*.h)", hvx_width/2, select(i16_1 >= i16_2, i16_1, i16_2));
-        check("vcmp.gt(v*.uh,v*.uh)", hvx_width/2, select(u16_1 >= u16_2, u16_1, u16_2));
-        check("vcmp.gt(v*.w,v*.w)", hvx_width/4, select(i32_1 >= i32_2, i32_1, i32_2));
+        check("vcmp.gt(v*.ub,v*.ub)", hvx_width/1, select(u8_1 >= u8_2, u8_3, u8_2));
+        check("vcmp.gt(v*.h,v*.h)", hvx_width/2, select(i16_1 >= i16_2, i16_3, i16_2));
+        check("vcmp.gt(v*.uh,v*.uh)", hvx_width/2, select(u16_1 >= u16_2, u16_3, u16_2));
+        check("vcmp.gt(v*.w,v*.w)", hvx_width/4, select(i32_1 >= i32_2, i32_3, i32_2));
         check("vcmp.gt(v*.uw,v*.uw)", hvx_width/4, select(u32_1 >= u32_2, u32_1, u32_2));
 
         check("vcmp.eq(v*.b,v*.b)", hvx_width/1, select(i8_1 == i8_2, i8_1, i8_2));

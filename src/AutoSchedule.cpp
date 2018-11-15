@@ -1957,7 +1957,7 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g, bool show_
     bool model_reuse = false;
 
     // Linear dropoff
-    Expr load_slope = cast<float>(arch_params.balance) / arch_params.last_level_cache_size;
+    float load_slope = arch_params.balance / arch_params.last_level_cache_size;
     for (const auto &f_load : group_load_costs) {
         internal_assert(g.inlined.find(f_load.first) == g.inlined.end())
             << "Intermediates of inlined pure fuction \"" << f_load.first
@@ -2629,7 +2629,7 @@ void Partitioner::reorder_dims(Stage f_handle, int stage_num, Definition def,
 class FindVarsUsingVar : public IRVisitor {
     using IRVisitor::visit;
 
-    void visit(const Let *let) {
+    void visit(const Let *let) override {
         if (expr_uses_vars(let->value, vars)) {
             vars.push(let->name);
         }
@@ -2999,10 +2999,10 @@ Partitioner::analyze_spatial_locality(const FStage &stg,
     Definition def = get_stage_definition(stg.func, stg.stage_num);
     // Perform inlining on the all the values and the args in the stage.
     for (auto &val : def.values()) {
-        val = perform_inline(val, dep_analysis.env, inlines);
+        val = perform_inline(val, dep_analysis.env, inlines, dep_analysis.order);
     }
     for (auto &arg : def.args()) {
-        arg = perform_inline(arg, dep_analysis.env, inlines);
+        arg = perform_inline(arg, dep_analysis.env, inlines, dep_analysis.order);
     }
     def.accept(&find);
 
@@ -3433,7 +3433,7 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
     // Initialize the cost model.
     // Compute the expression costs for each function in the pipeline.
     debug(2) << "Initializing region costs...\n";
-    RegionCosts costs(env);
+    RegionCosts costs(env, order);
     if (debug::debug_level() >= 3) {
         costs.disp_func_costs();
     }
@@ -3468,7 +3468,7 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
         debug(2) << "Re-computing function value bounds...\n";
         func_val_bounds = compute_function_value_bounds(order, env);
         debug(2) << "Re-initializing region costs...\n";
-        RegionCosts costs(env);
+        RegionCosts costs(env, order);
         debug(2) << "Re-initializing dependence analysis...\n";
         dep_analysis = DependenceAnalysis(env, order, func_val_bounds);
         debug(2) << "Re-computing pipeline bounds...\n";
@@ -3548,13 +3548,15 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
 }  // namespace Internal
 
 MachineParams MachineParams::generic() {
-    return MachineParams(16, 16 * 1024 * 1024, 40);
+    std::string params = Internal::get_env_variable("HL_MACHINE_PARAMS");
+    if (params.empty()) {
+        return MachineParams(16, 16 * 1024 * 1024, 40);
+    } else {
+        return MachineParams(params);
+    }
 }
 
 std::string MachineParams::to_string() const {
-    internal_assert(parallelism.type().is_int() &&
-                    last_level_cache_size.type().is_int() &&
-                    balance.type().is_int());
     std::ostringstream o;
     o << parallelism << "," << last_level_cache_size << "," << balance;
     return o.str();
@@ -3563,9 +3565,9 @@ std::string MachineParams::to_string() const {
 MachineParams::MachineParams(const std::string &s) {
     std::vector<std::string> v = Internal::split_string(s, ",");
     user_assert(v.size() == 3) << "Unable to parse MachineParams: " << s;
-    parallelism = Internal::string_to_int(v[0]);
-    last_level_cache_size = Internal::string_to_int(v[1]);
-    balance = Internal::string_to_int(v[2]);
+    parallelism = std::atoi(v[0].c_str());
+    last_level_cache_size = std::atoll(v[1].c_str());
+    balance = std::atof(v[2].c_str());
 }
 
 }  // namespace Halide

@@ -159,6 +159,17 @@ void CodeGen_PTX_Dev::init_module() {
     #endif
 }
 
+void CodeGen_PTX_Dev::visit(const Call *op) {
+    if (op->is_intrinsic(Call::gpu_thread_barrier)) {
+        llvm::Function *barrier0 = module->getFunction("llvm.nvvm.barrier0");
+        internal_assert(barrier0) << "Could not find PTX barrier intrinsic (llvm.nvvm.barrier0)\n";
+        builder->CreateCall(barrier0);
+        value = ConstantInt::get(i32_t, 0);
+    } else {
+        CodeGen_LLVM::visit(op);
+    }
+}
+
 string CodeGen_PTX_Dev::simt_intrinsic(const string &name) {
     if (ends_with(name, ".__thread_id_x")) {
         return "llvm.nvvm.read.ptx.sreg.tid.x";

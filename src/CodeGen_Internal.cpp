@@ -153,7 +153,9 @@ bool function_takes_user_context(const std::string &name) {
         "halide_device_and_host_malloc",
         "halide_device_sync",
         "halide_do_par_for",
+        "halide_do_loop_task",
         "halide_do_task",
+        "halide_do_async_consumer",
         "halide_error",
         "halide_free",
         "halide_malloc",
@@ -191,6 +193,8 @@ bool function_takes_user_context(const std::string &name) {
         "halide_qurt_hvx_lock",
         "halide_qurt_hvx_unlock",
         "halide_qurt_hvx_unlock_as_destructor",
+        "halide_vtcm_malloc",
+        "halide_vtcm_free",
         "halide_cuda_initialize_kernels",
         "halide_opencl_initialize_kernels",
         "halide_opengl_initialize_kernels",
@@ -474,6 +478,83 @@ void set_function_attributes_for_target(llvm::Function *fn, Target t) {
     // Turn off approximate reciprocals for division. It's too
     // inaccurate even for us.
     fn->addFnAttr("reciprocal-estimates", "none");
+}
+
+void embed_bitcode(llvm::Module *M, const string &halide_command) {
+    // Save llvm.compiler.used and remote it.
+    SmallVector<Constant*, 2> used_array;
+    SmallPtrSet<GlobalValue*, 4> used_globals;
+    llvm::Type *used_element_type = llvm::Type::getInt8Ty(M->getContext())->getPointerTo(0);
+    GlobalVariable *used = collectUsedGlobalVariables(*M, used_globals, true);
+    for (auto *GV : used_globals) {
+        if (GV->getName() != "llvm.embedded.module" &&
+            GV->getName() != "llvm.cmdline")
+          used_array.push_back(
+              ConstantExpr::getPointerBitCastOrAddrSpaceCast(GV, used_element_type));
+    }
+    if (used) {
+        used->eraseFromParent();
+    }
+
+    // Embed the bitcode for the llvm module.
+    std::string data;
+    Triple triple(M->getTargetTriple());
+    // Create a constant that contains the bitcode.
+    llvm::raw_string_ostream OS(data);
+#if LLVM_VERSION >= 70
+    llvm::WriteBitcodeToFile(*M, OS, /* ShouldPreserveUseListOrder */ true);
+#else
+    llvm::WriteBitcodeToFile(M, OS, /* ShouldPreserveUseListOrder */ true);
+#endif
+    ArrayRef<uint8_t> module_data =
+        ArrayRef<uint8_t>((const uint8_t *)OS.str().data(), OS.str().size());
+
+    llvm::Constant *module_constant =
+        llvm::ConstantDataArray::get(M->getContext(), module_data);
+    llvm::GlobalVariable *GV = new llvm::GlobalVariable(
+        *M, module_constant->getType(), true, llvm::GlobalValue::PrivateLinkage,
+        module_constant);
+    GV->setSection((triple.getObjectFormat() == Triple::MachO) ? "__LLVM,__bitcode" : ".llvmbc");
+    used_array.push_back(
+        ConstantExpr::getPointerBitCastOrAddrSpaceCast(GV, used_element_type));
+    if (llvm::GlobalVariable *old =
+            M->getGlobalVariable("llvm.embedded.module", true)) {
+        internal_assert(old->hasOneUse()) << "llvm.embedded.module can only be used once in llvm.compiler.used";
+        GV->takeName(old);
+        old->eraseFromParent();
+    } else {
+        GV->setName("llvm.embedded.module");
+    }
+
+    // Embed command-line options.
+    ArrayRef<uint8_t> command_line_data(const_cast<uint8_t *>(reinterpret_cast<const uint8_t *>(halide_command.data())),
+                                        halide_command.size());
+    llvm::Constant *command_line_constant =
+        llvm::ConstantDataArray::get(M->getContext(), command_line_data);
+    GV = new llvm::GlobalVariable(*M, command_line_constant->getType(), true,
+                                  llvm::GlobalValue::PrivateLinkage,
+                                  command_line_constant);
+
+    GV->setSection((triple.getObjectFormat() == Triple::MachO) ? "__LLVM,__cmdline" : ".llvmcmd");
+    used_array.push_back(
+        ConstantExpr::getPointerBitCastOrAddrSpaceCast(GV, used_element_type));
+    if (llvm::GlobalVariable *old =
+            M->getGlobalVariable("llvm.cmdline", true)) {
+        internal_assert(old->hasOneUse()) << "llvm.cmdline can only be used once in llvm.compiler.used";
+        GV->takeName(old);
+        old->eraseFromParent();
+    } else {
+        GV->setName("llvm.cmdline");
+    }
+
+    if (!used_array.empty()) {
+        // Recreate llvm.compiler.used.
+        ArrayType *ATy = ArrayType::get(used_element_type, used_array.size());
+        auto *new_used = new GlobalVariable(
+            *M, ATy, false, llvm::GlobalValue::AppendingLinkage,
+            llvm::ConstantArray::get(ATy, used_array), "llvm.compiler.used");
+        new_used->setSection("llvm.metadata");
+    }
 }
 
 }  // namespace Internal

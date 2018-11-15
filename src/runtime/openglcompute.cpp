@@ -284,7 +284,8 @@ WEAK int halide_openglcompute_device_malloc(void *user_context, halide_buffer_t 
     if (global_state.CheckAndReportError(user_context, "oglc: GenBuffers")) { return 1; }
     global_state.BindBuffer(GL_ARRAY_BUFFER, the_buffer);
     if (global_state.CheckAndReportError(user_context, "oglc: BindBuffer")) { return 1; }
-    size_t size_in_bytes = buf->size_in_bytes();
+    // OpenGLCompute only supports int32 and float data types, both of which are 4 bytes.
+    size_t size_in_bytes = buf->number_of_elements() * 4;
     halide_assert(user_context, size_in_bytes != 0);
     global_state.BufferData(GL_ARRAY_BUFFER, size_in_bytes, NULL, GL_DYNAMIC_COPY);
     if (global_state.CheckAndReportError(user_context, "oglc: BufferData")) { return 1; }
@@ -339,6 +340,29 @@ WEAK int halide_openglcompute_device_free(void *user_context, halide_buffer_t *b
     return 0;
 }
 
+namespace {
+
+template <typename Source, typename Dest>
+__attribute__((always_inline)) void converting_copy_memory_helper(const device_copy &copy, int d, int64_t src_off, int64_t dst_off) {
+    // Skip size-1 dimensions
+    while (d >= 0 && copy.extent[d] == 1) d--;
+
+    if (d == -1) {
+        const Source *from = (Source *)(copy.src + src_off);
+        Dest *to = (Dest *)(copy.dst + dst_off);
+        for (uint64_t index = 0; index < copy.chunk_size; index++) {
+            *to++ = (Dest)*from++;
+        }
+    } else {
+        for (uint64_t i = 0; i < copy.extent[d]; i++) {
+            converting_copy_memory_helper<Source, Dest>(copy, d - 1, src_off, dst_off);
+            src_off += copy.src_stride_bytes[d];
+            dst_off += copy.dst_stride_bytes[d];
+        }
+    }
+}
+
+}
 // Copy image data from host memory to texture.
 WEAK int halide_openglcompute_copy_to_device(void *user_context, halide_buffer_t *buf) {
 #ifdef DEBUG_RUNTIME
@@ -359,10 +383,60 @@ WEAK int halide_openglcompute_copy_to_device(void *user_context, halide_buffer_t
     global_state.BindBuffer(GL_ARRAY_BUFFER, the_buffer);
     if (global_state.CheckAndReportError(user_context, "oglc: BindBuffer")) { return 1; }
 
-    size_t size = buf->size_in_bytes();
-    halide_assert(user_context, size != 0);
-    global_state.BufferData(GL_ARRAY_BUFFER, size, buf->host, GL_DYNAMIC_COPY);
-    if (global_state.CheckAndReportError(user_context, "oglc: BufferData")) { return 1; }
+    size_t size = buf->number_of_elements() * 4;
+    global_state.BindBuffer(GL_ARRAY_BUFFER, the_buffer);
+    if (global_state.CheckAndReportError(user_context, "oglc: BindBuffer")) { return 1; }
+
+    debug(user_context) << "Calling global_state.MapBufferRange(GL_ARRAY_BUFFER, 0, " << (uint64_t)size << ", GL_MAP_READ_BIT|GL_MAP_WRITE_BIT)\n";
+    void* device_data = global_state.MapBufferRange(GL_ARRAY_BUFFER,
+                                                    0,
+                                                    size,
+                                                    GL_MAP_READ_BIT|GL_MAP_WRITE_BIT);
+    if (global_state.CheckAndReportError(user_context, "oglc: MapBufferRange")) { return 1; }
+    halide_buffer_t buf_copy = *buf;
+    buf_copy.device = (uint64_t)device_data;
+    device_copy dev_copy = make_host_to_device_copy(&buf_copy);
+    
+    if (buf->type.code == halide_type_int) {
+        if (buf->type.bits == 8) {
+          converting_copy_memory_helper<int8_t, float>(dev_copy, MAX_COPY_DIMS-1, dev_copy.src_begin, 0);
+        } else if (buf->type.bits == 16) {
+            // Convert chunk_size in bytes to the number of items to be copied.
+            // This doesn't happen for the 8-bit case because it would be a division by one,
+            // and it doesn't happen for the 32-bit case as there is no data conversion and memcpy
+            // is used.
+            dev_copy.chunk_size /= 2;
+            converting_copy_memory_helper<int16_t, float>(dev_copy, MAX_COPY_DIMS-1, dev_copy.src_begin, 0);
+        } else if (buf->type.bits == 32) {
+            copy_memory_helper(dev_copy, MAX_COPY_DIMS-1, dev_copy.src_begin, 0);
+        } else {
+            error(user_context) << "OpenGLCompute does not support 64-bit integers.\n";
+            return -1;
+        }
+    } else if (buf->type.code == halide_type_uint) {
+        if (buf->type.bits == 8) {
+            converting_copy_memory_helper<uint8_t, float>(dev_copy, MAX_COPY_DIMS-1, dev_copy.src_begin, 0);
+        } else if (buf->type.bits == 16) {
+            // Convert chunk_size in bytes to the number of items to be copied.
+            // This doesn't happen for the 8-bit case because it would be a division by one,
+            // and it doesn't happen for the 32-bit case as there is no data conversion and memcpy
+            // is used.
+            dev_copy.chunk_size /= 2;
+            converting_copy_memory_helper<uint16_t, float>(dev_copy, MAX_COPY_DIMS-1, dev_copy.src_begin, 0);
+        } else if (buf->type.bits == 32) {
+            copy_memory_helper(dev_copy, MAX_COPY_DIMS-1, dev_copy.src_begin, 0);
+        } else {
+            error(user_context) << "OpenGLCompute does not support 64-bit integers.\n";
+            return -1;
+        }
+    } else if (buf->type.code == halide_type_float) {
+        if (buf->type.bits == 32) {
+            copy_memory_helper(dev_copy, MAX_COPY_DIMS-1, dev_copy.src_begin, 0);
+        } else {
+            error(user_context) << "OpenGLCompute does not support 64-bit floating-point.\n";
+        }
+    }
+    global_state.UnmapBuffer(GL_ARRAY_BUFFER);
 
     debug(user_context) << "  copied " << ((unsigned)size) << " bytes from " << buf->host << " to the device.\n";
 
@@ -403,7 +477,51 @@ WEAK int halide_openglcompute_copy_to_host(void *user_context, halide_buffer_t *
                                                     size,
                                                     GL_MAP_READ_BIT);
     if (global_state.CheckAndReportError(user_context, "oglc: MapBufferRange")) { return 1; }
-    memcpy(buf->host, device_data, size);
+
+    halide_buffer_t buf_copy = *buf;
+    buf_copy.device = (uint64_t)device_data;
+    device_copy dev_copy = make_device_to_host_copy(&buf_copy);
+    
+    if (buf->type.code == halide_type_int) {
+        if (buf->type.bits == 8) {
+            converting_copy_memory_helper<float, int8_t>(dev_copy, MAX_COPY_DIMS-1, 0, dev_copy.src_begin);
+        } else if (buf->type.bits == 16) {
+            // Convert chunk_size in bytes to the number of items to be copied.
+            // This doesn't happen for the 8-bit case because it would be a division by one,
+            // and it doesn't happen for the 32-bit case as there is no data conversion and memcpy
+            // is used.
+            dev_copy.chunk_size /= 2;
+            converting_copy_memory_helper<float, int16_t>(dev_copy, MAX_COPY_DIMS-1, 0, dev_copy.src_begin);
+        } else if (buf->type.bits == 32) {
+            copy_memory_helper(dev_copy, MAX_COPY_DIMS-1, 0, dev_copy.src_begin);
+        } else {
+            error(user_context) << "OpenGLCompute does not support 64-bit integers.\n";
+            return -1;
+        }
+    } else if (buf->type.code == halide_type_uint) {
+        if (buf->type.bits == 8) {
+            converting_copy_memory_helper<float, uint8_t>(dev_copy, MAX_COPY_DIMS-1, 0, dev_copy.src_begin);
+        } else if (buf->type.bits == 16) {
+            // Convert chunk_size in bytes to the number of items to be copied.
+            // This doesn't happen for the 8-bit case because it would be a division by one,
+            // and it doesn't happen for the 32-bit case as there is no data conversion and memcpy
+            // is used.
+            dev_copy.chunk_size /= 2;
+            converting_copy_memory_helper<float, uint16_t>(dev_copy, MAX_COPY_DIMS-1, 0, dev_copy.src_begin);
+        } else if (buf->type.bits == 32) {
+            copy_memory_helper(dev_copy, MAX_COPY_DIMS-1, 0, dev_copy.src_begin);
+        } else {
+            error(user_context) << "OpenGLCompute does not support 64-bit integers.\n";
+            return -1;
+        }
+    } else if (buf->type.code == halide_type_float) {
+        if (buf->type.bits == 32) {
+            copy_memory_helper(dev_copy, MAX_COPY_DIMS-1, 0, dev_copy.src_begin);
+        } else {
+            error(user_context) << "OpenGLCompute does not support 64-bit floating-point.\n";
+        }
+    }
+
     global_state.UnmapBuffer(GL_ARRAY_BUFFER);
 
     debug(user_context) << "  copied " << (unsigned)size << " bytes to the host.\n";
@@ -654,8 +772,10 @@ WEAK int halide_openglcompute_initialize_kernels(void *user_context, void **stat
         const GLchar* sources = { src };
         const GLint sources_lengths = { (GLint) src_len };
 
+#ifdef DEBUG_RUNTIME
         print(user_context) << "Compute shader source for: " << kernel_name;
         halide_print(user_context, src);
+#endif
 
         global_state.ShaderSource(shader, 1, &sources, &sources_lengths);
         if (global_state.CheckAndReportError(user_context, "shader source")) { return -1; }
@@ -789,6 +909,7 @@ WEAK halide_device_interface_t openglcompute_device_interface = {
     halide_device_release_crop,
     halide_device_wrap_native,
     halide_device_detach_native,
+    NULL,
     &openglcompute_device_interface_impl
 };
 

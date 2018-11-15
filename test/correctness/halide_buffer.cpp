@@ -1,3 +1,4 @@
+#include<iostream>
 // Don't include Halide.h: it is not necessary for this test.
 #include "HalideBuffer.h"
 
@@ -334,6 +335,68 @@ int main(int argc, char **argv) {
 
         // Won't compile: a and b are const, can't specify a nonconst ref for value
         // c.for_each_value([&](int c_value, int a_value, int &b_value) { }, a_const, b_const);
+    }
+
+    {
+        // Check initializing const buffers via return ref from fill(), etc
+        const int W = 5, H = 4;
+
+        const Buffer<const int> a = Buffer<int>(W, H).fill(1);
+        assert(a.all_equal(1));
+
+        const Buffer<const int> b = Buffer<int>(W, H).for_each_value([](int &value) { value = 2; });
+        assert(b.all_equal(2));
+
+        // for_each_element()'s callback doesn't get the Buffer itself, so we need a named temp here
+        auto c0 = Buffer<int>(W, H);
+        const Buffer<const int> c = c0.for_each_element([&](int x, int y) { c0(x, y) = 3; });
+        assert(c.all_equal(3));
+
+        const Buffer<const int> d = Buffer<int>(W, H).fill([](int x, int y) -> int { return 4; });
+        assert(d.all_equal(4));
+    }
+
+    {
+        constexpr int W = 7, H = 5, C = 3, Z = 2;
+
+        // test reorder() and the related ctors
+        auto a = Buffer<uint8_t>({W, H, C}, {2, 0, 1});
+        assert(a.dim(0).extent() == W);
+        assert(a.dim(1).extent() == H);
+        assert(a.dim(2).extent() == C);
+        assert(a.dim(2).stride() == 1);
+        assert(a.dim(0).stride() == C);
+        assert(a.dim(1).stride() == W * C);
+
+        auto b = Buffer<uint8_t>({W, H, C, Z}, {2, 3, 0, 1});
+        assert(b.dim(0).extent() == W);
+        assert(b.dim(1).extent() == H);
+        assert(b.dim(2).extent() == C);
+        assert(b.dim(3).extent() == Z);
+        assert(b.dim(2).stride() == 1);
+        assert(b.dim(3).stride() == C);
+        assert(b.dim(0).stride() == C * Z);
+        assert(b.dim(1).stride() == W * C * Z);
+
+        auto b2 = Buffer<uint8_t>(C, Z, W, H);
+        assert(b.dim(0).extent() == b2.dim(2).extent());
+        assert(b.dim(1).extent() == b2.dim(3).extent());
+        assert(b.dim(2).extent() == b2.dim(0).extent());
+        assert(b.dim(3).extent() == b2.dim(1).extent());
+        assert(b.dim(0).stride() == b2.dim(2).stride());
+        assert(b.dim(1).stride() == b2.dim(3).stride());
+        assert(b.dim(2).stride() == b2.dim(0).stride());
+        assert(b.dim(3).stride() == b2.dim(1).stride());
+
+        b2.transpose({2, 3, 0, 1});
+        assert(b.dim(0).extent() == b2.dim(0).extent());
+        assert(b.dim(1).extent() == b2.dim(1).extent());
+        assert(b.dim(2).extent() == b2.dim(2).extent());
+        assert(b.dim(3).extent() == b2.dim(3).extent());
+        assert(b.dim(0).stride() == b2.dim(0).stride());
+        assert(b.dim(1).stride() == b2.dim(1).stride());
+        assert(b.dim(2).stride() == b2.dim(2).stride());
+        assert(b.dim(3).stride() == b2.dim(3).stride());
     }
 
     printf("Success!\n");

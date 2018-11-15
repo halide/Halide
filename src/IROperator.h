@@ -8,6 +8,7 @@
  */
 
 #include <atomic>
+#include <cmath>
 
 #include "IR.h"
 #include "Tuple.h"
@@ -198,6 +199,63 @@ struct BufferBuilder {
 /** If e is a ramp expression with stride, default 1, return the base,
  * otherwise undefined. */
 Expr strided_ramp_base(Expr e, int stride = 1);
+
+/** Implementations of division and mod that are specific to Halide.
+ * Use these implementations; do not use native C division or mod to
+ * simplify Halide expressions. Halide division and modulo satisify
+ * the Euclidean definition of division for integers a and b:
+ *
+ /code
+ (a/b)*b + a%b = a
+ 0 <= a%b < |b|
+ /endcode
+ *
+ */
+// @{
+template<typename T>
+inline T mod_imp(T a, T b) {
+    Type t = type_of<T>();
+    if (t.is_int()) {
+        T r = a % b;
+        r = r + (r < 0 ? (T)std::abs((int64_t)b) : 0);
+        return r;
+    } else {
+        return a % b;
+    }
+}
+
+template<typename T>
+inline T div_imp(T a, T b) {
+    Type t = type_of<T>();
+    if (t.is_int()) {
+        int64_t q = a / b;
+        int64_t r = a - q * b;
+        int64_t bs = b >> (t.bits() - 1);
+        int64_t rs = r >> (t.bits() - 1);
+        return (T) (q - (rs & bs) + (rs & ~bs));
+    } else {
+        return a / b;
+    }
+}
+// @}
+
+// Special cases for float, double.
+template<> inline float mod_imp<float>(float a, float b) {
+    float f = a - b * (floorf(a / b));
+    // The remainder has the same sign as b.
+    return f;
+}
+template<> inline double mod_imp<double>(double a, double b) {
+    double f = a - b * (std::floor(a / b));
+    return f;
+}
+
+template<> inline float div_imp<float>(float a, float b) {
+    return a/b;
+}
+template<> inline double div_imp<double>(double a, double b) {
+    return a/b;
+}
 
 } // namespace Internal
 
@@ -1894,8 +1952,8 @@ inline Expr likely_if_innermost(Expr e) {
 }
 
 /** Cast an expression to the halide type corresponding to the C++
- * type T clamping to the minimum and maximum values of the result
- * type. */
+ * type T. As part of the cast, clamp to the minimum and maximum
+ * values of the result type. */
 template <typename T>
 Expr saturating_cast(Expr e) {
     return saturating_cast(type_of<T>(), std::move(e));

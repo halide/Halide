@@ -16,7 +16,7 @@ public:
     bool result;
     FindErrorHandler() : result(false) {}
     using IRVisitor::visit;
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         if (op->name == "halide_error_unaligned_host_ptr" &&
             op->call_type == Call::Extern) {
             result = true;
@@ -32,7 +32,7 @@ public:
     Expr left, right;
 
     using IRVisitor::visit;
-    void visit(const Mod *op) {
+    void visit(const Mod *op) override {
         left = op->a;
         right = op->b;
         return;
@@ -47,7 +47,7 @@ public:
 
     using IRVisitor::visit;
 
-    void visit(const AssertStmt *op) {
+    void visit(const AssertStmt *op) override {
         Expr m = op->message;
         FindErrorHandler f;
         m.accept(&f);

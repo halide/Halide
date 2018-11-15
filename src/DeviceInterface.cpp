@@ -32,7 +32,7 @@ bool lookup_runtime_routine(const std::string &name,
 
 const halide_device_interface_t *get_device_interface_for_device_api(DeviceAPI d, const Target &t,
                                                                      const char *error_site) {
-  
+
   if (d == DeviceAPI::Default_GPU) {
         d = get_default_device_api_for_target(t);
         if (d == DeviceAPI::Host) {
@@ -56,6 +56,8 @@ const halide_device_interface_t *get_device_interface_for_device_api(DeviceAPI d
         name = "openglcompute";
     } else if (d == DeviceAPI::GLSL) {
         name = "opengl";
+    } else if (d == DeviceAPI::HexagonDma) {
+        name = "hexagon_dma";
     } else if (d == DeviceAPI::D3D12Compute) {
         name = "d3d12compute";
     } else {
@@ -96,6 +98,8 @@ DeviceAPI get_default_device_api_for_target(const Target &target) {
         return DeviceAPI::OpenGLCompute;
     } else if (target.has_feature(Target::OpenGL)) {
         return DeviceAPI::GLSL;
+    } else if (target.has_feature(Target::HexagonDma)) {
+        return DeviceAPI::HexagonDma;
     } else if (target.has_feature(Target::D3D12Compute)) {
         return DeviceAPI::D3D12Compute;
     } else {
@@ -128,6 +132,9 @@ Expr make_device_interface_call(DeviceAPI device_api) {
         break;
     case DeviceAPI::Hexagon:
         interface_name = "halide_hexagon_device_interface";
+        break;
+    case DeviceAPI::HexagonDma:
+        interface_name = "halide_hexagon_dma_device_interface";
         break;
     case DeviceAPI::D3D12Compute:
         interface_name = "halide_d3d12compute_device_interface";

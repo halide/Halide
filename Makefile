@@ -160,7 +160,15 @@ LLVM_HAS_NO_RTTI = $(findstring -fno-rtti, $(LLVM_CXX_FLAGS))
 WITH_RTTI ?= $(if $(LLVM_HAS_NO_RTTI),, not-empty)
 RTTI_CXX_FLAGS=$(if $(WITH_RTTI), , -fno-rtti )
 
+CXX_VERSION = $(shell $(CXX) --version | head -n1)
 CXX_WARNING_FLAGS = -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi
+ifneq (,$(findstring g++,$(CXX_VERSION)))
+GCC_MAJOR_VERSION := $(shell $(CXX) -dumpfullversion -dumpversion | cut -f1 -d.)
+GCC_MINOR_VERSION := $(shell $(CXX) -dumpfullversion -dumpversion | cut -f2 -d.)
+ifeq (1,$(shell expr $(GCC_MAJOR_VERSION) \> 5 \| $(GCC_MAJOR_VERSION) = 5 \& $(GCC_MINOR_VERSION) \>= 1))
+CXX_WARNING_FLAGS += -Wsuggest-override
+endif
+endif
 CXX_FLAGS = $(CXX_WARNING_FLAGS) $(RTTI_CXX_FLAGS) -Woverloaded-virtual $(FPIC) $(OPTIMIZE) -fno-omit-frame-pointer -DCOMPILING_HALIDE
 
 CXX_FLAGS += $(LLVM_CXX_FLAGS)
@@ -207,7 +215,6 @@ TEST_CXX_FLAGS ?= $(TUTORIAL_CXX_FLAGS) $(CXX_WARNING_FLAGS) -march=native
 TEST_LD_FLAGS = -L$(BIN_DIR) -lHalide $(COMMON_LD_FLAGS)
 
 # gcc 4.8 fires a bogus warning on old versions of png.h
-CXX_VERSION = $(shell $(CXX) --version | head -n1)
 ifneq (,$(findstring g++,$(CXX_VERSION)))
 ifneq (,$(findstring 4.8,$(CXX_VERSION)))
 TEST_CXX_FLAGS += -Wno-literal-suffix
@@ -349,6 +356,7 @@ SOURCE_FILES = \
   ApplySplit.cpp \
   AssociativeOpsTable.cpp \
   Associativity.cpp \
+  AsyncProducers.cpp \
   AutoSchedule.cpp \
   AutoScheduleUtils.cpp \
   BoundaryConditions.cpp \
@@ -438,6 +446,7 @@ SOURCE_FILES = \
   Prefetch.cpp \
   PrintLoopNest.cpp \
   Profiling.cpp \
+  PurifyIndexMath.cpp \
   PythonExtensionGen.cpp \
   Qualify.cpp \
   Random.cpp \
@@ -446,12 +455,32 @@ SOURCE_FILES = \
   Reduction.cpp \
   RegionCosts.cpp \
   RemoveDeadAllocations.cpp \
+  RemoveExternLoops.cpp \
   RemoveTrivialForLoops.cpp \
   RemoveUndef.cpp \
   Schedule.cpp \
   ScheduleFunctions.cpp \
   SelectGPUAPI.cpp \
   Simplify.cpp \
+  Simplify_Add.cpp \
+  Simplify_And.cpp \
+  Simplify_Call.cpp \
+  Simplify_Cast.cpp \
+  Simplify_Div.cpp \
+  Simplify_EQ.cpp \
+  Simplify_Exprs.cpp \
+  Simplify_LT.cpp \
+  Simplify_Let.cpp \
+  Simplify_Max.cpp \
+  Simplify_Min.cpp \
+  Simplify_Mod.cpp \
+  Simplify_Mul.cpp \
+  Simplify_Not.cpp \
+  Simplify_Or.cpp \
+  Simplify_Select.cpp \
+  Simplify_Shuffle.cpp \
+  Simplify_Stmts.cpp \
+  Simplify_Sub.cpp \
   SimplifySpecializations.cpp \
   SkipStages.cpp \
   SlidingWindow.cpp \
@@ -489,6 +518,7 @@ HEADER_FILES = \
   Argument.h \
   AssociativeOpsTable.h \
   Associativity.h \
+  AsyncProducers.h \
   AutoSchedule.h \
   AutoScheduleUtils.h \
   BoundaryConditions.h \
@@ -588,6 +618,7 @@ HEADER_FILES = \
   Pipeline.h \
   Prefetch.h \
   Profiling.h \
+  PurifyIndexMath.h \
   PythonExtensionGen.h \
   Qualify.h \
   Random.h \
@@ -596,6 +627,7 @@ HEADER_FILES = \
   Reduction.h \
   RegionCosts.h \
   RemoveDeadAllocations.h \
+  RemoveExternLoops.h \
   RemoveTrivialForLoops.h \
   RemoveUndef.h \
   Schedule.h \
@@ -656,7 +688,10 @@ RUNTIME_CPP_COMPONENTS = \
   fake_thread_pool \
   float16_t \
   gpu_device_selection \
+  hexagon_cache_allocator \
   hexagon_cpu_features \
+  hexagon_dma_pool \
+  hexagon_dma \
   hexagon_host \
   ios_io \
   linux_clock \
@@ -696,8 +731,10 @@ RUNTIME_CPP_COMPONENTS = \
   prefetch \
   profiler \
   profiler_inlined \
+  pseudostack \
   qurt_allocator \
   qurt_hvx \
+  qurt_hvx_vtcm \
   qurt_init_fini \
   qurt_threads \
   qurt_threads_tsan \
@@ -717,7 +754,7 @@ RUNTIME_CPP_COMPONENTS = \
   windows_threads_tsan \
   windows_yield \
   write_debug_image \
-  x86_cpu_features
+  x86_cpu_features \
 
 RUNTIME_LL_COMPONENTS = \
   aarch64 \
@@ -739,6 +776,7 @@ RUNTIME_LL_COMPONENTS = \
 RUNTIME_EXPORTED_INCLUDES = $(INCLUDE_DIR)/HalideRuntime.h \
                             $(INCLUDE_DIR)/HalideRuntimeD3D12Compute.h \
                             $(INCLUDE_DIR)/HalideRuntimeCuda.h \
+                            $(INCLUDE_DIR)/HalideRuntimeHexagonDma.h \
                             $(INCLUDE_DIR)/HalideRuntimeHexagonHost.h \
                             $(INCLUDE_DIR)/HalideRuntimeOpenCL.h \
                             $(INCLUDE_DIR)/HalideRuntimeOpenGL.h \
@@ -897,6 +935,10 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp $(SRC_DIR)/%.h $(BUILD_DIR)/llvm_ok
 	@mkdir -p $(@D)
 	$(CXX) $(CXX_FLAGS) -c $< -o $@ -MMD -MP -MF $(BUILD_DIR)/$*.d -MT $(BUILD_DIR)/$*.o
 
+$(BUILD_DIR)/Simplify_%.o: $(SRC_DIR)/Simplify_%.cpp $(SRC_DIR)/Simplify_Internal.h $(BUILD_DIR)/llvm_ok
+	@mkdir -p $(@D)
+	$(CXX) $(CXX_FLAGS) -c $< -o $@ -MMD -MP -MF $(BUILD_DIR)/Simplify_$*.d -MT $@
+
 .PHONY: clean
 clean:
 	rm -rf $(LIB_DIR)
@@ -907,6 +949,7 @@ clean:
 	rm -rf $(INCLUDE_DIR)
 	rm -rf $(DOC_DIR)
 	rm -rf $(DISTRIB_DIR)
+	rm -rf $(ROOT_DIR)/apps/*/bin
 
 .SECONDARY:
 
@@ -989,12 +1032,16 @@ GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_memory_profiler_mandelbr
 # https://github.com/halide/Halide/issues/2082
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_matlab,$(GENERATOR_AOTCPP_TESTS))
 
+# https://github.com/halide/Halide/issues/2093
+GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_async_parallel,$(GENERATOR_AOTCPP_TESTS))
+
 test_aotcpp_generator: $(GENERATOR_AOTCPP_TESTS)
 
 # This is just a test to ensure than RunGen builds and links for a critical mass of Generators;
 # not all will work directly (e.g. due to missing define_externs at link time), so we blacklist
 # those known to be broken for plausible reasons.
 GENERATOR_BUILD_RUNGEN_TESTS = $(GENERATOR_EXTERNAL_TEST_GENERATOR:$(ROOT_DIR)/test/generator/%_generator.cpp=$(FILTERS_DIR)/%.rungen)
+GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/async_parallel.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/cxx_mangling_define_extern.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/define_extern_opencl.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/matlab.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
@@ -1003,6 +1050,7 @@ GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/multitarget.rungen,$
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/nested_externs.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/old_buffer_t.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/tiled_blur.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
+GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/extern_output.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
 test_rungen: $(GENERATOR_BUILD_RUNGEN_TESTS)
 
 test_generator: $(GENERATOR_AOT_TESTS) $(GENERATOR_AOTCPP_TESTS) $(GENERATOR_JIT_TESTS) $(GENERATOR_BUILD_RUNGEN_TESTS)
@@ -1040,7 +1088,7 @@ clean_generator:
 	rm -rf $(BIN_DIR)/*/generator_*
 	rm -rf $(BUILD_DIR)/*_generator.o
 	rm -f $(BUILD_DIR)/GenGen.o
-	rm -f $(BUILD_DIR)/RunGen.o
+	rm -f $(BUILD_DIR)/RunGenMain.o
 
 time_compilation_tests: time_compilation_correctness time_compilation_performance time_compilation_generator
 
@@ -1418,11 +1466,11 @@ generator_aot_multitarget: $(BIN_DIR)/$(TARGET)/generator_aot_multitarget
 test_generator_nested_externs:
 	@echo "Skipping"
 
-$(BUILD_DIR)/RunGen.o: $(ROOT_DIR)/tools/RunGen.cpp $(RUNTIME_EXPORTED_INCLUDES)
+$(BUILD_DIR)/RunGenMain.o: $(ROOT_DIR)/tools/RunGenMain.cpp $(RUNTIME_EXPORTED_INCLUDES) $(ROOT_DIR)/tools/RunGen.h
 	@mkdir -p $(@D)
 	$(CXX) -c $< $(TEST_CXX_FLAGS) $(IMAGE_IO_CXX_FLAGS) -I$(INCLUDE_DIR) -I $(SRC_DIR)/runtime -I$(ROOT_DIR)/tools -o $@
 
-$(FILTERS_DIR)/%.rungen: $(BUILD_DIR)/RunGen.o $(BIN_DIR)/$(TARGET)/runtime.a $(ROOT_DIR)/tools/RunGenStubs.cpp $(FILTERS_DIR)/%.a
+$(FILTERS_DIR)/%.rungen: $(BUILD_DIR)/RunGenMain.o $(BIN_DIR)/$(TARGET)/runtime.a $(ROOT_DIR)/tools/RunGenStubs.cpp $(FILTERS_DIR)/%.a
 	@mkdir -p $(@D)
 	$(CXX) -std=c++11 -DHL_RUNGEN_FILTER_HEADER=\"$*.h\" -I$(FILTERS_DIR) $^ $(GEN_AOT_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@
 
@@ -1609,7 +1657,10 @@ TEST_APPS=\
 test_apps: distrib
 	@for APP in $(TEST_APPS); do \
 		echo Testing app $${APP}... ; \
-		make -C $(ROOT_DIR)/apps/$${APP} test HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR) BIN=$(CURDIR)/$(BIN_DIR)/apps/$${APP} || exit 1 ; \
+		make -C $(ROOT_DIR)/apps/$${APP} test \
+			HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
+			BIN=$(ROOT_DIR)/apps/$${APP}/bin \
+			|| exit 1 ; \
 	done
 
 # Bazel depends on the distrib archive being built
@@ -1768,11 +1819,13 @@ install: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR
 	cp $(ROOT_DIR)/tutorial/*.sh $(PREFIX)/share/halide/tutorial
 	cp $(ROOT_DIR)/tools/mex_halide.m $(PREFIX)/share/halide/tools
 	cp $(ROOT_DIR)/tools/GenGen.cpp $(PREFIX)/share/halide/tools
-	cp $(ROOT_DIR)/tools/RunGen.cpp $(PREFIX)/share/halide/tools
+	cp $(ROOT_DIR)/tools/RunGen.h $(PREFIX)/share/halide/tools
+	cp $(ROOT_DIR)/tools/RunGenMain.cpp $(PREFIX)/share/halide/tools
 	cp $(ROOT_DIR)/tools/RunGenStubs.cpp $(PREFIX)/share/halide/tools
 	cp $(ROOT_DIR)/tools/halide_image.h $(PREFIX)/share/halide/tools
 	cp $(ROOT_DIR)/tools/halide_image_io.h $(PREFIX)/share/halide/tools
 	cp $(ROOT_DIR)/tools/halide_image_info.h $(PREFIX)/share/halide/tools
+	cp $(ROOT_DIR)/tools/halide_malloc_trace.h $(PREFIX)/share/halide/tools
 ifeq ($(UNAME), Darwin)
 	install_name_tool -id $(PREFIX)/lib/libHalide.$(SHARED_EXT) $(PREFIX)/lib/libHalide.$(SHARED_EXT)
 endif
@@ -1780,13 +1833,14 @@ endif
 # This is a specialized 'install' for users who need Hexagon support libraries as well.
 install_qc: install $(HEXAGON_RUNTIME_LIBS)
 	mkdir -p $(PREFIX)/lib/arm-32-android $(PREFIX)/lib/arm-64-android $(PREFIX)/lib/host $(PREFIX)/lib/v60 $(PREFIX)/tools
-	cp $(ROOT_DIR)/tools/sim_qurt/libsim_qurt.a $(PREFIX)/lib
 	cp $(HEXAGON_RUNTIME_LIBS_DIR)/arm-32-android/* $(PREFIX)/lib/arm-32-android
 	cp $(HEXAGON_RUNTIME_LIBS_DIR)/arm-64-android/* $(PREFIX)/lib/arm-64-android
 	cp $(HEXAGON_RUNTIME_LIBS_DIR)/host/* $(PREFIX)/lib/host
 	cp -r $(HEXAGON_RUNTIME_LIBS_DIR)/v60/* $(PREFIX)/lib/v60
 	ln -sf $(PREFIX)/share/halide/tools/GenGen.cpp $(PREFIX)/tools/GenGen.cpp
 	ln -sf $(PREFIX)/lib/v60/hexagon_sim_remote $(PREFIX)/bin/hexagon_sim_remote
+	ln -sf $(PREFIX)/lib/v60/libsim_qurt.a $(PREFIX)/lib/libsim_qurt.a
+	ln -sf $(PREFIX)/lib/v60/libsim_qurt_vtcm.a $(PREFIX)/lib/libsim_qurt_vtcm.a
 
 # We need to capture the system libraries that we'll need to link
 # against, so that downstream consumers of our build rules don't
@@ -1804,7 +1858,8 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
 						   $(ROOT_DIR)/README*.md \
 						   $(ROOT_DIR)/bazel/* \
 						   $(BUILD_DIR)/halide_config.bzl \
-						   $(BUILD_DIR)/halide_config.cmake \
+               $(BUILD_DIR)/halide_config.cmake \
+               $(BUILD_DIR)/halide_config.make \
 						   $(ROOT_DIR)/halide.cmake
 	mkdir -p $(DISTRIB_DIR)/include \
 	         $(DISTRIB_DIR)/bin \
@@ -1827,12 +1882,14 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
 	cp $(ROOT_DIR)/tutorial/*.sh $(DISTRIB_DIR)/tutorial
 	cp $(ROOT_DIR)/tools/mex_halide.m $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/GenGen.cpp $(DISTRIB_DIR)/tools
-	cp $(ROOT_DIR)/tools/RunGen.cpp $(DISTRIB_DIR)/tools
+	cp $(ROOT_DIR)/tools/RunGen.h $(DISTRIB_DIR)/tools
+	cp $(ROOT_DIR)/tools/RunGenMain.cpp $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/RunGenStubs.cpp $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_benchmark.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_image.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_image_io.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_image_info.h $(DISTRIB_DIR)/tools
+	cp $(ROOT_DIR)/tools/halide_malloc_trace.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_trace_config.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/README*.md $(DISTRIB_DIR)
 	cp $(ROOT_DIR)/bazel/BUILD $(DISTRIB_DIR)
@@ -1859,6 +1916,7 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
 		halide/tools/halide_image.h \
 		halide/tools/halide_image_io.h \
 		halide/tools/halide_image_info.h \
+		halide/tools/halide_malloc_trace.h \
 		halide/tools/halide_trace_config.h
 	rm -rf halide
 

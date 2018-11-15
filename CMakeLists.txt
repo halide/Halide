@@ -206,11 +206,14 @@ else()
 endif()
 
 if (NOT MSVC)
-    add_compile_options(-Wall
-                        -Wno-unused-function
-                        -Wcast-qual
-                        -Woverloaded-virtual
-                        -Wignored-qualifiers)
+  add_compile_options(-Wall
+                      -Wno-unused-function
+                      -Wcast-qual
+                      -Woverloaded-virtual
+                      -Wignored-qualifiers)
+  if (CMAKE_COMPILER_IS_GNUCC AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 5.1)
+    add_compile_options(-Wsuggest-override)
+  endif()
   if (WARNINGS_AS_ERRORS)
     add_compile_options(-Werror)
   endif()
@@ -424,12 +427,14 @@ install(DIRECTORY tutorial
 # ---- Tools
 foreach(F mex_halide.m
           GenGen.cpp
-          RunGen.cpp
+          RunGen.h
+          RunGenMain.cpp
           RunGenStubs.cpp
           halide_benchmark.h
           halide_image.h
           halide_image_io.h
           halide_image_info.h
+          halide_malloc_trace.h
           halide_trace_config.h)
   install(FILES "${HALIDE_BASE_DIR}/tools/${F}"
           DESTINATION tools)

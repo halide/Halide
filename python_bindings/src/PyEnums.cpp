@@ -138,6 +138,8 @@ void define_enums(py::module &m) {
         .value("TSAN", Target::Feature::TSAN)
         .value("ASAN", Target::Feature::ASAN)
         .value("CheckUnsafePromises", Target::Feature::CheckUnsafePromises)
+        .value("HexagonDma", Target::Feature::HexagonDma)
+        .value("EmbedBitcode", Target::Feature::EmbedBitcode)
         .value("FeatureEnd", Target::Feature::FeatureEnd);
 
     py::enum_<halide_type_code_t>(m, "TypeCode")

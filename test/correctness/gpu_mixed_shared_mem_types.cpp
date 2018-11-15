@@ -23,11 +23,12 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    const int n_types = 9;
-
-    Type types[] = {Int(8), Int(16), Int(32), Int(64),
+    Type types[] = { Int(8),  Int(16),  Int(32),  Int(64),
                     UInt(8), UInt(16), UInt(32), UInt(64),
-                    Float(32)};
+                    Float(32) };
+
+    const int n_types = sizeof(types) / sizeof(types[0]);
+
     Func funcs[n_types];
 
     Var x("x"), xi("xi");
@@ -43,14 +44,16 @@ int main(int argc, char **argv) {
     }
     Expr e = cast(result_type, 0);
     int offset = 0;
+    int skipped_types = 0;
     for (int i = 0; i < n_types; i++) {
         int off = 0;
         if ((types[i].is_int() || types[i].is_uint())) {
             // Metal does not support 64-bit integers.
-            // neither does D3D12 with SM 5.1.
+            // neither does D3D12 under SM 5.1.
             if ((t.supports_device_api(DeviceAPI::Metal) ||
                  t.supports_device_api(DeviceAPI::D3D12Compute)) &&
                 types[i].bits() >= 64) {
+                ++skipped_types;
                 continue;
             }
 
@@ -74,11 +77,12 @@ int main(int argc, char **argv) {
     int result;
     if (t.has_feature(Target::Metal) ||
         t.has_feature(Target::D3D12Compute)) {
-        result = check_result<uint32_t>(output, n_types - 2, offset);
+        result = check_result<uint32_t>(output, n_types - skipped_types, offset);
     } else {
         result = check_result<uint64_t>(output, n_types, offset);
     }
     if (result != 0) {
+        printf("Failed!\n");
         return result;
     }
 
