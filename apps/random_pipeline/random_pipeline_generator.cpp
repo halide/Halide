@@ -99,7 +99,7 @@ Expr random_expr(vector<Expr> inputs, int depth, int func_size) {
     int op = rng() % op_count; // ops need to be defined
     switch(op) {
     case 0:  // casting
-    {    
+    {
         // Get a random type
         Type convertT = random_type();
         auto e1 = random_expr(inputs, depth, func_size);
@@ -126,7 +126,7 @@ Expr random_expr(vector<Expr> inputs, int depth, int func_size) {
     }
     case 3: // sin
     {
-        if (func_size > func_size_thresh) 
+        if (func_size > func_size_thresh)
             break;
         auto e1 = random_expr(inputs, depth-1, func_size);
         return sin(e1);
@@ -175,12 +175,12 @@ Expr random_expr(vector<Expr> inputs, int depth, int func_size) {
 }
 
 Expr rand_value(Type t) {
-    if (t.is_int()) {
+    if (t.is_bool()) {
+        return cast(t, rand_int(0,1));
+    } else if (t.is_int() || t.is_uint()) {
         return cast(t, rand_int(1, 127));
     } else if (t.is_float()) {
         return cast(t, rand_float());
-    } else if (t.is_bool()) {
-        return cast(t, rand_int(0,1));
     } else {
         // Shouldn't get here.
         assert(false);
@@ -192,7 +192,7 @@ Expr rand_value(Type t) {
 // be solely a function of the seed and the number of stages.
 class RandomPipeline : public Halide::Generator<RandomPipeline> {
 public:
-    int num_stage_types = 18; 
+    int num_stage_types = 18;
     // The random seed to use to generate the pipeline.
     GeneratorParam<int> seed{"seed", 1};
     // The approximate max number of stages to generate in the random pipeline.
@@ -325,7 +325,8 @@ public:
         bounds.at(1).second = f.h;
         bounds.at(2).first = 0;
         bounds.at(2).second = f.c;
-        return {BoundaryConditions::constant_exterior(f.func, 0.0f, bounds), f.w, f.h, f.c};
+        Expr zero = cast(f.func.value().type(), 0);
+        return {BoundaryConditions::constant_exterior(f.func, zero, bounds), f.w, f.h, f.c};
     }
 
     Stage convolve2D(Stage f, int kernel_min, int kernel_max) {
@@ -360,8 +361,10 @@ public:
         std::cout << "Tanh\n";
         Func activation("tanh");
         vector<Expr> coords = make_arguments(f.func.args());
-        activation(f.func.args()) = tanh(f.func(coords));
-        return {activation, f.w, f.h, f.c}; 
+        Expr exp_pos = exp(f.func(coords));
+        Expr exp_neg = exp(-f.func(coords));
+        activation(f.func.args()) = (exp_pos - exp_neg) / (exp_pos + exp_neg); //tanh(f.func(coords));
+        return {activation, f.w, f.h, f.c};
     }
 
     /*** pooling stages ***/
@@ -488,13 +491,13 @@ public:
                 }
             }
         }
-        
+
         int out_channels = f.random_out_channels();
         int kernel_width = kernel_max - kernel_min + 1;
         int min_depth = std::floor(std::log(kernel_width * kernel_width * f.c));
         int max_depth = min_depth + 1;
         int func_size = f.w * f.h * out_channels;
-        
+
         Expr def = random_expr(inputs, rand_int(min_depth, max_depth), func_size);
         std::cerr << def << "\n";
 
@@ -843,9 +846,9 @@ public:
             size = n*n;
             for (int i = 0; i < size; i++) {
                 cdf.push_back(0.0f);
-            }  
+            }
         }
-        
+
         float get(int i, int j) {
             int index = i*num_states+j;
             assert(index < size);
@@ -872,7 +875,7 @@ public:
             std::cout << std::setprecision(2) << std::fixed;
             for (int i = 0; i < num_states; i++) {
                 for (int j = 0; j < num_states; j++) {
-                    std::cout << " | " << get(i,j); 
+                    std::cout << " | " << get(i,j);
                 }
                 std::cout << " |\n";
             }
@@ -886,7 +889,7 @@ public:
 
         // vector representaiton of 2D transition matrix.
         // value at (i,j) is probability of moving from state i to state j
-        vector<float> probabilities; 
+        vector<float> probabilities;
 
         float get(int i, int j) {
             int index = i*num_states+j;
@@ -899,7 +902,7 @@ public:
             assert(index < size);
             probabilities[index] = val;
         }
-        
+
         void set_cdf(TransitionCDF& cdf) {
             assert(cdf.size == size);
             assert(cdf.num_states == num_states);
@@ -908,7 +911,7 @@ public:
                 float sum = 0.0f;
                 for (int j = 0; j < num_states; j++) {
                     sum += get(i,j);
-                    cdf.set(i,j,sum);  
+                    cdf.set(i,j,sum);
                 }
             }
         }
@@ -916,18 +919,18 @@ public:
         void initialize(int n) {
             num_states = n;
             size = n*n;
-            // transition to every state equally likely 
-            float transition_prob = 1.0f/(num_states); 
+            // transition to every state equally likely
+            float transition_prob = 1.0f/(num_states);
             for (int i = 0; i < size; i++) {
                 probabilities.push_back(transition_prob);
-            }  
+            }
         }
 
         void print() {
             std::cout << std::setprecision(2) << std::fixed;
             for (int i = 0; i < num_states; i++) {
                 for (int j = 0; j < num_states; j++) {
-                    std::cout << " | " << get(i,j); 
+                    std::cout << " | " << get(i,j);
                 }
                 std::cout << " |\n";
             }
@@ -941,11 +944,11 @@ public:
         int i2 = m > 0 ? rand_int(0, m - 1) : 0;
         int i1 = m > 0 ? rand_int(i2 + 1, m) : 0;
         Stage f = s[i1], g = s[i2];
-        
+
         // generate stage based on transition probabilities
         int stage_type = CDF.sample_cdf(curr_stage_id);
         // set current stage id to the chosen stage for next iteration
-        curr_stage_id = stage_type; 
+        curr_stage_id = stage_type;
 
 
         if (stage_type == 0) {
@@ -1018,7 +1021,7 @@ public:
         float escape_prob; // prob of leaving a convnet state
 
         // P(activation | conv) = 0.8
-        escape_prob = 0.2f/(num_stage_types-1); 
+        escape_prob = 0.2f/(num_stage_types-1);
         for (int i = 0; i < num_stage_types; i++) {
             if (i == activation_id) {
                 P.set(conv2D_id, i, 0.8f);
@@ -1027,7 +1030,7 @@ public:
             }
         }
         // P(padding | activation) = P(pool | activation) = 0.4
-        escape_prob = 0.2f/(num_stage_types-2); 
+        escape_prob = 0.2f/(num_stage_types-2);
         for (int i = 0; i < num_stage_types; i++) {
             if (i == padding_id || i == pool2D_id) {
                 P.set(activation_id, i, 0.4f);
@@ -1036,16 +1039,16 @@ public:
             }
         }
         // P(conv | padding) = P(pool | padding) = 0.4
-        escape_prob = 0.2f/(num_stage_types-2); 
+        escape_prob = 0.2f/(num_stage_types-2);
         for (int i = 0; i < num_stage_types; i++) {
             if (i == conv2D_id || i == pool2D_id) {
                 P.set(padding_id, i, 0.4f);
             } else {
                 P.set(padding_id, i, escape_prob);
-            }    
+            }
         }
         // P(conv | pool) = 0.8
-        escape_prob = 0.2f/(num_stage_types-1); 
+        escape_prob = 0.2f/(num_stage_types-1);
         for (int i = 0; i < num_stage_types; i++) {
             if (i == conv2D_id) {
                 P.set(pool2D_id, i, 0.8f);
