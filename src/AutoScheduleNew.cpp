@@ -3918,6 +3918,8 @@ std::string generate_schedules_autotune(const std::vector<Function> &output_func
             internal_assert(history.size() == max_history/2);
         }
     }
+
+    return "";
 }
 
 void test_convnet_correctness() {

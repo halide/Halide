@@ -98,8 +98,8 @@ public:
     template<typename T> using Output = GeneratorOutput<T>;
 
     // Inputs
-    Input<int> num_stages{ "num_stages" };
-    Input<int> batch_size{ "batch_size" };
+    Input<int> num_stages{ "num_stages", 1 };
+    Input<int> batch_size{ "batch_size", 1 };
     Input<Buffer<float>> pipeline_features{ "pipeline_features", 3 };
     Input<Buffer<float>> schedule_features{ "schedule_features", 3 };
 
@@ -131,8 +131,8 @@ public:
     Weight bias6{ "bias6", 0 };
 
     // Some extra inputs for training mode. Really should be conditional on 'training'.
-    Input<float> learning_rate{ "learning_rate" };
-    Input<int> timestep{ "timestep" }; // Needed by ADAM
+    Input<float> learning_rate{ "learning_rate", 1.0f };
+    Input<int> timestep{ "timestep", 0 }; // Needed by ADAM
     Input<Buffer<float>> true_runtime{ "true_runtime", 1 };
 
     // Either outputs a prediction per batch element or a loss
