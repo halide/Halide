@@ -393,13 +393,11 @@ void CodeGen_LLVM::init_context() {
     fast_flags.setNoSignedZeros();
     // Don't use approximate reciprocals for division. It's too inaccurate even for Halide.
     // fast_flags.setAllowReciprocal();
-    #if LLVM_VERSION >= 60
     // Theoretically, setAllowReassoc could be setUnsafeAlgebra for earlier versions, but that
     // turns on all the flags.
     fast_flags.setAllowReassoc();
     fast_flags.setAllowContract(true);
     fast_flags.setApproxFunc();
-    #endif
     builder->setFastMathFlags(fast_flags);
 
     // Define some types
@@ -600,7 +598,7 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
         std::string halide_command = "halide target=" + target.to_string();
         embed_bitcode(module.get(), halide_command);
     }
-    
+
     input_module = nullptr;
 
     // Disown the module and return it.
@@ -633,17 +631,9 @@ void CodeGen_LLVM::begin_func(LinkageType linkage, const std::string& name,
             << " already exists in the same module\n";
         if (func_t != function->getFunctionType()) {
             std::cerr << "Desired function type for " << extern_name << ":\n";
-            #if LLVM_VERSION >= 50
             func_t->print(dbgs(), true);
-            #else
-            func_t->dump();
-            #endif
             std::cerr << "Declared function type of " << extern_name << ":\n";
-            #if LLVM_VERSION >= 50
             function->getFunctionType()->print(dbgs(), true);
-            #else
-            function->getFunctionType()->dump();
-            #endif
             user_error << "Cannot create a function with a declaration of mismatched type.\n";
         }
     }
@@ -652,11 +642,7 @@ void CodeGen_LLVM::begin_func(LinkageType linkage, const std::string& name,
     // Mark the buffer args as no alias
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer()) {
-            #if LLVM_VERSION < 50
-            function->setDoesNotAlias(i+1);
-            #else
             function->addParamAttr(i, Attribute::NoAlias);
-            #endif
         }
     }
 
@@ -724,11 +710,7 @@ void CodeGen_LLVM::compile_func(const LoweredFunc &f, const std::string &simple_
             module->getFunction("halide_msan_annotate_buffer_is_initialized_as_destructor");
         internal_assert(annotate_buffer_fn)
             << "Could not find halide_msan_annotate_buffer_is_initialized_as_destructor in module\n";
-        #if LLVM_VERSION < 50
-        annotate_buffer_fn->setDoesNotAlias(1);
-        #else
         annotate_buffer_fn->addParamAttr(0, Attribute::NoAlias);
-        #endif
         for (const auto &arg : f.args) {
             if (arg.kind == Argument::OutputBuffer) {
                 register_destructor(annotate_buffer_fn, sym_get(arg.name + ".buffer"), OnSuccess);
@@ -1042,11 +1024,7 @@ void CodeGen_LLVM::optimize_module() {
     debug(3) << "Optimizing module\n";
 
     if (debug::debug_level() >= 3) {
-        #if LLVM_VERSION >= 50
         module->print(dbgs(), nullptr, false, true);
-        #else
-        module->dump();
-        #endif
     }
 
     // We override PassManager::add so that we have an opportunity to
@@ -1077,19 +1055,13 @@ void CodeGen_LLVM::optimize_module() {
 
     PassManagerBuilder b;
     b.OptLevel = 3;
-#if LLVM_VERSION >= 50
     b.Inliner = createFunctionInliningPass(b.OptLevel, 0, false);
-#else
-    b.Inliner = createFunctionInliningPass(b.OptLevel, 0);
-#endif
     b.LoopVectorize = true;
     b.SLPVectorize = true;
 
-#if LLVM_VERSION >= 50
     if (TM) {
         TM->adjustPassManager(b);
     }
-#endif
 
     if (get_target().has_feature(Target::ASAN)) {
         auto addAddressSanitizerPasses = [](const PassManagerBuilder &builder, legacy::PassManagerBase &pm) {
@@ -1144,11 +1116,7 @@ void CodeGen_LLVM::optimize_module() {
 
     debug(3) << "After LLVM optimizations:\n";
     if (debug::debug_level() >= 2) {
-        #if LLVM_VERSION >= 50
         module->print(dbgs(), nullptr, false, true);
-        #else
-        module->dump();
-        #endif
     }
 }
 
@@ -3343,11 +3311,7 @@ void CodeGen_LLVM::do_parallel_tasks(const vector<ParallelTask> &tasks) {
 
         llvm::Value *task_ptr = builder->CreatePointerCast(function, fn_type->getPointerTo());
 
-        #if LLVM_VERSION < 50
-        function->setDoesNotAlias(closure_arg_idx + 1);
-        #else
         function->addParamAttr(closure_arg_idx, Attribute::NoAlias);
-        #endif
 
         set_function_attributes_for_target(function, target);
 
@@ -3439,11 +3403,7 @@ void CodeGen_LLVM::do_parallel_tasks(const vector<ParallelTask> &tasks) {
         if (use_do_par_for) {
             llvm::Function *do_par_for = module->getFunction("halide_do_par_for");
             internal_assert(do_par_for) << "Could not find halide_do_par_for in initial module\n";
-            #if LLVM_VERSION < 50
-            do_par_for->setDoesNotAlias(5);
-            #else
             do_par_for->addParamAttr(4, Attribute::NoAlias);
-            #endif
             Value *args[] = {get_user_context(), task_ptr, min, extent, closure_ptr};
             debug(4) << "Creating call to do_par_for\n";
             result = builder->CreateCall(do_par_for, args);
@@ -3473,11 +3433,7 @@ void CodeGen_LLVM::do_parallel_tasks(const vector<ParallelTask> &tasks) {
     if (!result) {
         llvm::Function *do_parallel_tasks = module->getFunction("halide_do_parallel_tasks");
         internal_assert(do_parallel_tasks) << "Could not find halide_do_parallel_tasks in initial module\n";
-        #if LLVM_VERSION < 50
-        do_parallel_tasks->setDoesNotAlias(3);
-        #else
         do_parallel_tasks->addParamAttr(2, Attribute::NoAlias);
-        #endif
         Value *task_parent = sym_get("__task_parent", false);
         if (!task_parent) {
             task_parent = ConstantPointerNull::get(i8_t->getPointerTo()); // void*

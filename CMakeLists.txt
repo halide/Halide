@@ -33,10 +33,6 @@ else()
   endif()
 endif()
 
-if("${LLVM_VERSION_MAJOR}${LLVM_VERSION_MINOR}" STREQUAL "40")
-  message(WARNING "*** Warning: LLVM 4.x is no longer actively tested with Halide; consider using a newer LLVM version. ***")
-endif()
-
 # Notify the user what paths and LLVM version we are using
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
@@ -118,10 +114,10 @@ check_tool_exists(clang "${CLANG}")
 
 # Check reported LLVM version
 if (NOT "${LLVM_VERSION}" MATCHES "^[0-9][0-9]$")
-  message(FATAL_ERROR "LLVM_VERSION not specified correctly. Must be <major><minor> E.g. LLVM 4.0 is \"40\"")
+  message(FATAL_ERROR "LLVM_VERSION not specified correctly. Must be <major><minor> E.g. LLVM 7.0 is \"70\"")
 endif()
-if (LLVM_VERSION LESS 40)
-  message(FATAL_ERROR "LLVM version must be 4.0 or newer")
+if (LLVM_VERSION LESS 60)
+  message(FATAL_ERROR "LLVM version must be 6.0 or newer")
 endif()
 
 function(check_llvm_target TARGET HAS_TARGET)
