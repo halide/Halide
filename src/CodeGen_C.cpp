@@ -1527,6 +1527,7 @@ enum BufferDeclType {
 
 template<BufferDeclType t>
 void DeclFnArg(std::ostream &o, const ArgInfo &a) {
+    o << "\n  ";
     if (a.arg.is_buffer()) {
         o << "::Halide::Runtime::Buffer<T_" << a.escaped_name << "> "
           << ((t == ByRef) ? "&" : "*");
@@ -1538,7 +1539,7 @@ void DeclFnArg(std::ostream &o, const ArgInfo &a) {
 
 template<BufferDeclType t>
 void PassFnArg(std::ostream &o, const ArgInfo &a) {
-    o << a.escaped_name;
+    o << "\n        " << a.escaped_name;
     if (a.arg.is_buffer()) {
         o << ((t == ByRef) ? "." : "->")
           << "template as<"
@@ -1677,7 +1678,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
                 stream << "template<";
                 emit_args([](std::ostream &o, const ArgInfo &a) {
                     if (a.arg.is_buffer()) {
-                        o << "typename T_" << a.escaped_name;
+                        o << "\n  typename T_" << a.escaped_name;
                     }
                 });
                 stream << ">\n";
