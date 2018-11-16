@@ -55,6 +55,7 @@ protected:
 
     /** Nodes for which we need to override default behavior for the GPU runtime */
     // @{
+    virtual void visit(const Call *) override;
     void visit(const For *) override;
     void visit(const Allocate *) override;
     void visit(const Free *) override;

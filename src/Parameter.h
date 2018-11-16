@@ -158,33 +158,6 @@ public:
     }
 };
 
-/** A Subclass of Parameter which registers itself in the ObjectInstanceRegistry;
- * this is provided for backwards compatibility with legacy Generator code
- * that uses ImageParam/Param instead of Input.
- */
-class RegisteredParameter : public Parameter {
-    void register_if_needed();
-    void unregister_if_needed();
-
-public:
-    RegisteredParameter() = default;
-
-    RegisteredParameter(Type t, bool is_buffer, int dimensions, const std::string &name);
-
-    ~RegisteredParameter() override;
-
-    // Can copy from Parameter *or* RegisteredParameter
-    RegisteredParameter(const Parameter&);
-    RegisteredParameter& operator=(const Parameter&);
-
-    RegisteredParameter(const RegisteredParameter&);
-    RegisteredParameter& operator=(const RegisteredParameter&);
-
-    // Can only move from RegisteredParameter
-    RegisteredParameter(RegisteredParameter&&);
-    RegisteredParameter& operator=(RegisteredParameter&&);
-};
-
 /** Validate arguments to a call to a func, image or imageparam. */
 void check_call_arg_types(const std::string &name, std::vector<Expr> *args, int dims);
 

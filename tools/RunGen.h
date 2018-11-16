@@ -346,7 +346,9 @@ inline void fix_chunky_strides(const Shape &constrained_shape, Shape *new_shape)
     // (Note that there are, theoretically, other stride combinations that might
     // need fixing; in practice, ~all generators that aren't planar tend
     // to be classically chunky.)
-    if (new_shape->size() >= 3) {
+    if (new_shape->size() >= 3 &&
+        (*new_shape)[0].extent > 1 &&
+        (*new_shape)[1].extent > 1) {
         if (constrained_shape[2].stride == 1) {
             if (constrained_shape[0].stride >= 1) {
                 // If we have stride[0] and stride[2] set to obviously-chunky,

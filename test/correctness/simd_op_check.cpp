@@ -311,12 +311,14 @@ struct Test {
 
             // TODO: Re-enable this after fixing #3281
             //check("paddusb", 8*w, u8(min(u16(u8_1) + u16(u8_2), max_u8)));
-            check("psubusb", 8*w, u8(max(i16(u8_1) - i16(u8_2), 0)));
+            // TODO: Re-enable this after fixing #3281
+            //check("psubusb", 8*w, u8(max(i16(u8_1) - i16(u8_2), 0)));
             check("paddsw",  4*w, i16_sat(i32(i16_1) + i32(i16_2)));
             check("psubsw",  4*w, i16_sat(i32(i16_1) - i32(i16_2)));
             // TODO: Re-enable this after fixing #3281
             //check("paddusw", 4*w, u16(min(u32(u16_1) + u32(u16_2), max_u16)));
-            check("psubusw", 4*w, u16(max(i32(u16_1) - i32(u16_2), 0)));
+            // TODO: Re-enable this after fixing #3281
+            //check("psubusw", 4*w, u16(max(i32(u16_1) - i32(u16_2), 0)));
             check("pmulhw",  4*w, i16((i32(i16_1) * i32(i16_2)) / (256*256)));
             check("pmulhw",  4*w, i16((i32(i16_1) * i32(i16_2)) >> 16));
 

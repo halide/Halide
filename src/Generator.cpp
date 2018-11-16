@@ -1694,18 +1694,21 @@ void GeneratorInputBase::set_inputs(const std::vector<StubInput> &inputs) {
         user_assert(in.kind() == kind()) << "An input for " << name() << " is not of the expected kind.\n";
         if (kind() == IOKind::Function) {
             auto f = in.func();
+            user_assert(f.defined()) << "The input for " << name() << " is an undefined Func. Please define it.\n";
             check_matching_types(f.output_types());
             check_matching_dims(f.dimensions());
             funcs_.push_back(f);
             parameters_.emplace_back(f.output_types().at(0), true, f.dimensions(), array_name(i));
         } else if (kind() == IOKind::Buffer) {
             auto p = in.parameter();
+            user_assert(p.defined()) << "The input for " << name() << " is an undefined Buffer. Please define it.\n";
             check_matching_types({p.type()});
             check_matching_dims(p.dimensions());
             funcs_.push_back(make_param_func(p, name()));
             parameters_.push_back(p);
         } else {
             auto e = in.expr();
+            user_assert(e.defined()) << "The input for " << name() << " is an undefined Expr. Please define it.\n";
             check_matching_types({e.type()});
             check_matching_dims(0);
             exprs_.push_back(e);
