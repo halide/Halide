@@ -399,6 +399,44 @@ int main(int argc, char **argv) {
         assert(b.dim(3).stride() == b2.dim(3).stride());
     }
 
+    {
+        // Check as() and as_ptr()
+        Buffer<> a(halide_type_of<int>(), 2, 2);
+
+        Buffer<int> a2 = a.as<int>();
+        Buffer<int> &a3 = a.as<int>();
+        const Buffer<int> &a4 = a.as<int>();
+
+        Buffer<int>* a5 = a.as_ptr<int>();
+        const Buffer<int>* a6 = a.as_ptr<int>();
+
+        // just to avoid unused-var warnings
+        (void) a2;
+        (void) a3;
+        (void) a4;
+        (void) a5;
+        (void) a6;
+    }
+
+    {
+        // Check as_const() and as_ptr_const()
+        Buffer<int> a(halide_type_of<int>(), 2, 2);
+
+        Buffer<const int> a2 = a.as_const();
+        Buffer<const int> &a3 = a.as_const();
+        const Buffer<const int> &a4 = a.as_const();
+
+        Buffer<const int>* a5 = a.as_ptr_const();
+        const Buffer<const int>* a6 = a.as_ptr_const();
+
+        // just to avoid unused-var warnings
+        (void) a2;
+        (void) a3;
+        (void) a4;
+        (void) a5;
+        (void) a6;
+    }
+
     printf("Success!\n");
     return 0;
 }

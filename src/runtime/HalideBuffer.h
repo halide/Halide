@@ -1118,6 +1118,46 @@ public:
     }
     // @}
 
+    /** Return a typed pointer to this Buffer. Useful for safely converting
+     * a reference to a Buffer<void>* to a reference to, for example, a
+     * Buffer<const uint8_t>*, or converting a Buffer<T>* to Buffer<const T>*.
+     * Does a runtime assert if the source buffer type is void. */
+    template<typename T2, int D2 = D,
+             typename = typename std::enable_if<(D2 <= D)>::type>
+    HALIDE_ALWAYS_INLINE
+    Buffer<T2, D2> *as_ptr() & {
+        Buffer<T2, D>::assert_can_convert_from(*this);
+        return ((Buffer<T2, D2> *)this);
+    }
+
+    /** Return a const typed pointer to this Buffer. Useful for safely
+     * converting a const pointer to one Buffer type to a const
+     * pointer to another Buffer type. Does a runtime assert if the
+     * source buffer type is void. */
+    template<typename T2, int D2 = D,
+             typename = typename std::enable_if<(D2 <= D)>::type>
+    HALIDE_ALWAYS_INLINE
+    const Buffer<T2, D2> &as_ptr() const &  {
+        Buffer<T2, D>::assert_can_convert_from(*this);
+        return ((const Buffer<T2, D2> *)this);
+    }
+
+    /** as_ptr_const() is syntactic sugar for .as_ptr<const T>(), to avoid the need
+     * to recapitulate the type argument. */
+    // @{
+    HALIDE_ALWAYS_INLINE
+    Buffer<typename std::add_const<T>::type, D> *as_ptr_const() & {
+        // Note that we can skip the assert_can_convert_from(), since T -> const T
+        // conversion is always legal.
+        return ((Buffer<typename std::add_const<T>::type> *)this);
+    }
+
+    HALIDE_ALWAYS_INLINE
+    const Buffer<typename std::add_const<T>::type, D> *as_ptr_const() const & {
+        return ((const Buffer<typename std::add_const<T>::type> *)this);
+    }
+    // @}
+
     /** Conventional names for the first three dimensions. */
     // @{
     int width() const {
