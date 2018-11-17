@@ -1595,6 +1595,18 @@ enum halide_argument_kind_t {
 */
 
 /**
+ * Obsolete version of halide_filter_argument_t; only present in
+ * code that wrote halide_filter_metadata_t version 0.
+ */
+struct halide_filter_argument_t_v0 {
+    const char *name;
+    int32_t kind;
+    int32_t dimensions;
+    struct halide_type_t type;
+    const struct halide_scalar_value_t *def, *min, *max;
+};
+
+/**
  * halide_filter_argument_t is essentially a plain-C-struct equivalent to
  * Halide::Argument; most user code will never need to create one.
  */
@@ -1605,14 +1617,20 @@ struct halide_filter_argument_t {
     struct halide_type_t type;
     // These pointers should always be null for buffer arguments,
     // and *may* be null for scalar arguments. (A null value means
-    // there is no def/min/max specified for this argument.)
-    const struct halide_scalar_value_t *def;
-    const struct halide_scalar_value_t *min;
-    const struct halide_scalar_value_t *max;
+    // there is no def/min/max/estimate specified for this argument.)
+    const struct halide_scalar_value_t *scalar_def, *scalar_min, *scalar_max, *scalar_estimate;
+    // This pointer should always be null for scalar arguments,
+    // and *may* be null for buffer arguments. If not null, it should always
+    // point to an array of dimensions*2 pointers, which will be the (min, extent)
+    // estimates for each dimension of the buffer. (Note that any of the pointers
+    // may be null as well.)
+    int64_t const* const* buffer_estimates;
 };
 
 struct halide_filter_metadata_t {
-    /** version of this metadata; currently always 0. */
+    enum { VERSION = 1 };
+
+    /** version of this metadata; currently always 1. */
     int32_t version;
 
     /** The number of entries in the arguments field. This is always >= 1. */

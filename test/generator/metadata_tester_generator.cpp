@@ -70,7 +70,7 @@ public:
     Output<Buffer<>[]> array_outputs9{ "array_outputs9" };
 
     void generate() {
-        Var x, y, c;
+        Var x("x"), y("y"), c("c");
 
         // These should all be zero; they are here to exercise the operator[] overloads
         Expr zero1 = array_input[1](x, y, c) - array_input[0](x, y, c);
@@ -126,6 +126,21 @@ public:
 
         // Verify compute_with works for Output<Buffer>
         dim_only_output_buffer.compute_with(Func(typed_output_buffer), x);
+
+        // Provide some bounds estimates for a Buffer input
+        typed_input_buffer.dim(0).set_bounds_estimate(0, 2592);
+        typed_input_buffer.dim(1).set_bounds_estimate(42, 1968);
+
+        // Provide some bounds estimates for a Func input
+        input
+            .estimate(Halide::_0, 10, 2592)
+            .estimate(Halide::_1, 20, 1968)
+            .estimate(Halide::_2, 0, 3);
+
+        // Provide some scalar estimates.
+        b.set_estimate(false);
+        i8.set_estimate(3);
+        f32.set_estimate(48.5f);
     }
 
     void schedule() {

@@ -724,7 +724,9 @@ public:
     RunGen(int (*halide_argv_call)(void **args),
                const struct halide_filter_metadata_t *(*halide_metadata_call)()) :
         halide_argv_call(halide_argv_call), md(halide_metadata_call()) {
-        const struct halide_filter_metadata_t *md = halide_metadata_call();
+        if (md->version != halide_filter_metadata_t::VERSION) {
+            fail() << "Unexpected metadata version " << md->version;
+        }
         for (size_t i = 0; i < (size_t) md->num_arguments; ++i) {
             std::string name = md->arguments[i].name;
             if (name.size() > 2 && name[name.size()-2] == '$' && isdigit(name[name.size()-1])) {
@@ -773,14 +775,17 @@ public:
             auto *md = arg.metadata;
             switch (arg.metadata->kind) {
             case halide_argument_kind_input_scalar: {
-                if (md->def) {
-                    arg.raw_string = scalar_to_string(md->type, *md->def);
+                if (md->scalar_estimate) {
+                    arg.raw_string = scalar_to_string(md->type, *md->scalar_estimate);
+                    info() << "Guess for Input \"" << arg.name << "\": use estimated value of " << arg.raw_string;
+                } else if (md->scalar_def) {
+                    arg.raw_string = scalar_to_string(md->type, *md->scalar_def);
                     info() << "Guess for Input \"" << arg.name << "\": use default value of " << arg.raw_string;
-                } else if (md->min) {
-                    arg.raw_string = scalar_to_string(md->type, *md->min);
+                } else if (md->scalar_min) {
+                    arg.raw_string = scalar_to_string(md->type, *md->scalar_min);
                     info() << "Guess for Input \"" << arg.name << "\": use min value of " << arg.raw_string;
-                } else if (md->max) {
-                    arg.raw_string = scalar_to_string(md->type, *md->max);
+                } else if (md->scalar_max) {
+                    arg.raw_string = scalar_to_string(md->type, *md->scalar_max);
                     info() << "Guess for Input \"" << arg.name << "\": use max value of " << arg.raw_string;
                 } else {
                     if (md->type == halide_type_of<bool>()) {
@@ -795,6 +800,7 @@ public:
                 break;
             }
             case halide_argument_kind_input_buffer: {
+                // TODO: use estimates for buffer min/extent here
                 const bool is_float = (md->type == halide_type_of<float>() || md->type == halide_type_of<double>());
                 if (md->dimensions == 2 && is_float) {
                     // Assume it's a matrix-like input
