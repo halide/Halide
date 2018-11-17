@@ -211,8 +211,8 @@ public:
     void set_upcast_types(Type input_type, Type& mult_type, Type& sum_type) { 
         if (input_type.is_int() && rand_int(0,1)) {
             int input_bits = input_type.bits();
-            int mult_bits = min(32, 2*input_bits);
-            int sum_bits = min(32, 2*mult_bits);
+            int mult_bits = std::min(32, 2*input_bits);
+            int sum_bits = std::min(32, 2*mult_bits);
             mult_type = Int(mult_bits);
             sum_type = Int(sum_bits);
         } else {
@@ -223,10 +223,10 @@ public:
     }
   
     void set_downcast_type(Type input_type, Type& output_type) {
-        if (input_type.is_int() && random_int(0,1)) {
+        if (input_type.is_int() && rand_int(0,1)) {
             int input_bits = input_type.bits();
             int factor = rand_int(1,2) * 2;
-            int output_bits = min(8, input_bits/factor);
+            int output_bits = std::min(8, input_bits/factor);
             output_type = Int(output_bits);
         } else {
             output_type = input_type;
@@ -234,7 +234,7 @@ public:
         return;
     }
 
-    Func weights get_conv_weight(Type t) {
+    Func get_conv_weights(Type t) {
         if (t == UInt(8)) return uint8_weights;
         else if (t == UInt(16)) return uint16_weights;
         else if (t == UInt(32)) return uint32_weights;
@@ -417,7 +417,7 @@ public:
     Stage pool2D_unrolled(Stage f, int kernel_min, int kernel_max) { 
         vector<Var> args = f.func.args();
         Func pooled2D("pooled2D" + args[0].name() + args[1].name());
-        int stride = random_size_reduce_factor();
+        int stride = f.random_size_reduce_factor();
         std::cout << "Pooling unrolled with stride: " << stride << " and kernel [ " << kernel_min 
           << ", " << kernel_max << "]\n";
 
@@ -427,7 +427,7 @@ public:
         Expr def = cast(f.func.value().type(), 0);
 
         // Avoid huge unrolled loops
-        if (extent >= 4) return pool2D_r(f);
+        if (extent >= 4) return pool2D_r(f, kernel_min, kernel_max);
 
         // assuming input is 3d: w, h, c
         for (int i = kernel_min; i <= kernel_max; i++) {
@@ -455,7 +455,7 @@ public:
     Stage pool2D_r(Stage f, int kernel_min, int kernel_max) {
         vector<Var> args = f.func.args();
         Func pooled2D_r("pool2D_r_" + args[0].name() + args[1].name());
-        int stride = random_size_reduce_factor();
+        int stride = f.random_size_reduce_factor();
         int extent = kernel_max - kernel_min + 1;
         int scale = extent * extent;
         
@@ -482,7 +482,7 @@ public:
     Stage pool2D_w(Stage f, int kernel_min, int kernel_max) {
         vector<Var> args = f.func.args();
         Func pooled2D_w("pooled2D_w_" + args[0].name() + args[1].name());
-        int stride = random_size_reduce_factor();
+        int stride = f.random_size_reduce_factor();
         int extent = kernel_max - kernel_min + 1;
         int scale = extent * extent;
 
@@ -554,7 +554,7 @@ public:
         Func weights = get_conv_weights(input_type);
         set_upcast_types(input_type, mult_type, sum_type);
 
-        int stride = random_size_reduce_factor();
+        int stride = f.random_size_reduce_factor();
         RDom r(kernel_min, kernel_max - kernel_min + 1,
                kernel_min, kernel_max - kernel_min + 1,
                0, f.c);
@@ -569,7 +569,7 @@ public:
         out.w = (out.w + stride - 1)/stride;
         out.h = (out.h + stride - 1)/stride;
         return out;
-    
+    } 
 
     // Generate a random convolution of one dimension of f using a reduction with a wrapper
     Stage convolve2D_w(Stage f, int kernel_min, int kernel_max) {
@@ -586,7 +586,7 @@ public:
         Func weights = get_conv_weights(input_type);
         set_upcast_types(input_type, mult_type, sum_type);
          
-        int stride = random_size_reduce_factor();
+        int stride = f.random_size_reduce_factor();
         RDom r(kernel_min, kernel_max - kernel_min + 1,
                kernel_min, kernel_max - kernel_min + 1,
                0, f.c);
@@ -1152,6 +1152,36 @@ public:
             input.dim(0).set_bounds_estimate(0, 2000)
                 .dim(1).set_bounds_estimate(0, 2000)
                 .dim(2).set_bounds_estimate(0, 3);
+            uint8_weights.dim(0).set_bounds_estimate(0, 512)
+                .dim(1).set_bounds_estimate(-5, 5)
+                .dim(2).set_bounds_estimate(-5, 5)
+                .dim(3).set_bounds_estimate(0, 512);
+            uint16_weights.dim(0).set_bounds_estimate(0, 512)
+                .dim(1).set_bounds_estimate(-5, 5)
+                .dim(2).set_bounds_estimate(-5, 5)
+                .dim(3).set_bounds_estimate(0, 512);
+            uint32_weights.dim(0).set_bounds_estimate(0, 512)
+                .dim(1).set_bounds_estimate(-5, 5)
+                .dim(2).set_bounds_estimate(-5, 5)
+                .dim(3).set_bounds_estimate(0, 512);
+            int8_weights.dim(0).set_bounds_estimate(0, 512)
+                .dim(1).set_bounds_estimate(-5, 5)
+                .dim(2).set_bounds_estimate(-5, 5)
+                .dim(3).set_bounds_estimate(0, 512);
+            int16_weights.dim(0).set_bounds_estimate(0, 512)
+                .dim(1).set_bounds_estimate(-5, 5)
+                .dim(2).set_bounds_estimate(-5, 5)
+                .dim(3).set_bounds_estimate(0, 512);
+            int32_weights.dim(0).set_bounds_estimate(0, 512)
+                .dim(1).set_bounds_estimate(-5, 5)
+                .dim(2).set_bounds_estimate(-5, 5)
+                .dim(3).set_bounds_estimate(0, 512);
+            float32_weights.dim(0).set_bounds_estimate(0, 512)
+                .dim(1).set_bounds_estimate(-5, 5)
+                .dim(2).set_bounds_estimate(-5, 5)
+                .dim(3).set_bounds_estimate(0, 512);
+
+            output.estimate(output.args()[0], 0, 2000);
             output.estimate(output.args()[0], 0, 2000);
             output.estimate(output.args()[1], 0, 2000);
             output.estimate(output.args()[2], 0, 3);
