@@ -2972,50 +2972,49 @@ struct State {
         return h;
     }
 
-    bool calculate_cost(const FunctionDAG &dag, const MachineParams &params, ThroughputPredictorPipeline *throughput_predictor,  bool verbose = false) {
+    void compute_featurization(const FunctionDAG &dag, const MachineParams &params, StageMap<ScheduleFeatures> *features) {
         NodeMap<const LoopNest *> compute_site, store_site;
         compute_site.make_large(dag.nodes.size());
         store_site.make_large(dag.nodes.size());
-        StageMap<ScheduleFeatures> features;
-        features.make_large(dag.nodes[0].stages[0].max_id);
+        features->make_large(dag.nodes[0].stages[0].max_id);
         internal_assert(root.defined());
         root->get_compute_sites(compute_site, store_site);
-        root->compute_features(params, compute_site, store_site, 1, 1, nullptr, *root, nullptr, &features);
+        root->compute_features(params, compute_site, store_site, 1, 1, nullptr, *root, nullptr, features);
+    }
 
-        if (verbose) {
-            for (const auto &n : dag.nodes) {
-                for (size_t stage_idx = n.stages.size(); stage_idx > 0; stage_idx--) {
-                    const auto &s = n.stages[stage_idx - 1];
-                    if (!features.contains(&s)) break;
-                    const auto &sched_feat = features.get(&s);
-                    debug(0) << "YYY ";
-                    debug(0) << n.func.name() << ' ' << (stage_idx - 1) << ' ';
-                    const int64_t *sched_stats = (const int64_t *)(&sched_feat);
-                    // binary file for features
-                    string feature_file = get_env_variable("HL_FEATURE_PATH");
-                    std::ofstream binfile(feature_file, std::ios::binary | std::ios_base::trunc);
-                    for (size_t i = 0; i < sizeof(ScheduleFeatures) / sizeof(int64_t); i++) {
-                        // The schedule-based features are all
-                        // naturally multiplicative and have a very
-                        // large dynamic range, so we emit them
-                        // logged
-                        float f = std::log(1 + sched_stats[i]);
-                        debug(0) << f << ' ';
-                        // also write feature to binary file
-                        binfile.write((char*) &f, sizeof(float));
-                    }
-                    const int *stats = (const int *)(&s.features);
-                    for (size_t i = 0; i < sizeof(s.features) / sizeof(int); i++) {
-                        debug(0) << stats[i] << ' ';
-                        float f = (float) stats[i];
-                        binfile.write((char*) &f, sizeof(float));
-                    }
-                    debug(0) << '\n';
-                    binfile.close();
+    void save_featurization(const FunctionDAG &dag, const MachineParams &params, const std::string &feature_file) {
+        StageMap<ScheduleFeatures> features;
+        compute_featurization(dag, params, &features);
+
+        std::ofstream binfile(feature_file, std::ios::binary | std::ios_base::trunc);
+        for (const auto &n : dag.nodes) {
+            for (size_t stage_idx = n.stages.size(); stage_idx > 0; stage_idx--) {
+                const auto &s = n.stages[stage_idx - 1];
+                const size_t num_schedule_features = sizeof(ScheduleFeatures) / sizeof(int64_t);
+                const size_t num_pipeline_features = sizeof(PipelineFeatures) / sizeof(int);
+                const auto &sched_feat = features.get(&s);
+                const int64_t *sched_ints = (const int64_t *)(&sched_feat);
+                const int *pipe_ints = (const int *)(&s.features);
+
+                float buf[num_schedule_features + num_pipeline_features];
+                // Save them as floats
+                for (size_t i = 0; i < num_schedule_features; i++) {
+                    buf[i] = sched_ints[i];
                 }
+
+                for (size_t i = 0; i < num_pipeline_features; i++) {
+                    buf[i + num_schedule_features] = pipe_ints[i];
+                }
+
+                binfile.write((const char *)buf, sizeof(buf));
             }
         }
+        binfile.close();
+    }
 
+    bool calculate_cost(const FunctionDAG &dag, const MachineParams &params, ThroughputPredictorPipeline *throughput_predictor, bool verbose = false) {
+        StageMap<ScheduleFeatures> features;
+        compute_featurization(dag, params, &features);
 
         cost = 0;
 
@@ -3763,6 +3762,10 @@ std::string generate_schedules_new(const std::vector<Function> &outputs,
     // Print out the predicted runtime of each Func, so we can compare them to a profile
     // optimal->print_predicted_runtimes(params);
 
+    string feature_file = get_env_variable("HL_FEATURE_FILE");
+    if (!feature_file.empty()) {
+        optimal->save_featurization(dag, params, feature_file);
+    }
 
     return "";
 }

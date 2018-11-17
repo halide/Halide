@@ -25,7 +25,6 @@ std::mt19937 rng;
 int rand_int(int min, int max) { return (rng() % (max - min + 1)) + min; }
 bool rand_bool() { return rng() % 2 == 0; }
 float rand_float() { return rand_int(0, 1 << 30) / (float)(1 << 30); }
-float uniform_rand() { return static_cast <float>(rand()) / static_cast <float>(RAND_MAX); }
 
 // Generate random expressions
 // Given a vector of expresions and a tree depth, recursively
@@ -129,29 +128,29 @@ Expr random_expr(vector<Expr> inputs, int depth, int func_size) {
         if (func_size > func_size_thresh)
             break;
         auto e1 = random_expr(inputs, depth-1, func_size);
-        return sin(e1);
+        return sin(cast<float>(e1));
     }
     case 4: // tanh
     {
         if (func_size > func_size_thresh)
             break;
         auto e1 = random_expr(inputs, depth-1, func_size);
-        return tanh(e1);
+        return tanh(cast<float>(e1));
     }
     case 5: // exp
     {
         auto e1 = random_expr(inputs, depth-1, func_size);
-        return exp(e1);
+        return fast_exp(cast<float>(e1));
     }
     case 6: // sqrt
     {
         auto e1 = random_expr(inputs, depth-1, func_size);
-        return sqrt(e1);
+        return sqrt(cast<float>(e1));
     }
     case 7: // log
     {
         auto e1 = random_expr(inputs, depth-1, func_size);
-        return log(e1);
+        return fast_log(cast<float>(e1));
     }
     case 8: // condition
     {
@@ -361,9 +360,8 @@ public:
         std::cout << "Tanh\n";
         Func activation("tanh");
         vector<Expr> coords = make_arguments(f.func.args());
-        Expr exp_pos = exp(f.func(coords));
-        Expr exp_neg = exp(-f.func(coords));
-        activation(f.func.args()) = (exp_pos - exp_neg) / (exp_pos + exp_neg); //tanh(f.func(coords));
+        Expr exp_pos = fast_exp(2 * cast<float>(f.func(coords)));
+        activation(f.func.args()) = (exp_pos - 1) / (exp_pos + 1);
         return {activation, f.w, f.h, f.c};
     }
 
@@ -424,6 +422,7 @@ public:
         coords[0] = coords[0] * factor + r.x;
         coords[1] = coords[1] * factor + r.y;
         if (ty.is_bool()) {
+            pooled2D_r(args) = const_true();
             pooled2D_r(args) = pooled2D_r(args) && f.func(coords);
         } else {
             pooled2D_r(args) += f.func(coords) / scale;
@@ -656,20 +655,17 @@ public:
         std::cout << "Unary op\n";
         Func unary("unary_op");
         vector<Expr> coords = make_arguments(f.func.args());
-        int op_type = rand_int(0,3); // exp, log, sqrt, sin
+        int op_type = rand_int(0,2); // exp, log, sqrt
 
         if (op_type == 0) {
-            unary(f.func.args()) = exp(f.func(coords));
+            unary(f.func.args()) = fast_exp(cast<float>(f.func(coords)));
             std::cout << "Unary op: exp\n";
         } else if (op_type == 1) {
-            unary(f.func.args()) = log(f.func(coords));
+            unary(f.func.args()) = fast_log(cast<float>(f.func(coords)));
             std::cout << "Unary op: log\n";
         } else if (op_type == 2) {
-            unary(f.func.args()) = sqrt(f.func(coords));
+            unary(f.func.args()) = sqrt(cast<float>(f.func(coords)));
             std::cout << "Unary op: sqrt\n";
-        } else {
-            unary(f.func.args()) = sin(f.func(coords));
-            std::cout << "Unary op: sin\n";
         }
         return {unary, f.w, f.h, f.c};
     }
@@ -863,7 +859,7 @@ public:
 
         // use inverse transform sampling to sample next state given current state
         int sample_cdf(int state) {
-            float sample_val = uniform_rand();
+            float sample_val = rand_float();
             for (int i = 0; i < num_states; i++) {
                 if (get(state, i) >= sample_val) {
                     return i;
@@ -1059,6 +1055,8 @@ public:
     }
 
     void generate() {
+        rng.seed((int)seed);
+
         // create transition matrix between stages
         TransitionMatrix P;
         P.initialize(num_stage_types);
@@ -1071,8 +1069,6 @@ public:
 
         Func first;
         first(x, y, c) = input(x, y, c);
-
-        rng.seed((int)seed);
 
         vector<Stage> stages;
         // Assume input starts at ~2000x2000
