@@ -962,22 +962,20 @@ llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_
         };
         Constant *type = ConstantStruct::get(type_t_type, type_fields);
 
-        Expr def = args[arg].def;
-        Expr min = args[arg].min;
-        Expr max = args[arg].max;
+        auto argument_estimates = args[arg].argument_estimates;
         if (args[arg].type.is_handle()) {
             // Handle values are always emitted into metadata as "undefined", regardless of
             // what sort of Expr is provided.
-            def = min = max = Expr();
+            argument_estimates = ArgumentEstimates{};
         }
         Constant *argument_fields[] = {
             create_string_constant(map_string(args[arg].name)),
             ConstantInt::get(i32_t, args[arg].kind),
             ConstantInt::get(i32_t, args[arg].dimensions),
             type,
-            embed_constant_expr(def),
-            embed_constant_expr(min),
-            embed_constant_expr(max)
+            embed_constant_expr(argument_estimates.scalar_def),
+            embed_constant_expr(argument_estimates.scalar_min),
+            embed_constant_expr(argument_estimates.scalar_max)
         };
         arguments_array_entries.push_back(ConstantStruct::get(argument_t_type, argument_fields));
     }

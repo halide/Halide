@@ -1,3 +1,4 @@
+#include "Argument.h"
 #include "IR.h"
 #include "IROperator.h"
 #include "ObjectInstanceRegistry.h"
@@ -274,6 +275,24 @@ Expr Parameter::estimate() const {
     check_is_scalar();
     return contents->scalar_estimate;
 }
+
+ArgumentEstimates Parameter::get_argument_estimates() const {
+    ArgumentEstimates argument_estimates;
+    if (!is_buffer()) {
+        argument_estimates.scalar_def = scalar_expr();
+        argument_estimates.scalar_min = min_value();
+        argument_estimates.scalar_max = max_value();
+        argument_estimates.scalar_estimate = estimate();
+    } else {
+        argument_estimates.buffer_estimates.resize(dimensions());
+        for (int i = 0; i < dimensions(); i++) {
+            argument_estimates.buffer_estimates[i].min = min_constraint_estimate(i);
+            argument_estimates.buffer_estimates[i].extent = extent_constraint_estimate(i);
+        }
+    }
+    return argument_estimates;
+}
+
 
 void check_call_arg_types(const std::string &name, std::vector<Expr> *args, int dims) {
     user_assert(args->size() == (size_t)dims)

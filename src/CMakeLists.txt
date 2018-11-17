@@ -435,6 +435,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   AlignLoads.cpp
   AllocationBoundsInference.cpp
   ApplySplit.cpp
+  Argument.cpp
   AssociativeOpsTable.cpp
   Associativity.cpp
   AsyncProducers.cpp

@@ -14,6 +14,21 @@
 
 namespace Halide {
 
+struct ArgumentEstimates {
+    /** If this is a scalar argument, then these are its default, min, max, and estimated values.
+     * For buffer arguments, all should be undefined. */
+    Expr scalar_def, scalar_min, scalar_max, scalar_estimate;
+
+    /** If this is a buffer argument, these are the estimated min and extent for each dimension.
+     * If there are no estimates, buffer_estimates.size() can be zero; otherwise, it must always equal the dimensions */
+    struct MinAndExtent {
+        Expr min, extent;
+    };
+    std::vector<MinAndExtent> buffer_estimates;
+
+    bool operator==(const ArgumentEstimates &rhs) const;
+};
+
 /**
  * A struct representing an argument to a halide-generated
  * function. Used for specifying the function signature of
@@ -39,11 +54,11 @@ struct Argument {
         InputBuffer = halide_argument_kind_input_buffer,
         OutputBuffer = halide_argument_kind_output_buffer
     };
-    Kind kind;
+    Kind kind = InputScalar;
 
     /** If kind == InputBuffer|OutputBuffer, this is the dimensionality of the buffer.
      * If kind == InputScalar, this value is ignored (and should always be set to zero) */
-    uint8_t dimensions;
+    uint8_t dimensions = 0;
 
     /** If this is a scalar parameter, then this is its type.
      *
@@ -53,27 +68,14 @@ struct Argument {
      * Note that type.lanes should always be 1 here. */
     Type type;
 
-    /** If this is a scalar parameter, then these are its default, min, max values.
-     * By default, they are left unset, implying "no default, no min, no max". */
-    Expr def, min, max;
+    /* The estimates (if any) and default/min/max values (if any) for this Argument. */
+    ArgumentEstimates argument_estimates;
 
-    Argument() : kind(InputScalar), dimensions(0) {}
+    Argument() = default;
     Argument(const std::string &_name, Kind _kind, const Type &_type, int _dimensions,
-                Expr _def = Expr(),
-                Expr _min = Expr(),
-                Expr _max = Expr()) :
-        name(_name), kind(_kind), dimensions((uint8_t) _dimensions), type(_type), def(_def), min(_min), max(_max) {
-        internal_assert(_dimensions >= 0 && _dimensions <= 255);
-        user_assert(!(is_scalar() && dimensions != 0))
-            << "Scalar Arguments must specify dimensions of 0";
-        user_assert(!(is_buffer() && def.defined()))
-            << "Scalar default must not be defined for Buffer Arguments";
-        user_assert(!(is_buffer() && min.defined()))
-            << "Scalar min must not be defined for Buffer Arguments";
-        user_assert(!(is_buffer() && max.defined()))
-            << "Scalar max must not be defined for Buffer Arguments";
-    }
+             const ArgumentEstimates &argument_estimates);
 
+    // TODO: this should really be marked explicit
     template<typename T>
     Argument(Buffer<T> im) :
         name(im.name()),
@@ -92,9 +94,7 @@ struct Argument {
                kind == rhs.kind &&
                dimensions == rhs.dimensions &&
                type == rhs.type &&
-               def.same_as(rhs.def) &&
-               min.same_as(rhs.min) &&
-               max.same_as(rhs.max);
+               argument_estimates == rhs.argument_estimates;
     }
 };
 

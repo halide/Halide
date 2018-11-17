@@ -354,6 +354,7 @@ SOURCE_FILES = \
   AlignLoads.cpp \
   AllocationBoundsInference.cpp \
   ApplySplit.cpp \
+  Argument.cpp \
   AssociativeOpsTable.cpp \
   Associativity.cpp \
   AsyncProducers.cpp \
