@@ -38,8 +38,33 @@ int main(int argc, char **argv) {
     }
 
     Buffer<float> input;
+    Buffer<uint8_t>  uint8_weights;
+    Buffer<uint16_t>  uint16_weights;
+    Buffer<uint32_t>  uint32_weights;
+    Buffer<int8_t>  int8_weights;
+    Buffer<int16_t>  int16_weights;
+    Buffer<int32_t>  int32_weights;
+    Buffer<float>  float32_weights;
+    
     assert(input.is_bounds_query());
-    random_pipeline(input, output);
+    assert(uint8_weights.is_bounds_query());
+    assert(uint16_weights.is_bounds_query());
+    assert(uint32_weights.is_bounds_query());
+    assert(int8_weights.is_bounds_query());
+    assert(int16_weights.is_bounds_query());
+    assert(int32_weights.is_bounds_query());
+    assert(float32_weights.is_bounds_query());
+
+    random_pipeline(input, 
+                    uint8_weights,
+                    uint16_weights, 
+                    uint32_weights, 
+                    int8_weights, 
+                    int16_weights, 
+                    int32_weights, 
+                    float32_weights, 
+                    output);
+
     input.allocate();
     input.fill(0.0f);
 
