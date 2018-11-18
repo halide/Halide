@@ -75,7 +75,9 @@ struct Argument {
     Argument(const std::string &_name, Kind _kind, const Type &_type, int _dimensions,
              const ArgumentEstimates &argument_estimates);
 
-    // TODO: this should really be marked explicit
+    // Not explicit, so that you can put Buffer in an argument list,
+    // to indicate that it shouldn't be baked into the object file,
+    // but instead received as an argument at runtime
     template<typename T>
     Argument(Buffer<T> im) :
         name(im.name()),
