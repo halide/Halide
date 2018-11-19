@@ -1628,7 +1628,9 @@ struct halide_filter_argument_t {
 };
 
 struct halide_filter_metadata_t {
+#ifdef __cplusplus
     static const int32_t VERSION = 1;
+#endif
 
     /** version of this metadata; currently always 1. */
     int32_t version;
