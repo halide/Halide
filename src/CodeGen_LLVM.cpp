@@ -970,12 +970,13 @@ llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_
         }
 
         Constant *buffer_estimates_array_ptr;
-        if (args[arg].is_buffer()) {
+        if (args[arg].is_buffer() && !argument_estimates.buffer_estimates.empty()) {
+            internal_assert((int) argument_estimates.buffer_estimates.size() == args[arg].dimensions);
             vector<Constant *> buffer_estimates_array_entries;
-            for (int i = 0; i < args[arg].dimensions; ++i) {
-                Expr min = argument_estimates.buffer_estimates[i].min;
+            for (const auto &be : argument_estimates.buffer_estimates) {
+                Expr min = be.min;
                 if (min.defined()) min = cast<int64_t>(min);
-                Expr extent = argument_estimates.buffer_estimates[i].extent;
+                Expr extent = be.extent;
                 if (extent.defined()) extent = cast<int64_t>(extent);
                 buffer_estimates_array_entries.push_back(embed_constant_expr(min, i64_t));
                 buffer_estimates_array_entries.push_back(embed_constant_expr(extent, i64_t));
