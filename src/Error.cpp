@@ -2,6 +2,10 @@
 
 #include <signal.h>
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 namespace Halide {
 
 namespace {
@@ -10,14 +14,17 @@ CompileTimeErrorReporter* custom_error_reporter = nullptr;
 
 void error_abort() {
 #if defined(_MSC_VER) && defined(_DEBUG)
-    // Debug variants of the MSVC runtime will present an "Abort, Retry, Ignore"
-    // dialog in response to a call to abort(); we ~never want this. This is
-    // a close approximation that will kill the process in a similar way.
-    raise(SIGABRT);
-    exit(1);
-#else
-    abort();
+    if (!IsDebuggerPresent()) {
+        // Debug variants of the MSVC runtime will present an "Abort, Retry, Ignore"
+        // dialog in response to a call to abort(); we ~never want this unless there
+        // is a Debugger attached. This is a close approximation that will kill the
+        // process in a similar way. (Note that 3 is the exit code for the "abort" button.)
+        raise(SIGABRT);
+        exit(1);
+    }
 #endif
+
+    abort();
 }
 
 }  // namespace
