@@ -1628,7 +1628,7 @@ struct halide_filter_argument_t {
 };
 
 struct halide_filter_metadata_t {
-    enum { VERSION = 1 };
+    enum Version { VERSION = 1 };
 
     /** version of this metadata; currently always 1. */
     int32_t version;
