@@ -1,10 +1,24 @@
 #include "Error.h"
 
+#include <signal.h>
+
 namespace Halide {
 
 namespace {
 
 CompileTimeErrorReporter* custom_error_reporter = nullptr;
+
+void error_abort() {
+#if defined(_MSC_VER) && defined(_DEBUG)
+    // Debug variants of the MSVC runtime will present an "Abort, Retry, Ignore"
+    // dialog in response to a call to abort(); we ~never want this. This is
+    // a close approximation that will kill the process in a similar way.
+    raise(SIGABRT);
+    exit(1);
+#else
+    abort();
+#endif
+}
 
 }  // namespace
 
@@ -99,7 +113,7 @@ ErrorReport::~ErrorReport()
             custom_error_reporter->error(msg.str().c_str());
             // error() should not have returned to us, but just in case
             // it does, make sure we don't continue.
-            abort();
+            error_abort();
         }
     }
 
@@ -128,7 +142,7 @@ ErrorReport::~ErrorReport()
     }
 #else
     std::cerr << msg.str();
-    abort();
+    error_abort();
 #endif
 }
 }  // namespace Internal

@@ -719,6 +719,7 @@ RUNTIME_CPP_COMPONENTS = \
   osx_host_cpu_count \
   osx_opengl_context \
   osx_yield \
+  posix_abort \
   posix_allocator \
   posix_clock \
   posix_error_handler \
@@ -744,6 +745,7 @@ RUNTIME_CPP_COMPONENTS = \
   ssp \
   to_string \
   tracing \
+  windows_abort \
   windows_clock \
   windows_cuda \
   windows_get_symbol \
