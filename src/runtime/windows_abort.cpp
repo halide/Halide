@@ -1,7 +1,7 @@
 #include "runtime_internal.h"
 
-void exit(int);
-int raise(int);
+extern "C" void exit(int);
+extern "C" int raise(int);
 
 #define SIGABRT 22
 

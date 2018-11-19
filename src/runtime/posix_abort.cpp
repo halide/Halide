@@ -1,6 +1,6 @@
 #include "runtime_internal.h"
 
-void abort();
+extern "C" void abort();
 
 namespace Halide {
 namespace Runtime {
