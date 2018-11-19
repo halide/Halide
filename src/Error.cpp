@@ -2,10 +2,6 @@
 
 #include <signal.h>
 
-#ifdef _WIN32
-#include <windows.h>
-#endif
-
 namespace Halide {
 
 namespace {
@@ -13,8 +9,10 @@ namespace {
 CompileTimeErrorReporter* custom_error_reporter = nullptr;
 
 void error_abort() {
-#if defined(_MSC_VER) && defined(_DEBUG)
-    if (!IsDebuggerPresent()) {
+#ifdef _MSC_VER
+    const std::string s = Internal::get_env_variable("HL_DISABLE_WINDOWS_ABORT_DIALOG");
+    const int disable !s.empty() ? atoi(s.c_str()) : 0;
+    if (disable) {
         // Debug variants of the MSVC runtime will present an "Abort, Retry, Ignore"
         // dialog in response to a call to abort(); we ~never want this unless there
         // is a Debugger attached. This is a close approximation that will kill the

@@ -1,13 +1,8 @@
 #include "runtime_internal.h"
 
+extern "C" void abort();
 extern "C" void exit(int);
 extern "C" int raise(int);
-
-#ifdef BITS_64
-extern "C" bool IsDebuggerPresent();
-#else
-extern "C" __stdcall bool IsDebuggerPresent();
-#endif
 
 #define SIGABRT 22
 
@@ -16,9 +11,8 @@ namespace Runtime {
 namespace Internal {
 
 WEAK __attribute__((always_inline)) void halide_abort() {
-    if (IsDebuggerPresent()) {
-        abort();
-    } else {
+    char *s = getenv("HL_DISABLE_WINDOWS_ABORT_DIALOG");
+    if (s && atoi(s)) {
         // Debug variants of the MSVC runtime will present an "Abort, Retry, Ignore"
         // dialog in response to a call to abort(); we ~never want this unless there
         // is a Debugger attached. This is a close approximation that will kill the
@@ -26,6 +20,8 @@ WEAK __attribute__((always_inline)) void halide_abort() {
         raise(SIGABRT);
         exit(3);
     }
+
+    abort();
 }
 
 }}}
