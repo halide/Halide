@@ -14,9 +14,10 @@ void error_abort() {
     const int disable !s.empty() ? atoi(s.c_str()) : 0;
     if (disable) {
         // Debug variants of the MSVC runtime will present an "Abort, Retry, Ignore"
-        // dialog in response to a call to abort(); we ~never want this unless there
-        // is a Debugger attached. This is a close approximation that will kill the
-        // process in a similar way. (Note that 3 is the exit code for the "abort" button.)
+        // dialog in response to a call to abort(); we want to be able to disable this
+        // for (e.g.) buildbots, where we never want that behavior. This is a close approximation
+        // that will kill the process in a similar way.
+        // (Note that 3 is the exit code for the "abort" button.)
         raise(SIGABRT);
         exit(1);
     }
