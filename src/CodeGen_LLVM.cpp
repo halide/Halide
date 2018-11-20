@@ -546,10 +546,10 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
     internal_assert(scalar_value_t_type) << "Did not find halide_scalar_value_t in initial module";
 
     device_interface_t_type = module->getTypeByName("struct.halide_device_interface_t");
-    internal_assert(scalar_value_t_type) << "Did not find halide_device_interface_t in initial module";
+    internal_assert(device_interface_t_type) << "Did not find halide_device_interface_t in initial module";
 
     pseudostack_slot_t_type = module->getTypeByName("struct.halide_pseudostack_slot_t");
-    internal_assert(scalar_value_t_type) << "Did not find halide_pseudostack_slot_t in initial module";
+    internal_assert(pseudostack_slot_t_type) << "Did not find halide_pseudostack_slot_t in initial module";
 
     semaphore_t_type = module->getTypeByName("struct.halide_semaphore_t");
     internal_assert(semaphore_t_type) << "Did not find halide_semaphore_t in initial module";
@@ -878,9 +878,9 @@ void CodeGen_LLVM::compile_buffer(const Buffer<> &buf) {
     sym_push(buf.name() + ".buffer", global_ptr);
 }
 
-Constant* CodeGen_LLVM::embed_constant_expr(Expr e) {
+Constant* CodeGen_LLVM::embed_constant_expr(Expr e, llvm::Type *t) {
     if (!e.defined()) {
-        return Constant::getNullValue(scalar_value_t_type->getPointerTo());
+        return Constant::getNullValue(t->getPointerTo());
     }
 
     internal_assert(!e.type().is_handle()) << "Should never see Handle types here.";
@@ -899,7 +899,7 @@ Constant* CodeGen_LLVM::embed_constant_expr(Expr e) {
     Constant *zero[] = {ConstantInt::get(i32_t, 0)};
     return ConstantExpr::getBitCast(
         ConstantExpr::getInBoundsGetElementPtr(constant->getType(), storage, zero),
-        scalar_value_t_type->getPointerTo());
+        t->getPointerTo());
 }
 
 // Make a wrapper to call the function with an array of pointer
@@ -968,14 +968,44 @@ llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_
             // what sort of Expr is provided.
             argument_estimates = ArgumentEstimates{};
         }
+
+        Constant *buffer_estimates_array_ptr;
+        if (args[arg].is_buffer() && !argument_estimates.buffer_estimates.empty()) {
+            internal_assert((int) argument_estimates.buffer_estimates.size() == args[arg].dimensions);
+            vector<Constant *> buffer_estimates_array_entries;
+            for (const auto &be : argument_estimates.buffer_estimates) {
+                Expr min = be.min;
+                if (min.defined()) min = cast<int64_t>(min);
+                Expr extent = be.extent;
+                if (extent.defined()) extent = cast<int64_t>(extent);
+                buffer_estimates_array_entries.push_back(embed_constant_expr(min, i64_t));
+                buffer_estimates_array_entries.push_back(embed_constant_expr(extent, i64_t));
+            }
+
+            llvm::ArrayType *buffer_estimates_array = ArrayType::get(i64_t->getPointerTo(), buffer_estimates_array_entries.size());
+            GlobalVariable *buffer_estimates_array_storage = new GlobalVariable(
+                *module,
+                buffer_estimates_array,
+                /*isConstant*/ true,
+                GlobalValue::PrivateLinkage,
+                ConstantArray::get(buffer_estimates_array, buffer_estimates_array_entries));
+
+            Value *zeros[] = {zero, zero};
+            buffer_estimates_array_ptr = ConstantExpr::getInBoundsGetElementPtr(buffer_estimates_array, buffer_estimates_array_storage, zeros);
+        } else {
+            buffer_estimates_array_ptr = Constant::getNullValue(i64_t->getPointerTo()->getPointerTo());
+        }
+
         Constant *argument_fields[] = {
             create_string_constant(map_string(args[arg].name)),
             ConstantInt::get(i32_t, args[arg].kind),
             ConstantInt::get(i32_t, args[arg].dimensions),
             type,
-            embed_constant_expr(argument_estimates.scalar_def),
-            embed_constant_expr(argument_estimates.scalar_min),
-            embed_constant_expr(argument_estimates.scalar_max)
+            embed_constant_expr(argument_estimates.scalar_def, scalar_value_t_type),
+            embed_constant_expr(argument_estimates.scalar_min, scalar_value_t_type),
+            embed_constant_expr(argument_estimates.scalar_max, scalar_value_t_type),
+            embed_constant_expr(argument_estimates.scalar_estimate, scalar_value_t_type),
+            buffer_estimates_array_ptr
         };
         arguments_array_entries.push_back(ConstantStruct::get(argument_t_type, argument_fields));
     }
@@ -987,9 +1017,11 @@ llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_
         GlobalValue::PrivateLinkage,
         ConstantArray::get(arguments_array, arguments_array_entries));
 
+    Constant *version = ConstantInt::get(i32_t, halide_filter_metadata_t::VERSION);
+
     Value *zeros[] = {zero, zero};
     Constant *metadata_fields[] = {
-        /* version */ zero,
+        /* version */ version,
         /* num_arguments */ ConstantInt::get(i32_t, num_args),
         /* arguments */ ConstantExpr::getInBoundsGetElementPtr(arguments_array, arguments_array_storage, zeros),
         /* target */ create_string_constant(map_string(target.to_string())),
