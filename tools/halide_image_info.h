@@ -37,12 +37,12 @@ static inline void print_dimid(int d, int val) {
     }
 }
 
-static inline void print_loc(const std::vector<int32_t> &loc, int dim, const int32_t *min) {
+static inline void print_loc(const std::vector<int32_t> &loc, int dim, const halide_buffer_t *buf) {
     for (int d = 0; d < dim; d++) {
         if (d) {
             std::cout << ",";
         }
-        std::cout << loc[d] + min[d];
+        std::cout << loc[d] + buf->dim[d].min;
     }
 }
 
@@ -71,27 +71,24 @@ static inline void print_memalign(intptr_t val) {
 
 template<typename T>
 void info(Runtime::Buffer<T> &img, const char *tag = "Buffer") {
-    buffer_t *buf = &(*img);
-    int32_t *min = buf->min;
-    int32_t *extent = buf->extent;
-    int32_t *stride = buf->stride;
+    halide_buffer_t *buf = &(*img);
     int dim = img.dimensions();
-    int img_bpp = buf->elem_size;
+    int img_bpp = buf->type.bytes();
     int img_tsize = sizeof(T);
     int img_csize = sizeof(Runtime::Buffer<T>);
     int img_bsize = sizeof(buffer_t);
     int32_t size = 1;
-    uint64_t dev = buf->dev;
-    bool host_dirty = buf->host_dirty;
-    bool dev_dirty = buf->dev_dirty;
+    uint64_t dev = buf->device;
+    bool host_dirty = buf->host_dirty();
+    bool dev_dirty = buf->device_dirty();
 
     std::cout << std::endl
               << "-----------------------------------------------------------------------------";
     std::cout << std::endl << "Buffer info: " << tag
               << " dim:" << dim << " bpp:" << img_bpp;
     for (int d = 0; d < dim; d++) {
-        print_dimid(d, extent[d]);
-        size *= extent[d];
+        print_dimid(d, buf->dim[d].extent);
+        size *= buf->dim[d].extent;
     }
     std::cout << std::endl;
     std::cout << tag << " class       = 0x" << std::left << std::setw(10) << (void*)img
@@ -122,25 +119,25 @@ void info(Runtime::Buffer<T> &img, const char *tag = "Buffer") {
     std::cout << tag << " channels    = " << img.channels() << std::endl;
     std::cout << tag << " extent[]    = ";
     for (int d = 0; d < dim; d++) {
-        std::cout << extent[d] << " ";
+        std::cout << buf->dim[d].extent << " ";
     }
     std::cout << std::endl;
     std::cout << tag << " min[]       = ";
     for (int d = 0; d < dim; d++) {
-        std::cout << min[d] << " ";
+        std::cout << buf->dim[d].min << " ";
     }
     std::cout << std::endl;
     std::cout << tag << " stride[]    = ";
     for (int d = 0; d < dim; d++) {
-        std::cout << stride[d] << " ";
+        std::cout << buf->dim[d].stride << " ";
     }
     std::cout << std::endl;
     if (img_bpp > 1) {
         for (int d = 0; d < dim; d++) {
             std::cout << tag << " str[" << d << "]*bpp  = "
-                             << std::left << std::setw(12) << stride[d] * img_bpp
+                             << std::left << std::setw(12) << buf->dim[d].stride * img_bpp
                              << std::right << " # ";
-            print_memalign(stride[d] * img_bpp); std::cout << std::endl;
+            print_memalign(buf->dim[d].stride * img_bpp); std::cout << std::endl;
         }
     }
 
@@ -168,19 +165,16 @@ void info(Runtime::Buffer<T> &img, const char *tag = "Buffer") {
 
 template<typename T>
 void dump(Runtime::Buffer<T> &img, const char *tag = "Buffer") {
-    buffer_t *buf = &(*img);
-    int32_t *min = buf->min;
-    int32_t *extent = buf->extent;
-    int32_t *stride = buf->stride;
+    halide_buffer_t *buf = &(*img);
     int dim = img.dimensions();
-    int bpp = buf->elem_size;
+    int bpp = buf->type.bytes();
     int32_t size = 1;
 
     std::cout << std::endl << "Buffer dump: " << tag
               << " dim:" << dim << " bpp:" << bpp;
     for (int d = 0; d < dim; d++) {
-        print_dimid(d, extent[d]);
-        size *= extent[d];
+        print_dimid(d, buf->dim[d].extent);
+        size *= buf->dim[d].extent;
     }
 
     // Arbitrary dimension image traversal
@@ -194,7 +188,7 @@ void dump(Runtime::Buffer<T> &img, const char *tag = "Buffer") {
     for (int32_t i = 0; i < size; i++) {
         // Track changes in position in higher dimensions
         for (int d = 1; d < dim; d++) {
-            if ((i % stride[d]) == 0) {
+            if ((i % buf->dim[d].stride) == 0) {
                 curloc[d]++;
                 for (int din = 0; din < d; din++) {
                     curloc[din] = 0;
@@ -202,7 +196,7 @@ void dump(Runtime::Buffer<T> &img, const char *tag = "Buffer") {
                 std::cout << std::endl;
                 // Print separators for dimensions beyond (x0,y1)
                 if (d > 1) {
-                    print_dimid(d, curloc[d]+min[d]);
+                    print_dimid(d, curloc[d]+buf->dim[d].min);
                     std::cout << "\n==========================================";
                 }
             }
@@ -213,10 +207,10 @@ void dump(Runtime::Buffer<T> &img, const char *tag = "Buffer") {
             int widx = 0;
             std::ostringstream idx;
             if (dim > 1) {   // Multi-dim, just report (x0,y1) on each row
-               idx << "(" << curloc[0]+min[0] << "," << curloc[1]+min[1] << ")";
+               idx << "(" << curloc[0]+buf->dim[0].min << "," << curloc[1]+buf->dim[1].min << ")";
                widx = 12;
             } else {         // Single-dim
-               idx << curloc[0]+min[0];
+               idx << curloc[0]+buf->dim[0].min;
                widx = 4;
             }
             std::cout << std::endl << std::setw(widx) << idx.str() << ": ";
@@ -232,18 +226,15 @@ void dump(Runtime::Buffer<T> &img, const char *tag = "Buffer") {
 
 template<typename T>
 void stats(Runtime::Buffer<T> &img, const char *tag = "Buffer") {
-    buffer_t *buf = &(*img);
-    int32_t *min = buf->min;
-    int32_t *extent = buf->extent;
-    int32_t *stride = buf->stride;
+    halide_buffer_t *buf = &(*img);
     int dim = img.dimensions();
-    int bpp = buf->elem_size;
+    int bpp = buf->type.bytes();
     int32_t size = 1;
     std::cout << std::endl << "Buffer stats: " << tag
               << " dim:" << dim << " bpp:" << bpp;
     for (int d = 0; d < dim; d++) {
-        print_dimid(d, extent[d]);
-        size *= extent[d];
+        print_dimid(d, buf->dim[d].extent);
+        size *= buf->dim[d].extent;
     }
 
     // Arbitrary dimension image traversal
@@ -269,7 +260,7 @@ void stats(Runtime::Buffer<T> &img, const char *tag = "Buffer") {
     for (int32_t i = 0; i < size; i++) {
         // Track changes in position in higher dimensions
         for (int d = 1; d < dim; d++) {
-            if ((i % stride[d]) == 0) {
+            if ((i % buf->dim[d].stride) == 0) {
                 curloc[d]++;
                 for (int din = 0; din < d; din++) {
                     curloc[din] = 0;
@@ -300,10 +291,10 @@ void stats(Runtime::Buffer<T> &img, const char *tag = "Buffer") {
     double avg = sum / cnt;
     std::cout << std::endl;
     std::cout << "min        = " << minval + 0 << " @ (";
-    print_loc(minloc, dim, min);
+    print_loc(minloc, dim, buf);
     std::cout << ")" << std::endl;
     std::cout << "max        = " << maxval + 0 << " @ (";
-    print_loc(maxloc, dim, min);
+    print_loc(maxloc, dim, buf);
     std::cout << ")" << std::endl;
     std::cout << "mean       = " << avg << std::endl;
     std::cout << "N          = " << cnt << std::endl;

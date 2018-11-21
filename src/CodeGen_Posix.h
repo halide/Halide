@@ -26,8 +26,8 @@ protected:
      * on the stack. The rest go on the heap by calling "halide_malloc"
      * and "halide_free" in the standard library. */
     // @{
-    void visit(const Allocate *);
-    void visit(const Free *);
+    void visit(const Allocate *) override;
+    void visit(const Free *) override;
     // @}
 
     /** It can be convenient for backends to assume there is extra
@@ -39,24 +39,28 @@ protected:
     /** A struct describing heap or stack allocations. */
     struct Allocation {
         /** The memory */
-        llvm::Value *ptr;
+        llvm::Value *ptr = nullptr;
 
         /** Destructor stack slot for this allocation. */
-        llvm::Value *destructor;
+        llvm::Value *destructor = nullptr;
 
         /** Function to accomplish the destruction. */
-        llvm::Function *destructor_function;
+        llvm::Function *destructor_function = nullptr;
+
+        /** Pseudostack slot for this allocation. Non-null for
+         * allocations of type Stack with dynamic size. */
+        llvm::Value *pseudostack_slot = nullptr;
 
         /** The (Halide) type of the allocation. */
         Type type;
 
         /** How many bytes this allocation is, or 0 if not
          * constant. */
-        int constant_bytes;
+        int constant_bytes = 0;
 
         /** How many bytes of stack space used. 0 implies it was a
          * heap allocation. */
-        int stack_bytes;
+        int stack_bytes = 0;
 
         /** A unique name for this allocation. May not be equal to the
          * Allocate node name in cases where we detect multiple
@@ -68,7 +72,7 @@ protected:
      * we enter a new function. */
     Scope<Allocation> allocations;
 
-    std::string get_allocation_name(const std::string &n);
+    std::string get_allocation_name(const std::string &n) override;
 
 private:
 
@@ -100,16 +104,16 @@ private:
      *
      * When the allocation can be freed call 'free_allocation', and
      * when it goes out of scope call 'destroy_allocation'. */
-    Allocation create_allocation(const std::string &name, Type type,
+    Allocation create_allocation(const std::string &name, Type type, MemoryType memory_type,
                                  const std::vector<Expr> &extents,
                                  Expr condition, Expr new_expr, std::string free_function);
 
     /** Free an allocation previously allocated with
      * create_allocation */
     void free_allocation(const std::string &name);
-
 };
 
-}}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

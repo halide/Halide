@@ -15,7 +15,7 @@ namespace Internal {
  * by the nesting order: innermost is assigned to x and so on. */
 Stmt canonicalize_gpu_vars(Stmt s);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

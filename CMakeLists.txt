@@ -2,6 +2,21 @@
 project(Halide)
 cmake_minimum_required(VERSION 3.2)
 
+set(HALIDE_BASE_DIR   "${CMAKE_CURRENT_SOURCE_DIR}")
+
+set(CPACK_PACKAGE_VENDOR "Halide")
+set(CPACK_RESOURCE_FILE_LICENSE "${HALIDE_BASE_DIR}/LICENSE.txt")
+set(CPACK_MONOLITHIC_INSTALL OFF)
+if (WIN32)
+  set(CPACK_GENERATOR "ZIP")
+else()
+  set(CPACK_GENERATOR "TGZ")
+endif()
+# Remove this to get package names that are formatted as
+# ${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION}-${CPACK_SYSTEM_NAME}.
+set(CPACK_PACKAGE_FILE_NAME "Halide" CACHE STRING "Name of package created by distrib target")
+include(CPack)
+
 find_package(Threads QUIET)
 
 if("${HALIDE_REQUIRE_LLVM_VERSION}" STREQUAL "")
@@ -22,8 +37,8 @@ endif()
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 
-if (MSVC)
-  # LLVM5.x on Windows can include "$(Configuration) in the path";
+if (MSVC AND NOT CMAKE_CONFIGURATION_TYPES)
+  # LLVM5.x on Windows can include "$(Configuration)" in the path;
   # fix this so we can use the paths right away.
   string(REPLACE "$(Configuration)" ${CMAKE_BUILD_TYPE} LLVM_TOOLS_BINARY_DIR "${LLVM_TOOLS_BINARY_DIR}")
 endif()
@@ -42,6 +57,8 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 set(CMAKE_MACOSX_RPATH ON)
 
+# Export all symbols
+SET(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
 
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
@@ -54,7 +71,7 @@ file(TO_NATIVE_PATH "${LLVM_TOOLS_BINARY_DIR}/llvm-nm${CMAKE_EXECUTABLE_SUFFIX}"
 file(TO_NATIVE_PATH "${LLVM_TOOLS_BINARY_DIR}/clang${CMAKE_EXECUTABLE_SUFFIX}" CLANG)
 file(TO_NATIVE_PATH "${LLVM_TOOLS_BINARY_DIR}/llvm-config${CMAKE_EXECUTABLE_SUFFIX}" LLVM_CONFIG)
 
-# LLVM doesn't appear to expose --system-libs via its CMake interface, 
+# LLVM doesn't appear to expose --system-libs via its CMake interface,
 # so we must shell out to llvm-config to find this info
 execute_process(COMMAND ${LLVM_CONFIG} --system-libs --link-static OUTPUT_VARIABLE HALIDE_SYSTEM_LIBS_RAW)
 string(STRIP "${HALIDE_SYSTEM_LIBS_RAW}" HALIDE_SYSTEM_LIBS_RAW)  # strip whitespace from start & end
@@ -79,6 +96,11 @@ function(check_tool_exists NAME PATH)
   # Need to convert to CMake path so that backslashes don't get
   # interpreted as an escape.
   file(TO_CMAKE_PATH "${PATH}" TOOL_PATH)
+  if (MSVC)
+    # LLVM5.x on Windows can include "$(Configuration)" in the path;
+    # fix this so we can use the paths right away.
+    string(REPLACE "$(Configuration)" ${CMAKE_BUILD_TYPE} TOOL_PATH "${TOOL_PATH}")
+  endif()
   if (NOT EXISTS "${TOOL_PATH}")
     message(FATAL_ERROR "Tool ${NAME} not found at ${TOOL_PATH}")
   endif()
@@ -92,10 +114,10 @@ check_tool_exists(clang "${CLANG}")
 
 # Check reported LLVM version
 if (NOT "${LLVM_VERSION}" MATCHES "^[0-9][0-9]$")
-  message(FATAL_ERROR "LLVM_VERSION not specified correctly. Must be <major><minor> E.g. LLVM 4.0 is \"40\"")
+  message(FATAL_ERROR "LLVM_VERSION not specified correctly. Must be <major><minor> E.g. LLVM 7.0 is \"70\"")
 endif()
-if (LLVM_VERSION LESS 40)
-  message(FATAL_ERROR "LLVM version must be 4.0 or newer")
+if (LLVM_VERSION LESS 60)
+  message(FATAL_ERROR "LLVM version must be 6.0 or newer")
 endif()
 
 function(check_llvm_target TARGET HAS_TARGET)
@@ -121,6 +143,8 @@ check_llvm_target(Hexagon WITH_HEXAGON 40)
 check_llvm_target(Mips WITH_MIPS)
 check_llvm_target(PowerPC WITH_POWERPC)
 check_llvm_target(NVPTX WITH_NVPTX)
+# AMDGPU target is WIP
+check_llvm_target(AMDGPU WITH_AMDGPU)
 
 option(TARGET_NATIVE_CLIENT "Include Native Client" OFF)
 option(TARGET_X86 "Include x86 target" ${WITH_X86})
@@ -131,10 +155,13 @@ option(TARGET_METAL "Include Metal target" ON)
 option(TARGET_MIPS "Include MIPS target" ${WITH_MIPS})
 option(TARGET_POWERPC "Include POWERPC target" ${WITH_POWERPC})
 option(TARGET_PTX "Include PTX target" ${WITH_NVPTX})
+option(TARGET_AMDGPU "Include AMDGPU target" ${WITH_AMDGPU})
 option(TARGET_OPENCL "Include OpenCL-C target" ON)
 option(TARGET_OPENGL "Include OpenGL/GLSL target" ON)
 option(TARGET_OPENGLCOMPUTE "Include OpenGLCompute target" ON)
+option(TARGET_D3D12COMPUTE "Include Direct3D 12 Compute target" ON)
 option(HALIDE_SHARED_LIBRARY "Build as a shared library" ON)
+option(HALIDE_ENABLE_RTTI "Enable RTTI" ${LLVM_ENABLE_RTTI})
 
 if (HALIDE_SHARED_LIBRARY)
   set(HALIDE_LIBRARY_TYPE SHARED)
@@ -142,15 +169,24 @@ else()
   set(HALIDE_LIBRARY_TYPE STATIC)
 endif()
 
+if (HALIDE_ENABLE_RTTI AND NOT LLVM_ENABLE_RTTI)
+  message(FATAL_ERROR "Can't enable RTTI. LLVM was compiled without it")
+endif()
+
 function(halide_project name folder)
   add_executable("${name}" ${ARGN})
   if (MSVC)
+    if(NOT HALIDE_ENABLE_RTTI)
+      target_compile_options("${name}" PUBLIC "/GR-")
+    endif()
   else()
-    target_compile_options("${name}" PUBLIC "-fno-rtti")
+    if (NOT HALIDE_ENABLE_RTTI)
+      target_compile_options("${name}" PUBLIC "-fno-rtti")
+    endif()
   endif()
   target_link_libraries("${name}" PRIVATE Halide ${CMAKE_DL_LIBS} ${CMAKE_THREAD_LIBS_INIT})
-  target_include_directories("${name}" PRIVATE "${CMAKE_SOURCE_DIR}/src")
-  target_include_directories("${name}" PRIVATE "${CMAKE_SOURCE_DIR}/tools")
+  target_include_directories("${name}" PRIVATE "${HALIDE_BASE_DIR}/src")
+  target_include_directories("${name}" PRIVATE "${HALIDE_BASE_DIR}/tools")
   set_target_properties("${name}" PROPERTIES FOLDER "${folder}")
   if (MSVC)
     target_link_libraries("${name}" PRIVATE Kernel32)
@@ -166,11 +202,14 @@ else()
 endif()
 
 if (NOT MSVC)
-    add_compile_options(-Wall
-                        -Wno-unused-function
-                        -Wcast-qual
-                        -Woverloaded-virtual
-                        -Wignored-qualifiers)
+  add_compile_options(-Wall
+                      -Wno-unused-function
+                      -Wcast-qual
+                      -Woverloaded-virtual
+                      -Wignored-qualifiers)
+  if (CMAKE_COMPILER_IS_GNUCC AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 5.1)
+    add_compile_options(-Wsuggest-override)
+  endif()
   if (WARNINGS_AS_ERRORS)
     add_compile_options(-Werror)
   endif()
@@ -179,6 +218,7 @@ else()
   add_compile_options(/wd4018)  # disable "signed/unsigned mismatch"
   add_compile_options(/wd4503)  # disable "decorated name length exceeded, name was truncated"
   add_compile_options(/wd4267)  # disable "conversion from 'size_t' to 'int', possible loss of data"
+  add_compile_options(/wd4800)  # forcing value to bool 'true' or 'false' (performance warning)
   if (WARNINGS_AS_ERRORS)
     add_compile_options(/WX)
   endif()
@@ -203,7 +243,7 @@ endif()
 # For in-tree builds, we need to set the input variables for halide.cmake
 # to specific values, rather than relying on HALIDE_DISTRIB_DIR to be set correctly.
 set(HALIDE_INCLUDE_DIR "${CMAKE_BINARY_DIR}/include")
-set(HALIDE_TOOLS_DIR "${CMAKE_SOURCE_DIR}/tools")
+set(HALIDE_TOOLS_DIR "${HALIDE_BASE_DIR}/tools")
 set(HALIDE_COMPILER_LIB Halide)
 set(HALIDE_DISTRIB_DIR "/bad-path")
 include(halide.cmake)
@@ -231,7 +271,7 @@ endforeach()
 
 function(define_test_group GROUP)
   if(TARGET "${GROUP}")
-    message(FATAL_ERROR "Group ${GROUP} is already defined.")    
+    message(FATAL_ERROR "Group ${GROUP} is already defined.")
   endif()
   add_custom_target("${GROUP}")
   set_target_properties("${GROUP}" PROPERTIES EXCLUDE_FROM_ALL TRUE)
@@ -276,11 +316,11 @@ function(add_test TARGET)
   get_target_property(TARGET_TYPE "${TARGET}" TYPE)
   if("${TARGET_TYPE}" STREQUAL "EXECUTABLE")
     if(${args_EXPECT_FAILURE})
-      set(COMMAND "${CMAKE_SOURCE_DIR}/test/common/expect_failure.sh" "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${TARGET}")
+      set(COMMAND "${HALIDE_BASE_DIR}/test/common/expect_failure.sh" "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${TARGET}")
     else()
       set(COMMAND "${TARGET}")
     endif()
-    add_custom_target("${EXEC_NAME}" 
+    add_custom_target("${EXEC_NAME}"
                      COMMAND ${COMMAND}
                      WORKING_DIRECTORY ${args_WORKING_DIRECTORY}
                      COMMENT "Executing ${TARGET}"
@@ -321,15 +361,12 @@ endif()
 
 option(WITH_APPS "Build apps" ON)
 if (WITH_APPS)
-  if (NOT WIN32)
-    message(STATUS "Building apps enabled")
-    add_subdirectory(apps)
-  else()
-    message(WARNING "Apps cannot be built under Windows using cmake. Try the makefile in an msys2 shell.")
-  endif()
+  message(STATUS "Building apps enabled")
+  add_subdirectory(apps)
 else()
   message(STATUS "Building apps disabled")
 endif()
+
 option(WITH_TUTORIALS "Build Tutorials" ON)
 if (WITH_TUTORIALS)
   message(STATUS "Building tutorials enabled")
@@ -345,7 +382,7 @@ find_package(Doxygen)
     message(FATAL_ERROR "Could not find Doxygen. Either install it or set WITH_DOCS to OFF")
   endif()
 
-  configure_file(${CMAKE_SOURCE_DIR}/Doxyfile.in ${CMAKE_BINARY_DIR}/Doxyfile @ONLY)
+  configure_file(${HALIDE_BASE_DIR}/Doxyfile.in ${CMAKE_BINARY_DIR}/Doxyfile @ONLY)
   # Note documentation is not built by default, the user needs to build the "doc" target
   add_custom_target(doc
     COMMAND ${DOXYGEN_EXECUTABLE} ${CMAKE_BINARY_DIR}/Doxyfile
@@ -363,149 +400,78 @@ else()
 endif()
 
 # ------------------------------------------------
-# 'make distrib' support
+# install
 
-add_custom_target(build_distrib_dir)
-set(DISTRIB_DIR "${CMAKE_BINARY_DIR}/distrib")
-
-function(_make_distrib_subdir TARGET DIR)
-  set(NAME "_make_distrib_dir_${TARGET}")
-  add_custom_target("${NAME}" 
-                    COMMAND cmake -E make_directory "${DISTRIB_DIR}/${DIR}")
-  set_target_properties("${NAME}" PROPERTIES EXCLUDE_FROM_ALL TRUE)
-  add_dependencies("${TARGET}" "${NAME}" )
-endfunction()
-
-# Copy the file produced by TARGET into the distrib folder, in the subdir DIR
-function(add_to_distrib TARGET DIR)
-  set(options )
-  set(oneValueArgs )
-  set(multiValueArgs DEPS)
-  cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
-  if(TARGET "${TARGET}")
-    set(NAME "_distrib_${TARGET}")
-    get_target_property(TARGET_TYPE "${TARGET}" TYPE)
-    if("${TARGET_TYPE}" STREQUAL "EXECUTABLE" OR 
-       "${TARGET_TYPE}" STREQUAL "STATIC_LIBRARY" OR
-       "${TARGET_TYPE}" STREQUAL "SHARED_LIBRARY")
-      add_custom_target("${NAME}" 
-                         COMMAND cmake -E copy $<TARGET_FILE:${TARGET}> "${DISTRIB_DIR}/${DIR}"
-                         DEPENDS "${TARGET}")
-      _make_distrib_subdir("${NAME}" "${DIR}")
-    else()
-      message(FATAL_ERROR "TARGET ${TARGET} has type ${TARGET_TYPE}")
-    endif()
-    set_target_properties("${NAME}" PROPERTIES EXCLUDE_FROM_ALL TRUE)
-  else()
-    get_filename_component(FNAME "${TARGET}" NAME)
-    set(NAME "_distrib_${DIR}_${FNAME}")
-    string(REPLACE "/" "_" NAME "${NAME}")
-    string(REPLACE "\\" "_" NAME "${NAME}")
-    add_custom_target("${NAME}" 
-                       COMMAND cmake -E copy "${TARGET}" "${DISTRIB_DIR}/${DIR}"
-                       DEPENDS "${TARGET}")
-    _make_distrib_subdir("${NAME}" "${DIR}")
-  endif()
-  if(NOT "${args_DEPS}" STREQUAL "")
-    add_dependencies("${NAME}" ${args_DEPS})
-  endif()
-  add_dependencies(build_distrib_dir "${NAME}")
-endfunction()
-
-# ---- libHalide
-if("${HALIDE_LIBRARY_TYPE}" STREQUAL "SHARED")
-  add_to_distrib(Halide bin)
-else()
-  add_to_distrib(Halide lib)
-endif()
-
-# ---- Header files
-add_to_distrib("${CMAKE_BINARY_DIR}/include/Halide.h" include
-               DEPS HalideIncludes)
-add_to_distrib("${CMAKE_BINARY_DIR}/include/HalideBuffer.h" include)
 file(GLOB FILES "${CMAKE_BINARY_DIR}/include/HalideRuntime*.h")
-foreach(F ${FILES})
-  add_to_distrib(${F} include)
-endforeach()
+install(FILES
+        "${CMAKE_BINARY_DIR}/include/Halide.h"
+        "${CMAKE_BINARY_DIR}/include/HalideBuffer.h"
+        ${FILES}
+        DESTINATION include
+        )
 
-# ---- Tutorials
-foreach(EXT cpp h sh)
-  set(DIR "${CMAKE_SOURCE_DIR}/tutorial")
-  file(GLOB FILES "${DIR}/*.${EXT}")
-  foreach(F ${FILES})
-    add_to_distrib(${F} tutorial)
-  endforeach()
-endforeach()
-foreach(EXT gif jpg mp4)
-  set(DIR "${CMAKE_SOURCE_DIR}/tutorial/figures")
-  file(GLOB FILES "${DIR}/*.${EXT}")
-  foreach(F ${FILES})
-    add_to_distrib(${F} tutorial/figures)
-  endforeach()
-endforeach()
-foreach(EXT png)
-  set(DIR "${CMAKE_SOURCE_DIR}/tutorial/images")
-  file(GLOB FILES "${DIR}/*.${EXT}")
-  foreach(F ${FILES})
-    add_to_distrib(${F} tutorial/images)
-  endforeach()
-endforeach()
+install(DIRECTORY tutorial
+        DESTINATION tutorial
+        FILES_MATCHING
+        PATTERN "*.h"
+        PATTERN "*.sh"
+        PATTERN "*.gif"
+        PATTERN "*.jpg"
+        PATTERN "*.mp4"
+        PATTERN "*.png")
 
 # ---- Tools
-foreach(F mex_halide.m 
-          GenGen.cpp 
-          RunGen.cpp 
-          RunGenStubs.cpp 
-          halide_benchmark.h  
-          halide_image.h 
-          halide_image_io.h 
-          halide_image_info.h)
-  add_to_distrib("${CMAKE_SOURCE_DIR}/tools/${F}" tools)
+foreach(F mex_halide.m
+          GenGen.cpp
+          RunGen.h
+          RunGenMain.cpp
+          RunGenStubs.cpp
+          halide_benchmark.h
+          halide_image.h
+          halide_image_io.h
+          halide_image_info.h
+          halide_malloc_trace.h
+          halide_trace_config.h)
+  install(FILES "${HALIDE_BASE_DIR}/tools/${F}"
+          DESTINATION tools)
 endforeach()
 
 # ---- README
-file(GLOB FILES "${CMAKE_SOURCE_DIR}/*.md")
-foreach(F ${FILES})
-  add_to_distrib(${F} "")
-endforeach()
+file(GLOB FILES "${HALIDE_BASE_DIR}/*.md")
+install(FILES ${FILES}
+        DESTINATION .)
 
-# ---- Bazel 
-file(GLOB FILES "${CMAKE_SOURCE_DIR}/bazel/*")
-foreach(F ${FILES})
-  add_to_distrib(${F} "")
-endforeach()
+# ---- Bazel
+file(GLOB FILES "${HALIDE_BASE_DIR}/bazel/*")
+install(FILES ${FILES}
+        DESTINATION .)
 
-# ---- CMake 
-file(GLOB FILES "${CMAKE_SOURCE_DIR}/*.cmake")
-foreach(F ${FILES})
-  add_to_distrib(${F} "")
-endforeach()
+# ---- CMake
+file(GLOB FILES "${HALIDE_BASE_DIR}/*.cmake")
+install(FILES ${FILES}
+        DESTINATION .)
 
-# ---- halide_config 
-file(GLOB FILES "${CMAKE_SOURCE_DIR}/tools/halide_config.*.tpl")
+# ---- halide_config
+file(GLOB FILES "${HALIDE_BASE_DIR}/tools/halide_config.*.tpl")
 foreach(F ${FILES})
-  # Can't rely on sed on Windows, so just do the trivial transform we need right here.
-  file(READ ${F} CONTENTS)
   get_filename_component(FNAME "${F}" NAME)  # Extract filename
   string(REGEX REPLACE "\\.tpl$" "" FNAME "${FNAME}")  # Strip .tpl extension
-  string(REPLACE "\${LLVM_SYSTEM_LIBS}" "${HALIDE_SYSTEM_LIBS_RAW}" NEW_CONTENTS "${CONTENTS}")
-  file(WRITE "${CMAKE_BINARY_DIR}/${FNAME}" ${NEW_CONTENTS})
-  add_to_distrib("${CMAKE_BINARY_DIR}/${FNAME}" "")
+  configure_file("${F}" "${CMAKE_BINARY_DIR}/${FNAME}" @ONLY)
+  install(FILES "${CMAKE_BINARY_DIR}/${FNAME}"
+          DESTINATION .)
 endforeach()
 
-# ---- distrib.tgz and distrib.zip
-file(TO_NATIVE_PATH "${DISTRIB_DIR}" NATIVE_DISTRIB_DIR)
-file(TO_NATIVE_PATH "${DISTRIB_DIR}/../" NATIVE_ARCHIVE_DIR)
-if (MSVC)
-  # 'cmake -E tar' can create zipfiles as of v3.2+
-  add_custom_target(halide_archive
-      DEPENDS build_distrib_dir
-      COMMAND cmake -E tar -cf "${NATIVE_ARCHIVE_DIR}/halide.zip" --format=zip "${NATIVE_DISTRIB_DIR}")
+if (NOT WIN32)
+  set(CPACK_PACKAGE_EXT "tar.gz")
+  set(DISTRIB_PACKAGE_EXT "tgz")
 else()
-  add_custom_target(halide_archive
-      DEPENDS build_distrib_dir
-      COMMAND cmake -E tar -czf "${NATIVE_ARCHIVE_DIR}/halide.tgz" "${NATIVE_DISTRIB_DIR}")
+  set(CPACK_PACKAGE_EXT "zip")
+  set(DISTRIB_PACKAGE_EXT ${CPACK_PACKAGE_EXT})
 endif()
 
-add_custom_target(distrib)
-add_dependencies(distrib build_distrib_dir halide_archive)
+add_custom_target(distrib
+  COMMAND cmake --build . --config $<CONFIG> --target package
+  COMMAND cmake -E echo "${CPACK_PACKAGE_VENDOR}.${CPACK_PACKAGE_EXT} \"=>\" ${CPACK_PACKAGE_VENDOR}.${DISTRIB_PACKAGE_EXT}"
+  COMMAND cmake -E rename "${CPACK_PACKAGE_VENDOR}.${CPACK_PACKAGE_EXT}" "${CPACK_PACKAGE_VENDOR}.${DISTRIB_PACKAGE_EXT}"
+  BYPRODUCTS "${CPACK_PACKAGE_VENDOR}.${DISTRIB_PACKAGE_EXT}"
+  USES_TERMINAL)

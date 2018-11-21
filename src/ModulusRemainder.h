@@ -29,29 +29,29 @@ struct ModulusRemainder {
  * aligned load. If all else fails, we can just say that an integer is
  * congruent to zero modulo one.
  */
-EXPORT ModulusRemainder modulus_remainder(Expr e);
+ModulusRemainder modulus_remainder(Expr e);
 
 /** If we have alignment information about external variables, we can
  * let the analysis know about that using this version of
  * modulus_remainder: */
-EXPORT ModulusRemainder modulus_remainder(Expr e, const Scope<ModulusRemainder> &scope);
+ModulusRemainder modulus_remainder(Expr e, const Scope<ModulusRemainder> &scope);
 
 /** Reduce an expression modulo some integer. Returns true and assigns
  * to remainder if an answer could be found. */
 ///@{
-EXPORT bool reduce_expr_modulo(Expr e, int modulus, int *remainder);
-EXPORT bool reduce_expr_modulo(Expr e, int modulus, int *remainder, const Scope<ModulusRemainder> &scope);
+bool reduce_expr_modulo(Expr e, int modulus, int *remainder);
+bool reduce_expr_modulo(Expr e, int modulus, int *remainder, const Scope<ModulusRemainder> &scope);
 ///@}
 
-EXPORT void modulus_remainder_test();
+void modulus_remainder_test();
 
 /** The greatest common divisor of two integers */
-EXPORT int gcd(int, int);
+int64_t gcd(int64_t, int64_t);
 
 /** The least common multiple of two integers */
-EXPORT int lcm(int, int);
+int64_t lcm(int64_t, int64_t);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

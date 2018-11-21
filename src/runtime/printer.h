@@ -44,7 +44,12 @@ public:
     }
 
     Printer &operator<<(const char *arg) {
-        dst = halide_string_to_string(dst, end, arg);
+        // Crashing on NULL here is a big debugging time sink.
+        if (arg == NULL) {
+            dst = halide_string_to_string(dst, end, "<NULL>");
+        } else {
+            dst = halide_string_to_string(dst, end, arg);
+        }
         return *this;
     }
 
@@ -102,6 +107,9 @@ public:
     // Use it like a stringstream.
     const char *str() {
         if (buf) {
+            if (type == StringStreamPrinter) {
+                msan_annotate_is_initialized();
+            }
             return buf;
         } else {
             return allocation_error();

@@ -10,14 +10,13 @@ namespace Halide {
  * in your object file. They are declared here in case you want to do
  * something non-default with them. */
 namespace IntegerDivideTable {
-EXPORT Buffer<uint8_t> integer_divide_table_u8();
-EXPORT Buffer<uint8_t> integer_divide_table_s8();
-EXPORT Buffer<uint16_t> integer_divide_table_u16();
-EXPORT Buffer<uint16_t> integer_divide_table_s16();
-EXPORT Buffer<uint32_t> integer_divide_table_u32();
-EXPORT Buffer<uint32_t> integer_divide_table_s32();
-}
-
+Buffer<uint8_t> integer_divide_table_u8();
+Buffer<uint8_t> integer_divide_table_s8();
+Buffer<uint16_t> integer_divide_table_u16();
+Buffer<uint16_t> integer_divide_table_s16();
+Buffer<uint32_t> integer_divide_table_u32();
+Buffer<uint32_t> integer_divide_table_s32();
+}  // namespace IntegerDivideTable
 
 /** Integer division by small values can be done exactly as multiplies
  * and shifts. This function does integer division for numerators of
@@ -39,13 +38,13 @@ EXPORT Buffer<uint32_t> integer_divide_table_s32();
  * 256. I.e. it interprets the uint8 divisor as a number from 1 to 256
  * inclusive.
  */
-EXPORT Expr fast_integer_divide(Expr numerator, Expr denominator);
+Expr fast_integer_divide(Expr numerator, Expr denominator);
 
 /** Use the fast integer division tables to implement a modulo
  * operation via the Euclidean identity: a%b = a - (a/b)*b
  */
-EXPORT Expr fast_integer_modulo(Expr numerator, Expr denominator);
+Expr fast_integer_modulo(Expr numerator, Expr denominator);
 
-}
+}  // namespace Halide
 
 #endif

@@ -31,7 +31,6 @@ public:
             outputs.insert(f.name());
         }
     }
-    Scope<> scope;
 private:
     const map<string, pair<Function, int>> &env;
     set<string> outputs;
@@ -43,9 +42,6 @@ private:
                         const Buffer<> &buf, const Parameter &param) {
         ReductionDomain rdom;
         name = name + "." + field + "." + std::to_string(dim);
-        if (scope.contains(name + ".constrained")) {
-            name = name + ".constrained";
-        }
         return Variable::make(Int(32), name, buf, param, rdom);
     }
 
@@ -191,7 +187,7 @@ private:
         stmt = LetStmt::make(op->name + ".buffer", builder.build(), stmt);
 
         // Make the allocation node
-        stmt = Allocate::make(op->name, op->types[0], allocation_extents, condition, stmt);
+        stmt = Allocate::make(op->name, op->types[0], op->memory_type, allocation_extents, condition, stmt);
 
         // Compute the strides
         for (int i = (int)op->bounds.size()-1; i > 0; i--) {
@@ -306,16 +302,18 @@ private:
         internal_assert(op->types.size() == 1)
             << "Prefetch from multi-dimensional halide tuple should have been split\n";
 
+        Expr condition = mutate(op->condition);
+
         vector<Expr> prefetch_min(op->bounds.size());
         vector<Expr> prefetch_extent(op->bounds.size());
         vector<Expr> prefetch_stride(op->bounds.size());
         for (size_t i = 0; i < op->bounds.size(); i++) {
             prefetch_min[i] = mutate(op->bounds[i].min);
             prefetch_extent[i] = mutate(op->bounds[i].extent);
-            prefetch_stride[i] = Variable::make(Int(32), op->name + ".stride." + std::to_string(i), op->param);
+            prefetch_stride[i] = Variable::make(Int(32), op->name + ".stride." + std::to_string(i), op->prefetch.param);
         }
 
-        Expr base_offset = mutate(flatten_args(op->name, prefetch_min, Buffer<>(), op->param));
+        Expr base_offset = mutate(flatten_args(op->name, prefetch_min, Buffer<>(), op->prefetch.param));
         Expr base_address = Variable::make(Handle(), op->name);
         vector<Expr> args = {base_address, base_offset};
 
@@ -351,23 +349,12 @@ private:
             }
         }
 
-        return Evaluate::make(Call::make(op->types[0], Call::prefetch, args, Call::Intrinsic));
-    }
-
-    Stmt visit(const LetStmt *op) override {
-        // Discover constrained versions of things.
-        bool constrained_version_exists = ends_with(op->name, ".constrained");
-        if (constrained_version_exists) {
-            scope.push(op->name);
+        Stmt prefetch_call = Evaluate::make(Call::make(op->types[0], Call::prefetch, args, Call::Intrinsic));
+        if (!is_one(condition)) {
+            prefetch_call = IfThenElse::make(condition, prefetch_call);
         }
-
-        Stmt stmt = IRMutator2::visit(op);
-
-        if (constrained_version_exists) {
-            scope.pop(op->name);
-        }
-
-        return stmt;
+        Stmt body = mutate(op->body);
+        return Block::make(prefetch_call, body);
     }
 
     Stmt visit(const For *op) override {
@@ -420,7 +407,7 @@ class PromoteToMemoryType : public IRMutator2 {
             for (Expr e : op->extents) {
                 extents.push_back(mutate(e));
             }
-            return Allocate::make(op->name, t, extents,
+            return Allocate::make(op->name, t, op->memory_type, extents,
                                   mutate(op->condition), mutate(op->body),
                                   mutate(op->new_expr), op->free_function);
         } else {

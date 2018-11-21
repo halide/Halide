@@ -39,12 +39,12 @@ struct SteadyClock<false> {
 // for real-world use. For now, callers using this to benchmark GPU
 // code should measure with extreme caution.
 
-inline double benchmark(int samples, int iterations, std::function<void()> op) {
+inline double benchmark(uint64_t samples, uint64_t iterations, std::function<void()> op) {
     using BenchmarkClock = SteadyClock<>::type;
     double best = std::numeric_limits<double>::infinity();
-    for (int i = 0; i < samples; i++) {
+    for (uint64_t i = 0; i < samples; i++) {
         auto start = BenchmarkClock::now();
-        for (int j = 0; j < iterations; j++) {
+        for (uint64_t j = 0; j < iterations; j++) {
             op();
         }
         auto end = BenchmarkClock::now();

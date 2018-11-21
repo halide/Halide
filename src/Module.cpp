@@ -8,14 +8,14 @@
 #include "CodeGen_Internal.h"
 #include "Debug.h"
 #include "HexagonOffload.h"
+#include "IROperator.h"
 #include "LLVM_Headers.h"
 #include "LLVM_Output.h"
 #include "LLVM_Runtime_Linker.h"
-#include "IROperator.h"
 #include "Outputs.h"
+#include "PythonExtensionGen.h"
 #include "StmtToHtml.h"
 #include "WrapExternStages.h"
-#include "ThreadPool.h"
 
 using Halide::Internal::debug;
 
@@ -81,6 +81,20 @@ std::string add_suffix(const std::string &path, const std::string &suffix) {
     return path.substr(0, found) + suffix + path.substr(found);
 }
 
+// Given a pathname of the form /path/to/name.old, replace extension to produce /path/to/name.new.
+std::string replace_extension(const std::string &path, const std::string &new_ext) {
+    size_t last_path = std::min(path.rfind('/'), path.rfind('\\'));
+    if (last_path == std::string::npos) {
+        last_path = 0;
+    }
+    size_t dot = path.find('.', last_path);
+    if (dot == std::string::npos) {
+        return path + new_ext;
+    } else {
+        return path.substr(0, dot) + new_ext;
+    }
+}
+
 Outputs add_suffixes(const Outputs &in, const std::string &suffix) {
     Outputs out;
     if (!in.object_name.empty()) out.object_name = add_suffix(in.object_name, suffix);
@@ -94,17 +108,6 @@ Outputs add_suffixes(const Outputs &in, const std::string &suffix) {
     return out;
 }
 
-uint64_t target_feature_mask(const Target &target) {
-    static_assert(sizeof(uint64_t)*8 >= Target::FeatureEnd, "Features will not fit in uint64_t");
-    uint64_t feature_mask = 0;
-    for (int i = 0; i < Target::FeatureEnd; ++i) {
-        if (target.has_feature((Target::Feature) i)) {
-            feature_mask |= ((uint64_t) 1) << i;
-        }
-    }
-    return feature_mask;
-}
-
 }  // namespace
 
 struct ModuleContents {
@@ -116,16 +119,17 @@ struct ModuleContents {
     std::vector<Module> submodules;
     std::vector<ExternalCode> external_code;
     std::map<std::string, std::string> metadata_name_map;
+    bool any_strict_float{false};
 };
 
 template<>
-EXPORT RefCount &ref_count<ModuleContents>(const ModuleContents *f) {
-    return f->ref_count;
+RefCount &ref_count<ModuleContents>(const ModuleContents *t) {
+    return t->ref_count;
 }
 
 template<>
-EXPORT void destroy<ModuleContents>(const ModuleContents *f) {
-    delete f;
+void destroy<ModuleContents>(const ModuleContents *t) {
+    delete t;
 }
 
 LoweredFunc::LoweredFunc(const std::string &name,
@@ -142,7 +146,7 @@ LoweredFunc::LoweredFunc(const std::string &name,
                          NameMangling name_mangling)
     : name(name), body(body), linkage(linkage), name_mangling(name_mangling) {
     for (const Argument &i : args) {
-        this->args.push_back(i);
+        this->args.push_back(LoweredArgument(i));
     }
 }
 
@@ -161,6 +165,10 @@ void Module::set_auto_schedule(const std::string &auto_schedule) {
     contents->auto_schedule = auto_schedule;
 }
 
+void Module::set_any_strict_float(bool any_strict_float) {
+    contents->any_strict_float = any_strict_float;
+}
+
 const Target &Module::target() const {
     return contents->target;
 }
@@ -171,6 +179,10 @@ const std::string &Module::name() const {
 
 const std::string &Module::auto_schedule() const {
     return contents->auto_schedule;
+}
+
+bool Module::any_strict_float() const {
+    return contents->any_strict_float;
 }
 
 const std::vector<Buffer<>> &Module::buffers() const {
@@ -200,7 +212,7 @@ Internal::LoweredFunc Module::get_function_by_name(const std::string &name) cons
         }
     }
     user_error << "get_function_by_name: function " << name << " not found.\n";
-    return Internal::LoweredFunc("", std::vector<Argument>{}, {}, LoweredFunc::External);
+    return Internal::LoweredFunc("", std::vector<Argument>{}, {}, LinkageType::External);
 }
 
 void Module::append(const Buffer<> &buffer) {
@@ -415,6 +427,19 @@ void Module::compile(const Outputs &output_files_arg) const {
                                Internal::CodeGen_C::CPlusPlusImplementation : Internal::CodeGen_C::CImplementation);
         cg.compile(*this);
     }
+    if (!output_files.python_extension_name.empty()) {
+        debug(1) << "Module.compile(): python_extension_name " << output_files.python_extension_name << "\n";
+        std::string c_header_name = output_files.c_header_name;
+        if (c_header_name.empty()) {
+          // If we we're not generating a header right now, guess the filename.
+          c_header_name = replace_extension(output_files.python_extension_name, ".h");
+        }
+        std::ofstream file(output_files.python_extension_name);
+        Internal::PythonExtensionGen python_extension_gen(file,
+                                                          c_header_name,
+                                                          target());
+        python_extension_gen.compile(*this);
+    }
     if (!output_files.schedule_name.empty()) {
         debug(1) << "Module.compile(): schedule_name " << output_files.schedule_name << "\n";
         std::ofstream file(output_files.schedule_name);
@@ -469,12 +494,6 @@ void compile_multitarget(const std::string &fn_name,
         return;
     }
 
-    std::vector<std::future<void>> futures;
-    // If we are running with HL_DEBUG_CODEGEN=1, use threads=1 to enforce
-    // sequential execution, so that debug output won't be utterly incomprehensible
-    const size_t num_threads = (debug::debug_level() > 0) ? 1 : Internal::ThreadPool<void>::num_processors_online();
-    Internal::ThreadPool<void> pool(num_threads);
-
     // For safety, the runtime must be built only with features common to all
     // of the targets; given an unusual ordering like
     //
@@ -484,7 +503,12 @@ void compile_multitarget(const std::string &fn_name,
     // (since x86-64-linux would be selected first due to ordering), but could
     // crash on non-sse41 machines (if we generated a runtime with sse41 instructions
     // included). So we'll keep track of the common features as we walk thru the targets.
-    uint64_t runtime_features_mask = (uint64_t)-1LL;
+
+    // Using something like std::bitset would be arguably cleaner here, but we need an
+    // array-of-uint64 for calls to halide_can_use_target_features() anyway,
+    // so we'll just build and maintain in that form to avoid extra conversion.
+    constexpr int kFeaturesWordCount = (Target::FeatureEnd + 63) / (sizeof(uint64_t) * 8);
+    uint64_t runtime_features[kFeaturesWordCount] = {(uint64_t)-1LL};
 
     TemporaryObjectFileDir temp_dir;
     std::vector<Expr> wrapper_args;
@@ -497,12 +521,14 @@ void compile_multitarget(const std::string &fn_name,
             user_error << "All Targets must have matching arch-bits-os for compile_multitarget.\n";
         }
         // Some features must match across all targets.
-        static const std::array<Target::Feature, 6> must_match_features = {{
+        static const std::array<Target::Feature, 8> must_match_features = {{
+            Target::ASAN,
             Target::CPlusPlusMangling,
             Target::JIT,
             Target::Matlab,
             Target::MSAN,
             Target::NoRuntime,
+            Target::TSAN,
             Target::UserContext,
         }};
         for (auto f : must_match_features) {
@@ -537,19 +563,32 @@ void compile_multitarget(const std::string &fn_name,
         Outputs sub_out = add_suffixes(output_files, suffix);
         internal_assert(sub_out.object_name.empty());
         sub_out.object_name = temp_dir.add_temp_object_file(output_files.static_library_name, suffix, target);
-        futures.emplace_back(pool.async([](Module m, Outputs o) {
-            debug(1) << "compile_multitarget: compile_sub_target " << o.object_name << "\n";
-            m.compile(o);
-        }, std::move(sub_module), std::move(sub_out)));
+        debug(1) << "compile_multitarget: compile_sub_target " << sub_out.object_name << "\n";
+        sub_module.compile(sub_out);
 
-        const uint64_t cur_target_mask = target_feature_mask(target);
-        Expr can_use = (target == base_target) ?
-                        IntImm::make(Int(32), 1) :
-                        Call::make(Int(32), "halide_can_use_target_features",
-                                   {UIntImm::make(UInt(64), cur_target_mask)},
+        uint64_t cur_target_features[kFeaturesWordCount] = {0};
+        for (int i = 0; i < Target::FeatureEnd; ++i) {
+            if (target.has_feature((Target::Feature) i)) {
+                cur_target_features[i >> 6] |= ((uint64_t) 1) << (i & 63);
+            }
+        }
+
+        Expr can_use;
+        if (target != base_target) {
+            std::vector<Expr> features_struct_args;
+            for (int i = 0; i < kFeaturesWordCount; ++i) {
+                features_struct_args.push_back(UIntImm::make(UInt(64), cur_target_features[i]));
+            }
+            can_use = Call::make(Int(32), "halide_can_use_target_features",
+                                   {kFeaturesWordCount, Call::make(type_of<uint64_t *>(), Call::make_struct, features_struct_args, Call::Intrinsic)},
                                    Call::Extern);
+        } else {
+            can_use = IntImm::make(Int(32), 1);
+        }
 
-        runtime_features_mask &= cur_target_mask;
+        for (int i = 0; i < kFeaturesWordCount; ++i) {
+            runtime_features[i] &= cur_target_features[i];
+        }
 
         wrapper_args.push_back(can_use != 0);
         wrapper_args.push_back(sub_fn_name);
@@ -560,21 +599,21 @@ void compile_multitarget(const std::string &fn_name,
     if (!base_target.has_feature(Target::NoRuntime)) {
         // Start with a bare Target, set only the features we know are common to all.
         Target runtime_target(base_target.os, base_target.arch, base_target.bits);
-        // We never want NoRuntime set here.
-        runtime_features_mask &= ~(((uint64_t)(1)) << Target::NoRuntime);
-        if (runtime_features_mask) {
-            for (int i = 0; i < Target::FeatureEnd; ++i) {
-                if (runtime_features_mask & (((uint64_t) 1) << i)) {
-                    runtime_target.set_feature((Target::Feature) i);
-                }
+        for (int i = 0; i < Target::FeatureEnd; ++i) {
+            // We never want NoRuntime set here.
+            if (i == Target::NoRuntime) {
+                continue;
+            }
+            const int word = i >> 6;
+            const int bit = i & 63;
+            if (runtime_features[word] & (((uint64_t) 1) << bit)) {
+                runtime_target.set_feature((Target::Feature) i);
             }
         }
         Outputs runtime_out = Outputs().object(
             temp_dir.add_temp_object_file(output_files.static_library_name, "_runtime", runtime_target));
-        futures.emplace_back(pool.async([](Target t, Outputs o) {
-            debug(1) << "compile_multitarget: compile_standalone_runtime " << o.static_library_name << "\n";
-            compile_standalone_runtime(o, t);
-        }, std::move(runtime_target), std::move(runtime_out)));
+        debug(1) << "compile_multitarget: compile_standalone_runtime " << runtime_out.static_library_name << "\n";
+        compile_standalone_runtime(runtime_out, runtime_target);
     }
 
     if (needs_wrapper) {
@@ -605,34 +644,25 @@ void compile_multitarget(const std::string &fn_name,
         }
 
         Module wrapper_module(fn_name, wrapper_target);
-        wrapper_module.append(LoweredFunc(fn_name, base_target_args, wrapper_body, LoweredFunc::ExternalPlusMetadata));
+        wrapper_module.append(LoweredFunc(fn_name, base_target_args, wrapper_body, LinkageType::ExternalPlusMetadata));
 
         // Add a wrapper to accept old buffer_ts
         add_legacy_wrapper(wrapper_module, wrapper_module.functions().back());
 
         Outputs wrapper_out = Outputs().object(
             temp_dir.add_temp_object_file(output_files.static_library_name, "_wrapper", base_target, /* in_front*/ true));
-        futures.emplace_back(pool.async([](Module m, Outputs o) {
-            debug(1) << "compile_multitarget: wrapper " << o.object_name << "\n";
-            m.compile(o);
-        }, std::move(wrapper_module), std::move(wrapper_out)));
+        debug(1) << "compile_multitarget: wrapper " << wrapper_out.object_name << "\n";
+        wrapper_module.compile(wrapper_out);
     }
 
     if (!output_files.c_header_name.empty()) {
         Module header_module(fn_name, base_target);
-        header_module.append(LoweredFunc(fn_name, base_target_args, {}, LoweredFunc::ExternalPlusMetadata));
+        header_module.append(LoweredFunc(fn_name, base_target_args, {}, LinkageType::ExternalPlusMetadata));
         // Add a wrapper to accept old buffer_ts
         add_legacy_wrapper(header_module, header_module.functions().back());
         Outputs header_out = Outputs().c_header(output_files.c_header_name);
-        futures.emplace_back(pool.async([](Module m, Outputs o) {
-            debug(1) << "compile_multitarget: c_header_name " << o.c_header_name << "\n";
-            m.compile(o);
-        }, std::move(header_module), std::move(header_out)));
-    }
-
-    // Must wait for everything to finish before we create the static library
-    for (auto &f : futures) {
-        f.wait();
+        debug(1) << "compile_multitarget: c_header_name " << header_out.c_header_name << "\n";
+        header_module.compile(header_out);
     }
 
     if (!output_files.static_library_name.empty()) {

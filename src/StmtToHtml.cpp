@@ -137,25 +137,25 @@ private:
         return "</a>";
     }
 
-    void visit(const IntImm *op){
+    void visit(const IntImm *op) override {
         stream << open_span("IntImm Imm");
         stream << Expr(op);
         stream << close_span();
     }
 
-    void visit(const UIntImm *op){
+    void visit(const UIntImm *op) override {
         stream << open_span("UIntImm Imm");
         stream << Expr(op);
         stream << close_span();
     }
 
-    void visit(const FloatImm *op){
+    void visit(const FloatImm *op) override {
         stream << open_span("FloatImm Imm");
         stream << Expr(op);
         stream << close_span();
     }
 
-    void visit(const StringImm *op){
+    void visit(const StringImm *op) override {
         stream << open_span("StringImm");
         stream << '"';
         for (size_t i = 0; i < op->value.size(); i++) {
@@ -190,11 +190,11 @@ private:
         stream << close_span();
     }
 
-    void visit(const Variable *op){
+    void visit(const Variable *op) override {
         stream << var(op->name);
     }
 
-    void visit(const Cast *op){
+    void visit(const Cast *op) override {
         stream << open_span("Cast");
 
         stream << open_span("Matched");
@@ -219,42 +219,42 @@ private:
         stream << close_span();
     }
 
-    void visit(const Add *op) { visit_binary_op(op->a, op->b, "+"); }
-    void visit(const Sub *op) { visit_binary_op(op->a, op->b, "-"); }
-    void visit(const Mul *op) { visit_binary_op(op->a, op->b, "*"); }
-    void visit(const Div *op) { visit_binary_op(op->a, op->b, "/"); }
-    void visit(const Mod *op) { visit_binary_op(op->a, op->b, "%"); }
-    void visit(const And *op) { visit_binary_op(op->a, op->b, "&amp;&amp;"); }
-    void visit(const Or *op) { visit_binary_op(op->a, op->b, "||"); }
-    void visit(const NE *op) { visit_binary_op(op->a, op->b, "!="); }
-    void visit(const LT *op) { visit_binary_op(op->a, op->b, "&lt;"); }
-    void visit(const LE *op) { visit_binary_op(op->a, op->b, "&lt="); }
-    void visit(const GT *op) { visit_binary_op(op->a, op->b, "&gt;"); }
-    void visit(const GE *op) { visit_binary_op(op->a, op->b, "&gt;="); }
-    void visit(const EQ *op) { visit_binary_op(op->a, op->b, "=="); }
+    void visit(const Add *op) override { visit_binary_op(op->a, op->b, "+"); }
+    void visit(const Sub *op) override { visit_binary_op(op->a, op->b, "-"); }
+    void visit(const Mul *op) override { visit_binary_op(op->a, op->b, "*"); }
+    void visit(const Div *op) override { visit_binary_op(op->a, op->b, "/"); }
+    void visit(const Mod *op) override { visit_binary_op(op->a, op->b, "%"); }
+    void visit(const And *op) override { visit_binary_op(op->a, op->b, "&amp;&amp;"); }
+    void visit(const Or *op) override { visit_binary_op(op->a, op->b, "||"); }
+    void visit(const NE *op) override { visit_binary_op(op->a, op->b, "!="); }
+    void visit(const LT *op) override { visit_binary_op(op->a, op->b, "&lt;"); }
+    void visit(const LE *op) override { visit_binary_op(op->a, op->b, "&lt="); }
+    void visit(const GT *op) override { visit_binary_op(op->a, op->b, "&gt;"); }
+    void visit(const GE *op) override { visit_binary_op(op->a, op->b, "&gt;="); }
+    void visit(const EQ *op) override { visit_binary_op(op->a, op->b, "=="); }
 
-    void visit(const Min *op) {
+    void visit(const Min *op) override {
         stream << open_span("Min");
         print_list(symbol("min") + "(", {op->a, op->b}, ")");
         stream << close_span();
     }
-    void visit(const Max *op) {
+    void visit(const Max *op) override {
         stream << open_span("Max");
         print_list(symbol("max") + "(", {op->a, op->b}, ")");
         stream << close_span();
     }
-    void visit(const Not *op) {
+    void visit(const Not *op) override {
         stream << open_span("Not");
         stream << '!';
         print(op->a);
         stream << close_span();
     }
-    void visit(const Select *op) {
+    void visit(const Select *op) override {
         stream << open_span("Select");
         print_list(symbol("select") + "(", {op->condition, op->true_value, op->false_value}, ")");
         stream << close_span();
     }
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         stream << open_span("Load");
         stream << open_span("Matched");
         stream << var(op->name) << "[";
@@ -267,12 +267,12 @@ private:
         }
         stream << close_span();
     }
-    void visit(const Ramp *op) {
+    void visit(const Ramp *op) override {
         stream << open_span("Ramp");
         print_list(symbol("ramp") + "(", {op->base, op->stride, Expr(op->lanes)}, ")");
         stream << close_span();
     }
-    void visit(const Broadcast *op) {
+    void visit(const Broadcast *op) override {
         stream << open_span("Broadcast");
         stream << open_span("Matched");
         stream << symbol("x") << op->lanes << "(";
@@ -281,13 +281,13 @@ private:
         stream << matched(")");
         stream << close_span();
     }
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         stream << open_span("Call");
         print_list(symbol(op->name) + "(", op->args, ")");
         stream << close_span();
     }
 
-    void visit(const Let *op) {
+    void visit(const Let *op) override {
         scope.push(op->name, unique_id());
         stream << open_span("Let");
         stream << open_span("Matched");
@@ -302,7 +302,7 @@ private:
         stream << close_span();
         scope.pop(op->name);
     }
-    void visit(const LetStmt *op) {
+    void visit(const LetStmt *op) override {
         scope.push(op->name, unique_id());
         stream << open_div("LetStmt") << open_line();
         stream << open_span("Matched");
@@ -316,7 +316,7 @@ private:
         stream << close_div();
         scope.pop(op->name);
     }
-    void visit(const AssertStmt *op) {
+    void visit(const AssertStmt *op) override {
         stream << open_div("AssertStmt WrapLine");
         std::vector<Expr> args;
         args.push_back(op->condition);
@@ -324,7 +324,7 @@ private:
         print_list(symbol("assert") + "(", args, ")");
         stream << close_div();
     }
-    void visit(const ProducerConsumer *op) {
+    void visit(const ProducerConsumer *op) override {
         scope.push(op->name, unique_id());
         stream << open_div(op->is_producer ? "Produce" : "Consumer");
         int produce_id = unique_id();
@@ -341,7 +341,8 @@ private:
         stream << close_div();
         scope.pop(op->name);
     }
-    void visit(const For *op) {
+
+    void visit(const For *op) override {
         scope.push(op->name, unique_id());
         stream << open_div("For");
 
@@ -360,6 +361,8 @@ private:
             stream << keyword("gpu_block");
         } else if (op->for_type == ForType::GPUThread) {
             stream << keyword("gpu_thread");
+        } else if (op->for_type == ForType::GPULane) {
+            stream << keyword("gpu_lane");
         } else {
             internal_assert(false) << "Unknown for type: " << ((int)op->for_type) << "\n";
         }
@@ -377,7 +380,27 @@ private:
         stream << close_div();
         scope.pop(op->name);
     }
-    void visit(const Store *op) {
+
+    void visit(const Acquire *op) override {
+        stream << open_div("Acquire");
+        int id = unique_id();
+        stream << open_span("Matched");
+        stream << open_expand_button(id);
+        stream << keyword("acquire (");
+        stream << close_span();
+        print(op->semaphore);
+        stream << ", ";
+        print(op->count);
+        stream << matched(")");
+        stream << close_expand_button() << " {";
+        stream << open_div("Acquire Indent", id);
+        print(op->body);
+        stream << close_div();
+        stream << matched("}");
+        stream << close_div();
+    }
+
+    void visit(const Store *op) override {
         stream << open_div("Store WrapLine");
         stream << open_span("Matched");
         stream << var(op->name) << "[";
@@ -394,7 +417,7 @@ private:
         stream << close_span();
         stream << close_div();
     }
-    void visit(const Provide *op) {
+    void visit(const Provide *op) override {
         stream << open_div("Provide WrapLine");
         stream << open_span("Matched");
         stream << var(op->name) << "(";
@@ -409,7 +432,7 @@ private:
         }
         stream << close_div();
     }
-    void visit(const Allocate *op) {
+    void visit(const Allocate *op) override {
         scope.push(op->name, unique_id());
         stream << open_div("Allocate");
         stream << open_span("Matched");
@@ -449,13 +472,13 @@ private:
         stream << close_div();
         scope.pop(op->name);
     }
-    void visit(const Free *op) {
+    void visit(const Free *op) override {
         stream << open_div("Free WrapLine");
         stream << keyword("free") << " ";
         stream << var(op->name);
         stream << close_div();
     }
-    void visit(const Realize *op) {
+    void visit(const Realize *op) override {
         scope.push(op->name, unique_id());
         stream << open_div("Realize");
         int id = unique_id();
@@ -483,7 +506,7 @@ private:
         scope.pop(op->name);
     }
 
-    void visit(const Prefetch *op) {
+    void visit(const Prefetch *op) override {
         stream << open_span("Prefetch");
         stream << keyword("prefetch") << " ";
         stream << var(op->name);
@@ -493,7 +516,15 @@ private:
             if (i < op->bounds.size() - 1) stream << ", ";
         }
         stream << matched(")");
+        if (!is_one(op->condition)) {
+            stream << " " << keyword("if") << " ";
+            print(op->condition);
+        }
         stream << close_span();
+
+        stream << open_div("PrefetchBody");
+        print(op->body);
+        stream << close_div();
     }
 
     // To avoid generating ridiculously deep DOMs, we flatten blocks here.
@@ -505,13 +536,46 @@ private:
             print(stmt);
         }
     }
-    void visit(const Block *op) {
+    void visit(const Block *op) override {
         stream << open_div("Block");
         visit_block_stmt(op->first);
         visit_block_stmt(op->rest);
         stream << close_div();
     }
-    void visit(const IfThenElse *op) {
+
+    // We also flatten forks
+    void visit_fork_stmt(Stmt stmt) {
+        if (const Fork *f = stmt.as<Fork>()) {
+            visit_fork_stmt(f->first);
+            visit_fork_stmt(f->rest);
+        } else if (stmt.defined()) {
+            stream << open_div("ForkTask");
+            int id = unique_id();
+            stream << open_expand_button(id);
+            stream << matched("task {");
+            stream << close_expand_button();
+            stream << open_div("ForkTask Indent", id);
+            print(stmt);
+            stream << close_div();
+            stream << matched("}");
+            stream << close_div();
+        }
+    }
+    void visit(const Fork *op) override {
+        stream << open_div("Fork");
+        int id = unique_id();
+        stream << open_expand_button(id);
+        stream << keyword("fork") << " " << matched("{");
+        stream << close_expand_button();
+        stream << open_div("Fork Indent", id);
+        visit_fork_stmt(op->first);
+        visit_fork_stmt(op->rest);
+        stream << close_div();
+        stream << matched("}");
+        stream << close_div();
+    }
+
+    void visit(const IfThenElse *op) override {
         stream << open_div("IfThenElse");
         int id = unique_id();
         stream << open_expand_button(id);
@@ -557,13 +621,13 @@ private:
         stream << close_div(); // Closing ifthenelse div.
     }
 
-    void visit(const Evaluate *op) {
+    void visit(const Evaluate *op) override {
         stream << open_div("Evaluate");
         print(op->value);
         stream << close_div();
     }
 
-    void visit(const Shuffle *op) {
+    void visit(const Shuffle *op) override {
         stream << open_span("Shuffle");
         if (op->is_concat()) {
             print_list(symbol("concat_vectors("), op->vectors, ")");
@@ -674,7 +738,7 @@ public:
         stream << "</head>\n <body>\n";
     }
 
-    ~StmtToHtml() {
+    ~StmtToHtml() override {
         stream << "<script>\n"
                << "$( '.Matched' ).each( function() {\n"
                << "    this.onmouseover = function() { $('.Matched[id^=' + this.id.split('-')[0] + '-]').addClass('Highlight'); }\n"

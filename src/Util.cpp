@@ -1,23 +1,23 @@
 #include "Util.h"
-#include "Introspection.h"
 #include "Debug.h"
 #include "Error.h"
-#include <sstream>
-#include <map>
+#include "Introspection.h"
 #include <atomic>
-#include <mutex>
-#include <string>
-#include <iomanip>
 #include <chrono>
+#include <iomanip>
+#include <map>
+#include <mutex>
+#include <sstream>
+#include <string>
 
 #ifdef _MSC_VER
 #include <io.h>
 #else
-#include <unistd.h>
 #include <stdlib.h>
+#include <unistd.h>
 #endif
-#include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 
 #ifdef __linux__
 #define CAN_GET_RUNNING_PROGRAM_NAME
@@ -36,10 +36,10 @@
 namespace Halide {
 namespace Internal {
 
+using std::map;
+using std::ostringstream;
 using std::string;
 using std::vector;
-using std::ostringstream;
-using std::map;
 
 std::string get_env_variable(char const *env_var_name) {
     if (!env_var_name) {
@@ -47,10 +47,19 @@ std::string get_env_variable(char const *env_var_name) {
     }
 
     #ifdef _MSC_VER
-    char lvl[128];
+    // call getenv_s without a buffer to determine the correct string length:
+    size_t length = 0;
+    if ((getenv_s(&length, NULL, 0, env_var_name) != 0) || (length == 0)) {
+        return "";
+    }
+    // call it again to retrieve the value of the environment variable;
+    // note that 'length' already accounts for the null-terminator
+    std::string lvl(length - 1, '@');
     size_t read = 0;
-    if (getenv_s(&read, lvl, env_var_name) != 0) read = 0;
-    if (read) return std::string(lvl);
+    if ((getenv_s(&read, &lvl[0], length, env_var_name) != 0) || (read != length)) {
+        return "";
+    }
+    return lvl;
     #else
     char *lvl = getenv(env_var_name);
     if (lvl) return std::string(lvl);
@@ -92,13 +101,17 @@ namespace {
 // will get suffixes that falsely hint that they are not.
 
 const int num_unique_name_counters = (1 << 14);
-std::atomic<int> unique_name_counters[num_unique_name_counters];
+
+// We want to init these to zero, but cannot use = {0} because that
+// would invoke a (deleted) copy ctor; this syntax should force
+// the correct behavior.
+std::atomic<int> unique_name_counters[num_unique_name_counters] = {};
 
 int unique_count(size_t h) {
     h = h & (num_unique_name_counters - 1);
     return unique_name_counters[h]++;
 }
-}
+}  // namespace
 
 // There are three possible families of names returned by the methods below:
 // 1) char pattern: (char that isn't '$') + number (e.g. v234)
@@ -157,8 +170,6 @@ string unique_name(const std::string &prefix) {
 
     return sanitized + "$" + std::to_string(count);
 }
-
-
 
 bool starts_with(const string &str, const string &prefix) {
     if (str.size() < prefix.size()) return false;
@@ -454,5 +465,5 @@ void halide_toc_impl(const char *file, int line) {
     debug(0) << t1.file << ":" << t1.line << " ... " << f << ":" << line << " : " << diff.count() * 1000 << " ms\n";
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

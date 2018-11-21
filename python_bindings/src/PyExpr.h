@@ -6,19 +6,7 @@
 namespace Halide {
 namespace PythonBindings {
 
-void define_expr();
-
-py::object expr_vector_to_python_tuple(const std::vector<Expr> &t);
-std::vector<Expr> python_tuple_to_expr_vector(const py::object &obj);
-
-template <typename T>
-std::vector<T> python_collection_to_vector(const py::object &obj) {
-    std::vector<T> result;
-    for (ssize_t i = 0; i < py::len(obj); i++) {
-        result.push_back(py::extract<T>(obj[i]));
-    }
-    return result;
-}
+void define_expr(py::module &m);
 
 }  // namespace PythonBindings
 }  // namespace Halide

@@ -25,7 +25,7 @@ int main(int argc, char **argv) {
     int timing_iterations = atoi(argv[4]);
 
     Buffer<float> input = load_and_convert_image(argv[1]);
-    Buffer<float> output(input.width(), input.height(), 1);
+    Buffer<float> output(input.width(), input.height());
 
     bilateral_grid(input, r_sigma, output);
 

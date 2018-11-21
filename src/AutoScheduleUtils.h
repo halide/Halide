@@ -6,13 +6,13 @@
  * Defines util functions that used by auto scheduler.
  */
 
-#include <set>
 #include <limits>
+#include <set>
 
 #include "Bounds.h"
-#include "Interval.h"
-#include "IRVisitor.h"
 #include "IRMutator.h"
+#include "IRVisitor.h"
+#include "Interval.h"
 
 namespace Halide {
 namespace Internal {
@@ -26,7 +26,7 @@ const int64_t unknown = std::numeric_limits<int64_t>::min();
 class FindAllCalls : public IRVisitor {
     using IRVisitor::visit;
 
-    void visit(const Call *call) {
+    void visit(const Call *call) override {
         if (call->call_type == Call::Halide || call->call_type == Call::Image) {
             funcs_called.insert(call->name);
             call_args.push_back(std::make_pair(call->name, call->args));
@@ -35,25 +35,21 @@ class FindAllCalls : public IRVisitor {
             call->args[i].accept(this);
         }
     }
+
 public:
     std::set<std::string> funcs_called;
     std::vector<std::pair<std::string, std::vector<Expr>>> call_args;
 };
 
+/** Return an int representation of 's'. Throw an error on failure. */
+int string_to_int(const std::string &s);
 
-/** Substitute every variable with its estimate if specified. */
-class SubstituteVarEstimates: public IRMutator2 {
-    using IRMutator2::visit;
-
-    Expr visit(const Variable *var) override {
-        if (var->param.defined() && !var->param.is_buffer() &&
-            var->param.estimate().defined()) {
-            return var->param.estimate();
-        } else {
-            return var;
-        }
-    }
-};
+/** Substitute every variable in an Expr or a Stmt with its estimate
+ * if specified. */
+//@{
+Expr subsitute_var_estimates(Expr e);
+Stmt subsitute_var_estimates(Stmt s);
+//@}
 
 /** Return the size of an interval. Return an undefined expr if the interval
  * is unbounded. */
@@ -88,9 +84,12 @@ DimBounds get_stage_bounds(Function f, int stage_num, const DimBounds &pure_boun
 std::vector<DimBounds> get_stage_bounds(Function f, const DimBounds &pure_bounds);
 
 /** Recursively inline all the functions in the set 'inlines' into the
- * expression 'e' and return the resulting expression. */
+ * expression 'e' and return the resulting expression. If 'order' is
+ * passed, inlining will be done in the reverse order of function realization
+ * to avoid extra inlining works. */
 Expr perform_inline(Expr e, const std::map<std::string, Function> &env,
-                    const std::set<std::string> &inlines = std::set<std::string>());
+                    const std::set<std::string> &inlines = std::set<std::string>(),
+                    const std::vector<std::string> &order = std::vector<std::string>());
 
 /** Return all functions that are directly called by a function stage (f, stage). */
 std::set<std::string> get_parents(Function f, int stage);
@@ -113,7 +112,9 @@ V &get_element(std::map<K, V> &m, const K &key) {
 }
 // @}
 
-}
-}
+void propagate_estimate_test();
+
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

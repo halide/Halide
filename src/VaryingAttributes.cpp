@@ -4,8 +4,8 @@
 
 #include "CodeGen_GPU_Dev.h"
 
-#include "IRMutator.h"
 #include "CSE.h"
+#include "IRMutator.h"
 #include "Simplify.h"
 
 namespace Halide {
@@ -1237,7 +1237,7 @@ public:
             return LetStmt::make("glsl.num_coords_dim0", dont_simplify((int)(coords[0].size())),
                    LetStmt::make("glsl.num_coords_dim1", dont_simplify((int)(coords[1].size())),
                    LetStmt::make("glsl.num_padded_attributes", dont_simplify(num_padded_attributes),
-                   Allocate::make(vs.vertex_buffer_name, Float(32), {vertex_buffer_size}, const_true(),
+                   Allocate::make(vs.vertex_buffer_name, Float(32), MemoryType::Auto, {vertex_buffer_size}, const_true(),
                    Block::make(vertex_setup,
                    Block::make(loop_stmt,
                    Block::make(used_in_codegen(Int(32), "glsl.num_coords_dim0"),
@@ -1255,5 +1255,5 @@ Stmt setup_gpu_vertex_buffer(Stmt s) {
     return vb.mutate(s);
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

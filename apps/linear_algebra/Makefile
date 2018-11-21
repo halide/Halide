@@ -2,7 +2,7 @@ include ../support/Makefile.inc
 
 BIN ?= bin
 BUILD = $(BIN)/build
-CXXFLAGS += -O3 -fopenmp -Wall -march=native
+CXXFLAGS += -O3 -Wall -march=native -I /opt/local/include
 HL_TARGET ?= host
 LIBHALIDE_BLAS = $(BIN)/libhalide_blas.a
 HALIDEBLAS_FLAGS ?= -DUSE_HALIDE
@@ -12,7 +12,7 @@ EIGEN_INCLUDES ?= -I/usr/include/eigen3
 CBLAS_LIBS ?= -lblas
 CBLAS_FLAGS ?= -DUSE_CBLAS
 OPENBLAS_FLAGS ?= -DUSE_OPENBLAS
-OPENBLAS_LIBS ?= -lopenblas
+OPENBLAS_LIBS ?= -L/opt/local/lib -lopenblas
 
 # ATLAS should be built and installed locally to get the best performance.
 # It is designed to automatically tune its performance to your machine during
@@ -251,27 +251,27 @@ $(BUILD)/halide_dasum.o $(BUILD)/halide_dasum.h: $(BUILD)/blas_l1.generator
 
 $(BUILD)/halide_sgemv_notrans.o $(BUILD)/halide_sgemv_notrans.h: $(BUILD)/blas_l2.generator
 	$< -g sgemv -f halide_sgemv_notrans -o $(BUILD) -e $(EMIT_OPTIONS) \
-	target=$(HL_TARGET_NR) parallel=false vectorize=true transpose=false
+	target=$(HL_TARGET_NR) parallel=true vectorize=true transpose=false
 
 $(BUILD)/halide_dgemv_notrans.o $(BUILD)/halide_dgemv_notrans.h: $(BUILD)/blas_l2.generator
 	$< -g dgemv -f halide_dgemv_notrans -o $(BUILD) -e $(EMIT_OPTIONS) \
-	target=$(HL_TARGET_NR) parallel=false vectorize=true transpose=false
+	target=$(HL_TARGET_NR) parallel=true vectorize=true transpose=false
 
 $(BUILD)/halide_sgemv_trans.o $(BUILD)/halide_sgemv_trans.h: $(BUILD)/blas_l2.generator
 	$< -g sgemv -f halide_sgemv_trans -o $(BUILD) -e $(EMIT_OPTIONS) \
-	target=$(HL_TARGET_NR) parallel=false vectorize=true transpose=true
+	target=$(HL_TARGET_NR) parallel=true vectorize=true transpose=true
 
 $(BUILD)/halide_dgemv_trans.o $(BUILD)/halide_dgemv_trans.h: $(BUILD)/blas_l2.generator
 	$< -g dgemv -f halide_dgemv_trans -o $(BUILD) -e $(EMIT_OPTIONS) \
-	target=$(HL_TARGET_NR) parallel=false vectorize=true transpose=true
+	target=$(HL_TARGET_NR) parallel=true vectorize=true transpose=true
 
 $(BUILD)/halide_sger_impl.o $(BUILD)/halide_sger_impl.h: $(BUILD)/blas_l2.generator
 	$< -g sger -f halide_sger_impl -o $(BUILD) -e $(EMIT_OPTIONS) \
-	target=$(HL_TARGET_NR) parallel=false vectorize=true
+	target=$(HL_TARGET_NR) parallel=true vectorize=true
 
 $(BUILD)/halide_dger_impl.o $(BUILD)/halide_dger_impl.h: $(BUILD)/blas_l2.generator
 	$< -g dger -f halide_dger_impl -o $(BUILD) -e $(EMIT_OPTIONS) \
-	target=$(HL_TARGET_NR) parallel=false vectorize=true
+	target=$(HL_TARGET_NR) parallel=true vectorize=true
 
 $(BUILD)/halide_sgemm_notrans.o $(BUILD)/halide_sgemm_notrans.h: $(BUILD)/blas_l3.generator
 	$< -g sgemm -f halide_sgemm_notrans -o $(BUILD) -e $(EMIT_OPTIONS) \

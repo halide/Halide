@@ -1,11 +1,11 @@
 #include "BoundsInference.h"
-#include "IRMutator.h"
-#include "Scope.h"
 #include "Bounds.h"
+#include "IREquality.h"
+#include "IRMutator.h"
 #include "IROperator.h"
 #include "Inline.h"
+#include "Scope.h"
 #include "Simplify.h"
-#include "IREquality.h"
 
 #include <algorithm>
 #include <iterator>
@@ -13,11 +13,11 @@
 namespace Halide {
 namespace Internal {
 
-using std::string;
-using std::vector;
 using std::map;
 using std::pair;
 using std::set;
+using std::string;
+using std::vector;
 
 namespace {
 
@@ -31,14 +31,14 @@ bool var_name_match(string candidate, string var) {
 class DependsOnBoundsInference : public IRVisitor {
     using IRVisitor::visit;
 
-    void visit(const Variable *var) {
+    void visit(const Variable *var) override {
         if (ends_with(var->name, ".max") ||
             ends_with(var->name, ".min")) {
             result = true;
         }
     }
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         if (op->name == Call::buffer_get_min ||
             op->name == Call::buffer_get_max) {
             result = true;
@@ -80,7 +80,7 @@ private:
 
     using IRVisitor::visit;
 
-    void visit(const LetStmt *op) {
+    void visit(const LetStmt *op) override {
         Interval in = bounds_of_expr_in_scope(op->value, scope);
         if (op->name == var) {
             result = in;
@@ -90,7 +90,7 @@ private:
         }
     }
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         // At this stage of lowering, loop_min and loop_max
         // conveniently exist in scope.
         Interval in(Variable::make(Int(32), op->name + ".loop_min"),
@@ -929,6 +929,12 @@ public:
     using IRMutator2::visit;
 
     Stmt visit(const For *op) override {
+        // Don't recurse inside loops marked 'Extern', they will be
+        // removed later.
+        if (op->for_type == ForType::Extern) {
+            return op;
+        }
+
         set<string> old_inner_productions;
         inner_productions.swap(old_inner_productions);
 
@@ -947,8 +953,12 @@ public:
             lets.push_back({ let->name, let->value });
         }
 
-        // If there are no pipelines at this loop level, we can skip most of the work.
-        bool no_pipelines = body.as<For>() != nullptr;
+        // If there are no pipelines at this loop level, we can skip
+        // most of the work.  Consider 'extern' for loops as pipelines
+        // (we aren't recursing into these loops above).
+        bool no_pipelines =
+            body.as<For>() != nullptr &&
+            body.as<For>()->for_type != ForType::Extern;
 
         // Figure out which stage of which function we're producing
         int producing = -1;
@@ -967,7 +977,7 @@ public:
 
         // Figure out how much of it we're producing
         Box box;
-        if (!no_pipelines && producing >= 0) {
+        if (!no_pipelines && producing >= 0 && !f.has_extern_definition()) {
             Scope<Interval> empty_scope;
             box = box_provided(body, stages[producing].name, empty_scope, func_bounds);
             internal_assert((int)box.size() == f.dimensions());
@@ -1009,38 +1019,42 @@ public:
                     internal_assert(box[i].is_bounded());
                     string var = stage_name + "." + f_args[i];
 
-                    if (box[i].is_single_point()){
+                    if (box[i].is_single_point()) {
                         body = LetStmt::make(var + ".max", Variable::make(Int(32), var + ".min"), body);
                     } else {
                         body = LetStmt::make(var + ".max", box[i].max, body);
                     }
 
                     body = LetStmt::make(var + ".min", box[i].min, body);
-
-                    // The following is also valid, but seems to not simplify as well
-                    /*
-                      string var = stage_name + "." + f_args[i];
-                      Interval in = bounds_of_inner_var(var, body);
-                      if (!in.min.defined() || !in.max.defined()) continue;
-
-                      if (in.max.same_as(in.min)) {
-                          body = LetStmt::make(var + ".max", Variable::make(Int(32), var + ".min"), body);
-                      } else {
-                          body = LetStmt::make(var + ".max", in.max, body);
-                      }
-
-                      body = LetStmt::make(var + ".min", in.min, body);
-                    */
                 }
             }
 
-            // And the current bounds on its reduction variables.
-            if (producing >= 0 && stages[producing].stage > 0) {
+            // And the current bounds on its reduction variables, and
+            // variables from extern for loops.
+            if (producing >= 0) {
                 const Stage &s = stages[producing];
-                for (const ReductionVariable &rv : s.rvars) {
-                    string var = s.stage_prefix + rv.var;
+                vector<string> vars;
+                if (s.func.has_extern_definition()) {
+                    vars = s.func.args();
+                }
+                if (stages[producing].stage > 0) {
+                    for (const ReductionVariable &rv : s.rvars) {
+                        vars.push_back(rv.var);
+                    }
+                }
+                for (const string& i : vars) {
+                    string var = s.stage_prefix + i;
                     Interval in = bounds_of_inner_var(var, body);
                     if (in.is_bounded()) {
+                        // bounds_of_inner_var doesn't understand
+                        // GuardWithIf, but we know split rvars never
+                        // have inner bounds that exceed the outer
+                        // ones.
+                        if (!s.rvars.empty()) {
+                            in.min = max(in.min, Variable::make(Int(32), var + ".min"));
+                            in.max = min(in.max, Variable::make(Int(32), var + ".max"));
+                        }
+
                         body = LetStmt::make(var + ".min", in.min, body);
                         body = LetStmt::make(var + ".max", in.max, body);
                     } else {
@@ -1130,5 +1144,5 @@ Stmt bounds_inference(Stmt s,
     return s.as<For>()->body;
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

@@ -11,17 +11,17 @@
 namespace Halide {
 namespace Internal {
 
-using std::string;
 using std::map;
-using std::vector;
 using std::pair;
 using std::set;
+using std::string;
+using std::vector;
 
 // Is it safe to lift an Expr out of a loop (and potentially across a device boundary)
 class CanLift : public IRVisitor {
     using IRVisitor::visit;
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         if (!op->is_pure()) {
             result = false;
         } else {
@@ -29,11 +29,11 @@ class CanLift : public IRVisitor {
         }
     }
 
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         result = false;
     }
 
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         if (varying.contains(op->name)) {
             result = false;
         }
@@ -117,6 +117,29 @@ public:
     map<Expr, string, IRDeepCompare> lifted;
 };
 
+// The pass above can lift out the value of lets entirely, leaving
+// them as just renamings of other variables. Easier to substitute
+// them in as a post-pass rather than make the pass above more clever.
+class SubstituteTrivialLets : public IRMutator2 {
+    using IRMutator2::visit;
+
+    Expr visit(const Let *op) override {
+        if (op->value.as<Variable>()) {
+            return mutate(substitute(op->name, op->value, op->body));
+        } else {
+            return IRMutator2::visit(op);
+        }
+    }
+
+    Stmt visit(const LetStmt *op) override {
+        if (op->value.as<Variable>()) {
+            return mutate(substitute(op->name, op->value, op->body));
+        } else {
+            return IRMutator2::visit(op);
+        }
+    }
+};
+
 class LICM : public IRMutator2 {
     using IRMutator2::visit;
 
@@ -141,6 +164,13 @@ class LICM : public IRMutator2 {
             return cost(sub->a, vars) + cost(sub->b, vars) + 1;
         } else if (const Mul *mul = e.as<Mul>()) {
             return cost(mul->a, vars) + cost(mul->b, vars) + 1;
+        } else if (const Call *call = e.as<Call>()) {
+            if (call->is_intrinsic(Call::reinterpret)) {
+                internal_assert(call->args.size() == 1);
+                return cost(call->args[0], vars);
+            } else {
+                return 100;
+            }
         } else {
             return 100;
         }
@@ -164,6 +194,7 @@ class LICM : public IRMutator2 {
             // Lift invariants
             LiftLoopInvariants lifter;
             Stmt new_stmt = lifter.mutate(op);
+            new_stmt = SubstituteTrivialLets().mutate(new_stmt);
 
             // As an optimization to reduce register pressure, take
             // the set of expressions to lift and check if any can
@@ -196,7 +227,7 @@ class LICM : public IRMutator2 {
             // Track the set of variables used by the inner loop
             class CollectVars : public IRVisitor {
                 using IRVisitor::visit;
-                void visit(const Variable *op) {
+                void visit(const Variable *op) override {
                     vars.insert(op->name);
                 }
             public:
@@ -252,7 +283,6 @@ class LICM : public IRMutator2 {
     }
 };
 
-
 // Reassociate summations to group together the loop invariants. Useful to run before LICM.
 class GroupLoopInvariants : public IRMutator2 {
     using IRMutator2::visit;
@@ -263,7 +293,7 @@ class GroupLoopInvariants : public IRMutator2 {
         using IRVisitor::visit;
         const Scope<int> &depth;
 
-        void visit(const Variable *op) {
+        void visit(const Variable *op) override {
             if (depth.contains(op->name)) {
                 result = std::max(result, depth.get(op->name));
             }
@@ -394,7 +424,6 @@ class GroupLoopInvariants : public IRMutator2 {
         ScopedBinding<int> bind(var_depth, op->name, expr_depth(op->value));
         return IRMutator2::visit(op);
     }
-
 };
 
 // Turn for loops of size one into let statements
@@ -406,5 +435,5 @@ Stmt loop_invariant_code_motion(Stmt s) {
     return s;
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

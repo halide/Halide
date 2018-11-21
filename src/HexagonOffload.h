@@ -18,7 +18,7 @@ Stmt inject_hexagon_rpc(Stmt s, const Target &host_target, Module &module);
 
 Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_code);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

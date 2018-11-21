@@ -15,6 +15,11 @@
 extern "C" {
 
 HALIDE_BUFFER_HELPER_ATTRS
+int _halide_buffer_get_dimensions(const halide_buffer_t *buf) {
+    return buf->dimensions;
+}
+
+HALIDE_BUFFER_HELPER_ATTRS
 uint8_t *_halide_buffer_get_host(const halide_buffer_t *buf) {
     return buf->host;
 }
@@ -171,7 +176,7 @@ halide_buffer_t *_halide_buffer_crop(void *user_context,
 // with distinct store_at/compute_at levels. Each call to the stage
 // only fills in part of the buffer.
 HALIDE_BUFFER_HELPER_ATTRS
-void _halide_buffer_retire_crop_after_extern_stage(void *user_context,
+int _halide_buffer_retire_crop_after_extern_stage(void *user_context,
                                                    void *obj) {
     halide_buffer_t **buffers = (halide_buffer_t **)obj;
     halide_buffer_t *crop = buffers[0];
@@ -197,16 +202,18 @@ void _halide_buffer_retire_crop_after_extern_stage(void *user_context,
     if (crop->host_dirty()) {
         parent->set_host_dirty();
     }
+    return 0;
 }
 
 HALIDE_BUFFER_HELPER_ATTRS
-void _halide_buffer_retire_crops_after_extern_stage(void *user_context,
+int _halide_buffer_retire_crops_after_extern_stage(void *user_context,
                                                     void *obj) {
     halide_buffer_t **buffers = (halide_buffer_t **)obj;
     while (*buffers) {
         _halide_buffer_retire_crop_after_extern_stage(user_context, buffers);
         buffers += 2;
     }
+    return 0;
 }
 
 HALIDE_BUFFER_HELPER_ATTRS

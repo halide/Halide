@@ -6,9 +6,9 @@
  * Classes for declaring image parameters to halide pipelines
  */
 
-#include "Var.h"
-#include "OutputImageParam.h"
 #include "Func.h"
+#include "OutputImageParam.h"
+#include "Var.h"
 
 namespace Halide {
 
@@ -24,7 +24,7 @@ class ImageParam : public OutputImageParam {
     ImageParam(const Internal::Parameter &p, Func f) : OutputImageParam(p, Argument::InputBuffer, f) {}
 
     /** Helper function to initialize the Func representation of this ImageParam. */
-    EXPORT Func create_func() const;
+    Func create_func() const;
 
 public:
 
@@ -33,24 +33,24 @@ public:
 
     /** Construct an image parameter of the given type and
      * dimensionality, with an auto-generated unique name. */
-    EXPORT ImageParam(Type t, int d);
+    ImageParam(Type t, int d);
 
     /** Construct an image parameter of the given type and
      * dimensionality, with the given name */
-    EXPORT ImageParam(Type t, int d, const std::string &n);
+    ImageParam(Type t, int d, const std::string &n);
 
     /** Bind an Image to this ImageParam. Only relevant for jitting */
     // @{
-    EXPORT void set(Buffer<> im);
+    void set(Buffer<> im);
     // @}
 
     /** Get a reference to the Buffer bound to this ImageParam. Only relevant for jitting. */
     // @{
-    EXPORT Buffer<> get() const;
+    Buffer<> get() const;
     // @}
 
     /** Unbind any bound Buffer */
-    EXPORT void reset();
+    void reset();
 
     /** Construct an expression which loads from this image
      * parameter. The location is extended with enough implicit
@@ -59,11 +59,11 @@ public:
      */
     // @{
     template <typename... Args>
-    NO_INLINE Expr operator()(Args&&... args) const {
+    HALIDE_NO_USER_CODE_INLINE Expr operator()(Args&&... args) const {
         return func(std::forward<Args>(args)...);
     }
-    EXPORT Expr operator()(std::vector<Expr>) const;
-    EXPORT Expr operator()(std::vector<Var>) const;
+    Expr operator()(std::vector<Expr>) const;
+    Expr operator()(std::vector<Var>) const;
     // @}
 
     /** Return the intrinsic Func representation of this ImageParam. This allows
@@ -79,7 +79,7 @@ public:
      * '_0' represents the first dimension of the Func, while _1 represents the
      * second dimension of the Func.
      */
-    EXPORT operator Func() const;
+    operator Func() const;
 
 
     /** Creates and returns a new Func that wraps this ImageParam. During
@@ -119,12 +119,18 @@ public:
      * See \ref Func::in for more possible use cases of the 'in()' directive.
      */
     // @{
-    EXPORT Func in(const Func &f);
-    EXPORT Func in(const std::vector<Func> &fs);
-    EXPORT Func in();
+    Func in(const Func &f);
+    Func in(const std::vector<Func> &fs);
+    Func in();
     // @}
+
+    /** Trace all loads from this ImageParam by emitting calls to halide_trace. */
+    void trace_loads();
+
+    /** Add a trace tag to this ImageParam's Func. */
+    ImageParam &add_trace_tag(const std::string &trace_tag);
 };
 
-}
+}  // namespace Halide
 
 #endif

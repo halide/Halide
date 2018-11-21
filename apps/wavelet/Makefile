@@ -14,7 +14,7 @@ clean:
 $(BIN)/%.generator: %_generator.cpp $(GENERATOR_DEPS)
 	@echo Building Generator $(filter %_generator.cpp,$^)
 	@mkdir -p $(@D)
-	@$(CXX) $(CXXFLAGS) -fno-rtti $(filter-out %.h,$^) $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS) -o $@
+	@$(CXX) $(CXXFLAGS) -fno-rtti $(filter-out %.h,$^) $(LDFLAGS) $(HALIDE_SYSTEM_LIBS) -o $@
 
 # By default, %.a/.h are produced by executing %.generator
 $(BIN)/%.a $(BIN)/%.h: $(BIN)/%.generator

@@ -1,25 +1,25 @@
 #include <algorithm>
 
-#include "VectorizeLoops.h"
-#include "IRMutator.h"
-#include "Scope.h"
-#include "IRPrinter.h"
-#include "Deinterleave.h"
-#include "Substitute.h"
-#include "IROperator.h"
-#include "IREquality.h"
-#include "ExprUsesVar.h"
-#include "Solve.h"
-#include "Simplify.h"
 #include "CSE.h"
 #include "CodeGen_GPU_Dev.h"
+#include "Deinterleave.h"
+#include "ExprUsesVar.h"
+#include "IREquality.h"
+#include "IRMutator.h"
+#include "IROperator.h"
+#include "IRPrinter.h"
+#include "Scope.h"
+#include "Simplify.h"
+#include "Solve.h"
+#include "Substitute.h"
+#include "VectorizeLoops.h"
 
 namespace Halide {
 namespace Internal {
 
+using std::pair;
 using std::string;
 using std::vector;
-using std::pair;
 
 namespace {
 
@@ -215,7 +215,7 @@ public:
 class UsesGPUVars : public IRVisitor {
 private:
     using IRVisitor::visit;
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         if (CodeGen_GPU_Dev::is_gpu_var(op->name)) {
             debug(3) << "Found gpu loop var: " << op->name << "\n";
             uses_gpu = true;
@@ -322,7 +322,7 @@ class PredicateLoadStore : public IRMutator2 {
             return op;
         }
         vectorized = true;
-        return Store::make(op->name, value, op->index, op->param, predicate);
+        return Store::make(op->name, value, index, op->param, predicate);
     }
 
     Expr visit(const Call *op) override {
@@ -482,26 +482,64 @@ class VectorSubs : public IRMutator2 {
         if (!changed) {
             return op;
         } else if (op->name == Call::trace) {
-            // Call::trace vectorizes uniquely, because we want a
-            // single trace call for the entire vector, instead of
-            // scalarizing the call and tracing each element.
-            for (size_t i = 1; i <= 2; i++) {
-                // Each struct should be a struct-of-vectors, not a
-                // vector of distinct structs.
-                const Call *call = new_args[i].as<Call>();
-                internal_assert(call && call->is_intrinsic(Call::make_struct));
-                // Widen the call args to have the same lanes as the max lanes found
-                vector<Expr> call_args(call->args.size());
-                for (size_t i = 0; i < call_args.size(); i++) {
-                    call_args[i] = widen(call->args[i], max_lanes);
+            const int64_t *event = as_const_int(op->args[6]);
+            internal_assert(event != nullptr);
+            if (*event == halide_trace_begin_realization || *event == halide_trace_end_realization) {
+                // Call::trace vectorizes uniquely for begin/end realization, because the coordinates
+                // for these are actually min/extent pairs; we need to maintain the proper dimensionality
+                // count and instead aggregate the widened values into a single pair.
+                for (size_t i = 1; i <= 2; i++) {
+                    const Call *call = new_args[i].as<Call>();
+                    internal_assert(call && call->is_intrinsic(Call::make_struct));
+                    if (i == 1) {
+                        // values should always be empty for these events
+                        internal_assert(call->args.empty());
+                        continue;
+                    }
+                    vector<Expr> call_args(call->args.size());
+                    for (size_t j = 0; j < call_args.size(); j += 2) {
+                        Expr min_v = widen(call->args[j], max_lanes);
+                        Expr extent_v = widen(call->args[j+1], max_lanes);
+                        Expr min_scalar = extract_lane(min_v, 0);
+                        Expr max_scalar = min_scalar + extract_lane(extent_v, 0);
+                        for (int k = 1; k < max_lanes; ++k) {
+                            Expr min_k = extract_lane(min_v, k);
+                            Expr extent_k = extract_lane(extent_v, k);
+                            min_scalar = min(min_scalar, min_k);
+                            max_scalar = max(max_scalar, min_k + extent_k);
+                        }
+                        call_args[j] = min_scalar;
+                        call_args[j+1] = max_scalar - min_scalar;
+                    }
+                    new_args[i] = Call::make(call->type.element_of(), Call::make_struct, call_args, Call::Intrinsic);
                 }
-                new_args[i] = Call::make(call->type.element_of(), Call::make_struct,
-                                         call_args, Call::Intrinsic);
+            } else {
+                // Call::trace vectorizes uniquely, because we want a
+                // single trace call for the entire vector, instead of
+                // scalarizing the call and tracing each element.
+                for (size_t i = 1; i <= 2; i++) {
+                    // Each struct should be a struct-of-vectors, not a
+                    // vector of distinct structs.
+                    const Call *call = new_args[i].as<Call>();
+                    internal_assert(call && call->is_intrinsic(Call::make_struct));
+                    // Widen the call args to have the same lanes as the max lanes found
+                    vector<Expr> call_args(call->args.size());
+                    for (size_t j = 0; j < call_args.size(); j++) {
+                        call_args[j] = widen(call->args[j], max_lanes);
+                    }
+                    new_args[i] = Call::make(call->type.element_of(), Call::make_struct,
+                                             call_args, Call::Intrinsic);
+                }
+                // One of the arguments to the trace helper
+                // records the number of vector lanes in the type being
+                // stored.
+                new_args[5] = max_lanes;
+                // One of the arguments to the trace helper
+                // records the number entries in the coordinates (which we just widened)
+                if (max_lanes > 1) {
+                    new_args[9] = new_args[9] * max_lanes;
+                }
             }
-            // One of the arguments to the trace helper
-            // records the number of vector lanes in the type being
-            // stored.
-            new_args[5] = max_lanes;
             return Call::make(op->type, Call::trace, new_args, op->call_type);
         } else {
             // Widen the args to have the same lanes as the max lanes found
@@ -845,7 +883,7 @@ class VectorSubs : public IRMutator2 {
         // The variable itself could still exist inside an inner scalarized block.
         body = substitute(v, Variable::make(Int(32), var), body);
 
-        return Allocate::make(op->name, op->type, new_extents, op->condition, body, new_expr, op->free_function);
+        return Allocate::make(op->name, op->type, op->memory_type, new_extents, op->condition, body, new_expr, op->free_function);
     }
 
     Stmt scalarize(Stmt s) {
@@ -945,11 +983,11 @@ public:
     VectorizeLoops(const Target &t) : target(t), in_hexagon(false) {}
 };
 
-} // Anonymous namespace
+}  // Anonymous namespace
 
 Stmt vectorize_loops(Stmt s, const Target &t) {
     return VectorizeLoops(t).mutate(s);
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

@@ -15,8 +15,7 @@ namespace Internal {
  * semantic equivalence. */
 Stmt uniquify_variable_names(Stmt s);
 
-}
-}
-
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

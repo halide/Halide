@@ -43,5 +43,5 @@ Stmt unroll_loops(Stmt s) {
     return UnrollLoops().mutate(s);
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

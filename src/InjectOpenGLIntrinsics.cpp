@@ -1,10 +1,10 @@
 #include "InjectOpenGLIntrinsics.h"
+#include "CodeGen_GPU_Dev.h"
+#include "FuseGPUThreadLoops.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "CodeGen_GPU_Dev.h"
-#include "Substitute.h"
-#include "FuseGPUThreadLoops.h"
 #include "Scope.h"
+#include "Substitute.h"
 
 namespace Halide {
 namespace Internal {
@@ -96,5 +96,5 @@ Stmt inject_opengl_intrinsics(Stmt s) {
     return gl.mutate(s);
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

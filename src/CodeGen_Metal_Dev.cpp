@@ -1,8 +1,8 @@
-#include <sstream>
 #include <algorithm>
+#include <sstream>
 
-#include "CodeGen_Metal_Dev.h"
 #include "CodeGen_Internal.h"
+#include "CodeGen_Metal_Dev.h"
 #include "Debug.h"
 #include "IROperator.h"
 
@@ -10,9 +10,9 @@ namespace Halide {
 namespace Internal {
 
 using std::ostringstream;
+using std::sort;
 using std::string;
 using std::vector;
-using std::sort;
 
 static ostringstream nil;
 
@@ -65,8 +65,6 @@ string CodeGen_Metal_Dev::CodeGen_Metal_C::print_type_maybe_storage(Type type, b
         case 2:
         case 3:
         case 4:
-        case 8:
-        case 16:
             oss << type.lanes();
             break;
         default:
@@ -122,7 +120,7 @@ string simt_intrinsic(const string &name) {
     internal_error << "simt_intrinsic called on bad variable name: " << name << "\n";
     return "";
 }
-}
+}  // namespace
 
 string CodeGen_Metal_Dev::CodeGen_Metal_C::print_extern_call(const Call *op) {
     internal_assert(!function_takes_user_context(op->name));
@@ -212,6 +210,16 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Broadcast *op) {
     print_assignment(op->type.with_lanes(op->lanes), rhs.str());
 }
 
+void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Call *op) {
+    if (op->is_intrinsic(Call::gpu_thread_barrier)) {
+        do_indent();
+        stream << "threadgroup_barrier(mem_flags::mem_threadgroup);\n";
+        print_assignment(op->type, "0");
+    } else {
+        CodeGen_C::visit(op);
+    }
+}
+
 namespace {
 
 // If e is a ramp expression with stride 1, return the base, otherwise undefined.
@@ -236,6 +244,7 @@ string CodeGen_Metal_Dev::CodeGen_Metal_C::get_memory_space(const string &buf) {
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Load *op) {
     user_assert(is_one(op->predicate)) << "Predicated load is not supported inside Metal kernel.\n";
+    user_assert(op->type.lanes() <= 4) << "Vectorization by widths greater than 4 is not supported by Metal -- type is " << op->type << ".\n";
 
     // If we're loading a contiguous ramp, load from a vector type pointer.
     Expr ramp_base = is_ramp_one(op->index);
@@ -278,9 +287,9 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Load *op) {
         // If index is a vector, gather vector elements.
         internal_assert(op->type.is_vector());
 
-        // This has to be underscore as print_name prepends and
-        // underscore to names without one and that results in a name
-        // mismatch of a Load appears as the value of a Let.
+        // This has to be underscore as print_name prepends an underscore to
+        // names without one and that results in a name mismatch if a Load
+        // appears as the value of a Let
         id = unique_name('_');
         cache[rhs.str()] = id;
 
@@ -304,6 +313,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Load *op) {
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Store *op) {
     user_assert(is_one(op->predicate)) << "Predicated store is not supported inside Metal kernel.\n";
+    user_assert(op->value.type().lanes() <= 4) << "Vectorization by widths greater than 4 is not supported by Metal -- type is " << op->value.type() << ".\n";
 
     string id_value = print_expr(op->value);
     Type t = op->value.type();
@@ -448,7 +458,7 @@ struct BufferSize {
         return size < r.size;
     }
 };
-}
+}  // namespace
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::add_kernel(Stmt s,
                                                     const string &name,
@@ -598,32 +608,30 @@ void CodeGen_Metal_Dev::init_module() {
                << "constexpr float nan_f32() { return as_type<float>(0x7fc00000); }\n" // Quiet NaN with minimum fractional value.
                << "constexpr float neg_inf_f32() { return float_from_bits(0xff800000); }\n"
                << "constexpr float inf_f32() { return float_from_bits(0x7f800000); }\n"
-               << "float fast_inverse_f32(float x) { return 1.0f / x; } \n"
-               << "#define sqrt_f32 sqrt \n"
-               << "#define sin_f32 sin \n"
-               << "#define cos_f32 cos \n"
-               << "#define exp_f32 exp \n"
-               << "#define log_f32 log \n"
-               << "#define abs_f32 fabs \n"
-               << "#define floor_f32 floor \n"
-               << "#define ceil_f32 ceil \n"
-               << "#define round_f32 round \n"
-               << "#define trunc_f32 trunc \n"
+               << "float fast_inverse_f32(float x) { return 1.0f / x; }\n"
+               << "#define sqrt_f32 sqrt\n"
+               << "#define sin_f32 sin\n"
+               << "#define cos_f32 cos\n"
+               << "#define exp_f32 exp\n"
+               << "#define log_f32 log\n"
+               << "#define abs_f32 fabs\n"
+               << "#define floor_f32 floor\n"
+               << "#define ceil_f32 ceil\n"
+               << "#define round_f32 round\n"
+               << "#define trunc_f32 trunc\n"
                << "#define pow_f32 pow\n"
-               << "#define asin_f32 asin \n"
-               << "#define acos_f32 acos \n"
-               << "#define tan_f32 tan \n"
-               << "#define atan_f32 atan \n"
+               << "#define asin_f32 asin\n"
+               << "#define acos_f32 acos\n"
+               << "#define tan_f32 tan\n"
+               << "#define atan_f32 atan\n"
                << "#define atan2_f32 atan2\n"
-               << "#define sinh_f32 sinh \n"
-               << "#define asinh_f32 asinh \n"
-               << "#define cosh_f32 cosh \n"
-               << "#define acosh_f32 acosh \n"
-               << "#define tanh_f32 tanh \n"
-               << "#define atanh_f32 atanh \n"
-               << "#define fast_inverse_sqrt_f32 rsqrt \n"
-               << "#define halide_gpu_thread_barrier() \\\n" // Must to be a #define as barriers in an inline function don't work
-               << "  (threadgroup_barrier(mem_flags::mem_threadgroup), 0)\n" // Halide only ever needs threadgroup (OpenCL "local") memory fences. (mem_threadgroup)
+               << "#define sinh_f32 sinh\n"
+               << "#define asinh_f32 asinh\n"
+               << "#define cosh_f32 cosh\n"
+               << "#define acosh_f32 acosh\n"
+               << "#define tanh_f32 tanh\n"
+               << "#define atanh_f32 atanh\n"
+               << "#define fast_inverse_sqrt_f32 rsqrt\n"
                << "}\n"; // close namespace
 
     // __shared always has address space threadgroup.
@@ -654,4 +662,5 @@ std::string CodeGen_Metal_Dev::print_gpu_name(const std::string &name) {
     return name;
 }
 
-}}
+}  // namespace Internal
+}  // namespace Halide

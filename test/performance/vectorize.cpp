@@ -30,7 +30,7 @@ bool test(int vec_width) {
     Buffer<A> input(W, H+20);
     for (int y = 0; y < H+20; y++) {
         for (int x = 0; x < W; x++) {
-            input(x, y) = (A)((rand() & 0xffff)*0.125 + 1.0);
+            input(x, y) = Internal::safe_numeric_cast<A>((rand() & 0xffff)*0.125 + 1.0);
         }
     }
 

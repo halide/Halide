@@ -1,7 +1,7 @@
 #include "ModulusRemainder.h"
+#include "IR.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
-#include "IR.h"
 #include "Simplify.h"
 
 // This file is largely a port of parts of src/analysis.ml
@@ -19,48 +19,50 @@ public:
         scope.set_containing_scope(s);
     }
 
-    void visit(const IntImm *);
-    void visit(const UIntImm *);
-    void visit(const FloatImm *);
-    void visit(const StringImm *);
-    void visit(const Cast *);
-    void visit(const Variable *);
-    void visit(const Add *);
-    void visit(const Sub *);
-    void visit(const Mul *);
-    void visit(const Div *);
-    void visit(const Mod *);
-    void visit(const Min *);
-    void visit(const Max *);
-    void visit(const EQ *);
-    void visit(const NE *);
-    void visit(const LT *);
-    void visit(const LE *);
-    void visit(const GT *);
-    void visit(const GE *);
-    void visit(const And *);
-    void visit(const Or *);
-    void visit(const Not *);
-    void visit(const Select *);
-    void visit(const Load *);
-    void visit(const Ramp *);
-    void visit(const Broadcast *);
-    void visit(const Call *);
-    void visit(const Let *);
-    void visit(const LetStmt *);
-    void visit(const AssertStmt *);
-    void visit(const ProducerConsumer *);
-    void visit(const For *);
-    void visit(const Store *);
-    void visit(const Provide *);
-    void visit(const Allocate *);
-    void visit(const Realize *);
-    void visit(const Block *);
-    void visit(const IfThenElse *);
-    void visit(const Free *);
-    void visit(const Evaluate *);
-    void visit(const Shuffle *);
-    void visit(const Prefetch *);
+    void visit(const IntImm *) override;
+    void visit(const UIntImm *) override;
+    void visit(const FloatImm *) override;
+    void visit(const StringImm *) override;
+    void visit(const Cast *) override;
+    void visit(const Variable *) override;
+    void visit(const Add *) override;
+    void visit(const Sub *) override;
+    void visit(const Mul *) override;
+    void visit(const Div *) override;
+    void visit(const Mod *) override;
+    void visit(const Min *) override;
+    void visit(const Max *) override;
+    void visit(const EQ *) override;
+    void visit(const NE *) override;
+    void visit(const LT *) override;
+    void visit(const LE *) override;
+    void visit(const GT *) override;
+    void visit(const GE *) override;
+    void visit(const And *) override;
+    void visit(const Or *) override;
+    void visit(const Not *) override;
+    void visit(const Select *) override;
+    void visit(const Load *) override;
+    void visit(const Ramp *) override;
+    void visit(const Broadcast *) override;
+    void visit(const Call *) override;
+    void visit(const Let *) override;
+    void visit(const LetStmt *) override;
+    void visit(const AssertStmt *) override;
+    void visit(const ProducerConsumer *) override;
+    void visit(const For *) override;
+    void visit(const Acquire *) override;
+    void visit(const Store *) override;
+    void visit(const Provide *) override;
+    void visit(const Allocate *) override;
+    void visit(const Realize *) override;
+    void visit(const Block *) override;
+    void visit(const Fork *) override;
+    void visit(const IfThenElse *) override;
+    void visit(const Free *) override;
+    void visit(const Evaluate *) override;
+    void visit(const Shuffle *) override;
+    void visit(const Prefetch *) override;
 };
 
 ModulusRemainder modulus_remainder(Expr e) {
@@ -72,8 +74,6 @@ ModulusRemainder modulus_remainder(Expr e, const Scope<ModulusRemainder> &scope)
     ComputeModulusRemainder mr(&scope);
     return mr.analyze(e);
 }
-
-
 
 bool reduce_expr_modulo(Expr expr, int modulus, int *remainder) {
     ModulusRemainder result = modulus_remainder(expr);
@@ -121,7 +121,7 @@ void check(Expr e, int m, int r) {
         exit(-1);
     }
 }
-}
+}  // namespace
 
 void modulus_remainder_test() {
     Expr x = Variable::make(Int(32), "x");
@@ -175,7 +175,7 @@ void ComputeModulusRemainder::visit(const Variable *op) {
     }
 }
 
-int gcd(int a, int b) {
+int64_t gcd(int64_t a, int64_t b) {
     if (a < b) std::swap(a, b);
     while (b != 0) {
         int64_t tmp = b;
@@ -185,11 +185,11 @@ int gcd(int a, int b) {
     return a;
 }
 
-int lcm(int a, int b) {
+int64_t lcm(int64_t a, int64_t b) {
     return (a*b)/gcd(a, b);
 }
 
-int mod(int a, int m) {
+int64_t mod(int64_t a, int64_t m) {
     if (m == 0) return a;
     return mod_imp(a, m);
 }
@@ -197,43 +197,71 @@ int mod(int a, int m) {
 void ComputeModulusRemainder::visit(const Add *op) {
     ModulusRemainder a = analyze(op->a);
     ModulusRemainder b = analyze(op->b);
-    modulus = gcd(a.modulus, b.modulus);
-    remainder = mod(a.remainder + b.remainder, modulus);
+    if (add_would_overflow(32, a.remainder, b.remainder)) {
+        modulus = 0;
+        remainder = 1;
+    } else {
+        modulus = gcd(a.modulus, b.modulus);
+        remainder = mod(a.remainder + b.remainder, modulus);
+    }
 }
 
 void ComputeModulusRemainder::visit(const Sub *op) {
     ModulusRemainder a = analyze(op->a);
     ModulusRemainder b = analyze(op->b);
-    modulus = gcd(a.modulus, b.modulus);
-    remainder = mod(a.remainder - b.remainder, modulus);
+    if (sub_would_overflow(32, a.remainder, b.remainder)) {
+        modulus = 0;
+        remainder = 1;
+    } else {
+        modulus = gcd(a.modulus, b.modulus);
+        remainder = mod(a.remainder - b.remainder, modulus);
+    }
 }
 
 void ComputeModulusRemainder::visit(const Mul *op) {
     ModulusRemainder a = analyze(op->a);
     ModulusRemainder b = analyze(op->b);
 
+    // Assume the nothing-interesting result until we are sure we don't have overflow
+    modulus = 0;
+    remainder = 1;
+
     if (a.modulus == 0) {
         // a is constant
-        modulus = a.remainder * b.modulus;
-        remainder = a.remainder * b.remainder;
+        if (!mul_would_overflow(32, a.remainder, b.modulus) && !mul_would_overflow(32, a.remainder, b.remainder)) {
+            modulus = a.remainder * b.modulus;
+            remainder = a.remainder * b.remainder;
+        }
     } else if (b.modulus == 0) {
         // b is constant
-        modulus = b.remainder * a.modulus;
-        remainder = a.remainder * b.remainder;
+        if (!mul_would_overflow(32, b.remainder, a.modulus) && !mul_would_overflow(32, a.remainder, b.remainder)) {
+            modulus = b.remainder * a.modulus;
+            remainder = a.remainder * b.remainder;
+        }
     } else if (a.remainder == 0 && b.remainder == 0) {
         // multiple times multiple
-        modulus = a.modulus * b.modulus;
-        remainder = 0;
+        if (!mul_would_overflow(32, a.modulus, b.modulus)) {
+            modulus = a.modulus * b.modulus;
+            remainder = 0;
+        }
     } else if (a.remainder == 0) {
-        modulus = a.modulus * gcd(b.modulus, b.remainder);
-        remainder = 0;
+        int g = gcd(b.modulus, b.remainder);
+        if (!mul_would_overflow(32, a.modulus, g)) {
+            modulus = a.modulus * g;
+            remainder = 0;
+        }
     } else if (b.remainder == 0) {
-        modulus = b.modulus * gcd(a.modulus, a.remainder);
-        remainder = 0;
+        int g = gcd(a.modulus, a.remainder);
+        if (!mul_would_overflow(32, b.modulus, g)) {
+            modulus = b.modulus * g;
+            remainder = 0;
+        }
     } else {
         // All our tricks failed. Convert them to the same modulus and multiply
-        modulus = gcd(a.modulus, b.modulus);
-        a.remainder = mod(a.remainder * b.remainder, modulus);
+        if (!mul_would_overflow(32, a.remainder, b.remainder)) {
+            modulus = gcd(a.modulus, b.modulus);
+            remainder = mod(a.remainder * b.remainder, modulus);
+        }
     }
 }
 
@@ -278,10 +306,9 @@ ModulusRemainder unify_alternatives(ModulusRemainder a, ModulusRemainder b) {
         << "unified modulus   = " << modulus << "\n"
         << "unified remainder = " << ra << "\n";
 
-
     return ModulusRemainder(modulus, ra);
 }
-}
+}  // namespace
 
 void ComputeModulusRemainder::visit(const Mod *op) {
     // We can treat x mod y as x + z*y, where we know nothing about z.
@@ -413,6 +440,10 @@ void ComputeModulusRemainder::visit(const For *) {
     internal_assert(false) << "modulus_remainder of statement\n";
 }
 
+void ComputeModulusRemainder::visit(const Acquire *) {
+    internal_assert(false) << "modulus_remainder of statement\n";
+}
+
 void ComputeModulusRemainder::visit(const Store *) {
     internal_assert(false) << "modulus_remainder of statement\n";
 }
@@ -433,6 +464,10 @@ void ComputeModulusRemainder::visit(const Block *) {
     internal_assert(false) << "modulus_remainder of statement\n";
 }
 
+void ComputeModulusRemainder::visit(const Fork *) {
+    internal_assert(false) << "modulus_remainder of statement\n";
+}
+
 void ComputeModulusRemainder::visit(const Free *) {
     internal_assert(false) << "modulus_remainder of statement\n";
 }
@@ -449,5 +484,5 @@ void ComputeModulusRemainder::visit(const Prefetch *) {
     internal_assert(false) << "modulus_remainder of statement\n";
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

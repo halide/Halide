@@ -6,7 +6,7 @@
 namespace Halide {
 namespace PythonBindings {
 
-void define_lambda();
+void define_lambda(py::module &m);
 
 }  // namespace PythonBindings
 }  // namespace Halide

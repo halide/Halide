@@ -43,6 +43,13 @@ class RemoveDeadAllocations : public IRMutator2 {
         return IRMutator2::visit(op);
     }
 
+    Expr visit(const Variable *op) override {
+        if (allocs.contains(op->name)) {
+            allocs.pop(op->name);
+        }
+        return op;
+    }
+
     Stmt visit(const Allocate *op) override {
         allocs.push(op->name, 1);
         Stmt body = mutate(op->body);
@@ -53,7 +60,8 @@ class RemoveDeadAllocations : public IRMutator2 {
         } else if (body.same_as(op->body)) {
             return op;
         } else {
-            return Allocate::make(op->name, op->type, op->extents, op->condition, body, op->new_expr, op->free_function);
+            return Allocate::make(op->name, op->type, op->memory_type, op->extents,
+                                  op->condition, body, op->new_expr, op->free_function);
         }
     }
 
@@ -71,6 +79,5 @@ Stmt remove_dead_allocations(Stmt s) {
     return RemoveDeadAllocations().mutate(s);
 }
 
-
-}
-}
+}  // namespace Internal
+}  // namespace Halide

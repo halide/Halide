@@ -1,13 +1,13 @@
 #include "FindCalls.h"
 #include "IRVisitor.h"
 
-namespace Halide{
+namespace Halide {
 namespace Internal {
 
 using std::map;
-using std::vector;
-using std::string;
 using std::pair;
+using std::string;
+using std::vector;
 
 namespace {
 /* Find all the internal halide calls in an expr */
@@ -28,14 +28,13 @@ public:
         }
     }
 
-    void visit(const Call *call) {
+    void visit(const Call *call) override {
         IRVisitor::visit(call);
 
         if (call->call_type == Call::Halide && call->func.defined()) {
             Function f(call->func);
             include_function(f);
         }
-
     }
 };
 
@@ -78,7 +77,7 @@ void populate_environment_helper(Function f, map<string, Function> &env,
     }
 }
 
-}
+}  // namespace
 
 void populate_environment(Function f, map<string, Function> &env) {
     populate_environment_helper(f, env, true, true);
@@ -96,5 +95,5 @@ map<string, Function> find_direct_calls(Function f) {
     return res;
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

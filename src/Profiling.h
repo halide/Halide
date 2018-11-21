@@ -38,7 +38,7 @@ namespace Internal {
  */
 Stmt inject_profiling(Stmt, std::string);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

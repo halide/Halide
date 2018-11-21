@@ -7,8 +7,8 @@
  */
 
 #include "IROperator.h"
-#include "Scope.h"
 #include "Interval.h"
+#include "Scope.h"
 
 namespace Halide {
 namespace Internal {
@@ -59,8 +59,8 @@ struct Box {
 
     size_t size() const {return bounds.size();}
     bool empty() const {return bounds.empty();}
-    Interval &operator[](int i) {return bounds[i];}
-    const Interval &operator[](int i) const {return bounds[i];}
+    Interval &operator[](size_t i) {return bounds[i];}
+    const Interval &operator[](size_t i) const {return bounds[i];}
     void resize(size_t sz) {bounds.resize(sz);}
     void push_back(const Interval &i) {bounds.push_back(i);}
 
@@ -162,9 +162,9 @@ Box box_touched(Stmt s, std::string fn,
 FuncValueBounds compute_function_value_bounds(const std::vector<std::string> &order,
                                               const std::map<std::string, Function> &env);
 
-EXPORT void bounds_test();
+void bounds_test();
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

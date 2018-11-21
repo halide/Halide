@@ -104,8 +104,12 @@ WEAK int halide_cuda_acquire_context(void *user_context, CUcontext *ctx, bool cr
     // If the context has not been initialized, initialize it now.
     halide_assert(user_context, &context != NULL);
 
-    CUcontext local_val;
-    __atomic_load(&context, &local_val, __ATOMIC_ACQUIRE);
+    // Note that this null-check of the context is *not* locked with
+    // respect to device_release, so we may get a non-null context
+    // that's in the process of being destroyed. Things will go badly
+    // in general if you call device_release while other Halide code
+    // is running though.
+    CUcontext local_val = context;
     if (local_val == NULL) {
         if (!create) {
             *ctx = NULL;
@@ -114,16 +118,20 @@ WEAK int halide_cuda_acquire_context(void *user_context, CUcontext *ctx, bool cr
 
         {
             ScopedSpinLock spinlock(&context_lock);
-
-            __atomic_load(&context, &local_val, __ATOMIC_ACQUIRE);
+            local_val = context;
             if (local_val == NULL) {
                 CUresult error = create_cuda_context(user_context, &local_val);
                 if (error != CUDA_SUCCESS) {
-                    __sync_lock_release(&context_lock);
                     return error;
                 }
             }
-            __atomic_store(&context, &local_val, __ATOMIC_RELEASE);
+            // Normally in double-checked locking you need a release
+            // fence here that synchronizes with an acquire fence
+            // above to ensure context is fully constructed before
+            // assigning to the global, but there's no way that
+            // create_cuda_context can access the "context" global, so
+            // we should be OK just storing to it here.
+            context = local_val;
         }  // spinlock
     }
 
@@ -164,27 +172,33 @@ public:
     INLINE Context(void *user_context) : user_context(user_context),
                                          context(NULL),
                                          error(CUDA_SUCCESS) {
-        if (cuInit == NULL) {
-            load_libcuda(user_context);
-        }
-
 #ifdef DEBUG_RUNTIME
         halide_start_clock(user_context);
 #endif
         error = halide_cuda_acquire_context(user_context, &context);
-        halide_assert(user_context, context != NULL);
         if (error != 0) {
             return;
         }
+
+        // The default acquire_context loads libcuda as a
+        // side-effect. However, if acquire_context has been
+        // overridden, we may still need to load libcuda
+        if (cuInit == NULL) {
+            load_libcuda(user_context);
+        }
+
+        halide_assert(user_context, context != NULL);
+        halide_assert(user_context, cuInit != NULL);
 
         error = cuCtxPushCurrent(context);
     }
 
     INLINE ~Context() {
-        CUcontext old;
-        cuCtxPopCurrent(&old);
-
-        halide_cuda_release_context(user_context);
+        if (error == 0) {
+            CUcontext old;
+            cuCtxPopCurrent(&old);
+            halide_cuda_release_context(user_context);
+        }
     }
 };
 
@@ -228,6 +242,14 @@ WEAK module_state *find_module_for_context(const registered_filters *filters, CU
 
 WEAK CUresult create_cuda_context(void *user_context, CUcontext *ctx) {
     // Initialize CUDA
+    if (!cuInit) {
+        load_libcuda(user_context);
+        if (!cuInit) {
+            error(user_context) << "Could not find cuda system libraries";
+            return CUDA_ERROR_FILE_NOT_FOUND;
+        }
+    }
+
     CUresult err = cuInit(0);
     if (err != CUDA_SUCCESS) {
         error(user_context) << "CUDA: cuInit failed: "
@@ -243,6 +265,7 @@ WEAK CUresult create_cuda_context(void *user_context, CUcontext *ctx) {
                             << get_error_name(err);
         return err;
     }
+
     if (deviceCount <= 0) {
         halide_error(user_context, "CUDA: No devices available");
         return CUDA_ERROR_NO_DEVICE;
@@ -547,6 +570,11 @@ WEAK int halide_cuda_device_release(void *user_context) {
     debug(user_context)
         << "CUDA: halide_cuda_device_release (user_context: " <<  user_context << ")\n";
 
+    // If we haven't even loaded libcuda, don't load it just to quit.
+    if (!lib_cuda) {
+        return 0;
+    }
+
     int err;
     CUcontext ctx;
     err = halide_cuda_acquire_context(user_context, &ctx, false);
@@ -670,8 +698,8 @@ WEAK int halide_cuda_device_malloc(void *user_context, halide_buffer_t *buf) {
 }
 
 namespace {
-WEAK int do_multidimensional_copy(void *user_context, const device_copy &c,
-                                  uint64_t src, uint64_t dst, int d, bool from_host, bool to_host) {
+WEAK int cuda_do_multidimensional_copy(void *user_context, const device_copy &c,
+                                       uint64_t src, uint64_t dst, int d, bool from_host, bool to_host) {
     if (d > MAX_COPY_DIMS) {
         error(user_context) << "Buffer has too many dimensions to copy to/from GPU\n";
         return -1;
@@ -682,12 +710,16 @@ WEAK int do_multidimensional_copy(void *user_context, const device_copy &c,
                             << " to " << (to_host ? "host" : "device") << ", "
                             << (void *)src << " -> " << (void *)dst << ", " << c.chunk_size << " bytes\n";
         if (!from_host && to_host) {
+            debug(user_context) << "cuMemcpyDtoH(" << (void *)dst << ", " << (void *)src << ", " << c.chunk_size <<")\n";
             err = cuMemcpyDtoH((void *)dst, (CUdeviceptr)src, c.chunk_size);
         } else if (from_host && !to_host) {
+            debug(user_context) << "cuMemcpyHtoD(" << (void *)dst << ", " << (void *)src << ", " << c.chunk_size <<")\n";
             err = cuMemcpyHtoD((CUdeviceptr)dst, (void *)src, c.chunk_size);
         } else if (!from_host && !to_host) {
+            debug(user_context) << "cuMemcpyDtoD(" << (void *)dst << ", " << (void *)src << ", " << c.chunk_size <<")\n";
             err = cuMemcpyDtoD((CUdeviceptr)dst, (CUdeviceptr)src, c.chunk_size);
         } else if (dst != src) {
+            debug(user_context) << "memcpy(" << (void *)dst << ", " << (void *)src << ", " << c.chunk_size <<")\n";
             // Could reach here if a user called directly into the
             // cuda API for a device->host copy on a source buffer
             // with device_dirty = false.
@@ -700,7 +732,7 @@ WEAK int do_multidimensional_copy(void *user_context, const device_copy &c,
     } else {
         ssize_t src_off = 0, dst_off = 0;
         for (int i = 0; i < (int)c.extent[d-1]; i++) {
-            int err = do_multidimensional_copy(user_context, c, src + src_off, dst + dst_off, d - 1, from_host, to_host);
+            int err = cuda_do_multidimensional_copy(user_context, c, src + src_off, dst + dst_off, d - 1, from_host, to_host);
             dst_off += c.dst_stride_bytes[d-1];
             src_off += c.src_stride_bytes[d-1];
             if (err) {
@@ -719,18 +751,16 @@ WEAK int halide_cuda_buffer_copy(void *user_context, struct halide_buffer_t *src
     halide_assert(user_context, dst_device_interface == NULL ||
                   dst_device_interface == &cuda_device_interface);
 
-    if (src->device_dirty() &&
+    if ((src->device_dirty() || src->host == NULL) &&
         src->device_interface != &cuda_device_interface) {
         halide_assert(user_context, dst_device_interface == &cuda_device_interface);
-        // If the source is not cuda or host memory, ask the source
-        // device interface to copy to dst host memory first.
-        int err = src->device_interface->impl->buffer_copy(user_context, src, NULL, dst);
-        if (err) return err;
-        // Now just copy from src to host
-        src = dst;
+        // This is handled at the higher level.
+        return halide_error_code_incompatible_device_interface;
     }
 
-    bool from_host = !src->device_dirty() && src->host;
+    bool from_host = (src->device_interface != &cuda_device_interface) ||
+                     (src->device == 0) ||
+                     (src->host_dirty() && src->host != NULL);
     bool to_host = !dst_device_interface;
 
     halide_assert(user_context, from_host || src->device);
@@ -759,7 +789,7 @@ WEAK int halide_cuda_buffer_copy(void *user_context, struct halide_buffer_t *src
         }
         #endif
 
-        err = do_multidimensional_copy(user_context, c, c.src + c.src_begin, c.dst, dst->dimensions, from_host, to_host);
+        err = cuda_do_multidimensional_copy(user_context, c, c.src + c.src_begin, c.dst, dst->dimensions, from_host, to_host);
 
         #ifdef DEBUG_RUNTIME
         uint64_t t_after = halide_current_time_ns(user_context);
@@ -770,6 +800,19 @@ WEAK int halide_cuda_buffer_copy(void *user_context, struct halide_buffer_t *src
     return err;
 }
 
+namespace {
+
+WEAK int cuda_device_crop_from_offset(const struct halide_buffer_t *src,
+                                      int64_t offset,
+                                      struct halide_buffer_t *dst) {
+    dst->device = src->device + offset;
+    dst->device_interface = src->device_interface;
+    dst->set_device_dirty(src->device_dirty());
+    return 0;
+}
+
+}  // namespace
+
 WEAK int halide_cuda_device_crop(void *user_context, const struct halide_buffer_t *src,
                                  struct halide_buffer_t *dst) {
     debug(user_context)
@@ -777,15 +820,21 @@ WEAK int halide_cuda_device_crop(void *user_context, const struct halide_buffer_
         << ", src: " << src << ", dst: " << dst << ")\n";
 
     // Pointer arithmetic works fine.
-    int64_t offset = 0;
-    for (int i = 0; i < src->dimensions; i++) {
-        offset += (dst->dim[i].min - src->dim[i].min) * src->dim[i].stride;
-    }
-    offset *= src->type.bytes();
-    dst->device = src->device + offset;
-    dst->device_interface = src->device_interface;
-    dst->set_device_dirty(src->device_dirty());
-    return 0;
+    const int64_t offset = calc_device_crop_byte_offset(src, dst);
+    return cuda_device_crop_from_offset(src, offset, dst);
+}
+
+WEAK int halide_cuda_device_slice(void *user_context, const struct halide_buffer_t *src,
+                                  int slice_dim, int slice_pos,
+                                  struct halide_buffer_t *dst) {
+    debug(user_context)
+        << "CUDA: halide_cuda_device_slice (user_context: " << user_context
+        << ", src: " << src << ", slice_dim " << slice_dim << ", slice_pos "
+        << slice_pos << ", dst: " << dst << ")\n";
+
+    // Pointer arithmetic works fine.
+    const int64_t offset = calc_device_slice_byte_offset(src, slice_dim, slice_pos);
+    return cuda_device_crop_from_offset(src, offset, dst);
 }
 
 WEAK int halide_cuda_device_release_crop(void *user_context, struct halide_buffer_t *dst) {
@@ -1003,6 +1052,54 @@ WEAK const halide_device_interface_t *halide_cuda_device_interface() {
     return &cuda_device_interface;
 }
 
+WEAK int halide_cuda_compute_capability(void *user_context, int *major, int *minor) {
+    if (!lib_cuda) {
+        // If cuda can't be found, we want to return 0, 0 and it's not
+        // considered an error. So we should be very careful about
+        // looking for libcuda without tripping any errors in the rest
+        // of this runtime.
+        void *sym = halide_cuda_get_symbol(user_context, "cuInit");
+        if (!sym) {
+            *major = *minor = 0;
+            return 0;
+        }
+    }
+
+    {
+        Context ctx(user_context);
+        if (ctx.error != 0) {
+            return ctx.error;
+        }
+
+        CUresult err;
+
+        CUdevice dev;
+        err = cuCtxGetDevice(&dev);
+        if (err != CUDA_SUCCESS) {
+            error(user_context)
+                << "CUDA: cuCtxGetDevice failed ("
+                << Halide::Runtime::Internal::Cuda::get_error_name(err)
+                << ")";
+            return err;
+        }
+
+        err = cuDeviceGetAttribute(major, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR, dev);
+        if (err == CUDA_SUCCESS) {
+            err = cuDeviceGetAttribute(minor, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR, dev);
+        }
+
+        if (err != CUDA_SUCCESS) {
+            error(user_context)
+                << "CUDA: cuDeviceGetAttribute failed ("
+                << Halide::Runtime::Internal::Cuda::get_error_name(err)
+                << ")";
+            return err;
+        }
+    }
+
+    return 0;
+}
+
 namespace {
 __attribute__((destructor))
 WEAK void halide_cuda_cleanup() {
@@ -1094,6 +1191,7 @@ WEAK halide_device_interface_impl_t cuda_device_interface_impl = {
     halide_cuda_device_and_host_free,
     halide_cuda_buffer_copy,
     halide_cuda_device_crop,
+    halide_cuda_device_slice,
     halide_cuda_device_release_crop,
     halide_cuda_wrap_device_ptr,
     halide_cuda_detach_device_ptr,
@@ -1110,9 +1208,11 @@ WEAK halide_device_interface_t cuda_device_interface = {
     halide_device_and_host_free,
     halide_buffer_copy,
     halide_device_crop,
+    halide_device_slice,
     halide_device_release_crop,
     halide_device_wrap_native,
     halide_device_detach_native,
+    halide_cuda_compute_capability,
     &cuda_device_interface_impl
 };
 

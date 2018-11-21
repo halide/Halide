@@ -2052,6 +2052,7 @@ WEAK halide_device_interface_impl_t opengl_device_interface_impl = {
     halide_opengl_device_and_host_free,
     halide_default_buffer_copy,
     halide_default_device_crop,
+    halide_default_device_slice,
     halide_default_device_release_crop,
     halide_opengl_wrap_texture,
     halide_opengl_detach_texture
@@ -2068,9 +2069,11 @@ WEAK halide_device_interface_t opengl_device_interface = {
     halide_device_and_host_free,
     halide_buffer_copy,
     halide_device_crop,
+    halide_device_slice,
     halide_device_release_crop,
     halide_device_wrap_native,
     halide_device_detach_native,
+    NULL,
     &opengl_device_interface_impl
 };
 

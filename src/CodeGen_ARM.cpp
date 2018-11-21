@@ -3,22 +3,22 @@
 
 #include "CodeGen_ARM.h"
 #include "ConciseCasts.h"
-#include "IROperator.h"
-#include "IRMatch.h"
-#include "IREquality.h"
 #include "Debug.h"
-#include "Util.h"
-#include "Simplify.h"
+#include "IREquality.h"
+#include "IRMatch.h"
+#include "IROperator.h"
 #include "IRPrinter.h"
 #include "LLVM_Headers.h"
+#include "Simplify.h"
+#include "Util.h"
 
 namespace Halide {
 namespace Internal {
 
-using std::vector;
-using std::string;
 using std::ostringstream;
 using std::pair;
+using std::string;
+using std::vector;
 
 using namespace Halide::ConciseCasts;
 using namespace llvm;
@@ -308,7 +308,6 @@ void CodeGen_ARM::visit(const Cast *op) {
         }
     }
 
-
     // Catch extract-high-half-of-signed integer pattern and convert
     // it to extract-high-half-of-unsigned-integer. llvm peephole
     // optimization recognizes logical shift right but not arithemtic
@@ -402,6 +401,43 @@ void CodeGen_ARM::visit(const Mul *op) {
         }
     }
 
+    //
+    // Detect the cases where any of the operands has the pattern:
+    //      broadcast(widen(scalar))
+    // and convert it to
+    //      widen(broadcast(scalar))
+    // to be able to generate vmlal.x instructions correctly from llvm.
+    //
+    if (op->type.is_int() || op->type.is_uint()) {
+        // Check the first operand op->a for the pattern broadcast(widen(scalar))
+        //
+        const Broadcast *bcast_a = op->a.as<Broadcast>();
+        const Cast *cast_a = bcast_a ? bcast_a->value.as<Cast>() : nullptr;
+        const int lanes = op->type.lanes();
+
+        // If the pattern is there, and the cast is a widening cast
+        if (cast_a && cast_a->value.type().bits() < op->type.bits()) {
+            // generate a new Mul with flipped widen(broadcast(scalar))
+            Expr new_a = Cast::make(op->type,
+                                    Broadcast::make(cast_a->value, lanes));
+            debug(4) << "Replaced: " << op->a << "\n  with: " << new_a << "\n";
+            value = codegen(new_a * op->b);
+            return;
+        }
+
+        // Do the same for the second operand op->b
+        //
+        const Broadcast *bcast_b = op->b.as<Broadcast>();
+        const Cast *cast_b = bcast_b ? bcast_b->value.as<Cast>() : nullptr;
+        if (cast_b && cast_b->value.type().bits() < op->type.bits()) {
+            Expr new_b = Cast::make(op->type,
+                                   Broadcast::make(cast_b->value, lanes));
+            debug(4) << "Replaced: " << op->b << "\n  with: " << new_b << "\n";
+            value = codegen(op->a * new_b);
+            return;
+        }
+    }
+
     CodeGen_Posix::visit(op);
 }
 
@@ -480,8 +516,10 @@ void CodeGen_ARM::visit(const Min *op) {
         // Use a 2-wide vector instead
         Value *undef = UndefValue::get(f32x2);
         Constant *zero = ConstantInt::get(i32_t, 0);
-        Value *a_wide = builder->CreateInsertElement(undef, codegen(op->a), zero);
-        Value *b_wide = builder->CreateInsertElement(undef, codegen(op->b), zero);
+        Value *a = codegen(op->a);
+        Value *a_wide = builder->CreateInsertElement(undef, a, zero);
+        Value *b = codegen(op->b);
+        Value *b_wide = builder->CreateInsertElement(undef, b, zero);
         Value *wide_result;
         if (target.bits == 32) {
             wide_result = call_intrin(f32x2, 2, "llvm.arm.neon.vmins.v2f32", {a_wide, b_wide});
@@ -553,8 +591,10 @@ void CodeGen_ARM::visit(const Max *op) {
         // Use a 2-wide vector instead
         Value *undef = UndefValue::get(f32x2);
         Constant *zero = ConstantInt::get(i32_t, 0);
-        Value *a_wide = builder->CreateInsertElement(undef, codegen(op->a), zero);
-        Value *b_wide = builder->CreateInsertElement(undef, codegen(op->b), zero);
+        Value *a = codegen(op->a);
+        Value *a_wide = builder->CreateInsertElement(undef, a, zero);
+        Value *b = codegen(op->b);
+        Value *b_wide = builder->CreateInsertElement(undef, b, zero);
         Value *wide_result;
         if (target.bits == 32) {
             wide_result = call_intrin(f32x2, 2, "llvm.arm.neon.vmaxs.v2f32", {a_wide, b_wide});
@@ -1002,4 +1042,5 @@ int CodeGen_ARM::native_vector_bits() const {
     return 128;
 }
 
-}}
+}  // namespace Internal
+}  // namespace Halide

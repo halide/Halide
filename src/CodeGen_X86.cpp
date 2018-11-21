@@ -2,21 +2,21 @@
 
 #include "CodeGen_X86.h"
 #include "ConciseCasts.h"
-#include "JITModule.h"
-#include "IROperator.h"
-#include "IRMatch.h"
 #include "Debug.h"
+#include "IRMatch.h"
+#include "IRMutator.h"
+#include "IROperator.h"
+#include "JITModule.h"
+#include "LLVM_Headers.h"
+#include "Param.h"
 #include "Util.h"
 #include "Var.h"
-#include "Param.h"
-#include "LLVM_Headers.h"
-#include "IRMutator.h"
 
 namespace Halide {
 namespace Internal {
 
-using std::vector;
 using std::string;
+using std::vector;
 
 using namespace Halide::ConciseCasts;
 using namespace llvm;
@@ -219,23 +219,64 @@ void CodeGen_X86::visit(const Cast *op) {
     };
 
     static Pattern patterns[] = {
+        {Target::AVX2, true, Int(8, 32), 0, "llvm.x86.avx2.padds.b",
+         i8_sat(wild_i16x_ + wild_i16x_)},
         {Target::FeatureEnd, true, Int(8, 16), 0, "llvm.x86.sse2.padds.b",
          i8_sat(wild_i16x_ + wild_i16x_)},
+        {Target::AVX2, true, Int(8, 32), 0, "llvm.x86.avx2.psubs.b",
+         i8_sat(wild_i16x_ - wild_i16x_)},
         {Target::FeatureEnd, true, Int(8, 16), 0, "llvm.x86.sse2.psubs.b",
          i8_sat(wild_i16x_ - wild_i16x_)},
+#if LLVM_VERSION < 80
+        // Older LLVM versions support this as an intrinsic
+        {Target::AVX2, true, UInt(8, 32), 0, "llvm.x86.avx2.paddus.b",
+         u8_sat(wild_u16x_ + wild_u16x_)},
         {Target::FeatureEnd, true, UInt(8, 16), 0, "llvm.x86.sse2.paddus.b",
          u8_sat(wild_u16x_ + wild_u16x_)},
+        {Target::AVX2, true, UInt(8, 32), 0, "llvm.x86.avx2.psubus.b",
+         u8(max(wild_i16x_ - wild_i16x_, 0))},
         {Target::FeatureEnd, true, UInt(8, 16), 0, "llvm.x86.sse2.psubus.b",
          u8(max(wild_i16x_ - wild_i16x_, 0))},
+#else
+        // LLVM 8.0+ require using helpers from x86.ll
+        {Target::AVX2, true, UInt(8, 32), 0, "paddusbx32",
+         u8_sat(wild_u16x_ + wild_u16x_)},
+        {Target::FeatureEnd, true, UInt(8, 16), 0, "paddusbx16",
+         u8_sat(wild_u16x_ + wild_u16x_)},
+        {Target::AVX2, true, UInt(8, 32), 0, "psubusbx32",
+         u8(max(wild_i16x_ - wild_i16x_, 0))},
+        {Target::FeatureEnd, true, UInt(8, 16), 0, "psubusbx16",
+         u8(max(wild_i16x_ - wild_i16x_, 0))},
+#endif
+        {Target::AVX2, true, Int(16, 16), 0, "llvm.x86.avx2.padds.w",
+         i16_sat(wild_i32x_ + wild_i32x_)},
         {Target::FeatureEnd, true, Int(16, 8), 0, "llvm.x86.sse2.padds.w",
          i16_sat(wild_i32x_ + wild_i32x_)},
+        {Target::AVX2, true, Int(16, 16), 0, "llvm.x86.avx2.psubs.w",
+         i16_sat(wild_i32x_ - wild_i32x_)},
         {Target::FeatureEnd, true, Int(16, 8), 0, "llvm.x86.sse2.psubs.w",
          i16_sat(wild_i32x_ - wild_i32x_)},
+#if LLVM_VERSION < 80
+        // Older LLVM versions support this as an intrinsic
+        {Target::AVX2, true, UInt(16, 16), 0, "llvm.x86.avx2.paddus.w",
+         u16_sat(wild_u32x_ + wild_u32x_)},
         {Target::FeatureEnd, true, UInt(16, 8), 0, "llvm.x86.sse2.paddus.w",
          u16_sat(wild_u32x_ + wild_u32x_)},
+        {Target::AVX2, true, UInt(16, 16), 0, "llvm.x86.avx2.psubus.w",
+         u16(max(wild_i32x_ - wild_i32x_, 0))},
         {Target::FeatureEnd, true, UInt(16, 8), 0, "llvm.x86.sse2.psubus.w",
          u16(max(wild_i32x_ - wild_i32x_, 0))},
-
+#else
+        // LLVM 8.0+ require using helpers from x86.ll
+        {Target::AVX2, true, UInt(16, 16), 0, "padduswx16",
+         u16_sat(wild_u32x_ + wild_u32x_)},
+        {Target::FeatureEnd, true, UInt(16, 8), 0, "padduswx8",
+         u16_sat(wild_u32x_ + wild_u32x_)},
+        {Target::AVX2, true, UInt(16, 16), 0, "psubuswx16",
+         u16(max(wild_i32x_ - wild_i32x_, 0))},
+        {Target::FeatureEnd, true, UInt(16, 8), 0, "psubuswx8",
+         u16(max(wild_i32x_ - wild_i32x_, 0))},
+#endif
         // Only use the avx2 version if we have > 8 lanes
         {Target::AVX2, true, Int(16, 16), 9, "llvm.x86.avx2.pmulh.w",
          i16((wild_i32x_ * wild_i32x_) / 65536)},
@@ -246,25 +287,29 @@ void CodeGen_X86::visit(const Cast *op) {
          i16((wild_i32x_ * wild_i32x_) / 65536)},
         {Target::FeatureEnd, true, UInt(16, 8), 0, "llvm.x86.sse2.pmulhu.w",
          u16((wild_u32x_ * wild_u32x_) / 65536)},
-#if LLVM_VERSION < 60
-        // Older LLVM versions support this as an intrinsic
-        {Target::FeatureEnd, true, UInt(8, 16), 0, "llvm.x86.sse2.pavg.b",
-         u8(((wild_u16x_ + wild_u16x_) + 1) / 2)},
-        {Target::FeatureEnd, true, UInt(16, 8), 0, "llvm.x86.sse2.pavg.w",
-         u16(((wild_u32x_ + wild_u32x_) + 1) / 2)},
-#else
         // LLVM 6.0+ require using helpers from x86.ll
-        {Target::FeatureEnd, true, UInt(8, 16), 0, "pavgb",
+        {Target::AVX2, true, UInt(8, 32), 0, "pavgbx32",
          u8(((wild_u16x_ + wild_u16x_) + 1) / 2)},
-        {Target::FeatureEnd, true, UInt(16, 8), 0, "pavgw",
+        {Target::FeatureEnd, true, UInt(8, 16), 0, "pavgbx16",
+         u8(((wild_u16x_ + wild_u16x_) + 1) / 2)},
+        {Target::AVX2, true, UInt(16, 16), 0, "pavgwx16",
          u16(((wild_u32x_ + wild_u32x_) + 1) / 2)},
-#endif
+        {Target::FeatureEnd, true, UInt(16, 8), 0, "pavgwx8",
+         u16(((wild_u32x_ + wild_u32x_) + 1) / 2)},
+        {Target::AVX2, false, Int(16, 16), 0, "packssdwx16",
+         i16_sat(wild_i32x_)},
         {Target::FeatureEnd, false, Int(16, 8), 0, "packssdwx8",
          i16_sat(wild_i32x_)},
+        {Target::AVX2, false, Int(8, 32), 0, "packsswbx32",
+         i8_sat(wild_i16x_)},
         {Target::FeatureEnd, false, Int(8, 16), 0, "packsswbx16",
          i8_sat(wild_i16x_)},
+        {Target::AVX2, false, UInt(8, 32), 0, "packuswbx32",
+         u8_sat(wild_i16x_)},
         {Target::FeatureEnd, false, UInt(8, 16), 0, "packuswbx16",
          u8_sat(wild_i16x_)},
+        {Target::AVX2, false, UInt(16, 16), 0, "packusdwx16",
+         u16_sat(wild_i32x_)},
         {Target::SSE41, false, UInt(16, 8), 0, "packusdwx8",
          u16_sat(wild_i32x_)}
     };
@@ -296,7 +341,6 @@ void CodeGen_X86::visit(const Cast *op) {
         }
     }
 
-
     // Workaround for https://llvm.org/bugs/show_bug.cgi?id=24512
     // LLVM uses a numerically unstable method for vector
     // uint32->float conversion before AVX.
@@ -318,7 +362,6 @@ void CodeGen_X86::visit(const Cast *op) {
         codegen(top_bits + top_bits + bottom_bit);
         return;
     }
-
 
     CodeGen_Posix::visit(op);
 }
@@ -406,4 +449,5 @@ int CodeGen_X86::native_vector_bits() const {
     }
 }
 
-}}
+}  // namespace Internal
+}  // namespace Halide
