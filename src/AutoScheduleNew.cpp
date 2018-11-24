@@ -3033,7 +3033,7 @@ struct State {
                 }
             }
             */
-
+            
             // Avoid code size explosion from recursive inlining.
             if (root->max_inlined_calls() > 100) {
                 cost = 1e50;

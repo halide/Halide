@@ -288,6 +288,9 @@ inline Shape parse_extents(const std::string &extent_list) {
         fail() << "Invalid format for extents: " << extent_list;
     }
     Shape result;
+    if (extent_list == "[]") {
+        return result;
+    }
     std::vector<std::string> extents = split_string(extent_list.substr(1, extent_list.size()-2), ",");
     for (size_t i = 0; i < extents.size(); i++) {
       const std::string &s = extents[i];
@@ -631,7 +634,7 @@ struct ArgData {
         bool updated = false;
         Shape new_shape = get_shape(buffer_value);
         if (new_shape.size() != constrained_shape.size()) {
-            fail() << "Dimension mismatch";
+            fail() << "Dimension mismatch on buffer " << name << " expected " << constrained_shape.size() << " got " << new_shape.size() << "\n";
         }
         for (size_t i = 0; i < constrained_shape.size(); ++i) {
             // min of nonzero means "largest value for min"
@@ -837,7 +840,7 @@ public:
             if (arg.raw_string.empty()) {
                 if (ok_to_omit_outputs && arg.metadata->kind == halide_argument_kind_output_buffer) {
                     continue;
-                }
+                } 
                 o << "Argument value missing for: " << arg.metadata->name << "\n";
             }
         }

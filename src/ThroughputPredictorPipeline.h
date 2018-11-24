@@ -398,113 +398,143 @@ class ThroughputPredictorPipeline {
         cursor = 0;
     }
 
+    Runtime::Buffer<float> zero_pad(const Runtime::Buffer<float> &src, const std::vector<int> &new_size) {
+        Runtime::Buffer<float> dst(new_size);
+        dst.fill(0.0f);
+        debug(0) << "Src shape: ";
+        for (int i = 0; i < src.dimensions(); i++) {
+            debug(0) << src.dim(i).extent() << " ";
+        }
+        debug(0) << "\nDst shape: ";
+        for (int i = 0; i < dst.dimensions(); i++) {
+            debug(0) << dst.dim(i).extent() << " ";
+        }
+        debug(0) << "\n";
+        internal_assert(src.dimensions() == dst.dimensions());
+        for (int i = 0; i < dst.dimensions(); i++) {
+            internal_assert(src.dim(i).extent() <= dst.dim(i).extent());
+        }
+        dst.copy_from(src);
+        return dst;
+    }
+    
     void load_weights() {
+
         if (weights_dir.empty()) {
-            weights.head1_filter = Runtime::Buffer<float>(halide_internal_weights_head1_conv1_weight, 7, 56, 20);
-            weights.head1_filter.transpose(0, 2);
+            weights.head1_filter = Runtime::Buffer<float>(halide_internal_weights_head1_conv1_weight, 24, 56, 7);
             internal_assert(halide_internal_weights_head1_conv1_weight_length == (int)weights.head1_filter.size_in_bytes());
 
-            weights.head1_bias = Runtime::Buffer<float>(halide_internal_weights_head1_conv1_bias, 20);
+            weights.head1_bias = Runtime::Buffer<float>(halide_internal_weights_head1_conv1_bias, 24);
             internal_assert(halide_internal_weights_head1_conv1_bias_length == (int)weights.head1_bias.size_in_bytes());
 
-            weights.head2_filter = Runtime::Buffer<float>(halide_internal_weights_head2_conv1_weight, 26, 20);
-            weights.head2_filter.transpose(0, 1);
+            weights.head2_filter = Runtime::Buffer<float>(halide_internal_weights_head2_conv1_weight, 24, 26);
             internal_assert(halide_internal_weights_head2_conv1_weight_length == (int)weights.head2_filter.size_in_bytes());
 
-            weights.head2_bias = Runtime::Buffer<float>(halide_internal_weights_head2_conv1_bias, 20);
+            weights.head2_bias = Runtime::Buffer<float>(halide_internal_weights_head2_conv1_bias, 24);
             internal_assert(halide_internal_weights_head2_conv1_bias_length == (int)weights.head2_bias.size_in_bytes());
 
-            weights.conv1_filter = Runtime::Buffer<float>(halide_internal_weights_trunk_conv1_weight, 3, 40, 40);
-            weights.conv1_filter.transpose(0, 2);
+            weights.conv1_filter = Runtime::Buffer<float>(halide_internal_weights_trunk_conv1_weight, 48, 48, 3);
             internal_assert(halide_internal_weights_trunk_conv1_weight_length == (int)weights.conv1_filter.size_in_bytes());
 
-            weights.conv1_bias = Runtime::Buffer<float>(halide_internal_weights_trunk_conv1_bias, 40);
+            weights.conv1_bias = Runtime::Buffer<float>(halide_internal_weights_trunk_conv1_bias, 48);
             internal_assert(halide_internal_weights_trunk_conv1_bias_length == (int)weights.conv1_bias.size_in_bytes());
 
-            weights.conv2_filter = Runtime::Buffer<float>(halide_internal_weights_trunk_conv2_weight, 3, 40, 40);
-            weights.conv2_filter.transpose(0, 2);
+            weights.conv2_filter = Runtime::Buffer<float>(halide_internal_weights_trunk_conv2_weight, 48, 48, 3);
             internal_assert(halide_internal_weights_trunk_conv2_weight_length == (int)weights.conv2_filter.size_in_bytes());
 
-            weights.conv2_bias = Runtime::Buffer<float>(halide_internal_weights_trunk_conv2_bias, 40);
+            weights.conv2_bias = Runtime::Buffer<float>(halide_internal_weights_trunk_conv2_bias, 48);
             internal_assert(halide_internal_weights_trunk_conv2_bias_length == (int)weights.conv2_bias.size_in_bytes());
 
-            weights.conv3_filter = Runtime::Buffer<float>(halide_internal_weights_trunk_conv3_weight, 3, 40, 80);
-            weights.conv3_filter.transpose(0, 2);
+            weights.conv3_filter = Runtime::Buffer<float>(halide_internal_weights_trunk_conv3_weight, 96, 48, 3);
             internal_assert(halide_internal_weights_trunk_conv3_weight_length == (int)weights.conv3_filter.size_in_bytes());
 
-            weights.conv3_bias = Runtime::Buffer<float>(halide_internal_weights_trunk_conv3_bias, 80);
+            weights.conv3_bias = Runtime::Buffer<float>(halide_internal_weights_trunk_conv3_bias, 96);
             internal_assert(halide_internal_weights_trunk_conv3_bias_length == (int)weights.conv3_bias.size_in_bytes());
 
-            weights.conv4_filter = Runtime::Buffer<float>(halide_internal_weights_trunk_conv4_weight, 3, 80, 120);
-            weights.conv4_filter.transpose(0, 2);
+            weights.conv4_filter = Runtime::Buffer<float>(halide_internal_weights_trunk_conv4_weight, 120, 96, 3);
             internal_assert(halide_internal_weights_trunk_conv4_weight_length == (int)weights.conv4_filter.size_in_bytes());
 
             weights.conv4_bias = Runtime::Buffer<float>(halide_internal_weights_trunk_conv4_bias, 120);
             internal_assert(halide_internal_weights_trunk_conv4_bias_length == (int)weights.conv4_bias.size_in_bytes());
 
-            weights.conv5_filter = Runtime::Buffer<float>(halide_internal_weights_trunk_conv5_weight, 3, 120, 160);
-            weights.conv5_filter.transpose(0, 2);
+            weights.conv5_filter = Runtime::Buffer<float>(halide_internal_weights_trunk_conv5_weight, 168, 120, 3);
             internal_assert(halide_internal_weights_trunk_conv5_weight_length == (int)weights.conv5_filter.size_in_bytes());
 
-            weights.conv5_bias = Runtime::Buffer<float>(halide_internal_weights_trunk_conv5_bias, 160);
+            weights.conv5_bias = Runtime::Buffer<float>(halide_internal_weights_trunk_conv5_bias, 168);
             internal_assert(halide_internal_weights_trunk_conv5_bias_length == (int)weights.conv5_bias.size_in_bytes());
 
-            weights.conv6_filter = Runtime::Buffer<float>(halide_internal_weights_trunk_conv6_weight, 160);
+            weights.conv6_filter = Runtime::Buffer<float>(halide_internal_weights_trunk_conv6_weight, 168);
             internal_assert(halide_internal_weights_trunk_conv6_weight_length == (int)weights.conv6_filter.size_in_bytes());
 
             weights.conv6_bias = Runtime::Buffer<float>::make_scalar(halide_internal_weights_trunk_conv6_bias);
             internal_assert(halide_internal_weights_trunk_conv6_bias_length == (int)weights.conv6_bias.size_in_bytes());
         } else {
-            weights.head1_filter = buffer_from_file(weights_dir + "/head1_conv1_weight.data", {7, 56, 20});
-            weights.head1_filter.transpose(0, 2);
+            weights.head1_filter = buffer_from_file(weights_dir + "/head1_conv1_weight.data", {24, 56, 7});
+            weights.head1_bias = buffer_from_file(weights_dir + "/head1_conv1_bias.data", {24});
 
-            weights.head1_bias = buffer_from_file(weights_dir + "/head1_conv1_bias.data", {20});
+            weights.head2_filter = buffer_from_file(weights_dir + "/head2_conv1_weight.data", {24, 26});
+            weights.head2_bias = buffer_from_file(weights_dir + "/head2_conv1_bias.data", {24});
 
-            weights.head2_filter = buffer_from_file(weights_dir + "/head2_conv1_weight.data", {26, 20});
-            weights.head2_filter.transpose(0, 1);
+            weights.conv1_filter = buffer_from_file(weights_dir + "/trunk_conv1_weight.data", {48, 48, 3});
+            weights.conv1_bias = buffer_from_file(weights_dir + "/trunk_conv1_bias.data", {48});
 
-            weights.head2_bias = buffer_from_file(weights_dir + "/head2_conv1_bias.data", {20});
+            weights.conv2_filter = buffer_from_file(weights_dir + "/trunk_conv2_weight.data", {48, 48, 3});
+            weights.conv2_bias = buffer_from_file(weights_dir + "/trunk_conv2_bias.data", {48});
 
-            weights.conv1_filter = buffer_from_file(weights_dir + "/trunk_conv1_weight.data", {3, 40, 40});
-            weights.conv1_filter.transpose(0, 2);
+            weights.conv3_filter = buffer_from_file(weights_dir + "/trunk_conv3_weight.data", {96, 48, 3});
+            weights.conv3_bias = buffer_from_file(weights_dir + "/trunk_conv3_bias.data", {96});
 
-            weights.conv1_bias = buffer_from_file(weights_dir + "/trunk_conv1_bias.data", {40});
-
-            weights.conv2_filter = buffer_from_file(weights_dir + "/trunk_conv2_weight.data", {3, 40, 40});
-            weights.conv2_filter.transpose(0, 2);
-
-            weights.conv2_bias = buffer_from_file(weights_dir + "/trunk_conv2_bias.data", {40});
-
-            weights.conv3_filter = buffer_from_file(weights_dir + "/trunk_conv3_weight.data", {3, 40, 80});
-            weights.conv3_filter.transpose(0, 2);
-
-            weights.conv3_bias = buffer_from_file(weights_dir + "/trunk_conv3_bias.data", {80});
-
-            weights.conv4_filter = buffer_from_file(weights_dir + "/trunk_conv4_weight.data", {3, 80, 120});
-            weights.conv4_filter.transpose(0, 2);
-
+            weights.conv4_filter = buffer_from_file(weights_dir + "/trunk_conv4_weight.data", {120, 96, 3});
             weights.conv4_bias = buffer_from_file(weights_dir + "/trunk_conv4_bias.data", {120});
 
-            weights.conv5_filter = buffer_from_file(weights_dir + "/trunk_conv5_weight.data", {3, 120, 160});
-            weights.conv5_filter.transpose(0, 2);
+            weights.conv5_filter = buffer_from_file(weights_dir + "/trunk_conv5_weight.data", {168, 120, 3});
+            weights.conv5_bias = buffer_from_file(weights_dir + "/trunk_conv5_bias.data", {168});
 
-            weights.conv5_bias = buffer_from_file(weights_dir + "/trunk_conv5_bias.data", {160});
-
-            weights.conv6_filter = buffer_from_file(weights_dir + "/trunk_conv6_weight.data", {160});
-
+            weights.conv6_filter = buffer_from_file(weights_dir + "/trunk_conv6_weight.data", {168});
             weights.conv6_bias = buffer_from_file(weights_dir + "/trunk_conv6_bias.data", {});
 
         }
+
+        // The following code is for resizing the weights to a larger size with zero-padding
+
+        #if 0
+        // Now reshuffle the weights in memory and zero-pad them out
+        // to the size expected by the current cost model generator
+        // (which is larger than the size of the checked-in weights)
+        weights.head1_filter = zero_pad(weights.head1_filter, {24, 56, 7});
+        weights.head1_bias = zero_pad(weights.head1_bias, {24});
+
+        weights.head2_filter = zero_pad(weights.head2_filter, {24, 26});
+        weights.head2_bias = zero_pad(weights.head2_bias, {24});
+
+        weights.conv1_filter = zero_pad(weights.conv1_filter, {48, 48, 3});
+        weights.conv1_bias = zero_pad(weights.conv1_bias, {48});
+
+        weights.conv2_filter = zero_pad(weights.conv2_filter, {48, 48, 3});
+        weights.conv2_bias = zero_pad(weights.conv2_bias, {48});
+
+        weights.conv3_filter = zero_pad(weights.conv3_filter, {96, 48, 3});
+        weights.conv3_bias = zero_pad(weights.conv3_bias, {96});
+
+        weights.conv4_filter = zero_pad(weights.conv4_filter, {120, 96, 3});
+        weights.conv4_bias = zero_pad(weights.conv4_bias, {120});
+
+        weights.conv5_filter = zero_pad(weights.conv5_filter, {168, 120, 3});
+        weights.conv5_bias = zero_pad(weights.conv5_bias, {168});                                                
+
+        weights.conv6_filter = zero_pad(weights.conv6_filter, {168});
+        weights.conv6_bias = weights.conv6_bias;
+        
+        save_weights();
+        #endif
     }
 
     void load_stats() {
         if (weights_dir.empty()) {
-            stats.pipeline_mean = Runtime::Buffer<float>(halide_internal_weights_pipeline_mean, 7, 56);
-            stats.pipeline_mean.transpose(0, 1); // Stored as 7x56, but pipeline will access as 56x7
+            stats.pipeline_mean = Runtime::Buffer<float>(halide_internal_weights_pipeline_mean, 56, 7);
             internal_assert(halide_internal_weights_pipeline_mean_length == (int)stats.pipeline_mean.size_in_bytes());
 
-            stats.pipeline_std = Runtime::Buffer<float>(halide_internal_weights_pipeline_std, 7, 56);
-            stats.pipeline_std.transpose(0, 1); // Stored as 7x56, but pipeline will access as 56x7
+            stats.pipeline_std = Runtime::Buffer<float>(halide_internal_weights_pipeline_std,  56, 7);
             internal_assert(halide_internal_weights_pipeline_std_length == (int)stats.pipeline_std.size_in_bytes());
 
             stats.schedule_mean = Runtime::Buffer<float>(halide_internal_weights_schedule_mean, 26);
@@ -513,10 +543,8 @@ class ThroughputPredictorPipeline {
             stats.schedule_std = Runtime::Buffer<float>(halide_internal_weights_schedule_std, 26);
             internal_assert(halide_internal_weights_schedule_std_length == (int)stats.schedule_std.size_in_bytes());
         } else {
-            stats.pipeline_mean = buffer_from_file(weights_dir + "/pipeline_mean.data", {7, 56});
-            stats.pipeline_mean.transpose(0, 1);
-            stats.pipeline_std = buffer_from_file(weights_dir + "/pipeline_std.data", {7, 56});
-            stats.pipeline_std.transpose(0, 1);
+            stats.pipeline_mean = buffer_from_file(weights_dir + "/pipeline_mean.data", {56, 7});
+            stats.pipeline_std = buffer_from_file(weights_dir + "/pipeline_std.data", {56, 7});
             stats.schedule_mean = buffer_from_file(weights_dir + "/schedule_mean.data", {26});
             stats.schedule_std = buffer_from_file(weights_dir + "/schedule_std.data", {26});
         }
