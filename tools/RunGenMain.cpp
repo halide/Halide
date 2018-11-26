@@ -78,7 +78,7 @@ Flags:
         print names and types of all arguments to stdout and exit.
 
     --output_extents=[NUM,NUM,...]
-        Normally we attempt to calculate a reasonable size for the output
+        By default, we attempt to calculate a reasonable size for the output
         buffers, based on the size of the input buffers and bounds query; if we
         guess wrong, or you want to explicitly specify the desired output size,
         you can specify the extent of each dimension with this flag:
@@ -261,7 +261,7 @@ int main(int argc, char **argv) {
 
     RunGen r(halide_rungen_redirect_argv, halide_rungen_redirect_metadata);
 
-    Shape explicit_default_output_shape;
+    Shape user_specified_output_shape;
     std::set<std::string> seen_args;
     bool benchmark = false;
     bool track_memory = false;
@@ -329,7 +329,7 @@ int main(int argc, char **argv) {
                     fail() << "Invalid value for flag: " << flag_name;
                 }
             } else if (flag_name == "output_extents") {
-                explicit_default_output_shape = parse_extents(flag_value);
+                user_specified_output_shape = parse_extents(flag_value);
             } else {
                 usage(argv[0]);
                 fail() << "Unknown flag: " << flag_name;
@@ -362,7 +362,7 @@ int main(int argc, char **argv) {
 
     // Parse all the input arguments, loading images as necessary.
     // (Don't handle outputs yet.)
-    r.load_inputs(explicit_default_output_shape);
+    r.load_inputs(user_specified_output_shape);
 
     // Run a bounds query: we need to figure out how to allocate the output buffers,
     // and the input buffers might need reshaping to satisfy constraints (e.g. a chunky/interleaved layout).

@@ -330,9 +330,10 @@ inline Shape choose_output_extents(int dimensions, const Shape &defaults) {
     for (int i = 0; i < dimensions; ++i) {
         if ((size_t) i < defaults.size()) {
             s[i] = defaults[i];
-            continue;
+        } else {
+            // If the defaults don't provide enough dimensions, make a guess.
+            s[i].extent = (i < 2 ? 1000 : 4);
         }
-        s[i].extent = (i < 2 ? 1000 : 4);
     }
     return s;
 }
@@ -790,8 +791,11 @@ public:
 
     // Parse all the input arguments, loading images as necessary.
     // (Don't handle outputs yet.)
-    void load_inputs(const Shape &explicit_default_output_shape) {
-        default_output_shape = explicit_default_output_shape;
+    void load_inputs(const Shape &user_specified_output_shape) {
+        if (!user_specified_output_shape.empty()) {
+            output_shape = user_specified_output_shape;
+            info() << "Output Shape is explicitly specified as: " << output_shape;
+        }
         for (auto &arg_pair : args) {
             auto &arg_name = arg_pair.first;
             auto &arg = arg_pair.second;
@@ -807,11 +811,13 @@ public:
             case halide_argument_kind_input_buffer: {
                 arg.buffer_value = arg.load_buffer();
                 info() << "Input " << arg_name << ": Shape is " << get_shape(arg.buffer_value);
-                // If there was no default_output_shape specified, use the shape of
-                // the first input buffer (if any).
-                // TODO: this is often a better-than-nothing guess, but not always. Add a way to defeat it?
-                if (default_output_shape.empty()) {
-                    default_output_shape = get_shape(arg.buffer_value);
+                // If there was no output shape specified by the user, use the shape of
+                // the first input buffer (if any). (This is a better-than-nothing guess
+                // that is definitely not always correct, but is convenient and useful enough
+                // to be worth doing.)
+                if (output_shape.empty()) {
+                    output_shape = get_shape(arg.buffer_value);
+                    info() << "Output Shape is using shape of Input " << arg_name << ": " << output_shape;
                 }
                 break;
             }
@@ -953,7 +959,7 @@ public:
             case halide_argument_kind_output_buffer:
                 Shape shape = (arg.metadata->kind == halide_argument_kind_input_buffer) ?
                                get_shape(arg.buffer_value) :
-                               choose_output_extents(arg.metadata->dimensions, default_output_shape);
+                               choose_output_extents(arg.metadata->dimensions, output_shape);
                 bounds_query_buffers[arg.index] = make_with_shape(arg.metadata->type, shape);
                 filter_argv[arg.index] = bounds_query_buffers[arg.index].raw_buffer();
                 break;
@@ -1106,7 +1112,7 @@ private:
     int (*halide_argv_call)(void **args);
     const struct halide_filter_metadata_t * const md;
     std::map<std::string, ArgData> args;
-    Shape default_output_shape;
+    Shape output_shape;
 };
 
 }  // namespace RunGen
