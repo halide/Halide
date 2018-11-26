@@ -4,6 +4,7 @@
 #include "Derivative.h"
 #include "InlineReductions.h"
 #include "Generator.h"
+#include "Simplify.h"
 
 // Define the pipeline that we'll be producing as a nullptr, because
 // we're going to be linking to most libHalide with that pipeline
@@ -75,8 +76,6 @@ struct ModelWeight<true> : public GeneratorInput<Buffer<float>> {
         new_weight = current_weight - step;
     }
     void set_shape(int s0, int s1 = 0, int s2 = 0) {
-        // dim(0).set_stride(Expr()).dim(dimensions() - 1).set_stride(1);
-        // grad.dim(0).set_stride(Expr()).dim(dimensions() - 1).set_stride(1);
         dim(0).set_bounds(0, s0);
         grad.dim(0).set_bounds(0, s0);
         grad.bound(grad.args()[0], 0, s0);
@@ -141,10 +140,9 @@ public:
     Input<int> timestep{ "timestep", 0 }; // Needed by ADAM
     Input<Buffer<float>> true_runtime{ "true_runtime", 1 };
 
-    // Either outputs a prediction per batch element or a loss
-    // aggregated across the batch, depending on training or inference
-    Output<Buffer<float>> output{ "output", training ? 0 : 1 };
-
+    Output<Buffer<float>> prediction_output{ "prediction_output", 1 };
+    Output<Buffer<float>> loss_output { "loss_output", 0 };
+    
     // Zero pad alone the last dimension of a Func
     Func pad_stages(Func f, Expr stages) {
         std::vector<std::pair<Expr, Expr>> bounds(f.dimensions());
@@ -159,13 +157,6 @@ public:
 
     void generate() {
         Var c("c"), w("w"), n("n"), j("j"), s("s");
-
-        // The memory layout of the weights and stats is matrix-style
-        /*
-        for (auto *b : {&pipeline_mean, &pipeline_std} ) {
-            b->dim(0).set_stride(Expr()).dim(b->dimensions() - 1).set_stride(1);
-        }
-        */
 
         Expr padded_stages = max(num_stages, 22);
         Expr first_valid = max(0, (padded_stages - num_stages) / 2);
@@ -189,17 +180,6 @@ public:
         const int conv4_channels = 120;
         const int conv5_channels = 168;
         const int conv_support = 3;
-
-        /*
-        const int head1_channels = 20, head1_w = 56, head1_h = 7;
-        const int head2_channels = 20, head2_w = 26;
-        const int conv1_channels = 40;
-        const int conv2_channels = 40;
-        const int conv3_channels = 80;
-        const int conv4_channels = 120;
-        const int conv5_channels = 160;
-        const int conv_support = 3;
-        */
 
         Func head1_conv("head1_conv");
         RDom r_head1(0, head1_w, 0, head1_h);
@@ -309,17 +289,18 @@ public:
         Func prediction;
         prediction(n) += relu6(n, r_reduce);
 
+        prediction_output(n) = prediction(n);
+
+        Var no;
+        prediction_output.specialize(batch_size < 8).split(n, no, n, 1);
+        prediction_output.compute_root().split(n, no, n, 8).parallel(no);
+        prediction_output.bound(n, 0, batch_size);
+        
         if (!training) {
-            output(n) = prediction(n);
+            loss_output() = 0.0f;
 
             // schedule
-
-            Var no;
-            output.specialize(batch_size < 8).split(n, no, n, 1);
-            output.compute_root().split(n, no, n, 8).parallel(no);
-
-            output.bound(n, 0, batch_size);
-
+            
             const int vec = 8;
 
             // Pipeline features processing
@@ -332,13 +313,13 @@ public:
             // features is not close to a multiple of 8, so vectorized
             // across the batch.
             normalized_schedule_features
-                .compute_at(output, no).vectorize(n)
+                .compute_at(prediction_output, no).vectorize(n)
                 .update().vectorize(n);
 
             // conv+relu layers
             auto schedule_conv = [&](Func conv, Func relu, RDom r, Func *input) {
                 Var ci, wi;
-                relu.compute_at(output, n).store_at(output, no)
+                relu.compute_at(prediction_output, n).store_at(prediction_output, no)
                     .tile(c, w, ci, wi, vec*3, 4, TailStrategy::RoundUp).vectorize(ci, vec);
                 conv.compute_at(relu, c).vectorize(c).unroll(w);
                 if (r.dimensions() == 1) {
@@ -358,7 +339,7 @@ public:
             schedule_conv(conv4, relu4, r4, &pool3_padded);
             schedule_conv(conv5, relu5, r5, &pool4_padded);
 
-            relu6.compute_at(output, n).store_at(output, no).vectorize(w, vec);
+            relu6.compute_at(prediction_output, n).store_at(prediction_output, no).vectorize(w, vec);
 
         } else {
             RDom r_batch(0, batch_size);
@@ -378,10 +359,10 @@ public:
             Expr delta = prediction(n) - true_runtime(n);
             err(n) = delta * delta;
             Expr loss = sum(err(r_batch));
+            
+            loss_output() = loss / batch_size;
 
-            output() = loss / batch_size;
-
-            auto d_loss_d = propagate_adjoints(output);
+            auto d_loss_d = propagate_adjoints(loss_output);
 
             Weight *weights[] = {&head1_filter, &head1_bias,
                                  &head2_filter, &head2_bias,
@@ -396,12 +377,75 @@ public:
                 w->backprop(d_loss_d, learning_rate, timestep);
             }
 
-            // A simple schedule. We'd like to autoschedule this, but
-            // it's not available at this stage of compilation. We'll
-            // just compute-root everything and let LLVM autovectorize.
+            auto schedule_func = [&](Func f) {
+                // Start by compute_rooting everything, as a sane default
+                // while we work on the schedule.
+                
+                f.compute_root();
+                // There are several classes of Funcs to schedule. Some at
+                // the start of the pipeline broadcast across the batch
+                // (pipeline feature processing) and some at the end
+                // aggregate over the batch (aggregating weight updates
+                // across the batch gradients). The bulk of the runtime
+                // will be inside the loop over the batch. We'd like it to
+                // be a single large parallel loop. The loop over the
+                // batch has multiple output Funcs, so we'll use
+                // compute_with to gather them all together. It's a
+                // reduction over the batch, so we'll use rfactor to
+                // parallelize it in groups of 8.
+                
+                // Start by classifying the func
+                
+                std::cerr << f.name() << " has " << f.num_update_definitions() << " update definitions\n";
+
+                auto args = f.args();
+                bool parallel_over_batch = std::find_if(args.begin(), args.end(),
+                                                        [&](const Var &v) {return v.name() == n.name();}) != args.end();
+                if (parallel_over_batch) {
+                    std::cerr << f.name() << " is parallel over the batch\n";
+                }
+
+                bool reduces_over_batch = false;
+                RVar batch_reduce_rvar;
+                if (f.has_update_definition()) {
+                    auto rvars = f.function().update_schedule(0).rvars();
+                    std::cerr << f.name() << " has " << rvars.size() << " rvars\n";
+                    for (auto rv : rvars) {
+                        Expr extent = simplify(rv.extent);
+                        std::cerr << f.name() << " " << rv.var << " " << extent << "\n";
+                        if (Internal::can_prove(extent == batch_size)) {
+                            std::cerr << f.name() << " reduces over the batch\n";
+                            batch_reduce_rvar = RVar(rv.var);
+                            reduces_over_batch = true;
+                        }
+                    }
+                }
+
+                auto reorder_outermost = [](Stage s, VarOrRVar v) {
+                    Var t;
+                    s.split(Var::outermost(), Var::outermost(), t, 1).reorder(t, v);
+                };
+                
+                (void)parallel_over_batch;
+                (void)reduces_over_batch;
+
+                if (reduces_over_batch) {
+                    RVar ro, ri;
+                    reorder_outermost(f.update(), batch_reduce_rvar);
+                    Func intm = f.update().split(batch_reduce_rvar, ro, ri, 8).rfactor(ro, no);
+                    intm.compute_root().update().parallel(no);
+                    intm.vectorize(intm.args()[0], 8);
+                } else if (parallel_over_batch) {
+                    // reorder n outermost
+                    Var t;
+                    reorder_outermost(f, n);
+                }
+                
+            };
+            
             for (Weight *w : weights) {
                 for (auto g : d_loss_d.funcs(Func(*w))) {
-                    g.compute_root();
+                    schedule_func(g);
                 }
             }
 
@@ -417,16 +461,58 @@ public:
                         conv5, relu5, relu5_padded,
                         conv6, relu6,
                         prediction,
-                        err, Func(output)}) {
-                f.compute_root();
+                        err, Func(loss_output)}) {
+                schedule_func(f);
                 for (auto g : d_loss_d.funcs(f)) {
-                    g.compute_root();
+                    schedule_func(g);
                 }
             }
+
+            /*
+            Var no("no"); // A group of 8 batch elements. The granularity of parallelism.
+
+            // There's one reduction over the batch for ever Func
+            // above that gets broadcast over the batch. The Funcs
+            // that get broadcast over the batch are:
+            Func broadcast_over_batch[] = {
+                conv1_stage1,
+                filter1, 
+            };
+
+            Func reductions_over_batch[] = {
+                conv1_stage1_1_d_def__ 
+                head2_filter_im_0_d_def__
+                head2_bias_im_0_d_def__
+                filter1_im_0_d_def__
+                bias1_im_0_d_def__
+                constant_exterior$59
+                filter2_im_0_d_def__
+                constant_exterior$42
+                bias2_im_0_d_def__
+                constant_exterior$70
+                filter3_im_0_d_def__
+                constant_exterior$37
+                bias3_im_0_d_def__
+                constant_exterior$71
+                filter4_im_0_d_def__
+                constant_exterior$29
+                bias4_im_0_d_def__
+                constant_exterior$72
+                filter5_im_0_d_def__
+                constant_exterior$21
+                bias5_im_0_d_def__
+                constant_exterior$73
+                filter6_im_0_d_def__
+                constant_exterior$16
+                bias6_im_0_d_def__
+                constant_exterior$74
+                sum}
+            */
         }
 
         // All the model weight shapes are statically known. Helps to
         // simplify generated code.
+
         head1_filter.set_shape(head1_channels, head1_w, head1_h);
         head1_bias.set_shape(head1_channels);
         head2_filter.set_shape(head2_channels, head2_w);
