@@ -77,15 +77,6 @@ Flags:
     --describe:
         print names and types of all arguments to stdout and exit.
 
-    --experimental_guess_missing_inputs:
-        If required input(s) aren't specified on the command line, attempt to
-        guess a suitable value rather than failing; this can sometimes be used
-        to allow benchmarking a totally unknown Halide pipeline (though, as you
-        would expect, the "sometimes" is highly variable). This is a highly
-        experimental feature and is likely to change substantially (or, get
-        removed entirely if it's not useful enough); please experiment with it,
-        but don't rely on it just yet.
-
     --output_extents=[NUM,NUM,...]
         Normally we attempt to calculate a reasonable size for the output
         buffers, based on the size of the input buffers and bounds query; if we
@@ -275,7 +266,6 @@ int main(int argc, char **argv) {
     bool benchmark = false;
     bool track_memory = false;
     bool describe = false;
-    bool experimental_guess_missing_inputs = false;;
     double benchmark_min_time = BenchmarkConfig().min_time;
     uint64_t benchmark_min_iters = BenchmarkConfig().min_iters;
     uint64_t benchmark_max_iters = BenchmarkConfig().max_iters;
@@ -312,13 +302,6 @@ int main(int argc, char **argv) {
                     flag_value = "true";
                 }
                 if (!parse_scalar(flag_value, &describe)) {
-                    fail() << "Invalid value for flag: " << flag_name;
-                }
-            } else if (flag_name == "experimental_guess_missing_inputs") {
-                if (flag_value.empty()) {
-                    flag_value = "true";
-                }
-                if (!parse_scalar(flag_value, &experimental_guess_missing_inputs)) {
                     fail() << "Invalid value for flag: " << flag_name;
                 }
             } else if (flag_name == "track_memory") {
@@ -372,10 +355,6 @@ int main(int argc, char **argv) {
 
     if (benchmark && track_memory) {
         warn() << "Using --track_memory with --benchmarks will produce inaccurate benchmark results.";
-    }
-
-    if (experimental_guess_missing_inputs) {
-        r.experimental_guess_missing_inputs();
     }
 
     // Check to be sure that all required arguments are specified.
