@@ -1082,7 +1082,8 @@ void CodeGen_LLVM::optimize_module() {
 #else
     b.Inliner = createFunctionInliningPass(b.OptLevel, 0);
 #endif
-    b.LoopVectorize = true;
+    b.LoopVectorize = false;
+    b.DisableUnrollLoops = true;
     b.SLPVectorize = true;
 
 #if LLVM_VERSION >= 50

@@ -3033,7 +3033,7 @@ struct State {
                 }
             }
             */
-
+            
             // Avoid code size explosion from recursive inlining.
             if (root->max_inlined_calls() > 100) {
                 cost = 1e50;
@@ -3944,7 +3944,7 @@ std::string generate_schedules_autotune(const std::vector<Function> &output_func
         }
 
         // Then run the predictor in training mode once we have enough samples
-        if (history.size() >= max_history) {
+        if (history.size() >= max_history / 2) {
             for (int i = 0; i < 10; i++) {
                 float loss = tp.backprop(runtimes.cropped(0, 0, history.size()), learning_rate);
                 debug(0) << "RMS Loss: " << std::sqrt(loss) << "\n";
@@ -4458,7 +4458,7 @@ void autoschedule_test() {
     }
 
     // Autotune a stencil chain. Disabled by default because this test does not currently terminate.
-    if (0) {
+    if (1) {
         const int N = 8;
         Func f[N];
         f[0](x, y) = (x + y) * (x + 2*y) * (x + 3*y);
@@ -4475,7 +4475,7 @@ void autoschedule_test() {
         generate_schedules_autotune({f[N-1].function()}, target, params);
     }
 
-    if (1) {
+    if (0) {
         // A schedule where it's insane to not compute inside an rvar
         Func f("f"), g("g");
         f(x, y) = x;
