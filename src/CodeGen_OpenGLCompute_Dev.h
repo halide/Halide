@@ -64,7 +64,6 @@ protected:
         void visit(const Select *op) override;
         void visit(const Evaluate *op) override;
         void visit(const IntImm *op) override;
-        void visit(const UIntImm *op) override;
 
     public:
         int workgroup_size[3];

@@ -909,7 +909,7 @@ private:
     // Create a copy of the sizes vector, ordered as specified by order.
     static std::vector<int> make_ordered_sizes(const std::vector<int> &sizes, const std::vector<int> &order) {
         assert(order.size() == sizes.size());
-        std::vector<int32_t> ordered_sizes(sizes.size());
+        std::vector<int> ordered_sizes(sizes.size());
         for (size_t i = 0; i < sizes.size(); ++i) {
             ordered_sizes[i] = sizes.at(order[i]);
         }

@@ -54,6 +54,10 @@ Arguments:
         set to zero of the appropriate type. (This is useful for benchmarking
         filters that don't have performance variances with different data.)
 
+        constant:VALUE:[NUM,NUM,...]
+
+        Like zero, but allows an arbitrary value of the input's type.
+
         identity:[NUM,NUM,...]
 
         This input should be an image with the given extents, where diagonal
@@ -72,22 +76,18 @@ Arguments:
         (We anticipate adding other pseudo-file inputs in the future, e.g.
         various random distributions, gradients, rainbows, etc.)
 
+        In place of [NUM,NUM,...] for boundary, you may specify 'auto'; this
+        will run a bounds-query to choose a legal input size given the output
+        size constraints. (In general, this is useful only when also using
+        the --output_extents flag.)
+
 Flags:
 
     --describe:
         print names and types of all arguments to stdout and exit.
 
-    --experimental_guess_missing_inputs:
-        If required input(s) aren't specified on the command line, attempt to
-        guess a suitable value rather than failing; this can sometimes be used
-        to allow benchmarking a totally unknown Halide pipeline (though, as you
-        would expect, the "sometimes" is highly variable). This is a highly
-        experimental feature and is likely to change substantially (or, get
-        removed entirely if it's not useful enough); please experiment with it,
-        but don't rely on it just yet.
-
     --output_extents=[NUM,NUM,...]
-        Normally we attempt to calculate a reasonable size for the output
+        By default, we attempt to calculate a reasonable size for the output
         buffers, based on the size of the input buffers and bounds query; if we
         guess wrong, or you want to explicitly specify the desired output size,
         you can specify the extent of each dimension with this flag:
@@ -126,6 +126,15 @@ Flags:
         Override Halide memory allocator to track high-water mark of memory
         allocation during run; note that this may slow down execution, so
         benchmarks may be inaccurate if you combine --benchmark with this.
+
+    --default_input_buffers=VALUE:
+        Specify the value for all otherwise-unspecified buffer inputs, in the
+        same syntax in use above.
+
+    --default_input_scalars:
+        Specify that all otherwise-unspecified scalar inputs should use their
+        default values. (If they have no default values, 0 of the appropriate
+        type will be used.)
 
 Known Issues:
 
@@ -270,15 +279,16 @@ int main(int argc, char **argv) {
 
     RunGen r(halide_rungen_redirect_argv, halide_rungen_redirect_metadata);
 
-    Shape explicit_default_output_shape;
+    Shape user_specified_output_shape;
     std::set<std::string> seen_args;
     bool benchmark = false;
     bool track_memory = false;
     bool describe = false;
-    bool experimental_guess_missing_inputs = false;;
     double benchmark_min_time = BenchmarkConfig().min_time;
     uint64_t benchmark_min_iters = BenchmarkConfig().min_iters;
     uint64_t benchmark_max_iters = BenchmarkConfig().max_iters;
+    std::string default_input_buffers;
+    std::string default_input_scalars;
     for (int i = 1; i < argc; ++i) {
         if (argv[i][0] == '-') {
             const char *p = argv[i] + 1; // skip -
@@ -314,13 +324,6 @@ int main(int argc, char **argv) {
                 if (!parse_scalar(flag_value, &describe)) {
                     fail() << "Invalid value for flag: " << flag_name;
                 }
-            } else if (flag_name == "experimental_guess_missing_inputs") {
-                if (flag_value.empty()) {
-                    flag_value = "true";
-                }
-                if (!parse_scalar(flag_value, &experimental_guess_missing_inputs)) {
-                    fail() << "Invalid value for flag: " << flag_name;
-                }
             } else if (flag_name == "track_memory") {
                 if (flag_value.empty()) {
                     flag_value = "true";
@@ -345,8 +348,18 @@ int main(int argc, char **argv) {
                 if (!parse_scalar(flag_value, &benchmark_max_iters)) {
                     fail() << "Invalid value for flag: " << flag_name;
                 }
+            } else if (flag_name == "default_input_buffers") {
+                default_input_buffers = flag_value;
+                if (default_input_buffers.empty()) {
+                    default_input_buffers = "zero:auto";
+                }
+            } else if (flag_name == "default_input_scalars") {
+                default_input_scalars = flag_value;
+                if (default_input_scalars.empty()) {
+                    default_input_scalars = "default";
+                }
             } else if (flag_name == "output_extents") {
-                explicit_default_output_shape = parse_extents(flag_value);
+                user_specified_output_shape = parse_extents(flag_value);
             } else {
                 usage(argv[0]);
                 fail() << "Unknown flag: " << flag_name;
@@ -374,16 +387,12 @@ int main(int argc, char **argv) {
         warn() << "Using --track_memory with --benchmarks will produce inaccurate benchmark results.";
     }
 
-    if (experimental_guess_missing_inputs) {
-        r.experimental_guess_missing_inputs();
-    }
-
     // Check to be sure that all required arguments are specified.
-    r.validate(seen_args, ok_to_omit_outputs);
+    r.validate(seen_args, default_input_buffers, default_input_scalars, ok_to_omit_outputs);
 
     // Parse all the input arguments, loading images as necessary.
     // (Don't handle outputs yet.)
-    r.load_inputs(explicit_default_output_shape);
+    r.load_inputs(user_specified_output_shape);
 
     // Run a bounds query: we need to figure out how to allocate the output buffers,
     // and the input buffers might need reshaping to satisfy constraints (e.g. a chunky/interleaved layout).

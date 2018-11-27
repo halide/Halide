@@ -59,6 +59,10 @@ public:
 
 protected:
     using CodeGen_C::visit;
+    void visit(const FloatImm *) override;
+    void visit(const UIntImm *) override;
+    void visit(const IntImm *) override;
+
     void visit(const Max *op) override;
     void visit(const Min *op) override;
     void visit(const Div *op) override;
@@ -93,10 +97,6 @@ public:
 
 protected:
     using CodeGen_C::visit;
-
-    void visit(const FloatImm *) override;
-    void visit(const UIntImm *) override;
-    void visit(const IntImm *) override;
 
     void visit(const Cast *) override;
     void visit(const Let *) override;
