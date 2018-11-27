@@ -912,7 +912,7 @@ void check_metadata(const halide_filter_metadata_t &md, bool expect_ucon_at_0) {
           nullptr,
           nullptr,
           nullptr,
-          nullptr,
+          make_int64_array({10, 2592, 20, 1968, 0, 3}),
         },
         {
           "output.1",
@@ -923,7 +923,7 @@ void check_metadata(const halide_filter_metadata_t &md, bool expect_ucon_at_0) {
           nullptr,
           nullptr,
           nullptr,
-          nullptr,
+          make_int64_array({10, 2592, 20, 1968, 0, 3}),
         },
         {
           "typed_output_buffer",
@@ -934,7 +934,7 @@ void check_metadata(const halide_filter_metadata_t &md, bool expect_ucon_at_0) {
           nullptr,
           nullptr,
           nullptr,
-          nullptr,
+          make_int64_array({10, 2592, 20, 1968, NO_VALUE, NO_VALUE}),
         },
         {
           "type_only_output_buffer",
