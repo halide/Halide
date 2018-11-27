@@ -32,6 +32,9 @@ Arguments:
 
         some_int=42 some_float=3.1415
 
+    You can also use the text `default` or `estimate` to use the default or
+    estimate value of the given input.
+
     Buffer inputs and outputs are specified by pathname:
 
         some_input_buffer=/path/to/existing/file.png
@@ -80,6 +83,9 @@ Arguments:
         will run a bounds-query to choose a legal input size given the output
         size constraints. (In general, this is useful only when also using
         the --output_extents flag.)
+
+        In place of [NUM,NUM,...] for boundary, you may specify 'estimate';
+        this will use the esimated bounds specified in the code.
 
 Flags:
 
@@ -131,10 +137,9 @@ Flags:
         Specify the value for all otherwise-unspecified buffer inputs, in the
         same syntax in use above.
 
-    --default_input_scalars:
-        Specify that all otherwise-unspecified scalar inputs should use their
-        default values. (If they have no default values, 0 of the appropriate
-        type will be used.)
+    --default_input_scalars=VALUE:
+        Specify the value for all otherwise-unspecified scalar inputs, in the
+        same syntax in use above.
 
 Known Issues:
 
@@ -279,7 +284,7 @@ int main(int argc, char **argv) {
 
     RunGen r(halide_rungen_redirect_argv, halide_rungen_redirect_metadata);
 
-    Shape user_specified_output_shape;
+    std::string user_specified_output_shape;
     std::set<std::string> seen_args;
     bool benchmark = false;
     bool track_memory = false;
@@ -359,7 +364,7 @@ int main(int argc, char **argv) {
                     default_input_scalars = "default";
                 }
             } else if (flag_name == "output_extents") {
-                user_specified_output_shape = parse_extents(flag_value);
+                user_specified_output_shape = flag_value;
             } else {
                 usage(argv[0]);
                 fail() << "Unknown flag: " << flag_name;
