@@ -391,12 +391,12 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Evaluate *o
 }
 
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const IntImm *op) {
-    // GL seems to interpret some large int immediates as uints.
-    id = "int(" + std::to_string(op->value) + ")";
-}
-
-void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const UIntImm *op) {
-    id = "uint(" + std::to_string(op->value) + ")";
+    if (op->type == Int(32)) {
+        // GL seems to interpret some large int immediates as uints.
+        id = "int(" + std::to_string(op->value) + ")";
+    } else {
+        id = print_type(op->type) + "(" + std::to_string(op->value) + ")";
+    }
 }
 
 vector<char> CodeGen_OpenGLCompute_Dev::compile_to_src() {
