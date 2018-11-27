@@ -54,6 +54,10 @@ Arguments:
         set to zero of the appropriate type. (This is useful for benchmarking
         filters that don't have performance variances with different data.)
 
+        constant:VALUE:[NUM,NUM,...]
+
+        Like zero, but allows an arbitrary value of the input's type.
+
         identity:[NUM,NUM,...]
 
         This input should be an image with the given extents, where diagonal
@@ -71,6 +75,11 @@ Arguments:
 
         (We anticipate adding other pseudo-file inputs in the future, e.g.
         various random distributions, gradients, rainbows, etc.)
+
+        In place of [NUM,NUM,...] for boundary, you may specify 'auto'; this
+        will run a bounds-query to choose a legal input size given the output
+        size constraints. (In general, this is useful only when also using
+        the --output_extents flag.)
 
 Flags:
 
@@ -117,6 +126,15 @@ Flags:
         Override Halide memory allocator to track high-water mark of memory
         allocation during run; note that this may slow down execution, so
         benchmarks may be inaccurate if you combine --benchmark with this.
+
+    --default_input_buffers=VALUE:
+        Specify the value for all otherwise-unspecified buffer inputs, in the
+        same syntax in use above.
+
+    --default_input_scalars:
+        Specify that all otherwise-unspecified scalar inputs should use their
+        default values. (If they have no default values, 0 of the appropriate
+        type will be used.)
 
 Known Issues:
 
