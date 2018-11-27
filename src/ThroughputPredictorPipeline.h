@@ -41,7 +41,8 @@ extern "C" int halide_autoscheduler_cost_model(int32_t num_stages,
                                                int timestep,
                                                halide_buffer_t *true_runtime,
                                                // Output
-                                               halide_buffer_t *prediction);
+                                               halide_buffer_t *prediction,
+                                               halide_buffer_t *loss);
 
 extern "C" int halide_autoscheduler_train_cost_model(int32_t _num_stages,
                                                      int32_t _batch_size,
@@ -88,6 +89,7 @@ extern "C" int halide_autoscheduler_train_cost_model(int32_t _num_stages,
                                                      halide_buffer_t *d_loss_d_bias5,
                                                      halide_buffer_t *d_loss_d_filter6,
                                                      halide_buffer_t *d_loss_d_bias6,
+                                                     halide_buffer_t *prediction,
                                                      halide_buffer_t *loss);
 
 extern "C" float halide_internal_weights_pipeline_mean[];
@@ -306,6 +308,8 @@ class ThroughputPredictorPipeline {
             timestep = 0;
         }
 
+        Runtime::Buffer<float> dst = costs.cropped(0, 0, cursor);
+        
         halide_autoscheduler_train_cost_model(num_stages,
                                               cursor,
                                               pipeline_feat_queue,
@@ -332,9 +336,16 @@ class ThroughputPredictorPipeline {
                                               conv4_filter_update, conv4_bias_update,
                                               conv5_filter_update, conv5_bias_update,
                                               conv6_filter_update, conv6_bias_update,
+                                              dst,
                                               loss);
 
 
+        for (int i = 0; i < cursor; i++) {
+            internal_assert(cost_ptrs(i)) << "Cost queue entry was null: " << i << "\n";
+            *(cost_ptrs(i)) = dst(i);
+        }
+
+        
         if (!weights_server_hostname.empty()) {
             // Send gradients, receive new weights
             send_gradients_to_weights_server();
@@ -370,7 +381,9 @@ class ThroughputPredictorPipeline {
         internal_assert(schedule_feat_queue.data());
 
         Runtime::Buffer<float> dst = costs.cropped(0, 0, cursor);
-
+       
+        auto loss = Runtime::Buffer<float>::make_scalar();
+        
         halide_autoscheduler_cost_model(num_stages,
                                         cursor,
                                         pipeline_feat_queue,
@@ -388,7 +401,7 @@ class ThroughputPredictorPipeline {
                                         weights.conv5_filter, weights.conv5_bias,
                                         weights.conv6_filter, weights.conv6_bias,
                                         0.0f, 0, nullptr,
-                                        dst);
+                                        dst, loss);
 
         for (int i = 0; i < cursor; i++) {
             internal_assert(cost_ptrs(i)) << "Cost queue entry was null: " << i << "\n";
