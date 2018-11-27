@@ -269,6 +269,8 @@ int main(int argc, char **argv) {
     double benchmark_min_time = BenchmarkConfig().min_time;
     uint64_t benchmark_min_iters = BenchmarkConfig().min_iters;
     uint64_t benchmark_max_iters = BenchmarkConfig().max_iters;
+    std::string default_input_buffers;
+    std::string default_input_scalars;
     for (int i = 1; i < argc; ++i) {
         if (argv[i][0] == '-') {
             const char *p = argv[i] + 1; // skip -
@@ -328,6 +330,16 @@ int main(int argc, char **argv) {
                 if (!parse_scalar(flag_value, &benchmark_max_iters)) {
                     fail() << "Invalid value for flag: " << flag_name;
                 }
+            } else if (flag_name == "default_input_buffers") {
+                default_input_buffers = flag_value;
+                if (default_input_buffers.empty()) {
+                    default_input_buffers = "zero:auto";
+                }
+            } else if (flag_name == "default_input_scalars") {
+                default_input_scalars = flag_value;
+                if (default_input_scalars.empty()) {
+                    default_input_scalars = "default";
+                }
             } else if (flag_name == "output_extents") {
                 user_specified_output_shape = parse_extents(flag_value);
             } else {
@@ -358,7 +370,7 @@ int main(int argc, char **argv) {
     }
 
     // Check to be sure that all required arguments are specified.
-    r.validate(seen_args, ok_to_omit_outputs);
+    r.validate(seen_args, default_input_buffers, default_input_scalars, ok_to_omit_outputs);
 
     // Parse all the input arguments, loading images as necessary.
     // (Don't handle outputs yet.)
