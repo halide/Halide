@@ -2,13 +2,13 @@
 #include "CSE.h"
 #include "ExprUsesVar.h"
 #include "IREquality.h"
-#include "IROperator.h"
 #include "IRMatch.h"
 #include "IRMutator.h"
+#include "IROperator.h"
 #include "IRPrinter.h"
+#include "Simplify.h"
 #include "Solve.h"
 #include "Substitute.h"
-#include "Simplify.h"
 #include "Util.h"
 
 #include <algorithm>
@@ -25,7 +25,7 @@ using std::vector;
 
 namespace {
 
-template <typename T>
+template<typename T>
 vector<T> get_subvector(const vector<T> &v, const set<int> &indices) {
     vector<T> sub;
     for (const auto &index : indices) {
@@ -37,8 +37,8 @@ vector<T> get_subvector(const vector<T> &v, const set<int> &indices) {
 
 // Replace self-references to 'func' with arguments 'args' at
 // 'value_index' in the Expr/Stmt with some Var
-class ConvertSelfRef : public IRMutator {
-    using IRMutator::visit;
+class ConvertSelfRef : public IRMutator2 {
+    using IRMutator2::visit;
 
     const string &func;
     const vector<Expr> &args;
@@ -47,17 +47,15 @@ class ConvertSelfRef : public IRMutator {
     const int value_index;
     const vector<string> &op_x_names;
 
-    void visit(const Call *op) {
+    Expr visit(const Call *op) override {
         if (!is_solvable) {
-            return;
+            return op;
         }
-        IRMutator::visit(op);
+        Expr expr = IRMutator2::visit(op);
         op = expr.as<Call>();
         internal_assert(op);
 
         if ((op->call_type == Call::Halide) && (func == op->name)) {
-            internal_assert(!op->func.defined())
-                << "Func should not have been defined for a self-reference\n";
             internal_assert(args.size() == op->args.size())
                 << "Self-reference should have the same number of args as the original\n";
             for (size_t i = 0; i < op->args.size(); i++) {
@@ -65,7 +63,7 @@ class ConvertSelfRef : public IRMutator {
                     debug(5) << "Self-reference of " << op->name
                              << " with different args from the LHS. Operation is not associative\n";
                     is_solvable = false;
-                    return;
+                    return expr;
                 }
             }
             // Substitute the call
@@ -80,6 +78,7 @@ class ConvertSelfRef : public IRMutator {
                 x_dependencies.insert(op->value_index);
             }
         }
+        return expr;
     }
 
 public:
@@ -96,9 +95,11 @@ bool associative_op_pattern_match(Expr e,
                                   const Expr &op,
                                   const vector<string> &x_names,
                                   const vector<string> &y_names,
-                                  const Scope<int> &x_scope,
+                                  const Scope<> &x_scope,
                                   map<string, Expr> &match) {
 
+    internal_assert(e.type() == op.type())
+        << "Expr has type " << e.type() << ", while pattern has type " << op.type() << "\n";
     map<string, Expr> result;
     if (expr_match(op, e, result)) {
         debug(5) << "Found associative ops for " << e << " -> " << op
@@ -163,9 +164,9 @@ bool find_match(const vector<AssociativePattern> &table, const vector<string> &o
     internal_assert(op_x_names.size() == exprs.size());
     internal_assert(op_x_names.size() == assoc_op.size());
 
-    Scope<int> x_scope;
+    Scope<> x_scope;
     for (const auto &x : op_x_names) {
-        x_scope.push(x, 0);
+        x_scope.push(x);
     }
 
     for (const AssociativePattern &pattern : table) {
@@ -228,18 +229,30 @@ bool find_match(const vector<AssociativePattern> &table, const vector<string> &o
 bool extract_associative_op(const vector<Expr> exprs, const vector<string> &op_x_names,
                             const vector<string> &op_y_names, const vector<Expr> &x_parts,
                             AssociativeOp &assoc_op) {
-
-    if ((exprs.size() == 1) && (!x_parts[0].defined())) {
+    if (exprs.size() == 1) {
         Type t = exprs[0].type();
-        // Update with no self-recurrence is associative and the identity can be
-        // anything since it's going to be replaced anyway, but it's not
-        // commutative
-        assoc_op.pattern.ops[0] = Variable::make(t, op_y_names[0]);
-        assoc_op.pattern.identities[0] = make_const(t, 0);
-        assoc_op.pattern.is_commutative = false;
-        assoc_op.xs[0] = {"", Expr()};
-        assoc_op.ys[0] = {op_y_names[0], exprs[0]};
-        return true;
+        if (!x_parts[0].defined()) {
+            // Update with no self-recurrence is associative and the identity
+            // can be anything since it's going to be replaced anyway, but it's
+            // not commutative
+            assoc_op.pattern.ops[0] = Variable::make(t, op_y_names[0]);
+            assoc_op.pattern.identities[0] = make_const(t, 0);
+            assoc_op.pattern.is_commutative = false;
+            assoc_op.xs[0] = {"", Expr()};
+            assoc_op.ys[0] = {op_y_names[0], exprs[0]};
+            return true;
+        } else if (equal(exprs[0], Variable::make(t, op_x_names[0]))) {
+            // Self assignment, f(x) = f(x), is both associative
+            // and commutative. The identity can be anything since it's
+            // going to be replaced by itself.
+            debug(5) << "Self assignment: " << x_parts[0] << " = " << x_parts[0] << "\n";
+            assoc_op.pattern.ops[0] = Variable::make(t, op_x_names[0]);
+            assoc_op.pattern.identities[0] = make_const(t, 0);
+            assoc_op.pattern.is_commutative = true;
+            assoc_op.xs[0] = {op_x_names[0], x_parts[0]};
+            assoc_op.ys[0] = {"", Expr()};
+            return true;
+        }
     }
     return find_match(get_ops_table(exprs), op_x_names, op_y_names,
                       x_parts, exprs, assoc_op);
@@ -498,8 +511,9 @@ void check_associativity(const string &f, vector<Expr> args, vector<Expr> exprs,
             if (result.xs[i].expr.defined()) {
                 replacement.emplace(assoc_op.xs[i].var, Variable::make(result.xs[i].expr.type(), result.xs[i].var));
             }
-            internal_assert(result.ys[i].expr.defined());
-            replacement.emplace(assoc_op.ys[i].var, Variable::make(result.ys[i].expr.type(), result.ys[i].var));
+            if (result.ys[i].expr.defined()) {
+                replacement.emplace(assoc_op.ys[i].var, Variable::make(result.ys[i].expr.type(), result.ys[i].var));
+            }
         }
         for (size_t i = 0; i < assoc_op.size(); ++i) {
             Expr expected_op = substitute(replacement, assoc_op.pattern.ops[i]);
@@ -530,7 +544,7 @@ void associativity_test() {
         Expr x = Variable::make(t, "x");
         Expr y = Variable::make(t, "y");
         Expr x_idx = Variable::make(Int(32), "x_idx");
-        Expr f_call_0 = Call::make(t, "f", {x_idx}, Call::CallType::Halide, nullptr, 0);
+        Expr f_call_0 = Call::make(t, "f", {x_idx}, Call::CallType::Halide, FunctionPtr(), 0);
 
         // f(x) = uint8(uint16(x + y), 255)
         check_associativity("f", {x_idx}, {Cast::make(UInt(8), min(Cast::make(UInt(16), y + f_call_0), make_const(t, 255)))},
@@ -575,7 +589,7 @@ void associativity_test() {
         Expr x = Variable::make(t, "x");
         Expr y = Variable::make(t, "y");
         Expr x_idx = Variable::make(Int(32), "x_idx");
-        Expr f_call_0 = Call::make(t, "f", {x_idx}, Call::CallType::Halide, nullptr, 0);
+        Expr f_call_0 = Call::make(t, "f", {x_idx}, Call::CallType::Halide, FunctionPtr(), 0);
 
         // f(x) = y && f(x)
         check_associativity("f", {x_idx}, {And::make(y, f_call_0)},
@@ -596,148 +610,196 @@ void associativity_test() {
                             );
     }
 
-    Type t = Int(32);
-    Expr x = Variable::make(t, "x");
-    Expr y = Variable::make(t, "y");
-    Expr z = Variable::make(t, "z");
-    Expr rx = Variable::make(t, "rx");
+    {
+        // Tests for 1D reduction
+        Type t = Int(32);
+        Expr x = Variable::make(t, "x");
+        Expr y = Variable::make(t, "y");
+        Expr z = Variable::make(t, "z");
+        Expr rx = Variable::make(t, "rx");
+        Expr f_call_0 = Call::make(t, "f", {x}, Call::CallType::Halide, FunctionPtr(), 0);
+        Expr g_call_0 = Call::make(t, "g", {rx}, Call::CallType::Halide, FunctionPtr(), 0);
 
-    vector<Expr> xs(4), ys(4), zs(4);
-    for (size_t i = 0; i < xs.size(); ++i) {
-        xs[i] = Variable::make(t, "x" + std::to_string(i));
-        ys[i] = Variable::make(t, "y" + std::to_string(i));
-        zs[i] = Variable::make(t, "z" + std::to_string(i));
+        // f(x) = f(x)
+        check_associativity("f", {x}, {f_call_0},
+                        AssociativeOp(
+                          AssociativePattern(x, make_const(t, 0), true),
+                          {Replacement("x", f_call_0)},
+                          {Replacement("", Expr())},
+                          true)
+                        );
+
+        // f(x) = min(f(x), y + int16(z))
+        check_associativity("f", {x}, {min(f_call_0, y + Cast::make(Int(16), z))},
+                            AssociativeOp(
+                              AssociativePattern(min(x, y), t.max(), true),
+                              {Replacement("x", f_call_0)},
+                              {Replacement("y", y + Cast::make(Int(16), z))},
+                              true)
+                            );
+
+        // f(x) = f(x) + g(rx) + y + z
+        check_associativity("f", {x}, {y + z + f_call_0},
+                            AssociativeOp(
+                              AssociativePattern(x + y, make_const(t, 0), true),
+                              {Replacement("x", f_call_0)},
+                              {Replacement("y", y + z)},
+                              true)
+                            );
+
+        // f(x) = max(y, f(x))
+        check_associativity("f", {x}, {max(y, f_call_0)},
+                            AssociativeOp(
+                              AssociativePattern(max(x, y), t.min(), true),
+                              {Replacement("x", f_call_0)},
+                              {Replacement("y", y)},
+                              true)
+                            );
+
+        // f(x) = max(f(x) + g(rx), g(rx)) -> not associative
+        check_associativity("f", {x}, {max(f_call_0 + g_call_0, g_call_0)}, AssociativeOp());
+
+        // f(x) = max(f(x) + g(rx), f(x) - 3) -> f(x) + max(g(rx) - 3)
+        check_associativity("f", {x}, {max(f_call_0 + g_call_0, f_call_0 - 3)},
+                            AssociativeOp(
+                              AssociativePattern(x + y, 0, true),
+                              {Replacement("x", f_call_0)},
+                              {Replacement("y", max(g_call_0, -3))},
+                              true)
+                            );
+
+        // f(x) = min(4, g(rx)) -> trivially associative
+        check_associativity("f", {x}, {min(4, g_call_0)},
+                            AssociativeOp(
+                              AssociativePattern(y, make_const(t, 0), true),
+                              {Replacement("", Expr())},
+                              {Replacement("y", min(g_call_0, 4))},
+                              true)
+                            );
+
+        // f(x) = max(max(min(f(x), g(rx) + 2), f(x)), g(rx) + 2) -> can be simplified into max(f(x), g(rx) + 2)
+        check_associativity("f", {x}, {max(max(min(f_call_0, g_call_0 + 2), f_call_0), g_call_0 + 2)},
+                            AssociativeOp(
+                              AssociativePattern(max(x, y), t.min(), true),
+                              {Replacement("x", f_call_0)},
+                              {Replacement("y", g_call_0 + 2)},
+                              true)
+                            );
+
+        // f(x) = max(x0, f(x)) -> x0 may conflict with the wildcard associative op pattern
+        Expr x0 = Variable::make(t, "x0");
+        check_associativity("f", {x}, {max(x0, f_call_0)},
+                            AssociativeOp(
+                              AssociativePattern(max(x, y), t.min(), true),
+                              {Replacement("x", f_call_0)},
+                              {Replacement("y", x0)},
+                              true)
+                            );
     }
 
-    Expr f_call_0 = Call::make(t, "f", {x}, Call::CallType::Halide, nullptr, 0);
-    Expr f_call_1 = Call::make(t, "f", {x}, Call::CallType::Halide, nullptr, 1);
-    Expr f_call_2 = Call::make(t, "f", {x}, Call::CallType::Halide, nullptr, 2);
-    Expr g_call_0 = Call::make(t, "g", {rx}, Call::CallType::Halide, nullptr, 0);
-    Expr g_call_1 = Call::make(t, "g", {rx}, Call::CallType::Halide, nullptr, 1);
+    {
+        // Tests for multi-dimensional reduction (with mixed types)
+        Type t = Int(32);
+        Expr x = Variable::make(t, "x");
+        Expr y = Variable::make(t, "y");
+        Expr z = Variable::make(t, "z");
+        Expr rx = Variable::make(t, "rx");
 
-    // f(x) = min(f(x), y + int16(z))
-    check_associativity("f", {x}, {min(f_call_0, y + Cast::make(Int(16), z))},
-                        AssociativeOp(
-                          AssociativePattern(min(x, y), t.max(), true),
-                          {Replacement("x", f_call_0)},
-                          {Replacement("y", y + Cast::make(Int(16), z))},
-                          true)
-                        );
+        vector<Type> ts = {Int(32), Int(32), Float(32)};
+        vector<Expr> xs(3), ys(3), zs(3);
+        for (size_t i = 0; i < xs.size(); ++i) {
+            xs[i] = Variable::make(ts[i], "x" + std::to_string(i));
+            ys[i] = Variable::make(ts[i], "y" + std::to_string(i));
+            zs[i] = Variable::make(ts[i], "z" + std::to_string(i));
+        }
 
-    // f(x) = f(x) + g(rx) + y + z
-    check_associativity("f", {x}, {y + z + f_call_0},
-                        AssociativeOp(
-                          AssociativePattern(x + y, make_const(t, 0), true),
-                          {Replacement("x", f_call_0)},
-                          {Replacement("y", y + z)},
-                          true)
-                        );
+        Expr f_call_0 = Call::make(ts[0], "f", {x}, Call::CallType::Halide, FunctionPtr(), 0);
+        Expr f_call_1 = Call::make(ts[1], "f", {x}, Call::CallType::Halide, FunctionPtr(), 1);
+        Expr f_call_2 = Call::make(ts[2], "f", {x}, Call::CallType::Halide, FunctionPtr(), 2);
+        Expr g_call_0 = Call::make(ts[0], "g", {rx}, Call::CallType::Halide, FunctionPtr(), 0);
+        Expr g_call_1 = Call::make(ts[1], "g", {rx}, Call::CallType::Halide, FunctionPtr(), 1);
 
-    // f(x) = max(y, f(x))
-    check_associativity("f", {x}, {max(y, f_call_0)},
-                        AssociativeOp(
-                          AssociativePattern(max(x, y), t.min(), true),
-                          {Replacement("x", f_call_0)},
-                          {Replacement("y", y)},
-                          true)
-                        );
+        // f(x) = Tuple(f(x)[0], 3, f(x)[2] + z)
+        check_associativity("f", {x}, {f_call_0, make_const(ts[1], 3), f_call_2 + cast(ts[2], z)},
+                            AssociativeOp(
+                              AssociativePattern({xs[0], ys[1], xs[2] + ys[2]},
+                                                 {make_const(ts[0], 0), make_const(ts[1], 0), make_const(ts[2], 0)},
+                                                 true),
+                              {Replacement("x0", f_call_0), Replacement("", Expr()), Replacement("x2", f_call_2)},
+                              {Replacement("", Expr()), Replacement("y1", make_const(ts[1], 3)), Replacement("y2", cast(ts[2], z))},
+                              true)
+                            );
 
-    // f(x) = Tuple(2, 3, f(x)[2] + z)
-    check_associativity("f", {x}, {2, 3, f_call_2 + z},
-                        AssociativeOp(
-                          AssociativePattern({ys[0], ys[1], xs[2] + ys[2]}, {make_const(t, 0), make_const(t, 0), make_const(t, 0)}, true),
-                          {Replacement("", Expr()), Replacement("", Expr()), Replacement("x2", f_call_2)},
-                          {Replacement("y0", 2), Replacement("y1", 3), Replacement("y2", z)},
-                          true)
-                        );
+        // f(x) = Tuple(2, 3, f(x)[2] + z)
+        check_associativity("f", {x}, {make_const(ts[0], 2), make_const(ts[1], 3), f_call_2 + cast(ts[2], z)},
+                            AssociativeOp(
+                              AssociativePattern({ys[0], ys[1], xs[2] + ys[2]},
+                                                 {make_const(ts[0], 0), make_const(ts[1], 0), make_const(ts[2], 0)},
+                                                 true),
+                              {Replacement("", Expr()), Replacement("", Expr()), Replacement("x2", f_call_2)},
+                              {Replacement("y0", make_const(ts[0], 2)), Replacement("y1", make_const(ts[1], 3)), Replacement("y2", cast(ts[2], z))},
+                              true)
+                            );
 
-    // f(x) = Tuple(min(f(x)[0], g(rx)), f(x)[1]*g(x)*2, f(x)[2] + z)
-    check_associativity("f", {x}, {min(f_call_0, g_call_0), f_call_1*g_call_0*2, f_call_2 + z},
-                        AssociativeOp(
-                          AssociativePattern(
-                              {min(xs[0], ys[0]), xs[1] * ys[1], xs[2] + ys[2]},
-                              {t.max(), make_const(t, 1), make_const(t, 0)},
-                              true),
-                          {Replacement("x0", f_call_0), Replacement("x1", f_call_1), Replacement("x2", f_call_2)},
-                          {Replacement("y0", g_call_0), Replacement("y1", g_call_0*2), Replacement("y2", z)},
-                          true)
-                        );
+        // f(x) = Tuple(min(f(x)[0], g(rx)), f(x)[1]*g(x)*2, f(x)[2] + z)
+        check_associativity("f", {x}, {min(f_call_0, g_call_0), f_call_1*g_call_0*2, f_call_2 + cast(ts[2], z)},
+                            AssociativeOp(
+                              AssociativePattern(
+                                  {min(xs[0], ys[0]), xs[1] * ys[1], xs[2] + ys[2]},
+                                  {ts[0].max(), make_const(ts[1], 1), make_const(ts[2], 0)},
+                                  true),
+                              {Replacement("x0", f_call_0), Replacement("x1", f_call_1), Replacement("x2", f_call_2)},
+                              {Replacement("y0", g_call_0), Replacement("y1", g_call_0*2), Replacement("y2", cast(ts[2], z))},
+                              true)
+                            );
 
-    // f(x) = max(f(x) + g(rx), g(rx)) -> not associative
-    check_associativity("f", {x}, {max(f_call_0 + g_call_0, g_call_0)}, AssociativeOp());
+        // Complex multiplication: f(x) = Tuple(f(x)[0]*g(r.x)[0] - f(x)[1]*g(r.x)[1], f(x)[0]*g(r.x)[1] + f(x)[1]*g(r.x)[0])
+        check_associativity("f", {x}, {f_call_0*g_call_0 - f_call_1*g_call_1, f_call_0*g_call_1 + f_call_1*g_call_0},
+                            AssociativeOp(
+                              AssociativePattern(
+                                {xs[0]*ys[0] - ys[1]*xs[1], xs[1]*ys[0] + ys[1]*xs[0]},
+                                {make_const(ts[0], 1), make_const(ts[1], 0)},
+                                true),
+                              {Replacement("x0", f_call_0), Replacement("x1", f_call_1)},
+                              {Replacement("y0", g_call_0), Replacement("y1", g_call_1)},
+                              true)
+                            );
 
-    // f(x) = max(f(x) + g(rx), f(x) - 3) -> f(x) + max(g(rx) - 3)
-    check_associativity("f", {x}, {max(f_call_0 + g_call_0, f_call_0 - 3)},
-                        AssociativeOp(
-                          AssociativePattern(x + y, 0, true),
-                          {Replacement("x", f_call_0)},
-                          {Replacement("y", max(g_call_0, -3))},
-                          true)
-                        );
-
-    // f(x) = min(4, g(rx)) -> trivially associative
-    check_associativity("f", {x}, {min(4, g_call_0)},
-                        AssociativeOp(
-                          AssociativePattern(y, make_const(t, 0), true),
-                          {Replacement("", Expr())},
-                          {Replacement("y", min(g_call_0, 4))},
-                          true)
-                        );
-
-    // f(x) = f(x) -> associative but doesn't really make any sense, so we'll treat it as non-associative
-    check_associativity("f", {x}, {f_call_0}, AssociativeOp());
-
-    // f(x) = max(max(min(f(x), g(rx) + 2), f(x)), g(rx) + 2) -> can be simplified into max(f(x), g(rx) + 2)
-    check_associativity("f", {x}, {max(max(min(f_call_0, g_call_0 + 2), f_call_0), g_call_0 + 2)},
-                        AssociativeOp(
-                          AssociativePattern(max(x, y), t.min(), true),
-                          {Replacement("x", f_call_0)},
-                          {Replacement("y", g_call_0 + 2)},
-                          true)
-                        );
-
-    // Complex multiplication: f(x) = Tuple(f(x)[0]*g(r.x)[0] - f(x)[1]*g(r.x)[1], f(x)[0]*g(r.x)[1] + f(x)[1]*g(r.x)[0])
-    check_associativity("f", {x}, {f_call_0*g_call_0 - f_call_1*g_call_1, f_call_0*g_call_1 + f_call_1*g_call_0},
-                        AssociativeOp(
-                          AssociativePattern(
-                            {xs[0]*ys[0] - xs[1]*ys[1], xs[1]*ys[0] + xs[0]*ys[1]},
-                            {make_const(t, 1), make_const(t, 0)},
-                            true),
-                          {Replacement("x0", f_call_0), Replacement("x1", f_call_1)},
-                          {Replacement("y0", g_call_0), Replacement("y1", g_call_1)},
-                          true)
-                        );
-
-    // 1D argmin: f(x) = Tuple(min(f(x)[0], g(r.x)[0]), select(f(x)[0] < g(r.x)[0], f(x)[1], r.x)
-    check_associativity("f", {x}, {min(f_call_0, g_call_0), select(f_call_0 < g_call_0, f_call_1, rx)},
-                        AssociativeOp(
-                          AssociativePattern(
-                            {min(xs[0], ys[0]), select(xs[0] < ys[0], xs[1], ys[1])},
-                            {t.max(), make_const(t, 0)},
-                            true),
-                          {Replacement("x0", f_call_0), Replacement("x1", f_call_1)},
-                          {Replacement("y0", g_call_0), Replacement("y1", rx)},
-                          true)
-                        );
-
-    // f(x) = max(x0, f(x)) -> x0 may conflict with the wildcard associative op pattern
-    check_associativity("f", {x}, {max(xs[0], f_call_0)},
-                        AssociativeOp(
-                          AssociativePattern(max(x, y), t.min(), true),
-                          {Replacement("x", f_call_0)},
-                          {Replacement("y", xs[0])},
-                          true)
-                        );
+        // 1D argmin: f(x) = Tuple(min(f(x)[0], g(r.x)[0]), select(f(x)[0] < g(r.x)[0], f(x)[1], g(r.x)[1])
+        check_associativity("f", {x}, {min(f_call_0, g_call_0), select(f_call_0 < g_call_0, f_call_1, g_call_1)},
+                            AssociativeOp(
+                              AssociativePattern(
+                                {min(xs[0], ys[0]), select(xs[0] < ys[0], xs[1], ys[1])},
+                                {ts[0].max(), make_const(ts[1], 0)},
+                                true),
+                              {Replacement("x0", f_call_0), Replacement("x1", f_call_1)},
+                              {Replacement("y0", g_call_0), Replacement("y1", g_call_1)},
+                              true)
+                            );
+    }
 
     {
+        Type t = Int(32);
+        Expr x = Variable::make(t, "x");
+        Expr y = Variable::make(t, "y");
+        Expr rx = Variable::make(t, "rx");
         Expr ry = Variable::make(t, "ry");
-        Expr f_xy_call_0 = Call::make(t, "f", {x, y}, Call::CallType::Halide, nullptr, 0);
-        Expr f_xy_call_1 = Call::make(t, "f", {x, y}, Call::CallType::Halide, nullptr, 1);
-        Expr f_xy_call_2 = Call::make(t, "f", {x, y}, Call::CallType::Halide, nullptr, 2);
-        Expr f_xy_call_3 = Call::make(t, "f", {x, y}, Call::CallType::Halide, nullptr, 3);
-        Expr g_xy_call_0 = Call::make(t, "g", {rx, ry}, Call::CallType::Halide, nullptr, 0);
 
-        // 2D argmin + trivial update:
+        vector<Type> ts = {UInt(8), Int(32), Int(16), Float(32)};
+        vector<Expr> xs(4), ys(4), zs(4);
+        for (size_t i = 0; i < xs.size(); ++i) {
+            xs[i] = Variable::make(ts[i], "x" + std::to_string(i));
+            ys[i] = Variable::make(ts[i], "y" + std::to_string(i));
+            zs[i] = Variable::make(ts[i], "z" + std::to_string(i));
+        }
+
+        Expr f_xy_call_0 = Call::make(ts[0], "f", {x, y}, Call::CallType::Halide, FunctionPtr(), 0);
+        Expr f_xy_call_1 = Call::make(ts[1], "f", {x, y}, Call::CallType::Halide, FunctionPtr(), 1);
+        Expr f_xy_call_2 = Call::make(ts[2], "f", {x, y}, Call::CallType::Halide, FunctionPtr(), 2);
+        Expr f_xy_call_3 = Call::make(ts[3], "f", {x, y}, Call::CallType::Halide, FunctionPtr(), 3);
+        Expr g_xy_call_0 = Call::make(ts[0], "g", {rx, ry}, Call::CallType::Halide, FunctionPtr(), 0);
+
+        // 2D argmin + trivial update (with mixed types):
         // f(x, y) = Tuple(min(f(x, y)[0], g(r.x, r.y)[0]),
         //                 r.x + r.y,
         //                 select(f(x, y)[0] < g(r.x, r.y)[0], f(x)[2], r.x),
@@ -745,15 +807,17 @@ void associativity_test() {
         check_associativity("f", {x, y},
                             {min(f_xy_call_0, g_xy_call_0),
                              rx + ry,
-                             select(f_xy_call_0 < g_xy_call_0, f_xy_call_2, rx),
-                             select(f_xy_call_0 < g_xy_call_0, f_xy_call_3, ry)},
+                             select(f_xy_call_0 < g_xy_call_0, f_xy_call_2, cast(Int(16), rx)),
+                             select(f_xy_call_0 < g_xy_call_0, f_xy_call_3, cast(Float(32), ry))},
                             AssociativeOp(
                               AssociativePattern(
                                 {min(xs[0], ys[0]), ys[1] , select(xs[0] < ys[0], xs[2], ys[2]), select(xs[0] < ys[0], xs[3], ys[3])},
-                                {t.max(), make_const(t, 0), make_const(t, 0), make_const(t, 0)},
+                                {ts[0].max(), make_const(ts[1], 0), make_const(ts[2], 0), make_const(ts[3], 0)},
                                 true),
-                              {Replacement("x0", f_xy_call_0), Replacement("", Expr()), Replacement("x2", f_xy_call_2), Replacement("x3", f_xy_call_3)},
-                              {Replacement("y0", g_xy_call_0), Replacement("y1", rx + ry), Replacement("y2", rx), Replacement("y3", ry)},
+                              {Replacement("x0", f_xy_call_0), Replacement("", Expr()),
+                               Replacement("x2", f_xy_call_2), Replacement("x3", f_xy_call_3)},
+                              {Replacement("y0", g_xy_call_0), Replacement("y1", rx + ry),
+                               Replacement("y2", cast(Int(16), rx)), Replacement("y3", cast(Float(32), ry))},
                               true)
                             );
     }
@@ -761,6 +825,5 @@ void associativity_test() {
     std::cout << "Associativity test passed" << std::endl;
 }
 
-
-}
-}
+}  // namespace Internal
+}  // namespace Halide

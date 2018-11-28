@@ -24,7 +24,7 @@ WEAK void annotate_helper(void *uc, const device_copy &c, int d, int64_t off) {
     } else {
         for (uint64_t i = 0; i < c.extent[d]; i++) {
             annotate_helper(uc, c, d - 1, off);
-            off += c.stride_bytes[d];
+            off += c.src_stride_bytes[d];
         }
     }
 };

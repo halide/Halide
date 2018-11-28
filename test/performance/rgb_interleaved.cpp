@@ -47,7 +47,7 @@ void test_deinterleave() {
     // Warm up caches, etc.
     dst.realize(dst_image);
 
-    double t1 = benchmark(1, 20, [&]() {
+    double t1 = benchmark([&]() {
         dst.realize(dst_image);
     });
 
@@ -65,7 +65,7 @@ void test_deinterleave() {
     dst_image.transpose(1, 2);
     dst_image.fill(0);
 
-    double t2 = benchmark(1, 20, [&]() {
+    double t2 = benchmark([&]() {
         dst.realize(dst_image);
     });
 
@@ -126,7 +126,7 @@ void test_interleave(bool fast) {
     // Warm up caches, etc.
     dst.realize(dst_image);
 
-    double t = benchmark(1, 20, [&]() {
+    double t = benchmark([&]() {
         dst.realize(dst_image);
     });
 

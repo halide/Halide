@@ -44,6 +44,6 @@ private:
     Func tone_curve, curved;
 };
 
-HALIDE_REGISTER_GENERATOR(Hello, "hello")
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(Hello, hello)

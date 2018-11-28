@@ -11,6 +11,8 @@ extern "C" {
  *  Routines specific to the Halide OpenGL runtime.
  */
 
+#define HALIDE_RUNTIME_OPENGL
+
 extern const struct halide_device_interface_t *halide_opengl_device_interface();
 
 /** These are forward declared here to allow clients to override the
@@ -38,16 +40,16 @@ extern int halide_opengl_run(void *user_context,
  * have an extent large enough to cover that specified by the
  * halide_buffer_t extent fields. The dev field of the halide_buffer_t
  * must be NULL when this routine is called. This call can fail due to
- * running out of memory or being passed an invalid texture. The
- * device and host dirty bits are left unmodified. */
-extern int halide_opengl_wrap_texture(void *user_context, struct halide_buffer_t *buf, uintptr_t texture_id);
+ * being passed an invalid texture. The device and host dirty bits are
+ * left unmodified. */
+extern int halide_opengl_wrap_texture(void *user_context, struct halide_buffer_t *buf, uint64_t texture_id);
 
 /** Set the underlying OpenGL texture for a buffer to refer to the
  * current render target (e.g., the frame buffer or an FBO). The
  * render target must have an extent large enough to cover that
  * specified by the halide_buffer_t extent fields. The dev field of
  * the halide_buffer_t must be NULL when this routine is called. This
- * call can fail due to running out of memory The device and host
+ * call can fail due to running out of memory. The device and host
  * dirty bits are left unmodified. */
 extern int halide_opengl_wrap_render_target(void *user_context, struct halide_buffer_t *buf);
 
@@ -55,12 +57,10 @@ extern int halide_opengl_wrap_render_target(void *user_context, struct halide_bu
  * wrapped around. Should only be called for a halide_buffer_t that
  * halide_opengl_wrap_texture was previously called on. Frees any
  * storage associated with the binding of the halide_buffer_t and the
- * device pointer, but does not free the texture. The previously
- * wrapped texture is returned. (If the buffer was wrapped with
- * halide_opengl_wrap_render_target, the return value is always zero.)
- * The dev field of the halide_buffer_t will be NULL on return.
+ * device pointer, but does not free the texture.  The dev field of
+ * the halide_buffer_t will be NULL on return.
  */
-extern uintptr_t halide_opengl_detach_texture(void *user_context, struct halide_buffer_t *buf);
+extern int halide_opengl_detach_texture(void *user_context, struct halide_buffer_t *buf);
 
 /** Return the underlying texture for a halide_buffer_t. This buffer
  *  must be valid on an OpenGL device, or not have any associated

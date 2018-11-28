@@ -27,8 +27,12 @@ public:
     Output<Buffer<uint8_t>> calculated_output{"calculated_output" };
     Output<Buffer<float>> float32_buffer_output{"float32_buffer_output" };
     Output<Buffer<int32_t>> int32_buffer_output{"int32_buffer_output" };
+    Output<Buffer<uint8_t>> array_test_output{"array_test_output" };
+    // We can infer the tupled-output-type from the Stub
+    Output<Buffer<>> tupled_output{ "tupled_output", 3 };
 
     void generate() {
+        Var x{"x"}, y{"y"}, c{"c"};
 
         Buffer<uint8_t> constant_image = make_image<uint8_t>();
 
@@ -38,6 +42,7 @@ public:
         StubTest::Inputs inputs;
         inputs.typed_buffer_input = constant_image;
         inputs.untyped_buffer_input = input;
+        inputs.array_buffer_input = { input, input };
         inputs.simple_input = input;
         inputs.array_input = { input };
         inputs.float_arg = 1.234f;
@@ -45,34 +50,25 @@ public:
 
         StubTest::GeneratorParams gp;
         gp.untyped_buffer_output_type = int32_buffer_output.type();
-
-        stub = StubTest(this, inputs, gp);
-
-        const float kOffset = 2.f;
-        calculated_output(x, y, c) = cast<uint8_t>(stub.tuple_output(x, y, c)[1] + kOffset);
+        gp.intermediate_level.set(LoopLevel(calculated_output, Var("y")));
+        gp.vectorize = true;
 
         // Stub outputs that are Output<Buffer> (rather than Output<Func>)
-        // can really only be assigned to another Output<Buffer>; this is 
+        // can really only be assigned to another Output<Buffer>; this is
         // nevertheless useful, as we can still set stride (etc) constraints
         // on the Output.
-        float32_buffer_output = stub.typed_buffer_output;
-        int32_buffer_output = stub.untyped_buffer_output;
-    }
+        StubTest::Outputs out = StubTest::generate(this, inputs, gp);
 
-    void schedule() {
-        stub.vectorize.set(true);
-        stub.intermediate_level.set(LoopLevel(calculated_output, Var("y")));
-    }
+        float32_buffer_output = out.typed_buffer_output;
+        int32_buffer_output = out.untyped_buffer_output;
+        array_test_output = out.array_buffer_output[1];
+        tupled_output = out.tupled_output;
 
-private:
-    Var x{"x"}, y{"y"}, c{"c"};
-    StubTest stub;
+        const float kOffset = 2.f;
+        calculated_output(x, y, c) = cast<uint8_t>(out.tuple_output(x, y, c)[1] + kOffset);
+    }
 };
 
-// Note that HALIDE_REGISTER_GENERATOR() with just two args is functionally
-// identical to the old Halide::RegisterGenerator<> syntax: no stub being defined,
-// just AOT usage. (If you try to generate a stub for this class you'll
-// fail with an error at generation time.)
-HALIDE_REGISTER_GENERATOR(StubUser, "stubuser")
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(StubUser, stubuser)

@@ -117,7 +117,7 @@ void destroy_extern_program() {
 }
 
 extern "C" int32_t gpu_input(halide_buffer_t *input, halide_buffer_t *output) {
-    if (input->host == nullptr) {
+    if (input->is_bounds_query()) {
         printf("gpu_input: Bounds query for output size %d\n", output->dim[0].extent);
         input->type = output->type;
         input->dimensions = 1;
@@ -145,10 +145,10 @@ extern "C" int32_t gpu_input(halide_buffer_t *input, halide_buffer_t *output) {
     size_t local_dim[1] = { 16 };
 
     // Set args
-    void *in = reinterpret_cast<void *>(input->device);
+    void *in = reinterpret_cast<void *>(halide_opencl_get_cl_mem(nullptr, input));
     error = clSetKernelArg(kernel, 0, sizeof(void *), &in);
     assert(error == CL_SUCCESS);
-    void *out = reinterpret_cast<void *>(output->device);
+    void *out = reinterpret_cast<void *>(halide_opencl_get_cl_mem(nullptr, output));
     error = clSetKernelArg(kernel, 1, sizeof(void *), &out);
     assert(error == CL_SUCCESS);
 

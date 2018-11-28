@@ -3,29 +3,54 @@
 #include <iostream>
 #include <limits>
 
+// Disable a warning in MSVC that we know will be triggered here.
+#ifdef _MSC_VER
+#pragma warning(disable:4756)  // "overflow in constant arithmetic"
+#endif
+
 using namespace Halide;
 using namespace Halide::ConciseCasts;
 
 typedef Expr (*cast_maker_t)(Expr);
 
+// Local alias for terseness. This must be used any time the
+// cast could be a float->int conversion that might not fit in the destination.
+template<typename DST, typename SRC>
+DST safe_cast(SRC s) {
+    return Internal::safe_numeric_cast<DST, SRC>(s);
+}
+
+
 template <typename source_t, typename target_t>
 void test_saturating() {
-    source_t source_min = std::numeric_limits<source_t>::lowest();
-    source_t source_max = std::numeric_limits<source_t>::max();
+    source_t source_min, source_max;
+    if (std::numeric_limits<source_t>::has_infinity) {
+        source_max = std::numeric_limits<source_t>::infinity();
+        source_min = -source_max;
+    } else {
+        source_min = std::numeric_limits<source_t>::lowest();
+        source_max = std::numeric_limits<source_t>::max();
+    }
 
-    target_t target_min = std::numeric_limits<target_t>::lowest();
-    target_t target_max = std::numeric_limits<target_t>::max();
+    target_t target_min, target_max;
+    if (std::numeric_limits<target_t>::has_infinity) {
+        target_max = std::numeric_limits<target_t>::infinity();
+        target_min = -target_max;
+    } else {
+        target_min = std::numeric_limits<target_t>::lowest();
+        target_max = std::numeric_limits<target_t>::max();
+    }
 
     Buffer<source_t> in(7);
     in(0) = (source_t)0;
     in(1) = (source_t)1;
     // This can intentionally change the value if source_t is unsigned
     in(2) = (source_t)-1;
-    in(3) = (source_t)source_max;
-    in(4) = (source_t)source_min;
+    in(3) = safe_cast<source_t>(source_max);
+    in(4) = safe_cast<source_t>(source_min);
     // These two can intentionally change the value if source_t is smaller than target_t
-    in(5) = (source_t)target_min;
-    in(6) = (source_t)target_max;
+    in(5) = safe_cast<source_t>(target_min);
+    in(6) = safe_cast<source_t>(target_max);
 
     Var x;
     Func f;
@@ -53,8 +78,8 @@ void test_saturating() {
         } else if (source_signed == target_signed) {
             if (sizeof(source_t) > sizeof(target_t)) {
                 correct_result = (target_t)std::min(std::max(in(i),
-                                                             (source_t)target_min),
-                                                    (source_t)target_max);
+                                                             safe_cast<source_t>(target_min)),
+                                                    safe_cast<source_t>(target_max));
             } else {
                 correct_result = (target_t)in(i);
             }
@@ -62,13 +87,13 @@ void test_saturating() {
             if (source_signed) {
                 source_t val = std::max(in(i), (source_t)0);
                 if (sizeof(source_t) > sizeof(target_t)) {
-                    correct_result = (target_t)std::min(val, (source_t)target_max);
+                    correct_result = (target_t)std::min(val, safe_cast<source_t>(target_max));
                 } else {
                     correct_result = (target_t)val;
                 }
             } else {
                 if (sizeof(source_t) >= sizeof(target_t)) {
-                    correct_result = (target_t)std::min(in(i), (source_t)target_max);
+                    correct_result = (target_t)std::min(in(i), safe_cast<source_t>(target_max));
                 } else { // dest is signed, but larger so unsigned source_t guaranteed to fit
                     correct_result = std::min((target_t)in(i), target_max);
                 }
@@ -120,11 +145,11 @@ void test_concise(cast_maker_t cast_maker, bool saturating) {
     in(1) = (source_t)1;
     // This can intentionally change the value if source_t is unsigned
     in(2) = (source_t)-1;
-    in(3) = (source_t)source_max;
-    in(4) = (source_t)source_min;
+    in(3) = source_max;
+    in(4) = source_min;
     // These two can intentionally change the value if source_t is smaller than target_t
-    in(5) = (source_t)target_min;
-    in(6) = (source_t)target_max;
+    in(5) = safe_cast<source_t>(target_min);
+    in(6) = safe_cast<source_t>(target_max);
 
     Var x;
     Func f;
@@ -141,8 +166,8 @@ void test_concise(cast_maker_t cast_maker, bool saturating) {
         target_t correct_result;
         if (saturating) {
             if (source_floating) {
-                source_t bounded_lower = std::max(in(i), (source_t)target_min);
-                if (bounded_lower >= (source_t)target_max) {
+                source_t bounded_lower = std::max(in(i), safe_cast<source_t>(target_min));
+                if (bounded_lower >= safe_cast<source_t>(target_max)) {
                     correct_result = target_max;
                 } else {
                     correct_result = (target_t)bounded_lower;
@@ -150,8 +175,8 @@ void test_concise(cast_maker_t cast_maker, bool saturating) {
             } else if (source_signed == target_signed) {
                 if (sizeof(source_t) > sizeof(target_t)) {
                     correct_result = (target_t)std::min(std::max(in(i),
-                                                                 (source_t)target_min),
-                                                        (source_t)target_max);
+                                                                 safe_cast<source_t>(target_min)),
+                                                        safe_cast<source_t>(target_max));
                 } else {
                   correct_result = (target_t)in(i);
                 }
@@ -159,13 +184,13 @@ void test_concise(cast_maker_t cast_maker, bool saturating) {
                 if (source_signed) {
                     source_t val = std::max(in(i), (source_t)0);
                     if (sizeof(source_t) > sizeof(target_t)) {
-                        correct_result = (target_t)std::min(val, (source_t)target_max);
+                        correct_result = (target_t)std::min(val, safe_cast<source_t>(target_max));
                     } else {
                         correct_result = (target_t)val;
                     }
                 } else {
                     if (sizeof(source_t) >= sizeof(target_t)) {
-                        correct_result = (target_t)std::min(in(i), (source_t)target_max);
+                        correct_result = (target_t)std::min(in(i), safe_cast<source_t>(target_max));
                     } else { // dest is signed, but larger so unsigned source_t guaranteed to fit
                         correct_result = std::min((target_t)in(i), target_max);
                     }

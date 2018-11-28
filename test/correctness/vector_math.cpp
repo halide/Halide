@@ -5,6 +5,7 @@
 #include <cmath>
 #include <algorithm>
 #include <future>
+#include <random>
 
 using namespace Halide;
 
@@ -111,7 +112,7 @@ struct with_unsigned<int64_t> {
 
 
 template<typename A>
-bool test(int lanes) {
+bool test(int lanes, int seed) {
     const int W = 320;
     const int H = 16;
 
@@ -119,10 +120,16 @@ bool test(int lanes) {
 
     printf("Testing %sx%d\n", string_of_type<A>(), lanes);
 
+    // use std::mt19937 instead of rand() to ensure consistent behavior on all systems
+    std::mt19937 rng(seed);
+    std::uniform_int_distribution<> dis(0, 1023);
+
     Buffer<A> input(W+16, H+16);
     for (int y = 0; y < H+16; y++) {
         for (int x = 0; x < W+16; x++) {
-            input(x, y) = (A)((rand() % 1024)*0.125 + 1.0);
+            // We must ensure that the result of casting is not out-of-range:
+            // float->int casts are UB if the result doesn't fit.
+            input(x, y) = (A)(dis(rng)*0.0625 + 1.0);
             if ((A)(-1) < 0) {
                 input(x, y) -= 10;
             }
@@ -612,18 +619,21 @@ bool test(int lanes) {
 
 int main(int argc, char **argv) {
 
+    int seed = argc > 1 ? atoi(argv[1]) : time(nullptr);
+    std::cout << "vector_math test seed: " << seed << std::endl;
+
     // Only native vector widths - llvm doesn't handle others well
     Halide::Internal::ThreadPool<bool> pool;
     std::vector<std::future<bool>> futures;
-    futures.push_back(pool.async(test<float>, 4));
-    futures.push_back(pool.async(test<float>, 8));
-    futures.push_back(pool.async(test<double>, 2));
-    futures.push_back(pool.async(test<uint8_t>, 16));
-    futures.push_back(pool.async(test<int8_t>, 16));
-    futures.push_back(pool.async(test<uint16_t>, 8));
-    futures.push_back(pool.async(test<int16_t>, 8));
-    futures.push_back(pool.async(test<uint32_t>, 4));
-    futures.push_back(pool.async(test<int32_t>, 4));
+    futures.push_back(pool.async(test<float>, 4, seed));
+    futures.push_back(pool.async(test<float>, 8, seed));
+    futures.push_back(pool.async(test<double>, 2, seed));
+    futures.push_back(pool.async(test<uint8_t>, 16, seed));
+    futures.push_back(pool.async(test<int8_t>, 16, seed));
+    futures.push_back(pool.async(test<uint16_t>, 8, seed));
+    futures.push_back(pool.async(test<int16_t>, 8, seed));
+    futures.push_back(pool.async(test<uint32_t>, 4, seed));
+    futures.push_back(pool.async(test<int32_t>, 4, seed));
 
     bool ok = true;
     for (auto &f : futures) {

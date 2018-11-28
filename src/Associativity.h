@@ -7,9 +7,9 @@
  * if there is any and computing the identity of the associative operator.
  */
 
+#include "AssociativeOpsTable.h"
 #include "IR.h"
 #include "IREquality.h"
-#include "AssociativeOpsTable.h"
 
 #include <functional>
 
@@ -46,8 +46,18 @@ namespace Internal {
     true
  );
  \endcode
- * Since it is a unary operator, the identity does not matter. It can be
- * anything.
+ *
+ * Self-assignment, f(x) = f(x), will be represented as:
+ \code
+ AssociativeOp assoc(
+    AssociativePattern(x, 0, true),
+    {Replacement("x", f(x))},
+    {Replacement("", Expr())},
+    true
+ );
+ \endcode
+ * For both unary operator and self-assignment cases, the identity does not
+ * matter. It can be anything.
  */
 struct AssociativeOp {
     struct Replacement {
@@ -87,17 +97,13 @@ struct AssociativeOp {
  * Given an update definition of a Func 'f', determine its equivalent
  * associative binary/unary operator if there is any. 'is_associative'
  * indicates if the operation was successfuly proven as associative.
- *
- * Note that even though f(x) = f(x) is associative, we'll treat it as
- * non-associative since it doesn't really make any sense to do any associative
- * reduction on that particular update definition.
  */
 AssociativeOp prove_associativity(
     const std::string &f, std::vector<Expr> args, std::vector<Expr> exprs);
 
-EXPORT void associativity_test();
+void associativity_test();
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

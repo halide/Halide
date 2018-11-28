@@ -7,14 +7,6 @@ using namespace Halide::Runtime::Internal::Qurt;
 
 extern "C" {
 
-enum qurt_hvx_mode_t {
-    QURT_HVX_MODE_64B = 0,
-    QURT_HVX_MODE_128B = 1,
-};
-
-extern int qurt_hvx_lock(qurt_hvx_mode_t);
-extern int qurt_hvx_unlock();
-
 WEAK int halide_qurt_hvx_lock(void *user_context, int size) {
     qurt_hvx_mode_t mode;
     switch (size) {
@@ -32,7 +24,6 @@ WEAK int halide_qurt_hvx_lock(void *user_context, int size) {
         error(user_context) << "qurt_hvx_lock failed\n";
         return -1;
     }
-
     return 0;
 }
 

@@ -4,19 +4,27 @@ compiler:
   #- clang
   - gcc
 env:
-  # Configurations
-  #
-  # Each line in the ``env`` section represents a set of environment
-  # variables passed to a build configuration
-  #
-  # Test a mix of llvm versions, a mix of build systems, and a mix of shared vs static library
-  # Don't build as a static library with cmake. It risks exceeding the travis memory limit.
-  - LLVM_VERSION=3.7.1 BUILD_SYSTEM=MAKE CXX_=g++-4.8 CC_=gcc-4.8
-  - LLVM_VERSION=3.8.1 BUILD_SYSTEM=MAKE CXX_=g++-4.8 CC_=gcc-4.8
-  - LLVM_VERSION=3.7.1 BUILD_SYSTEM=MAKE CXX_=g++-4.8 CC_=gcc-4.8 HALIDE_SHARED_LIBRARY=1
-  - LLVM_VERSION=3.8.1 BUILD_SYSTEM=CMAKE CXX_=g++-4.8 CC_=gcc-4.8 HALIDE_SHARED_LIBRARY=1
-cache: apt
-# Note the commands below are written assuming Ubuntu 12.04LTS
+  global:
+    # The Travis Ubuntu Trusty environment we run in currently promises 2 cores,
+    # so running lengthy make steps with -j2 is almost certainly a win.
+    - MAKEFLAGS=-j2
+  matrix:
+    # Configurations
+    #
+    # Each line in the ``env`` section represents a set of environment
+    # variables passed to a build configuration
+    #
+    # Test a mix of llvm versions, a mix of build systems, and a mix of shared vs static library
+    # Don't build as a static library with cmake. It risks exceeding the travis memory limit.
+    #
+    # Skip LLVM7 on Travis for now: the prebuilts are hard to get to work properly on Trusty,
+    # and Travis doesn't properly support Xenial yet
+    # - LLVM_VERSION=7.0.0 BUILD_SYSTEM=MAKE CXX_=g++-4.8 CC_=gcc-4.8
+    - LLVM_VERSION=6.0.0 BUILD_SYSTEM=MAKE CXX_=g++-4.8 CC_=gcc-4.8
+    - LLVM_VERSION=6.0.0 BUILD_SYSTEM=CMAKE CXX_=g++-4.8 CC_=gcc-4.8 HALIDE_SHARED_LIBRARY=1
+cache: apt ccache
+dist: trusty
+# Note the commands below are written assuming Ubuntu 14.04LTS
 before_install:
   # Needed for new libstdc++ and gcc4.8
   - export CXX=${CXX_}
@@ -29,7 +37,7 @@ install:
   - sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/${CC} 20
   - sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/${CXX} 20
   # Download the right llvm release
-  - wget http://llvm.org/releases/${LLVM_VERSION}/clang+llvm-${LLVM_VERSION}-x86_64-linux-gnu-ubuntu-14.04.tar.xz
+  - wget https://releases.llvm.org/${LLVM_VERSION}/clang+llvm-${LLVM_VERSION}-x86_64-linux-gnu-ubuntu-14.04.tar.xz
   - tar xvf clang+llvm-${LLVM_VERSION}-x86_64-linux-gnu-ubuntu-14.04.tar.xz
   - sudo mv clang+llvm-${LLVM_VERSION}-x86_64-linux-gnu-ubuntu-14.04 /usr/local/llvm
   # Get libpng for the tutorials and apps

@@ -3,6 +3,8 @@
 #include <map>
 #include <string>
 
+namespace {
+
 using std::vector;
 using std::map;
 using std::string;
@@ -14,7 +16,7 @@ public:
     bool result;
     FindErrorHandler() : result(false) {}
     using IRVisitor::visit;
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         if (op->name == "halide_error_unaligned_host_ptr" &&
             op->call_type == Call::Extern) {
             result = true;
@@ -30,7 +32,7 @@ public:
     Expr left, right;
 
     using IRVisitor::visit;
-    void visit(const Mod *op) {
+    void visit(const Mod *op) override {
         left = op->a;
         right = op->b;
         return;
@@ -45,7 +47,7 @@ public:
 
     using IRVisitor::visit;
 
-    void visit(const AssertStmt *op) {
+    void visit(const AssertStmt *op) override {
         Expr m = op->message;
         FindErrorHandler f;
         m.accept(&f);
@@ -85,7 +87,7 @@ int count_host_alignment_asserts(Func f, std::map<string, int> m) {
     return c.count;
 }
 
-int main(int argc, char **argv) {
+int test() {
     Var x, y, c;
     std::map<string, int> m;
     ImageParam i1(Int(8), 1);
@@ -107,4 +109,10 @@ int main(int argc, char **argv) {
 
     printf("Success!\n");
     return 0;
+}
+
+}  // namespace
+
+int main(int argc, char **argv) {
+    return test();
 }

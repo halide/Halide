@@ -11,6 +11,8 @@ extern "C" {
  *  Routines specific to the Halide OpenCL runtime.
  */
 
+#define HALIDE_RUNTIME_OPENCL
+
 extern const struct halide_device_interface_t *halide_opencl_device_interface();
 
 /** These are forward declared here to allow clients to override the
@@ -68,17 +70,16 @@ extern const char *halide_opencl_get_device_type(void *user_context);
  * routine is called. This call can fail due to running out of memory
  * or being passed an invalid device pointer. The device and host
  * dirty bits are left unmodified. */
-extern int halide_opencl_wrap_cl_mem(void *user_context, struct halide_buffer_t *buf, uintptr_t device_ptr);
+extern int halide_opencl_wrap_cl_mem(void *user_context, struct halide_buffer_t *buf, uint64_t device_ptr);
 
-/** Disconnect a halide_buffer_t from the memory it was previously wrapped
- * around. Should only be called for a halide_buffer_t that
+/** Disconnect a halide_buffer_t from the memory it was previously
+ * wrapped around. Should only be called for a halide_buffer_t that
  * halide_opencl_wrap_device_ptr was previously called on. Frees any
- * storage associated with the binding of the halide_buffer_t and the device
- * pointer, but does not free the cl_mem. The previously wrapped
- * cl_mem is returned. The dev field of the halide_buffer_t will be NULL on
- * return.
+ * storage associated with the binding of the halide_buffer_t and the
+ * device pointer, but does not free the cl_mem. The dev field of the
+ * halide_buffer_t will be NULL on return.
  */
-extern uintptr_t halide_opencl_detach_cl_mem(void *user_context, struct halide_buffer_t *buf);
+extern int halide_opencl_detach_cl_mem(void *user_context, struct halide_buffer_t *buf);
 
 /** Return the underlying cl_mem for a halide_buffer_t. This buffer must be
  *  valid on an OpenCL device, or not have any associated device
@@ -86,6 +87,9 @@ extern uintptr_t halide_opencl_detach_cl_mem(void *user_context, struct halide_b
  *  returns 0.
  */
 extern uintptr_t halide_opencl_get_cl_mem(void *user_context, struct halide_buffer_t *buf);
+
+/** Returns the offset associated with the OpenCL memory allocation via device_crop or device_slice. */
+extern uint64_t halide_opencl_get_crop_offset(void *user_context, halide_buffer_t *buf);
 
 #ifdef __cplusplus
 } // End extern "C"

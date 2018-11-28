@@ -1,5 +1,7 @@
 #include "HalideBuffer.h"
 
+#include <stdio.h>
+
 using namespace Halide::Runtime;
 
 int main(int argc, char **argv) {

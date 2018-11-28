@@ -4,56 +4,66 @@
 
 int error_occurred = false;
 void halide_error(void *ctx, const char *msg) {
-    printf("Saw Halide Error: %s\n", msg);
+    // Emitting "error.*:" to stdout or stderr will cause CMake to report the
+    // test as a failure on Windows, regardless of error code returned,
+    // hence the abbreviation to "err".
+    printf("Saw (Expected) Halide Err: %s\n", msg);
     error_occurred = true;
 }
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
-    // Use something other than 'int' here to ensure that the return
-    // type of the error-handler path doesn't need to match the expr type
-    const float kPrime1 = 7829.f;
-    const float kPrime2 = 7919.f;
+static void test(int vector_width) {
+    const int32_t kPrime1 = 7829;
+    const int32_t kPrime2 = 7919;
 
-    Buffer<float> result;
-    Param<float> p1, p2;
+    int32_t realize_width = vector_width ? vector_width : 1;
+
+    Buffer<int32_t> result;
+    Param<int32_t> p1, p2;
     Var x;
-    Func f;
-    f(x) = require((p1 + p2) == kPrime1, 
-                   (p1 + p2) * kPrime2,
-                   "The parameters should add to exactly", (kPrime1 * kPrime2), "but were", p1, p2);
+    Func s, f;
+    s(x) = p1 + p2;
+    f(x) = require(s(x) == kPrime1,
+                   s(x) * kPrime2 + x,
+                   "The parameters should add to exactly", kPrime1, "but were", s(x), "for vector_width", vector_width);
+    if (vector_width) {
+        s.vectorize(x, vector_width).compute_root();
+        f.vectorize(x, vector_width);
+    }
     f.set_error_handler(&halide_error);
 
-    // It should be the case that the non-error path of the code
-    // assumes (p1 + p2) == kPrime1, and thus hardcodes the body to fill
-    // in the result to the constant kPrime1*kPrime2 (rather than
-    // actually computing the result at runtime).
-    // f.compile_to_assembly("require_.s", {p1, p2}, "require_body");
-
+    // choose values that will fail
     p1.set(1);
     p2.set(2);
     error_occurred = false;
-    result = f.realize(1);
+    result = f.realize(realize_width);
     if (!error_occurred) {
-        printf("There should have been a requirement error\n");
-        return 1;
+        printf("There should have been a requirement error (vector_width = %d)\n", vector_width);
+        exit(1);
     }
-
 
     p1.set(1);
     p2.set(kPrime1-1);
     error_occurred = false;
-    result = f.realize(1);
+    result = f.realize(realize_width);
     if (error_occurred) {
-        printf("There should not have been a requirement error\n");
-        return 1;
+        printf("There should not have been a requirement error (vector_width = %d)\n", vector_width);
+        exit(1);
     }
-    if (result(0) != (kPrime1 * kPrime2)) {
-        printf("Unexpected value: %f\n", result(0));
-        return 1;
+    for (int i = 0; i < realize_width; ++i) {
+        const int32_t expected = (kPrime1 * kPrime2) + i;
+        const int32_t actual = result(i);
+        if (actual != expected) {
+            printf("Unexpected value at %d: actual=%d, expected=%d (vector_width = %d)\n", i, actual, expected, vector_width);
+            exit(1);
+        }
     }
+}
 
+int main(int argc, char **argv) {
+    test(0);
+    test(4);
     printf("Success!\n");
     return 0;
 

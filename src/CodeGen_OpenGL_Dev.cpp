@@ -1,22 +1,22 @@
 #include "CodeGen_OpenGL_Dev.h"
+#include "Debug.h"
+#include "Deinterleave.h"
 #include "IRMatch.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "Debug.h"
-#include "Deinterleave.h"
 #include "Simplify.h"
 #include "VaryingAttributes.h"
 #include <iomanip>
-#include <map>
 #include <limits>
+#include <map>
 
 namespace Halide {
 namespace Internal {
 
+using std::map;
 using std::ostringstream;
 using std::string;
 using std::vector;
-using std::map;
 
 namespace {
 
@@ -84,7 +84,7 @@ Expr call_builtin(const Type &result_type, const string &func,
     return simplify(Cast::make(result_type, val));
 }
 
-}
+}  // namespace
 
 CodeGen_OpenGL_Dev::CodeGen_OpenGL_Dev(const Target &target)
     : target(target) {
@@ -146,6 +146,12 @@ CodeGen_GLSLBase::CodeGen_GLSLBase(std::ostream &s, Target target) : CodeGen_C(s
     builtin["tan_f32"] = "tan";
     builtin["atan_f32"] = "atan";
     builtin["atan2_f32"] = "atan"; // also called atan in GLSL
+    builtin["sinh_f32"] = "sinh";
+    builtin["cosh_f32"] = "cosh";
+    builtin["tanh_f32"] = "tanh";
+    builtin["asinh_f32"] = "asinh";
+    builtin["acosh_f32"] = "acosh";
+    builtin["atanh_f32"] = "atanh";
     builtin["min"] = "min";
     builtin["max"] = "max";
     builtin["mix"] = "mix";
@@ -153,7 +159,6 @@ CodeGen_GLSLBase::CodeGen_GLSLBase(std::ostream &s, Target target) : CodeGen_C(s
     builtin["abs"] = "abs";
     builtin["isnan"] = "isnan";
     builtin["round_f32"] = "roundEven";
-    builtin["trunc_f32"] = "_trunc_f32";
 
     // functions that produce bvecs
     builtin["equal"] = "equal";
@@ -162,6 +167,33 @@ CodeGen_GLSLBase::CodeGen_GLSLBase(std::ostream &s, Target target) : CodeGen_C(s
     builtin["lessThanEqual"] = "lessThanEqual";
     builtin["greaterThan"] = "greaterThan";
     builtin["greaterThanEqual"] = "greaterThanEqual";
+}
+
+void CodeGen_GLSLBase::visit(const FloatImm *op) {
+    ostringstream oss;
+    // Print integral numbers with trailing ".0". For fractional numbers use a
+    // precision of 9 digits, which should be enough to recover the binary
+    // float unambiguously from the decimal representation (if iostreams
+    // implements correct rounding).
+    const float truncated = (op->value < 0 ? std::ceil(op->value) : std::floor(op->value) );
+    if (truncated == op->value) {
+        oss << std::fixed << std::setprecision(1) << op->value;
+    } else {
+        oss << std::setprecision(9) << op->value;
+    }
+    id = oss.str();
+}
+
+void CodeGen_GLSLBase::visit(const IntImm *op) {
+    if (op->type == Int(32)) {
+        id = std::to_string(op->value);
+    } else {
+        id = print_type(op->type) + "(" + std::to_string(op->value) + ")";
+    }
+}
+
+void CodeGen_GLSLBase::visit(const UIntImm *op) {
+    id = print_type(op->type) + "(" + std::to_string(op->value) + ")";
 }
 
 void CodeGen_GLSLBase::visit(const Max *op) {
@@ -190,18 +222,63 @@ void CodeGen_GLSLBase::visit(const Mod *op) {
 }
 
 void CodeGen_GLSLBase::visit(const Call *op) {
-    ostringstream rhs;
-    if (builtin.count(op->name) == 0) {
-        user_error << "GLSL: unknown function '" << op->name << "' encountered.\n";
-    }
+    if (op->is_intrinsic(Call::lerp)) {
+        // Implement lerp using GLSL's mix() function, which always uses
+        // floating point arithmetic.
+        Expr zero_val = op->args[0];
+        Expr one_val = op->args[1];
+        Expr weight = op->args[2];
 
-    rhs << builtin[op->name] << "(";
-    for (size_t i = 0; i < op->args.size(); i++) {
-        if (i > 0) rhs << ", ";
-        rhs << print_expr(op->args[i]);
+        internal_assert(weight.type().is_uint() || weight.type().is_float());
+        if (weight.type().is_uint()) {
+            // Normalize integer weights to [0.0f, 1.0f] range.
+            internal_assert(weight.type().bits() < 32);
+            weight = Div::make(Cast::make(Float(32), weight),
+                               Cast::make(Float(32), weight.type().max()));
+        } else if (op->type.is_uint()) {
+            // Round float weights down to next multiple of (1/op->type.imax())
+            // to give same results as lerp based on integer arithmetic.
+            internal_assert(op->type.bits() < 32);
+            weight = floor(weight * op->type.max()) / op->type.max();
+        }
+
+        Type result_type = Float(32, op->type.lanes());
+        Expr e = call_builtin(result_type, "mix", {zero_val, one_val, weight});
+
+        if (!op->type.is_float()) {
+            // Mirror rounding implementation of Halide's integer lerp.
+            e = Cast::make(op->type, floor(e + 0.5f));
+        }
+        print_expr(e);
+        return;
+    } else if (op->is_intrinsic(Call::absd)) {
+        internal_assert(op->args.size() == 2);
+        Expr a = op->args[0];
+        Expr b = op->args[1];
+        Type t = Float(32);
+        Expr e = cast(t, select(a < b, b - a, a - b));
+        print_expr(e);
+        return;
+    } else if (op->is_intrinsic(Call::return_second)) {
+        internal_assert(op->args.size() == 2);
+        // Simply discard the first argument, which is generally a call to
+        // 'halide_printf'.
+        print_expr(op->args[1]);
+        return;
+    } else {
+        ostringstream rhs;
+        if (builtin.count(op->name) == 0) {
+            user_error << "GLSL: unknown function '" << op->name << "' encountered.\n";
+        }
+
+        rhs << builtin[op->name] << "(";
+        for (size_t i = 0; i < op->args.size(); i++) {
+            if (i > 0) rhs << ", ";
+            rhs << print_expr(op->args[i]);
+        }
+        rhs << ")";
+        print_assignment(op->type, rhs.str());
     }
-    rhs << ")";
-    print_assignment(op->type, rhs.str());
 }
 
 string CodeGen_GLSLBase::print_type(Type type, AppendSpaceIfNeeded space_option) {
@@ -320,31 +397,9 @@ string CodeGen_GLSLBase::print_name(const string &name) {
 //
 // CodeGen_GLSL
 //
-void CodeGen_GLSL::visit(const FloatImm *op) {
-    ostringstream oss;
-    // Print integral numbers with trailing ".0". For fractional numbers use a
-    // precision of 9 digits, which should be enough to recover the binary
-    // float unambiguously from the decimal representation (if iostreams
-    // implements correct rounding).
-    const float truncated = (op->value < 0 ? std::ceil(op->value) : std::floor(op->value) );
-    if (truncated == op->value) {
-        oss << std::fixed << std::setprecision(1) << op->value;
-    } else {
-        oss << std::setprecision(9) << op->value;
-    }
-    id = oss.str();
-}
 
-void CodeGen_GLSL::visit(const IntImm *op) {
-    if (op->type == Int(32)) {
-        id = std::to_string(op->value);
-    } else {
-        id = print_type(op->type) + "(" + std::to_string(op->value) + ")";
-    }
-}
-
-void CodeGen_GLSL::visit(const UIntImm *op) {
-    id = print_type(op->type) + "(" + std::to_string(op->value) + ")";
+CodeGen_GLSL::CodeGen_GLSL(std::ostream &s, const Target &t) : CodeGen_GLSLBase(s, t) {
+    builtin["trunc_f32"] = "_trunc_f32";
 }
 
 void CodeGen_GLSL::visit(const Cast *op) {
@@ -354,8 +409,8 @@ void CodeGen_GLSL::visit(const Cast *op) {
     if (map_type(op->type) == map_type(value_type)) {
         Expr value = op->value;
         if (value_type.code() == Type::Float) {
-            // float->int conversions may need explicit truncation if the
-            // integer types is embedded into floats.  (Note: overflows are
+            // float->int conversions may need explicit truncation if an
+            // integer type is embedded into a float. (Note: overflows are
             // considered undefined behavior, so we do nothing about values
             // that are out of range of the target type.)
             if (op->type.code() == Type::UInt) {
@@ -692,44 +747,6 @@ void CodeGen_GLSL::visit(const Call *op) {
         // Output the tagged expression.
         print_expr(op->args[1]);
         return;
-    } else if (op->is_intrinsic(Call::lerp)) {
-        // Implement lerp using GLSL's mix() function, which always uses
-        // floating point arithmetic.
-        Expr zero_val = op->args[0];
-        Expr one_val = op->args[1];
-        Expr weight = op->args[2];
-
-        internal_assert(weight.type().is_uint() || weight.type().is_float());
-        if (weight.type().is_uint()) {
-            // Normalize integer weights to [0.0f, 1.0f] range.
-            internal_assert(weight.type().bits() < 32);
-            weight = Div::make(Cast::make(Float(32), weight),
-                               Cast::make(Float(32), weight.type().max()));
-        } else if (op->type.is_uint()) {
-            // Round float weights down to next multiple of (1/op->type.imax())
-            // to give same results as lerp based on integer arithmetic.
-            internal_assert(op->type.bits() < 32);
-            weight = floor(weight * op->type.max()) / op->type.max();
-        }
-
-        Type result_type = Float(32, op->type.lanes());
-        Expr e = call_builtin(result_type, "mix", {zero_val, one_val, weight});
-
-        if (!op->type.is_float()) {
-            // Mirror rounding implementation of Halide's integer lerp.
-            e = Cast::make(op->type, floor(e + 0.5f));
-        }
-        print_expr(e);
-
-        return;
-    } else if (op->is_intrinsic(Call::abs)) {
-        print_expr(call_builtin(op->type, op->name, op->args));
-        return;
-    } else if (op->is_intrinsic(Call::return_second)) {
-        internal_assert(op->args.size() == 2);
-        // Simply discard the first argument, which is generally a call to
-        // 'halide_printf'.
-        rhs << print_expr(op->args[1]);
     } else {
         CodeGen_GLSLBase::visit(op);
         return;
@@ -741,14 +758,14 @@ namespace {
 class AllAccessConstant : public IRVisitor {
     using IRVisitor::visit;
 
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         if (op->name == buf && !is_const(op->index)) {
             result = false;
         }
         IRVisitor::visit(op);
     }
 
-    void visit(const Store *op) {
+    void visit(const Store *op) override {
         if (op->name == buf && !is_const(op->index)) {
             result = false;
         }
@@ -762,7 +779,7 @@ public:
 }
 
 void CodeGen_GLSL::visit(const Allocate *op) {
-    int32_t size = CodeGen_GPU_Dev::get_constant_bound_allocation_size(op);
+    int32_t size = op->constant_allocation_size();
     user_assert(size) << "Allocations inside GLSL kernels must be constant-sized\n";
 
     // Check if all access to the allocation uses a constant index
@@ -774,15 +791,13 @@ void CodeGen_GLSL::visit(const Allocate *op) {
     if (size == 1) {
         // We can use a variable
         stream << print_type(op->type) << " " << print_name(op->name) << ";\n";
-        scalar_vars.push(op->name, 0);
+        ScopedBinding<int> p(scalar_vars, op->name, 0);
         op->body.accept(this);
-        scalar_vars.pop(op->name);
     } else if (size <= 4 && all_access_constant.result) {
         // We can just use a vector variable
         stream << print_type(op->type.with_lanes(size)) << " " << print_name(op->name) << ";\n";
-        vector_vars.push(op->name, 0);
+        ScopedBinding<int> p(vector_vars, op->name, 0);
         op->body.accept(this);
-        vector_vars.pop(op->name);
     } else {
         stream << print_type(op->type) << " " << print_name(op->name) << "[" << size << "];\n";
         op->body.accept(this);
@@ -922,7 +937,7 @@ void CodeGen_GLSL::add_kernel(Stmt stmt, string name,
         "float _trunc_f32(float x) {\n"
         "  return floor(abs(x)) * sign(x);\n"
         "}\n";
-
+    
     stream << "void main() {\n";
     indent += 2;
 
@@ -1123,4 +1138,5 @@ void CodeGen_GLSL::test() {
     std::cout << "CodeGen_GLSL test passed\n";
 }
 
-}}
+}  // namespace Internal
+}  // namespace Halide

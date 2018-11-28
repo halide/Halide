@@ -56,7 +56,7 @@ int main(int argc, char **argv) {
         // consumer(x, y) = (sin(x * y) +
         //                   sin(x * (y + 1)) +
         //                   sin((x + 1) * y) +
-        //                   sin((x + 1) * (y + 1)));
+        //                   sin((x + 1) * (y + 1))/4);
 
         // All calls to 'producer' have been replaced with the body of
         // 'producer', with the arguments substituted in for the
@@ -162,7 +162,7 @@ int main(int argc, char **argv) {
     // producer.compute_root():
     // - Temporary memory allocated: 25 floats
     // - Loads: 64
-    // - Stores: 39
+    // - Stores: 41
     // - Calls to sin: 25
 
     // There's a trade-off here. Full inlining used minimal temporary

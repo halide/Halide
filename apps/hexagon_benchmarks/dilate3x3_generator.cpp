@@ -9,6 +9,9 @@ public:
     // Outputs an 8 bit image; one channel.
     Output<Buffer<uint8_t>> output{"output", 2};
 
+    GeneratorParam<bool> use_parallel_sched{"use_parallel_sched", true};
+    GeneratorParam<bool> use_prefetch_sched{"use_prefetch_sched", true};
+
     void generate() {
         bounded_input(x, y) = BoundaryConditions::repeat_edge(input)(x, y);
         max_y(x, y) = max(bounded_input(x, y-1), bounded_input(x, y), bounded_input(x, y+1));
@@ -41,6 +44,13 @@ public:
                 .tile(x, y, xi, yi, vector_size, 4)
                 .vectorize(xi)
                 .unroll(yi);
+            if (use_prefetch_sched) {
+                output.prefetch(input, y, 2);
+            }
+            if (use_parallel_sched) {
+                Var yo;
+                output.split(y, yo, y, 128).parallel(yo);
+            }
         } else {
             const int vector_size = natural_vector_size<uint8_t>();
             output
@@ -54,4 +64,4 @@ private:
     Func bounded_input{"bounded_input"};
 };
 
-HALIDE_REGISTER_GENERATOR(Dilate3x3, "dilate3x3");
+HALIDE_REGISTER_GENERATOR(Dilate3x3, dilate3x3)

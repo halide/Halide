@@ -404,7 +404,7 @@ int main(int argc, char **argv) {
         // x_inner runs from 0 to factor
         // x = min(x_outer * factor, x_extent - factor) + x_inner + x_min
         //
-        // In our example, x_min was 0, x_extent was 5, and factor was 2.
+        // In our example, x_min was 0, x_extent was 7, and factor was 3.
 
         // However, if you write a Halide function with an update
         // definition (see lesson 9), then it is not safe to evaluate
@@ -515,7 +515,7 @@ int main(int argc, char **argv) {
         // See figures/lesson_05_fast.mp4 for a visualization.
 
         printf("Checking Halide result against equivalent C...\n");
-        for (int tile_index = 0; tile_index < 4 * 3; tile_index++) {
+        for (int tile_index = 0; tile_index < 6 * 4; tile_index++) {
             int y_outer = tile_index / 4;
             int x_outer = tile_index % 4;
             for (int y_inner_outer = 0; y_inner_outer < 64/2; y_inner_outer++) {

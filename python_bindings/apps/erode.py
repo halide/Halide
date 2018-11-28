@@ -1,9 +1,8 @@
-#!/usr/bin/python3
 """
 Erode application using Python Halide bindings
 """
 
-from halide import *
+import halide as hl
 
 import numpy as np
 from scipy.misc import imread, imsave
@@ -14,19 +13,19 @@ def get_erode(input):
     Erode on 5x5 stencil, first erode x then erode y.
     """
 
-    x = Var("x")
-    y = Var("y")
-    c = Var("c")
-    input_clamped = Func("input_clamped")
-    erode_x = Func("erode_x")
-    erode_y = Func("erode_y")
+    x = hl.Var("x")
+    y = hl.Var("y")
+    c = hl.Var("c")
+    input_clamped = hl.Func("input_clamped")
+    erode_x = hl.Func("erode_x")
+    erode_y = hl.Func("erode_y")
 
-    input_clamped[x,y,c] = input[clamp(x,cast(Int(32),0),cast(Int(32),input.width()-1)),
-                                 clamp(y,cast(Int(32),0),cast(Int(32),input.height()-1)), c]
-    erode_x[x,y,c] = min(min(min(min(input_clamped[x-2,y,c],input_clamped[x-1,y,c]),input_clamped[x,y,c]),input_clamped[x+1,y,c]),input_clamped[x+2,y,c])
-    erode_y[x,y,c] = min(min(min(min(erode_x[x,y-2,c],erode_x[x,y-1,c]),erode_x[x,y,c]),erode_x[x,y+1,c]),erode_x[x,y+2,c])
+    input_clamped[x,y,c] = input[hl.clamp(x,hl.cast(hl.Int(32),0),hl.cast(hl.Int(32),input.width()-1)),
+                                 hl.clamp(y,hl.cast(hl.Int(32),0),hl.cast(hl.Int(32),input.height()-1)), c]
+    erode_x[x,y,c] = hl.min(hl.min(hl.min(hl.min(input_clamped[x-2,y,c],input_clamped[x-1,y,c]),input_clamped[x,y,c]),input_clamped[x+1,y,c]),input_clamped[x+2,y,c])
+    erode_y[x,y,c] = hl.min(hl.min(hl.min(hl.min(erode_x[x,y-2,c],erode_x[x,y-1,c]),erode_x[x,y,c]),erode_x[x,y+1,c]),erode_x[x,y+2,c])
 
-    yi = Var("yi")
+    yi = hl.Var("yi")
 
     # CPU Schedule
     erode_x.compute_root().split(y, y, yi, 8).parallel(y)
@@ -51,17 +50,17 @@ def get_input_data():
 def main():
 
     # define and compile the function
-    input = ImageParam(UInt(8), 3, "input")
+    input = hl.ImageParam(hl.UInt(8), 3, "input")
     erode = get_erode(input)
     erode.compile_jit()
 
     # preparing input and output memory buffers (numpy ndarrays)
     input_data = get_input_data()
-    input_image = Buffer(input_data)
+    input_image = hl.Buffer(input_data)
     input.set(input_image)
 
     output_data = np.empty(input_data.shape, dtype=input_data.dtype, order="F")
-    output_image = Buffer(output_data)
+    output_image = hl.Buffer(output_data)
 
     print("input_image", input_image)
     print("output_image", output_image)

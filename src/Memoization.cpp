@@ -17,7 +17,7 @@ namespace {
 class FindParameterDependencies : public IRGraphVisitor {
 public:
     FindParameterDependencies() { }
-    ~FindParameterDependencies() { }
+    ~FindParameterDependencies() override { }
 
     void visit_function(const Function &function) {
         function.accept(this);
@@ -40,7 +40,7 @@ public:
 
     using IRGraphVisitor::visit;
 
-    void visit(const Call *call) {
+    void visit(const Call *call) override {
         if (call->param.defined()) {
             record(call->param);
         }
@@ -65,14 +65,14 @@ public:
     }
 
 
-    void visit(const Load *load) {
+    void visit(const Load *load) override {
         if (load->param.defined()) {
             record(load->param);
         }
         IRGraphVisitor::visit(load);
     }
 
-    void visit(const Variable *var) {
+    void visit(const Variable *var) override {
         if (var->param.defined()) {
             record(var->param);
         }
@@ -148,6 +148,7 @@ class KeyInfo {
     Expr key_size_expr;
     const std::string &top_level_name;
     const std::string &function_name;
+    int memoize_instance;
 
     size_t parameters_alignment() {
         int32_t max_alignment = 0;
@@ -181,8 +182,10 @@ class KeyInfo {
 // It was deleted as part of the address_of intrinsic cleanup).
 
 public:
-  KeyInfo(const Function &function, const std::string &name)
-        : top_level_name(name), function_name(function.name())
+    KeyInfo(const Function &function, const std::string &name, int memoize_instance)
+        : top_level_name(name),
+          function_name(function.origin_name()),
+          memoize_instance(memoize_instance)
     {
         dependencies.visit_function(function);
         size_t size_so_far = 0;
@@ -213,10 +216,7 @@ public:
         // Store a pointer to a string identifying the filter and
         // function. Assume this will be unique due to CSE. This can
         // break with loading and unloading of code, though the name
-        // mechanism can also break in those conditions. For JIT, a
-        // counter is needed as the address may be reused. This isn't
-        // a problem when using full names as the function names
-        // already are uniquefied by a counter.
+        // mechanism can also break in those conditions.
         writes.push_back(Store::make(key_name,
                                      StringImm::make(std::to_string(top_level_name.size()) + ":" + top_level_name +
                                                      std::to_string(function_name.size()) + ":" + function_name),
@@ -225,9 +225,8 @@ public:
         index += Handle().bytes();
 
         // Halide compilation is not threadsafe anyway...
-        static std::atomic<int> memoize_instance {0};
         writes.push_back(Store::make(key_name,
-                                     memoize_instance++,
+                                     memoize_instance,
                                      (index / Int(32).bytes()),
                                      Parameter(), const_true()));
         alignment += 4;
@@ -305,20 +304,23 @@ public:
 }
 
 // Inject caching structure around memoized realizations.
-class InjectMemoization : public IRMutator {
+class InjectMemoization : public IRMutator2 {
 public:
     const std::map<std::string, Function> &env;
+    int memoize_instance;
     const std::string &top_level_name;
     const std::vector<Function> &outputs;
 
-  InjectMemoization(const std::map<std::string, Function> &e, const std::string &name,
-                    const std::vector<Function> &outputs) :
-    env(e), top_level_name(name), outputs(outputs) {}
+    InjectMemoization(const std::map<std::string, Function> &e,
+                      int memoize_instance,
+                      const std::string &name,
+                      const std::vector<Function> &outputs) :
+        env(e), memoize_instance(memoize_instance), top_level_name(name), outputs(outputs) {}
 private:
 
-    using IRMutator::visit;
+    using IRMutator2::visit;
 
-    void visit(const Realize *op) {
+    Stmt visit(const Realize *op) override {
         std::map<std::string, Function>::const_iterator iter = env.find(op->name);
         if (iter != env.end() &&
             iter->second.schedule().memoized()) {
@@ -345,7 +347,7 @@ private:
 
             Stmt mutated_body = mutate(op->body);
 
-            KeyInfo key_info(f, top_level_name);
+            KeyInfo key_info(f, top_level_name, memoize_instance);
 
             std::string cache_key_name = op->name + ".cache_key";
             std::string cache_result_name = op->name + ".cache_result";
@@ -380,16 +382,16 @@ private:
 
             Stmt generate_key = Block::make(key_info.generate_key(cache_key_name), computed_bounds_let);
             Stmt cache_key_alloc =
-                Allocate::make(cache_key_name, UInt(8), {key_info.key_size()},
+                Allocate::make(cache_key_name, UInt(8), MemoryType::Stack, {key_info.key_size()},
                                const_true(), generate_key);
 
-            stmt = Realize::make(op->name, op->types, op->bounds, op->condition, cache_key_alloc);
+            return Realize::make(op->name, op->types, op->memory_type, op->bounds, op->condition, cache_key_alloc);
         } else {
-            IRMutator::visit(op);
+            return IRMutator2::visit(op);
         }
     }
 
-    void visit(const ProducerConsumer *op) {
+    Stmt visit(const ProducerConsumer *op) override {
         std::map<std::string, Function>::const_iterator iter = env.find(op->name);
         if (iter != env.end() &&
             iter->second.schedule().memoized()) {
@@ -404,10 +406,10 @@ private:
 
             if (op->is_producer) {
                 Stmt mutated_body = IfThenElse::make(cache_miss, body);
-                stmt = ProducerConsumer::make(op->name, op->is_producer, mutated_body);
+                return ProducerConsumer::make(op->name, op->is_producer, mutated_body);
             } else {
                 const Function f(iter->second);
-                KeyInfo key_info(f, top_level_name);
+                KeyInfo key_info(f, top_level_name, memoize_instance);
 
                 std::string cache_key_name = op->name + ".cache_key";
                 std::string computed_bounds_name = op->name + ".computed_bounds.buffer";
@@ -416,10 +418,10 @@ private:
                     IfThenElse::make(cache_miss, key_info.store_computation(cache_key_name, computed_bounds_name, f.outputs(), op->name));
 
                 Stmt mutated_body = Block::make(cache_store_back, body);
-                stmt = ProducerConsumer::make(op->name, op->is_producer, mutated_body);
+                return ProducerConsumer::make(op->name, op->is_producer, mutated_body);
             }
         } else {
-            IRMutator::visit(op);
+            return IRMutator2::visit(op);
         }
     }
 };
@@ -427,15 +429,20 @@ private:
 Stmt inject_memoization(Stmt s, const std::map<std::string, Function> &env,
                         const std::string &name,
                         const std::vector<Function> &outputs) {
-    InjectMemoization injector(env, name, outputs);
+    // Cache keys use the addresses of names of Funcs. For JIT, a
+    // counter for the pipeline is needed as the address may be reused
+    // across pipelines. This isn't a problem when using full names as
+    // the function names already are uniquefied by a counter.
+    static std::atomic<int> memoize_instance {0};
+
+    InjectMemoization injector(env, memoize_instance++, name, outputs);
 
     return injector.mutate(s);
 }
 
-class RewriteMemoizedAllocations : public IRMutator {
+class RewriteMemoizedAllocations : public IRMutator2 {
 public:
-    RewriteMemoizedAllocations(const std::map<std::string, Function> &e)
-        : env(e) {}
+    RewriteMemoizedAllocations(const std::map<std::string, Function> &e) : env(e) {}
 
 private:
     const std::map<std::string, Function> &env;
@@ -457,26 +464,22 @@ private:
         return realization_name;
     }
 
-    using IRMutator::visit;
+    using IRMutator2::visit;
 
-    void visit(const Allocate *allocation) {
+    Stmt visit(const Allocate *allocation) override {
         std::string realization_name = get_realization_name(allocation->name);
         std::map<std::string, Function>::const_iterator iter = env.find(realization_name);
 
         if (iter != env.end() && iter->second.schedule().memoized()) {
-            std::string old_innermost_realization_name = innermost_realization_name;
-            innermost_realization_name = realization_name;
-
+            ScopedValue<std::string> old_innermost_realization_name(innermost_realization_name, realization_name);
             pending_memoized_allocations[innermost_realization_name].push_back(allocation);
-            stmt = mutate(allocation->body);
-
-            innermost_realization_name = old_innermost_realization_name;
+            return mutate(allocation->body);
         } else {
-            IRMutator::visit(allocation);
+            return IRMutator2::visit(allocation);
         }
     }
 
-    void visit(const Call *call) {
+    Expr visit(const Call *call) override {
         if (!innermost_realization_name.empty() &&
             call->name == Call::buffer_init) {
             internal_assert(call->args.size() >= 3)
@@ -488,17 +491,16 @@ private:
                 // Rewrite _halide_buffer_init to use a nullptr handle for address.
                 std::vector<Expr> args = call->args;
                 args[2] = make_zero(Handle());
-                expr = Call::make(type_of<struct halide_buffer_t *>(), Call::buffer_init,
+                return Call::make(type_of<struct halide_buffer_t *>(), Call::buffer_init,
                                   args, Call::Extern);
-                return;
             }
         }
 
         // If any part of the match failed, do default mutator action.
-        IRMutator::visit(call);
+        return IRMutator2::visit(call);
     }
 
-    void visit(const LetStmt *let) {
+    Stmt visit(const LetStmt *let) override {
         if (let->name == innermost_realization_name + ".cache_miss") {
             Expr value = mutate(let->value);
             Stmt body = mutate(let->body);
@@ -509,7 +511,7 @@ private:
                 const Allocate *allocation = allocations[i - 1];
 
                 // Make the allocation node
-                body = Allocate::make(allocation->name, allocation->type, allocation->extents, allocation->condition, body,
+                body = Allocate::make(allocation->name, allocation->type, allocation->memory_type, allocation->extents, allocation->condition, body,
                                       Call::make(Handle(), Call::buffer_get_host,
                                                  { Variable::make(type_of<struct halide_buffer_t *>(), allocation->name + ".buffer") }, Call::Extern),
                                       "halide_memoization_cache_release");
@@ -517,18 +519,19 @@ private:
 
             pending_memoized_allocations.erase(innermost_realization_name);
 
-            stmt = LetStmt::make(let->name, value, body);
+            return LetStmt::make(let->name, value, body);
         } else {
-            IRMutator::visit(let);
+            return IRMutator2::visit(let);
         }
     }
 };
 
 Stmt rewrite_memoized_allocations(Stmt s, const std::map<std::string, Function> &env) {
+
     RewriteMemoizedAllocations rewriter(env);
 
     return rewriter.mutate(s);
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

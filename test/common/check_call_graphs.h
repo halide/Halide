@@ -21,7 +21,7 @@ public:
 private:
     using Halide::Internal::IRVisitor::visit;
 
-    void visit(const Halide::Internal::ProducerConsumer *op) {
+    void visit(const Halide::Internal::ProducerConsumer *op) override {
         if (op->is_producer) {
             std::string old_producer = producer;
             producer = op->name;
@@ -34,7 +34,7 @@ private:
         }
     }
 
-    void visit(const Halide::Internal::Load *op) {
+    void visit(const Halide::Internal::Load *op) override {
         Halide::Internal::IRVisitor::visit(op);
         if (!producer.empty()) {
             assert(calls.count(producer) > 0);
@@ -82,13 +82,14 @@ inline int check_call_graphs(CallGraphs &result, CallGraphs &expected) {
     return 0;
 }
 
-inline int check_image(const Halide::Buffer<int> &im, const std::function<int(int,int)> &func) {
+template <typename T, typename F>
+inline int check_image2(const Halide::Buffer<T> &im, const F &func) {
     for (int y = 0; y < im.height(); y++) {
         for (int x = 0; x < im.width(); x++) {
-            int correct = func(x, y);
+            T correct = func(x, y);
             if (im(x, y) != correct) {
-                printf("im(%d, %d) = %d instead of %d\n",
-                       x, y, im(x, y), correct);
+                std::cout << "im(" << x << ", " << y << ") = " << im(x, y)
+                          << " instead of " << correct << "\n";
                 return -1;
             }
         }
@@ -96,20 +97,35 @@ inline int check_image(const Halide::Buffer<int> &im, const std::function<int(in
     return 0;
 }
 
-inline int check_image(const Halide::Buffer<int> &im, const std::function<int(int,int,int)> &func) {
+template <typename T, typename F>
+inline int check_image3(const Halide::Buffer<T> &im, const F &func) {
     for (int z = 0; z < im.channels(); z++) {
         for (int y = 0; y < im.height(); y++) {
             for (int x = 0; x < im.width(); x++) {
-                int correct = func(x, y, z);
+                T correct = func(x, y, z);
                 if (im(x, y, z) != correct) {
-                    printf("im(%d, %d, %d) = %d instead of %d\n",
-                           x, y, z, im(x, y, z), correct);
+                    std::cout << "im(" << x << ", " << y << ", " << z << ") = "
+                              << im(x, y, z) << " instead of " << correct << "\n";
                     return -1;
                 }
             }
         }
     }
     return 0;
+}
+
+template <typename T, typename F>
+inline auto // SFINAE: returns int if F has arity of 2
+check_image(const Halide::Buffer<T> &im, const F &func) ->
+    decltype(std::declval<F>()(0, 0), int()) {
+    return check_image2(im, func);
+}
+
+template <typename T, typename F>
+inline auto // SFINAE: returns int if F has arity of 3
+check_image(const Halide::Buffer<T> &im, const F &func) ->
+    decltype(std::declval<F>()(0, 0, 0), int()) {
+    return check_image3(im, func);
 }
 
 #endif

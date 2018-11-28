@@ -59,30 +59,26 @@ class IirBlur : public Generator<IirBlur> {
 public:
     // This is the input image: a 3D (color) image with 32 bit float
     // pixels.
-    ImageParam input{Float(32), 3, "input"};
+    Input<Buffer<float>> input{"input", 3};
     // The filter coefficient, alpha is the weight of the input to the
     // filter.
-    Param<float> alpha{"alpha"};
+    Input<float> alpha{"alpha"};
 
-    Func build() {
+    Output<Buffer<float>> output{"output", 3};
+
+    void generate() {
         Expr width = input.width();
         Expr height = input.height();
 
-        // Our input is an ImageParam, but blur_cols takes a Func, so
-        // we define a trivial func to wrap the input.
-        Func input_func;
-        input_func(x, y, c) = input(x, y, c);
-
         // First, blur the columns of the input.
-        Func blury_T = blur_cols_transpose(input_func, height, alpha);
+        Func blury_T = blur_cols_transpose(input, height, alpha);
 
         // Blur the columns again (the rows of the original).
         Func blur = blur_cols_transpose(blury_T, width, alpha);
 
         // Scheduling is done inside blur_cols_transpose.
-
-        return blur;
+        output(x, y, c) = blur(x, y, c);
     }
 };
 
-auto iirblur = RegisterGenerator<IirBlur>("IirBlur");
+HALIDE_REGISTER_GENERATOR(IirBlur, IirBlur)

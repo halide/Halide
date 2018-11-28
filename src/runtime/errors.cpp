@@ -39,6 +39,14 @@ WEAK int halide_error_bad_type(void *user_context, const char *func_name,
     return halide_error_code_bad_type;
 }
 
+WEAK int halide_error_bad_dimensions(void *user_context, const char *func_name,
+                                     int32_t dimensions_given, int32_t correct_dimensions) {
+    error(user_context)
+        << func_name << " requires a buffer of exactly " << correct_dimensions
+        << " dimensions, but the buffer passed in has " << dimensions_given << " dimensions";
+    return halide_error_code_bad_dimensions;
+}
+
 WEAK int halide_error_access_out_of_bounds(void *user_context, const char *func_name,
                                            int dimension, int min_touched, int max_touched,
                                            int min_valid, int max_valid) {
@@ -202,12 +210,37 @@ WEAK int halide_error_unaligned_host_ptr(void *user_context, const char *func,
     return halide_error_code_unaligned_host_ptr;
 }
 
+WEAK int halide_error_host_is_null(void *user_context, const char *func) {
+    error(user_context)
+        << "The host pointer of " << func
+        << " is null, but the pipeline will access it on the host.";
+    return halide_error_code_host_is_null;
+}
+
 WEAK int halide_error_bad_fold(void *user_context, const char *func_name, const char *var_name,
                                const char *loop_name) {
     error(user_context)
         << "The folded storage dimension " << var_name << " of " << func_name
         << " was accessed out of order by loop " << loop_name << ".";
     return halide_error_code_bad_fold;
+}
+
+WEAK int halide_error_bad_extern_fold(void *user_context, const char *func_name,
+                                      int dim, int min, int extent, int valid_min, int fold_factor) {
+    if (min < valid_min || min + extent > valid_min + fold_factor) {
+        error(user_context)
+            << "Cannot fold dimension " << dim << " of " << func_name
+            << " because an extern stage accesses [" << min << ", " << (min + extent - 1) << "],"
+            << " which is outside the range currently valid: ["
+            << valid_min << ", " << (valid_min + fold_factor - 1) << "].";
+    } else {
+        error(user_context)
+            << "Cannot fold dimension " << dim << " of " << func_name
+            << " because an extern stage accesses [" << min << ", " << (min + extent - 1) << "],"
+            << " which wraps around the boundary of the fold, "
+            << "which occurs at multiples of " << fold_factor << ".";
+    }
+    return halide_error_code_bad_extern_fold;
 }
 
 WEAK int halide_error_fold_factor_too_small(void *user_context, const char *func_name, const char *var_name,
@@ -232,5 +265,29 @@ WEAK int halide_error_specialize_fail(void *user_context, const char *message) {
     return halide_error_code_specialize_fail;
 }
 
+WEAK int halide_error_no_device_interface(void *user_context) {
+    error(user_context) << "Buffer has a non-zero device but no device interface.\n";
+    return halide_error_code_no_device_interface;
+}
+
+WEAK int halide_error_device_interface_no_device(void *user_context) {
+    error(user_context) << "Buffer has a non-null devie_interface but device is 0.\n";
+    return halide_error_code_device_interface_no_device;
+}
+
+WEAK int halide_error_host_and_device_dirty(void *user_context) {
+    error(user_context) << "Buffer has both host and device dirty bits set.\n";
+    return halide_error_code_host_and_device_dirty;
+}
+
+WEAK int halide_error_buffer_is_null(void *user_context, const char *routine) {
+    error(user_context) << "Buffer pointer passed to " << routine << " is null.\n";
+    return halide_error_code_buffer_is_null;
+}
+
+WEAK int halide_error_integer_division_by_zero(void *user_context) {
+    error(user_context) << "Integer division or modulo by zero.\n";
+    return halide_error_code_integer_division_by_zero;
+}
 
 }  // extern "C"

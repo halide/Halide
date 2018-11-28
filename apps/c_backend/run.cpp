@@ -13,7 +13,7 @@ extern "C" int an_extern_func(int x, int y) {
 }
 
 extern "C" int an_extern_stage(halide_buffer_t *in, halide_buffer_t *out) {
-    if (in->host == nullptr) {
+    if (in->is_bounds_query()) {
         // We expect a 2D input.
         in->dim[0].extent = 10;
         in->dim[1].extent = 10;

@@ -1,17 +1,17 @@
 #include "AddImageChecks.h"
-#include "Target.h"
 #include "IRVisitor.h"
-#include "Substitute.h"
 #include "Simplify.h"
+#include "Substitute.h"
+#include "Target.h"
 
 namespace Halide {
 namespace Internal {
 
-using std::vector;
-using std::string;
+using std::make_pair;
 using std::map;
 using std::pair;
-using std::make_pair;
+using std::string;
+using std::vector;
 
 /* Find all the externally referenced buffers in a stmt */
 class FindBuffers : public IRGraphVisitor {
@@ -20,32 +20,63 @@ public:
         Buffer<> image;
         Parameter param;
         Type type;
-        int dimensions;
-        Result() : dimensions(0) {}
+        int dimensions{0};
+        bool used_on_host{false};
     };
 
     map<string, Result> buffers;
+    bool in_device_loop = false;
 
     using IRGraphVisitor::visit;
 
-    void visit(const Call *op) {
+    void visit(const For *op) override {
+        op->min.accept(this);
+        op->extent.accept(this);
+        bool old = in_device_loop;
+        if (op->device_api != DeviceAPI::None &&
+            op->device_api != DeviceAPI::Host) {
+            in_device_loop = true;
+        }
+        op->body.accept(this);
+        in_device_loop = old;
+    }
+
+    void visit(const Call *op) override {
         IRGraphVisitor::visit(op);
         if (op->image.defined()) {
-            Result r;
+            Result &r = buffers[op->name];
             r.image = op->image;
             r.type = op->type.element_of();
             r.dimensions = (int)op->args.size();
-            buffers[op->name] = r;
+            r.used_on_host = r.used_on_host || (!in_device_loop);
         } else if (op->param.defined()) {
-            Result r;
+            Result &r = buffers[op->name];
             r.param = op->param;
             r.type = op->type.element_of();
             r.dimensions = (int)op->args.size();
-            buffers[op->name] = r;
+            r.used_on_host = r.used_on_host || (!in_device_loop);
         }
     }
 
-    void visit(const Variable *op) {
+    void visit(const Provide *op) override {
+        IRGraphVisitor::visit(op);
+        if (op->values.size() == 1) {
+            auto it = buffers.find(op->name);
+            if (it != buffers.end() && !in_device_loop) {
+                it->second.used_on_host = true;
+            }
+        } else {
+            for (size_t i = 0; i < op->values.size(); i++) {
+                string name = op->name + "." + std::to_string(i);
+                auto it = buffers.find(name);
+                if (it != buffers.end() && !in_device_loop) {
+                    it->second.used_on_host = true;
+                }
+            }
+        }
+    }
+
+    void visit(const Variable *op) override {
         if (op->param.defined() &&
             op->param.is_buffer() &&
             buffers.find(op->param.name()) == buffers.end()) {
@@ -53,7 +84,12 @@ public:
             r.param = op->param;
             r.type = op->param.type();
             r.dimensions = op->param.dimensions();
+            r.used_on_host = false;
             buffers[op->param.name()] = r;
+        } else if (op->reduction_domain.defined()) {
+            // The bounds of reduction domains are not yet defined,
+            // and they may be the only reference to some parameters.
+            op->reduction_domain.accept(this);
         }
     }
 };
@@ -70,8 +106,7 @@ Stmt add_image_checks(Stmt s,
 
     // First hunt for all the referenced buffers
     FindBuffers finder;
-    s.accept(&finder);
-    map<string, FindBuffers::Result> bufs = finder.buffers;
+    map<string, FindBuffers::Result> &bufs = finder.buffers;
 
     // Add the output buffer(s).
     for (Function f : outputs) {
@@ -88,6 +123,10 @@ Stmt add_image_checks(Stmt s,
         }
     }
 
+    // Add the input buffer(s) and annotate which output buffers are
+    // used on host.
+    s.accept(&finder);
+
     Scope<Interval> empty_scope;
     map<string, Box> boxes = boxes_touched(s, empty_scope, fb);
 
@@ -103,6 +142,7 @@ Stmt add_image_checks(Stmt s,
     vector<Stmt> asserts_proposed;
     vector<Stmt> asserts_elem_size;
     vector<Stmt> asserts_host_alignment;
+    vector<Stmt> asserts_host_non_null;
     vector<Stmt> buffer_rewrites;
 
     // Inject the code that conditionally returns if we're in inference mode
@@ -143,6 +183,7 @@ Stmt add_image_checks(Stmt s,
         Parameter &param = buf.second.param;
         Type type = buf.second.type;
         int dimensions = buf.second.dimensions;
+        bool used_on_host = buf.second.used_on_host;
 
         // Detect if this is one of the outputs of a multi-output pipeline.
         bool is_output_buffer = false;
@@ -174,7 +215,8 @@ Stmt add_image_checks(Stmt s,
             vector<string> extern_users;
             for (size_t i = 0; i < order.size(); i++) {
                 Function f = env.find(order[i])->second;
-                if (f.has_extern_definition()) {
+                if (f.has_extern_definition() &&
+                    !f.extern_definition_proxy_expr().defined()) {
                     const vector<ExternFuncArgument> &args = f.extern_arguments();
                     for (size_t j = 0; j < args.size(); j++) {
                         if ((args[j].image_param.defined() &&
@@ -235,6 +277,18 @@ Stmt add_image_checks(Stmt s,
                 AssertStmt::make((type_code == type.code()) &&
                                  (type_bits == type.bits()) &&
                                  (type_lanes == type.lanes()), error));
+        }
+
+        // Check the dimensions matches the internally-understood dimensions
+        {
+            string dimensions_name = name + ".dimensions";
+            Expr dimensions_given = Variable::make(Int(32), dimensions_name, image, param, rdom);
+            Expr error = Call::make(Int(32), "halide_error_bad_dimensions",
+                                    {error_name,
+                                     dimensions_given, make_const(Int(32), dimensions)},
+                                    Call::Extern);
+            asserts_elem_size.push_back(
+                AssertStmt::make(dimensions_given == dimensions, error));
         }
 
         if (touched.maybe_unused()) {
@@ -313,7 +367,7 @@ Stmt add_image_checks(Stmt s,
             // And that no product of extents overflows 2^31 - 1. This
             // second test is likely only needed if a fuse directive
             // is used in the schedule to combine multiple extents,
-            // but it is here for extra safety. On targets with the
+            // but it is here for extra safety. On 64-bit targets with the
             // LargeBuffers feature, the maximum size is 2^63 - 1.
             Expr max_size = make_const(UInt(64), t.maximum_buffer_size());
             Expr max_extent = make_const(UInt(64), 0x7fffffff);
@@ -489,17 +543,32 @@ Stmt add_image_checks(Stmt s,
 
             lets_constrained.push_back({ name + ".constrained", constraints[i].second });
 
-            Expr error = Call::make(Int(32), "halide_error_constraint_violated",
-                                    {name, var, constrained_var_str, constrained_var},
-                                    Call::Extern);
+            Expr error = 0;
+            if (!no_asserts) {
+                error = Call::make(Int(32), "halide_error_constraint_violated",
+                                   {name, var, constrained_var_str, constrained_var},
+                                   Call::Extern);
+            }
 
             // Check the var passed in equals the constrained version (when not in inference mode)
             asserts_constrained.push_back(AssertStmt::make(var == constrained_var, error));
         }
+
+        // For the buffers used on host, check the host field is non-null
+        Expr host_ptr = Variable::make(Handle(), name, image, param, ReductionDomain());
+        if (used_on_host) {
+            Expr error = Call::make(Int(32), "halide_error_host_is_null",
+                                    {error_name}, Call::Extern);
+            Expr check = (host_ptr != make_zero(host_ptr.type()));
+            if (touched.maybe_unused()) {
+                check = !touched.used || check;
+            }
+            asserts_host_non_null.push_back(AssertStmt::make(check, error));
+        }
+
+        // and check alignment of the host field
         if (param.defined() && param.host_alignment() != param.type().bytes()) {
-            string host_name = name;
             int alignment_required = param.host_alignment();
-            Expr host_ptr = Variable::make(Handle(), host_name);
             Expr u64t_host_ptr = reinterpret<uint64_t>(host_ptr);
             Expr align_condition = (u64t_host_ptr % alignment_required) == 0;
             Expr error = Call::make(Int(32), "halide_error_unaligned_host_ptr",
@@ -508,8 +577,11 @@ Stmt add_image_checks(Stmt s,
         }
     }
 
-    // Inject the code that check for the alignment of the host pointers.
+    // Inject the code that checks the host pointers.
     if (!no_asserts) {
+        for (size_t i = asserts_host_non_null.size(); i > 0; i--) {
+            s = Block::make(asserts_host_non_null[i-1], s);
+        }
         for (size_t i = asserts_host_alignment.size(); i > 0; i--) {
             s = Block::make(asserts_host_alignment[i-1], s);
         }
@@ -536,12 +608,14 @@ Stmt add_image_checks(Stmt s,
     // all in reverse order compared to execution, as we incrementally
     // prepending code.
 
-    if (!no_asserts) {
-        // Inject the code that checks the constraints are correct.
-        for (size_t i = asserts_constrained.size(); i > 0; i--) {
-            s = Block::make(asserts_constrained[i-1], s);
-        }
+    // Inject the code that checks the constraints are correct. We
+    // need these regardless of how NoAsserts is set, because they are
+    // what gets Halide to actually exploit the constraint.
+    for (size_t i = asserts_constrained.size(); i > 0; i--) {
+        s = Block::make(asserts_constrained[i-1], s);
+    }
 
+    if (!no_asserts) {
         // Inject the code that checks for out-of-bounds access to the buffers.
         for (size_t i = asserts_required.size(); i > 0; i--) {
             s = Block::make(asserts_required[i-1], s);
@@ -588,5 +662,5 @@ Stmt add_image_checks(Stmt s,
     return s;
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

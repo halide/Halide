@@ -8,7 +8,10 @@
 using namespace Halide::Runtime;
 
 void my_error_handler(void *user_context, const char *message) {
-    printf("Saw Error: (%s)\n", message);
+    // Don't use the word "error": if CMake sees it in the output
+    // from an add_custom_command() on Windows, it can decide that
+    // the command failed, regardless of error code.
+    printf("Saw: (%s)\n", message);
 }
 
 std::pair<std::string, bool> get_env_variable(char const *env_var_name) {
@@ -40,9 +43,11 @@ bool use_debug_feature() {
 
 static std::atomic<int> can_use_count;
 
-int my_can_use_target_features(uint64_t features) {
+int my_can_use_target_features(int count, const uint64_t *features) {
     can_use_count += 1;
-    if (features & (1ULL << halide_target_feature_debug)) {
+    const int word = halide_target_feature_debug / 64;
+    const int bit = halide_target_feature_debug % 64;
+    if (features[word] & (1ULL << bit)) {
         if (use_debug_feature()) {
             return 1;
         } else {
@@ -61,6 +66,7 @@ int main(int argc, char **argv) {
 
     if (HalideTest::multitarget(output) != 0) {
         printf("Error at multitarget\n");
+        return -1;
     }
 
     // Verify output.
@@ -80,6 +86,7 @@ int main(int argc, char **argv) {
     for (int i = 0; i < 10; ++i) {
         if (HalideTest::multitarget(output) != 0) {
             printf("Error at multitarget\n");
+            return -1;
         }
     }
     if (can_use_count != 1) {

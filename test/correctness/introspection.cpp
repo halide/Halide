@@ -1,6 +1,8 @@
 #include "Halide.h"
 #include <stdio.h>
 
+using namespace Halide;
+
 // The check has to go in the Halide namespace, because get_source_location looks for the first thing outside of it
 namespace Halide {
 void check(const void *var, const std::string &type,
@@ -55,8 +57,8 @@ struct Bar {
     Bar(int x) : bar_int(x) {}
     ~Bar() {}
     void check_bar() {
-        check(this, "Foo::{anonymous}::Bar", "b", __FILE__, __LINE__);
-        check(&bar_int, "Foo::{anonymous}::Bar::bint", "b.bar_int", __FILE__, __LINE__);
+        check(this, "Foo::_::Bar", "b", __FILE__, __LINE__);
+        check(&bar_int, "Foo::_::Bar::bint", "b.bar_int", __FILE__, __LINE__);
     }
     int get() {
         return bar_int * 2;
@@ -125,7 +127,7 @@ int main(int argc, char **argv) {
     // .. unless they're members of explicitly registered objects
     HeapObject *obj = new HeapObject;
     static HeapObject *dummy_heap_object_ptr = nullptr;
-    check(&dummy_heap_object_ptr, "HeapObject *", "dummy_heap_object_ptr", __FILE__, __LINE__);
+    check(&dummy_heap_object_ptr, "HeapObject \\*", "dummy_heap_object_ptr", __FILE__, __LINE__);
     Halide::Internal::Introspection::register_heap_object(obj, sizeof(HeapObject), &dummy_heap_object_ptr);
     check(&(obj->f), "float", "f", __FILE__, __LINE__);
     check(&(obj->f2), "fancy_float", "f2", __FILE__, __LINE__);
@@ -133,11 +135,11 @@ int main(int argc, char **argv) {
     check(&(obj->i), "int", "i", __FILE__, __LINE__);
     check(&(obj->inner.c), "char", "inner.c", __FILE__, __LINE__);
     check(&(obj->inner.d), "double", "inner.d", __FILE__, __LINE__);
-    check(&(obj->ptr), "HeapObject *", "ptr", __FILE__, __LINE__);
+    check(&(obj->ptr), "HeapObject \\*", "ptr", __FILE__, __LINE__);
     // TODO:
     check(&(obj->inner.i_array[10]), "int", "inner.i_array[10]", __FILE__, __LINE__);
     check(&(obj->inner2_array[4].a[2]), "int", "inner2_array[4].a[2]", __FILE__, __LINE__);
-    check(&(obj->inner.i_array), "int [20]", "inner.i_array", __FILE__, __LINE__);
+    check(&(obj->inner.i_array), "int .20.", "inner.i_array", __FILE__, __LINE__);
     Halide::Internal::Introspection::deregister_heap_object(obj, sizeof(HeapObject));
     delete obj;
 
@@ -180,6 +182,21 @@ int main(int argc, char **argv) {
     check(&SomeStruct::static_member_double_array[5], "double", "SomeStruct::static_member_double_array[5]", __FILE__, __LINE__);
 
     check(&SomeStruct::substruct.a, "int", "SomeStruct::substruct.a", __FILE__, __LINE__);
+
+    // Check that we can query front-end objects for their source locations
+    {
+        std::string loc;
+        Func f;
+        Var x;
+        f(x) = x;
+        loc = std::string(__FILE__) + ":" + std::to_string(__LINE__ - 1);
+        assert(f.source_location() == loc);
+
+        f(x) += 1;
+        loc = std::string(__FILE__) + ":" + std::to_string(__LINE__ - 1);
+        assert(f.update().source_location() == loc);
+    }
+
 
     printf("Success!\n");
 

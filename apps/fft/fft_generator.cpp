@@ -131,8 +131,8 @@ public:
                  output(x, y, c) = re(complex_result(x, y));
             }
         } else {
-            output(x, y, c) = select(c == 0, 
-                                     re(complex_result(x, y)), 
+            output(x, y, c) = select(c == 0,
+                                     re(complex_result(x, y)),
                                      im(complex_result(x, y)));
         }
     }
@@ -146,7 +146,7 @@ public:
 
         output.dim(0).set_stride(output_comps)
               .dim(2).set_min(0).set_extent(output_comps).set_stride(1);
-	
+
         if (output_comps != 1) {
             output.reorder(c, x, y).unroll(c);
         }
@@ -164,6 +164,6 @@ private:
     ComplexFunc complex_result;
 };
 
-Halide::RegisterGenerator<FFTGenerator> register_fft{"fft"};
+}  // namespace
 
-}
+HALIDE_REGISTER_GENERATOR(FFTGenerator, fft)

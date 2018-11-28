@@ -1,15 +1,15 @@
 #ifndef HALIDE_SCOPE_H
 #define HALIDE_SCOPE_H
 
-#include <string>
-#include <map>
-#include <stack>
-#include <utility>
 #include <iostream>
+#include <unordered_map>
+#include <stack>
+#include <string>
+#include <utility>
 
-#include "Util.h"
 #include "Debug.h"
 #include "Error.h"
+#include "Util.h"
 
 /** \file
  * Defines the Scope class, which is used for keeping track of names in a scope while traversing IR
@@ -66,14 +66,30 @@ public:
     }
 };
 
+template<>
+class SmallStack<void> {
+    // A stack of voids. Voids are all the same, so just record how many voids are in the stack
+    int counter = 0;
+public:
+    void pop() {
+        counter--;
+    }
+    void push() {
+        counter++;
+    }
+    bool empty() const {
+        return counter == 0;
+    }
+};
+
 /** A common pattern when traversing Halide IR is that you need to
  * keep track of stuff when you find a Let or a LetStmt, and that it
  * should hide previous values with the same name until you leave the
  * Let or LetStmt nodes This class helps with that. */
-template<typename T>
+template<typename T = void>
 class Scope {
 private:
-    std::map<std::string, SmallStack<T>> table;
+    std::unordered_map<std::string, SmallStack<T>> table;
 
     // Copying a scope object copies a large table full of strings and
     // stacks. Bad idea.
@@ -81,7 +97,6 @@ private:
     Scope<T> &operator=(const Scope<T> &);
 
     const Scope<T> *containing_scope;
-
 
 public:
     Scope() : containing_scope(nullptr) {}
@@ -102,30 +117,34 @@ public:
     }
 
     /** Retrieve the value referred to by a name */
-    T get(const std::string &name) const {
-        typename std::map<std::string, SmallStack<T>>::const_iterator iter = table.find(name);
+    template<typename T2 = T,
+             typename = typename std::enable_if<!std::is_same<T2, void>::value>::type>
+    T2 get(const std::string &name) const {
+        typename std::unordered_map<std::string, SmallStack<T>>::const_iterator iter = table.find(name);
         if (iter == table.end() || iter->second.empty()) {
             if (containing_scope) {
                 return containing_scope->get(name);
             } else {
-                internal_error << "Symbol '" << name << "' not found\n";
+                internal_error << "Name not in Scope: " << name << "\n" << *this << "\n";
             }
         }
         return iter->second.top();
     }
 
     /** Return a reference to an entry. Does not consider the containing scope. */
-    T &ref(const std::string &name) {
-        typename std::map<std::string, SmallStack<T>>::iterator iter = table.find(name);
+    template<typename T2 = T,
+             typename = typename std::enable_if<!std::is_same<T2, void>::value>::type>
+    T2 &ref(const std::string &name) {
+        typename std::unordered_map<std::string, SmallStack<T>>::iterator iter = table.find(name);
         if (iter == table.end() || iter->second.empty()) {
-            internal_error << "Symbol '" << name << "' not found\n";
+            internal_error << "Name not in Scope: " << name << "\n" << *this << "\n";
         }
         return iter->second.top_ref();
     }
 
     /** Tests if a name is in scope */
     bool contains(const std::string &name) const {
-        typename std::map<std::string, SmallStack<T>>::const_iterator iter = table.find(name);
+        typename std::unordered_map<std::string, SmallStack<T>>::const_iterator iter = table.find(name);
         if (iter == table.end() || iter->second.empty()) {
             if (containing_scope) {
                 return containing_scope->contains(name);
@@ -139,16 +158,24 @@ public:
     /** Add a new (name, value) pair to the current scope. Hide old
      * values that have this name until we pop this name.
      */
-    void push(const std::string &name, const T &value) {
+    template<typename T2 = T,
+             typename = typename std::enable_if<!std::is_same<T2, void>::value>::type>
+    void push(const std::string &name, const T2 &value) {
         table[name].push(value);
+    }
+
+    template<typename T2 = T,
+             typename = typename std::enable_if<std::is_same<T2, void>::value>::type>
+    void push(const std::string &name) {
+        table[name].push();
     }
 
     /** A name goes out of scope. Restore whatever its old value
      * was (or remove it entirely if there was nothing else of the
      * same name in an outer scope) */
     void pop(const std::string &name) {
-        typename std::map<std::string, SmallStack<T>>::iterator iter = table.find(name);
-        internal_assert(iter != table.end()) << "Name not in symbol table: " << name << "\n";
+        typename std::unordered_map<std::string, SmallStack<T>>::iterator iter = table.find(name);
+        internal_assert(iter != table.end()) << "Name not in Scope: " << name << "\n" << *this << "\n";
         iter->second.pop();
         if (iter->second.empty()) {
             table.erase(iter);
@@ -157,9 +184,9 @@ public:
 
     /** Iterate through the scope. Does not capture any containing scope. */
     class const_iterator {
-        typename std::map<std::string, SmallStack<T>>::const_iterator iter;
+        typename std::unordered_map<std::string, SmallStack<T>>::const_iterator iter;
     public:
-        explicit const_iterator(const typename std::map<std::string, SmallStack<T>>::const_iterator &i) :
+        explicit const_iterator(const typename std::unordered_map<std::string, SmallStack<T>>::const_iterator &i) :
             iter(i) {
         }
 
@@ -181,7 +208,9 @@ public:
             return iter->second;
         }
 
-        const T &value() {
+        template<typename T2 = T,
+                 typename = typename std::enable_if<!std::is_same<T2, void>::value>::type>
+        const T2 &value() {
             return iter->second.top_ref();
         }
     };
@@ -195,9 +224,9 @@ public:
     }
 
     class iterator {
-        typename std::map<std::string, SmallStack<T>>::iterator iter;
+        typename std::unordered_map<std::string, SmallStack<T>>::iterator iter;
     public:
-        explicit iterator(typename std::map<std::string, SmallStack<T>>::iterator i) :
+        explicit iterator(typename std::unordered_map<std::string, SmallStack<T>>::iterator i) :
             iter(i) {
         }
 
@@ -219,7 +248,9 @@ public:
             return iter->second;
         }
 
-        T &value() {
+        template<typename T2 = T,
+                 typename = typename std::enable_if<!std::is_same<T2, void>::value>::type>
+        T2 &value() {
             return iter->second.top_ref();
         }
     };
@@ -249,7 +280,56 @@ std::ostream &operator<<(std::ostream &stream, const Scope<T>& s) {
     return stream;
 }
 
-}
-}
+/** Helper class for pushing/popping Scope<> values, to allow
+ * for early-exit in Visitor/Mutators that preserves correctness.
+ * Note that this name can be a bit confusing, since there are two "scopes"
+ * involved here:
+ * - the Scope object itself
+ * - the lifetime of this helper object
+ * The "Scoped" in this class name refers to the latter, as it temporarily binds
+ * a name within the scope of this helper's lifetime. */
+template<typename T = void>
+struct ScopedBinding {
+    Scope<T> *scope;
+    std::string name;
+    ScopedBinding(Scope<T> &s, const std::string &n, const T &value) :
+        scope(&s), name(n) {
+        scope->push(name, value);
+    }
+    ScopedBinding(bool condition, Scope<T> &s, const std::string &n, const T &value) :
+        scope(condition ? &s : nullptr), name(n) {
+        if (condition) {
+            scope->push(name, value);
+        }
+    }
+    ~ScopedBinding() {
+        if (scope) {
+            scope->pop(name);
+        }
+    }
+};
+
+template<>
+struct ScopedBinding<void> {
+    Scope<> *scope;
+    std::string name;
+    ScopedBinding(Scope<> &s, const std::string &n) : scope(&s), name(n) {
+        scope->push(name);
+    }
+    ScopedBinding(bool condition, Scope<> &s, const std::string &n) :
+        scope(condition ? &s : nullptr), name(n) {
+        if (condition) {
+            scope->push(name);
+        }
+    }
+    ~ScopedBinding() {
+        if (scope) {
+            scope->pop(name);
+        }
+    }
+};
+
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

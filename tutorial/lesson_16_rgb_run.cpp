@@ -121,7 +121,7 @@ int main(int argc, char **argv) {
         brighten_specialized(interleaved_input, 1, interleaved_output);
     }
     double specialized_interleaved_time = tick("brighten_specialized on interleaved images");
-    assert(specialized_interleaved_time < 1.5 * interleaved_time);
+    assert(specialized_interleaved_time < 2.0 * interleaved_time);
 
     return 0;
 }

@@ -9,7 +9,7 @@
 extern "C" {
 // Returns the address of the global halide_profiler state
 WEAK halide_profiler_state *halide_profiler_get_state() {
-    static halide_profiler_state s = {{{0}}, NULL, 1, 0, 0, 0, NULL, false};
+    static halide_profiler_state s = {{{0}}, 1, 0, 0, 0, 0, NULL, NULL};
     return &s;
 }
 }
@@ -130,8 +130,6 @@ WEAK void sampling_profiler_thread(void *) {
         }
     }
 
-    s->started = false;
-
     halide_mutex_unlock(&s->lock);
 }
 
@@ -180,10 +178,9 @@ WEAK int halide_profiler_pipeline_start(void *user_context,
 
     ScopedMutexLock lock(&s->lock);
 
-    if (!s->started) {
+    if (!s->sampling_thread) {
         halide_start_clock(user_context);
-        halide_spawn_thread(sampling_profiler_thread, NULL);
-        s->started = true;
+        s->sampling_thread = halide_spawn_thread(sampling_profiler_thread, NULL);
     }
 
     halide_profiler_pipeline_stats *p =
@@ -392,15 +389,7 @@ WEAK void halide_profiler_report(void *user_context) {
 }
 
 
-WEAK void halide_profiler_reset() {
-    // WARNING: Do not call this method while any other halide
-    // pipeline is running; halide_profiler_memory_allocate/free and
-    // halide_profiler_stack_peak_update update the profiler pipeline's
-    // state without grabbing the global profiler state's lock.
-    halide_profiler_state *s = halide_profiler_get_state();
-
-    ScopedMutexLock lock(&s->lock);
-
+WEAK void halide_profiler_reset_unlocked(halide_profiler_state *s) {
     while (s->pipelines) {
         halide_profiler_pipeline_stats *p = s->pipelines;
         s->pipelines = (halide_profiler_pipeline_stats *)(p->next);
@@ -410,26 +399,57 @@ WEAK void halide_profiler_reset() {
     s->first_free_id = 0;
 }
 
-namespace {
+WEAK void halide_profiler_reset() {
+    // WARNING: Do not call this method while any other halide
+    // pipeline is running; halide_profiler_memory_allocate/free and
+    // halide_profiler_stack_peak_update update the profiler pipeline's
+    // state without grabbing the global profiler state's lock.
+    halide_profiler_state *s = halide_profiler_get_state();
+    ScopedMutexLock lock(&s->lock);
+    halide_profiler_reset_unlocked(s);
+}
+
+#ifndef WINDOWS
 __attribute__((destructor))
+#endif
 WEAK void halide_profiler_shutdown() {
     halide_profiler_state *s = halide_profiler_get_state();
-    if (!s->started) return;
+    if (!s->sampling_thread) {
+        return;
+    }
+
     s->current_func = halide_profiler_please_stop;
-    do {
-        // Memory barrier.
-        __sync_synchronize();
-    } while (s->started);
+    halide_join_thread(s->sampling_thread);
+    s->sampling_thread = NULL;
     s->current_func = halide_profiler_outside_of_halide;
 
     // Print results. No need to lock anything because we just shut
     // down the thread.
     halide_profiler_report_unlocked(NULL, s);
 
-    // Leak the memory. Not all implementations of ScopedMutexLock may
-    // be safe to use at static destruction time (windows).
-    // halide_profiler_reset();
+    halide_profiler_reset_unlocked(s);
 }
+
+namespace {
+#ifdef WINDOWS
+WEAK void halide_windows_profiler_shutdown() {
+    halide_profiler_state *s = halide_profiler_get_state();
+    if (!s->sampling_thread) {
+        return;
+    }
+
+    // On Windows it is unsafe to do anything with threads or critical
+    // sections in a static destructor as it may run after threads
+    // have been killed by the OS. Furthermore, may calls, even things
+    // like EnterCriticalSection may be set to kill the process if
+    // called during process shutdown. Hence kthis routine doesn't attmept
+    // to clean up state as the destructor does on other platforms.
+
+    // Print results. Avoid locking as it will cause problems and
+    // nothing should be running.
+    halide_profiler_report_unlocked(NULL, s);
+}
+#endif
 }
 
 WEAK void halide_profiler_pipeline_end(void *user_context, void *state) {

@@ -1,17 +1,18 @@
 #include <stdlib.h>
 
-#include "IR.h"
-#include "IROperator.h"
-#include "IRMutator.h"
 #include "Definition.h"
+#include "IR.h"
+#include "IRMutator.h"
+#include "IROperator.h"
+#include "Introspection.h"
 #include "Var.h"
 
 namespace Halide {
 namespace Internal {
 
-using std::vector;
-using std::string;
 using std::map;
+using std::string;
+using std::vector;
 
 struct DefinitionContents {
     mutable RefCount ref_count;
@@ -20,6 +21,7 @@ struct DefinitionContents {
     std::vector<Expr> values, args;
     StageSchedule stage_schedule;
     std::vector<Specialization> specializations;
+    std::string source_location;
 
     DefinitionContents() : is_init(true), predicate(const_true()) {}
 
@@ -45,7 +47,7 @@ struct DefinitionContents {
         }
     }
 
-    void mutate(IRMutator *mutator) {
+    void mutate(IRMutator2 *mutator) {
         if (predicate.defined()) {
             predicate = mutator->mutate(predicate);
         }
@@ -69,16 +71,16 @@ struct DefinitionContents {
 };
 
 template<>
-EXPORT RefCount &ref_count<DefinitionContents>(const DefinitionContents *d) {
+RefCount &ref_count<DefinitionContents>(const DefinitionContents *d) {
     return d->ref_count;
 }
 
 template<>
-EXPORT void destroy<DefinitionContents>(const DefinitionContents *d) {
+void destroy<DefinitionContents>(const DefinitionContents *d) {
     delete d;
 }
 
-Definition::Definition() : contents(new DefinitionContents) {}
+Definition::Definition() : contents(nullptr) {}
 
 Definition::Definition(const IntrusivePtr<DefinitionContents> &ptr) : contents(ptr) {
     internal_assert(ptr.defined())
@@ -91,6 +93,7 @@ Definition::Definition(const std::vector<Expr> &args, const std::vector<Expr> &v
     contents->is_init = is_init;
     contents->values = values;
     contents->args = args;
+    contents->source_location = Introspection::get_source_location();
     if (rdom.defined()) {
         contents->predicate = rdom.predicate();
         for (size_t i = 0; i < rdom.domain().size(); i++) {
@@ -102,12 +105,13 @@ Definition::Definition(const std::vector<Expr> &args, const std::vector<Expr> &v
 Definition Definition::get_copy() const {
     internal_assert(contents.defined()) << "Cannot copy undefined Definition\n";
 
-    Definition copy;
+    Definition copy(new DefinitionContents);
     copy.contents->is_init = contents->is_init;
     copy.contents->predicate = contents->predicate;
     copy.contents->values = contents->values;
     copy.contents->args = contents->args;
     copy.contents->stage_schedule = contents->stage_schedule.get_copy();
+    copy.contents->source_location = contents->source_location;
 
     // Deep-copy specializations
     for (const Specialization &s : contents->specializations) {
@@ -120,6 +124,10 @@ Definition Definition::get_copy() const {
     return copy;
 }
 
+bool Definition::defined() const {
+    return contents.defined();
+}
+
 bool Definition::is_init() const {
     return contents->is_init;
 }
@@ -128,7 +136,7 @@ void Definition::accept(IRVisitor *visitor) const {
     contents->accept(visitor);
 }
 
-void Definition::mutate(IRMutator *mutator) {
+void Definition::mutate(IRMutator2 *mutator) {
     contents->mutate(mutator);
 }
 
@@ -178,13 +186,19 @@ const std::vector<Specialization> &Definition::specializations() const {
     return contents->specializations;
 }
 
+std::string Definition::source_location() const {
+    return contents->source_location;
+}
+
 const Specialization &Definition::add_specialization(Expr condition) {
     Specialization s;
     s.condition = condition;
+    s.definition.contents = new DefinitionContents;
     s.definition.contents->is_init = contents->is_init;
     s.definition.contents->predicate = contents->predicate;
     s.definition.contents->values = contents->values;
     s.definition.contents->args   = contents->args;
+    s.definition.contents->source_location = contents->source_location;
 
     // The sub-schedule inherits everything about its parent except for its specializations.
     s.definition.contents->stage_schedule = contents->stage_schedule.get_copy();
@@ -193,5 +207,5 @@ const Specialization &Definition::add_specialization(Expr condition) {
     return contents->specializations.back();
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

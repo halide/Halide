@@ -16,7 +16,7 @@
 namespace Halide {
 namespace Internal {
 
- /** An inferred argument. Inferred args are either Params,
+/** An inferred argument. Inferred args are either Params,
  * ImageParams, or Buffers. The first two are handled by the param
  * field, and global images are tracked via the buf field. These
  * are used directly when jitting, or used for validation when
@@ -38,7 +38,7 @@ struct InferredArgument {
 };
 
 class Function;
- 
+
 std::vector<InferredArgument> infer_arguments(Stmt body, const std::vector<Function> &outputs);
 
 }  // namespace Internal

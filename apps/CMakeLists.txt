@@ -1,24 +1,26 @@
-include_directories ("${CMAKE_CURRENT_LIST_DIR}/support")
-# The support header file depends on Halide.h
 include_directories("${CMAKE_BINARY_DIR}/include")
-include_directories("${CMAKE_SOURCE_DIR}/tools")
+include_directories("${HALIDE_TOOLS_DIR}")
 
-macro(add_if_have_libpng dirname)
-  if (PNG_FOUND)
-    add_subdirectory(${dirname})
-  else()
-    message(WARNING "Not building \"${dirname}\" because libpng could not be found")
-  endif()
-endmacro()
+if (MSVC)
+    # Sample apps, so we can disable some of the more pedantic warnings
+    add_definitions(-D_CRT_SECURE_NO_WARNINGS)
+    add_compile_options(/wd4244) # conversion from 'type1' to 'type2', possible loss of data.
+endif()
 
-add_if_have_libpng(bilateral_grid)
+add_subdirectory(bilateral_grid)
 add_subdirectory(blur)
 add_subdirectory(c_backend)
-add_if_have_libpng(camera_pipe)
-#add_subdirectory(HelloAndroid)
+add_subdirectory(camera_pipe)
+add_subdirectory(conv_layer)
 add_subdirectory(glsl)
-add_if_have_libpng(interpolate)
-add_if_have_libpng(local_laplacian)
+add_subdirectory(interpolate)
+add_subdirectory(lens_blur)
+add_subdirectory(linear_algebra)
+add_subdirectory(linear_blur)
+add_subdirectory(local_laplacian)
+add_subdirectory(nl_means)
+add_subdirectory(resize)
+add_subdirectory(stencil_chain)
 
 # Don't add this one; it's deliberately standalone
-#add_subdirectory(wavelet)
+# add_subdirectory(wavelet)

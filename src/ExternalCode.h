@@ -23,7 +23,7 @@ private:
 
     // Used for debugging and naming the module to llvm.
     std::string nametag;
-    
+
     ExternalCode(Kind kind, const Target &llvm_target, DeviceAPI device_api, const std::vector<uint8_t> &code, const std::string &name)
         : kind(kind), llvm_target(llvm_target), device_code_kind(device_api), code(code), nametag(name) {
     }
@@ -124,7 +124,7 @@ public:
     const std::string &name() const { return nametag; }
 };
 
-}
+}  // namespace Halide
 
 #endif
 

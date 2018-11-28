@@ -8,9 +8,9 @@
 // Provide a simple mock implementation of matlab's API so we can test the mexFunction.
 
 #ifdef _WIN32
-#define EXPORT __declspec(dllexport)
+#define DLLEXPORT __declspec(dllexport)
 #else
-#define EXPORT
+#define DLLEXPORT
 #endif
 
 enum mxClassID {
@@ -48,13 +48,13 @@ class mxArrayImpl : public mxArray {
 public:
     mxArrayImpl(size_t M, size_t N) : data(M * N), dims({M, N}) {}
 
-    void *get_data() { return &data[0]; }
-    const void *get_data() const { return &data[0]; }
-    const size_t *get_dimensions() const { return &dims[0]; }
-    size_t get_number_of_dimensions() const { return dims.size(); }
-    mxClassID get_class_id() const { return ::get_class_id<T>(); }
-    double get_scalar() const { return data[0]; }
-    size_t get_element_size() const { return sizeof(T); }
+    void *get_data() override { return &data[0]; }
+    const void *get_data() const override { return &data[0]; }
+    const size_t *get_dimensions() const override { return &dims[0]; }
+    size_t get_number_of_dimensions() const override { return dims.size(); }
+    mxClassID get_class_id() const override { return ::get_class_id<T>(); }
+    double get_scalar() const override { return data[0]; }
+    size_t get_element_size() const override { return sizeof(T); }
 
     T &operator () (int i, int j) { return data[i * dims[0] + j]; }
     T operator () (int i, int j) const { return data[i * dims[0] + j]; }
@@ -62,57 +62,57 @@ public:
 
 extern "C" {
 
-EXPORT int mexWarnMsgTxt(const char *msg) {
+DLLEXPORT int mexWarnMsgTxt(const char *msg) {
     // Don't bother with the varargs.
     printf("%s\n", msg);
     return 0;
 }
 
-EXPORT size_t mxGetNumberOfDimensions_730(const mxArray *a) {
+DLLEXPORT size_t mxGetNumberOfDimensions_730(const mxArray *a) {
     return a->get_number_of_dimensions();
 }
 
-EXPORT int mxGetNumberOfDimensions_700(const mxArray *a) {
+DLLEXPORT int mxGetNumberOfDimensions_700(const mxArray *a) {
     return (int) a->get_number_of_dimensions();
 }
 
-EXPORT const size_t *mxGetDimensions_730(const mxArray *a) {
+DLLEXPORT const size_t *mxGetDimensions_730(const mxArray *a) {
     return a->get_dimensions();
 }
 
-EXPORT const int *mxGetDimensions_700(const mxArray *a) {
+DLLEXPORT const int *mxGetDimensions_700(const mxArray *a) {
     assert(sizeof(size_t) == sizeof(int));
     return reinterpret_cast<const int *>(a->get_dimensions());
 }
 
-EXPORT mxClassID mxGetClassID(const mxArray *a) {
+DLLEXPORT mxClassID mxGetClassID(const mxArray *a) {
     return a->get_class_id();
 }
 
-EXPORT void *mxGetData(const mxArray *a) {
+DLLEXPORT void *mxGetData(const mxArray *a) {
     return const_cast<mxArray *>(a)->get_data();
 }
 
-EXPORT size_t mxGetElementSize(const mxArray *a) {
+DLLEXPORT size_t mxGetElementSize(const mxArray *a) {
     return a->get_element_size();
 }
 
 // We only support real, numeric classes in this mock implementation.
-EXPORT bool mxIsNumeric(const mxArray *a) {
+DLLEXPORT bool mxIsNumeric(const mxArray *a) {
     return true;
 }
-EXPORT bool mxIsLogical(const mxArray *a) {
+DLLEXPORT bool mxIsLogical(const mxArray *a) {
     return false;
 }
-EXPORT bool mxIsComplex(const mxArray *a) {
+DLLEXPORT bool mxIsComplex(const mxArray *a) {
     return false;
 }
 
-EXPORT double mxGetScalar(const mxArray *a) {
+DLLEXPORT double mxGetScalar(const mxArray *a) {
     return a->get_scalar();
 }
 
-EXPORT mxArray *mxCreateNumericMatrix_730(size_t M, size_t N, mxClassID type, mxComplexity complexity) {
+DLLEXPORT mxArray *mxCreateNumericMatrix_730(size_t M, size_t N, mxClassID type, mxComplexity complexity) {
     assert(complexity == mxREAL);
     switch (type) {
     case mxSINGLE_CLASS: return new mxArrayImpl<float>(M, N);
@@ -121,7 +121,7 @@ EXPORT mxArray *mxCreateNumericMatrix_730(size_t M, size_t N, mxClassID type, mx
     }
 }
 
-EXPORT mxArray *mxCreateNumericMatrix_700(int M, int N, mxClassID type, mxComplexity complexity) {
+DLLEXPORT mxArray *mxCreateNumericMatrix_700(int M, int N, mxClassID type, mxComplexity complexity) {
     return mxCreateNumericMatrix_730(M, N, type, complexity);
 }
 

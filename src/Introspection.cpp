@@ -14,6 +14,8 @@
 // defines backtrace, which gets the call stack as instruction pointers
 #include <execinfo.h>
 
+#include <regex>
+
 using std::vector;
 using std::pair;
 using std::map;
@@ -261,21 +263,6 @@ public:
         calibrated = true;
     }
 
-    bool type_name_match(const std::string &actual_type, const std::string &query_type) {
-        if (query_type.empty()) {
-            return true;
-        }
-        if (query_type == actual_type) {
-            return true;
-        }
-        if (query_type[query_type.size()-1] == '?' &&
-            starts_with(actual_type, query_type.substr(0, query_type.size()-1))) {
-            return true;
-        }
-
-        return false;
-    }
-
     int find_global_variable(const void *global_pointer) {
         if (global_variables.empty()) {
             debug(5) << "Considering possible global at " << global_pointer << " but global_variables is empty\n";
@@ -339,6 +326,8 @@ public:
 
         uint64_t address = (uint64_t)global_pointer;
 
+        std::regex re(type_name);
+
         // Now test all of them
         for (; (size_t)idx < global_variables.size() && global_variables[idx].addr <= address; idx++) {
 
@@ -357,11 +346,11 @@ public:
 
             if (v.addr == address &&
                 (type_name.empty() ||
-                 (v.type && type_name_match(v.type->name, type_name)))) {
+                 (v.type && regex_match(v.type->name, re)))) {
                 return v.name;
             } else if (elem_type && // Check if it's an array element
                        (type_name.empty() ||
-                        (elem_type && type_name_match(elem_type->name, type_name)))) {
+                        (elem_type && regex_match(elem_type->name, re)))) {
                 int64_t array_size_bytes = v.type->size * elem_type->size;
                 int64_t pos_bytes = address - v.addr;
                 if (pos_bytes >= 0 &&
@@ -371,6 +360,8 @@ public:
                     oss << v.name << '[' << (pos_bytes / elem_type->size) << ']';
                     debug(5) << "Successful match to array element\n";
                     return oss.str();
+                } else {
+                    debug(5) << "Failed match to array element: " << pos_bytes << " " << array_size_bytes << " " << elem_type->size << "\n";
                 }
             }
         }
@@ -511,6 +502,8 @@ public:
 
         std::ostringstream name;
 
+        std::regex re(type_name);
+
         // Look in the members for the appropriate offset.
         for (size_t i = 0; i < obj.members.size(); i++) {
             TypeInfo *t = obj.members[i].type;
@@ -524,7 +517,8 @@ public:
 
 
             if (obj.members[i].addr == addr &&
-                type_name_match(t->name, type_name)) {
+                (type_name.empty() ||
+                 regex_match(t->name, re))) {
                 name << obj.members[i].name;
                 return name.str();
             }
@@ -653,6 +647,8 @@ public:
 
         debug(5) << "Searching for var at offset " << offset << "\n";
 
+        std::regex re(type_name);
+
         for (size_t j = 0; j < func->variables.size(); j++) {
             const LocalVariable &var = func->variables[j];
             debug(5) << "Var " << var.name << " is at offset " << var.stack_offset << "\n";
@@ -685,13 +681,13 @@ public:
 
             if (offset == var.stack_offset &&
                 (type_name.empty() ||
-                 (type && type_name_match(type->name, type_name)))) {
+                 (type && regex_match(type->name, re)))) {
                 debug(5) << "Successful match to scalar var\n";
                 return var.name;
             } else if (elem_type && // Check if it's an array element
                        (type_name.empty() ||
                         (elem_type && // Check the type matches
-                         type_name_match(elem_type->name, type_name)))) {
+                         regex_match(elem_type->name, re)))) {
                 int64_t array_size_bytes = type->size * elem_type->size;
                 int64_t pos_bytes = offset - var.stack_offset;
                 if (pos_bytes >= 0 &&
@@ -701,6 +697,8 @@ public:
                     oss << var.name << '[' << (pos_bytes / elem_type->size) << ']';
                     debug(5) << "Successful match to array element\n";
                     return oss.str();
+                } else {
+                    debug(5) << "No match to array element: " << type->size << " " << array_size_bytes << " " << pos_bytes << " " << elem_type->size << "\n";
                 }
             }
         }
@@ -864,14 +862,33 @@ public:
 
     }
 
+    bool dump_stack_frame(void *ptr) {
+        FunctionInfo *fi = find_containing_function(ptr);
+        if (fi == nullptr) {
+            debug(0) << "Failed to find function containing " << ptr << " in debug info\n";
+            return false;
+        }
+
+        debug(0) << fi->name << ":\n";
+        for (const LocalVariable &v : fi->variables) {
+            TypeInfo *t = v.type;
+            debug(0) << " ";
+            if (t) {
+                debug(0) << t->name << " ";
+            } else {
+                debug(0) << "(unknown type) ";
+            }
+            debug(0) << v.name << " @ " << v.stack_offset << "\n";
+        }
+        return true;
+    }
+
 private:
 
     void load_and_parse_object_file(const std::string &binary) {
         llvm::object::ObjectFile *obj = nullptr;
 
-        // Open the object file in question. The API to do this keeps changing.
-        #if LLVM_VERSION >= 39
-
+        // Open the object file in question.
         llvm::Expected<llvm::object::OwningBinary<llvm::object::ObjectFile>> maybe_obj =
             llvm::object::ObjectFile::createObjectFile(binary);
 
@@ -882,19 +899,6 @@ private:
         }
 
         obj = maybe_obj.get().getBinary();
-
-        #else
-
-        llvm::ErrorOr<llvm::object::OwningBinary<llvm::object::ObjectFile>> maybe_obj =
-            llvm::object::ObjectFile::createObjectFile(binary);
-
-        if (!maybe_obj) {
-            debug(1) << "Failed to load binary:" << binary << "\n";
-            return;
-        }
-
-        obj = maybe_obj.get().getBinary();
-        #endif
 
         if (obj) {
             working = true;
@@ -1579,7 +1583,7 @@ private:
                     types.push_back(type_info);
                 } else if (fmt.tag == tag_namespace && fmt.has_children) {
                     if (namespace_name.empty()) {
-                        namespace_name = "{anonymous}";
+                        namespace_name = "_";
                     }
                     namespace_stack.push_back({ namespace_name, stack_depth });
                 } else if ((fmt.tag == tag_inlined_subroutine ||
@@ -1731,6 +1735,15 @@ private:
             }
         }
 
+        // Fix up the sizes of typedefs where we know the underlying type
+        for (size_t i = 0; i < types.size(); i++) {
+            TypeInfo *t = &types[i];
+            if (types[i].type == TypeInfo::Typedef &&
+                !t->members.empty() &&
+                t->members[0].type) {
+                t->size = t->members[0].type->size;
+            }
+        }
 
 
         // Unpack class members into the local variables list.
@@ -2108,8 +2121,6 @@ private:
 
     }
 
-
-
     FunctionInfo *find_containing_function(void *addr) {
         uint64_t address = (uint64_t)addr;
         debug(5) << "Searching for function containing address " << addr << "\n";
@@ -2177,6 +2188,14 @@ private:
 
 namespace {
 DebugSections *debug_sections = nullptr;
+}
+
+bool dump_stack_frame() {
+    if (!debug_sections || !debug_sections->working) {
+        return false;
+    }
+    void *ptr = __builtin_return_address(0);
+    return debug_sections->dump_stack_frame(ptr);
 }
 
 std::string get_variable_name(const void *var, const std::string &expected_type) {
@@ -2262,16 +2281,14 @@ void test_compilation_unit(bool (*test)(bool (*)(const void *, const std::string
         debug(5) << "Test passed\n";
     }
 
-    //debug_sections->dump();
-
     #endif
 }
 
-}
-}
-}
+}  // namespace Introspection
+}  // namespace Internal
+}  // namespace Halide
 
-#else // WITH_INTROSPECTION
+#else  // WITH_INTROSPECTION
 
 namespace Halide {
 namespace Internal {
@@ -2296,8 +2313,8 @@ void test_compilation_unit(bool (*test)(bool (*)(const void *, const std::string
                            void (*calib)()) {
 }
 
-}
-}
-}
+}  // namespace Introspection
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

@@ -3,22 +3,23 @@
 
 #include "CodeGen_C.h"
 #include "CodeGen_Internal.h"
-#include "Substitute.h"
+#include "Deinterleave.h"
 #include "IROperator.h"
-#include "Param.h"
-#include "Var.h"
 #include "Lerp.h"
+#include "Param.h"
 #include "Simplify.h"
+#include "Substitute.h"
+#include "Var.h"
 
 namespace Halide {
 namespace Internal {
 
-using std::ostream;
 using std::endl;
+using std::map;
+using std::ostream;
+using std::ostringstream;
 using std::string;
 using std::vector;
-using std::ostringstream;
-using std::map;
 
 extern "C" unsigned char halide_internal_initmod_inlined_c[];
 extern "C" unsigned char halide_internal_runtime_header_HalideRuntime_h[];
@@ -29,6 +30,7 @@ extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeOpenCL_h[];
 extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeOpenGLCompute_h[];
 extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeOpenGL_h[];
 extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeQurt_h[];
+extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeD3D12Compute_h[];
 
 namespace {
 
@@ -51,8 +53,8 @@ void halide_profiler_pipeline_end(void *, void *);
 }
 
 #ifdef _WIN32
-float roundf(float);
-double round(double);
+__declspec(dllimport) float __cdecl roundf(float);
+__declspec(dllimport) double __cdecl round(double);
 #else
 inline float asinh_f32(float x) {return asinhf(x);}
 inline float acosh_f32(float x) {return acoshf(x);}
@@ -102,16 +104,50 @@ inline float neg_inf_f32() {return -INFINITY;}
 inline float inf_f32() {return INFINITY;}
 inline bool is_nan_f32(float x) {return x != x;}
 inline bool is_nan_f64(double x) {return x != x;}
-template<typename A, typename B> A reinterpret(B b) { static_assert(sizeof(A) == sizeof(B), "type size mismatch"); A a; memcpy(&a, &b, sizeof(a)); return a;}
-inline float float_from_bits(uint32_t bits) {return reinterpret<float, uint32_t>(bits);}
 
-template<typename T> T max(T a, T b) {if (a > b) return a; return b;}
-template<typename T> T min(T a, T b) {if (a < b) return a; return b;}
+template<typename A, typename B>
+inline A reinterpret(const B &b) {
+    #if __cplusplus >= 201103L
+    static_assert(sizeof(A) == sizeof(B), "type size mismatch");
+    #endif
+    A a;
+    memcpy(&a, &b, sizeof(a));
+    return a;
+}
+inline float float_from_bits(uint32_t bits) {
+    return reinterpret<float, uint32_t>(bits);
+}
+
+template<typename T>
+inline uint8_t halide_count_leading_zeros(T v) {
+    int bits = sizeof(v) * 8;
+    while (v) {
+        v >>= 1;
+        bits--;
+    }
+    return bits;
+}
+
+template<typename T>
+inline T halide_cpp_max(const T &a, const T &b) {return (a > b) ? a : b;}
+
+template<typename T>
+inline T halide_cpp_min(const T &a, const T &b) {return (a < b) ? a : b;}
 
 template<typename A, typename B>
 const B &return_second(const A &a, const B &b) {
     (void) a;
     return b;
+}
+
+template<typename A, typename B>
+inline auto quiet_div(const A &a, const B &b) -> decltype(a / b) {
+    return b == 0 ? static_cast<decltype(a / b)>(0) : (a / b);
+}
+
+template<typename A, typename B>
+inline auto quiet_mod(const A &a, const B &b) -> decltype(a % b) {
+    return b == 0 ? static_cast<decltype(a % b)>(0) : (a % b);
 }
 
 namespace {
@@ -126,7 +162,7 @@ public:
     ~HalideFreeHelper() { free(); }
     void free() {
         if (p) {
-            // TOOD: do all free_functions guarantee to ignore a null ptr?
+            // TODO: do all free_functions guarantee to ignore a nullptr?
             free_function(user_context, p);
             p = nullptr;
         }
@@ -135,8 +171,7 @@ public:
 } // namespace
 
 )INLINE_CODE";
-
-}
+}  // namespace
 
 class TypeInfoGatherer : public IRGraphVisitor {
 public:
@@ -146,22 +181,33 @@ public:
     using IRGraphVisitor::include;
     using IRGraphVisitor::visit;
 
-    void include(const Expr &e) {
-        // bool vectors are not supported and are removed by EliminateBoolVectors.
-        if (!e.type().is_bool() && e.type().lanes() > 1) {
-            vector_types_used.insert(e.type());
+    void include(const Expr &e) override {
+        if (e.type().is_vector()) {
+            if (e.type().is_bool()) {
+                // bool vectors are always emitted as uint8 in the C++ backend
+                // TODO: on some architectures, we could do better by choosing
+                // a bitwidth that matches the other vectors in use; EliminateBoolVectors
+                // could be used for this with a bit of work.
+                vector_types_used.insert(UInt(8).with_lanes(e.type().lanes()));
+            } else if (!e.type().is_handle()) {
+                // Vector-handle types can be seen when processing (e.g.)
+                // require() statements that are vectorized, but they
+                // will all be scalarized away prior to use, so don't emit
+                // them.
+                vector_types_used.insert(e.type());
+            }
         }
         IRGraphVisitor::include(e);
     }
 
     // GCC's __builtin_shuffle takes an integer vector of
     // the size of its input vector. Make sure this type exists.
-    void visit(const Shuffle *op) {
+    void visit(const Shuffle *op) override {
         vector_types_used.insert(Int(32, op->vectors[0].type().lanes()));
         IRGraphVisitor::visit(op);
     }
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         for_types_used.insert(op->for_type);
         IRGraphVisitor::visit(op);
     }
@@ -193,14 +239,16 @@ CodeGen_C::CodeGen_C(ostream &s, Target t, OutputKind output_kind, const std::st
                << "// Metadata describing the arguments to the generated function.\n"
                << "// Used to construct calls to the _argv version of the function.\n"
                << "struct halide_filter_metadata_t;\n"
-               << "\n"
-               << "// The legacy buffer type. Do not use in new code.\n"
-               << "struct buffer_t;\n"
                << "\n";
         // We just forward declared the following types:
         forward_declared.insert(type_of<halide_buffer_t *>().handle_type);
         forward_declared.insert(type_of<halide_filter_metadata_t *>().handle_type);
-        forward_declared.insert(type_of<buffer_t *>().handle_type);
+        if (t.has_feature(Target::LegacyBufferWrappers)) {
+            stream << "// The legacy buffer type. Do not use in new code.\n"
+                   << "struct buffer_t;\n"
+                   << "\n";
+            forward_declared.insert(type_of<buffer_t *>().handle_type);
+        }
     } else {
         // Include declarations of everything generated C source might want
         stream
@@ -269,6 +317,9 @@ CodeGen_C::~CodeGen_C() {
             if (target.has_feature(Target::OpenGL)) {
                 stream << halide_internal_runtime_header_HalideRuntimeOpenGL_h << '\n';
             }
+            if (target.has_feature(Target::D3D12Compute)) {
+                stream << halide_internal_runtime_header_HalideRuntimeD3D12Compute_h << '\n';
+            }
         }
         stream << "#endif\n";
     }
@@ -278,7 +329,7 @@ namespace {
 string type_to_c_type(Type type, bool include_space, bool c_plus_plus = true) {
     bool needs_space = true;
     ostringstream oss;
-    user_assert(type.lanes() == 1) << "Can't use vector types when compiling to C (yet)\n";
+
     if (type.is_float()) {
         if (type.bits() == 32) {
             oss << "float";
@@ -287,7 +338,9 @@ string type_to_c_type(Type type, bool include_space, bool c_plus_plus = true) {
         } else {
             user_error << "Can't represent a float with this many bits in C: " << type << "\n";
         }
-
+        if (type.is_vector()) {
+            oss << type.lanes();
+        }
     } else if (type.is_handle()) {
         needs_space = false;
 
@@ -337,13 +390,35 @@ string type_to_c_type(Type type, bool include_space, bool c_plus_plus = true) {
             }
         }
     } else {
+        // This ends up using different type names than OpenCL does
+        // for the integer vector types. E.g. uint16x8_t rather than
+        // OpenCL's short8. Should be fine as CodeGen_C introduces
+        // typedefs for them and codegen always goes through this
+        // routine or its override in CodeGen_OpenCL to make the
+        // names. This may be the better bet as the typedefs are less
+        // likely to collide with built-in types (e.g. the OpenCL
+        // ones for a C compiler that decides to compile OpenCL).
+        // This code also supports arbitrary vector sizes where the
+        // OpenCL ones must be one of 2, 3, 4, 8, 16, which is too
+        // restrictive for already existing architectures.
         switch (type.bits()) {
         case 1:
-            oss << "bool";
+            // bool vectors are always emitted as uint8 in the C++ backend
+            if (type.is_vector()) {
+                oss << "uint8x" << type.lanes() << "_t";
+            } else {
+                oss << "bool";
+            }
             break;
         case 8: case 16: case 32: case 64:
-            if (type.is_uint()) oss << 'u';
-            oss << "int" << type.bits() << "_t";
+            if (type.is_uint()) {
+                oss << 'u';
+            }
+            oss << "int" << type.bits();
+            if (type.is_vector()) {
+                oss << "x" << type.lanes();
+            }
+            oss << "_t";
             break;
         default:
             user_error << "Can't represent an integer with this many bits in C: " << type << "\n";
@@ -353,6 +428,777 @@ string type_to_c_type(Type type, bool include_space, bool c_plus_plus = true) {
         oss << " ";
     return oss.str();
 }
+
+}  // namespace
+
+void CodeGen_C::add_vector_typedefs(const std::set<Type> &vector_types) {
+    if (!vector_types.empty()) {
+        // MSVC has a limit of ~16k for string literals, so split
+        // up these declarations accordingly
+        const char *cpp_vector_decl = R"INLINE_CODE(
+#if !defined(__has_attribute)
+    #define __has_attribute(x) 0
+#endif
+
+#if !defined(__has_builtin)
+    #define __has_builtin(x) 0
+#endif
+
+template <typename ElementType_, size_t Lanes_>
+class CppVector {
+public:
+    typedef ElementType_ ElementType;
+    static const size_t Lanes = Lanes_;
+    typedef CppVector<ElementType, Lanes> Vec;
+    typedef CppVector<uint8_t, Lanes> Mask;
+
+    CppVector &operator=(const Vec &src) {
+        if (this != &src) {
+            for (size_t i = 0; i < Lanes; i++) {
+                elements[i] = src[i];
+            }
+        }
+        return *this;
+    }
+
+    /* not-explicit */ CppVector(const Vec &src) {
+        for (size_t i = 0; i < Lanes; i++) {
+            elements[i] = src[i];
+        }
+    }
+
+    CppVector() {
+        for (size_t i = 0; i < Lanes; i++) {
+            elements[i] = 0;
+        }
+    }
+
+    static Vec broadcast(const ElementType &v) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = v;
+        }
+        return r;
+    }
+
+    static Vec ramp(const ElementType &base, const ElementType &stride) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = base + stride * i;
+        }
+        return r;
+    }
+
+    static Vec load(const void *base, int32_t offset) {
+        Vec r(empty);
+        memcpy(&r.elements[0], ((const ElementType*)base + offset), sizeof(r.elements));
+        return r;
+    }
+
+    // gather
+    static Vec load(const void *base, const CppVector<int32_t, Lanes> &offset) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = ((const ElementType*)base)[offset[i]];
+        }
+        return r;
+    }
+
+    void store(void *base, int32_t offset) const {
+        memcpy(((ElementType*)base + offset), &this->elements[0], sizeof(this->elements));
+    }
+
+    // scatter
+    void store(void *base, const CppVector<int32_t, Lanes> &offset) const {
+        for (size_t i = 0; i < Lanes; i++) {
+            ((ElementType*)base)[offset[i]] = elements[i];
+        }
+    }
+
+    static Vec shuffle(const Vec &a, const int32_t indices[Lanes]) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            if (indices[i] < 0) {
+                continue;
+            }
+            r.elements[i] = a[indices[i]];
+        }
+        return r;
+    }
+
+    template<size_t InputLanes>
+    static Vec concat(size_t count, const CppVector<ElementType, InputLanes> vecs[]) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = vecs[i / InputLanes][i % InputLanes];
+        }
+        return r;
+    }
+
+    Vec replace(size_t i, const ElementType &b) const {
+        Vec r = *this;
+        r.elements[i] = b;
+        return r;
+    }
+
+    ElementType operator[](size_t i) const {
+        return elements[i];
+    }
+
+    Vec operator~() const {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = ~elements[i];
+        }
+        return r;
+    }
+
+    friend Vec operator+(const Vec &a, const Vec &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = a[i] + b[i];
+        }
+        return r;
+    }
+    friend Vec operator-(const Vec &a, const Vec &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = a[i] - b[i];
+        }
+        return r;
+    }
+    friend Vec operator*(const Vec &a, const Vec &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = a[i] * b[i];
+        }
+        return r;
+    }
+    friend Vec operator/(const Vec &a, const Vec &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = a[i] / b[i];
+        }
+        return r;
+    }
+    friend Vec operator%(const Vec &a, const Vec &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = a[i] % b[i];
+        }
+        return r;
+    }
+    friend Vec operator<<(const Vec &a, const Vec &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = a[i] << b[i];
+        }
+        return r;
+    }
+    friend Vec operator>>(const Vec &a, const Vec &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = a[i] >> b[i];
+        }
+        return r;
+    }
+    friend Vec operator&(const Vec &a, const Vec &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = a[i] & b[i];
+        }
+        return r;
+    }
+    friend Vec operator|(const Vec &a, const Vec &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = a[i] | b[i];
+        }
+        return r;
+    }
+
+    friend Vec operator+(const Vec &a, const ElementType &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = a[i] + b;
+        }
+        return r;
+    }
+    friend Vec operator-(const Vec &a, const ElementType &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = a[i] - b;
+        }
+        return r;
+    }
+    friend Vec operator*(const Vec &a, const ElementType &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = a[i] * b;
+        }
+        return r;
+    }
+    friend Vec operator/(const Vec &a, const ElementType &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = a[i] / b;
+        }
+        return r;
+    }
+    friend Vec operator%(const Vec &a, const ElementType &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = a[i] % b;
+        }
+        return r;
+    }
+    friend Vec operator>>(const Vec &a, const ElementType &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = a[i] >> b;
+        }
+        return r;
+    }
+    friend Vec operator<<(const Vec &a, const ElementType &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = a[i] << b;
+        }
+        return r;
+    }
+    friend Vec operator&(const Vec &a, const ElementType &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = a[i] & b;
+        }
+        return r;
+    }
+    friend Vec operator|(const Vec &a, const ElementType &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = a[i] | b;
+        }
+        return r;
+    }
+
+    friend Vec operator+(const ElementType &a, const Vec &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = a + b[i];
+        }
+        return r;
+    }
+    friend Vec operator-(const ElementType &a, const Vec &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = a - b[i];
+        }
+        return r;
+    }
+    friend Vec operator*(const ElementType &a, const Vec &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = a * b[i];
+        }
+        return r;
+    }
+    friend Vec operator/(const ElementType &a, const Vec &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = a / b[i];
+        }
+        return r;
+    }
+    friend Vec operator%(const ElementType &a, const Vec &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = a % b[i];
+        }
+        return r;
+    }
+    friend Vec operator>>(const ElementType &a, const Vec &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = a >> b[i];
+        }
+        return r;
+    }
+    friend Vec operator<<(const ElementType &a, const Vec &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = a << b[i];
+        }
+        return r;
+    }
+    friend Vec operator&(const ElementType &a, const Vec &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = a & b[i];
+        }
+        return r;
+    }
+    friend Vec operator|(const ElementType &a, const Vec &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = a | b[i];
+        }
+        return r;
+    }
+
+    friend Mask operator<(const Vec &a, const Vec &b) {
+        Mask r;
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = a[i] < b[i] ? 0xff : 0x00;
+        }
+        return r;
+    }
+
+    friend Mask operator<=(const Vec &a, const Vec &b) {
+        Mask r;
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = a[i] <= b[i] ? 0xff : 0x00;
+        }
+        return r;
+    }
+
+    friend Mask operator>(const Vec &a, const Vec &b) {
+        Mask r;
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = a[i] > b[i] ? 0xff : 0x00;
+        }
+        return r;
+    }
+
+    friend Mask operator>=(const Vec &a, const Vec &b) {
+        Mask r;
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = a[i] >= b[i] ? 0xff : 0x00;
+        }
+        return r;
+    }
+
+    friend Mask operator==(const Vec &a, const Vec &b) {
+        Mask r;
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = a[i] == b[i] ? 0xff : 0x00;
+        }
+        return r;
+    }
+
+    friend Mask operator!=(const Vec &a, const Vec &b) {
+        Mask r;
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = a[i] != b[i] ? 0xff : 0x00;
+        }
+        return r;
+    }
+
+    static Vec select(const Mask &cond, const Vec &true_value, const Vec &false_value) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = cond[i] ? true_value[i] : false_value[i];
+        }
+        return r;
+    }
+
+    template <typename OtherVec>
+    static Vec convert_from(const OtherVec &src) {
+        #if __cplusplus >= 201103L
+        static_assert(Vec::Lanes == OtherVec::Lanes, "Lanes mismatch");
+        #endif
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = static_cast<typename Vec::ElementType>(src[i]);
+        }
+        return r;
+    }
+
+    static Vec max(const Vec &a, const Vec &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = ::halide_cpp_max(a[i], b[i]);
+        }
+        return r;
+    }
+
+    static Vec min(const Vec &a, const Vec &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = ::halide_cpp_min(a[i], b[i]);
+        }
+        return r;
+    }
+
+private:
+    template <typename, size_t> friend class CppVector;
+    ElementType elements[Lanes];
+
+    // Leave vector uninitialized for cases where we overwrite every entry
+    enum Empty { empty };
+    CppVector(Empty) {}
+};
+
+)INLINE_CODE";
+
+        const char *native_vector_decl = R"INLINE_CODE(
+#if __has_attribute(ext_vector_type) || __has_attribute(vector_size)
+template <typename ElementType_, size_t Lanes_>
+class NativeVector {
+public:
+    typedef ElementType_ ElementType;
+    static const size_t Lanes = Lanes_;
+    typedef NativeVector<ElementType, Lanes> Vec;
+    typedef NativeVector<uint8_t, Lanes> Mask;
+
+#if __has_attribute(ext_vector_type)
+    typedef ElementType_ NativeVectorType __attribute__((ext_vector_type(Lanes), aligned(sizeof(ElementType))));
+#elif __has_attribute(vector_size) || __GNUC__
+    typedef ElementType_ NativeVectorType __attribute__((vector_size(Lanes * sizeof(ElementType)), aligned(sizeof(ElementType))));
+#endif
+
+    NativeVector &operator=(const Vec &src) {
+        if (this != &src) {
+            native_vector = src.native_vector;
+        }
+        return *this;
+    }
+
+    /* not-explicit */ NativeVector(const Vec &src) {
+        native_vector = src.native_vector;
+    }
+
+    NativeVector() {
+        native_vector = (NativeVectorType){};
+    }
+
+    static Vec broadcast(const ElementType &v) {
+        Vec zero; // Zero-initialized native vector.
+        return zero + v;
+    }
+
+    // TODO: this should be improved by taking advantage of native operator support.
+    static Vec ramp(const ElementType &base, const ElementType &stride) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = base + stride * i;
+        }
+        return r;
+    }
+
+    // TODO: could this be improved by taking advantage of native operator support?
+    static Vec load(const void *base, int32_t offset) {
+        Vec r(empty);
+        memcpy(&r.native_vector, ((const ElementType*)base + offset), sizeof(NativeVectorType));
+        return r;
+    }
+
+    // gather
+    // TODO: could this be improved by taking advantage of native operator support?
+    static Vec load(const void *base, const NativeVector<int32_t, Lanes> &offset) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = ((const ElementType*)base)[offset[i]];
+        }
+        return r;
+    }
+
+    // TODO: could this be improved by taking advantage of native operator support?
+    void store(void *base, int32_t offset) const {
+        memcpy(((ElementType*)base + offset), &native_vector, sizeof(NativeVectorType));
+    }
+
+    // scatter
+    // TODO: could this be improved by taking advantage of native operator support?
+    void store(void *base, const NativeVector<int32_t, Lanes> &offset) const {
+        for (size_t i = 0; i < Lanes; i++) {
+            ((ElementType*)base)[offset[i]] = native_vector[i];
+        }
+    }
+
+    // TODO: this should be improved by taking advantage of native operator support.
+    static Vec shuffle(const Vec &a, const int32_t indices[Lanes]) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            if (indices[i] < 0) {
+                continue;
+            }
+            r.native_vector[i] = a[indices[i]];
+        }
+        return r;
+    }
+
+    // TODO: this should be improved by taking advantage of native operator support.
+    template<size_t InputLanes>
+    static Vec concat(size_t count, const NativeVector<ElementType, InputLanes> vecs[]) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = vecs[i / InputLanes][i % InputLanes];
+        }
+        return r;
+    }
+
+    // TODO: this should be improved by taking advantage of native operator support.
+    Vec replace(size_t i, const ElementType &b) const {
+        Vec r = *this;
+        r.native_vector[i] = b;
+        return r;
+    }
+
+    ElementType operator[](size_t i) const {
+        return native_vector[i];
+    }
+
+    Vec operator~() const {
+        return Vec(from_native_vector, ~native_vector);
+    }
+
+    friend Vec operator+(const Vec &a, const Vec &b) {
+        return Vec(from_native_vector, a.native_vector + b.native_vector);
+    }
+    friend Vec operator-(const Vec &a, const Vec &b) {
+        return Vec(from_native_vector, a.native_vector - b.native_vector);
+    }
+    friend Vec operator*(const Vec &a, const Vec &b) {
+        return Vec(from_native_vector, a.native_vector * b.native_vector);
+    }
+    friend Vec operator/(const Vec &a, const Vec &b) {
+        return Vec(from_native_vector, a.native_vector / b.native_vector);
+    }
+    friend Vec operator%(const Vec &a, const Vec &b) {
+        return Vec(from_native_vector, a.native_vector % b.native_vector);
+    }
+    friend Vec operator<<(const Vec &a, const Vec &b) {
+        return Vec(from_native_vector, a.native_vector << b.native_vector);
+    }
+    friend Vec operator>>(const Vec &a, const Vec &b) {
+        return Vec(from_native_vector, a.native_vector >> b.native_vector);
+    }
+    friend Vec operator&(const Vec &a, const Vec &b) {
+        return Vec(from_native_vector, a.native_vector & b.native_vector);
+    }
+    friend Vec operator|(const Vec &a, const Vec &b) {
+        return Vec(from_native_vector, a.native_vector | b.native_vector);
+    }
+
+    friend Vec operator+(const Vec &a, const ElementType &b) {
+        return Vec(from_native_vector, a.native_vector + b);
+    }
+    friend Vec operator-(const Vec &a, const ElementType &b) {
+        return Vec(from_native_vector, a.native_vector - b);
+    }
+    friend Vec operator*(const Vec &a, const ElementType &b) {
+        return Vec(from_native_vector, a.native_vector * b);
+    }
+    friend Vec operator/(const Vec &a, const ElementType &b) {
+        return Vec(from_native_vector, a.native_vector / b);
+    }
+    friend Vec operator%(const Vec &a, const ElementType &b) {
+        return Vec(from_native_vector, a.native_vector % b);
+    }
+    friend Vec operator<<(const Vec &a, const ElementType &b) {
+        return Vec(from_native_vector, a.native_vector << b);
+    }
+    friend Vec operator>>(const Vec &a, const ElementType &b) {
+        return Vec(from_native_vector, a.native_vector >> b);
+    }
+    friend Vec operator&(const Vec &a, const ElementType &b) {
+        return Vec(from_native_vector, a.native_vector & b);
+    }
+    friend Vec operator|(const Vec &a, const ElementType &b) {
+        return Vec(from_native_vector, a.native_vector | b);
+    }
+
+    friend Vec operator+(const ElementType &a, const Vec &b) {
+        return Vec(from_native_vector, a + b.native_vector);
+    }
+    friend Vec operator-(const ElementType &a, const Vec &b) {
+        return Vec(from_native_vector, a - b.native_vector);
+    }
+    friend Vec operator*(const ElementType &a, const Vec &b) {
+        return Vec(from_native_vector, a * b.native_vector);
+    }
+    friend Vec operator/(const ElementType &a, const Vec &b) {
+        return Vec(from_native_vector, a / b.native_vector);
+    }
+    friend Vec operator%(const ElementType &a, const Vec &b) {
+        return Vec(from_native_vector, a % b.native_vector);
+    }
+    friend Vec operator<<(const ElementType &a, const Vec &b) {
+        return Vec(from_native_vector, a << b.native_vector);
+    }
+    friend Vec operator>>(const ElementType &a, const Vec &b) {
+        return Vec(from_native_vector, a >> b.native_vector);
+    }
+    friend Vec operator&(const ElementType &a, const Vec &b) {
+        return Vec(from_native_vector, a & b.native_vector);
+    }
+    friend Vec operator|(const ElementType &a, const Vec &b) {
+        return Vec(from_native_vector, a | b.native_vector);
+    }
+
+    // TODO: this should be improved by taking advantage of native operator support.
+    friend Mask operator<(const Vec &a, const Vec &b) {
+        Mask r;
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = a[i] < b[i] ? 0xff : 0x00;
+        }
+        return r;
+    }
+
+    // TODO: this should be improved by taking advantage of native operator support.
+    friend Mask operator<=(const Vec &a, const Vec &b) {
+        Mask r;
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = a[i] <= b[i] ? 0xff : 0x00;
+        }
+        return r;
+    }
+
+    // TODO: this should be improved by taking advantage of native operator support.
+    friend Mask operator>(const Vec &a, const Vec &b) {
+        Mask r;
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = a[i] > b[i] ? 0xff : 0x00;
+        }
+        return r;
+    }
+
+    // TODO: this should be improved by taking advantage of native operator support.
+    friend Mask operator>=(const Vec &a, const Vec &b) {
+        Mask r;
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = a[i] >= b[i] ? 0xff : 0x00;
+        }
+        return r;
+    }
+
+    // TODO: this should be improved by taking advantage of native operator support.
+    friend Mask operator==(const Vec &a, const Vec &b) {
+        Mask r;
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = a[i] == b[i] ? 0xff : 0x00;
+        }
+        return r;
+    }
+
+    // TODO: this should be improved by taking advantage of native operator support.
+    friend Mask operator!=(const Vec &a, const Vec &b) {
+        Mask r;
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = a[i] != b[i] ? 0xff : 0x00;
+        }
+        return r;
+    }
+
+    // TODO: this should be improved by taking advantage of native operator support.
+    static Vec select(const Mask &cond, const Vec &true_value, const Vec &false_value) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = cond[i] ? true_value[i] : false_value[i];
+        }
+        return r;
+    }
+
+    template <typename OtherVec>
+    static Vec convert_from(const OtherVec &src) {
+        #if __cplusplus >= 201103L
+        static_assert(Vec::Lanes == OtherVec::Lanes, "Lanes mismatch");
+        #endif
+#if 0 // __has_builtin(__builtin_convertvector)
+        // Disabled (for now) because __builtin_convertvector appears to have
+        // different float->int rounding behavior in at least some situations;
+        // for now we'll use the much-slower-but-correct explicit C++ code.
+        // (https://github.com/halide/Halide/issues/2080)
+        return Vec(from_native_vector, __builtin_convertvector(src.native_vector, NativeVectorType));
+#else
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = static_cast<typename Vec::ElementType>(src.native_vector[i]);
+        }
+        return r;
+#endif
+    }
+
+    // TODO: this should be improved by taking advantage of native operator support.
+    static Vec max(const Vec &a, const Vec &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = ::halide_cpp_max(a[i], b[i]);
+        }
+        return r;
+    }
+
+    // TODO: this should be improved by taking advantage of native operator support.
+    static Vec min(const Vec &a, const Vec &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = ::halide_cpp_min(a[i], b[i]);
+        }
+        return r;
+    }
+
+private:
+    template<typename, size_t> friend class NativeVector;
+
+    NativeVectorType native_vector;
+
+    // Leave vector uninitialized for cases where we overwrite every entry
+    enum Empty { empty };
+    inline NativeVector(Empty) {}
+
+    // Syntactic sugar to avoid ctor overloading issues
+    enum FromNativeVector { from_native_vector };
+    inline NativeVector(FromNativeVector, const NativeVectorType &src) {
+        native_vector = src;
+    }
+};
+#endif  // __has_attribute(ext_vector_type) || __has_attribute(vector_size)
+
+)INLINE_CODE";
+
+        const char *vector_selection_decl = R"INLINE_CODE(
+#if __has_attribute(ext_vector_type) || __has_attribute(vector_size)
+    #if __GNUC__ && !__clang__
+        // GCC only allows powers-of-two; fall back to CppVector for other widths
+        #define halide_cpp_use_native_vector(type, lanes) ((lanes & (lanes - 1)) == 0)
+    #else
+        #define halide_cpp_use_native_vector(type, lanes) (true)
+    #endif
+#else
+    // No NativeVector available
+    #define halide_cpp_use_native_vector(type, lanes) (false)
+#endif  // __has_attribute(ext_vector_type) || __has_attribute(vector_size)
+
+ // Failsafe to allow forcing non-native vectors in case of unruly compilers
+#if HALIDE_CPP_ALWAYS_USE_CPP_VECTORS
+    #undef halide_cpp_use_native_vector
+    #define halide_cpp_use_native_vector(type, lanes) (false)
+#endif
+
+)INLINE_CODE";
+
+        // Vodoo fix: on at least one config (our arm32 buildbot running gcc 5.4),
+        // emitting this long text string was regularly garbled in a predictable pattern;
+        // flushing the stream before or after heals it. Since C++ codegen is rarely
+        // on a compilation critical path, we'll just band-aid it in this way.
+        stream << std::flush;
+        stream << cpp_vector_decl << native_vector_decl << vector_selection_decl;
+        stream << std::flush;
+
+        for (const auto &t : vector_types) {
+            string name = type_to_c_type(t, false, false);
+            string scalar_name = type_to_c_type(t.element_of(), false, false);
+            stream << "#if halide_cpp_use_native_vector(" << scalar_name << ", " << t.lanes() << ")\n";
+            stream << "typedef NativeVector<" << scalar_name << ", " << t.lanes() << "> " << name << ";\n";
+            // Useful for debugging which Vector implementation is being selected
+            // stream << "#pragma message \"using NativeVector for " << t << "\"\n";
+            stream << "#else\n";
+            stream << "typedef CppVector<" << scalar_name << ", " << t.lanes() << "> " << name << ";\n";
+            // Useful for debugging which Vector implementation is being selected
+            // stream << "#pragma message \"using CppVector for " << t << "\"\n";
+            stream << "#endif\n";
+        }
+    }
 }
 
 void CodeGen_C::set_name_mangling_mode(NameMangling mode) {
@@ -421,10 +1267,11 @@ class ExternCallPrototypes : public IRGraphVisitor {
     std::map<string, const Call *> c_externs;
     std::set<std::string> processed;
     std::set<std::string> internal_linkage;
+    std::set<std::string> destructors;
 
     using IRGraphVisitor::visit;
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         IRGraphVisitor::visit(op);
 
         if (!processed.count(op->name)) {
@@ -441,6 +1288,20 @@ class ExternCallPrototypes : public IRGraphVisitor {
                 namespace_map->insert({name, NamespaceOrCall(op)});
             }
             processed.insert(op->name);
+        }
+
+        if (op->is_intrinsic(Call::register_destructor)) {
+            internal_assert(op->args.size() == 2);
+            const StringImm *fn = op->args[0].as<StringImm>();
+            internal_assert(fn);
+            destructors.insert(fn->value);
+        }
+    }
+
+    void visit(const Allocate *op) override {
+        IRGraphVisitor::visit(op);
+        if (!op->free_function.empty()) {
+            destructors.insert(op->free_function);
         }
     }
 
@@ -525,6 +1386,9 @@ public:
         for (const auto &call : c_externs) {
             emit_function_decl(stream, call.second, call.first);
         }
+        for (const auto &d : destructors) {
+            stream << "void " << d << "(void *, void *);\n";
+        }
         stream << "\n";
     }
 
@@ -535,7 +1399,7 @@ public:
         stream << "\n";
     }
 };
-}
+}  // namespace
 
 void CodeGen_C::forward_declare_type_if_needed(const Type &t) {
     if (!t.handle_type ||
@@ -572,17 +1436,15 @@ void CodeGen_C::forward_declare_type_if_needed(const Type &t) {
 }
 
 void CodeGen_C::compile(const Module &input) {
-    {
-        TypeInfoGatherer type_info;
-        for (const auto &f : input.functions()) {
-            if (f.body.defined()) {
-                f.body.accept(&type_info);
-            }
+    TypeInfoGatherer type_info;
+    for (const auto &f : input.functions()) {
+        if (f.body.defined()) {
+            f.body.accept(&type_info);
         }
-        uses_vector_types = !type_info.vector_types_used.empty();
-        uses_gpu_for_loops = type_info.for_types_used.count(ForType::GPUBlock) ||
-                             type_info.for_types_used.count(ForType::GPUThread);
     }
+    uses_gpu_for_loops = (type_info.for_types_used.count(ForType::GPUBlock) ||
+                          type_info.for_types_used.count(ForType::GPUThread) ||
+                          type_info.for_types_used.count(ForType::GPULane));
 
     // Forward-declare all the types we need; this needs to happen before
     // we emit function prototypes, since those may need the types.
@@ -607,13 +1469,15 @@ void CodeGen_C::compile(const Module &input) {
             }
         }
 
+        add_vector_typedefs(type_info.vector_types_used);
+
         // Emit prototypes for all external and internal-only functions.
         // Gather them up and do them all up front, to reduce duplicates,
         // and to make it simpler to get internal-linkage functions correct.
         ExternCallPrototypes e;
         for (const auto &f : input.functions()) {
             f.body.accept(&e);
-            if (f.linkage == LoweredFunc::Internal) {
+            if (f.linkage == LinkageType::Internal) {
                 // We can't tell at the call site if a LoweredFunc is intended to be internal
                 // or not, so mark them explicitly.
                 e.set_internal_linkage(f.name);
@@ -641,7 +1505,7 @@ void CodeGen_C::compile(const Module &input) {
 
 void CodeGen_C::compile(const LoweredFunc &f) {
     // Don't put non-external function declarations in headers.
-    if (is_header() && f.linkage == LoweredFunc::Internal) {
+    if (is_header() && f.linkage == LinkageType::Internal) {
         return;
     }
 
@@ -669,16 +1533,14 @@ void CodeGen_C::compile(const LoweredFunc &f) {
     }
 
     if (!namespaces.empty()) {
-        const char *separator = "";
         for (const auto &ns : namespaces) {
-            stream << separator << "namespace " << ns << " {";
-            separator = " ";
+            stream << "namespace " << ns << " {\n";
         }
-        stream << "\n\n";
+        stream << "\n";
     }
 
     // Emit the function prototype
-    if (f.linkage == LoweredFunc::Internal) {
+    if (f.linkage == LinkageType::Internal) {
         // If the function isn't public, mark it static.
         stream << "static ";
     }
@@ -702,15 +1564,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         stream << ") HALIDE_FUNCTION_ATTRS {\n";
         indent += 1;
 
-        if (uses_vector_types) {
-            do_indent();
-            stream << "halide_error("
-                   << (have_user_context ? "__user_context_" : "nullptr")
-                   << ", \"C++ Backend does not support vector types yet, "
-                   << "this function will always fail at runtime\");\n";
-            do_indent();
-            stream << "return -1;\n";
-        } else if (uses_gpu_for_loops) {
+        if (uses_gpu_for_loops) {
             do_indent();
             stream << "halide_error("
                    << (have_user_context ? "__user_context_" : "nullptr")
@@ -740,7 +1594,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         stream << "}\n";
     }
 
-    if (is_header() && f.linkage == LoweredFunc::ExternalPlusMetadata) {
+    if (is_header() && f.linkage == LinkageType::ExternalPlusMetadata) {
         // Emit the argv version
         stream << "int " << simple_name << "_argv(void **args) HALIDE_FUNCTION_ATTRS;\n";
 
@@ -750,17 +1604,34 @@ void CodeGen_C::compile(const LoweredFunc &f) {
 
     if (!namespaces.empty()) {
         stream << "\n";
-        for (size_t i = 0; i < namespaces.size(); i++) {
-            stream << "}";
+        for (size_t i = namespaces.size(); i > 0; i--) {
+            stream << "}  // namespace " << namespaces[i-1] << "\n";
         }
-        stream << " // Close namespaces ";
-        const char *separator = "";
-        for (const auto &ns : namespaces) {
-            stream << separator << ns;
-            separator = "::";
-        }
+        stream << "\n";
+    }
 
-        stream << "\n\n";
+    if (is_header() && f.linkage == LinkageType::ExternalPlusMetadata) {
+        // C syntax for function-that-returns-function-pointer is fun.
+        const string getter = R"INLINE_CODE(
+
+// This allows the includer of this file to get the argv/metadata entry points
+// for this file without needing to know the specific function names;
+// if HALIDE_GET_STANDARD_ARGV_FUNCTION is defined before this file is
+// included, an inline function with that name is provided that return
+// a function pointer to the _argv() entry point (similarly,
+// HALIDE_GET_STANDARD_METADATA_FUNCTION -> _metadata() entry point).
+#ifdef HALIDE_GET_STANDARD_ARGV_FUNCTION
+inline int (*HALIDE_GET_STANDARD_ARGV_FUNCTION())(void**) {
+    return $NAME$_argv;
+}
+#endif
+#ifdef HALIDE_GET_STANDARD_METADATA_FUNCTION
+inline const struct halide_filter_metadata_t* (*HALIDE_GET_STANDARD_METADATA_FUNCTION())() {
+    return $NAME$_metadata;
+}
+#endif
+)INLINE_CODE";
+        stream << replace_all(getter, "$NAME$", f.name) << "\n\n";
     }
 }
 
@@ -789,7 +1660,7 @@ void CodeGen_C::compile(const Buffer<> &buffer) {
     bool is_constant = buffer.dimensions() != 0;
 
     // Emit the data
-    stream << "static " << (is_constant ? "const" : "") << " uint8_t " << name << "_data[] __attribute__ ((aligned (32))) = {\n";
+    stream << "static " << (is_constant ? "const" : "") << " uint8_t " << name << "_data[] HALIDE_ATTRIBUTE_ALIGN(32) = {\n";
     do_indent();
     for (size_t i = 0; i < num_elems * b.type.bytes(); i++) {
         if (i > 0) {
@@ -808,9 +1679,9 @@ void CodeGen_C::compile(const Buffer<> &buffer) {
     // Emit the shape (constant even for scalar buffers)
     stream << "static const halide_dimension_t " << name << "_buffer_shape[] = {";
     for (int i = 0; i < buffer.dimensions(); i++) {
-        stream << "{" << buffer.dim(i).min()
+        stream << "halide_dimension_t(" << buffer.dim(i).min()
                << ", " << buffer.dim(i).extent()
-               << ", " << buffer.dim(i).stride() << "}";
+               << ", " << buffer.dim(i).stride() << ")";
         if (i < buffer.dimensions() - 1) {
             stream << ", ";
         }
@@ -820,16 +1691,16 @@ void CodeGen_C::compile(const Buffer<> &buffer) {
     Type t = buffer.type();
 
     // Emit the buffer struct. Note that although our shape and (usually) our host
-    // data is const, the buffer itself isn't: embedded buffers in one pipeline 
+    // data is const, the buffer itself isn't: embedded buffers in one pipeline
     // can be passed to another pipeline (e.g. for an extern stage), in which
-    // case the buffer objects need to be non-const, because the constness 
+    // case the buffer objects need to be non-const, because the constness
     // (from the POV of the extern stage) is a runtime property.
     stream << "static halide_buffer_t " << name << "_buffer_ = {"
            << "0, "             // device
            << "nullptr, "       // device_interface
            << "const_cast<uint8_t*>(&" << name << "_data[0]), " // host
            << "0, "             // flags
-           << "{(halide_type_code_t)(" << (int)t.code() << "), " << t.bits() << ", " << t.lanes() << "}, "
+           << "halide_type_t((halide_type_code_t)(" << (int)t.code() << "), " << t.bits() << ", " << t.lanes() << "), "
            << buffer.dimensions() << ", "
            << "const_cast<halide_dimension_t*>(" << name << "_buffer_shape)};\n";
 
@@ -843,14 +1714,24 @@ string CodeGen_C::print_expr(Expr e) {
     return id;
 }
 
+string CodeGen_C::print_cast_expr(const Type &t, Expr e) {
+    string value = print_expr(e);
+    string type = print_type(t);
+    if (t.is_vector() &&
+        t.lanes() == e.type().lanes() &&
+        t != e.type()) {
+        return print_assignment(t, type + "::convert_from<" + print_type(e.type()) + ">(" + value + ")");
+    } else {
+        return print_assignment(t, "(" + type + ")(" + value + ")");
+    }
+}
+
 void CodeGen_C::print_stmt(Stmt s) {
     s.accept(this);
 }
 
 string CodeGen_C::print_assignment(Type t, const std::string &rhs) {
-
-    map<string, string>::iterator cached = cache.find(rhs);
-
+    auto cached = cache.find(rhs);
     if (cached == cache.end()) {
         id = unique_name('_');
         do_indent();
@@ -885,7 +1766,7 @@ void CodeGen_C::visit(const Variable *op) {
 }
 
 void CodeGen_C::visit(const Cast *op) {
-    print_assignment(op->type, "(" + print_type(op->type) + ")(" + print_expr(op->value) + ")");
+    id = print_cast_expr(op->type, op->value);
 }
 
 void CodeGen_C::visit_binop(Type t, Expr a, Expr b, const char * op) {
@@ -909,9 +1790,7 @@ void CodeGen_C::visit(const Mul *op) {
 void CodeGen_C::visit(const Div *op) {
     int bits;
     if (is_const_power_of_two_integer(op->b, &bits)) {
-        ostringstream oss;
-        oss << print_expr(op->a) << " >> " << bits;
-        print_assignment(op->type, oss.str());
+        visit_binop(op->type, op->a, make_const(op->a.type(), bits), ">>");
     } else if (op->type.is_int()) {
         print_expr(lower_euclidean_div(op->a, op->b));
     } else {
@@ -922,9 +1801,7 @@ void CodeGen_C::visit(const Div *op) {
 void CodeGen_C::visit(const Mod *op) {
     int bits;
     if (is_const_power_of_two_integer(op->b, &bits)) {
-        ostringstream oss;
-        oss << print_expr(op->a) << " & " << ((1 << bits)-1);
-        print_assignment(op->type, oss.str());
+        visit_binop(op->type, op->a, make_const(op->a.type(), (1 << bits)-1), "&");
     } else if (op->type.is_int()) {
         print_expr(lower_euclidean_mod(op->a, op->b));
     } else {
@@ -933,11 +1810,27 @@ void CodeGen_C::visit(const Mod *op) {
 }
 
 void CodeGen_C::visit(const Max *op) {
-    print_expr(Call::make(op->type, "max", {op->a, op->b}, Call::Extern));
+    // clang doesn't support the ternary operator on OpenCL style vectors.
+    // See: https://bugs.llvm.org/show_bug.cgi?id=33103
+    if (op->type.is_scalar()) {
+        print_expr(Call::make(op->type, "::halide_cpp_max", {op->a, op->b}, Call::Extern));
+    } else {
+        ostringstream rhs;
+        rhs << print_type(op->type) << "::max(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
+        print_assignment(op->type, rhs.str());
+    }
 }
 
 void CodeGen_C::visit(const Min *op) {
-    print_expr(Call::make(op->type, "min", {op->a, op->b}, Call::Extern));
+    // clang doesn't support the ternary operator on OpenCL style vectors.
+    // See: https://bugs.llvm.org/show_bug.cgi?id=33103
+    if (op->type.is_scalar()) {
+        print_expr(Call::make(op->type, "::halide_cpp_min", {op->a, op->b}, Call::Extern));
+    } else {
+        ostringstream rhs;
+        rhs << print_type(op->type) << "::min(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
+        print_assignment(op->type, rhs.str());
+    }
 }
 
 void CodeGen_C::visit(const EQ *op) {
@@ -1026,18 +1919,17 @@ void CodeGen_C::visit(const FloatImm *op) {
         u.as_float = op->value;
 
         ostringstream oss;
+        if (op->type.bits() == 64) {
+            oss << "(double) ";
+        }
         oss << "float_from_bits(" << u.as_uint << " /* " << u.as_float << " */)";
-        id = oss.str();
+        print_assignment(op->type, oss.str());
     }
 }
 
 void CodeGen_C::visit(const Call *op) {
 
-    internal_assert(op->call_type == Call::Extern ||
-                    op->call_type == Call::ExternCPlusPlus ||
-                    op->call_type == Call::PureExtern ||
-                    op->call_type == Call::Intrinsic ||
-                    op->call_type == Call::PureIntrinsic)
+    internal_assert(op->is_extern() || op->is_intrinsic())
         << "Can only codegen extern calls and intrinsics\n";
 
     ostringstream rhs;
@@ -1086,6 +1978,10 @@ void CodeGen_C::visit(const Call *op) {
         string a0 = print_expr(op->args[0]);
         string a1 = print_expr(op->args[1]);
         rhs << a0 << " >> " << a1;
+    } else if (op->is_intrinsic(Call::count_leading_zeros)) {
+        internal_assert(op->args.size() == 1);
+        string a0 = print_expr(op->args[0]);
+        rhs << "halide_count_leading_zeros(" << a0 << ")";
     } else if (op->is_intrinsic(Call::lerp)) {
         internal_assert(op->args.size() == 3);
         Expr e = lower_lerp(op->args[0], op->args[1], op->args[2]);
@@ -1094,7 +1990,8 @@ void CodeGen_C::visit(const Call *op) {
         internal_assert(op->args.size() == 2);
         Expr a = op->args[0];
         Expr b = op->args[1];
-        Expr e = select(a < b, b - a, a - b);
+        Type t = op->type.with_code(op->type.is_int() ? Type::UInt : op->type.code());
+        Expr e = cast(t, select(a < b, b - a, a - b));
         rhs << print_expr(e);
     } else if (op->is_intrinsic(Call::return_second)) {
         internal_assert(op->args.size() == 2);
@@ -1128,6 +2025,14 @@ void CodeGen_C::visit(const Call *op) {
         close_scope("if " + cond_id + " else");
 
         rhs << result_id;
+    } else if (op->is_intrinsic(Call::require)) {
+        internal_assert(op->args.size() == 3);
+        if (op->args[0].type().is_vector()) {
+            rhs << print_scalarized_expr(op);
+        } else {
+            create_assertion(op->args[0], op->args[2]);
+            rhs << print_expr(op->args[1]);
+        }
     } else if (op->is_intrinsic(Call::abs)) {
         internal_assert(op->args.size() == 1);
         Expr a0 = op->args[0];
@@ -1228,11 +2133,7 @@ void CodeGen_C::visit(const Call *op) {
         do_indent();
         stream << "char " << buf_name << "[1024];\n";
         do_indent();
-        stream << "snprintf(" << buf_name << ", 1024, \"" << format_string << "\"";
-        for (size_t i = 0; i < printf_args.size(); i++) {
-            stream << ", " << printf_args[i];
-        }
-        stream << ");\n";
+        stream << "snprintf(" << buf_name << ", 1024, \"" << format_string << "\", " << with_commas(printf_args) << ");\n";
         rhs << buf_name;
 
     } else if (op->is_intrinsic(Call::register_destructor)) {
@@ -1241,17 +2142,16 @@ void CodeGen_C::visit(const Call *op) {
         internal_assert(fn);
         string arg = print_expr(op->args[1]);
 
-        string call = fn->value + "(_ucon, arg);";
-
         do_indent();
         // Make a struct on the stack that calls the given function as a destructor
         string struct_name = unique_name('s');
         string instance_name = unique_name('d');
-        stream << "struct " << struct_name << "{ "
-               << "void *arg; "
-               << struct_name << "(void *a) : arg((void *)a) {} "
-               << "~" << struct_name << "() {" << call << "}"
-               << "} " << instance_name << "(" << arg << ");\n";
+        stream << "struct " << struct_name << " { "
+               << "void * const ucon; "
+               << "void * const arg; "
+               << "" << struct_name << "(void *ucon, void *a) : ucon(ucon), arg((void *)a) {} "
+               << "~" << struct_name << "() { " << fn->value + "(ucon, arg); } "
+               << "} " << instance_name << "(_ucon, " << arg << ");\n";
         rhs << print_expr(0);
     } else if (op->is_intrinsic(Call::div_round_to_zero)) {
         rhs << print_expr(op->args[0]) << " / " << print_expr(op->args[1]);
@@ -1261,6 +2161,22 @@ void CodeGen_C::visit(const Call *op) {
         user_error << "Signed integer overflow occurred during constant-folding. Signed"
             " integer overflow for int32 and int64 is undefined behavior in"
             " Halide.\n";
+    } else if (op->is_intrinsic(Call::quiet_div)) {
+        internal_assert(op->args.size() == 2);
+        // Don't bother checking for zero denominator here; the quiet_div
+        // implementation will always do a runtime check and return zero
+        // (rather than failing at runtime).
+        string a = print_expr(op->args[0]);
+        string b = print_expr(op->args[1]);
+        rhs << "::quiet_div(" << a << ", " << b << ")";
+    } else if (op->is_intrinsic(Call::quiet_mod)) {
+        internal_assert(op->args.size() == 2);
+        // Don't bother checking for zero denominator here; the quiet_mod
+        // implementation will always do a runtime check and return zero
+        // (rather than failing at runtime).
+        string a = print_expr(op->args[0]);
+        string b = print_expr(op->args[1]);
+        rhs << "::quiet_mod(" << a << ", " << b << ")";
     } else if (op->is_intrinsic(Call::prefetch)) {
         user_assert((op->args.size() == 4) && is_one(op->args[2]))
             << "Only prefetch of 1 cache line is supported in C backend.\n";
@@ -1273,88 +2189,133 @@ void CodeGen_C::visit(const Call *op) {
         user_error << "Indeterminate expression occurred during constant-folding.\n";
     } else if (op->is_intrinsic(Call::size_of_halide_buffer_t)) {
         rhs << "(sizeof(halide_buffer_t))";
-    } else if (op->call_type == Call::Intrinsic ||
-               op->call_type == Call::PureIntrinsic) {
+    } else if (op->is_intrinsic(Call::strict_float)) {
+        internal_assert(op->args.size() == 1);
+        string arg0 = print_expr(op->args[0]);
+        rhs << "(" << arg0 << ")";
+    } else if (op->is_intrinsic()) {
         // TODO: other intrinsics
         internal_error << "Unhandled intrinsic in C backend: " << op->name << '\n';
     } else {
-        // Generic calls
-        vector<string> args(op->args.size());
-        for (size_t i = 0; i < op->args.size(); i++) {
-            args[i] = print_expr(op->args[i]);
-            // This substitution ensures const correctness for all calls
-            if (args[i] == "__user_context") {
-                args[i] = "_ucon";
-            }
-        }
-        rhs << op->name << "(";
-
-        if (function_takes_user_context(op->name)) {
-            rhs << "_ucon, ";
-        }
-
-        for (size_t i = 0; i < op->args.size(); i++) {
-            if (i > 0) rhs << ", ";
-            rhs << args[i];
-        }
-        rhs << ")";
+        // Generic extern calls
+        rhs << print_extern_call(op);
     }
 
     print_assignment(op->type, rhs.str());
+}
+
+string CodeGen_C::print_scalarized_expr(Expr e) {
+    Type t = e.type();
+    internal_assert(t.is_vector());
+    string v = unique_name('_');
+    do_indent();
+    stream << print_type(t, AppendSpace) << v << ";\n";
+    for (int lane = 0; lane < t.lanes(); lane++) {
+        Expr e2 = extract_lane(e, lane);
+        string elem = print_expr(e2);
+        ostringstream rhs;
+        rhs << v << ".replace(" << lane << ", " << elem << ")";
+        v = print_assignment(t, rhs.str());
+    }
+    return v;
+}
+
+string CodeGen_C::print_extern_call(const Call *op) {
+    if (op->type.is_vector()) {
+        // Need to split into multiple scalar calls.
+        return print_scalarized_expr(op);
+    }
+    ostringstream rhs;
+    vector<string> args(op->args.size());
+    for (size_t i = 0; i < op->args.size(); i++) {
+        args[i] = print_expr(op->args[i]);
+        // This substitution ensures const correctness for all calls
+        if (args[i] == "__user_context") {
+            args[i] = "_ucon";
+        }
+    }
+    if (function_takes_user_context(op->name)) {
+        args.insert(args.begin(), "_ucon");
+    }
+    rhs << op->name << "(" << with_commas(args) << ")";
+    return rhs.str();
 }
 
 void CodeGen_C::visit(const Load *op) {
+    user_assert(is_one(op->predicate)) << "Predicated load is not supported by C backend.\n";
+
+    // TODO: We could replicate the logic in the llvm codegen which decides whether
+    // the vector access can be aligned. Doing so would also require introducing
+    // aligned type equivalents for all the vector types.
+    ostringstream rhs;
 
     Type t = op->type;
-    bool type_cast_needed =
-        !allocations.contains(op->name) ||
-        allocations.get(op->name).type != t;
+    string name = print_name(op->name);
 
-    ostringstream rhs;
-    if (type_cast_needed) {
-        rhs << "((const "
-            << print_type(op->type)
-            << " *)"
-            << print_name(op->name)
-            << ")";
+    // If we're loading a contiguous ramp into a vector, just load the vector
+    Expr dense_ramp_base = strided_ramp_base(op->index, 1);
+    if (dense_ramp_base.defined()) {
+        internal_assert(t.is_vector());
+        string id_ramp_base = print_expr(dense_ramp_base);
+        rhs << print_type(t) + "::load(" << name << ", " << id_ramp_base << ")";
+    } else if (op->index.type().is_vector()) {
+        // If index is a vector, gather vector elements.
+        internal_assert(t.is_vector());
+        string id_index = print_expr(op->index);
+        rhs << print_type(t) + "::load(" << name << ", " << id_index << ")";
     } else {
-        rhs << print_name(op->name);
+        string id_index = print_expr(op->index);
+        bool type_cast_needed = !(allocations.contains(op->name) &&
+                              allocations.get(op->name).type.element_of() == t.element_of());
+        if (type_cast_needed) {
+            rhs << "((const " << print_type(t.element_of()) << " *)" << name << ")";
+        } else {
+            rhs << name;
+        }
+        rhs << "[" << id_index << "]";
     }
-    rhs << "["
-        << print_expr(op->index)
-        << "]";
-
-    print_assignment(op->type, rhs.str());
+    print_assignment(t, rhs.str());
 }
 
 void CodeGen_C::visit(const Store *op) {
+    user_assert(is_one(op->predicate)) << "Predicated store is not supported by C backend.\n";
 
     Type t = op->value.type();
-
-    bool type_cast_needed =
-        t.is_handle() ||
-        !allocations.contains(op->name) ||
-        allocations.get(op->name).type != t;
-
-    string id_index = print_expr(op->index);
     string id_value = print_expr(op->value);
-    do_indent();
+    string name = print_name(op->name);
 
-    if (type_cast_needed) {
-        stream << "(("
-               << print_type(t)
-               << " *)"
-               << print_name(op->name)
-               << ")";
+    // TODO: We could replicate the logic in the llvm codegen which decides whether
+    // the vector access can be aligned. Doing so would also require introducing
+    // aligned type equivalents for all the vector types.
+
+    // If we're writing a contiguous ramp, just store the vector.
+    Expr dense_ramp_base = strided_ramp_base(op->index, 1);
+    if (dense_ramp_base.defined()) {
+        internal_assert(op->value.type().is_vector());
+        string id_ramp_base = print_expr(dense_ramp_base);
+        do_indent();
+        stream << id_value + ".store(" << name << ", " << id_ramp_base << ");\n";
+    } else if (op->index.type().is_vector()) {
+        // If index is a vector, scatter vector elements.
+        internal_assert(t.is_vector());
+        string id_index = print_expr(op->index);
+        do_indent();
+        stream << id_value + ".store(" << name << ", " << id_index << ");\n";
     } else {
-        stream << print_name(op->name);
-    }
-    stream << "["
-           << id_index
-           << "] = "
-           << id_value
-           << ";\n";
+        bool type_cast_needed =
+            t.is_handle() ||
+            !allocations.contains(op->name) ||
+            allocations.get(op->name).type != t;
 
+        string id_index = print_expr(op->index);
+        do_indent();
+        if (type_cast_needed) {
+            stream << "((" << print_type(t) << " *)" << name << ")";
+        } else {
+            stream << name;
+        }
+        stream << "[" << id_index << "] = " << id_value << ";\n";
+    }
     cache.clear();
 }
 
@@ -1377,14 +2338,22 @@ void CodeGen_C::visit(const Let *op) {
 
 void CodeGen_C::visit(const Select *op) {
     ostringstream rhs;
+    string type = print_type(op->type);
     string true_val = print_expr(op->true_value);
     string false_val = print_expr(op->false_value);
     string cond = print_expr(op->condition);
-    rhs << "(" << print_type(op->type) << ")"
-        << "(" << cond
-        << " ? " << true_val
-        << " : " << false_val
-        << ")";
+
+    // clang doesn't support the ternary operator on OpenCL style vectors.
+    // See: https://bugs.llvm.org/show_bug.cgi?id=33103
+    if (op->condition.type().is_scalar()) {
+        rhs << "(" << type << ")"
+            << "(" << cond
+            << " ? " << true_val
+            << " : " << false_val
+            << ")";
+    } else {
+        rhs << type << "::select(" << cond << ", " << true_val << ", " << false_val << ")";
+    }
     print_assignment(op->type, rhs.str());
 }
 
@@ -1455,7 +2424,48 @@ void CodeGen_C::visit(const ProducerConsumer *op) {
     print_stmt(op->body);
 }
 
+void CodeGen_C::visit(const Fork *op) {
+    // TODO: This doesn't actually work with nested tasks
+    do_indent();
+    stream << "#pragma omp parallel\n";
+    open_scope();
+    do_indent();
+    stream << "#pragma omp single\n";
+    open_scope();
+    do_indent();
+    stream << "#pragma omp task\n";
+    open_scope();
+    print_stmt(op->first);
+    close_scope("");
+    do_indent();
+    stream << "#pragma omp task\n";
+    open_scope();
+    print_stmt(op->rest);
+    close_scope("");
+    do_indent();
+    stream << "#pragma omp taskwait\n";
+    close_scope("");
+    close_scope("");
+}
+
+void CodeGen_C::visit(const Acquire *op) {
+    string id_sem = print_expr(op->semaphore);
+    string id_count = print_expr(op->count);
+    open_scope();
+    do_indent();
+    stream << "while (!halide_semaphore_try_acquire(" << id_sem << ", " << id_count << "))\n";
+    open_scope();
+    do_indent();
+    stream << "#pragma omp taskyield\n";
+    close_scope("");
+    op->body.accept(this);
+    close_scope("");
+}
+
 void CodeGen_C::visit(const For *op) {
+    string id_min = print_expr(op->min);
+    string id_extent = print_expr(op->extent);
+
     if (op->for_type == ForType::Parallel) {
         do_indent();
         stream << "#pragma omp parallel for\n";
@@ -1463,9 +2473,6 @@ void CodeGen_C::visit(const For *op) {
         internal_assert(op->for_type == ForType::Serial)
             << "Can only emit serial or parallel for loops to C\n";
     }
-
-    string id_min = print_expr(op->min);
-    string id_extent = print_expr(op->extent);
 
     do_indent();
     stream << "for (int "
@@ -1483,6 +2490,26 @@ void CodeGen_C::visit(const For *op) {
     op->body.accept(this);
     close_scope("for " + print_name(op->name));
 
+}
+
+void CodeGen_C::visit(const Ramp *op) {
+    Type vector_type = op->type.with_lanes(op->lanes);
+    string id_base = print_expr(op->base);
+    string id_stride = print_expr(op->stride);
+    print_assignment(vector_type, print_type(vector_type) + "::ramp(" + id_base + ", " + id_stride + ")");
+}
+
+void CodeGen_C::visit(const Broadcast *op) {
+    Type vector_type = op->type.with_lanes(op->lanes);
+    string id_value = print_expr(op->value);
+    string rhs;
+    if (op->lanes > 1) {
+        rhs = print_type(vector_type) + "::broadcast(" + id_value + ")";
+    } else {
+        rhs = id_value;
+    }
+
+    print_assignment(vector_type, rhs);
 }
 
 void CodeGen_C::visit(const Provide *op) {
@@ -1503,7 +2530,7 @@ void CodeGen_C::visit(const Allocate *op) {
         Allocation alloc;
         alloc.type = op->type;
         allocations.push(op->name, alloc);
-        heap_allocations.push(op->name, 0);
+        heap_allocations.push(op->name);
         stream << op_type << "*" << op_name << " = (" << print_expr(op->new_expr) << ");\n";
     } else {
         constant_size = op->constant_allocation_size();
@@ -1515,7 +2542,9 @@ void CodeGen_C::visit(const Allocate *op) {
                            << op->name << " is constant but exceeds 2^31 - 1.\n";
             } else {
                 size_id = print_expr(Expr(static_cast<int32_t>(constant_size)));
-                if (can_allocation_fit_on_stack(stack_bytes)) {
+                if (op->memory_type == MemoryType::Stack ||
+                    (op->memory_type == MemoryType::Auto &&
+                     can_allocation_fit_on_stack(stack_bytes))) {
                     on_stack = true;
                 }
             }
@@ -1581,7 +2610,7 @@ void CodeGen_C::visit(const Allocate *op) {
                    << " *)halide_malloc(_ucon, sizeof("
                    << op_type
                    << ")*" << size_id << ");\n";
-            heap_allocations.push(op->name, 0);
+            heap_allocations.push(op->name);
         }
     }
 
@@ -1645,14 +2674,48 @@ void CodeGen_C::visit(const Evaluate *op) {
 }
 
 void CodeGen_C::visit(const Shuffle *op) {
-    internal_error << "Cannot emit vector code to C\n";
+    internal_assert(op->vectors.size() >= 1);
+    internal_assert(op->vectors[0].type().is_vector());
+    for (size_t i = 1; i < op->vectors.size(); i++) {
+        internal_assert(op->vectors[0].type() == op->vectors[i].type());
+    }
+    internal_assert(op->type.lanes() == (int) op->indices.size());
+    const int max_index = (int) (op->vectors[0].type().lanes() * op->vectors.size());
+    for (int i : op->indices) {
+        internal_assert(i >= -1 && i < max_index);
+    }
+
+    std::vector<string> vecs;
+    for (Expr v : op->vectors) {
+        vecs.push_back(print_expr(v));
+    }
+    string src = vecs[0];
+    if (op->vectors.size() > 1) {
+        ostringstream rhs;
+        string storage_name = unique_name('_');
+        do_indent();
+        stream << "const " << print_type(op->vectors[0].type()) << " " << storage_name << "[] = { " << with_commas(vecs) << " };\n";
+
+        rhs << print_type(op->type) << "::concat(" << op->vectors.size() << ", " << storage_name << ")";
+        src = print_assignment(op->type, rhs.str());
+    }
+    ostringstream rhs;
+    if (op->type.is_scalar()) {
+        rhs << src << "[" << op->indices[0] << "]";
+    } else {
+        string indices_name = unique_name('_');
+        do_indent();
+        stream << "const int32_t " << indices_name << "[" << op->indices.size() << "] = { " << with_commas(op->indices) << " };\n";
+        rhs << print_type(op->type) << "::shuffle(" << src << ", " << indices_name << ")";
+    }
+    print_assignment(op->type, rhs.str());
 }
 
 void CodeGen_C::test() {
-    LoweredArgument buffer_arg("buf", Argument::OutputBuffer, Int(32), 3);
-    LoweredArgument float_arg("alpha", Argument::InputScalar, Float(32), 0);
-    LoweredArgument int_arg("beta", Argument::InputScalar, Int(32), 0);
-    LoweredArgument user_context_arg("__user_context", Argument::InputScalar, type_of<const void*>(), 0);
+    LoweredArgument buffer_arg("buf", Argument::OutputBuffer, Int(32), 3, ArgumentEstimates{});
+    LoweredArgument float_arg("alpha", Argument::InputScalar, Float(32), 0, ArgumentEstimates{});
+    LoweredArgument int_arg("beta", Argument::InputScalar, Int(32), 0, ArgumentEstimates{});
+    LoweredArgument user_context_arg("__user_context", Argument::InputScalar, type_of<const void*>(), 0, ArgumentEstimates{});
     vector<LoweredArgument> args = { buffer_arg, float_arg, int_arg, user_context_arg };
     Var x("x");
     Param<float> alpha("alpha");
@@ -1661,14 +2724,14 @@ void CodeGen_C::test() {
     Stmt s = Store::make("buf", e, x, Parameter(), const_true());
     s = LetStmt::make("x", beta+1, s);
     s = Block::make(s, Free::make("tmp.stack"));
-    s = Allocate::make("tmp.stack", Int(32), {127}, const_true(), s);
+    s = Allocate::make("tmp.stack", Int(32), MemoryType::Stack, {127}, const_true(), s);
     s = Block::make(s, Free::make("tmp.heap"));
-    s = Allocate::make("tmp.heap", Int(32), {43, beta}, const_true(), s);
+    s = Allocate::make("tmp.heap", Int(32), MemoryType::Heap, {43, beta}, const_true(), s);
     Expr buf = Variable::make(Handle(), "buf.buffer");
     s = LetStmt::make("buf", Call::make(Handle(), Call::buffer_get_host, {buf}, Call::Extern), s);
 
     Module m("", get_host_target());
-    m.append(LoweredFunc("test1", args, s, LoweredFunc::External));
+    m.append(LoweredFunc("test1", args, s, LinkageType::External));
 
     ostringstream source;
     {
@@ -1730,9 +2793,10 @@ int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void
     _5 = 3;
    } // if _6 else
    int32_t _10 = _5;
-   bool _11 = _alpha > float_from_bits(1082130432 /* 4 */);
-   int32_t _12 = (int32_t)(_11 ? _10 : 2);
-   ((int32_t *)_buf)[_4] = _12;
+   float _11 = float_from_bits(1082130432 /* 4 */);
+   bool _12 = _alpha > _11;
+   int32_t _13 = (int32_t)(_12 ? _10 : 2);
+   ((int32_t *)_buf)[_4] = _13;
   } // alloc _tmp_stack
   _tmp_heap_free.free();
  } // alloc _tmp_heap
@@ -1763,5 +2827,5 @@ int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void
     std::cout << "CodeGen_C test passed\n";
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

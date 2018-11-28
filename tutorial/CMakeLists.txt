@@ -1,3 +1,5 @@
+include(CMakeParseArguments)
+
 include_directories("${CMAKE_BINARY_DIR}/tools")
 
 # Detect if we need supress -Wunused-but-set-variable warning.  This warning
@@ -5,54 +7,59 @@ include_directories("${CMAKE_BINARY_DIR}/tools")
 # when showing a demonstration of a computation in C code.
 check_cxx_compiler_flag("-Wno-unused-but-set-variable" SUPPORT_NO_UNUSED_BUT_SET_VARIABLE)
 
-macro(add_tutorial source_file)
+file(GLOB IMAGES RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}/images" "${CMAKE_CURRENT_SOURCE_DIR}/images/*.png")
+file(MAKE_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/images")
+foreach(FILE ${IMAGES})
+  configure_file("${CMAKE_CURRENT_SOURCE_DIR}/images/${FILE}" "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/images/" COPYONLY)
+endforeach()
+
+function(add_tutorial source_file)
+  set(options WITH_IMAGE_IO WITH_OPENMP)
+  set(oneValueArgs )
+  set(multiValueArgs SRCS )
+  cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+
   string(REPLACE ".cpp" "" name ${source_file})
   halide_project(${name} "tutorials" ${source_file})
+  add_test("${name}"
+           GROUPS test_tutorial
+           WORKING_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
   target_include_directories(${name} PRIVATE "${CMAKE_SOURCE_DIR}/tools")
   if (SUPPORT_NO_UNUSED_BUT_SET_VARIABLE)
     target_compile_options(${name} PRIVATE "-Wno-unused-but-set-variable")
   endif()
-endmacro()
-
-macro(use_openmp TARGET)
-  if (NOT MSVC)
+  if (${args_WITH_IMAGE_IO})
+    halide_use_image_io(${name})
+  endif()
+  if (${args_WITH_OPENMP})
     if (OPENMP_FOUND)
-      target_compile_options(${TARGET} PRIVATE ${OpenMP_CXX_FLAGS})
-      target_link_libraries(${TARGET} PRIVATE ${OpenMP_CXX_FLAGS})
+      target_compile_options(${name} PRIVATE ${OpenMP_CXX_FLAGS})
+      target_link_libraries(${name} PRIVATE ${OpenMP_CXX_FLAGS})
     else()
       # Compile anyway but supress warnings about unrecognised pragmas
-      target_compile_options(${TARGET} PRIVATE -Wno-unknown-pragmas)
+      if (NOT MSVC)
+        target_compile_options(${name} PRIVATE -Wno-unknown-pragmas)
+      else()
+        target_compile_options(${name} PRIVATE /Wd4068)
+      endif()
     endif()
-  else()
-    message(STATUS "TODO: Implement OpenMP support for MSVC")
   endif()
-endmacro()
+endfunction()
 
 # Declare tutorials
 add_tutorial(lesson_01_basics.cpp)
+add_tutorial(lesson_02_input_image.cpp WITH_IMAGE_IO)
 add_tutorial(lesson_03_debugging_1.cpp)
 add_tutorial(lesson_04_debugging_2.cpp)
 add_tutorial(lesson_05_scheduling_1.cpp)
 add_tutorial(lesson_06_realizing_over_shifted_domains.cpp)
+add_tutorial(lesson_07_multi_stage_pipelines.cpp WITH_IMAGE_IO)
+add_tutorial(lesson_08_scheduling_2.cpp WITH_IMAGE_IO WITH_OPENMP)
+add_tutorial(lesson_09_update_definitions.cpp WITH_IMAGE_IO WITH_OPENMP)
 add_tutorial(lesson_11_cross_compilation.cpp)
+add_tutorial(lesson_12_using_the_gpu.cpp WITH_IMAGE_IO)
 add_tutorial(lesson_13_tuples.cpp)
 add_tutorial(lesson_14_types.cpp)
-if (PNG_FOUND AND JPEG_FOUND)
-  add_tutorial(lesson_02_input_image.cpp)
-  use_image_io(lesson_02_input_image)
-  add_tutorial(lesson_07_multi_stage_pipelines.cpp)
-  use_image_io(lesson_07_multi_stage_pipelines)
-  add_tutorial(lesson_08_scheduling_2.cpp)
-  use_image_io(lesson_08_scheduling_2)
-  use_openmp(lesson_08_scheduling_2)
-  add_tutorial(lesson_09_update_definitions.cpp)
-  use_image_io(lesson_09_update_definitions)
-  use_openmp(lesson_09_update_definitions)
-  add_tutorial(lesson_12_using_the_gpu.cpp)
-  use_image_io(lesson_12_using_the_gpu)
-else()
-  message(WARNING "Not building all tutorials due to missing libpng or libjpeg")
-endif()
 
 option(BUILD_AOT_TUTORIAL "Build the ahead-of-time compilation tutorial" ON)
 if (BUILD_AOT_TUTORIAL)
@@ -60,12 +67,17 @@ if (BUILD_AOT_TUTORIAL)
   # so we can build the final executable.
   add_tutorial(lesson_10_aot_compilation_generate.cpp)
 
+  # LLVM may leak memory during Halide compilation. If projects are built with address sanitizer enabled,
+  # this may cause generators to fail, making it hard to use Halide and address sanitizer at the same time.
+  # To work around this, we execute generators with an environment setting to disable leak checking.
+  set(RUN_WITHOUT_LEAKCHECK ${CMAKE_COMMAND} -E env "ASAN_OPTIONS=detect_leaks=0")
+
   set(FILTER_H "lesson_10_halide.h")
   set(FILTER_LIB "lesson_10_halide${CMAKE_STATIC_LIBRARY_SUFFIX}")
   set(FILTER_DIR "${CMAKE_CURRENT_BINARY_DIR}")
   add_custom_command(OUTPUT "${FILTER_H}" "${FILTER_LIB}"
                      DEPENDS lesson_10_aot_compilation_generate
-                     COMMAND lesson_10_aot_compilation_generate
+                     COMMAND ${RUN_WITHOUT_LEAKCHECK} $<TARGET_FILE:lesson_10_aot_compilation_generate>
                      WORKING_DIRECTORY "${FILTER_DIR}"
                      COMMENT "generating stuff in ${FILTER_DIR}" )
   add_custom_target(exec_lesson_10_aot_compilation_generate
@@ -81,10 +93,6 @@ if (BUILD_AOT_TUTORIAL)
   target_include_directories(lesson_10_aot_compilation_run PRIVATE "${FILTER_DIR}")
   # Needed to find HalideBuffer.h
   target_include_directories(lesson_10_aot_compilation_run PRIVATE "${CMAKE_BINARY_DIR}/include")
-  # HalideBuffer.h requires C++11
-  if (NOT MSVC)
-    target_compile_options(lesson_10_aot_compilation_run PUBLIC "-std=c++11")
-  endif()
 
   if (NOT WIN32)
     target_link_libraries(lesson_10_aot_compilation_run PRIVATE dl pthread)

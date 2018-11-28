@@ -1,19 +1,19 @@
-#include "IR.h"
 #include "ParallelRVar.h"
-#include "IRMutator.h"
-#include "Debug.h"
-#include "Simplify.h"
-#include "IROperator.h"
-#include "Substitute.h"
 #include "CSE.h"
+#include "Debug.h"
+#include "IR.h"
 #include "IREquality.h"
+#include "IRMutator.h"
+#include "IROperator.h"
+#include "Simplify.h"
+#include "Substitute.h"
 
 namespace Halide {
 namespace Internal {
 
+using std::map;
 using std::string;
 using std::vector;
-using std::map;
 
 namespace {
 /** Find all calls arguments to the given function. Substitutes in
@@ -23,14 +23,14 @@ class FindLoads : public IRVisitor {
 
     const string &func;
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         if (op->name == func && op->call_type == Call::Halide) {
             loads.push_back(op->args);
         }
         IRVisitor::visit(op);
     }
 
-    void visit(const Let *op) {
+    void visit(const Let *op) override {
         IRVisitor::visit(op);
         for (size_t i = 0; i < loads.size(); i++) {
             for (size_t j = 0; j < loads[i].size(); j++) {
@@ -46,16 +46,16 @@ public:
 };
 
 /** Rename all free variables to unique new names. */
-class RenameFreeVars : public IRMutator {
-    using IRMutator::visit;
+class RenameFreeVars : public IRMutator2 {
+    using IRMutator2::visit;
 
     map<string, string> new_names;
 
-    void visit(const Variable *op) {
+    Expr visit(const Variable *op) override {
         if (!op->param.defined() && !op->image.defined()) {
-            expr = Variable::make(op->type, get_new_name(op->name));
+            return Variable::make(op->type, get_new_name(op->name));
         } else {
-            expr = op;
+            return op;
         }
     }
 
@@ -69,25 +69,22 @@ public:
             new_names[s] = new_name;
             return new_name;
         }
-
     }
-
-
 };
 
 /** Substitute in boolean expressions. */
-class SubstituteInBooleanLets : public IRMutator {
-    using IRMutator::visit;
+class SubstituteInBooleanLets : public IRMutator2 {
+    using IRMutator2::visit;
 
-    void visit(const Let *op) {
+    Expr visit(const Let *op) override {
         if (op->value.type() == Bool()) {
-            expr = substitute(op->name, mutate(op->value), mutate(op->body));
+            return substitute(op->name, mutate(op->value), mutate(op->body));
         } else {
-            IRMutator::visit(op);
+            return IRMutator2::visit(op);
         }
     }
 };
-}
+}  // namespace
 
 bool can_parallelize_rvar(const string &v,
                           const string &f,
@@ -165,5 +162,5 @@ bool can_parallelize_rvar(const string &v,
     return is_zero(hazard);
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

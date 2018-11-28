@@ -2,12 +2,13 @@
 #define HALIDE_ELF_H
 
 #include <algorithm>
-#include <memory>
-#include <vector>
-#include <list>
-#include <string>
 #include <iterator>
 #include <limits>
+#include <list>
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace Halide {
 namespace Internal {
@@ -283,7 +284,21 @@ public:
         this->contents.insert(this->contents.end(), begin, end);
         return *this;
     }
-    /** Set or append an object to the contents, assuming T is a
+    template <typename It>
+    Section &prepend_contents(It begin, It end) {
+        typedef typename std::iterator_traits<It>::value_type T;
+        uint64_t size_bytes = std::distance(begin, end) * sizeof(T);
+        this->contents.insert(this->contents.begin(), begin, end);
+
+        // When we add data to the start of the section, we need to fix up
+        // the offsets of the relocations linked to this section.
+        for (Relocation &r : relocations()) {
+            r.set_offset(r.get_offset() + size_bytes);
+        }
+
+        return *this;
+    }
+    /** Set, append or prepend an object to the contents, assuming T is a
      * trivially copyable datatype. */
     template <typename T>
     Section &set_contents(const std::vector<T> &contents) {
@@ -293,6 +308,10 @@ public:
     template <typename T>
     Section &append_contents(const T& x) {
         return append_contents((const char *)&x, (const char *)(&x + 1));
+    }
+    template <typename T>
+    Section &prepend_contents(const T& x) {
+        return prepend_contents((const char *)&x, (const char *)(&x + 1));
     }
     const std::vector<char> &get_contents() const { return contents; }
     contents_iterator contents_begin() { return contents.begin(); }

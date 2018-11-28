@@ -38,7 +38,7 @@ public:
     void generate() {
         extern_stage_1.define_extern("nested_externs_leaf", {value}, Float(32), 3);
         extern_stage_2.define_extern("nested_externs_leaf", {value+1}, Float(32), 3);
-        extern_stage_combine.define_extern("nested_externs_combine", 
+        extern_stage_combine.define_extern("nested_externs_combine",
             {extern_stage_1, extern_stage_2}, Float(32), 3);
         inner(x, y, c) = extern_stage_combine(x, y, c);
     }
@@ -81,7 +81,7 @@ public:
     void generate() {
         extern_stage_1.define_extern("nested_externs_inner", {value}, Float(32), 3);
         extern_stage_2.define_extern("nested_externs_inner", {value+1}, Float(32), 3);
-        extern_stage_combine.define_extern("nested_externs_combine", 
+        extern_stage_combine.define_extern("nested_externs_combine",
             {extern_stage_1, extern_stage_2}, Float(32), 3);
         root(x, y, c) = extern_stage_combine(x, y, c);
     }
@@ -100,9 +100,9 @@ private:
     Func extern_stage_1, extern_stage_2, extern_stage_combine;
 };
 
-HALIDE_REGISTER_GENERATOR(NestedExternsCombine, "nested_externs_combine")
-HALIDE_REGISTER_GENERATOR(NestedExternsInner, "nested_externs_inner")
-HALIDE_REGISTER_GENERATOR(NestedExternsLeaf, "nested_externs_leaf")
-HALIDE_REGISTER_GENERATOR(NestedExternsRoot, "nested_externs_root")
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(NestedExternsCombine, nested_externs_combine)
+HALIDE_REGISTER_GENERATOR(NestedExternsInner, nested_externs_inner)
+HALIDE_REGISTER_GENERATOR(NestedExternsLeaf, nested_externs_leaf)
+HALIDE_REGISTER_GENERATOR(NestedExternsRoot, nested_externs_root)

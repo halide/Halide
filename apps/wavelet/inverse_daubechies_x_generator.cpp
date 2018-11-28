@@ -8,20 +8,19 @@ Halide::Var x("x"), y("y"), c("c");
 
 class inverse_daubechies_x : public Halide::Generator<inverse_daubechies_x> {
 public:
-    ImageParam in_{ Float(32), 3, "in" };
+    Input<Buffer<float>> in_{"in" , 3};
+    Output<Buffer<float>> out_{"out" , 2};
 
-    Func build() {
+    void generate() {
         Func in = Halide::BoundaryConditions::repeat_edge(in_);
 
-        Func out("out");
-        out(x, y) = select(x%2 == 0,
+        out_(x, y) = select(x%2 == 0,
                            D2*in(x/2, y, 0) + D1*in(x/2, y, 1) + D0*in(x/2+1, y, 0) + D3*in(x/2+1, y, 1),
                            D3*in(x/2, y, 0) - D0*in(x/2, y, 1) + D1*in(x/2+1, y, 0) - D2*in(x/2+1, y, 1));
-        out.unroll(x, 2);
-        return out;
+        out_.unroll(x, 2);
     }
 };
 
-Halide::RegisterGenerator<inverse_daubechies_x> register_my_gen{"inverse_daubechies_x"};
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(inverse_daubechies_x, inverse_daubechies_x)

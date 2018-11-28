@@ -1,11 +1,11 @@
-#include "Var.h"
+#include "Reduction.h"
 #include "IR.h"
 #include "IREquality.h"
+#include "IRMutator.h"
 #include "IROperator.h"
 #include "IRVisitor.h"
-#include "IRMutator.h"
-#include "Reduction.h"
 #include "Simplify.h"
+#include "Var.h"
 
 namespace Halide {
 namespace Internal {
@@ -41,7 +41,7 @@ void check(Expr pred, std::vector<Expr> &expected) {
     }
 }
 
-}
+}  // namespace
 
 void split_predicate_test() {
     Expr x = Var("x"), y = Var("y"), z = Var("z"), w = Var("w");
@@ -113,8 +113,8 @@ struct ReductionDomainContents {
         }
     }
 
-    // Pass an IRMutator through to all Exprs referenced in the ReductionDomainContents
-    void mutate(IRMutator *mutator) {
+    // Pass an IRMutator2 through to all Exprs referenced in the ReductionDomainContents
+    void mutate(IRMutator2 *mutator) {
         for (ReductionVariable &rvar : domain) {
             if (rvar.min.defined()) {
                 rvar.min = mutator->mutate(rvar.min);
@@ -130,10 +130,10 @@ struct ReductionDomainContents {
 };
 
 template<>
-EXPORT RefCount &ref_count<Halide::Internal::ReductionDomainContents>(const ReductionDomainContents *p) {return p->ref_count;}
+RefCount &ref_count<Halide::Internal::ReductionDomainContents>(const ReductionDomainContents *p) {return p->ref_count;}
 
 template<>
-EXPORT void destroy<Halide::Internal::ReductionDomainContents>(const ReductionDomainContents *p) {delete p;}
+void destroy<Halide::Internal::ReductionDomainContents>(const ReductionDomainContents *p) {delete p;}
 
 ReductionDomain::ReductionDomain(const std::vector<ReductionVariable> &domain) :
     contents(new ReductionDomainContents) {
@@ -155,18 +155,18 @@ const std::vector<ReductionVariable> &ReductionDomain::domain() const {
 }
 
 namespace {
-class DropSelfReferences : public IRMutator {
-    using IRMutator::visit;
+class DropSelfReferences : public IRMutator2 {
+    using IRMutator2::visit;
 
-    void visit(const Variable *op) {
+    Expr visit(const Variable *op) override {
         if (op->reduction_domain.defined()) {
             user_assert(op->reduction_domain.same_as(domain))
                 << "An RDom's predicate may only refer to its own RVars, "
                 << " not the RVars of some other RDom. "
                 << "Cannot set the predicate to : " << predicate << "\n";
-            expr = Variable::make(op->type, op->name);
+            return Variable::make(op->type, op->name);
         } else {
-            expr = op;
+            return op;
         }
     }
 public:
@@ -175,7 +175,7 @@ public:
     DropSelfReferences(Expr p, const ReductionDomain &d) :
         predicate(p), domain(d) {}
 };
-}
+}  // namespace
 
 void ReductionDomain::set_predicate(Expr p) {
     // The predicate can refer back to the RDom. We need to break
@@ -211,11 +211,11 @@ void ReductionDomain::accept(IRVisitor *visitor) const {
     }
 }
 
-void ReductionDomain::mutate(IRMutator *mutator) {
+void ReductionDomain::mutate(IRMutator2 *mutator) {
     if (contents.defined()) {
         contents->mutate(mutator);
     }
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

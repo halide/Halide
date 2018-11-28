@@ -18,10 +18,18 @@ extern "C" void halide_print(void *user_context, const char *message) {
 #endif
 
 int main(int argc, char **argv) {
-    if (get_jit_target_from_environment().has_feature(Target::Profile)) {
+    Target target = get_jit_target_from_environment();
+    if (target.has_feature(Target::Profile)) {
         // The profiler adds lots of extra prints, so counting the
         // number of prints is not useful.
         printf("Skipping test because profiler is active\n");
+        return 0;
+    }
+
+    if (target.has_feature(Target::Debug)) {
+        // Same thing here: the runtime debug adds lots of extra prints,
+        // so counting the number of prints is not useful.
+        printf("Skipping test because runtime debug is active\n");
         return 0;
     }
 
@@ -195,6 +203,56 @@ int main(int argc, char **argv) {
 
     }
     #endif
+
+    messages.clear();
+
+    {
+        Func f;
+
+        // Test a vectorized print.
+        f(x) = print(x * 3);
+        f.set_custom_print(halide_print);
+        f.vectorize(x, 32);
+        if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+            f.hexagon();
+        }
+        Buffer<int> result = f.realize(128);
+
+        if (!target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+            assert((int)messages.size() == result.width());
+            for (size_t i = 0; i < messages.size(); i++) {
+                assert(messages[i] == std::to_string(i * 3) + "\n");
+            }
+        } else {
+            // The Hexagon simulator prints directly to stderr, so we
+            // can't read the messages.
+        }
+    }
+
+    messages.clear();
+
+    {
+        Func f;
+
+        // Test a vectorized print_when.
+        f(x) = print_when(x % 2 == 0, x * 3);
+        f.set_custom_print(halide_print);
+        f.vectorize(x, 32);
+        if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+            f.hexagon();
+        }
+        Buffer<int> result = f.realize(128);
+
+        if (!target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+            assert((int)messages.size() == result.width() / 2);
+            for (size_t i = 0; i < messages.size(); i++) {
+                assert(messages[i] == std::to_string(i * 2 * 3) + "\n");
+            }
+        } else {
+            // The Hexagon simulator prints directly to stderr, so we
+            // can't read the messages.
+        }
+    }
 
 
     printf("Success!\n");

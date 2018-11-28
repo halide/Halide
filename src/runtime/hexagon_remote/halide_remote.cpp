@@ -15,12 +15,14 @@ extern "C" {
 #include "dlib.h"
 #include "pipeline_context.h"
 #include "log.h"
+#include "known_symbols.h"
 
 const int stack_alignment = 128;
 const int stack_size = 1024 * 1024;
 
 typedef halide_hexagon_remote_handle_t handle_t;
 typedef halide_hexagon_remote_buffer buffer;
+typedef halide_hexagon_remote_scalar_t scalar_t;
 
 extern "C" {
 
@@ -41,55 +43,24 @@ void halide_error(void *user_context, const char *str) {
     }
 }
 
-namespace {
-
-// We keep a small pool of small pre-allocated buffers for use by Halide
-// code; some kernels end up doing per-scanline allocations and frees,
-// which can cause a noticable performance impact on some workloads.
-// 'num_buffers' is the number of pre-allocated buffers and 'buffer_size' is
-// the size of each buffer. The pre-allocated buffers are shared among threads
-// and we use __sync_val_compare_and_swap primitive to synchronize the buffer
-// allocation.
-// TODO(psuriana): make num_buffers configurable by user
-const int num_buffers = 10;
-const int buffer_size = 1024 * 64;
-int buf_is_used[num_buffers];
-char mem_buf[num_buffers][buffer_size]
-    __attribute__((aligned(128))); /* Hexagon requires 128-byte alignment. */
-
-}
-
-void *halide_malloc(void *user_context, size_t x) {
-    if (x <= buffer_size) {
-        for (int i = 0; i < num_buffers; ++i) {
-            if (__sync_val_compare_and_swap(buf_is_used+i, 0, 1) == 0) {
-                return mem_buf[i];
-            }
-        }
-    }
-    return memalign(128, x);
-}
-
-void halide_free(void *user_context, void *ptr) {
-    for (int i = 0; i < num_buffers; ++i) {
-        if (mem_buf[i] == ptr) {
-            buf_is_used[i] = 0;
-            return;
-        }
-    }
-    free(ptr);
-}
-
 void *halide_get_symbol(const char *name) {
-    // We need to try both RTLD_SELF and RTLD_DEFAULT. Sometimes,
-    // RTLD_SELF finds a symbol when RTLD_DEFAULT does not. This is
-    // surprising, I *think* RLTD_SELF should search a subset of the
-    // symbols searched by RTLD_DEFAULT...
+    // Try dlsym first. We need to try both RTLD_SELF and
+    // RTLD_DEFAULT. Sometimes, RTLD_SELF finds a symbol when
+    // RTLD_DEFAULT does not. This is surprising, I *think* RLTD_SELF
+    // should search a subset of the symbols searched by
+    // RTLD_DEFAULT...
     void *def = dlsym(RTLD_SELF, name);
     if (def) {
         return def;
     }
-    return dlsym(RTLD_DEFAULT, name);
+    def = dlsym(RTLD_DEFAULT, name);
+    if (def) {
+        return def;
+    }
+
+    // dlsym has some very unpredictable behavior that makes
+    // it randomly unable to find symbols. To mitigate this, check our known symbols mapping.
+    return get_known_symbol(name);
 }
 
 void *halide_load_library(const char *name) {
@@ -100,16 +71,6 @@ void *halide_get_library_symbol(void *lib, const char *name) {
     return dlsym(lib, name);
 }
 
-typedef int (*set_runtime_t)(halide_malloc_t user_malloc,
-                             halide_free_t custom_free,
-                             halide_print_t print,
-                             halide_error_handler_t error_handler,
-                             halide_do_par_for_t do_par_for,
-                             halide_do_task_t do_task,
-                             void *(*)(const char *),
-                             void *(*)(const char *),
-                             void *(*)(void *, const char *));
-
 PipelineContext run_context(stack_alignment, stack_size);
 
 __attribute__((weak)) void* dlopenbuf(const char*filename, const char* data, int size, int perms);
@@ -118,18 +79,14 @@ static bool use_dlopenbuf() {
     return dlopenbuf != NULL;
 }
 
-int halide_hexagon_remote_initialize_kernels_v3(const unsigned char *code, int codeLen, handle_t *module_ptr) {
+int halide_hexagon_remote_load_library(const char *soname, int sonameLen,
+                                       const unsigned char *code, int codeLen,
+                                       handle_t *module_ptr) {
     void *lib = NULL;
     if (use_dlopenbuf()) {
-        // We need a unique soname, or dlopenbuf will return a
-        // previously opened library.
-        static int unique_id = 0;
-        char soname[256];
-        sprintf(soname, "libhalide_kernels%04d.so", __sync_fetch_and_add(&unique_id, 1));
-
         // We need to use RTLD_NOW, the libraries we build for Hexagon
         // offloading do not support lazy binding.
-        lib = dlopenbuf(soname, (const char*)code, codeLen, RTLD_LOCAL | RTLD_NOW);
+        lib = dlopenbuf(soname, (const char*)code, codeLen, RTLD_GLOBAL | RTLD_NOW);
         if (!lib) {
             log_printf("dlopenbuf failed: %s\n", dlerror());
             return -1;
@@ -140,44 +97,6 @@ int halide_hexagon_remote_initialize_kernels_v3(const unsigned char *code, int c
             log_printf("mmap_dlopen failed\n");
             return -1;
         }
-    }
-    // Initialize the runtime. The Hexagon runtime can't call any
-    // system functions (because we can't link them), so we put all
-    // the implementations that need to do so here, and pass poiners
-    // to them in here.
-    set_runtime_t set_runtime;
-    if (use_dlopenbuf()) {
-        set_runtime = (set_runtime_t)dlsym(lib, "halide_noos_set_runtime");
-    } else {
-        set_runtime = (set_runtime_t)mmap_dlsym(lib, "halide_noos_set_runtime");
-    }
-    if (!set_runtime) {
-        if (use_dlopenbuf()) {
-            dlclose(lib);
-        } else {
-            mmap_dlclose(lib);
-        }
-        log_printf("halide_noos_set_runtime not found in shared object\n");
-        return -1;
-    }
-
-    int result = set_runtime(halide_malloc,
-                             halide_free,
-                             halide_print,
-                             halide_error,
-                             halide_do_par_for,
-                             halide_do_task,
-                             halide_get_symbol,
-                             halide_load_library,
-                             halide_get_library_symbol);
-    if (result != 0) {
-        if (use_dlopenbuf()) {
-            dlclose(lib);
-        } else {
-            mmap_dlclose(lib);
-        }
-        log_printf("set_runtime failed (%d)\n", result);
-        return result;
     }
 
     *module_ptr = reinterpret_cast<handle_t>(lib);
@@ -269,6 +188,22 @@ int halide_hexagon_remote_set_performance_mode(int mode) {
     HAP_power_response_t power_info;
     unsigned int max_mips = 0;
     uint64 max_bus_bw = 0;
+    HAP_power_request_t request;
+
+    const HAP_dcvs_voltage_corner_t voltage_corner[] = {
+        HAP_DCVS_VCORNER_SVS,
+        HAP_DCVS_VCORNER_NOM,
+        HAP_DCVS_VCORNER_TURBO,
+        HAP_DCVS_VCORNER_DISABLE,
+        HAP_DCVS_VCORNER_SVSPLUS,
+        HAP_DCVS_VCORNER_SVS2,
+        HAP_DCVS_VCORNER_NOMPLUS
+    };
+
+    if (mode > 6) {
+        log_printf("Unknown power mode (%d)\n");
+        return -1;
+    }
 
     power_info.type = HAP_power_get_max_mips;
     int retval = HAP_power_get(NULL, &power_info);
@@ -341,14 +276,39 @@ int halide_hexagon_remote_set_performance_mode(int mode) {
     mipsTotal = mipsPerThread * 2;
 
     bwMegabytesPerSec = bwBytePerSec >> 20;
-    return halide_hexagon_remote_set_performance(set_mips,
-                                                 mipsPerThread,
-                                                 mipsTotal,
-                                                 set_bus_bw,
-                                                 bwMegabytesPerSec,
-                                                 busbwUsagePercentage,
-                                                 set_latency,
-                                                 latency);
+
+    memset(&request, 0, sizeof(HAP_power_request_t));
+    request.type = HAP_power_set_apptype;
+    request.apptype = HAP_POWER_COMPUTE_CLIENT_CLASS;
+    retval = HAP_power_set(NULL, &request);
+    if (0 != retval) {
+        log_printf("HAP_power_set(HAP_power_set_apptype) failed (%d)\n", retval);
+        return -1;
+    }
+
+    memset(&request, 0, sizeof(HAP_power_request_t));
+    request.type = HAP_power_set_DCVS_v2;
+    request.dcvs_v2.dcvs_enable = TRUE;
+    request.dcvs_v2.dcvs_option = HAP_DCVS_V2_POWER_SAVER_MODE;
+    request.dcvs_v2.set_dcvs_params = TRUE;
+    request.dcvs_v2.dcvs_params.min_corner = HAP_DCVS_VCORNER_DISABLE;
+    request.dcvs_v2.dcvs_params.max_corner = HAP_DCVS_VCORNER_DISABLE;
+    request.dcvs_v2.dcvs_params.target_corner = voltage_corner[mode];
+    request.dcvs_v2.set_latency = set_latency;
+    request.dcvs_v2.latency = latency;
+    retval = HAP_power_set(NULL, &request);
+    if (0 == retval) {
+        return 0;
+    } else {
+        return halide_hexagon_remote_set_performance(set_mips,
+                                                     mipsPerThread,
+                                                     mipsTotal,
+                                                     set_bus_bw,
+                                                     bwMegabytesPerSec,
+                                                     busbwUsagePercentage,
+                                                     set_latency,
+                                                     latency);
+    }
 }
 
 int halide_hexagon_remote_get_symbol_v4(handle_t module_ptr, const char* name, int nameLen, handle_t *sym_ptr) {
@@ -360,12 +320,10 @@ int halide_hexagon_remote_get_symbol_v4(handle_t module_ptr, const char* name, i
     return *sym_ptr != 0 ? 0 : -1;
 }
 
-
-int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
-                              const buffer *input_buffersPtrs, int input_buffersLen,
-                              buffer *output_buffersPtrs, int output_buffersLen,
-                              const buffer *input_scalarsPtrs, int input_scalarsLen) {
-
+int halide_hexagon_remote_run_v2(handle_t module_ptr, handle_t function,
+                                 const buffer *input_buffersPtrs, int input_buffersLen,
+                                 buffer *output_buffersPtrs, int output_buffersLen,
+                                 const scalar_t *scalars, int scalarsLen) {
     // Get a pointer to the argv version of the pipeline.
     pipeline_argv_t pipeline = reinterpret_cast<pipeline_argv_t>(function);
 
@@ -378,7 +336,7 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
         uint64_t dev;
         uint8_t* host;
     };
-    void **args = (void **)__builtin_alloca((input_buffersLen + input_scalarsLen + output_buffersLen) * sizeof(void *));
+    void **args = (void **)__builtin_alloca((input_buffersLen + scalarsLen + output_buffersLen) * sizeof(void *));
     buffer_t *buffers = (buffer_t *)__builtin_alloca((input_buffersLen + output_buffersLen) * sizeof(buffer_t));
 
     void **next_arg = &args[0];
@@ -394,8 +352,8 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
         *next_arg = next_buffer_t;
     }
     // Input scalars are last.
-    for (int i = 0; i < input_scalarsLen; i++, next_arg++) {
-        *next_arg = input_scalarsPtrs[i].data;
+    for (int i = 0; i < scalarsLen; i++, next_arg++) {
+        *next_arg = const_cast<scalar_t *>(&scalars[i]);
     }
 
     // Prior to running the pipeline, power HVX on (if it was not already on).
@@ -413,7 +371,7 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
     return result;
 }
 
-int halide_hexagon_remote_release_kernels_v2(handle_t module_ptr) {
+int halide_hexagon_remote_release_library(handle_t module_ptr) {
     if (use_dlopenbuf()) {
         dlclose(reinterpret_cast<void*>(module_ptr));
     } else {
@@ -427,7 +385,10 @@ int halide_hexagon_remote_poll_profiler_state(int *func, int *threads) {
     *threads = halide_profiler_get_state()->active_threads;
     return 0;
 }
-
+int halide_hexagon_remote_profiler_set_current_func(int current_func) {
+    halide_profiler_get_state()->current_func = current_func;
+    return 0;
+}
 halide_profiler_state *halide_profiler_get_state() {
     static halide_profiler_state hvx_profiler_state;
     return &hvx_profiler_state;

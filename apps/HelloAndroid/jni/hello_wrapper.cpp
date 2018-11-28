@@ -43,7 +43,7 @@ JNIEXPORT void JNICALL Java_com_example_hellohalide_CameraPreview_processFrame(
 
     ANativeWindow *win = ANativeWindow_fromSurface(env, surf);
 
-    
+
     static bool first_call = true;
     static unsigned counter = 0;
     static unsigned times[16];
@@ -94,7 +94,7 @@ JNIEXPORT void JNICALL Java_com_example_hellohalide_CameraPreview_processFrame(
             srcBuf.dim[0].stride = -1;
             srcBuf.dim[1].stride = -w;
         }
-        
+
         dstBuf.host = dst;
         dstBuf.dim = dstDim;
         dstBuf.dim[0].min = 0;

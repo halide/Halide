@@ -50,9 +50,11 @@ struct MultiDevicePipeline {
     void run(Buffer<float> &result) {
         stage[current_stage - 1].realize(result);
         result.copy_to_host();
+        result.device_free();
+        result.set_host_dirty();
     }
 
-    bool verify(const Buffer<float> &result, size_t stages, const char * test_case) {
+    bool verify(const Buffer<float> &result, size_t stages, const char *test_case) {
         for (int i = 0; i < 100; i++) {
             for (int j = 0; j < 100; j++) {
                 for (int k = 0; k < 3; k++) {
@@ -100,11 +102,17 @@ int main(int argc, char **argv) {
         Buffer<float> output2(100, 100, 3);
         pipe2.run(output2);
 
+        if (!pipe2.verify(output2, pipe2.current_stage - 1, "chained buffers intermediate")) {
+            return -1;
+        }
+
         Buffer<float> output3(100, 100, 3);
         gpu_buffer.set(output2);
         pipe3.run(output3);
 
-        pipe3.verify(output3, pipe2.current_stage + pipe3.current_stage - 2, "chained buffers");
+        if (!pipe3.verify(output3, pipe2.current_stage + pipe3.current_stage - 2, "chained buffers")) {
+            return -1;
+        }
     }
 
     printf("Success!\n");

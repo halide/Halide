@@ -1,13 +1,11 @@
 /tutorial/figures/tmp/trace.bin
 /apps/*/bin
+/apps/*/cmake_build
 /apps/HelloMatlab/blurred.png
 /apps/HelloMatlab/iir_blur.mex
-bazel-bin
-bazel-genfiles
-bazel-Halide
-bazel-out
-bazel-testlogs
+bazel-*
 bin/*
+python_bindings/bin/*
 build-64/*
 build-ios/*
 build-osx/*
@@ -51,7 +49,6 @@ src/test_*.s
 *.guru
 *.dSYM
 .*.swp
-Doxyfile
 tools/objc/BUILD
 tools/objc/*.mobileprovision
 *.xcworkspacedata

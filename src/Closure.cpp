@@ -4,38 +4,35 @@
 namespace Halide {
 namespace Internal {
 
-using std::string;
 using std::map;
-using std::vector;
 using std::pair;
+using std::string;
+using std::vector;
 
 Closure::Closure(Stmt s, const string &loop_variable) {
     if (!loop_variable.empty()) {
-        ignore.push(loop_variable, 0);
+        ignore.push(loop_variable);
     }
     s.accept(this);
 }
 
 void Closure::visit(const Let *op) {
     op->value.accept(this);
-    ignore.push(op->name, 0);
+    ScopedBinding<> p(ignore, op->name);
     op->body.accept(this);
-    ignore.pop(op->name);
 }
 
 void Closure::visit(const LetStmt *op) {
     op->value.accept(this);
-    ignore.push(op->name, 0);
+    ScopedBinding<> p(ignore, op->name);
     op->body.accept(this);
-    ignore.pop(op->name);
 }
 
 void Closure::visit(const For *op) {
-    ignore.push(op->name, 0);
+    ScopedBinding<> p(ignore, op->name);
     op->min.accept(this);
     op->extent.accept(this);
     op->body.accept(this);
-    ignore.pop(op->name);
 }
 
 void Closure::found_buffer_ref(const string &name, Type type,
@@ -44,8 +41,8 @@ void Closure::found_buffer_ref(const string &name, Type type,
         debug(3) << "Adding buffer " << name << " to closure\n";
         Buffer &ref = buffers[name];
         ref.type = type.element_of(); // TODO: Validate type is the same as existing refs?
-        ref.read = read;
-        ref.write = written;
+        ref.read = ref.read || read;
+        ref.write = ref.write || written;
 
         // If reading an image/buffer, compute the size.
         if (image.defined()) {
@@ -74,12 +71,12 @@ void Closure::visit(const Allocate *op) {
     if (op->new_expr.defined()) {
         op->new_expr.accept(this);
     }
-    ignore.push(op->name, 0);
+    ScopedBinding<> p(ignore, op->name);
     for (size_t i = 0; i < op->extents.size(); i++) {
         op->extents[i].accept(this);
     }
+    op->condition.accept(this);
     op->body.accept(this);
-    ignore.pop(op->name);
 }
 
 void Closure::visit(const Variable *op) {
@@ -91,5 +88,5 @@ void Closure::visit(const Variable *op) {
     }
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

@@ -2,6 +2,7 @@
 #include <cstdio>
 #include <algorithm>
 #include "halide_benchmark.h"
+#include "test/common/halide_test_dirs.h"
 
 using namespace Halide;
 using namespace Halide::Tools;
@@ -13,7 +14,7 @@ Buffer<uint16_t> output;
 #define MAX 1020
 
 double test(Func f, bool test_correctness = true) {
-    f.compile_to_assembly(f.name() + ".s", {input}, f.name());
+    f.compile_to_assembly(Internal::get_test_tmp_dir() + f.name() + ".s", {input}, f.name());
     f.compile_jit();
     f.realize(output);
 
@@ -32,7 +33,7 @@ double test(Func f, bool test_correctness = true) {
         }
     }
 
-    return benchmark(1, 10, [&]() { f.realize(output); });
+    return benchmark([&]() { f.realize(output); });
 }
 
 int main(int argc, char **argv) {
@@ -72,7 +73,7 @@ int main(int argc, char **argv) {
         f(x, y) = g(x, y) * 3 + g(x+1, y);
 
         f.vectorize(x, 8);
-        f.compile_to_lowered_stmt("debug_clamped_vector_load.stmt", f.infer_arguments());
+        f.compile_to_lowered_stmt(Internal::get_test_tmp_dir() + "debug_clamped_vector_load.stmt", f.infer_arguments());
 
         t_clamped = test(f);
     }

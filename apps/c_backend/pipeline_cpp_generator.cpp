@@ -50,10 +50,10 @@ HalideExtern_2(int, an_extern_c_func, int, float);
 
 class PipelineCpp : public Halide::Generator<PipelineCpp> {
 public:
-    ImageParam input{UInt(16), 2, "input"};
+    Input<Buffer<uint16_t>>  input{"input", 2};
+    Output<Buffer<uint16_t>> output{"output", 2};
 
-    Func build() {
-        Func f;
+    void generate() {
         Var x, y;
 
         assert(get_target().has_feature(Target::CPlusPlusMangling));
@@ -77,12 +77,10 @@ public:
 
         add_all_the_things += an_extern_c_func(cast<int32_t>(input(x, y)), cast<float>(x + y));
 
-        f(x, y) = cast<uint16_t>(add_all_the_things);
-
-        return f;
+        output(x, y) = cast<uint16_t>(add_all_the_things);
     }
 };
 
-Halide::RegisterGenerator<PipelineCpp> register_me{"pipeline_cpp"};
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(PipelineCpp, pipeline_cpp)

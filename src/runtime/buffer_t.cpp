@@ -15,6 +15,11 @@
 extern "C" {
 
 HALIDE_BUFFER_HELPER_ATTRS
+int _halide_buffer_get_dimensions(const halide_buffer_t *buf) {
+    return buf->dimensions;
+}
+
+HALIDE_BUFFER_HELPER_ATTRS
 uint8_t *_halide_buffer_get_host(const halide_buffer_t *buf) {
     return buf->host;
 }
@@ -140,7 +145,8 @@ halide_buffer_t *_halide_buffer_init_from_buffer(halide_buffer_t *dst,
 }
 
 HALIDE_BUFFER_HELPER_ATTRS
-halide_buffer_t *_halide_buffer_crop(halide_buffer_t *dst,
+halide_buffer_t *_halide_buffer_crop(void *user_context,
+                                     halide_buffer_t *dst,
                                      halide_dimension_t *dst_shape,
                                      const halide_buffer_t *src,
                                      const int *min, const int *extent) {
@@ -153,8 +159,69 @@ halide_buffer_t *_halide_buffer_crop(halide_buffer_t *dst,
         dst->dim[i].extent = extent[i];
         offset += (min[i] - src->dim[i].min) * src->dim[i].stride;
     }
-    dst->host += offset * src->type.bytes();
+    if (dst->host) {
+        dst->host += offset * src->type.bytes();
+    }
+    dst->device_interface = 0;
+    dst->device = 0;
+    if (src->device_interface) {
+        src->device_interface->device_crop(user_context, src, dst);
+    }
     return dst;
+}
+
+
+// Called on return from an extern stage where the output buffer was a
+// crop of some other larger buffer. This happens for extern stages
+// with distinct store_at/compute_at levels. Each call to the stage
+// only fills in part of the buffer.
+HALIDE_BUFFER_HELPER_ATTRS
+int _halide_buffer_retire_crop_after_extern_stage(void *user_context,
+                                                   void *obj) {
+    halide_buffer_t **buffers = (halide_buffer_t **)obj;
+    halide_buffer_t *crop = buffers[0];
+    halide_buffer_t *parent = buffers[1];
+
+    if (crop->device) {
+        if (!parent->device) {
+            // We have been given a device allocation by the extern
+            // stage. It only represents the cropped region, so we
+            // can't just give it to the parent.
+            if (crop->device_dirty()) {
+                crop->device_interface->copy_to_host(user_context, crop);
+            }
+            crop->device_interface->device_free(user_context, crop);
+        } else {
+            // We are a crop of an existing device allocation.
+            if (crop->device_dirty()) {
+                parent->set_device_dirty();
+            }
+            crop->device_interface->device_release_crop(user_context, crop);
+        }
+    }
+    if (crop->host_dirty()) {
+        parent->set_host_dirty();
+    }
+    return 0;
+}
+
+HALIDE_BUFFER_HELPER_ATTRS
+int _halide_buffer_retire_crops_after_extern_stage(void *user_context,
+                                                    void *obj) {
+    halide_buffer_t **buffers = (halide_buffer_t **)obj;
+    while (*buffers) {
+        _halide_buffer_retire_crop_after_extern_stage(user_context, buffers);
+        buffers += 2;
+    }
+    return 0;
+}
+
+HALIDE_BUFFER_HELPER_ATTRS
+halide_buffer_t *_halide_buffer_set_bounds(halide_buffer_t *buf,
+                                           int dim, int min, int extent) {
+    buf->dim[dim].min = min;
+    buf->dim[dim].extent = extent;
+    return buf;
 }
 
 }

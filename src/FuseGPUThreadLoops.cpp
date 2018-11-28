@@ -1,26 +1,26 @@
 #include <algorithm>
 #include <cmath>
 
-#include "FuseGPUThreadLoops.h"
+#include "Bounds.h"
+#include "CSE.h"
 #include "CodeGen_GPU_Dev.h"
+#include "ExprUsesVar.h"
+#include "FuseGPUThreadLoops.h"
 #include "IR.h"
+#include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "Bounds.h"
-#include "Substitute.h"
-#include "IREquality.h"
-#include "Simplify.h"
 #include "IRPrinter.h"
-#include "ExprUsesVar.h"
-#include "CSE.h"
+#include "Simplify.h"
+#include "Substitute.h"
 
 namespace Halide {
 namespace Internal {
 
 using std::map;
-using std::vector;
-using std::string;
 using std::sort;
+using std::string;
+using std::vector;
 
 namespace {
 string thread_names[] = {"__thread_id_x", "__thread_id_y", "__thread_id_z", "__thread_id_w"};
@@ -28,39 +28,49 @@ string block_names[] = {"__block_id_x", "__block_id_y", "__block_id_z", "__block
 string shared_mem_name = "__shared";
 }
 
-class InjectThreadBarriers : public IRMutator {
+class InjectThreadBarriers : public IRMutator2 {
     bool in_threads;
 
-    using IRMutator::visit;
+    using IRMutator2::visit;
 
     Stmt barrier;
 
-    void visit(const For *op) {
-        bool old_in_threads = in_threads;
-        if (CodeGen_GPU_Dev::is_gpu_thread_var(op->name)) {
-            in_threads = true;
+    Stmt visit(const For *op) override {
+        ScopedValue<bool> old_in_threads(in_threads,
+                                         (in_threads ||
+                                          op->for_type == ForType::GPUThread ||
+                                          op->for_type == ForType::GPULane));
+
+        if (op->for_type == ForType::Serial) {
+            Stmt body = mutate(op->body);
+            // Serial for loops at the block level with internal
+            // synchronization also need synchronization after each
+            // loop iteration.
+            if (!in_threads && !body.same_as(op->body)) {
+                body = Block::make(body, barrier);
+            }
+            return For::make(op->name, op->min, op->extent,
+                             op->for_type, op->device_api, body);
+        } else {
+            return IRMutator2::visit(op);
         }
-
-        IRMutator::visit(op);
-
-        in_threads = old_in_threads;
     }
 
-    void visit(const Block *op) {
+    Stmt visit(const Block *op) override {
         if (!in_threads && op->rest.defined()) {
             Stmt first = mutate(op->first);
             Stmt rest = mutate(op->rest);
-            stmt = Block::make(Block::make(first, barrier), rest);
+            return Block::make(Block::make(first, barrier), rest);
         } else {
-            IRMutator::visit(op);
+            return IRMutator2::visit(op);
         }
     }
 
 public:
     InjectThreadBarriers() : in_threads(false) {
         barrier =
-            Evaluate::make(Call::make(Int(32), "halide_gpu_thread_barrier",
-                                      vector<Expr>(), Call::Extern));
+            Evaluate::make(Call::make(Int(32), Call::gpu_thread_barrier,
+                                      vector<Expr>(), Call::Intrinsic));
     }
 };
 
@@ -79,7 +89,7 @@ class ExtractBlockSize : public IRVisitor {
         }
     }
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         for (int i = 0; i < 4; i++) {
             if (ends_with(op->name, thread_names[i])) {
                 found_for(i, op->extent);
@@ -89,9 +99,7 @@ class ExtractBlockSize : public IRVisitor {
         IRVisitor::visit(op);
 
         Scope<Interval> scope;
-        scope.push(op->name,
-                   Interval(Variable::make(Int(32), op->name + ".loop_min"),
-                            Variable::make(Int(32), op->name + ".loop_max")));
+        scope.push(op->name, Interval(op->min, simplify(op->min + op->extent - 1)));
         for (int i = 0; i < 4; i++) {
             if (block_extent[i].defined() &&
                 expr_uses_var(block_extent[i], op->name)) {
@@ -101,7 +109,7 @@ class ExtractBlockSize : public IRVisitor {
         }
     }
 
-    void visit(const LetStmt *op) {
+    void visit(const LetStmt *op) override {
         IRVisitor::visit(op);
         for (int i = 0; i < 4; i++) {
             if (block_extent[i].defined() &&
@@ -126,8 +134,8 @@ public:
     }
 };
 
-class NormalizeDimensionality : public IRMutator {
-    using IRMutator::visit;
+class NormalizeDimensionality : public IRMutator2 {
+    using IRMutator2::visit;
 
     const ExtractBlockSize &block_size;
     const DeviceAPI device_api;
@@ -152,7 +160,7 @@ class NormalizeDimensionality : public IRMutator {
         return s;
     }
 
-    void visit(const Block *op) {
+    Stmt visit(const Block *op) override {
         Stmt first = wrap(op->first);
 
         Stmt rest;
@@ -162,22 +170,23 @@ class NormalizeDimensionality : public IRMutator {
 
         if (first.same_as(op->first) &&
             rest.same_as(op->rest)) {
-            stmt = op;
+            return op;
         } else {
-            stmt = Block::make(first, rest);
+            return Block::make(first, rest);
         }
     }
 
-    void visit(const For *op) {
+    Stmt visit(const For *op) override {
         if (CodeGen_GPU_Dev::is_gpu_thread_var(op->name)) {
             depth++;
             if (depth > max_depth) {
                 max_depth = depth;
             }
-            IRMutator::visit(op);
+            Stmt stmt = IRMutator2::visit(op);
             depth--;
+            return stmt;
         } else {
-            IRMutator::visit(op);
+            return IRMutator2::visit(op);
         }
     }
 
@@ -186,12 +195,12 @@ public:
       : block_size(e), device_api(device_api), depth(0), max_depth(0) {}
 };
 
-class ReplaceForWithIf : public IRMutator {
-    using IRMutator::visit;
+class ReplaceForWithIf : public IRMutator2 {
+    using IRMutator2::visit;
 
     const ExtractBlockSize &block_size;
 
-    void visit(const For *op) {
+    Stmt visit(const For *op) override {
         if (CodeGen_GPU_Dev::is_gpu_thread_var(op->name)) {
             int dim;
             for (dim = 0; dim < 4; dim++) {
@@ -208,13 +217,13 @@ class ReplaceForWithIf : public IRMutator {
             body = substitute(op->name, var + op->min, body);
 
             if (equal(op->extent, block_size.extent(dim))) {
-                stmt = body;
+                return body;
             } else {
                 Expr cond = var < op->extent;
-                stmt = IfThenElse::make(cond, body, Stmt());
+                return IfThenElse::make(cond, body, Stmt());
             }
         } else {
-            IRMutator::visit(op);
+            return IRMutator2::visit(op);
         }
     }
 
@@ -222,8 +231,8 @@ public:
     ReplaceForWithIf(const ExtractBlockSize &e) : block_size(e) {}
 };
 
-class ExtractSharedAllocations : public IRMutator {
-    using IRMutator::visit;
+class ExtractSharedAllocations : public IRMutator2 {
+    using IRMutator2::visit;
 
     struct IntInterval {
         IntInterval() : IntInterval(0, 0) {}
@@ -272,12 +281,13 @@ class ExtractSharedAllocations : public IRMutator {
 
     const DeviceAPI device_api;
 
-    void visit(const For *op) {
+    Stmt visit(const For *op) override {
         if (CodeGen_GPU_Dev::is_gpu_thread_var(op->name)) {
             bool old = in_threads;
             in_threads = true;
-            IRMutator::visit(op);
+            Stmt stmt = IRMutator2::visit(op);
             in_threads = old;
+            return stmt;
         } else {
             // Set aside the allocations we've found so far.
             vector<SharedAllocation> old;
@@ -288,8 +298,7 @@ class ExtractSharedAllocations : public IRMutator {
 
             // Expand any new shared allocations found in the body using the loop bounds.
             Scope<Interval> scope;
-            scope.push(op->name, Interval(Variable::make(Int(32), op->name + ".loop_min"),
-                                          Variable::make(Int(32), op->name + ".loop_max")));
+            scope.push(op->name, Interval(op->min, simplify(op->min + op->extent - 1)));
 
             // Expand the inner allocations using the loop bounds.
             for (SharedAllocation &s : allocations) {
@@ -305,11 +314,11 @@ class ExtractSharedAllocations : public IRMutator {
                 allocations.swap(old);
             }
 
-            stmt = For::make(op->name, mutate(op->min), mutate(op->extent), op->for_type, op->device_api, body);
+            return For::make(op->name, mutate(op->min), mutate(op->extent), op->for_type, op->device_api, body);
         }
     }
 
-    void visit(const Block *op) {
+    Stmt visit(const Block *op) override {
         if (!in_threads && op->rest.defined()) {
             Stmt first = mutate(op->first);
             barrier_stage++;
@@ -317,26 +326,33 @@ class ExtractSharedAllocations : public IRMutator {
 
             if (first.same_as(op->first) &&
                 rest.same_as(op->rest)) {
-                stmt = op;
+                return op;
             } else {
-                stmt = Block::make(first, rest);
+                return Block::make(first, rest);
             }
         } else {
-            IRMutator::visit(op);
+            return IRMutator2::visit(op);
         }
     }
 
-    void visit(const Allocate *op) {
+    Stmt visit(const Allocate *op) override {
         user_assert(!op->new_expr.defined()) << "Allocate node inside GPU kernel has custom new expression.\n" <<
             "(Memoization is not supported inside GPU kernels at present.)\n";
 
-        if (in_threads) {
-            IRMutator::visit(op);
-            return;
+        if (in_threads ||
+            op->memory_type == MemoryType::Stack ||
+            op->memory_type == MemoryType::Register) {
+            // TODO: Support shared allocations inside loops over threads by giving each loop iteration a unique slice.
+            return IRMutator2::visit(op);
         }
 
+        user_assert(op->memory_type == MemoryType::Auto ||
+                    op->memory_type == MemoryType::GPUShared)
+            << "Allocation " << op->name << " must live in shared memory, "
+            << "but is scheduled to live in " << op->memory_type << " memory.\n";
+
         shared.emplace(op->name, IntInterval(barrier_stage, barrier_stage));
-        IRMutator::visit(op);
+        Stmt stmt = IRMutator2::visit(op);
         op = stmt.as<Allocate>();
         internal_assert(op);
 
@@ -351,50 +367,49 @@ class ExtractSharedAllocations : public IRMutator {
         alloc.size = simplify(alloc.size);
         allocations.push_back(alloc);
         shared.erase(op->name);
-        stmt = op->body;
+        return op->body;
     }
 
-    void visit(const Load *op) {
+    Expr visit(const Load *op) override {
         if (shared.count(op->name)) {
             Expr predicate = mutate(op->predicate);
             Expr index = mutate(op->index);
             shared[op->name].max = barrier_stage;
             if (device_api == DeviceAPI::OpenGLCompute) {
-                expr = Load::make(op->type, shared_mem_name + "_" + op->name,
+                return Load::make(op->type, shared_mem_name + "_" + op->name,
                                   index, op->image, op->param, predicate);
             } else {
                 Expr base = Variable::make(Int(32), op->name + ".shared_offset");
-                expr = Load::make(op->type, shared_mem_name, base + index,
+                return Load::make(op->type, shared_mem_name, base + index,
                                   op->image, op->param, predicate);
             }
 
         } else {
-            IRMutator::visit(op);
+            return IRMutator2::visit(op);
         }
     }
 
-    void visit(const Store *op) {
+    Stmt visit(const Store *op) override {
         if (shared.count(op->name)) {
             shared[op->name].max = barrier_stage;
             Expr predicate = mutate(op->predicate);
             Expr index = mutate(op->index);
             Expr value = mutate(op->value);
             if (device_api == DeviceAPI::OpenGLCompute) {
-                stmt = Store::make(shared_mem_name + "_" + op->name, value, index,
+                return Store::make(shared_mem_name + "_" + op->name, value, index,
                                    op->param, predicate);
             } else {
                 Expr base = Variable::make(Int(32), op->name + ".shared_offset");
-                stmt = Store::make(shared_mem_name, value, base + index, op->param, predicate);
+                return Store::make(shared_mem_name, value, base + index, op->param, predicate);
             }
         } else {
-            IRMutator::visit(op);
+            return IRMutator2::visit(op);
         }
     }
 
-    void visit(const LetStmt *op) {
+    Stmt visit(const LetStmt *op) override {
         if (in_threads) {
-            IRMutator::visit(op);
-            return;
+            return IRMutator2::visit(op);
         }
 
         Expr value = mutate(op->value);
@@ -407,9 +422,9 @@ class ExtractSharedAllocations : public IRMutator {
         }
 
         if (op->body.same_as(body) && value.same_as(op->value)) {
-            stmt = op;
+            return op;
         } else {
-            stmt = LetStmt::make(op->name, value, body);
+            return LetStmt::make(op->name, value, body);
         }
     }
 
@@ -527,7 +542,8 @@ public:
             // Individual shared allocations.
             for (SharedAllocation alloc : allocations) {
                 s = Allocate::make(shared_mem_name + "_" + alloc.name,
-                                   alloc.type, {alloc.size}, const_true(), s);
+                                   alloc.type, MemoryType::GPUShared,
+                                   {alloc.size}, const_true(), s);
             }
         } else {
             // One big combined shared allocation.
@@ -553,7 +569,8 @@ public:
 
             // Add a dummy allocation at the end to get the total size
             Expr total_size = Variable::make(Int(32), "group_" + std::to_string(mem_allocs.size()-1) + ".shared_offset");
-            s = Allocate::make(shared_mem_name, UInt(8), {total_size}, const_true(), s);
+            s = Allocate::make(shared_mem_name, UInt(8), MemoryType::GPUShared,
+                               {total_size}, const_true(), s);
 
             // Define an offset for each allocation. The offsets are in
             // elements, not bytes, so that the stores and loads can use
@@ -583,12 +600,155 @@ public:
     ExtractSharedAllocations(DeviceAPI d) : in_threads(false), barrier_stage(0), device_api(d) {}
 };
 
-class FuseGPUThreadLoopsSingleKernel : public IRMutator {
-    using IRMutator::visit;
+
+// Pull out any allocate node outside of the innermost thread
+// block. Should only be run after shared allocations have already
+// been extracted.
+class ExtractRegisterAllocations : public IRMutator2 {
+    using IRMutator2::visit;
+
+    struct RegisterAllocation {
+        string name;
+        string loop_var; // The nearest enclosing loop over threads. Empty if it's at block level.
+        Type type;
+        Expr size;
+        MemoryType memory_type; // Should be Auto, Stack, or Register
+    };
+
+    bool in_lane_loop = false;
+
+    Stmt visit(const For *op) override {
+        ScopedValue<string> old_loop_var(loop_var);
+
+        if (op->for_type == ForType::GPULane) {
+            loop_var = op->name;
+            internal_assert(!in_lane_loop);
+            ScopedValue<bool> old_in_lane_loop(in_lane_loop, true);
+            has_lane_loop = true;
+            return IRMutator2::visit(op);
+        } else {
+            if (op->for_type == ForType::GPUThread) {
+                has_thread_loop = true;
+                loop_var = op->name;
+            }
+
+            // Hoisting an allocation out of a vectorized for loop
+            // would break here. We should already have hoisted
+            // vectorized allocations.
+            internal_assert(op->for_type != ForType::Vectorized);
+
+            // Set aside the allocations we've found so far.
+            vector<RegisterAllocation> old;
+            old.swap(allocations);
+
+            // Find allocations inside the loop body
+            Stmt body = mutate(op->body);
+
+            // Expand any new register allocations found in the body using the loop bounds.
+            Scope<Interval> scope;
+            scope.push(op->name, Interval(op->min, simplify(op->min + op->extent - 1)));
+
+            // Expand the inner allocations using the loop bounds.
+            for (RegisterAllocation &s : allocations) {
+                if (expr_uses_var(s.size, op->name)) {
+                    s.size = bounds_of_expr_in_scope(s.size, scope).max;
+                }
+            }
+
+            // Add back on the allocations we set aside.
+            if (!allocations.empty()) {
+                allocations.insert(allocations.end(), old.begin(), old.end());
+            } else {
+                allocations.swap(old);
+            }
+
+            return For::make(op->name, mutate(op->min), mutate(op->extent), op->for_type, op->device_api, body);
+        }
+    }
+
+    Stmt visit(const Allocate *op) override {
+        if (in_lane_loop) {
+            return IRMutator2::visit(op);
+        }
+
+        user_assert(op->memory_type == MemoryType::Stack ||
+                    op->memory_type == MemoryType::Register ||
+                    op->memory_type == MemoryType::Auto)
+            << "Allocation " << op->name << " is scheduled inside a loop over GPU threads, so "
+            << "it must live in stack memory or registers. "
+            << "Shared allocations at this loop level are not yet supported.\n";
+
+        ScopedBinding<int> p(register_allocations, op->name, 0);
+
+        RegisterAllocation alloc;
+        alloc.name = op->name;
+        alloc.type = op->type;
+        alloc.size = 1;
+        alloc.loop_var = loop_var;
+        for (size_t i = 0; i < op->extents.size(); i++) {
+            alloc.size *= op->extents[i];
+        }
+        alloc.size = simplify(alloc.size);
+        alloc.memory_type = op->memory_type;
+
+        allocations.push_back(alloc);
+        return mutate(op->body);
+    }
+
+    template<typename ExprOrStmt, typename LetOrLetStmt>
+    ExprOrStmt visit_let(const LetOrLetStmt *op) {
+        ExprOrStmt body = op->body;
+
+        body = mutate(op->body);
+
+        for (RegisterAllocation &s : allocations) {
+            if (expr_uses_var(s.size, op->name)) {
+                s.size = simplify(Let::make(op->name, op->value, s.size));
+            }
+        }
+
+        if (op->body.same_as(body)) {
+            return op;
+        } else {
+            return LetOrLetStmt::make(op->name, op->value, body);
+        }
+    }
+
+    Expr visit(const Let *op) override {
+        return visit_let<Expr>(op);
+    }
+
+    Stmt visit(const LetStmt *op) override {
+        return visit_let<Stmt>(op);
+    }
+
+
+    Scope<int> register_allocations;
+    string loop_var;
+
+public:
+    vector<RegisterAllocation> allocations;
+
+    Stmt rewrap(Stmt body, const string &loop_var) {
+        for (RegisterAllocation &alloc : allocations) {
+            if ((!loop_var.empty() && ends_with(alloc.loop_var, loop_var)) |
+                (loop_var.empty() && alloc.loop_var.empty())) {
+                body = Allocate::make(alloc.name, alloc.type, alloc.memory_type, {alloc.size}, const_true(), body);
+            }
+        }
+        return body;
+    }
+
+    bool has_lane_loop = false;
+    bool has_thread_loop = false;
+};
+
+class FuseGPUThreadLoopsSingleKernel : public IRMutator2 {
+    using IRMutator2::visit;
     const ExtractBlockSize &block_size;
     ExtractSharedAllocations &shared_mem;
 
-    void visit(const For *op) {
+    Stmt visit(const For *op) override {
         if (ends_with(op->name, ".__block_id_x")) {
             Stmt body = op->body;
 
@@ -600,8 +760,23 @@ class FuseGPUThreadLoopsSingleKernel : public IRMutator {
 
             debug(3) << "Normalized dimensionality:\n" << body << "\n\n";
 
-            InjectThreadBarriers i;
-            body = i.mutate(body);
+            Expr block_size_x = block_size.dimensions() ? block_size.extent(0) : 1;
+            ExtractRegisterAllocations register_allocs;
+            ForType innermost_loop_type = ForType::GPUThread;
+            if (block_size.dimensions()) {
+                body = register_allocs.mutate(body);
+                if (register_allocs.has_lane_loop) {
+                    innermost_loop_type = ForType::GPULane;
+                }
+            }
+
+            debug(3) << "Extracted register-level allocations:\n" << body << "\n\n";
+
+            if (register_allocs.has_thread_loop) {
+                // If there's no loop over threads, everything is already synchronous.
+                InjectThreadBarriers i;
+                body = i.mutate(body);
+            }
 
             debug(3) << "Injected synchronization:\n" << body << "\n\n";
 
@@ -610,15 +785,20 @@ class FuseGPUThreadLoopsSingleKernel : public IRMutator {
 
             debug(3) << "Replaced for with if:\n" << body << "\n\n";
 
-            // Rewrap the whole thing in the loop over threads
-            for (int i = 0; i < block_size.dimensions(); i++) {
+            // There is always a loop over thread_id_x
+            string thread_id = "." + thread_names[0];
+            // Add back in any register-level allocations
+            body = register_allocs.rewrap(body, thread_id);
+            body = For::make(thread_id, 0, block_size_x, innermost_loop_type, op->device_api, body);
+
+            // Rewrap the whole thing in other loops over threads
+            for (int i = 1; i < block_size.dimensions(); i++) {
+                thread_id = "." + thread_names[i];
+                body = register_allocs.rewrap(body, thread_id);
                 body = For::make("." + thread_names[i], 0, block_size.extent(i), ForType::GPUThread, op->device_api, body);
             }
-
-            // There at least needs to be a loop over __thread_id_x as a marker for codegen
-            if (block_size.dimensions() == 0) {
-                body = For::make(".__thread_id_x", 0, 1, ForType::GPUThread, op->device_api, body);
-            }
+            thread_id.clear();
+            body = register_allocs.rewrap(body, thread_id);
 
             debug(3) << "Rewrapped in for loops:\n" << body << "\n\n";
 
@@ -627,12 +807,12 @@ class FuseGPUThreadLoopsSingleKernel : public IRMutator {
             debug(3) << "Add back in shared allocations:\n" << body << "\n\n";
 
             if (body.same_as(op->body)) {
-                stmt = op;
+                return op;
             } else {
-                stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
+                return For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
             }
         } else {
-            IRMutator::visit(op);
+            return IRMutator2::visit(op);
         }
 
     }
@@ -644,13 +824,12 @@ public:
 
 };
 
-class FuseGPUThreadLoops : public IRMutator {
-    using IRMutator::visit;
+class FuseGPUThreadLoops : public IRMutator2 {
+    using IRMutator2::visit;
 
-    void visit(const For *op) {
+    Stmt visit(const For *op) override {
         if (op->device_api == DeviceAPI::GLSL) {
-            stmt = op;
-            return;
+            return op;
         }
 
         user_assert(!(CodeGen_GPU_Dev::is_gpu_thread_var(op->name)))
@@ -673,25 +852,26 @@ class FuseGPUThreadLoops : public IRMutator {
             debug(3) << "Pulled out shared allocations:\n" << loop << "\n\n";
 
             // Mutate the inside of the kernel
-            stmt = FuseGPUThreadLoopsSingleKernel(block_size, shared_mem).mutate(loop);
+            return FuseGPUThreadLoopsSingleKernel(block_size, shared_mem).mutate(loop);
         } else {
-            IRMutator::visit(op);
+            return IRMutator2::visit(op);
         }
     }
 };
 
-class ZeroGPULoopMins : public IRMutator {
+class ZeroGPULoopMins : public IRMutator2 {
     bool in_non_glsl_gpu;
-    using IRMutator::visit;
+    using IRMutator2::visit;
 
-    void visit(const For *op) {
-        bool old_in_non_glsl_gpu = in_non_glsl_gpu;
+    Stmt visit(const For *op) override {
+        ScopedValue<bool> old_in_non_glsl_gpu(in_non_glsl_gpu);
 
         in_non_glsl_gpu = (in_non_glsl_gpu && op->device_api == DeviceAPI::None) ||
           (op->device_api == DeviceAPI::CUDA) || (op->device_api == DeviceAPI::OpenCL) ||
-          (op->device_api == DeviceAPI::Metal);
+          (op->device_api == DeviceAPI::Metal) ||
+          (op->device_api == DeviceAPI::D3D12Compute);
 
-        IRMutator::visit(op);
+        Stmt stmt = IRMutator2::visit(op);
         if (CodeGen_GPU_Dev::is_gpu_var(op->name) && !is_zero(op->min)) {
             op = stmt.as<For>();
             internal_assert(op);
@@ -699,8 +879,7 @@ class ZeroGPULoopMins : public IRMutator {
             Stmt body = substitute(op->name, adjusted, op->body);
             stmt = For::make(op->name, 0, op->extent, op->for_type, op->device_api, body);
         }
-
-        in_non_glsl_gpu = old_in_non_glsl_gpu;
+        return stmt;
     }
 
 public:
@@ -713,11 +892,11 @@ class ValidateGPULoopNesting : public IRVisitor {
 
     using IRVisitor::visit;
 
-    void visit(const For *op) {
-        string old_innermost_block_var  = innermost_block_var;
-        string old_innermost_thread_var = innermost_thread_var;
-        int old_gpu_block_depth  = gpu_block_depth;
-        int old_gpu_thread_depth = gpu_thread_depth;
+    void visit(const For *op) override {
+        ScopedValue<string> old_innermost_block_var(innermost_block_var);
+        ScopedValue<string> old_innermost_thread_var(innermost_thread_var);
+        ScopedValue<int> old_gpu_block_depth(gpu_block_depth);
+        ScopedValue<int> old_gpu_thread_depth(gpu_thread_depth);
 
         for (int i = 1; i <= 4; i++) {
             if (ends_with(op->name, block_names[4-i])) {
@@ -742,11 +921,6 @@ class ValidateGPULoopNesting : public IRVisitor {
             }
         }
         IRVisitor::visit(op);
-
-        innermost_block_var  = old_innermost_block_var;
-        innermost_thread_var = old_innermost_thread_var;
-        gpu_block_depth  = old_gpu_block_depth;
-        gpu_thread_depth = old_gpu_thread_depth;
     }
 };
 
@@ -763,5 +937,5 @@ Stmt fuse_gpu_thread_loops(Stmt s) {
     return s;
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

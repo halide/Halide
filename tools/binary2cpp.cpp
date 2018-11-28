@@ -24,8 +24,8 @@ int main(int argc, const char **argv) {
             printf("#ifndef _H_%s_binary2cpp\n", target);
             printf("#define _H_%s_binary2cpp\n", target);
             printf("extern \"C\" {\n");
-            printf("unsigned char %s[];\n", target);
-            printf("int %s_length;\n", target);
+            printf("extern unsigned char %s[];\n", target);
+            printf("extern int %s_length;\n", target);
             printf("}  // extern \"C\"\n");
             printf("#endif  // _H_%s_binary2cpp\n", target);
             return 0;

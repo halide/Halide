@@ -1,14 +1,14 @@
 #include "SimplifySpecializations.h"
-#include "IROperator.h"
-#include "IRMutator.h"
-#include "Simplify.h"
-#include "Substitute.h"
 #include "Definition.h"
 #include "IREquality.h"
+#include "IRMutator.h"
+#include "IROperator.h"
+#include "Simplify.h"
+#include "Substitute.h"
 
 #include <set>
 
-namespace Halide{
+namespace Halide {
 namespace Internal {
 
 using std::map;
@@ -29,11 +29,11 @@ void substitute_value_in_var(const string &var, Expr value, vector<Definition> &
     }
 }
 
-class SimplifyUsingFact : public IRMutator {
+class SimplifyUsingFact : public IRMutator2 {
 public:
-    using IRMutator::mutate;
+    using IRMutator2::mutate;
 
-    Expr mutate(const Expr &e) {
+    Expr mutate(const Expr &e) override {
         if (e.type().is_bool()) {
             if (equal(fact, e) ||
                 can_prove(!fact || e)) {
@@ -47,7 +47,7 @@ public:
                 return const_false();
             }
         }
-        return IRMutator::mutate(e);
+        return IRMutator2::mutate(e);
     }
 
     Expr fact;
@@ -122,6 +122,8 @@ vector<Definition> propagate_specialization_in_definition(Definition &def, const
         const EQ *eq = c.as<EQ>();
         const Variable *var = eq ? eq->a.as<Variable>() : c.as<Variable>();
 
+        internal_assert(s_def.defined());
+
         vector<Definition> s_result = propagate_specialization_in_definition(s_def, name);
 
         if (var && eq) {
@@ -149,16 +151,16 @@ vector<Definition> propagate_specialization_in_definition(Definition &def, const
     return result;
 }
 
-}
-
-
+}  // namespace
 
 void simplify_specializations(map<string, Function> &env) {
     for (auto &iter : env) {
         Function &func = iter.second;
-        propagate_specialization_in_definition(func.definition(), func.name());
+        if (func.definition().defined()) {
+            propagate_specialization_in_definition(func.definition(), func.name());
+        }
     }
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

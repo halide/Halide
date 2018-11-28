@@ -9,10 +9,10 @@ using std::vector;
 namespace Halide {
 namespace Internal {
 
-class UnrollLoops : public IRMutator {
-    using IRMutator::visit;
+class UnrollLoops : public IRMutator2 {
+    using IRMutator2::visit;
 
-    void visit(const For *for_loop) {
+    Stmt visit(const For *for_loop) override {
         if (for_loop->for_type == ForType::Unrolled) {
             // Give it one last chance to simplify to an int
             Expr extent = simplify(for_loop->extent);
@@ -31,10 +31,10 @@ class UnrollLoops : public IRMutator {
             for (int i = 0; i < e->value; i++) {
                 iters.push_back(substitute(for_loop->name, for_loop->min + i, body));
             }
-            stmt = Block::make(iters);
+            return Block::make(iters);
 
         } else {
-            IRMutator::visit(for_loop);
+            return IRMutator2::visit(for_loop);
         }
     }
 };
@@ -43,5 +43,5 @@ Stmt unroll_loops(Stmt s) {
     return UnrollLoops().mutate(s);
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

@@ -5,9 +5,9 @@
  * Defines the code-generator for producing CUDA host code
  */
 
-#include "CodeGen_LLVM.h"
-#include "CodeGen_GPU_Host.h"
 #include "CodeGen_GPU_Dev.h"
+#include "CodeGen_GPU_Host.h"
+#include "CodeGen_LLVM.h"
 
 namespace llvm {
 class BasicBlock;
@@ -24,22 +24,22 @@ public:
 
     /** Create a PTX device code generator. */
     CodeGen_PTX_Dev(Target host);
-    ~CodeGen_PTX_Dev();
+    ~CodeGen_PTX_Dev() override;
 
     void add_kernel(Stmt stmt,
                     const std::string &name,
-                    const std::vector<DeviceArgument> &args);
+                    const std::vector<DeviceArgument> &args) override;
 
     static void test();
 
-    std::vector<char> compile_to_src();
-    std::string get_current_kernel_name();
+    std::vector<char> compile_to_src() override;
+    std::string get_current_kernel_name() override;
 
-    void dump();
+    void dump() override;
 
-    virtual std::string print_gpu_name(const std::string &name);
+    std::string print_gpu_name(const std::string &name) override;
 
-    std::string api_unique_name() { return "cuda"; }
+    std::string api_unique_name() override { return "cuda"; }
 
 protected:
     using CodeGen_LLVM::visit;
@@ -47,7 +47,7 @@ protected:
     /** (Re)initialize the PTX module. This is separate from compile, since
      * a PTX device module will often have many kernels compiled into it for
      * a single pipeline. */
-    /* override */ virtual void init_module();
+    /* override */ void init_module() override;
 
     /** We hold onto the basic block at the start of the device
      * function in order to inject allocas */
@@ -55,24 +55,28 @@ protected:
 
     /** Nodes for which we need to override default behavior for the GPU runtime */
     // @{
-    void visit(const For *);
-    void visit(const Allocate *);
-    void visit(const Free *);
-    void visit(const AssertStmt *);
+    virtual void visit(const Call *) override;
+    void visit(const For *) override;
+    void visit(const Allocate *) override;
+    void visit(const Free *) override;
+    void visit(const AssertStmt *) override;
+    void visit(const Load *) override;
+    void visit(const Store *) override;
     // @}
 
     std::string march() const;
-    std::string mcpu() const;
-    std::string mattrs() const;
-    bool use_soft_float_abi() const;
-    int native_vector_bits() const;
-    bool promote_indices() const {return false;}
+    std::string mcpu() const override;
+    std::string mattrs()  const override;
+    bool use_soft_float_abi()  const override;
+    int native_vector_bits()  const override;
+    bool promote_indices()  const override {return false;}
 
     /** Map from simt variable names (e.g. foo.__block_id_x) to the llvm
      * ptx intrinsic functions to call to get them. */
     std::string simt_intrinsic(const std::string &name);
 };
 
-}}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

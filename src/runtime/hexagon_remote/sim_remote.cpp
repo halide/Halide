@@ -11,93 +11,31 @@
 #include "sim_protocol.h"
 #include "log.h"
 #include "dlib.h"
+#include "known_symbols.h"
 
 typedef halide_hexagon_remote_handle_t handle_t;
 typedef halide_hexagon_remote_buffer buffer;
 
 const int hvx_alignment = 128;
 
-extern "C" {
-
-// Provide an implementation of qurt to redirect to the appropriate
-// simulator calls.
-int qurt_hvx_lock(int mode) {
-    SIM_ACQUIRE_HVX;
-    if (mode == 0) {
-        SIM_CLEAR_HVX_DOUBLE_MODE;
-    } else {
-        SIM_SET_HVX_DOUBLE_MODE;
+// memalign() on the Simulator is unreliable and can apparently return
+// overlapping areas. Roll our own version that is based on malloc().
+static void *aligned_malloc(size_t alignment, size_t x) {
+    void *orig = malloc(x + alignment);
+    if (!orig) {
+        return NULL;
     }
-    return 0;
+    // We want to store the original pointer prior to the pointer we return.
+    void *ptr = (void *)(((size_t)orig + alignment + sizeof(void*) - 1) & ~(alignment - 1));
+    ((void **)ptr)[-1] = orig;
+    return ptr;
 }
 
-int qurt_hvx_unlock() {
-    SIM_RELEASE_HVX;
-    return 0;
+static void aligned_free(void *ptr) {
+    if (ptr) {
+        free(((void**)ptr)[-1]);
+    }
 }
-
-// More symbols we need to support from halide_get_symbol.
-extern int __hexagon_muldf3;
-extern int __hexagon_divdf3;
-extern int __hexagon_adddf3;
-extern int __hexagon_divsf3;
-extern int __hexagon_udivdi3;
-extern int __hexagon_udivsi3;
-extern int __hexagon_umodsi3;
-extern int __hexagon_divsi3;
-extern int __hexagon_modsi3;
-extern int __hexagon_subdf3;
-extern int sqrtf;
-extern int sqrt;
-extern int expf;
-extern int exp;
-extern int logf;
-extern int log;
-extern int powf;
-extern int pow;
-extern int sinf;
-extern int sin;
-extern int cosf;
-extern int cos;
-extern int tanf;
-extern int tan;
-extern int asinf;
-extern int asin;
-extern int acosf;
-extern int acos;
-extern int atanf;
-extern int atan;
-extern int atan2f;
-extern int atan2;
-extern int sinhf;
-extern int sinh;
-extern int coshf;
-extern int cosh;
-extern int tanhf;
-extern int tanh;
-extern int asinhf;
-extern int asinh;
-extern int acoshf;
-extern int acosh;
-extern int atanhf;
-extern int atanh;
-extern int nearbyintf;
-extern int nearbyint;
-extern int truncf;
-extern int trunc;
-extern int floorf;
-extern int floor;
-extern int ceilf;
-extern int ceil;
-
-extern int write;
-
-// These might not always be available.
-__attribute__((weak)) extern int mmap;
-__attribute__((weak)) extern int mprotect;
-__attribute__((weak)) extern int munmap;
-
-}  // extern "C"
 
 void log_printf(const char *fmt, ...) {
     va_list ap;
@@ -105,6 +43,8 @@ void log_printf(const char *fmt, ...) {
     vfprintf(stderr, fmt, ap);
     va_end(ap);
 }
+
+extern "C" {
 
 void halide_print(void *user_context, const char *str) {
     log_printf("%s", str);
@@ -115,133 +55,25 @@ void halide_error(void *user_context, const char *str) {
     halide_print(user_context, str);
 }
 
-void *halide_malloc(void *user_context, size_t x) {
-    return memalign(hvx_alignment, x);
-}
-
-void halide_free(void *user_context, void *ptr) {
-    free(ptr);
-}
-
-int halide_do_task(void *user_context, halide_task_t f, int idx,
-                   uint8_t *closure) {
-    return f(user_context, idx, closure);
-}
-
-int halide_do_par_for(void *user_context, halide_task_t f,
-                      int min, int size, uint8_t *closure) {
-    for (int x = min; x < min + size; x++) {
-        int result = halide_do_task(user_context, f, x, closure);
-        if (result) {
-            return result;
-        }
-    }
-    return 0;
-}
-
-void halide_mutex_destroy(halide_mutex *) {}
+// These might not always be available.
+__attribute__((weak)) extern int mmap;
+__attribute__((weak)) extern int mprotect;
+__attribute__((weak)) extern int munmap;
 
 void *halide_get_symbol(const char *name) {
-    // dlsym is just a stub on the simulator, so we need to support
-    // the symbols we need manually.
-    struct known_sym {
-        const char *name;
-        char *addr;
-    };
-    static known_sym known_syms[] = {
-        {"abort", (char *)(&abort)},
-        {"atoi", (char *)(&atoi)},
-        {"close", (char *)(&close)},
-        {"exit", (char *)(&exit)},
-        {"fclose", (char *)(&fclose)},
-        {"fileno", (char *)(&fileno)},
-        {"fopen", (char *)(&fopen)},
-        {"free", (char *)(&free)},
-        {"fwrite", (char *)(&fwrite)},
-        {"getenv", (char *)(&getenv)},
-        {"malloc", (char *)(&malloc)},
-        {"memcmp", (char *)(&memcmp)},
-        {"memcpy", (char *)(&memcpy)},
-        {"memmove", (char *)(&memmove)},
-        {"memset", (char *)(&memset)},
+    // dlsym doesn't do anything on the simulator, and we need to
+    // support mmap/mprotect/mnmap if needed.
+    static known_symbol known_syms[] = {
         {"mmap", (char *)(&mmap)},
         {"mprotect", (char *)(&mprotect)},
         {"munmap", (char *)(&munmap)},
-        {"strcmp", (char *)(&strcmp)},
-        {"strchr", (char *)(char *(*)(char *, int))(&strchr)},
-        {"strstr", (char *)(char *(*)(char *, const char *))(&strstr)},
-        {"strncmp", (char *)(&strncmp)},
-        {"strncpy", (char *)(&strncpy)},
-        {"write", (char *)(&write)},
-
-        {"halide_mutex_destroy", (char *)(&halide_mutex_destroy)},
-        {"halide_profiler_get_state", (char *)(&halide_profiler_get_state)},
-        {"qurt_hvx_lock", (char *)(&qurt_hvx_lock)},
-        {"qurt_hvx_unlock", (char *)(&qurt_hvx_unlock)},
-
-        {"__hexagon_divdf3", (char *)(&__hexagon_divdf3)},
-        {"__hexagon_muldf3", (char *)(&__hexagon_muldf3)},
-        {"__hexagon_adddf3", (char *)(&__hexagon_adddf3)},
-        {"__hexagon_subdf3", (char *)(&__hexagon_subdf3)},
-        {"__hexagon_divsf3", (char *)(&__hexagon_divsf3)},
-        {"__hexagon_udivdi3", (char *)(&__hexagon_udivdi3)},
-        {"__hexagon_udivsi3", (char *)(&__hexagon_udivsi3)},
-        {"__hexagon_umodsi3", (char *)(&__hexagon_umodsi3)},
-        {"__hexagon_divsi3", (char *)(&__hexagon_divsi3)},
-        {"__hexagon_modsi3", (char *)(&__hexagon_modsi3)},
-        {"__hexagon_sqrtf", (char *)(&sqrtf)},
-        {"sqrtf", (char *)(&sqrtf)},
-        {"sqrt", (char *)(&sqrt)},
-        {"sinf", (char *)(&sinf)},
-        {"expf", (char *)(&expf)},
-        {"exp", (char *)(&exp)},
-        {"logf", (char *)(&logf)},
-        {"log", (char *)(&log)},
-        {"powf", (char *)(&powf)},
-        {"pow", (char *)(&pow)},
-        {"sin", (char *)(&sin)},
-        {"cosf", (char *)(&cosf)},
-        {"cos", (char *)(&cos)},
-        {"tanf", (char *)(&tanf)},
-        {"tan", (char *)(&tan)},
-        {"asinf", (char *)(&asinf)},
-        {"asin", (char *)(&asin)},
-        {"acosf", (char *)(&acosf)},
-        {"acos", (char *)(&acos)},
-        {"atanf", (char *)(&atanf)},
-        {"atan", (char *)(&atan)},
-        {"atan2f", (char *)(&atan2f)},
-        {"atan2", (char *)(&atan2)},
-        {"sinhf", (char *)(&sinhf)},
-        {"sinh", (char *)(&sinh)},
-        {"coshf", (char *)(&coshf)},
-        {"cosh", (char *)(&cosh)},
-        {"tanhf", (char *)(&tanhf)},
-        {"tanh", (char *)(&tanh)},
-        {"asinhf", (char *)(&asinhf)},
-        {"asinh", (char *)(&asinh)},
-        {"acoshf", (char *)(&acoshf)},
-        {"acosh", (char *)(&acosh)},
-        {"atanhf", (char *)(&atanhf)},
-        {"atanh", (char *)(&atanh)},
-        {"nearbyintf", (char *)(&nearbyintf)},
-        {"nearbyint", (char *)(&nearbyint)},
-        {"truncf", (char *)(&truncf)},
-        {"trunc", (char *)(&trunc)},
-        {"floorf", (char *)(&floorf)},
-        {"floor", (char *)(&floor)},
-        {"ceilf", (char *)(&ceilf)},
-        {"ceil", (char *)(&ceil)},
-        {NULL, NULL} // Null terminator.
     };
-
-    for (int i = 0; known_syms[i].name; i++) {
-        if (strncmp(name, known_syms[i].name, strlen(known_syms[i].name)+1) == 0) {
-            return known_syms[i].addr;
-        }
+    void *mmap_sym = lookup_symbol(name, known_syms);
+    if (mmap_sym) {
+        return mmap_sym;
     }
 
-    return dlsym(RTLD_DEFAULT, name);
+    return get_known_symbol(name);
 }
 
 void *halide_load_library(const char *name) {
@@ -252,16 +84,9 @@ void *halide_get_library_symbol(void *lib, const char *name) {
     return dlsym(lib, name);
 }
 
-typedef int (*set_runtime_t)(halide_malloc_t user_malloc,
-                             halide_free_t custom_free,
-                             halide_print_t print,
-                             halide_error_handler_t error_handler,
-                             halide_do_par_for_t do_par_for,
-                             halide_do_task_t do_task,
-                             void *(*)(const char *),
-                             void *(*)(const char *),
-                             void *(*)(void *, const char *));
 __attribute__ ((weak)) void* dlopenbuf(const char*filename, const char* data, int size, int perms);
+
+}  // extern "C"
 
 static void dllib_init() {
     // The simulator needs this call to enable dlopen to work...
@@ -269,18 +94,13 @@ static void dllib_init() {
     dlinit(3, const_cast<char**>(builtin));
 }
 
-int initialize_kernels(const unsigned char *code, int codeLen, bool use_dlopenbuf, handle_t *module_ptr) {
+int load_library(const char *soname, const unsigned char *code, int codeLen, bool use_dlopenbuf, handle_t *module_ptr) {
     void *lib = NULL;
     if (use_dlopenbuf) {
         if (!dlopenbuf) {
             log_printf("dlopenbuf not available.\n");
             return -1;
         }
-        // We need a unique soname, or dlopenbuf will return a
-        // previously opened library.
-        static int unique_id = 0;
-        char soname[256];
-        sprintf(soname, "libhalide_kernels%04d.so", __sync_fetch_and_add(&unique_id, 1));
 
         // Open the library
         dllib_init();
@@ -300,43 +120,6 @@ int initialize_kernels(const unsigned char *code, int codeLen, bool use_dlopenbu
         }
     }
 
-    // Initialize the runtime. The Hexagon runtime can't call any
-    // system functions (because we can't link them), so we put all
-    // the implementations that need to do so here, and pass poiners
-    // to them in here.
-    set_runtime_t set_runtime;
-    if (use_dlopenbuf) {
-        set_runtime = (set_runtime_t)dlsym(lib, "halide_noos_set_runtime");
-    } else {
-        set_runtime = (set_runtime_t)mmap_dlsym(lib, "halide_noos_set_runtime");
-    }
-    if (!set_runtime) {
-        if (use_dlopenbuf) {
-            dlclose(lib);
-        } else {
-            mmap_dlclose(lib);
-        }
-        halide_print(NULL, "halide_noos_set_runtime not found in shared object\n");
-        return -1;
-    }
-    int result = set_runtime(halide_malloc,
-                             halide_free,
-                             halide_print,
-                             halide_error,
-                             halide_do_par_for,
-                             halide_do_task,
-                             halide_get_symbol,
-                             halide_load_library,
-                             halide_get_library_symbol);
-    if (result != 0) {
-        if (use_dlopenbuf) {
-            dlclose(lib);
-        } else {
-            mmap_dlclose(lib);
-        }
-        halide_print(NULL, "set_runtime failed\n");
-        return result;
-    }
     *module_ptr = reinterpret_cast<handle_t>(lib);
     return 0;
 }
@@ -390,7 +173,7 @@ int run(handle_t module_ptr, handle_t function,
     return pipeline(args);
 }
 
-int release_kernels(handle_t module_ptr, bool use_dlopenbuf) {
+int release_library(handle_t module_ptr, bool use_dlopenbuf) {
     if (use_dlopenbuf) {
         dlclose(reinterpret_cast<void *>(module_ptr));
     } else {
@@ -442,18 +225,19 @@ int main(int argc, const char **argv) {
         case Message::None:
             break;
         case Message::Alloc:
-            set_rpc_return(reinterpret_cast<int>(memalign(hvx_alignment, RPC_ARG(0))));
+            set_rpc_return(reinterpret_cast<int>(aligned_malloc(hvx_alignment, RPC_ARG(0))));
             break;
         case Message::Free:
-            free(reinterpret_cast<void*>(RPC_ARG(0)));
+            aligned_free(reinterpret_cast<void*>(RPC_ARG(0)));
             set_rpc_return(0);
             break;
-        case Message::InitKernels:
-            set_rpc_return(initialize_kernels(
-                reinterpret_cast<unsigned char*>(RPC_ARG(0)),
-                RPC_ARG(1),
-                RPC_ARG(2),
-                reinterpret_cast<handle_t*>(RPC_ARG(3))));
+        case Message::LoadLibrary:
+            set_rpc_return(load_library(
+                reinterpret_cast<char*>(RPC_ARG(0)),
+                reinterpret_cast<unsigned char*>(RPC_ARG(2)),
+                RPC_ARG(3),
+                RPC_ARG(4),
+                reinterpret_cast<handle_t*>(RPC_ARG(5))));
             break;
         case Message::GetSymbol:
             set_rpc_return(get_symbol(
@@ -473,8 +257,8 @@ int main(int argc, const char **argv) {
                 reinterpret_cast<const buffer*>(RPC_ARG(6)),
                 RPC_ARG(7)));
             break;
-        case Message::ReleaseKernels:
-            set_rpc_return(release_kernels(
+        case Message::ReleaseLibrary:
+            set_rpc_return(release_library(
                 static_cast<handle_t>(RPC_ARG(0)),
                 RPC_ARG(1)));
             break;

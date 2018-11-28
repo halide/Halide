@@ -11,6 +11,8 @@ extern "C" {
  *  Routines specific to the Halide Hexagon host-side runtime.
  */
 
+#define HALIDE_RUNTIME_HEXAGON
+
 typedef int halide_hexagon_handle_t;
 
 extern const struct halide_device_interface_t *halide_hexagon_device_interface();
@@ -34,10 +36,9 @@ extern int halide_hexagon_wrap_device_handle(void *user_context, struct halide_b
  * halide_buffer_t that halide_hexagon_wrap_device_handle was
  * previously called on. Frees any storage associated with the binding
  * of the halide_buffer_t and the device handle, but does not free the
- * device handle. The previously wrapped device handle is
- * returned. The device field of the halide_buffer_t will be NULL on
- * return. */
-extern void *halide_hexagon_detach_device_handle(void *user_context, struct halide_buffer_t *buf);
+ * device handle. The device field of the halide_buffer_t will be NULL
+ * on return. */
+extern int halide_hexagon_detach_device_handle(void *user_context, struct halide_buffer_t *buf);
 
 /** Return the underlying device handle for a buffer_t. If there is
  * no device memory (dev field is NULL), this returns 0. */
@@ -58,10 +59,13 @@ extern void halide_hexagon_power_hvx_off_as_destructor(void *user_context, void 
 
 /** Power modes for Hexagon. */
 typedef enum halide_hexagon_power_mode_t {
-    halide_hexagon_power_low     = 0,
-    halide_hexagon_power_nominal = 1,
-    halide_hexagon_power_turbo   = 2,
-    halide_hexagon_power_default = 3, /// Resets power to its default state.
+    halide_hexagon_power_low          = 0,
+    halide_hexagon_power_nominal      = 1,
+    halide_hexagon_power_turbo        = 2,
+    halide_hexagon_power_default      = 3, /// Resets power to its default state.
+    halide_hexagon_power_low_plus     = 4,
+    halide_hexagon_power_low_2        = 5,
+    halide_hexagon_power_nominal_plus = 6,
 
     // These are deprecated.
     halide_hvx_power_low     = halide_hexagon_power_low,
@@ -114,7 +118,8 @@ extern int halide_hexagon_set_performance(void *user_context, halide_hexagon_pow
 // @{
 extern int halide_hexagon_initialize_kernels(void *user_context,
                                              void **module_ptr,
-                                             const uint8_t *code, uint64_t code_size);
+                                             const uint8_t *code, uint64_t code_size,
+                                             const uint8_t *runtime, uint64_t runtime_size);
 extern int halide_hexagon_run(void *user_context,
                               void *module_ptr,
                               const char *name,

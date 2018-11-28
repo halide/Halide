@@ -31,7 +31,7 @@ int main() {
     result.copy_to_host();
 
     // Check the result.
-    if (!Testing::check_result<float>(result, 1e-3, [&](int x, int y, int c) {
+    if (!Testing::check_result<float>(result, 1e-3f, [&](int x, int y, int c) {
             float temp = 0.0f;
             for (int r = 0; r < 5; r++) {
                 temp += input(std::min(x + r, input.width() - 1), y, c);

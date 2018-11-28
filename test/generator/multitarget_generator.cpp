@@ -4,18 +4,18 @@ namespace {
 
 class Multitarget : public Halide::Generator<Multitarget> {
 public:
-    Func build() {
-        Var x, y; 
-        Func f("f");
+    Output<Buffer<uint32_t>> output{"output", 2};
+
+    void generate() {
+        Var x, y;
         if (get_target().has_feature(Target::Debug)) {
-            f(x, y) = cast<uint32_t>((int32_t)0xdeadbeef);
+            output(x, y) = cast<uint32_t>((int32_t)0xdeadbeef);
         } else {
-            f(x, y) = cast<uint32_t>((int32_t)0xf00dcafe);
+            output(x, y) = cast<uint32_t>((int32_t)0xf00dcafe);
         }
-        return f;
     }
 };
 
-Halide::RegisterGenerator<Multitarget> register_my_gen{"multitarget"};
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(Multitarget, multitarget)

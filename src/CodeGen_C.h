@@ -36,12 +36,15 @@ public:
               Target target,
               OutputKind output_kind = CImplementation,
               const std::string &include_guard = "");
-    ~CodeGen_C();
+    ~CodeGen_C() override;
 
     /** Emit the declarations contained in the module as C code. */
     void compile(const Module &module);
 
-    EXPORT static void test();
+    /** The target we're generating code for */
+    const Target &get_target() const { return target; }
+
+    static void test();
 
 protected:
 
@@ -68,6 +71,9 @@ protected:
      * resulting var */
     std::string print_expr(Expr);
 
+    /** Like print_expr, but cast the Expr to the given Type */
+    std::string print_cast_expr(const Type &, Expr);
+
     /** Emit a statement */
     void print_stmt(Stmt);
 
@@ -93,8 +99,18 @@ protected:
     /** Emit a version of a string that is a valid identifier in C (. is replaced with _) */
     virtual std::string print_name(const std::string &);
 
+    /** Add typedefs for vector types. Not needed for OpenCL, might
+     * use different syntax for other C-like languages. */
+    virtual void add_vector_typedefs(const std::set<Type> &vector_types);
+
+    /** Bottleneck to allow customization of calls to generic Extern/PureExtern calls.  */
+    virtual std::string print_extern_call(const Call *op);
+
+    /** Convert a vector Expr into a series of scalar Exprs, then reassemble into vector of original type.  */
+    std::string print_scalarized_expr(Expr e);
+
     /** Emit an SSA-style assignment, and set id to the freshly generated name. Return id. */
-    std::string print_assignment(Type t, const std::string &rhs);
+    virtual std::string print_assignment(Type t, const std::string &rhs);
 
     /** Return true if only generating an interface, which may be extern "C" or C++ */
     bool is_header() {
@@ -122,16 +138,13 @@ protected:
     Scope<Allocation> allocations;
 
     /** Track which allocations actually went on the heap. */
-    Scope<int> heap_allocations;
+    Scope<> heap_allocations;
 
     /** True if there is a void * __user_context parameter in the arguments. */
     bool have_user_context;
 
     /** Track current calling convention scope. */
     bool extern_c_open;
-
-    /** True if at least one vector type is used. */
-    bool uses_vector_types;
 
     /** True if at least one gpu-based for loop is used. */
     bool uses_gpu_for_loops;
@@ -147,50 +160,71 @@ protected:
 
     using IRPrinter::visit;
 
-    void visit(const Variable *);
-    void visit(const IntImm *);
-    void visit(const UIntImm *);
-    void visit(const StringImm *);
-    void visit(const FloatImm *);
-    void visit(const Cast *);
-    void visit(const Add *);
-    void visit(const Sub *);
-    void visit(const Mul *);
-    void visit(const Div *);
-    void visit(const Mod *);
-    void visit(const Max *);
-    void visit(const Min *);
-    void visit(const EQ *);
-    void visit(const NE *);
-    void visit(const LT *);
-    void visit(const LE *);
-    void visit(const GT *);
-    void visit(const GE *);
-    void visit(const And *);
-    void visit(const Or *);
-    void visit(const Not *);
-    void visit(const Call *);
-    void visit(const Select *);
-    void visit(const Load *);
-    void visit(const Store *);
-    void visit(const Let *);
-    void visit(const LetStmt *);
-    void visit(const AssertStmt *);
-    void visit(const ProducerConsumer *);
-    void visit(const For *);
-    void visit(const Provide *);
-    void visit(const Allocate *);
-    void visit(const Free *);
-    void visit(const Realize *);
-    void visit(const IfThenElse *);
-    void visit(const Evaluate *);
-    void visit(const Shuffle *);
-    void visit(const Prefetch *);
+    void visit(const Variable *) override;
+    void visit(const IntImm *) override;
+    void visit(const UIntImm *) override;
+    void visit(const StringImm *) override;
+    void visit(const FloatImm *) override;
+    void visit(const Cast *) override;
+    void visit(const Add *) override;
+    void visit(const Sub *) override;
+    void visit(const Mul *) override;
+    void visit(const Div *) override;
+    void visit(const Mod *) override;
+    void visit(const Max *) override;
+    void visit(const Min *) override;
+    void visit(const EQ *) override;
+    void visit(const NE *) override;
+    void visit(const LT *) override;
+    void visit(const LE *) override;
+    void visit(const GT *) override;
+    void visit(const GE *) override;
+    void visit(const And *) override;
+    void visit(const Or *) override;
+    void visit(const Not *) override;
+    void visit(const Call *) override;
+    void visit(const Select *) override;
+    void visit(const Load *) override;
+    void visit(const Store *) override;
+    void visit(const Let *) override;
+    void visit(const LetStmt *) override;
+    void visit(const AssertStmt *) override;
+    void visit(const ProducerConsumer *) override;
+    void visit(const For *) override;
+    void visit(const Ramp *) override;
+    void visit(const Broadcast *) override;
+    void visit(const Provide *) override;
+    void visit(const Allocate *) override;
+    void visit(const Free *) override;
+    void visit(const Realize *) override;
+    void visit(const IfThenElse *) override;
+    void visit(const Evaluate *) override;
+    void visit(const Shuffle *) override;
+    void visit(const Prefetch *) override;
+    void visit(const Fork *) override;
+    void visit(const Acquire *) override;
 
     void visit_binop(Type t, Expr a, Expr b, const char *op);
+
+    template<typename T>
+    static std::string with_sep(const std::vector<T> &v, const std::string &sep) {
+        std::ostringstream o;
+        for (size_t i = 0; i < v.size(); ++i) {
+            if (i > 0) {
+                o << sep;
+            }
+            o << v[i];
+        }
+        return o.str();
+    }
+
+    template<typename T>
+    static std::string with_commas(const std::vector<T> &v) {
+        return with_sep<T>(v, ", ");
+    }
 };
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

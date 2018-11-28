@@ -315,9 +315,9 @@ bool mul(int vector_width, ScheduleVariant scheduling, const Target &target) {
             T1 ai = a(i, j);
             T2 bi = b(i, j);
             RT ri = r(i, j);
-            RT correct = RT(ai)*RT(bi);
+            RT correct = BIG(ai)*BIG(bi);
             if (correct != ri && (ecount++) < 10) {
-                std::cerr << ai << "*" << bi << " -> " << ri << " != " << correct << "\n";
+                std::cerr << (int64_t)ai << "*" << (int64_t)bi << " -> " << (int64_t)ri << " != " << (int64_t)correct << "\n";
                 success = false;
             }
 
@@ -404,7 +404,7 @@ bool div_mod(int vector_width, ScheduleVariant scheduling, const Target &target)
             T qi = q(i, j);
             T ri = r(i, j);
 
-            if (qi*bi + ri != ai && (ecount++) < 10) {
+            if (BIG(qi)*BIG(bi) + ri != ai && (ecount++) < 10) {
                 std::cerr << "(a/b)*b + a%b != a; a, b = " << (int64_t)ai
                           << ", " << (int64_t)bi
                           << "; q, r = " << (int64_t)qi
@@ -522,7 +522,7 @@ bool test_mul(int vector_width, ScheduleVariant scheduling, Target target) {
     // multiplications, but it covers all of the special cases we
     // have in Halide.
     success &= mul<uint16_t, uint32_t, uint32_t, uint64_t>(vector_width, scheduling, target);
-    success &= mul<int16_t, int32_t, int32_t, uint64_t>(vector_width, scheduling, target);
+    success &= mul<int16_t, int32_t, int32_t, int64_t>(vector_width, scheduling, target);
     success &= mul<uint16_t, int32_t, int32_t, uint64_t>(vector_width, scheduling, target);
 
     return success;
@@ -553,7 +553,8 @@ int main(int argc, char **argv) {
 
     // Test multiplication
     std::vector<int> mul_vector_widths = { 1 };
-    if (target.has_feature(Target::Metal)) {
+    if (target.has_feature(Target::Metal) ||
+        target.has_feature(Target::D3D12Compute)) {
         for (int i = 2; i <= 4; i *= 2) {
             mul_vector_widths.push_back(i);
         }

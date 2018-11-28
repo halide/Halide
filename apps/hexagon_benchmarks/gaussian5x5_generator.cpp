@@ -7,6 +7,9 @@ public:
     Input<Buffer<uint8_t>> input{"input", 2};
     Output<Buffer<uint8_t>> output{"output", 2};
 
+    GeneratorParam<bool> use_parallel_sched{"use_parallel_sched", true};
+    GeneratorParam<bool> use_prefetch_sched{"use_prefetch_sched", true};
+
     void generate() {
         bounded_input(x, y) = BoundaryConditions::repeat_edge(input)(x, y);
 
@@ -48,6 +51,13 @@ public:
                 .tile(x, y, x, y, xi, yi, vector_size, 4, TailStrategy::RoundUp)
                 .vectorize(xi)
                 .unroll(yi);
+            if (use_prefetch_sched) {
+                output.prefetch(input, y, 2);
+            }
+            if (use_parallel_sched) {
+                Var yo;
+                output.split(y, yo, y, 128).parallel(yo);
+            }
         } else {
             const int vector_size = natural_vector_size<uint8_t>();
             output
@@ -60,4 +70,4 @@ private:
     Var x{"x"}, y{"y"};
 };
 
-HALIDE_REGISTER_GENERATOR(Gaussian5x5, "gaussian5x5");
+HALIDE_REGISTER_GENERATOR(Gaussian5x5, gaussian5x5)

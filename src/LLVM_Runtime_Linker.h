@@ -5,8 +5,8 @@
  * Support for linking LLVM modules that comprise the runtime.
  */
 
-#include <memory>
 #include "Target.h"
+#include <memory>
 
 namespace llvm {
 class Module;

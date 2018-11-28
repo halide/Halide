@@ -18,7 +18,7 @@ namespace Internal {
  * close of their Allocate node. */
 Stmt inject_early_frees(Stmt s);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

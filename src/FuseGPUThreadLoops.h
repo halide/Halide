@@ -1,5 +1,5 @@
-#ifndef HALIDE_SYNCTHREADS_H
-#define HALIDE_SYNCTHREADS_H
+#ifndef HALIDE_FUSE_GPU_THREAD_LOOPS_H
+#define HALIDE_FUSE_GPU_THREAD_LOOPS_H
 
 /** \file
  * Defines the lowering pass that fuses and normalizes loops over gpu
@@ -22,7 +22,7 @@ Stmt zero_gpu_loop_mins(Stmt s);
  * array. */
 Stmt fuse_gpu_thread_loops(Stmt s);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

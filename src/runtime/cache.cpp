@@ -3,13 +3,6 @@
 #include "printer.h"
 #include "scoped_mutex_lock.h"
 
-// This is temporary code. In particular, the hash table is stupid and
-// currently thread safety is accomplished via large granularity spin
-// locks. It is mainly intended to prove the programming model and
-// runtime interface for memoization. We'll improve the implementation
-// later. In the meantime, on some platforms it can be replaced by a
-// platform specific LRU cache such as libcache from Apple.
-
 namespace Halide { namespace Runtime { namespace Internal {
 
 #define CACHE_DEBUGGING 0
@@ -72,14 +65,6 @@ WEAK bool buffer_has_shape(const halide_buffer_t *buf, const halide_dimension_t 
     return true;
 }
 
-// Each host block has extra space to store a header just before the contents.
-// 16 is chosen to keep that alignment.
-// The header holds the cache key hash and pointer to the hash entry.
-//
-// This is an optimization the number of cycles it takes for the cache
-// to operate.
-const size_t extra_bytes_host_bytes = 16;
-
 struct CacheEntry {
     CacheEntry *next;
     CacheEntry *more_recent;
@@ -110,8 +95,19 @@ struct CacheBlockHeader {
     uint32_t hash;
 };
 
+// Each host block has extra space to store a header just before the
+// contents. This block must respect the same alignment as
+// halide_malloc, because it offsets the return value from
+// halide_malloc. The header holds the cache key hash and pointer to
+// the hash entry.
+WEAK __attribute((always_inline)) size_t header_bytes() {
+    size_t s = sizeof(CacheBlockHeader);
+    size_t mask = halide_malloc_alignment() - 1;
+    return (s + mask) & ~mask;
+}
+
 WEAK CacheBlockHeader *get_pointer_to_header(uint8_t * host) {
-    return (CacheBlockHeader *)(host - extra_bytes_host_bytes);
+    return (CacheBlockHeader *)(host - header_bytes());
 }
 
 WEAK bool CacheEntry::init(const uint8_t *cache_key, size_t cache_key_size,
@@ -184,12 +180,12 @@ WEAK void CacheEntry::destroy() {
 WEAK uint32_t djb_hash(const uint8_t *key, size_t key_size)  {
     uint32_t h = 5381;
     for (size_t i = 0; i < key_size; i++) {
-      h = (h << 5) + h + key[i];
+        h = (h << 5) + h + key[i];
     }
     return h;
 }
 
-WEAK halide_mutex memoization_lock;
+WEAK halide_mutex memoization_lock = { { 0 } };
 
 const size_t kHashTableSize = 256;
 
@@ -395,8 +391,7 @@ WEAK int halide_memoization_cache_lookup(void *user_context, const uint8_t *cach
     for (int32_t i = 0; i < tuple_count; i++) {
         halide_buffer_t *buf = tuple_buffers[i];
 
-        // See documentation on extra_bytes_host_bytes
-        buf->host = ((uint8_t *)halide_malloc(user_context, buf->size_in_bytes() + extra_bytes_host_bytes));
+        buf->host = ((uint8_t *)halide_malloc(user_context, buf->size_in_bytes() + header_bytes()));
         if (buf->host == NULL) {
             for (int32_t j = i; j > 0; j--) {
                 halide_free(user_context, get_pointer_to_header(tuple_buffers[j - 1]->host));
@@ -404,7 +399,7 @@ WEAK int halide_memoization_cache_lookup(void *user_context, const uint8_t *cach
             }
             return -1;
         }
-        buf->host += extra_bytes_host_bytes;
+        buf->host += header_bytes();
         CacheBlockHeader *header = get_pointer_to_header(buf->host);
         header->hash = h;
         header->entry = NULL;
@@ -563,7 +558,6 @@ WEAK void halide_memoization_cache_cleanup() {
     current_cache_size = 0;
     most_recently_used = NULL;
     least_recently_used = NULL;
-    halide_mutex_destroy(&memoization_lock);
 }
 
 namespace {

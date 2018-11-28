@@ -11,6 +11,8 @@ extern "C" {
  *  Routines specific to the Halide Metal runtime.
  */
 
+#define HALIDE_RUNTIME_METAL
+
 extern const struct halide_device_interface_t *halide_metal_device_interface();
 
 /** These are forward declared here to allow clients to override the
@@ -41,17 +43,16 @@ extern int halide_metal_run(void *user_context,
  * routine is called. This call can fail due to running out of memory
  * or being passed an invalid buffer. The device and host dirty bits
  * are left unmodified. */
-extern int halide_metal_wrap_buffer(void *user_context, struct halide_buffer_t *buf, uintptr_t buffer);
+extern int halide_metal_wrap_buffer(void *user_context, struct halide_buffer_t *buf, uint64_t buffer);
 
-/** Disconnect a halide_buffer_t from the memory it was previously wrapped
- * around. Should only be called for a halide_buffer_t that
+/** Disconnect a halide_buffer_t from the memory it was previously
+ * wrapped around. Should only be called for a halide_buffer_t that
  * halide_metal_wrap_buffer was previously called on. Frees any
- * storage associated with the binding of the halide_buffer_t and the buffer,
- * but does not free the MTLBuffer. The previously wrapped
- * buffer is returned. The dev field of the halide_buffer_t will be NULL on
- * return.
+ * storage associated with the binding of the halide_buffer_t and the
+ * buffer, but does not free the MTLBuffer. The dev field of the
+ * halide_buffer_t will be NULL on return.
  */
-extern uintptr_t halide_metal_detach_buffer(void *user_context, struct halide_buffer_t *buf);
+extern int halide_metal_detach_buffer(void *user_context, struct halide_buffer_t *buf);
 
 /** Return the underlying MTLBuffer for a halide_buffer_t. This buffer must be
  * valid on an Metal device, or not have any associated device
@@ -60,13 +61,16 @@ extern uintptr_t halide_metal_detach_buffer(void *user_context, struct halide_bu
  */
 extern uintptr_t halide_metal_get_buffer(void *user_context, struct halide_buffer_t *buf);
 
+/** Returns the offset associated with the Metal Buffer allocation via device_crop or device_slice. */
+extern uint64_t halide_metal_get_crop_offset(void *user_context, struct halide_buffer_t *buf);
+
 struct halide_metal_device;
 struct halide_metal_command_queue;
 
 /** This prototype is exported as applications will typically need to
  * replace it to get Halide filters to execute on the same device and
  * command queue used for other purposes. The halide_metal_device is an
- * id <MTLDevice> and halide_metal_command_queue is an id <MTLCommandQueue>.
+ * id \<MTLDevice\> and halide_metal_command_queue is an id \<MTLCommandQueue\>.
  * No reference counting is done by Halide on these objects. They must remain
  * valid until all off the following are true:
  * - A balancing halide_metal_release_context has occurred for each

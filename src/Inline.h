@@ -14,16 +14,16 @@ namespace Internal {
  * be inlined, it must not have any specializations (i.e. it can only have one
  * values definition). */
 // @{
-Stmt inline_function(Stmt, Function);
-Expr inline_function(Expr, Function);
+Stmt inline_function(Stmt s, Function f);
+Expr inline_function(Expr e, Function f);
+void inline_function(Function caller, Function f);
 // @}
 
 /** Check if the schedule of an inlined function is legal, throwing an error
  * if it is not. */
 void validate_schedule_inlined_function(Function f);
 
-}
-}
-
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

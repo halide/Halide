@@ -30,8 +30,7 @@ struct Test {
 
         Buffer<float> out = g.realize(W, H);
 
-        // best of 10 x 5 runs.
-        time = benchmark(10, 5, [&]() {
+        time = benchmark([&]() {
                 g.realize(out);
                 out.device_sync();
         });
@@ -56,8 +55,7 @@ struct Test {
 
         Buffer<float> out = g.realize(W, H);
 
-        // best of 3 x 3 runs.
-        time = benchmark(3, 3, [&]() {
+        time = benchmark([&]() {
                 g.realize(out);
                 out.device_sync();
         });

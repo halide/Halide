@@ -1,19 +1,19 @@
 #include "SlidingWindow.h"
+#include "Bounds.h"
+#include "Debug.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "Scope.h"
-#include "Debug.h"
-#include "Substitute.h"
 #include "IRPrinter.h"
-#include "Simplify.h"
 #include "Monotonic.h"
-#include "Bounds.h"
+#include "Scope.h"
+#include "Simplify.h"
+#include "Substitute.h"
 
 namespace Halide {
 namespace Internal {
 
-using std::string;
 using std::map;
+using std::string;
 
 namespace {
 
@@ -21,11 +21,11 @@ namespace {
 class ExprDependsOnVar : public IRVisitor {
     using IRVisitor::visit;
 
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         if (op->name == var) result = true;
     }
 
-    void visit(const Let *op) {
+    void visit(const Let *op) override {
         op->value.accept(this);
         // The name might be hidden within the body of the let, in
         // which case there's no point descending.
@@ -49,16 +49,17 @@ bool expr_depends_on_var(Expr e, string v) {
 }
 
 
-class ExpandExpr : public IRMutator {
-    using IRMutator::visit;
+class ExpandExpr : public IRMutator2 {
+    using IRMutator2::visit;
     const Scope<Expr> &scope;
 
-    void visit(const Variable *var) {
+    Expr visit(const Variable *var) override {
         if (scope.contains(var->name)) {
-            expr = scope.get(var->name);
+            Expr expr = scope.get(var->name);
             debug(3) << "Fully expanded " << var->name << " -> " << expr << "\n";
+            return expr;
         } else {
-            expr = var;
+            return var;
         }
     }
 
@@ -79,7 +80,7 @@ Expr expand_expr(Expr e, const Scope<Expr> &scope) {
 
 // Perform sliding window optimization for a function over a
 // particular serial for loop
-class SlidingWindowOnFunctionAndLoop : public IRMutator {
+class SlidingWindowOnFunctionAndLoop : public IRMutator2 {
     Function func;
     string loop_var;
     Expr loop_min;
@@ -87,7 +88,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
 
     map<string, Expr> replacements;
 
-    using IRMutator::visit;
+    using IRMutator2::visit;
 
     // Check if the dimension at index 'dim_idx' is always pure (i.e. equal to 'dim')
     // in the definition (including in its specializations)
@@ -106,12 +107,11 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
         return true;
     }
 
-    void visit(const ProducerConsumer *op) {
+    Stmt visit(const ProducerConsumer *op) override {
         if (!op->is_producer || (op->name != func.name())) {
-            IRMutator::visit(op);
+            return IRMutator2::visit(op);
         } else {
-
-            stmt = op;
+            Stmt stmt = op;
 
             // We're interested in the case where exactly one of the
             // dimensions of the buffer has a min/extent that depends
@@ -149,14 +149,23 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                         min_required = min_req;
                         max_required = max_req;
                     }
+                } else if (!min_required.defined() &&
+                           i == func.dimensions() - 1 &&
+                           is_pure(min_req) &&
+                           is_pure(max_req)) {
+                    // The footprint doesn't depend on the loop var. Just compute everything on the first loop iteration.
+                    dim = func_args[i];
+                    dim_idx = i;
+                    min_required = min_req;
+                    max_required = max_req;
                 }
             }
 
             if (!min_required.defined()) {
                 debug(3) << "Could not perform sliding window optimization of "
-                         << func.name() << " over " << loop_var << " because either zero "
-                         << "or many dimensions of the function dependended on the loop var\n";
-                return;
+                         << func.name() << " over " << loop_var << " because multiple "
+                         << "dimensions of the function dependended on the loop var\n";
+                return stmt;
             }
 
             // If the function is not pure in the given dimension, give up. We also
@@ -172,7 +181,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                 debug(3) << "Could not performance sliding window optimization of "
                          << func.name() << " over " << loop_var << " because the function "
                          << "scatters along the related axis.\n";
-                return;
+                return stmt;
             }
 
             bool can_slide_up = false;
@@ -198,7 +207,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                          << " because I couldn't prove it moved monotonically along that dimension\n"
                          << "Min is " << min_required << "\n"
                          << "Max is " << max_required << "\n";
-                return;
+                return stmt;
             }
 
             // Ok, we've isolated a function, a dimension to slide
@@ -221,16 +230,16 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                          << " there's no overlap in the region computed across iterations\n"
                          << "Min is " << min_required << "\n"
                          << "Max is " << max_required << "\n";
-                return;
+                return stmt;
             }
 
             Expr new_min, new_max;
             if (can_slide_up) {
-                new_min = select(loop_var_expr <= loop_min, min_required, likely(prev_max_plus_one));
+                new_min = select(loop_var_expr <= loop_min, min_required, likely_if_innermost(prev_max_plus_one));
                 new_max = max_required;
             } else {
                 new_min = min_required;
-                new_max = select(loop_var_expr <= loop_min, max_required, likely(prev_min_minus_one));
+                new_max = select(loop_var_expr <= loop_min, max_required, likely_if_innermost(prev_min_minus_one));
             }
 
             Expr early_stages_min_required = new_min;
@@ -271,10 +280,11 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                     stmt = LetStmt::make(n, max(var, b[dim_idx].max), stmt);
                 }
             }
+            return stmt;
         }
     }
 
-    void visit(const For *op) {
+    Stmt visit(const For *op) override {
         // It's not safe to enter an inner loop whose bounds depend on
         // the var we're sliding over.
         Expr min = expand_expr(op->min, scope);
@@ -286,21 +296,20 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             // Unpack it back into the for
             const LetStmt *l = s.as<LetStmt>();
             internal_assert(l);
-            stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, l->body);
+            return For::make(op->name, op->min, op->extent, op->for_type, op->device_api, l->body);
         } else if (is_monotonic(min, loop_var) != Monotonic::Constant ||
                    is_monotonic(extent, loop_var) != Monotonic::Constant) {
             debug(3) << "Not entering loop over " << op->name
                      << " because the bounds depend on the var we're sliding over: "
                      << min << ", " << extent << "\n";
-            stmt = op;
+            return op;
         } else {
-            IRMutator::visit(op);
-
+            return IRMutator2::visit(op);
         }
     }
 
-    void visit(const LetStmt *op) {
-        scope.push(op->name, simplify(expand_expr(op->value, scope)));
+    Stmt visit(const LetStmt *op) override {
+        ScopedBinding<Expr> bind(scope, op->name, simplify(expand_expr(op->value, scope)));
         Stmt new_body = mutate(op->body);
 
         Expr value = op->value;
@@ -312,11 +321,10 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
         }
 
         if (new_body.same_as(op->body) && value.same_as(op->value)) {
-            stmt = op;
+            return op;
         } else {
-            stmt = LetStmt::make(op->name, value, new_body);
+            return LetStmt::make(op->name, value, new_body);
         }
-        scope.pop(op->name);
     }
 
 public:
@@ -324,13 +332,12 @@ public:
 };
 
 // Perform sliding window optimization for a particular function
-class SlidingWindowOnFunction : public IRMutator {
+class SlidingWindowOnFunction : public IRMutator2 {
     Function func;
 
+    using IRMutator2::visit;
 
-    using IRMutator::visit;
-
-    void visit(const For *op) {
+    Stmt visit(const For *op) override {
         debug(3) << " Doing sliding window analysis over loop: " << op->name << "\n";
 
         Stmt new_body = op->body;
@@ -343,9 +350,9 @@ class SlidingWindowOnFunction : public IRMutator {
         }
 
         if (new_body.same_as(op->body)) {
-            stmt = op;
+            return op;
         } else {
-            stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, new_body);
+            return For::make(op->name, op->min, op->extent, op->for_type, op->device_api, new_body);
         }
     }
 
@@ -354,28 +361,26 @@ public:
 };
 
 // Perform sliding window optimization for all functions
-class SlidingWindow : public IRMutator {
+class SlidingWindow : public IRMutator2 {
     const map<string, Function> &env;
 
-    using IRMutator::visit;
+    using IRMutator2::visit;
 
-    void visit(const Realize *op) {
+    Stmt visit(const Realize *op) override {
         // Find the args for this function
         map<string, Function>::const_iterator iter = env.find(op->name);
 
         // If it's not in the environment it's some anonymous
         // realization that we should skip (e.g. an inlined reduction)
         if (iter == env.end()) {
-            IRMutator::visit(op);
-            return;
+            return IRMutator2::visit(op);
         }
 
         // If the Function in question has the same compute_at level
         // as its store_at level, skip it.
         const FuncSchedule &sched = iter->second.schedule();
         if (sched.compute_level() == sched.store_level()) {
-            IRMutator::visit(op);
-            return;
+            return IRMutator2::visit(op);
         }
 
         Stmt new_body = op->body;
@@ -387,9 +392,10 @@ class SlidingWindow : public IRMutator {
         new_body = mutate(new_body);
 
         if (new_body.same_as(op->body)) {
-            stmt = op;
+            return op;
         } else {
-            stmt = Realize::make(op->name, op->types, op->bounds, op->condition, new_body);
+            return Realize::make(op->name, op->types, op->memory_type,
+                                 op->bounds, op->condition, new_body);
         }
     }
 public:
@@ -401,5 +407,5 @@ Stmt sliding_window(Stmt s, const map<string, Function> &env) {
     return SlidingWindow(env).mutate(s);
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

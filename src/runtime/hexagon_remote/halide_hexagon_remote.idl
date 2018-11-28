@@ -1,10 +1,13 @@
+#include "AEEStdDef.idl"
+
 interface halide_hexagon_remote
 {
     typedef sequence<octet> buffer;
     typedef unsigned long handle_t;
+    typedef unsigned long long scalar_t;
 
     // Routine to initialize a module on the remote side. Returns a pointer to the module.
-    long initialize_kernels_v3(in buffer code, rout handle_t module_ptr);
+    long load_library(in sequence<char> soname, in buffer code, rout handle_t module_ptr);
 
     // Get a symbol from the module.
     // v2: return the result as an output parameter instead of a return value.
@@ -17,19 +20,22 @@ interface halide_hexagon_remote
     long power_hvx_off();
 
     // Routine to run a pipeline on the remote side.
-    long run(in handle_t module_ptr, in handle_t symbol,
-             in sequence<buffer> input_buffers,
-             rout sequence<buffer> output_buffers,
-             in sequence<buffer> input_scalars);
+    // v2: Pass all scalars in a single buffer as an array of scalar_t.
+    long run_v2(in handle_t module_ptr, in handle_t symbol,
+                in sequence<buffer> input_buffers,
+                rout sequence<buffer> output_buffers,
+                in sequence<scalar_t> scalars);
 
     // Routine to clean up a module on the remote side.
-    long release_kernels_v2(in handle_t module_ptr);
+    long release_library(in handle_t module_ptr);
 
     // Retrive messages written by log_printf.
     long poll_log(rout sequence<char> log, rout long read_size);
 
     // Retrieve the current profiling Func ID
     long poll_profiler_state(rout long func, rout long threads);
+    // Set the current_func being profiled
+    long profiler_set_current_func(in long current_func);
 
     // Set a performance target.
     long set_performance_mode(in long mode);

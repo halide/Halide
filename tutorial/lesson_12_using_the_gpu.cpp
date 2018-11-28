@@ -3,11 +3,11 @@
 // This lesson demonstrates how to use Halide to run code on a GPU using OpenCL.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_12*.cpp -g -std=c++11 -I ../include -I ../tools -L ../bin -lHalide `libpng-config --cflags --ldflags` -lpthread -ldl -o lesson_12
+// g++ lesson_12*.cpp -g -std=c++11 -I ../include -I ../tools -L ../bin -lHalide `libpng-config --cflags --ldflags` -ljpeg -lpthread -ldl -o lesson_12
 // LD_LIBRARY_PATH=../bin ./lesson_12
 
 // On os x:
-// g++ lesson_12*.cpp -g -std=c++11 -I ../include -I ../tools -L ../bin -lHalide `libpng-config --cflags --ldflags` -o lesson_12
+// g++ lesson_12*.cpp -g -std=c++11 -I ../include -I ../tools -L ../bin -lHalide `libpng-config --cflags --ldflags` -ljpeg -o lesson_12
 // DYLD_LIBRARY_PATH=../bin ./lesson_12
 
 // If you have the entire Halide source tree, you can also build it by
@@ -26,6 +26,8 @@ using namespace Halide::Tools;
 
 // Include a clock to do performance testing.
 #include "clock.h"
+
+Target find_gpu_target();
 
 // Define some Vars to use.
 Var x, y, c, i, ii, xo, yo, xi, yi;
@@ -99,11 +101,24 @@ public:
         padded.vectorize(x, 16);
 
         // JIT-compile the pipeline for the CPU.
-        curved.compile_jit();
+        Target target = get_host_target();
+        curved.compile_jit(target);
     }
 
     // Now a schedule that uses CUDA or OpenCL.
-    void schedule_for_gpu() {
+    bool schedule_for_gpu() {
+        Target target = find_gpu_target();
+        if (!target.has_gpu_feature()) {
+            return false;
+        }
+
+        // If you want to see all of the OpenCL, Metal, CUDA or D3D 12 API
+        // calls done by the pipeline, you can also enable the Debug flag.
+        // This is helpful for figuring out which stages are slow, or when
+        // CPU -> GPU copies happen. It hurts performance though, so we'll
+        // leave it commented out.
+        //target.set_feature(Target::Debug);
+
         // We make the decision about whether to use the GPU for each
         // Func independently. If you have one Func computed on the
         // CPU, and the next computed on the GPU, Halide will do the
@@ -168,33 +183,10 @@ public:
         // target object to compile_jit. Otherwise your CPU will very
         // slowly pretend it's a GPU, and use one thread per output
         // pixel.
-
-        // Start with a target suitable for the machine you're running
-        // this on.
-        Target target = get_host_target();
-
-        // Then enable OpenCL or Metal, depending on which platform
-        // we're on. OS X doesn't update its OpenCL drivers, so they
-        // tend to be broken. CUDA would also be a fine choice on
-        // machines with NVidia GPUs.
-        if (target.os == Target::OSX) {
-            target.set_feature(Target::Metal);
-        } else {
-            target.set_feature(Target::OpenCL);
-        }
-
-        // Uncomment the next line and comment out the lines above to
-        // try CUDA instead.
-        // target.set_feature(Target::CUDA);
-
-        // If you want to see all of the OpenCL, Metal, or CUDA API
-        // calls done by the pipeline, you can also enable the Debug
-        // flag. This is helpful for figuring out which stages are
-        // slow, or when CPU -> GPU copies happen. It hurts
-        // performance though, so we'll leave it commented out.
-        // target.set_feature(Target::Debug);
-
+        printf("Target: %s\n", target.to_string().c_str());
         curved.compile_jit(target);
+
+        return true;
     }
 
     void test_performance() {
@@ -253,8 +245,6 @@ public:
     }
 };
 
-bool have_opencl_or_metal();
-
 int main(int argc, char **argv) {
     // Load an input image.
     Buffer<uint8_t> input = load_image("images/rgb.png");
@@ -262,28 +252,35 @@ int main(int argc, char **argv) {
     // Allocated an image that will store the correct output
     Buffer<uint8_t> reference_output(input.width(), input.height(), input.channels());
 
-    printf("Testing performance on CPU:\n");
+    printf("Running pipeline on CPU:\n");
     MyPipeline p1(input);
     p1.schedule_for_cpu();
-    p1.test_performance();
     p1.curved.realize(reference_output);
 
-    if (have_opencl_or_metal()) {
-        printf("Testing performance on GPU:\n");
-        MyPipeline p2(input);
-        p2.schedule_for_gpu();
-        p2.test_performance();
+    printf("Running pipeline on GPU:\n");
+    MyPipeline p2 (input);
+    bool has_gpu_target = p2.schedule_for_gpu();
+    if (has_gpu_target) {
+        printf("Testing GPU correctness:\n");
         p2.test_correctness(reference_output);
     } else {
-        printf("Not testing performance on GPU, "
-               "because I can't find the opencl library\n");
+        printf("No GPU target available on the host\n");
+    }
+
+    printf("Testing performance on CPU:\n");
+    p1.test_performance();
+
+    if (has_gpu_target) {
+        printf("Testing performance on GPU:\n");
+        p2.test_performance();
     }
 
     return 0;
 }
 
 
-// A helper function to check if OpenCL seems to exist on this machine.
+
+// A helper function to check if OpenCL, Metal or D3D12 is present on the host machine.
 
 #ifdef _WIN32
 #include <windows.h>
@@ -291,12 +288,31 @@ int main(int argc, char **argv) {
 #include <dlfcn.h>
 #endif
 
-bool have_opencl_or_metal() {
+Target find_gpu_target() {
+    // Start with a target suitable for the machine you're running this on.
+    Target target = get_host_target();
+
+    // Uncomment the following lines to try CUDA instead:
+    // target.set_feature(Target::CUDA);
+    // return target;
+
 #ifdef _WIN32
-    return LoadLibrary("OpenCL.dll") != NULL;
+    if (LoadLibrary("d3d12.dll") != NULL) {
+        target.set_feature(Target::D3D12Compute);
+    } else if (LoadLibrary("OpenCL.dll") != NULL) {
+        target.set_feature(Target::OpenCL);
+    }
 #elif __APPLE__
-    return dlopen("/System/Library/Frameworks/Metal.framework/Versions/Current/Metal", RTLD_LAZY) != NULL;
+    // OS X doesn't update its OpenCL drivers, so they tend to be broken.
+    // CUDA would also be a fine choice on machines with NVidia GPUs.
+    if (dlopen("/System/Library/Frameworks/Metal.framework/Versions/Current/Metal", RTLD_LAZY) != NULL) {
+        target.set_feature(Target::Metal);
+    }
 #else
-    return dlopen("libOpenCL.so", RTLD_LAZY) != NULL;
+    if (dlopen("libOpenCL.so", RTLD_LAZY) != NULL) {
+        target.set_feature(Target::OpenCL);
+    }
 #endif
+
+    return target;
 }

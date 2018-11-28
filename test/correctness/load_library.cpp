@@ -6,7 +6,7 @@ using namespace Halide;
 // This test exercises the ability to override halide_get_library_symbol (etc)
 // when using JIT code; to do so, it compiles & calls a simple pipeline
 // using an OpenCL schedule, since that is known to use these calls
-// in a (reasonably) well-defined way and is unlikely to change a great deal 
+// in a (reasonably) well-defined way and is unlikely to change a great deal
 // in the near future; additionally, it doesn't require a particular
 // feature in LLVM (unlike, say, Hexagon).
 
@@ -16,11 +16,14 @@ int load_library_calls = 0;
 int get_library_symbol_calls = 0;
 
 void my_error_handler(void* u, const char *msg) {
+    // Emitting "error.*:" to stdout or stderr will cause CMake to report the
+    // test as a failure on Windows, regardless of error code returned,
+    // hence the abbreviation to "err".
     if (!strstr(msg, "OpenCL API not found")) {
-        fprintf(stderr, "Saw unexpected error: %s\n", msg);
+        fprintf(stderr, "Saw unexpected err: %s\n", msg);
         exit(-1);
     }
-    printf("Saw expected error: %s\n", msg);
+    printf("Saw expected err: %s\n", msg);
     if (load_library_calls == 0 || get_library_symbol_calls == 0) {
         fprintf(stderr, "Should have seen load_library and get_library_symbol calls!\n");
         exit(-1);
@@ -57,6 +60,12 @@ void *my_get_library_symbol_impl(void *lib, const char *name) {
 }
 
 int main(int argc, char **argv) {
+    Target target = get_jit_target_from_environment();
+    if (!target.has_feature(Target::OpenCL)) {
+        printf("This test requires opencl.\n");
+        return 0;
+    }
+
     // These calls are only available for AOT-compiled code:
     //
     //   halide_set_custom_get_symbol(my_get_symbol_impl);
@@ -74,7 +83,6 @@ int main(int argc, char **argv) {
     Var x, y, xi, yi;
     Func f;
     f(x, y) = cast<int32_t>(x + y);
-    Target target = get_jit_target_from_environment().with_feature(Target::OpenCL);
     f.gpu_tile(x, y, xi, yi, 8, 8, TailStrategy::Auto, DeviceAPI::OpenCL);
     f.set_error_handler(my_error_handler);
 

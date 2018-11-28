@@ -151,6 +151,30 @@ int main(int argc, char **argv) {
         return -1;
     }
 
+    // Check that min of a bunch of infinities is infinity
+    const float inf_f32 = std::numeric_limits<float>::infinity();
+    const double inf_f64 = std::numeric_limits<double>::infinity();
+    result_f32 = evaluate<float>(minimum(RDom(1, 10) * inf_f32));
+    if (result_f32 != inf_f32) {
+        printf("minimum is %f instead of infinity\n", result_f32);
+        return -1;
+    }
+    result_f64 = evaluate<double>(minimum(RDom(1, 10) * Expr(inf_f64)));
+    if (result_f64 != inf_f64) {
+        printf("minimum is %f instead of infinity\n", result_f64);
+        return -1;
+    }
+    result_f32 = evaluate<float>(maximum(RDom(1, 10) * -inf_f32));
+    if (result_f32 != -inf_f32) {
+        printf("maximum is %f instead of -infinity\n", result_f32);
+        return -1;
+    }
+    result_f64 = evaluate<double>(maximum(RDom(1, 10) * Expr(-inf_f64)));
+    if (result_f64 != -inf_f64) {
+        printf("maximum is %f instead of -infinity\n", result_f64);
+        return -1;
+    }
+
     printf("Success!\n");
     return 0;
 

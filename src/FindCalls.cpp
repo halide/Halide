@@ -1,14 +1,15 @@
 #include "FindCalls.h"
 #include "IRVisitor.h"
 
-namespace Halide{
+namespace Halide {
 namespace Internal {
 
 using std::map;
-using std::vector;
-using std::string;
 using std::pair;
+using std::string;
+using std::vector;
 
+namespace {
 /* Find all the internal halide calls in an expr */
 class FindCalls : public IRVisitor {
 public:
@@ -27,18 +28,18 @@ public:
         }
     }
 
-    void visit(const Call *call) {
+    void visit(const Call *call) override {
         IRVisitor::visit(call);
 
         if (call->call_type == Call::Halide && call->func.defined()) {
             Function f(call->func);
             include_function(f);
         }
-
     }
 };
 
-void populate_environment(Function f, map<string, Function> &env, bool recursive = true) {
+void populate_environment_helper(Function f, map<string, Function> &env,
+                                 bool recursive = true, bool include_wrappers = false) {
     map<string, Function>::const_iterator iter = env.find(f.name());
     if (iter != env.end()) {
         user_assert(iter->second.same_as(f))
@@ -58,28 +59,41 @@ void populate_environment(Function f, map<string, Function> &env, bool recursive
         }
     }
 
+    if (include_wrappers) {
+        for (auto it : f.schedule().wrappers()) {
+            Function g(it.second);
+            calls.calls[g.name()] = g;
+        }
+    }
+
     if (!recursive) {
         env.insert(calls.calls.begin(), calls.calls.end());
     } else {
         env[f.name()] = f;
 
         for (pair<string, Function> i : calls.calls) {
-            populate_environment(i.second, env);
+            populate_environment_helper(i.second, env, recursive, include_wrappers);
         }
     }
 }
 
+}  // namespace
+
+void populate_environment(Function f, map<string, Function> &env) {
+    populate_environment_helper(f, env, true, true);
+}
+
 map<string, Function> find_transitive_calls(Function f) {
     map<string, Function> res;
-    populate_environment(f, res, true);
+    populate_environment_helper(f, res, true, false);
     return res;
 }
 
 map<string, Function> find_direct_calls(Function f) {
     map<string, Function> res;
-    populate_environment(f, res, false);
+    populate_environment_helper(f, res, false, false);
     return res;
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

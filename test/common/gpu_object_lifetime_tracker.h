@@ -42,7 +42,7 @@ class GpuObjectLifetimeTracker {
         {"Allocating: new_library_with_source", "Releasing: new_library_with_source"},
 
         // Hexagon objects
-        {"halide_remote_initialize_kernels", "halide_remote_release_kernels"},
+        {"halide_remote_load_library", "halide_remote_release_library"},
         {"ion_alloc", "ion_free"},
     }};
 

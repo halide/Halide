@@ -1,6 +1,6 @@
 #include <map>
-#include <vector>
 #include <sstream>
+#include <vector>
 
 #include "DebugToFile.h"
 #include "IRMutator.h"
@@ -9,17 +9,17 @@
 namespace Halide {
 namespace Internal {
 
-using std::string;
 using std::map;
-using std::vector;
 using std::ostringstream;
+using std::string;
+using std::vector;
 
-class DebugToFile : public IRMutator {
+class DebugToFile : public IRMutator2 {
     const map<string, Function> &env;
 
-    using IRMutator::visit;
+    using IRMutator2::visit;
 
-    void visit(const Realize *op) {
+    Stmt visit(const Realize *op) override {
         map<string, Function>::const_iterator iter = env.find(op->name);
         if (iter != env.end() && !iter->second.debug_file().empty()) {
             Function f = iter->second;
@@ -80,10 +80,9 @@ class DebugToFile : public IRMutator {
             body = LetStmt::make(call_result_name, call, body);
             body = Block::make(mutate(op->body), body);
 
-            stmt = Realize::make(op->name, op->types, op->bounds, op->condition, body);
-
+            return Realize::make(op->name, op->types, op->memory_type, op->bounds, op->condition, body);
         } else {
-            IRMutator::visit(op);
+            return IRMutator2::visit(op);
         }
     }
 
@@ -91,19 +90,18 @@ public:
     DebugToFile(const map<string, Function> &e) : env(e) {}
 };
 
-class RemoveDummyRealizations : public IRMutator {
+class RemoveDummyRealizations : public IRMutator2 {
     const vector<Function> &outputs;
 
-    using IRMutator::visit;
+    using IRMutator2::visit;
 
-    void visit(const Realize *op) {
+    Stmt visit(const Realize *op) override {
         for (Function f : outputs) {
             if (op->name == f.name()) {
-                stmt = mutate(op->body);
-                return;
+                return mutate(op->body);
             }
         }
-        IRMutator::visit(op);
+        return IRMutator2::visit(op);
     }
 
 public:
@@ -120,7 +118,7 @@ Stmt debug_to_file(Stmt s, const vector<Function> &outputs, const map<string, Fu
             Expr extent = Variable::make(Int(32), out.name() + ".extent." + dim);
             output_bounds.push_back(Range(min, extent));
         }
-        s = Realize::make(out.name(), out.output_types(), output_bounds, const_true(), s);
+        s = Realize::make(out.name(), out.output_types(), MemoryType::Auto, output_bounds, const_true(), s);
     }
     s = DebugToFile(env).mutate(s);
 
@@ -130,5 +128,5 @@ Stmt debug_to_file(Stmt s, const vector<Function> &outputs, const map<string, Fu
     return s;
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

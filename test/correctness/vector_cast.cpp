@@ -22,28 +22,12 @@ DECL_SOT(double);
 
 template <typename T>
 bool is_type_supported(int vec_width, const Target &target) {
-    return target.supports_type(type_of<T>().with_lanes(vec_width));
-}
+    DeviceAPI device = DeviceAPI::Default_GPU;
 
-template <>
-bool is_type_supported<float>(int vec_width, const Target &target) {
     if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
-        return vec_width == 1;
-    } else {
-        return true;
+        device = DeviceAPI::Hexagon;
     }
-}
-
-template <>
-bool is_type_supported<double>(int vec_width, const Target &target) {
-    if (target.has_feature(Target::OpenCL) &&
-        !target.has_feature(Target::CLDoubles)) {
-        return false;
-    } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
-        return vec_width == 1;
-    } else {
-        return true;
-    }
+    return target.supports_type(type_of<T>().with_lanes(vec_width), device);
 }
 
 template<typename A, typename B>
@@ -59,7 +43,9 @@ bool test(int vec_width, const Target &target) {
     Buffer<A> input(W, H);
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
-            input(x, y) = (A)((rand()&0xffff)*0.1);
+            // Casting from an out-of-range float to an int is UB, so
+            // we have to pick our values a little carefully.
+            input(x, y) = (A)((rand() & 0xffff)/512.0);
         }
     }
 
@@ -95,6 +81,7 @@ bool test(int vec_width, const Target &target) {
         for (int x = 0; x < W; x++) {
 
             bool ok = ((B)(input(x, y)) == output(x, y));
+
             if (!ok) {
                 fprintf(stderr, "%s x %d -> %s x %d failed\n",
                        string_of_type<A>(), vec_width,

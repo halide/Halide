@@ -1,18 +1,18 @@
-#include <iostream>
 #include <fstream>
+#include <iostream>
 #include <memory>
 
-#include "HexagonOffload.h"
 #include "Closure.h"
-#include "InjectHostDevBufferCopies.h"
+#include "Elf.h"
+#include "HexagonOffload.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "LLVM_Output.h"
+#include "InjectHostDevBufferCopies.h"
 #include "LLVM_Headers.h"
+#include "LLVM_Output.h"
 #include "Param.h"
 #include "RemoveTrivialForLoops.h"
 #include "Substitute.h"
-#include "Elf.h"
 
 namespace Halide {
 namespace Internal {
@@ -42,6 +42,7 @@ enum {
     EF_HEXAGON_MACH_V61 = 0x61,
     EF_HEXAGON_MACH_V62 = 0x62,
     EF_HEXAGON_MACH_V65 = 0x65,
+    EF_HEXAGON_MACH_V66 = 0x66,
 };
 
 enum {
@@ -189,6 +190,40 @@ std::string hex(uint32_t x) {
     return buffer;
 }
 
+std::string section_type_string(Section::Type type) {
+    switch(type) {
+    case Section::SHT_NULL: return "SHT_NULL";
+    case Section::SHT_PROGBITS: return "SHT_PROGBITS";
+    case Section::SHT_SYMTAB: return "SHT_SYMTAB";
+    case Section::SHT_STRTAB: return "SHT_STRTAB";
+    case Section::SHT_RELA: return "SHT_RELA";
+    case Section::SHT_HASH: return "SHT_HASH";
+    case Section::SHT_DYNAMIC: return "SHT_DYNAMIC";
+    case Section::SHT_NOTE: return "SHT_NOTE";
+    case Section::SHT_NOBITS: return "SHT_NOBITS";
+    case Section::SHT_REL: return "SHT_REL";
+    case Section::SHT_SHLIB: return "SHT_SHLIB";
+    case Section::SHT_DYNSYM: return "SHT_DYNSYM";
+    case Section::SHT_LOPROC: return "SHT_LOPROC";
+    case Section::SHT_HIPROC: return "SHT_HIPROC";
+    case Section::SHT_LOUSER: return "SHT_LOUSER";
+    case Section::SHT_HIUSER: return "SHT_HIUSER";
+    default:
+        return "UNKNOWN TYPE";
+    }
+}
+std::string print_sections(const Object &obj) {
+    std::ostringstream oss;
+    if (obj.sections_size() == 0) {
+        oss << "No sections in object\n";
+        return oss.str();
+    }
+    for (const Section &s : obj.sections()) {
+        oss << s.get_name() << ", Type = " << section_type_string(s.get_type()) << ", Size = " << hex(s.get_size()) << ", Alignment = " << s.get_alignment() << "\n";
+    }
+    return oss.str();
+}
+
 void do_reloc(char *addr, uint32_t mask, uintptr_t val, bool is_signed, bool verify) {
     uint32_t inst = *((uint32_t *)addr);
     debug(4) << "Relocation in instruction: " << hex(inst) << "\n";
@@ -274,8 +309,29 @@ void do_reloc(char *addr, uint32_t mask, uintptr_t val, bool is_signed, bool ver
             // 0111 0011 -11sssss PP1iiiii iiiddddd
             mask = 0x00001fe0;
 
+        } else if ((inst >> 24) == 126) {
+            // 0111 1110 0uu0 iiii PP0i iiii iiid dddd
+            // 0111 1110 0uu0 iiii PP1i iiii iiid dddd
+            // 0111 1110 0uu1 iiii PP0i iiii iiid dddd
+            // 0111 1110 0uu1 iiii PP1i iiii iiid dddd
+            mask = 0x000f1fe0;
+        } else if ((inst >> 24) == 65 || (inst >> 24) == 77) {
+            // 0100 0001 000s ssss PP0t tiii iiid dddd
+            // 0100 0001 001s ssss PP0t tiii iiid dddd
+            // 0100 0001 010s ssss PP0t tiii iiid dddd
+            // 0100 0001 011s ssss PP0t tiii iiid dddd
+            // 0100 0001 100s ssss PP0t tiii iiid dddd
+            // 0100 0001 110s ssss PP0t tiii iiid dddd
+            // TODO: Add instructions to comment for mask 77.
+            mask = 0x000007e0;
+        } else if ((inst >> 21) == 540) {
+            // 0100 0011 100s ssss PP0t tiii iiid dddd
+            mask = 0x000007e0;
+        } else if ((inst >> 28) == 11) {
+            // 1011 iiii iiis ssss PPii iiii iiid dddd
+            mask = 0x0fe03fe0;
         } else {
-            internal_error << "Unhandled instruction type!\n";
+            internal_error << "Unhandled instruction type! Instruction = " << inst << "\n";
         }
     }
 
@@ -454,6 +510,10 @@ void do_relocation(uint32_t fixup_offset, char *fixup_addr, uint32_t type,
         do_reloc(fixup_addr, Word32_X26, intptr_t(G) >> 6, _signed, truncate);
         needs_got_entry = true;
         break;
+    case R_HEX_GOT_16_X:
+        do_reloc(fixup_addr, Word32_U6, intptr_t(G), _signed, truncate);
+        needs_got_entry = true;
+        break;
     case R_HEX_GOT_11_X:
         do_reloc(fixup_addr, Word32_U6, uintptr_t(G), _unsigned, truncate);
         needs_got_entry = true;
@@ -475,7 +535,11 @@ public:
     uint32_t flags;
 
     HexagonLinker(const Target &target) {
-        if (target.has_feature(Target::HVX_v62)) {
+        if (target.has_feature(Target::HVX_v66)) {
+            flags = Elf::EF_HEXAGON_MACH_V66;
+        } else if (target.has_feature(Target::HVX_v65)) {
+            flags = Elf::EF_HEXAGON_MACH_V65;
+        } else if (target.has_feature(Target::HVX_v62)) {
             flags = Elf::EF_HEXAGON_MACH_V62;
         } else {
             flags = Elf::EF_HEXAGON_MACH_V60;
@@ -566,30 +630,33 @@ public:
 
 namespace {
 
+const std::string runtime_module_name = "halide_shared_runtime";
+const std::string pipeline_module_name = "halide_hexagon_code";
+
 // Replace the parameter objects of loads/stores with a new parameter
 // object.
-class ReplaceParams : public IRMutator {
+class ReplaceParams : public IRMutator2 {
     const std::map<std::string, Parameter> &replacements;
 
-    using IRMutator::visit;
+    using IRMutator2::visit;
 
-    void visit(const Load *op) {
+    Expr visit(const Load *op) override {
         auto i = replacements.find(op->name);
         if (i != replacements.end()) {
-            expr = Load::make(op->type, op->name, mutate(op->index), op->image,
+            return Load::make(op->type, op->name, mutate(op->index), op->image,
                               i->second, mutate(op->predicate));
         } else {
-            IRMutator::visit(op);
+            return IRMutator2::visit(op);
         }
     }
 
-    void visit(const Store *op) {
+    Stmt visit(const Store *op) override {
         auto i = replacements.find(op->name);
         if (i != replacements.end()) {
-            stmt = Store::make(op->name, mutate(op->value), mutate(op->index),
+            return Store::make(op->name, mutate(op->value), mutate(op->index),
                                i->second, mutate(op->predicate));
         } else {
-            IRMutator::visit(op);
+            return IRMutator2::visit(op);
         }
     }
 
@@ -602,7 +669,7 @@ Stmt replace_params(Stmt s, const std::map<std::string, Parameter> &replacements
     return ReplaceParams(replacements).mutate(s);
 }
 
-class InjectHexagonRpc : public IRMutator {
+class InjectHexagonRpc : public IRMutator2 {
     std::map<std::string, Expr> state_bufs;
 
     Module &device_code;
@@ -644,12 +711,11 @@ class InjectHexagonRpc : public IRMutator {
         return Call::make(Handle(), Call::buffer_get_host, {buf}, Call::Extern);
     }
 
-    using IRMutator::visit;
+    using IRMutator2::visit;
 
-    void visit(const For *loop) {
+    Stmt visit(const For *loop) override {
         if (loop->device_api != DeviceAPI::Hexagon) {
-            IRMutator::visit(loop);
-            return;
+            return IRMutator2::visit(loop);
         }
 
         // Unrolling or loop partitioning might generate multiple
@@ -682,10 +748,10 @@ class InjectHexagonRpc : public IRMutator {
         for (const auto& i : c.buffers) {
             if (i.second.write) {
                 Argument::Kind kind = Argument::OutputBuffer;
-                output_buffers.push_back(LoweredArgument(i.first, kind, i.second.type, i.second.dimensions));
+                output_buffers.push_back(LoweredArgument(i.first, kind, i.second.type, i.second.dimensions, ArgumentEstimates{}));
             } else {
                 Argument::Kind kind = Argument::InputBuffer;
-                input_buffers.push_back(LoweredArgument(i.first, kind, i.second.type, i.second.dimensions));
+                input_buffers.push_back(LoweredArgument(i.first, kind, i.second.type, i.second.dimensions, ArgumentEstimates{}));
             }
 
             // Build a parameter to replace.
@@ -722,13 +788,13 @@ class InjectHexagonRpc : public IRMutator {
         args.insert(args.end(), input_buffers.begin(), input_buffers.end());
         args.insert(args.end(), output_buffers.begin(), output_buffers.end());
         for (const auto& i : c.vars) {
-            LoweredArgument arg(i.first, Argument::InputScalar, i.second, 0);
+            LoweredArgument arg(i.first, Argument::InputScalar, i.second, 0, ArgumentEstimates{});
             if (alignment_info.contains(i.first)) {
                 arg.alignment = alignment_info.get(i.first);
             }
             args.push_back(arg);
         }
-        device_code.append(LoweredFunc(hex_name, args, body, LoweredFunc::ExternalPlusMetadata));
+        device_code.append(LoweredFunc(hex_name, args, body, LinkageType::ExternalPlusMetadata));
 
         // Generate a call to hexagon_device_run.
         std::vector<Expr> arg_sizes;
@@ -771,35 +837,37 @@ class InjectHexagonRpc : public IRMutator {
         params.push_back(module_state());
         params.push_back(pipeline_name);
         params.push_back(state_var_ptr(hex_name, type_of<int>()));
-        params.push_back(Call::make(type_of<size_t*>(), Call::make_struct, arg_sizes, Call::Intrinsic));
+        params.push_back(Call::make(type_of<uint64_t*>(), Call::make_struct, arg_sizes, Call::Intrinsic));
         params.push_back(Call::make(type_of<void**>(), Call::make_struct, arg_ptrs, Call::Intrinsic));
         params.push_back(Call::make(type_of<int*>(), Call::make_struct, arg_flags, Call::Intrinsic));
 
-        stmt = call_extern_and_assert("halide_hexagon_run", params);
+        return call_extern_and_assert("halide_hexagon_run", params);
     }
 
-    void visit(const Let *op) {
+    Expr visit(const Let *op) override {
         if (op->value.type() == Int(32)) {
             alignment_info.push(op->name, modulus_remainder(op->value, alignment_info));
         }
 
-        IRMutator::visit(op);
+        Expr expr = IRMutator2::visit(op);
 
         if (op->value.type() == Int(32)) {
             alignment_info.pop(op->name);
         }
+        return expr;
     }
 
-    void visit(const LetStmt *op) {
+    Stmt visit(const LetStmt *op) override {
         if (op->value.type() == Int(32)) {
             alignment_info.push(op->name, modulus_remainder(op->value, alignment_info));
         }
 
-        IRMutator::visit(op);
+        Stmt stmt = IRMutator2::visit(op);
 
         if (op->value.type() == Int(32)) {
             alignment_info.pop(op->name);
         }
+        return stmt;
     }
 
 public:
@@ -810,11 +878,15 @@ public:
 
         if (!device_code.functions().empty()) {
             // Wrap the statement in calls to halide_initialize_kernels.
-            Expr buf_var = Variable::make(type_of<struct halide_buffer_t *>(), "hexagon_code.buffer");
-            Expr code_size = Call::make(Int(32), Call::buffer_get_extent, { buf_var, 0 }, Call::Extern);
-            Expr code_ptr = Call::make(Handle(), Call::buffer_get_host, { buf_var }, Call::Extern);
+            Expr runtime_buf_var = Variable::make(type_of<struct halide_buffer_t *>(), runtime_module_name + ".buffer");
+            Expr runtime_size = Call::make(Int(32), Call::buffer_get_extent, { runtime_buf_var, 0 }, Call::Extern);
+            Expr runtime_ptr = Call::make(Handle(), Call::buffer_get_host, { runtime_buf_var }, Call::Extern);
+
+            Expr code_buf_var = Variable::make(type_of<struct halide_buffer_t *>(), pipeline_module_name + ".buffer");
+            Expr code_size = Call::make(Int(32), Call::buffer_get_extent, { code_buf_var, 0 }, Call::Extern);
+            Expr code_ptr = Call::make(Handle(), Call::buffer_get_host, { code_buf_var }, Call::Extern);
             Stmt init_kernels = call_extern_and_assert("halide_hexagon_initialize_kernels",
-                                                       { module_state_ptr(), code_ptr, cast<uint64_t>(code_size) });
+                                                       { module_state_ptr(), code_ptr, cast<uint64_t>(code_size), runtime_ptr, cast<uint64_t>(runtime_size) });
             s = Block::make(init_kernels, s);
         }
 
@@ -831,6 +903,13 @@ Stmt inject_hexagon_rpc(Stmt s, const Target &host_target,
                         Module &containing_module) {
     // Make a new target for the device module.
     Target target(Target::NoOS, Target::Hexagon, 32);
+    // There are two ways of offloading, on device and on host.
+    // In the former we have true QuRT available, while on the
+    // latter we simulate the Hexagon side code with a barebones
+    // Shim layer, ie. NO QURT!
+    if (host_target.arch == Target::ARM) {
+        target.os = Target::QuRT;
+    }
 
     // These feature flags are propagated from the host target to the
     // device module.
@@ -844,6 +923,8 @@ Stmt inject_hexagon_rpc(Stmt s, const Target &host_target,
         Target::HVX_64,
         Target::HVX_128,
         Target::HVX_v62,
+        Target::HVX_v65,
+        Target::HVX_v66,
     };
     for (Target::Feature i : shared_features) {
         if (host_target.has_feature(i)) {
@@ -851,12 +932,14 @@ Stmt inject_hexagon_rpc(Stmt s, const Target &host_target,
         }
     }
 
-    Module hexagon_module("hexagon_code", target);
+    Module shared_runtime(runtime_module_name, target);
+    Module hexagon_module(pipeline_module_name, target.with_feature(Target::NoRuntime));
     InjectHexagonRpc injector(hexagon_module);
     s = injector.inject(s);
 
     if (!hexagon_module.functions().empty()) {
         containing_module.append(hexagon_module);
+        containing_module.append(shared_runtime);
     }
 
     return s;
@@ -866,11 +949,22 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
     llvm::LLVMContext context;
     std::unique_ptr<llvm::Module> llvm_module(compile_module_to_llvm_module(device_code, context));
 
+    // Write intermediate bitcode to disk if requested.
+    // TODO: We really need something better than this. This won't
+    // work in non-trivial JIT or AOT programs.
+    std::string bitcode_dump_path = get_env_variable("HL_HEXAGON_DUMP_BITCODE");
+    if (!bitcode_dump_path.empty()) {
+        auto fd_ostream = make_raw_fd_ostream(bitcode_dump_path);
+        compile_llvm_module_to_llvm_bitcode(*llvm_module, *fd_ostream);
+        debug(0) << "Wrote Hexagon device bitcode to " << bitcode_dump_path;
+    }
+
     llvm::SmallVector<char, 4096> object;
     llvm::raw_svector_ostream object_stream(object);
     compile_llvm_module_to_object(*llvm_module, object_stream);
 
-    if (debug::debug_level() >= 2) {
+    int min_debug_level = device_code.name() == runtime_module_name ? 3 : 2;
+    if (debug::debug_level() >= min_debug_level) {
         debug(0) << "Hexagon device code assembly: " << "\n";
         llvm::SmallString<4096> assembly;
         llvm::raw_svector_ostream assembly_stream(assembly);
@@ -888,13 +982,38 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
     auto bss = obj->find_section(".bss");
     if (bss != obj->sections_end()) {
         bss->set_alignment(128);
+        // TODO: We should set the type to SHT_NOBITS
+        // This will cause a difference in MemSize and FileSize like so:
+        //        FileSize = (MemSize - size_of_bss)
+        // When the Hexagon loader is used on 8998 and later targets,
+        // the difference is filled with zeroes thereby initializing the .bss
+        // section.
         bss->set_type(Elf::Section::SHT_PROGBITS);
+        std::fill(bss->contents_begin(), bss->contents_end(), 0);
     }
 
+    auto dtors = obj->find_section(".dtors");
+    if (dtors != obj->sections_end()) {
+        dtors->append_contents((uint32_t) 0);
+    }
+
+    // We call the constructors in ctors backwards starting from special
+    // symbol __CTOR_END__ until we reach a 0 (NULL pointer value). So,
+    // prepend the .ctors section with 0.
+    auto ctors = obj->find_section(".ctors");
+    if (ctors != obj->sections_end()) {
+        ctors->prepend_contents((uint32_t) 0);
+    }
+
+    debug(2) << print_sections(*obj);
+
     // Link into a shared object.
+    std::string soname = "lib" + device_code.name() + ".so";
     Elf::HexagonLinker linker(device_code.target());
-    std::vector<std::string> dependencies = { "libhalide_hexagon_remote_skel.so" };
-    std::vector<char> shared_object = obj->write_shared_object(&linker, dependencies);
+    std::vector<std::string> dependencies = {
+        "libhalide_hexagon_remote_skel.so",
+    };
+    std::vector<char> shared_object = obj->write_shared_object(&linker, dependencies, soname);
 
     std::string signer = get_env_variable("HL_HEXAGON_CODE_SIGNER");
     if (!signer.empty()) {
@@ -913,7 +1032,8 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
         debug(1) << "Signing Hexagon code: " << input.pathname() << " -> " << output.pathname() << "\n";
 
         {
-            std::ofstream f(input.pathname());
+            std::ofstream f(input.pathname(), std::ios::out|std::ios::binary);
+
             f.write(shared_object.data(), shared_object.size());
             f.flush();
             internal_assert(f.good());
@@ -922,10 +1042,13 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
 
         debug(1) << "Signing tool: (" << signer << ")\n";
         std::string cmd = signer + " " + input.pathname() + " " + output.pathname();
-        internal_assert(system(cmd.c_str()) == 0);
+        int result = system(cmd.c_str());
+        internal_assert(result == 0)
+            << "HL_HEXAGON_CODE_SIGNER failed: result = " << result
+            << " for cmd (" << cmd << ")";
 
         {
-            std::ifstream f(output.pathname());
+            std::ifstream f(output.pathname(), std::ios::in|std::ios::binary);
             f.seekg(0, std::ifstream::end);
             size_t signed_size = f.tellg();
             shared_object.resize(signed_size);

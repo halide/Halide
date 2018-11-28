@@ -15,9 +15,9 @@
 using Halide::Runtime::Buffer;
 
 struct HalideFuncs {
-    int (*init)(const void*, buffer_t*);
-    int (*update)(const void*, buffer_t*, int, int, int, buffer_t*);
-    int (*render)(const void*, buffer_t*, int, buffer_t*);
+    int (*init)(const void*, halide_buffer_t*);
+    int (*update)(const void*, halide_buffer_t*, int, int, int, halide_buffer_t*);
+    int (*render)(const void*, halide_buffer_t*, int, halide_buffer_t*);
 };
 
 static const HalideFuncs kHalideCPU = {

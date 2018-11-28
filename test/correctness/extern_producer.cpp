@@ -24,7 +24,8 @@ int round_down(int x, int m) {
 
 // Imagine that this loads from a file, or tiled storage. Here we'll just fill in the data using sinf.
 extern "C" DLLEXPORT int make_data(halide_buffer_t *out) {
-    if (!out->host) {
+    static int desired_row_extent = 0;
+    if (out->is_bounds_query()) {
         // Bounds query mode. To make life interesting, let's add some
         // arbitrary constraints on what we can produce.
 
@@ -33,6 +34,7 @@ extern "C" DLLEXPORT int make_data(halide_buffer_t *out) {
         max_plus_one = round_up(max_plus_one, 10);
         out->dim[0].min = round_down(out->dim[0].min, 10);
         out->dim[0].extent = max_plus_one - out->dim[0].min;
+        desired_row_extent = out->dim[0].extent;
 
         // There must be at least 40 scanlines.
         if (out->dim[1].extent < 40) {
@@ -44,6 +46,10 @@ extern "C" DLLEXPORT int make_data(halide_buffer_t *out) {
     assert(out->type == halide_type_of<float>());
     assert(out->dimensions == 2);
     assert(out->dim[0].stride == 1);
+    // Check that the row stride is 128B/32-element aligned.
+    assert(out->dim[1].stride == (out->dim[1].stride)/32*32);
+    // Check that the row extent is not changed due to alignment.
+    assert(out->dim[0].extent == desired_row_extent);
     printf("Generating data over [%d %d] x [%d %d]\n",
            out->dim[0].min, out->dim[0].min + out->dim[0].extent,
            out->dim[1].min, out->dim[1].min + out->dim[1].extent);
@@ -88,53 +94,60 @@ extern "C" DLLEXPORT int make_data_multi(halide_buffer_t *out1, halide_buffer_t 
 }
 
 int main(int argc, char **argv) {
-    Func source;
-    source.define_extern("make_data",
-                         std::vector<ExternFuncArgument>(),
-                         Float(32), 2);
-    Func sink;
     Var x, y;
-    sink(x, y) = source(x, y) - sin(x + y);
-
     Var xi, yi;
-    sink.tile(x, y, xi, yi, 32, 32);
+    {
+        Func source;
+        source.define_extern("make_data",
+                             std::vector<ExternFuncArgument>(),
+                             Float(32), {x, y});
+        // Row stride should be 128B/32-element aligned.
+        source.align_storage(x, 32);
+        Func sink;
+        sink(x, y) = source(x, y) - sin(x + y);
 
-    // Compute the source per tile of sink
-    source.compute_at(sink, x);
+        sink.tile(x, y, xi, yi, 32, 32);
 
-    Buffer<float> output = sink.realize(100, 100);
+        // Compute the source per tile of sink
+        source.compute_at(sink, x);
 
-    // Should be all zeroes.
-    RDom r(output);
-    float error = evaluate_may_gpu<float>(sum(abs(output(r.x, r.y))));
-    if (error != 0) {
-        printf("Something went wrong\n");
-        return -1;
+        Buffer<float> output = sink.realize(100, 100);
+
+        // Should be all zeroes.
+        RDom r(output);
+        float error = evaluate_may_gpu<float>(sum(abs(output(r.x, r.y))));
+        if (error != 0) {
+            printf("Something went wrong\n");
+            return -1;
+        }
     }
 
-    Func multi;
-    std::vector<Type> types;
-    types.push_back(Float(32));
-    types.push_back(Float(32));
-    multi.define_extern("make_data_multi",
-                        std::vector<ExternFuncArgument>(),
-                        types, 2);
-    Func sink_multi;
-    sink_multi(x, y) = multi(x, y)[0] - sin(x + y) +
-                       multi(x, y)[1] - cos(x + y);
+    {
+        Func multi;
+        std::vector<Type> types;
+        types.push_back(Float(32));
+        types.push_back(Float(32));
+        multi.define_extern("make_data_multi",
+                            std::vector<ExternFuncArgument>(),
+                            types, {x, y});
+        Func sink_multi;
+        sink_multi(x, y) = multi(x, y)[0] - sin(x + y) +
+                multi(x, y)[1] - cos(x + y);
 
-    sink_multi.tile(x, y, xi, yi, 32, 32);
+        sink_multi.tile(x, y, xi, yi, 32, 32);
 
-    // Compute the source per tile of sink
-    multi.compute_at(sink_multi, x);
+        // Compute the source per tile of sink
+        multi.compute_at(sink_multi, x);
 
-    Buffer<float> output_multi = sink_multi.realize(100, 100);
+        Buffer<float> output_multi = sink_multi.realize(100, 100);
 
-    // Should be all zeroes.
-    float error_multi = evaluate<float>(sum(abs(output_multi(r.x, r.y))));
-    if (error_multi != 0) {
-        printf("Something went wrong in multi case\n");
-        return -1;
+        // Should be all zeroes.
+        RDom r(output_multi);
+        float error_multi = evaluate<float>(sum(abs(output_multi(r.x, r.y))));
+        if (error_multi != 0) {
+            printf("Something went wrong in multi case\n");
+            return -1;
+        }
     }
 
     printf("Success!\n");

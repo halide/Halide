@@ -28,7 +28,11 @@ std::map<std::string, Function> find_direct_calls(Function f);
  */
 std::map<std::string, Function> find_transitive_calls(Function f);
 
-}
-}
+/** Find all Functions transitively referenced by f in any way and add
+ * them to the given map. */
+void populate_environment(Function f, std::map<std::string, Function> &env);
+
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

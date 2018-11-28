@@ -27,8 +27,8 @@ public:
         // input tile (if any).
 
         // (In fact, if we are being used as an extern stage for tiled processing,
-        // clamping accesses to lie within the input tile using input.min() and 
-        // input.extent() would tell the calling kernel we can cope with any size 
+        // clamping accesses to lie within the input tile using input.min() and
+        // input.extent() would tell the calling kernel we can cope with any size
         // input, so it would always pass us 1x1 tiles.)
 
         Func input_clamped = Halide::BoundaryConditions::repeat_edge(
@@ -63,6 +63,6 @@ private:
     Var x{"x"}, y{"y"}, c{"c"};
 };
 
-HALIDE_REGISTER_GENERATOR(Blur2x2, "blur2x2")
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(Blur2x2, blur2x2)

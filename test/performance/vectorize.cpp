@@ -30,7 +30,7 @@ bool test(int vec_width) {
     Buffer<A> input(W, H+20);
     for (int y = 0; y < H+20; y++) {
         for (int x = 0; x < W; x++) {
-            input(x, y) = (A)((rand() & 0xffff)*0.125 + 1.0);
+            input(x, y) = Internal::safe_numeric_cast<A>((rand() & 0xffff)*0.125 + 1.0);
         }
     }
 
@@ -58,10 +58,10 @@ bool test(int vec_width) {
     Buffer<A> outputg = g.realize(W, H);
     Buffer<A> outputf = f.realize(W, H);
 
-    double t_g = benchmark(10, 10, [&]() {
+    double t_g = benchmark([&]() {
         g.realize(outputg);
     });
-    double t_f = benchmark(10, 10, [&]() {
+    double t_f = benchmark([&]() {
         f.realize(outputf);
     });
 

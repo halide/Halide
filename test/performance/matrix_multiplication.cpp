@@ -49,8 +49,6 @@ int main(int argc, char **argv) {
 
     matrix_mul.compile_jit();
 
-    const int iterations = 50;
-
     Buffer<float> mat_A(matrix_size, matrix_size);
     Buffer<float> mat_B(matrix_size, matrix_size);
     Buffer<float> output(matrix_size, matrix_size);
@@ -68,7 +66,7 @@ int main(int argc, char **argv) {
 
     matrix_mul.realize(output);
 
-    double t = benchmark(1, iterations, [&]() {
+    double t = benchmark([&]() {
         matrix_mul.realize(output);
     });
 
@@ -102,7 +100,7 @@ int main(int argc, char **argv) {
     }
     */
 
-    float gflops = 2.0f * matrix_size * matrix_size * matrix_size / 1e6f;
+    float gflops = 2.0f * matrix_size * matrix_size * matrix_size / 1e9f;
 
     printf("Halide: %fms, %f GFLOP/s\n\n", t * 1e3, (gflops / t));
 

@@ -5,7 +5,9 @@
 #include "HalideRuntimeOpenCL.h"
 #include "HalideRuntimeMetal.h"
 #include "HalideRuntimeHexagonHost.h"
+#include "HalideRuntimeD3D12Compute.h"
 #include "HalideRuntimeQurt.h"
+#include "cpu_features.h"
 
 // This runtime module will contain extern declarations of the Halide
 // API and the types it uses. It's useful for compiling modules that
@@ -15,11 +17,11 @@
 // cat src/runtime/runtime_internal.h src/runtime/HalideRuntime*.h | grep "^[^ ][^(]*halide_[^ ]*(" | grep -v '#define' | sed "s/[^(]*halide/halide/" | sed "s/(.*//" | sed "s/^h/    \(void *)\&h/" | sed "s/$/,/" | sort | uniq
 
 extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
+    (void *)&halide_buffer_copy,
     (void *)&halide_buffer_to_string,
     (void *)&halide_can_use_target_features,
     (void *)&halide_cond_broadcast,
-    (void *)&halide_cond_destroy,
-    (void *)&halide_cond_init,
+    (void *)&halide_cond_signal,
     (void *)&halide_cond_wait,
     (void *)&halide_copy_to_device,
     (void *)&halide_copy_to_device_legacy,
@@ -48,13 +50,17 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_device_sync,
     (void *)&halide_device_sync_legacy,
     (void *)&halide_do_par_for,
+    (void *)&halide_do_parallel_tasks,
     (void *)&halide_do_task,
+    (void *)&halide_do_loop_task,
     (void *)&halide_double_to_string,
     (void *)&halide_downgrade_buffer_t,
     (void *)&halide_downgrade_buffer_t_device_fields,
     (void *)&halide_error,
     (void *)&halide_error_access_out_of_bounds,
+    (void *)&halide_error_bad_dimensions,
     (void *)&halide_error_bad_fold,
+    (void *)&halide_error_bad_extern_fold,
     (void *)&halide_error_bad_type,
     (void *)&halide_error_bounds_inference_call_failed,
     (void *)&halide_error_buffer_allocation_too_large,
@@ -67,6 +73,8 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_error_explicit_bounds_too_small,
     (void *)&halide_error_extern_stage_failed,
     (void *)&halide_error_fold_factor_too_small,
+    (void *)&halide_error_host_is_null,
+    (void *)&halide_error_integer_division_by_zero,
     (void *)&halide_error_out_of_memory,
     (void *)&halide_error_param_too_large_f64,
     (void *)&halide_error_param_too_large_i64,
@@ -112,6 +120,7 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_metal_detach_buffer,
     (void *)&halide_metal_device_interface,
     (void *)&halide_metal_get_buffer,
+    (void *)&halide_metal_get_crop_offset,
     (void *)&halide_metal_initialize_kernels,
     (void *)&halide_metal_release_context,
     (void *)&halide_metal_run,
@@ -119,7 +128,6 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_msan_annotate_buffer_is_initialized,
     (void *)&halide_msan_annotate_buffer_is_initialized_as_destructor,
     (void *)&halide_msan_annotate_memory_is_initialized,
-    (void *)&halide_mutex_destroy,
     (void *)&halide_mutex_lock,
     (void *)&halide_mutex_unlock,
     (void *)&halide_opencl_detach_cl_mem,
@@ -127,6 +135,7 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_opencl_get_cl_mem,
     (void *)&halide_opencl_get_device_type,
     (void *)&halide_opencl_get_platform_name,
+    (void *)&halide_opencl_get_crop_offset,
     (void *)&halide_opencl_initialize_kernels,
     (void *)&halide_opencl_run,
     (void *)&halide_opencl_set_device_type,
@@ -159,8 +168,12 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_qurt_hvx_unlock,
     (void *)&halide_qurt_hvx_unlock_as_destructor,
     (void *)&halide_release_jit_module,
+    (void *)&halide_semaphore_init,
+    (void *)&halide_semaphore_release,
+    (void *)&halide_semaphore_try_acquire,
     (void *)&halide_set_custom_can_use_target_features,
     (void *)&halide_set_custom_do_par_for,
+    (void *)&halide_set_custom_do_loop_task,
     (void *)&halide_set_custom_do_task,
     (void *)&halide_set_custom_free,
     (void *)&halide_set_custom_get_library_symbol,
@@ -184,4 +197,9 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_uint64_to_string,
     (void *)&halide_upgrade_buffer_t,
     (void *)&halide_use_jit_module,
+    (void *)&halide_d3d12compute_acquire_context,
+    (void *)&halide_d3d12compute_device_interface,
+    (void *)&halide_d3d12compute_initialize_kernels,
+    (void *)&halide_d3d12compute_release_context,
+    (void *)&halide_d3d12compute_run,
 };

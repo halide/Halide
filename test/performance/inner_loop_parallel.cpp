@@ -6,11 +6,12 @@ using namespace Halide;
 using namespace Halide::Tools;
 
 int main(int argc, char **argv) {
-
     Func f;
     Var x, y;
     f(x, y) = x + y;
     f.parallel(x);
+
+    Pipeline p(f);
 
     // Having more threads than tasks shouldn't hurt performance too much.
     double correct_time = 0;
@@ -22,12 +23,14 @@ int main(int argc, char **argv) {
         char buf[32] = {0};
         memcpy(buf, str.c_str(), str.size());
         putenv(buf);
+        p.invalidate_cache();
         Halide::Internal::JITSharedRuntime::release_all();
-        f.compile_jit();
+
+        p.compile_jit();
         // Start the thread pool without giving any hints as to the
         // number of tasks we'll be using.
-        f.realize(t, 1);
-        double min_time = benchmark(3, 1, [&]() { return f.realize(2, 1000000); });
+        p.realize(t, 1);
+        double min_time = benchmark([&]() { return p.realize(2, 1000000); });
 
         printf("%d: %f ms\n", t, min_time * 1e3);
         if (t == 2) {

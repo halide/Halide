@@ -1,4 +1,5 @@
 #include "Halide.h"
+#include "halide_trace_config.h"
 
 namespace {
 
@@ -6,15 +7,16 @@ constexpr int maxJ = 20;
 
 class LocalLaplacian : public Halide::Generator<LocalLaplacian> {
 public:
+    GeneratorParam<int>     pyramid_levels{"pyramid_levels", 8, 1, maxJ};
 
-    GeneratorParam<int>   pyramid_levels{"pyramid_levels", 8, 1, maxJ};
+    Input<Buffer<uint16_t>> input{"input", 3};
+    Input<int>              levels{"levels"};
+    Input<float>            alpha{"alpha"};
+    Input<float>            beta{"beta"};
 
-    ImageParam            input{UInt(16), 3, "input"};
-    Param<int>            levels{"levels"};
-    Param<float>          alpha{"alpha"};
-    Param<float>          beta{"beta"};
+    Output<Buffer<uint16_t>> output{"output", 3};
 
-    Func build() {
+    void generate() {
         /* THE ALGORITHM */
         const int J = pyramid_levels;
 
@@ -82,17 +84,27 @@ public:
         float eps = 0.01f;
         color(x, y, c) = outGPyramid[0](x, y) * (floating(x, y, c)+eps) / (gray(x, y)+eps);
 
-        Func output("local_laplacian");
         // Convert back to 16-bit
         output(x, y, c) = cast<uint16_t>(clamp(color(x, y, c), 0.0f, 1.0f) * 65535.0f);
 
-
-
         /* THE SCHEDULE */
-        remap.compute_root();
 
-        if (get_target().has_gpu_feature()) {
+        if (auto_schedule) {
+            // Provide estimates on the input image
+            input.dim(0).set_bounds_estimate(0, 1536);
+            input.dim(1).set_bounds_estimate(0, 2560);
+            input.dim(2).set_bounds_estimate(0, 3);
+            // Provide estimates on the parameters
+            levels.set_estimate(8);
+            alpha.set_estimate(1);
+            beta.set_estimate(1);
+            // Provide estimates on the pipeline output
+            output.estimate(x, 0, 1536)
+                .estimate(y, 0, 2560)
+                .estimate(c, 0, 3);
+        } else if (get_target().has_gpu_feature()) {
             // gpu schedule
+            remap.compute_root();
             Var xi, yi;
             output.compute_root().gpu_tile(x, y, xi, yi, 16, 8);
             for (int j = 0; j < J; j++) {
@@ -109,6 +121,7 @@ public:
             }
         } else {
             // cpu schedule
+            remap.compute_root();
             Var yo;
             output.reorder(c, x, y).split(y, yo, y, 64).parallel(yo).vectorize(x, 8);
             gray.compute_root().parallel(y, 32).vectorize(x, 8);
@@ -119,11 +132,10 @@ public:
                     .compute_root().reorder_storage(x, k, y)
                     .reorder(k, y).parallel(y, 8).vectorize(x, 8);
                 outGPyramid[j]
-                    .store_at(output, yo).compute_at(output, y)
+                    .store_at(output, yo).compute_at(output, y).fold_storage(y, 8)
                     .vectorize(x, 8);
             }
-            outGPyramid[0]
-                .compute_at(output, y).vectorize(x, 8);
+            outGPyramid[0].compute_at(output, y).vectorize(x, 8);
             for (int j = 5; j < J; j++) {
                 inGPyramid[j].compute_root();
                 gPyramid[j].compute_root().parallel(k);
@@ -131,7 +143,66 @@ public:
             }
         }
 
-        return output;
+        /* Optional tags to specify layout for HalideTraceViz */
+        {
+            Halide::Trace::FuncConfig cfg;
+            cfg.color_dim = 2;
+            cfg.max = 65535;
+            cfg.pos.x = 30;
+            cfg.pos.y = 100;
+            input.add_trace_tag(cfg.to_trace_tag());
+
+            cfg.pos.x = 1700;
+            output.add_trace_tag(cfg.to_trace_tag());
+        }
+
+        {
+            Halide::Trace::FuncConfig cfg;
+            cfg.store_cost = 5;
+            cfg.pos.x = 370;
+            cfg.pos.y = 100;
+            cfg.labels = { { "input pyramid", {-90, -68} } };
+            gray.add_trace_tag(cfg.to_trace_tag());
+        }
+
+        for (int i = 0; i < pyramid_levels; ++i) {
+            int y = 100;
+            for (int j = 0; j < i; ++j) {
+                y += 500 >> j;
+            }
+            {
+                int x = 370;
+                int store_cost = 1 << (i + 1);
+                Halide::Trace::FuncConfig cfg;
+                cfg.pos = {x, y};
+                cfg.store_cost = store_cost;
+                inGPyramid[i].add_trace_tag(cfg.to_trace_tag());
+            }
+            {
+                int x = 720;
+                int store_cost = 1 << i;
+                Halide::Trace::FuncConfig cfg;
+                cfg.strides = {{1, 0}, {0, 1}, {200, 0}};
+                cfg.pos = {x, y};
+                cfg.store_cost = store_cost;
+                if (i == 1) {
+                    cfg.labels = { { "differently curved intermediate pyramids" } };
+                }
+                gPyramid[i].add_trace_tag(cfg.to_trace_tag());
+            }
+            {
+                int x = 1500;
+                int store_cost = (1 << i) * 10;
+                Halide::Trace::FuncConfig cfg;
+                cfg.pos = {x, y};
+                cfg.store_cost = store_cost;
+                if (i == 0) {
+                    cfg.labels = { { "output pyramids" } };
+                    cfg.pos = {x, 100};
+                }
+                outGPyramid[i].add_trace_tag(cfg.to_trace_tag());
+            }
+        }
     }
 private:
     Var x, y, c, k;
@@ -157,6 +228,6 @@ private:
 
 };
 
-Halide::RegisterGenerator<LocalLaplacian> register_me{"local_laplacian"};
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(LocalLaplacian, local_laplacian)

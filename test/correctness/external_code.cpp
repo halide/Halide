@@ -15,7 +15,7 @@ int main(int argc, char **argv) {
     f(x, y) = 42;
 
     Target target = get_jit_target_from_environment();
-    
+
     std::string bitcode_file = Internal::get_test_tmp_dir() + "extern.bc";
     f.compile_to_bitcode(bitcode_file, {}, "extern", target);
 
@@ -42,7 +42,7 @@ int main(int argc, char **argv) {
     auto forty_two = module.get_function_by_name("forty_two");
 
     Internal::JITModule jit_module(module, forty_two, {});
-    
+
     auto main_function = (int (*)(halide_buffer_t *buf))jit_module.main_function();
     Buffer<int32_t> buf(16, 16);
 

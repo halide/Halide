@@ -1,9 +1,17 @@
+#include "Schedule.h"
 #include "Func.h"
 #include "Function.h"
 #include "IR.h"
 #include "IRMutator.h"
-#include "Schedule.h"
 #include "Var.h"
+
+namespace {
+
+const char * const root_looplevel_name = "__root";
+const char * const inline_looplevel_name = "";
+const char * const undefined_looplevel_name = "__undefined_loop_level_var_name";
+
+}  // namespace
 
 namespace Halide {
 
@@ -12,112 +20,187 @@ namespace Internal {
 struct LoopLevelContents {
     mutable RefCount ref_count;
 
-    // Note: func_ is empty for inline or root.
+    // Note: func_name is empty for inline or root.
     std::string func_name;
+    // If set to -1, this loop level does not refer to a particular stage of the
+    // function. 0 refers to initial stage, 1 refers to the 1st update stage, etc.
+    int stage_index;
     // TODO: these two fields should really be VarOrRVar,
     // but cyclical include dependencies make this challenging.
     std::string var_name;
     bool is_rvar;
+    bool locked;
 
     LoopLevelContents(const std::string &func_name,
                       const std::string &var_name,
-                      bool is_rvar)
-    : func_name(func_name), var_name(var_name), is_rvar(is_rvar) {}
+                      bool is_rvar,
+                      int stage_index,
+                      bool locked)
+    : func_name(func_name), stage_index(stage_index), var_name(var_name),
+      is_rvar(is_rvar), locked(locked) {}
 };
 
 template<>
-EXPORT RefCount &ref_count<LoopLevelContents>(const LoopLevelContents *p) {
+RefCount &ref_count<LoopLevelContents>(const LoopLevelContents *p) {
     return p->ref_count;
 }
 
 template<>
-EXPORT void destroy<LoopLevelContents>(const LoopLevelContents *p) {
+void destroy<LoopLevelContents>(const LoopLevelContents *p) {
     delete p;
 }
 
 }  // namespace Internal
 
-LoopLevel::LoopLevel(const std::string &func_name, const std::string &var_name, bool is_rvar)
-    : contents(new Internal::LoopLevelContents(func_name, var_name, is_rvar)) {}
+LoopLevel::LoopLevel(const std::string &func_name, const std::string &var_name,
+                     bool is_rvar, int stage_index, bool locked)
+    : contents(new Internal::LoopLevelContents(func_name, var_name, is_rvar, stage_index, locked)) {}
 
-LoopLevel::LoopLevel(Internal::Function f, VarOrRVar v) : LoopLevel(f.name(), v.name(), v.is_rvar) {}
+LoopLevel::LoopLevel(const Internal::Function &f, VarOrRVar v, int stage_index)
+    : LoopLevel(f.name(), v.name(), v.is_rvar, stage_index, false) {}
 
-LoopLevel::LoopLevel(Func f, VarOrRVar v) : LoopLevel(f.function().name(), v.name(), v.is_rvar) {}
+LoopLevel::LoopLevel(const Func &f, VarOrRVar v, int stage_index)
+    : LoopLevel(f.function().name(), v.name(), v.is_rvar, stage_index, false) {}
 
-void LoopLevel::copy_from(const LoopLevel &other) {
+// Note that even 'undefined' LoopLevels get a LoopLevelContents; this is deliberate,
+// as we want to be able to create an undefined LoopLevel, pass it to another function
+// to use, then mutate it afterwards via 'set()'.
+LoopLevel::LoopLevel() : LoopLevel("", undefined_looplevel_name, false, -1, false) {}
+
+void LoopLevel::check_defined() const {
     internal_assert(defined());
+}
+
+void LoopLevel::check_locked() const {
+    // A LoopLevel can be in one of two states:
+    //   - Unlocked (the default state): An unlocked LoopLevel can be mutated freely (via the set() method),
+    //     but cannot be inspected (calls to func(), var(), is_inlined(), is_root(), etc.
+    //     will assert-fail). This is the only sort of LoopLevel that most user code will ever encounter.
+    //   - Locked: Once a LoopLevel is locked, it can be freely inspected, but no longer mutated.
+    //     Halide locks all LoopLevels during the lowering process to ensure that no user
+    //     code (e.g. custom passes) can interfere with invariants.
+    user_assert(contents->locked)
+        << "Cannot inspect an unlocked LoopLevel: "
+        << contents->func_name << "." << contents->var_name
+        << "\n";
+}
+
+void LoopLevel::check_defined_and_locked() const {
+    check_defined();
+    check_locked();
+}
+
+void LoopLevel::set(const LoopLevel &other) {
+    // Don't check locked(), since we don't care if it's defined() or not
+    user_assert(!contents->locked)
+        << "Cannot call set() on a locked LoopLevel: "
+        << contents->func_name << "." << contents->var_name
+        << "\n";
     contents->func_name = other.contents->func_name;
+    contents->stage_index = other.contents->stage_index;
     contents->var_name = other.contents->var_name;
     contents->is_rvar = other.contents->is_rvar;
 }
 
+LoopLevel &LoopLevel::lock() {
+    contents->locked = true;
+
+    // If you have an undefined LoopLevel at the point we're
+    // locking it (i.e., start of lowering), you've done something wrong,
+    // so let's give a more useful error message.
+    user_assert(defined())
+        << "There should be no undefined LoopLevels at the start of lowering. "
+        << "(Did you mean to use LoopLevel::inlined() instead of LoopLevel() ?)";
+
+    return *this;
+}
+
 bool LoopLevel::defined() const {
-    return contents.defined();
+    check_locked();
+    return contents->var_name != undefined_looplevel_name;
 }
 
 std::string LoopLevel::func() const {
-    internal_assert(defined());
+    check_defined_and_locked();
     return contents->func_name;
 }
 
+int LoopLevel::stage_index() const {
+    check_defined_and_locked();
+    internal_assert(contents->stage_index >= 0);
+    return contents->stage_index;
+}
+
 VarOrRVar LoopLevel::var() const {
-    internal_assert(defined());
-    internal_assert(!is_inline() && !is_root());
+    check_defined_and_locked();
+    internal_assert(!is_inlined() && !is_root());
     return VarOrRVar(contents->var_name, contents->is_rvar);
 }
 
 /*static*/
 LoopLevel LoopLevel::inlined() {
-    return LoopLevel("", "", false);
+    return LoopLevel("", inline_looplevel_name, false, -1);
 }
 
-bool LoopLevel::is_inline() const {
-    internal_assert(defined());
-    return contents->var_name.empty();
+bool LoopLevel::is_inlined() const {
+    // It's OK to be undefined (just return false).
+    check_locked();
+    return contents->var_name == inline_looplevel_name;
 }
 
 /*static*/
 LoopLevel LoopLevel::root() {
-    return LoopLevel("", "__root", false);
+    return LoopLevel("", root_looplevel_name, false, -1);
 }
 
 bool LoopLevel::is_root() const {
-    internal_assert(defined());
-    return contents->var_name == "__root";
+    // It's OK to be undefined (just return false).
+    check_locked();
+    return contents->var_name == root_looplevel_name;
 }
 
 std::string LoopLevel::to_string() const {
-    internal_assert(defined());
-    return contents->func_name + "." + contents->var_name;
+    check_defined_and_locked();
+    if (contents->stage_index == -1) {
+        return contents->func_name + "." + contents->var_name;
+    } else {
+        return contents->func_name + ".s" + std::to_string(contents->stage_index) + "." + contents->var_name;
+    }
 }
 
 bool LoopLevel::match(const std::string &loop) const {
-    internal_assert(defined());
-    return Internal::starts_with(loop, contents->func_name + ".") &&
-           Internal::ends_with(loop, "." + contents->var_name);
+    check_defined_and_locked();
+    if (contents->stage_index == -1) {
+        return Internal::starts_with(loop, contents->func_name + ".") &&
+               Internal::ends_with(loop, "." + contents->var_name);
+    } else {
+        std::string prefix = contents->func_name + ".s" + std::to_string(contents->stage_index) + ".";
+        return Internal::starts_with(loop, prefix) &&
+               Internal::ends_with(loop, "." + contents->var_name);
+    }
 }
 
 bool LoopLevel::match(const LoopLevel &other) const {
-    internal_assert(defined());
+    check_defined_and_locked();
+    other.check_defined_and_locked();
     return (contents->func_name == other.contents->func_name &&
             (contents->var_name == other.contents->var_name ||
              Internal::ends_with(contents->var_name, "." + other.contents->var_name) ||
-             Internal::ends_with(other.contents->var_name, "." + contents->var_name)));
+             Internal::ends_with(other.contents->var_name, "." + contents->var_name)) &&
+            (contents->stage_index == other.contents->stage_index));
 }
 
 bool LoopLevel::operator==(const LoopLevel &other) const {
-    return defined() == other.defined() &&
-           contents->func_name == other.contents->func_name &&
-           contents->var_name == other.contents->var_name;
+    check_defined_and_locked();
+    other.check_defined_and_locked();
+    return (contents->func_name == other.contents->func_name) &&
+           (contents->stage_index == other.contents->stage_index) &&
+           (contents->var_name == other.contents->var_name);
 }
 
 namespace Internal {
 
-typedef std::map<IntrusivePtr<FunctionContents>, IntrusivePtr<FunctionContents>> DeepCopyMap;
-
-IntrusivePtr<FunctionContents> deep_copy_function_contents_helper(
-    const IntrusivePtr<FunctionContents> &src,
-    DeepCopyMap &copied_map);
+typedef std::map<FunctionPtr, FunctionPtr> DeepCopyMap;
 
 /** A schedule for a halide function, which defines where, when, and
  * how it should be evaluated. */
@@ -127,16 +210,32 @@ struct FuncScheduleContents {
     LoopLevel store_level, compute_level;
     std::vector<StorageDim> storage_dims;
     std::vector<Bound> bounds;
-    std::map<std::string, IntrusivePtr<Internal::FunctionContents>> wrappers;
-    bool memoized;
+    std::vector<Bound> estimates;
+    std::map<std::string, Internal::FunctionPtr> wrappers;
+    MemoryType memory_type;
+    bool memoized, async;
 
     FuncScheduleContents() :
         store_level(LoopLevel::inlined()), compute_level(LoopLevel::inlined()),
-        memoized(false) {};
+        memory_type(MemoryType::Auto), memoized(false), async(false) {};
 
-    // Pass an IRMutator through to all Exprs referenced in the FuncScheduleContents
-    void mutate(IRMutator *mutator) {
+    // Pass an IRMutator2 through to all Exprs referenced in the FuncScheduleContents
+    void mutate(IRMutator2 *mutator) {
         for (Bound &b : bounds) {
+            if (b.min.defined()) {
+                b.min = mutator->mutate(b.min);
+            }
+            if (b.extent.defined()) {
+                b.extent = mutator->mutate(b.extent);
+            }
+            if (b.modulus.defined()) {
+                b.modulus = mutator->mutate(b.modulus);
+            }
+            if (b.remainder.defined()) {
+                b.remainder = mutator->mutate(b.remainder);
+            }
+        }
+        for (Bound &b : estimates) {
             if (b.min.defined()) {
                 b.min = mutator->mutate(b.min);
             }
@@ -154,17 +253,17 @@ struct FuncScheduleContents {
 };
 
 template<>
-EXPORT RefCount &ref_count<FuncScheduleContents>(const FuncScheduleContents *p) {
+RefCount &ref_count<FuncScheduleContents>(const FuncScheduleContents *p) {
     return p->ref_count;
 }
 
 template<>
-EXPORT void destroy<FuncScheduleContents>(const FuncScheduleContents *p) {
+void destroy<FuncScheduleContents>(const FuncScheduleContents *p) {
     delete p;
 }
 
 
-/** A schedule for a sigle halide stage, which defines where, when, and
+/** A schedule for a sigle halide stage_index, which defines where, when, and
  * how it should be evaluated. */
 struct StageScheduleContents {
     mutable RefCount ref_count;
@@ -173,13 +272,16 @@ struct StageScheduleContents {
     std::vector<Split> splits;
     std::vector<Dim> dims;
     std::vector<PrefetchDirective> prefetches;
+    FuseLoopLevel fuse_level;
+    std::vector<FusedPair> fused_pairs;
     bool touched;
     bool allow_race_conditions;
 
-    StageScheduleContents() : touched(false), allow_race_conditions(false) {};
+    StageScheduleContents() : fuse_level(FuseLoopLevel()), touched(false),
+                              allow_race_conditions(false) {};
 
-    // Pass an IRMutator through to all Exprs referenced in the StageScheduleContents
-    void mutate(IRMutator *mutator) {
+    // Pass an IRMutator2 through to all Exprs referenced in the StageScheduleContents
+    void mutate(IRMutator2 *mutator) {
         for (ReductionVariable &r : rvars) {
             if (r.min.defined()) {
                 r.min = mutator->mutate(r.min);
@@ -202,12 +304,12 @@ struct StageScheduleContents {
 };
 
 template<>
-EXPORT RefCount &ref_count<StageScheduleContents>(const StageScheduleContents *p) {
+RefCount &ref_count<StageScheduleContents>(const StageScheduleContents *p) {
     return p->ref_count;
 }
 
 template<>
-EXPORT void destroy<StageScheduleContents>(const StageScheduleContents *p) {
+void destroy<StageScheduleContents>(const StageScheduleContents *p) {
     delete p;
 }
 
@@ -215,7 +317,7 @@ EXPORT void destroy<StageScheduleContents>(const StageScheduleContents *p) {
 FuncSchedule::FuncSchedule() : contents(new FuncScheduleContents) {}
 
 FuncSchedule FuncSchedule::deep_copy(
-        std::map<IntrusivePtr<FunctionContents>, IntrusivePtr<FunctionContents>> &copied_map) const {
+        std::map<FunctionPtr, FunctionPtr> &copied_map) const {
 
     internal_assert(contents.defined()) << "Cannot deep-copy undefined FuncSchedule\n";
     FuncSchedule copy;
@@ -223,22 +325,27 @@ FuncSchedule FuncSchedule::deep_copy(
     copy.contents->compute_level = contents->compute_level;
     copy.contents->storage_dims = contents->storage_dims;
     copy.contents->bounds = contents->bounds;
+    copy.contents->estimates = contents->estimates;
+    copy.contents->memory_type = contents->memory_type;
     copy.contents->memoized = contents->memoized;
+    copy.contents->async = contents->async;
 
-    // Deep-copy wrapper functions. If function has already been deep-copied before,
-    // i.e. it's in the 'copied_map', use the deep-copied version from the map instead
-    // of creating a new deep-copy
+    // Deep-copy wrapper functions.
     for (const auto &iter : contents->wrappers) {
-        IntrusivePtr<FunctionContents> &copied_func = copied_map[iter.second];
-        if (copied_func.defined()) {
-            copy.contents->wrappers[iter.first] = copied_func;
-        } else {
-            copy.contents->wrappers[iter.first] = deep_copy_function_contents_helper(iter.second, copied_map);
-            copied_map[iter.second] = copy.contents->wrappers[iter.first];
-        }
+        FunctionPtr &copied_func = copied_map[iter.second];
+        internal_assert(copied_func.defined()) << Function(iter.second).name() << "\n";
+        copy.contents->wrappers[iter.first] = copied_func;
     }
     internal_assert(copy.contents->wrappers.size() == contents->wrappers.size());
     return copy;
+}
+
+MemoryType FuncSchedule::memory_type() const {
+    return contents->memory_type;
+}
+
+MemoryType &FuncSchedule::memory_type() {
+    return contents->memory_type;
 }
 
 bool &FuncSchedule::memoized() {
@@ -247,6 +354,14 @@ bool &FuncSchedule::memoized() {
 
 bool FuncSchedule::memoized() const {
     return contents->memoized;
+}
+
+bool &FuncSchedule::async() {
+    return contents->async;
+}
+
+bool FuncSchedule::async() const {
+    return contents->async;
 }
 
 std::vector<StorageDim> &FuncSchedule::storage_dims() {
@@ -265,16 +380,24 @@ const std::vector<Bound> &FuncSchedule::bounds() const {
     return contents->bounds;
 }
 
-std::map<std::string, IntrusivePtr<Internal::FunctionContents>> &FuncSchedule::wrappers() {
+std::vector<Bound> &FuncSchedule::estimates() {
+    return contents->estimates;
+}
+
+const std::vector<Bound> &FuncSchedule::estimates() const {
+    return contents->estimates;
+}
+
+std::map<std::string, Internal::FunctionPtr> &FuncSchedule::wrappers() {
     return contents->wrappers;
 }
 
-const std::map<std::string, IntrusivePtr<Internal::FunctionContents>> &FuncSchedule::wrappers() const {
+const std::map<std::string, Internal::FunctionPtr> &FuncSchedule::wrappers() const {
     return contents->wrappers;
 }
 
 void FuncSchedule::add_wrapper(const std::string &f,
-                               const IntrusivePtr<Internal::FunctionContents> &wrapper) {
+                               const Internal::FunctionPtr &wrapper) {
     if (contents->wrappers.count(f)) {
         if (f.empty()) {
             user_warning << "Replacing previous definition of global wrapper in function \""
@@ -317,9 +440,23 @@ void FuncSchedule::accept(IRVisitor *visitor) const {
             b.remainder.accept(visitor);
         }
     }
+    for (const Bound &b : estimates()) {
+        if (b.min.defined()) {
+            b.min.accept(visitor);
+        }
+        if (b.extent.defined()) {
+            b.extent.accept(visitor);
+        }
+        if (b.modulus.defined()) {
+            b.modulus.accept(visitor);
+        }
+        if (b.remainder.defined()) {
+            b.remainder.accept(visitor);
+        }
+    }
 }
 
-void FuncSchedule::mutate(IRMutator *mutator) {
+void FuncSchedule::mutate(IRMutator2 *mutator) {
     if (contents.defined()) {
         contents->mutate(mutator);
     }
@@ -335,6 +472,8 @@ StageSchedule StageSchedule::get_copy() const {
     copy.contents->splits = contents->splits;
     copy.contents->dims = contents->dims;
     copy.contents->prefetches = contents->prefetches;
+    copy.contents->fuse_level = contents->fuse_level;
+    copy.contents->fused_pairs = contents->fused_pairs;
     copy.contents->touched = contents->touched;
     copy.contents->allow_race_conditions = contents->allow_race_conditions;
     return copy;
@@ -380,6 +519,22 @@ const std::vector<PrefetchDirective> &StageSchedule::prefetches() const {
     return contents->prefetches;
 }
 
+FuseLoopLevel &StageSchedule::fuse_level() {
+    return contents->fuse_level;
+}
+
+const FuseLoopLevel &StageSchedule::fuse_level() const {
+    return contents->fuse_level;
+}
+
+std::vector<FusedPair> &StageSchedule::fused_pairs() {
+    return contents->fused_pairs;
+}
+
+const std::vector<FusedPair> &StageSchedule::fused_pairs() const {
+    return contents->fused_pairs;
+}
+
 bool &StageSchedule::allow_race_conditions() {
     return contents->allow_race_conditions;
 }
@@ -409,7 +564,7 @@ void StageSchedule::accept(IRVisitor *visitor) const {
     }
 }
 
-void StageSchedule::mutate(IRMutator *mutator) {
+void StageSchedule::mutate(IRMutator2 *mutator) {
     if (contents.defined()) {
         contents->mutate(mutator);
     }

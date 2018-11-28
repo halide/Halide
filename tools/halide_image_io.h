@@ -1,4 +1,4 @@
-// This simple PNG IO library works the Halide::Buffer<T> type or any
+// This simple IO library works the Halide::Buffer<T> type or any
 // other image type with the same API.
 
 #ifndef HALIDE_IMAGE_IO_H
@@ -6,10 +6,15 @@
 
 #include <algorithm>
 #include <cstdarg>
+#include <cstddef>
 #include <cstdio>
 #include <cstdlib>
+#include <functional>
+#include <map>
+#include <set>
 #include <string>
 #include <vector>
+#include <cctype>
 
 #ifndef HALIDE_NO_PNG
 #include "png.h"
@@ -19,739 +24,1880 @@
 #include "jpeglib.h"
 #endif
 
+#include "HalideRuntime.h"  // for halide_type_t
+
 namespace Halide {
 namespace Tools {
 
+struct FormatInfo {
+    halide_type_t type;
+    int dimensions;
+
+    bool operator<(const FormatInfo &other) const {
+        if (type.code < other.type.code) {
+            return true;
+        } else if (type.code > other.type.code) {
+            return false;
+        }
+        if (type.bits < other.type.bits) {
+            return true;
+        } else if (type.bits > other.type.bits) {
+            return false;
+        }
+        if (type.lanes < other.type.lanes) {
+            return true;
+        } else if (type.lanes > other.type.lanes) {
+            return false;
+        }
+        return (dimensions < other.dimensions);
+    }
+};
+
 namespace Internal {
 
-typedef bool (*CheckFunc)(bool condition, const char* fmt, ...);
+// Must be constexpr to allow use in case clauses.
+inline constexpr int halide_type_code(halide_type_code_t code, int bits) {
+    return (((int) code) << 8) | bits;
+}
 
-inline bool CheckFail(bool condition, const char* fmt, ...) {
+typedef bool (*CheckFunc)(bool condition, const char* msg);
+
+inline bool CheckFail(bool condition, const char* msg) {
     if (!condition) {
-        char buffer[1024];
-        va_list args;
-        va_start(args, fmt);
-        vsnprintf(buffer, sizeof(buffer), fmt, args);
-        va_end(args);
-        fprintf(stderr, "%s", buffer);
+        fprintf(stderr, "%s\n", msg);
         exit(-1);
     }
     return condition;
 }
 
-inline bool CheckReturn(bool condition, const char* fmt, ...) {
+inline bool CheckReturn(bool condition, const char* msg) {
     return condition;
 }
 
+template<typename To, typename From>
+To convert(const From &from);
+
+// Convert to bool
+template<> inline bool convert(const bool &in) { return in; }
+template<> inline bool convert(const uint8_t &in) { return in != 0; }
+template<> inline bool convert(const uint16_t &in) { return in != 0; }
+template<> inline bool convert(const uint32_t &in) { return in != 0; }
+template<> inline bool convert(const uint64_t &in) { return in != 0; }
+template<> inline bool convert(const int8_t &in) { return in != 0; }
+template<> inline bool convert(const int16_t &in) { return in != 0; }
+template<> inline bool convert(const int32_t &in) { return in != 0; }
+template<> inline bool convert(const int64_t &in) { return in != 0; }
+template<> inline bool convert(const float &in) { return in != 0; }
+template<> inline bool convert(const double &in) { return in != 0; }
+
 // Convert to u8
-inline void convert(uint8_t in, uint8_t &out) {out = in;}
-inline void convert(uint16_t in, uint8_t &out) {out = in >> 8;}
-inline void convert(uint32_t in, uint8_t &out) {out = in >> 24;}
-inline void convert(int8_t in, uint8_t &out) {out = in;}
-inline void convert(int16_t in, uint8_t &out) {out = in >> 8;}
-inline void convert(int32_t in, uint8_t &out) {out = in >> 24;}
-inline void convert(float in, uint8_t &out) {out = (uint8_t)(in*255.0f);}
-inline void convert(double in, uint8_t &out) {out = (uint8_t)(in*255.0f);}
+template<> inline uint8_t convert(const bool &in) { return in; }
+template<> inline uint8_t convert(const uint8_t &in) { return in; }
+template<> inline uint8_t convert(const uint16_t &in) {
+    uint32_t tmp = (uint32_t)(in) + 0x80;
+    // Fast approximation of div-by-257: see http://research.swtch.com/divmult
+    return ((tmp * 255 + 255) >> 16);
+}
+template<> inline uint8_t convert(const uint32_t &in) { return (uint8_t) ((((uint64_t) in) + 0x00808080) / 0x01010101); }
+// uint64 -> 8 just discards the lower 32 bits: if you were expecting more precision, well, sorry
+template<> inline uint8_t convert(const uint64_t &in) { return convert<uint8_t, uint32_t>(uint32_t(in >> 32)); }
+template<> inline uint8_t convert(const int8_t &in) { return convert<uint8_t, uint8_t>(in); }
+template<> inline uint8_t convert(const int16_t &in) { return convert<uint8_t, uint16_t>(in); }
+template<> inline uint8_t convert(const int32_t &in) { return convert<uint8_t, uint32_t>(in); }
+template<> inline uint8_t convert(const int64_t &in) { return convert<uint8_t, uint64_t>(in); }
+template<> inline uint8_t convert(const float &in) { return (uint8_t)(in*255.0f+0.5f); }
+template<> inline uint8_t convert(const double &in) { return (uint8_t)(in*255.0+0.5); }
 
 // Convert to u16
-inline void convert(uint8_t in, uint16_t &out) {out = in << 8;}
-inline void convert(uint16_t in, uint16_t &out) {out = in;}
-inline void convert(uint32_t in, uint16_t &out) {out = in >> 16;}
-inline void convert(int8_t in, uint16_t &out) {out = in << 8;}
-inline void convert(int16_t in, uint16_t &out) {out = in;}
-inline void convert(int32_t in, uint16_t &out) {out = in >> 16;}
-inline void convert(float in, uint16_t &out) {out = (uint16_t)(in*65535.0f);}
-inline void convert(double in, uint16_t &out) {out = (uint16_t)(in*65535.0f);}
+template<> inline uint16_t convert(const bool &in) { return in; }
+template<> inline uint16_t convert(const uint8_t &in) { return uint16_t(in) * 0x0101; }
+template<> inline uint16_t convert(const uint16_t &in) { return in; }
+template<> inline uint16_t convert(const uint32_t &in) { return in >> 16; }
+template<> inline uint16_t convert(const uint64_t &in) { return in >> 48; }
+template<> inline uint16_t convert(const int8_t &in) { return convert<uint16_t, uint8_t>(in); }
+template<> inline uint16_t convert(const int16_t &in) { return convert<uint16_t, uint16_t>(in); }
+template<> inline uint16_t convert(const int32_t &in) { return convert<uint16_t, uint32_t>(in); }
+template<> inline uint16_t convert(const int64_t &in) { return convert<uint16_t, uint64_t>(in); }
+template<> inline uint16_t convert(const float &in) { return (uint16_t)(in*65535.0f+0.5f); }
+template<> inline uint16_t convert(const double &in) { return (uint16_t)(in*65535.0+0.5); }
 
-// Convert from u8
-inline void convert(uint8_t in, uint32_t &out) {out = in << 24;}
-inline void convert(uint8_t in, int8_t &out) {out = in;}
-inline void convert(uint8_t in, int16_t &out) {out = in << 8;}
-inline void convert(uint8_t in, int32_t &out) {out = in << 24;}
-inline void convert(uint8_t in, float &out) {out = in/255.0f;}
-inline void convert(uint8_t in, double &out) {out = in/255.0f;}
+// Convert to u32
+template<> inline uint32_t convert(const bool &in) { return in; }
+template<> inline uint32_t convert(const uint8_t &in) { return uint32_t(in) * 0x01010101; }
+template<> inline uint32_t convert(const uint16_t &in) { return uint32_t(in) * 0x00010001; }
+template<> inline uint32_t convert(const uint32_t &in) { return in; }
+template<> inline uint32_t convert(const uint64_t &in) { return (uint32_t) (in >> 32); }
+template<> inline uint32_t convert(const int8_t &in) { return convert<uint32_t, uint8_t>(in); }
+template<> inline uint32_t convert(const int16_t &in) { return convert<uint32_t, uint16_t>(in); }
+template<> inline uint32_t convert(const int32_t &in) { return convert<uint32_t, uint32_t>(in); }
+template<> inline uint32_t convert(const int64_t &in) { return convert<uint32_t, uint64_t>(in); }
+template<> inline uint32_t convert(const float &in) { return (uint32_t)(in*4294967295.0+0.5); }
+template<> inline uint32_t convert(const double &in) { return (uint32_t)(in*4294967295.0+0.5f); }
 
-// Convert from u16
-inline void convert(uint16_t in, uint32_t &out) {out = in << 16;}
-inline void convert(uint16_t in, int8_t &out) {out = in >> 8;}
-inline void convert(uint16_t in, int16_t &out) {out = in;}
-inline void convert(uint16_t in, int32_t &out) {out = in << 16;}
-inline void convert(uint16_t in, float &out) {out = in/65535.0f;}
-inline void convert(uint16_t in, double &out) {out = in/65535.0f;}
+// Convert to u64
+template<> inline uint64_t convert(const bool &in) { return in; }
+template<> inline uint64_t convert(const uint8_t &in) { return uint64_t(in) * 0x0101010101010101LL; }
+template<> inline uint64_t convert(const uint16_t &in) { return uint64_t(in) * 0x0001000100010001LL; }
+template<> inline uint64_t convert(const uint32_t &in) { return uint64_t(in) * 0x0000000100000001LL; }
+template<> inline uint64_t convert(const uint64_t &in) { return in; }
+template<> inline uint64_t convert(const int8_t &in) { return convert<uint64_t, uint8_t>(in); }
+template<> inline uint64_t convert(const int16_t &in) { return convert<uint64_t, uint16_t>(in); }
+template<> inline uint64_t convert(const int32_t &in) { return convert<uint64_t, uint64_t>(in); }
+template<> inline uint64_t convert(const int64_t &in) { return convert<uint64_t, uint64_t>(in); }
+template<> inline uint64_t convert(const float &in) { return convert<uint64_t, uint32_t>((uint32_t)(in*4294967295.0+0.5)); }
+template<> inline uint64_t convert(const double &in) { return convert<uint64_t, uint32_t>((uint32_t)(in*4294967295.0+0.5)); }
 
+// Convert to i8
+template<> inline int8_t convert(const bool &in) { return in; }
+template<> inline int8_t convert(const uint8_t &in) { return convert<uint8_t, uint8_t>(in); }
+template<> inline int8_t convert(const uint16_t &in) { return convert<uint8_t, uint16_t>(in); }
+template<> inline int8_t convert(const uint32_t &in) { return convert<uint8_t, uint32_t>(in); }
+template<> inline int8_t convert(const uint64_t &in) { return convert<uint8_t, uint64_t>(in); }
+template<> inline int8_t convert(const int8_t &in) { return convert<uint8_t, int8_t>(in); }
+template<> inline int8_t convert(const int16_t &in) { return convert<uint8_t, int16_t>(in); }
+template<> inline int8_t convert(const int32_t &in) { return convert<uint8_t, int32_t>(in); }
+template<> inline int8_t convert(const int64_t &in) { return convert<uint8_t, int64_t>(in); }
+template<> inline int8_t convert(const float &in) { return convert<uint8_t, float>(in); }
+template<> inline int8_t convert(const double &in) { return convert<uint8_t, double>(in); }
 
-inline bool ends_with_ignore_case(const std::string &ac, const std::string &bc) {
-    if (ac.length() < bc.length()) { return false; }
-    std::string a = ac, b = bc;
-    std::transform(a.begin(), a.end(), a.begin(), ::tolower);
-    std::transform(b.begin(), b.end(), b.begin(), ::tolower);
-    return a.compare(a.length()-b.length(), b.length(), b) == 0;
+// Convert to i16
+template<> inline int16_t convert(const bool &in) { return in; }
+template<> inline int16_t convert(const uint8_t &in) { return convert<uint16_t, uint8_t>(in); }
+template<> inline int16_t convert(const uint16_t &in) { return convert<uint16_t, uint16_t>(in); }
+template<> inline int16_t convert(const uint32_t &in) { return convert<uint16_t, uint32_t>(in); }
+template<> inline int16_t convert(const uint64_t &in) { return convert<uint16_t, uint64_t>(in); }
+template<> inline int16_t convert(const int8_t &in) { return convert<uint16_t, int8_t>(in); }
+template<> inline int16_t convert(const int16_t &in) { return convert<uint16_t, int16_t>(in); }
+template<> inline int16_t convert(const int32_t &in) { return convert<uint16_t, int32_t>(in); }
+template<> inline int16_t convert(const int64_t &in) { return convert<uint16_t, int64_t>(in); }
+template<> inline int16_t convert(const float &in) { return convert<uint16_t, float>(in); }
+template<> inline int16_t convert(const double &in) { return convert<uint16_t, double>(in); }
+
+// Convert to i32
+template<> inline int32_t convert(const bool &in) { return in; }
+template<> inline int32_t convert(const uint8_t &in) { return convert<uint32_t, uint8_t>(in); }
+template<> inline int32_t convert(const uint16_t &in) { return convert<uint32_t, uint16_t>(in); }
+template<> inline int32_t convert(const uint32_t &in) { return convert<uint32_t, uint32_t>(in); }
+template<> inline int32_t convert(const uint64_t &in) { return convert<uint32_t, uint64_t>(in); }
+template<> inline int32_t convert(const int8_t &in) { return convert<uint32_t, int8_t>(in); }
+template<> inline int32_t convert(const int16_t &in) { return convert<uint32_t, int16_t>(in); }
+template<> inline int32_t convert(const int32_t &in) { return convert<uint32_t, int32_t>(in); }
+template<> inline int32_t convert(const int64_t &in) { return convert<uint32_t, int64_t>(in); }
+template<> inline int32_t convert(const float &in) { return convert<uint32_t, float>(in); }
+template<> inline int32_t convert(const double &in) { return convert<uint32_t, double>(in); }
+
+// Convert to i64
+template<> inline int64_t convert(const bool &in) { return in; }
+template<> inline int64_t convert(const uint8_t &in) { return convert<uint64_t, uint8_t>(in); }
+template<> inline int64_t convert(const uint16_t &in) { return convert<uint64_t, uint16_t>(in); }
+template<> inline int64_t convert(const uint32_t &in) { return convert<uint64_t, uint32_t>(in); }
+template<> inline int64_t convert(const uint64_t &in) { return convert<uint64_t, uint64_t>(in); }
+template<> inline int64_t convert(const int8_t &in) { return convert<uint64_t, int8_t>(in); }
+template<> inline int64_t convert(const int16_t &in) { return convert<uint64_t, int16_t>(in); }
+template<> inline int64_t convert(const int32_t &in) { return convert<uint64_t, int32_t>(in); }
+template<> inline int64_t convert(const int64_t &in) { return convert<uint64_t, int64_t>(in); }
+template<> inline int64_t convert(const float &in) { return convert<uint64_t, float>(in); }
+template<> inline int64_t convert(const double &in) { return convert<uint64_t, double>(in); }
+
+// Convert to f32
+template<> inline float convert(const bool &in) { return in; }
+template<> inline float convert(const uint8_t &in) { return in/255.0f; }
+template<> inline float convert(const uint16_t &in) { return in/65535.0f; }
+template<> inline float convert(const uint32_t &in) { return (float) (in/4294967295.0); }
+template<> inline float convert(const uint64_t &in) { return convert<float, uint32_t>(uint32_t(in >> 32)); }
+template<> inline float convert(const int8_t &in) { return convert<float, uint8_t>(in); }
+template<> inline float convert(const int16_t &in) { return convert<float, uint16_t>(in); }
+template<> inline float convert(const int32_t &in) { return convert<float, uint64_t>(in); }
+template<> inline float convert(const int64_t &in) { return convert<float, uint64_t>(in); }
+template<> inline float convert(const float &in) { return in; }
+template<> inline float convert(const double &in) { return (float) in; }
+
+// Convert to f64
+template<> inline double convert(const bool &in) { return in; }
+template<> inline double convert(const uint8_t &in) { return in/255.0f; }
+template<> inline double convert(const uint16_t &in) { return in/65535.0f; }
+template<> inline double convert(const uint32_t &in) { return (double) (in/4294967295.0); }
+template<> inline double convert(const uint64_t &in) { return convert<double, uint32_t>(uint32_t(in >> 32)); }
+template<> inline double convert(const int8_t &in) { return convert<double, uint8_t>(in); }
+template<> inline double convert(const int16_t &in) { return convert<double, uint16_t>(in); }
+template<> inline double convert(const int32_t &in) { return convert<double, uint64_t>(in); }
+template<> inline double convert(const int64_t &in) { return convert<double, uint64_t>(in); }
+template<> inline double convert(const float &in) { return (double) in; }
+template<> inline double convert(const double &in) { return in; }
+
+inline std::string to_lowercase(const std::string &s) {
+    std::string r = s;
+    std::transform(r.begin(), r.end(), r.begin(), ::tolower);
+    return r;
 }
 
-inline bool is_little_endian() {
-    int value = 1;
-    return ((char *) &value)[0] == 1;
-}
-
-inline void swap_endian_16(bool little_endian, uint16_t &value) {
-    if (little_endian) {
-        value = ((value & 0xff)<<8)|((value & 0xff00)>>8);
+inline std::string get_lowercase_extension(const std::string &path) {
+    size_t last_dot = path.rfind('.');
+    if (last_dot == std::string::npos) {
+        return "";
     }
+    return to_lowercase(path.substr(last_dot + 1));
+}
+
+template<typename ElemType>
+ElemType read_big_endian(const uint8_t *src);
+
+template<>
+inline uint8_t read_big_endian(const uint8_t *src) {
+    return *src;
+}
+
+template<>
+inline uint16_t read_big_endian(const uint8_t *src) {
+    return (((uint16_t) src[0]) << 8) | ((uint16_t) src[1]);
+}
+
+template<typename ElemType>
+void write_big_endian(const ElemType &src, uint8_t *dst);
+
+template<>
+inline void write_big_endian(const uint8_t &src, uint8_t *dst) {
+    *dst = src;
+}
+
+template<>
+inline void write_big_endian(const uint16_t &src, uint8_t *dst) {
+    dst[0] = src >> 8;
+    dst[1] = src & 0xff;
 }
 
 struct FileOpener {
-    FileOpener(const char* filename, const char* mode) : f(fopen(filename, mode)) {
+    FileOpener(const std::string &filename, const char* mode) : f(fopen(filename.c_str(), mode)) {
         // nothing
     }
+
     ~FileOpener() {
         if (f != nullptr) {
             fclose(f);
         }
     }
-    // read a line of data skipping lines that begin with '#"
-    char *readLine(char *buf, int maxlen) {
+
+    // read a line of data, skipping lines that begin with '#"
+    char *read_line(char *buf, int maxlen) {
         char *status;
         do {
             status = fgets(buf, maxlen, f);
         } while(status && buf[0] == '#');
         return(status);
     }
+
+    // call read_line and to a sscanf() on it
+    int scan_line(const char *fmt, ...) {
+        char buf[1024];
+        if (!read_line(buf, 1024)) {
+            return 0;
+        }
+        va_list args;
+        va_start(args, fmt);
+        int result = vsscanf(buf, fmt, args);
+        va_end(args);
+        return result;
+    }
+
+    bool read_bytes(void *data, size_t count) {
+        return fread(data, 1, count, f) == count;
+    }
+
+    template<typename T, size_t N>
+    bool read_array(T (&data)[N]) {
+        return read_bytes(&data[0], sizeof(T) * N);
+    }
+
+    template<typename T>
+    bool read_vector(std::vector<T> *v) {
+        return read_bytes(v->data(), v->size() * sizeof(T));
+    }
+
+    bool write_bytes(const void *data, size_t count) {
+        return fwrite(data, 1, count, f) == count;
+    }
+
+    template<typename T>
+    bool write_vector(const std::vector<T> &v) {
+        return write_bytes(v.data(), v.size() * sizeof(T));
+    }
+
+    template<typename T, size_t N>
+    bool write_array(const T (&data)[N]) {
+        return write_bytes(&data[0], sizeof(T) * N);
+    }
+
     FILE * const f;
 };
 
+// Read a row of ElemTypes from a byte buffer and copy them into a specific image row.
+// Multibyte elements are assumed to be big-endian.
+template<typename ElemType, typename ImageType>
+void read_big_endian_row(const uint8_t *src, int y, ImageType *im) {
+    auto im_typed = im->template as<ElemType>();
+    const int xmin = im_typed.dim(0).min();
+    const int xmax = im_typed.dim(0).max();
+    if (im_typed.dimensions() > 2) {
+        const int cmin = im_typed.dim(2).min();
+        const int cmax = im_typed.dim(2).max();
+        for (int x = xmin; x <= xmax; x++) {
+            for (int c = cmin; c <= cmax; c++) {
+                im_typed(x, y, c+cmin) = read_big_endian<ElemType>(src);
+                src += sizeof(ElemType);
+            }
+        }
+    } else {
+        for (int x = xmin; x <= xmax; x++) {
+            im_typed(x, y) = read_big_endian<ElemType>(src);
+            src += sizeof(ElemType);
+        }
+    }
+}
+
+// Copy a row from an image into a byte buffer.
+// Multibyte elements are written in big-endian layout.
+template<typename ElemType, typename ImageType>
+void write_big_endian_row(const ImageType &im, int y, uint8_t *dst) {
+    auto im_typed = im.template as<typename std::add_const<ElemType>::type>();
+    const int xmin = im_typed.dim(0).min();
+    const int xmax = im_typed.dim(0).max();
+    if (im_typed.dimensions() > 2) {
+        const int cmin = im_typed.dim(2).min();
+        const int cmax = im_typed.dim(2).max();
+        for (int x = xmin; x <= xmax; x++) {
+            for (int c = cmin; c <= cmax; c++) {
+                write_big_endian<ElemType>(im_typed(x, y, c), dst);
+                dst += sizeof(ElemType);
+            }
+        }
+    } else {
+        for (int x = xmin; x <= xmax; x++) {
+            write_big_endian<ElemType>(im_typed(x, y), dst);
+            dst += sizeof(ElemType);
+        }
+    }
+}
+
 #ifndef HALIDE_NO_PNG
-struct PngRowPointers {
-    PngRowPointers(int height, int rowbytes) : p(new png_bytep[height]), height(height) {
-        if (p != nullptr) {
-            for (int y = 0; y < height; y++) {
-                p[y] = new png_byte[rowbytes];
-            }
-        }
-    }
-    ~PngRowPointers() {
-        if (p) {
-            for (int y = 0; y < height; y++) {
-                delete[] p[y];
-            }
-            delete[] p;
-        }
-    }
-    png_bytep* const p;
-    int const height;
-};
-#endif // HALIDE_NO_PNG
-
-}  // namespace Internal
-
 
 template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
 bool load_png(const std::string &filename, ImageType *im) {
-#ifdef HALIDE_NO_PNG
-    check(false, "png not supported in this build\n");
-    return false;
-#else // HALIDE_NO_PNG
-    png_byte header[8];
-    png_structp png_ptr;
-    png_infop info_ptr;
+    static_assert(!ImageType::has_static_halide_type, "");
 
     /* open file and test for it being a png */
-    Internal::FileOpener f(filename.c_str(), "rb");
-    if (!check(f.f != nullptr, "File %s could not be opened for reading\n", filename.c_str())) return false;
-    if (!check(fread(header, 1, 8, f.f) == 8, "File ended before end of header\n")) return false;
-    if (!check(!png_sig_cmp(header, 0, 8), "File %s is not recognized as a PNG file\n", filename.c_str())) return false;
+    Internal::FileOpener f(filename, "rb");
+    if (!check(f.f != nullptr, "File could not be opened for reading")) {
+        return false;
+    }
+    png_byte header[8];
+    if (!check(f.read_array(header), "File ended before end of header")) {
+        return false;
+    }
+    if (!check(!png_sig_cmp(header, 0, 8), "File is not recognized as a PNG file")) {
+        return false;
+    }
 
     /* initialize stuff */
-    png_ptr = png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+    png_structp png_ptr = png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+    if (!check(png_ptr != nullptr, "png_create_read_struct failed")) {
+        return false;
+    }
 
-    if (!check(png_ptr != nullptr, "png_create_read_struct failed\n")) return false;
+    png_infop info_ptr = png_create_info_struct(png_ptr);
+    if (!check(info_ptr != nullptr, "png_create_info_struct failed")) {
+        return false;
+    }
 
-    info_ptr = png_create_info_struct(png_ptr);
-    if (!check(info_ptr != nullptr, "png_create_info_struct failed\n")) return false;
-
-    if (!check(!setjmp(png_jmpbuf(png_ptr)), "Error during init_io\n")) return false;
+    if (!check(!setjmp(png_jmpbuf(png_ptr)), "Error loading PNG")) {
+        return false;
+    }
 
     png_init_io(png_ptr, f.f);
     png_set_sig_bytes(png_ptr, 8);
 
     png_read_info(png_ptr, info_ptr);
 
-    int width = png_get_image_width(png_ptr, info_ptr);
-    int height = png_get_image_height(png_ptr, info_ptr);
-    int channels = png_get_channels(png_ptr, info_ptr);
-    int bit_depth = png_get_bit_depth(png_ptr, info_ptr);
+    const int width = png_get_image_width(png_ptr, info_ptr);
+    const int height = png_get_image_height(png_ptr, info_ptr);
+    const int channels = png_get_channels(png_ptr, info_ptr);
+    const int bit_depth = png_get_bit_depth(png_ptr, info_ptr);
 
-    // Expand low-bpp images to have only 1 pixel per byte (As opposed to tight packing)
-    if (bit_depth < 8) {
-        png_set_packing(png_ptr);
-    }
-
+    const halide_type_t im_type(halide_type_uint, bit_depth);
+    std::vector<int> im_dimensions = { width, height };
     if (channels != 1) {
-        *im = ImageType(width, height, channels);
-    } else {
-        *im = ImageType(width, height);
+        im_dimensions.push_back(channels);
     }
 
-    png_set_interlace_handling(png_ptr);
+    *im = ImageType(im_type, im_dimensions);
+
     png_read_update_info(png_ptr, info_ptr);
 
-    // read the file
-    if (!check(!setjmp(png_jmpbuf(png_ptr)), "Error during read_image\n")) return false;
+    auto copy_to_image = bit_depth == 8 ?
+        Internal::read_big_endian_row<uint8_t, ImageType> :
+        Internal::read_big_endian_row<uint16_t, ImageType>;
 
-    Internal::PngRowPointers row_pointers(im->height(), png_get_rowbytes(png_ptr, info_ptr));
-    png_read_image(png_ptr, row_pointers.p);
-
-    if (!check((bit_depth == 8) || (bit_depth == 16), "Can only handle 8-bit or 16-bit pngs\n")) return false;
-
-    // convert the data to ImageType::ElemType
-
-    int64_t c_stride = (im->channels() == 1) ? 0 : ((&(*im)(0, 0, 1)) - (&(*im)(0, 0, 0)));
-    typename ImageType::ElemType *ptr = (typename ImageType::ElemType*)im->data();
-    if (bit_depth == 8) {
-        for (int y = 0; y < im->height(); y++) {
-            uint8_t *srcPtr = (uint8_t *)(row_pointers.p[y]);
-            for (int x = 0; x < im->width(); x++) {
-                for (int c = 0; c < im->channels(); c++) {
-                    Internal::convert(*srcPtr++, ptr[c*c_stride]);
-                }
-                ptr++;
-            }
-        }
-    } else if (bit_depth == 16) {
-        for (int y = 0; y < im->height(); y++) {
-            uint8_t *srcPtr = (uint8_t *)(row_pointers.p[y]);
-            for (int x = 0; x < im->width(); x++) {
-                for (int c = 0; c < im->channels(); c++) {
-                    uint16_t hi = (*srcPtr++) << 8;
-                    uint16_t lo = hi | (*srcPtr++);
-                    Internal::convert(lo, ptr[c*c_stride]);
-                }
-                ptr++;
-            }
-        }
+    std::vector<uint8_t> row(png_get_rowbytes(png_ptr, info_ptr));
+    const int ymin = im->dim(1).min();
+    const int ymax = im->dim(1).max();
+    for (int y = ymin; y <= ymax; ++y) {
+        png_read_row(png_ptr, row.data(), nullptr);
+        copy_to_image(row.data(), y, im);
     }
 
     png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
 
-    im->set_host_dirty();
     return true;
-#endif // HALIDE_NO_PNG
+}
+
+inline const std::set<FormatInfo> &query_png() {
+    static std::set<FormatInfo> info = {
+        { halide_type_t(halide_type_uint, 8), 2 },
+        { halide_type_t(halide_type_uint, 16), 2 },
+        { halide_type_t(halide_type_uint, 8), 3 },
+        { halide_type_t(halide_type_uint, 16), 3 }
+    };
+    return info;
 }
 
 // "im" is not const-ref because copy_to_host() is not const.
 template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
 bool save_png(ImageType &im, const std::string &filename) {
-#ifdef HALIDE_NO_PNG
-    check(false, "png not supported in this build\n");
-    return false;
-#else // HALIDE_NO_PNG
-    png_structp png_ptr;
-    png_infop info_ptr;
-    png_byte color_type;
+    static_assert(!ImageType::has_static_halide_type, "");
 
     im.copy_to_host();
 
-    if (!check(im.channels() > 0 && im.channels() < 5,
-           "Can't write PNG files that have other than 1, 2, 3, or 4 channels\n")) return false;
+    const int width = im.width();
+    const int height = im.height();
+    const int channels = im.channels();
 
-    png_byte color_types[4] = {PNG_COLOR_TYPE_GRAY, PNG_COLOR_TYPE_GRAY_ALPHA,
-                               PNG_COLOR_TYPE_RGB,  PNG_COLOR_TYPE_RGB_ALPHA
-                              };
-    color_type = color_types[im.channels() - 1];
+    if (!check(channels >= 1 && channels <= 4,
+           "Can't write PNG files that have other than 1, 2, 3, or 4 channels")) {
+        return false;
+    }
+
+    const png_byte color_types[4] = {
+        PNG_COLOR_TYPE_GRAY,
+        PNG_COLOR_TYPE_GRAY_ALPHA,
+        PNG_COLOR_TYPE_RGB,
+        PNG_COLOR_TYPE_RGB_ALPHA
+    };
+    png_byte color_type = color_types[channels - 1];
 
     // open file
-    Internal::FileOpener f(filename.c_str(), "wb");
-    if (!check(f.f != nullptr, "[write_png_file] File %s could not be opened for writing\n", filename.c_str())) return false;
+    Internal::FileOpener f(filename, "wb");
+    if (!check(f.f != nullptr, "[write_png_file] File could not be opened for writing")) {
+        return false;
+    }
 
     // initialize stuff
-    png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
-    if (!check(png_ptr != nullptr, "[write_png_file] png_create_write_struct failed\n")) return false;
+    png_structp png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+    if (!check(png_ptr != nullptr, "[write_png_file] png_create_write_struct failed")) {
+        return false;
+    }
 
-    info_ptr = png_create_info_struct(png_ptr);
-    if (!check(info_ptr != nullptr, "[write_png_file] png_create_info_struct failed\n")) return false;
+    png_infop info_ptr = png_create_info_struct(png_ptr);
+    if (!check(info_ptr != nullptr, "[write_png_file] png_create_info_struct failed")) {
+        return false;
+    }
 
-    if (!check(!setjmp(png_jmpbuf(png_ptr)), "[write_png_file] Error during init_io\n")) return false;
+    if (!check(!setjmp(png_jmpbuf(png_ptr)), "Error saving PNG")) {
+        return false;
+    }
 
     png_init_io(png_ptr, f.f);
 
-    unsigned int bit_depth = 16;
-    if (sizeof(typename ImageType::ElemType) == 1) {
-        bit_depth = 8;
-    }
+    const halide_type_t im_type = im.type();
+    const int bit_depth = im_type.bits;
 
-    // write header
-    if (!check(!setjmp(png_jmpbuf(png_ptr)), "[write_png_file] Error during writing header\n")) return false;
-
-    png_set_IHDR(png_ptr, info_ptr, im.width(), im.height(),
+    png_set_IHDR(png_ptr, info_ptr, width, height,
                  bit_depth, color_type, PNG_INTERLACE_NONE,
                  PNG_COMPRESSION_TYPE_BASE, PNG_FILTER_TYPE_BASE);
 
     png_write_info(png_ptr, info_ptr);
 
-    Internal::PngRowPointers row_pointers(im.height(), png_get_rowbytes(png_ptr, info_ptr));
+    auto copy_from_image = bit_depth == 8 ?
+        Internal::write_big_endian_row<uint8_t, ImageType> :
+        Internal::write_big_endian_row<uint16_t, ImageType>;
 
-    // We don't require that the image type provided has any
-    // particular way to get at the strides, so take differences of
-    // addresses of pixels to compute them.
-    int64_t c_stride = (im.channels() == 1) ? 0 : ((&im(0, 0, 1)) - (&im(0, 0, 0)));
-    int64_t x_stride = (int)((&im(1, 0, 0)) - (&im(0, 0, 0)));
-    typename ImageType::ElemType *srcPtr = (typename ImageType::ElemType*)im.data();
-
-    for (int y = 0; y < im.height(); y++) {
-        uint8_t *dstPtr = (uint8_t *)(row_pointers.p[y]);
-        if (bit_depth == 16) {
-            // convert to uint16_t
-            for (int x = 0; x < im.width(); x++) {
-                for (int c = 0; c < im.channels(); c++) {
-                    uint16_t out;
-                    Internal::convert(srcPtr[c*c_stride], out);
-                    *dstPtr++ = out >> 8;
-                    *dstPtr++ = out & 0xff;
-                }
-                srcPtr += x_stride;
-            }
-        } else if (bit_depth == 8) {
-            // convert to uint8_t
-            for (int x = 0; x < im.width(); x++) {
-                for (int c = 0; c < im.channels(); c++) {
-                    uint8_t out;
-                    Internal::convert(srcPtr[c*c_stride], out);
-                    *dstPtr++ = out;
-                }
-                srcPtr += x_stride;
-            }
-        } else {
-            if (!check(bit_depth == 8 || bit_depth == 16, "We only support saving 8- and 16-bit images.")) return false;
-        }
+    std::vector<uint8_t> row(png_get_rowbytes(png_ptr, info_ptr));
+    const int ymin = im.dim(1).min();
+    const int ymax = im.dim(1).max();
+    for (int y = ymin; y <= ymax; ++y) {
+        copy_from_image(im, y, row.data());
+        png_write_row(png_ptr, row.data());
     }
-
-    // write data
-    if (!check(!setjmp(png_jmpbuf(png_ptr)), "[write_png_file] Error during writing bytes")) return false;
-
-    png_write_image(png_ptr, row_pointers.p);
-
-    // finish write
-    if (!check(!setjmp(png_jmpbuf(png_ptr)), "[write_png_file] Error during end of write")) return false;
-
     png_write_end(png_ptr, NULL);
-
     png_destroy_write_struct(&png_ptr, &info_ptr);
 
     return true;
-#endif // HALIDE_NO_PNG
+}
+
+#endif // not HALIDE_NO_PNG
+
+template<Internal::CheckFunc check>
+bool read_pnm_header(Internal::FileOpener &f, const std::string &hdr_fmt, int *width, int *height, int *bit_depth) {
+    if (!check(f.f != nullptr, "File could not be opened for reading")) {
+        return false;
+    }
+
+    char header[256];
+    if (!check(f.scan_line("%255s", header) == 1, "Could not read header")) {
+        return false;
+    }
+
+    if (!check(to_lowercase(hdr_fmt) == to_lowercase(header), "Unexpected file header")) {
+        return false;
+    }
+
+    if (!check(f.scan_line("%d %d\n", width, height) == 2, "Could not read width and height")) {
+        return false;
+    }
+
+    int maxval;
+    if (!check(f.scan_line("%d", &maxval) == 1, "Could not read max value")) {
+        return false;
+    }
+    if (maxval == 255) {
+        *bit_depth = 8;
+    } else if (maxval == 65535) {
+        *bit_depth = 16;
+    } else {
+        *bit_depth = 0;
+        return check(false, "Invalid bit depth");
+    }
+
+    return true;
+}
+
+template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
+bool load_pnm(const std::string &filename, int channels, ImageType *im) {
+    static_assert(!ImageType::has_static_halide_type, "");
+
+    const char *hdr_fmt = channels == 3 ? "P6" : "P5";
+
+    Internal::FileOpener f(filename, "rb");
+    int width, height, bit_depth;
+    if (!Internal::read_pnm_header<check>(f, hdr_fmt, &width, &height, &bit_depth)) {
+        return false;
+    }
+
+    const halide_type_t im_type(halide_type_uint, bit_depth);
+    std::vector<int> im_dimensions = { width, height };
+    if (channels > 1) {
+        im_dimensions.push_back(channels);
+    }
+    *im = ImageType(im_type, im_dimensions);
+
+    auto copy_to_image = bit_depth == 8 ?
+        Internal::read_big_endian_row<uint8_t, ImageType> :
+        Internal::read_big_endian_row<uint16_t, ImageType>;
+
+    std::vector<uint8_t> row(width * channels * (bit_depth / 8));
+    const int ymin = im->dim(1).min();
+    const int ymax = im->dim(1).max();
+    for (int y = ymin; y <= ymax; ++y) {
+        if (!check(f.read_vector(&row), "Could not read data")) {
+            return false;
+        }
+        copy_to_image(row.data(), y, im);
+    }
+
+    return true;
+}
+
+template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
+bool save_pnm(ImageType &im, const int channels, const std::string &filename) {
+    static_assert(!ImageType::has_static_halide_type, "");
+
+    if (!check(im.channels() == channels, "Wrong number of channels")) {
+        return false;
+    }
+
+    im.copy_to_host();
+
+    const halide_type_t im_type = im.type();
+    const int width = im.width();
+    const int height = im.height();
+    const int bit_depth = im_type.bits;
+
+    Internal::FileOpener f(filename, "wb");
+    if (!check(f.f != nullptr, "File could not be opened for writing")) {
+        return false;
+    }
+    const char *hdr_fmt = channels == 3 ? "P6" : "P5";
+    fprintf(f.f, "%s\n%d %d\n%d\n", hdr_fmt, width, height, (1<<bit_depth)-1);
+
+    auto copy_from_image = bit_depth == 8 ?
+        Internal::write_big_endian_row<uint8_t, ImageType> :
+        Internal::write_big_endian_row<uint16_t, ImageType>;
+
+    std::vector<uint8_t> row(width * channels * (bit_depth / 8));
+    const int ymin = im.dim(1).min();
+    const int ymax = im.dim(1).max();
+    for (int y = ymin; y <= ymax; ++y) {
+        copy_from_image(im, y, row.data());
+        if (!check(f.write_vector(row), "Could not write data")) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
 bool load_pgm(const std::string &filename, ImageType *im) {
+    return Internal::load_pnm<ImageType, check>(filename, 1, im);
+}
 
-    /* open file and test for it being a pgm */
-    Internal::FileOpener f(filename.c_str(), "rb");
-    if (!check(f.f != nullptr, "File %s could not be opened for reading\n", filename.c_str())) return false;
-
-    int width, height, maxval;
-    char header[256];
-    char buf[1024];
-    bool fmt_binary = false;
-
-    f.readLine(buf, 1024);
-    if (!check(sscanf(buf, "%255s", header) == 1, "Could not read PGM header\n")) return false;
-    if (header == std::string("P5") || header == std::string("p5"))
-        fmt_binary = true;
-    if (!check(fmt_binary, "Input is not binary PGM\n")) return false;
-
-    f.readLine(buf, 1024);
-    if (!check(sscanf(buf, "%d %d\n", &width, &height) == 2, "Could not read PGM width and height\n")) return false;
-    f.readLine(buf, 1024);
-    if (!check(sscanf(buf, "%d", &maxval) == 1, "Could not read PGM max value\n")) return false;
-
-    int bit_depth = 0;
-    if (maxval == 255) { bit_depth = 8; }
-    else if (maxval == 65535) { bit_depth = 16; }
-    else if (!check(false, "Invalid bit depth in PGM\n")) { return false; }
-
-    // Graymap
-    *im = ImageType(width, height);
-
-    // convert the data to ImageType::ElemType
-    if (bit_depth == 8) {
-        std::vector<uint8_t> data(width*height);
-        if (!check(fread((void *) &data[0], sizeof(uint8_t), width*height, f.f) == (size_t) (width*height), "Could not read PGM 8-bit data\n")) return false;
-        typename ImageType::ElemType *im_data = (typename ImageType::ElemType*) im->data();
-        uint8_t *p = &data[0];
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-                Internal::convert(*p++, *im_data++);
-            }
-        }
-    } else if (bit_depth == 16) {
-        bool little_endian = Internal::is_little_endian();
-        std::vector<uint16_t> data(width*height);
-        if (!check(fread((void *) &data[0], sizeof(uint16_t), width*height, f.f) == (size_t) (width*height), "Could not read PGM 16-bit data\n")) return false;
-        typename ImageType::ElemType *im_data = (typename ImageType::ElemType*) im->data();
-        uint16_t *p = &data[0];
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-                uint16_t value = *p++;
-                Internal::swap_endian_16(little_endian, value);
-                Internal::convert(value, *im_data++);
-            }
-        }
-    }
-    (*im)(0,0,0) = (*im)(0,0,0);      /* Mark dirty inside read/write functions. */
-
-    return true;
+inline const std::set<FormatInfo> &query_pgm() {
+    static std::set<FormatInfo> info = {
+        { halide_type_t(halide_type_uint, 8), 2 },
+        { halide_type_t(halide_type_uint, 16), 2 }
+    };
+    return info;
 }
 
 // "im" is not const-ref because copy_to_host() is not const.
-// Optional channel parameter for specifying which color to save as a graymap
 template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
-bool save_pgm(ImageType &im, const std::string &filename, unsigned int channel = 0) {
-    im.copy_to_host();
-
-    unsigned int bit_depth = sizeof(typename ImageType::ElemType) == 1 ? 8: 16;
-    unsigned int num_channels = im.channels();
-
-    if (!check(channel >= 0, "Selected channel %d not available in image\n", channel)) return false;
-    if (!check(channel < num_channels, "Selected channel %d not available in image\n", channel)) return false;
-    Internal::FileOpener f(filename.c_str(), "wb");
-    if (!check(f.f != nullptr, "File %s could not be opened for writing\n", filename.c_str())) return false;
-    fprintf(f.f, "P5\n%d %d\n%d\n", im.width(), im.height(), (1<<bit_depth)-1);
-    int width = im.width(), height = im.height();
-
-    if (bit_depth == 8) {
-        std::vector<uint8_t> data(width*height);
-        uint8_t *p = &data[0];
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-                Internal::convert(im(x, y, channel), *p++);
-            }
-        }
-        if (!check(fwrite((void *) &data[0], sizeof(uint8_t), width*height, f.f) == (size_t) (width*height), "Could not write PGM 8-bit data\n")) return false;
-    } else if (bit_depth == 16) {
-        bool little_endian = Internal::is_little_endian();
-        std::vector<uint16_t> data(width*height);
-        uint16_t *p = &data[0];
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-                uint16_t value;
-                Internal::convert(im(x, y, channel), value);
-                Internal::swap_endian_16(little_endian, value);
-                *p++ = value;
-            }
-        }
-        if (!check(fwrite((void *) &data[0], sizeof(uint16_t), width*height, f.f) == (size_t) (width*height), "Could not write PGM 16-bit data\n")) return false;
-    } else {
-        return check(false, "We only support saving 8- and 16-bit images.");
-    }
-    return true;
+bool save_pgm(ImageType &im, const std::string &filename) {
+    return Internal::save_pnm<ImageType, check>(im, 1, filename);
 }
 
 template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
 bool load_ppm(const std::string &filename, ImageType *im) {
+    return Internal::load_pnm<ImageType, check>(filename, 3, im);
+}
 
-    /* open file and test for it being a ppm */
-    Internal::FileOpener f(filename.c_str(), "rb");
-    if (!check(f.f != nullptr, "File %s could not be opened for reading\n", filename.c_str())) return false;
-
-    int width, height, maxval;
-    char header[256];
-    char buf[1024];
-    bool fmt_binary = false;
-
-    f.readLine(buf, 1024);
-    if (!check(sscanf(buf, "%255s", header) == 1, "Could not read PPM header\n")) return false;
-    if (header == std::string("P6") || header == std::string("p6"))
-        fmt_binary = true;
-    if (!check(fmt_binary, "Input is not binary PPM\n")) return false;
-
-    f.readLine(buf, 1024);
-    if (!check(sscanf(buf, "%d %d\n", &width, &height) == 2, "Could not read PPM width and height\n")) return false;
-    f.readLine(buf, 1024);
-    if (!check(sscanf(buf, "%d", &maxval) == 1, "Could not read PPM max value\n")) return false;
-
-    int bit_depth = 0;
-    if (maxval == 255) { bit_depth = 8; }
-    else if (maxval == 65535) { bit_depth = 16; }
-    else if (!check(false, "Invalid bit depth in PPM\n")) { return false; }
-
-    int channels = 3;
-    *im = ImageType(width, height, channels);
-
-    // convert the data to ImageType::ElemType
-    if (bit_depth == 8) {
-        std::vector<uint8_t> data(width*height*3);
-        if (!check(fread((void *) &data[0], sizeof(uint8_t), width*height*3, f.f) == (size_t) (width*height*3), "Could not read PPM 8-bit data\n")) return false;
-        typename ImageType::ElemType *im_data = (typename ImageType::ElemType*) im->data();
-        uint8_t *row = &data[0];
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-                Internal::convert(*row++, im_data[(0*height+y)*width+x]);
-                Internal::convert(*row++, im_data[(1*height+y)*width+x]);
-                Internal::convert(*row++, im_data[(2*height+y)*width+x]);
-            }
-        }
-    } else if (bit_depth == 16) {
-        bool little_endian = Internal::is_little_endian();
-        std::vector<uint16_t> data(width*height*3);
-        if (!check(fread((void *) &data[0], sizeof(uint16_t), width*height*3, f.f) == (size_t) (width*height*3), "Could not read PPM 16-bit data\n")) return false;
-        typename ImageType::ElemType *im_data = (typename ImageType::ElemType*) im->data();
-        uint16_t *row = &data[0];
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-                uint16_t value;
-                value = *row++;
-                Internal::swap_endian_16(little_endian, value);
-                Internal::convert(value, im_data[(0*height+y)*width+x]);
-                value = *row++;
-                Internal::swap_endian_16(little_endian, value);
-                Internal::convert(value, im_data[(1*height+y)*width+x]);
-                value = *row++;
-                Internal::swap_endian_16(little_endian, value);
-                Internal::convert(value, im_data[(2*height+y)*width+x]);
-            }
-        }
-    }
-    (*im)(0,0,0) = (*im)(0,0,0);      /* Mark dirty inside read/write functions. */
-
-    return true;
+inline const std::set<FormatInfo> &query_ppm() {
+    static std::set<FormatInfo> info = {
+        { halide_type_t(halide_type_uint, 8), 3 },
+        { halide_type_t(halide_type_uint, 16), 3 }
+    };
+    return info;
 }
 
 // "im" is not const-ref because copy_to_host() is not const.
 template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
 bool save_ppm(ImageType &im, const std::string &filename) {
-    if (!check(im.channels() == 3, "save_ppm() requires a 3-channel image.\n")) { return false; }
-
-    im.copy_to_host();
-
-    unsigned int bit_depth = sizeof(typename ImageType::ElemType) == 1 ? 8: 16;
-
-    Internal::FileOpener f(filename.c_str(), "wb");
-    if (!check(f.f != nullptr, "File %s could not be opened for writing\n", filename.c_str())) return false;
-    fprintf(f.f, "P6\n%d %d\n%d\n", im.width(), im.height(), (1<<bit_depth)-1);
-    int width = im.width(), height = im.height(), channels = im.channels();
-
-    if (bit_depth == 8) {
-        std::vector<uint8_t> data(width*height*3);
-        uint8_t *p = &data[0];
-        // unroll inner loop for 3 channel RGB (common case)
-        if (channels == 3) {
-            for (int y = 0; y < height; y++) {
-                for (int x = 0; x < width; x++) {
-                    Internal::convert(im(x, y, 0), *p++);
-                    Internal::convert(im(x, y, 1), *p++);
-                    Internal::convert(im(x, y, 2), *p++);
-                }
-            }
-        } else {
-            for (int y = 0; y < height; y++) {
-                for (int x = 0; x < width; x++) {
-                    for (int c = 0; c < channels; c++) {
-                        Internal::convert(im(x, y, c), *p++);
-                    }
-                }
-            }
-        }
-        if (!check(fwrite((void *) &data[0], sizeof(uint8_t), width*height*3, f.f) == (size_t) (width*height*3), "Could not write PPM 8-bit data\n")) return false;
-    } else if (bit_depth == 16) {
-        bool little_endian = Internal::is_little_endian();
-        std::vector<uint16_t> data(width*height*3);
-        uint16_t *p = &data[0];
-        // unroll inner loop for 3 channel RGB (common case)
-        if (channels == 3) {
-            for (int y = 0; y < height; y++) {
-                for (int x = 0; x < width; x++) {
-                    uint16_t value0, value1, value2;
-                    Internal::convert(im(x, y, 0), value0);
-                    Internal::swap_endian_16(little_endian, value0);
-                    *p++ = value0;
-                    Internal::convert(im(x, y, 1), value1);
-                    Internal::swap_endian_16(little_endian, value1);
-                    *p++ = value1;
-                    Internal::convert(im(x, y, 2), value2);
-                    Internal::swap_endian_16(little_endian, value2);
-                    *p++ = value2;
-                }
-            }
-        } else {
-            for (int y = 0; y < height; y++) {
-                for (int x = 0; x < width; x++) {
-                    for (int c = 0; c < channels; c++) {
-                        uint16_t value;
-                        Internal::convert(im(x, y, c), value);
-                        Internal::swap_endian_16(little_endian, value);
-                        *p++ = value;
-                    }
-                }
-            }
-        }
-        if (!check(fwrite((void *) &data[0], sizeof(uint16_t), width*height*3, f.f) == (size_t) (width*height*3), "Could not write PPM 16-bit data\n")) return false;
-    } else {
-        return check(false, "We only support saving 8- and 16-bit images.");
-    }
-    return true;
+    return Internal::save_pnm<ImageType, check>(im, 3, filename);
 }
 
-template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
-bool save_jpg(ImageType &im, const std::string &filename) {
-#ifdef HALIDE_NO_JPEG
-    check(false, "jpg not supported in this build\n");
-    return false;
-#else
-    im.copy_to_host();
-
-    int channels = 1;
-    if (im.dimensions() == 3) {
-        channels = im.channels();
-    }
-
-    if (!check((im.dimensions() == 2 ||
-                im.dimensions() == 3) &&
-               (channels == 1 ||
-                channels == 3),
-               "Can only save jpg images with 1 or 3 channels\n")) {
-        return false;
-    }
-
-    // TODO: Make this an argument?
-    const int quality = 99;
-
-    struct jpeg_compress_struct cinfo;
-    struct jpeg_error_mgr jerr;
-
-    Internal::FileOpener f(filename.c_str(), "wb");
-    if (!check(f.f != nullptr,
-               "File %s could not be opened for writing\n", filename.c_str())) {
-        return false;
-    }
-
-    cinfo.err = jpeg_std_error(&jerr);
-    jpeg_create_compress(&cinfo);
-    jpeg_stdio_dest(&cinfo, f.f);
-
-    cinfo.image_width = im.width();
-    cinfo.image_height = im.height();
-    cinfo.input_components = channels;
-    if (channels == 3) {
-        cinfo.in_color_space = JCS_RGB;
-    } else { // channels must be 1
-        cinfo.in_color_space = JCS_GRAYSCALE;
-    }
-
-    jpeg_set_defaults(&cinfo);
-    jpeg_set_quality(&cinfo, quality, TRUE);
-
-    jpeg_start_compress(&cinfo, TRUE);
-
-    std::vector<JSAMPLE> row(im.width() * channels);
-
-    for (int y = 0; y < im.height(); y++) {
-        JSAMPLE *dst = row.data();
-        if (im.dimensions() == 2) {
-            for (int x = 0; x < im.width(); x++) {
-                *dst++ = (JSAMPLE)(im(x, y));
-            }
-        } else {
-            for (int x = 0; x < im.width(); x++) {
-                for (int c = 0; c < channels; c++) {
-                    *dst++ = (JSAMPLE)(im(x, y, c));
-                }
-            }
-        }
-        JSAMPROW row_ptr = row.data();
-        jpeg_write_scanlines(&cinfo, &row_ptr, 1);
-    }
-
-    jpeg_finish_compress(&cinfo);
-    jpeg_destroy_compress(&cinfo);
-
-    return true;
-#endif
-}
+#ifndef HALIDE_NO_JPEG
 
 template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
 bool load_jpg(const std::string &filename, ImageType *im) {
-#ifdef HALIDE_NO_JPEG
-    check(false, "jpg not supported in this build\n");
-    return false;
-#else
-    struct jpeg_decompress_struct cinfo;
-    struct jpeg_error_mgr jerr;
+    static_assert(!ImageType::has_static_halide_type, "");
 
-    Internal::FileOpener f(filename.c_str(), "rb");
-    if (!check(f.f != nullptr,
-               "File %s could not be opened for reading\n", filename.c_str())) {
+    Internal::FileOpener f(filename, "rb");
+    if (!check(f.f != nullptr, "File could not be opened for reading")) {
         return false;
     }
 
+    struct jpeg_decompress_struct cinfo;
+    struct jpeg_error_mgr jerr;
     cinfo.err = jpeg_std_error(&jerr);
     jpeg_create_decompress(&cinfo);
     jpeg_stdio_src(&cinfo, f.f);
-
     jpeg_read_header(&cinfo, TRUE);
     jpeg_start_decompress(&cinfo);
 
-    int channels = cinfo.output_components;
-    if (channels > 1) {
-        *im = ImageType(cinfo.output_width, cinfo.output_height, channels);
-    } else {
-        *im = ImageType(cinfo.output_width, cinfo.output_height);
-    }
-    std::vector<JSAMPLE> row(im->width() * channels);
+    const int width = cinfo.output_width;
+    const int height = cinfo.output_height;
+    const int channels = cinfo.output_components;
 
-    for (int y = 0; y < im->height(); y++) {
-        JSAMPLE *src = row.data();
+    const halide_type_t im_type(halide_type_uint, 8);
+    std::vector<int> im_dimensions = { width, height };
+    if (channels > 1) {
+        im_dimensions.push_back(channels);
+    }
+    *im = ImageType(im_type, im_dimensions);
+
+    auto copy_to_image = Internal::read_big_endian_row<uint8_t, ImageType>;
+
+    std::vector<uint8_t> row(width * channels);
+    const int ymin = im->dim(1).min();
+    const int ymax = im->dim(1).max();
+    for (int y = ymin; y <= ymax; ++y) {
+        uint8_t *src = row.data();
         jpeg_read_scanlines(&cinfo, &src, 1);
-        if (channels > 1) {
-            for (int x = 0; x < im->width(); x++) {
-                for (int c = 0; c < channels; c++) {
-                    (*im)(x, y, c) = *src++;
-                }
-            }
-        } else {
-            for (int x = 0; x < im->width(); x++) {
-                (*im)(x, y) = *src++;
-            }
-        }
+        copy_to_image(row.data(), y, im);
     }
 
     jpeg_finish_decompress(&cinfo);
     jpeg_destroy_decompress(&cinfo);
 
     return true;
-#endif
+}
+
+inline const std::set<FormatInfo> &query_jpg() {
+    static std::set<FormatInfo> info = {
+        { halide_type_t(halide_type_uint, 8), 2 },
+        { halide_type_t(halide_type_uint, 8), 3 },
+    };
+    return info;
+}
+
+template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
+bool save_jpg(ImageType &im, const std::string &filename) {
+    static_assert(!ImageType::has_static_halide_type, "");
+
+    im.copy_to_host();
+
+    const int width = im.width();
+    const int height = im.height();
+    const int channels = im.channels();
+    if (!check(channels == 1 || channels == 3, "Wrong number of channels")) {
+        return false;
+    }
+
+    Internal::FileOpener f(filename, "wb");
+    if (!check(f.f != nullptr, "File could not be opened for writing")) {
+        return false;
+    }
+
+    // TODO: Make this an argument?
+    constexpr int quality = 99;
+
+    struct jpeg_compress_struct cinfo;
+    struct jpeg_error_mgr jerr;
+    cinfo.err = jpeg_std_error(&jerr);
+    jpeg_create_compress(&cinfo);
+    jpeg_stdio_dest(&cinfo, f.f);
+    cinfo.image_width = width;
+    cinfo.image_height = height;
+    cinfo.input_components = channels;
+    cinfo.in_color_space = (channels == 3) ? JCS_RGB : JCS_GRAYSCALE;
+    jpeg_set_defaults(&cinfo);
+    jpeg_set_quality(&cinfo, quality, TRUE);
+    jpeg_start_compress(&cinfo, TRUE);
+
+    auto copy_from_image = Internal::write_big_endian_row<uint8_t, ImageType>;
+
+    std::vector<uint8_t> row(width * channels);
+    const int ymin = im.dim(1).min();
+    const int ymax = im.dim(1).max();
+    for (int y = ymin; y <= ymax; ++y) {
+        uint8_t *dst = row.data();
+        copy_from_image(im, y, dst);
+        jpeg_write_scanlines(&cinfo, &dst, 1);
+    }
+
+    jpeg_finish_compress(&cinfo);
+    jpeg_destroy_compress(&cinfo);
+
+    return true;
+}
+
+#endif  // not HALIDE_NO_JPEG
+
+constexpr int kNumTmpCodes = 10;
+
+inline const halide_type_t *tmp_code_to_halide_type() {
+    static const halide_type_t tmp_code_to_halide_type_[kNumTmpCodes] = {
+      { halide_type_float, 32 },
+      { halide_type_float, 64 },
+      { halide_type_uint, 8 },
+      { halide_type_int, 8 },
+      { halide_type_uint, 16 },
+      { halide_type_int, 16 },
+      { halide_type_uint, 32 },
+      { halide_type_int, 32 },
+      { halide_type_uint, 64 },
+      { halide_type_int, 64 }
+    };
+    return tmp_code_to_halide_type_;
+}
+
+// return true iff the buffer storage has no padding between
+// any elements, and is in strictly planar order.
+template<typename ImageType>
+bool buffer_is_compact_planar(ImageType &im) {
+    const halide_type_t im_type = im.type();
+    const size_t elem_size = (im_type.bits / 8);
+    if (((const uint8_t*)im.begin() + (im.number_of_elements() * elem_size)) != (const uint8_t*) im.end()) {
+        return false;
+    }
+    for (int d = 1; d < im.dimensions(); ++d) {
+        if (im.dim(d-1).stride() > im.dim(d).stride()) {
+            return false;
+        }
+        // Strides can only match if the previous dimension has extent 1
+        // (this can happen when artificially adding dimension(s), e.g.
+        // to write a .tmp file)
+        if (im.dim(d-1).stride() == im.dim(d).stride() && im.dim(d-1).extent() != 1) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// ".tmp" is a file format used by the ImageStack tool (see https://github.com/abadams/ImageStack)
+template<typename ImageType, CheckFunc check = CheckReturn>
+bool load_tmp(const std::string &filename, ImageType *im) {
+    static_assert(!ImageType::has_static_halide_type, "");
+
+    FileOpener f(filename, "rb");
+    if (!check(f.f != nullptr, "File could not be opened for reading")) {
+        return false;
+    }
+
+    int32_t header[5];
+    if (!check(f.read_array(header), "Count not read .tmp header")) {
+        return false;
+    }
+
+    if (!check(header[0] > 0 && header[1] > 0 && header[2] > 0 && header[3] > 0 &&
+               header[4] >= 0 && header[4] < kNumTmpCodes, "Bad header on .tmp file")) {
+        return false;
+    }
+
+    const halide_type_t im_type = tmp_code_to_halide_type()[header[4]];
+    std::vector<int> im_dimensions = { header[0], header[1], header[2], header[3] };
+    *im = ImageType(im_type, im_dimensions);
+
+    // This should never fail unless the default Buffer<> constructor behavior changes.
+    if (!check(buffer_is_compact_planar(*im), "load_tmp() requires compact planar images")) {
+        return false;
+    }
+
+    if (!check(f.read_bytes(im->begin(), im->size_in_bytes()), "Count not read .tmp payload")) {
+        return false;
+    }
+
+    im->set_host_dirty();
+    return true;
+}
+
+inline const std::set<FormatInfo> &query_tmp() {
+    // TMP files require exactly 4 dimensions.
+    static std::set<FormatInfo> info = {
+      { halide_type_t(halide_type_float, 32), 4 },
+      { halide_type_t(halide_type_float, 64), 4 },
+      { halide_type_t(halide_type_uint, 8), 4 },
+      { halide_type_t(halide_type_int, 8), 4 },
+      { halide_type_t(halide_type_uint, 16), 4 },
+      { halide_type_t(halide_type_int, 16), 4 },
+      { halide_type_t(halide_type_uint, 32), 4 },
+      { halide_type_t(halide_type_int, 32), 4 },
+      { halide_type_t(halide_type_uint, 64), 4 },
+      { halide_type_t(halide_type_int, 64), 4 },
+    };
+    return info;
+}
+
+template<typename ImageType, CheckFunc check = CheckReturn>
+bool write_planar_payload(ImageType &im, FileOpener &f) {
+    if (im.dimensions() == 0 || buffer_is_compact_planar(im)) {
+        // Contiguous buffer! Write it all in one swell foop.
+        if (!check(f.write_bytes(im.begin(), im.size_in_bytes()), "Count not write .tmp payload")) {
+            return false;
+        }
+    } else {
+        // We have to do this the hard way.
+        int d = im.dimensions() - 1;
+        for (int i = im.dim(d).min(); i <= im.dim(d).max(); i++) {
+            auto slice = im.sliced(d, i);
+            if (!write_planar_payload(slice, f)) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+// ".tmp" is a file format used by the ImageStack tool (see https://github.com/abadams/ImageStack)
+template<typename ImageType, CheckFunc check = CheckReturn>
+bool save_tmp(ImageType &im, const std::string &filename) {
+    static_assert(!ImageType::has_static_halide_type, "");
+
+    im.copy_to_host();
+
+    int32_t header[5] = { 1, 1, 1, 1, -1 };
+    for (int i = 0; i < im.dimensions(); ++i) {
+        header[i] = im.dim(i).extent();
+    }
+    auto *table = tmp_code_to_halide_type();
+    for (int i = 0; i < kNumTmpCodes; i++) {
+        if (im.type() == table[i]) {
+            header[4] = i;
+            break;
+        }
+    }
+    if (!check(header[4] >= 0, "Unsupported type for .tmp file")) {
+        return false;
+    }
+
+    FileOpener f(filename, "wb");
+    if (!check(f.f != nullptr, "File could not be opened for writing")) {
+        return false;
+    }
+    if (!check(f.write_array(header), "Could not write .tmp header")) {
+        return false;
+    }
+
+    if (!write_planar_payload<ImageType, check>(im, f)) {
+        return false;
+    }
+
+    return true;
 }
 
 
+// ".mat" is the matlab level 5 format documented here:
+// http://www.mathworks.com/help/pdf_doc/matlab/matfile_format.pdf
+
+
+enum MatlabTypeCode {
+    miINT8 = 1,
+    miUINT8 = 2,
+    miINT16 = 3,
+    miUINT16 = 4,
+    miINT32 = 5,
+    miUINT32 = 6,
+    miSINGLE = 7,
+    miDOUBLE = 9,
+    miINT64 = 12,
+    miUINT64 = 13,
+    miMATRIX = 14,
+    miCOMPRESSED = 15,
+    miUTF8 = 16,
+    miUTF16 = 17,
+    miUTF32 = 18
+};
+
+enum MatlabClassCode {
+    mxCHAR_CLASS = 3,
+    mxDOUBLE_CLASS = 6,
+    mxSINGLE_CLASS = 7,
+    mxINT8_CLASS = 8,
+    mxUINT8_CLASS = 9,
+    mxINT16_CLASS = 10,
+    mxUINT16_CLASS = 11,
+    mxINT32_CLASS = 12,
+    mxUINT32_CLASS = 13,
+    mxINT64_CLASS = 14,
+    mxUINT64_CLASS = 15
+};
+
+template<typename ImageType, CheckFunc check = CheckReturn>
+bool load_mat(const std::string &filename, ImageType *im) {
+    static_assert(!ImageType::has_static_halide_type, "");
+
+    FileOpener f(filename, "rb");
+    if (!check(f.f != nullptr, "File could not be opened for reading")) {
+        return false;
+    }
+
+    uint8_t header[128];
+    if (!check(f.read_array(header), "Could not read .mat header\n")) {
+        return false;
+    }
+
+    // Matrix header
+    uint32_t matrix_header[2];
+    if (!check(f.read_array(matrix_header), "Could not read .mat header\n")) {
+        return false;
+    }
+    if (!check(matrix_header[0] == miMATRIX, "Could not parse this .mat file: bad matrix header\n")) {
+        return false;
+    }
+
+    // Array flags
+    uint32_t flags[4];
+    if (!check(f.read_array(flags), "Could not read .mat header\n")) {
+        return false;
+    }
+    if (!check(flags[0] == miUINT32 && flags[1] == 8, "Could not parse this .mat file: bad flags\n")) {
+        return false;
+    }
+
+    // Shape
+    uint32_t shape_header[2];
+    if (!check(f.read_array(shape_header), "Could not read .mat header\n")) {
+        return false;
+    }
+    if (!check(shape_header[0] == miINT32, "Could not parse this .mat file: bad shape header\n")) {
+        return false;
+    }
+    int dims = shape_header[1]/4;
+    std::vector<int> extents(dims);
+    if (!check(f.read_vector(&extents), "Could not read .mat header\n")) {
+        return false;
+    }
+    if (dims & 1) {
+        uint32_t padding;
+        if (!check(f.read_bytes(&padding, 4), "Could not read .mat header\n")) {
+            return false;
+        }
+    }
+
+    // Skip over the name
+    uint32_t name_header[2];
+    if (!check(f.read_array(name_header), "Could not read .mat header\n")) {
+        return false;
+    }
+
+    if (name_header[0] >> 16) {
+        // Name must be fewer than 4 chars, and so the whole name
+        // field was stored packed into 8 bytes
+    } else {
+        if (!check(name_header[0] == miINT8, "Could not parse this .mat file: bad name header\n")) {
+            return false;
+        }
+        std::vector<uint64_t> scratch((name_header[1] + 7) / 8);
+        if (!check(f.read_vector(&scratch), "Could not read .mat header\n")) {
+            return false;
+        }
+    }
+
+    // Payload header
+    uint32_t payload_header[2];
+    if (!check(f.read_array(payload_header), "Could not read .mat header\n")) {
+        return false;
+    }
+    halide_type_t type;
+    switch (payload_header[0]) {
+    case miINT8:
+        type = halide_type_of<int8_t>();
+        break;
+    case miINT16:
+        type = halide_type_of<int16_t>();
+        break;
+    case miINT32:
+        type = halide_type_of<int32_t>();
+        break;
+    case miINT64:
+        type = halide_type_of<int64_t>();
+        break;
+    case miUINT8:
+        type = halide_type_of<uint8_t>();
+        break;
+    case miUINT16:
+        type = halide_type_of<uint16_t>();
+        break;
+    case miUINT32:
+        type = halide_type_of<uint32_t>();
+        break;
+    case miUINT64:
+        type = halide_type_of<uint64_t>();
+        break;
+    case miSINGLE:
+        type = halide_type_of<float>();
+        break;
+    case miDOUBLE:
+        type = halide_type_of<double>();
+        break;
+    }
+
+    *im = ImageType(type, extents);
+
+    // This should never fail unless the default Buffer<> constructor behavior changes.
+    if (!check(buffer_is_compact_planar(*im), "load_mat() requires compact planar images")) {
+        return false;
+    }
+
+    if (!check(f.read_bytes(im->begin(), im->size_in_bytes()), "Could not read .tmp payload")) {
+        return false;
+    }
+
+    im->set_host_dirty();
+    return true;
+}
+
+inline const std::set<FormatInfo> &query_mat() {
+    // MAT files must have at least 2 dimensions, but there's no upper
+    // bound. Our support arbitrarily stops at 16 dimensions.
+    static std::set<FormatInfo> info = []() {
+        std::set<FormatInfo> s;
+        for (int i = 2; i < 16; i++) {
+            s.insert({ halide_type_t(halide_type_float, 32), i });
+            s.insert({ halide_type_t(halide_type_float, 64), i });
+            s.insert({ halide_type_t(halide_type_uint, 8), i });
+            s.insert({ halide_type_t(halide_type_int, 8), i });
+            s.insert({ halide_type_t(halide_type_uint, 16), i });
+            s.insert({ halide_type_t(halide_type_int, 16), i });
+            s.insert({ halide_type_t(halide_type_uint, 32), i });
+            s.insert({ halide_type_t(halide_type_int, 32), i });
+            s.insert({ halide_type_t(halide_type_uint, 64), i });
+            s.insert({ halide_type_t(halide_type_int, 64), i });
+        }
+        return s;
+    }();
+    return info;
+}
+
+template<typename ImageType, CheckFunc check = CheckReturn>
+bool save_mat(ImageType &im, const std::string &filename) {
+    static_assert(!ImageType::has_static_halide_type, "");
+
+    im.copy_to_host();
+
+    uint32_t class_code = 0, type_code = 0;
+    switch (im.raw_buffer()->type.code) {
+    case halide_type_int:
+        switch (im.raw_buffer()->type.bits) {
+        case 8:
+            class_code = mxINT8_CLASS;
+            type_code = miINT8;
+            break;
+        case 16:
+            class_code = mxINT16_CLASS;
+            type_code = miINT16;
+            break;
+        case 32:
+            class_code = mxINT32_CLASS;
+            type_code = miINT32;
+            break;
+        case 64:
+            class_code = mxINT64_CLASS;
+            type_code = miINT64;
+            break;
+        default:
+            check(false, "unreachable");
+        };
+        break;
+    case halide_type_uint:
+        switch (im.raw_buffer()->type.bits) {
+        case 8:
+            class_code = mxUINT8_CLASS;
+            type_code = miUINT8;
+            break;
+        case 16:
+            class_code = mxUINT16_CLASS;
+            type_code = miUINT16;
+            break;
+        case 32:
+            class_code = mxUINT32_CLASS;
+            type_code = miUINT32;
+            break;
+        case 64:
+            class_code = mxUINT64_CLASS;
+            type_code = miUINT64;
+            break;
+        default:
+            check(false, "unreachable");
+        };
+        break;
+    case halide_type_float:
+        switch (im.raw_buffer()->type.bits) {
+        case 32:
+            class_code = mxSINGLE_CLASS;
+            type_code = miSINGLE;
+            break;
+        case 64:
+            class_code = mxDOUBLE_CLASS;
+            type_code = miDOUBLE;
+            break;
+        default:
+            check(false, "unreachable");
+        };
+        break;
+    case halide_type_handle:
+        check(false, "unreachable");
+    }
+
+    FileOpener f(filename, "wb");
+    if (!check(f.f != nullptr, "File could not be opened for writing")) {
+        return false;
+    }
+
+    // Pick a name for the array
+    size_t idx = filename.rfind('.');
+    std::string name = filename.substr(0, idx);
+    idx = filename.rfind('/');
+    if (idx != std::string::npos) {
+        name = name.substr(idx+1);
+    }
+
+    // Matlab variable names conform to similar rules as C
+    if (name.empty() || !std::isalpha(name[0])) {
+        name = "v" + name;
+    }
+    for (size_t i = 0; i < name.size(); i++) {
+        if (!std::isalnum(name[i])) {
+            name[i] = '_';
+        }
+    }
+
+    uint32_t name_size = (int)name.size();
+    while (name.size() & 0x7) name += '\0';
+
+    char header[128] = "MATLAB 5.0 MAT-file, produced by Halide";
+    int len = strlen(header);
+    memset(header + len, ' ', sizeof(header) - len);
+
+    // Version
+    *((uint16_t *)(header + 124)) = 0x0100;
+
+    // Endianness check
+    header[126] = 'I';
+    header[127] = 'M';
+
+    uint64_t payload_bytes = im.size_in_bytes();
+
+    if (!check((payload_bytes >> 32) == 0, "Buffer too large to save as .mat")) {
+        return false;
+    }
+
+    int dims = im.dimensions();
+    if (dims < 2) {
+        dims = 2;
+    }
+    int padded_dims = dims + (dims & 1);
+
+    // Matrix header
+    uint32_t matrix_header[2] = {
+        miMATRIX, 40 + padded_dims * 4 + (uint32_t)name.size() + (uint32_t)payload_bytes
+    };
+
+    // Array flags
+    uint32_t flags[4] = {
+        miUINT32, 8, class_code, 1
+    };
+
+    // Shape
+    int32_t shape[2] = {
+        miINT32, im.dimensions() * 4,
+    };
+    std::vector<int> extents(im.dimensions());
+    for (int d = 0; d < im.dimensions(); d++) {
+        extents[d] = im.dim(d).extent();
+    }
+    while ((int)extents.size() < dims) {
+        extents.push_back(1);
+    }
+    while ((int)extents.size() < padded_dims) {
+        extents.push_back(0);
+    }
+
+    // Name
+    uint32_t name_header[2] = {
+        miINT8, name_size
+    };
+
+    uint32_t padding_bytes = 7 - ((payload_bytes - 1) & 7);
+
+    // Payload header
+    uint32_t payload_header[2] = {
+        type_code, (uint32_t)payload_bytes
+    };
+
+    bool success =
+        f.write_array(header) &&
+        f.write_array(matrix_header) &&
+        f.write_array(flags) &&
+        f.write_array(shape) &&
+        f.write_vector(extents) &&
+        f.write_array(name_header) &&
+        f.write_bytes(&name[0], name.size()) &&
+        f.write_array(payload_header);
+
+    if (!check(success, "Could not write .mat header")) {
+        return false;
+    }
+
+    if (!write_planar_payload<ImageType, check>(im, f)) {
+        return false;
+    }
+
+    // Padding
+    if (!check(padding_bytes < 8, "Too much padding!\n")) {
+        return false;
+    }
+    uint64_t padding = 0;
+    if (!f.write_bytes(&padding, padding_bytes)) {
+        return false;
+    }
+
+    return true;
+}
+
+template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
+bool load_tiff(const std::string &filename, ImageType *im) {
+    static_assert(!ImageType::has_static_halide_type, "");
+    check(false, "Reading TIFF is not yet supported");
+    return false;
+}
+
+inline const std::set<FormatInfo> &query_tiff() {
+    auto build_set = []() -> std::set<FormatInfo> {
+        std::set<FormatInfo> s;
+        for (halide_type_code_t code : { halide_type_int, halide_type_uint, halide_type_float}) {
+            for (int bits: { 8, 16, 32, 64 }) {
+                for (int dims: { 1, 2, 3, 4 }) {
+                    if (code == halide_type_float && bits < 32) {
+                        continue;
+                    }
+                    s.insert({halide_type_t(code, bits), dims});
+                }
+            }
+        }
+        return s;
+    };
+
+    static std::set<FormatInfo> info = build_set();
+    return info;
+}
+
+#pragma pack(push)
+#pragma pack(2)
+
+struct halide_tiff_tag {
+    uint16_t tag_code;
+    int16_t type_code;
+    int32_t count;
+    union {
+        int8_t i8;
+        int16_t i16;
+        int32_t i32;
+    } value;
+
+    void assign16(uint16_t tag_code, int32_t count, int16_t value) {
+        this->tag_code = tag_code;
+        this->type_code = 3;  // SHORT
+        this->count = count;
+        this->value.i16 = value;
+    }
+
+    void assign32(uint16_t tag_code, int32_t count, int32_t value) {
+        this->tag_code = tag_code;
+        this->type_code = 4;  // LONG
+        this->count = count;
+        this->value.i32 = value;
+    }
+
+    void assign32(uint16_t tag_code, int16_t type_code, int32_t count, int32_t value) {
+        this->tag_code = tag_code;
+        this->type_code = type_code;
+        this->count = count;
+        this->value.i32 = value;
+    }
+};
+
+struct halide_tiff_header {
+    int16_t byte_order_marker;
+    int16_t version;
+    int32_t ifd0_offset;
+    int16_t entry_count;
+    halide_tiff_tag entries[15];
+    int32_t ifd0_end;
+    int32_t width_resolution[2];
+    int32_t height_resolution[2];
+};
+
+#pragma pack(pop)
+
+template<typename ElemType, int BUFFER_SIZE = 1024>
+struct ElemWriter {
+    ElemWriter(FileOpener *f) : f(f), next(&buf[0]), ok(true) {}
+    ~ElemWriter() { flush(); }
+
+    void operator()(const ElemType &elem) {
+        if (!ok) return;
+
+        *next++ = elem;
+        if (next == &buf[BUFFER_SIZE]) {
+            flush();
+        }
+    }
+
+    void flush() {
+        if (!ok) return;
+
+        if (next > buf) {
+            if (!f->write_bytes(buf, (next - buf) * sizeof(ElemType))) {
+                ok = false;
+            }
+            next = buf;
+        }
+    }
+
+    FileOpener * const f;
+    ElemType buf[BUFFER_SIZE];
+    ElemType *next;
+    bool ok;
+};
+
+// Note that this is a fairly simpleminded TIFF writer that doesn't
+// do any compression. It would be desirable to (optionally) support using libtiff
+// here instead, which would also allow us to provide a useful implementation
+// for TIFF reading.
+template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
+bool save_tiff(ImageType &im, const std::string &filename) {
+    static_assert(!ImageType::has_static_halide_type, "");
+
+    im.copy_to_host();
+
+    if (!check(im.dimensions() <= 4, "Can only save TIFF files with <= 4 dimensions")) {
+        return false;
+    }
+
+    FileOpener f(filename, "wb");
+    if (!check(f.f != nullptr, "File could not be opened for writing")) {
+        return false;
+    }
+
+    const size_t elements = im.number_of_elements();
+    halide_dimension_t shape[4];
+    for (int i = 0; i < im.dimensions() && i < 4; i++) {
+        const auto &d = im.dim(i);
+        shape[i].min = d.min();
+        shape[i].extent = d.extent();
+        shape[i].stride = d.stride();
+    }
+    for (int i = im.dimensions(); i < 4; i++) {
+        shape[i].min = 0;
+        shape[i].extent = 1;
+        shape[i].stride = 0;
+    }
+    const halide_type_t im_type = im.type();
+    if (!check(im_type.code >= 0 && im_type.code < 3, "Unsupported image type")) {
+        return false;
+    }
+    const int32_t bytes_per_element = im_type.bytes();
+    const int32_t width = shape[0].extent;
+    const int32_t height = shape[1].extent;
+    int32_t depth = shape[2].extent;
+    int32_t channels = shape[3].extent;
+
+    if ((channels == 0 || channels == 1) && (depth < 5)) {
+        channels = depth;
+        depth = 1;
+    }
+
+    // TIFF sample type values are:
+    //     0 => Signed int
+    //     1 => Unsigned int
+    //     2 => Floating-point
+    static const int16_t type_code_to_tiff_sample_type[] = {
+        2, 1, 3
+    };
+
+    struct halide_tiff_header header;
+    memset(&header, 0, sizeof(header));
+
+    const int32_t MMII = 0x4d4d4949;
+    // Select the appropriate two bytes signaling byte order automatically
+    const char *c = (const char *)&MMII;
+    header.byte_order_marker = (c[0] << 8) | c[1];
+    header.version = 42;
+    header.ifd0_offset = offsetof(halide_tiff_header, entry_count);
+    header.entry_count = sizeof(header.entries) / sizeof(header.entries[0]);
+
+    static_assert(sizeof(halide_tiff_tag) == 12, "Unexpected halide_tiff_tag packing");
+    halide_tiff_tag *tag = &header.entries[0];
+    tag++->assign32(256, 1, width);                          // ImageWidth
+    tag++->assign32(257, 1, height);                         // ImageLength
+    tag++->assign16(258, 1, int16_t(bytes_per_element * 8)); // BitsPerSample
+    tag++->assign16(259, 1, 1);                              // Compression -- none
+    tag++->assign16(262, 1, channels >= 3 ? 2 : 1);          // PhotometricInterpretation -- black is zero or RGB
+    tag++->assign32(273, channels, sizeof(header));          // StripOffsets
+    tag++->assign16(277, 1, int16_t(channels));              // SamplesPerPixel
+    tag++->assign32(278, 1, height);                         // RowsPerStrip
+    tag++->assign32(279, channels,                           // StripByteCounts
+                    (channels == 1) ?
+                        elements * bytes_per_element :
+                        sizeof(header) + channels * sizeof(int32_t));  // for channels > 1, this is an offset
+    tag++->assign32(282, 5, 1,
+                    offsetof(halide_tiff_header, width_resolution));     // XResolution
+    tag++->assign32(283, 5, 1,
+                    offsetof(halide_tiff_header, height_resolution));    // YResolution
+    tag++->assign16(284, 1, 2);                              // PlanarConfiguration -- planar
+    tag++->assign16(296, 1, 1);                              // ResolutionUnit -- none
+    tag++->assign16(339, 1, type_code_to_tiff_sample_type[im_type.code]);        // SampleFormat
+    tag++->assign32(32997, 1, depth);                        // Image depth
+
+    // Verify we used exactly the number we declared
+    assert(tag == &header.entries[header.entry_count]);
+
+    header.ifd0_end = 0;
+    header.width_resolution[0] = 1;
+    header.width_resolution[1] = 1;
+    header.height_resolution[0] = 1;
+    header.height_resolution[1] = 1;
+
+    if (!check(f.write_bytes(&header, sizeof(header)), "TIFF write failed")) {
+        return false;
+    }
+
+    if (channels > 1) {
+        // Fill in the values for StripOffsets
+        int32_t offset = sizeof(header) + channels * sizeof(int32_t) * 2;
+        for (int32_t i = 0; i < channels; i++) {
+            if (!check(f.write_bytes(&offset, sizeof(offset)), "TIFF write failed")) {
+                return false;
+            }
+            offset += width * height * depth * bytes_per_element;
+        }
+        // Fill in the values for StripByteCounts
+        int32_t count = width * height * depth * bytes_per_element;
+        for (int32_t i = 0; i < channels; i++) {
+            if (!check(f.write_bytes(&count, sizeof(count)), "TIFF write failed")) {
+                return false;
+            }
+        }
+    }
+
+    // If image is dense, we can write it in one fell swoop
+    if (elements * bytes_per_element == im.size_in_bytes()) {
+        if (!check(f.write_bytes(im.data(), im.size_in_bytes()), "TIFF write failed")) {
+            return false;
+        }
+        return true;
+    }
+
+    // Otherwise, write it out via manual traversal.
+#define HANDLE_CASE(CODE, BITS, TYPE) \
+    case halide_type_code(CODE, BITS): { \
+        ElemWriter<TYPE> ew(&f); \
+        im.template as<const TYPE>().for_each_value(ew); \
+        if (!check(ew.ok, "TIFF write failed")) { \
+            return false; \
+        } \
+        break; \
+    }
+
+    switch (halide_type_code((halide_type_code_t) im_type.code, im_type.bits)) {
+        HANDLE_CASE(halide_type_float, 32, float)
+        HANDLE_CASE(halide_type_float, 64, double)
+        HANDLE_CASE(halide_type_int, 8, int8_t)
+        HANDLE_CASE(halide_type_int, 16, int16_t)
+        HANDLE_CASE(halide_type_int, 32, int32_t)
+        HANDLE_CASE(halide_type_int, 64, int64_t)
+        HANDLE_CASE(halide_type_uint, 1, bool)
+        HANDLE_CASE(halide_type_uint, 8, uint8_t)
+        HANDLE_CASE(halide_type_uint, 16, uint16_t)
+        HANDLE_CASE(halide_type_uint, 32, uint32_t)
+        HANDLE_CASE(halide_type_uint, 64, uint64_t)
+        // Note that we don't attempt to handle halide_type_handle here.
+        default:
+            assert(false && "Unsupported type");
+            return false;
+    }
+#undef HANDLE_CASE
+
+    return true;
+}
+
+// Given something like ImageType<Foo>, produce typedef ImageType<Bar>
+template<typename ImageType, typename ElemType>
+struct ImageTypeWithElemType {
+    using type = decltype(std::declval<ImageType>().template as<ElemType>());
+};
+
+// Given something like ImageType<Foo>, produce typedef ImageType<const Bar>
+template<typename ImageType, typename ElemType>
+struct ImageTypeWithConstElemType {
+    using type = decltype(std::declval<ImageType>().template as<typename std::add_const<ElemType>::type>());
+};
+
+template<typename ImageType, Internal::CheckFunc check>
+struct ImageIO {
+    using ConstImageType = typename ImageTypeWithConstElemType<ImageType, typename ImageType::ElemType>::type;
+
+    std::function<bool(const std::string &, ImageType *)> load;
+    std::function<bool(ConstImageType &im, const std::string &)> save;
+    std::function<const std::set<FormatInfo>&()> query;
+};
+
+template<typename ImageType, Internal::CheckFunc check>
+bool find_imageio(const std::string &filename, ImageIO<ImageType, check> *result) {
+    static_assert(!ImageType::has_static_halide_type, "");
+    using ConstImageType = typename ImageTypeWithConstElemType<ImageType, typename ImageType::ElemType>::type;
+
+    const std::map<std::string, ImageIO<ImageType, check>> m = {
+#ifndef HALIDE_NO_JPEG
+        {"jpeg", {load_jpg<ImageType, check>, save_jpg<ConstImageType, check>, query_jpg}},
+        {"jpg", {load_jpg<ImageType, check>, save_jpg<ConstImageType, check>, query_jpg}},
+#endif
+        {"pgm", {load_pgm<ImageType, check>, save_pgm<ConstImageType, check>, query_pgm}},
+#ifndef HALIDE_NO_PNG
+        {"png", {load_png<ImageType, check>, save_png<ConstImageType, check>, query_png}},
+#endif
+        {"ppm", {load_ppm<ImageType, check>, save_ppm<ConstImageType, check>, query_ppm}},
+        {"tmp", {load_tmp<ImageType, check>, save_tmp<ConstImageType, check>, query_tmp}},
+        {"mat", {load_mat<ImageType, check>, save_mat<ConstImageType, check>, query_mat}},
+        {"tiff", {load_tiff<ImageType, check>, save_tiff<ConstImageType, check>, query_tiff}},
+    };
+    std::string ext = Internal::get_lowercase_extension(filename);
+    auto it = m.find(ext);
+    if (it != m.end()) {
+        *result = it->second;
+        return true;
+    }
+
+    std::string err = "unsupported file extension \"" + ext + "\", supported are:";
+    for (auto &it : m) {
+        err += " " + it.first;
+    }
+    err += "\n";
+    return check(false, err.c_str());
+}
+
+template<typename ImageType>
+FormatInfo best_save_format(const ImageType &im, const std::set<FormatInfo> &info) {
+    // A bit ad hoc, but will do for now:
+    // Perfect score is zero (exact match).
+    // The larger the score, the worse the match.
+    int best_score = 0x7fffffff;
+    FormatInfo best{};
+    const halide_type_t im_type = im.type();
+    const int im_dimensions = im.dimensions();
+    for (auto &f : info) {
+        int score = 0;
+        // If format has too-few dimensions, that's very bad.
+        score += std::max(0, im_dimensions - f.dimensions) * 1024;
+        // If format has too-few bits, that's pretty bad.
+        score += std::max(0, im_type.bits - f.type.bits) * 8;
+        // If format has too-many bits, that's a little bad.
+        score += std::max(0, f.type.bits - im_type.bits);
+        // If format has different code, that's a little bad.
+        score += (f.type.code != im_type.code) ? 1 : 0;
+        if (score < best_score) {
+            best_score = score;
+            best = f;
+        }
+    }
+
+    return best;
+}
+
+}  // namespace Internal
+
+struct ImageTypeConversion {
+    // Convert an Image from one ElemType to another, where the src and
+    // dst types are statically known (e.g. Buffer<uint8_t> -> Buffer<float>).
+    // Note that this does conversion with scaling -- intepreting integers
+    // as fixed-point numbers between 0 and 1 -- not merely C-style casting.
+    //
+    // You'd normally call this with an explicit type for DstElemType and
+    // allow ImageType to be inferred, e.g.
+    //     Buffer<uint8_t> src = ...;
+    //     Buffer<float> dst = convert_image<float>(src);
+    template<typename DstElemType, typename ImageType,
+             typename std::enable_if<ImageType::has_static_halide_type && !std::is_void<DstElemType>::value>::type * = nullptr>
+    static auto convert_image(const ImageType &src) ->
+            typename Internal::ImageTypeWithElemType<ImageType, DstElemType>::type {
+        // The enable_if ensures this will never fire; this is here primarily
+        // as documentation and a backstop against breakage.
+        static_assert(ImageType::has_static_halide_type,
+                      "This variant of convert_image() requires a statically-typed image");
+
+        using SrcImageType = ImageType;
+        using SrcElemType = typename SrcImageType::ElemType;
+
+        using DstImageType = typename Internal::ImageTypeWithElemType<ImageType, DstElemType>::type;
+
+        DstImageType dst = DstImageType::make_with_shape_of(src);
+        const auto converter = [](DstElemType &dst_elem, SrcElemType src_elem) {
+            dst_elem = Internal::convert<DstElemType>(src_elem);
+        };
+        // TODO: do we need src.copy_to_host() here?
+        dst.for_each_value(converter, src);
+        dst.set_host_dirty();
+
+        return dst;
+    }
+
+    // Convert an Image from one ElemType to another, where the dst type is statically
+    // known but the src type is not (e.g. Buffer<> -> Buffer<float>).
+    // You'd normally call this with an explicit type for DstElemType and
+    // allow ImageType to be inferred, e.g.
+    //     Buffer<uint8_t> src = ...;
+    //     Buffer<float> dst = convert_image<float>(src);
+    template<typename DstElemType, typename ImageType,
+             typename std::enable_if<!ImageType::has_static_halide_type && !std::is_void<DstElemType>::value>::type * = nullptr>
+    static auto convert_image(const ImageType &src) ->
+            typename Internal::ImageTypeWithElemType<ImageType, DstElemType>::type {
+        // The enable_if ensures this will never fire; this is here primarily
+        // as documentation and a backstop against breakage.
+        static_assert(!ImageType::has_static_halide_type,
+                      "This variant of convert_image() requires a dynamically-typed image");
+
+        const halide_type_t src_type = src.type();
+        switch (Internal::halide_type_code((halide_type_code_t) src_type.code, src_type.bits)) {
+            case Internal::halide_type_code(halide_type_float, 32):
+                return convert_image<DstElemType>(src.template as<float>());
+            case Internal::halide_type_code(halide_type_float, 64):
+                return convert_image<DstElemType>(src.template as<double>());
+            case Internal::halide_type_code(halide_type_int, 8):
+                return convert_image<DstElemType>(src.template as<int8_t>());
+            case Internal::halide_type_code(halide_type_int, 16):
+                return convert_image<DstElemType>(src.template as<int16_t>());
+            case Internal::halide_type_code(halide_type_int, 32):
+                return convert_image<DstElemType>(src.template as<int32_t>());
+            case Internal::halide_type_code(halide_type_int, 64):
+                return convert_image<DstElemType>(src.template as<int64_t>());
+            case Internal::halide_type_code(halide_type_uint, 1):
+                return convert_image<DstElemType>(src.template as<bool>());
+            case Internal::halide_type_code(halide_type_uint, 8):
+                return convert_image<DstElemType>(src.template as<uint8_t>());
+            case Internal::halide_type_code(halide_type_uint, 16):
+                return convert_image<DstElemType>(src.template as<uint16_t>());
+            case Internal::halide_type_code(halide_type_uint, 32):
+                return convert_image<DstElemType>(src.template as<uint32_t>());
+            case Internal::halide_type_code(halide_type_uint, 64):
+                return convert_image<DstElemType>(src.template as<uint64_t>());
+            default:
+                assert(false && "Unsupported type");
+                using DstImageType = typename Internal::ImageTypeWithElemType<ImageType, DstElemType>::type;
+                return DstImageType();
+        }
+    }
+
+    // Convert an Image from one ElemType to another, where the src type
+    // is statically known but the dst type is not
+    // (e.g. Buffer<uint8_t> -> Buffer<>(halide_type_t)).
+    template <typename DstElemType = void,
+              typename ImageType,
+              typename std::enable_if<ImageType::has_static_halide_type && std::is_void<DstElemType>::value>::type * = nullptr>
+    static auto convert_image(const ImageType &src, const halide_type_t &dst_type) ->
+            typename Internal::ImageTypeWithElemType<ImageType, void>::type {
+        // The enable_if ensures this will never fire; this is here primarily
+        // as documentation and a backstop against breakage.
+        static_assert(ImageType::has_static_halide_type,
+                      "This variant of convert_image() requires a statically-typed image");
+
+        // Call the appropriate static-to-static conversion routine
+        // based on the desired dst type.
+        switch (Internal::halide_type_code((halide_type_code_t) dst_type.code, dst_type.bits)) {
+            case Internal::halide_type_code(halide_type_float, 32):
+                return convert_image<float>(src);
+            case Internal::halide_type_code(halide_type_float, 64):
+                return convert_image<double>(src);
+            case Internal::halide_type_code(halide_type_int, 8):
+                return convert_image<int8_t>(src);
+            case Internal::halide_type_code(halide_type_int, 16):
+                return convert_image<int16_t>(src);
+            case Internal::halide_type_code(halide_type_int, 32):
+                return convert_image<int32_t>(src);
+            case Internal::halide_type_code(halide_type_int, 64):
+                return convert_image<int64_t>(src);
+            case Internal::halide_type_code(halide_type_uint, 1):
+                return convert_image<bool>(src);
+            case Internal::halide_type_code(halide_type_uint, 8):
+                return convert_image<uint8_t>(src);
+            case Internal::halide_type_code(halide_type_uint, 16):
+                return convert_image<uint16_t>(src);
+            case Internal::halide_type_code(halide_type_uint, 32):
+                return convert_image<uint32_t>(src);
+            case Internal::halide_type_code(halide_type_uint, 64):
+                return convert_image<uint64_t>(src);
+            default:
+                assert(false && "Unsupported type");
+                return ImageType();
+        }
+    }
+
+    // Convert an Image from one ElemType to another, where neither src type
+    // nor dst type are statically known
+    // (e.g. Buffer<>(halide_type_t) -> Buffer<>(halide_type_t)).
+    template <typename DstElemType = void,
+              typename ImageType,
+              typename std::enable_if<!ImageType::has_static_halide_type && std::is_void<DstElemType>::value>::type * = nullptr>
+    static auto convert_image(const ImageType &src, const halide_type_t &dst_type) ->
+            typename Internal::ImageTypeWithElemType<ImageType, void>::type {
+        // The enable_if ensures this will never fire; this is here primarily
+        // as documentation and a backstop against breakage.
+        static_assert(!ImageType::has_static_halide_type,
+                      "This variant of convert_image() requires a dynamically-typed image");
+
+        // Sniff the runtime type of src, coerce it to that type using as<>(),
+        // and call the static-to-dynamic variant of this method. (Note that
+        // this forces instantiation of the complete any-to-any conversion
+        // matrix of code.)
+        const halide_type_t src_type = src.type();
+        switch (Internal::halide_type_code((halide_type_code_t) src_type.code, src_type.bits)) {
+            case Internal::halide_type_code(halide_type_float, 32):
+                return convert_image(src.template as<float>(), dst_type);
+            case Internal::halide_type_code(halide_type_float, 64):
+                return convert_image(src.template as<double>(), dst_type);
+            case Internal::halide_type_code(halide_type_int, 8):
+                return convert_image(src.template as<int8_t>(), dst_type);
+            case Internal::halide_type_code(halide_type_int, 16):
+                return convert_image(src.template as<int16_t>(), dst_type);
+            case Internal::halide_type_code(halide_type_int, 32):
+                return convert_image(src.template as<int32_t>(), dst_type);
+            case Internal::halide_type_code(halide_type_int, 64):
+                return convert_image(src.template as<int64_t>(), dst_type);
+            case Internal::halide_type_code(halide_type_uint, 1):
+                return convert_image(src.template as<bool>(), dst_type);
+            case Internal::halide_type_code(halide_type_uint, 8):
+                return convert_image(src.template as<uint8_t>(), dst_type);
+            case Internal::halide_type_code(halide_type_uint, 16):
+                return convert_image(src.template as<uint16_t>(), dst_type);
+            case Internal::halide_type_code(halide_type_uint, 32):
+                return convert_image(src.template as<uint32_t>(), dst_type);
+            case Internal::halide_type_code(halide_type_uint, 64):
+                return convert_image(src.template as<uint64_t>(), dst_type);
+            default:
+                assert(false && "Unsupported type");
+                return ImageType();
+        }
+    }
+};
+
+// Load the Image from the given file.
+// If output Image has a static type, and the loaded image cannot be stored
+// in such an image without losing data, fail.
 // Returns false upon failure.
 template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
 bool load(const std::string &filename, ImageType *im) {
-    if (Internal::ends_with_ignore_case(filename, ".png")) {
-        return load_png<ImageType, check>(filename, im);
-    } else if (Internal::ends_with_ignore_case(filename, ".jpg") ||
-               Internal::ends_with_ignore_case(filename, ".jpeg")) {
-        return load_jpg<ImageType, check>(filename, im);
-    } else if (Internal::ends_with_ignore_case(filename, ".pgm")) {
-        return load_pgm<ImageType, check>(filename, im);
-    } else if (Internal::ends_with_ignore_case(filename, ".ppm")) {
-        return load_ppm<ImageType, check>(filename, im);
-    } else {
-        return check(false, "[load] unsupported file extension (png|jpg|pgm|ppm supported)");
+    using DynamicImageType = typename Internal::ImageTypeWithElemType<ImageType, void>::type;
+    Internal::ImageIO<DynamicImageType, check> imageio;
+    if (!Internal::find_imageio<DynamicImageType, check>(filename, &imageio)) {
+        return false;
     }
+    using DynamicImageType = typename Internal::ImageTypeWithElemType<ImageType, void>::type;
+    DynamicImageType im_d;
+    if (!imageio.load(filename, &im_d)) {
+        return false;
+    }
+    // Allow statically-typed images to be passed as the out-param, but do
+    // a runtime check to ensure
+    if (ImageType::has_static_halide_type) {
+        const halide_type_t expected_type = ImageType::static_halide_type();
+        if (!check(im_d.type() == expected_type, "Image loaded did not match the expected type")) {
+            return false;
+        }
+    }
+    *im = im_d.template as<typename ImageType::ElemType>();
+    im->set_host_dirty();
+    return true;
 }
+
+// Save the Image in the format associated with the filename's extension.
+// If the format can't represent the Image without losing data, fail.
 // Returns false upon failure.
 template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
 bool save(ImageType &im, const std::string &filename) {
-    if (Internal::ends_with_ignore_case(filename, ".png")) {
-        return save_png<ImageType, check>(im, filename);
-    } else if (Internal::ends_with_ignore_case(filename, ".jpg") ||
-               Internal::ends_with_ignore_case(filename, ".jpeg")) {
-        return save_jpg<ImageType, check>(im, filename);
-    } else if (Internal::ends_with_ignore_case(filename, ".pgm")) {
-        return save_pgm<ImageType, check>(im, filename);
-    } else if (Internal::ends_with_ignore_case(filename, ".ppm")) {
-        return save_ppm<ImageType, check>(im, filename);
-    } else {
-        return check(false, "[save] unsupported file extension (png|jpg|pgm|ppm supported)");
+    using DynamicImageType = typename Internal::ImageTypeWithElemType<ImageType, void>::type;
+    Internal::ImageIO<DynamicImageType, check> imageio;
+    if (!Internal::find_imageio<DynamicImageType, check>(filename, &imageio)) {
+        return false;
     }
+    if (!check(imageio.query().count({im.type(), im.dimensions()}) > 0, "Image cannot be saved in this format")) {
+        return false;
+    }
+
+    // Allow statically-typed images to be passed in, but quietly pass them on
+    // as dynamically-typed images.
+    auto im_d = im.template as<const void>();
+    return imageio.save(im_d, filename);
+}
+
+// Return a set of FormatInfo structs that contain the legal type-and-dimensions
+// that can be saved in this format. Most applications won't ever need to use
+// this call. Returns false upon failure.
+template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
+bool save_query(const std::string &filename, std::set<FormatInfo> *info) {
+    using DynamicImageType = typename Internal::ImageTypeWithElemType<ImageType, void>::type;
+    Internal::ImageIO<DynamicImageType, check> imageio;
+    if (!Internal::find_imageio<DynamicImageType, check>(filename, &imageio)) {
+        return false;
+    }
+    *info = imageio.query();
+    return true;
 }
 
 // Fancy wrapper to call load() with CheckFail, inferring the return type;
@@ -760,15 +1906,44 @@ bool save(ImageType &im, const std::string &filename) {
 //    Image im = load_image("filename");
 //
 // without bothering to check error results (all errors simply abort).
+//
+// Note that if the image being loaded doesn't match the static type and
+// dimensions of of the image on the LHS, a runtime error will occur.
 class load_image {
 public:
     load_image(const std::string &f) : filename(f) {}
+
+    template<typename ImageType>
+    operator ImageType() {
+        using DynamicImageType = typename Internal::ImageTypeWithElemType<ImageType, void>::type;
+        DynamicImageType im_d;
+        (void) load<DynamicImageType, Internal::CheckFail>(filename, &im_d);
+        return im_d.template as<typename ImageType::ElemType>();
+    }
+
+private:
+  const std::string filename;
+};
+
+// Like load_image, but quietly convert the loaded image to the type of the LHS
+// if necessary, discarding information if necessary.
+class load_and_convert_image {
+public:
+    load_and_convert_image(const std::string &f) : filename(f) {}
+
     template<typename ImageType>
     inline operator ImageType() {
-        ImageType im;
-        (void) load<ImageType, Internal::CheckFail>(filename, &im);
-        return im;
+        using DynamicImageType = typename Internal::ImageTypeWithElemType<ImageType, void>::type;
+        DynamicImageType im_d;
+        (void) load<DynamicImageType, Internal::CheckFail>(filename, &im_d);
+        const halide_type_t expected_type = ImageType::static_halide_type();
+        if (im_d.type() == expected_type) {
+            return im_d.template as<typename ImageType::ElemType>();
+        } else {
+            return ImageTypeConversion::convert_image<typename ImageType::ElemType>(im_d);
+        }
     }
+
 private:
   const std::string filename;
 };
@@ -778,9 +1953,34 @@ private:
 //    save_image(im, "filename");
 //
 // without bothering to check error results (all errors simply abort).
-template<typename ImageType>
+//
+// If the specified image file format cannot represent the image without
+// losing data (e.g, a float32 or 4-dimensional image saved as a JPEG),
+// a runtime error will occur.
+template<typename ImageType, Internal::CheckFunc check = Internal::CheckFail>
 void save_image(ImageType &im, const std::string &filename) {
-    (void) save<ImageType, Internal::CheckFail>(im, filename);
+    (void) save<ImageType, check>(im, filename);
+}
+
+// Like save_image, but quietly convert the saved image to a type that the
+// specified image file format can hold, discarding information if necessary.
+// (Note that the input image is unaffected!)
+template<typename ImageType, Internal::CheckFunc check = Internal::CheckFail>
+void convert_and_save_image(ImageType &im, const std::string &filename) {
+    std::set<FormatInfo> info;
+    (void) save_query<ImageType, check>(filename, &info);
+    const FormatInfo best = Internal::best_save_format(im, info);
+    if (best.type == im.type() && best.dimensions == im.dimensions()) {
+        // It's an exact match, we can save as-is.
+        (void) save<ImageType, check>(im, filename);
+    } else {
+        using DynamicImageType = typename Internal::ImageTypeWithElemType<ImageType, void>::type;
+        DynamicImageType im_converted = ImageTypeConversion::convert_image(im, best.type);
+        while (im_converted.dimensions() < best.dimensions) {
+            im_converted.add_dimension();
+        }
+        (void) save<DynamicImageType, check>(im_converted, filename);
+    }
 }
 
 }  // namespace Tools
