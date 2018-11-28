@@ -306,6 +306,8 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"check_unsafe_promises", Target::CheckUnsafePromises},
     {"hexagon_dma", Target::HexagonDma},
     {"embed_bitcode", Target::EmbedBitcode},
+    {"disable_llvm_loop_vectorize", Target::DisableLLVMLoopVectorize},
+    {"disable_llvm_loop_unroll", Target::DisableLLVMLoopUnroll},
     // NOTE: When adding features to this map, be sure to update
     // PyEnums.cpp and halide.cmake as well.
 };
