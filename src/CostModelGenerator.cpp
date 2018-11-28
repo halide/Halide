@@ -142,7 +142,7 @@ public:
 
     Output<Buffer<float>> prediction_output{ "prediction_output", 1 };
     Output<Buffer<float>> loss_output { "loss_output", 0 };
-    
+
     // Zero pad alone the last dimension of a Func
     Func pad_stages(Func f, Expr stages) {
         std::vector<std::pair<Expr, Expr>> bounds(f.dimensions());
@@ -152,33 +152,27 @@ public:
     }
 
     Expr activation(Expr e) {
-        return max(0, e) + 1e-5f * e;
+        return max(0, e); // + 1e-5f * e;
     }
 
     void generate() {
         Var c("c"), w("w"), n("n"), j("j"), s("s");
 
-        Expr padded_stages = max(num_stages, 22);
-        Expr first_valid = max(0, (padded_stages - num_stages) / 2);
-
         Func normalized_pipeline_features("normalized_pipeline_features");
-        normalized_pipeline_features(c, j, s) = 0.0f;
-        RDom r_s(first_valid, num_stages);
-        normalized_pipeline_features(c, j, r_s) =
-            (pipeline_features(c, j, r_s - first_valid) - pipeline_mean(c, j)) / max(1e-8f, pipeline_std(c, j));
+        normalized_pipeline_features(c, j, s) =
+            (pipeline_features(c, j, s) - pipeline_mean(c, j)) / max(1, pipeline_std(c, j));
 
         Func normalized_schedule_features("normalized_schedule_features");
-        normalized_schedule_features(n, c, s) = 0.0f;
-        normalized_schedule_features(n, c, r_s) =
-            (fast_log(schedule_features(n, c, r_s - first_valid) + 1) - schedule_mean(c)) / max(1e-8f, schedule_std(c));
+        normalized_schedule_features(n, c, s) =
+            (fast_log(schedule_features(n, c, s) + 1) - schedule_mean(c)) / max(1, schedule_std(c));
 
         const int head1_channels = 24, head1_w = 56, head1_h = 7;
         const int head2_channels = 24, head2_w = 26;
-        const int conv1_channels = 48;
-        const int conv2_channels = 48;
-        const int conv3_channels = 96;
-        const int conv4_channels = 120;
-        const int conv5_channels = 168;
+        const int conv1_channels = 24;
+        const int conv2_channels = 24;
+        const int conv3_channels = 24;
+        const int conv4_channels = 24;
+        const int conv5_channels = 24;
         const int conv_support = 3;
 
         Func head1_conv("head1_conv");
@@ -189,7 +183,7 @@ public:
         Func head1_relu("head1_relu");
         head1_relu(c, w) = activation(head1_conv(c, w));
 
-        Func head1_relu_padded = pad_stages(head1_relu, padded_stages);
+        Func head1_relu_padded = pad_stages(head1_relu, num_stages);
 
         Func head2_conv("head2_conv");
         RDom r_head2(0, head2_w);
@@ -199,7 +193,7 @@ public:
         Func head2_relu("head2_relu");
         head2_relu(n, c, w) = activation(head2_conv(n, c, w));
 
-        Func head2_relu_padded = pad_stages(head2_relu, padded_stages);
+        Func head2_relu_padded = pad_stages(head2_relu, num_stages);
 
         /***** network trunk *****/
         // first 20 input channels are from head1_relu, next 20 input channels are from head2_relu
@@ -218,7 +212,7 @@ public:
         Func relu1("relu1");
         relu1(n, c, w) = activation(conv1_stage2(n, c, w));
 
-        Func relu1_padded = pad_stages(relu1, padded_stages);
+        Func relu1_padded = pad_stages(relu1, num_stages);
 
         Func conv2("conv2");
         RDom r2(0, conv1_channels, 0, conv_support);
@@ -229,7 +223,7 @@ public:
         relu2(n, c, w) = activation(conv2(n, c, w));
 
         // set boundary conditions for relu2
-        Func relu2_padded = pad_stages(relu2, padded_stages);
+        Func relu2_padded = pad_stages(relu2, num_stages);
 
         Func conv3("conv3");
         RDom r3(0, conv2_channels, 0, conv_support);
@@ -240,41 +234,29 @@ public:
         relu3(n, c, w) = activation(conv3(n, c, w));
 
         // set boundary conditions for relu3
-        Func relu3_padded = pad_stages(relu3, padded_stages);
-
-        Func pool3("pool3");
-        pool3(n, c, w) = 0.5f * (relu3_padded(n, c, w * 2 - 1) + relu3_padded(n, c, w * 2));
-
-        // set boundary conditions for pool3
-        Func pool3_padded = pad_stages(pool3, padded_stages / 2 + 1);
+        Func relu3_padded = pad_stages(relu3, num_stages);
 
         Func conv4("conv4");
         RDom r4(0, conv3_channels, 0, conv_support);
         conv4(n, c, w) = bias4(c);
-        conv4(n, c, w) += filter4(c, r4.x, r4.y) * pool3_padded(n, r4.x, w + r4.y - 1);
+        conv4(n, c, w) += filter4(c, r4.x, r4.y) * relu3_padded(n, r4.x, w + r4.y - 1);
 
         Func relu4("relu4");
         relu4(n, c, w) = activation(conv4(n, c, w));
 
         // set boundary conditions for relu4
-        Func relu4_padded = pad_stages(relu4, padded_stages / 2 + 1);
-
-        Func pool4("pool4");
-        pool4(n, c, w) = 0.5f * (relu4_padded(n, c, w * 2 - 1) + relu4_padded(n, c, w * 2));
-
-        // set boundary conditions for pool4
-        Func pool4_padded = pad_stages(pool4, (padded_stages + 6) / 4);
+        Func relu4_padded = pad_stages(relu4, num_stages);
 
         Func conv5("conv5");
         RDom r5(0, conv4_channels, 0, conv_support);
         conv5(n, c, w) = bias5(c);
-        conv5(n, c, w) += filter5(c, r5.x, r5.y) * pool4_padded(n, r5.x, w + r5.y - 1);
+        conv5(n, c, w) += filter5(c, r5.x, r5.y) * relu4_padded(n, r5.x, w + r5.y - 1);
 
         Func relu5("relu5");
         relu5(n, c, w) = activation(conv5(n, c, w));
 
         // set boundary conditions for relu5
-        Func relu5_padded = pad_stages(relu5, (padded_stages + 6) / 4);
+        Func relu5_padded = pad_stages(relu5, num_stages);
 
         Func conv6("conv6");
         RDom r6(0, conv5_channels);
@@ -284,10 +266,11 @@ public:
         Func relu6("relu6");
         relu6(n, c, w) = activation(conv6(n, c, w));
 
-        // reduce over a region that expands to 3x1 convs from the first two stages to the last two stages with zero padding
-        RDom r_reduce(0, (padded_stages + 6) / 4);
+        RDom r_reduce(0, num_stages);
+        Expr points_computed = schedule_features(n, 4, r_reduce);
+        Expr inlined_calls = schedule_features(n, 17, r_reduce);
         Func prediction;
-        prediction(n) += relu6(n, 0, r_reduce);
+        prediction(n) += relu6(n, 0, r_reduce) * ((points_computed + inlined_calls) / 1000000.0f);
 
         prediction_output(n) = prediction(n);
 
@@ -331,22 +314,19 @@ public:
             };
 
         // Pipeline features processing
-        normalized_pipeline_features.compute_root()
-            .vectorize(c, vec).update().vectorize(c, vec);
+        normalized_pipeline_features.compute_root().vectorize(c, vec);
         head1_relu.compute_root().vectorize(c, vec);
         conv1_stage1.compute_root().vectorize(c, vec);
-        
+
         // Schedule features processing. The number of schedule
         // features is not close to a multiple of 8, so vectorized
         // across the batch.
         if (!training) {
             normalized_schedule_features
-                .compute_at(prediction_output, no).vectorize(n)
-                .update().vectorize(n);
+                .compute_at(prediction_output, no).vectorize(n);
         } else {
             normalized_schedule_features
-                .compute_root().vectorize(n, 8)
-                .update().vectorize(n, 8);            
+                .compute_root().vectorize(n, 8);
         }
 
         // conv+relu layers
@@ -354,13 +334,13 @@ public:
         schedule_conv(conv1_stage2, relu1, r1_stage2.x, r1_stage2.y, &head2_relu_padded);
         schedule_conv(conv2, relu2, r2.x, r2.y, &relu1_padded);
         schedule_conv(conv3, relu3, r3.x, r3.y, &relu2_padded);
-        schedule_conv(conv4, relu4, r4.x, r4.y, &pool3_padded);
-        schedule_conv(conv5, relu5, r5.x, r5.y, &pool4_padded);
+        schedule_conv(conv4, relu4, r4.x, r4.y, &relu3_padded);
+        schedule_conv(conv5, relu5, r5.x, r5.y, &relu4_padded);
         schedule_conv(conv6, relu6, r6.x, RVar(""), nullptr);
-            
+
         if (!training) {
             loss_output() = 0.0f;
-                    
+
         } else {
 
             // The tail end of the reverse-mode pipeline
@@ -381,7 +361,7 @@ public:
             Expr delta = prediction(n) - true_runtime(n);
             err(n) = delta * delta;
             Expr loss = sum(err(r_batch));
-            
+
             loss_output() = loss / batch_size;
 
             auto d_loss_d = propagate_adjoints(loss_output);
@@ -403,17 +383,17 @@ public:
             // other reverse stages. TODO: apply the real
             // autoscheduler to this in some sort of staged
             // compilation setup.
-            
+
             auto reorder_outermost = [](Stage s, VarOrRVar v) {
                 Var t;
                 s.split(Var::outermost(), Var::outermost(), t, 1).reorder(t, v);
             };
 
-            auto vectorize_innermost = [](Func f) {                
+            auto vectorize_innermost = [](Func f) {
                 auto storage_dims = f.function().schedule().storage_dims();
                 if (storage_dims.empty()) return;
                 const auto &innermost_storage_dim = storage_dims[0].var;
-                
+
                 auto vectorize_innermost_of_stage = [&](Stage s) {
                     auto sched = s.get_schedule();
 
@@ -426,7 +406,7 @@ public:
                             return;
                         }
                     }
-                    
+
                     for (auto d : sched.dims()) {
                         // Only vectorize unsplit dimensions
                         if (d.var.find('.') != std::string::npos) continue;
@@ -440,16 +420,16 @@ public:
                         }
                     }
                 };
-                
+
                 vectorize_innermost_of_stage(f);
                 for (int i = 0; i < f.num_update_definitions(); i++) {
                     vectorize_innermost_of_stage(f.update(i));
                 }
             };
-            
+
             auto factor_batch_reduction = [&](Func f) -> Func {
                 RVar batch_reduce_rvar;
-                bool found = false;                               
+                bool found = false;
 
                 auto rvars = f.function().update_schedule(0).rvars();
                 for (auto rv : rvars) {
@@ -462,9 +442,9 @@ public:
 
                 Func intm;
                 if (found) {
-                    reorder_outermost(f.update(), batch_reduce_rvar);               
+                    reorder_outermost(f.update(), batch_reduce_rvar);
                     RVar ro, ri;
-                    intm = f.update().split(batch_reduce_rvar, ro, ri, 8).rfactor(ro, no);                    
+                    intm = f.update().split(batch_reduce_rvar, ro, ri, 8).rfactor(ro, no);
                     intm.in().compute_root().parallel(no);
                     intm.compute_at(intm.in(), no);
                     vectorize_innermost(intm);
@@ -473,16 +453,16 @@ public:
 
                 f.in().compute_root();
                 vectorize_innermost(f.in());
-                
+
                 return intm;
             };
-            
+
             auto schedule_weight_gradient = [&](Func filter, Func bias) {
                 Func dfilter = d_loss_d(filter, -1, false);
                 Func dbias = d_loss_d(bias, -1, false);
                 factor_batch_reduction(dfilter);
-                factor_batch_reduction(dbias);                
-            };               
+                factor_batch_reduction(dbias);
+            };
 
             auto schedule_activation_gradient = [&](Func a) {
                 Func da = d_loss_d(a, -1, false);
@@ -492,9 +472,9 @@ public:
                     .reorder_storage(c, n).reorder(c, n);
                 da.compute_at(da.in(), n).reorder_storage(c, n);
                 vectorize_innermost(da);
-                vectorize_innermost(da.in());                
+                vectorize_innermost(da.in());
             };
-            
+
             // Convs that compute loss contributions due to each weight
             schedule_weight_gradient(head1_filter, head1_bias);
             schedule_weight_gradient(head2_filter, head2_bias);
@@ -503,26 +483,24 @@ public:
             schedule_weight_gradient(filter3, bias3);
             schedule_weight_gradient(filter4, bias4);
             schedule_weight_gradient(filter5, bias5);
-            schedule_weight_gradient(filter6, bias6);                        
+            schedule_weight_gradient(filter6, bias6);
 
-            // Convs that compute the activation gradients 
+            // Convs that compute the activation gradients
             schedule_activation_gradient(head2_relu_padded);
             schedule_activation_gradient(relu1_padded);
             schedule_activation_gradient(relu2_padded);
-            schedule_activation_gradient(pool3_padded);
-            schedule_activation_gradient(pool4_padded);                                    
-            schedule_activation_gradient(relu5_padded);                        
+            schedule_activation_gradient(relu3_padded);
+            schedule_activation_gradient(relu4_padded);
+            schedule_activation_gradient(relu5_padded);
 
             // Schedule the reverse Funcs for everything else
             for (Func f : {normalized_schedule_features, normalized_pipeline_features,
-                        head1_conv, head1_relu, 
-                        head2_conv, head2_relu, 
-                        conv1_stage1, conv1_stage2, relu1, 
-                        conv2, relu2, 
-                        conv3, relu3, relu3_padded, 
-                        pool3, 
-                        conv4, relu4, relu4_padded,
-                        pool4, 
+                        head1_conv, head1_relu,
+                        head2_conv, head2_relu,
+                        conv1_stage1, conv1_stage2, relu1,
+                        conv2, relu2,
+                        conv3, relu3,
+                        conv4, relu4,
                         conv5, relu5,
                         conv6, relu6,
                         prediction,

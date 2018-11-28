@@ -2923,7 +2923,7 @@ struct LoopNest {
                                 << outer.name() << ", "
                                 << inner.name() << ", "
                                 << factor << ", "
-                                << tail_strategy << ")";
+                                << "TailStrategy::" << tail_strategy << ")";
                             v = parent;
                             parent.var = outer;
                             parent.extent = size[i];
@@ -3888,11 +3888,16 @@ std::string generate_schedules_autotune(const std::vector<Function> &output_func
     // Use a thread pool for compilation jobs. LLVM is slow.
     ThreadPool<void> thread_pool;
 
-    float learning_rate = 0.001f;
+    float learning_rate = 0.0001f;
 
     size_t best_of_all_time = 0;
 
     int exploration_dropout = 50;
+
+    Tools::BenchmarkConfig config;
+    config.min_time = 0.2;
+    config.max_time = 2.0;
+    config.accuracy = 0.02;
 
     for (int iter = 0;; iter++) {
 
@@ -3976,7 +3981,7 @@ std::string generate_schedules_autotune(const std::vector<Function> &output_func
             // Benchmark it
             autotuner_errored = false;
             size_t c = batch_start + b;
-            double ms = 1e3 * Tools::benchmark(3, 3, [&]() {t->p.realize(buf);});
+            double ms = 1e3 * Tools::benchmark([&]() {t->p.realize(buf);}, config);
             if (autotuner_errored) {
                 internal_assert(!history.empty()) << "The very first run errored out\n";
                 runtimes(c) = runtimes(0);
@@ -4024,9 +4029,14 @@ std::string generate_schedules_autotune(const std::vector<Function> &output_func
 
         // Then run the predictor in training mode once we have enough samples
         if (history.size() >= max_history / 2) {
-            for (int i = 0; i < 10; i++) {
+            // Iterate until we can model the current set of runtimes to within 20% of the fastest one
+            for (int i = 0; i < 1000; i++) {
                 float loss = tp.backprop(runtimes.cropped(0, 0, history.size()), learning_rate);
-                debug(0) << "RMS Loss: " << std::sqrt(loss) << "\n";
+                loss = std::sqrt(loss);
+                if (i % 100 == 0) {
+                    debug(0) << "RMS Loss: " << loss << "\n";
+                }
+                if (loss < runtimes(best_of_all_time) / 5.0) break;
             }
             tp.save_weights();
         }
