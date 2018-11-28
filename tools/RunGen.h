@@ -308,7 +308,7 @@ inline Shape parse_metadata_buffer_estimates(const halide_filter_argument_t *md)
     }
     Shape result(md->dimensions);
     int32_t stride = 1;
-    for (size_t i = 0; i < md->dimensions; i++) {
+    for (int i = 0; i < md->dimensions; i++) {
         const int64_t *min = md->buffer_estimates[i*2];
         const int64_t *extent = md->buffer_estimates[i*2+1];
         if (!min || !extent) {
