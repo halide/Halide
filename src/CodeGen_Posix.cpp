@@ -22,7 +22,7 @@ using namespace llvm;
 
 CodeGen_Posix::CodeGen_Posix(Target t) : CodeGen_LLVM(t) {}
 
-Value *CodeGen_Posix::codegen_allocation_size(const std::string &name, Type type, const std::vector<Expr> &extents) {
+Value *CodeGen_Posix::codegen_allocation_size(const std::string &name, Type type, const std::vector<Expr> &extents, Expr condition) {
     // Compute size from list of extents checking for overflow.
 
     Expr overflow = make_zero(UInt(64));
@@ -39,7 +39,7 @@ Value *CodeGen_Posix::codegen_allocation_size(const std::string &name, Type type
 
     Expr low_mask = make_const(UInt(64), (uint64_t)(0xffffffff));
     for (size_t i = 0; i < extents.size(); i++) {
-        Expr next_extent = cast(UInt(32), extents[i]);
+        Expr next_extent = cast(UInt(32), max(0, extents[i]));
 
         // Update total_size >> 32. This math can't overflow due to
         // the loop invariant:
@@ -57,6 +57,10 @@ Value *CodeGen_Posix::codegen_allocation_size(const std::string &name, Type type
 
     Expr max_size = make_const(UInt(64), target.maximum_buffer_size());
     Expr size_check = (overflow == 0) && (total_size <= max_size);
+
+    if (!is_one(condition)) {
+        size_check = simplify(size_check || !condition);
+    }
 
     // For constant-sized allocations this check should simplify away.
     size_check = common_subexpression_elimination(simplify(size_check));
@@ -91,19 +95,20 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
             const string str_max_size = target.has_large_buffers() ? "2^63 - 1" : "2^31 - 1";
             user_error << "Total size for allocation " << name << " is constant but exceeds " << str_max_size << ".";
         } else if (memory_type == MemoryType::Heap ||
-                   (memory_type != MemoryType::Stack &&
-                    memory_type != MemoryType::Register &&
+                   (memory_type != MemoryType::Register &&
                     !can_allocation_fit_on_stack(stack_bytes))) {
             // We should put the allocation on the heap if it's
             // explicitly placed on the heap, or if it's not
-            // explicitly placed on the stack/register and it's large.
+            // explicitly placed in registers and it's large. Large
+            // stack allocations become pseudostack allocations
+            // instead.
             stack_bytes = 0;
             llvm_size = codegen(Expr(constant_bytes));
         }
     } else {
         // Should have been caught in bound_small_allocations
         internal_assert(memory_type != MemoryType::Register);
-        llvm_size = codegen_allocation_size(name, type, extents);
+        llvm_size = codegen_allocation_size(name, type, extents, condition);
     }
 
     // Only allocate memory if the condition is true, otherwise 0.

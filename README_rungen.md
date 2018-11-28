@@ -127,6 +127,22 @@ noise based on a specific random-number seed:
 $ ./bin/local_laplacian.rungen --output_extents=[100,200,3] input=random:42:[123,456,3] levels=8 alpha=1 beta=1 output=/tmp/out.png
 ```
 
+Instead of specifying an explicit set of extents for a pseudo-input, you can use the string `auto`, which will run a bounds query to choose a legal set of extents for that input given the known output extents. (This is only useful when used in conjunction with the `--output_extents` flag.)
+
+```
+$ ./bin/local_laplacian.rungen --output_extents=[100,200,3] input=zero:auto levels=8 alpha=1 beta=1 output=/tmp/out.png
+```
+
+If you don't want to explicitly specify all (or any!) of the input values, you can use the `--default_input_buffers` and `--default_input_scalars` flags, which provide wildcards for any omitted inputs:
+
+```
+$ ./bin/local_laplacian.rungen --output_extents=[100,200,3] --default_input_buffers=random:0:auto --default_input_scalars output=/tmp/out.png
+```
+
+In this case, all input buffers will be sized according to bounds query, and filled with a random seed; all input scalars will be initialized to their declared default values. (If they have no declared default value, a zero of the appropriate type will be used.)
+
+Note: `--default_input_buffers` can produce surprising sizes! For instance, any input that uses `BoundaryConditions::repeat_edge` to wrap itself can legally be set to almost any size, so you may legitimately get an input with extent=1 in all dimensions; whether this is useful to you or not depends on the code. It's highly recommended you do testing with the `--verbose` flag (which will log the calculated sizes) to reality-check that you are getting what you expect, especially for benchmarking.
+
 ## Benchmarking
 
 To run a benchmark, use the `--benchmark` flag:
