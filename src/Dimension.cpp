@@ -61,7 +61,7 @@ Dimension Dimension::set_stride(Expr stride) {
 }
 
 Dimension Dimension::set_bounds(Expr min, Expr extent) {
-    return set_min(min).set_extent(extent);
+    return set_min(min).set_extent(extent).set_bounds_estimate(min, extent);
 }
 
 Dimension Dimension::set_bounds_estimate(Expr min, Expr extent) {

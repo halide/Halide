@@ -340,10 +340,15 @@ class ThroughputPredictorPipeline {
                                               loss);
 
 
+        double err = 0;
         for (int i = 0; i < cursor; i++) {
             internal_assert(cost_ptrs(i)) << "Cost queue entry was null: " << i << "\n";
             *(cost_ptrs(i)) = dst(i);
+            double delta = true_runtimes(i) - dst(i);
+            err += delta * delta;
         }
+        err /= cursor;
+        err = std::sqrt(err);
 
 
         if (!weights_server_hostname.empty()) {
@@ -354,6 +359,16 @@ class ThroughputPredictorPipeline {
             // Update weights locally
             auto update_weight = [](const Runtime::Buffer<float> &src, Runtime::Buffer<float> &dst) {
                 dst.copy_from(src.sliced(src.dimensions()-1, 0));
+                /*
+                double grad_mag = 0, weight_mag = 0;
+                auto grad = src.sliced(src.dimensions() - 1, 3);
+                grad.for_each_value([&](float f) {grad_mag += f*f;});
+                auto weight = src.sliced(src.dimensions() - 1, 0);
+                weight.for_each_value([&](float f) {weight_mag += f*f;});
+                debug(0) << std::sqrt(grad_mag / grad.number_of_elements()) << " "
+                << std::sqrt(weight_mag / weight.number_of_elements()) << "\n";
+                */
+
             };
             update_weight(head1_filter_update, weights.head1_filter);
             update_weight(head1_bias_update, weights.head1_bias);
@@ -373,7 +388,9 @@ class ThroughputPredictorPipeline {
             update_weight(conv6_bias_update, weights.conv6_bias);
         }
 
-        return loss();
+        internal_assert(cursor != 0);
+
+        return err;
     }
 
     void evaluate_costs() {
@@ -434,6 +451,8 @@ class ThroughputPredictorPipeline {
     }
 
     void load_weights() {
+
+        internal_assert(!weights_dir.empty());
 
         if (weights_dir.empty()) {
             weights.head1_filter = Runtime::Buffer<float>(halide_internal_weights_head1_conv1_weight, 24, 56, 7);
@@ -509,7 +528,6 @@ class ThroughputPredictorPipeline {
             weights.conv6_bias = buffer_from_file(weights_dir + "/trunk_conv6_bias.data", {});
 
         }
-
         /*
         // Fill the weights with random values
         for_each_weight([](Runtime::Buffer<float> &w) {
@@ -518,6 +536,7 @@ class ThroughputPredictorPipeline {
                     });
             });
         */
+
 
         // The following code is for resizing the weights to a larger size with zero-padding
 
@@ -531,7 +550,7 @@ class ThroughputPredictorPipeline {
         weights.head2_filter = zero_pad(weights.head2_filter, {24, 26});
         weights.head2_bias = zero_pad(weights.head2_bias, {24});
 
-        weights.conv1_filter = zero_pad(weights.conv1_filter, {24, 24, 3});
+        weights.conv1_filter = zero_pad(weights.conv1_filter, {24, 48, 3});
         weights.conv1_bias = zero_pad(weights.conv1_bias, {24});
 
         weights.conv2_filter = zero_pad(weights.conv2_filter, {24, 24, 3});
