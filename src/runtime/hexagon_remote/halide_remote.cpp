@@ -376,6 +376,10 @@ int halide_hexagon_remote_run_v2(handle_t module_ptr, handle_t function,
     // Prior to running the pipeline, power HVX on (if it was not already on).
     int result = halide_hexagon_remote_power_hvx_on();
     if (result != 0) {
+        if (allocated_on_heap) {
+            free(buffers);
+            free(args);
+        }
         return result;
     }
 
