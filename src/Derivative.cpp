@@ -470,8 +470,10 @@ void ReverseAccumulationVisitor::propagate_adjoints(
             adjoint_funcs[unbounded_func_key] = adjoint_func;
             if (adjoint_func.values().size() == 1) {
                 Type type = adjoint_func.values()[0].type();
-                adjoint_func = BoundaryConditions::constant_exterior(
-                    adjoint_func, make_const(type, 0.0), box_to_vector(bounds));
+                internal_assert(adjoint_func.function().output_types()[0] == adjoint_func.values()[0].type());
+                Func f = BoundaryConditions::constant_exterior(adjoint_func, make_const(type, 0.0), box_to_vector(bounds));
+                adjoint_func = f;
+
             } else {
                 vector<Expr> values(adjoint_func.values().size());
                 for (int i = 0; i < (int) values.size(); i++) {
@@ -607,10 +609,12 @@ void ReverseAccumulationVisitor::propagate_adjoints(
             {  // First phase
                 is_self_referencing_phase = true;
                 expr_adjoints.clear();
-                for (int i = 0; i < (int) output_exprs.size(); i++) {
-                    expr_adjoints[output_exprs[i]] =
-                        Call::make(adjoint_funcs[func_key].function(),
-                                   update_args, i);
+                if (output_exprs.size() == 1) {
+                    expr_adjoints[output_exprs[0]] = (adjoint_funcs[func_key])(update_args);
+                } else {
+                    for (int i = 0; i < (int) output_exprs.size(); i++) {
+                        expr_adjoints[output_exprs[i]] = (adjoint_funcs[func_key])(update_args)[i];
+                    }
                 }
 
                 // Traverse the expressions in reverse order
@@ -683,9 +687,9 @@ void ReverseAccumulationVisitor::visit(const Cast *op) {
 
     // d/dx cast(x) = 1.f if op->type is float otherwise 0
     if (op->type.is_float()) {
-        accumulate(op->value, make_const(op->type, 1.0));
+        accumulate(op->value, cast(op->value.type(), adjoint));
     } else {
-        accumulate(op->value, make_const(op->type, 0));
+        accumulate(op->value, make_const(op->value.type(), 0));
     }
 }
 
