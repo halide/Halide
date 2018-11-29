@@ -61,35 +61,35 @@ int main(int argc, char **argv) {
 
         // All Scalar Arguments have a defined default when coming from
         // infer_arguments.
-        EXPECT(false, input1_arg.def.defined());
-        EXPECT(false, input2_arg.def.defined());
-        EXPECT(true, frac_arg.def.defined());
-        EXPECT(true, constant_expr_equals<float>(frac_arg.def, 22.5f));
-        EXPECT(true, height_arg.def.defined());
-        EXPECT(true, thresh_arg.def.defined());
-        EXPECT(true, width_arg.def.defined());
-        EXPECT(true, z_unsigned_arg.def.defined());
-        EXPECT(true, constant_expr_equals<uint64_t>(z_unsigned_arg.def, 0xdeadbeef));
+        EXPECT(false, input1_arg.argument_estimates.scalar_def.defined());
+        EXPECT(false, input2_arg.argument_estimates.scalar_def.defined());
+        EXPECT(true, frac_arg.argument_estimates.scalar_def.defined());
+        EXPECT(true, constant_expr_equals<float>(frac_arg.argument_estimates.scalar_def, 22.5f));
+        EXPECT(true, height_arg.argument_estimates.scalar_def.defined());
+        EXPECT(true, thresh_arg.argument_estimates.scalar_def.defined());
+        EXPECT(true, width_arg.argument_estimates.scalar_def.defined());
+        EXPECT(true, z_unsigned_arg.argument_estimates.scalar_def.defined());
+        EXPECT(true, constant_expr_equals<uint64_t>(z_unsigned_arg.argument_estimates.scalar_def, 0xdeadbeef));
 
-        EXPECT(false, input1_arg.min.defined());
-        EXPECT(false, input2_arg.min.defined());
-        EXPECT(true, frac_arg.min.defined());
-        EXPECT(true, constant_expr_equals<float>(frac_arg.min, 11.25f));
-        EXPECT(false, height_arg.min.defined());
-        EXPECT(false, thresh_arg.min.defined());
-        EXPECT(false, width_arg.min.defined());
-        EXPECT(true, z_unsigned_arg.min.defined());
-        EXPECT(true, constant_expr_equals<uint64_t>(z_unsigned_arg.min, 0x1));
+        EXPECT(false, input1_arg.argument_estimates.scalar_min.defined());
+        EXPECT(false, input2_arg.argument_estimates.scalar_min.defined());
+        EXPECT(true, frac_arg.argument_estimates.scalar_min.defined());
+        EXPECT(true, constant_expr_equals<float>(frac_arg.argument_estimates.scalar_min, 11.25f));
+        EXPECT(false, height_arg.argument_estimates.scalar_min.defined());
+        EXPECT(false, thresh_arg.argument_estimates.scalar_min.defined());
+        EXPECT(false, width_arg.argument_estimates.scalar_min.defined());
+        EXPECT(true, z_unsigned_arg.argument_estimates.scalar_min.defined());
+        EXPECT(true, constant_expr_equals<uint64_t>(z_unsigned_arg.argument_estimates.scalar_min, 0x1));
 
-        EXPECT(false, input1_arg.max.defined());
-        EXPECT(false, input2_arg.max.defined());
-        EXPECT(true, frac_arg.max.defined());
-        EXPECT(true, constant_expr_equals<float>(frac_arg.max, 1e30f));
-        EXPECT(false, height_arg.max.defined());
-        EXPECT(false, thresh_arg.max.defined());
-        EXPECT(false, width_arg.max.defined());
-        EXPECT(true, z_unsigned_arg.max.defined());
-        EXPECT(true, constant_expr_equals<uint64_t>(z_unsigned_arg.max, 0xf00dcafedeadbeef));
+        EXPECT(false, input1_arg.argument_estimates.scalar_max.defined());
+        EXPECT(false, input2_arg.argument_estimates.scalar_max.defined());
+        EXPECT(true, frac_arg.argument_estimates.scalar_max.defined());
+        EXPECT(true, constant_expr_equals<float>(frac_arg.argument_estimates.scalar_max, 1e30f));
+        EXPECT(false, height_arg.argument_estimates.scalar_max.defined());
+        EXPECT(false, thresh_arg.argument_estimates.scalar_max.defined());
+        EXPECT(false, width_arg.argument_estimates.scalar_max.defined());
+        EXPECT(true, z_unsigned_arg.argument_estimates.scalar_max.defined());
+        EXPECT(true, constant_expr_equals<uint64_t>(z_unsigned_arg.argument_estimates.scalar_max, 0xf00dcafedeadbeef));
 
         EXPECT(3, input1_arg.dimensions);
         EXPECT(2, input2_arg.dimensions);

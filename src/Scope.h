@@ -125,7 +125,7 @@ public:
             if (containing_scope) {
                 return containing_scope->get(name);
             } else {
-                internal_error << "Name not in Scope: " << name << "\n";
+                internal_error << "Name not in Scope: " << name << "\n" << *this << "\n";
             }
         }
         return iter->second.top();
@@ -137,7 +137,7 @@ public:
     T2 &ref(const std::string &name) {
         typename std::unordered_map<std::string, SmallStack<T>>::iterator iter = table.find(name);
         if (iter == table.end() || iter->second.empty()) {
-            internal_error << "Name not in Scope: " << name << "\n";
+            internal_error << "Name not in Scope: " << name << "\n" << *this << "\n";
         }
         return iter->second.top_ref();
     }
@@ -175,7 +175,7 @@ public:
      * same name in an outer scope) */
     void pop(const std::string &name) {
         typename std::unordered_map<std::string, SmallStack<T>>::iterator iter = table.find(name);
-        internal_assert(iter != table.end()) << "Name not in Scope: " << name << "\n";
+        internal_assert(iter != table.end()) << "Name not in Scope: " << name << "\n" << *this << "\n";
         iter->second.pop();
         if (iter->second.empty()) {
             table.erase(iter);
@@ -208,7 +208,9 @@ public:
             return iter->second;
         }
 
-        const T &value() {
+        template<typename T2 = T,
+                 typename = typename std::enable_if<!std::is_same<T2, void>::value>::type>
+        const T2 &value() {
             return iter->second.top_ref();
         }
     };
@@ -246,7 +248,9 @@ public:
             return iter->second;
         }
 
-        T &value() {
+        template<typename T2 = T,
+                 typename = typename std::enable_if<!std::is_same<T2, void>::value>::type>
+        T2 &value() {
             return iter->second.top_ref();
         }
     };

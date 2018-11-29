@@ -60,6 +60,7 @@ set(RUNTIME_CPP
   osx_host_cpu_count
   osx_opengl_context
   osx_yield
+  posix_abort
   posix_allocator
   posix_clock
   posix_error_handler
@@ -86,6 +87,7 @@ set(RUNTIME_CPP
   ssp
   to_string
   tracing
+  windows_abort
   windows_clock
   windows_cuda
   windows_get_symbol
@@ -439,6 +441,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   AlignLoads.cpp
   AllocationBoundsInference.cpp
   ApplySplit.cpp
+  Argument.cpp
   AssociativeOpsTable.cpp
   Associativity.cpp
   AsyncProducers.cpp

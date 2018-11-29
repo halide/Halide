@@ -10,6 +10,7 @@
 
 namespace Halide {
 
+struct ArgumentEstimates;
 class OutputImageParam;
 
 namespace Internal {
@@ -156,6 +157,9 @@ public:
     bool operator<(const Parameter &other) const {
         return contents < other.contents;
     }
+
+    /** Get the ArgumentEstimates appropriate for this Parameter. */
+    ArgumentEstimates get_argument_estimates() const;
 };
 
 /** Validate arguments to a call to a func, image or imageparam. */

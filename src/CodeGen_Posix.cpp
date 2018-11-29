@@ -58,6 +58,10 @@ Value *CodeGen_Posix::codegen_allocation_size(const std::string &name, Type type
     Expr max_size = make_const(UInt(64), target.maximum_buffer_size());
     Expr size_check = (overflow == 0) && (total_size <= max_size);
 
+    if (!is_one(condition)) {
+        size_check = simplify(size_check || !condition);
+    }
+
     // For constant-sized allocations this check should simplify away.
     size_check = common_subexpression_elimination(simplify(size_check));
     if (!is_one(size_check)) {
@@ -95,7 +99,9 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
                     !can_allocation_fit_on_stack(stack_bytes))) {
             // We should put the allocation on the heap if it's
             // explicitly placed on the heap, or if it's not
-            // explicitly placed on the stack/register and it's large.
+            // explicitly placed in registers and it's large. Large
+            // stack allocations become pseudostack allocations
+            // instead.
             stack_bytes = 0;
             llvm_size = codegen(Expr(constant_bytes));
         }
@@ -211,11 +217,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
         // pseudostack_alloc to potentially reallocate.
         llvm::Function *malloc_fn = module->getFunction("pseudostack_alloc");
         internal_assert(malloc_fn) << "Could not find pseudostack_alloc in module\n";
-        #if LLVM_VERSION < 50
-        malloc_fn->setDoesNotAlias(0);
-        #else
         malloc_fn->setReturnDoesNotAlias();
-        #endif
 
         llvm::Function::arg_iterator arg_iter = malloc_fn->arg_begin();
         ++arg_iter;  // skip the user context *
@@ -235,11 +237,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
             // call malloc
             llvm::Function *malloc_fn = module->getFunction("halide_malloc");
             internal_assert(malloc_fn) << "Could not find halide_malloc in module\n";
-            #if LLVM_VERSION < 50
-            malloc_fn->setDoesNotAlias(0);
-            #else
             malloc_fn->setReturnDoesNotAlias();
-            #endif
 
             llvm::Function::arg_iterator arg_iter = malloc_fn->arg_begin();
             ++arg_iter;  // skip the user context *

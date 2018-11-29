@@ -46,21 +46,21 @@ class WrapExternStages : public IRMutator2 {
                 Function f_arg(arg.func);
                 for (auto b : f_arg.output_buffers()) {
                     args.emplace_back(b.name(), Argument::InputBuffer,
-                                      b.type(), b.dimensions());
+                                      b.type(), b.dimensions(), b.get_argument_estimates());
                 }
             } else if (arg.arg_type == ExternFuncArgument::BufferArg) {
                 args.emplace_back(arg.buffer.name(), Argument::InputBuffer,
-                                  arg.buffer.type(), arg.buffer.dimensions());
+                                  arg.buffer.type(), arg.buffer.dimensions(), ArgumentEstimates{});
             } else if (arg.arg_type == ExternFuncArgument::ExprArg) {
                 args.emplace_back(unique_name('a'), Argument::InputScalar,
-                                  arg.expr.type(), 0);
+                                  arg.expr.type(), 0, ArgumentEstimates{});
             } else if (arg.arg_type == ExternFuncArgument::ImageParamArg) {
                 args.emplace_back(arg.image_param.name(), Argument::InputBuffer,
-                                  arg.image_param.type(), arg.image_param.dimensions());
+                                  arg.image_param.type(), arg.image_param.dimensions(), ArgumentEstimates{});
             }
         }
         for (auto b : f.output_buffers()) {
-            args.emplace_back(b.name(), Argument::OutputBuffer, b.type(), b.dimensions());
+            args.emplace_back(b.name(), Argument::OutputBuffer, b.type(), b.dimensions(), b.get_argument_estimates());
         }
 
         // Build the body of the wrapper.
@@ -178,7 +178,7 @@ void add_legacy_wrapper(Module module, const LoweredFunc &fn) {
             call_args.push_back(Variable::make(arg.type, arg.name));
         } else {
             // Buffer arguments become opaque pointers
-            args.emplace_back(arg.name, Argument::InputScalar, type_of<buffer_t *>(), 0);
+            args.emplace_back(arg.name, Argument::InputScalar, type_of<buffer_t *>(), 0, ArgumentEstimates{});
 
             string new_buffer_name = arg.name + ".upgraded";
             Expr new_buffer_var = Variable::make(type_of<struct halide_buffer_t *>(), new_buffer_name);
