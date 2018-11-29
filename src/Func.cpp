@@ -2074,6 +2074,10 @@ Func &Func::bound(Var var, Expr min, Expr extent) {
 
     Bound b = {var.name(), min, extent, Expr(), Expr()};
     func.schedule().bounds().push_back(b);
+
+    // If we have an explicit bound on the min/extent, set those as estimates as well.
+    estimate(var, min, extent);
+
     return *this;
 }
 
@@ -2101,8 +2105,12 @@ Func &Func::estimate(Var var, Expr min, Expr extent) {
     }
     internal_assert(dim >= 0);
     for (auto param : func.output_buffers()) {
-        param.set_min_constraint_estimate(dim, min);
-        param.set_extent_constraint_estimate(dim, extent);
+        if (min.defined()) {
+            param.set_min_constraint_estimate(dim, min);
+        }
+        if (extent.defined()) {
+            param.set_extent_constraint_estimate(dim, extent);
+        }
     }
     return *this;
 }
