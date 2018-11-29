@@ -2531,7 +2531,7 @@ struct LoopNest {
 
         if ((!is_root() || f->is_output || !force_only_output_compute_root) &&
             !innermost &&
-            (!in_realization || size[vector_dim] == 1)) {
+            (!in_realization || size.empty() || size[vector_dim] == 1)) {
             // Place the computation inside this loop
             std::unique_ptr<LoopNest> r{new LoopNest};
             r->copy_from(*this);
@@ -3053,7 +3053,6 @@ struct State {
             // Perform any quick rejection tests before enqueuing this
 
             // TODO: allow massive recompute for stages that are no more expensive than a load from them
-            /*
             for (auto it = features.begin(); it != features.end(); it++) {
                 auto &feat = it.value();
                 if (feat.points_computed_total + feat.inlined_calls > 10 * feat.points_computed_minimum) {
@@ -3061,7 +3060,6 @@ struct State {
                     return true;
                 }
             }
-            */
 
             // Avoid code size explosion from recursive inlining.
             if (root->max_inlined_calls() > 100) {
@@ -3858,7 +3856,7 @@ void autotuner_error_handler(void *, const char *msg) {
 std::string generate_schedules_autotune(const std::vector<Function> &output_funcs,
                                         const Target &target,
                                         const MachineParams &params) {
-    const int beam_size = 50;
+    const int beam_size = 1;
 
     ThroughputPredictorPipeline tp;
 
@@ -3869,10 +3867,11 @@ std::string generate_schedules_autotune(const std::vector<Function> &output_func
         map<string, Function> env;
         Pipeline p;
         float misprediction;
+        uint64_t hash;
     };
 
-    const int max_history = 512;
-    const int batch_size = 64;
+    const int max_history = 800;
+    const int batch_size = 80;
     vector<std::shared_ptr<Trial>> history;
     Runtime::Buffer<float> runtimes(max_history);
 
@@ -3892,7 +3891,7 @@ std::string generate_schedules_autotune(const std::vector<Function> &output_func
 
     size_t best_of_all_time = 0;
 
-    int exploration_dropout = 50;
+    int exploration_dropout = 95;
 
     Tools::BenchmarkConfig config;
     config.min_time = 0.2;
@@ -3919,7 +3918,29 @@ std::string generate_schedules_autotune(const std::vector<Function> &output_func
             // Autoschedule it
             std::unique_ptr<FunctionDAG> dag { new FunctionDAG {outputs, params, target} };
             std::shared_ptr<Trial> t { new Trial {std::move(dag), nullptr, outputs, local_env, Pipeline{}, 0.0f} };
-            t->optimal = optimal_schedule(*(t->dag), outputs, params, &tp, bs);
+            bool unique = false;
+            while (!unique) {
+                t->optimal = optimal_schedule(*(t->dag), outputs, params, &tp, bs);
+                if (t->optimal->cost >= 1e50) {
+                    // We're starting to include crazy stuff - get more conservative
+                    if (exploration_dropout < 99) exploration_dropout++;
+                    continue;
+                }
+                t->hash = t->optimal->structural_hash(0x7fffffff, params.parallelism);
+
+                // Make sure this hash isn't already in the history
+                unique = true;
+                if (b > 0) {
+                    for (size_t i = 0; i < history.size(); i++) {
+                        if (history[i]->hash == t->hash) {
+                            unique = false;
+                            // We're starting to repeat stuff, increase diversity
+                            if (exploration_dropout > 50) exploration_dropout--;
+                            break;
+                        }
+                    }
+                }
+            }
             t->optimal->apply_schedule(params);
             history.emplace_back(std::move(t));
         }
@@ -3930,10 +3951,11 @@ std::string generate_schedules_autotune(const std::vector<Function> &output_func
             debug(0) << "Compiling batch member " << b << "\n";
             internal_assert(batch_start + b < history.size());
             Trial *t = history[batch_start + b].get();
-            internal_assert(t->outputs.size() == 1) << "Multiple outputs not yet supported\n";
-            Function o = t->outputs[0];
-            t->p = Pipeline(Func(o));
-            internal_assert(o.output_types().size() == 1) << "Tuple outputs not yet supported\n";
+            vector<Func> outputs;
+            for (Function o : t->outputs) {
+                outputs.push_back(Func(o));
+            }
+            t->p = Pipeline(outputs);
             // TODO: We'd like to use the target here, but that
             // triggers recompilation in infer_input_bounds when the
             // target doesn't match the jit target.
@@ -3958,30 +3980,34 @@ std::string generate_schedules_autotune(const std::vector<Function> &output_func
             debug(0) << "Benchmarking batch member " << b << "\n";
             internal_assert(batch_start + b < history.size());
             Trial *t = history[batch_start + b].get();
-            Function o = t->outputs[0];
-
-            // Make output buffers and run
-            vector<int> sz;
-            sz.resize(o.dimensions());
-            for (const auto &b : o.schedule().estimates()) {
-                int dim = 0;
-                for (dim = 0; dim < o.dimensions(); dim++) {
-                    if (o.args()[dim] == b.var) break;
+            vector<Buffer<>> output_buffers;
+            for (Function o : t->outputs) {
+                // Make output buffers and run
+                vector<int> sz;
+                sz.resize(o.dimensions());
+                for (const auto &b : o.schedule().estimates()) {
+                    int dim = 0;
+                    for (dim = 0; dim < o.dimensions(); dim++) {
+                        if (o.args()[dim] == b.var) break;
+                    }
+                    internal_assert(dim < o.dimensions());
+                    const int64_t *sz_ptr = as_const_int(b.extent);
+                    sz[dim] = *sz_ptr;
                 }
-                internal_assert(dim < o.dimensions());
-                const int64_t *sz_ptr = as_const_int(b.extent);
-                sz[dim] = *sz_ptr;
+                for (auto t : o.output_types()) {
+                    output_buffers.emplace_back(t, sz);
+                }
             }
+            Realization r(output_buffers);
 
-            Runtime::Buffer<> buf(o.output_types()[0], sz);
             // Make some input buffers
-            t->p.infer_input_bounds(buf);
+            t->p.infer_input_bounds(r);
             t->p.set_error_handler(autotuner_error_handler);
 
             // Benchmark it
             autotuner_errored = false;
             size_t c = batch_start + b;
-            double ms = 1e3 * Tools::benchmark([&]() {t->p.realize(buf);}, config);
+            double ms = 1e3 * Tools::benchmark([&]() {t->p.realize(r);}, config);
             if (autotuner_errored) {
                 internal_assert(!history.empty()) << "The very first run errored out\n";
                 runtimes(c) = runtimes(0);
@@ -4030,13 +4056,15 @@ std::string generate_schedules_autotune(const std::vector<Function> &output_func
         // Then run the predictor in training mode once we have enough samples
         if (history.size() >= max_history / 2) {
             // Iterate until we can model the current set of runtimes to within 20% of the fastest one
-            for (int i = 0; i < 1000; i++) {
+            for (int i = 0; i < 100000; i++) {
                 float loss = tp.backprop(runtimes.cropped(0, 0, history.size()), learning_rate);
-                loss = std::sqrt(loss);
                 if (i % 100 == 0) {
-                    debug(0) << "RMS Loss: " << loss << "\n";
+                    debug(0) << "RMS misprediction: " << loss << "\n";
                 }
-                if (loss < runtimes(best_of_all_time) / 5.0) break;
+                if (loss < runtimes(best_of_all_time) / 5.0) {
+                    debug(0) << "Final RMS misprediction: " << loss << "\n";
+                    break;
+                }
             }
             tp.save_weights();
         }
