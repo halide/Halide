@@ -143,6 +143,93 @@ public:
     Output<Buffer<float>> prediction_output{ "prediction_output", 1 };
     Output<Buffer<float>> loss_output { "loss_output", 0 };
 
+    void set_input_estimates() {
+        num_stages.set_estimate(22);
+        batch_size.set_estimate(1024);
+
+        pipeline_features.dim(0).set_bounds_estimate(0, 56)
+                         .dim(1).set_bounds_estimate(0, 7)
+                         .dim(2).set_bounds_estimate(0, 22);
+
+        schedule_features.dim(0).set_bounds_estimate(0, 1024)
+                         .dim(1).set_bounds_estimate(0, 26)
+                         .dim(2).set_bounds_estimate(0, 22);
+
+        pipeline_mean.dim(0).set_bounds_estimate(0, 56)
+                     .dim(1).set_bounds_estimate(0, 7);
+        pipeline_std.dim(0).set_bounds_estimate(0, 56)
+                    .dim(1).set_bounds_estimate(0, 7);
+
+        schedule_mean.dim(0).set_bounds_estimate(0, 26);
+        schedule_std.dim(0).set_bounds_estimate(0, 26);
+
+        head1_filter.dim(0).set_bounds_estimate(0, 24)
+                    .dim(1).set_bounds_estimate(0, 56)
+                    .dim(2).set_bounds_estimate(0, 7);
+        head1_bias.dim(0).set_bounds_estimate(0, 24);
+
+        head2_filter.dim(0).set_bounds_estimate(0, 24)
+                    .dim(1).set_bounds_estimate(0, 26);
+        head2_bias.dim(0).set_bounds_estimate(0, 24);
+
+        filter1.dim(0).set_bounds_estimate(0, 48)
+               .dim(1).set_bounds_estimate(0, 48)
+               .dim(2).set_bounds_estimate(0, 3);
+        bias1.dim(0).set_bounds_estimate(0, 1024);
+
+        filter2.dim(0).set_bounds_estimate(0, 48)
+               .dim(1).set_bounds_estimate(0, 48)
+               .dim(2).set_bounds_estimate(0, 3);
+        bias2.dim(0).set_bounds_estimate(0, 1024);
+
+        filter3.dim(0).set_bounds_estimate(0, 96)
+               .dim(1).set_bounds_estimate(0, 48)
+               .dim(2).set_bounds_estimate(0, 3);
+        bias3.dim(0).set_bounds_estimate(0, 1024);
+
+        filter4.dim(0).set_bounds_estimate(0, 120)
+               .dim(1).set_bounds_estimate(0, 96)
+               .dim(2).set_bounds_estimate(0, 3);
+        bias4.dim(0).set_bounds_estimate(0, 1024);
+
+        filter5.dim(0).set_bounds_estimate(0, 168)
+               .dim(1).set_bounds_estimate(0, 120)
+               .dim(2).set_bounds_estimate(0, 3);
+        bias5.dim(0).set_bounds_estimate(0, 1024);
+
+        filter6.dim(0).set_bounds_estimate(0, 168);
+        // bias6 is zero-dimensional, no estimate is needed (or possible)
+
+        learning_rate.set_estimate(0.001f);
+
+        timestep.set_estimate(1);
+
+        true_runtime.dim(0).set_bounds_estimate(0, 1024);
+    }
+
+    void set_common_output_estimates() {
+        prediction_output.dim(0).set_bounds_estimate(0, 1);
+        // loss_output is zero-dimensional, no estimate is needed (or possible)
+    }
+
+    template <bool training_ = training, typename std::enable_if<training_>::type * = nullptr>
+    void set_output_estimates() {
+        set_common_output_estimates();
+
+        // Set these estimates to extent=1 in all dimensions
+        for (ModelWeight<training> *o : { &head1_filter, &head2_filter, &filter1, &filter2, &filter3, &filter4, &filter5, &filter6,
+                                          &head1_bias, &head2_bias, &bias1, &bias2, &bias3, &bias4, &bias5, &bias6 }) {
+            for (int d = 0; d < o->grad.dimensions(); d++) {
+                o->grad.dim(d).set_bounds_estimate(0, 1);
+            }
+        }
+    }
+
+    template <bool training_ = training, typename std::enable_if<!training_>::type * = nullptr>
+    void set_output_estimates() {
+        set_common_output_estimates();
+    }
+
     // Zero pad alone the last dimension of a Func
     Func pad_stages(Func f, Expr stages) {
         std::vector<std::pair<Expr, Expr>> bounds(f.dimensions());
@@ -530,6 +617,9 @@ public:
         filter5.set_shape(conv5_channels, conv4_channels, conv_support);
         bias5.set_shape(conv5_channels);
         filter6.set_shape(conv5_channels);
+
+        set_input_estimates();
+        set_output_estimates();
     }
 };
 

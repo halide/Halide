@@ -1,10 +1,26 @@
 set -e
-make -j bin/host/runtime.a bin/builtin_pipelines.generator 
-#HL_DEBUG_CODEGEN=1 ./bin/builtin_pipelines.generator -g halide_autoscheduler_cost_model -e assembly,static_library,h -o tmp target=x86-64-avx2-no_runtime #-debug
-#g++ -std=c++11 -I tmp -I include tools/RunGenMain.cpp tools/RunGenStubs.cpp tmp/*.a bin/host/runtime.a -DHL_RUNGEN_FILTER_HEADER='"halide_autoscheduler_cost_model.h"'  -lpng -lz -lpthread -ldl -ljpeg -o bench_cost_model
-#./bench_cost_model --benchmarks=all --benchmark_min_time=1 --output_extents=[1024] batch_size=1024 bias1=random:0:[1024] bias2=random:0:[1024] bias3=random:0:[1024] bias4=random:0:[1024] bias5=random:0:[1024] bias6=random:0:[] filter1=random:0:[48,48,3] filter2=random:0:[48,48,3] filter3=random:0:[96,48,3] filter4=random:0:[120,96,3] filter5=random:0:[168,120,3] filter6=random:0:[168] head1_bias=random:0:[24] head2_bias=random:0:[24] head1_filter=random:0:[24,56,7] head2_filter=random:0:[24,26] learning_rate=0.001 num_stages=22 pipeline_features=random:0:[56,7,22] schedule_features=random:0:[1024,26,22] schedule_mean=random:0:[26] schedule_std=random:0:[26] pipeline_mean=random:0:[56,7] pipeline_std=random:0:[56,7] true_runtime=random:0:[1024] timestep=1
+make -j bin/host/runtime.a bin/builtin_pipelines.generator
 
+HL_DEBUG_CODEGEN=0 ./bin/builtin_pipelines.generator \
+    -g halide_autoscheduler_train_cost_model \
+    -e assembly,static_library,h,stmt,html \
+    -o tmp \
+    target=x86-64-avx2-no_runtime-debug-profile
 
-HL_DEBUG_CODEGEN=1 ./bin/builtin_pipelines.generator -g halide_autoscheduler_train_cost_model -e assembly,static_library,h,stmt,html -o tmp target=x86-64-avx2-no_runtime-debug-profile
-g++ -std=c++11 -I tmp -I include tools/RunGenMain.cpp tools/RunGenStubs.cpp tmp/*.a bin/host/runtime.a -DHL_RUNGEN_FILTER_HEADER='"halide_autoscheduler_train_cost_model.h"'  -lpng -lz -lpthread -ldl -ljpeg -o bench_train_cost_model
-./bench_train_cost_model --benchmarks=all --benchmark_min_time=1 --output_extents=[1] batch_size=1024 bias1=random:0:[1024] bias2=random:0:[1024] bias3=random:0:[1024] bias4=random:0:[1024] bias5=random:0:[1024] bias6=random:0:[] filter1=random:0:[48,48,3] filter2=random:0:[48,48,3] filter3=random:0:[96,48,3] filter4=random:0:[120,96,3] filter5=random:0:[168,120,3] filter6=random:0:[168] head1_bias=random:0:[24] head2_bias=random:0:[24] head1_filter=random:0:[24,56,7] head2_filter=random:0:[24,26] learning_rate=0.001 num_stages=22 pipeline_features=random:0:[56,7,22] schedule_features=random:0:[1024,26,22] schedule_mean=random:0:[26] schedule_std=random:0:[26] pipeline_mean=random:0:[56,7] pipeline_std=random:0:[56,7] true_runtime=random:0:[1024] timestep=1
+g++ -std=c++11 \
+    -I tmp -I include \
+    tools/RunGenMain.cpp \
+    tools/RunGenStubs.cpp \
+    tmp/halide_autoscheduler_train_cost_model.a \
+    bin/host/runtime.a \
+    -DHL_RUNGEN_FILTER_HEADER='"halide_autoscheduler_train_cost_model.h"' \
+    -lpng -lz -lpthread -ldl -ljpeg \
+    -o bench_train_cost_model
+
+./bench_train_cost_model --benchmarks=all \
+    --benchmark_min_time=1 \
+    --default_input_buffers=random:0:estimate \
+    --default_input_scalars=estimate \
+    --output_extents=[1] \
+    --verbose
+
