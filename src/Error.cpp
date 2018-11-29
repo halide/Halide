@@ -11,7 +11,7 @@ CompileTimeErrorReporter* custom_error_reporter = nullptr;
 void error_abort() {
 #ifdef _MSC_VER
     const std::string s = Internal::get_env_variable("HL_DISABLE_WINDOWS_ABORT_DIALOG");
-    const int disable !s.empty() ? atoi(s.c_str()) : 0;
+    const int disable = !s.empty() ? atoi(s.c_str()) : 0;
     if (disable) {
         // Debug variants of the MSVC runtime will present an "Abort, Retry, Ignore"
         // dialog in response to a call to abort(); we want to be able to disable this
