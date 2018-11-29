@@ -59,6 +59,10 @@ public:
 
 protected:
     using CodeGen_C::visit;
+    void visit(const FloatImm *) override;
+    void visit(const UIntImm *) override;
+    void visit(const IntImm *) override;
+
     void visit(const Max *op) override;
     void visit(const Min *op) override;
     void visit(const Div *op) override;
@@ -76,7 +80,6 @@ protected:
 
     void visit(const Shuffle *) override;
 
-private:
     std::map<std::string, std::string> builtin;
 };
 
@@ -84,7 +87,7 @@ private:
 /** Compile one statement into GLSL. */
 class CodeGen_GLSL : public CodeGen_GLSLBase {
 public:
-    CodeGen_GLSL(std::ostream &s, const Target &t) : CodeGen_GLSLBase(s, t) {}
+    CodeGen_GLSL(std::ostream &s, const Target &t);
 
     void add_kernel(Stmt stmt,
                     std::string name,
@@ -94,10 +97,6 @@ public:
 
 protected:
     using CodeGen_C::visit;
-
-    void visit(const FloatImm *) override;
-    void visit(const UIntImm *) override;
-    void visit(const IntImm *) override;
 
     void visit(const Cast *) override;
     void visit(const Let *) override;

@@ -903,13 +903,13 @@ public:
     }
 
     /** Allocate a new image of known type using a vector of ints as the size. */
-    explicit Buffer(const std::vector<int> &sizes) : Buffer(halide_type_of<T>(), sizes) {}
+    explicit Buffer(const std::vector<int> &sizes) : Buffer(static_halide_type(), sizes) {}
 
 private:
     // Create a copy of the sizes vector, ordered as specified by order.
     static std::vector<int> make_ordered_sizes(const std::vector<int> &sizes, const std::vector<int> &order) {
         assert(order.size() == sizes.size());
-        std::vector<int32_t> ordered_sizes(sizes.size());
+        std::vector<int> ordered_sizes(sizes.size());
         for (size_t i = 0; i < sizes.size(); ++i) {
             ordered_sizes[i] = sizes.at(order[i]);
         }
@@ -927,7 +927,7 @@ public:
     }
 
     Buffer(const std::vector<int> &sizes, const std::vector<int> &storage_order)
-        : Buffer(halide_type_of<T>(), sizes, storage_order) {}
+        : Buffer(static_halide_type(), sizes, storage_order) {}
 
     /** Make an Buffer that refers to a statically sized array. Does not
      * take ownership of the data, and does not set the host_dirty flag. */
@@ -1024,7 +1024,7 @@ public:
      * an array describing the shape.  Does not take ownership of the
      * data and does not set the host_dirty flag. */
     explicit Buffer(T *data, int d, const halide_dimension_t *shape) {
-        buf.type = halide_type_of<typename std::remove_cv<T>::type>();
+        buf.type = static_halide_type();
         buf.dimensions = d;
         buf.host = (uint8_t *) const_cast<typename std::remove_const<T>::type *>(data);
         make_shape_storage();
@@ -1699,7 +1699,7 @@ public:
      * generator has been compiled with support for interleaved (also
      * known as packed or chunky) memory layouts. */
     static Buffer<T, D> make_interleaved(int width, int height, int channels) {
-        return make_interleaved(halide_type_of<T>(), width, height, channels);
+        return make_interleaved(static_halide_type(), width, height, channels);
     }
 
     /** Wrap an existing interleaved image. */
@@ -1713,7 +1713,7 @@ public:
 
     /** Wrap an existing interleaved image. */
     static Buffer<T, D> make_interleaved(T *data, int width, int height, int channels) {
-        return make_interleaved(halide_type_of<T>(), data, width, height, channels);
+        return make_interleaved(static_halide_type(), data, width, height, channels);
     }
 
     /** Make a zero-dimensional Buffer */

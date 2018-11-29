@@ -370,7 +370,7 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
         for (Parameter buf : out.output_buffers()) {
             public_args.push_back(Argument(buf.name(),
                                            Argument::OutputBuffer,
-                                           buf.type(), buf.dimensions()));
+                                           buf.type(), buf.dimensions(), buf.get_argument_estimates()));
         }
     }
 
