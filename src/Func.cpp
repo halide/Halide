@@ -162,15 +162,13 @@ void Func::define_extern(const std::string &function_name,
                          const std::vector<ExternFuncArgument> &args,
                          const std::vector<Type> &types,
                          const std::vector<Var> &arguments,
-                         NameMangling mangling,
-                         DeviceAPI device_api,
-                         bool uses_old_buffer_t) {
-    vector<string> dim_names(arguments.size());
-    for (size_t i = 0; i < arguments.size(); i++) {
-        dim_names[i] = arguments[i].name();
-    }
-    func.define_extern(function_name, args, types, dim_names,
-                       mangling, device_api, uses_old_buffer_t);
+                         NameMangling mangling, DeviceAPI device_api) {
+  vector<string> dim_names(arguments.size());
+  for (size_t i = 0; i < arguments.size(); i++) {
+    dim_names[i] = arguments[i].name();
+  }
+  func.define_extern(function_name, args, types, dim_names, mangling,
+                     device_api);
 }
 
 /** Get the types of the buffers returned by an extern definition. */
@@ -1945,7 +1943,7 @@ Func Func::copy_to_device(DeviceAPI d) {
     ExternFuncArgument device_interface = make_device_interface_call(d);
     func.define_extern("halide_buffer_copy", {buffer, device_interface},
                        {call->type}, func.args(), // Reuse the existing dimension names
-                       NameMangling::C, d, false);
+                       NameMangling::C, d);
     return *this;
 }
 
