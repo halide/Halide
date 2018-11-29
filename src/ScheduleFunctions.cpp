@@ -1387,6 +1387,8 @@ private:
             return consumer;
         }
 
+        user_assert(num_skipped == 0) << "Fused groups must either be entirely used or unused\n";
+
         user_assert(!skip_last_func)
         << "Invalid compute_with: the 'parent' function \"" << funcs[funcs.size() - 1].name()
         << "\" in fused group " << funcs << " is not used at the compute_at level "
