@@ -1287,7 +1287,9 @@ typedef enum halide_target_feature_t {
     halide_target_feature_check_unsafe_promises = 55, ///< Insert assertions for promises.
     halide_target_feature_hexagon_dma = 56, ///< Enable Hexagon DMA buffers.
     halide_target_feature_embed_bitcode = 57,  ///< Emulate clang -fembed-bitcode flag.
-    halide_target_feature_end = 58 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
+    halide_target_feature_disable_llvm_loop_vectorize = 58,  ///< Disable loop vectorization in LLVM. (Ignored for non-LLVM targets.)
+    halide_target_feature_disable_llvm_loop_unroll = 59,  ///< Disable loop unrolling in LLVM. (Ignored for non-LLVM targets.)
+    halide_target_feature_end = 60 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 
 /** This function is called internally by Halide in some situations to determine

@@ -1,5 +1,6 @@
 #include "HalideRuntime.h"
 #include "printer.h"
+#include "runtime_internal.h"
 
 extern "C" {
 
@@ -16,7 +17,7 @@ WEAK void halide_default_error(void *user_context, const char *msg) {
     }
     halide_msan_annotate_memory_is_initialized(user_context, buf, dst - buf + 1);
     halide_print(user_context, buf);
-    abort();
+    Halide::Runtime::Internal::halide_abort();
 }
 
 }

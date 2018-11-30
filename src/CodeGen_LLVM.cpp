@@ -1100,8 +1100,9 @@ void CodeGen_LLVM::optimize_module() {
     PassManagerBuilder b;
     b.OptLevel = 3;
     b.Inliner = createFunctionInliningPass(b.OptLevel, 0, false);
-    b.LoopVectorize = true;
-    b.SLPVectorize = true;
+    b.LoopVectorize = !get_target().has_feature(Target::DisableLLVMLoopVectorize);
+    b.DisableUnrollLoops = get_target().has_feature(Target::DisableLLVMLoopUnroll);
+    b.SLPVectorize = true;  // Note: SLP vectorization has no analogue in the Halide scheduling model
 
     if (TM) {
         TM->adjustPassManager(b);
