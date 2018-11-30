@@ -2075,7 +2075,9 @@ Func &Func::bound(Var var, Expr min, Expr extent) {
     Bound b = {var.name(), min, extent, Expr(), Expr()};
     func.schedule().bounds().push_back(b);
 
-    // If we have an explicit bound on the min/extent, set those as estimates as well.
+    // Propagate constant bounds into estimates as well.
+    if (!is_const(min)) min = Expr();
+    if (!is_const(extent)) extent = Expr();
     estimate(var, min, extent);
 
     return *this;
