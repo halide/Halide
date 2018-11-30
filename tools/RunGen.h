@@ -307,6 +307,10 @@ inline Shape parse_extents(const std::string &extent_list) {
 // Parse the buffer_estimate list from a given argument's metadata into a Shape.
 inline Shape parse_metadata_buffer_estimates(const halide_filter_argument_t *md) {
     if (!md->buffer_estimates) {
+        // zero-dimensional buffers don't have (or need) estimates, so don't fail.
+        if (md->dimensions == 0) {
+            return Shape();
+        }
         fail() << "Argument " << md->name << " was specified as 'estimate', but no estimates were provided.";
     }
     Shape result(md->dimensions);
@@ -315,7 +319,7 @@ inline Shape parse_metadata_buffer_estimates(const halide_filter_argument_t *md)
         const int64_t *min = md->buffer_estimates[i*2];
         const int64_t *extent = md->buffer_estimates[i*2+1];
         if (!min || !extent) {
-            fail() << "Argument " << md->name << " was specified as 'estimate', but no estimate was provided for dimension " << i;
+            fail() << "Argument " << md->name << " was specified as 'estimate', but no estimate was provided for dimension " << i << " of " << md->dimensions;
         }
         result[i] = halide_dimension_t{(int32_t) *min, (int32_t) *extent, stride};
         stride *= result[i].extent;
@@ -872,22 +876,22 @@ public:
                     if (!arg.metadata->scalar_def) {
                         fail() << "Argument value for: " << arg.metadata->name << " was specified as using the default, but no default was found in the metadata.";
                     }
-                    arg.raw_string = scalar_to_string(arg.metadata->type, *arg.metadata->scalar_def);
-                    info() << "Argument value for: " << arg.metadata->name << " is parsed from metadata as: " << arg.raw_string;
-                    break;
-                }
-                if (arg.raw_string == "estimate") {
+                    info() << "Argument value for: " << arg.metadata->name << " is parsed from metadata as: "
+                           << scalar_to_string(arg.metadata->type, *arg.metadata->scalar_def);
+                    arg.scalar_value = *arg.metadata->scalar_def;
+                } else if (arg.raw_string == "estimate") {
                     if (!arg.metadata->scalar_estimate) {
                         fail() << "Argument value for: " << arg.metadata->name << " was specified as using the estimate, but no estimate was found in the metadata.";
                     }
-                    arg.raw_string = scalar_to_string(arg.metadata->type, *arg.metadata->scalar_estimate);
-                    info() << "Argument value for: " << arg.metadata->name << " is parsed from metadata as: " << arg.raw_string;
-                    break;
-                }
-                if (!parse_scalar(arg.metadata->type, arg.raw_string, &arg.scalar_value)) {
-                    fail() << "Argument value for: " << arg_name << " could not be parsed as type "
-                         << arg.metadata->type << ": "
-                         << arg.raw_string;
+                    info() << "Argument value for: " << arg.metadata->name << " is parsed from metadata as: "
+                           << scalar_to_string(arg.metadata->type, *arg.metadata->scalar_estimate);
+                    arg.scalar_value = *arg.metadata->scalar_estimate;
+                } else {
+                    if (!parse_scalar(arg.metadata->type, arg.raw_string, &arg.scalar_value)) {
+                        fail() << "Argument value for: " << arg_name << " could not be parsed as type "
+                             << arg.metadata->type << ": "
+                             << arg.raw_string;
+                    }
                 }
                 break;
             }
