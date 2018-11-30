@@ -1,10 +1,9 @@
 #include "HalideRuntime.h"
 #include "HalideBuffer.h"
 
-#include <math.h>
-#include <stdio.h>
+#include <cmath>
 #include <iostream>
-#include <string.h>
+#include <string>
 #include <map>
 
 #include "metadata_tester.h"
