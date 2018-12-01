@@ -76,7 +76,6 @@ Target calculate_host_target() {
 
 #if __riscv__
     Target::Arch arch = Target::RISCV;
-    return Target(os, arch, bits);
 #else
 #if __mips__ || __mips || __MIPS__
     Target::Arch arch = Target::MIPS;
