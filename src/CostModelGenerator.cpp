@@ -184,6 +184,11 @@ public:
         true_runtime.dim(0).set_bounds_estimate(0, 1024);
     }
 
+    void set_output_estimates() {
+        // Provide estimates for things that don't have hard bounds
+        prediction_output.dim(0).set_bounds_estimate(0, 1);
+    }
+
     // Zero pad alone the last dimension of a Func
     Func pad_stages(Func f, Expr stages) {
         std::vector<std::pair<Expr, Expr>> bounds(f.dimensions());
@@ -594,6 +599,7 @@ public:
         }
 
         set_input_estimates();
+        set_output_estimates();
     }
 };
 

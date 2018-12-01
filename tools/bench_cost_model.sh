@@ -21,6 +21,6 @@ g++ -std=c++11 \
     --benchmark_min_time=1 \
     --default_input_buffers=random:0:estimate \
     --default_input_scalars=estimate \
-    --output_extents=[1] \
+    --output_extents=estimate \
     --verbose
 
