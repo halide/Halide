@@ -2074,6 +2074,12 @@ Func &Func::bound(Var var, Expr min, Expr extent) {
 
     Bound b = {var.name(), min, extent, Expr(), Expr()};
     func.schedule().bounds().push_back(b);
+
+    // Propagate constant bounds into estimates as well.
+    if (!is_const(min)) min = Expr();
+    if (!is_const(extent)) extent = Expr();
+    estimate(var, min, extent);
+
     return *this;
 }
 
@@ -2088,6 +2094,26 @@ Func &Func::estimate(Var var, Expr min, Expr extent) {
 
     Bound b = {var.name(), min, extent, Expr(), Expr()};
     func.schedule().estimates().push_back(b);
+
+    // Propagate the estimate into the Parameter as well, so that
+    // the values in the metadata will be correct.
+    const auto &arg_names = func.args();
+    int dim = -1;
+    for (size_t i = 0; i < arg_names.size(); ++i) {
+        if (arg_names[i] == var.name()) {
+            dim = i;
+            break;
+        }
+    }
+    internal_assert(dim >= 0);
+    for (auto param : func.output_buffers()) {
+        if (min.defined()) {
+            param.set_min_constraint_estimate(dim, min);
+        }
+        if (extent.defined()) {
+            param.set_extent_constraint_estimate(dim, extent);
+        }
+    }
     return *this;
 }
 

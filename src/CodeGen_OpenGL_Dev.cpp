@@ -169,6 +169,33 @@ CodeGen_GLSLBase::CodeGen_GLSLBase(std::ostream &s, Target target) : CodeGen_C(s
     builtin["greaterThanEqual"] = "greaterThanEqual";
 }
 
+void CodeGen_GLSLBase::visit(const FloatImm *op) {
+    ostringstream oss;
+    // Print integral numbers with trailing ".0". For fractional numbers use a
+    // precision of 9 digits, which should be enough to recover the binary
+    // float unambiguously from the decimal representation (if iostreams
+    // implements correct rounding).
+    const float truncated = (op->value < 0 ? std::ceil(op->value) : std::floor(op->value) );
+    if (truncated == op->value) {
+        oss << std::fixed << std::setprecision(1) << op->value;
+    } else {
+        oss << std::setprecision(9) << op->value;
+    }
+    id = oss.str();
+}
+
+void CodeGen_GLSLBase::visit(const IntImm *op) {
+    if (op->type == Int(32)) {
+        id = std::to_string(op->value);
+    } else {
+        id = print_type(op->type) + "(" + std::to_string(op->value) + ")";
+    }
+}
+
+void CodeGen_GLSLBase::visit(const UIntImm *op) {
+    id = print_type(op->type) + "(" + std::to_string(op->value) + ")";
+}
+
 void CodeGen_GLSLBase::visit(const Max *op) {
     print_expr(call_builtin(op->type, "max", {op->a, op->b}));
 }
@@ -373,33 +400,6 @@ string CodeGen_GLSLBase::print_name(const string &name) {
 
 CodeGen_GLSL::CodeGen_GLSL(std::ostream &s, const Target &t) : CodeGen_GLSLBase(s, t) {
     builtin["trunc_f32"] = "_trunc_f32";
-}
-
-void CodeGen_GLSL::visit(const FloatImm *op) {
-    ostringstream oss;
-    // Print integral numbers with trailing ".0". For fractional numbers use a
-    // precision of 9 digits, which should be enough to recover the binary
-    // float unambiguously from the decimal representation (if iostreams
-    // implements correct rounding).
-    const float truncated = (op->value < 0 ? std::ceil(op->value) : std::floor(op->value) );
-    if (truncated == op->value) {
-        oss << std::fixed << std::setprecision(1) << op->value;
-    } else {
-        oss << std::setprecision(9) << op->value;
-    }
-    id = oss.str();
-}
-
-void CodeGen_GLSL::visit(const IntImm *op) {
-    if (op->type == Int(32)) {
-        id = std::to_string(op->value);
-    } else {
-        id = print_type(op->type) + "(" + std::to_string(op->value) + ")";
-    }
-}
-
-void CodeGen_GLSL::visit(const UIntImm *op) {
-    id = print_type(op->type) + "(" + std::to_string(op->value) + ")";
 }
 
 void CodeGen_GLSL::visit(const Cast *op) {

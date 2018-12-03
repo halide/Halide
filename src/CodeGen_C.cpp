@@ -1157,7 +1157,9 @@ private:
 )INLINE_CODE";
 
         const char *vector_selection_decl = R"INLINE_CODE(
-#if __has_attribute(ext_vector_type) || __has_attribute(vector_size)
+// Dec. 1, 2018: Apparently emscripten compilation runs with the __has_attribute true,
+// then fails to handle the vector intrinsics later.
+#if !defined(__EMSCRIPTEN__) && (__has_attribute(ext_vector_type) || __has_attribute(vector_size))
     #if __GNUC__ && !__clang__
         // GCC only allows powers-of-two; fall back to CppVector for other widths
         #define halide_cpp_use_native_vector(type, lanes) ((lanes & (lanes - 1)) == 0)
@@ -1169,7 +1171,7 @@ private:
     #define halide_cpp_use_native_vector(type, lanes) (false)
 #endif  // __has_attribute(ext_vector_type) || __has_attribute(vector_size)
 
- // Failsafe to allow forcing non-native vectors in case of unruly compilers
+// Failsafe to allow forcing non-native vectors in case of unruly compilers
 #if HALIDE_CPP_ALWAYS_USE_CPP_VECTORS
     #undef halide_cpp_use_native_vector
     #define halide_cpp_use_native_vector(type, lanes) (false)
@@ -2712,10 +2714,10 @@ void CodeGen_C::visit(const Shuffle *op) {
 }
 
 void CodeGen_C::test() {
-    LoweredArgument buffer_arg("buf", Argument::OutputBuffer, Int(32), 3);
-    LoweredArgument float_arg("alpha", Argument::InputScalar, Float(32), 0);
-    LoweredArgument int_arg("beta", Argument::InputScalar, Int(32), 0);
-    LoweredArgument user_context_arg("__user_context", Argument::InputScalar, type_of<const void*>(), 0);
+    LoweredArgument buffer_arg("buf", Argument::OutputBuffer, Int(32), 3, ArgumentEstimates{});
+    LoweredArgument float_arg("alpha", Argument::InputScalar, Float(32), 0, ArgumentEstimates{});
+    LoweredArgument int_arg("beta", Argument::InputScalar, Int(32), 0, ArgumentEstimates{});
+    LoweredArgument user_context_arg("__user_context", Argument::InputScalar, type_of<const void*>(), 0, ArgumentEstimates{});
     vector<LoweredArgument> args = { buffer_arg, float_arg, int_arg, user_context_arg };
     Var x("x");
     Param<float> alpha("alpha");

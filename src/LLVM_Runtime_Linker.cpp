@@ -114,6 +114,7 @@ DECLARE_CPP_INITMOD(osx_get_symbol)
 DECLARE_CPP_INITMOD(osx_host_cpu_count)
 DECLARE_CPP_INITMOD(osx_opengl_context)
 DECLARE_CPP_INITMOD(osx_yield)
+DECLARE_CPP_INITMOD(posix_abort)
 DECLARE_CPP_INITMOD(posix_allocator)
 DECLARE_CPP_INITMOD(posix_clock)
 DECLARE_CPP_INITMOD(posix_error_handler)
@@ -144,6 +145,7 @@ DECLARE_CPP_INITMOD(windows_allocator)
 DECLARE_CPP_INITMOD(windows_clock)
 DECLARE_CPP_INITMOD(windows_cuda)
 DECLARE_CPP_INITMOD(windows_get_symbol)
+DECLARE_CPP_INITMOD(windows_abort)
 DECLARE_CPP_INITMOD(windows_io)
 DECLARE_CPP_INITMOD(windows_opencl)
 DECLARE_CPP_INITMOD(windows_profiler)
@@ -912,6 +914,12 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
         modules.push_back(get_initmod_module_jit_ref_count(c, bits_64, debug));
     } else if (module_type == ModuleAOT) {
         modules.push_back(get_initmod_module_aot_ref_count(c, bits_64, debug));
+    }
+
+    if (t.os == Target::Windows) {
+        modules.push_back(get_initmod_windows_abort(c, bits_64, debug));
+    } else {
+        modules.push_back(get_initmod_posix_abort(c, bits_64, debug));
     }
 
     if (module_type == ModuleAOT || module_type == ModuleGPU) {

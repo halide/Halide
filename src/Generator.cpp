@@ -124,15 +124,11 @@ Outputs compute_outputs(const Target &target,
 }
 
 Argument to_argument(const Internal::Parameter &param, const Expr &default_value) {
-    Expr def, min, max;
-    if (!param.is_buffer()) {
-        def = default_value; // *not* param.scalar_expr();
-        min = param.min_value();
-        max = param.max_value();
-    }
+    ArgumentEstimates argument_estimates = param.get_argument_estimates();
+    argument_estimates.scalar_def = default_value;
     return Argument(param.name(),
         param.is_buffer() ? Argument::InputBuffer : Argument::InputScalar,
-        param.type(), param.dimensions(), def, min, max);
+        param.type(), param.dimensions(), argument_estimates);
 }
 
 Func make_param_func(const Parameter &p, const std::string &name) {
