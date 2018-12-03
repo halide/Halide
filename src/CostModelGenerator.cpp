@@ -156,39 +156,6 @@ public:
     Output<Buffer<float>> prediction_output{ "prediction_output", 1 };
     Output<Buffer<float>> loss_output { "loss_output", 0 };
 
-    void set_input_estimates() {
-        // Provide estimates for things that don't have hard bounds
-        num_stages.set_estimate(22);
-        batch_size.set_estimate(1024);
-
-        pipeline_features.dim(0).set_bounds_estimate(0, 56)
-                         .dim(1).set_bounds_estimate(0, 7)
-                         .dim(2).set_bounds_estimate(0, 22);
-
-        schedule_features.dim(0).set_bounds_estimate(0, 1024)
-                         .dim(1).set_bounds_estimate(0, 26)
-                         .dim(2).set_bounds_estimate(0, 22);
-
-        pipeline_mean.dim(0).set_bounds_estimate(0, 56)
-                     .dim(1).set_bounds_estimate(0, 7);
-        pipeline_std.dim(0).set_bounds_estimate(0, 56)
-                    .dim(1).set_bounds_estimate(0, 7);
-
-        schedule_mean.dim(0).set_bounds_estimate(0, 26);
-        schedule_std.dim(0).set_bounds_estimate(0, 26);
-
-        learning_rate.set_estimate(0.001f);
-
-        timestep.set_estimate(1);
-
-        true_runtime.dim(0).set_bounds_estimate(0, 1024);
-    }
-
-    void set_output_estimates() {
-        // Provide estimates for things that don't have hard bounds
-        prediction_output.dim(0).set_bounds_estimate(0, 1);
-    }
-
     // Zero pad alone the last dimension of a Func
     Func pad_stages(Func f, Expr stages) {
         std::vector<std::pair<Expr, Expr>> bounds(f.dimensions());
@@ -393,11 +360,7 @@ public:
 
         if (auto_schedule) {
 
-            batch_size.set_estimate(1024);
-            num_stages.set_estimate(13);
-            prediction_output.dim(0).set_bounds_estimate(0, 1024);
-            learning_rate.set_estimate(0.001f);
-            timestep.set_estimate(37);
+            // nothing
 
         } else {
 
@@ -598,8 +561,13 @@ public:
             }
         }
 
-        set_input_estimates();
-        set_output_estimates();
+        // ESTIMATES
+
+        batch_size.set_estimate(1024);
+        num_stages.set_estimate(13);
+        prediction_output.dim(0).set_bounds_estimate(0, 1024);
+        learning_rate.set_estimate(0.001f);
+        timestep.set_estimate(37);
     }
 };
 

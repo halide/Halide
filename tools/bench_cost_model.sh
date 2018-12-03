@@ -19,7 +19,7 @@ g++ -std=c++11 \
 
 ./bench_train_cost_model --benchmarks=all \
     --benchmark_min_time=1 \
-    --default_input_buffers=random:0:estimate \
+    --default_input_buffers=random:0:estimate_then_auto \
     --default_input_scalars=estimate \
     --output_extents=estimate \
     --verbose
