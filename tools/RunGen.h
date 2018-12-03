@@ -900,7 +900,7 @@ public:
                 }
                 break;
             }
-            halide_argument_kind_input_buffer:
+            case halide_argument_kind_input_buffer:
             case halide_argument_kind_output_buffer:
                 // Nothing yet
                 break;
