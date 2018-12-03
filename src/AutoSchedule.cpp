@@ -2386,28 +2386,10 @@ pair<VarOrRVar, VarOrRVar> Partitioner::split_dim(
     // care for the nested loops. If it is the update definition of the group output
     // however, we'd better make sure that no other member of the groups accesses
     // the inputs or outputs.
+
     TailStrategy strategy = TailStrategy::Auto;
     if ((stage_num > 0) && !v.is_rvar) {
-        if (!is_group_output) {
-            if (access_inputs_or_outputs(def, v, costs.inputs, outputs)) {
-                strategy = TailStrategy::GuardWithIf;
-            }
-        } else {
-            bool any_access_inputs_outputs = false;
-            for (const FStage &mem : g.members) {
-                if (mem.func.name() == f_handle.name()) {
-                    continue;
-                }
-                Definition mem_def = get_stage_definition(mem.func, mem.stage_num);
-                if (access_inputs_or_outputs(mem_def, v, costs.inputs, outputs)) {
-                    any_access_inputs_outputs = true;
-                    break;
-                }
-            }
-            if (any_access_inputs_outputs) {
-                strategy = TailStrategy::GuardWithIf;
-            }
-        }
+        strategy = TailStrategy::GuardWithIf;
     }
 
     f_handle.split(v, outer, inner, factor, strategy);
