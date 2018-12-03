@@ -2389,6 +2389,9 @@ pair<VarOrRVar, VarOrRVar> Partitioner::split_dim(
 
     TailStrategy strategy = TailStrategy::Auto;
     if ((stage_num > 0) && !v.is_rvar) {
+        // TODO: It's safe to use RoundUp here if we know there are no
+        // loads from any input, but at this point we've lost track of
+        // loads from inputs that happen inside inlined Funcs.
         strategy = TailStrategy::GuardWithIf;
     }
 
