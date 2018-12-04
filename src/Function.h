@@ -219,10 +219,6 @@ public:
     Expr make_call_to_extern_definition(const std::vector<Expr> &args,
                                         const Target &t) const;
 
-    /** Check if the extern function being called expects the legacy
-     * buffer_t type. */
-    bool extern_definition_uses_old_buffer_t() const;
-
     /** Get the proxy Expr for the extern stage. This is an expression
      * known to have the same data access pattern as the extern
      * stage. It must touch at least all of the memory that the extern
@@ -239,9 +235,7 @@ public:
                        const std::vector<ExternFuncArgument> &args,
                        const std::vector<Type> &types,
                        const std::vector<std::string> &dims,
-                       NameMangling mangling,
-                       DeviceAPI device_api,
-                       bool uses_old_buffer_t);
+                       NameMangling mangling, DeviceAPI device_api);
 
     /** Retrive the arguments of the extern definition. */
     // @{
