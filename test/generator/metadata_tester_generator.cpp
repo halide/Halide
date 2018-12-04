@@ -142,15 +142,20 @@ public:
         i8.set_estimate(3);
         f32.set_estimate(48.5f);
 
-        // Provide some bounds estimates for an Output<Func>
+        // Provide some bounds estimates for an Output<Func>.
+        // Note that calling bound() implicitly calls estimate() as well.
         output
             .estimate(x, 10, 2592)
             .estimate(y, 20, 1968)
-            .estimate(c, 0, 3);
+            .bound(c, 0, 3);
 
         // Provide partial bounds estimates for an Output<Buffer>
         typed_output_buffer.estimate(x, 10, 2592);
         typed_output_buffer.dim(1).set_bounds_estimate(20, 1968);
+
+        // Note that calling set_bounds()/bound() implicitly calls set_bounds_estimate()/estimate() as well.
+        type_only_output_buffer.dim(1).set_bounds(0, 32);
+        type_only_output_buffer.bound(c, 0, 3);
     }
 
     void schedule() {

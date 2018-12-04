@@ -911,7 +911,7 @@ class VectorSubs : public IRMutator2 {
         for (int i = lanes - 1; i >= 0; --i) {
             // Hide all the vector let values in scope with a scalar version
             // in the appropriate lane.
-            for (Scope<Expr>::iterator iter = scope.begin(); iter != scope.end(); ++iter) {
+            for (Scope<Expr>::const_iterator iter = scope.cbegin(); iter != scope.cend(); ++iter) {
                 string name = iter.name() + ".lane." + std::to_string(i);
                 Expr lane = extract_lane(iter.value(), i);
                 e = substitute(iter.name(), Variable::make(lane.type(), name), e);

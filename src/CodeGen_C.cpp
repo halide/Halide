@@ -1157,7 +1157,9 @@ private:
 )INLINE_CODE";
 
         const char *vector_selection_decl = R"INLINE_CODE(
-#if __has_attribute(ext_vector_type) || __has_attribute(vector_size)
+// Dec. 1, 2018: Apparently emscripten compilation runs with the __has_attribute true,
+// then fails to handle the vector intrinsics later.
+#if !defined(__EMSCRIPTEN__) && (__has_attribute(ext_vector_type) || __has_attribute(vector_size))
     #if __GNUC__ && !__clang__
         // GCC only allows powers-of-two; fall back to CppVector for other widths
         #define halide_cpp_use_native_vector(type, lanes) ((lanes & (lanes - 1)) == 0)
@@ -1169,7 +1171,7 @@ private:
     #define halide_cpp_use_native_vector(type, lanes) (false)
 #endif  // __has_attribute(ext_vector_type) || __has_attribute(vector_size)
 
- // Failsafe to allow forcing non-native vectors in case of unruly compilers
+// Failsafe to allow forcing non-native vectors in case of unruly compilers
 #if HALIDE_CPP_ALWAYS_USE_CPP_VECTORS
     #undef halide_cpp_use_native_vector
     #define halide_cpp_use_native_vector(type, lanes) (false)
