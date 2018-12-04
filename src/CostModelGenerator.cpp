@@ -360,11 +360,7 @@ public:
 
         if (auto_schedule) {
 
-            batch_size.set_estimate(1024);
-            num_stages.set_estimate(13);
-            prediction_output.dim(0).set_bounds_estimate(0, 1024);
-            learning_rate.set_estimate(0.001f);
-            timestep.set_estimate(37);
+            // nothing
 
         } else {
 
@@ -564,6 +560,14 @@ public:
                 }
             }
         }
+
+        // ESTIMATES
+
+        batch_size.set_estimate(1024);
+        num_stages.set_estimate(13);
+        prediction_output.dim(0).set_bounds_estimate(0, 1024);
+        learning_rate.set_estimate(0.001f);
+        timestep.set_estimate(37);
     }
 };
 
