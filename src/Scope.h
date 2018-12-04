@@ -2,7 +2,7 @@
 #define HALIDE_SCOPE_H
 
 #include <iostream>
-#include <unordered_map>
+#include <map>
 #include <stack>
 #include <string>
 #include <utility>
@@ -89,7 +89,7 @@ public:
 template<typename T = void>
 class Scope {
 private:
-    std::unordered_map<std::string, SmallStack<T>> table;
+    std::map<std::string, SmallStack<T>> table;
 
     // Copying a scope object copies a large table full of strings and
     // stacks. Bad idea.
@@ -120,7 +120,7 @@ public:
     template<typename T2 = T,
              typename = typename std::enable_if<!std::is_same<T2, void>::value>::type>
     T2 get(const std::string &name) const {
-        typename std::unordered_map<std::string, SmallStack<T>>::const_iterator iter = table.find(name);
+        typename std::map<std::string, SmallStack<T>>::const_iterator iter = table.find(name);
         if (iter == table.end() || iter->second.empty()) {
             if (containing_scope) {
                 return containing_scope->get(name);
@@ -135,7 +135,7 @@ public:
     template<typename T2 = T,
              typename = typename std::enable_if<!std::is_same<T2, void>::value>::type>
     T2 &ref(const std::string &name) {
-        typename std::unordered_map<std::string, SmallStack<T>>::iterator iter = table.find(name);
+        typename std::map<std::string, SmallStack<T>>::iterator iter = table.find(name);
         if (iter == table.end() || iter->second.empty()) {
             internal_error << "Name not in Scope: " << name << "\n" << *this << "\n";
         }
@@ -144,7 +144,7 @@ public:
 
     /** Tests if a name is in scope */
     bool contains(const std::string &name) const {
-        typename std::unordered_map<std::string, SmallStack<T>>::const_iterator iter = table.find(name);
+        typename std::map<std::string, SmallStack<T>>::const_iterator iter = table.find(name);
         if (iter == table.end() || iter->second.empty()) {
             if (containing_scope) {
                 return containing_scope->contains(name);
@@ -174,7 +174,7 @@ public:
      * was (or remove it entirely if there was nothing else of the
      * same name in an outer scope) */
     void pop(const std::string &name) {
-        typename std::unordered_map<std::string, SmallStack<T>>::iterator iter = table.find(name);
+        typename std::map<std::string, SmallStack<T>>::iterator iter = table.find(name);
         internal_assert(iter != table.end()) << "Name not in Scope: " << name << "\n" << *this << "\n";
         iter->second.pop();
         if (iter->second.empty()) {
@@ -184,9 +184,9 @@ public:
 
     /** Iterate through the scope. Does not capture any containing scope. */
     class const_iterator {
-        typename std::unordered_map<std::string, SmallStack<T>>::const_iterator iter;
+        typename std::map<std::string, SmallStack<T>>::const_iterator iter;
     public:
-        explicit const_iterator(const typename std::unordered_map<std::string, SmallStack<T>>::const_iterator &i) :
+        explicit const_iterator(const typename std::map<std::string, SmallStack<T>>::const_iterator &i) :
             iter(i) {
         }
 
@@ -221,46 +221,6 @@ public:
 
     const_iterator cend() const {
         return const_iterator(table.end());
-    }
-
-    class iterator {
-        typename std::unordered_map<std::string, SmallStack<T>>::iterator iter;
-    public:
-        explicit iterator(typename std::unordered_map<std::string, SmallStack<T>>::iterator i) :
-            iter(i) {
-        }
-
-        iterator() {}
-
-        bool operator!=(const iterator &other) {
-            return iter != other.iter;
-        }
-
-        void operator++() {
-            ++iter;
-        }
-
-        const std::string &name() {
-            return iter->first;
-        }
-
-        SmallStack<T> &stack() {
-            return iter->second;
-        }
-
-        template<typename T2 = T,
-                 typename = typename std::enable_if<!std::is_same<T2, void>::value>::type>
-        T2 &value() {
-            return iter->second.top_ref();
-        }
-    };
-
-    iterator begin() {
-        return iterator(table.begin());
-    }
-
-    iterator end() {
-        return iterator(table.end());
     }
 
     void swap(Scope<T> &other) {
