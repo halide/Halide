@@ -305,13 +305,15 @@ inline Shape parse_extents(const std::string &extent_list) {
 }
 
 // Parse the buffer_estimate list from a given argument's metadata into a Shape.
-inline Shape parse_metadata_buffer_estimates(const halide_filter_argument_t *md) {
+// If no valid buffer_estimate exists, return false.
+inline bool try_parse_metadata_buffer_estimates(const halide_filter_argument_t *md, Shape *shape) {
     if (!md->buffer_estimates) {
         // zero-dimensional buffers don't have (or need) estimates, so don't fail.
         if (md->dimensions == 0) {
-            return Shape();
+            *shape = Shape();
+            return true;
         }
-        fail() << "Argument " << md->name << " was specified as 'estimate', but no estimates were provided.";
+        return false;
     }
     Shape result(md->dimensions);
     int32_t stride = 1;
@@ -319,12 +321,24 @@ inline Shape parse_metadata_buffer_estimates(const halide_filter_argument_t *md)
         const int64_t *min = md->buffer_estimates[i*2];
         const int64_t *extent = md->buffer_estimates[i*2+1];
         if (!min || !extent) {
+            return false;
             fail() << "Argument " << md->name << " was specified as 'estimate', but no estimate was provided for dimension " << i << " of " << md->dimensions;
         }
         result[i] = halide_dimension_t{(int32_t) *min, (int32_t) *extent, stride};
         stride *= result[i].extent;
     }
-    return result;
+    *shape = result;
+    return true;
+};
+
+// Parse the buffer_estimate list from a given argument's metadata into a Shape.
+// If no valid buffer_estimate exists, fail.
+inline Shape parse_metadata_buffer_estimates(const halide_filter_argument_t *md) {
+    Shape shape;
+    if (!try_parse_metadata_buffer_estimates(md, &shape)) {
+        fail() << "Argument " << md->name << " was specified as 'estimate', but no valid estimates were provided.";
+    }
+    return shape;
 };
 
 // Given a Buffer<>, return its shape in the form of a vector<halide_dimension_t>.
@@ -612,6 +626,14 @@ struct ArgData {
             if (s == "estimate") {
                 return parse_metadata_buffer_estimates(argument_metadata);
             }
+            if (s == "estimate_then_auto") {
+                Shape shape;
+                if (!try_parse_metadata_buffer_estimates(argument_metadata, &shape)) {
+                    info() << "Input " << argument_metadata->name << " has no estimates; using bounds-query result instead.";
+                    shape = auto_shape;
+                }
+                return shape;
+            }
             return parse_extents(s);
         };
 
@@ -848,25 +870,8 @@ public:
         Shape first_input_shape;
         std::map<std::string, Shape> auto_input_shapes;
 
-        if (!user_specified_output_shape_string.empty()) {
-            // For now, we set all output shapes to be identical -- there's no
-            // way on the command line to specify different shapes for each
-            // output. Would be nice to try?
-            for (auto &arg_pair : args) {
-                auto &arg = arg_pair.second;
-                if (arg.metadata->kind == halide_argument_kind_output_buffer) {
-                    auto &arg_name = arg_pair.first;
-                    if (user_specified_output_shape_string == "estimate") {
-                        output_shapes[arg_name] = parse_metadata_buffer_estimates(arg.metadata);
-                        info() << "Output " << arg_name << " is parsed from metadata as: " << output_shapes[arg_name];
-                    } else {
-                        output_shapes[arg_name] = parse_extents(user_specified_output_shape_string);
-                        info() << "Output " << arg_name << " has user-specified Shape: " << output_shapes[arg_name];
-                    }
-                }
-            }
-            auto_input_shapes = bounds_query_input_shapes();
-        }
+        // First, set all the scalar inputs: we need those to be correct
+        // in order to get useful values from the bound-query for input buffers.
         for (auto &arg_pair : args) {
             auto &arg_name = arg_pair.first;
             auto &arg = arg_pair.second;
@@ -895,11 +900,44 @@ public:
                 }
                 break;
             }
-            case halide_argument_kind_input_buffer: {
+            case halide_argument_kind_input_buffer:
+            case halide_argument_kind_output_buffer:
+                // Nothing yet
+                break;
+            }
+        }
+
+        if (!user_specified_output_shape_string.empty()) {
+            // For now, we set all output shapes to be identical -- there's no
+            // way on the command line to specify different shapes for each
+            // output. Would be nice to try?
+            for (auto &arg_pair : args) {
+                auto &arg = arg_pair.second;
+                if (arg.metadata->kind == halide_argument_kind_output_buffer) {
+                    auto &arg_name = arg_pair.first;
+                    if (user_specified_output_shape_string == "estimate") {
+                        output_shapes[arg_name] = parse_metadata_buffer_estimates(arg.metadata);
+                        info() << "Output " << arg_name << " is parsed from metadata as: " << output_shapes[arg_name];
+                    } else {
+                        output_shapes[arg_name] = parse_extents(user_specified_output_shape_string);
+                        info() << "Output " << arg_name << " has user-specified Shape: " << output_shapes[arg_name];
+                    }
+                }
+            }
+            auto_input_shapes = bounds_query_input_shapes();
+        }
+
+        for (auto &arg_pair : args) {
+            auto &arg_name = arg_pair.first;
+            auto &arg = arg_pair.second;
+            switch (arg.metadata->kind) {
+            case halide_argument_kind_input_buffer:
                 arg.buffer_value = arg.load_buffer(auto_input_shapes[arg_name], arg.metadata);
                 info() << "Input " << arg_name << ": Shape is " << get_shape(arg.buffer_value);
                 break;
-            }
+            case halide_argument_kind_input_scalar:
+                // Already handled.
+                break;
             case halide_argument_kind_output_buffer:
                 // Nothing yet
                 break;

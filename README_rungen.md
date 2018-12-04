@@ -159,6 +159,15 @@ aren't estimates for all of the buffer's dimensions, a runtime error occurs.)
 $ ./bin/local_laplacian.rungen --output_extents=[100,200,3] input=zero:auto levels=8 alpha=1 beta=1 output=/tmp/out.png
 ```
 
+You can combine the two and specify `estimate_then_auto` for the extents, which
+will attempt to use the estimate values; if a given input buffer has no
+estimates, it will fall back to the bounds-query result for that input:
+
+```
+$ ./bin/local_laplacian.rungen --output_extents=[100,200,3] input=zero:estimate_then_auto levels=8 alpha=1 beta=1 output=/tmp/out.png
+```
+
+
 Similarly, you can use `estimate` for `--output_extents`, which will use the
 estimate values for each output. (If there aren't estimates for all of the
 outputs, a runtime error occurs.)
