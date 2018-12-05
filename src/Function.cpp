@@ -84,7 +84,6 @@ struct FunctionContents {
 
     NameMangling extern_mangling = NameMangling::Default;
     DeviceAPI extern_function_device_api = DeviceAPI::Host;
-    bool extern_uses_old_buffer_t = false;
     Expr extern_proxy_expr;
 
     bool trace_loads = false, trace_stores = false, trace_realizations = false;
@@ -336,7 +335,6 @@ void Function::deep_copy(FunctionPtr copy, DeepCopyMap &copied_map) const {
     copy->extern_function_name = contents->extern_function_name;
     copy->extern_mangling = contents->extern_mangling;
     copy->extern_function_device_api = contents->extern_function_device_api;
-    copy->extern_uses_old_buffer_t = contents->extern_uses_old_buffer_t;
     copy->extern_proxy_expr = contents->extern_proxy_expr;
     copy->trace_loads = contents->trace_loads;
     copy->trace_stores = contents->trace_stores;
@@ -685,8 +683,7 @@ void Function::define_extern(const std::string &function_name,
                              const std::vector<Type> &types,
                              const std::vector<string> &args,
                              NameMangling mangling,
-                             DeviceAPI device_api,
-                             bool use_old_buffer_t) {
+                             DeviceAPI device_api) {
 
     user_assert(!has_pure_definition() && !has_update_definition())
         << "In extern definition for Func \"" << name() << "\":\n"
@@ -702,7 +699,6 @@ void Function::define_extern(const std::string &function_name,
     contents->output_types = types;
     contents->extern_mangling = mangling;
     contents->extern_function_device_api = device_api;
-    contents->extern_uses_old_buffer_t = use_old_buffer_t;
 
     std::vector<Expr> values;
     contents->output_buffers.clear();
@@ -858,10 +854,6 @@ Expr Function::make_call_to_extern_definition(const std::vector<Expr> &args,
         break;
     }
     return Call::make(Int(32), contents->extern_function_name, args, call_type, contents);
-}
-
-bool Function::extern_definition_uses_old_buffer_t() const {
-    return contents->extern_uses_old_buffer_t;
 }
 
 Expr Function::extern_definition_proxy_expr() const {

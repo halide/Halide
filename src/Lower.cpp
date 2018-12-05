@@ -454,9 +454,6 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
         add_legacy_wrapper(result_module, main_func);
     }
 
-    // Also append any wrappers for extern stages that expect the old buffer_t
-    wrap_legacy_extern_stages(result_module);
-
     return result_module;
 }
 
