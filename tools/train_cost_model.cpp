@@ -1,5 +1,6 @@
 #include <string>
 #include <vector>
+#include <set>
 #include <unistd.h>
 
 #include "Debug.h"
@@ -8,6 +9,7 @@
 using std::vector;
 using std::string;
 using std::map;
+using std::set;
 
 using namespace Halide;
 using namespace Halide::Internal;
@@ -41,7 +43,7 @@ uint64_t hash_floats(uint64_t h, float *begin, float *end) {
 // Load all the samples, reading filenames from stdin
 map<int, PipelineSample> load_samples() {
     map<int, PipelineSample> result;
-    vector<float> scratch(1024 * 1024);
+    vector<float> scratch(10 * 1024 * 1024);
 
     int best = -1;
     float best_runtime = 1e20f;
@@ -73,7 +75,7 @@ map<int, PipelineSample> load_samples() {
         const size_t num_stages = num_features / features_per_stage;
 
         const float runtime = scratch[num_features];
-        if (runtime <= 0 || runtime > 1000 * 1000) {
+        if (runtime <= 0 || runtime > 1000) { // Don't try to predict runtime over 1s
             debug(0) << "Implausible runtime in ms: " << runtime << "\n";
             continue;
         }
@@ -129,13 +131,22 @@ map<int, PipelineSample> load_samples() {
             sample.schedule_id = schedule_id;
             sample.schedule_features = Runtime::Buffer<float>(26, num_stages);
 
+            bool ok = true;
             for (size_t i = 0; i < num_stages; i++) {
                 for (int x = 0; x < 26; x++) {
-                    sample.schedule_features(x, i) = scratch[i * features_per_stage + x];
+                    float f = scratch[i * features_per_stage + x];
+                    if (f < 0 || f > 1e14) {
+                        debug(0) << "Negative or implausibly large schedule feature: " << i << " " << x << " " << f << "\n";
+                        // Something must have overflowed
+                        ok = false;
+                    }
+                    sample.schedule_features(x, i) = f;
                 }
             }
-            ps.schedules.emplace(schedule_hash, std::move(sample));
-            num_unique++;
+            if (ok) {
+                ps.schedules.emplace(schedule_hash, std::move(sample));
+                num_unique++;
+            }
         }
         num_read++;
 
@@ -150,7 +161,8 @@ map<int, PipelineSample> load_samples() {
         size_t count = 0;
         // Compute the weighted average of variances across all samples
         for (const auto &p : pipe.second.schedules) {
-            debug(0) << "Unique sample: " << p.second.filename << "\n";
+            internal_assert(!p.second.runtimes.empty()) << "Empty runtimes for schedule: " << p.first << "\n";
+            debug(0) << "Unique sample: " << p.second.filename << " : " << p.second.runtimes[0] << "\n";
             if (p.second.runtimes.size() > 1) {
                 // Compute variance from samples
                 double mean = 0;
@@ -167,9 +179,13 @@ map<int, PipelineSample> load_samples() {
                 count += p.second.runtimes.size() - 1;
             }
         }
-        double stddev = std::sqrt(variance_sum / count);
-        debug(0) << "Noise level: " << stddev << "\n";
+        if (count > 0) {
+            double stddev = std::sqrt(variance_sum / count);
+            debug(0) << "Noise level: " << stddev << "\n";
+        }
     }
+
+    debug(0) << "Distinct pipelines: " << result.size() << "\n";
 
     debug(0) << "Best schedule id / runtime: " << best << " / " << best_runtime << "\n";
     return result;
@@ -182,34 +198,53 @@ int main(int argc, char **argv) {
     // Iterate through the pipelines
     ThroughputPredictorPipeline tpp;
 
-    float rates[] = {1e-4f};
+    float rates[] = {0.01f};
+
+    std::set<int> blacklist;
 
     for (float learning_rate : rates) {
-        for (int batch = 0; batch < 1000000; batch++) {
+        for (int batch = 0; batch < atoi(argv[1]); batch++) {
+            int counter = 0;
+            float loss_sum = 0, loss_sum_counter = 0;
+            float correct_ordering_rate_sum = 0.0f;
+            float correct_ordering_rate_count = 0;
+            debug(0) << "Iterating over " << samples.size() << " samples\n";
             for (auto &p : samples) {
+                debug(0) << "Pipeline " << p.first << " has " << p.second.schedules.size() << " schedules\n";
+                if (blacklist.count(p.first)) continue;
+                if (p.second.schedules.size() < 16) continue;
                 tpp.reset();
                 tpp.set_pipeline_features(p.second.pipeline_features);
 
-                Runtime::Buffer<float> runtimes(1024);
+                size_t batch_size = std::min((size_t)1024, p.second.schedules.size());
 
-                for (int i = 0; i < 1024; i++) {
-                    int j = rand() % p.second.schedules.size();
+                Runtime::Buffer<float> runtimes(batch_size);
+
+                size_t first = 0;
+                if (p.second.schedules.size() > 1024) {
+                    first = rand() % (p.second.schedules.size() - 1024);
+                }
+
+                for (size_t j = 0; j < batch_size; j++) {
+                    internal_assert(j + first < p.second.schedules.size());
                     auto it = p.second.schedules.begin();
-                    std::advance(it, j);
+                    std::advance(it, j + first);
                     auto &sched = it->second;
                     Runtime::Buffer<float> buf;
                     tpp.enqueue(p.second.num_stages, &buf, &sched.prediction);
-                    runtimes(i) = sched.runtimes[0];
+                    runtimes(j) = sched.runtimes[0];
                     buf.copy_from(sched.schedule_features);
                 }
 
                 float loss = tpp.backprop(runtimes, learning_rate);
+                debug(0) << "Loss = " << loss << "\n";
+                loss_sum += loss;
+                loss_sum_counter ++;
 
-                debug(0) << "RMS error = " << std::sqrt(loss) << "\n";
-
-                if (batch % 10 == 0 && batch > 100) {
+                if (true) {
                     int good = 0, bad = 0;
-                    while (good + bad < 1024) {
+                    int attempts = 0;
+                    while (good + bad < batch_size && attempts < batch_size * 2) {
                         int j1 = rand() % p.second.schedules.size();
                         int j2 = rand() % p.second.schedules.size();
                         auto it1 = p.second.schedules.begin();
@@ -219,7 +254,8 @@ int main(int argc, char **argv) {
                         auto &sched1 = it1->second;
                         auto &sched2 = it2->second;
                         if (sched1.prediction == 0 || sched2.prediction == 0) continue;
-                        if (std::abs(sched1.runtimes[0] - sched2.runtimes[0]) > 0.1f) {
+                        if (sched1.runtimes[0] > 1.5f*sched2.runtimes[0] ||
+                            sched2.runtimes[0] > 1.5f*sched1.runtimes[0]) {
                             if ((sched1.prediction > sched2.prediction) ==
                                 (sched1.runtimes[0] > sched2.runtimes[0])) {
                                 good++;
@@ -227,23 +263,41 @@ int main(int argc, char **argv) {
                                 bad++;
                             }
                         }
+                        attempts++;
                     }
-                    debug(0) << "Correct ordering rate = " << (float)good / (good + bad) << "\n";
+                    correct_ordering_rate_sum += good;
+                    correct_ordering_rate_count += good + bad;
+                    if (false && good < bad) {
+                        debug(0) << "Blacklisting " << p.first << "\n";
+                        // Assume this pipeline is some sort of outlier
+                        blacklist.insert(p.first);
+                    }
                 }
 
+                /*
                 if (batch % 100 == 0) {
                     for (auto &sched : p.second.schedules) {
                         debug(0) << sched.second.runtimes[0] << " " << sched.second.prediction << "\n";
                     }
                 }
+                */
+                if (counter % 1000 == 999) {
+                    debug(0) << "Saving weights... "
+                             << (loss_sum / loss_sum_counter)
+                             << " "
+                             << (correct_ordering_rate_sum / correct_ordering_rate_count)
+                             << "\n";
+                    tpp.save_weights();
+                }
+                counter++;
             }
-
-            if (batch % 100 == 0) {
-                tpp.save_weights();
-            }
+            debug(0) << "RMS error = " << loss_sum / loss_sum_counter << "\n";
+            debug(0) << "Correct ordering rate = " << correct_ordering_rate_sum / correct_ordering_rate_count << "\n";
+            tpp.save_weights();
         }
     }
 
+    tpp.save_weights();
 
     return 0;
 }
