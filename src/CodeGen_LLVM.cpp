@@ -878,12 +878,66 @@ void CodeGen_LLVM::compile_buffer(const Buffer<> &buf) {
     sym_push(buf.name() + ".buffer", global_ptr);
 }
 
+Constant* CodeGen_LLVM::embed_constant_scalar_value_t(Expr e) {
+    if (!e.defined()) {
+        return Constant::getNullValue(scalar_value_t_type->getPointerTo());
+    }
+
+    internal_assert(!e.type().is_handle()) << "Should never see Handle types here.";
+
+    llvm::Value *val = codegen(e);
+    llvm::Constant *constant = dyn_cast<llvm::Constant>(val);
+    internal_assert(constant);
+    // Verify that the size of the LLVM value is the size we expected.
+    internal_assert(constant);
+    internal_assert((uint64_t) constant->getType()->getPrimitiveSizeInBits() == (uint64_t) e.type().bits());
+
+    // It's important that we allocate a full scalar_value_t_type here,
+    // even if the type of the value is smaller; downstream consumers should
+    // be able to correctly load an entire scalar_value_t_type regardless of its
+    // type, and if we emit just (say) a uint8 value here, the pointer may be
+    // misaligned and/or the storage after may be unmapped. LLVM doesn't support
+    // unions directly, so we'll fake it by making a constant array of the elements
+    // we need, setting the first to the constant we want, and setting the rest
+    // to all-zeros. (This happens to work because sizeof(halide_scalar_value_t) is evenly
+    // divisible by sizeof(any-union-field.)
+
+    const size_t value_size = e.type().bits() / 8;
+    internal_assert(value_size <= sizeof(halide_scalar_value_t));
+
+    const size_t array_size = sizeof(halide_scalar_value_t) / value_size;
+    internal_assert(array_size * value_size == sizeof(halide_scalar_value_t));
+
+    vector<Constant *> array_entries(array_size, Constant::getNullValue(constant->getType()));
+    array_entries[0] = constant;
+
+    llvm::ArrayType *array_type = ArrayType::get(constant->getType(), array_size);
+    GlobalVariable *storage = new GlobalVariable(
+        *module,
+        array_type,
+        /*isConstant*/ true,
+        GlobalValue::PrivateLinkage,
+        ConstantArray::get(array_type, array_entries));
+
+
+    // Ensure that the storage is aligned for halide_scalar_value_t
+    storage->setAlignment((unsigned) sizeof(halide_scalar_value_t));
+
+    Constant *zero[] = {ConstantInt::get(i32_t, 0)};
+    return ConstantExpr::getBitCast(
+        ConstantExpr::getInBoundsGetElementPtr(array_type, storage, zero),
+        scalar_value_t_type->getPointerTo());
+}
+
 Constant* CodeGen_LLVM::embed_constant_expr(Expr e, llvm::Type *t) {
+    internal_assert(t != scalar_value_t_type);
+
     if (!e.defined()) {
         return Constant::getNullValue(t->getPointerTo());
     }
 
     internal_assert(!e.type().is_handle()) << "Should never see Handle types here.";
+    internal_assert(is_const(e)) << "Should never see Handle types here.";
 
     llvm::Value *val = codegen(e);
     llvm::Constant *constant = dyn_cast<llvm::Constant>(val);
@@ -1001,10 +1055,10 @@ llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_
             ConstantInt::get(i32_t, args[arg].kind),
             ConstantInt::get(i32_t, args[arg].dimensions),
             type,
-            embed_constant_expr(argument_estimates.scalar_def, scalar_value_t_type),
-            embed_constant_expr(argument_estimates.scalar_min, scalar_value_t_type),
-            embed_constant_expr(argument_estimates.scalar_max, scalar_value_t_type),
-            embed_constant_expr(argument_estimates.scalar_estimate, scalar_value_t_type),
+            embed_constant_scalar_value_t(argument_estimates.scalar_def),
+            embed_constant_scalar_value_t(argument_estimates.scalar_min),
+            embed_constant_scalar_value_t(argument_estimates.scalar_max),
+            embed_constant_scalar_value_t(argument_estimates.scalar_estimate),
             buffer_estimates_array_ptr
         };
         arguments_array_entries.push_back(ConstantStruct::get(argument_t_type, argument_fields));
