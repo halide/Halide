@@ -146,7 +146,7 @@ LoweredFunc::LoweredFunc(const std::string &name,
                          NameMangling name_mangling)
     : name(name), body(body), linkage(linkage), name_mangling(name_mangling) {
     for (const Argument &i : args) {
-        this->args.push_back(i);
+        this->args.push_back(LoweredArgument(i));
     }
 }
 

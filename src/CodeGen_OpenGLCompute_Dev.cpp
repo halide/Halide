@@ -55,6 +55,11 @@ Type map_type(const Type &type) {
 }
 }  // namespace
 
+CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::CodeGen_OpenGLCompute_C(std::ostream &s, Target t)
+    : CodeGen_GLSLBase(s, t) {
+    builtin["trunc_f32"] = "trunc";
+}
+
 string CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::print_type(Type type, AppendSpaceIfNeeded space) {
     Type mapped_type = map_type(type);
     if (mapped_type.is_uint() && !mapped_type.is_bool()) {
@@ -357,12 +362,21 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Allocate *o
     internal_assert(is_const(extent));
 
     if (!starts_with(op->name, "__shared_")) {
+        stream << "{\n";
+        indent += 2;
+        do_indent();
         // Shared allocations were already declared at global scope.
         stream << print_type(op->type) << " "
                << print_name(op->name) << "["
                << op->extents[0] << "];\n";
     }
     op->body.accept(this);
+
+    if (!starts_with(op->name, "__shared_")) {
+        indent -= 2;
+        do_indent();
+        stream << "}\n";
+    }
 }
 
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Free *op) {
@@ -377,12 +391,12 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Evaluate *o
 }
 
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const IntImm *op) {
-    // GL seems to interpret some large int immediates as uints.
-    id = "int(" + std::to_string(op->value) + ")";
-}
-
-void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const UIntImm *op) {
-    id = "uint(" + std::to_string(op->value) + ")";
+    if (op->type == Int(32)) {
+        // GL seems to interpret some large int immediates as uints.
+        id = "int(" + std::to_string(op->value) + ")";
+    } else {
+        id = print_type(op->type) + "(" + std::to_string(op->value) + ")";
+    }
 }
 
 vector<char> CodeGen_OpenGLCompute_Dev::compile_to_src() {

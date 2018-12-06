@@ -354,6 +354,7 @@ SOURCE_FILES = \
   AlignLoads.cpp \
   AllocationBoundsInference.cpp \
   ApplySplit.cpp \
+  Argument.cpp \
   AssociativeOpsTable.cpp \
   Associativity.cpp \
   AsyncProducers.cpp \
@@ -718,6 +719,7 @@ RUNTIME_CPP_COMPONENTS = \
   osx_host_cpu_count \
   osx_opengl_context \
   osx_yield \
+  posix_abort \
   posix_allocator \
   posix_clock \
   posix_error_handler \
@@ -743,6 +745,7 @@ RUNTIME_CPP_COMPONENTS = \
   ssp \
   to_string \
   tracing \
+  windows_abort \
   windows_clock \
   windows_cuda \
   windows_get_symbol \
@@ -1749,23 +1752,18 @@ $(BUILD_DIR)/clang_ok:
 	@exit 1
 endif
 
-ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 40 50 60 70 80))
+ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 60 70 80))
 LLVM_OK=yes
 endif
 
 ifneq ($(LLVM_OK), )
 $(BUILD_DIR)/llvm_ok: $(BUILD_DIR)/rtti_ok
 	@echo "Found a new enough version of llvm"
-ifeq ($(LLVM_VERSION_TIMES_10), 40)
-	@echo
-	@echo "*** Warning: LLVM 4.x is no longer actively tested with Halide; consider using a newer LLVM version. ***"
-	@echo
-endif
 	mkdir -p $(BUILD_DIR)
 	touch $(BUILD_DIR)/llvm_ok
 else
 $(BUILD_DIR)/llvm_ok:
-	@echo "Can't find llvm or version of llvm too old (we need 4.0 or greater):"
+	@echo "Can't find llvm or version of llvm too old (we need 6.0 or greater):"
 	@echo "You can override this check by setting LLVM_OK=y"
 	$(LLVM_CONFIG) --version
 	@exit 1

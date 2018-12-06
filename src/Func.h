@@ -1150,80 +1150,40 @@ public:
      * fftw. */
     // @{
     void define_extern(const std::string &function_name,
-                       const std::vector<ExternFuncArgument> &params,
-                       Type t,
-                       int dimensionality,
-                       NameMangling mangling,
-                       bool uses_old_buffer_t) {
-        define_extern(function_name, params, t,
-                      Internal::make_argument_list(dimensionality),
-                      mangling, uses_old_buffer_t);
-    }
-
-    void define_extern(const std::string &function_name,
-                       const std::vector<ExternFuncArgument> &params,
-                       Type t,
+                       const std::vector<ExternFuncArgument> &params, Type t,
                        int dimensionality,
                        NameMangling mangling = NameMangling::Default,
-                       DeviceAPI device_api = DeviceAPI::Host,
-                       bool uses_old_buffer_t = false) {
-        define_extern(function_name, params, t,
-                      Internal::make_argument_list(dimensionality),
-                      mangling, device_api, uses_old_buffer_t);
+                       DeviceAPI device_api = DeviceAPI::Host) {
+      define_extern(function_name, params, t,
+                    Internal::make_argument_list(dimensionality), mangling,
+                    device_api);
     }
 
     void define_extern(const std::string &function_name,
                        const std::vector<ExternFuncArgument> &params,
-                       const std::vector<Type> &types,
-                       int dimensionality,
-                       NameMangling mangling,
-                       bool uses_old_buffer_t) {
-        define_extern(function_name, params, types,
-                      Internal::make_argument_list(dimensionality),
-                      mangling, uses_old_buffer_t);
+                       const std::vector<Type> &types, int dimensionality,
+                       NameMangling mangling) {
+      define_extern(function_name, params, types,
+                    Internal::make_argument_list(dimensionality), mangling);
     }
 
     void define_extern(const std::string &function_name,
                        const std::vector<ExternFuncArgument> &params,
-                       const std::vector<Type> &types,
-                       int dimensionality,
+                       const std::vector<Type> &types, int dimensionality,
                        NameMangling mangling = NameMangling::Default,
-                       DeviceAPI device_api = DeviceAPI::Host,
-                       bool uses_old_buffer_t = false) {
-        define_extern(function_name, params, types,
-                      Internal::make_argument_list(dimensionality),
-                      mangling, device_api, uses_old_buffer_t);
+                       DeviceAPI device_api = DeviceAPI::Host) {
+      define_extern(function_name, params, types,
+                    Internal::make_argument_list(dimensionality), mangling,
+                    device_api);
     }
 
     void define_extern(const std::string &function_name,
-                       const std::vector<ExternFuncArgument> &params,
-                       Type t,
-                       const std::vector<Var> &arguments,
-                       NameMangling mangling,
-                       bool uses_old_buffer_t) {
-        define_extern(function_name, params, std::vector<Type>{t},
-                      arguments, mangling, uses_old_buffer_t);
-    }
-
-    void define_extern(const std::string &function_name,
-                       const std::vector<ExternFuncArgument> &params,
-                       Type t,
+                       const std::vector<ExternFuncArgument> &params, Type t,
                        const std::vector<Var> &arguments,
                        NameMangling mangling = NameMangling::Default,
-                       DeviceAPI device_api = DeviceAPI::Host,
-                       bool uses_old_buffer_t = false) {
-        define_extern(function_name, params, std::vector<Type>{t},
-                      arguments, mangling, device_api, uses_old_buffer_t);
-    }
-
-    void define_extern(const std::string &function_name,
-                       const std::vector<ExternFuncArgument> &params,
-                       const std::vector<Type> &types,
-                       const std::vector<Var> &arguments,
-                       NameMangling mangling,
-                       bool uses_old_buffer_t) {
-        define_extern(function_name, params, types,
-                      arguments, mangling, DeviceAPI::Host, uses_old_buffer_t);
+                       DeviceAPI device_api = DeviceAPI::Host) {
+      define_extern(function_name, params, std::vector<Type>{t}, arguments,
+                    mangling, device_api);
     }
 
     void define_extern(const std::string &function_name,
@@ -1231,8 +1191,7 @@ public:
                        const std::vector<Type> &types,
                        const std::vector<Var> &arguments,
                        NameMangling mangling = NameMangling::Default,
-                       DeviceAPI device_api = DeviceAPI::Host,
-                       bool uses_old_buffer_t = false);
+                       DeviceAPI device_api = DeviceAPI::Host);
     // @}
 
     /** Get the types of the outputs of this Func. */
