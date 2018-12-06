@@ -888,8 +888,8 @@ Constant* CodeGen_LLVM::embed_constant_scalar_value_t(Expr e) {
     llvm::Value *val = codegen(e);
     llvm::Constant *constant = dyn_cast<llvm::Constant>(val);
     internal_assert(constant);
+
     // Verify that the size of the LLVM value is the size we expected.
-    internal_assert(constant);
     internal_assert((uint64_t) constant->getType()->getPrimitiveSizeInBits() == (uint64_t) e.type().bits());
 
     // It's important that we allocate a full scalar_value_t_type here,
@@ -918,7 +918,6 @@ Constant* CodeGen_LLVM::embed_constant_scalar_value_t(Expr e) {
         /*isConstant*/ true,
         GlobalValue::PrivateLinkage,
         ConstantArray::get(array_type, array_entries));
-
 
     // Ensure that the storage is aligned for halide_scalar_value_t
     storage->setAlignment((unsigned) sizeof(halide_scalar_value_t));
