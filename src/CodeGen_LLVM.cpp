@@ -902,8 +902,8 @@ Constant* CodeGen_LLVM::embed_constant_scalar_value_t(Expr e) {
     // to all-zeros. (This happens to work because sizeof(halide_scalar_value_t) is evenly
     // divisible by sizeof(any-union-field.)
 
-    const size_t value_size = e.type().bits() / 8;
-    internal_assert(value_size <= sizeof(halide_scalar_value_t));
+    const size_t value_size = (e.type().bits() + 7) / 8;
+    internal_assert(value_size > 0 && value_size <= sizeof(halide_scalar_value_t));
 
     const size_t array_size = sizeof(halide_scalar_value_t) / value_size;
     internal_assert(array_size * value_size == sizeof(halide_scalar_value_t));
