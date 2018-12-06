@@ -2338,6 +2338,11 @@ public:
     /** Get the source location of the pure definition of this
      * Func. See Stage::source_location() */
     std::string source_location() const;
+
+    /** Return the current StageSchedule associated with this initial
+     * Stage of this Func. For introspection only: to modify schedule,
+     * use the Func interface. */
+    const Internal::StageSchedule &get_schedule() const { return Stage(*this).get_schedule(); }
 };
 
 namespace Internal {
