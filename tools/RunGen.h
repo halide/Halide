@@ -360,8 +360,10 @@ inline Buffer<> make_with_shape(const halide_type_t &type, const Shape &shape) {
 // (Oddly, Buffer<> has an API to do this with vector-of-extent, but not vector-of-halide_dimension_t.)
 inline Buffer<> allocate_buffer(const halide_type_t &type, const Shape &shape) {
     Buffer<> b = make_with_shape(type, shape);
-    b.check_overflow();
-    b.allocate();
+    if (b.number_of_elements() > 0) {
+        b.check_overflow();
+        b.allocate();
+    }
     return b;
 }
 
