@@ -1,4 +1,5 @@
 #include "Halide.h"
+#include "configure.stub.h"
 #include "stubtest.stub.h"
 
 using Halide::Buffer;
@@ -30,6 +31,7 @@ public:
     Output<Buffer<uint8_t>> array_test_output{"array_test_output" };
     // We can infer the tupled-output-type from the Stub
     Output<Buffer<>> tupled_output{ "tupled_output", 3 };
+    Output<Buffer<int>> int_output{ "int_output", 3 };
 
     void generate() {
         Var x{"x"}, y{"y"}, c{"c"};
@@ -66,6 +68,9 @@ public:
 
         const float kOffset = 2.f;
         calculated_output(x, y, c) = cast<uint8_t>(out.tuple_output(x, y, c)[1] + kOffset);
+
+        Buffer<int> constant_image2 = make_image<int>();
+        int_output = configure::generate(this, {constant_image2, 1}).output;
     }
 };
 

@@ -55,14 +55,16 @@ int main(int argc, char **argv) {
   Buffer<uint8_t> array_test_output(kSize, kSize, 3);
   Buffer<float> tupled_output0(kSize, kSize, 3);
   Buffer<int32_t> tupled_output1(kSize, kSize, 3);
+  Buffer<int> int_output(kSize, kSize, 3);
 
-  stubuser(input, calculated_output, float32_buffer_output, int32_buffer_output, array_test_output, tupled_output0, tupled_output1);
+  stubuser(input, calculated_output, float32_buffer_output, int32_buffer_output,
+    array_test_output, tupled_output0, tupled_output1, int_output);
   verify(input, kFloatArg, kIntArg, kOffset, calculated_output);
   verify(input, 1.f, 0, 0.f, float32_buffer_output);
   verify<uint8_t, int32_t>(input, 1.f, 0, 0.f, int32_buffer_output);
   verify(input, 1.f, 0, 2, array_test_output);
   verify(input, 1.f, 0, 0, tupled_output0);
-  verify(input, 1.f, 1, 0, tupled_output1);
+  verify(input, 1.f, 1, 0, int_output);
 
   printf("Success!\n");
   return 0;
