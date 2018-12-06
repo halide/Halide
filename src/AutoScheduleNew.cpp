@@ -2194,11 +2194,14 @@ struct LoopNest {
                         int64_t extent = p.second - p.first + 1;
                         int64_t compute_extent = compute_p.second - compute_p.first + 1;
                         int64_t store_extent = store_p.second - store_p.first + 1;
-                        internal_assert(!mul_would_overflow(64, footprint, extent)) << footprint << " " << extent << "\n";
+                        internal_assert(!mul_would_overflow(64, footprint, extent))
+                            << footprint << " " << extent << "\n";
                         footprint *= extent;
-                        internal_assert(!mul_would_overflow(64, compute_footprint, compute_extent)) << compute_footprint << " " << compute_extent << "\n";
+                        internal_assert(!mul_would_overflow(64, compute_footprint, compute_extent))
+                            << compute_footprint << " " << compute_extent << "\n";
                         compute_footprint *= compute_extent;
-                        internal_assert(!mul_would_overflow(64, store_footprint, store_extent)) << store_footprint << " " << store_extent << "\n";
+                        internal_assert(!mul_would_overflow(64, store_footprint, store_extent))
+                            << store_footprint << " " << store_extent << "\n";
                         store_footprint *= store_extent;
                         if (discontinuous) {
                             line_footprint *= extent;
@@ -3072,6 +3075,15 @@ struct State {
 
         cost = 0;
 
+        if (verbose) {
+            for (auto it = features.begin(); it != features.end(); it++) {
+                auto &stage = *(it.key());
+                const auto &feat = it.value();
+                debug(0) << "Schedule features for " << stage.stage.name() << "\n";
+                feat.dump();
+            }
+        }
+
         // use either deep network or linear model to predict cost
         if (throughput_predictor) {
 
@@ -3129,11 +3141,6 @@ struct State {
                 // doing more than 10x redundant recompute for any one
                 // stage.
                 //if (feat.points_computed_total + feat.inlined_calls > 10*feat.points_computed_minimum) return false;
-
-                if (verbose) {
-                    debug(0) << "Schedule features for " << stage.stage.name() << "\n";
-                    feat.dump();
-                }
 
                 double compute_cost = 0;
                 const int *pipeline_feat = (const int *)(&stage.features.op_histogram[0][0]);
