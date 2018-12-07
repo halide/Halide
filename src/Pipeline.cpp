@@ -150,11 +150,21 @@ vector<Func> Pipeline::outputs() const {
     return funcs;
 }
 
+std::function<string(Pipeline, const Target &, const MachineParams &)> Pipeline::custom_auto_scheduler;
+
 string Pipeline::auto_schedule(const Target &target, const MachineParams &arch_params) {
+    if (custom_auto_scheduler) {
+        return custom_auto_scheduler(*this, target, arch_params);
+    }
+
     user_assert(target.arch == Target::X86 || target.arch == Target::ARM ||
                 target.arch == Target::POWERPC || target.arch == Target::MIPS)
         << "Automatic scheduling is currently supported only on these architectures.";
     return generate_schedules(contents->outputs, target, arch_params);
+}
+
+void Pipeline::set_custom_auto_scheduler(std::function<string(Pipeline, const Target &, const MachineParams &)> auto_scheduler) {
+    Pipeline::custom_auto_scheduler = auto_scheduler;
 }
 
 Func Pipeline::get_func(size_t index) {
