@@ -65,7 +65,7 @@ Value *CodeGen_Posix::codegen_allocation_size(const std::string &name, Type type
     // For constant-sized allocations this check should simplify away.
     size_check = common_subexpression_elimination(simplify(size_check));
     if (!is_one(size_check)) {
-        create_assertion(codegen(size_check),
+        create_assertion(codegen(size_check || !condition),
                          Call::make(Int(32), "halide_error_buffer_allocation_too_large",
                                     {name, total_size, max_size}, Call::Extern));
     }
