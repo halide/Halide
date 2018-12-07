@@ -171,6 +171,41 @@
  * some extra restrictions on underscore use). By convention, the name should match
  * the member-variable name.
  *
+ * You can dynamically add Inputs and Outputs to your Generator via adding a
+ * configure() method; if present, it will be called before generate(). It can
+ * examine GeneratorParams but it may not examine predeclared Inputs or Outputs;
+ * the only thing it should do is call add_input<>() and/or add_output<>().
+ * Added inputs will be appended (in order) after predeclared Inputs but before
+ * any Outputs; added outputs will be appended after predeclared Outputs.
+ *
+ * Note that the pointers returned by add_input() and add_output() are owned
+ * by the Generator and will remain valid for the Generator's lifetime; user code
+ * should not attempt to delete or free them.
+ *
+ * \code
+ *     class MultiSum : public Generator<MultiSum> {
+ *     public:
+ *         GeneratorParam<int32_t> input_count{"input_count", 10};
+ *         Output<Func> output{ "output", Float(32), 2 };
+ *
+ *         void configure() {
+ *             for (int i = 0; i < input_count; ++i) {
+ *                 extra_inputs.push_back(
+ *                     add_input<Func>("input_" + std::to_string(i), Float(32), 2);
+ *             }
+ *         }
+ *
+ *         void generate() {
+ *             Expr sum = 0.f;
+ *             for (int i = 0; i < input_count; ++i) {
+ *                 sum += (*extra_inputs)[i](x, y);
+ *             }
+ *             output(x, y) = sum;
+ *         }
+ *     private:
+ *         std::vector<Input<Func>* extra_inputs;
+ *     };
+ * \endcode
  *
  *  All Generators have three GeneratorParams that are implicitly provided
  *  by the base class:
