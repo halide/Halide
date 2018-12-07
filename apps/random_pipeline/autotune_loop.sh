@@ -3,6 +3,13 @@
 # Make sure Halide is built
 # make -C ../../ distrib -j
 
+bash ./watchdog_bench.sh &
+WATCHDOG_PID=$!
+function finish {
+    kill $WATCHDOG_PID
+}
+trap finish EXIT
+
 # Build the generator to autotune.
 GENERATOR=./bin/random_pipeline.generator
 PIPELINE=random_pipeline
@@ -50,11 +57,15 @@ for ((i=$((FIRST+1));i<1000000;i++)); do
     DIR=${PWD}/samples/batch_${i}
 
     for ((b=0;b<${BATCH_SIZE};b++)); do
-        echo Compiling sample $b
         S=$(printf "%d%02d" $i $b)
         make_sample "${DIR}/${b}" $S $i &
+        pids[${b}]=$!
     done
-    wait
+
+    for ((b=0;b<${BATCH_SIZE};b++)); do
+        echo Compiling sample $b 
+        wait ${pids[${b}]}
+    done
     
     # benchmark them serially using rungen
     for ((b=0;b<${BATCH_SIZE};b++)); do
