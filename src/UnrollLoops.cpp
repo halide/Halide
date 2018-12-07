@@ -54,6 +54,9 @@ public:
         // important, we need to expose it in the scheduling
         // language somewhere, but how? For now we do something
         // ugly and expedient.
+
+        // For the tracking issue to fix this, see
+        // https://github.com/halide/Halide/issues/3479
         permit_failed_unroll = get_env_variable("HL_PERMIT_FAILED_UNROLL") == "1";
     }
 };
