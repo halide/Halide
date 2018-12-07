@@ -3,6 +3,14 @@
 # Make sure Halide is built
 # make -C ../../ distrib -j
 
+bash ./watchdog_bench.sh &
+WATCHDOG_PID=$!
+
+function finish {
+    kill $WATCHDOG_PID
+}
+trap finish EXIT
+
 # Build the generator to autotune.
 GENERATOR=./bin/random_pipeline.generator
 PIPELINE=random_pipeline
