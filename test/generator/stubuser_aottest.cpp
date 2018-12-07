@@ -64,7 +64,7 @@ int main(int argc, char **argv) {
   verify<uint8_t, int32_t>(input, 1.f, 0, 0.f, int32_buffer_output);
   verify(input, 1.f, 0, 2, array_test_output);
   verify(input, 1.f, 0, 0, tupled_output0);
-  verify(input, 1.f, 1, 0, int_output);
+  verify(input, 1.f, 1, 3, int_output);
 
   printf("Success!\n");
   return 0;

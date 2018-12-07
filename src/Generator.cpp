@@ -1427,6 +1427,8 @@ Module GeneratorBase::build_module(const std::string &function_name,
 
 void GeneratorBase::emit_cpp_stub(const std::string &stub_file_path) {
     user_assert(!generator_registered_name.empty() && !generator_stub_name.empty()) << "Generator has no name.\n";
+    // Make sure we call configure() so that extra inputs/outputs are added as necessary.
+    call_configure();
     // StubEmitter will want to access the GP/SP values, so advance the phase to avoid assert-fails.
     advance_phase(GenerateCalled);
     advance_phase(ScheduleCalled);

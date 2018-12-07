@@ -1,16 +1,22 @@
-#include "HalideRuntime.h"
-#include "HalideBuffer.h"
+#include "Halide.h"
 
-#include <math.h>
-#include <stdio.h>
+// Include the machine-generated .stub.h header file.
+#include "configure.stub.h"
 
-#include "configure.h"
-
-using Halide::Runtime::Buffer;
+using namespace Halide;
 
 const int kSize = 32;
 
+void verify(const Buffer<int32_t> &img, float compiletime_factor, float runtime_factor, int channels) {
+    img.for_each_element([=](int x, int y, int c) {
+        int expected = (int32_t)(compiletime_factor * runtime_factor * c * (x > y ? x : y));
+        int actual = img(x, y, c);
+        assert(expected == actual);
+    });
+}
+
 int main(int argc, char **argv) {
+    GeneratorContext context(get_jit_target_from_environment());
 
     Buffer<int> input(kSize, kSize, 3);
     input.for_each_element([&](int x, int y, int c) {
@@ -29,29 +35,26 @@ int main(int argc, char **argv) {
     typed_extra.fill(4);
     extra_value += 4;
 
-    // Funcs are aot-compiled as buffers.
-    Buffer<uint16_t> func_extra(kSize, kSize, 3);
-    func_extra.fill(5);
+    Var x, y, c;
+    Func func_extra;
+    func_extra(x, y, c) = cast<uint16_t>(5);
     extra_value += 5;
 
     const int extra_scalar = 7;
     extra_value += extra_scalar;
 
-    Buffer<int> output(kSize, kSize, 3);
-    Buffer<float> extra_buffer_output(kSize, kSize, 3);
-    Buffer<double> extra_func_output(kSize, kSize);
-
     const int bias = 1;
-    int result = configure(input, bias,
-                            // extra inputs are in the order they were added, after all predeclared inputs
-                            extras[0], extras[1], extras[2], typed_extra, func_extra, extra_scalar,
-                            output,
-                            // extra outputs are in the order they were added, after all predeclared outputs
-                            extra_buffer_output, extra_func_output);
-    if (result != 0) {
-        fprintf(stderr, "Result: %d\n", result);
-        exit(-1);
-    }
+    auto result = configure::generate(context, configure::Inputs{
+            input,
+            bias,
+            extras[0], extras[1], extras[2],
+            typed_extra,
+            func_extra,
+            extra_scalar});
+
+    Buffer<int32_t> output = result.output.realize(kSize, kSize, 3);
+    Buffer<float> extra_buffer_output = result.extra_buffer_output.realize(kSize, kSize, 3);
+    Buffer<double> extra_func_output = result.extra_func_output.realize(kSize, kSize);
 
     output.for_each_element([&](int x, int y, int c) {
         assert(output(x, y, c) == input(x, y, c) + bias + extra_value);

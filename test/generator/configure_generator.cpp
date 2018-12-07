@@ -33,6 +33,8 @@ public:
 
         extra_buffer_output = add_output<Buffer<>>("extra_buffer_output", Float(32), 3);
 
+        extra_func_output = add_output<Func>("extra_func_output", Float(64), 2);
+
         // Will fail: it is not legal to examine Inputs in the configure() method
         // assert(input.dimensions() == 3);
 
@@ -64,6 +66,7 @@ public:
         output(x, y, c) = input(x, y, c) + bias + extra_sum;
 
         (*extra_buffer_output)(x, y, c) = cast<float>(output(x, y, c));
+        (*extra_func_output)(x, y) = cast<double>(output(x, y, 0));
     }
 
 private:
@@ -75,6 +78,7 @@ private:
     Input<int> *extra_scalar_input;
 
     Output<Buffer<>> *extra_buffer_output;
+    Output<Func> *extra_func_output;
 };
 
 }  // namespace
