@@ -3,6 +3,10 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
+    #ifdef _WIN32
+    printf("Test skipped on windows due to use of setenv\n");
+    #else
+
     // This tests a temporary hack to silence the error when you try
     // to unroll a loop of non-constant size. We have yet to figure
     // out whether or how to expose this behavior in the scheduling
@@ -15,7 +19,10 @@ int main(int argc, char **argv) {
     // constant size.
     f.unroll(x);
 
-
     setenv("HL_PERMIT_FAILED_UNROLL", "1", 1);
     f.realize(17);
+    #endif
+
+    printf("Success!\n");
+    return 0;
 }
