@@ -15,9 +15,11 @@ using namespace Halide;
 using namespace Halide::Internal;
 using namespace Halide::Internal::AutoScheduleModel;
 
+const int models = 80;
+
 struct Sample {
     vector<float> runtimes;
-    double prediction;
+    double prediction[models];
     string filename;
     int32_t schedule_id;
     Runtime::Buffer<float> schedule_features;
@@ -127,7 +129,9 @@ map<int, PipelineSample> load_samples() {
             Sample sample;
             sample.filename = s;
             sample.runtimes.push_back(runtime);
-            sample.prediction = 0.0;
+            for (int i = 0; i < models; i++) {
+                sample.prediction[i] = 0.0;
+            }
             sample.schedule_id = schedule_id;
             sample.schedule_features = Runtime::Buffer<float>(26, num_stages);
 
@@ -196,81 +200,89 @@ int main(int argc, char **argv) {
     auto samples = load_samples();
 
     // Iterate through the pipelines
-    ThroughputPredictorPipeline tpp;
+    ThroughputPredictorPipeline tpp[models];
 
     float rates[] = {0.01f};
+
+    int num_cores = atoi(getenv("HL_NUM_THREADS"));
 
     std::set<int> blacklist;
 
     for (float learning_rate : rates) {
         for (int batch = 0; batch < atoi(argv[1]); batch++) {
             int counter = 0;
-            float loss_sum = 0, loss_sum_counter = 0;
-            float correct_ordering_rate_sum = 0.0f;
-            float correct_ordering_rate_count = 0;
+            float loss_sum[models] = {0}, loss_sum_counter[models] = {0};
+            float correct_ordering_rate_sum[models] = {0};
+            float correct_ordering_rate_count[models] = {0};
             debug(0) << "Iterating over " << samples.size() << " samples\n";
-            for (auto &p : samples) {
-                debug(0) << "Pipeline " << p.first << " has " << p.second.schedules.size() << " schedules\n";
-                if (blacklist.count(p.first)) continue;
-                if (p.second.schedules.size() < 16) continue;
-                tpp.reset();
-                tpp.set_pipeline_features(p.second.pipeline_features);
+            #pragma omp parallel for
+            for (int model = 0; model < models; model++) {
+                loss_sum[model] = loss_sum_counter[model] = correct_ordering_rate_sum[model] = correct_ordering_rate_count[model] = 0;
+                auto &tp = tpp[model];
+                for (auto &p : samples) {
+                    debug(1) << "Pipeline " << p.first << " has " << p.second.schedules.size() << " schedules\n";
+                    if (blacklist.count(p.first)) continue;
+                    if (p.second.schedules.size() < 16) continue;
+                    tp.reset();
+                    tp.set_num_cores(num_cores);
+                    tp.set_pipeline_features(p.second.pipeline_features);
 
-                size_t batch_size = std::min((size_t)1024, p.second.schedules.size());
+                    size_t batch_size = std::min((size_t)1024, p.second.schedules.size());
 
-                Runtime::Buffer<float> runtimes(batch_size);
+                    Runtime::Buffer<float> runtimes(batch_size);
 
-                size_t first = 0;
-                if (p.second.schedules.size() > 1024) {
-                    first = rand() % (p.second.schedules.size() - 1024);
-                }
-
-                for (size_t j = 0; j < batch_size; j++) {
-                    internal_assert(j + first < p.second.schedules.size());
-                    auto it = p.second.schedules.begin();
-                    std::advance(it, j + first);
-                    auto &sched = it->second;
-                    Runtime::Buffer<float> buf;
-                    tpp.enqueue(p.second.num_stages, &buf, &sched.prediction);
-                    runtimes(j) = sched.runtimes[0];
-                    buf.copy_from(sched.schedule_features);
-                }
-
-                float loss = tpp.backprop(runtimes, learning_rate);
-                debug(0) << "Loss = " << loss << "\n";
-                loss_sum += loss;
-                loss_sum_counter ++;
-
-                if (true) {
-                    int good = 0, bad = 0;
-                    int attempts = 0;
-                    while (good + bad < batch_size && attempts < batch_size * 2) {
-                        int j1 = rand() % p.second.schedules.size();
-                        int j2 = rand() % p.second.schedules.size();
-                        auto it1 = p.second.schedules.begin();
-                        auto it2 = p.second.schedules.begin();
-                        std::advance(it1, j1);
-                        std::advance(it2, j2);
-                        auto &sched1 = it1->second;
-                        auto &sched2 = it2->second;
-                        if (sched1.prediction == 0 || sched2.prediction == 0) continue;
-                        if (sched1.runtimes[0] > 1.5f*sched2.runtimes[0] ||
-                            sched2.runtimes[0] > 1.5f*sched1.runtimes[0]) {
-                            if ((sched1.prediction > sched2.prediction) ==
-                                (sched1.runtimes[0] > sched2.runtimes[0])) {
-                                good++;
-                            } else {
-                                bad++;
-                            }
-                        }
-                        attempts++;
+                    size_t first = 0;
+                    if (p.second.schedules.size() > 1024) {
+                        first = rand() % (p.second.schedules.size() - 1024);
                     }
-                    correct_ordering_rate_sum += good;
-                    correct_ordering_rate_count += good + bad;
-                    if (false && good < bad) {
-                        debug(0) << "Blacklisting " << p.first << "\n";
-                        // Assume this pipeline is some sort of outlier
-                        blacklist.insert(p.first);
+
+                    for (size_t j = 0; j < batch_size; j++) {
+                        internal_assert(j + first < p.second.schedules.size());
+                        auto it = p.second.schedules.begin();
+                        std::advance(it, j + first);
+                        auto &sched = it->second;
+                        Runtime::Buffer<float> buf;
+                        tp.enqueue(p.second.num_stages, &buf, &sched.prediction[model]);
+                        runtimes(j) = sched.runtimes[0];
+                        buf.copy_from(sched.schedule_features);
+                    }
+
+                    float loss = tp.backprop(runtimes, learning_rate);
+                    debug(1) << "Loss = " << loss << "\n";
+                    loss_sum[model] += loss;
+                    loss_sum_counter[model] ++;
+
+                    if (true) {
+                        int good = 0, bad = 0;
+                        int attempts = 0;
+                        while (good + bad < batch_size && attempts < batch_size * 2) {
+                            int j1 = rand() % p.second.schedules.size();
+                            int j2 = rand() % p.second.schedules.size();
+                            auto it1 = p.second.schedules.begin();
+                            auto it2 = p.second.schedules.begin();
+                            std::advance(it1, j1);
+                            std::advance(it2, j2);
+                            auto &sched1 = it1->second;
+                            auto &sched2 = it2->second;
+                            if (sched1.prediction[model] == 0 || sched2.prediction[model] == 0) continue;
+                            if (sched1.runtimes[0] > 1.5f*sched2.runtimes[0] ||
+                                sched2.runtimes[0] > 1.5f*sched1.runtimes[0]) {
+                                if ((sched1.prediction[model] > sched2.prediction[model]) ==
+                                    (sched1.runtimes[0] > sched2.runtimes[0])) {
+                                    good++;
+                                } else {
+                                    bad++;
+                                }
+                            }
+                            attempts++;
+                        }
+                        correct_ordering_rate_sum[model] += good;
+                        correct_ordering_rate_count[model] += good + bad;
+                        if (false && good < bad) {
+                            debug(0) << "Blacklisting " << p.first << "\n";
+                            // Assume this pipeline is some sort of outlier
+                            blacklist.insert(p.first);
+                        }
                     }
                 }
 
@@ -282,22 +294,33 @@ int main(int argc, char **argv) {
                 }
                 */
                 if (counter % 1000 == 999) {
-                    debug(0) << "Saving weights... "
-                             << (loss_sum / loss_sum_counter)
-                             << " "
-                             << (correct_ordering_rate_sum / correct_ordering_rate_count)
-                             << "\n";
-                    tpp.save_weights();
+                    debug(0) << "Saving weights... ";
+                    // tpp.save_weights();
                 }
                 counter++;
             }
-            debug(0) << "RMS error = " << loss_sum / loss_sum_counter << "\n";
-            debug(0) << "Correct ordering rate = " << correct_ordering_rate_sum / correct_ordering_rate_count << "\n";
-            tpp.save_weights();
+
+            debug(0) << "RMS errors: ";
+            for (int model = 0; model < models; model++) {
+                debug(0) << loss_sum[model] / loss_sum_counter[model] << " ";
+            }
+            debug(0) << "\nCorrect ordering rate: ";
+            int best_model = 0;
+            float best_rate = 0;
+            for (int model = 0; model < models; model++) {
+                float rate = correct_ordering_rate_sum[model] / correct_ordering_rate_count[model];
+                if (rate < best_rate) {
+                    best_model = model;
+                    best_rate = rate;
+                }
+                debug(0) << rate << " ";
+            }
+            debug(0) << "\n";
+            tpp[best_model].save_weights();
         }
     }
 
-    tpp.save_weights();
+    // tpp.save_weights();
 
     return 0;
 }

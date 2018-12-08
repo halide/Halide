@@ -13,6 +13,7 @@
 
 extern "C" int halide_autoscheduler_cost_model(int32_t num_stages,
                                                int32_t batch_size,
+                                               int32_t num_cores,
                                                // Inputs
                                                halide_buffer_t *pipeline_features,
                                                halide_buffer_t *schedule_features,
@@ -36,6 +37,7 @@ extern "C" int halide_autoscheduler_cost_model(int32_t num_stages,
 
 extern "C" int halide_autoscheduler_train_cost_model(int32_t _num_stages,
                                                      int32_t _batch_size,
+                                                     int32_t _num_cores,
                                                      // Inputs
                                                      halide_buffer_t *pipeline_features,
                                                      halide_buffer_t *schedule_features,
@@ -130,7 +132,7 @@ class ThroughputPredictorPipeline {
     Stats stats;
     Runtime::Buffer<float> schedule_feat_queue, pipeline_feat_queue, costs;
     Runtime::Buffer<double *> cost_ptrs;
-    int cursor, num_stages;
+    int cursor, num_stages, num_cores = 0;
 
     std::string weights_server_hostname;
     int weights_server_port = 0;
@@ -154,6 +156,10 @@ class ThroughputPredictorPipeline {
 
     void set_pipeline_features(const Runtime::Buffer<float> &pipeline_feats) {
         pipeline_feat_queue = pipeline_feats;
+    }
+
+    void set_num_cores(int n) {
+        num_cores = n;
     }
 
     void enqueue(int ns, Runtime::Buffer<float> *schedule_feats, double *cost_ptr) {
@@ -232,6 +238,7 @@ class ThroughputPredictorPipeline {
 
         halide_autoscheduler_train_cost_model(num_stages,
                                               cursor,
+                                              num_cores,
                                               pipeline_feat_queue,
                                               schedule_feat_queue,
                                               stats.pipeline_mean,
@@ -305,6 +312,7 @@ class ThroughputPredictorPipeline {
 
         halide_autoscheduler_cost_model(num_stages,
                                         cursor,
+                                        num_cores,
                                         pipeline_feat_queue,
                                         schedule_feat_queue,
                                         stats.pipeline_mean,

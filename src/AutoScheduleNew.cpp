@@ -3606,6 +3606,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
                                           std::unordered_set<uint64_t> &permitted_hashes) {
 
     if (throughput_predictor) {
+        throughput_predictor->set_num_cores(params.parallelism);
         configure_pipeline_features(dag, throughput_predictor);
     }
 

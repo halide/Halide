@@ -119,6 +119,7 @@ public:
     // Inputs
     Input<int> num_stages{ "num_stages", 1 };
     Input<int> batch_size{ "batch_size", 1 };
+    Input<int> num_cores{ "num_cores", 1 };
     Input<Buffer<float>> pipeline_features{ "pipeline_features", 3 };
     Input<Buffer<float>> schedule_features{ "schedule_features", 3 };
 
@@ -248,27 +249,26 @@ public:
         // and that each element costs as much as an entire
         // vector
         Expr tail = innermost_pure_loop_extent + vector_size - rounded_innermost_pure_loop_extent;
-        Expr vector_recompute_1 = (innermost_pure_loop_extent - tail + tail * vector_size) / max(1, innermost_pure_loop_extent);
-
-        // If shiftinwards or roundup, we can just round up the innermost loop
-        Expr vector_recompute_2 = rounded_innermost_pure_loop_extent / max(1, innermost_pure_loop_extent);
+        Expr vector_recompute = (innermost_pure_loop_extent - tail + tail * vector_size) / max(1, innermost_pure_loop_extent);
 
         // Account for idle simd lanes
-        vector_recompute_1 *= native_vector_size / max(1, vector_size);
-        vector_recompute_2 *= native_vector_size / max(1, vector_size);
+        vector_recompute *= native_vector_size / max(1, vector_size);
+
+        // Account for idle cores
+        Expr idle_core_wastage = reinterpret<float>(((inner_parallelism * outer_parallelism) % max(1, num_cores)) / max(1, num_cores));
 
         // Extract a few of them as things that might have a runtime cost per instance
         Expr terms[conv1_channels] = {num_realizations, // cost per allocation
                                       inner_parallelism * num_productions, // cost per thread pool task
-                                      points_computed_total * vector_recompute_1, // cost per vector computed, with worst-case assumptions for the tail
+                                      points_computed_total * vector_recompute * idle_core_wastage, // cost per point computed
                                       inlined_calls,  // cost per inlined evaluation of the Func
                                       bytes_at_production * num_realizations, // cost per byte stored
                                       non_unique_bytes_read_per_realization * num_realizations, // cost per byte read
                                       unique_bytes_read_per_realization * num_realizations, // cost per byte pulled into cache
                                       (bytes_at_realization / max(1, innermost_bytes_at_realization)) * num_realizations, // cost per line read
                                       unique_lines_read_per_realization * num_realizations, // cost per line pulled into cache
-                                      select(inner_parallelism > 1.0f, num_productions, 0), // Cost per parallel job launch
-                                      0.0f, //working_set * num_realizations, // cost per temporary byte allocated during realization
+                                      select(inner_parallelism > 1.0f, num_productions, 0), // cost per parallel job launch
+                                      working_set * num_realizations, // cost per temporary byte allocated during realization
                                       0.0f,
                                       0.0f,
                                       0.0f,
