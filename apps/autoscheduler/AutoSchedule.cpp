@@ -13,18 +13,10 @@
 #include "Halide.h"
 #include "halide_benchmark.h"
 #include "ThroughputPredictorPipeline.h"
-
-// Pretend we're inside the compiler
-#ifndef internal_assert
-#define user_assert(c)            _halide_internal_assertion(c, Halide::Internal::ErrorReport::User)
-#define internal_assert(c)        _halide_internal_assertion(c, 0)
-#define internal_error            Halide::Internal::ErrorReport(__FILE__, __LINE__, nullptr, 0)
-#endif
+#include "Errors.h"
 
 namespace Halide {
 namespace Internal {
-
-using namespace AutoScheduleModel;
 
 namespace {
 
@@ -33,14 +25,6 @@ using std::vector;
 using std::map;
 using std::set;
 using std::pair;
-
-// This should be a function f s.t
-// f(0) = 0
-// f(params.last_level_cache_size) = params.balance
-double cost_of_cold_load(double buffer_size, const MachineParams &params) {
-    return params.balance * std::sqrt(buffer_size / params.last_level_cache_size);
-    //return params.balance * std::log2(1 + buffer_size / params.last_level_cache_size);
-}
 
 uint64_t get_dropout_threshold() {
     string random_dropout_str = get_env_variable("HL_RANDOM_DROPOUT");
@@ -61,7 +45,6 @@ bool random_dropout() {
     bool drop_it = (r % 100) >= random_dropout_threshold;
     return drop_it;
 }
-
 
 struct PipelineFeatures {
     // A featurization of the compute done by a Func, to
@@ -478,9 +461,6 @@ struct FunctionDAG {
             // The loop nest that computes this stage, from innermost out.
             vector<Loop> loop;
             bool loop_nest_all_common_cases = false;
-
-            // The amount of compute done per point evaluated, including the need to generate the call.
-            double compute;
 
             // The vectorization width that will be used.
             int vector_size;

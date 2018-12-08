@@ -10,11 +10,7 @@ using std::string;
 using std::map;
 using std::set;
 
-using namespace Halide;
-using namespace Halide::Internal;
-using namespace Halide::Internal::AutoScheduleModel;
-
-const int models = 80;
+const int models = 16;
 
 struct Sample {
     vector<float> runtimes;
@@ -41,6 +37,15 @@ uint64_t hash_floats(uint64_t h, float *begin, float *end) {
     return h;
 }
 
+bool ends_with(const string &str, const string &suffix) {
+    if (str.size() < suffix.size()) return false;
+    size_t off = str.size() - suffix.size();
+    for (size_t i = 0; i < suffix.size(); i++) {
+        if (str[off+i] != suffix[i]) return false;
+    }
+    return true;
+}
+
 // Load all the samples, reading filenames from stdin
 map<int, PipelineSample> load_samples() {
     map<int, PipelineSample> result;
@@ -53,7 +58,6 @@ map<int, PipelineSample> load_samples() {
     while (!std::cin.eof()) {
         string s;
         std::cin >> s;
-        internal_assert(!ends_with(s, "\n"));
         if (!ends_with(s, ".sample")) {
             std::cout << "Skipping file: " << s << "\n";
             continue;
@@ -163,8 +167,11 @@ map<int, PipelineSample> load_samples() {
         double variance_sum = 0;
         size_t count = 0;
         // Compute the weighted average of variances across all samples
-        for (const auto &p : pipe.second.schedules) {
-            internal_assert(!p.second.runtimes.empty()) << "Empty runtimes for schedule: " << p.first << "\n";
+        for (const auto &p : pipe.second.schedules) {            
+            if (p.second.runtimes.empty()) {
+                std::cerr << "Empty runtimes for schedule: " << p.first << "\n";
+                abort();
+            }
             std::cout << "Unique sample: " << p.second.filename << " : " << p.second.runtimes[0] << "\n";
             if (p.second.runtimes.size() > 1) {
                 // Compute variance from samples
@@ -203,8 +210,6 @@ int main(int argc, char **argv) {
 
     float rates[] = {0.01f};
 
-    std::set<int> blacklist;
-
     for (float learning_rate : rates) {
         for (int batch = 0; batch < atoi(argv[1]); batch++) {
             int counter = 0;
@@ -216,10 +221,9 @@ int main(int argc, char **argv) {
             for (int model = 0; model < models; model++) {
                 loss_sum[model] = loss_sum_counter[model] = correct_ordering_rate_sum[model] = correct_ordering_rate_count[model] = 0;
                 auto &tp = tpp[model];
+
                 for (auto &p : samples) {
-                    debug(1) << "Pipeline " << p.first << " has " << p.second.schedules.size() << " schedules\n";
-                    if (blacklist.count(p.first)) continue;
-                    if (p.second.schedules.size() < 16) continue;
+                    if (p.second.schedules.size() < 8) continue;
                     tp.reset();
                     tp.set_pipeline_features(p.second.pipeline_features);
 
@@ -233,7 +237,6 @@ int main(int argc, char **argv) {
                     }
 
                     for (size_t j = 0; j < batch_size; j++) {
-                        internal_assert(j + first < p.second.schedules.size());
                         auto it = p.second.schedules.begin();
                         std::advance(it, j + first);
                         auto &sched = it->second;
@@ -244,7 +247,6 @@ int main(int argc, char **argv) {
                     }
 
                     float loss = tp.backprop(runtimes, learning_rate);
-                    debug(1) << "Loss = " << loss << "\n";
                     loss_sum[model] += loss;
                     loss_sum_counter[model] ++;
 
@@ -274,24 +276,7 @@ int main(int argc, char **argv) {
                         }
                         correct_ordering_rate_sum[model] += good;
                         correct_ordering_rate_count[model] += good + bad;
-                        if (false && good < bad) {
-                            std::cout << "Blacklisting " << p.first << "\n";
-                            // Assume this pipeline is some sort of outlier
-                            blacklist.insert(p.first);
-                        }
                     }
-                }
-
-                /*
-                if (batch % 100 == 0) {
-                    for (auto &sched : p.second.schedules) {
-                        std::cout << sched.second.runtimes[0] << " " << sched.second.prediction << "\n";
-                    }
-                }
-                */
-                if (counter % 1000 == 999) {
-                    std::cout << "Saving weights... ";
-                    // tpp.save_weights();
                 }
                 counter++;
             }

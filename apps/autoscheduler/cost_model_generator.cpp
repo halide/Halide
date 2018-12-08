@@ -525,5 +525,5 @@ public:
 using CostModelInference = CostModel<false>;
 using CostModelTraining = CostModel<true>;
 
-HALIDE_REGISTER_GENERATOR(CostModelInference, halide_autoscheduler_cost_model);
-HALIDE_REGISTER_GENERATOR(CostModelTraining, halide_autoscheduler_train_cost_model);
+HALIDE_REGISTER_GENERATOR(CostModelInference, cost_model);
+HALIDE_REGISTER_GENERATOR(CostModelTraining, train_cost_model);
