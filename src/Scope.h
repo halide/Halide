@@ -267,6 +267,10 @@ struct ScopedBinding {
             scope->pop(name);
         }
     }
+
+    // allow move but not copy
+    ScopedBinding(const ScopedBinding& that) = delete;
+    ScopedBinding(ScopedBinding&& that) = default;
 };
 
 template<>
@@ -287,6 +291,10 @@ struct ScopedBinding<void> {
             scope->pop(name);
         }
     }
+
+    // allow move but not copy
+    ScopedBinding(const ScopedBinding& that) = delete;
+    ScopedBinding(ScopedBinding&& that) = default;
 };
 
 }  // namespace Internal
