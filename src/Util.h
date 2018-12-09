@@ -305,6 +305,9 @@ struct ScopedValue {
     ScopedValue(T &var, T new_value) : var(var), old_value(var) { var = new_value; }
     ~ScopedValue() { var = old_value; }
     operator T() const { return old_value; }
+    // allow move but not copy
+    ScopedValue(const ScopedValue& that) = delete;
+    ScopedValue(ScopedValue&& that) = default;
 };
 
 // Wrappers for some C++14-isms that are useful and trivially implementable
