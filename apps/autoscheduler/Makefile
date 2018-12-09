@@ -57,7 +57,7 @@ $(BIN)/demo.generator: demo_generator.cpp $(GENERATOR_DEPS)
 
 # To use the autoscheduler, set a few environment variables and use the -p flag to the generator to load the autoscheduler as a plugin
 $(BIN)/demo.a: $(BIN)/demo.generator $(BIN)/auto_schedule.so
-	HL_MACHINE_PARAMS=16,1,1 HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=weights \
+	HL_MACHINE_PARAMS=32,1,1 HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=weights \
 	$(BIN)/demo.generator -g demo -o $(BIN) -f demo -e static_library,h target=$(HL_TARGET) auto_schedule=true -p $(BIN)/auto_schedule.so
 
 $(BIN)/demo.rungen: $(BIN)/demo.a $(BIN)/runtime.a
@@ -68,7 +68,7 @@ test: $(BIN)/demo.rungen
 	$(BIN)/demo.rungen --benchmarks=all --benchmark_min_time=1 --default_input_buffers=random:0:auto --output_extents=estimate --default_input_scalars=estimate
 
 # demonstrates an autotuning loop
-autotune: $(BIN)/demo.generator $(BIN)/augment_sample $(BIN)/train_cost_model autotune_loop.sh
+autotune: $(BIN)/demo.generator $(BIN)/augment_sample $(BIN)/train_cost_model autotune_loop.sh $(BIN)/auto_schedule.so
 	bash autotune_loop.sh
 
 clean:
