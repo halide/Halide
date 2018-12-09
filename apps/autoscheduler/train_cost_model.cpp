@@ -210,6 +210,8 @@ int main(int argc, char **argv) {
 
     float rates[] = {0.01f};
 
+    int num_cores = atoi(getenv("HL_NUM_THREADS"));
+    
     for (float learning_rate : rates) {
         for (int batch = 0; batch < atoi(argv[1]); batch++) {
             int counter = 0;
@@ -225,7 +227,7 @@ int main(int argc, char **argv) {
                 for (auto &p : samples) {
                     if (p.second.schedules.size() < 8) continue;
                     tp.reset();
-                    tp.set_pipeline_features(p.second.pipeline_features);
+                    tp.set_pipeline_features(p.second.pipeline_features, num_cores);
 
                     size_t batch_size = std::min((size_t)1024, p.second.schedules.size());
 
