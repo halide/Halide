@@ -1979,12 +1979,15 @@ struct LoopNest {
 
         int64_t working_set_here = 0;
 
-        int64_t loop_instances = 1, pure_loop_instances = 1;
+        int64_t loop_instances = 1, parallel_loop_instances = 1;
         size_t idx = 0;
+        bool in_impure = false;
         for (auto i : size) {
             loop_instances *= i;
-            if (stage->loop[idx++].pure) {
-                pure_loop_instances *= i;
+            if (stage->loop[idx++].pure && !in_impure) {
+                parallel_loop_instances *= i;
+            } else {
+                in_impure = true;
             }
         }
         int64_t subinstances = instances * loop_instances;
@@ -2067,7 +2070,7 @@ struct LoopNest {
             return;
         }
 
-        int64_t parallel_tasks = parent->is_root() ? pure_loop_instances : 1;
+        int64_t parallel_tasks = parent->is_root() ? parallel_loop_instances : 1;
         int64_t subparallelism = parallel_tasks * parallelism;
 
         // Figure out the features at the compute_at level
@@ -3540,6 +3543,7 @@ public:
 };
 
 void configure_pipeline_features(const FunctionDAG &dag,
+                                 const MachineParams &params,
                                  ThroughputPredictorPipeline *throughput_predictor) {
     throughput_predictor->reset();
     const int pipeline_feat_size = 56 * 7;
@@ -3563,7 +3567,7 @@ void configure_pipeline_features(const FunctionDAG &dag,
         }
     }
     internal_assert(stage == num_stages);
-    throughput_predictor->set_pipeline_features(pipeline_features);
+    throughput_predictor->set_pipeline_features(pipeline_features, params.parallelism);
 }
 
 IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
@@ -3575,7 +3579,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
                                           std::unordered_set<uint64_t> &permitted_hashes) {
 
     if (throughput_predictor) {
-        configure_pipeline_features(dag, throughput_predictor);
+        configure_pipeline_features(dag, params, throughput_predictor);
     }
 
     StateQueue q, pending;
@@ -4125,7 +4129,7 @@ void test_convnet_correctness() {
 
     ThroughputPredictorPipeline throughput_predictor;
 
-    throughput_predictor.set_pipeline_features(pipeline_features);
+    throughput_predictor.set_pipeline_features(pipeline_features, 1);
     throughput_predictor.enqueue(10, &schedule_features, &cost);
 
     std::default_random_engine generator;
