@@ -42,7 +42,7 @@ $(BIN)/auto_schedule.so: AutoSchedule.cpp $(WEIGHT_OBJECTS) $(COST_MODEL_LIBS) $
 	@mkdir -p $(@D)
 	$(CXX) -shared -fPIC $(CXXFLAGS) -I $(BIN)/cost_model AutoSchedule.cpp $(WEIGHT_OBJECTS) $(COST_MODEL_LIBS) $(BIN)/runtime.a -O3 -fno-rtti -o $@ $(HALIDE_SYSTEM_LIBS)
 
-$(BIN)/train_cost_model: train_cost_model.cpp $(COST_MODEL_LIBS) $(WEIGHT_OBJECTS) $(BIN)/runtime.a
+$(BIN)/train_cost_model: train_cost_model.cpp ThroughputPredictorPipeline.h $(COST_MODEL_LIBS) $(WEIGHT_OBJECTS) $(BIN)/runtime.a
 	$(CXX) $(CXXFLAGS) -I $(BIN)/cost_model -O3 $^ -o $@ $(LDFLAGS) -fopenmp
 
 $(BIN)/augment_sample: augment_sample.cpp
