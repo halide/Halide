@@ -10,7 +10,7 @@ using std::string;
 using std::map;
 using std::set;
 
-const int models = 16;
+const int models = 1;
 
 struct Sample {
     vector<float> runtimes;
@@ -210,6 +210,8 @@ int main(int argc, char **argv) {
 
     float rates[] = {0.01f};
 
+    int num_cores = atoi(getenv("HL_NUM_THREADS"));
+    
     for (float learning_rate : rates) {
         for (int batch = 0; batch < atoi(argv[1]); batch++) {
             int counter = 0;
@@ -225,7 +227,7 @@ int main(int argc, char **argv) {
                 for (auto &p : samples) {
                     if (p.second.schedules.size() < 8) continue;
                     tp.reset();
-                    tp.set_pipeline_features(p.second.pipeline_features);
+                    tp.set_pipeline_features(p.second.pipeline_features, num_cores);
 
                     size_t batch_size = std::min((size_t)1024, p.second.schedules.size());
 
@@ -253,7 +255,8 @@ int main(int argc, char **argv) {
                     if (true) {
                         int good = 0, bad = 0;
                         int attempts = 0;
-                        while (good + bad < batch_size && attempts < batch_size * 2) {
+                        while (good + bad < batch_size && attempts < batch_size * 2) {                            
+                            attempts++;
                             int j1 = rand() % p.second.schedules.size();
                             int j2 = rand() % p.second.schedules.size();
                             auto it1 = p.second.schedules.begin();
@@ -272,7 +275,6 @@ int main(int argc, char **argv) {
                                     bad++;
                                 }
                             }
-                            attempts++;
                         }
                         correct_ordering_rate_sum[model] += good;
                         correct_ordering_rate_count[model] += good + bad;

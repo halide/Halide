@@ -3,6 +3,7 @@
 #include <iostream>
 #include <map>
 
+#include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/ip.h>
@@ -74,7 +75,7 @@ class ThroughputPredictorPipeline {
     Stats stats;
     Runtime::Buffer<float> schedule_feat_queue, pipeline_feat_queue, costs;
     Runtime::Buffer<double *> cost_ptrs;
-    int cursor, num_stages;
+    int cursor, num_stages, num_cores;
 
     std::string weights_server_hostname;
     int weights_server_port = 0;
@@ -104,8 +105,9 @@ class ThroughputPredictorPipeline {
         }
     }
 
-    void set_pipeline_features(const Runtime::Buffer<float> &pipeline_feats) {
+    void set_pipeline_features(const Runtime::Buffer<float> &pipeline_feats, int n) {
         pipeline_feat_queue = pipeline_feats;
+        num_cores = n;
     }
 
     void enqueue(int ns, Runtime::Buffer<float> *schedule_feats, double *cost_ptr) {
@@ -187,6 +189,7 @@ class ThroughputPredictorPipeline {
 
         train_cost_model(num_stages,
                          cursor,
+                         num_cores,
                          pipeline_feat_queue,
                          schedule_feat_queue,
                          stats.pipeline_mean,
@@ -260,6 +263,7 @@ class ThroughputPredictorPipeline {
 
         cost_model(num_stages,
                    cursor,
+                   num_cores,
                    pipeline_feat_queue,
                    schedule_feat_queue,
                    stats.pipeline_mean,

@@ -1,7 +1,4 @@
 #include "Halide.h"
-
-// We'll use the autodiff work for the reverse pipeline. It's not
-// merged into master Halide yet.
 #include "Derivative.h"
 
 using namespace Halide;
@@ -100,6 +97,7 @@ public:
     // Inputs
     Input<int> num_stages{ "num_stages", 1 };
     Input<int> batch_size{ "batch_size", 1 };
+    Input<int> num_cores{ "num_cores", 1 };
     Input<Buffer<float>> pipeline_features{ "pipeline_features", 3 };
     Input<Buffer<float>> schedule_features{ "schedule_features", 3 };
 
@@ -229,27 +227,27 @@ public:
         // and that each element costs as much as an entire
         // vector
         Expr tail = innermost_pure_loop_extent + vector_size - rounded_innermost_pure_loop_extent;
-        Expr vector_recompute_1 = (innermost_pure_loop_extent - tail + tail * vector_size) / max(1, innermost_pure_loop_extent);
-
-        // If shiftinwards or roundup, we can just round up the innermost loop
-        Expr vector_recompute_2 = rounded_innermost_pure_loop_extent / max(1, innermost_pure_loop_extent);
+        Expr vector_recompute = (innermost_pure_loop_extent - tail + tail * vector_size) / max(1, innermost_pure_loop_extent);
 
         // Account for idle simd lanes
-        vector_recompute_1 *= native_vector_size / max(1, vector_size);
-        vector_recompute_2 *= native_vector_size / max(1, vector_size);
+        vector_recompute *= native_vector_size / max(1, vector_size);
+
+        // Account for idle cores
+        Expr tasks_per_core = (inner_parallelism * outer_parallelism) / max(1, num_cores);
+        Expr idle_core_wastage = ceil(tasks_per_core) / tasks_per_core;
 
         // Extract a few of them as things that might have a runtime cost per instance
         Expr terms[conv1_channels] = {num_realizations, // cost per allocation
                                       inner_parallelism * num_productions, // cost per thread pool task
-                                      points_computed_total * vector_recompute_1, // cost per vector computed, with worst-case assumptions for the tail
+                                      points_computed_total * vector_recompute * idle_core_wastage, // cost per point computed
                                       inlined_calls,  // cost per inlined evaluation of the Func
                                       bytes_at_production * num_realizations, // cost per byte stored
                                       non_unique_bytes_read_per_realization * num_realizations, // cost per byte read
                                       unique_bytes_read_per_realization * num_realizations, // cost per byte pulled into cache
                                       (bytes_at_realization / max(1, innermost_bytes_at_realization)) * num_realizations, // cost per line read
                                       unique_lines_read_per_realization * num_realizations, // cost per line pulled into cache
-                                      select(inner_parallelism > 1.0f, num_productions, 0), // Cost per parallel job launch
-                                      0.0f, //working_set * num_realizations, // cost per temporary byte allocated during realization
+                                      select(inner_parallelism > 1.0f, num_productions, 0), // cost per parallel job launch
+                                      working_set * num_realizations, // cost per temporary byte allocated during realization
                                       0.0f,
                                       0.0f,
                                       0.0f,
@@ -297,9 +295,31 @@ public:
             Expr regularize1 = sum(-min(conv1_stage2(r_conv1_output.x, r_conv1_output.y, n), 0));
             Expr regularize2 = sum(-min(conv1_stage1(r_conv1_output.x, r_conv1_output.y), 0));
 
-            // The network should also predict runtimes accurately, relative to one known runtime
-            Expr delta = (prediction(n) - true_runtime(n))/true_runtime(0);
-            err(n) = delta * delta + 0.00001f * regularize1;
+            auto sigmoid = [](Expr x) {
+                return (1 - 1 / abs(x)) * select(x > 0, 1.0f, -1.0f);
+            };
+            
+
+            Expr n2 = (n + 1) % batch_size;
+            Expr scale = 1.0f / true_runtime(0);
+            Expr p1 = prediction(n) * scale, p2 = prediction(n2) * scale;
+            Expr r1 = true_runtime(n) * scale, r2 = true_runtime(n2) * scale;
+
+            // The network should predict runtime           
+            Expr delta = abs(p1 - r1);
+            
+            // More importantly, the network should predict runtimes
+            // in the correct order
+           
+            // A reward for being confident and correct, a penalty for
+            // being confident and wrong, and nothing when the result
+            // is not confident. Size of reward or penalty is also
+            // scaled by just how different the two true runtimes are.
+            Expr confidence = 1 - 1 / (abs(p1 - p2) + 1);
+            Expr significance = 1 - 1 / (abs(r1 - r2) + 1);
+            Expr correct_order = confidence * significance * select((r1 > r2) == (p1 > p2), -1.0f, 1.0f);
+            err(n) = correct_order + 0.001f * delta + 0.00001f * regularize1;
+
             Expr loss = sum(err(r_batch));
 
             loss_output() = cast<float>(loss) + 0.00001f * regularize2;

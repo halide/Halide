@@ -42,7 +42,7 @@ $(BIN)/auto_schedule.so: AutoSchedule.cpp $(WEIGHT_OBJECTS) $(COST_MODEL_LIBS) $
 	@mkdir -p $(@D)
 	$(CXX) -shared -fPIC $(CXXFLAGS) -g -I $(BIN)/cost_model AutoSchedule.cpp $(WEIGHT_OBJECTS) $(COST_MODEL_LIBS) $(BIN)/runtime.a -O3 -fno-rtti -o $@ $(HALIDE_SYSTEM_LIBS)
 
-$(BIN)/train_cost_model: train_cost_model.cpp $(COST_MODEL_LIBS) $(WEIGHT_OBJECTS) $(BIN)/runtime.a
+$(BIN)/train_cost_model: train_cost_model.cpp ThroughputPredictorPipeline.h $(COST_MODEL_LIBS) $(WEIGHT_OBJECTS) $(BIN)/runtime.a
 	$(CXX) $(CXXFLAGS) -I $(BIN)/cost_model -O3 $^ -o $@ $(LDFLAGS) -fopenmp
 
 $(BIN)/augment_sample: augment_sample.cpp
@@ -57,7 +57,7 @@ $(BIN)/demo.generator: demo_generator.cpp $(GENERATOR_DEPS)
 
 # To use the autoscheduler, set a few environment variables and use the -p flag to the generator to load the autoscheduler as a plugin
 $(BIN)/demo.a: $(BIN)/demo.generator $(BIN)/auto_schedule.so
-	HL_MACHINE_PARAMS=16,1,1 HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=weights \
+	HL_MACHINE_PARAMS=32,1,1 HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=weights \
 	$(BIN)/demo.generator -g demo -o $(BIN) -f demo -e static_library,h target=$(HL_TARGET) auto_schedule=true -p $(BIN)/auto_schedule.so
 
 $(BIN)/demo.rungen: $(BIN)/demo.a $(BIN)/runtime.a
@@ -74,7 +74,7 @@ demo: $(BIN)/demo.rungen
 	$(BIN)/demo.rungen --benchmarks=all --benchmark_min_time=1 --default_input_buffers=random:0:auto --output_extents=estimate --default_input_scalars=estimate
 
 # demonstrates an autotuning loop
-autotune: $(BIN)/demo.generator $(BIN)/augment_sample $(BIN)/train_cost_model autotune_loop.sh
+autotune: $(BIN)/demo.generator $(BIN)/augment_sample $(BIN)/train_cost_model autotune_loop.sh $(BIN)/auto_schedule.so
 	bash autotune_loop.sh
 
 clean:
