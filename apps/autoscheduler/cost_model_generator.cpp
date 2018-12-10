@@ -306,7 +306,7 @@ public:
             Expr r1 = true_runtime(n) * scale, r2 = true_runtime(n2) * scale;
 
             // The network should predict runtime           
-            Expr delta = (p1 - r1) * (p1 - r1);
+            Expr delta = abs(p1 - r1);
             
             // More importantly, the network should predict runtimes
             // in the correct order
@@ -319,7 +319,6 @@ public:
             Expr significance = 1 - 1 / (abs(r1 - r2) + 1);
             Expr correct_order = confidence * significance * select((r1 > r2) == (p1 > p2), -1.0f, 1.0f);
             err(n) = correct_order + 0.001f * delta + 0.00001f * regularize1;
-
 
             Expr loss = sum(err(r_batch));
 
