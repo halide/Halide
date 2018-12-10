@@ -3237,8 +3237,12 @@ public:
 
     template <typename... Args>
     void apply(const Args &...args) {
-        static_assert(has_generate_method<T>::value && has_schedule_method<T>::value,
-            "apply() is not supported for old-style Generators.");
+#ifndef _MSC_VER
+        // VS2015 apparently has some SFINAE issues, so this can inappropriately
+        // trigger there. (We'll still fail when generate() is called, just
+        // with a less-helpful error message.)
+        static_assert(has_generate_method<T>::value, "apply() is not supported for old-style Generators.");
+#endif
         call_configure();
         set_inputs(args...);
         call_generate();
