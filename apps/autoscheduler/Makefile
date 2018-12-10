@@ -40,7 +40,7 @@ $(BIN)/cost_model/%.a: $(BIN)/cost_model.generator
 
 $(BIN)/auto_schedule.so: AutoSchedule.cpp $(WEIGHT_OBJECTS) $(COST_MODEL_LIBS) $(GENERATOR_DEPS) $(BIN)/runtime.a
 	@mkdir -p $(@D)
-	$(CXX) -shared -fPIC $(CXXFLAGS) -I $(BIN)/cost_model AutoSchedule.cpp $(WEIGHT_OBJECTS) $(COST_MODEL_LIBS) $(BIN)/runtime.a -O3 -fno-rtti -o $@ $(HALIDE_SYSTEM_LIBS)
+	$(CXX) -shared -fPIC $(CXXFLAGS) -g -I $(BIN)/cost_model AutoSchedule.cpp $(WEIGHT_OBJECTS) $(COST_MODEL_LIBS) $(BIN)/runtime.a -O3 -fno-rtti -o $@ $(HALIDE_SYSTEM_LIBS)
 
 $(BIN)/train_cost_model: train_cost_model.cpp $(COST_MODEL_LIBS) $(WEIGHT_OBJECTS) $(BIN)/runtime.a
 	$(CXX) $(CXXFLAGS) -I $(BIN)/cost_model -O3 $^ -o $@ $(LDFLAGS) -fopenmp
@@ -63,8 +63,14 @@ $(BIN)/demo.a: $(BIN)/demo.generator $(BIN)/auto_schedule.so
 $(BIN)/demo.rungen: $(BIN)/demo.a $(BIN)/runtime.a
 	$(CXX) -std=c++11 -I $(BIN) -DHL_RUNGEN_FILTER_HEADER="\"demo.h\"" -I ../../include ../../tools/RunGenMain.cpp ../../tools/RunGenStubs.cpp  $(BIN)/demo.a -o $@ $(HALIDE_SYSTEM_LIBS) -lpng -ljpeg
 
+$(BIN)/test: test.cpp $(BIN)/auto_schedule.so
+	$(CXX) $(CXXFLAGS) -rdynamic $< -o $@ $(LDFLAGS) $(LIB_HALIDE) $(HALIDE_SYSTEM_LIBS)
+
+test: $(BIN)/test
+	HL_WEIGHTS_DIR=weights LD_LIBRARY_PATH=$(BIN) $(BIN)/test
+
 # demonstrates single-shot use of the autoscheduler
-test: $(BIN)/demo.rungen
+demo: $(BIN)/demo.rungen
 	$(BIN)/demo.rungen --benchmarks=all --benchmark_min_time=1 --default_input_buffers=random:0:auto --output_extents=estimate --default_input_scalars=estimate
 
 # demonstrates an autotuning loop
