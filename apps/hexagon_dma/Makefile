@@ -9,7 +9,7 @@ include ../support/Makefile.inc
 #$ build/tools/make-standalone-toolchain.sh --arch=arm --platform=android-21 --install-dir=$ANDROID_ARM_TOOLCHAIN
 
 #to run the specialized tests optional arguments are
-#$(BIN)/process_nv12_linear_ro_basic-host  width height option( where option is pipeline basic, fold, async, split, split_fold ) 
+#$(BIN)/process_nv12_linear_ro_basic-host  width height option( where option is pipeline basic, fold, async, split, split_fold )
 CXX-host ?= $(CXX)
 CXX-arm-64-android ?= $(ANDROID_ARM64_TOOLCHAIN)/bin/aarch64-linux-android-c++
 CXX-arm-32-android ?= $(ANDROID_ARM_TOOLCHAIN)/bin/arm-linux-androideabi-c++
@@ -37,10 +37,10 @@ all: $(BIN)/process_nv12_linear_ro_basic-host \
 
 $(BIN)/pipeline_yuv_linear_basic: pipeline_yuv_linear_basic.cpp $(GENERATOR_DEPS)
 	mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 $(BIN)/pipeline_raw_linear_ro_basic_interleaved: pipeline_raw_linear_ro_basic_interleaved.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 INPUT_YUV_8BIT = input_y.type=uint8 input_uv.type=uint8
 INPUT_YUV_16BIT = input_y.type=uint16 input_uv.type=uint16
