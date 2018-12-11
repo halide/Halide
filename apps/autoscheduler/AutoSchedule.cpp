@@ -15,6 +15,8 @@
 #include "ThroughputPredictorPipeline.h"
 #include "Errors.h"
 
+#define GPU true
+
 namespace Halide {
 namespace Internal {
 
@@ -2819,33 +2821,36 @@ struct LoopNest {
                             split_factor = 4;
                         }
                         if (split_factor > 1) {
-                            VarOrRVar vec(Var(innermost_pure_var->var.name() + "_vec"));
                             auto tail_strategy = pure_var_tail_strategy;
                             if (stage_idx != 0 && !innermost_pure_var->outermost) {
                                 // Ugh, we'll be using vector predication
                                 tail_strategy = TailStrategy::GuardWithIf;
                             }
-                            s.split(innermost_pure_var->var, innermost_pure_var->var, vec, split_factor, tail_strategy)
-                                .vectorize(vec);
-                            state.schedule_source
-                                << "\n    .split("
-                                << innermost_pure_var->var.name() << ", "
-                                << innermost_pure_var->var.name() << ", "
-                                << vec.name() << ", "
-                                << split_factor << ", "
-                                << "TailStrategy::" << tail_strategy << ").vectorize("
-                                << vec.name() << ")";
-                            StageScheduleState::FuncVar v = *innermost_pure_var;
-                            v.extent = split_factor;
-                            v.var = vec;
-                            v.accessor.clear();
-                            v.parallel = false;
-                            v.outermost = false;
-                            innermost_pure_var->extent += split_factor - 1;
-                            innermost_pure_var->extent /= split_factor;
-                            state.vars.insert(state.vars.begin(), v);
-                            product_of_pure_loops /= split_factor;
-                            vectorized = true;
+			    if (GPU == false) // Vectorize only for CPU
+			    {
+                                VarOrRVar vec(Var(innermost_pure_var->var.name() + "_vec"));
+                                s.split(innermost_pure_var->var, innermost_pure_var->var, vec, split_factor, tail_strategy)
+                                    .vectorize(vec);
+                                state.schedule_source
+                                    << "\n    .split("
+                                    << innermost_pure_var->var.name() << ", "
+                                    << innermost_pure_var->var.name() << ", "
+                                    << vec.name() << ", "
+                                    << split_factor << ", "
+                                    << "TailStrategy::" << tail_strategy << ").vectorize("
+                                    << vec.name() << ")";
+                                StageScheduleState::FuncVar v = *innermost_pure_var;
+                                v.extent = split_factor;
+                                v.var = vec;
+                                v.accessor.clear();
+                                v.parallel = false;
+                                v.outermost = false;
+                                innermost_pure_var->extent += split_factor - 1;
+                                innermost_pure_var->extent /= split_factor;
+                                state.vars.insert(state.vars.begin(), v);
+                                product_of_pure_loops /= split_factor;
+                                vectorized = true;
+			    }
                         }
                     }
 
@@ -3422,16 +3427,61 @@ struct State {
             // Do all the reorders and pick which vars to
             // parallelize.
             vector<VarOrRVar> vars;
-            int64_t parallel_tasks = 1;
-            for (auto it = p.second.vars.rbegin(); it != p.second.vars.rend(); it++) {
-                if (!it->exists) continue;
-                if (!it->parallel) break;
-                parallel_tasks *= it->extent;
-                p.second.schedule_source << "\n    .parallel(" << it->var.name() << ")";
-                stage.parallel(it->var);
-                // Stop at a sufficient number of tasks (TODO: Make this a tiling level in the search space instead).
-                if (parallel_tasks > params.parallelism * 8) break;
-            }
+	    if (GPU == false) // If scheduling for CPU.
+	    {
+                int64_t parallel_tasks = 1;
+                for (auto it = p.second.vars.rbegin(); it != p.second.vars.rend(); it++) {
+                    if (!it->exists) continue;
+                    if (!it->parallel) break;
+                    parallel_tasks *= it->extent;
+                    p.second.schedule_source << "\n    .parallel(" << it->var.name() << ")";
+                    stage.parallel(it->var);
+                    // Stop at a sufficient number of tasks (TODO: Make this a tiling level in the search space instead).
+                    if (parallel_tasks > params.parallelism * 8) break;
+	        }
+	    }
+	    else
+	    {
+                uint64_t n_parallel_loops = 0;
+                uint64_t current_parallel_loop = 0;
+
+	        // Count the number of parallel loops.
+                for (auto it = p.second.vars.rbegin(); it != p.second.vars.rend(); it++) {
+                    if (!it->exists) continue;
+                    if (!it->parallel) break;
+
+		    n_parallel_loops++;
+		}
+
+                // Tag with GPUBlock and GPUThread only if we have at least two
+                // loops.  The first half of loop levels are tagged with GPUBlock
+                // and the second half with GPUThread.
+                // If the number of loop levels is more than 6, all the inner
+                // loops will be run by one thread. This should become a search
+                // space decision later.
+                if (n_parallel_loops >= 2)
+                {
+		    // Tag the parallel loops.
+                    for (auto it = p.second.vars.rbegin(); it != p.second.vars.rend(); it++) {
+                        if (!it->exists) continue;
+                        if (!it->parallel) break;
+                        if (current_parallel_loop >= 6) break;
+
+                        if (current_parallel_loop < n_parallel_loops/2)
+                        {
+                            p.second.schedule_source << "\n    .GPUBlock(" << it->var.name() << ")";
+                            stage.gpu_blocks(it->var);
+                            current_parallel_loop++;
+                        }
+                        else
+                        {
+                            p.second.schedule_source << "\n    .GPUThread(" << it->var.name() << ")";
+                            stage.gpu_threads(it->var);
+                            current_parallel_loop++;
+                        }
+                    }
+                }
+	    }
 
             if (p.second.vars.size() > 1) {
                 p.second.schedule_source << "\n    .reorder(";
