@@ -6,7 +6,7 @@ all: $(BIN)/process
 
 $(BIN)/nl_means.generator: nl_means_generator.cpp $(GENERATOR_DEPS)
 	@-mkdir -p $(BIN)
-	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS)
 
 $(BIN)/nl_means.a: $(BIN)/nl_means.generator
 	@-mkdir -p $(BIN)
