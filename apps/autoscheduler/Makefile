@@ -15,7 +15,7 @@ $(BIN)/weights_schedule_std.o \
 $(BIN)/weights_pipeline_mean.o \
 $(BIN)/weights_pipeline_std.o \
 
-$(BIN)/weights_%.cpp: 
+$(BIN)/weights_%.cpp:
 	@mkdir -p $(@D)
 	../../bin/binary2cpp weights_$* < weights/$*.data > $@
 
@@ -62,12 +62,6 @@ $(BIN)/demo.a: $(BIN)/demo.generator $(BIN)/auto_schedule.so
 
 $(BIN)/demo.rungen: $(BIN)/demo.a $(BIN)/runtime.a
 	$(CXX) -std=c++11 -I $(BIN) -DHL_RUNGEN_FILTER_HEADER="\"demo.h\"" -I ../../include ../../tools/RunGenMain.cpp ../../tools/RunGenStubs.cpp  $(BIN)/demo.a -o $@ $(HALIDE_SYSTEM_LIBS) -lpng -ljpeg
-
-$(BIN)/test: test.cpp $(BIN)/auto_schedule.so
-	$(CXX) $(CXXFLAGS) -rdynamic $< -o $@ $(LDFLAGS) $(LIB_HALIDE) $(HALIDE_SYSTEM_LIBS)
-
-test: $(BIN)/test
-	HL_WEIGHTS_DIR=weights LD_LIBRARY_PATH=$(BIN) $(BIN)/test
 
 # demonstrates single-shot use of the autoscheduler
 demo: $(BIN)/demo.rungen
