@@ -61,6 +61,6 @@ for ((i=$((FIRST+1));i<1000000;i++)); do
     
     # retrain model weights on all samples seen so far
     echo Retraining model...
-    find samples | grep sample$ | HL_NUM_THREADS=32 HL_WEIGHTS_DIR=weights ./bin/train_cost_model 1000
+    find samples | grep sample$ | HL_NUM_THREADS=32 HL_WEIGHTS_DIR=weights ./bin/train_cost_model 100
     
 done

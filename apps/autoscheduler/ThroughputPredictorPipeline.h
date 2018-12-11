@@ -39,6 +39,7 @@ using namespace Halide;
 
 Runtime::Buffer<float> buffer_from_file(const std::string &filename, const std::vector<int> &shape) {
     Runtime::Buffer<float> buf(shape);
+    buf.fill(0.0f);
 
     std::ifstream i(filename.c_str());
     i.read((char *)(buf.data()), buf.size_in_bytes());
@@ -187,6 +188,14 @@ class ThroughputPredictorPipeline {
 
         Runtime::Buffer<float> dst = costs.cropped(0, 0, cursor);
 
+        /*
+        pipeline_feat_queue.for_each_value([&](float f) { assert(!std::isnan(f)); });
+        schedule_feat_queue.for_each_value([&](float f) { assert(!std::isnan(f)); });
+        for_each_weight([&](const Runtime::Buffer<float> &buf) {
+                buf.for_each_value([&](float f) { assert(!std::isnan(f)); });
+            });
+        */
+
         train_cost_model(num_stages,
                          cursor,
                          num_cores,
@@ -322,7 +331,7 @@ class ThroughputPredictorPipeline {
                 // Fill the weights with random values
                 for_each_weight([](Runtime::Buffer<float> &w) {
                         w.for_each_value([](float &f) {
-                                f = ((float)rand()) / RAND_MAX - 0.5f;
+                                f = ((float)rand()) / RAND_MAX; // - 0.5f;
                             });
                     });
             }
@@ -492,5 +501,3 @@ class ThroughputPredictorPipeline {
     }
 
 };
-
-
