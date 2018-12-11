@@ -2,6 +2,12 @@
 #include <fstream>
 #include <set>
 
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <dlfcn.h>
+#endif
+
 #include "Generator.h"
 #include "Outputs.h"
 #include "Simplify.h"
@@ -786,12 +792,24 @@ std::string halide_type_to_c_type(const Type &t) {
 }
 
 int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
-    const char kUsage[] = "gengen [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR] [-r RUNTIME_NAME] [-e EMIT_OPTIONS] [-x EXTENSION_OPTIONS] [-n FILE_BASE_NAME] "
-                          "target=target-string[,target-string...] [generator_arg=value [...]]\n\n"
-                          "  -e  A comma separated list of files to emit. Accepted values are "
-                          "[assembly, bitcode, cpp, h, html, o, static_library, stmt, cpp_stub, schedule]. If omitted, default value is [static_library, h].\n"
-                          "  -x  A comma separated list of file extension pairs to substitute during file naming, "
-                          "in the form [.old=.new[,.old2=.new2]]\n";
+    const char kUsage[] =
+        "gengen \n"
+        "  [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR] [-r RUNTIME_NAME]\n"
+        "  [-e EMIT_OPTIONS] [-x EXTENSION_OPTIONS] [-n FILE_BASE_NAME] [-p PLUGIN_NAME]\n"
+        "       target=target-string[,target-string...] [generator_arg=value [...]]\n"
+        "\n"
+        " -e  A comma separated list of files to emit. Accepted values are:\n"
+        "     [assembly, bitcode, cpp, h, html, o, static_library,\n"
+        "      stmt, cpp_stub, schedule].\n"
+        "     If omitted, default value is [static_library, h].\n"
+        "\n"
+        " -x  A comma separated list of file extension pairs to substitute during\n"
+        "     file naming, in the form [.old=.new[,.old2=.new2]]\n"
+        "\n"
+        " -p  A comma-separted list of shared libraries that will be loaded before the\n"
+        "     generator is run. Useful for custom auto-schedulers. The generator must\n"
+        "     either be linked against a shared libHalide or compiled with -rdynamic\n"
+        "     so that references in the shared library to libHalide can resolve.\n";
 
     std::map<std::string, std::string> flags_info = { { "-f", "" },
                                                       { "-g", "" },
@@ -799,7 +817,8 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
                                                       { "-e", "" },
                                                       { "-n", "" },
                                                       { "-x", "" },
-                                                      { "-r", "" }};
+                                                      { "-r", "" },
+                                                      { "-p", "" }};
     GeneratorParamsMap generator_args;
 
     for (int i = 1; i < argc; ++i) {
@@ -825,6 +844,22 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
         cerr << "Unknown flag: " << argv[i] << "\n";
         cerr << kUsage;
         return 1;
+    }
+
+    // It's possible that in the future loaded plugins might change
+    // how arguments are parsed, so we handle those first.
+    for (auto lib : split_string(flags_info["-p"], ",")) {
+#ifdef _WIN32
+        if (LoadLibrary(lib.c_str()) != nullptr) {
+            cerr << "Failed to load: " << lib << "\n";
+            return 1;
+        }
+#else
+        if (dlopen(lib.c_str(), RTLD_LAZY) == nullptr) {
+            cerr << "Failed to load: " << lib << ": " << dlerror() << "\n";
+            return 1;
+        }
+#endif
     }
 
     std::string runtime_name = flags_info["-r"];
