@@ -2,7 +2,7 @@
 
 extern "C" {
 
-extern void *malloc(size_t);
+extern void *memalign(size_t alignment, size_t size);
 extern void free(void *);
 
 }
@@ -10,25 +10,11 @@ extern void free(void *);
 namespace Halide { namespace Runtime { namespace Internal {
 
 WEAK void *aligned_malloc(size_t alignment, size_t size) {
-    // We also need to align the size of the buffer.
-    size = (size + alignment - 1) & ~(alignment - 1);
-
-    // Allocate enough space for aligning the pointer we return.
-    void *orig = malloc(size + alignment);
-    if (orig == NULL) {
-        // Will result in a failed assertion and a call to halide_error
-        return NULL;
-    }
-    // We want to store the original pointer prior to the pointer we return.
-    void *ptr = (void *)(((size_t)orig + alignment + sizeof(void*) - 1) & ~(alignment - 1));
-    ((void **)ptr)[-1] = orig;
-    return ptr;
+    return memalign(alignment, size);
 }
 
 WEAK void aligned_free(void *ptr) {
-    if (ptr) {
-        free(((void**)ptr)[-1]);
-    }
+    free(ptr);
 }
 
 // We keep a small pool of small pre-allocated buffers for use by Halide

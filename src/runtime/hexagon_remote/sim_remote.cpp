@@ -18,23 +18,12 @@ typedef halide_hexagon_remote_buffer buffer;
 
 const int hvx_alignment = 128;
 
-// memalign() on the Simulator is unreliable and can apparently return
-// overlapping areas. Roll our own version that is based on malloc().
 static void *aligned_malloc(size_t alignment, size_t x) {
-    void *orig = malloc(x + alignment);
-    if (!orig) {
-        return NULL;
-    }
-    // We want to store the original pointer prior to the pointer we return.
-    void *ptr = (void *)(((size_t)orig + alignment + sizeof(void*) - 1) & ~(alignment - 1));
-    ((void **)ptr)[-1] = orig;
-    return ptr;
+    return memalign(alignment, x);
 }
 
 static void aligned_free(void *ptr) {
-    if (ptr) {
-        free(((void**)ptr)[-1]);
-    }
+    free(ptr);
 }
 
 void log_printf(const char *fmt, ...) {
