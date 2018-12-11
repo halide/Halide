@@ -102,6 +102,10 @@ struct PipelineFeatures {
         transpose_accesses[(int)AccessType::NumAccessTypes][(int)ScalarType::NumScalarTypes],         // Square permutation matrix. f(y + 1, z - 3, x)
         broadcast_accesses[(int)AccessType::NumAccessTypes][(int)ScalarType::NumScalarTypes],         // Each row sums to 1. Each column sums to 1 or 0. f(y, x)
         slice_accesses[(int)AccessType::NumAccessTypes][(int)ScalarType::NumScalarTypes],             // Each row sums to 1 or 0. Each column sums to 1. f(z, y, x, 4)
+
+
+    // The following four features are dead (always zero), now that we
+    // actually search over which dimension to vectorize over:
         vectorizable_accesses[(int)AccessType::NumAccessTypes][(int)ScalarType::NumScalarTypes], // First (vectorized) col is 1, 0, 0, ... f(x+y, z*y, y/z)
         strided_accesses[(int)AccessType::NumAccessTypes][(int)ScalarType::NumScalarTypes],      // First col is [(int)2,3,4], 0, 0, ...        f(3*x + 1, z/8, y/z)
         scalar_accesses[(int)AccessType::NumAccessTypes][(int)ScalarType::NumScalarTypes],       // First col is all zero                  f(y, 2, z*8)
@@ -1212,7 +1216,6 @@ struct FunctionDAG {
                 zeros_per_col(stage.loop.size(), 0);
             matrix.resize(args.size());
             bool is_pointwise = args.size() == stage.loop.size();
-            bool is_strided = true, is_vector = true, is_scalar = true;
             for (size_t i = 0; i < args.size(); i++) {
                 matrix[i].resize(stage.loop.size());
                 for (size_t j = 0; j < stage.loop.size(); j++) {
@@ -1222,11 +1225,6 @@ struct FunctionDAG {
                     zeros_per_col[j] += deriv.is_zero();
                     ones_per_col[j] += deriv.is_one();
                     is_pointwise &= (i == j ? deriv.is_one() : deriv.is_zero());
-                    if (j == vector_dim) {
-                        is_vector &= (i == 0 ? deriv.is_one() : deriv.is_zero());
-                        is_strided &= (i == 0 ? deriv.is_small_integer() : deriv.is_zero());
-                        is_scalar &= deriv.is_zero();
-                    }
                 }
             }
             bool is_transpose = (args.size() == stage.loop.size());
@@ -1245,7 +1243,6 @@ struct FunctionDAG {
                 is_broadcast &= single_one;
                 is_slice &= single_one;
             }
-            bool is_gather_scatter = !is_vector && !is_strided && !is_scalar;
 
             auto type_class = classify_type(t);
 
@@ -1253,10 +1250,6 @@ struct FunctionDAG {
             stage.features.transpose_accesses[(int)type][(int)type_class] += is_transpose;
             stage.features.broadcast_accesses[(int)type][(int)type_class] += is_broadcast;
             stage.features.slice_accesses[(int)type][(int)type_class] += is_slice;
-            stage.features.vectorizable_accesses[(int)type][(int)type_class] += is_vector;
-            stage.features.strided_accesses[(int)type][(int)type_class] += is_strided;
-            stage.features.scalar_accesses[(int)type][(int)type_class] += is_scalar;
-            stage.features.gather_scatter_accesses[(int)type][(int)type_class] += is_gather_scatter;
         }
 
     public:
@@ -1948,6 +1941,11 @@ struct LoopNest {
                     hash_combine(h, s);
                 }
             }
+        }
+
+        if (innermost) {
+            // Which dimension are we vectorized over?
+            hash_combine(h, vectorized_loop_index);
         }
 
         if (depth > 1) {
