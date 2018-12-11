@@ -28,7 +28,7 @@ $(BIN)/cost_model/train_cost_model.a \
 
 $(BIN)/cost_model.generator: cost_model_generator.cpp Derivative.cpp Derivative.h DerivativeUtils.cpp DerivativeUtils.h cost_model_schedule.h $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) -g $(filter-out %.h,$^) -o $@ $(HALIDE_SYSTEM_LIBS)
 
 $(BIN)/runtime.a: $(BIN)/cost_model.generator
 	@mkdir -p $(@D)
@@ -40,7 +40,7 @@ $(BIN)/cost_model/%.a: $(BIN)/cost_model.generator
 
 $(BIN)/auto_schedule.so: AutoSchedule.cpp $(WEIGHT_OBJECTS) $(COST_MODEL_LIBS) $(GENERATOR_DEPS) $(BIN)/runtime.a
 	@mkdir -p $(@D)
-	$(CXX) -shared -fPIC $(CXXFLAGS) -g -I $(BIN)/cost_model AutoSchedule.cpp $(WEIGHT_OBJECTS) $(COST_MODEL_LIBS) $(BIN)/runtime.a -O3 -fno-rtti -o $@ $(HALIDE_SYSTEM_LIBS)
+	$(CXX) -shared -fPIC $(CXXFLAGS) -g -I $(BIN)/cost_model AutoSchedule.cpp $(WEIGHT_OBJECTS) $(COST_MODEL_LIBS) $(BIN)/runtime.a -O3 -o $@ $(HALIDE_SYSTEM_LIBS)
 
 $(BIN)/train_cost_model: train_cost_model.cpp ThroughputPredictorPipeline.h $(COST_MODEL_LIBS) $(WEIGHT_OBJECTS) $(BIN)/runtime.a
 	$(CXX) $(CXXFLAGS) -I $(BIN)/cost_model -O3 $^ -o $@ $(LDFLAGS) -fopenmp
@@ -53,7 +53,7 @@ $(BIN)/augment_sample: augment_sample.cpp
 # autoscheduler can't find the libHalide symbols that it needs.
 $(BIN)/demo.generator: demo_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -rdynamic -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) -rdynamic -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 # To use the autoscheduler, set a few environment variables and use the -p flag to the generator to load the autoscheduler as a plugin
 $(BIN)/demo.a: $(BIN)/demo.generator $(BIN)/auto_schedule.so
