@@ -46,7 +46,7 @@ $(BIN)/auto_schedule.so: AutoSchedule.cpp $(WEIGHT_OBJECTS) $(COST_MODEL_LIBS) $
 	$(CXX) -shared $(USE_DYNAMIC_LOOKUPS) -fPIC $(CXXFLAGS) -g -I $(BIN)/cost_model AutoSchedule.cpp $(WEIGHT_OBJECTS) $(COST_MODEL_LIBS) $(BIN)/runtime.a -O3 -o $@ $(HALIDE_SYSTEM_LIBS)
 
 $(BIN)/train_cost_model: train_cost_model.cpp ThroughputPredictorPipeline.h $(COST_MODEL_LIBS) $(WEIGHT_OBJECTS) $(BIN)/runtime.a
-	$(CXX) $(CXXFLAGS) -I $(BIN)/cost_model -O3 $^ -o $@ $(LDFLAGS) -fopenmp
+	$(CXX) $(CXXFLAGS) -I $(BIN)/cost_model -O3 $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(USE_OPEN_MP)
 
 $(BIN)/augment_sample: augment_sample.cpp
 	$(CXX) $< -O3 -o $@

@@ -33,11 +33,14 @@ endif
 
 ifeq ($(UNAME), Linux)
 USE_DYNAMIC_LOOKUPS=-rdynamic
+USE_OPEN_MP=-fopenmp
 else
 ifeq ($(UNAME), Darwin)
 USE_DYNAMIC_LOOKUPS=-undefined dynamic_lookup
+USE_OPEN_MP=
 else
 USE_DYNAMIC_LOOKUPS
+USE_OPEN_MP=
 endif
 endif
 
