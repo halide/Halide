@@ -2,6 +2,9 @@
 #include <fstream>
 #include <set>
 
+#if defined(_MSC_VER) && !defined(NOMINMAX)
+#define NOMINMAX
+#endif
 #ifdef _WIN32
 #include <windows.h>
 #else
