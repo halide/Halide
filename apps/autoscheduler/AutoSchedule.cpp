@@ -877,7 +877,7 @@ struct FunctionDAG {
                     node.bytes_per_point = bytes_per_point;
                 }
 
-                stage.vector_size = target.natural_vector_size(checker.narrowest_type);
+                stage.vector_size = 32; // warp size = 32
 
                 if (!should_vectorize) {
                     stage.vector_size = 1;
@@ -1383,26 +1383,32 @@ vector<vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, int fa
                     t.back() = outer;
                     result.push_back(t);
                 }
-                for (int outer = 1; outer <= s[d]; outer *= factor) {
-                    int inner = (s[d] + outer - 1) / outer;
-                    if (is_one && outer == 1) continue;
-                    if (is_full && outer == s[d]) continue;
-                    // Stop when we get into the regime covered by the loop above.
-                    if (inner < max_inner * 2) break;
-                    // Or when the wasted compute gets too bad.
-                    if (inner * outer * 7 > s[d] * 8) break;
-                    t.back() = outer;
-                    result.push_back(t);
+                // Additional tiling options may have inner extents that are not
+                // multiples of 32 so skip them for the vector dimension
+                if (d != vector_dim) {
+                    for (int outer = 1; outer <= s[d]; outer *= factor) {
+                        int inner = (s[d] + outer - 1) / outer;
+                        if (is_one && outer == 1) continue;
+                        if (is_full && outer == s[d]) continue;
+                        // Stop when we get into the regime covered by the loop above.
+                        if (inner < max_inner * 2) break;
+                        // Or when the wasted compute gets too bad.
+                        if (inner * outer * 7 > s[d] * 8) break;
+                        t.back() = outer;
+                        result.push_back(t);
+                    }
                 }
 
-                // The sequence above (in terms of the inner loop) goes 1 2 4 8 16 ...
-                // but 3 is an important inner tiling factor for matrix multiply ops.
-                int inner3 = (d == vector_dim) ? 3*vector_size : 3;
-                int outer3 = (s[d] + inner3 - 1) / inner3;
-                if (factor == 2 && inner3 < s[d] && outer3 < s[d] && outer3 > 1) {
-                    if (inner3 * outer3 * 7 <= s[d] * 8) {
-                        t.back() = outer3;
-                        result.push_back(t);
+                if (!GPU) {
+                    // The sequence above (in terms of the inner loop) goes 1 2 4 8 16 ...
+                    // but 3 is an important inner tiling factor for matrix multiply ops.
+                    int inner3 = (d == vector_dim) ? 3*vector_size : 3;
+                    int outer3 = (s[d] + inner3 - 1) / inner3;
+                    if (factor == 2 && inner3 < s[d] && outer3 < s[d] && outer3 > 1) {
+                        if (inner3 * outer3 * 7 <= s[d] * 8) {
+                            t.back() = outer3;
+                            result.push_back(t);
+                        }
                     }
                 }
             }
@@ -2547,7 +2553,8 @@ struct LoopNest {
             }
 
             for (auto t : tilings) {
-                if (parent->is_root()) {
+                // params.parallelism is currently only relevant for CPU
+                if (parent->is_root() && !GPU) {
                     const auto &l = stage->loop;
                     // Skip root-level tilings that provide
                     // insufficient parallelism to avoid nested
@@ -2807,27 +2814,27 @@ struct LoopNest {
 
                     // TODO: Do an aligned unroll of anything with mods/divs on the coordinates.
 
-                    int vector_size = stage->vector_size;
-                    bool vectorized = false;
-                    if (innermost_pure_var && vector_size > 1) {
-                        int split_factor = 1;
-                        if (innermost_pure_var->extent >= vector_size) {
-                            split_factor = vector_size;
-                        } else if (innermost_pure_var->extent >= 16) {
-                            split_factor = 16;
-                        } else if (innermost_pure_var->extent >= 8) {
-                            split_factor = 8;
-                        } else if (innermost_pure_var->extent >= 4) {
-                            split_factor = 4;
-                        }
-                        if (split_factor > 1) {
-                            auto tail_strategy = pure_var_tail_strategy;
-                            if (stage_idx != 0 && !innermost_pure_var->outermost) {
-                                // Ugh, we'll be using vector predication
-                                tail_strategy = TailStrategy::GuardWithIf;
+                    // Vectorize only for CPU
+                    if (GPU == false) {
+                        int vector_size = stage->vector_size;
+                        bool vectorized = false;
+                        if (innermost_pure_var && vector_size > 1) {
+                            int split_factor = 1;
+                            if (innermost_pure_var->extent >= vector_size) {
+                                split_factor = vector_size;
+                            } else if (innermost_pure_var->extent >= 16) {
+                                split_factor = 16;
+                            } else if (innermost_pure_var->extent >= 8) {
+                                split_factor = 8;
+                            } else if (innermost_pure_var->extent >= 4) {
+                                split_factor = 4;
                             }
-			    if (GPU == false) // Vectorize only for CPU
-			    {
+                            if (split_factor > 1) {
+                                auto tail_strategy = pure_var_tail_strategy;
+                                if (stage_idx != 0 && !innermost_pure_var->outermost) {
+                                    // Ugh, we'll be using vector predication
+                                    tail_strategy = TailStrategy::GuardWithIf;
+                                }
                                 VarOrRVar vec(Var(innermost_pure_var->var.name() + "_vec"));
                                 s.split(innermost_pure_var->var, innermost_pure_var->var, vec, split_factor, tail_strategy)
                                     .vectorize(vec);
@@ -2850,7 +2857,7 @@ struct LoopNest {
                                 state.vars.insert(state.vars.begin(), v);
                                 product_of_pure_loops /= split_factor;
                                 vectorized = true;
-			    }
+                            }
                         }
                     }
 
@@ -3427,8 +3434,9 @@ struct State {
             // Do all the reorders and pick which vars to
             // parallelize.
             vector<VarOrRVar> vars;
-	    if (GPU == false) // If scheduling for CPU.
-	    {
+
+            // If scheduling for CPU.
+            if (!GPU) {
                 int64_t parallel_tasks = 1;
                 for (auto it = p.second.vars.rbegin(); it != p.second.vars.rend(); it++) {
                     if (!it->exists) continue;
@@ -3438,20 +3446,18 @@ struct State {
                     stage.parallel(it->var);
                     // Stop at a sufficient number of tasks (TODO: Make this a tiling level in the search space instead).
                     if (parallel_tasks > params.parallelism * 8) break;
-	        }
-	    }
-	    else
-	    {
+                }
+            } else {
                 uint64_t n_parallel_loops = 0;
                 uint64_t current_parallel_loop = 0;
 
-	        // Count the number of parallel loops.
+                // Count the number of parallel loops.
                 for (auto it = p.second.vars.rbegin(); it != p.second.vars.rend(); it++) {
                     if (!it->exists) continue;
                     if (!it->parallel) break;
 
-		    n_parallel_loops++;
-		}
+                    n_parallel_loops++;
+                }
 
                 // Tag with GPUBlock and GPUThread only if we have at least two
                 // loops.  The first half of loop levels are tagged with GPUBlock
@@ -3459,29 +3465,25 @@ struct State {
                 // If the number of loop levels is more than 6, all the inner
                 // loops will be run by one thread. This should become a search
                 // space decision later.
-                if (n_parallel_loops >= 2)
-                {
-		    // Tag the parallel loops.
+                if (n_parallel_loops >= 2) {
+                    // Tag the parallel loops.
                     for (auto it = p.second.vars.rbegin(); it != p.second.vars.rend(); it++) {
                         if (!it->exists) continue;
                         if (!it->parallel) break;
                         if (current_parallel_loop >= 6) break;
 
-                        if (current_parallel_loop < n_parallel_loops/2)
-                        {
-                            p.second.schedule_source << "\n    .GPUBlock(" << it->var.name() << ")";
+                        if (current_parallel_loop < n_parallel_loops/2) {
+                            p.second.schedule_source << "\n    .gpu_blocks(" << it->var.name() << ")";
                             stage.gpu_blocks(it->var);
                             current_parallel_loop++;
-                        }
-                        else
-                        {
-                            p.second.schedule_source << "\n    .GPUThread(" << it->var.name() << ")";
+                        } else {
+                            p.second.schedule_source << "\n    .gpu_threads(" << it->var.name() << ")";
                             stage.gpu_threads(it->var);
                             current_parallel_loop++;
                         }
                     }
                 }
-	    }
+            }
 
             if (p.second.vars.size() > 1) {
                 p.second.schedule_source << "\n    .reorder(";
