@@ -1,7 +1,9 @@
-#include <string>
-#include <vector>
+#include <iomanip>
 #include <set>
+#include <sstream>
+#include <string>
 #include <unistd.h>
+#include <vector>
 
 #include "ThroughputPredictorPipeline.h"
 
@@ -44,6 +46,23 @@ bool ends_with(const string &str, const string &suffix) {
         if (str[off+i] != suffix[i]) return false;
     }
     return true;
+}
+
+void log_best_schedule(int best_id, float best_runtime) {
+    const int batch = best_id / 100;
+    const int sample = best_id % 100;
+    std::ostringstream o;
+    o << "Best schedule id / runtime: " << best_id
+        << std::setfill('0') << std::setw(2) << " (" << "batch_" << batch << "/" << sample << ")"
+        << ", runtime = " << best_runtime << "\n";
+    std::cout << o.str();
+    if (char *e = getenv("HL_BEST_SCHEDULE_FILE")) {
+        if (e && *e) {
+            std::ofstream f(e, std::ios_base::trunc);
+            f << o.str();
+            f.close();
+        }
+    }
 }
 
 // Load all the samples, reading filenames from stdin
@@ -167,7 +186,7 @@ map<int, PipelineSample> load_samples() {
         double variance_sum = 0;
         size_t count = 0;
         // Compute the weighted average of variances across all samples
-        for (const auto &p : pipe.second.schedules) {            
+        for (const auto &p : pipe.second.schedules) {
             if (p.second.runtimes.empty()) {
                 std::cerr << "Empty runtimes for schedule: " << p.first << "\n";
                 abort();
@@ -197,7 +216,8 @@ map<int, PipelineSample> load_samples() {
 
     std::cout << "Distinct pipelines: " << result.size() << "\n";
 
-    std::cout << "Best schedule id / runtime: " << best << " / " << best_runtime << "\n";
+    log_best_schedule(best, best_runtime);
+
     return result;
 }
 
@@ -211,14 +231,14 @@ int main(int argc, char **argv) {
     float rates[] = {0.01f};
 
     int num_cores = atoi(getenv("HL_NUM_THREADS"));
-    
+
     for (float learning_rate : rates) {
         for (int batch = 0; batch < atoi(argv[1]); batch++) {
             int counter = 0;
             float loss_sum[models] = {0}, loss_sum_counter[models] = {0};
             float correct_ordering_rate_sum[models] = {0};
             float correct_ordering_rate_count[models] = {0};
-            std::cout << "Iterating over " << samples.size() << " samples\n";
+            std::cout << "Iterating over " << samples.size() << " samples... ";
             #pragma omp parallel for
             for (int model = 0; model < models; model++) {
                 loss_sum[model] = loss_sum_counter[model] = correct_ordering_rate_sum[model] = correct_ordering_rate_count[model] = 0;
@@ -255,7 +275,7 @@ int main(int argc, char **argv) {
                     if (true) {
                         int good = 0, bad = 0;
                         int attempts = 0;
-                        while (good + bad < batch_size && attempts < batch_size * 2) {                            
+                        while (good + bad < batch_size && attempts < batch_size * 2) {
                             attempts++;
                             int j1 = rand() % p.second.schedules.size();
                             int j2 = rand() % p.second.schedules.size();
@@ -283,11 +303,11 @@ int main(int argc, char **argv) {
                 counter++;
             }
 
-            std::cout << "RMS errors: ";
+            std::cout << "RMS errors:";
             for (int model = 0; model < models; model++) {
-                std::cout << loss_sum[model] / loss_sum_counter[model] << " ";
+                std::cout << " " << loss_sum[model] / loss_sum_counter[model];
             }
-            std::cout << "\nCorrect ordering rate: ";
+            std::cout << ", Correct ordering rate:";
             int best_model = 0;
             float best_rate = 0;
             for (int model = 0; model < models; model++) {
@@ -296,7 +316,7 @@ int main(int argc, char **argv) {
                     best_model = model;
                     best_rate = rate;
                 }
-                std::cout << rate << " ";
+                std::cout << " " << rate;
             }
             std::cout << "\n";
             tpp[best_model].save_weights();

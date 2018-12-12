@@ -3,7 +3,7 @@
 
 int main(int argc, char **argv) {
     if (argc != 5) {
-        printf("Usage: record_runtime sample.bin runtime pipeline_id schedule_id\n");
+        printf("Usage: augment_sample sample.bin runtime pipeline_id schedule_id\n");
         return -1;
     }
 

@@ -78,7 +78,7 @@ demo: $(BIN)/demo.rungen
 
 # demonstrates an autotuning loop
 autotune: $(BIN)/demo.generator $(BIN)/augment_sample $(BIN)/train_cost_model autotune_loop.sh $(BIN)/auto_schedule.so
-	bash autotune_loop.sh
+	bash autotune_loop.sh $(BIN)/demo.generator demo x86-64-avx2
 
 clean:
 	rm -rf $(BIN)
