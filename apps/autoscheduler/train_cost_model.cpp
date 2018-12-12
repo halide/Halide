@@ -48,23 +48,6 @@ bool ends_with(const string &str, const string &suffix) {
     return true;
 }
 
-void log_best_schedule(int best_id, float best_runtime) {
-    const int batch = best_id / 100;
-    const int sample = best_id % 100;
-    std::ostringstream o;
-    o << "Best schedule id / runtime: " << best_id
-        << std::setfill('0') << std::setw(2) << " (" << "batch_" << batch << "/" << sample << ")"
-        << ", runtime = " << best_runtime << "\n";
-    std::cout << o.str();
-    if (char *e = getenv("HL_BEST_SCHEDULE_FILE")) {
-        if (e && *e) {
-            std::ofstream f(e, std::ios_base::trunc);
-            f << o.str();
-            f.close();
-        }
-    }
-}
-
 // Load all the samples, reading filenames from stdin
 map<int, PipelineSample> load_samples() {
     map<int, PipelineSample> result;
@@ -72,6 +55,7 @@ map<int, PipelineSample> load_samples() {
 
     int best = -1;
     float best_runtime = 1e20f;
+    string best_path;
 
     size_t num_read = 0, num_unique = 0;
     while (!std::cin.eof()) {
@@ -111,6 +95,7 @@ map<int, PipelineSample> load_samples() {
         if (runtime < best_runtime) {
             best_runtime = runtime;
             best = schedule_id;
+            best_path = s;
         }
 
         PipelineSample &ps = result[pipeline_id];
@@ -216,7 +201,16 @@ map<int, PipelineSample> load_samples() {
 
     std::cout << "Distinct pipelines: " << result.size() << "\n";
 
-    log_best_schedule(best, best_runtime);
+    std::ostringstream o;
+    o << "Best runtime is " << best_runtime << ", from schedule id "<< best << " in file " << best_path << "\n";
+    std::cout << o.str();
+    if (char *e = getenv("HL_BEST_SCHEDULE_FILE")) {
+        if (e && *e) {
+            std::ofstream f(e, std::ios_base::trunc);
+            f << o.str();
+            f.close();
+        }
+    }
 
     return result;
 }
