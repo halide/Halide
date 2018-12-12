@@ -460,7 +460,7 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
                                                 options,
                                                 llvm::Reloc::PIC_,
 #ifdef HALIDE_USE_CODEMODEL_LARGE
-                                               llvm::CodeModel::Large,
+                                                llvm::CodeModel::Large,
 #else
                                                 llvm::CodeModel::Small,
 #endif
