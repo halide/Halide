@@ -39,7 +39,7 @@ ifeq ($(UNAME), Darwin)
 USE_EXPORT_DYNAMIC=-undefined dynamic_lookup
 USE_OPEN_MP=
 else
-USE_EXPORT_DYNAMIC
+USE_EXPORT_DYNAMIC=
 USE_OPEN_MP=
 endif
 endif
