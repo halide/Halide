@@ -1890,6 +1890,25 @@ HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<int64_t>() {
     return halide_type_t(halide_type_int, 64);
 }
 
+// Some programming environments use aliases like `typedef long long int64`
+// (rather than the C99 integer types); for various reasons, these aren't
+// always considered the same type by C++, but we'd like to quietly accept them
+// in Halide, so add mappings here to the values we expect (along with static_asserts
+// to verify that the situation remains as we expect).
+template<>
+HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<long long>() {
+    static_assert(sizeof(long long) == sizeof(int64_t),
+                  "long long is expected to be a 64-bit signed int here");
+    return halide_type_t(halide_type_int, 64);
+}
+
+template<>
+HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<unsigned long long>() {
+    static_assert(sizeof(unsigned long long) == sizeof(uint64_t),
+                  "unsigned long long is expected to be a 64-bit unsigned int here");
+    return halide_type_t(halide_type_uint, 64);
+}
+
 #endif
 
 #endif // HALIDE_HALIDERUNTIME_H
