@@ -128,7 +128,7 @@ class ThroughputPredictorPipeline {
         if (!schedule_feat_queue.data() ||
             schedule_feat_queue.dim(2).extent() < max_num_stages) {
             assert(cursor == 0);
-            schedule_feat_queue = Runtime::Buffer<float>(batch_size, 26, max_num_stages);
+            schedule_feat_queue = Runtime::Buffer<float>(batch_size, 25, max_num_stages);
             if (!costs.data()) {
                 assert(!cost_ptrs.data());
                 costs = Runtime::Buffer<float>(batch_size);
@@ -304,7 +304,7 @@ class ThroughputPredictorPipeline {
             weights.head1_bias = Runtime::Buffer<float>(weights_head1_conv1_bias, 24);
             assert(weights_head1_conv1_bias_length == (int)weights.head1_bias.size_in_bytes());
 
-            weights.head2_filter = Runtime::Buffer<float>(weights_head2_conv1_weight, 24, 26);
+            weights.head2_filter = Runtime::Buffer<float>(weights_head2_conv1_weight, 24, 25);
             assert(weights_head2_conv1_weight_length == (int)weights.head2_filter.size_in_bytes());
 
             weights.head2_bias = Runtime::Buffer<float>(weights_head2_conv1_bias, 24);
@@ -319,7 +319,7 @@ class ThroughputPredictorPipeline {
             weights.head1_filter = buffer_from_file(weights_dir + "/head1_conv1_weight.data", {24, 56, 7});
             weights.head1_bias = buffer_from_file(weights_dir + "/head1_conv1_bias.data", {24});
 
-            weights.head2_filter = buffer_from_file(weights_dir + "/head2_conv1_weight.data", {24, 26});
+            weights.head2_filter = buffer_from_file(weights_dir + "/head2_conv1_weight.data", {24, 25});
             weights.head2_bias = buffer_from_file(weights_dir + "/head2_conv1_bias.data", {24});
 
             weights.conv1_filter = buffer_from_file(weights_dir + "/trunk_conv1_weight.data", {16, 48, 3});
@@ -327,11 +327,13 @@ class ThroughputPredictorPipeline {
         }
 
         if (char *e = getenv("HL_RANDOMIZE_WEIGHTS")) {
+            srand(time(NULL));
             if (std::string(e) == "1") {
+                std::cout << "Randomizing weights\n";
                 // Fill the weights with random values
                 for_each_weight([](Runtime::Buffer<float> &w) {
                         w.for_each_value([](float &f) {
-                                f = ((float)rand()) / RAND_MAX; // - 0.5f;
+                                f = ((float)rand()) / RAND_MAX - 0.5f;
                             });
                     });
             }
@@ -346,16 +348,16 @@ class ThroughputPredictorPipeline {
             stats.pipeline_std = Runtime::Buffer<float>(weights_pipeline_std,  56, 7);
             assert(weights_pipeline_std_length == (int)stats.pipeline_std.size_in_bytes());
 
-            stats.schedule_mean = Runtime::Buffer<float>(weights_schedule_mean, 26);
+            stats.schedule_mean = Runtime::Buffer<float>(weights_schedule_mean, 25);
             assert(weights_schedule_mean_length == (int)stats.schedule_mean.size_in_bytes());
 
-            stats.schedule_std = Runtime::Buffer<float>(weights_schedule_std, 26);
+            stats.schedule_std = Runtime::Buffer<float>(weights_schedule_std, 25);
             assert(weights_schedule_std_length == (int)stats.schedule_std.size_in_bytes());
         } else {
             stats.pipeline_mean = buffer_from_file(weights_dir + "/pipeline_mean.data", {56, 7});
             stats.pipeline_std = buffer_from_file(weights_dir + "/pipeline_std.data", {56, 7});
-            stats.schedule_mean = buffer_from_file(weights_dir + "/schedule_mean.data", {26});
-            stats.schedule_std = buffer_from_file(weights_dir + "/schedule_std.data", {26});
+            stats.schedule_mean = buffer_from_file(weights_dir + "/schedule_mean.data", {25});
+            stats.schedule_std = buffer_from_file(weights_dir + "/schedule_std.data", {25});
         }
     }
 

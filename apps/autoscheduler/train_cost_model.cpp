@@ -102,7 +102,11 @@ map<int, PipelineSample> load_samples() {
             for (size_t i = 0; i < num_stages; i++) {
                 for (int x = 0; x < 56; x++) {
                     for (int y = 0; y < 7; y++) {
-                        ps.pipeline_features(x, y, i) = scratch[i * features_per_stage + (x + 1) * 7 + y + 26];
+                        float f = scratch[i * features_per_stage + (x + 1) * 7 + y + 26];
+                        if (f < 0 || std::isnan(f)) {
+                            std::cout << "Negative or NaN pipeline feature: " << x << " " << y << " " << i << " " << f << "\n";
+                        }
+                        ps.pipeline_features(x, y, i) = f;
                     }
                 }
             }
@@ -142,7 +146,7 @@ map<int, PipelineSample> load_samples() {
             for (size_t i = 0; i < num_stages; i++) {
                 for (int x = 0; x < 26; x++) {
                     float f = scratch[i * features_per_stage + x];
-                    if (f < 0 || f > 1e14) {
+                    if (f < 0 || f > 1e14 || std::isnan(f)) {
                         std::cout << "Negative or implausibly large schedule feature: " << i << " " << x << " " << f << "\n";
                         // Something must have overflowed
                         ok = false;
@@ -167,7 +171,7 @@ map<int, PipelineSample> load_samples() {
         double variance_sum = 0;
         size_t count = 0;
         // Compute the weighted average of variances across all samples
-        for (const auto &p : pipe.second.schedules) {            
+        for (const auto &p : pipe.second.schedules) {
             if (p.second.runtimes.empty()) {
                 std::cerr << "Empty runtimes for schedule: " << p.first << "\n";
                 abort();
@@ -211,7 +215,7 @@ int main(int argc, char **argv) {
     float rates[] = {0.01f};
 
     int num_cores = atoi(getenv("HL_NUM_THREADS"));
-    
+
     for (float learning_rate : rates) {
         for (int batch = 0; batch < atoi(argv[1]); batch++) {
             int counter = 0;
@@ -252,10 +256,16 @@ int main(int argc, char **argv) {
                     loss_sum[model] += loss;
                     loss_sum_counter[model] ++;
 
+                    for (size_t j = 0; j < batch_size; j++) {
+                        auto it = p.second.schedules.begin();
+                        std::advance(it, j + first);
+                        auto &sched = it->second;
+                    }
+
                     if (true) {
                         int good = 0, bad = 0;
                         int attempts = 0;
-                        while (good + bad < batch_size && attempts < batch_size * 2) {                            
+                        while (good + bad < batch_size && attempts < batch_size * 10) {
                             attempts++;
                             int j1 = rand() % p.second.schedules.size();
                             int j2 = rand() % p.second.schedules.size();

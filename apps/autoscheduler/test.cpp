@@ -125,7 +125,7 @@ int main(int argc, char **argv) {
     }
 
     // A Func with multiple stages, some of which include additional loops
-    if (0) {
+    if (1) {
         Buffer<float> a(1024, 1024);
         Func f("multiple_stages"), g("g"), h("h");
         Var x, y;
@@ -272,7 +272,7 @@ int main(int argc, char **argv) {
         Pipeline(g).auto_schedule(target, params);
     }
 
-    if (1) {
+    if (0) {
         // A pipeline where the vectorized dimension should alternate index
         Func f("f"), g("g"), h("h");
         f(x, y) = x*y;
@@ -285,6 +285,25 @@ int main(int argc, char **argv) {
         h.estimate(x, 0, 1000).estimate(y, 0, 1000);
 
         Pipeline(h).auto_schedule(target, params);
+    }
+
+    if (1) {
+        // A no-win scenario in which a Func is going to be read from
+        // lots of times using a vector gather no matter how it is
+        // scheduled.
+        Func in("in"), a("a"), b("b");
+
+        in(x, y) = sqrt(sqrt(sqrt(sqrt(x*y))));
+
+        RDom r(-50, 100, -50, 100);
+        a(x, y) += in(x+r.x, y+r.y);
+        b(x, y) += in(y+r.y, x+r.x);
+
+        a.estimate(x, 0, 1000).estimate(y, 0, 1000);
+        b.estimate(x, 0, 1000).estimate(y, 0, 1000);
+
+        Pipeline({a, b}).auto_schedule(target, params);
+
     }
 
     return 0;

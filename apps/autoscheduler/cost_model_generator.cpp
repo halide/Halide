@@ -152,7 +152,7 @@ public:
             cast(working_type, (fast_log(schedule_features(n, c, s) + 1) - schedule_mean(c)) / max(1, schedule_std(c)));
 
         const int head1_channels = 24, head1_w = 56, head1_h = 7;
-        const int head2_channels = 24, head2_w = 26;
+        const int head2_channels = 24, head2_w = 25;
         const int conv1_channels = 16;
         const int conv_support = 3;
 
@@ -201,27 +201,27 @@ public:
         Expr points_computed_total = schedule_features(n, 4, w);
         Expr points_computed_minimum = schedule_features(n, 5, w);
         Expr innermost_loop_extent = schedule_features(n, 6, w);
-        Expr innermost_pure_loop_extent = schedule_features(n, 7, w);
-        Expr inner_parallelism = schedule_features(n, 8, w);
-        Expr outer_parallelism = schedule_features(n, 9, w);
+        Expr inner_parallelism = schedule_features(n, 7, w);
+        Expr outer_parallelism = schedule_features(n, 8, w);
 
-        Expr bytes_at_realization = schedule_features(n, 10, w);
-        Expr bytes_at_production = schedule_features(n, 11, w);
-        Expr bytes_at_root = schedule_features(n, 12, w);
-        Expr innermost_bytes_at_realization = schedule_features(n, 13, w);
-        Expr innermost_bytes_at_production = schedule_features(n, 14, w);
-        Expr innermost_bytes_at_root = schedule_features(n, 15, w);
-        Expr bytes_read_per_tile = schedule_features(n, 16, w);
-        Expr inlined_calls = schedule_features(n, 17, w);
-        Expr unique_bytes_read_per_realization = schedule_features(n, 18, w);
-        Expr unique_lines_read_per_realization = schedule_features(n, 19, w);
-        Expr allocation_bytes_read_per_realization = schedule_features(n, 20, w);
-        Expr working_set = schedule_features(n, 21, w);
+        Expr bytes_at_realization = schedule_features(n, 9, w);
+        Expr bytes_at_production = schedule_features(n, 10, w);
+        Expr bytes_at_root = schedule_features(n, 11, w);
+        Expr innermost_bytes_at_realization = schedule_features(n, 12, w);
+        Expr innermost_bytes_at_production = schedule_features(n, 13, w);
+        Expr innermost_bytes_at_root = schedule_features(n, 14, w);
 
-        Expr vector_size = schedule_features(n, 22, w);
-        Expr rounded_innermost_pure_loop_extent = schedule_features(n, 23, w);
-        Expr native_vector_size = schedule_features(n, 24, w);
-        Expr non_unique_bytes_read_per_realization = schedule_features(n, 25, w);
+        Expr inlined_calls = schedule_features(n, 15, w);
+        Expr unique_bytes_read_per_realization = schedule_features(n, 16, w);
+        Expr unique_lines_read_per_realization = schedule_features(n, 17, w);
+        Expr allocation_bytes_read_per_realization = schedule_features(n, 18, w);
+        Expr working_set = schedule_features(n, 19, w);
+
+        Expr vector_size = schedule_features(n, 20, w);
+        Expr native_vector_size = schedule_features(n, 21, w);
+        Expr num_vectors = schedule_features(n, 22, w);
+        Expr vector_loads_per_vector = schedule_features(n, 23, w);
+        Expr scalar_loads_per_vector = schedule_features(n, 24, w);
 
         // If GuardWithIf, we must assume the tail scalarized
         // and that each element costs as much as an entire
@@ -298,19 +298,19 @@ public:
             auto sigmoid = [](Expr x) {
                 return (1 - 1 / abs(x)) * select(x > 0, 1.0f, -1.0f);
             };
-            
+
 
             Expr n2 = (n + 1) % batch_size;
             Expr scale = 1.0f / true_runtime(0);
             Expr p1 = prediction(n) * scale, p2 = prediction(n2) * scale;
             Expr r1 = true_runtime(n) * scale, r2 = true_runtime(n2) * scale;
 
-            // The network should predict runtime           
+            // The network should predict runtime
             Expr delta = abs(p1 - r1);
-            
+
             // More importantly, the network should predict runtimes
             // in the correct order
-           
+
             // A reward for being confident and correct, a penalty for
             // being confident and wrong, and nothing when the result
             // is not confident. Size of reward or penalty is also

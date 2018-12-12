@@ -116,10 +116,6 @@ struct PipelineFeatures {
 
     // TODO: strided captures downsamples. What about upsamples?
 
-    // TODO: It's weird that we've already selected a
-    // dimension to be vectorized over - that should be part
-    // of the scheduling search space instead.
-
     void dump() const {
         for (int i = 0; i < (int)ScalarType::NumScalarTypes; i++) {
             const char *type_names[] = {"Bool", "UInt8", "UInt16", "UInt32", "UInt64", "Float", "Double"};
@@ -689,12 +685,6 @@ struct FunctionDAG {
                 node.region_required.push_back(interval);
             }
 
-            // TODO: The search swizzles this around
-            string innermost_storage_dim;
-            if (!consumer.args().empty()) {
-                innermost_storage_dim = consumer.args()[0];
-            }
-
             for (int s = 0; s <= (int)consumer.updates().size(); s++) {
                 stage_count++;
 
@@ -766,8 +756,6 @@ struct FunctionDAG {
                     }
                 }
 
-                bool should_vectorize = false;
-
                 // We'll take any existing reordering, but won't handle existing splits
                 internal_assert(sched.splits().empty());
                 stage.loop_nest_all_common_cases = true;
@@ -812,14 +800,7 @@ struct FunctionDAG {
                     }
 
                     stage.loop_nest_all_common_cases &= (l.bounds_are_constant || l.equals_region_computed);
-
-                    if (d.var == innermost_storage_dim) {
-                        // TODO: This has gotta go. We don't know the innermost storage dim yet
-                        should_vectorize = true;
-                        stage.loop.insert(stage.loop.begin(), l);
-                    } else {
-                        stage.loop.emplace_back(std::move(l));
-                    }
+                    stage.loop.emplace_back(std::move(l));
                 }
 
                 // Bundle all expressions associated with the definition into a single dummy call node
@@ -885,10 +866,6 @@ struct FunctionDAG {
                 }
 
                 stage.vector_size = target.natural_vector_size(checker.narrowest_type);
-
-                if (!should_vectorize) {
-                    stage.vector_size = 1;
-                }
 
                 if (s == 0) {
                     node.vector_size = stage.vector_size;
@@ -1420,12 +1397,12 @@ struct ScheduleFeatures {
     //  == num_realizations * points_computed_per_realization
     //  ~= num_productions * points_computed_per_production
     // Only approximately equal because of the simplifications made
-    // regarding the modelling of sliding window
+    // regarding the modeling of sliding window
 
     int64_t points_computed_minimum = 0; // The minimum number of points that are actually required to be computed to produce a correct output.
 
-    int64_t innermost_loop_extent = 0; // Trip count of innermost loop
-    int64_t innermost_pure_loop_extent = 0; // Trip count of the loop that's going to be vectorized
+    int64_t innermost_loop_extent = 0; // Trip count of innermost serial loop
+
     int64_t inner_parallelism = 0; // The number of parallel jobs used in the production of this Func. 1 unless the Func is compute_root.
     int64_t outer_parallelism = 0; // The number of times this Func could be realized in parallel. 1 when the Func is compute_root.
 
@@ -1436,24 +1413,22 @@ struct ScheduleFeatures {
     int64_t innermost_bytes_at_production = 0;
     int64_t innermost_bytes_at_root = 0;
 
-    int64_t bytes_read_per_tile = 0; // Number of bytes loaded from alnputs per tile (TODO: Not particularly useful without knowing how many times this runs)
-
     int64_t inlined_calls = 0; // For inlined Funcs, how many calls are made to this Func total
 
     // Logically these features should be grouped earlier, but the convnet currently doesn't know about them
     int64_t unique_bytes_read_per_realization = 0; // Number of unique bytes loaded from all inputs per production
     int64_t unique_lines_read_per_realization = 0; // Number of unique contiguous segments of memory loaded from all inputs per production
-    int64_t allocation_bytes_read_per_realization = 0; // The sum of the sizes of the allocations accessed per production. Gives a hint as to the likely locality of it.
+    int64_t allocation_bytes_read_per_realization = 0; // The sum of the sizes of the allocations accessed. Gives a hint as to the likely locality of it.
 
     int64_t working_set = 0; // The sum of the sizes of the allocations within the production of this Func. Probably a good thing if it fits in cache.
 
-    int64_t vector_size = 0; // The vectorization factor (#simd lanes) to be used to compute this stage. Wasted work if innermost_pure_loop is not a multiple of this, or if it's smaller than the stage's native vector size (which is in the pipeline features).
-
-    int64_t rounded_innermost_pure_loop_extent = 0; // Innermost pure loop extend rounded up to the next multiple of the vector size
+    int64_t vector_size = 0; // The vectorization factor (#simd lanes) to be used to compute this stage. Wasted work if it's smaller than the stage's native vector size (which is in the pipeline features).
 
     int native_vector_size = 0; // The native vector size for the narrowest type used.
 
-    int64_t non_unique_bytes_read_per_realization = 0; // Number of bytes read per realization, counting reloads of the same memory.
+    int64_t num_vectors = 0; // Number of vectors computed (Assuming sliding worked)
+    int64_t scalar_loads_per_vector = 0;
+    int64_t vector_loads_per_vector = 0;
 
     void dump() const {
         debug(0) << "    num_realizations:                      " << num_realizations << '\n'
@@ -1463,7 +1438,6 @@ struct ScheduleFeatures {
                  << "    points_computed_total:                 " << points_computed_total << '\n'
                  << "    points_computed_minimum:               " << points_computed_minimum << '\n'
                  << "    innermost_loop_extent:                 " << innermost_loop_extent << '\n'
-                 << "    innermost_pure_loop_extent:            " << innermost_pure_loop_extent << '\n'
                  << "    inner_parallelism:                     " << inner_parallelism << '\n'
                  << "    outer_parallelism:                     " << outer_parallelism << '\n'
                  << "    bytes_at_realization:                  " << bytes_at_realization << '\n'
@@ -1472,16 +1446,17 @@ struct ScheduleFeatures {
                  << "    innermost_bytes_at_realization:        " << innermost_bytes_at_realization << '\n'
                  << "    innermost_bytes_at_production:         " << innermost_bytes_at_production << '\n'
                  << "    innermost_bytes_at_root:               " << innermost_bytes_at_root << '\n'
-                 << "    bytes_read_per_tile:                   " << bytes_read_per_tile << '\n'
                  << "    inlined_calls:                         " << inlined_calls << '\n'
                  << "    unique_bytes_read_per_realization:     " << unique_bytes_read_per_realization << '\n'
                  << "    unique_lines_read_per_realization:     " << unique_lines_read_per_realization << '\n'
                  << "    allocation_bytes_read_per_realization: " << allocation_bytes_read_per_realization << '\n'
                  << "    working_set:                           " << working_set << '\n'
                  << "    vector_size:                           " << vector_size << '\n'
-                 << "    rounded_innermost_pure_loop_extent     " << rounded_innermost_pure_loop_extent << '\n'
-                 << "    native_vector_size:                    " << vector_size << '\n'
-                 << "    non_unique_bytes_read_per_realization: " << non_unique_bytes_read_per_realization << '\n';
+                 << "    native_vector_size:                    " << native_vector_size << '\n'
+                 << "    num_vectors:                           " << num_vectors << '\n'
+                 << "    scalar_loads_per_vector:               " << scalar_loads_per_vector << '\n'
+                 << "    vector_loads_per_vector:               " << vector_loads_per_vector << '\n';
+
     }
 };
 
@@ -1849,8 +1824,10 @@ using StageMap = PerfectHashMap<FunctionDAG::Node::Stage, T>;
 struct LoopNest {
     mutable RefCount ref_count;
 
-    // The extents of the loops
-    vector<int64_t> size;
+    // The size of the outer loop, and the split factor used to create
+    // the inner loop. Put another way, the number of tiles, and the
+    // size of each tile.
+    vector<int64_t> size, split_factor;
 
     // The nodes inside the loop body
     vector<IntrusivePtr<const LoopNest>> children;
@@ -1881,7 +1858,7 @@ struct LoopNest {
     int vector_dim = -1;
 
     // Which loop is vectorized. -1 means none of them.
-    int vectorized_loop_index = -1;
+v    int vectorized_loop_index = -1;
 
     void copy_from(const LoopNest &n) {
         size = n.size;
@@ -2217,7 +2194,6 @@ struct LoopNest {
                         discontinuous = true;
                     }
 
-
                     int64_t store_instances_per_consumption = 1;
                     const auto &producer_feat = features->get_or_create(&(e->producer->stages[0]));
 
@@ -2243,11 +2219,6 @@ struct LoopNest {
                     }
                 }
             }
-        }
-
-        // TODO: consider input images in these bytes-read metrics.
-        if (innermost) {
-            feat.bytes_read_per_tile = bytes_loaded;
         }
 
         if (at_production) {
@@ -2361,8 +2332,11 @@ struct LoopNest {
             debug(0) << prefix << node->func.name();
             prefix += " ";
         }
-        for (auto s : size) {
-            debug(0) << " " << s;
+        for (size_t i = 0; i < size.size(); i++) {
+            debug(0) << " " << size[i];
+            if (innermost && i == vectorized_loop_index) {
+                debug(0) << 'v';
+            }
         }
         if (tileable) {
             debug(0) << " t";
@@ -2484,11 +2458,12 @@ struct LoopNest {
     void compute_here(const FunctionDAG::Node *f, bool tileable, int vector_dim) {
         const auto &bounds = get_bounds(f);
         for (int s = (int)f->stages.size() - 1; s >= 0; s--) {
-            std::unique_ptr<LoopNest> node{new LoopNest};
+            LoopNest *node = new LoopNest;
             node->node = f;
             node->stage_idx = s;
             node->stage = &f->stages[s];
             node->innermost = true;
+            node->vectorized_loop_index = -1;
             // TODO: rvars are not tileable
             node->tileable = tileable;
             // Set up a bound for the inside of the
@@ -2497,23 +2472,52 @@ struct LoopNest {
             auto single_point = bounds->make_copy();
             size_t loop_dim = f->stages[s].loop.size();
             node->size.resize(loop_dim);
+            int64_t total_extent = 1;
+            int vectorized_loop_index = -1;
             for (size_t i = 0; i < loop_dim; i++) {
                 const auto &l = bounds->loops(s, i);
                 // Initialize the loop nest
                 node->size[i] = l.second - l.first + 1;
+                total_extent *= node->size[i];
                 // Pick a representative loop iteration for the inner
                 // loop. With the way tiling is done below, it needs
                 // to be the first loop iteration.
                 single_point->loops(s, i) = {l.first, l.first};
 
                 if (f->stages[s].loop[i].var == f->func.args()[vector_dim]) {
-                    node->vectorized_loop_index = (int)i;
+                    vectorized_loop_index = (int)i;
+                    int sz = node->stage->vector_size;
+                    single_point->loops(s, i).second += sz - 1;
+                    node->size[i] += sz - 1;
+                    node->size[i] /= sz;
                 }
             }
             // Leave region required blank inside the computation of a Func
             node->set_bounds(f, std::move(single_point));
             node->vector_dim = vector_dim;
-            children.emplace_back(node.release());
+
+            if (vectorized_loop_index >= 0) {
+                // Split off the single vector as an inner loop nest.
+                node->innermost = false;
+
+                LoopNest *one_vector = new LoopNest;
+                one_vector->node      = node->node;
+                one_vector->stage     = node->stage;
+                one_vector->stage_idx = node->stage_idx;
+                one_vector->tileable  = false;
+                one_vector->vectorized_loop_index = vectorized_loop_index;
+                one_vector->size.resize(loop_dim, 1);
+                one_vector->innermost = true;
+                auto b = node->get_bounds(f)->make_copy();
+                // Set the region computed inside this node to be the first vector lane
+                b->loops(s, vectorized_loop_index).second = b->loops(s, vectorized_loop_index).first;
+                one_vector->set_bounds(f, b);
+                one_vector->size[vectorized_loop_index] = node->stage->vector_size;
+
+                node->children.emplace_back(one_vector);
+            }
+
+            children.emplace_back(node);
         }
     }
 
@@ -2566,7 +2570,7 @@ struct LoopNest {
 
         if (tileable) {
             // Generate a list of tile sizes to try
-            auto tilings = generate_tilings(size, (int)(size.size() - 1), 2, !in_realization, vector_dim, innermost ? vector_size : 1);
+            auto tilings = generate_tilings(size, (int)(size.size() - 1), 2, !in_realization, vectorized_loop_index, innermost ? vector_size : 1);
 
             if (tilings.size() > 1000) {
                 debug(0) << "Warning: lots of tilings: " << tilings.size() << "\n";
@@ -2817,70 +2821,15 @@ struct LoopNest {
 
             if (!size.empty()) {
                 if (innermost) {
-                    // Find the innermost var, and the innermost pure var
-                    StageScheduleState::FuncVar *innermost_var = nullptr, *var_to_vectorize = nullptr;
-                    internal_assert(state.vars.size() >= symbolic_loop.size());
-                    int64_t product_of_pure_loops = 1;
-                    for (size_t i = 0; i < symbolic_loop.size(); i++) {
-                        if (!state.vars[i].exists) continue;
-                        if (innermost_var == nullptr) {
-                            innermost_var = &state.vars[i];
-                        }
-                        if (state.vars[i].pure) {
-                            product_of_pure_loops *= state.vars[i].extent;
-                        }
-                    }
                     if (vectorized_loop_index >= 0) {
-                        var_to_vectorize = &state.vars[vectorized_loop_index];
+                        state.schedule_source
+                            << "\n    .vectorize(" << state.vars[vectorized_loop_index].var.name() << ")";
                     }
-                    internal_assert(innermost_var);
-                    here = LoopLevel(node->func, innermost_var->var);
 
-                    // TODO: Do an aligned unroll of anything with mods/divs on the coordinates.
 
-                    int vector_size = stage->vector_size;
-                    bool vectorized = false;
-                    if (var_to_vectorize && vector_size > 1) {
-                        int split_factor = 1;
-                        if (var_to_vectorize->extent >= vector_size) {
-                            split_factor = vector_size;
-                        } else if (var_to_vectorize->extent >= 16) {
-                            split_factor = 16;
-                        } else if (var_to_vectorize->extent >= 8) {
-                            split_factor = 8;
-                        } else if (var_to_vectorize->extent >= 4) {
-                            split_factor = 4;
-                        }
-                        if (split_factor > 1) {
-                            VarOrRVar vec(Var(var_to_vectorize->var.name() + "_vec"));
-                            auto tail_strategy = pure_var_tail_strategy;
-                            if (stage_idx != 0 && !var_to_vectorize->outermost) {
-                                // Ugh, we'll be using vector predication
-                                tail_strategy = TailStrategy::GuardWithIf;
-                            }
-                            s.split(var_to_vectorize->var, var_to_vectorize->var, vec, split_factor, tail_strategy)
-                                .vectorize(vec);
-                            state.schedule_source
-                                << "\n    .split("
-                                << var_to_vectorize->var.name() << ", "
-                                << var_to_vectorize->var.name() << ", "
-                                << vec.name() << ", "
-                                << split_factor << ", "
-                                << "TailStrategy::" << tail_strategy << ").vectorize("
-                                << vec.name() << ")";
-                            StageScheduleState::FuncVar v = *var_to_vectorize;
-                            v.extent = split_factor;
-                            v.var = vec;
-                            v.accessor.clear();
-                            v.parallel = false;
-                            v.outermost = false;
-                            var_to_vectorize->extent += split_factor - 1;
-                            var_to_vectorize->extent /= split_factor;
-                            state.vars.insert(state.vars.begin(), v);
-                            product_of_pure_loops /= split_factor;
-                            vectorized = true;
-                        }
-                    }
+                // TODO: Capture the loop level at which we want to do unrolling
+
+                /*
 
                     // Temporary hack until we can actually model
                     // which loops are constant size. The other part
@@ -2908,16 +2857,36 @@ struct LoopNest {
                             }
                         }
                     }
+                */
 
                     // TODO: unroll anything small with an explicit bound
 
                 } else {
+                    // This is not the innermost loop. Go find the next inner loop.
+                    const LoopNest *child = nullptr;
+                    for (const auto &c : children) {
+                        if (c->node == node) {
+                            child = c.get();
+                            break;
+                        }
+                    }
+
                     // Do the implied splits
                     vector<StageScheduleState::FuncVar> new_inner;
                     for (size_t i = 0; i < symbolic_loop.size(); i++) {
                         StageScheduleState::FuncVar v;
                         StageScheduleState::FuncVar &parent = state.vars[i];
+
                         int64_t factor = (parent.extent + size[i] - 1) / size[i];
+
+                        if (child && child->size[i] > factor) {
+                            // We may have picked a
+                            // larger-that-minimal extent for the
+                            // child loop, for the purpose of
+                            // vectorization.
+                            factor = child->size[i];
+                        }
+
                         if (!parent.exists || parent.extent == 1 || factor == 1) {
                             v.exists = false;
                             v.extent = 1;
@@ -2967,6 +2936,13 @@ struct LoopNest {
                     state.vars.insert(state.vars.begin(), new_inner.begin(), new_inner.end());
                 }
             }
+            if (innermost) {
+                internal_assert(store_at.empty());
+                internal_assert(children.empty());
+                return;
+            }
+
+
             for (auto f : store_at) {
                 Func(f->func).store_at(here);
             }
@@ -3467,6 +3443,12 @@ struct State {
             for (auto it = p.second.vars.rbegin(); it != p.second.vars.rend(); it++) {
                 if (!it->exists) continue;
                 if (!it->parallel) break;
+                if (parallel_tasks > params.parallelism && parallel_tasks * it->extent > params.parallelism * 128) {
+                    // Probably should stop at this point. TODO:
+                    // replace with actually searching for what
+                    // parallel tiles to use in the search.
+                    break;
+                }
                 parallel_tasks *= it->extent;
                 p.second.schedule_source << "\n    .parallel(" << it->var.name() << ")";
                 stage.parallel(it->var);
