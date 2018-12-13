@@ -5,7 +5,7 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    if (!dlopen("auto_schedule.so", RTLD_LAZY)) {
+    if (!dlopen("libauto_schedule.so", RTLD_LAZY)) {
         std::cerr << "Failed to load autoscheduler: " << dlerror() << "\n";
         return 1;
     }

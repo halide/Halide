@@ -41,7 +41,7 @@ $(BIN)/cost_model/%.a: $(BIN)/cost_model.generator
 # It's important to use dynamic lookups for undefined symbols here: all of libHalide
 # is expected to be present (in the loading binary), so we explicitly make the symbols
 # undefined rather than dependent on libHalide.so.
-$(BIN)/auto_schedule.so: AutoSchedule.cpp $(WEIGHT_OBJECTS) $(COST_MODEL_LIBS) $(GENERATOR_DEPS) $(BIN)/runtime.a
+$(BIN)/libauto_schedule.so: AutoSchedule.cpp $(WEIGHT_OBJECTS) $(COST_MODEL_LIBS) $(GENERATOR_DEPS) $(BIN)/runtime.a
 	@mkdir -p $(@D)
 	$(CXX) -shared $(USE_EXPORT_DYNAMIC) -fPIC $(CXXFLAGS) -g -I $(BIN)/cost_model AutoSchedule.cpp $(WEIGHT_OBJECTS) $(COST_MODEL_LIBS) $(BIN)/runtime.a -O3 -o $@ $(HALIDE_SYSTEM_LIBS)
 
@@ -59,14 +59,14 @@ $(BIN)/demo.generator: demo_generator.cpp $(GENERATOR_DEPS)
 	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 # To use the autoscheduler, set a few environment variables and use the -p flag to the generator to load the autoscheduler as a plugin
-$(BIN)/demo.a: $(BIN)/demo.generator $(BIN)/auto_schedule.so
+$(BIN)/demo.a: $(BIN)/demo.generator $(BIN)/libauto_schedule.so
 	HL_MACHINE_PARAMS=32,1,1 HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=weights \
-	$(BIN)/demo.generator -g demo -o $(BIN) -f demo -e static_library,h target=$(HL_TARGET) auto_schedule=true -p $(BIN)/auto_schedule.so
+	$(BIN)/demo.generator -g demo -o $(BIN) -f demo -e static_library,h target=$(HL_TARGET) auto_schedule=true -p $(BIN)/libauto_schedule.so
 
 $(BIN)/demo.rungen: $(BIN)/demo.a $(BIN)/runtime.a
 	$(CXX) -std=c++11 -I $(BIN) -DHL_RUNGEN_FILTER_HEADER="\"demo.h\"" -I ../../include ../../tools/RunGenMain.cpp ../../tools/RunGenStubs.cpp  $(BIN)/demo.a -o $@ $(HALIDE_SYSTEM_LIBS) -lpng -ljpeg
 
-$(BIN)/test: test.cpp $(BIN)/auto_schedule.so
+$(BIN)/test: test.cpp $(BIN)/libauto_schedule.so
 	$(CXX) $(CXXFLAGS) -rdynamic $< -o $@ $(LDFLAGS) $(LIB_HALIDE) $(HALIDE_SYSTEM_LIBS)
 
 test: $(BIN)/test
@@ -77,7 +77,7 @@ demo: $(BIN)/demo.rungen
 	$(BIN)/demo.rungen --benchmarks=all --benchmark_min_time=1 --default_input_buffers=random:0:auto --output_extents=estimate --default_input_scalars=estimate
 
 # demonstrates an autotuning loop
-autotune: $(BIN)/demo.generator $(BIN)/augment_sample $(BIN)/train_cost_model autotune_loop.sh $(BIN)/auto_schedule.so
+autotune: $(BIN)/demo.generator $(BIN)/augment_sample $(BIN)/train_cost_model autotune_loop.sh $(BIN)/libauto_schedule.so
 	bash autotune_loop.sh $(BIN)/demo.generator demo x86-64-avx2
 
 clean:
