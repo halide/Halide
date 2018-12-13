@@ -7,6 +7,8 @@
 
 #include "ThroughputPredictorPipeline.h"
 
+namespace {
+
 using std::vector;
 using std::string;
 using std::map;
@@ -215,6 +217,7 @@ map<int, PipelineSample> load_samples() {
     return result;
 }
 
+}  // namespace
 
 int main(int argc, char **argv) {
     auto samples = load_samples();
