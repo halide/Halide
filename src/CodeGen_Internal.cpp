@@ -459,7 +459,11 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
                                                 mcpu, mattrs,
                                                 options,
                                                 llvm::Reloc::PIC_,
+#ifdef HALIDE_USE_CODEMODEL_LARGE
+                                                llvm::CodeModel::Large,
+#else
                                                 llvm::CodeModel::Small,
+#endif
                                                 llvm::CodeGenOpt::Aggressive));
 }
 
