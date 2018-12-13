@@ -101,7 +101,7 @@ public:
     static std::vector<Internal::JITModule> make_externs_jit_module(const Target &target,
                                                                     std::map<std::string, JITExtern> &externs_in_out);
 
-    static std::function<std::string(Pipeline, const Target &, const MachineParams &)> custom_auto_scheduler;
+    static std::function<std::string(Pipeline, const Target &, const MachineParams &)> *get_custom_auto_scheduler_ptr();
 
  public:
     /** Make an undefined Pipeline object. */
