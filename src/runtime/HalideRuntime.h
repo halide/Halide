@@ -1820,7 +1820,11 @@ extern double halide_float16_bits_to_double(uint16_t);
 
 #ifdef __cplusplus
 
-namespace {
+#ifdef COMPILING_HALIDE_RUNTIME
+
+// Handle just the standard types, without using <type_traits>
+
+namespace halide_type_of_helpers {
 template<typename T> struct check_is_pointer;
 template<typename T> struct check_is_pointer<T *> {};
 }
@@ -1830,7 +1834,7 @@ template<typename T>
 HALIDE_ALWAYS_INLINE halide_type_t halide_type_of() {
     // Create a compile-time error if T is not a pointer (without
     // using any includes - this code goes into the runtime).
-    check_is_pointer<T> check;
+    halide_type_of_helpers::check_is_pointer<T> check;
     (void)check;
     return halide_type_t(halide_type_handle, 64);
 }
@@ -1890,25 +1894,62 @@ HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<int64_t>() {
     return halide_type_t(halide_type_int, 64);
 }
 
-// Some programming environments use aliases like `typedef long long int64`
-// (rather than the C99 integer types); for various reasons, these aren't
-// always considered the same type by C++, but we'd like to quietly accept them
-// in Halide, so add mappings here to the values we expect (along with static_asserts
-// to verify that the situation remains as we expect).
-template<>
-HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<long long>() {
-    static_assert(sizeof(long long) == sizeof(int64_t),
-                  "long long is expected to be a 64-bit signed int here");
-    return halide_type_t(halide_type_int, 64);
+#else // not COMPILING_HALIDE_RUNTIME
+
+// Use type_traits to handle all variants of int/uint/etc that might
+// be thrown at us, not just the C99 types. Uglier but more flexible
+// for all downstream users.
+
+#include <type_traits>
+
+// pointer types.
+template<typename T>
+HALIDE_ALWAYS_INLINE
+typename std::enable_if<std::is_pointer<T>::value, halide_type_t>::type
+halide_type_of() {
+    return halide_type_t(halide_type_handle, 64);
 }
 
-template<>
-HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<unsigned long long>() {
-    static_assert(sizeof(unsigned long long) == sizeof(uint64_t),
-                  "unsigned long long is expected to be a 64-bit unsigned int here");
-    return halide_type_t(halide_type_uint, 64);
+// floating point types.
+template<typename T>
+HALIDE_ALWAYS_INLINE
+typename std::enable_if<std::is_floating_point<T>::value, halide_type_t>::type
+halide_type_of() {
+    constexpr int BITS = sizeof(T) * 8;
+    static_assert(BITS == 32 || BITS == 64, "Unsupported size for halide_type_float");
+    return halide_type_t(halide_type_float, BITS);
 }
 
-#endif
+// signed integer types.
+template<typename T>
+HALIDE_ALWAYS_INLINE
+typename std::enable_if<std::is_integral<T>::value && std::is_signed<T>::value && !std::is_same<T, bool>::value, halide_type_t>::type
+halide_type_of() {
+    constexpr int BITS = sizeof(T) * 8;
+    static_assert(BITS == 8 || BITS == 16 || BITS == 32 || BITS == 64, "Unsupported size for halide_type_int");
+    return halide_type_t(halide_type_int, BITS);
+}
+
+// unsigned integer types.
+template<typename T>
+HALIDE_ALWAYS_INLINE
+typename std::enable_if<std::is_integral<T>::value && !std::is_signed<T>::value && !std::is_same<T, bool>::value, halide_type_t>::type
+halide_type_of() {
+    constexpr int BITS = sizeof(T) * 8;
+    static_assert(BITS == 8 || BITS == 16 || BITS == 32 || BITS == 64, "Unsupported size for halide_type_uint");
+    return halide_type_t(halide_type_uint, BITS);
+}
+
+// bool, which is special-cased.
+template<typename T>
+HALIDE_ALWAYS_INLINE
+typename std::enable_if<std::is_same<T, bool>::value, halide_type_t>::type
+halide_type_of() {
+    return halide_type_t(halide_type_uint, 1);
+}
+
+#endif // not COMPILING_HALIDE_RUNTIME
+
+#endif  // __cplusplus
 
 #endif // HALIDE_HALIDERUNTIME_H
