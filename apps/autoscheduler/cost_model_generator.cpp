@@ -152,7 +152,7 @@ public:
             cast(working_type, (fast_log(schedule_features(n, c, s) + 1) - schedule_mean(c)) / max(1, schedule_std(c)));
 
         const int head1_channels = 24, head1_w = 56, head1_h = 7;
-        const int head2_channels = 24, head2_w = 25;
+        const int head2_channels = 24, head2_w = 26;
         const int conv1_channels = 16;
         const int conv_support = 3;
 
@@ -194,62 +194,60 @@ public:
         relu1(c, w, n) = activation(conv1_stage2(c, w, n));
 
         // Unpack all of the schedule features
-        Expr num_realizations = schedule_features(n, 0, w);
-        Expr num_productions = schedule_features(n, 1, w);
-        Expr points_computed_per_realization = schedule_features(n, 2, w);
-        Expr points_computed_per_production = schedule_features(n, 3, w);
-        Expr points_computed_total = schedule_features(n, 4, w);
-        Expr points_computed_minimum = schedule_features(n, 5, w);
-        Expr innermost_loop_extent = schedule_features(n, 6, w);
-        Expr inner_parallelism = schedule_features(n, 7, w);
-        Expr outer_parallelism = schedule_features(n, 8, w);
+        int idx = 0;
+        Expr num_realizations = schedule_features(n, idx++, w);
+        Expr num_productions = schedule_features(n, idx++, w);
+        Expr points_computed_per_realization = schedule_features(n, idx++, w);
+        Expr points_computed_per_production = schedule_features(n, idx++, w);
+        Expr points_computed_total = schedule_features(n, idx++, w);
+        Expr points_computed_minimum = schedule_features(n, idx++, w);
+        Expr innermost_loop_extent = schedule_features(n, idx++, w);
+        Expr innermost_pure_loop_extent = schedule_features(n, idx++, w);
+        Expr inner_parallelism = schedule_features(n, idx++, w);
+        Expr outer_parallelism = schedule_features(n, idx++, w);
 
-        Expr bytes_at_realization = schedule_features(n, 9, w);
-        Expr bytes_at_production = schedule_features(n, 10, w);
-        Expr bytes_at_root = schedule_features(n, 11, w);
-        Expr innermost_bytes_at_realization = schedule_features(n, 12, w);
-        Expr innermost_bytes_at_production = schedule_features(n, 13, w);
-        Expr innermost_bytes_at_root = schedule_features(n, 14, w);
+        Expr bytes_at_realization = schedule_features(n, idx++, w);
+        Expr bytes_at_production = schedule_features(n, idx++, w);
+        Expr bytes_at_root = schedule_features(n, idx++, w);
+        Expr innermost_bytes_at_realization = schedule_features(n, idx++, w);
+        Expr innermost_bytes_at_production = schedule_features(n, idx++, w);
+        Expr innermost_bytes_at_root = schedule_features(n, idx++, w);
 
-        Expr inlined_calls = schedule_features(n, 15, w);
-        Expr unique_bytes_read_per_realization = schedule_features(n, 16, w);
-        Expr unique_lines_read_per_realization = schedule_features(n, 17, w);
-        Expr allocation_bytes_read_per_realization = schedule_features(n, 18, w);
-        Expr working_set = schedule_features(n, 19, w);
+        Expr inlined_calls = schedule_features(n, idx++, w);
+        Expr unique_bytes_read_per_realization = schedule_features(n, idx++, w);
+        Expr unique_lines_read_per_realization = schedule_features(n, idx++, w);
+        Expr allocation_bytes_read_per_realization = schedule_features(n, idx++, w);
+        Expr working_set = schedule_features(n, idx++, w);
 
-        Expr vector_size = schedule_features(n, 20, w);
-        Expr native_vector_size = schedule_features(n, 21, w);
-        Expr num_vectors = schedule_features(n, 22, w);
-        Expr vector_loads_per_vector = schedule_features(n, 23, w);
-        Expr scalar_loads_per_vector = schedule_features(n, 24, w);
-
-        // If GuardWithIf, we must assume the tail scalarized
-        // and that each element costs as much as an entire
-        // vector
-        Expr tail = innermost_pure_loop_extent + vector_size - rounded_innermost_pure_loop_extent;
-        Expr vector_recompute = (innermost_pure_loop_extent - tail + tail * vector_size) / max(1, innermost_pure_loop_extent);
+        Expr vector_size = schedule_features(n, idx++, w);
+        Expr native_vector_size = schedule_features(n, idx++, w);
+        Expr num_vectors = schedule_features(n, idx++, w);
+        Expr vector_loads_per_vector = schedule_features(n, idx++, w);
+        Expr scalar_loads_per_vector = schedule_features(n, idx++, w);
+        assert(idx == head2_w);
 
         // Account for idle simd lanes
-        vector_recompute *= native_vector_size / max(1, vector_size);
+        Expr vector_recompute = native_vector_size / max(1, vector_size);
 
         // Account for idle cores
         Expr tasks_per_core = (inner_parallelism * outer_parallelism) / max(1, num_cores);
+
         Expr idle_core_wastage = ceil(tasks_per_core) / tasks_per_core;
 
         // Extract a few of them as things that might have a runtime cost per instance
         Expr terms[conv1_channels] = {num_realizations, // cost per allocation
                                       inner_parallelism * num_productions, // cost per thread pool task
+                                      select(inner_parallelism > 1.0f, num_productions, 0), // cost per parallel job launch
                                       points_computed_total * vector_recompute * idle_core_wastage, // cost per point computed
-                                      inlined_calls,  // cost per inlined evaluation of the Func
+                                      inlined_calls * vector_recompute * idle_core_wastage,  // cost per inlined evaluation of the Func
                                       bytes_at_production * num_realizations, // cost per byte stored
-                                      non_unique_bytes_read_per_realization * num_realizations, // cost per byte read
+                                      num_vectors, // cost per vector stored
+                                      scalar_loads_per_vector * num_vectors, // cost per scalar load
+                                      vector_loads_per_vector * num_vectors, // cost per vector load
                                       unique_bytes_read_per_realization * num_realizations, // cost per byte pulled into cache
                                       (bytes_at_realization / max(1, innermost_bytes_at_realization)) * num_realizations, // cost per line read
                                       unique_lines_read_per_realization * num_realizations, // cost per line pulled into cache
-                                      select(inner_parallelism > 1.0f, num_productions, 0), // cost per parallel job launch
                                       working_set * num_realizations, // cost per temporary byte allocated during realization
-                                      0.0f,
-                                      0.0f,
                                       0.0f,
                                       0.0f,
                                       1.0f};
