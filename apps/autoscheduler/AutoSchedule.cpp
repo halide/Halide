@@ -1,3 +1,21 @@
+/*
+    Env vars used (directly or indirectly):
+
+    TODO(someone): document all these
+
+    HL_AUTO_SCHEDULE_TIME_LIMIT
+    HL_BEAM_SIZE
+    HL_CYOS
+    HL_FEATURE_FILE -> output
+    HL_MACHINE_PARAMS
+    HL_PERMIT_FAILED_UNROLL
+    HL_RANDOM_DROPOUT
+    HL_SCHEDULE_FILE
+    HL_SEED
+    HL_USE_MANUAL_COST_MODEL
+    HL_WEIGHTS_DIR
+
+*/
 #include <set>
 #include <queue>
 #include <algorithm>
@@ -3924,6 +3942,16 @@ std::string generate_schedules_new(const std::vector<Function> &outputs,
 
     // Print out the schedule
     optimal->dump();
+
+    string schedule_file = get_env_variable("HL_SCHEDULE_FILE");
+    if (!schedule_file.empty()) {
+        debug(0) << "Writing schedule to " << schedule_file << "...\n";
+        std::ofstream f(schedule_file, std::ios_base::trunc);
+        f << "// --- BEGIN machine-generated schedule\n"
+          << optimal->schedule_source
+          << "// --- END machine-generated schedule\n";
+        f.close();
+    }
 
     // Print out the predicted runtime of each Func, so we can compare them to a profile
     // optimal->print_predicted_runtimes(params);
