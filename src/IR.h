@@ -421,7 +421,10 @@ struct Realize : public StmtNode<Realize> {
 struct Block : public StmtNode<Block> {
     Stmt first, rest;
 
-    static Stmt make(Stmt first, Stmt rest);
+    /** Construct a Block of two Stmt.
+     * If canonicalize is true and first is a Block, it reorders the order
+     * nested block. */
+    static Stmt make(Stmt first, Stmt rest, bool canonicalize = true);
     /** Construct zero or more Blocks to invoke a list of statements in order.
      * This method may not return a Block statement if stmts.size() <= 1. */
     static Stmt make(const std::vector<Stmt> &stmts);

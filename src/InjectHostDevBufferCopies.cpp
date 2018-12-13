@@ -380,7 +380,17 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator2 {
         HasLoops loops;
         op->accept(&loops);
         if (loops.result) {
-            return IRMutator2::visit(op);
+            // Do not use IRMutator2::visit(op) because it canonicalize
+            // block nesting order and can destroy the 'last_use' pattern
+            // we flagged.
+            Stmt first = mutate(op->first);
+            Stmt rest = mutate(op->rest);
+            if (first.same_as(op->first) &&
+                rest.same_as(op->rest)) {
+                return op;
+            }
+            return Block::make(std::move(first), std::move(rest),
+                               /*canonicalize=*/ false);
         } else {
             return do_copies(op);
         }
@@ -504,10 +514,14 @@ class InjectBufferCopies : public IRMutator2 {
         Stmt last_use;
         Stmt free_stmt;
     public:
+        bool success = false;
+
         using IRMutator2::mutate;
 
         Stmt mutate(const Stmt &s) override {
             if (s.same_as(last_use)) {
+                internal_assert(!success);
+                success = false;
                 return Block::make(last_use, free_stmt);
             } else {
                 return IRMutator2::mutate(s);
@@ -551,7 +565,9 @@ class InjectBufferCopies : public IRMutator2 {
             // Make a device_and_host_free stmt
             if (injector.last_use.defined()) {
                 Stmt device_free = call_extern_and_assert("halide_device_and_host_free", {buffer});
-                body = FreeAfterLastUse(injector.last_use, device_free).mutate(body);
+                FreeAfterLastUse free_injecter(injector.last_use, device_free);
+                body = free_injecter.mutate(body);
+                internal_assert(free_injecter.success);
             }
 
             return InjectCombinedAllocation(op->name, op->type, op->extents,
@@ -567,7 +583,9 @@ class InjectBufferCopies : public IRMutator2 {
             // Make a device_free stmt
             if (injector.last_use.defined()) {
                 Stmt device_free = call_extern_and_assert("halide_device_free", {buffer});
-                body = FreeAfterLastUse(injector.last_use, device_free).mutate(body);
+                FreeAfterLastUse free_injecter(injector.last_use, device_free);
+                body = free_injecter.mutate(body);
+                internal_assert(free_injecter.success);
             }
 
             Expr condition = op->condition;
