@@ -11,7 +11,7 @@ HL_USE_MANUAL_COST_MODEL ?= 0
 
 ifeq ($(NEW_AUTOSCHEDULER),1)
 ID = $(HL_TARGET)-new_autoscheduler/pipeline_$(PIPELINE_SEED)_$(PIPELINE_STAGES)/schedule_$(HL_SEED)_$(HL_RANDOM_DROPOUT)_$(HL_BEAM_SIZE)_$(HL_USE_MANUAL_COST_MODEL)
-GEN_GEN_ARGS = -p bin/auto_schedule.so
+GEN_GEN_ARGS = -p bin/libauto_schedule.so
 else
 ID = $(HL_TARGET)-new_autoscheduler/pipeline_$(PIPELINE_SEED)_$(PIPELINE_STAGES)/schedule_$(HL_SEED)_$(HL_RANDOM_DROPOUT)_$(HL_BEAM_SIZE)_$(HL_USE_MANUAL_COST_MODEL)
 GEN_GEN_ARGS =

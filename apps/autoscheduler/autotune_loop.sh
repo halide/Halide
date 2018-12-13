@@ -46,7 +46,7 @@ make_sample() {
         -o ${D} \
         target=${HL_TARGET} \
         auto_schedule=true \
-        -p bin/auto_schedule.so \
+        -p bin/libauto_schedule.so \
             2> ${D}/compile_log.txt
 
     c++ \

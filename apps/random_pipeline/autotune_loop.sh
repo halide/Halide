@@ -12,11 +12,11 @@ GENERATOR=./bin/random_pipeline.generator
 PIPELINE=random_pipeline
 make bin/random_pipeline.generator
 
-# Build some tools we need. 
+# Build some tools we need.
 make -C ../autoscheduler bin/augment_sample
 make -C ../autoscheduler bin/train_cost_model
-make -C ../autoscheduler bin/auto_schedule.so
-cp ../autoscheduler/bin/augment_sample ../autoscheduler/bin/train_cost_model  ../autoscheduler/bin/auto_schedule.so bin/
+make -C ../autoscheduler bin/libauto_schedule.so
+cp ../autoscheduler/bin/augment_sample ../autoscheduler/bin/train_cost_model  ../autoscheduler/bin/libauto_schedule.so bin/
 
 mkdir -p weights
 
@@ -31,13 +31,13 @@ make_sample() {
     rm -f "${D}/sample.sample"
     if [[ $D == */0 ]]; then
         # Sample 0 in each batch is best effort beam search, with no randomness
-        HL_PERMIT_FAILED_UNROLL=1 HL_SEED=${2} HL_FEATURE_FILE=${D}/sample.sample HL_WEIGHTS_DIR=${PWD}/weights HL_RANDOM_DROPOUT=100 HL_BEAM_SIZE=20 ${GENERATOR} -g ${PIPELINE} -o ${D} target=host auto_schedule=true max_stages=8 seed=${3} -p ${PWD}/bin/auto_schedule.so 2> ${D}/compile_log_stderr.txt > ${D}/compile_log_stdout.txt
+        HL_PERMIT_FAILED_UNROLL=1 HL_SEED=${2} HL_FEATURE_FILE=${D}/sample.sample HL_WEIGHTS_DIR=${PWD}/weights HL_RANDOM_DROPOUT=100 HL_BEAM_SIZE=20 ${GENERATOR} -g ${PIPELINE} -o ${D} target=host auto_schedule=true max_stages=8 seed=${3} -p ${PWD}/bin/libauto_schedule.so 2> ${D}/compile_log_stderr.txt > ${D}/compile_log_stdout.txt
     else
         # The other samples are random probes biased by the cost model
-        HL_PERMIT_FAILED_UNROLL=1 HL_SEED=${2} HL_FEATURE_FILE=${D}/sample.sample HL_WEIGHTS_DIR=${PWD}/weights HL_RANDOM_DROPOUT=75 HL_BEAM_SIZE=1 ${GENERATOR} -g ${PIPELINE} -o ${D} target=host auto_schedule=true max_stages=8 seed=${3} -p ${PWD}/bin/auto_schedule.so 2> ${D}/compile_log_stderr.txt > ${D}/compile_log_stdout.txt
+        HL_PERMIT_FAILED_UNROLL=1 HL_SEED=${2} HL_FEATURE_FILE=${D}/sample.sample HL_WEIGHTS_DIR=${PWD}/weights HL_RANDOM_DROPOUT=75 HL_BEAM_SIZE=1 ${GENERATOR} -g ${PIPELINE} -o ${D} target=host auto_schedule=true max_stages=8 seed=${3} -p ${PWD}/bin/libauto_schedule.so 2> ${D}/compile_log_stderr.txt > ${D}/compile_log_stdout.txt
     fi
-    
-    c++ -std=c++11 -DHL_RUNGEN_FILTER_HEADER="\"${D}/${PIPELINE}.h\"" -I ../../include ../../tools/RunGenMain.cpp ../../tools/RunGenStubs.cpp  ${D}/*.a -o ${D}/bench -ljpeg -ldl -lpthread -lz -lpng    
+
+    c++ -std=c++11 -DHL_RUNGEN_FILTER_HEADER="\"${D}/${PIPELINE}.h\"" -I ../../include ../../tools/RunGenMain.cpp ../../tools/RunGenStubs.cpp  ${D}/*.a -o ${D}/bench -ljpeg -ldl -lpthread -lz -lpng
 }
 
 # Benchmark one of the random samples
@@ -64,19 +64,19 @@ for ((i=$((FIRST+1));i<1000000;i++)); do
     done
 
     for ((b=0;b<${BATCH_SIZE};b++)); do
-        echo Compiling sample $b 
+        echo Compiling sample $b
         wait ${pids[${b}]}
     done
-    
+
     # benchmark them serially using rungen
     for ((b=0;b<${BATCH_SIZE};b++)); do
         echo Benchmarking sample $b
         S=$(printf "%d%02d" $i $b)
         benchmark_sample "${DIR}/${b}" $S $i
     done
-    
+
     # retrain model weights on all samples seen so far
     echo Retraining model...
     find samples | grep sample$ | HL_NUM_THREADS=32 HL_WEIGHTS_DIR=weights ./bin/train_cost_model 100
-    
+
 done
