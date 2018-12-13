@@ -1902,54 +1902,64 @@ HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<int64_t>() {
 
 #include <type_traits>
 
-// pointer types.
+namespace halide_type_of_helpers {
+
 template<typename T>
-HALIDE_ALWAYS_INLINE
-typename std::enable_if<std::is_pointer<T>::value, halide_type_t>::type
-halide_type_of() {
-    return halide_type_t(halide_type_handle, 64);
+struct halide_type_of_impl {
+
+    // pointer types.
+    template<typename T2 = T,
+             typename std::enable_if<std::is_pointer<T2>::value>::type * = nullptr>
+    HALIDE_ALWAYS_INLINE static halide_type_t get_type() {
+        return halide_type_t(halide_type_handle, 64);
+    }
+
+    // floating point types.
+    template<typename T2 = T,
+             typename std::enable_if<
+                std::is_floating_point<T2>::value
+             >::type * = nullptr>
+    HALIDE_ALWAYS_INLINE static halide_type_t get_type() {
+        constexpr int BITS = sizeof(T2) * 8;
+        static_assert(BITS == 32 || BITS == 64, "Unsupported size for halide_type_float");
+        return halide_type_t(halide_type_float, BITS);
+    }
+
+    // signed integer types.
+    template<typename T2 = T,
+             typename std::enable_if<std::is_integral<T2>::value && std::is_signed<T2>::value && !std::is_same<T2, bool>::value>::type * = nullptr>
+    HALIDE_ALWAYS_INLINE static halide_type_t get_type() {
+        constexpr int BITS = sizeof(T2) * 8;
+        static_assert(BITS == 8 || BITS == 16 || BITS == 32 || BITS == 64, "Unsupported size for halide_type_float");
+        return halide_type_t(halide_type_int, BITS);
+    }
+
+    // unsigned integer types.
+    template<typename T2 = T,
+             typename std::enable_if<std::is_integral<T2>::value && !std::is_signed<T2>::value && !std::is_same<T2, bool>::value>::type * = nullptr>
+    HALIDE_ALWAYS_INLINE static halide_type_t get_type() {
+        constexpr int BITS = sizeof(T2) * 8;
+        static_assert(BITS == 8 || BITS == 16 || BITS == 32 || BITS == 64, "Unsupported size for halide_type_float");
+        return halide_type_t(halide_type_uint, BITS);
+    }
+
+    // bool, which is special-cased.
+    template<typename T2 = T,
+             typename std::enable_if<std::is_same<T2, bool>::value>::type * = nullptr>
+    HALIDE_ALWAYS_INLINE static halide_type_t get_type() {
+        return halide_type_t(halide_type_uint, 1);
+    }
+};
+
+}  // namespace halide_type_of_helpers
+
+template<typename T>
+HALIDE_ALWAYS_INLINE halide_type_t halide_type_of() {
+    return halide_type_of_helpers::halide_type_of_impl<T>::get_type();
 }
 
-// floating point types.
-template<typename T>
-HALIDE_ALWAYS_INLINE
-typename std::enable_if<std::is_floating_point<T>::value, halide_type_t>::type
-halide_type_of() {
-    constexpr int BITS = sizeof(T) * 8;
-    static_assert(BITS == 32 || BITS == 64, "Unsupported size for halide_type_float");
-    return halide_type_t(halide_type_float, BITS);
-}
+#endif  // not COMPILING_HALIDE_RUNTIME
 
-// signed integer types.
-template<typename T>
-HALIDE_ALWAYS_INLINE
-typename std::enable_if<std::is_integral<T>::value && std::is_signed<T>::value && !std::is_same<T, bool>::value, halide_type_t>::type
-halide_type_of() {
-    constexpr int BITS = sizeof(T) * 8;
-    static_assert(BITS == 8 || BITS == 16 || BITS == 32 || BITS == 64, "Unsupported size for halide_type_int");
-    return halide_type_t(halide_type_int, BITS);
-}
-
-// unsigned integer types.
-template<typename T>
-HALIDE_ALWAYS_INLINE
-typename std::enable_if<std::is_integral<T>::value && !std::is_signed<T>::value && !std::is_same<T, bool>::value, halide_type_t>::type
-halide_type_of() {
-    constexpr int BITS = sizeof(T) * 8;
-    static_assert(BITS == 8 || BITS == 16 || BITS == 32 || BITS == 64, "Unsupported size for halide_type_uint");
-    return halide_type_t(halide_type_uint, BITS);
-}
-
-// bool, which is special-cased.
-template<typename T>
-HALIDE_ALWAYS_INLINE
-typename std::enable_if<std::is_same<T, bool>::value, halide_type_t>::type
-halide_type_of() {
-    return halide_type_t(halide_type_uint, 1);
-}
-
-#endif // not COMPILING_HALIDE_RUNTIME
-
-#endif  // __cplusplus
+#endif
 
 #endif // HALIDE_HALIDERUNTIME_H
