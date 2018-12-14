@@ -939,8 +939,7 @@ struct FunctionDAG {
                     }
                 }
 
-                node.is_input = node.func.is_wrapper() && !any_incoming_edges;
-
+                node.is_input = !node.func.has_update_definition() && node.func.is_wrapper() && !any_incoming_edges;
             }
         }
 
@@ -1368,7 +1367,7 @@ vector<vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, int fa
                     if (is_one && outer == 1) continue;
                     if (is_full && outer == s[d]) continue;
                     // Stop when we get into the regime covered by the loop above.
-                    if (inner < max_inner * 2) break;
+                    if (outer > 1 && inner < max_inner * 2) break;
                     // Or when the wasted compute gets too bad.
                     if (inner * outer * 7 > s[d] * 8) break;
                     t.back() = outer;
@@ -1737,6 +1736,10 @@ public:
             } while (iter != end && iter->first == nullptr);
         }
 
+        void operator++() {
+            (*this)++;
+        }
+
         const K *key() const {
             return iter->first;
         }
@@ -1752,6 +1755,10 @@ public:
         bool operator==(const iterator &other) const {
             return iter == other.iter;
         }
+
+        pair<const K *, T> &operator*() {
+            return *iter;
+        }
     };
 
     struct const_iterator {
@@ -1761,6 +1768,10 @@ public:
             do {
                 iter++;
             } while (iter != end && iter->first == nullptr);
+        }
+
+        void operator++() {
+            (*this)++;
         }
 
         const K *key() const {
@@ -1777,6 +1788,10 @@ public:
 
         bool operator==(const const_iterator &other) const {
             return iter == other.iter;
+        }
+
+        const pair<const K *, T> &operator*() const {
+            return *iter;
         }
     };
 
@@ -1952,6 +1967,7 @@ struct LoopNest {
 
     struct Sites {
         const LoopNest *compute = nullptr, *store = nullptr, *produce = nullptr, *innermost = nullptr;
+        bool inlined = false;
     };
 
     void get_sites(NodeMap<Sites> &sites,
@@ -1966,6 +1982,9 @@ struct LoopNest {
         }
         for (auto f : store_at) {
             sites.get_or_create(f).store = this;
+        }
+        for (auto it = inlined.begin(); it != inlined.end(); it++) {
+            sites.get_or_create(it.key()).inlined = true;
         }
         if (innermost) {
             sites.get_or_create(node).innermost = this;
@@ -1986,10 +2005,16 @@ struct LoopNest {
         int64_t loop_instances = 1, parallel_loop_instances = 1;
         size_t idx = 0;
         bool in_impure = false;
-        for (auto i : size) {
+        for (int idx = (int)size.size() - 1; idx >= 0; idx--) {
+            size_t i = size[idx];
             loop_instances *= i;
-            if (stage->loop[idx++].pure && !in_impure) {
-                parallel_loop_instances *= i;
+            if (stage->loop[idx].pure && !in_impure) {
+                // This mirrors the logic used to lower parallel loops below
+                if (parallel_loop_instances <= params.parallelism * 8 &&
+                    (parallel_loop_instances < params.parallelism ||
+                     parallel_loop_instances * i <= params.parallelism * 32)) {
+                    parallel_loop_instances *= i;
+                }
             } else {
                 in_impure = true;
             }
@@ -2002,6 +2027,7 @@ struct LoopNest {
 
             for (size_t s = 0; s < node->stages.size(); s++) {
                 // TODO: Lift invariants from this loop. Most of it's the same for every stage.
+                internal_assert(!node->is_input);
                 ScheduleFeatures &feat = features->get_or_create(&(node->stages[s]));
 
                 feat.num_realizations = subinstances;
@@ -2091,12 +2117,23 @@ struct LoopNest {
         int64_t subparallelism = parallel_tasks * parallelism;
 
         // Figure out the features at the compute_at level
+        internal_assert(!stage->node->is_input);
         ScheduleFeatures &feat = features->get_or_create(stage);
 
-        if (!innermost) {
+        if (innermost) {
+            if (vectorized_loop_index >= 0 && vectorized_loop_index < size.size()) {
+                feat.vector_size = size[vectorized_loop_index];
+            } else {
+                feat.vector_size = 1;
+            }
+        } else {
             // These will get progressively overwritten as we visit the children
             feat.innermost_loop_extent = size.empty() ? 1 : size[0];
-            feat.innermost_pure_loop_extent = size.empty() ? 1 : size[vectorized_loop_index];
+            if (vectorized_loop_index >= 0 && vectorized_loop_index < size.size()) {
+                feat.innermost_pure_loop_extent = size[vectorized_loop_index];
+            } else {
+                feat.innermost_pure_loop_extent = 1;
+            }
         }
 
         const bool at_production = parent->node != node;
@@ -2106,7 +2143,6 @@ struct LoopNest {
             feat.num_productions = instances;
             feat.inner_parallelism = parallel_tasks;
             feat.outer_parallelism = parallelism;
-            feat.vector_size = stage->vector_size;
             feat.native_vector_size = stage->vector_size;
 
             const auto &bounds = parent->get_bounds(node);
@@ -2142,7 +2178,8 @@ struct LoopNest {
         if (innermost || at_production) {
             // Pick the site at which we will compute the footprint relationship
             const auto *consumer_store_site = innermost ? parent : sites.get(node).store;
-            int consumer_instances = innermost ? instances : feat.num_realizations;
+            int64_t consumer_instances = innermost ? instances : feat.num_realizations;
+            internal_assert(consumer_instances != 0);
 
             vector<const FunctionDAG::Node *> pending;
             pending.push_back(node);
@@ -2156,16 +2193,18 @@ struct LoopNest {
                     }
 
                     if (!sites.contains(e->producer)) {
-                        // Producer was inlined, recursively examine
-                        // its inputs. This also triggers for
-                        // unscheduled Funcs, and harmlessly
-                        // recursively walks all the way back to the
-                        // inputs. TODO: cut this off to reduce compile times.
-                        pending.push_back(e->producer);
+                        // Not yet scheduled. Optimistically treat it as free.
                         continue;
                     }
 
                     const auto &site = sites.get(e->producer);
+
+                    if (site.inlined) {
+                        // Recursively examine the inputs
+                        pending.push_back(e->producer);
+                        continue;
+                    }
+
                     const auto *producer_compute_site = site.compute;
                     const auto *producer_store_site = site.store;
                     const auto &bounds = consumer_store_site->get_bounds(e->producer);
@@ -2181,10 +2220,19 @@ struct LoopNest {
 
                     bool dense_vector_loads = true;
 
+                    if (e->producer->is_input) {
+                        internal_assert(producer_store_site->is_root());
+                        internal_assert(producer_compute_site->is_root());
+                    }
+
                     for (int i = 0; i < e->producer->func.dimensions(); i++) {
                         auto p = bounds->region_required(i);
                         auto compute_p = producer_compute_bounds->region_computed(i);
                         auto store_p = producer_store_bounds->region_required(i);
+
+                        internal_assert(store_p.first <= store_p.second);
+                        internal_assert(compute_p.first <= compute_p.second);
+
                         int64_t extent = p.second - p.first + 1;
                         int64_t compute_extent = compute_p.second - compute_p.first + 1;
                         int64_t store_extent = store_p.second - store_p.first + 1;
@@ -2192,7 +2240,7 @@ struct LoopNest {
                         compute_footprint *= compute_extent;
                         store_footprint *= store_extent;
 
-                        bool dense = (i == site.produce->vector_dim);
+                        bool dense = i == (e->producer->is_input ? 0 : site.produce->vector_dim);
 
                         if (dense) {
                             dense_vector_loads = extent >= feat.vector_size;
@@ -2217,13 +2265,16 @@ struct LoopNest {
                     }
 
                     int64_t store_instances_per_consumption = 1;
-                    const auto &producer_feat = features->get_or_create(&(e->producer->stages[0]));
 
-                    if (producer_feat.num_realizations) {
-                        // The producer's realization is nested inside this Func's realization
-                        const int64_t producer_store_instances = producer_feat.num_realizations;
-                        if (producer_store_instances > consumer_instances) {
-                            store_instances_per_consumption = producer_store_instances / consumer_instances;
+                    if (!e->producer->is_input) {
+                        const auto &producer_feat = features->get_or_create(&(e->producer->stages[0]));
+
+                        if (producer_feat.num_realizations) {
+                            // The producer's realization is nested inside this Func's realization
+                            const int64_t producer_store_instances = producer_feat.num_realizations;
+                            if (producer_store_instances > consumer_instances) {
+                                store_instances_per_consumption = producer_store_instances / consumer_instances;
+                            }
                         }
                     }
 
@@ -2231,9 +2282,9 @@ struct LoopNest {
 
                     if (store_instances_per_consumption > 1) {
                         // The producer is nested inside the consumer
-                        bytes_loaded += store_footprint * store_instances_per_consumption;
+                        bytes_loaded += store_footprint; // * store_instances_per_consumption;
                         // Due to folding, the actual buffer size is smaller than the bounds at the store level
-                        lines_loaded += store_line_footprint * store_instances_per_consumption;
+                        lines_loaded += store_line_footprint; // * store_instances_per_consumption;
                     } else {
                         // The consumer is consuming some portion of a larger producer computed earlier
                         bytes_loaded += footprint;
@@ -2301,7 +2352,7 @@ struct LoopNest {
     }
 
     const Bound &get_bounds(const FunctionDAG::Node *f) const {
-        // debug(0) << "get_bounds of " << f.name() << " in loop over " << (is_root() ? "root" : func.name()) << '\n';
+        // debug(0) << "get_bounds of " << f->func.name() << " in loop over " << (is_root() ? "root" : node->func.name()) << '\n';
         if (bounds.contains(f)) {
             const Bound &b = bounds.get(f);
             // debug(0) << "Getting bounds of " << f->func.name() << " at site:\n";
@@ -2331,8 +2382,8 @@ struct LoopNest {
                 if (!computes(e->consumer)) {
                     continue;
                 }
-                const auto &c_bounds = get_bounds(e->consumer);
                 // debug(0) << "Expanding footprint along edge " << e->producer->func.name() << " -> " << e->consumer->func.name() << "\n";
+                const auto &c_bounds = get_bounds(e->consumer);
                 const auto *consumer_loop = &(c_bounds->loops(e->consumer_stage, 0)); // For the concrete sizes of the loop
                 e->expand_footprint(consumer_loop, &(bound->region_required(0)));
             }
@@ -2360,7 +2411,7 @@ struct LoopNest {
                 debug(0) << 'v';
             }
         }
-        debug(0) << " (" << vectorized_loop_index << ")";
+        debug(0) << " (" << vectorized_loop_index << ", " << vector_dim << ")";
         if (tileable) {
             debug(0) << " t";
         }
@@ -2478,7 +2529,7 @@ struct LoopNest {
         }
     }
 
-    void compute_here(const FunctionDAG::Node *f, bool tileable, int vector_dim) {
+    void compute_here(const FunctionDAG::Node *f, bool tileable, int v) {
         const auto &bounds = get_bounds(f);
 
         for (int s = (int)f->stages.size() - 1; s >= 0; s--) {
@@ -2497,8 +2548,8 @@ struct LoopNest {
             size_t loop_dim = f->stages[s].loop.size();
             node->size.resize(loop_dim);
 
-            bool single_vector = true;
             int64_t total_extent = 1;
+            int64_t vector_size = 1;
             for (size_t i = 0; i < loop_dim; i++) {
                 const auto &l = bounds->loops(s, i);
                 // Initialize the loop nest
@@ -2509,18 +2560,17 @@ struct LoopNest {
                 // to be the first loop iteration.
                 single_point->loops(s, i) = {l.first, l.first};
 
-                if (f->stages[s].loop[i].var == f->func.args()[vector_dim]) {
+                if (node->size[i] > 1 && f->stages[s].loop[i].var == f->func.args()[v]) {
                     node->vectorized_loop_index = (int)i;
-                    int sz = node->stage->vector_size;
-                    single_point->loops(s, i).second += sz - 1;
-                    node->size[i] += sz - 1;
-                    node->size[i] /= sz;
+                    vector_size = std::min(node->size[i], (int64_t)(node->stage->vector_size));
+                    single_point->loops(s, i).second += vector_size - 1;
+                    node->size[i] += vector_size - 1;
+                    node->size[i] /= vector_size;
                 }
-                single_vector &= (node->size[i] == 1);
             }
             // Leave region required blank inside the computation of a Func
             node->set_bounds(f, std::move(single_point));
-            node->vector_dim = vector_dim;
+            node->vector_dim = v;
 
             if (node->vectorized_loop_index >= 0) {
                 // Split off the single vector as an inner loop nest.
@@ -2532,27 +2582,18 @@ struct LoopNest {
                 one_vector->stage_idx = node->stage_idx;
                 one_vector->tileable  = false;
                 one_vector->vectorized_loop_index = node->vectorized_loop_index;
-                one_vector->vector_dim = vector_dim;
+                one_vector->vector_dim = v;
                 one_vector->size.resize(loop_dim, 1);
                 one_vector->innermost = true;
                 auto b = node->get_bounds(f)->make_copy();
                 // Set the region computed inside this node to be the first vector lane
                 b->loops(s, node->vectorized_loop_index).second = b->loops(s, node->vectorized_loop_index).first;
                 one_vector->set_bounds(f, b);
-                one_vector->size[node->vectorized_loop_index] = node->stage->vector_size;
+                one_vector->size[node->vectorized_loop_index] = vector_size;
 
-                if (single_vector) {
-                    children.emplace_back(one_vector);
-                } else {
-                    node->children.emplace_back(one_vector);
-                }
+                node->children.emplace_back(one_vector);
             }
-
-            if (single_vector) {
-                delete node;
-            } else {
-                children.emplace_back(node);
-            }
+            children.emplace_back(node);
         }
     }
 
@@ -2560,7 +2601,7 @@ struct LoopNest {
     vector<IntrusivePtr<const LoopNest>> compute_in_tiles(const FunctionDAG::Node *f,
                                                           const LoopNest *parent,
                                                           const MachineParams &params,
-                                                          int vector_dim,
+                                                          int v,
                                                           bool in_realization) const {
         internal_assert(f);
 
@@ -2589,7 +2630,7 @@ struct LoopNest {
             // Place the computation inside this loop
             std::unique_ptr<LoopNest> r{new LoopNest};
             r->copy_from(*this);
-            r->compute_here(f, true, vector_dim);
+            r->compute_here(f, true, v);
             if (!in_realization) {
                 r->store_at.insert(f);
             } else {
@@ -2598,7 +2639,7 @@ struct LoopNest {
             result.emplace_back(r.release());
         }
 
-        if (f->is_output || f->is_input) {
+        if (f->is_output) {
             // Not permitted to compute at tiles of some consumer
             return result;
         }
@@ -2697,8 +2738,8 @@ struct LoopNest {
                     // don't have to worry about the constraints this
                     // places on parallelism, as we forced all the
                     // parallelism to the outer loop.
-                    auto v = inner->compute_in_tiles(f, outer, params, vector_dim, true);
-                    for (IntrusivePtr<const LoopNest> &n : v) {
+                    auto opts = inner->compute_in_tiles(f, outer, params, v, true);
+                    for (IntrusivePtr<const LoopNest> &n : opts) {
                         LoopNest *store_at_outer_compute_further_in = new LoopNest;
                         store_at_outer_compute_further_in->copy_from(*outer);
                         store_at_outer_compute_further_in->children.emplace_back(std::move(n));
@@ -2708,7 +2749,7 @@ struct LoopNest {
 
                 // Site the computation inside the outer loop
                 outer->children.emplace_back(inner);
-                outer->compute_here(f, true, vector_dim);
+                outer->compute_here(f, true, v);
                 outer->tileable &= !in_realization;
                 result.emplace_back(outer);
             }
@@ -2731,8 +2772,8 @@ struct LoopNest {
                     // level, so this would constrain parallelism.
                     continue;
                 }
-                auto v = children[child]->compute_in_tiles(f, this, params, vector_dim, store_here);
-                for (IntrusivePtr<const LoopNest> &n : v) {
+                auto opts = children[child]->compute_in_tiles(f, this, params, v, store_here);
+                for (IntrusivePtr<const LoopNest> &n : opts) {
                     // (Only valid if one child calls f) Push the
                     // computation into the child. Possibly leaving
                     // the storage out here.
@@ -2766,7 +2807,7 @@ struct LoopNest {
     };
 
     void apply(LoopLevel here,
-               map<const FunctionDAG::Node::Stage *, StageScheduleState> &state_map,
+               StageMap<StageScheduleState> &state_map,
                double num_cores,
                int depth,
                const LoopNest *parent,
@@ -2776,7 +2817,7 @@ struct LoopNest {
                 Func(c->node->func).compute_root();
                 c->apply(LoopLevel::root(), state_map, num_cores, 1, this, c.get());
                 if (c->stage_idx == 0) {
-                    auto &state = state_map[c->stage];
+                    auto &state = state_map.get(c->stage);
                     state.schedule_source << "\n    .compute_root()";
                     // TODO: Omitting logic for printing store_root() assumes everything store_root is also compute root
                 }
@@ -2786,10 +2827,9 @@ struct LoopNest {
                 compute_site = this;
             }
 
-            auto it = state_map.find(stage);
             const auto &symbolic_loop = stage->loop;
             const auto &parent_bounds = parent->get_bounds(node);
-            if (it == state_map.end()) {
+            if (!state_map.contains(stage)) {
                 StageScheduleState state;
                 state.num_cores = num_cores;
                 state.vector_dim = vector_dim;
@@ -2809,7 +2849,7 @@ struct LoopNest {
                 }
                 state_map.emplace(stage, std::move(state));
             }
-            auto &state = state_map[stage];
+            auto &state = state_map.get(stage);
 
             // The getter for grabbing Func handles is reverse topological order
             Stage s = Func(node->func);
@@ -2856,9 +2896,12 @@ struct LoopNest {
             if (!size.empty()) {
                 if (innermost) {
                     if (vectorized_loop_index >= 0) {
+                        auto &v = state.vars[vectorized_loop_index];
+                        internal_assert(v.exists);
+                        // Is the result of a split
                         state.schedule_source
-                            << "\n    .vectorize(" << state.vars[vectorized_loop_index].var.name() << ")";
-                        s.vectorize(state.vars[vectorized_loop_index].var);
+                            << "\n    .vectorize(" << v.var.name() << ")";
+                        s.vectorize(v.var);
                     }
                 } else {
                     // This is not the innermost loop. Go find the next inner loop.
@@ -2886,10 +2929,10 @@ struct LoopNest {
                             factor = child->size[i];
                         }
 
-                        if (!parent.exists || parent.extent == 1 || factor == 1) {
+                        if (!parent.exists || factor == 1) {
                             v.exists = false;
                             v.extent = 1;
-                        } else if (size[i] == 1) {
+                        } else if (size[i] == 1 && !(child && child->innermost && i == vectorized_loop_index)) {
                             // Not split in this dimension
                             v = parent;
                             v.parallel = false;
@@ -2996,7 +3039,7 @@ struct LoopNest {
                 }
                 c->apply(here, state_map, num_cores, depth + 1, this, compute_site);
                 if (c->node != node && c->stage_idx == 0) {
-                    auto &state = state_map[c->stage];
+                    auto &state = state_map.get(c->stage);
                     state.schedule_source << "\n    .compute" << loop_level;
                 }
             }
@@ -3009,7 +3052,7 @@ struct LoopNest {
                     }
                 }
                 if (!computed_here) {
-                    auto &state = state_map[&(f->stages[0])];
+                    auto &state = state_map.get(&(f->stages[0]));
                     state.schedule_source << "\n    .store" << loop_level;
                 }
             }
@@ -3051,6 +3094,17 @@ struct State {
         features->make_large(dag.nodes[0].stages[0].max_id);
         internal_assert(root.defined());
         root->get_sites(sites);
+
+        // For the input nodes, the compute and store sites are root,
+        // and the produce and innermost sites are unset (nullptr)
+        for (const auto &n : dag.nodes) {
+            if (n.is_input) {
+                auto &s = sites.get_or_create(&n);
+                s.compute = root.get();
+                s.store = root.get();
+            }
+        }
+
         root->compute_features(params, sites, 1, 1, nullptr, *root, nullptr, features);
     }
 
@@ -3060,6 +3114,7 @@ struct State {
 
         std::ofstream binfile(feature_file, std::ios::binary | std::ios_base::trunc);
         for (const auto &n : dag.nodes) {
+            if (n.is_input) continue;
             for (size_t stage_idx = n.stages.size(); stage_idx > 0; stage_idx--) {
                 const auto &s = n.stages[stage_idx - 1];
                 const size_t num_schedule_features = sizeof(ScheduleFeatures) / sizeof(int64_t);
@@ -3134,9 +3189,10 @@ struct State {
             int stage = 0;
             // load schedule features into input buffer
             for (const auto &n : dag.nodes) {
+                if (n.is_input) continue; // Inputs are computed outside of the pipeline and don't count.
                 if (stage >= num_stages) break;
                 for (auto it = n.stages.rbegin(); it != n.stages.rend(); it++) {
-                    internal_assert(features.contains(&*it));
+                    internal_assert(features.contains(&*it)) << n.func.name() << "\n";
                     const auto &feat = features.get(&*it);
                     const int64_t *sched_stats = (const int64_t *)(&feat);
                     for (int i = 0; i < schedule_feat_size; i++) {
@@ -3237,8 +3293,8 @@ struct State {
                     cold_cache_misses *= feat.num_realizations;
                     //int64_t footprint = std::min(feat.allocation_bytes_read_per_realization, feat.bytes_read_per_realization);
                     int64_t footprint = feat.allocation_bytes_read_per_realization;
-                    //cost_of_miss = std::sqrt(footprint) * params.balance * 5e-3;
-                    cost_of_cold_miss = footprint * params.balance * 1e-6;
+                    //cost_of_miss = std::sqrt(footprint) * 40 * 5e-3;
+                    cost_of_cold_miss = footprint * 40 * 1e-4;
 
                     // Now estimate the number of capacity-related cache misses using the total number of bytes read.
 
@@ -3253,7 +3309,7 @@ struct State {
                     // level that fits the entire source allocation,
                     // not just the footprint accessed of it.
                     capacity_cache_misses = feat.num_vectors * (feat.vector_loads_per_vector + feat.scalar_loads_per_vector) * 1e-2;
-                    cost_of_capacity_miss = feat.unique_bytes_read_per_realization * params.balance * 1e-6;
+                    cost_of_capacity_miss = feat.unique_bytes_read_per_realization * 40 * 1e-4;
 
                     // We'll assume multiway caches work well and ignore the other 'C' (conflict cache misses).
                 }
@@ -3266,8 +3322,8 @@ struct State {
                     int64_t lines_written_per_realization = feat.bytes_at_realization / feat.innermost_bytes_at_realization;
                     cache_misses = 1e1 * lines_written_per_realization + feat.bytes_at_realization * 1e-2;
                     cache_misses *= feat.num_realizations;
-                    //cost_of_miss = std::sqrt(feat.bytes_at_production) * params.balance * 5e-3;
-                    cost_of_miss = feat.bytes_at_production * params.balance * 2e-6;
+                    //cost_of_miss = std::sqrt(feat.bytes_at_production) * 40 * 5e-3;
+                    cost_of_miss = feat.bytes_at_production * 40 * 2e-6;
                 }
 
                 double memory_store_cost = cache_misses * cost_of_miss;
@@ -3282,7 +3338,7 @@ struct State {
 
                 // Penalize working sets that start to fall out of cache
                 double ws = 1e-6 * feat.working_set;
-                double cost_of_working_set = ws * ws * ws * params.balance * feat.num_realizations;
+                double cost_of_working_set = ws * ws * ws * 40 * feat.num_realizations;
 
                 if (verbose) {
                     debug(0) << "Cost model for " << stage.stage.name() << " "
@@ -3327,6 +3383,17 @@ struct State {
                 << ", which is one of the consumers of " << node->func.name();
         }
 
+        if (node->is_input) {
+            // We don't need to schedule nodes that represent inputs,
+            // and there are no other decisions to be made about them
+            // at this time.
+            // debug(0) << "Skipping over scheduling input node: " << node->func.name() << "\n";
+            auto child = make_child();
+            child->num_funcs_scheduled++;
+            accept_child(std::move(child));
+            return;
+        }
+
         if (!node->outgoing_edges.empty() && !root->calls(node)) {
             debug(0) << "In state:\n";
             dump();
@@ -3344,7 +3411,7 @@ struct State {
         int num_children = 0;
         {
             // 1) Inline it
-            if (node->stages.size() == 1 && !node->is_output && !node->is_input) {
+            if (node->stages.size() == 1 && !node->is_output) {
                 auto child = make_child();
                 LoopNest *new_root = new LoopNest;
                 new_root->copy_from(*root);
@@ -3367,7 +3434,8 @@ struct State {
         for (int vector_dim = 0; vector_dim < node->func.dimensions(); vector_dim++) {
             // Outputs must be vectorized over their innermost
             // dimension, because we don't have control of the
-            // storage.
+            // storage. TODO: Go inspect to see which dimension has a
+            // stride==1 constraint instead of assuming 0.
             if (vector_dim > 0 && (node->is_output || node->is_input)) break;
 
             // TODO: Pre-prune the list of sane dimensions to
@@ -3403,7 +3471,7 @@ struct State {
     string schedule_source;
 
     void apply_schedule(const FunctionDAG &dag, const MachineParams &params) {
-        map<const FunctionDAG::Node::Stage *, LoopNest::StageScheduleState> state_map;
+        StageMap<LoopNest::StageScheduleState> state_map;
         root->apply(LoopLevel::root(), state_map, params.parallelism, 0, nullptr, nullptr);
 
         std::ostringstream src;
@@ -3464,19 +3532,18 @@ struct State {
             // parallelize.
             vector<VarOrRVar> vars;
             int64_t parallel_tasks = 1;
+            vector<VarOrRVar> parallel_vars;
             for (auto it = p.second.vars.rbegin(); it != p.second.vars.rend(); it++) {
                 if (!it->exists) continue;
                 if (!it->parallel) break;
-                if (parallel_tasks > params.parallelism && parallel_tasks * it->extent > params.parallelism * 128) {
+                if (parallel_tasks >= params.parallelism && parallel_tasks * it->extent > params.parallelism * 32) {
                     // Probably should stop at this point. TODO:
                     // replace with actually searching for what
                     // parallel tiles to use in the search.
                     break;
                 }
                 parallel_tasks *= it->extent;
-                p.second.schedule_source << "\n    .parallel(" << it->var.name() << ")";
-                stage.parallel(it->var);
-                // Stop at a sufficient number of tasks (TODO: Make this a tiling level in the search space instead).
+                parallel_vars.push_back(it->var);
                 if (parallel_tasks > params.parallelism * 8) break;
             }
 
@@ -3495,6 +3562,19 @@ struct State {
                 }
                 p.second.schedule_source << ")";
                 stage.reorder(vars);
+            }
+
+            for (size_t i = 1; i < parallel_vars.size(); i++) {
+                // Outermost, and next outermost. Preserve the inner
+                // name to not invalidate any compute_ats.
+                p.second.schedule_source << "\n    .fuse(" << parallel_vars[i].name()
+                                         << ", " << parallel_vars[i-1].name()
+                                         << ", " << parallel_vars[i].name() << ")";
+                stage.fuse(parallel_vars[i], parallel_vars[i-1], parallel_vars[i]);
+            }
+            if (!parallel_vars.empty()) {
+                p.second.schedule_source << "\n    .parallel(" << parallel_vars.back().name() << ")";
+                stage.parallel(parallel_vars.back());
             }
 
             // Reorder the vector dimension innermost
@@ -3820,6 +3900,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
             for (int choice_label = (int)q.size() - 1; choice_label >= 0; choice_label--) {
                 auto state = q[choice_label];
                 debug(0) << "\n[" << choice_label << "]:\n";
+                state->calculate_cost(dag, params, throughput_predictor, true);
                 state->dump();
             }
 

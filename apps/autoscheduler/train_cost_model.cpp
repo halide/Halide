@@ -253,6 +253,7 @@ int main(int argc, char **argv) {
                     }
 
                     float loss = tp.backprop(runtimes, learning_rate);
+                    assert(!std::isnan(loss));
                     loss_sum[model] += loss;
                     loss_sum_counter[model] ++;
 
@@ -295,7 +296,7 @@ int main(int argc, char **argv) {
 
             std::cout << "RMS errors: ";
             for (int model = 0; model < models; model++) {
-                std::cout << loss_sum[model] / loss_sum_counter[model] << " ";
+                std::cout << loss_sum[model] / loss_sum_counter[model] << " " << loss_sum_counter[model] << " " ;
             }
             std::cout << "\nCorrect ordering rate: ";
             int best_model = 0;

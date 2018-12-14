@@ -76,7 +76,7 @@ int main(int argc, char **argv) {
     }
 
     // A stencil chain
-    if (1) {
+    if (0) {
         const int N = 8;
         Func f[N];
         f[0](x, y) = (x + y) * (x + 2*y) * (x + 3*y);
@@ -125,7 +125,7 @@ int main(int argc, char **argv) {
     }
 
     // A Func with multiple stages, some of which include additional loops
-    if (1) {
+    if (0) {
         Buffer<float> a(1024, 1024);
         Func f("multiple_stages"), g("g"), h("h");
         Var x, y;
@@ -303,6 +303,64 @@ int main(int argc, char **argv) {
         b.estimate(x, 0, 1000).estimate(y, 0, 1000);
 
         Pipeline({a, b}).auto_schedule(target, params);
+
+    }
+
+    if (0) {
+        // Boring memcpy
+        ImageParam im(Float(32), 2);
+        Func f("f"), g("g");
+        f(x, y) = im(x, y);
+        g(x, y) = f(x, y);
+
+        g.estimate(x, 0, 1000).estimate(y, 0, 1000);
+        Pipeline(g).auto_schedule(target, params);
+    }
+
+    if (0) {
+        // A load from a tiny input image
+        ImageParam im(Float(32), 2);
+        Func f("f");
+        f(x, y) = im(x, y) * 7;
+
+        f.estimate(x, 0, 3).estimate(y, 0, 5);
+        Pipeline(f).auto_schedule(target, params);
+    }
+
+    if (0) {
+        // Lots of dimensions
+        ImageParam im(Float(32), 7);
+        Func f("f");
+        Var z, w, t, u, v;
+        f(x, y, z, w, t, u, v) = im(x, y, z, w, t, u, v) * 7;
+
+        f.estimate(x, 0, 8)
+            .estimate(y, 0, 9)
+            .estimate(z, 0, 10)
+            .estimate(w, 0, 5)
+            .estimate(t, 0, 3)
+            .estimate(u, 0, 2)
+            .estimate(v, 0, 6);
+        Pipeline(f).auto_schedule(target, params);
+    }
+
+    if (1) {
+        // Long transpose chain.
+        ImageParam im(Float(32), 2);
+        Func f("f"), g("g"), h("h");
+
+        f(x, y) = im(clamp(y*x, 0, 999), x);
+        g(x, y) = f(clamp(y*x, 0, 999), x);
+        h(x, y) = g(clamp(y*x, 0, 999), x);
+
+        // Force everything to be compute root by accessing them in two separate outputs
+        Func out1("out1"), out2("out2");
+        out1(x, y) = f(x, y) + g(x, y) + h(x, y);
+        out2(x, y) = f(x, y) + g(x, y) + h(x, y);
+
+        out1.estimate(x, 0, 1000).estimate(y, 0, 1000);
+        out2.estimate(x, 0, 1000).estimate(y, 0, 1000);
+        Pipeline({out1, out2}).auto_schedule(target, params);
 
     }
 

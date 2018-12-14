@@ -232,20 +232,22 @@ public:
         // Account for idle cores
         Expr tasks_per_core = (inner_parallelism * outer_parallelism) / max(1, num_cores);
 
+        // tasks_per_core = max(1, tasks_per_core); // Avoid NaNs on corrupted input data
+
         Expr idle_core_wastage = ceil(tasks_per_core) / tasks_per_core;
 
         // Extract a few of them as things that might have a runtime cost per instance
         Expr terms[conv1_channels] = {num_realizations, // cost per allocation
                                       inner_parallelism * num_productions, // cost per thread pool task
                                       select(inner_parallelism > 1.0f, num_productions, 0), // cost per parallel job launch
-                                      points_computed_total * vector_recompute * idle_core_wastage, // cost per point computed
-                                      inlined_calls * vector_recompute * idle_core_wastage,  // cost per inlined evaluation of the Func
+                                      points_computed_total * vector_recompute, // cost per point computed
+                                      inlined_calls * vector_recompute,  // cost per inlined evaluation of the Func
                                       bytes_at_production * num_realizations, // cost per byte stored
                                       num_vectors, // cost per vector stored
                                       scalar_loads_per_vector * num_vectors, // cost per scalar load
                                       vector_loads_per_vector * num_vectors, // cost per vector load
                                       unique_bytes_read_per_realization * num_realizations, // cost per byte pulled into cache
-                                      (bytes_at_realization / max(1, innermost_bytes_at_realization)) * num_realizations, // cost per line read
+                                      (bytes_at_realization / max(1, innermost_bytes_at_realization)) * num_realizations, // cost per line stored
                                       unique_lines_read_per_realization * num_realizations, // cost per line pulled into cache
                                       working_set * num_realizations, // cost per temporary byte allocated during realization
                                       0.0f,
@@ -256,6 +258,10 @@ public:
         for (int i = 0; i < conv1_channels; i++) {
             e += terms[i] * relu1(i, w, n);
         }
+
+        // If you leave cores idle, runtimes scales up uniformly across all terms
+        e *= idle_core_wastage;
+
         Func runtime_per_stage;
         runtime_per_stage(n, w) = e * 1e-9f;
 
@@ -299,7 +305,7 @@ public:
 
 
             Expr n2 = (n + 1) % batch_size;
-            Expr scale = 1.0f / true_runtime(0);
+            Expr scale = 1.0f / max(1, true_runtime(0));
             Expr p1 = prediction(n) * scale, p2 = prediction(n2) * scale;
             Expr r1 = true_runtime(n) * scale, r2 = true_runtime(n2) * scale;
 

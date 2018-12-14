@@ -221,10 +221,14 @@ class ThroughputPredictorPipeline {
         for (int i = 0; i < cursor; i++) {
             assert(cost_ptrs(i));
             *(cost_ptrs(i)) = dst(i);
+            assert(!std::isnan(dst(i)));
+            assert(true_runtimes(0) > 0);
             double delta = (true_runtimes(i) - dst(i)) / true_runtimes(0);
             err += delta * delta;
         }
+        assert(!std::isnan(err));
         err /= cursor;
+        assert(err > 0);
         err = std::sqrt(err);
 
 
