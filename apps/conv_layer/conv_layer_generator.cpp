@@ -22,13 +22,13 @@ public:
         RDom r(0, CI, 0, 3, 0, 3);
 
         f_conv(c, x, y, n) = bias(c);
-
         f_conv(c, x, y, n) += filter(c, r.y, r.z, r.x) * input(r.x, x + r.y, y + r.z, n);
 
         f_ReLU(c, x, y, n) = max(0, f_conv(c, x, y, n));
 
-        /* THE SCHEDULE */
-
+        // MKL JITs code for the specific size and strides, so we'll
+        // do the same and ask Halide to compile for this specific
+        // size:
         f_ReLU.bound(x, 0, W)
             .bound(y, 0, H)
             .bound(c, 0, CO)
@@ -71,29 +71,7 @@ public:
                 .estimate(c, 0, CO)
                 .estimate(n, 0, N);
 
-
-
-        } /*else if (get_target().has_gpu_feature()) {
-            // TODO: Turn off the manual GPU schedule for now.
-            // For some reasons, it sometimes triggers the (err == CL_SUCCESS)
-            // assertion on mingw.
-            Var ni, no, xi, xo, yi, yo, ci, co;
-            f_ReLU.compute_root()
-                .split(x, xo, xi, 4)
-                .split(y, yo, yi, 4)
-                .split(c, co, ci, 4)
-                .reorder(xi, yi, ci, n, xo, yo, co)
-                .gpu_threads(xi, yi, ci)
-                .gpu_blocks(xo, yo, co);
-
-            f_conv.compute_at(f_ReLU, n)
-                .gpu_threads(x, y, c)
-                .update()
-                .unroll(r.x, 3)
-                .unroll(r.y, 3)
-                .gpu_threads(x, y, c);
-        }*/ else {
-
+        } else {
             // Best schedule (optimized for N = 4, CI = 64, CO = 64, W = 128, H = 128)
             /*
             Var co, ci, xo, xi, yo, yi, t;
@@ -110,10 +88,7 @@ public:
             filter.in().compute_at(f_conv, r.x).vectorize(_0);
             */
 
-            // Sane schedule that should work for any size
-            f_ReLU.parallel(n).parallel(y).vectorize(c, 8);
-
-            /* MKL uses the schedule below, but LLVM won't register-allocate it properly
+            /* For that size, MKL uses the schedule below, but LLVM won't register-allocate it properly :(
             Var co, ci, cio, cii, xo, xi, yo, yi, t;
             f_ReLU.split(c, co, ci, 32).split(ci, cio, cii, 8)
                 .split(x, xo, xi, 3)
@@ -131,6 +106,24 @@ public:
             input.in().compute_at(f_conv, rxi).unroll(_1);
             filter.in().compute_at(f_conv, co).vectorize(_0).unroll(_3);
             */
+
+            // Best schedule for (N = 5, CI = 120, CO = 24, W = 120, H
+            // = 80).
+            Var co, ci, xo, xi, yo, yi, t;
+            f_ReLU.split(c, co, ci, 24)
+                .split(x, xo, xi, 4)
+                .reorder(ci, xi, xo, y, n, co)
+                .vectorize(ci, 8).unroll(ci).unroll(xi)
+                .parallel(y).parallel(n).parallel(co);
+            f_conv.compute_at(f_ReLU, xo)
+                .vectorize(c, 8).unroll(c).unroll(x).unroll(y)
+                .update().reorder(c, x, y, r.x, r.y, r.z, n)
+                .vectorize(c, 8).unroll(c).unroll(x).unroll(y).unroll(r.x, 2);
+            filter.in().compute_at(f_conv, r.x).vectorize(_0, 8).unroll(_0).unroll(_3);
+            input.in().compute_at(f_conv, x).unroll(_0);
+
+            // Sane schedule that should work for any size
+            // f_ReLU.parallel(n).parallel(y).vectorize(c, 8);
 
         }
     }
