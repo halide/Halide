@@ -63,14 +63,8 @@ $(BIN)/demo.a: $(BIN)/demo.generator $(BIN)/libauto_schedule.so
 	HL_MACHINE_PARAMS=32,1,1 HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=weights \
 	$(BIN)/demo.generator -g demo -o $(BIN) -f demo -e static_library,h target=$(HL_TARGET) auto_schedule=true -p $(BIN)/libauto_schedule.so
 
-$(BIN)/demo.rungen: $(BIN)/demo.a $(BIN)/runtime.a
-	$(CXX) -std=c++11 -I $(BIN) -DHL_RUNGEN_FILTER_HEADER="\"demo.h\"" -I ../../include ../../tools/RunGenMain.cpp ../../tools/RunGenStubs.cpp  $(BIN)/demo.a -o $@ $(HALIDE_SYSTEM_LIBS) -lpng -ljpeg
-
-$(BIN)/test: test.cpp $(BIN)/libauto_schedule.so
-	$(CXX) $(CXXFLAGS) -rdynamic $< -o $@ $(LDFLAGS) $(LIB_HALIDE) $(HALIDE_SYSTEM_LIBS)
-
-test: $(BIN)/test
-	HL_WEIGHTS_DIR=weights LD_LIBRARY_PATH=$(BIN) $(BIN)/test
+$(BIN)/demo.rungen: $(BIN)/demo.a $(BIN)/RunGenMain.o $(HALIDE_DISTRIB_PATH)/tools/RunGenStubs.cpp
+	$(CXX) -I $(BIN) -DHL_RUNGEN_FILTER_HEADER="\"demo.h\"" $^ -o $@ $(HALIDE_SYSTEM_LIBS) $(IMAGE_IO_FLAGS)
 
 # demonstrates single-shot use of the autoscheduler
 demo: $(BIN)/demo.rungen
@@ -79,6 +73,13 @@ demo: $(BIN)/demo.rungen
 # demonstrates an autotuning loop
 autotune: $(BIN)/demo.generator $(BIN)/augment_sample $(BIN)/train_cost_model autotune_loop.sh $(BIN)/libauto_schedule.so
 	bash autotune_loop.sh $(BIN)/demo.generator demo x86-64-avx2
+
+# Simple jit-based test
+$(BIN)/test: test.cpp $(BIN)/libauto_schedule.so
+	$(CXX) $(CXXFLAGS) -rdynamic $< -o $@ $(LDFLAGS) $(LIB_HALIDE) $(HALIDE_SYSTEM_LIBS)
+
+test: $(BIN)/test
+	HL_WEIGHTS_DIR=weights LD_LIBRARY_PATH=$(BIN) $(BIN)/test
 
 clean:
 	rm -rf $(BIN)
