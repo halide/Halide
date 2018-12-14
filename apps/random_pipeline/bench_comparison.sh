@@ -11,11 +11,15 @@ trap finish EXIT
 
 mkdir -p results
 
-PIPELINES=100
+PIPELINES=20
 SCHEDULES=1
 
 RANDOM_DROPOUT=100
 BEAM_SIZE=50
+
+make -C ../autoscheduler bin/auto_schedule.so
+mkdir -p bin
+cp ../autoscheduler/bin/auto_schedule.so bin/
 
 # Build the shared things by building one pipeline
 HL_TARGET=host HL_SEED=root PIPELINE_SEED=0 HL_RANDOM_DROPOUT=${RANDOM_DROPOUT} HL_BEAM_SIZE=${BEAM_SIZE} make build
@@ -34,7 +38,7 @@ for ((b=1;b<2;b++)); do
         for prof in ""; do
             for ((m=0;m<2;m++)); do 
                 for ((s=0;s<$SCHEDULES;s++)); do
-                    echo "NEW_AUTOSCHEDULER=1 HL_TARGET=host${prof} HL_SEED=$s PIPELINE_SEED=$P PIPELINE_STAGES=$STAGES HL_RANDOM_DROPOUT=${RANDOM_DROPOUT} HL_BEAM_SIZE=${BEAM_SIZE} HL_USE_MANUAL_COST_MODEL=${m} make build 2>&1 | grep -v Nothing.to.be.done"
+                    echo "NEW_AUTOSCHEDULER=1 HL_TARGET=host${prof} HL_SEED=$s PIPELINE_SEED=$P PIPELINE_STAGES=$STAGES HL_RANDOM_DROPOUT=${RANDOM_DROPOUT} HL_BEAM_SIZE=${BEAM_SIZE} HL_USE_MANUAL_COST_MODEL=${m} HL_NUM_THREADS=32 HL_MACHINE_PARAMS=32,1,1 make build 2>&1 | grep -v Nothing.to.be.done"
                 done
             done
         done
@@ -50,14 +54,14 @@ for ((b=1;b<2;b++)); do
         #grep '^Time' $F > /dev/null && echo $F >> results/files_root_${b}.txt
 
         F=bin/host/pipeline_${P}_${STAGES}/schedule_0_${RANDOM_DROPOUT}_${BEAM_SIZE}_0/times.txt
-        if [ ! -f $F ]; then HL_TARGET=host HL_SEED=0 PIPELINE_SEED=$P PIPELINE_STAGES=$STAGES HL_RANDOM_DROPOUT=${RANDOM_DROPOUT} HL_BEAM_SIZE=${BEAM_SIZE} HL_USE_MANUAL_COST_MODEL=0 HL_NUM_THREADS=32 make bench 2>&1 | grep -v "Nothing to be done"; fi
+        if [ ! -f $F ]; then HL_TARGET=host HL_SEED=0 PIPELINE_SEED=$P PIPELINE_STAGES=$STAGES HL_RANDOM_DROPOUT=${RANDOM_DROPOUT} HL_BEAM_SIZE=${BEAM_SIZE} HL_USE_MANUAL_COST_MODEL=0 HL_NUM_THREADS=32 HL_MACHINE_PARAMS=32,1,1 make bench 2>&1 | grep -v "Nothing to be done"; fi
         
         grep '^Time' $F > /dev/null && echo $F >> results/files_master_${b}.txt
         for prof in ""; do
             for ((m=0;m<2;m++)); do
                 for ((s=0;s<$SCHEDULES;s++)); do
                     F=bin/host${prof}-new_autoscheduler/pipeline_${P}_${STAGES}/schedule_${s}_${RANDOM_DROPOUT}_${BEAM_SIZE}_${m}/times.txt
-                    if [ ! -f $F ]; then PLUGIN="-p bin/auto_schedule.so" HL_TARGET=host${prof} HL_SEED=$s PIPELINE_SEED=$P PIPELINE_STAGES=$STAGES HL_RANDOM_DROPOUT=${RANDOM_DROPOUT} HL_BEAM_SIZE=${BEAM_SIZE} HL_USE_MANUAL_COST_MODEL=${m} HL_NUM_THREADS=32 make bench 2>&1 | grep -v "Nothing to be done"; fi
+                    if [ ! -f $F ]; then NEW_AUTOSCHEDULER=1 HL_TARGET=host${prof} HL_SEED=$s PIPELINE_SEED=$P PIPELINE_STAGES=$STAGES HL_RANDOM_DROPOUT=${RANDOM_DROPOUT} HL_BEAM_SIZE=${BEAM_SIZE} HL_USE_MANUAL_COST_MODEL=${m} HL_NUM_THREADS=32 HL_MACHINE_PARAMS=32,1,1 make bench 2>&1 | grep -v "Nothing to be done"; fi
 
                     grep '^Time' $F > /dev/null && echo $F >> results/files_${b}_${m}${prof}.txt
                 done
@@ -66,7 +70,8 @@ for ((b=1;b<2;b++)); do
     done
 
     # Generate the success cases by taking the intersection of the results from the learned model and the manual model
-    cat results/files_${b}_0.txt results/files_${b}_1.txt | sed "s/_..times.txt/_X\/times.txt/" | sort | uniq -d > results/files_common.txt
+    cat results/files_${b}_0.txt results/files_${b}_1.txt | sed "s/_..times.txt/_X\/times.txt/" | sort | uniq -d > results/files_new.txt
+    cat results/files_new.txt results/files_master_${b}.txt | sed "s/-new_autoscheduler//;s/_..times.txt/_X\/times.txt/" |  sort | uniq -d  | sed "s/host/host-new_autoscheduler/" > results/files_common.txt
     
     # Extract the runtimes
     echo "Extracting runtimes..."
@@ -78,7 +83,7 @@ for ((b=1;b<2;b++)); do
     cat results/files_common.txt | sed "s/_X/_0/" | sed "s/schedule_[0-9]*/schedule_root/" | while read F; do grep '^Time' $F | cut -d: -f2 | cut -b2-; done > results/root_runtimes_${b}.txt
 
     echo "Extracting master runtimes..."
-    cat results/files_common.txt | sed "s/_X/_0/" | sed "s///" | while read F; do grep '^Time' $F | cut -d: -f2 | cut -b2-; done > results/master_runtimes_${b}.txt
+    cat results/files_common.txt | sed "s/_X/_0/" | sed "s/-new_autoscheduler//" | while read F; do grep '^Time' $F | cut -d: -f2 | cut -b2-; done > results/master_runtimes_${b}.txt
     
     # Extract the features
     echo "Extracting features..."
@@ -90,6 +95,6 @@ for ((b=1;b<2;b++)); do
 
     # Extract the cost according to the hand-designed model (just the sum of a few of the features)
     echo "Extracting costs..."
-    cat results/files_common.txt | sed "s/_X/_0/" | while read F; do echo $(grep '^State with cost' ${F/times/stderr} | cut -d' ' -f4 | cut -d: -f1); done  > results/learned_costs_${b}.txt
-    cat results/files_common.txt | sed "s/_X/_1/" | while read F; do echo $(grep '^State with cost' ${F/times/stderr} | cut -d' ' -f4 | cut -d: -f1); done  > results/manual_costs_${b}.txt    
+    cat results/files_common.txt | sed "s/_X/_0/" | while read F; do echo $(grep '^State with cost' ${F/times/stderr} | cut -d' ' -f4 | cut -d: -f1 | sort -n | head -n2 | tail -n1); done  > results/learned_costs_${b}.txt
+    cat results/files_common.txt | sed "s/_X/_1/" | while read F; do echo $(grep '^State with cost' ${F/times/stderr} | cut -d' ' -f4 | cut -d: -f1 | sort -n | head -n1); done  > results/manual_costs_${b}.txt    
 done
