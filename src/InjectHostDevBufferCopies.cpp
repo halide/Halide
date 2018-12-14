@@ -626,11 +626,6 @@ class InjectBufferCopies : public IRMutator2 {
             // only touched on device, or touched on multiple
             // devices. Do separate device and host allocations.
 
-            user_assert(op->extents.size() <= 4)
-                << "Buffer " << op->name
-                << " cannot be used on the GPU, because it has more than four "
-                   "dimensions.\n";
-
             // Add a device destructor
             body = InjectDeviceDestructor(buffer_name).mutate(body);
 
