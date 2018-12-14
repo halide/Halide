@@ -499,14 +499,13 @@ Stmt Prefetch::make(const std::string &name, const std::vector<Type> &types,
     return node;
 }
 
-Stmt Block::make(Stmt first, Stmt rest, bool canonicalize) {
+Stmt Block::make(Stmt first, Stmt rest) {
     internal_assert(first.defined()) << "Block of undefined\n";
     internal_assert(rest.defined()) << "Block of undefined\n";
 
     Block *node = new Block;
 
-    const Block *b = first.as<Block>();
-    if (b && canonicalize) {
+    if (const Block *b = first.as<Block>()) {
         // Use a canonical block nesting order
         node->first = b->first;
         node->rest  = Block::make(b->rest, std::move(rest));

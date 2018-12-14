@@ -319,11 +319,6 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator2 {
             state.current_device = DeviceAPI::None;
         }
 
-        if (!finder.devices_touched.empty() ||
-            !finder.devices_touched_by_extern.empty()) {
-            last_use = s;
-        }
-
         return s;
     }
 
@@ -380,17 +375,7 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator2 {
         HasLoops loops;
         op->accept(&loops);
         if (loops.result) {
-            // Do not use IRMutator2::visit(op) because it canonicalize
-            // block nesting order and can destroy the 'last_use' pattern
-            // we flagged.
-            Stmt first = mutate(op->first);
-            Stmt rest = mutate(op->rest);
-            if (first.same_as(op->first) &&
-                rest.same_as(op->rest)) {
-                return op;
-            }
-            return Block::make(std::move(first), std::move(rest),
-                               /*canonicalize=*/ false);
+            return IRMutator2::visit(op);
         } else {
             return do_copies(op);
         }
@@ -424,8 +409,70 @@ public:
             state.current_device = DeviceAPI::None;
         }
     }
+};
 
+// Find the last use of a given buffer, which will used later for injecting
+// device free calls.
+class FindLastUse : public IRVisitor {
+public:
     Stmt last_use;
+
+    FindLastUse(const string &b) : buffer(b) {}
+
+private:
+    string buffer;
+
+    using IRVisitor::visit;
+
+    void check_and_record_last_use(Stmt s) {
+        // Sniff what happens to the buffer inside the stmt
+        FindBufferUsage finder(buffer, DeviceAPI::Host);
+        s.accept(&finder);
+
+        if (!finder.devices_touched.empty() ||
+            !finder.devices_touched_by_extern.empty()) {
+            last_use = s;
+        }
+    }
+
+    // We want to break things down into a serial sequence of leaf
+    // stmts similar to InjectBufferCopiesForSingleBuffer.
+    void visit(const For *op) override {
+         check_and_record_last_use(op);
+    }
+
+    void visit(const Fork *op) override {
+         check_and_record_last_use(op);
+    }
+
+    void visit(const Evaluate *op) override {
+         check_and_record_last_use(op);
+    }
+
+    void visit(const LetStmt *op) override {
+        // If op->value uses the buffer, we need to treat this as a
+        // single leaf. Otherwise we can recurse.
+        FindBufferUsage finder(buffer, DeviceAPI::Host);
+        op->value.accept(&finder);
+        if (finder.devices_touched.empty() &&
+            finder.devices_touched_by_extern.empty()) {
+             IRVisitor::visit(op);
+        } else {
+             check_and_record_last_use(op);
+        }
+    }
+
+    void visit(const AssertStmt *op) override {
+        check_and_record_last_use(op);
+    }
+
+    void visit(const Store *op) override {
+        check_and_record_last_use(op);
+    }
+
+    void visit(const IfThenElse *op) override {
+        check_and_record_last_use(op);
+    }
 };
 
 // Inject the buffer-handling logic for all internal
@@ -515,13 +562,12 @@ class InjectBufferCopies : public IRMutator2 {
         Stmt free_stmt;
     public:
         bool success = false;
-
         using IRMutator2::mutate;
 
         Stmt mutate(const Stmt &s) override {
             if (s.same_as(last_use)) {
                 internal_assert(!success);
-                success = false;
+                success = true;
                 return Block::make(last_use, free_stmt);
             } else {
                 return IRMutator2::mutate(s);
@@ -563,9 +609,12 @@ class InjectBufferCopies : public IRMutator2 {
             }
 
             // Make a device_and_host_free stmt
-            if (injector.last_use.defined()) {
+
+            FindLastUse last_use(op->name);
+            body.accept(&last_use);
+            if (last_use.last_use.defined()) {
                 Stmt device_free = call_extern_and_assert("halide_device_and_host_free", {buffer});
-                FreeAfterLastUse free_injecter(injector.last_use, device_free);
+                FreeAfterLastUse free_injecter(last_use.last_use, device_free);
                 body = free_injecter.mutate(body);
                 internal_assert(free_injecter.success);
             }
@@ -577,13 +626,21 @@ class InjectBufferCopies : public IRMutator2 {
             // only touched on device, or touched on multiple
             // devices. Do separate device and host allocations.
 
+            user_assert(op->extents.size() <= 4)
+                << "Buffer " << op->name
+                << " cannot be used on the GPU, because it has more than four "
+                   "dimensions.\n";
+
             // Add a device destructor
             body = InjectDeviceDestructor(buffer_name).mutate(body);
 
             // Make a device_free stmt
-            if (injector.last_use.defined()) {
+
+            FindLastUse last_use(op->name);
+            body.accept(&last_use);
+            if (last_use.last_use.defined()) {
                 Stmt device_free = call_extern_and_assert("halide_device_free", {buffer});
-                FreeAfterLastUse free_injecter(injector.last_use, device_free);
+                FreeAfterLastUse free_injecter(last_use.last_use, device_free);
                 body = free_injecter.mutate(body);
                 internal_assert(free_injecter.success);
             }

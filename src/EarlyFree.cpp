@@ -8,6 +8,7 @@
 
 namespace Halide {
 namespace Internal {
+namespace {
 
 using std::map;
 using std::string;
@@ -160,6 +161,8 @@ class InjectEarlyFrees : public IRMutator2 {
 
     }
 };
+
+}  // namespace
 
 Stmt inject_early_frees(Stmt s) {
     InjectEarlyFrees early_frees;
