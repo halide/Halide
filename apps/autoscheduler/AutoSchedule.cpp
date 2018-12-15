@@ -2473,6 +2473,10 @@ struct LoopNest {
         if (is_root()) return false;
 
         auto check = [&](const FunctionDAG::Node *n) {
+            for (const auto *e : n->incoming_edges) {
+                if (e->producer->is_input) return true;
+            }
+
             for (const auto &s : n->stages) {
                 for (int t = 0; t < (int)PipelineFeatures::ScalarType::NumScalarTypes; t++) {
                     if (s.features.op_histogram[(int)PipelineFeatures::OpType::ImageCall][t] > 0) return true;
