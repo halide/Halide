@@ -240,12 +240,12 @@ public:
         Expr terms[conv1_channels] = {num_realizations, // cost per allocation
                                       inner_parallelism * num_productions, // cost per thread pool task
                                       select(inner_parallelism > 1.0f, num_productions, 0), // cost per parallel job launch
-                                      points_computed_total * vector_recompute, // cost per point computed
-                                      inlined_calls * vector_recompute,  // cost per inlined evaluation of the Func
+                                      points_computed_total * vector_recompute * idle_core_wastage, // cost per point computed
+                                      inlined_calls * vector_recompute * idle_core_wastage,  // cost per inlined evaluation of the Func
                                       bytes_at_production * num_realizations, // cost per byte stored
                                       num_vectors, // cost per vector stored
-                                      scalar_loads_per_vector * num_vectors, // cost per scalar load
-                                      vector_loads_per_vector * num_vectors, // cost per vector load
+                                      scalar_loads_per_vector * num_vectors * idle_core_wastage, // cost per scalar load
+                                      vector_loads_per_vector * num_vectors * idle_core_wastage, // cost per vector load
                                       unique_bytes_read_per_realization * num_realizations, // cost per byte pulled into cache
                                       (bytes_at_realization / max(1, innermost_bytes_at_realization)) * num_realizations, // cost per line stored
                                       unique_lines_read_per_realization * num_realizations, // cost per line pulled into cache
@@ -258,9 +258,6 @@ public:
         for (int i = 0; i < conv1_channels; i++) {
             e += terms[i] * relu1(i, w, n);
         }
-
-        // If you leave cores idle, runtimes scales up uniformly across all terms
-        e *= idle_core_wastage;
 
         Func runtime_per_stage;
         runtime_per_stage(n, w) = e * 1e-9f;
@@ -322,11 +319,11 @@ public:
             Expr confidence = 1 - 1 / (abs(p1 - p2) + 1);
             Expr significance = 1 - 1 / (abs(r1 - r2) + 1);
             Expr correct_order = confidence * significance * select((r1 > r2) == (p1 > p2), -1.0f, 1.0f);
-            err(n) = correct_order + 0.001f * delta + 0.00001f * regularize1;
+            err(n) = correct_order + 1e-3f * delta + 1e-10f * regularize1;
 
             Expr loss = sum(err(r_batch));
 
-            loss_output() = cast<float>(loss) + 0.00001f * regularize2;
+            loss_output() = cast<float>(loss) + 1e-10f * regularize2;
 
             d_loss_d = propagate_adjoints(loss_output);
 
