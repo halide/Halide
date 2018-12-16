@@ -152,7 +152,7 @@ public:
             cast(working_type, (fast_log(schedule_features(n, c, s) + 1) - 1e-10f * schedule_mean(c)) / max(1, 1e-10f * schedule_std(c)));
 
         const int head1_channels = 24, head1_w = 56, head1_h = 7;
-        const int head2_channels = 24, head2_w = 28;
+        const int head2_channels = 96, head2_w = 28;
         const int conv1_channels = 16;
         const int conv_support = 3;
 
@@ -269,9 +269,14 @@ public:
 
         // Replicate the manual cost model, but with tunable constants
 
-        Expr compute_cost = (num_vectors * relu1(0, w, n) +
-                             inlined_calls * (native_vector_size / vector_size) * relu1(2, w, n));
+        Expr vector_recompute = native_vector_size / vector_size;
 
+        Expr compute_cost = (num_vectors * relu1(0, w, n) +
+                             inlined_calls * vector_recompute * relu1(1, w, n));
+
+        Expr innermost_cache_lines = innermost_bytes_at_production / 64;
+        Expr cache_line_penalty = ceil(innermost_cache_lines) / max(1, innermost_cache_lines);
+        compute_cost *= cache_line_penalty;
 
         Expr num_tasks = inner_parallelism;
         Expr cores_per_realization = num_cores / outer_parallelism;
@@ -312,14 +317,6 @@ public:
         Expr cost_of_store_miss = bytes_at_production * 1e-6f;
         Expr store_cost = store_cache_misses * cost_of_store_miss;
 
-        // We can only write back whole cache lines
-        /*
-        Expr native_cache_line_size = 64;
-        Expr innermost_cache_lines = innermost_bytes_at_task / native_cache_line_size;
-        Expr cache_line_wastage = ceil(innermost_cache_lines) / max(1, innermost_cache_lines);
-        store_cost *= cache_line_wastage;
-        */
-
         // Now account for false sharing of cache lines. The
         // probability of a store hitting a cache line also hit by
         // another core is inversely proportional to
@@ -343,6 +340,8 @@ public:
         for (int i = 0; i < 16; i++) {
             cost += 0.0f * relu1(i, w, n);
         }
+
+        cost += relu1(15, w, n);
 
         Func runtime_per_stage;
         runtime_per_stage(n, w) = cost * 1e-9f;
@@ -391,8 +390,8 @@ public:
             Expr p1 = prediction(n) * scale, p2 = prediction(n2) * scale;
             Expr r1 = true_runtime(n) * scale, r2 = true_runtime(n2) * scale;
 
-            // The network should predict runtime
-            Expr delta = (p1 - r1) * (p1 - r1);
+            // The network should predict runtime.
+            Expr delta = abs(r1 - p1);
 
             // More importantly, the network should predict runtimes
             // in the correct order
@@ -401,10 +400,20 @@ public:
             // being confident and wrong, and nothing when the result
             // is not confident. Size of reward or penalty is also
             // scaled by just how different the two true runtimes are.
+
+            // Run the difference between the two predictions through
+            // a sigmoid to convert it into a predicted probability
+            // that A is faster than B
             Expr confidence = 1 - 1 / (abs(p1 - p2) + 1);
+
+            // Assume there's noise in the runtime measurements, and
+            // use a similar sigmoid to determine the probability that
+            // A really *is* faster than B.
             Expr significance = 1 - 1 / (abs(r1 - r2) + 1);
+
+            // Maximize
             Expr correct_order = confidence * significance * select((r1 > r2) == (p1 > p2), -1.0f, 1.0f);
-            err(n) = 1e-10f * correct_order + delta + 1e-10f * regularize1;
+            err(n) = correct_order + 1e-10f * delta + 1e-10f * regularize1;
 
             Expr loss = sum(err(r_batch));
 
