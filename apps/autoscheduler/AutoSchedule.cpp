@@ -1435,6 +1435,9 @@ struct ScheduleFeatures {
     int64_t scalar_loads_per_vector = 0;
     int64_t vector_loads_per_vector = 0;
 
+    int64_t bytes_at_task = 0;
+    int64_t innermost_bytes_at_task = 0;
+
     void dump() const {
         debug(0) << "    num_realizations:                      " << num_realizations << '\n'
                  << "    num_productions:                       " << num_productions << '\n'
@@ -1461,7 +1464,9 @@ struct ScheduleFeatures {
                  << "    native_vector_size:                    " << native_vector_size << '\n'
                  << "    num_vectors:                           " << num_vectors << '\n'
                  << "    scalar_loads_per_vector:               " << scalar_loads_per_vector << '\n'
-                 << "    vector_loads_per_vector:               " << vector_loads_per_vector << '\n';
+                 << "    vector_loads_per_vector:               " << vector_loads_per_vector << '\n'
+                 << "    bytes_at_task:                         " << bytes_at_task << '\n'
+                 << "    innermost_bytes_at_task:               " << innermost_bytes_at_task << '\n';
 
     }
 };
@@ -2009,13 +2014,8 @@ struct LoopNest {
             size_t i = size[idx];
             loop_instances *= i;
             if (stage->loop[idx].pure && !in_impure) {
-                // This mirrors the logic used to lower parallel loops below
-                if (parallel_loop_instances <= params.parallelism * 8 &&
-                    (parallel_loop_instances < params.parallelism ||
-                     parallel_loop_instances * i <= params.parallelism * 32)) {
-                    parallel_loop_instances *= i;
-                }
-            } else {
+                parallel_loop_instances *= i;
+            } else if (i != 1) {
                 in_impure = true;
             }
         }
@@ -2058,6 +2058,11 @@ struct LoopNest {
                                                 bounds->region_computed(v).first + 1);
                 }
                 feat.innermost_bytes_at_realization = node->bytes_per_point * innermost_storage_extent;
+
+                if (!is_root()) {
+                    feat.bytes_at_task = feat.bytes_at_realization;
+                    feat.innermost_bytes_at_task = feat.innermost_bytes_at_realization;
+                }
             }
         }
 
@@ -2136,8 +2141,32 @@ struct LoopNest {
             }
         }
 
+        const bool at_task = parent->is_root();
         const bool at_production = parent->node != node;
         const bool at_pure_production = at_production && stage_idx == 0;
+
+        if (at_task) {
+            const auto &bounds = get_bounds(node);
+            feat.bytes_at_task = node->bytes_per_point;
+            int64_t innermost_storage_extent = 1;
+            for (int i = 0; i < node->func.dimensions(); i++) {
+                int64_t outer = 1;
+                for (int l = 0; l < stage->loop.size(); l++) {
+                    if (stage->loop[l].var == node->func.args()[i]) {
+                        outer = size[l];
+                        break;
+                    }
+                }
+                const auto &p = bounds->region_computed(i);
+                int64_t extent = (p.second - p.first) + 1;
+                extent /= outer;
+                feat.bytes_at_task *= extent;
+                if (i == vector_dim) {
+                    innermost_storage_extent = extent;
+                }
+            }
+            feat.innermost_bytes_at_task = node->bytes_per_point * innermost_storage_extent;
+        }
 
         if (at_production) {
             feat.num_productions = instances;
@@ -2601,6 +2630,100 @@ struct LoopNest {
         }
     }
 
+    // Return all possible ways to parallelize this loop
+    vector<IntrusivePtr<const LoopNest>> parallelize_in_tiles(const MachineParams &params, const LoopNest *parent) const {
+        // For now we use a single fixed strategy
+        int64_t total_pure_extent = 1;
+        bool any_impure = false;
+        for (size_t i = 0; i < stage->loop.size(); i++) {
+            if (stage->loop[i].pure) {
+                total_pure_extent *= size[i];
+            } else if (size[i] > 1) {
+                any_impure = true;
+            }
+        }
+
+        vector<IntrusivePtr<const LoopNest>> result;
+        if (total_pure_extent < params.parallelism * 2 && !any_impure) {
+            // No splits to be made
+            LoopNest *child = new LoopNest;
+            child->copy_from(*this);
+            result.emplace_back(child);
+            return result;
+        }
+
+        // Split this loop and move factors to the inner loop
+        LoopNest *inner = new LoopNest, *outer = new LoopNest;
+        inner->node      = outer->node      = node;
+        inner->stage     = outer->stage     = stage;
+        inner->stage_idx = outer->stage_idx = stage_idx;
+        inner->tileable  = outer->tileable  = tileable;
+        inner->vector_dim = outer->vector_dim = vector_dim;
+        inner->vectorized_loop_index = outer->vectorized_loop_index = vectorized_loop_index;
+        outer->size = size;
+        outer->innermost = false;
+
+        // First make an inner loop representing a 1x1x1... tile
+        inner->size.resize(size.size(), 1);
+        inner->innermost = innermost;
+        inner->children = children;
+        inner->inlined = inlined;
+        inner->bounds = bounds;
+        inner->store_at = store_at;
+
+        auto b = inner->get_bounds(node)->make_copy();
+
+        // Then move factors from the outer loop to the inner loop
+        auto parent_bounds = parent->get_bounds(node);
+
+        // We want this many parallel tasks remaining in the outer loop
+        int64_t parallelism_required = params.parallelism * 8; // TODO: 8 should be searched over
+
+        // So far we've found nothing
+        int64_t parallelism_found = 1;
+
+        // End at -1, which will be the vectorized loop
+        for (int i = (int)stage->loop.size() - 1; i >= -1; i--) {
+            int l = (i == -1) ? vectorized_loop_index : i;
+            if (l == -1) break; // There's no vectorized loop
+            if (i == vectorized_loop_index) continue; // We will handle the vectorized loop last
+
+            int64_t outer_extent = 1;
+            if (!stage->loop[l].pure) {
+                // Not parallelizeable. We must move this inwards.
+                outer_extent = 1;
+            } else if (i == -1 && parallelism_found < params.parallelism) {
+                // Things are dire. We need to parallelize across
+                // the innermost storage dimension. Do it
+                // minimally.
+                outer_extent = std::min(outer->size[l], (params.parallelism + parallelism_found - 1) / parallelism_found);
+            } else {
+                // Pick some number of loop iterations per parallel tasks
+                int64_t inner_size = 1;
+                outer_extent = outer->size[l];
+                while (parallelism_found * outer_extent > 2 * parallelism_required) {
+                    inner_size *= 2;
+                    outer_extent = (outer->size[l] + inner_size - 1) / inner_size;
+                }
+            }
+
+            inner->size[l] = (outer->size[l] + outer_extent - 1) / outer_extent;
+            outer->size[l] = outer_extent;
+            const auto &p = parent_bounds->loops(stage_idx, i);
+            int64_t min = p.first;
+            int64_t extent = p.second - min + 1;
+            extent = (extent + outer_extent - 1) / outer_extent;
+            b->loops(stage_idx, l) = {min, min + extent - 1};
+
+            parallelism_found *= outer_extent;
+        }
+        outer->set_bounds(node, b);
+
+        outer->children.emplace_back(inner);
+        result.emplace_back(outer);
+        return result;
+    }
+
     // Return all possible ways to compute f in tiles.
     vector<IntrusivePtr<const LoopNest>> compute_in_tiles(const FunctionDAG::Node *f,
                                                           const LoopNest *parent,
@@ -2908,12 +3031,17 @@ struct LoopNest {
                         s.vectorize(v.var);
                     }
                 } else {
-                    // This is not the innermost loop. Go find the next inner loop.
-                    const LoopNest *child = nullptr;
-                    for (const auto &c : children) {
-                        if (c->node == node) {
-                            child = c.get();
-                            break;
+                    // Grab the innermost loop for this node
+                    const LoopNest *innermost_loop = this, *child = nullptr;
+                    while (!innermost_loop->innermost) {
+                        for (const auto &c : innermost_loop->children) {
+                            if (c->node == node) {
+                                if (!child) {
+                                    child = c.get();
+                                }
+                                innermost_loop = c.get();
+                                break;
+                            }
                         }
                     }
 
@@ -2925,12 +3053,8 @@ struct LoopNest {
 
                         int64_t factor = (parent.extent + size[i] - 1) / size[i];
 
-                        if (child && child->size[i] > factor) {
-                            // We may have picked a
-                            // larger-that-minimal extent for the
-                            // child loop, for the purpose of
-                            // vectorization.
-                            factor = child->size[i];
+                        if (child && innermost_loop->size[i] > factor) {
+                            factor = innermost_loop->size[i];
                         }
 
                         if (!parent.exists || factor == 1) {
@@ -3226,10 +3350,10 @@ struct State {
                     per_element_compute_cost += pipeline_feat[i];
                 }
 
-                // Assume that narrow types are cheaper because they vectorize wider.
-                compute_cost *= 8.0 / feat.native_vector_size; // Relative to fp32
-
-                compute_cost = per_element_compute_cost * feat.points_computed_total;
+                // Assume that narrow types are cheaper because they
+                // vectorize wider, and just count the number of
+                // vectors computed.
+                compute_cost = per_element_compute_cost * feat.num_vectors;
 
                 // Figure out vector overcompute
                 const int native_vector_size = feat.native_vector_size;
@@ -3323,7 +3447,7 @@ struct State {
                 double cache_misses = 0, cost_of_miss = 0;
                 if (feat.inlined_calls == 0) {
                     // Estimate the number of cache misses on the data that this writes to and their cost
-                    int64_t lines_written_per_realization = feat.bytes_at_realization / feat.innermost_bytes_at_realization;
+                    int64_t lines_written_per_realization = feat.inner_parallelism * (feat.bytes_at_task / feat.innermost_bytes_at_task);
                     cache_misses = 1e1 * lines_written_per_realization + feat.bytes_at_realization * 1e-2;
                     cache_misses *= feat.num_realizations;
                     //cost_of_miss = std::sqrt(feat.bytes_at_production) * 40 * 5e-3;
@@ -3333,7 +3457,7 @@ struct State {
                 double memory_store_cost = cache_misses * cost_of_miss;
 
                 // Penalize writing partial cache lines. Assume a cache line is two simd vectors.
-                const double native_cache_line_size = native_vector_size * 2;
+                const double native_cache_line_size = 2 * idle_simd_lanes; // two full vectors
                 const double cache_line_wastage = std::max(1.0, native_cache_line_size / feat.innermost_pure_loop_extent);
                 memory_store_cost *= cache_line_wastage;
 
@@ -3375,12 +3499,15 @@ struct State {
                            std::function<void(IntrusivePtr<State> &&)> &accept_child) const {
         internal_assert(root.defined() && root->is_root());
 
-        if (num_funcs_scheduled == (int)dag.nodes.size()) {
+        if (num_funcs_scheduled == 2*(int)dag.nodes.size()) {
             return;
         }
 
+        int next_node = num_funcs_scheduled % dag.nodes.size();
+        int phase = num_funcs_scheduled / dag.nodes.size();
+
         // Enumerate all legal ways to schedule the next Func
-        const FunctionDAG::Node *node = &dag.nodes[num_funcs_scheduled];
+        const FunctionDAG::Node *node = &dag.nodes[next_node];
         for (const auto *e : node->outgoing_edges) {
             internal_assert(root->computes(e->consumer))
                 << "Partially scheduled code doesn't compute " << e->consumer->func.name()
@@ -3413,48 +3540,79 @@ struct State {
         }
 
         int num_children = 0;
-        {
-            // 1) Inline it
-            if (node->stages.size() == 1 && !node->is_output) {
-                auto child = make_child();
-                LoopNest *new_root = new LoopNest;
-                new_root->copy_from(*root);
-                new_root->inline_func(node);
-                child->root = new_root;
-                child->num_funcs_scheduled++;
-                // TODO: filter children here instead of calculating the cost of children we don't want.
-                if (child->calculate_cost(dag, params, throughput_predictor)) {
-                    internal_assert(child->root->computes(node)) << "Failed to inline " << node->func.name() << '\n';
-                    num_children++;
-                    accept_child(std::move(child));
-                } else {
-                    // Discarding state....
+
+        if (phase == 0) {
+            // Injecting realizations
+            {
+                // 1) Inline it
+                if (node->stages.size() == 1 && !node->is_output) {
+                    auto child = make_child();
+                    LoopNest *new_root = new LoopNest;
+                    new_root->copy_from(*root);
+                    new_root->inline_func(node);
+                    child->root = new_root;
+                    child->num_funcs_scheduled++;
+                    // TODO: filter children here instead of calculating the cost of children we don't want.
+                    if (child->calculate_cost(dag, params, throughput_predictor)) {
+                        internal_assert(child->root->computes(node)) << "Failed to inline " << node->func.name() << '\n';
+                        num_children++;
+                        accept_child(std::move(child));
+                    } else {
+                        // Discarding state....
+                    }
                 }
             }
-        }
 
 
-        // 2) Realize it somewhere
-        for (int vector_dim = 0; vector_dim < node->func.dimensions(); vector_dim++) {
-            // Outputs must be vectorized over their innermost
-            // dimension, because we don't have control of the
-            // storage. TODO: Go inspect to see which dimension has a
-            // stride==1 constraint instead of assuming 0.
-            if (vector_dim > 0 && (node->is_output || node->is_input)) break;
+            // 2) Realize it somewhere
+            for (int vector_dim = 0; vector_dim < node->func.dimensions(); vector_dim++) {
+                // Outputs must be vectorized over their innermost
+                // dimension, because we don't have control of the
+                // storage. TODO: Go inspect to see which dimension has a
+                // stride==1 constraint instead of assuming 0.
+                if (vector_dim > 0 && (node->is_output || node->is_input)) break;
 
-            // TODO: Pre-prune the list of sane dimensions to
-            // vectorize a Func over to reduce branching factor.
+                // TODO: Pre-prune the list of sane dimensions to
+                // vectorize a Func over to reduce branching factor.
 
-            auto tile_options = root->compute_in_tiles(node, nullptr, params, vector_dim, false);
-            for (IntrusivePtr<const LoopNest> &n : tile_options) {
-                auto child = make_child();
-                child->root = std::move(n);
-                child->num_funcs_scheduled++;
-                if (child->calculate_cost(dag, params, throughput_predictor)) {
-                    internal_assert(child->root->computes(node)) << "Failed to inject realization of " << node->func.name() << '\n';
-                    num_children++;
-                    accept_child(std::move(child));
+                auto tile_options = root->compute_in_tiles(node, nullptr, params, vector_dim, false);
+                for (IntrusivePtr<const LoopNest> &n : tile_options) {
+                    auto child = make_child();
+                    child->root = std::move(n);
+                    child->num_funcs_scheduled++;
+                    if (child->calculate_cost(dag, params, throughput_predictor)) {
+                        internal_assert(child->root->computes(node)) << "Failed to inject realization of " << node->func.name() << '\n';
+                        num_children++;
+                        accept_child(std::move(child));
+                    }
                 }
+            }
+        } else {
+            // Deciding on parallel tasks
+
+            auto child = make_child();
+            vector<IntrusivePtr<const LoopNest>> new_root_children = root->children;
+            int child_to_replace = -1;
+            for (int i = 0; i < (int)root->children.size(); i++) {
+                if (root->children[i]->node == node) {
+                    child_to_replace = i;
+                }
+            }
+
+            LoopNest *new_root = new LoopNest;
+            new_root->copy_from(*root);
+
+            if (child_to_replace != -1) {
+                // For now assume that parallelize in tiles returns a single option
+                new_root->children[child_to_replace] =
+                    new_root->children[child_to_replace]->parallelize_in_tiles(params, root.get())[0];
+            }
+
+            child->root = new_root;
+            child->num_funcs_scheduled++;
+            if (child->calculate_cost(dag, params, throughput_predictor)) {
+                num_children++;
+                accept_child(std::move(child));
             }
         }
 
@@ -3540,15 +3698,8 @@ struct State {
             for (auto it = p.second.vars.rbegin(); it != p.second.vars.rend(); it++) {
                 if (!it->exists) continue;
                 if (!it->parallel) break;
-                if (parallel_tasks >= params.parallelism && parallel_tasks * it->extent > params.parallelism * 32) {
-                    // Probably should stop at this point. TODO:
-                    // replace with actually searching for what
-                    // parallel tiles to use in the search.
-                    break;
-                }
                 parallel_tasks *= it->extent;
                 parallel_vars.push_back(it->var);
-                if (parallel_tasks > params.parallelism * 8) break;
             }
 
             if (p.second.vars.size() > 1) {
@@ -3835,7 +3986,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
                 continue;
             }
 
-            if (state->num_funcs_scheduled == (int)dag.nodes.size()) {
+            if (state->num_funcs_scheduled == 2*(int)dag.nodes.size()) {
                 debug(0) << '\n';
 
                 if (false) {

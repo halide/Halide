@@ -66,7 +66,7 @@ map<int, PipelineSample> load_samples() {
         file.read((char *)(scratch.data()), scratch.size() * sizeof(float));
         const size_t floats_read = file.gcount() / sizeof(float);
         const size_t num_features = floats_read - 3;
-        const size_t features_per_stage = 26 + 57 * 7;
+        const size_t features_per_stage = 28 + 57 * 7;
         file.close();
 
         if (floats_read == scratch.size()) {
@@ -102,7 +102,7 @@ map<int, PipelineSample> load_samples() {
             for (size_t i = 0; i < num_stages; i++) {
                 for (int x = 0; x < 56; x++) {
                     for (int y = 0; y < 7; y++) {
-                        float f = scratch[i * features_per_stage + (x + 1) * 7 + y + 26];
+                        float f = scratch[i * features_per_stage + (x + 1) * 7 + y + 28];
                         if (f < 0 || std::isnan(f)) {
                             std::cout << "Negative or NaN pipeline feature: " << x << " " << y << " " << i << " " << f << "\n";
                         }
@@ -118,7 +118,7 @@ map<int, PipelineSample> load_samples() {
             schedule_hash =
                 hash_floats(schedule_hash,
                             &scratch[i * features_per_stage],
-                            &scratch[i * features_per_stage + 26]);
+                            &scratch[i * features_per_stage + 28]);
         }
 
         auto it = ps.schedules.find(schedule_hash);
@@ -140,11 +140,11 @@ map<int, PipelineSample> load_samples() {
                 sample.prediction[i] = 0.0;
             }
             sample.schedule_id = schedule_id;
-            sample.schedule_features = Runtime::Buffer<float>(26, num_stages);
+            sample.schedule_features = Runtime::Buffer<float>(28, num_stages);
 
             bool ok = true;
             for (size_t i = 0; i < num_stages; i++) {
-                for (int x = 0; x < 26; x++) {
+                for (int x = 0; x < 28; x++) {
                     float f = scratch[i * features_per_stage + x];
                     if (f < 0 || f > 1e14 || std::isnan(f)) {
                         std::cout << "Negative or implausibly large schedule feature: " << i << " " << x << " " << f << "\n";
@@ -212,7 +212,7 @@ int main(int argc, char **argv) {
     // Iterate through the pipelines
     ThroughputPredictorPipeline tpp[models];
 
-    float rates[] = {0.01f};
+    float rates[] = {0.001f};
 
     int num_cores = atoi(getenv("HL_NUM_THREADS"));
 
@@ -257,11 +257,21 @@ int main(int argc, char **argv) {
                     loss_sum[model] += loss;
                     loss_sum_counter[model] ++;
 
+                    float worst_miss = 0;
+                    uint64_t worst_miss_id = 0;
                     for (size_t j = 0; j < batch_size; j++) {
                         auto it = p.second.schedules.begin();
                         std::advance(it, j + first);
                         auto &sched = it->second;
+
+                        float m = sched.runtimes[0] / (sched.prediction[model] + 1e-10f);
+                        if (m > worst_miss) {
+                            worst_miss = m;
+                            worst_miss_id = it->first;
+                        }
                     }
+
+                    std::cerr << "Worst mistake (" << worst_miss << "): " << p.second.schedules[worst_miss_id].filename << "\n";
 
                     if (true) {
                         int good = 0, bad = 0;

@@ -145,14 +145,14 @@ public:
 
         Func normalized_pipeline_features("normalized_pipeline_features");
         normalized_pipeline_features(c, j, s) =
-            cast(working_type, (pipeline_features(c, j, s) - pipeline_mean(c, j)) / max(1, pipeline_std(c, j)));
+            cast(working_type, (pipeline_features(c, j, s) - 1e-10f * pipeline_mean(c, j)) / max(1, 1e-10f * pipeline_std(c, j)));
 
         Func normalized_schedule_features("normalized_schedule_features");
         normalized_schedule_features(n, c, s) =
-            cast(working_type, (fast_log(schedule_features(n, c, s) + 1) - schedule_mean(c)) / max(1, schedule_std(c)));
+            cast(working_type, (fast_log(schedule_features(n, c, s) + 1) - 1e-10f * schedule_mean(c)) / max(1, 1e-10f * schedule_std(c)));
 
         const int head1_channels = 24, head1_w = 56, head1_h = 7;
-        const int head2_channels = 24, head2_w = 26;
+        const int head2_channels = 24, head2_w = 28;
         const int conv1_channels = 16;
         const int conv_support = 3;
 
@@ -180,12 +180,12 @@ public:
         // first 20 input channels are from head1_relu, next 20 input channels are from head2_relu
         // have to do two stages for conv1 to convolve over each head's outputs
         Func conv1_stage1("conv1_stage1");
-        RDom r1_stage1(0, head1_channels, 0, conv_support);
+        RDom r1_stage1(0, head1_channels, 1, 1); //0, conv_support);
         conv1_stage1(c, w) = cast(working_type, bias1(c));
         conv1_stage1(c, w) += filter1(c, r1_stage1.x, r1_stage1.y) * head1_relu_padded(r1_stage1.x, w + r1_stage1.y - 1);
 
         Func conv1_stage2("conv1_stage2");
-        RDom r1_stage2(0, head2_channels, 0, conv_support);
+        RDom r1_stage2(0, head2_channels, 1, 1); //0, conv_support);
         conv1_stage2(c, w, n) = cast(working_type, conv1_stage1(c, w));  // Broadcast the processed pipeline features across the batch
         conv1_stage2(c, w, n) += (filter1(c, head1_filter.dim(0).extent() + r1_stage2.x, r1_stage2.y) *
                                   head2_relu_padded(r1_stage2.x, w + r1_stage2.y - 1, n));
@@ -199,15 +199,17 @@ public:
         Expr num_productions = schedule_features(n, idx++, w);
         Expr points_computed_per_realization = schedule_features(n, idx++, w);
         Expr points_computed_per_production = schedule_features(n, idx++, w);
+
         Expr points_computed_total = schedule_features(n, idx++, w);
         Expr points_computed_minimum = schedule_features(n, idx++, w);
         Expr innermost_loop_extent = schedule_features(n, idx++, w);
         Expr innermost_pure_loop_extent = schedule_features(n, idx++, w);
+
         Expr inner_parallelism = schedule_features(n, idx++, w);
         Expr outer_parallelism = schedule_features(n, idx++, w);
-
         Expr bytes_at_realization = schedule_features(n, idx++, w);
         Expr bytes_at_production = schedule_features(n, idx++, w);
+
         Expr bytes_at_root = schedule_features(n, idx++, w);
         Expr innermost_bytes_at_realization = schedule_features(n, idx++, w);
         Expr innermost_bytes_at_production = schedule_features(n, idx++, w);
@@ -217,15 +219,19 @@ public:
         Expr unique_bytes_read_per_realization = schedule_features(n, idx++, w);
         Expr unique_lines_read_per_realization = schedule_features(n, idx++, w);
         Expr allocation_bytes_read_per_realization = schedule_features(n, idx++, w);
-        Expr working_set = schedule_features(n, idx++, w);
 
+        Expr working_set = schedule_features(n, idx++, w);
         Expr vector_size = schedule_features(n, idx++, w);
         Expr native_vector_size = schedule_features(n, idx++, w);
         Expr num_vectors = schedule_features(n, idx++, w);
+
         Expr vector_loads_per_vector = schedule_features(n, idx++, w);
         Expr scalar_loads_per_vector = schedule_features(n, idx++, w);
+        Expr bytes_at_task = schedule_features(n, idx++, w);
+        Expr innermost_bytes_at_task = schedule_features(n, idx++, w);
         assert(idx == head2_w);
 
+        /*
         // Account for idle simd lanes
         Expr vector_recompute = native_vector_size / max(1, vector_size);
 
@@ -235,6 +241,7 @@ public:
         // tasks_per_core = max(1, tasks_per_core); // Avoid NaNs on corrupted input data
 
         Expr idle_core_wastage = ceil(tasks_per_core) / tasks_per_core;
+
 
         // Extract a few of them as things that might have a runtime cost per instance
         Expr terms[conv1_channels] = {num_realizations, // cost per allocation
@@ -258,9 +265,87 @@ public:
         for (int i = 0; i < conv1_channels; i++) {
             e += terms[i] * relu1(i, w, n);
         }
+        */
+
+        // Replicate the manual cost model, but with tunable constants
+
+        Expr compute_cost = (num_vectors * relu1(0, w, n) +
+                             inlined_calls * (native_vector_size / vector_size) * relu1(2, w, n));
+
+
+        Expr num_tasks = inner_parallelism;
+        Expr cores_per_realization = num_cores / outer_parallelism;
+        Expr idle_core_wastage = (0.5f * cores_per_realization + num_tasks) / num_tasks;
+        idle_core_wastage = min(idle_core_wastage, 1 + relu1(2, w, n));
+        idle_core_wastage *= ceil(num_tasks / cores_per_realization) * (cores_per_realization / num_tasks);
+
+        compute_cost *= idle_core_wastage;
+
+
+        Expr cold_cache_misses = num_realizations * (unique_lines_read_per_realization * relu1(3, w, n) +
+                                                     unique_bytes_read_per_realization * relu1(4, w, n));
+        Expr cost_of_cold_miss = allocation_bytes_read_per_realization * 1e-6f;
+
+        Expr cold_load_cost = cold_cache_misses * cost_of_cold_miss;
+
+        Expr capacity_cache_misses = num_vectors * (vector_loads_per_vector * relu1(5, w, n) +
+                                                    scalar_loads_per_vector * relu1(6, w, n));
+        Expr cost_of_capacity_miss = unique_bytes_read_per_realization * 1e-6f;
+
+        Expr hot_load_cost = capacity_cache_misses * cost_of_capacity_miss;
+
+        // Estimate the number of cache misses on the data that this writes to and their cost
+        Expr lines_written_per_realization = inner_parallelism * (bytes_at_task / max(1, innermost_bytes_at_task));
+
+        // Use separate coefficients for things with internal
+        // parallelism, because for stages with internal parallelism,
+        // most values produced will be consumed on another core, so
+        // they will get punted out to L3 no matter how small.
+        Expr alpha = select(inner_parallelism > 1, relu1(7, w, n),
+                            relu1(8, w, n));
+        Expr beta = select(inner_parallelism > 1, relu1(9, w, n),
+                           relu1(10, w, n));
+
+
+        Expr store_cache_misses = num_realizations * (lines_written_per_realization * alpha +
+                                                      bytes_at_realization * beta);
+        Expr cost_of_store_miss = bytes_at_production * 1e-6f;
+        Expr store_cost = store_cache_misses * cost_of_store_miss;
+
+        // We can only write back whole cache lines
+        /*
+        Expr native_cache_line_size = 64;
+        Expr innermost_cache_lines = innermost_bytes_at_task / native_cache_line_size;
+        Expr cache_line_wastage = ceil(innermost_cache_lines) / max(1, innermost_cache_lines);
+        store_cost *= cache_line_wastage;
+        */
+
+        // Now account for false sharing of cache lines. The
+        // probability of a store hitting a cache line also hit by
+        // another core is inversely proportional to
+        // innermost_bytes_at_task, and the cost is paid on every
+        // store.
+        Expr cost_of_false_sharing = select(inner_parallelism > 1, relu1(11, w, n) * num_vectors / max(1, innermost_bytes_at_task), 0.0f);
+
+        // Malloc aint free. Small allocations should go on the stack, but this isn't totally reliable.
+        Expr cost_of_malloc = relu1(12, w, n) * num_realizations;
+
+        // Penalize working sets that start to fall out of cache
+        // Expr cost_of_working_set = 1e-17f * working_set * working_set * working_set * relu1(10, w, n);
+
+        Expr cost_of_parallel_launches = num_productions * select(inner_parallelism > 1, relu1(13, w, n), 0.0f);
+
+        Expr cost_of_parallel_tasks = num_productions * (inner_parallelism - 1) * relu1(14, w, n);
+
+        Expr cost = compute_cost + cold_load_cost + hot_load_cost + store_cost + cost_of_malloc + cost_of_false_sharing + cost_of_parallel_tasks + cost_of_parallel_launches;
+
+        // Keep the schedule fixed by adding a dependence to all 16 out channels
+        for (int i = 0; i < 16; i++) {
+            cost += 0.0f * relu1(i, w, n);
+        }
 
         Func runtime_per_stage;
-        runtime_per_stage(n, w) = e * 1e-9f;
+        runtime_per_stage(n, w) = cost * 1e-9f;
 
         Func prediction;
         RDom r_reduce(0, num_stages);
@@ -319,7 +404,7 @@ public:
             Expr confidence = 1 - 1 / (abs(p1 - p2) + 1);
             Expr significance = 1 - 1 / (abs(r1 - r2) + 1);
             Expr correct_order = confidence * significance * select((r1 > r2) == (p1 > p2), -1.0f, 1.0f);
-            err(n) = correct_order + delta + 1e-10f * regularize1;
+            err(n) = 1e-10f * correct_order + delta + 1e-10f * regularize1;
 
             Expr loss = sum(err(r_batch));
 
