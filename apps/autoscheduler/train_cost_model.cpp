@@ -212,7 +212,7 @@ int main(int argc, char **argv) {
     // Iterate through the pipelines
     ThroughputPredictorPipeline tpp[models];
 
-    float rates[] = {0.001f};
+    float rates[] = {0.01f};
 
     int num_cores = atoi(getenv("HL_NUM_THREADS"));
 
@@ -222,6 +222,11 @@ int main(int argc, char **argv) {
             float loss_sum[models] = {0}, loss_sum_counter[models] = {0};
             float correct_ordering_rate_sum[models] = {0};
             float correct_ordering_rate_count[models] = {0};
+
+            float worst_miss = 0;
+            uint64_t worst_miss_pipeline_id = 0;
+            uint64_t worst_miss_schedule_id = 0;
+
             std::cout << "Iterating over " << samples.size() << " samples\n";
             #pragma omp parallel for
             for (int model = 0; model < models; model++) {
@@ -229,6 +234,7 @@ int main(int argc, char **argv) {
                 auto &tp = tpp[model];
 
                 for (auto &p : samples) {
+                    if (models > 1 && rand() & 1) continue; // If we are training multiple models, allow them to diverge.
                     if (p.second.schedules.size() < 8) continue;
                     tp.reset();
                     tp.set_pipeline_features(p.second.pipeline_features, num_cores);
@@ -257,8 +263,6 @@ int main(int argc, char **argv) {
                     loss_sum[model] += loss;
                     loss_sum_counter[model] ++;
 
-                    float worst_miss = 0;
-                    uint64_t worst_miss_id = 0;
                     for (size_t j = 0; j < batch_size; j++) {
                         auto it = p.second.schedules.begin();
                         std::advance(it, j + first);
@@ -267,11 +271,10 @@ int main(int argc, char **argv) {
                         float m = sched.runtimes[0] / (sched.prediction[model] + 1e-10f);
                         if (m > worst_miss) {
                             worst_miss = m;
-                            worst_miss_id = it->first;
+                            worst_miss_pipeline_id = p.first;
+                            worst_miss_schedule_id = it->first;
                         }
                     }
-
-                    std::cerr << "Worst mistake (" << worst_miss << "): " << p.second.schedules[worst_miss_id].filename << "\n";
 
                     if (true) {
                         int good = 0, bad = 0;
@@ -304,9 +307,15 @@ int main(int argc, char **argv) {
                 counter++;
             }
 
+
+            std::cerr << "Worst mistake (" << worst_miss << "): " << samples[worst_miss_pipeline_id].schedules[worst_miss_schedule_id].filename << "\n";
+            if (worst_miss > 1) {
+                // samples[worst_miss_pipeline_id].schedules.erase(worst_miss_schedule_id);
+            }
+
             std::cout << "RMS errors: ";
             for (int model = 0; model < models; model++) {
-                std::cout << loss_sum[model] / loss_sum_counter[model] << " " << loss_sum_counter[model] << " " ;
+                std::cout << loss_sum[model] / loss_sum_counter[model] << " ";
             }
             std::cout << "\nCorrect ordering rate: ";
             int best_model = 0;
