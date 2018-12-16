@@ -2692,11 +2692,13 @@ struct LoopNest {
             if (!stage->loop[l].pure) {
                 // Not parallelizeable. We must move this inwards.
                 outer_extent = 1;
-            } else if (i == -1 && parallelism_found < params.parallelism) {
-                // Things are dire. We need to parallelize across
-                // the innermost storage dimension. Do it
-                // minimally.
-                outer_extent = std::min(outer->size[l], (params.parallelism + parallelism_found - 1) / parallelism_found);
+            } else if (i == -1) {
+                if (parallelism_found < params.parallelism) {
+                    // Things are dire. We need to parallelize across
+                    // the innermost storage dimension. Do it
+                    // minimally.
+                    outer_extent = std::min(outer->size[l], (params.parallelism + parallelism_found - 1) / parallelism_found);
+                }
             } else {
                 // Pick some number of loop iterations per parallel tasks
                 int64_t inner_size = 1;
