@@ -3593,21 +3593,15 @@ struct State {
             // Deciding on parallel tasks
 
             auto child = make_child();
-            vector<IntrusivePtr<const LoopNest>> new_root_children = root->children;
-            int child_to_replace = -1;
-            for (int i = 0; i < (int)root->children.size(); i++) {
-                if (root->children[i]->node == node) {
-                    child_to_replace = i;
-                }
-            }
-
             LoopNest *new_root = new LoopNest;
             new_root->copy_from(*root);
 
-            if (child_to_replace != -1) {
-                // For now assume that parallelize in tiles returns a single option
-                new_root->children[child_to_replace] =
-                    new_root->children[child_to_replace]->parallelize_in_tiles(params, root.get())[0];
+            for (int i = 0; i < (int)root->children.size(); i++) {
+                if (root->children[i]->node == node) {
+                    // For now assume that parallelize in tiles returns a single option
+                    new_root->children[i] =
+                        new_root->children[i]->parallelize_in_tiles(params, root.get())[0];
+                }
             }
 
             child->root = new_root;
