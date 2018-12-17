@@ -435,7 +435,7 @@ private:
         }
     }
 
-    // We want to break things down into a serial sequence of leaf
+    // We break things down into a serial sequence of leaf
     // stmts similar to InjectBufferCopiesForSingleBuffer.
     void visit(const For *op) override {
          check_and_record_last_use(op);
