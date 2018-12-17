@@ -2208,7 +2208,10 @@ struct LoopNest {
             // Pick the site at which we will compute the footprint relationship
             const auto *consumer_store_site = innermost ? parent : sites.get(node).store;
             int64_t consumer_instances = innermost ? instances : feat.num_realizations;
-            internal_assert(consumer_instances != 0);
+            if (consumer_instances == 0) {
+                root.dump(" ");
+            }
+            internal_assert(consumer_instances != 0) << node->func.name() << " " << innermost << " " << instances << " " << feat.num_realizations << "\n";
 
             vector<const FunctionDAG::Node *> pending;
             pending.push_back(node);
@@ -2862,7 +2865,7 @@ struct LoopNest {
 
                 bool may_slide = (!in_realization &&
                                   f->stages.size() == 1);
-                if (may_slide) {
+                if (false && may_slide) {
                     // Store here, but compute further in. Currently
                     // don't have to worry about the constraints this
                     // places on parallelism, as we forced all the
@@ -2893,8 +2896,18 @@ struct LoopNest {
             for (auto s : child_size) {
                 num_ones += (s == 1) ? 1 : 0;
             }
-            bool may_slide = !is_root() && (num_ones == ((int)child_size.size() - 1)) && f->stages.size() == 1;
-            may_slide &= (vector_dim >= (int)child_size.size()) || (child_size[vector_dim] == 1);
+            // Can't slide at the root level, or no parallelism
+            bool may_slide = !is_root();
+            // Only slide over single-dimensional loops
+            may_slide &= num_ones == ((int)child_size.size() - 1);
+            // Don't slide funcs with update stages
+            may_slide &= f->stages.size() == 1;
+            // Don't slide over a split vector dimension (why?)
+            may_slide &= (children[child]->vectorized_loop_index == -1 ||
+                          child_size[children[child]->vectorized_loop_index] == 1);
+
+            may_slide = false;
+
             for (int store_here = 0; store_here < 2; store_here++) {
                 if (store_here && !may_slide) {
                     // We place all our parallel loops at the root
@@ -4063,6 +4076,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
             }
 
             auto selected = q[selection];
+            selected->dump();
             q.clear();
             q.emplace(std::move(selected));
         }

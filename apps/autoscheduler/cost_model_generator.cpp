@@ -152,7 +152,7 @@ public:
             cast(working_type, (fast_log(schedule_features(n, c, s) + 1) - 1e-10f * schedule_mean(c)) / max(1, 1e-10f * schedule_std(c)));
 
         const int head1_channels = 24, head1_w = 56, head1_h = 7;
-        const int head2_channels = 96, head2_w = 28;
+        const int head2_channels = 24, head2_w = 28;
         const int conv1_channels = 16;
         const int conv_support = 3;
 
@@ -413,7 +413,7 @@ public:
 
             // Maximize
             Expr correct_order = confidence * significance * select((r1 > r2) == (p1 > p2), -1.0f, 1.0f);
-            err(n) = correct_order + 1e-10f * delta + 1e-10f * regularize1;
+            err(n) = 1e-10f * correct_order + delta + 1e-10f * regularize1;
 
             Expr loss = sum(err(r_batch));
 

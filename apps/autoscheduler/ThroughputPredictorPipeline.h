@@ -326,7 +326,7 @@ class ThroughputPredictorPipeline {
             weights.head2_filter = buffer_from_file(weights_dir + "/head2_conv1_weight.data", {24, 28});
             weights.head2_bias = buffer_from_file(weights_dir + "/head2_conv1_bias.data", {24});
 
-            weights.conv1_filter = buffer_from_file(weights_dir + "/trunk_conv1_weight.data", {16, 48, 3});
+            weights.conv1_filter = buffer_from_file(weights_dir + "/trunk_conv1_weight.data", {16, 24 + 24, 3});
             weights.conv1_bias = buffer_from_file(weights_dir + "/trunk_conv1_bias.data", {16});
         }
 
