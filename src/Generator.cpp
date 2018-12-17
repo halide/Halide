@@ -1,7 +1,15 @@
 #include <cmath>
 #include <fstream>
 #include <set>
+
+#if defined(_MSC_VER) && !defined(NOMINMAX)
+#define NOMINMAX
+#endif
+#ifdef _WIN32
+#include <windows.h>
+#else
 #include <dlfcn.h>
+#endif
 
 #include "Generator.h"
 #include "Outputs.h"
@@ -802,7 +810,9 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
         "     file naming, in the form [.old=.new[,.old2=.new2]]\n"
         "\n"
         " -p  A comma-separted list of shared libraries that will be loaded before the\n"
-        "     generator is run. Useful for custom auto-schedulers.\n";
+        "     generator is run. Useful for custom auto-schedulers. The generator must\n"
+        "     either be linked against a shared libHalide or compiled with -rdynamic\n"
+        "     so that references in the shared library to libHalide can resolve.\n";
 
     std::map<std::string, std::string> flags_info = { { "-f", "" },
                                                       { "-g", "" },
@@ -842,10 +852,18 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
     // It's possible that in the future loaded plugins might change
     // how arguments are parsed, so we handle those first.
     for (auto lib : split_string(flags_info["-p"], ",")) {
+        if (lib.empty()) continue;
+#ifdef _WIN32
+        if (LoadLibrary(lib.c_str()) != nullptr) {
+            cerr << "Failed to load: " << lib << "\n";
+            return 1;
+        }
+#else
         if (dlopen(lib.c_str(), RTLD_LAZY) == nullptr) {
             cerr << "Failed to load: " << lib << ": " << dlerror() << "\n";
             return 1;
         }
+#endif
     }
 
     std::string runtime_name = flags_info["-r"];

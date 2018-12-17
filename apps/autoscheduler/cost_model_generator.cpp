@@ -1,6 +1,8 @@
 #include "Halide.h"
 #include "Derivative.h"
 
+#include "cost_model_schedule.h"
+
 using namespace Halide;
 
 // A model weight is either just an input, or an input and an output
@@ -295,22 +297,17 @@ public:
             Expr regularize1 = sum(-min(conv1_stage2(r_conv1_output.x, r_conv1_output.y, n), 0));
             Expr regularize2 = sum(-min(conv1_stage1(r_conv1_output.x, r_conv1_output.y), 0));
 
-            auto sigmoid = [](Expr x) {
-                return (1 - 1 / abs(x)) * select(x > 0, 1.0f, -1.0f);
-            };
-            
-
             Expr n2 = (n + 1) % batch_size;
             Expr scale = 1.0f / true_runtime(0);
             Expr p1 = prediction(n) * scale, p2 = prediction(n2) * scale;
             Expr r1 = true_runtime(n) * scale, r2 = true_runtime(n2) * scale;
 
-            // The network should predict runtime           
-            Expr delta = (p1 - r1) * (p1 - r1);
-            
+            // The network should predict runtime
+            Expr delta = abs(p1 - r1);
+
             // More importantly, the network should predict runtimes
             // in the correct order
-           
+
             // A reward for being confident and correct, a penalty for
             // being confident and wrong, and nothing when the result
             // is not confident. Size of reward or penalty is also
@@ -319,7 +316,6 @@ public:
             Expr significance = 1 - 1 / (abs(r1 - r2) + 1);
             Expr correct_order = confidence * significance * select((r1 > r2) == (p1 > p2), -1.0f, 1.0f);
             err(n) = correct_order + 0.001f * delta + 0.00001f * regularize1;
-
 
             Expr loss = sum(err(r_batch));
 
@@ -359,8 +355,7 @@ public:
 
         } else if (training) {
             // Output by the autoscheduler in autotuning mode
-
-            #include "cost_model_schedule.h"
+            do_cost_model_schedule(get_pipeline());
         } else {
 
             Var no;

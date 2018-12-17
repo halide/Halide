@@ -5,7 +5,9 @@ IMAGES ?= ../images
 HL_TARGET ?= host
 UNAME ?= $(shell uname)
 
-# This pulls in the definition of HALIDE_SYSTEM_LIBS
+SANITIZER_FLAGS ?=
+
+# This pulls in the definition of HALIDE_SYSTEM_LIBS and HALIDE_RTTI
 include $(HALIDE_DISTRIB_PATH)/halide_config.make
 
 ifeq ($(OS), Windows_NT)
@@ -19,11 +21,29 @@ CXX ?= g++
 GXX ?= g++
 
 CFLAGS += -I $(HALIDE_DISTRIB_PATH)/include/ -I $(HALIDE_DISTRIB_PATH)/tools/ -I $(HALIDE_DISTRIB_PATH)/apps/support/
-CXXFLAGS += -std=c++11 -I $(HALIDE_DISTRIB_PATH)/include/ -I $(HALIDE_DISTRIB_PATH)/tools/
+CXXFLAGS += -std=c++11 -I $(HALIDE_DISTRIB_PATH)/include/ -I $(HALIDE_DISTRIB_PATH)/tools/ $(SANITIZER_FLAGS)
+
+ifeq (0, HALIDE_RTTI)
+CXXFLAGS += -fno-rtti
+endif
 
 ifeq ($(UNAME), Darwin)
 CXXFLAGS += -fvisibility=hidden
 endif
+
+ifeq ($(UNAME), Linux)
+USE_EXPORT_DYNAMIC=-rdynamic
+USE_OPEN_MP=-fopenmp
+else
+ifeq ($(UNAME), Darwin)
+USE_EXPORT_DYNAMIC=-undefined dynamic_lookup
+USE_OPEN_MP=
+else
+USE_EXPORT_DYNAMIC=
+USE_OPEN_MP=
+endif
+endif
+
 
 # To run apps on android that support this, build a separate toolchain from the Android NDK
 # using the make-standalone-toolchain.sh script:
