@@ -11,7 +11,7 @@ trap finish EXIT
 
 mkdir -p results
 
-PIPELINES=20
+PIPELINES=100
 SCHEDULES=1
 
 RANDOM_DROPOUT=100

@@ -1432,8 +1432,10 @@ struct ScheduleFeatures {
     int native_vector_size = 0; // The native vector size for the narrowest type used.
 
     int64_t num_vectors = 0; // Number of vectors computed (Assuming sliding worked)
+    int64_t num_scalars = 0; // Number of scalars computed (e.g. from tails of loops)
     int64_t scalar_loads_per_vector = 0;
     int64_t vector_loads_per_vector = 0;
+    int64_t scalar_loads_per_scalar = 0;
 
     int64_t bytes_at_task = 0;
     int64_t innermost_bytes_at_task = 0;
@@ -1463,8 +1465,10 @@ struct ScheduleFeatures {
                  << "    vector_size:                           " << vector_size << '\n'
                  << "    native_vector_size:                    " << native_vector_size << '\n'
                  << "    num_vectors:                           " << num_vectors << '\n'
+                 << "    num_scalars:                           " << num_scalars << '\n'
                  << "    scalar_loads_per_vector:               " << scalar_loads_per_vector << '\n'
                  << "    vector_loads_per_vector:               " << vector_loads_per_vector << '\n'
+                 << "    scalar_loads_per_scalar:               " << scalar_loads_per_scalar << '\n'
                  << "    bytes_at_task:                         " << bytes_at_task << '\n'
                  << "    innermost_bytes_at_task:               " << innermost_bytes_at_task << '\n';
 
@@ -2033,15 +2037,21 @@ struct LoopNest {
                 feat.num_realizations = subinstances;
 
                 feat.points_computed_per_realization = 1;
-                feat.num_vectors = subinstances;
+                feat.num_scalars = feat.num_vectors = subinstances;
                 for (int i = 0; i < (int)node->stages[s].loop.size(); i++) {
                     const auto &p = bounds->loops(s, i);
                     int64_t extent = p.second - p.first + 1;
                     feat.points_computed_per_realization *= extent;
                     if (i == sites.get(node).produce->vectorized_loop_index) {
-                        feat.num_vectors *= (extent + node->stages[s].vector_size - 1) / node->stages[s].vector_size;
+                        // Assumes that we're not going to split
+                        // things such that non-native-width
+                        // vectorization is a problem, except for the
+                        // tail.
+                        feat.num_vectors *= extent / node->stages[s].vector_size;
+                        feat.num_scalars *= extent % node->stages[s].vector_size;
                     } else {
                         feat.num_vectors *= extent;
+                        feat.num_scalars *= extent;
                     }
                 }
                 feat.points_computed_total = feat.points_computed_per_realization * feat.num_realizations;
@@ -2131,6 +2141,11 @@ struct LoopNest {
             } else {
                 feat.vector_size = 1;
             }
+            if (feat.vector_size == 1) {
+                // They're all scalars
+                feat.num_scalars += feat.num_vectors;
+                feat.num_vectors = 0;
+            }
         } else {
             // These will get progressively overwritten as we visit the children
             feat.innermost_loop_extent = size.empty() ? 1 : size[0];
@@ -2203,7 +2218,7 @@ struct LoopNest {
 
         *working_set += working_set_here;
 
-        int64_t bytes_loaded = 0, lines_loaded = 0, allocation_bytes_loaded = 0, vectors_loaded = 0, scalars_loaded = 0;
+        int64_t bytes_loaded = 0, lines_loaded = 0, allocation_bytes_loaded = 0, vectors_loaded = 0, scalars_loaded = 0, elements_loaded = 0;
         if (innermost || at_production) {
             // Pick the site at which we will compute the footprint relationship
             const auto *consumer_store_site = innermost ? parent : sites.get(node).store;
@@ -2295,6 +2310,7 @@ struct LoopNest {
                     } else {
                         scalars_loaded += footprint / e->producer->bytes_per_point;
                     }
+                    elements_loaded += footprint / e->producer->bytes_per_point;
 
                     int64_t store_instances_per_consumption = 1;
 
@@ -2347,9 +2363,9 @@ struct LoopNest {
 
         if (innermost) {
             feat.points_computed_per_production = subinstances / feat.num_productions;
-            // Important TODO: account for loads from input images
             feat.vector_loads_per_vector = vectors_loaded;
             feat.scalar_loads_per_vector = scalars_loaded;
+            feat.scalar_loads_per_scalar = elements_loaded;
         }
 
         // Track features for inlined Funcs
@@ -2358,6 +2374,8 @@ struct LoopNest {
             internal_assert(f);
             auto &inlined_feat = features->get_or_create(&(f->stages[0]));
             inlined_feat.inlined_calls += it.value() * subinstances;
+            inlined_feat.num_vectors += it.value() * feat.num_vectors;
+            inlined_feat.num_scalars += it.value() * feat.num_scalars;
             inlined_feat.native_vector_size = (int64_t)(stage->vector_size);
             if (inlined_feat.vector_size > 0) {
                 inlined_feat.vector_size = std::min(inlined_feat.vector_size, (int64_t)stage->vector_size);
@@ -3301,17 +3319,16 @@ struct State {
         if (throughput_predictor) {
 
             // Perform any quick rejection tests before enqueuing this
-
-            // TODO: allow massive recompute for stages that are no more expensive than a load from them
-            /*
             for (auto it = features.begin(); it != features.end(); it++) {
-                auto &feat = it.value();
-                if (feat.points_computed_total + feat.inlined_calls > 10 * feat.points_computed_minimum) {
-                    cost = 1e50;
-                    return true;
+                if (!it.key()->node->func.is_wrapper()) { // It's OK to repeatedly stage data
+                    auto &feat = it.value();
+                    if (feat.points_computed_total + feat.inlined_calls > 1.5 * feat.points_computed_minimum) {
+                        cost = 1e50;
+                        return true;
+                    }
                 }
             }
-            */
+
 
             // Avoid code size explosion from recursive inlining.
             if (root->max_inlined_calls() > 100) {
@@ -3368,7 +3385,7 @@ struct State {
                 // Assume that narrow types are cheaper because they
                 // vectorize wider, and just count the number of
                 // vectors computed.
-                compute_cost = per_element_compute_cost * feat.num_vectors;
+                compute_cost = per_element_compute_cost * (feat.num_vectors + feat.num_scalars);
 
                 // Figure out vector overcompute
                 const int native_vector_size = feat.native_vector_size;
@@ -3451,7 +3468,9 @@ struct State {
                     // *cold* misses, by contrast, go out to the cache
                     // level that fits the entire source allocation,
                     // not just the footprint accessed of it.
-                    capacity_cache_misses = feat.num_vectors * (feat.vector_loads_per_vector + feat.scalar_loads_per_vector) * 1e-2;
+                    capacity_cache_misses = feat.num_vectors * (feat.vector_loads_per_vector + feat.scalar_loads_per_vector);
+                    capacity_cache_misses += feat.num_scalars * feat.scalar_loads_per_scalar;
+                    capacity_cache_misses *= 1e-2;
                     cost_of_capacity_miss = feat.unique_bytes_read_per_realization * 40 * 1e-4;
 
                     // We'll assume multiway caches work well and ignore the other 'C' (conflict cache misses).

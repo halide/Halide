@@ -152,8 +152,8 @@ public:
             cast(working_type, (fast_log(schedule_features(n, c, s) + 1) - 1e-10f * schedule_mean(c)) / max(1, 1e-10f * schedule_std(c)));
 
         const int head1_channels = 24, head1_w = 56, head1_h = 7;
-        const int head2_channels = 24, head2_w = 28;
-        const int conv1_channels = 16;
+        const int head2_channels = 24, head2_w = 30;
+        const int conv1_channels = 24;
         const int conv_support = 3;
 
         Func head1_conv("head1_conv");
@@ -224,9 +224,10 @@ public:
         Expr vector_size = schedule_features(n, idx++, w);
         Expr native_vector_size = schedule_features(n, idx++, w);
         Expr num_vectors = schedule_features(n, idx++, w);
-
+        Expr num_scalars = schedule_features(n, idx++, w);
         Expr vector_loads_per_vector = schedule_features(n, idx++, w);
         Expr scalar_loads_per_vector = schedule_features(n, idx++, w);
+        Expr scalar_loads_per_scalar = schedule_features(n, idx++, w);
         Expr bytes_at_task = schedule_features(n, idx++, w);
         Expr innermost_bytes_at_task = schedule_features(n, idx++, w);
         assert(idx == head2_w);
@@ -269,32 +270,37 @@ public:
 
         // Replicate the manual cost model, but with tunable constants
 
-        Expr vector_recompute = native_vector_size / vector_size;
-
-        Expr compute_cost = (num_vectors * relu1(0, w, n) +
-                             inlined_calls * vector_recompute * relu1(1, w, n));
-
+        // Ratio of inner loop trip count compared to ideal inner loop
+        // trip count in a perfectly vectorized world. TODO: This don't work for inlined things.
+        Expr compute_cost = select(inlined_calls == 0,
+                                   (num_vectors * relu1(0, w, n) +
+                                    num_scalars * relu1(1, w, n)),
+                                   (num_vectors * relu1(2, w, n) +
+                                    num_scalars * relu1(3, w, n)));
+        /*
         Expr innermost_cache_lines = innermost_bytes_at_production / 64;
         Expr cache_line_penalty = ceil(innermost_cache_lines) / max(1, innermost_cache_lines);
         compute_cost *= cache_line_penalty;
+        */
 
         Expr num_tasks = inner_parallelism;
         Expr cores_per_realization = num_cores / outer_parallelism;
         Expr idle_core_wastage = (0.5f * cores_per_realization + num_tasks) / num_tasks;
-        idle_core_wastage = min(idle_core_wastage, 1 + relu1(2, w, n));
+        idle_core_wastage = min(idle_core_wastage, 1 + relu1(4, w, n));
         idle_core_wastage *= ceil(num_tasks / cores_per_realization) * (cores_per_realization / num_tasks);
 
         compute_cost *= idle_core_wastage;
 
-
-        Expr cold_cache_misses = num_realizations * (unique_lines_read_per_realization * relu1(3, w, n) +
-                                                     unique_bytes_read_per_realization * relu1(4, w, n));
+        Expr cold_cache_misses = num_realizations * (unique_lines_read_per_realization * relu1(5, w, n) +
+                                                     unique_bytes_read_per_realization * relu1(6, w, n));
         Expr cost_of_cold_miss = allocation_bytes_read_per_realization * 1e-6f;
 
         Expr cold_load_cost = cold_cache_misses * cost_of_cold_miss;
 
-        Expr capacity_cache_misses = num_vectors * (vector_loads_per_vector * relu1(5, w, n) +
-                                                    scalar_loads_per_vector * relu1(6, w, n));
+        Expr capacity_cache_misses =
+            (num_vectors * (vector_loads_per_vector * relu1(7, w, n) +
+                            scalar_loads_per_vector * relu1(8, w, n)) +
+             num_scalars * scalar_loads_per_scalar * relu1(9, w, n));
         Expr cost_of_capacity_miss = unique_bytes_read_per_realization * 1e-6f;
 
         Expr hot_load_cost = capacity_cache_misses * cost_of_capacity_miss;
@@ -306,11 +312,10 @@ public:
         // parallelism, because for stages with internal parallelism,
         // most values produced will be consumed on another core, so
         // they will get punted out to L3 no matter how small.
-        Expr alpha = select(inner_parallelism > 1, relu1(7, w, n),
-                            relu1(8, w, n));
-        Expr beta = select(inner_parallelism > 1, relu1(9, w, n),
-                           relu1(10, w, n));
-
+        Expr alpha = select(inner_parallelism > 1, relu1(10, w, n),
+                            relu1(11, w, n));
+        Expr beta = select(inner_parallelism > 1, relu1(12, w, n),
+                           relu1(13, w, n));
 
         Expr store_cache_misses = num_realizations * (lines_written_per_realization * alpha +
                                                       bytes_at_realization * beta);
@@ -322,26 +327,35 @@ public:
         // another core is inversely proportional to
         // innermost_bytes_at_task, and the cost is paid on every
         // store.
-        Expr cost_of_false_sharing = select(inner_parallelism > 1, relu1(11, w, n) * num_vectors / max(1, innermost_bytes_at_task), 0.0f);
+        Expr cost_of_false_sharing = select(inner_parallelism > 1, relu1(14, w, n) * (num_vectors + num_scalars) / max(1, innermost_bytes_at_task), 0.0f);
+
+        // Now add a term for false sharing of pages. The maximum
+        // number of threads that could all fault on the same page at
+        // the same time is:
+        Expr max_threads_hitting_same_page_fault = min(inner_parallelism, 4096 / max(1, innermost_bytes_at_task));
+
+        // The total number of page faults is proportionate to the number of bytes allocated
+        Expr num_page_faults = bytes_at_production;
+
+        // And page faults are serviced serially, so the total CPU time gets multiplied by the thread count again!
+        Expr cost_of_page_faults = num_page_faults * max_threads_hitting_same_page_fault * inner_parallelism * outer_parallelism * relu1(15, w, n);
 
         // Malloc aint free. Small allocations should go on the stack, but this isn't totally reliable.
-        Expr cost_of_malloc = relu1(12, w, n) * num_realizations;
+        Expr cost_of_malloc = relu1(16, w, n) * num_realizations;
 
         // Penalize working sets that start to fall out of cache
-        // Expr cost_of_working_set = 1e-17f * working_set * working_set * working_set * relu1(10, w, n);
+        // Expr cost_of_working_set = ...
 
-        Expr cost_of_parallel_launches = num_productions * select(inner_parallelism > 1, relu1(13, w, n), 0.0f);
+        Expr cost_of_parallel_launches = num_productions * select(inner_parallelism > 1, relu1(17, w, n), 0.0f);
 
-        Expr cost_of_parallel_tasks = num_productions * (inner_parallelism - 1) * relu1(14, w, n);
+        Expr cost_of_parallel_tasks = num_productions * (inner_parallelism - 1) * relu1(18, w, n);
 
-        Expr cost = compute_cost + cold_load_cost + hot_load_cost + store_cost + cost_of_malloc + cost_of_false_sharing + cost_of_parallel_tasks + cost_of_parallel_launches;
+        Expr cost = compute_cost + cold_load_cost + hot_load_cost + store_cost + cost_of_malloc + cost_of_false_sharing + cost_of_parallel_tasks + cost_of_parallel_launches + cost_of_page_faults;
 
-        // Keep the schedule fixed by adding a dependence to all 16 out channels
-        for (int i = 0; i < 16; i++) {
+        // Keep the schedule fixed by adding a dependence to all 24 out channels
+        for (int i = 0; i < 24; i++) {
             cost += 0.0f * relu1(i, w, n);
         }
-
-        cost += relu1(15, w, n);
 
         Func runtime_per_stage;
         runtime_per_stage(n, w) = cost * 1e-9f;
@@ -391,7 +405,7 @@ public:
             Expr r1 = true_runtime(n) * scale, r2 = true_runtime(n2) * scale;
 
             // The network should predict runtime.
-            Expr delta = abs(r1 - p1);
+            Expr delta = pow(r1 - p1, 2);
 
             // More importantly, the network should predict runtimes
             // in the correct order
@@ -413,11 +427,11 @@ public:
 
             // Maximize
             Expr correct_order = confidence * significance * select((r1 > r2) == (p1 > p2), -1.0f, 1.0f);
-            err(n) = 1e-10f * correct_order + delta + 1e-10f * regularize1;
+            err(n) = 1e-10f * correct_order + delta + 1e-5f * regularize1;
 
             Expr loss = sum(err(r_batch));
 
-            loss_output() = cast<float>(loss) + 1e-10f * regularize2;
+            loss_output() = cast<float>(loss) + 1e-5f * regularize2;
 
             d_loss_d = propagate_adjoints(loss_output);
 
