@@ -216,6 +216,9 @@ int main(int argc, char **argv) {
 
     int num_cores = atoi(getenv("HL_NUM_THREADS"));
 
+    int batches = atoi(argv[1]);
+    int epochs = (batches + (int)(samples.size()) - 1) / (int)(samples.size());
+    
     std::cout.setf(std::ios::fixed, std::ios::floatfield);
     std::cout.precision(4);
 
@@ -226,7 +229,7 @@ int main(int argc, char **argv) {
         float correct_ordering_rate_sum[models] = {0};
         float correct_ordering_rate_count[models] = {0};
 
-        for (int batch = 0; batch < atoi(argv[1]); batch++) {
+        for (int e = 0; e < epochs; e++) {
             int counter = 0;
 
             float worst_miss = 0;

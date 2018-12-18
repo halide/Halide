@@ -1885,6 +1885,9 @@ struct LoopNest {
     // Are we permitted to tile this loop?
     bool tileable = false;
 
+    // Is this the parallel outer loop?
+    bool parallel = false;
+    
     // What dimension is this Func vectorized over, in terms of the args of the Func?
     int vector_dim = -1;
 
@@ -2023,6 +2026,7 @@ struct LoopNest {
                 in_impure = true;
             }
         }
+        
         int64_t subinstances = instances * loop_instances;
 
         for (const auto *node : store_at) {
@@ -2038,6 +2042,7 @@ struct LoopNest {
 
                 feat.points_computed_per_realization = 1;
                 feat.num_scalars = feat.num_vectors = subinstances;
+                bool vectorized = false;
                 for (int i = 0; i < (int)node->stages[s].loop.size(); i++) {
                     const auto &p = bounds->loops(s, i);
                     int64_t extent = p.second - p.first + 1;
@@ -2049,10 +2054,14 @@ struct LoopNest {
                         // tail.
                         feat.num_vectors *= extent / node->stages[s].vector_size;
                         feat.num_scalars *= extent % node->stages[s].vector_size;
+                        vectorized = true;
                     } else {
                         feat.num_vectors *= extent;
                         feat.num_scalars *= extent;
                     }
+                }
+                if (!vectorized) {
+                    feat.num_vectors = 0;
                 }
                 feat.points_computed_total = feat.points_computed_per_realization * feat.num_realizations;
 
@@ -2128,7 +2137,15 @@ struct LoopNest {
             return;
         }
 
-        int64_t parallel_tasks = parent->is_root() ? parallel_loop_instances : 1;
+        int64_t parallel_tasks = 1;
+        if (parallel) {
+            parallel_tasks = parallel_loop_instances;
+        } else if (parent->is_root()) {
+            // We haven't picked a parallel tiling yet. Just assume an
+            // appropriate number of loops above will be parallelized
+            parallel_tasks = params.parallelism;
+        }
+
         int64_t subparallelism = parallel_tasks * parallelism;
 
         // Figure out the features at the compute_at level
@@ -2161,26 +2178,33 @@ struct LoopNest {
         const bool at_pure_production = at_production && stage_idx == 0;
 
         if (at_task) {
-            const auto &bounds = get_bounds(node);
-            feat.bytes_at_task = node->bytes_per_point;
-            int64_t innermost_storage_extent = 1;
-            for (int i = 0; i < node->func.dimensions(); i++) {
-                int64_t outer = 1;
-                for (int l = 0; l < stage->loop.size(); l++) {
-                    if (stage->loop[l].var == node->func.args()[i]) {
-                        outer = size[l];
-                        break;
+            if (parallel) {                
+                const auto &bounds = get_bounds(node);
+                feat.bytes_at_task = node->bytes_per_point;
+                int64_t innermost_storage_extent = 1;
+                for (int i = 0; i < node->func.dimensions(); i++) {
+                    int64_t outer = 1;
+                    for (int l = 0; l < stage->loop.size(); l++) {
+                        if (stage->loop[l].var == node->func.args()[i]) {
+                            outer = size[l];
+                            break;
+                        }
+                    }
+                    const auto &p = bounds->region_computed(i);
+                    int64_t extent = (p.second - p.first) + 1;
+                    extent /= outer;
+                    feat.bytes_at_task *= extent;
+                    if (i == vector_dim) {
+                        innermost_storage_extent = extent;
                     }
                 }
-                const auto &p = bounds->region_computed(i);
-                int64_t extent = (p.second - p.first) + 1;
-                extent /= outer;
-                feat.bytes_at_task *= extent;
-                if (i == vector_dim) {
-                    innermost_storage_extent = extent;
-                }
+                feat.innermost_bytes_at_task = node->bytes_per_point * innermost_storage_extent;
+            } else {
+                // How this loop will be parallelized is not yet
+                // determined. Use optimistic values for the features.
+                feat.bytes_at_task = (feat.bytes_at_realization + params.parallelism - 1) / params.parallelism;
+                feat.innermost_bytes_at_task = std::min(feat.bytes_at_task, (feat.innermost_bytes_at_realization + params.parallelism - 1) / params.parallelism);
             }
-            feat.innermost_bytes_at_task = node->bytes_per_point * innermost_storage_extent;
         }
 
         if (at_production) {
@@ -2467,6 +2491,8 @@ struct LoopNest {
         }
         if (innermost) {
             debug(0) << " *\n";
+        } else if (parallel) {
+            debug(0) << " p\n";
         } else {
             debug(0) << '\n';
         }
@@ -2614,9 +2640,9 @@ struct LoopNest {
                 // to be the first loop iteration.
                 single_point->loops(s, i) = {l.first, l.first};
 
-                if (node->size[i] > 1 && f->stages[s].loop[i].var == f->func.args()[v]) {
+                if (node->size[i] >= node->stage->vector_size && f->stages[s].loop[i].var == f->func.args()[v]) {
                     node->vectorized_loop_index = (int)i;
-                    vector_size = std::min(node->size[i], (int64_t)(node->stage->vector_size));
+                    vector_size = (int64_t)(node->stage->vector_size);
                     single_point->loops(s, i).second += vector_size - 1;
                     node->size[i] += vector_size - 1;
                     node->size[i] /= vector_size;
@@ -2669,6 +2695,7 @@ struct LoopNest {
             // No splits to be made
             LoopNest *child = new LoopNest;
             child->copy_from(*this);
+            child->parallel = true;
             result.emplace_back(child);
             return result;
         }
@@ -2683,6 +2710,7 @@ struct LoopNest {
         inner->vectorized_loop_index = outer->vectorized_loop_index = vectorized_loop_index;
         outer->size = size;
         outer->innermost = false;
+        outer->parallel = true;
 
         // First make an inner loop representing a 1x1x1... tile
         inner->size.resize(size.size(), 1);
@@ -3240,6 +3268,12 @@ struct State {
     int num_funcs_scheduled = 0;
     bool penalized = false;
 
+    State() = default;
+    State(const State &) = delete;
+    State(State &&) = delete;
+    void operator=(const State &) = delete;
+    void operator=(State &&) = delete;
+    
     static int cost_calculations;
 
     uint64_t structural_hash(int depth, int parallelism) const {
@@ -4083,7 +4117,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
             for (int choice_label = (int)q.size() - 1; choice_label >= 0; choice_label--) {
                 auto state = q[choice_label];
                 debug(0) << "\n[" << choice_label << "]:\n";
-                state->calculate_cost(dag, params, throughput_predictor, true);
+                // state->calculate_cost(dag, params, throughput_predictor, true);
                 state->dump();
             }
 
@@ -4112,6 +4146,12 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
 
     std::unordered_set<uint64_t> permitted_hashes;
     int num_passes = (beam_size == 1) ? 1 : 5;
+
+    string cyos_str = get_env_variable("HL_CYOS");
+    if (cyos_str == "1") {
+        num_passes = 1;
+    }
+
     for (int i = 0; i < num_passes; i++) {
         auto pass = optimal_schedule_pass(dag, outputs, params, throughput_predictor, beam_size, i, permitted_hashes);
         debug(0) << "\nPass " << i << " result:\n";
