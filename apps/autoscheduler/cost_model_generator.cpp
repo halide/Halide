@@ -1,6 +1,8 @@
 #include "Halide.h"
 #include "Derivative.h"
 
+#include "cost_model_schedule.h"
+
 using namespace Halide;
 
 // A model weight is either just an input, or an input and an output
@@ -463,8 +465,7 @@ public:
 
         } else if (training) {
             // Output by the autoscheduler in autotuning mode
-
-            #include "cost_model_schedule.h"
+            do_cost_model_schedule(get_pipeline());
         } else {
 
             Var no;

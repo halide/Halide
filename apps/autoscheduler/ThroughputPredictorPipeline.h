@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cmath>
 #include <fstream>
 #include <iostream>
 #include <map>
@@ -412,6 +413,7 @@ class ThroughputPredictorPipeline {
         void send(const uint8_t *data, ssize_t len) {
             ssize_t sent = ::send(fd, data, len, 0);
             assert(sent == len);
+            (void) sent;
         }
 
         void recv(uint8_t *data, ssize_t len) {

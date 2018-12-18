@@ -2,6 +2,9 @@
 #include <fstream>
 #include <set>
 
+#if defined(_MSC_VER) && !defined(NOMINMAX)
+#define NOMINMAX
+#endif
 #ifdef _WIN32
 #include <windows.h>
 #else
@@ -849,6 +852,7 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
     // It's possible that in the future loaded plugins might change
     // how arguments are parsed, so we handle those first.
     for (auto lib : split_string(flags_info["-p"], ",")) {
+        if (lib.empty()) continue;
 #ifdef _WIN32
         if (LoadLibrary(lib.c_str()) != nullptr) {
             cerr << "Failed to load: " << lib << "\n";

@@ -17,9 +17,9 @@ SCHEDULES=1
 RANDOM_DROPOUT=100
 BEAM_SIZE=50
 
-make -C ../autoscheduler bin/auto_schedule.so
+make -C ../autoscheduler bin/libauto_schedule.so
 mkdir -p bin
-cp ../autoscheduler/bin/auto_schedule.so bin/
+cp ../autoscheduler/bin/libauto_schedule.so bin/
 
 # Build the shared things by building one pipeline
 HL_TARGET=host HL_SEED=root PIPELINE_SEED=0 HL_RANDOM_DROPOUT=${RANDOM_DROPOUT} HL_BEAM_SIZE=${BEAM_SIZE} make build
@@ -27,16 +27,16 @@ HL_TARGET=host HL_SEED=root PIPELINE_SEED=0 HL_RANDOM_DROPOUT=${RANDOM_DROPOUT} 
 for ((b=1;b<2;b++)); do
     echo Batch $b
     rm -f results/files_*.txt
-    
+
     # Build lots of pipelines
     for ((p=0;p<$PIPELINES;p++)); do
         P=$((b * $PIPELINES + p))
         STAGES=$(((P % 30) + 10))
         echo echo Building pipeline $P
         #echo "HL_TARGET=host HL_SEED=root PIPELINE_SEED=$P PIPELINE_STAGES=$STAGES HL_RANDOM_DROPOUT=${RANDOM_DROPOUT} HL_BEAM_SIZE=${BEAM_SIZE} make build 2>&1 | grep -v Nothing.to.be.done"
-        echo "HL_TARGET=host HL_SEED=0 PIPELINE_SEED=$P PIPELINE_STAGES=$STAGES HL_RANDOM_DROPOUT=${RANDOM_DROPOUT} HL_BEAM_SIZE=${BEAM_SIZE} make build 2>&1 | grep -v Nothing.to.be.done"        
+        echo "HL_TARGET=host HL_SEED=0 PIPELINE_SEED=$P PIPELINE_STAGES=$STAGES HL_RANDOM_DROPOUT=${RANDOM_DROPOUT} HL_BEAM_SIZE=${BEAM_SIZE} make build 2>&1 | grep -v Nothing.to.be.done"
         for prof in ""; do
-            for ((m=0;m<2;m++)); do 
+            for ((m=0;m<2;m++)); do
                 for ((s=0;s<$SCHEDULES;s++)); do
                     echo "NEW_AUTOSCHEDULER=1 HL_TARGET=host${prof} HL_SEED=$s PIPELINE_SEED=$P PIPELINE_STAGES=$STAGES HL_RANDOM_DROPOUT=${RANDOM_DROPOUT} HL_BEAM_SIZE=${BEAM_SIZE} HL_USE_MANUAL_COST_MODEL=${m} HL_NUM_THREADS=32 HL_MACHINE_PARAMS=32,1,1 make build 2>&1 | grep -v Nothing.to.be.done"
                 done
@@ -76,7 +76,7 @@ for ((b=1;b<2;b++)); do
     # Extract the runtimes
     echo "Extracting runtimes..."
     cat results/files_common.txt | sed "s/_X/_0/" | while read F; do grep '^Time' $F | cut -d: -f2 | cut -b2-; done > results/learned_runtimes_${b}.txt
-    cat results/files_common.txt | sed "s/_X/_1/" | while read F; do grep '^Time' $F | cut -d: -f2 | cut -b2-; done > results/manual_runtimes_${b}.txt    
+    cat results/files_common.txt | sed "s/_X/_1/" | while read F; do grep '^Time' $F | cut -d: -f2 | cut -b2-; done > results/manual_runtimes_${b}.txt
 
     # Extract the compute_root runtimes
     echo "Extracting compute_root runtimes..."
@@ -84,14 +84,14 @@ for ((b=1;b<2;b++)); do
 
     echo "Extracting master runtimes..."
     cat results/files_common.txt | sed "s/_X/_0/" | sed "s/-new_autoscheduler//" | while read F; do grep '^Time' $F | cut -d: -f2 | cut -b2-; done > results/master_runtimes_${b}.txt
-    
+
     # Extract the features
     echo "Extracting features..."
     cat results/files_common.txt | sed "s/_X/_0/" | while read F; do echo $(grep '^YYY' ${F/times/stderr} | cut -d' ' -f3-); done > results/features_${b}.txt
 
     # Extract failed proofs
     echo "Extracting any failed proofs..."
-    cat results/files_${b}_*.txt | while read F; do grep -A1 'Failed to prove' ${F/times/stderr}; done > results/failed_proofs_${b}.txt    
+    cat results/files_${b}_*.txt | while read F; do grep -A1 'Failed to prove' ${F/times/stderr}; done > results/failed_proofs_${b}.txt
 
     # Extract the cost according to the hand-designed model (just the sum of a few of the features)
     echo "Extracting costs..."

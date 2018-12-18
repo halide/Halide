@@ -19,8 +19,8 @@ SAMPLES=${PWD}/samples
 # Build some tools we need. 
 make -C ../autoscheduler bin/augment_sample
 make -C ../autoscheduler bin/train_cost_model
-make -C ../autoscheduler bin/auto_schedule.so
-cp ../autoscheduler/bin/augment_sample ../autoscheduler/bin/train_cost_model  ../autoscheduler/bin/auto_schedule.so bin/
+make -C ../autoscheduler bin/libauto_schedule.so
+cp ../autoscheduler/bin/augment_sample ../autoscheduler/bin/train_cost_model  ../autoscheduler/bin/libauto_schedule.so bin/
 
 mkdir -p ${SAMPLES}
 mkdir -p weights
@@ -43,8 +43,8 @@ make_sample() {
         # The other samples are random probes biased by the cost model
         HL_MACHINE_PARAMS=32,1,1 HL_PERMIT_FAILED_UNROLL=1 HL_SEED=${2} HL_FEATURE_FILE=${D}/sample.sample HL_WEIGHTS_DIR=${PWD}/weights HL_RANDOM_DROPOUT=80 HL_BEAM_SIZE=1 ${GENERATOR} -g ${PIPELINE} -o ${D} -e static_library,h,stmt,assembly target=${HL_TARGET} auto_schedule=true max_stages=12 seed=${3} -p ${PWD}/bin/auto_schedule.so 2> ${D}/compile_log_stderr.txt > ${D}/compile_log_stdout.txt
     fi
-    
-    c++ -std=c++11 -DHL_RUNGEN_FILTER_HEADER="\"${D}/${PIPELINE}.h\"" -I ../../include ../../tools/RunGenMain.cpp ../../tools/RunGenStubs.cpp  ${D}/*.a -o ${D}/bench -ljpeg -ldl -lpthread -lz -lpng    
+
+    c++ -std=c++11 -DHL_RUNGEN_FILTER_HEADER="\"${D}/${PIPELINE}.h\"" -I ../../include ../../tools/RunGenMain.cpp ../../tools/RunGenStubs.cpp  ${D}/*.a -o ${D}/bench -ljpeg -ldl -lpthread -lz -lpng
 }
 
 # Benchmark one of the random samples
@@ -75,7 +75,7 @@ for ((i=$((FIRST+1));i<1000000;i++)); do
     done
 
     for ((b=0;b<${BATCH_SIZE};b++)); do
-        echo Compiling sample $b 
+        echo Compiling sample $b
         wait ${pids[${b}]}
     done
 
@@ -88,7 +88,7 @@ for ((i=$((FIRST+1));i<1000000;i++)); do
         S=$(printf "%d%02d" $i $b)
         benchmark_sample "${DIR}/${b}" $S $i
     done
-    
+
     # retrain model weights on all samples seen so far
     echo Retraining model...
     find ${SAMPLES} | grep sample$ | HL_NUM_THREADS=32 HL_WEIGHTS_DIR=weights ./bin/train_cost_model 1000

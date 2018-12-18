@@ -150,9 +150,13 @@ vector<Func> Pipeline::outputs() const {
     return funcs;
 }
 
-std::function<string(Pipeline, const Target &, const MachineParams &)> Pipeline::custom_auto_scheduler;
+/*static*/ std::function<std::string(Pipeline, const Target &, const MachineParams &)> *Pipeline::get_custom_auto_scheduler_ptr() {
+    static std::function<string(Pipeline, const Target &, const MachineParams &)> custom_auto_scheduler = nullptr;
+    return &custom_auto_scheduler;
+}
 
 string Pipeline::auto_schedule(const Target &target, const MachineParams &arch_params) {
+    auto custom_auto_scheduler = *get_custom_auto_scheduler_ptr();
     if (custom_auto_scheduler) {
         return custom_auto_scheduler(*this, target, arch_params);
     }
@@ -164,7 +168,7 @@ string Pipeline::auto_schedule(const Target &target, const MachineParams &arch_p
 }
 
 void Pipeline::set_custom_auto_scheduler(std::function<string(Pipeline, const Target &, const MachineParams &)> auto_scheduler) {
-    Pipeline::custom_auto_scheduler = auto_scheduler;
+    *get_custom_auto_scheduler_ptr() = auto_scheduler;
 }
 
 Func Pipeline::get_func(size_t index) {

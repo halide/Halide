@@ -1,9 +1,13 @@
-#include <string>
-#include <vector>
+#include <iomanip>
 #include <set>
+#include <sstream>
+#include <string>
 #include <unistd.h>
+#include <vector>
 
 #include "ThroughputPredictorPipeline.h"
+
+namespace {
 
 using std::vector;
 using std::string;
@@ -53,6 +57,7 @@ map<int, PipelineSample> load_samples() {
 
     int best = -1;
     float best_runtime = 1e20f;
+    string best_path;
 
     size_t num_read = 0, num_unique = 0;
     while (!std::cin.eof()) {
@@ -92,6 +97,7 @@ map<int, PipelineSample> load_samples() {
         if (runtime < best_runtime) {
             best_runtime = runtime;
             best = schedule_id;
+            best_path = s;
         }
 
         PipelineSample &ps = result[pipeline_id];
@@ -201,10 +207,21 @@ map<int, PipelineSample> load_samples() {
 
     std::cout << "Distinct pipelines: " << result.size() << "\n";
 
-    std::cout << "Best schedule id / runtime: " << best << " / " << best_runtime << "\n";
+    std::ostringstream o;
+    o << "Best runtime is " << best_runtime << ", from schedule id "<< best << " in file " << best_path << "\n";
+    std::cout << o.str();
+    if (char *e = getenv("HL_BEST_SCHEDULE_FILE")) {
+        if (e && *e) {
+            std::ofstream f(e, std::ios_base::trunc);
+            f << o.str();
+            f.close();
+        }
+    }
+
     return result;
 }
 
+}  // namespace
 
 int main(int argc, char **argv) {
     auto samples = load_samples();
@@ -218,7 +235,7 @@ int main(int argc, char **argv) {
 
     int batches = atoi(argv[1]);
     int epochs = (batches + (int)(samples.size()) - 1) / (int)(samples.size());
-    
+
     std::cout.setf(std::ios::fixed, std::ios::floatfield);
     std::cout.precision(4);
 
