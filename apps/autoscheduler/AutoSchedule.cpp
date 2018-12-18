@@ -2203,7 +2203,7 @@ struct LoopNest {
                 // How this loop will be parallelized is not yet
                 // determined. Use optimistic values for the features.
                 feat.bytes_at_task = (feat.bytes_at_realization + params.parallelism - 1) / params.parallelism;
-                feat.innermost_bytes_at_task = std::min(feat.bytes_at_task, (feat.innermost_bytes_at_realization + params.parallelism - 1) / params.parallelism);
+                feat.innermost_bytes_at_task = std::min(feat.bytes_at_task, feat.innermost_bytes_at_realization);
             }
         }
 
@@ -2640,7 +2640,8 @@ struct LoopNest {
                 // to be the first loop iteration.
                 single_point->loops(s, i) = {l.first, l.first};
 
-                if (node->size[i] >= node->stage->vector_size && f->stages[s].loop[i].var == f->func.args()[v]) {
+                if (node->size[i] >= node->stage->vector_size &&
+                    f->stages[s].loop[i].var == f->func.args()[v]) {
                     node->vectorized_loop_index = (int)i;
                     vector_size = (int64_t)(node->stage->vector_size);
                     single_point->loops(s, i).second += vector_size - 1;
@@ -4117,9 +4118,10 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
             for (int choice_label = (int)q.size() - 1; choice_label >= 0; choice_label--) {
                 auto state = q[choice_label];
                 debug(0) << "\n[" << choice_label << "]:\n";
-                // state->calculate_cost(dag, params, throughput_predictor, true);
                 state->dump();
+                state->calculate_cost(dag, params, throughput_predictor, true);
             }
+            throughput_predictor->evaluate_costs();
 
             // Select next partial schedule to expand.
             int selection = -1;

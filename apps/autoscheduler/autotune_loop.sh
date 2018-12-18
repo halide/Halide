@@ -6,7 +6,7 @@ PIPELINE=demo
 
 HL_TARGET=x86-64-avx2
 
-SAMPLES=${PWD}/samples
+SAMPLES=/mnt/e/samples_conv
 
 mkdir -p ${SAMPLES}
 
@@ -24,7 +24,7 @@ make_sample() {
         HL_PERMIT_FAILED_UNROLL=1 HL_MACHINE_PARAMS=32,1,1 HL_SEED=${2} HL_FEATURE_FILE=${D}/sample.sample HL_WEIGHTS_DIR=${PWD}/weights HL_RANDOM_DROPOUT=100 HL_BEAM_SIZE=50 ${GENERATOR} -g ${PIPELINE} -o ${D} target=${HL_TARGET} auto_schedule=true -p bin/auto_schedule.so 2> ${D}/compile_log.txt
     else
         # The other samples are random probes biased by the cost model
-        HL_PERMIT_FAILED_UNROLL=1 HL_MACHINE_PARAMS=32,1,1 HL_SEED=${2} HL_FEATURE_FILE=${D}/sample.sample HL_WEIGHTS_DIR=${PWD}/weights HL_RANDOM_DROPOUT=50 HL_BEAM_SIZE=1 ${GENERATOR} -g ${PIPELINE} -o ${D} target=${HL_TARGET} auto_schedule=true -p bin/auto_schedule.so 2> ${D}/compile_log.txt
+        HL_PERMIT_FAILED_UNROLL=1 HL_MACHINE_PARAMS=32,1,1 HL_SEED=${2} HL_FEATURE_FILE=${D}/sample.sample HL_WEIGHTS_DIR=${PWD}/weights HL_RANDOM_DROPOUT=10 HL_BEAM_SIZE=1 ${GENERATOR} -g ${PIPELINE} -o ${D} target=${HL_TARGET} auto_schedule=true -p bin/auto_schedule.so 2> ${D}/compile_log.txt
     fi
     
     c++ -std=c++11 -DHL_RUNGEN_FILTER_HEADER="\"${D}/${PIPELINE}.h\"" -I ../../include ../../tools/RunGenMain.cpp ../../tools/RunGenStubs.cpp  ${D}/*.a -o ${D}/bench -ljpeg -ldl -lpthread -lz -lpng    
@@ -49,6 +49,10 @@ for ((i=$((FIRST+1));i<1000000;i++)); do
     # Compile a batch of samples using the generator in parallel
     DIR=${SAMPLES}/batch_${i}
 
+    # Copy the weights being used into the batch folder so that we can repro failures
+    mkdir -p ${DIR}
+    cp weights/* ${SAMPLES}/batch_${i}/
+    
     for ((b=0;b<${BATCH_SIZE};b++)); do
         echo Compiling sample $b
         S=$(printf "%d%02d" $i $b)

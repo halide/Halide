@@ -283,11 +283,11 @@ public:
         compute_cost *= cache_line_penalty;
         */
 
-        Expr num_tasks = inner_parallelism;
-        Expr cores_per_realization = num_cores / outer_parallelism;
+        Expr num_tasks = max(1, inner_parallelism);
+        Expr cores_per_realization = num_cores / max(1, outer_parallelism);
         Expr idle_core_wastage = (0.5f * cores_per_realization + num_tasks) / num_tasks;
         idle_core_wastage = min(idle_core_wastage, 1 + relu1(4, w, n));
-        idle_core_wastage *= ceil(num_tasks / cores_per_realization) * (cores_per_realization / num_tasks);
+        idle_core_wastage *= ceil(num_tasks / (cores_per_realization + 1e-10f)) * (cores_per_realization / num_tasks);
 
         compute_cost *= idle_core_wastage;
 
@@ -394,11 +394,6 @@ public:
             RDom r_conv1_output(0, conv1_channels, 0, num_stages);
             Expr regularize1 = sum(-min(conv1_stage2(r_conv1_output.x, r_conv1_output.y, n), 0));
             Expr regularize2 = sum(-min(conv1_stage1(r_conv1_output.x, r_conv1_output.y), 0));
-
-            auto sigmoid = [](Expr x) {
-                return (1 - 1 / abs(x)) * select(x > 0, 1.0f, -1.0f);
-            };
-
 
             Expr n2 = (n + 1) % batch_size;
             Expr scale = 1.0f / max(1, true_runtime(0));
