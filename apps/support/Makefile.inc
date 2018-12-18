@@ -23,7 +23,7 @@ GXX ?= g++
 CFLAGS += -I $(HALIDE_DISTRIB_PATH)/include/ -I $(HALIDE_DISTRIB_PATH)/tools/ -I $(HALIDE_DISTRIB_PATH)/apps/support/
 CXXFLAGS += -std=c++11 -I $(HALIDE_DISTRIB_PATH)/include/ -I $(HALIDE_DISTRIB_PATH)/tools/ $(SANITIZER_FLAGS)
 
-ifeq (0, HALIDE_RTTI)
+ifeq (0, $(HALIDE_RTTI))
 CXXFLAGS += -fno-rtti
 endif
 
