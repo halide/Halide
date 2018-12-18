@@ -2564,7 +2564,7 @@ struct LoopNest {
 
         if ((!is_root() || f->is_output || !force_only_output_compute_root) &&
             !innermost &&
-            (!in_realization || size.empty() || size[vector_dim] == 1)) {
+            (!in_realization || size.empty() || (vector_dim < size.size() && size[vector_dim] == 1))) {
             // Place the computation inside this loop
             std::unique_ptr<LoopNest> r{new LoopNest};
             r->copy_from(*this);
