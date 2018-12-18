@@ -13,13 +13,16 @@ GENERATOR=./bin/random_pipeline.generator
 PIPELINE=random_pipeline
 make bin/random_pipeline.generator
 
+SAMPLES=${PWD}/samples
+# SAMPLES=/mnt/e/samples
+
 # Build some tools we need. 
 make -C ../autoscheduler bin/augment_sample
 make -C ../autoscheduler bin/train_cost_model
 make -C ../autoscheduler bin/auto_schedule.so
 cp ../autoscheduler/bin/augment_sample ../autoscheduler/bin/train_cost_model  ../autoscheduler/bin/auto_schedule.so bin/
 
-mkdir -p samples
+mkdir -p ${SAMPLES}
 mkdir -p weights
 
 # A batch of this many samples is built in parallel, and then
@@ -53,15 +56,15 @@ benchmark_sample() {
 }
 
 # Don't clobber existing samples
-FIRST=$(ls samples | cut -d_ -f2 | sort -n | tail -n1)
+FIRST=$(ls ${SAMPLES} | cut -d_ -f2 | sort -n | tail -n1)
 
 for ((i=$((FIRST+1));i<1000000;i++)); do
     # Compile a batch of samples using the generator in parallel
-    DIR=${PWD}/samples/batch_${i}
+    DIR=${SAMPLES}/batch_${i}
 
     # Copy the weights being used into the batch folder so that we can repro failures
     mkdir -p ${DIR}
-    cp weights/* samples/batch_${i}/
+    cp weights/* ${SAMPLES}/batch_${i}/
     
     for ((b=0;b<${BATCH_SIZE};b++)); do
         S=$(printf "%d%02d" $i $b)
@@ -83,6 +86,6 @@ for ((i=$((FIRST+1));i<1000000;i++)); do
     
     # retrain model weights on all samples seen so far
     echo Retraining model...
-    find samples | grep sample$ | HL_NUM_THREADS=32 HL_WEIGHTS_DIR=weights ./bin/train_cost_model 100
+    find ${SAMPLES} | grep sample$ | HL_NUM_THREADS=32 HL_WEIGHTS_DIR=weights ./bin/train_cost_model 10000
     
 done
