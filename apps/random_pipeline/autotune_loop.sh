@@ -73,6 +73,9 @@ for ((i=$((FIRST+1));i<1000000;i++)); do
         echo Compiling sample $b 
         wait ${pids[${b}]}
     done
+
+    # Kill the ones with silly predicted costs that still slipped through because randomness
+    grep -r 100000000000 ${DIR} | sed 's/compile_log.*/bench' | sort | uniq | xargs rm
     
     # benchmark them serially using rungen
     for ((b=0;b<${BATCH_SIZE};b++)); do
