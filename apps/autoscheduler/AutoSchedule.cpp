@@ -2000,29 +2000,31 @@ struct LoopNest {
         bool inlined = false;
     };
 
-    void get_sites(NodeMap<Sites> &sites,
+    void get_sites(StageMap<Sites> &sites,
                    const LoopNest *parent = nullptr) const {
         for (auto c : children) {
             c->get_sites(sites, this);
         }
         if (parent && node != parent->node) {
-            auto &s = sites.get_or_create(node);
+            auto &s = sites.get_or_create(stage);
             s.compute = parent;
             s.produce = this;
         }
         for (auto f : store_at) {
-            sites.get_or_create(f).store = this;
+            for (const auto &s : f->stages) {
+                sites.get_or_create(&s).store = this;
+            }
         }
         for (auto it = inlined.begin(); it != inlined.end(); it++) {
-            sites.get_or_create(it.key()).inlined = true;
+            sites.get_or_create(&(it.key()->stages[0])).inlined = true;
         }
         if (innermost) {
-            sites.get_or_create(node).innermost = this;
+            sites.get_or_create(stage).innermost = this;
         }
     }
 
     void compute_features(const MachineParams &params,
-                          const NodeMap<Sites> &sites,
+                          const StageMap<Sites> &sites,
                           int64_t instances,
                           int64_t parallelism,
                           const LoopNest *parent,
@@ -2065,7 +2067,7 @@ struct LoopNest {
                     const auto &p = bounds->loops(s, i);
                     int64_t extent = p.second - p.first + 1;
                     feat.points_computed_per_realization *= extent;
-                    if (i == sites.get(node).produce->vectorized_loop_index) {
+                    if (i == sites.get(&(node->stages[s])).produce->vectorized_loop_index) {
                         // Assumes that we're not going to split
                         // things such that non-native-width
                         // vectorization is a problem, except for the
@@ -2089,7 +2091,7 @@ struct LoopNest {
                     feat.bytes_at_realization *= (p.second - p.first) + 1;
                 }
                 int64_t innermost_storage_extent = 1;
-                int v = sites.get(node).produce->vector_dim;
+                int v = sites.get(&(node->stages[s])).produce->vector_dim;
                 if (v >= 0) {
                     innermost_storage_extent = (bounds->region_computed(v).second -
                                                 bounds->region_computed(v).first + 1);
@@ -2124,7 +2126,7 @@ struct LoopNest {
                 // What innermost storage extent means for inlined
                 // Funcs is unclear, because we haven't selected which
                 // storage dimension is innermost.
-                auto *p = sites.get(node).produce;
+                auto *p = sites.get(stage).produce;
                 if (p) {
                     int64_t innermost_storage_extent = 1;
                     int v = p->vector_dim;
@@ -2263,7 +2265,7 @@ struct LoopNest {
         int64_t bytes_loaded = 0, lines_loaded = 0, allocation_bytes_loaded = 0, vectors_loaded = 0, scalars_loaded = 0, elements_loaded = 0;
         if (innermost || at_production) {
             // Pick the site at which we will compute the footprint relationship
-            const auto *consumer_store_site = innermost ? parent : sites.get(node).store;
+            const auto *consumer_store_site = innermost ? parent : sites.get(&(node->stages[0])).store;
             int64_t consumer_instances = innermost ? instances : feat.num_realizations;
             if (consumer_instances == 0) {
                 root.dump(" ");
@@ -2281,12 +2283,12 @@ struct LoopNest {
                         continue;
                     }
 
-                    if (!sites.contains(e->producer)) {
+                    if (!sites.contains(&(e->producer->stages[0]))) {
                         // Not yet scheduled. Optimistically treat it as free.
                         continue;
                     }
 
-                    const auto &site = sites.get(e->producer);
+                    const auto &site = sites.get(&(e->producer->stages[0]));
 
                     if (site.inlined) {
                         // Recursively examine the inputs
@@ -3325,8 +3327,8 @@ struct State {
     }
 
     void compute_featurization(const FunctionDAG &dag, const MachineParams &params, StageMap<ScheduleFeatures> *features) {
-        NodeMap<LoopNest::Sites> sites;
-        sites.make_large(dag.nodes.size());
+        StageMap<LoopNest::Sites> sites;
+        sites.make_large(dag.nodes[0].stages[0].max_id);
         features->make_large(dag.nodes[0].stages[0].max_id);
         internal_assert(root.defined());
         root->get_sites(sites);
@@ -3335,7 +3337,7 @@ struct State {
         // and the produce and innermost sites are unset (nullptr)
         for (const auto &n : dag.nodes) {
             if (n.is_input) {
-                auto &s = sites.get_or_create(&n);
+                auto &s = sites.get_or_create(&(n.stages[0]));
                 s.compute = root.get();
                 s.store = root.get();
             }
@@ -3811,7 +3813,7 @@ struct State {
             int64_t parallel_tasks = 1;
             vector<VarOrRVar> parallel_vars;
             for (auto it = p.second.vars.rbegin(); it != p.second.vars.rend(); it++) {
-                if (!it->exists) continue;
+                if (!it->exists || it->extent == 1) continue;
                 if (!it->parallel) break;
                 parallel_tasks *= it->extent;
                 parallel_vars.push_back(it->var);
