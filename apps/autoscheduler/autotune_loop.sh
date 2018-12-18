@@ -6,7 +6,7 @@ PIPELINE=demo
 
 HL_TARGET=x86-64-avx2
 
-SAMPLES=/mnt/e/samples_conv
+SAMPLES=samples
 
 mkdir -p ${SAMPLES}
 

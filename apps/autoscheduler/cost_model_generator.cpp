@@ -319,6 +319,7 @@ public:
 
         Expr store_cache_misses = num_realizations * (lines_written_per_realization * alpha +
                                                       bytes_at_realization * beta);
+        // Expr store_cache_misses = num_vectors * alpha + num_scalars * beta;
         Expr cost_of_store_miss = bytes_at_production * 1e-6f;
         Expr store_cost = store_cache_misses * cost_of_store_miss;
 
@@ -405,7 +406,7 @@ public:
             Expr r1 = true_runtime(n) * scale, r2 = true_runtime(n2) * scale;
 
             // The network should predict runtime.
-            Expr delta = pow(r1 - p1, 2);
+            Expr delta = pow(1/(r1 + 1e-5f) - 1/(p1 + 1e-5f), 2);
 
             // More importantly, the network should predict runtimes
             // in the correct order
