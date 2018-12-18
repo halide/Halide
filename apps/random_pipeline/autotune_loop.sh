@@ -29,6 +29,8 @@ mkdir -p weights
 # benchmarked serially. Set to number of cores.
 BATCH_SIZE=32
 
+HL_TARGET=x86-64-avx2-disable_llvm_loop_vectorize-disable_llvm_loop_unroll
+
 # Build a single sample of the pipeline with a random schedule
 make_sample() {
     D=${1}
@@ -36,10 +38,10 @@ make_sample() {
     rm -f "${D}/sample.sample"
     if [[ $D == */0 ]]; then
         # Sample 0 in each batch is best effort beam search, with no randomness
-        HL_MACHINE_PARAMS=32,1,1 HL_PERMIT_FAILED_UNROLL=1 HL_SEED=${2} HL_FEATURE_FILE=${D}/sample.sample HL_WEIGHTS_DIR=${PWD}/weights HL_RANDOM_DROPOUT=100 HL_BEAM_SIZE=20 ${GENERATOR} -g ${PIPELINE} -o ${D} -e static_library,h,stmt,assembly target=host auto_schedule=true max_stages=12 seed=${3} -p ${PWD}/bin/auto_schedule.so 2> ${D}/compile_log_stderr.txt > ${D}/compile_log_stdout.txt
+        HL_MACHINE_PARAMS=32,1,1 HL_PERMIT_FAILED_UNROLL=1 HL_SEED=${2} HL_FEATURE_FILE=${D}/sample.sample HL_WEIGHTS_DIR=${PWD}/weights HL_RANDOM_DROPOUT=100 HL_BEAM_SIZE=20 ${GENERATOR} -g ${PIPELINE} -o ${D} -e static_library,h,stmt,assembly target=${HL_TARGET} auto_schedule=true max_stages=12 seed=${3} -p ${PWD}/bin/auto_schedule.so 2> ${D}/compile_log_stderr.txt > ${D}/compile_log_stdout.txt
     else
         # The other samples are random probes biased by the cost model
-        HL_MACHINE_PARAMS=32,1,1 HL_PERMIT_FAILED_UNROLL=1 HL_SEED=${2} HL_FEATURE_FILE=${D}/sample.sample HL_WEIGHTS_DIR=${PWD}/weights HL_RANDOM_DROPOUT=80 HL_BEAM_SIZE=1 ${GENERATOR} -g ${PIPELINE} -o ${D} -e static_library,h,stmt,assembly target=host auto_schedule=true max_stages=12 seed=${3} -p ${PWD}/bin/auto_schedule.so 2> ${D}/compile_log_stderr.txt > ${D}/compile_log_stdout.txt
+        HL_MACHINE_PARAMS=32,1,1 HL_PERMIT_FAILED_UNROLL=1 HL_SEED=${2} HL_FEATURE_FILE=${D}/sample.sample HL_WEIGHTS_DIR=${PWD}/weights HL_RANDOM_DROPOUT=80 HL_BEAM_SIZE=1 ${GENERATOR} -g ${PIPELINE} -o ${D} -e static_library,h,stmt,assembly target=${HL_TARGET} auto_schedule=true max_stages=12 seed=${3} -p ${PWD}/bin/auto_schedule.so 2> ${D}/compile_log_stderr.txt > ${D}/compile_log_stdout.txt
     fi
     
     c++ -std=c++11 -DHL_RUNGEN_FILTER_HEADER="\"${D}/${PIPELINE}.h\"" -I ../../include ../../tools/RunGenMain.cpp ../../tools/RunGenStubs.cpp  ${D}/*.a -o ${D}/bench -ljpeg -ldl -lpthread -lz -lpng    
@@ -78,7 +80,7 @@ for ((i=$((FIRST+1));i<1000000;i++)); do
     done
 
     # Kill the ones with silly predicted costs that still slipped through because randomness
-    grep -r 100000000000 ${DIR} | sed 's/compile_log.*/bench' | sort | uniq | xargs rm
+    grep -r 100000000000 ${DIR} | sed 's/compile_log.*/bench/' | sort | uniq | xargs rm
     
     # benchmark them serially using rungen
     for ((b=0;b<${BATCH_SIZE};b++)); do
@@ -89,6 +91,6 @@ for ((i=$((FIRST+1));i<1000000;i++)); do
     
     # retrain model weights on all samples seen so far
     echo Retraining model...
-    find ${SAMPLES} | grep sample$ | HL_NUM_THREADS=32 HL_WEIGHTS_DIR=weights ./bin/train_cost_model 10000
+    find ${SAMPLES} | grep sample$ | HL_NUM_THREADS=32 HL_WEIGHTS_DIR=weights ./bin/train_cost_model 1000
     
 done

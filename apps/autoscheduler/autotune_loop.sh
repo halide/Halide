@@ -4,7 +4,7 @@
 GENERATOR=./bin/demo.generator
 PIPELINE=demo
 
-HL_TARGET=x86-64-avx2
+HL_TARGET=x86-64-avx2-disable_llvm_loop_unroll-disable_loop_loop_vectorize
 
 SAMPLES=/mnt/e/samples_conv
 
