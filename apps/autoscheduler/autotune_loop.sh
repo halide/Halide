@@ -24,6 +24,8 @@ if [ -z ${PIPELINE} ]; then
 PIPELINE=demo
 fi
 
+SAMPLES=samples
+
 # A batch of this many samples is built in parallel, and then
 # benchmarked serially.
 BATCH_SIZE=32

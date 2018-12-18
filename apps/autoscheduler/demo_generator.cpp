@@ -16,14 +16,10 @@ public:
 
         Var x("x"), y("y"), c("c"), n("n");
 
-        Func input_staged("input_staged"), filter_staged("filter_staged");
-        input_staged(c, x, y, n) = input(c, x, y, n);
-        filter_staged(c, x, y, n) = filter(c, x, y, n);
-
         Func conv("conv");
         RDom r(0, CI, 0, 3, 0, 3);
         conv(c, x, y, n) = bias(c);
-        conv(c, x, y, n) += filter_staged(c, r.y, r.z, r.x) * input_staged(r.x, x + r.y, y + r.z, n);
+        conv(c, x, y, n) += filter(c, r.y, r.z, r.x) * input(r.x, x + r.y, y + r.z, n);
         relu(c, x, y, n) = max(0, conv(c, x, y, n));
 
         relu.bound(c, 0, CO)
