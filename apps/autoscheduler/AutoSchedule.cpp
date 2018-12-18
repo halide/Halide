@@ -1887,7 +1887,7 @@ struct LoopNest {
 
     // Is this the parallel outer loop?
     bool parallel = false;
-    
+
     // What dimension is this Func vectorized over, in terms of the args of the Func?
     int vector_dim = -1;
 
@@ -2026,7 +2026,7 @@ struct LoopNest {
                 in_impure = true;
             }
         }
-        
+
         int64_t subinstances = instances * loop_instances;
 
         for (const auto *node : store_at) {
@@ -2178,7 +2178,7 @@ struct LoopNest {
         const bool at_pure_production = at_production && stage_idx == 0;
 
         if (at_task) {
-            if (parallel) {                
+            if (parallel) {
                 const auto &bounds = get_bounds(node);
                 feat.bytes_at_task = node->bytes_per_point;
                 int64_t innermost_storage_extent = 1;
@@ -2786,6 +2786,27 @@ struct LoopNest {
 
         vector<IntrusivePtr<const LoopNest>> result;
 
+        // Some pruning to not waste time on terrible states
+        if (parent) {
+            // Don't descend into loops that break our ability to
+            // vectorize if we could have vectorized one level up.
+            const auto &p = get_bounds(f)->region_computed(v);
+            const auto &p_parent = parent->get_bounds(f)->region_computed(v);
+            int64_t e = p.second - p.first + 1;
+            int64_t ep = p_parent.second - p_parent.first + 1;
+            if (ep >= f->vector_size && e < f->vector_size) return result;
+
+            // Don't descend into loops if the bounds computed don't shrink
+            int64_t total_size_parent = 1, total_size = 1;
+            for (int i = 0; i < f->func.dimensions(); i++) {
+                const auto &p = get_bounds(f)->region_computed(v);
+                const auto &p_parent = parent->get_bounds(f)->region_computed(v);
+                total_size_parent *= p_parent.second - p_parent.first + 1;
+                total_size *= p.second - p.first + 1;
+            }
+            if (total_size_parent <= total_size) return result;
+        }
+
         // Figure out which child we can fuse this into
         int child = -1;
         bool called_by_multiple_children = false;
@@ -2805,7 +2826,7 @@ struct LoopNest {
 
         if ((!is_root() || f->is_output || !force_only_output_compute_root) &&
             !innermost &&
-            (!in_realization || size.empty() || size[vector_dim] == 1)) {
+            (!in_realization || size.empty() || vector_dim == -1 || size[vector_dim] == 1)) {
             // Place the computation inside this loop
             std::unique_ptr<LoopNest> r{new LoopNest};
             r->copy_from(*this);
@@ -3274,7 +3295,7 @@ struct State {
     State(State &&) = delete;
     void operator=(const State &) = delete;
     void operator=(State &&) = delete;
-    
+
     static int cost_calculations;
 
     uint64_t structural_hash(int depth, int parallelism) const {
@@ -3362,6 +3383,8 @@ struct State {
                         return true;
                     }
                 }
+
+
             }
 
 
@@ -3632,17 +3655,27 @@ struct State {
                 }
             }
 
+            // Construct a list of plausible dimensions to vectorize over
+            // TODO: Pre-prune the list of sane dimensions to
+            // vectorize a Func over to reduce branching factor.
+            vector<int> vector_dims;
+            for (int v = 0; v < node->func.dimensions(); v++) {
+                const auto &p = root->get_bounds(node)->region_computed(v);
+                if (p.second - p.first + 1 >= node->vector_size) {
+                    vector_dims.push_back(v);
+                }
+            }
+            if (vector_dims.empty()) {
+                vector_dims.push_back(0);
+            }
 
             // 2) Realize it somewhere
-            for (int vector_dim = 0; vector_dim < node->func.dimensions(); vector_dim++) {
+            for (int vector_dim : vector_dims) {
                 // Outputs must be vectorized over their innermost
                 // dimension, because we don't have control of the
                 // storage. TODO: Go inspect to see which dimension has a
                 // stride==1 constraint instead of assuming 0.
                 if (vector_dim > 0 && (node->is_output || node->is_input)) break;
-
-                // TODO: Pre-prune the list of sane dimensions to
-                // vectorize a Func over to reduce branching factor.
 
                 auto tile_options = root->compute_in_tiles(node, nullptr, params, vector_dim, false);
                 for (IntrusivePtr<const LoopNest> &n : tile_options) {
