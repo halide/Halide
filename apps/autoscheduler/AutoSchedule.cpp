@@ -2873,9 +2873,9 @@ struct LoopNest {
                     // TODO: Do an aligned unroll of anything with mods/divs on the coordinates.
 
                     // Vectorize only for CPU
+                    bool vectorized = false;
                     if (GPU == false) {
                         int vector_size = stage->vector_size;
-                        bool vectorized = false;
                         if (var_to_vectorize && vector_size > 1) {
                             int split_factor = 1;
                             if (var_to_vectorize->extent >= vector_size) {
@@ -2926,7 +2926,7 @@ struct LoopNest {
                     // constant.
                     bool all_pure_loops_constant_size = true;
 
-                    if (product_of_pure_loops <= 16 && all_pure_loops_constant_size) {
+                    if (!GPU && product_of_pure_loops <= 16 && all_pure_loops_constant_size) {
                         // There's a hope we can fit anything compute-at this level into registers if we fully unroll
                         // TODO: 16 should be the number of vector registers in the architecture
 
