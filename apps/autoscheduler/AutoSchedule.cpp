@@ -3040,7 +3040,7 @@ struct LoopNest {
     };
 
     void apply(LoopLevel here,
-               StageMap<StageScheduleState> &state_map,
+               StageMap<std::unique_ptr<StageScheduleState>> &state_map,
                double num_cores,
                int depth,
                const LoopNest *parent,
@@ -3051,7 +3051,7 @@ struct LoopNest {
                 c->apply(LoopLevel::root(), state_map, num_cores, 1, this, c.get());
                 if (c->stage_idx == 0) {
                     auto &state = state_map.get(c->stage);
-                    state.schedule_source << "\n    .compute_root()";
+                    state->schedule_source << "\n    .compute_root()";
                     // TODO: Omitting logic for printing store_root() assumes everything store_root is also compute root
                 }
             }
@@ -3063,9 +3063,9 @@ struct LoopNest {
             const auto &symbolic_loop = stage->loop;
             const auto &parent_bounds = parent->get_bounds(node);
             if (!state_map.contains(stage)) {
-                StageScheduleState state;
-                state.num_cores = num_cores;
-                state.vector_dim = vector_dim;
+                StageScheduleState *state = new StageScheduleState;
+                state->num_cores = num_cores;
+                state->vector_dim = vector_dim;
                 for (size_t i = 0; i < symbolic_loop.size(); i++) {
                     StageScheduleState::FuncVar fv;
                     const auto &l = symbolic_loop[i];
@@ -3078,11 +3078,11 @@ struct LoopNest {
                     fv.parallel = parent->is_root() && l.pure;
                     fv.exists = true;
                     fv.pure = l.pure;
-                    state.vars.push_back(fv);
+                    state->vars.push_back(fv);
                 }
-                state_map.emplace(stage, std::move(state));
+                state_map.emplace(stage, std::unique_ptr<StageScheduleState>(state));
             }
-            auto &state = state_map.get(stage);
+            auto &state = *(state_map.get(stage));
 
             // The getter for grabbing Func handles is reverse topological order
             Stage s = Func(node->func);
@@ -3273,7 +3273,7 @@ struct LoopNest {
                 }
                 c->apply(here, state_map, num_cores, depth + 1, this, compute_site);
                 if (c->node != node && c->stage_idx == 0) {
-                    auto &state = state_map.get(c->stage);
+                    auto &state = *(state_map.get(c->stage));
                     state.schedule_source << "\n    .compute" << loop_level;
                 }
             }
@@ -3286,7 +3286,7 @@ struct LoopNest {
                     }
                 }
                 if (!computed_here) {
-                    auto &state = state_map.get(&(f->stages[0]));
+                    auto &state = *(state_map.get(&(f->stages[0])));
                     state.schedule_source << "\n    .store" << loop_level;
                 }
             }
@@ -3753,7 +3753,7 @@ struct State {
     string schedule_source;
 
     void apply_schedule(const FunctionDAG &dag, const MachineParams &params) {
-        StageMap<LoopNest::StageScheduleState> state_map;
+        StageMap<std::unique_ptr<LoopNest::StageScheduleState>> state_map;
         root->apply(LoopLevel::root(), state_map, params.parallelism, 0, nullptr, nullptr);
 
         std::ostringstream src;
@@ -3770,7 +3770,7 @@ struct State {
         // Gather all Vars and RVars so that we can declare them in the emitted source
         map<string, string> vars, rvars;
         for (auto &p : state_map) {
-            for (auto &v : p.second.vars) {
+            for (auto &v : p.second->vars) {
                 if (v.exists) {
                     if (v.var.is_rvar) {
                         rvars.emplace(v.var.name(), v.accessor);
@@ -3815,65 +3815,65 @@ struct State {
             vector<VarOrRVar> vars;
             int64_t parallel_tasks = 1;
             vector<VarOrRVar> parallel_vars;
-            for (auto it = p.second.vars.rbegin(); it != p.second.vars.rend(); it++) {
+            for (auto it = p.second->vars.rbegin(); it != p.second->vars.rend(); it++) {
                 if (!it->exists || it->extent == 1) continue;
                 if (!it->parallel) break;
                 parallel_tasks *= it->extent;
                 parallel_vars.push_back(it->var);
             }
 
-            if (p.second.vars.size() > 1) {
-                p.second.schedule_source << "\n    .reorder(";
+            if (p.second->vars.size() > 1) {
+                p.second->schedule_source << "\n    .reorder(";
                 bool first = true;
-                for (auto &v : p.second.vars) {
+                for (auto &v : p.second->vars) {
                     if (v.exists) {
                         vars.push_back(v.var);
                         if (!first) {
-                            p.second.schedule_source << ", ";
+                            p.second->schedule_source << ", ";
                         }
                         first = false;
-                        p.second.schedule_source << v.var.name();
+                        p.second->schedule_source << v.var.name();
                     }
                 }
-                p.second.schedule_source << ")";
+                p.second->schedule_source << ")";
                 stage.reorder(vars);
             }
 
             for (size_t i = 1; i < parallel_vars.size(); i++) {
                 // Outermost, and next outermost. Preserve the inner
                 // name to not invalidate any compute_ats.
-                p.second.schedule_source << "\n    .fuse(" << parallel_vars[i].name()
+                p.second->schedule_source << "\n    .fuse(" << parallel_vars[i].name()
                                          << ", " << parallel_vars[i-1].name()
                                          << ", " << parallel_vars[i].name() << ")";
                 stage.fuse(parallel_vars[i], parallel_vars[i-1], parallel_vars[i]);
             }
             if (!parallel_vars.empty()) {
-                p.second.schedule_source << "\n    .parallel(" << parallel_vars.back().name() << ")";
+                p.second->schedule_source << "\n    .parallel(" << parallel_vars.back().name() << ")";
                 stage.parallel(parallel_vars.back());
             }
 
             // Reorder the vector dimension innermost
-            if (p.first->index == 0 && p.second.vector_dim > 0) {
+            if (p.first->index == 0 && p.second->vector_dim > 0) {
                 vector<Var> storage_vars = Func(p.first->node->func).args();
-                for (int i = p.second.vector_dim; i > 0; i--) {
+                for (int i = p.second->vector_dim; i > 0; i--) {
                     std::swap(storage_vars[i], storage_vars[i-1]);
                 }
-                p.second.schedule_source << "\n    .reorder_storage(";
+                p.second->schedule_source << "\n    .reorder_storage(";
                 bool first = true;
                 for (auto v : storage_vars) {
                     if (!first) {
-                        p.second.schedule_source << ", ";
+                        p.second->schedule_source << ", ";
                     }
                     first = false;
-                    p.second.schedule_source << v.name();
+                    p.second->schedule_source << v.name();
                 }
-                p.second.schedule_source << ")";
+                p.second->schedule_source << ")";
                 Func(p.first->node->func).reorder_storage(storage_vars);
             }
 
             // Dump the schedule source string
             src << p.first->name
-                << p.second.schedule_source.str()
+                << p.second->schedule_source.str()
                 << ";\n";
         }
         schedule_source = src.str();
