@@ -40,17 +40,26 @@ using namespace Halide;
 
 Runtime::Buffer<float> buffer_from_file(const std::string &filename, const std::vector<int> &shape) {
     Runtime::Buffer<float> buf(shape);
-    buf.fill(0.0f);
 
-    std::ifstream i(filename.c_str());
+    std::ifstream i(filename, std::ios_base::binary);
     i.read((char *)(buf.data()), buf.size_in_bytes());
+    i.close();
 
+    if (i.fail()) {
+        std::cerr << "Could not load buffer from file: " << filename << "\n Using random values instead.\n";
+        buf.for_each_value([](float &f) {
+                f = ((float)rand()) / RAND_MAX - 0.5f;
+            });        
+    }
+    
     return buf;
 }
 
 void buffer_to_file(const Runtime::Buffer<float> &buf, const std::string &filename) {
-    std::ofstream o(filename.c_str());
+    std::ofstream o(filename, std::ios_base::trunc | std::ios_base::binary);
     o.write((const char *)(buf.data()), buf.size_in_bytes());
+    o.close();
+    assert(!o.fail());
 }
 
 struct Stats {

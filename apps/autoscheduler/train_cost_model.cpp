@@ -73,6 +73,11 @@ map<int, PipelineSample> load_samples() {
         const size_t num_features = floats_read - 3;
         const size_t features_per_stage = 30 + 57 * 7;
         file.close();
+        // Note we do not check file.fail(). The various failure cases
+        // are handled below by checking the number of floats read. We
+        // expect truncated files if the benchmarking or
+        // autoscheduling procedure crashes and want to filter them
+        // out with a warning.
 
         if (floats_read == scratch.size()) {
             std::cout << "Too-large sample: " << s << " " << floats_read << "\n";
@@ -215,6 +220,7 @@ map<int, PipelineSample> load_samples() {
             std::ofstream f(e, std::ios_base::trunc);
             f << o.str();
             f.close();
+            assert(!f.fail());
         }
     }
 
@@ -354,7 +360,11 @@ int main(int argc, char **argv) {
                 correct_ordering_rate_count[model] *= 0.9f;
             }
             if (models > 1) std::cout << "\n";
-            std::cout << " Worst: " << worst_miss << " " << samples[worst_miss_pipeline_id].schedules[worst_miss_schedule_id].filename << "\n";
+            if (samples.count(worst_miss_pipeline_id)) {
+                std::cout << " Worst: " << worst_miss << " " << samples[worst_miss_pipeline_id].schedules[worst_miss_schedule_id].filename << "\n";
+            } else {
+                std::cout << "\n";
+            }
             tpp[best_model].save_weights();
         }
     }

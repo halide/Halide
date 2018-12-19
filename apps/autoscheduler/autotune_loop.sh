@@ -24,7 +24,9 @@ if [ -z ${PIPELINE} ]; then
 PIPELINE=demo
 fi
 
-SAMPLES=samples
+SAMPLES=${PWD}/samples
+
+mkdir -p ${SAMPLES}
 
 # A batch of this many samples is built in parallel, and then
 # benchmarked serially.
@@ -59,6 +61,7 @@ make_sample() {
         -g ${PIPELINE} \
         -f ${FNAME} \
         -o ${D} \
+        -e stmt,assembly,static_library,h \
         target=${HL_TARGET} \
         auto_schedule=true \
         -p bin/libauto_schedule.so \
@@ -121,7 +124,7 @@ for ((i=$((FIRST+1));i<1000000;i++)); do
 
     # retrain model weights on all samples seen so far
     echo Retraining model...
-    find samples | grep sample$ | \
+    find ${SAMPLES} | grep sample$ | \
         HL_NUM_THREADS=32 HL_WEIGHTS_DIR=weights HL_BEST_SCHEDULE_FILE=${PWD}/samples/best.txt ./bin/train_cost_model 1000
 
 done
