@@ -2538,13 +2538,32 @@ std::string generate_schedules_new(const std::vector<Function> &outputs,
         time_limit = atof(time_limit_str.c_str());
     }
 
+    string weights_dir = get_env_variable("HL_WEIGHTS_DIR");
+
+    string randomize_weights_str = get_env_variable("HL_RANDOMIZE_WEIGHTS");
+    bool randomize_weights = randomize_weights_str == "1";
+
+    string weights_server_hostname = get_env_variable("HL_WEIGHTS_SERVER_HOSTNAME");
+
+    string weights_server_port_str = get_env_variable("HL_WEIGHTS_SERVER_PORT");
+    int weights_server_port = 0;
+    if (!weights_server_port_str.empty()) {
+        weights_server_port = atoi(weights_server_port_str.c_str());
+    }
+
+    string weights_server_experiment_id_str = get_env_variable("HL_WEIGHTS_SERVER_EXPERIMENT_ID");
+    int weights_server_experiment_id = 0;
+    if (!weights_server_experiment_id_str.empty()) {
+        weights_server_experiment_id = atoi(weights_server_experiment_id_str.c_str());
+    }
+
     FunctionDAG dag(outputs, params, target);
 
     dag.dump();
 
-    auto cost_model = CostModel::make_default();
-    if (get_env_variable("HL_USE_MANUAL_COST_MODEL") == "1") {
-        cost_model.reset();
+    std::unique_ptr<CostModel> cost_model;
+    if (get_env_variable("HL_USE_MANUAL_COST_MODEL") != "1") {
+        cost_model = CostModel::make_default(weights_dir, randomize_weights, weights_server_hostname, weights_server_port, weights_server_experiment_id);
     }
 
     IntrusivePtr<State> optimal;

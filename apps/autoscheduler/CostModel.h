@@ -12,7 +12,12 @@ public:
     virtual void reset() = 0;
     virtual float backprop(const Halide::Runtime::Buffer<const float> &true_runtimes, float learning_rate) = 0;
     virtual void save_weights() = 0;
-    static std::unique_ptr<CostModel> make_default();
+
+    static std::unique_ptr<CostModel> make_default(const std::string &weights_dir = "",
+                                                   bool randomize_weights = false,
+                                                   const std::string &weights_server_hostname = "",
+                                                   int weights_server_port = 0,
+                                                   int weights_server_experiment_id = 0);
 };
 
 #endif

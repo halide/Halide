@@ -233,10 +233,14 @@ map<int, PipelineSample> load_samples() {
 int main(int argc, char **argv) {
     auto samples = load_samples();
 
+    string randomize_weights_str = getenv("HL_RANDOMIZE_WEIGHTS");
+    bool randomize_weights = randomize_weights_str == "1";
+    string weights_dir = getenv("HL_WEIGHTS_DIR");
+
     // Iterate through the pipelines
     vector<std::unique_ptr<CostModel>> tpp;
     for (int i = 0; i < models; i++) {
-        tpp.emplace_back(CostModel::make_default());
+        tpp.emplace_back(CostModel::make_default(weights_dir, randomize_weights));
     }
 
     float rates[] = {0.001f};

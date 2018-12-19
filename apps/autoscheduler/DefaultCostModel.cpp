@@ -83,36 +83,35 @@ struct Weights {
 };
 
 class DefaultCostModel : public CostModel {
-    std::string weights_dir;
     Weights weights;
     Stats stats;
     Runtime::Buffer<float> schedule_feat_queue, pipeline_feat_queue, costs;
     Runtime::Buffer<double *> cost_ptrs;
     int cursor, num_stages, num_cores;
 
+    std::string weights_dir;
+    bool randomize_weights;
     std::string weights_server_hostname;
-    int weights_server_port = 0;
-    int weights_server_experiment_id = 0;
+    int weights_server_port;
+    int weights_server_experiment_id;
 
  public:
 
-    DefaultCostModel() {
-        if (char *e = getenv("HL_WEIGHTS_DIR")) {
-            weights_dir = e;
-        }
+    DefaultCostModel(const std::string &weights_dir,
+                     bool randomize_weights,
+                     const std::string &weights_server_hostname,
+                     int weights_server_port,
+                     int weights_server_experiment_id) :
+        weights_dir(weights_dir),
+        randomize_weights(randomize_weights),
+        weights_server_hostname(weights_server_hostname),
+        weights_server_port(weights_server_port),
+        weights_server_experiment_id(weights_server_experiment_id) {
+
         load_weights();
         load_stats();
 
-        if (char *e = getenv("HL_WEIGHTS_SERVER_HOSTNAME")) {
-            weights_server_hostname = e;
-        }
         if (!weights_server_hostname.empty()) {
-            if (char *e = getenv("HL_WEIGHTS_SERVER_PORT")) {
-                weights_server_port = std::atoi(e);
-            }
-            if (char *e = getenv("HL_WEIGHTS_SERVER_EXPERIMENT_ID")) {
-                weights_server_experiment_id = std::atoi(e);
-            }
             std::cerr << "Using weights server " << weights_server_hostname << ":" << weights_server_port << "/" << weights_server_experiment_id << "\n";
             send_weights_to_weights_server();
         }
@@ -342,17 +341,15 @@ class DefaultCostModel : public CostModel {
             weights.conv1_bias = buffer_from_file(weights_dir + "/trunk_conv1_bias.data", {24});
         }
 
-        if (char *e = getenv("HL_RANDOMIZE_WEIGHTS")) {
+        if (randomize_weights) {
             srand(time(NULL));
-            if (std::string(e) == "1") {
-                std::cout << "Randomizing weights\n";
-                // Fill the weights with random values
-                for_each_weight([](Runtime::Buffer<float> &w) {
-                        w.for_each_value([](float &f) {
-                                f = ((float)rand()) / RAND_MAX - 0.5f;
-                            });
-                    });
-            }
+            std::cout << "Randomizing weights\n";
+            // Fill the weights with random values
+            for_each_weight([](Runtime::Buffer<float> &w) {
+                    w.for_each_value([](float &f) {
+                            f = ((float)rand()) / RAND_MAX - 0.5f;
+                        });
+                });
         }
     }
 
@@ -527,6 +524,12 @@ class DefaultCostModel : public CostModel {
 };
 
 
-std::unique_ptr<CostModel> CostModel::make_default() {
-    return std::unique_ptr<CostModel>(new DefaultCostModel);
+
+
+std::unique_ptr<CostModel> CostModel::make_default(const std::string &weights_dir,
+                                                   bool randomize_weights,
+                                                   const std::string &weights_server_hostname,
+                                                   int weights_server_port,
+                                                   int weights_server_experiment_id) {
+    return std::unique_ptr<CostModel>(new DefaultCostModel(weights_dir, randomize_weights, weights_server_hostname, weights_server_port, weights_server_experiment_id));
 }
