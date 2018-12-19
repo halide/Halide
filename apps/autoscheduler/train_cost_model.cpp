@@ -243,7 +243,7 @@ int main(int argc, char **argv) {
         tpp.emplace_back(CostModel::make_default(weights_dir, randomize_weights));
     }
 
-    float rates[] = {0.001f};
+    float rates[] = {0.0001f};
 
     int num_cores = atoi(getenv("HL_NUM_THREADS"));
 
@@ -255,10 +255,23 @@ int main(int argc, char **argv) {
 
     std::cout << "Iterating over " << samples.size() << " samples\n";
 
+    decltype(samples) validation_set;
+    for (auto p : samples) {
+        if ((rand() & 3) == 0) {
+            validation_set.insert(p);
+        }
+    }
+
+    for (auto p : validation_set) {
+        samples.erase(p.first);
+    }
+
     for (float learning_rate : rates) {
         float loss_sum[models] = {0}, loss_sum_counter[models] = {0};
         float correct_ordering_rate_sum[models] = {0};
         float correct_ordering_rate_count[models] = {0};
+        float v_correct_ordering_rate_sum[models] = {0};
+        float v_correct_ordering_rate_count[models] = {0};
 
         for (int e = 0; e < epochs; e++) {
             int counter = 0;
@@ -269,81 +282,94 @@ int main(int argc, char **argv) {
 
             #pragma omp parallel for
             for (int model = 0; model < models; model++) {
-                auto &tp = tpp[model];
+                for (int train = 0; train < 2; train++) {
+                    auto &tp = tpp[model];
 
-                for (auto &p : samples) {
-                    if (models > 1 && rand() & 1) continue; // If we are training multiple models, allow them to diverge.
-                    if (p.second.schedules.size() < 8) {
-                        continue;
-                    }
-                    tp->reset();
-                    tp->set_pipeline_features(p.second.pipeline_features, num_cores);
-
-                    size_t batch_size = std::min((size_t)1024, p.second.schedules.size());
-
-                    Runtime::Buffer<float> runtimes(batch_size);
-
-                    size_t first = 0;
-                    if (p.second.schedules.size() > 1024) {
-                        first = rand() % (p.second.schedules.size() - 1024);
-                    }
-
-                    for (size_t j = 0; j < batch_size; j++) {
-                        auto it = p.second.schedules.begin();
-                        std::advance(it, j + first);
-                        auto &sched = it->second;
-                        Runtime::Buffer<float> buf;
-                        tp->enqueue(p.second.num_stages, &buf, &sched.prediction[model]);
-                        runtimes(j) = sched.runtimes[0];
-                        buf.copy_from(sched.schedule_features);
-                    }
-
-                    float loss = tp->backprop(runtimes, learning_rate);
-                    assert(!std::isnan(loss));
-                    loss_sum[model] += loss;
-                    loss_sum_counter[model] ++;
-
-                    for (size_t j = 0; j < batch_size; j++) {
-                        auto it = p.second.schedules.begin();
-                        std::advance(it, j + first);
-                        auto &sched = it->second;
-
-                        float m = sched.runtimes[0] / (sched.prediction[model] + 1e-10f);
-                        if (m > worst_miss) {
-                            worst_miss = m;
-                            worst_miss_pipeline_id = p.first;
-                            worst_miss_schedule_id = it->first;
+                    for (auto &p : train ? samples : validation_set) {
+                        if (models > 1 && rand() & 1) continue; // If we are training multiple models, allow them to diverge.
+                        if (p.second.schedules.size() < 8) {
+                            continue;
                         }
-                    }
+                        tp->reset();
+                        tp->set_pipeline_features(p.second.pipeline_features, num_cores);
 
-                    if (true) {
-                        int good = 0, bad = 0;
-                        int attempts = 0;
-                        while (attempts < batch_size * 10) {
-                            attempts++;
-                            int j1 = rand() % p.second.schedules.size();
-                            int j2 = rand() % p.second.schedules.size();
-                            auto it1 = p.second.schedules.begin();
-                            auto it2 = p.second.schedules.begin();
-                            std::advance(it1, j1);
-                            std::advance(it2, j2);
-                            auto &sched1 = it1->second;
-                            auto &sched2 = it2->second;
-                            if (sched1.prediction[model] == 0 || sched2.prediction[model] == 0) continue;
-                            if (sched1.runtimes[0] > 1.3f*sched2.runtimes[0] ||
-                                sched2.runtimes[0] > 1.3f*sched1.runtimes[0]) {
-                                if ((sched1.prediction[model] > sched2.prediction[model]) ==
-                                    (sched1.runtimes[0] > sched2.runtimes[0])) {
-                                    good++;
-                                } else {
-                                    bad++;
+                        size_t batch_size = std::min((size_t)1024, p.second.schedules.size());
+
+                        Runtime::Buffer<float> runtimes(batch_size);
+
+                        size_t first = 0;
+                        if (p.second.schedules.size() > 1024) {
+                            first = rand() % (p.second.schedules.size() - 1024);
+                        }
+
+                        for (size_t j = 0; j < batch_size; j++) {
+                            auto it = p.second.schedules.begin();
+                            std::advance(it, j + first);
+                            auto &sched = it->second;
+                            Runtime::Buffer<float> buf;
+                            tp->enqueue(p.second.num_stages, &buf, &sched.prediction[model]);
+                            runtimes(j) = sched.runtimes[0];
+                            buf.copy_from(sched.schedule_features);
+                        }
+
+                        float loss = 0.0f;
+                        if (train) {
+                            loss = tp->backprop(runtimes, learning_rate);
+                            assert(!std::isnan(loss));
+                            loss_sum[model] += loss;
+                            loss_sum_counter[model] ++;
+
+                            for (size_t j = 0; j < batch_size; j++) {
+                                auto it = p.second.schedules.begin();
+                                std::advance(it, j + first);
+                                auto &sched = it->second;
+
+                                float m = sched.runtimes[0] / (sched.prediction[model] + 1e-10f);
+                                if (m > worst_miss) {
+                                    worst_miss = m;
+                                    worst_miss_pipeline_id = p.first;
+                                    worst_miss_schedule_id = it->first;
                                 }
                             }
+                        } else {
+                            tp->evaluate_costs();
                         }
-                        correct_ordering_rate_sum[model] += good;
-                        correct_ordering_rate_count[model] += good + bad;
+
+                        if (true) {
+                            int good = 0, bad = 0;
+                            int attempts = 0;
+                            while (attempts < batch_size * 10) {
+                                attempts++;
+                                int j1 = rand() % p.second.schedules.size();
+                                int j2 = rand() % p.second.schedules.size();
+                                auto it1 = p.second.schedules.begin();
+                                auto it2 = p.second.schedules.begin();
+                                std::advance(it1, j1);
+                                std::advance(it2, j2);
+                                auto &sched1 = it1->second;
+                                auto &sched2 = it2->second;
+                                if (sched1.prediction[model] == 0 || sched2.prediction[model] == 0) continue;
+                                if (sched1.runtimes[0] > 1.3f*sched2.runtimes[0] ||
+                                    sched2.runtimes[0] > 1.3f*sched1.runtimes[0]) {
+                                    if ((sched1.prediction[model] > sched2.prediction[model]) ==
+                                        (sched1.runtimes[0] > sched2.runtimes[0])) {
+                                        good++;
+                                    } else {
+                                        bad++;
+                                    }
+                                }
+                            }
+                            if (train) {
+                                correct_ordering_rate_sum[model] += good;
+                                correct_ordering_rate_count[model] += good + bad;
+                            } else {
+                                v_correct_ordering_rate_sum[model] += good;
+                                v_correct_ordering_rate_count[model] += good + bad;
+                            }
+                        }
                     }
                 }
+
                 counter++;
             }
 
@@ -359,17 +385,24 @@ int main(int argc, char **argv) {
             float best_rate = 0;
             for (int model = 0; model < models; model++) {
                 float rate = correct_ordering_rate_sum[model] / correct_ordering_rate_count[model];
+                std::cout << rate << " ";
+                correct_ordering_rate_sum[model] *= 0.9f;
+                correct_ordering_rate_count[model] *= 0.9f;
+
+                rate = v_correct_ordering_rate_sum[model] / v_correct_ordering_rate_count[model];
                 if (rate < best_rate) {
                     best_model = model;
                     best_rate = rate;
                 }
                 std::cout << rate << " ";
-                correct_ordering_rate_sum[model] *= 0.9f;
-                correct_ordering_rate_count[model] *= 0.9f;
+                v_correct_ordering_rate_sum[model] *= 0.9f;
+                v_correct_ordering_rate_count[model] *= 0.9f;
             }
+
             if (models > 1) std::cout << "\n";
             if (samples.count(worst_miss_pipeline_id)) {
                 std::cout << " Worst: " << worst_miss << " " << samples[worst_miss_pipeline_id].schedules[worst_miss_schedule_id].filename << "\n";
+                samples[worst_miss_pipeline_id].schedules.erase(worst_miss_schedule_id);
             } else {
                 std::cout << "\n";
             }
