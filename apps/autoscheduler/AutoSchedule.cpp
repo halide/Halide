@@ -2409,7 +2409,7 @@ struct LoopNest {
             feat.points_computed_per_production = subinstances / feat.num_productions;
             feat.vector_loads_per_vector = vectors_loaded;
             feat.scalar_loads_per_vector = scalars_loaded;
-            feat.scalar_loads_per_scalar = elements_loaded;
+            feat.scalar_loads_per_scalar = (elements_loaded + subinstances - 1) / subinstances;
         }
 
         // Track features for inlined Funcs
