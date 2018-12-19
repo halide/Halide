@@ -40,9 +40,9 @@ using namespace Halide;
 
 Runtime::Buffer<float> buffer_from_file(const std::string &filename, const std::vector<int> &shape) {
     Runtime::Buffer<float> buf(shape);
-    buf.fill(0.0f);
+    buf.fill(1234.0f);
 
-    std::ifstream i(filename, std::ios_base::trunc | std::ios_base::binary);
+    std::ifstream i(filename, std::ios_base::binary);
     i.read((char *)(buf.data()), buf.size_in_bytes());
     i.close();
     // TODO: some existing weights are the wrong size (e.g. weights/head2_conv1_weight.data is currently
