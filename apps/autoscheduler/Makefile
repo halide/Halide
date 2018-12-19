@@ -63,7 +63,7 @@ $(BIN)/demo.a: $(BIN)/demo.generator $(BIN)/libauto_schedule.so
 	HL_MACHINE_PARAMS=32,1,1 HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=weights \
 	$(BIN)/demo.generator -g demo -o $(BIN) -f demo -e static_library,h target=$(HL_TARGET) auto_schedule=true -p $(BIN)/libauto_schedule.so
 
-$(BIN)/demo.rungen: $(BIN)/demo.a $(BIN)/RunGenMain.o $(HALIDE_DISTRIB_PATH)/tools/RunGenStubs.cpp
+$(BIN)/demo.rungen: $(BIN)/RunGenMain.o $(BIN)/demo.a $(HALIDE_DISTRIB_PATH)/tools/RunGenStubs.cpp
 	$(CXX) -I $(BIN) -DHL_RUNGEN_FILTER_HEADER="\"demo.h\"" $^ -o $@ $(HALIDE_SYSTEM_LIBS) $(IMAGE_IO_FLAGS)
 
 # demonstrates single-shot use of the autoscheduler

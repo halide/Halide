@@ -16,7 +16,7 @@ int main(int argc, char **argv) {
 
     Var x("x"), y("y");
 
-    if (0) {
+    if (1) {
         // In a point-wise pipeline, everything should be fully fused.
         Func f("f"), g("g"), h("h");
         f(x, y) = (x + y) * (x + y);
@@ -28,7 +28,7 @@ int main(int argc, char **argv) {
         Pipeline(h).auto_schedule(target, params);
     }
 
-    if (0) {
+    if (1) {
         // In a pipeline with huge expensive stencils and low memory costs, nothing should be fused
         Func f("f"), g("g"), h("h");
         f(x, y) = (x + y) * (x + 2*y) * (x + 3*y) * (x + 4*y) * (x + 5*y);
@@ -48,7 +48,7 @@ int main(int argc, char **argv) {
         Pipeline(h).auto_schedule(target, params);
     }
 
-    if (0) {
+    if (1) {
         // In a pipeline with moderate isotropic stencils, there should be some square tiling
         Func f("f"), h("h");
         f(x, y) = (x + y) * (x + 2*y) * (x + 3*y);
@@ -63,7 +63,7 @@ int main(int argc, char **argv) {
     }
 
     // Smaller footprint stencil -> smaller tiles
-    if (0) {
+    if (1) {
         Func f("f"), g("g"), h("h");
         f(x, y) = (x + y) * (x + 2*y) * (x + 3*y);
         h(x, y) = (f(x-1, y-1) + f(x, y-1) + f(x+1, y-1) +
@@ -95,7 +95,7 @@ int main(int argc, char **argv) {
     }
 
     // An outer product
-    if (0) {
+    if (1) {
         Buffer<float> a(2048), b(2048);
         Func f;
         f(x, y) = a(x) * b(y);
@@ -106,7 +106,7 @@ int main(int argc, char **argv) {
     }
 
     // A separable downsample that models the start of local_laplacian
-    if (0) {
+    if (1) {
         Buffer<float> in(2048, 2048);
         Var k;
         Func orig("orig"), expensive("expensive"), downy("downy"), downx("downx");
@@ -125,7 +125,7 @@ int main(int argc, char **argv) {
     }
 
     // A Func with multiple stages, some of which include additional loops
-    if (0) {
+    if (1) {
         Buffer<float> a(1024, 1024);
         Func f("multiple_stages"), g("g"), h("h");
         Var x, y;
@@ -143,7 +143,7 @@ int main(int argc, char **argv) {
         Pipeline(g).auto_schedule(target, params);
     }
 
-    if (0) {
+    if (1) {
         // A scan with pointwise stages before and after
         Buffer<float> a(1024, 1024);
         Func before[5];
@@ -168,7 +168,7 @@ int main(int argc, char **argv) {
     }
 
 
-    if (0) {
+    if (1) {
         Func f_u8("f_u8");
         Func f_u64_1("f_u64_1");
         Func f_u64_2("f_u64_2");
@@ -188,7 +188,7 @@ int main(int argc, char **argv) {
         Pipeline(f_u64_2).auto_schedule(target, params);
     }
 
-    if (0) {
+    if (1) {
         Buffer<float> im_a(1024, 1024, "a"), im_b(1024, 1024, "b");
         im_a.fill(0.0f);
         im_b.fill(0.0f);
@@ -207,7 +207,7 @@ int main(int argc, char **argv) {
         Pipeline(out).auto_schedule(target, params);
     }
 
-    if (0) {
+    if (1) {
         // A scan in x followed by a downsample in y, with pointwise stuff in between
         const int N = 3;
         Buffer<float> a(1024, 1024);
@@ -237,7 +237,7 @@ int main(int argc, char **argv) {
         Pipeline(p3[N-1]).auto_schedule(target, params);
     }
 
-    if (0) {
+    if (1) {
         // A gather that only uses a small portion of a potentially
         // large LUT. The number of points computed should be less
         // than points computed minimum, and the LUT should be
@@ -257,7 +257,7 @@ int main(int argc, char **argv) {
         Pipeline(out).auto_schedule(target, params);
     }
 
-    if (0) {
+    if (1) {
         // A schedule where it's insane to not compute inside an rvar
         Func f("f"), g("g");
         f(x, y) = x;
@@ -285,6 +285,83 @@ int main(int argc, char **argv) {
         h.estimate(x, 0, 1000).estimate(y, 0, 1000);
 
         Pipeline(h).auto_schedule(target, params);
+    }
+
+    if (1) {
+        // A no-win scenario in which a Func is going to be read from
+        // lots of times using a vector gather no matter how it is
+        // scheduled.
+        Func in("in"), a("a"), b("b");
+
+        in(x, y) = sqrt(sqrt(sqrt(sqrt(x*y))));
+
+        RDom r(-50, 100, -50, 100);
+        a(x, y) += in(x+r.x, y+r.y);
+        b(x, y) += in(y+r.y, x+r.x);
+
+        a.estimate(x, 0, 1000).estimate(y, 0, 1000);
+        b.estimate(x, 0, 1000).estimate(y, 0, 1000);
+
+        Pipeline({a, b}).auto_schedule(target, params);
+
+    }
+
+    if (1) {
+        // Boring memcpy
+        ImageParam im(Float(32), 2);
+        Func f("f"), g("g");
+        f(x, y) = im(x, y);
+        g(x, y) = f(x, y);
+
+        g.estimate(x, 0, 1000).estimate(y, 0, 1000);
+        Pipeline(g).auto_schedule(target, params);
+    }
+
+    if (1) {
+        // A load from a tiny input image
+        ImageParam im(Float(32), 2);
+        Func f("f");
+        f(x, y) = im(x, y) * 7;
+
+        f.estimate(x, 0, 3).estimate(y, 0, 5);
+        Pipeline(f).auto_schedule(target, params);
+    }
+
+    if (1) {
+        // Lots of dimensions
+        ImageParam im(Float(32), 7);
+        Func f("f");
+        Var z, w, t, u, v;
+        f(x, y, z, w, t, u, v) = im(x, y, z, w, t, u, v) * 7;
+
+        f.estimate(x, 0, 8)
+            .estimate(y, 0, 9)
+            .estimate(z, 0, 10)
+            .estimate(w, 0, 5)
+            .estimate(t, 0, 3)
+            .estimate(u, 0, 2)
+            .estimate(v, 0, 6);
+        Pipeline(f).auto_schedule(target, params);
+    }
+
+    if (1) {
+        // Long transpose chain.
+        ImageParam im(Float(32), 2);
+        Func f("f"), g("g"), h("h");
+
+        f(x, y) = im(clamp(y*x, 0, 999), x);
+        g(x, y) = f(clamp(y*x, 0, 999), x);
+        h(x, y) = g(clamp(y*x, 0, 999), x);
+
+        // Force everything to be compute root by accessing them in two separate outputs
+        Func out1("out1"), out2("out2");
+        out1(x, y) = f(x, y) + g(x, y) + h(x, y);
+        out2(x, y) = f(x, y) + g(x, y) + h(x, y);
+
+        out1.estimate(x, 0, 1000).estimate(y, 0, 1000);
+        out2.estimate(x, 0, 1000).estimate(y, 0, 1000);
+        Pipeline({out1, out2}).auto_schedule(target, params);
+
     }
 
     return 0;

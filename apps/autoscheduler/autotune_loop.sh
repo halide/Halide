@@ -12,6 +12,20 @@ GENERATOR=${1}
 PIPELINE=${2}
 HL_TARGET=${3}
 
+if [ -z ${HL_TARGET} ]; then
+HL_TARGET=x86-64-avx2-disable_llvm_loop_unroll-disable_loop_loop_vectorize
+fi
+
+if [ -z ${GENERATOR} ]; then
+GENERATOR=./bin/demo.generator
+fi
+
+if [ -z ${PIPELINE} ]; then
+PIPELINE=demo
+fi
+
+SAMPLES=samples
+
 # A batch of this many samples is built in parallel, and then
 # benchmarked serially.
 BATCH_SIZE=32
@@ -29,7 +43,7 @@ make_sample() {
         beam=50
     else
         # The other samples are random probes biased by the cost model
-        dropout=90
+        dropout=50
         beam=1
     fi
     HL_PERMIT_FAILED_UNROLL=1 \
@@ -40,6 +54,7 @@ make_sample() {
         HL_WEIGHTS_DIR=${PWD}/weights \
         HL_RANDOM_DROPOUT=${dropout} \
         HL_BEAM_SIZE=${beam} \
+        HL_MACHINE_PARAMS=32,1,1 \
         ${GENERATOR} \
         -g ${PIPELINE} \
         -f ${FNAME} \
@@ -80,12 +95,16 @@ benchmark_sample() {
 }
 
 # Don't clobber existing samples
-FIRST=$(ls samples | cut -d_ -f2 | sort -n | tail -n1)
+FIRST=$(ls ${SAMPLES} | cut -d_ -f2 | sort -n | tail -n1)
 
 for ((i=$((FIRST+1));i<1000000;i++)); do
     # Compile a batch of samples using the generator in parallel
-    DIR=${PWD}/samples/batch_${i}
+    DIR=${SAMPLES}/batch_${i}
 
+    # Copy the weights being used into the batch folder so that we can repro failures
+    mkdir -p ${DIR}
+    cp weights/* ${SAMPLES}/batch_${i}/
+    
     echo Compiling ${BATCH_SIZE} samples for batch_${i}...
     for ((b=0;b<${BATCH_SIZE};b++)); do
         S=$(printf "%d%02d" $i $b)
@@ -103,6 +122,6 @@ for ((i=$((FIRST+1));i<1000000;i++)); do
     # retrain model weights on all samples seen so far
     echo Retraining model...
     find samples | grep sample$ | \
-        HL_NUM_THREADS=32 HL_WEIGHTS_DIR=weights HL_BEST_SCHEDULE_FILE=${PWD}/samples/best.txt ./bin/train_cost_model 100
+        HL_NUM_THREADS=32 HL_WEIGHTS_DIR=weights HL_BEST_SCHEDULE_FILE=${PWD}/samples/best.txt ./bin/train_cost_model 1000
 
 done
