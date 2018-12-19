@@ -354,7 +354,11 @@ int main(int argc, char **argv) {
                 correct_ordering_rate_count[model] *= 0.9f;
             }
             if (models > 1) std::cout << "\n";
-            std::cout << " Worst: " << worst_miss << " " << samples[worst_miss_pipeline_id].schedules[worst_miss_schedule_id].filename << "\n";
+            if (samples.count(worst_miss_pipeline_id)) {
+                std::cout << " Worst: " << worst_miss << " " << samples[worst_miss_pipeline_id].schedules[worst_miss_schedule_id].filename << "\n";
+            } else {
+                std::cout << "\n";
+            }
             tpp[best_model].save_weights();
         }
     }
