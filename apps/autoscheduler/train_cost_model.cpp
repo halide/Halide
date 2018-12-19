@@ -4,10 +4,13 @@
 #include <string>
 #include <unistd.h>
 #include <vector>
+#include <map>
+#include <iostream>
+#include <fstream>
 
-#include "ThroughputPredictorPipeline.h"
+#include "CostModel.h"
 
-namespace {
+using namespace Halide;
 
 using std::vector;
 using std::string;
@@ -227,13 +230,14 @@ map<int, PipelineSample> load_samples() {
     return result;
 }
 
-}  // namespace
-
 int main(int argc, char **argv) {
     auto samples = load_samples();
 
     // Iterate through the pipelines
-    ThroughputPredictorPipeline tpp[models];
+    vector<std::unique_ptr<CostModel>> tpp;
+    for (int i = 0; i < models; i++) {
+        tpp.emplace_back(CostModel::make_default());
+    }
 
     float rates[] = {0.001f};
 
@@ -268,8 +272,8 @@ int main(int argc, char **argv) {
                     if (p.second.schedules.size() < 8) {
                         continue;
                     }
-                    tp.reset();
-                    tp.set_pipeline_features(p.second.pipeline_features, num_cores);
+                    tp->reset();
+                    tp->set_pipeline_features(p.second.pipeline_features, num_cores);
 
                     size_t batch_size = std::min((size_t)1024, p.second.schedules.size());
 
@@ -285,12 +289,12 @@ int main(int argc, char **argv) {
                         std::advance(it, j + first);
                         auto &sched = it->second;
                         Runtime::Buffer<float> buf;
-                        tp.enqueue(p.second.num_stages, &buf, &sched.prediction[model]);
+                        tp->enqueue(p.second.num_stages, &buf, &sched.prediction[model]);
                         runtimes(j) = sched.runtimes[0];
                         buf.copy_from(sched.schedule_features);
                     }
 
-                    float loss = tp.backprop(runtimes, learning_rate);
+                    float loss = tp->backprop(runtimes, learning_rate);
                     assert(!std::isnan(loss));
                     loss_sum[model] += loss;
                     loss_sum_counter[model] ++;
@@ -365,7 +369,7 @@ int main(int argc, char **argv) {
             } else {
                 std::cout << "\n";
             }
-            tpp[best_model].save_weights();
+            tpp[best_model]->save_weights();
         }
     }
 

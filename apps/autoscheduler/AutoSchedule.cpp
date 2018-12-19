@@ -30,7 +30,7 @@
 
 #include "Halide.h"
 #include "halide_benchmark.h"
-#include "ThroughputPredictorPipeline.h"
+#include "CostModel.h"
 #include "Featurization.h"
 #include "FunctionDAG.h"
 #include "PerfectHashMap.h"
@@ -1667,7 +1667,7 @@ struct State {
         internal_assert(!binfile.fail()) << "Failed to write " << feature_file;
     }
 
-    bool calculate_cost(const FunctionDAG &dag, const MachineParams &params, ThroughputPredictorPipeline *throughput_predictor, bool verbose = false) {
+    bool calculate_cost(const FunctionDAG &dag, const MachineParams &params, CostModel *cost_model, bool verbose = false) {
         StageMap<ScheduleFeatures> features;
         compute_featurization(dag, params, &features);
 
@@ -1683,7 +1683,7 @@ struct State {
         }
 
         // use either deep network or linear model to predict cost
-        if (throughput_predictor) {
+        if (cost_model) {
 
             // Perform any quick rejection tests before enqueuing this
             for (auto it = features.begin(); it != features.end(); it++) {
@@ -1712,7 +1712,7 @@ struct State {
             Runtime::Buffer<float> schedule_features;
 
             // Won't actually run anything until we call evaluate_costs...
-            throughput_predictor->enqueue(num_stages, &schedule_features, &cost);
+            cost_model->enqueue(num_stages, &schedule_features, &cost);
 
             // index of current stage whose features we are reading
             int stage = 0;
@@ -1898,7 +1898,7 @@ struct State {
 
     void generate_children(const FunctionDAG &dag,
                            const MachineParams &params,
-                           ThroughputPredictorPipeline *throughput_predictor,
+                           CostModel *cost_model,
                            std::function<void(IntrusivePtr<State> &&)> &accept_child) const {
         internal_assert(root.defined() && root->is_root());
 
@@ -1956,7 +1956,7 @@ struct State {
                     child->root = new_root;
                     child->num_funcs_scheduled++;
                     // TODO: filter children here instead of calculating the cost of children we don't want.
-                    if (child->calculate_cost(dag, params, throughput_predictor)) {
+                    if (child->calculate_cost(dag, params, cost_model)) {
                         internal_assert(child->root->computes(node)) << "Failed to inline " << node->func.name() << '\n';
                         num_children++;
                         accept_child(std::move(child));
@@ -1993,7 +1993,7 @@ struct State {
                     auto child = make_child();
                     child->root = std::move(n);
                     child->num_funcs_scheduled++;
-                    if (child->calculate_cost(dag, params, throughput_predictor)) {
+                    if (child->calculate_cost(dag, params, cost_model)) {
                         internal_assert(child->root->computes(node)) << "Failed to inject realization of " << node->func.name() << '\n';
                         num_children++;
                         accept_child(std::move(child));
@@ -2017,7 +2017,7 @@ struct State {
 
             child->root = new_root;
             child->num_funcs_scheduled++;
-            if (child->calculate_cost(dag, params, throughput_predictor)) {
+            if (child->calculate_cost(dag, params, cost_model)) {
                 num_children++;
                 accept_child(std::move(child));
             }
@@ -2252,8 +2252,8 @@ public:
 
 void configure_pipeline_features(const FunctionDAG &dag,
                                  const MachineParams &params,
-                                 ThroughputPredictorPipeline *throughput_predictor) {
-    throughput_predictor->reset();
+                                 CostModel *cost_model) {
+    cost_model->reset();
     const int pipeline_feat_size = 56 * 7;
     static_assert(sizeof(PipelineFeatures) - 7 * sizeof(int) ==
                   sizeof(int) * pipeline_feat_size,
@@ -2275,19 +2275,19 @@ void configure_pipeline_features(const FunctionDAG &dag,
         }
     }
     internal_assert(stage == num_stages);
-    throughput_predictor->set_pipeline_features(pipeline_features, params.parallelism);
+    cost_model->set_pipeline_features(pipeline_features, params.parallelism);
 }
 
 IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
                                           vector<Function> outputs,
                                           const MachineParams &params,
-                                          ThroughputPredictorPipeline *throughput_predictor,
+                                          CostModel *cost_model,
                                           int beam_size,
                                           int pass_idx,
                                           std::unordered_set<uint64_t> &permitted_hashes) {
 
-    if (throughput_predictor) {
-        configure_pipeline_features(dag, params, throughput_predictor);
+    if (cost_model) {
+        configure_pipeline_features(dag, params, cost_model);
     }
 
     StateQueue q, pending;
@@ -2440,16 +2440,16 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
               state->calculate_cost(dag, params, nullptr, true);
             */
 
-            state->generate_children(dag, params, throughput_predictor, enqueue_new_children);
+            state->generate_children(dag, params, cost_model, enqueue_new_children);
             expanded++;
         }
 
         // Drop the other states unconsidered.
         pending.clear();
 
-        if (throughput_predictor) {
+        if (cost_model) {
             // Now evaluate all the costs and re-sort them in the priority queue
-            throughput_predictor->evaluate_costs();
+            cost_model->evaluate_costs();
             q.resort();
         }
 
@@ -2463,9 +2463,9 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
                 auto state = q[choice_label];
                 debug(0) << "\n[" << choice_label << "]:\n";
                 state->dump();
-                state->calculate_cost(dag, params, throughput_predictor, true);
+                state->calculate_cost(dag, params, cost_model, true);
             }
-            throughput_predictor->evaluate_costs();
+            cost_model->evaluate_costs();
 
             // Select next partial schedule to expand.
             int selection = -1;
@@ -2485,7 +2485,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
 IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
                                      vector<Function> outputs,
                                      const MachineParams &params,
-                                     ThroughputPredictorPipeline *throughput_predictor,
+                                     CostModel *cost_model,
                                      int beam_size) {
 
     IntrusivePtr<State> best;
@@ -2499,7 +2499,7 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
     }
 
     for (int i = 0; i < num_passes; i++) {
-        auto pass = optimal_schedule_pass(dag, outputs, params, throughput_predictor, beam_size, i, permitted_hashes);
+        auto pass = optimal_schedule_pass(dag, outputs, params, cost_model, beam_size, i, permitted_hashes);
         debug(0) << "\nPass " << i << " result:\n";
         pass->dump();
 
@@ -2542,10 +2542,9 @@ std::string generate_schedules_new(const std::vector<Function> &outputs,
 
     dag.dump();
 
-    ThroughputPredictorPipeline throughput_predictor;
-    ThroughputPredictorPipeline *tp = &throughput_predictor;
+    auto cost_model = CostModel::make_default();
     if (get_env_variable("HL_USE_MANUAL_COST_MODEL") == "1") {
-        tp = nullptr;
+        cost_model.reset();
     }
 
     IntrusivePtr<State> optimal;
@@ -2554,7 +2553,7 @@ std::string generate_schedules_new(const std::vector<Function> &outputs,
         // Use a fixed running time
         auto start = std::chrono::steady_clock::now();
         for (size_t beam_size = 1; ; beam_size *= 2) {
-            auto s = optimal_schedule(dag, outputs, params, tp, beam_size);
+            auto s = optimal_schedule(dag, outputs, params, cost_model.get(), beam_size);
             if (beam_size == 1 || s->cost < optimal->cost) {
                 optimal = s;
             }
@@ -2566,7 +2565,7 @@ std::string generate_schedules_new(const std::vector<Function> &outputs,
         }
     } else {
         // Use a fixed beam size
-        optimal = optimal_schedule(dag, outputs, params, tp, beam_size);
+        optimal = optimal_schedule(dag, outputs, params, cost_model.get(), beam_size);
     }
 
     debug(0) << "Cost evaluated this many times: " << State::cost_calculations << '\n';
@@ -2574,7 +2573,7 @@ std::string generate_schedules_new(const std::vector<Function> &outputs,
     debug(0) << "** Optimal schedule:\n";
 
     // Just to get the debugging prints to fire
-    optimal->calculate_cost(dag, params, tp, true);
+    optimal->calculate_cost(dag, params, cost_model.get(), true);
 
     // Apply the schedules
     optimal->apply_schedule(dag, params);

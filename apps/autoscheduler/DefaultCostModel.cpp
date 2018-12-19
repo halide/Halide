@@ -14,6 +14,8 @@
 #include "cost_model.h"
 #include "train_cost_model.h"
 
+#include "CostModel.h"
+
 extern "C" float weights_pipeline_mean[];
 extern "C" int weights_pipeline_mean_length;
 extern "C" float weights_pipeline_std[];
@@ -49,9 +51,9 @@ Runtime::Buffer<float> buffer_from_file(const std::string &filename, const std::
         std::cerr << "Could not load buffer from file: " << filename << "\n Using random values instead.\n";
         buf.for_each_value([](float &f) {
                 f = ((float)rand()) / RAND_MAX - 0.5f;
-            });        
+            });
     }
-    
+
     return buf;
 }
 
@@ -80,7 +82,7 @@ struct Weights {
     Runtime::Buffer<float> conv1_bias;
 };
 
-class ThroughputPredictorPipeline {
+class DefaultCostModel : public CostModel {
     std::string weights_dir;
     Weights weights;
     Stats stats;
@@ -94,7 +96,7 @@ class ThroughputPredictorPipeline {
 
  public:
 
-    ThroughputPredictorPipeline() {
+    DefaultCostModel() {
         if (char *e = getenv("HL_WEIGHTS_DIR")) {
             weights_dir = e;
         }
@@ -168,7 +170,7 @@ class ThroughputPredictorPipeline {
         conv1_filter_update, conv1_bias_update;
     int timestep = 0;
 
-    float backprop(Runtime::Buffer<const float> true_runtimes, float learning_rate) {
+    float backprop(const Runtime::Buffer<const float> &true_runtimes, float learning_rate) {
         assert(cursor != 0);
         assert(pipeline_feat_queue.data());
         assert(schedule_feat_queue.data());
@@ -219,7 +221,7 @@ class ThroughputPredictorPipeline {
                          weights.head2_filter, weights.head2_bias,
                          weights.conv1_filter, weights.conv1_bias,
                          learning_rate, timestep++,
-                         true_runtimes,
+                         true_runtimes.alias(),
                          head1_filter_update, head1_bias_update,
                          head2_filter_update, head2_bias_update,
                          conv1_filter_update, conv1_bias_update,
@@ -523,3 +525,8 @@ class ThroughputPredictorPipeline {
     }
 
 };
+
+
+std::unique_ptr<CostModel> CostModel::make_default() {
+    return std::unique_ptr<CostModel>(new DefaultCostModel);
+}
