@@ -73,7 +73,11 @@ map<int, PipelineSample> load_samples() {
         const size_t num_features = floats_read - 3;
         const size_t features_per_stage = 30 + 57 * 7;
         file.close();
-        assert(!file.fail());
+        // Note we do not check file.fail(). The various failure cases
+        // are handled below by checking the number of floats read. We
+        // expect truncated files if the benchmarking or
+        // autoscheduling procedure crashes and want to filter them
+        // out with a warning.
 
         if (floats_read == scratch.size()) {
             std::cout << "Too-large sample: " << s << " " << floats_read << "\n";
