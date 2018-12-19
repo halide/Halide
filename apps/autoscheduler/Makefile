@@ -41,11 +41,11 @@ $(BIN)/cost_model/%.a: $(BIN)/cost_model.generator
 # It's important to use dynamic lookups for undefined symbols here: all of libHalide
 # is expected to be present (in the loading binary), so we explicitly make the symbols
 # undefined rather than dependent on libHalide.so.
-$(BIN)/libauto_schedule.so: AutoSchedule.cpp $(WEIGHT_OBJECTS) $(COST_MODEL_LIBS) $(GENERATOR_DEPS) $(BIN)/runtime.a
+$(BIN)/libauto_schedule.so: AutoSchedule.cpp DefaultCostModel.cpp FunctionDAG.h Featurization.h CostModel.h PerfectHashMap.h $(WEIGHT_OBJECTS) $(COST_MODEL_LIBS) $(GENERATOR_DEPS) $(BIN)/runtime.a
 	@mkdir -p $(@D)
-	$(CXX) -shared $(USE_EXPORT_DYNAMIC) -fPIC $(CXXFLAGS) -g -I $(BIN)/cost_model AutoSchedule.cpp $(WEIGHT_OBJECTS) $(COST_MODEL_LIBS) $(BIN)/runtime.a -O3 -o $@ $(HALIDE_SYSTEM_LIBS)
+	$(CXX) -shared $(USE_EXPORT_DYNAMIC) -fPIC $(CXXFLAGS) -g -I $(BIN)/cost_model AutoSchedule.cpp DefaultCostModel.cpp $(WEIGHT_OBJECTS) $(COST_MODEL_LIBS) $(BIN)/runtime.a -O3 -o $@ $(HALIDE_SYSTEM_LIBS)
 
-$(BIN)/train_cost_model: train_cost_model.cpp ThroughputPredictorPipeline.h $(COST_MODEL_LIBS) $(WEIGHT_OBJECTS) $(BIN)/runtime.a
+$(BIN)/train_cost_model: train_cost_model.cpp DefaultCostModel.cpp CostModel.h $(COST_MODEL_LIBS) $(WEIGHT_OBJECTS) $(BIN)/runtime.a
 	$(CXX) $(CXXFLAGS) -I $(BIN)/cost_model -O3 $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(USE_OPEN_MP)
 
 $(BIN)/augment_sample: augment_sample.cpp
@@ -72,7 +72,7 @@ demo: $(BIN)/demo.rungen
 
 # demonstrates an autotuning loop
 autotune: $(BIN)/demo.generator $(BIN)/augment_sample $(BIN)/train_cost_model autotune_loop.sh $(BIN)/libauto_schedule.so
-	bash autotune_loop.sh $(BIN)/demo.generator demo x86-64-avx2
+	bash autotune_loop.sh $(BIN)/demo.generator demo x86-64-avx2-disable_llvm_loop_unroll-disable_llvm_loop_vectorize
 
 # Simple jit-based test
 $(BIN)/test: test.cpp $(BIN)/libauto_schedule.so

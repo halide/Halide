@@ -4,10 +4,13 @@
 #include <string>
 #include <unistd.h>
 #include <vector>
+#include <map>
+#include <iostream>
+#include <fstream>
 
-#include "ThroughputPredictorPipeline.h"
+#include "CostModel.h"
 
-namespace {
+using namespace Halide;
 
 using std::vector;
 using std::string;
@@ -73,6 +76,11 @@ map<int, PipelineSample> load_samples() {
         const size_t num_features = floats_read - 3;
         const size_t features_per_stage = 30 + 57 * 7;
         file.close();
+        // Note we do not check file.fail(). The various failure cases
+        // are handled below by checking the number of floats read. We
+        // expect truncated files if the benchmarking or
+        // autoscheduling procedure crashes and want to filter them
+        // out with a warning.
 
         if (floats_read == scratch.size()) {
             std::cout << "Too-large sample: " << s << " " << floats_read << "\n";
@@ -215,22 +223,21 @@ map<int, PipelineSample> load_samples() {
             std::ofstream f(e, std::ios_base::trunc);
             f << o.str();
             f.close();
+            assert(!f.fail());
         }
     }
 
     return result;
 }
 
-}  // namespace
-
 int main(int argc, char **argv) {
     auto samples = load_samples();
 
-    const auto use_getenv = [](const char *s) -> const char * { return getenv(s); };
-    ThroughputPredictorPipeline::Params tpp_params(use_getenv);
-
     // Iterate through the pipelines
-    ThroughputPredictorPipeline tpp[models] = {tpp_params};
+    vector<std::unique_ptr<CostModel>> tpp;
+    for (int i = 0; i < models; i++) {
+        tpp.emplace_back(CostModel::make_default());
+    }
 
     float rates[] = {0.001f};
 
@@ -265,8 +272,8 @@ int main(int argc, char **argv) {
                     if (p.second.schedules.size() < 8) {
                         continue;
                     }
-                    tp.reset();
-                    tp.set_pipeline_features(p.second.pipeline_features, num_cores);
+                    tp->reset();
+                    tp->set_pipeline_features(p.second.pipeline_features, num_cores);
 
                     size_t batch_size = std::min((size_t)1024, p.second.schedules.size());
 
@@ -282,12 +289,12 @@ int main(int argc, char **argv) {
                         std::advance(it, j + first);
                         auto &sched = it->second;
                         Runtime::Buffer<float> buf;
-                        tp.enqueue(p.second.num_stages, &buf, &sched.prediction[model]);
+                        tp->enqueue(p.second.num_stages, &buf, &sched.prediction[model]);
                         runtimes(j) = sched.runtimes[0];
                         buf.copy_from(sched.schedule_features);
                     }
 
-                    float loss = tp.backprop(runtimes, learning_rate);
+                    float loss = tp->backprop(runtimes, learning_rate);
                     assert(!std::isnan(loss));
                     loss_sum[model] += loss;
                     loss_sum_counter[model] ++;
@@ -357,8 +364,12 @@ int main(int argc, char **argv) {
                 correct_ordering_rate_count[model] *= 0.9f;
             }
             if (models > 1) std::cout << "\n";
-            std::cout << " Worst: " << worst_miss << " " << samples[worst_miss_pipeline_id].schedules[worst_miss_schedule_id].filename << "\n";
-            tpp[best_model].save_weights();
+            if (samples.count(worst_miss_pipeline_id)) {
+                std::cout << " Worst: " << worst_miss << " " << samples[worst_miss_pipeline_id].schedules[worst_miss_schedule_id].filename << "\n";
+            } else {
+                std::cout << "\n";
+            }
+            tpp[best_model]->save_weights();
         }
     }
 

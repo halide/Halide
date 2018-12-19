@@ -14,6 +14,8 @@
 #include "cost_model.h"
 #include "train_cost_model.h"
 
+#include "CostModel.h"
+
 extern "C" float weights_pipeline_mean[];
 extern "C" int weights_pipeline_mean_length;
 extern "C" float weights_pipeline_std[];
@@ -40,17 +42,26 @@ using namespace Halide;
 
 Runtime::Buffer<float> buffer_from_file(const std::string &filename, const std::vector<int> &shape) {
     Runtime::Buffer<float> buf(shape);
-    buf.fill(0.0f);
 
-    std::ifstream i(filename.c_str());
+    std::ifstream i(filename, std::ios_base::binary);
     i.read((char *)(buf.data()), buf.size_in_bytes());
+    i.close();
+
+    if (i.fail()) {
+        std::cerr << "Could not load buffer from file: " << filename << "\n Using random values instead.\n";
+        buf.for_each_value([](float &f) {
+                f = ((float)rand()) / RAND_MAX - 0.5f;
+            });
+    }
 
     return buf;
 }
 
 void buffer_to_file(const Runtime::Buffer<float> &buf, const std::string &filename) {
-    std::ofstream o(filename.c_str());
+    std::ofstream o(filename, std::ios_base::trunc | std::ios_base::binary);
     o.write((const char *)(buf.data()), buf.size_in_bytes());
+    o.close();
+    assert(!o.fail());
 }
 
 struct Stats {
@@ -71,7 +82,7 @@ struct Weights {
     Runtime::Buffer<float> conv1_bias;
 };
 
-class ThroughputPredictorPipeline {
+class DefaultCostModel : public CostModel {
     Weights weights;
     Stats stats;
     Runtime::Buffer<float> schedule_feat_queue, pipeline_feat_queue, costs;
@@ -113,7 +124,7 @@ private:
     const Params params;
 
  public:
-    ThroughputPredictorPipeline(const Params &params_) : params(params_) {
+    DefaultCostModel(const Params &params_) : params(params_) {
         load_weights();
         load_stats();
         if (!params.weights_server_hostname.empty()) {
@@ -173,7 +184,7 @@ private:
         conv1_filter_update, conv1_bias_update;
     int timestep = 0;
 
-    float backprop(Runtime::Buffer<const float> true_runtimes, float learning_rate) {
+    float backprop(const Runtime::Buffer<const float> &true_runtimes, float learning_rate) {
         assert(cursor != 0);
         assert(pipeline_feat_queue.data());
         assert(schedule_feat_queue.data());
@@ -224,7 +235,7 @@ private:
                          weights.head2_filter, weights.head2_bias,
                          weights.conv1_filter, weights.conv1_bias,
                          learning_rate, timestep++,
-                         true_runtimes,
+                         true_runtimes.alias(),
                          head1_filter_update, head1_bias_update,
                          head2_filter_update, head2_bias_update,
                          conv1_filter_update, conv1_bias_update,
@@ -526,3 +537,8 @@ private:
     }
 
 };
+
+
+std::unique_ptr<CostModel> CostModel::make_default() {
+    return std::unique_ptr<CostModel>(new DefaultCostModel);
+}
