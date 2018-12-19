@@ -1,3 +1,4 @@
+#include <cmath>
 #include <iomanip>
 #include <set>
 #include <sstream>
@@ -233,10 +234,13 @@ map<int, PipelineSample> load_samples() {
 int main(int argc, char **argv) {
     auto samples = load_samples();
 
+    const auto use_getenv = [](const char *s) -> const char * { return getenv(s); };
+    CostModel::Params cm_params(use_getenv);
+
     // Iterate through the pipelines
     vector<std::unique_ptr<CostModel>> tpp;
     for (int i = 0; i < models; i++) {
-        tpp.emplace_back(CostModel::make_default());
+        tpp.emplace_back(CostModel::make_default(cm_params));
     }
 
     float rates[] = {0.001f};

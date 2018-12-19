@@ -2542,7 +2542,10 @@ std::string generate_schedules_new(const std::vector<Function> &outputs,
 
     dag.dump();
 
-    auto cost_model = CostModel::make_default();
+    const auto use_getenv = [](const char *s) -> const char * { return getenv(s); };
+    CostModel::Params cm_params(use_getenv);
+
+    auto cost_model = CostModel::make_default(cm_params);
     if (get_env_variable("HL_USE_MANUAL_COST_MODEL") == "1") {
         cost_model.reset();
     }

@@ -88,43 +88,10 @@ class DefaultCostModel : public CostModel {
     Runtime::Buffer<float> schedule_feat_queue, pipeline_feat_queue, costs;
     Runtime::Buffer<double *> cost_ptrs;
     int cursor, num_stages, num_cores;
+    const CostModel::Params params;
 
  public:
-    struct Params {
-        std::string weights_dir;
-        std::string weights_server_hostname;
-        int weights_server_port = 0;
-        int weights_server_experiment_id = 0;
-        bool randomize_weights_on_load = false;
-
-        Params() = default;
-
-        explicit Params(std::function<const char *(const char *)> env) {
-            if (const char *e = env("HL_WEIGHTS_DIR")) {
-                weights_dir = e;
-            }
-            if (const char *e = env("HL_WEIGHTS_SERVER_HOSTNAME")) {
-                weights_server_hostname = e;
-            }
-            if (!weights_server_hostname.empty()) {
-                if (const char *e = env("HL_WEIGHTS_SERVER_PORT")) {
-                    weights_server_port = std::atoi(e);
-                }
-                if (const char *e = env("HL_WEIGHTS_SERVER_EXPERIMENT_ID")) {
-                    weights_server_experiment_id = std::atoi(e);
-                }
-            }
-            if (const char *e = env("HL_RANDOMIZE_WEIGHTS")) {
-                randomize_weights_on_load = std::string(e) == "1";
-            }
-        }
-    };
-
-private:
-    const Params params;
-
- public:
-    DefaultCostModel(const Params &params_) : params(params_) {
+    DefaultCostModel(const Params &p) : params(p) {
         load_weights();
         load_stats();
         if (!params.weights_server_hostname.empty()) {
@@ -539,6 +506,6 @@ private:
 };
 
 
-std::unique_ptr<CostModel> CostModel::make_default() {
-    return std::unique_ptr<CostModel>(new DefaultCostModel);
+std::unique_ptr<CostModel> CostModel::make_default(const Params &p) {
+    return std::unique_ptr<CostModel>(new DefaultCostModel(p));
 }
