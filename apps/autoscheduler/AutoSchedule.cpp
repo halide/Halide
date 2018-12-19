@@ -2321,8 +2321,8 @@ struct LoopNest {
                         auto compute_p = producer_compute_bounds->region_computed(i);
                         auto store_p = producer_store_bounds->region_required(i);
 
-                        internal_assert(store_p.first <= store_p.second);
-                        internal_assert(compute_p.first <= compute_p.second);
+                        internal_assert(store_p.first <= store_p.second) << store_p.first << " " << store_p.second << "\n";
+                        internal_assert(compute_p.first <= compute_p.second) << compute_p.first << " " << compute_p.second << "\n";
 
                         int64_t extent = p.second - p.first + 1;
                         int64_t compute_extent = compute_p.second - compute_p.first + 1;
@@ -2474,6 +2474,7 @@ struct LoopNest {
             for (const auto *e : f->outgoing_edges) {
                 // Ignore consumers outside of this loop nest
                 if (!computes(e->consumer)) {
+                    // debug(0) << "Skipping edge from " << e->producer->func.name() << " to " << e->consumer->func.name() << "\n";
                     continue;
                 }
                 // debug(0) << "Expanding footprint along edge " << e->producer->func.name() << " -> " << e->consumer->func.name() << "\n";
@@ -2659,6 +2660,8 @@ struct LoopNest {
                 // loop. With the way tiling is done below, it needs
                 // to be the first loop iteration.
                 single_point->loops(s, i) = {l.first, l.first};
+
+                internal_assert(l.second >= l.first) << i << " " << l.second << " " << l.first << "\n";
 
                 if (node->size[i] >= node->stage->vector_size &&
                     f->stages[s].loop[i].var == f->func.args()[v]) {
@@ -2950,10 +2953,11 @@ struct LoopNest {
                 if (!in_realization) {
                     outer->store_at.insert(f);
                 }
+                outer->children.emplace_back(inner);
 
                 bool may_slide = (!in_realization &&
                                   f->stages.size() == 1);
-                if (false && may_slide) {
+                if (may_slide) {
                     // Store here, but compute further in. Currently
                     // don't have to worry about the constraints this
                     // places on parallelism, as we forced all the
@@ -2962,13 +2966,13 @@ struct LoopNest {
                     for (IntrusivePtr<const LoopNest> &n : opts) {
                         LoopNest *store_at_outer_compute_further_in = new LoopNest;
                         store_at_outer_compute_further_in->copy_from(*outer);
+                        store_at_outer_compute_further_in->children.pop_back();
                         store_at_outer_compute_further_in->children.emplace_back(std::move(n));
                         result.emplace_back(store_at_outer_compute_further_in);
                     }
                 }
 
                 // Site the computation inside the outer loop
-                outer->children.emplace_back(inner);
                 outer->compute_here(f, true, v);
                 outer->tileable &= !in_realization;
                 result.emplace_back(outer);
@@ -2993,8 +2997,6 @@ struct LoopNest {
             // Don't slide over a split vector dimension (why?)
             may_slide &= (children[child]->vectorized_loop_index == -1 ||
                           child_size[children[child]->vectorized_loop_index] == 1);
-
-            may_slide = false;
 
             for (int store_here = 0; store_here < 2; store_here++) {
                 if (store_here && !may_slide) {
