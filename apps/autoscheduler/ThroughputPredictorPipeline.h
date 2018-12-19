@@ -13,6 +13,7 @@
 #include "HalideBuffer.h"
 #include "cost_model.h"
 #include "train_cost_model.h"
+#include "ThroughputPredictor.h"
 
 extern "C" float weights_pipeline_mean[];
 extern "C" int weights_pipeline_mean_length;
@@ -71,7 +72,7 @@ struct Weights {
     Runtime::Buffer<float> conv1_bias;
 };
 
-class ThroughputPredictorPipeline {
+class ThroughputPredictorPipeline : public ThroughputPredictor {
     std::string weights_dir;
     Weights weights;
     Stats stats;
