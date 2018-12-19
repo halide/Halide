@@ -3375,6 +3375,7 @@ struct State {
             }
         }
         binfile.close();
+        internal_assert(!binfile.fail()) << "Failed to write " << feature_file;
     }
 
     bool calculate_cost(const FunctionDAG &dag, const MachineParams &params, ThroughputPredictorPipeline *throughput_predictor, bool verbose = false) {
@@ -4295,11 +4296,12 @@ std::string generate_schedules_new(const std::vector<Function> &outputs,
     string schedule_file = get_env_variable("HL_SCHEDULE_FILE");
     if (!schedule_file.empty()) {
         debug(0) << "Writing schedule to " << schedule_file << "...\n";
-        std::ofstream f(schedule_file, std::ios_base::trunc);
+        std::ofstream f(schedule_file);
         f << "// --- BEGIN machine-generated schedule\n"
           << optimal->schedule_source
           << "// --- END machine-generated schedule\n";
         f.close();
+        internal_assert(!f.fail()) << "Failed to write " << schedule_file;
     }
 
     // Print out the predicted runtime of each Func, so we can compare them to a profile

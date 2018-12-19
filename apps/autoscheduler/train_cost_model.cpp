@@ -73,6 +73,7 @@ map<int, PipelineSample> load_samples() {
         const size_t num_features = floats_read - 3;
         const size_t features_per_stage = 30 + 57 * 7;
         file.close();
+        assert(!file.fail());
 
         if (floats_read == scratch.size()) {
             std::cout << "Too-large sample: " << s << " " << floats_read << "\n";
@@ -215,6 +216,7 @@ map<int, PipelineSample> load_samples() {
             std::ofstream f(e, std::ios_base::trunc);
             f << o.str();
             f.close();
+            assert(!f.fail());
         }
     }
 
