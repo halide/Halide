@@ -72,7 +72,7 @@ demo: $(BIN)/demo.rungen
 
 # demonstrates an autotuning loop
 autotune: $(BIN)/demo.generator $(BIN)/augment_sample $(BIN)/train_cost_model autotune_loop.sh $(BIN)/libauto_schedule.so
-	bash autotune_loop.sh $(BIN)/demo.generator demo x86-64-avx2
+	bash autotune_loop.sh $(BIN)/demo.generator demo x86-64-avx2-disable_llvm_loop_unroll-disable_llvm_loop_vectorize
 
 # Simple jit-based test
 $(BIN)/test: test.cpp $(BIN)/libauto_schedule.so
