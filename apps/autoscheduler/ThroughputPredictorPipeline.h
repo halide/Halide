@@ -40,15 +40,18 @@ using namespace Halide;
 
 Runtime::Buffer<float> buffer_from_file(const std::string &filename, const std::vector<int> &shape) {
     Runtime::Buffer<float> buf(shape);
-    buf.fill(1234.0f);
 
     std::ifstream i(filename, std::ios_base::binary);
     i.read((char *)(buf.data()), buf.size_in_bytes());
     i.close();
-    // TODO: some existing weights are the wrong size (e.g. weights/head2_conv1_weight.data is currently
-    // 2496 bytes on disk but we request 2880 bytes here).
-    // assert(!i.fail());
 
+    if (i.fail()) {
+        std::cerr << "Could not load buffer from file: " << filename << "\n Using random values instead.\n";
+        buf.for_each_value([](float &f) {
+                f = ((float)rand()) / RAND_MAX - 0.5f;
+            });        
+    }
+    
     return buf;
 }
 
