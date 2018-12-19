@@ -1119,6 +1119,19 @@ struct FunctionDAG {
         }
     }
 
+   void compute_pipeline_featurization(std::unordered_map<Stage, PipelineFeatures, StageHasher> *features) {
+       // Annotate the DAG with pipeline features
+      featurize();
+
+      // Extract the pipeline features
+      for (const Internal::FunctionDAG::Node &node : nodes) {
+          for (const Internal::FunctionDAG::Node::Stage& stage : node.stages) {
+	      features->emplace(stage.stage, stage.features);
+          }
+      }
+
+   }
+
     void dump() const {
         for (const Node &n : nodes) {
             debug(0) << "Node: " << n.func.name() << '\n'
