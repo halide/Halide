@@ -3910,7 +3910,10 @@ std::string generate_schedules_new(const std::vector<Function> &outputs,
 
     dag.dump();
 
-    ThroughputPredictorPipeline throughput_predictor;
+    const auto use_getenv = [](const char *s) -> const char * { return getenv(s); };
+    ThroughputPredictorPipeline::Params tpp_params(use_getenv);
+
+    ThroughputPredictorPipeline throughput_predictor(tpp_params);
     ThroughputPredictorPipeline *tp = &throughput_predictor;
     if (get_env_variable("HL_USE_MANUAL_COST_MODEL") == "1") {
         tp = nullptr;
@@ -3982,7 +3985,10 @@ std::string generate_schedules_autotune(const std::vector<Function> &output_func
                                         const MachineParams &params) {
     const int beam_size = 50;
 
-    ThroughputPredictorPipeline tp;
+    const auto use_getenv = [](const char *s) -> const char * { return getenv(s); };
+    ThroughputPredictorPipeline::Params tpp_params(use_getenv);
+
+    ThroughputPredictorPipeline tp(tpp_params);
 
     struct Trial {
         std::unique_ptr<FunctionDAG> dag;

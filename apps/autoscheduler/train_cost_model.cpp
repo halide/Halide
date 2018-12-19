@@ -222,8 +222,11 @@ map<int, PipelineSample> load_samples() {
 int main(int argc, char **argv) {
     auto samples = load_samples();
 
+    const auto use_getenv = [](const char *s) -> const char * { return getenv(s); };
+    ThroughputPredictorPipeline::Params tpp_params(use_getenv);
+
     // Iterate through the pipelines
-    ThroughputPredictorPipeline tpp[models];
+    ThroughputPredictorPipeline tpp[models] = {tpp_params};
 
     float rates[] = {0.01f};
 

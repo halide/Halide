@@ -72,37 +72,51 @@ struct Weights {
 };
 
 class ThroughputPredictorPipeline {
-    std::string weights_dir;
     Weights weights;
     Stats stats;
     Runtime::Buffer<float> schedule_feat_queue, pipeline_feat_queue, costs;
     Runtime::Buffer<double *> cost_ptrs;
     int cursor, num_stages, num_cores;
 
-    std::string weights_server_hostname;
-    int weights_server_port = 0;
-    int weights_server_experiment_id = 0;
+ public:
+    struct Params {
+        std::string weights_dir;
+        std::string weights_server_hostname;
+        int weights_server_port = 0;
+        int weights_server_experiment_id = 0;
+        bool randomize_weights_on_load = false;
+
+        Params() = default;
+
+        explicit Params(std::function<const char *(const char *)> env) {
+            if (const char *e = env("HL_WEIGHTS_DIR")) {
+                weights_dir = e;
+            }
+            if (const char *e = env("HL_WEIGHTS_SERVER_HOSTNAME")) {
+                weights_server_hostname = e;
+            }
+            if (!weights_server_hostname.empty()) {
+                if (const char *e = env("HL_WEIGHTS_SERVER_PORT")) {
+                    weights_server_port = std::atoi(e);
+                }
+                if (const char *e = env("HL_WEIGHTS_SERVER_EXPERIMENT_ID")) {
+                    weights_server_experiment_id = std::atoi(e);
+                }
+            }
+            if (const char *e = env("HL_RANDOMIZE_WEIGHTS")) {
+                randomize_weights_on_load = std::string(e) == "1";
+            }
+        }
+    };
+
+private:
+    const Params params;
 
  public:
-
-    ThroughputPredictorPipeline() {
-        if (char *e = getenv("HL_WEIGHTS_DIR")) {
-            weights_dir = e;
-        }
+    ThroughputPredictorPipeline(const Params &params_) : params(params_) {
         load_weights();
         load_stats();
-
-        if (char *e = getenv("HL_WEIGHTS_SERVER_HOSTNAME")) {
-            weights_server_hostname = e;
-        }
-        if (!weights_server_hostname.empty()) {
-            if (char *e = getenv("HL_WEIGHTS_SERVER_PORT")) {
-                weights_server_port = std::atoi(e);
-            }
-            if (char *e = getenv("HL_WEIGHTS_SERVER_EXPERIMENT_ID")) {
-                weights_server_experiment_id = std::atoi(e);
-            }
-            std::cerr << "Using weights server " << weights_server_hostname << ":" << weights_server_port << "/" << weights_server_experiment_id << "\n";
+        if (!params.weights_server_hostname.empty()) {
             send_weights_to_weights_server();
         }
     }
@@ -229,7 +243,7 @@ class ThroughputPredictorPipeline {
         err = std::sqrt(err);
 
 
-        if (!weights_server_hostname.empty()) {
+        if (!params.weights_server_hostname.empty()) {
             // Send gradients, receive new weights
             send_gradients_to_weights_server();
             get_weights_from_weights_server();
@@ -296,9 +310,9 @@ class ThroughputPredictorPipeline {
 
     void load_weights() {
 
-        assert(!weights_dir.empty());
+        assert(!params.weights_dir.empty());
 
-        if (weights_dir.empty()) {
+        if (params.weights_dir.empty()) {
             weights.head1_filter = Runtime::Buffer<float>(weights_head1_conv1_weight, 24, 56, 7);
             assert(weights_head1_conv1_weight_length == (int)weights.head1_filter.size_in_bytes());
 
@@ -317,30 +331,28 @@ class ThroughputPredictorPipeline {
             weights.conv1_bias = Runtime::Buffer<float>(weights_trunk_conv1_bias, 16);
             assert(weights_trunk_conv1_bias_length == (int)weights.conv1_bias.size_in_bytes());
         } else {
-            weights.head1_filter = buffer_from_file(weights_dir + "/head1_conv1_weight.data", {24, 56, 7});
-            weights.head1_bias = buffer_from_file(weights_dir + "/head1_conv1_bias.data", {24});
+            weights.head1_filter = buffer_from_file(params.weights_dir + "/head1_conv1_weight.data", {24, 56, 7});
+            weights.head1_bias = buffer_from_file(params.weights_dir + "/head1_conv1_bias.data", {24});
 
-            weights.head2_filter = buffer_from_file(weights_dir + "/head2_conv1_weight.data", {24, 26});
-            weights.head2_bias = buffer_from_file(weights_dir + "/head2_conv1_bias.data", {24});
+            weights.head2_filter = buffer_from_file(params.weights_dir + "/head2_conv1_weight.data", {24, 26});
+            weights.head2_bias = buffer_from_file(params.weights_dir + "/head2_conv1_bias.data", {24});
 
-            weights.conv1_filter = buffer_from_file(weights_dir + "/trunk_conv1_weight.data", {16, 48, 3});
-            weights.conv1_bias = buffer_from_file(weights_dir + "/trunk_conv1_bias.data", {16});
+            weights.conv1_filter = buffer_from_file(params.weights_dir + "/trunk_conv1_weight.data", {16, 48, 3});
+            weights.conv1_bias = buffer_from_file(params.weights_dir + "/trunk_conv1_bias.data", {16});
         }
 
-        if (char *e = getenv("HL_RANDOMIZE_WEIGHTS")) {
-            if (std::string(e) == "1") {
-                // Fill the weights with random values
-                for_each_weight([](Runtime::Buffer<float> &w) {
-                        w.for_each_value([](float &f) {
-                                f = ((float)rand()) / RAND_MAX; // - 0.5f;
-                            });
-                    });
-            }
+        if (params.randomize_weights_on_load) {
+            // Fill the weights with random values
+            for_each_weight([](Runtime::Buffer<float> &w) {
+                    w.for_each_value([](float &f) {
+                            f = ((float)rand()) / RAND_MAX; // - 0.5f;
+                        });
+                });
         }
     }
 
     void load_stats() {
-        if (weights_dir.empty()) {
+        if (params.weights_dir.empty()) {
             stats.pipeline_mean = Runtime::Buffer<float>(weights_pipeline_mean, 56, 7);
             assert(weights_pipeline_mean_length == (int)stats.pipeline_mean.size_in_bytes());
 
@@ -353,22 +365,22 @@ class ThroughputPredictorPipeline {
             stats.schedule_std = Runtime::Buffer<float>(weights_schedule_std, 26);
             assert(weights_schedule_std_length == (int)stats.schedule_std.size_in_bytes());
         } else {
-            stats.pipeline_mean = buffer_from_file(weights_dir + "/pipeline_mean.data", {56, 7});
-            stats.pipeline_std = buffer_from_file(weights_dir + "/pipeline_std.data", {56, 7});
-            stats.schedule_mean = buffer_from_file(weights_dir + "/schedule_mean.data", {26});
-            stats.schedule_std = buffer_from_file(weights_dir + "/schedule_std.data", {26});
+            stats.pipeline_mean = buffer_from_file(params.weights_dir + "/pipeline_mean.data", {56, 7});
+            stats.pipeline_std = buffer_from_file(params.weights_dir + "/pipeline_std.data", {56, 7});
+            stats.schedule_mean = buffer_from_file(params.weights_dir + "/schedule_mean.data", {26});
+            stats.schedule_std = buffer_from_file(params.weights_dir + "/schedule_std.data", {26});
         }
     }
 
     void save_weights() {
-        if (weights_dir.empty()) return;
+        if (params.weights_dir.empty()) return;
 
-        buffer_to_file(weights.head1_filter, weights_dir + "/head1_conv1_weight.data");
-        buffer_to_file(weights.head1_bias, weights_dir + "/head1_conv1_bias.data");
-        buffer_to_file(weights.head2_filter, weights_dir + "/head2_conv1_weight.data");
-        buffer_to_file(weights.head2_bias, weights_dir + "/head2_conv1_bias.data");
-        buffer_to_file(weights.conv1_filter, weights_dir + "/trunk_conv1_weight.data");
-        buffer_to_file(weights.conv1_bias, weights_dir + "/trunk_conv1_bias.data");
+        buffer_to_file(weights.head1_filter, params.weights_dir + "/head1_conv1_weight.data");
+        buffer_to_file(weights.head1_bias, params.weights_dir + "/head1_conv1_bias.data");
+        buffer_to_file(weights.head2_filter, params.weights_dir + "/head2_conv1_weight.data");
+        buffer_to_file(weights.head2_bias, params.weights_dir + "/head2_conv1_bias.data");
+        buffer_to_file(weights.conv1_filter, params.weights_dir + "/trunk_conv1_weight.data");
+        buffer_to_file(weights.conv1_bias, params.weights_dir + "/trunk_conv1_bias.data");
     }
 
 
@@ -445,7 +457,7 @@ class ThroughputPredictorPipeline {
 
     void send_weights_to_weights_server() {
         // std::cerr << "Sending weights to weights server...\n";
-        auto conn = TCPConnection(weights_server_hostname, weights_server_port);
+        auto conn = TCPConnection(params.weights_server_hostname, params.weights_server_port);
 
         ssize_t total_size_of_weights = 0;
 
@@ -453,7 +465,7 @@ class ThroughputPredictorPipeline {
                 total_size_of_weights += w.size_in_bytes();
             });
 
-        int header[4] = {7582946, 1, weights_server_experiment_id, (int)total_size_of_weights};
+        int header[4] = {7582946, 1, params.weights_server_experiment_id, (int)total_size_of_weights};
         conn.send((const uint8_t *)header, sizeof(header));
         for_each_weight([&](const Runtime::Buffer<float> &w) {
                 conn.send((const uint8_t *)(w.data()), w.size_in_bytes());
@@ -463,7 +475,7 @@ class ThroughputPredictorPipeline {
 
     void send_gradients_to_weights_server() {
         // std::cerr << "Sending gradients to weights server...\n";
-        auto conn = TCPConnection(weights_server_hostname, weights_server_port);
+        auto conn = TCPConnection(params.weights_server_hostname, params.weights_server_port);
 
         ssize_t total_size_of_weights = 0;
 
@@ -471,7 +483,7 @@ class ThroughputPredictorPipeline {
                 total_size_of_weights += w.size_in_bytes();
             });
 
-        int header[4] = {7582946, 2, weights_server_experiment_id, (int)total_size_of_weights};
+        int header[4] = {7582946, 2, params.weights_server_experiment_id, (int)total_size_of_weights};
         conn.send((const uint8_t *)header, sizeof(header));
         for_each_gradient([&](const Runtime::Buffer<float> &w) {
                 conn.send((const uint8_t *)(w.data()), w.size_in_bytes());
@@ -481,7 +493,7 @@ class ThroughputPredictorPipeline {
 
     void get_weights_from_weights_server() {
         // std::cerr << "Getting weights from weights server...\n";
-        auto conn = TCPConnection(weights_server_hostname, weights_server_port);
+        auto conn = TCPConnection(params.weights_server_hostname, params.weights_server_port);
 
         ssize_t total_size_of_weights = 0;
 
@@ -489,7 +501,7 @@ class ThroughputPredictorPipeline {
                 total_size_of_weights += w.size_in_bytes();
             });
 
-        int header[4] = {7582946, 0, weights_server_experiment_id, (int)total_size_of_weights};
+        int header[4] = {7582946, 0, params.weights_server_experiment_id, (int)total_size_of_weights};
         conn.send((const uint8_t *)header, sizeof(header));
         for_each_weight([&](Runtime::Buffer<float> &w) {
                 conn.recv((uint8_t *)(w.data()), w.size_in_bytes());
