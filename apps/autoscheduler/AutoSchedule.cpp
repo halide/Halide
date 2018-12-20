@@ -950,7 +950,8 @@ struct LoopNest {
 
                 internal_assert(l.second >= l.first) << i << " " << l.second << " " << l.first << "\n";
 
-                if (node->size[i] >= node->stage->vector_size &&
+                if (f->func.dimensions() &&
+                    node->size[i] >= node->stage->vector_size &&
                     f->stages[s].loop[i].var == f->func.args()[v]) {
                     node->vectorized_loop_index = (int)i;
                     vector_size = (int64_t)(node->stage->vector_size);
@@ -1530,7 +1531,10 @@ struct LoopNest {
                         found = true;
                         break;
                     }
-                    internal_assert(found) << "Could not find appropriate compute_at location for children of " << node->func.name() << "\n";
+                    if (!found) {
+                        here = LoopLevel(node->func, Var::outermost());
+                    }
+                    // internal_assert(found) << "Could not find appropriate compute_at location for children of " << node->func.name() << "\n";
                     state.vars.insert(state.vars.begin(), new_inner.begin(), new_inner.end());
                 }
             }
@@ -1689,15 +1693,12 @@ struct State {
             for (auto it = features.begin(); it != features.end(); it++) {
                 if (!it.key()->node->func.is_wrapper()) { // It's OK to repeatedly stage data
                     auto &feat = it.value();
-                    if (feat.points_computed_total + feat.inlined_calls > 1.5 * feat.points_computed_minimum) {
+                    if (feat.points_computed_total + feat.inlined_calls > 2 * feat.points_computed_minimum) {
                         cost = 1e50;
                         return true;
                     }
                 }
-
-
             }
-
 
             // Avoid code size explosion from recursive inlining.
             if (root->max_inlined_calls() > 100) {
@@ -1980,6 +1981,17 @@ struct State {
                 vector_dims.push_back(0);
             }
 
+            /*
+            // HACK: May only vectorize across x, if there is one
+            for (int v = 0; v < node->func.dimensions(); v++) {
+                if (node->func.args()[v] == "x") {
+                    vector_dims.clear();
+                    vector_dims.push_back(v);
+                    break;
+                }
+            }
+            */
+
             // 2) Realize it somewhere
             for (int vector_dim : vector_dims) {
                 // Outputs must be vectorized over their innermost
@@ -2102,11 +2114,16 @@ struct State {
             vector<VarOrRVar> vars;
             int64_t parallel_tasks = 1;
             vector<VarOrRVar> parallel_vars;
+            debug(0) << p.first->node->func.name() << "\n";
+            bool any_parallel_vars = false, any_parallel_rvars = false;
             for (auto it = p.second->vars.rbegin(); it != p.second->vars.rend(); it++) {
                 if (!it->exists || it->extent == 1) continue;
                 if (!it->parallel) break;
+                any_parallel_rvars |= it->var.is_rvar;
+                any_parallel_vars |= !it->var.is_rvar;
                 parallel_tasks *= it->extent;
                 parallel_vars.push_back(it->var);
+                debug(0) << "Parallel var: " << it->var.name() << " " << it->var.is_rvar << "\n";
             }
 
             if (p.second->vars.size() > 1) {
@@ -2126,17 +2143,30 @@ struct State {
                 stage.reorder(vars);
             }
 
-            for (size_t i = 1; i < parallel_vars.size(); i++) {
-                // Outermost, and next outermost. Preserve the inner
-                // name to not invalidate any compute_ats.
-                p.second->schedule_source << "\n    .fuse(" << parallel_vars[i].name()
-                                         << ", " << parallel_vars[i-1].name()
-                                         << ", " << parallel_vars[i].name() << ")";
-                stage.fuse(parallel_vars[i], parallel_vars[i-1], parallel_vars[i]);
-            }
-            if (!parallel_vars.empty()) {
-                p.second->schedule_source << "\n    .parallel(" << parallel_vars.back().name() << ")";
-                stage.parallel(parallel_vars.back());
+            debug(0) << any_parallel_vars << " " << any_parallel_rvars << "\n";
+
+            // Halide doesn't let you fuse an RVar with a Var, even if
+            // they are both pure.
+            bool can_fuse = false; // !(any_parallel_vars && any_parallel_rvars);
+
+            if (can_fuse) {
+                for (size_t i = 1; i < parallel_vars.size(); i++) {
+                    // Outermost, and next outermost. Preserve the inner
+                    // name to not invalidate any compute_ats.
+                    p.second->schedule_source << "\n    .fuse(" << parallel_vars[i].name()
+                                              << ", " << parallel_vars[i-1].name()
+                                              << ", " << parallel_vars[i].name() << ")";
+                    stage.fuse(parallel_vars[i], parallel_vars[i-1], parallel_vars[i]);
+                }
+                if (!parallel_vars.empty()) {
+                    p.second->schedule_source << "\n    .parallel(" << parallel_vars.back().name() << ")";
+                    stage.parallel(parallel_vars.back());
+                }
+            } else {
+                for (const auto &v : parallel_vars) {
+                    p.second->schedule_source << "\n    .parallel(" << v.name() << ")";
+                    stage.parallel(v);
+                }
             }
 
             // Reorder the vector dimension innermost
@@ -2507,6 +2537,8 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
             best = pass;
         }
     }
+
+    debug(0) << "Best cost: " << best->cost << "\n";
 
     return best;
 }
