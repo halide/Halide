@@ -68,20 +68,31 @@ struct ModelWeight<true> : public GeneratorInput<Buffer<float>> {
     void set_shape(int s0 = 0, int s1 = 0, int s2 = 0) {
         if (s0) {
             dim(0).set_bounds(0, s0);
+            dim(0).set_bounds_estimate(0, s0);
             grad.dim(0).set_bounds(0, s0);
+            grad.dim(0).set_bounds_estimate(0, s0);
             grad.bound(grad.args()[0], 0, s0);
+            grad.estimate(grad.args()[0], 0, s0);
         }
         if (s1) {
             dim(1).set_bounds(0, s1);
+            dim(1).set_bounds_estimate(0, s1);
             grad.dim(1).set_bounds(0, s1);
+            grad.dim(1).set_bounds_estimate(0, s1);
             grad.bound(grad.args()[1], 0, s1);
+            grad.estimate(grad.args()[1], 0, s1);
+
         }
         if (s2) {
             dim(2).set_bounds(0, s2);
+            dim(2).set_bounds_estimate(0, s2);
             grad.dim(2).set_bounds(0, s2);
+            grad.dim(2).set_bounds_estimate(0, s2);
             grad.bound(grad.args()[2], 0, s2);
+            grad.estimate(grad.args()[2], 0, s2);
         }
         grad.dim(dimensions()).set_bounds(0, 4);
+        grad.dim(dimensions()).set_bounds_estimate(0, 4);
     }
 };
 
@@ -103,12 +114,6 @@ public:
     Input<Buffer<float>> pipeline_features{ "pipeline_features", 3 };
     Input<Buffer<float>> schedule_features{ "schedule_features", 3 };
 
-    // Feature statistics for whitening
-    Input<Buffer<float>> pipeline_mean{ "pipeline_mean", 2 };
-    Input<Buffer<float>> pipeline_std{ "pipeline_std", 2 };
-    Input<Buffer<float>> schedule_mean{ "schedule_mean", 1 };
-    Input<Buffer<float>> schedule_std{ "schedule_std", 1 };
-
     // Network weights. These are parameters instead of baked-in
     // buffers so that they can be swapped out using an environment
     // variable at runtime. In training mode they are also outputs.
@@ -117,7 +122,7 @@ public:
     Weight head1_bias{ "head1_bias", 1 };
     Weight head2_filter{ "head2_filter", 2 };
     Weight head2_bias{ "head2_bias", 1 };
-    Weight filter1{ "filter1", 3 };
+    Weight filter1{ "filter1", 2 };
     Weight bias1{ "bias1", 1 };
 
     // Some extra inputs for training mode. Really should be conditional on 'training'.
@@ -147,54 +152,40 @@ public:
     void generate() {
         Var c("c"), w("w"), n("n"), j("j"), s("s");
 
-        Type working_type = Float(32); //training ? Float(64) : Float(32);
-
-        Func normalized_pipeline_features("normalized_pipeline_features");
-        normalized_pipeline_features(c, j, s) =
-            cast(working_type, (pipeline_features(c, j, s) - 1e-10f * pipeline_mean(c, j)) / max(1, 1e-10f * pipeline_std(c, j)));
-
         Func normalized_schedule_features("normalized_schedule_features");
-        normalized_schedule_features(n, c, s) =
-            cast(working_type, (fast_log(schedule_features(n, c, s) + 1) - 1e-10f * schedule_mean(c)) / max(1, 1e-10f * schedule_std(c)));
+        normalized_schedule_features(n, c, s) = fast_log(schedule_features(n, c, s) + 1);
 
         const int head1_channels = 24, head1_w = 56, head1_h = 7;
-        const int head2_channels = 48, head2_w = 30;
+        const int head2_channels = 96, head2_w = 30;
         const int conv1_channels = 24;
-        const int conv_support = 3;
+
+        Func squashed_head1_filter("squashed_head1_filter");
+        squashed_head1_filter(c, w, n) = sigmoid(head1_filter(c, w, n));
 
         Func head1_conv("head1_conv");
         RDom r_head1(0, head1_w, 0, head1_h);
-        head1_conv(c, w) = cast(working_type, head1_bias(c));
-        head1_conv(c, w) += sigmoid(head1_filter(c, r_head1.x, r_head1.y)) * normalized_pipeline_features(r_head1.x, r_head1.y, w);
+        head1_conv(c, w) = head1_bias(c);
+        head1_conv(c, w) += squashed_head1_filter(c, r_head1.x, r_head1.y) * pipeline_features(r_head1.x, r_head1.y, w);
 
-        Func head1_relu("head1_relu");
-        head1_relu(c, w) = activation(head1_conv(c, w));
-
-        Func head1_relu_padded = pad_stages(head1_relu, num_stages);
+        // No point in a relu - the inputs and weights are positive
 
         Func head2_conv("head2_conv");
         RDom r_head2(0, head2_w);
-        head2_conv(c, w, n) = cast(working_type, head2_bias(c));
+        head2_conv(c, w, n) = head2_bias(c);
         head2_conv(c, w, n) += head2_filter(c, r_head2) * normalized_schedule_features(n, r_head2, w);
 
         Func head2_relu("head2_relu");
         head2_relu(c, w, n) = activation(head2_conv(c, w, n));
 
-        Func head2_relu_padded = pad_stages(head2_relu, num_stages);
-
-        /***** network trunk *****/
-        // first 20 input channels are from head1_relu, next 20 input channels are from head2_relu
-        // have to do two stages for conv1 to convolve over each head's outputs
         Func conv1_stage1("conv1_stage1");
-        RDom r1_stage1(0, head1_channels, 1, 1); //0, conv_support);
-        conv1_stage1(c, w) = cast(working_type, bias1(c));
-        conv1_stage1(c, w) += filter1(c, r1_stage1.x, r1_stage1.y) * head1_relu_padded(r1_stage1.x, w + r1_stage1.y - 1);
+        RDom r1_stage1(0, head1_channels);
+        conv1_stage1(c, w) = bias1(c);
+        conv1_stage1(c, w) += filter1(c, r1_stage1.x) * head1_conv(r1_stage1.x, w);
 
         Func conv1_stage2("conv1_stage2");
-        RDom r1_stage2(0, head2_channels, 1, 1);
-        conv1_stage2(c, w, n) = cast(working_type, conv1_stage1(c, w));  // Broadcast the processed pipeline features across the batch
-        conv1_stage2(c, w, n) += (filter1(c, head1_filter.dim(0).extent() + r1_stage2.x, r1_stage2.y) *
-                                  head2_relu_padded(r1_stage2.x, w + r1_stage2.y - 1, n));
+        RDom r1_stage2(0, head2_channels);
+        conv1_stage2(c, w, n) = conv1_stage1(c, w);
+        conv1_stage2(c, w, n) += filter1(c, head1_filter.dim(0).extent() + r1_stage2.x) * head2_relu(r1_stage2.x, w, n);
 
         Func relu1("relu1");
         relu1(c, w, n) = activation(conv1_stage2(c, w, n));
@@ -238,56 +229,12 @@ public:
         Expr innermost_bytes_at_task = schedule_features(n, idx++, w);
         assert(idx == head2_w);
 
-        /*
-        // Account for idle simd lanes
-        Expr vector_recompute = native_vector_size / max(1, vector_size);
-
-        // Account for idle cores
-        Expr tasks_per_core = (inner_parallelism * outer_parallelism) / max(1, num_cores);
-
-        // tasks_per_core = max(1, tasks_per_core); // Avoid NaNs on corrupted input data
-
-        Expr idle_core_wastage = ceil(tasks_per_core) / tasks_per_core;
-
-
-        // Extract a few of them as things that might have a runtime cost per instance
-        Expr terms[conv1_channels] = {num_realizations, // cost per allocation
-                                      inner_parallelism * num_productions, // cost per thread pool task
-                                      select(inner_parallelism > 1.0f, num_productions, 0), // cost per parallel job launch
-                                      points_computed_total * vector_recompute * idle_core_wastage, // cost per point computed
-                                      inlined_calls * vector_recompute * idle_core_wastage,  // cost per inlined evaluation of the Func
-                                      bytes_at_production * num_realizations, // cost per byte stored
-                                      num_vectors, // cost per vector stored
-                                      scalar_loads_per_vector * num_vectors * idle_core_wastage, // cost per scalar load
-                                      vector_loads_per_vector * num_vectors * idle_core_wastage, // cost per vector load
-                                      unique_bytes_read_per_realization * num_realizations, // cost per byte pulled into cache
-                                      (bytes_at_realization / max(1, innermost_bytes_at_realization)) * num_realizations, // cost per line stored
-                                      unique_lines_read_per_realization * num_realizations, // cost per line pulled into cache
-                                      working_set * num_realizations, // cost per temporary byte allocated during realization
-                                      0.0f,
-                                      0.0f,
-                                      1.0f};
-
-        Expr e = cast(working_type, 0);
-        for (int i = 0; i < conv1_channels; i++) {
-            e += terms[i] * relu1(i, w, n);
-        }
-        */
-
-        // Replicate the manual cost model, but with tunable constants
-
-        // Ratio of inner loop trip count compared to ideal inner loop
-        // trip count in a perfectly vectorized world. TODO: This don't work for inlined things.
+        // Count up the number of things computed
         Expr compute_cost = select(inlined_calls == 0,
                                    (num_vectors * relu1(0, w, n) +
                                     num_scalars * relu1(1, w, n)),
                                    (num_vectors * relu1(2, w, n) +
                                     num_scalars * relu1(3, w, n)));
-        /*
-        Expr innermost_cache_lines = innermost_bytes_at_production / 64;
-        Expr cache_line_penalty = ceil(innermost_cache_lines) / max(1, innermost_cache_lines);
-        compute_cost *= cache_line_penalty;
-        */
 
         // Account for all the code outside of the innermost loop. It's inversly proportional to the size of the innermost loop.
         Expr innermost_loops = relu1(4, w, n) * (num_vectors + num_scalars) / max(1, innermost_loop_extent);
@@ -406,8 +353,7 @@ public:
             // mallocs, or compute more values, or launch more
             // parallel tasks.
             RDom r_conv1_output(0, conv1_channels, 0, num_stages);
-            Expr regularize1 = sum(-min(conv1_stage2(r_conv1_output.x, r_conv1_output.y, n), 0));
-            Expr regularize2 = sum(-min(conv1_stage1(r_conv1_output.x, r_conv1_output.y), 0));
+            Expr regularize = sum(-min(conv1_stage2(r_conv1_output.x, r_conv1_output.y, n), 0));
 
             Expr n2 = (n + 1) % batch_size;
             Expr scale = 1.0f / max(1, true_runtime(0));
@@ -425,11 +371,6 @@ public:
             // is not confident. Size of reward or penalty is also
             // scaled by just how different the two true runtimes are.
 
-            // Run the difference between the two predictions through
-            // a sigmoid to convert it into a predicted probability
-            // that A is faster than B
-            Expr confidence = 1 - 1 / (abs(p1 - p2) + 1);
-
             // Assume there's noise in the runtime measurements, and
             // use a similar sigmoid to determine the probability that
             // A really *is* faster than B.
@@ -438,11 +379,11 @@ public:
             // Maximize
             Expr dp = abs(p1 - p2);
             Expr correct_order = significance * select((r1 > r2) == (p1 > p2), 1/(dp + 1), 1 + dp);
-            err(n) = correct_order + 1e-20f * delta + 1e-3f * regularize1;
+            err(n) = correct_order + 1e-20f * delta + 1e-3f * regularize;
 
             Expr loss = sum(err(r_batch));
 
-            loss_output() = cast<float>(loss) + 1e-30f * regularize2;
+            loss_output() = loss;
 
             d_loss_d = propagate_adjoints(loss_output);
 
@@ -462,23 +403,31 @@ public:
         head1_bias.set_shape(head1_channels);
         head2_filter.set_shape(head2_channels, head2_w);
         head2_bias.set_shape(head2_channels);
-        filter1.set_shape(conv1_channels, head1_channels + head2_channels, conv_support);
+        filter1.set_shape(conv1_channels, head1_channels + head2_channels);
         bias1.set_shape(conv1_channels);
+        num_cores.set_estimate(32);
 
         batch_size.set_estimate(80);
         num_stages.set_estimate(13);
         prediction_output.dim(0).set_bounds_estimate(0, 80);
         learning_rate.set_estimate(0.001f);
         timestep.set_estimate(37);
+        pipeline_features
+            .dim(0).set_bounds_estimate(0, head1_w)
+            .dim(1).set_bounds_estimate(0, head1_h)
+            .dim(2).set_bounds_estimate(0, 13);
+        schedule_features
+            .dim(0).set_bounds_estimate(0, 80)
+            .dim(1).set_bounds_estimate(0, head2_w)
+            .dim(2).set_bounds_estimate(0, 13);
+        true_runtime
+            .dim(0).set_bounds_estimate(0, 80);
 
         // SCHEDULE
-
-        if (auto_schedule) {
-            // Blank
-
-        } else if (training) {
-            // Output by the autoscheduler in autotuning mode
+        if (training) {
             do_cost_model_schedule(get_pipeline());
+        } else if (auto_schedule) {
+            // Blank
         } else {
 
             Var no;
@@ -490,16 +439,13 @@ public:
             const int vec = 8;
 
             // A helper function for scheduling conv layers
-            auto schedule_conv = [&](Func conv, Func relu, RVar r_channels, RVar r_stencil, Func *pre_conv_padding) {
+            auto schedule_conv = [&](Func conv, Func relu, RVar r_channels) {
                 Var ci, wi;
                 if (!training) {
                     relu.compute_at(prediction_output, n).store_at(prediction_output, no)
                         .tile(c, w, ci, wi, vec*3, 4, TailStrategy::RoundUp)
                         .vectorize(ci, vec).unroll(ci);
                     conv.compute_at(relu, c);
-                    if (pre_conv_padding) {
-                        pre_conv_padding->in(conv).compute_at(relu, w).vectorize(c);
-                    }
                 } else {
                     // In training mode, we need the conv activations pre-relu too
                     conv.in().compute_root()
@@ -507,22 +453,13 @@ public:
                         .vectorize(ci, vec).unroll(ci).unroll(wi).parallel(n, 8);
                     conv.compute_at(conv.in(), c);
                     relu.compute_root().reorder_storage(c, w, n).reorder(c, w, n).vectorize(c, vec).parallel(n, 8);
-                    if (pre_conv_padding) {
-                        pre_conv_padding->in(conv).compute_at(conv.in(), w).vectorize(c);
-                    }
                 }
-                conv.vectorize(c).unroll(w).update().vectorize(c).unroll(w);
-                if (r_stencil.name().empty()) {
-                    conv.update().reorder(c, w, r_channels);
-                } else {
-                    conv.update().reorder(c, w, r_channels, r_stencil);
-                }
+                conv.vectorize(c).unroll(w).update().vectorize(c).unroll(w).reorder(c, w, r_channels);
             };
 
             // Pipeline features processing
-            normalized_pipeline_features.compute_root().vectorize(c, vec);
-            head1_relu.compute_root().vectorize(c, vec);
             conv1_stage1.compute_root().vectorize(c, vec);
+            squashed_head1_filter.compute_root().vectorize(c, vec);
 
             // Schedule features processing. The number of schedule
             // features is not close to a multiple of 8, so vectorized
@@ -536,127 +473,8 @@ public:
             }
 
             // conv+relu layers
-            schedule_conv(head2_conv, head2_relu, r_head2.x, RVar(""), nullptr);
-            schedule_conv(conv1_stage2, relu1, r1_stage2.x, r1_stage2.y, &head2_relu_padded);
-
-            if (training) {
-                // We now use a bespoke mini-autoscheduler to schedule the
-                // other reverse stages. TODO: apply the real
-                // autoscheduler to this in some sort of staged
-                // compilation setup.
-
-                auto reorder_outermost = [](Stage s, VarOrRVar v) {
-                    Var t;
-                    s.split(Var::outermost(), Var::outermost(), t, 1).reorder(t, v);
-                };
-
-                auto vectorize_innermost = [](Func f) {
-                    auto storage_dims = f.function().schedule().storage_dims();
-                    if (storage_dims.empty()) return;
-                    const auto &innermost_storage_dim = storage_dims[0].var;
-
-                    auto vectorize_innermost_of_stage = [&](Stage s) {
-                        auto sched = s.get_schedule();
-
-                        // First try vectorizing the innermost storage
-                        // dimension, then the innermost pure loop
-                        // dimension.
-                        for (auto d : sched.dims()) {
-                            if (d.var == innermost_storage_dim) {
-                                s.vectorize(Var(d.var), vec);
-                                return;
-                            }
-                        }
-
-                        for (auto d : sched.dims()) {
-                            // Only vectorize unsplit dimensions
-                            if (d.var.find('.') != std::string::npos) continue;
-                            if (d.is_pure()) {
-                                if (d.is_rvar()) {
-                                    s.vectorize(RVar(d.var), vec);
-                                } else {
-                                    s.vectorize(Var(d.var), vec);
-                                }
-                                return;
-                            }
-                        }
-                    };
-
-                    vectorize_innermost_of_stage(f);
-                    for (int i = 0; i < f.num_update_definitions(); i++) {
-                        vectorize_innermost_of_stage(f.update(i));
-                    }
-                };
-
-                auto factor_batch_reduction = [&](Func f) -> Func {
-                    RVar batch_reduce_rvar;
-                    bool found = false;
-
-                    auto rvars = f.function().update_schedule(0).rvars();
-                    for (auto rv : rvars) {
-                        Expr extent = simplify(rv.extent);
-                        if (Internal::can_prove(extent == batch_size)) {
-                            found = true;
-                            batch_reduce_rvar = RVar(rv.var);
-                        }
-                    }
-
-                    Func intm;
-                    if (found) {
-                        reorder_outermost(f.update(), batch_reduce_rvar);
-                        RVar ro, ri;
-                        intm = f.update().split(batch_reduce_rvar, ro, ri, 8).rfactor(ro, no);
-                        intm.in().compute_root().parallel(no);
-                        intm.compute_at(intm.in(), no);
-                        //vectorize_innermost(intm);
-                        //vectorize_innermost(intm.in());
-                    }
-
-                    f.in().compute_root();
-                    //vectorize_innermost(f.in());
-
-                    return intm;
-                };
-
-                auto schedule_weight_gradient = [&](Func filter, Func bias) {
-                    Func dfilter = d_loss_d(filter, -1, false);
-                    Func dbias = d_loss_d(bias, -1, false);
-                    factor_batch_reduction(dfilter);
-                    factor_batch_reduction(dbias);
-                };
-
-                auto schedule_activation_gradient = [&](Func a) {
-                    Func da = d_loss_d(a, -1, false);
-
-                    reorder_outermost(da.in(), n);
-                    da.in().compute_root().parallel(n, 8);
-                    da.compute_at(da.in(), n);
-                    //vectorize_innermost(da);
-                    //vectorize_innermost(da.in());
-                };
-
-                // Convs that compute loss contributions due to each weight
-                schedule_weight_gradient(head1_filter, head1_bias);
-                schedule_weight_gradient(head2_filter, head2_bias);
-                schedule_weight_gradient(filter1, bias1);
-
-                // Convs that compute the activation gradients
-                schedule_activation_gradient(head2_relu_padded);
-                schedule_activation_gradient(relu1);
-
-                // Schedule the reverse Funcs for everything else
-                for (Func f : {normalized_schedule_features, normalized_pipeline_features,
-                            head1_conv, head1_relu,
-                            head2_conv, head2_relu,
-                            conv1_stage1, conv1_stage2,
-                            prediction,
-                            err, Func(loss_output)}) {
-                    for (auto g : d_loss_d.funcs(f)) {
-                        g.compute_root();
-                        vectorize_innermost(g);
-                    }
-                }
-            }
+            schedule_conv(head2_conv, head2_relu, r_head2.x);
+            schedule_conv(conv1_stage2, relu1, r1_stage2.x);
         }
     }
 };
