@@ -242,6 +242,8 @@ string getenv_safe(const char *key) {
 }  // namespace
 
 int main(int argc, char **argv) {
+    using std::string;
+
     auto samples = load_samples();
 
     string randomize_weights_str = getenv_safe("HL_RANDOMIZE_WEIGHTS");
