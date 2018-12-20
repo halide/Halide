@@ -140,6 +140,10 @@ public:
         return max(e, 0);
     }
 
+    Expr sigmoid(Expr e) {
+        return 1 / (1 + exp(-e));
+    }
+
     void generate() {
         Var c("c"), w("w"), n("n"), j("j"), s("s");
 
@@ -161,7 +165,7 @@ public:
         Func head1_conv("head1_conv");
         RDom r_head1(0, head1_w, 0, head1_h);
         head1_conv(c, w) = cast(working_type, head1_bias(c));
-        head1_conv(c, w) += head1_filter(c, r_head1.x, r_head1.y) * normalized_pipeline_features(r_head1.x, r_head1.y, w);
+        head1_conv(c, w) += sigmoid(head1_filter(c, r_head1.x, r_head1.y)) * normalized_pipeline_features(r_head1.x, r_head1.y, w);
 
         Func head1_relu("head1_relu");
         head1_relu(c, w) = activation(head1_conv(c, w));
@@ -428,7 +432,7 @@ public:
 
             // Maximize
             Expr correct_order = confidence * significance * select((r1 > r2) == (p1 > p2), -1.0f, 1.0f);
-            err(n) = 1e-10f * correct_order + delta + 1e-5f * regularize1;
+            err(n) = correct_order + 1e-10f * delta + 1e-5f * regularize1;
 
             Expr loss = sum(err(r_batch));
 
