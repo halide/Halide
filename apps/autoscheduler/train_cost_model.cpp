@@ -11,6 +11,8 @@
 
 #include "CostModel.h"
 
+namespace {
+
 using namespace Halide;
 
 using std::vector;
@@ -231,12 +233,20 @@ map<int, PipelineSample> load_samples() {
     return result;
 }
 
+string getenv_safe(const char *key) {
+    const char *value = getenv(key);
+    if (!value) value = "";
+    return value;
+}
+
+}  // namespace
+
 int main(int argc, char **argv) {
     auto samples = load_samples();
 
-    string randomize_weights_str = getenv("HL_RANDOMIZE_WEIGHTS");
+    string randomize_weights_str = getenv_safe("HL_RANDOMIZE_WEIGHTS");
     bool randomize_weights = randomize_weights_str == "1";
-    string weights_dir = getenv("HL_WEIGHTS_DIR");
+    string weights_dir = getenv_safe("HL_WEIGHTS_DIR");
 
     // Iterate through the pipelines
     vector<std::unique_ptr<CostModel>> tpp;
@@ -244,9 +254,9 @@ int main(int argc, char **argv) {
         tpp.emplace_back(CostModel::make_default(weights_dir, randomize_weights));
     }
 
-    float rates[] = {0.0001f};
+    float rates[] = {0.00001f};
 
-    int num_cores = atoi(getenv("HL_NUM_THREADS"));
+    int num_cores = atoi(getenv_safe("HL_NUM_THREADS").c_str());
 
     int batches = atoi(argv[1]);
     int epochs = (batches + (int)(samples.size()) - 1) / (int)(samples.size());
@@ -374,7 +384,7 @@ int main(int argc, char **argv) {
                 counter++;
             }
 
-            std::cout << "RMS: ";
+            std::cout << "Loss: ";
             for (int model = 0; model < models; model++) {
                 std::cout << loss_sum[model] / loss_sum_counter[model] << " ";
                 loss_sum[model] *= 0.9f;

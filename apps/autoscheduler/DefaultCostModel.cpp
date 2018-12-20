@@ -227,21 +227,12 @@ class DefaultCostModel : public CostModel {
                          dst,
                          loss);
 
-
-        double err = 0;
         for (int i = 0; i < cursor; i++) {
             assert(cost_ptrs(i));
             *(cost_ptrs(i)) = dst(i);
             assert(!std::isnan(dst(i)));
             assert(true_runtimes(0) > 0);
-            double delta = (true_runtimes(i) - dst(i)) / true_runtimes(0);
-            err += delta * delta;
         }
-        assert(!std::isnan(err));
-        err /= cursor;
-        assert(err > 0);
-        err = std::sqrt(err);
-
 
         if (!weights_server_hostname.empty()) {
             // Send gradients, receive new weights
@@ -272,7 +263,7 @@ class DefaultCostModel : public CostModel {
 
         assert(cursor != 0);
 
-        return err;
+        return loss();
     }
 
     void evaluate_costs() {
@@ -319,10 +310,10 @@ class DefaultCostModel : public CostModel {
             weights.head1_bias = Runtime::Buffer<float>(weights_head1_conv1_bias, 24);
             assert(weights_head1_conv1_bias_length == (int)weights.head1_bias.size_in_bytes());
 
-            weights.head2_filter = Runtime::Buffer<float>(weights_head2_conv1_weight, 24, 30);
+            weights.head2_filter = Runtime::Buffer<float>(weights_head2_conv1_weight, 48, 30);
             assert(weights_head2_conv1_weight_length == (int)weights.head2_filter.size_in_bytes());
 
-            weights.head2_bias = Runtime::Buffer<float>(weights_head2_conv1_bias, 24);
+            weights.head2_bias = Runtime::Buffer<float>(weights_head2_conv1_bias, 48);
             assert(weights_head2_conv1_bias_length == (int)weights.head2_bias.size_in_bytes());
 
             weights.conv1_filter = Runtime::Buffer<float>(weights_trunk_conv1_weight, 24, 48, 3);
@@ -334,10 +325,10 @@ class DefaultCostModel : public CostModel {
             weights.head1_filter = buffer_from_file(weights_dir + "/head1_conv1_weight.data", {24, 56, 7});
             weights.head1_bias = buffer_from_file(weights_dir + "/head1_conv1_bias.data", {24});
 
-            weights.head2_filter = buffer_from_file(weights_dir + "/head2_conv1_weight.data", {24, 30});
-            weights.head2_bias = buffer_from_file(weights_dir + "/head2_conv1_bias.data", {24});
+            weights.head2_filter = buffer_from_file(weights_dir + "/head2_conv1_weight.data", {48, 30});
+            weights.head2_bias = buffer_from_file(weights_dir + "/head2_conv1_bias.data", {48});
 
-            weights.conv1_filter = buffer_from_file(weights_dir + "/trunk_conv1_weight.data", {24, 24 + 24, 3});
+            weights.conv1_filter = buffer_from_file(weights_dir + "/trunk_conv1_weight.data", {24, 48 + 24, 3});
             weights.conv1_bias = buffer_from_file(weights_dir + "/trunk_conv1_bias.data", {24});
         }
 

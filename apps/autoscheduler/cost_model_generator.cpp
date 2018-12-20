@@ -158,7 +158,7 @@ public:
             cast(working_type, (fast_log(schedule_features(n, c, s) + 1) - 1e-10f * schedule_mean(c)) / max(1, 1e-10f * schedule_std(c)));
 
         const int head1_channels = 24, head1_w = 56, head1_h = 7;
-        const int head2_channels = 24, head2_w = 30;
+        const int head2_channels = 48, head2_w = 30;
         const int conv1_channels = 24;
         const int conv_support = 3;
 
@@ -191,7 +191,7 @@ public:
         conv1_stage1(c, w) += filter1(c, r1_stage1.x, r1_stage1.y) * head1_relu_padded(r1_stage1.x, w + r1_stage1.y - 1);
 
         Func conv1_stage2("conv1_stage2");
-        RDom r1_stage2(0, head2_channels, 1, 1); //0, conv_support);
+        RDom r1_stage2(0, head2_channels, 1, 1);
         conv1_stage2(c, w, n) = cast(working_type, conv1_stage1(c, w));  // Broadcast the processed pipeline features across the batch
         conv1_stage2(c, w, n) += (filter1(c, head1_filter.dim(0).extent() + r1_stage2.x, r1_stage2.y) *
                                   head2_relu_padded(r1_stage2.x, w + r1_stage2.y - 1, n));
@@ -289,10 +289,15 @@ public:
         compute_cost *= cache_line_penalty;
         */
 
+        // Account for all the code outside of the innermost loop. It's inversly proportional to the size of the innermost loop.
+        Expr innermost_loops = relu1(4, w, n) * (num_vectors + num_scalars) / max(1, innermost_loop_extent);
+
+        compute_cost += innermost_loops;
+
         Expr num_tasks = max(1, inner_parallelism);
         Expr cores_per_realization = num_cores / max(1, outer_parallelism);
         Expr idle_core_wastage = (0.5f * cores_per_realization + num_tasks) / num_tasks;
-        idle_core_wastage = min(idle_core_wastage, 1 + relu1(4, w, n));
+        idle_core_wastage = min(idle_core_wastage, 1.1f);
         idle_core_wastage *= ceil(num_tasks / (cores_per_realization + 1e-10f)) * (cores_per_realization / num_tasks);
 
         compute_cost *= idle_core_wastage;
@@ -431,12 +436,13 @@ public:
             Expr significance = 1 - 1 / (abs(r1 - r2) + 1);
 
             // Maximize
-            Expr correct_order = confidence * significance * select((r1 > r2) == (p1 > p2), -1.0f, 1.0f);
-            err(n) = correct_order + 1e-10f * delta + 1e-5f * regularize1;
+            Expr dp = abs(p1 - p2);
+            Expr correct_order = significance * select((r1 > r2) == (p1 > p2), 1/(dp + 1), 1 + dp);
+            err(n) = correct_order + 1e-20f * delta + 1e-3f * regularize1;
 
             Expr loss = sum(err(r_batch));
 
-            loss_output() = cast<float>(loss) + 1e-5f * regularize2;
+            loss_output() = cast<float>(loss) + 1e-30f * regularize2;
 
             d_loss_d = propagate_adjoints(loss_output);
 
