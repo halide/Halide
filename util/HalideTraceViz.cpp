@@ -1413,7 +1413,7 @@ int main(int argc, char **argv) {
     };
 
 #ifdef _MSC_VER
-	_setmode(STDIN_FILENO, _O_BINARY);
+    _setmode(STDIN_FILENO, _O_BINARY);
     _setmode(STDOUT_FILENO, _O_BINARY);
 #endif
 
