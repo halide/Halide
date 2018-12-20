@@ -50,7 +50,7 @@ OPTIMIZE ?= -O3
 # OPTIMIZE ?= -g -DDEBUG=1 -UNDEBUG
 
 # Compiling with -fvisibility=hidden saves ~80k on optimized x64 builds
-CCFLAGS=$(shell $(PYTHON)-config --cflags) $(PYBIND11_CFLAGS) -I $(HALIDE_DISTRIB_PATH)/include -I $(ROOT_DIR) -std=c++11 $(FPIC) -fvisibility=hidden -fvisibility-inlines-hidden $(OPTIMIZE)
+CCFLAGS=$(shell $(PYTHON)-config --cflags) $(PYBIND11_CFLAGS) -I $(HALIDE_DISTRIB_PATH)/include -I $(ROOT_DIR) -std=c++11 $(FPIC) -fvisibility=hidden -fvisibility-inlines-hidden $(OPTIMIZE) $(CXXFLAGS)
 # Filter out a pointless warning present in some Python installs
 CCFLAGS := $(filter-out -Wstrict-prototypes,$(CCFLAGS))
 
