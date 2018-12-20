@@ -322,7 +322,6 @@ struct LoopNest {
         int64_t working_set_here = 0;
 
         int64_t loop_instances = 1, parallel_loop_instances = 1;
-        size_t idx = 0;
         bool in_impure = false;
         for (int idx = (int)size.size() - 1; idx >= 0; idx--) {
             size_t i = size[idx];
