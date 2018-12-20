@@ -1004,6 +1004,9 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
                     // Must re-create each time since each instance will have a different Target.
                     auto gen = GeneratorRegistry::create(generator_name, GeneratorContext(target));
                     gen->set_generator_param_values(sub_generator_args);
+                    // Reset the counters so the function/variable names look
+                    // more consistent for different targets.
+                    reset_unique_name_counters();
                     return gen->build_module(name);
                 };
             if (targets.size() > 1 || !emit_options.substitutions.empty()) {
