@@ -1613,25 +1613,33 @@ void CodeGen_C::compile(const LoweredFunc &f) {
     }
 
     if (is_header() && f.linkage == LinkageType::ExternalPlusMetadata) {
-        // C syntax for function-that-returns-function-pointer is fun.
-        const string getter = R"INLINE_CODE(
+        set_name_mangling_mode(NameMangling::CPlusPlus);
 
-// This allows the includer of this file to get the argv/metadata entry points
-// for this file without needing to know the specific function names;
-// if HALIDE_GET_STANDARD_ARGV_FUNCTION is defined before this file is
-// included, an inline function with that name is provided that return
-// a function pointer to the _argv() entry point (similarly,
-// HALIDE_GET_STANDARD_METADATA_FUNCTION -> _metadata() entry point).
-#ifdef HALIDE_GET_STANDARD_ARGV_FUNCTION
-inline int (*HALIDE_GET_STANDARD_ARGV_FUNCTION())(void**) {
-    return $NAME$_argv;
+        // Note that the code belows emits an inline function inside an anonymous
+        // namespace; normally this is considered a Very Bad Thing to do in a .h
+        // file; however, in this case it's quite deliberate, as we want to be
+        // able to include multiple variants of this in conjunction with RunGenStubs.cpp
+        // in a way that avoids possible name collisions. Normal users should never need
+        // to deal with this.
+        const string getter = R"INLINE_CODE(
+#ifdef HALIDE_REGISTER_ARGV_AND_METADATA
+
+#ifndef __cplusplus
+#error "HALIDE_REGISTER_ARGV_AND_METADATA requires C++"
+#endif  // __cplusplus
+
+extern "C" void halide_register_argv_and_metadata(
+    int (*filter_argv_call)(void **),
+    const struct halide_filter_metadata_t *filter_metadata
+);
+
+namespace {
+inline void HALIDE_REGISTER_ARGV_AND_METADATA () {
+    halide_register_argv_and_metadata(::$NAME$_argv, ::$NAME$_metadata());
 }
-#endif
-#ifdef HALIDE_GET_STANDARD_METADATA_FUNCTION
-inline const struct halide_filter_metadata_t* (*HALIDE_GET_STANDARD_METADATA_FUNCTION())() {
-    return $NAME$_metadata;
-}
-#endif
+}  // namespace
+
+#endif  // HALIDE_REGISTER_ARGV_AND_METADATA
 )INLINE_CODE";
         stream << replace_all(getter, "$NAME$", f.name) << "\n\n";
     }
