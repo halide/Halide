@@ -1491,7 +1491,7 @@ $(FILTERS_DIR)/%.rungen: $(BUILD_DIR)/RunGenMain.o $(BIN_DIR)/$(TARGET)/runtime.
 		$(BUILD_DIR)/RunGenMain.o \
 		$(BIN_DIR)/$(TARGET)/runtime.a \
 		$(call alwayslink,$(FILTERS_DIR)/$*.rungenstubs.o) \
-		$(FILTERS_DIR)/%.a \
+		$(FILTERS_DIR)/$*.a \
 		$(GEN_AOT_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@
 
 RUNARGS ?=
