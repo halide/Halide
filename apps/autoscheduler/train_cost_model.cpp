@@ -243,7 +243,7 @@ int main(int argc, char **argv) {
         tpp.emplace_back(CostModel::make_default(weights_dir, randomize_weights));
     }
 
-    float rates[] = {0.0001f};
+    float rates[] = {0.00001f};
 
     int num_cores = atoi(getenv("HL_NUM_THREADS"));
 
@@ -373,7 +373,7 @@ int main(int argc, char **argv) {
                 counter++;
             }
 
-            std::cout << "RMS: ";
+            std::cout << "Loss: ";
             for (int model = 0; model < models; model++) {
                 std::cout << loss_sum[model] / loss_sum_counter[model] << " ";
                 loss_sum[model] *= 0.9f;
