@@ -1,3 +1,4 @@
+#include <cmath>
 #include <iomanip>
 #include <set>
 #include <sstream>
@@ -9,6 +10,8 @@
 #include <fstream>
 
 #include "CostModel.h"
+
+namespace {
 
 using namespace Halide;
 
@@ -230,12 +233,20 @@ map<int, PipelineSample> load_samples() {
     return result;
 }
 
+string getenv_safe(const char *key) {
+    const char *value = getenv(key);
+    if (!value) value = "";
+    return value;
+}
+
+}  // namespace
+
 int main(int argc, char **argv) {
     auto samples = load_samples();
 
-    string randomize_weights_str = getenv("HL_RANDOMIZE_WEIGHTS");
+    string randomize_weights_str = getenv_safe("HL_RANDOMIZE_WEIGHTS");
     bool randomize_weights = randomize_weights_str == "1";
-    string weights_dir = getenv("HL_WEIGHTS_DIR");
+    string weights_dir = getenv_safe("HL_WEIGHTS_DIR");
 
     // Iterate through the pipelines
     vector<std::unique_ptr<CostModel>> tpp;
@@ -245,7 +256,7 @@ int main(int argc, char **argv) {
 
     float rates[] = {0.00001f};
 
-    int num_cores = atoi(getenv("HL_NUM_THREADS"));
+    int num_cores = atoi(getenv_safe("HL_NUM_THREADS").c_str());
 
     int batches = atoi(argv[1]);
     int epochs = (batches + (int)(samples.size()) - 1) / (int)(samples.size());
