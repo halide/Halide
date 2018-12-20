@@ -1490,8 +1490,8 @@ $(FILTERS_DIR)/%.rungen: $(BUILD_DIR)/RunGenMain.o $(BIN_DIR)/$(TARGET)/runtime.
 	$(CXX) -std=c++11 -I$(FILTERS_DIR) \
 		$(BUILD_DIR)/RunGenMain.o \
 		$(BIN_DIR)/$(TARGET)/runtime.a \
-		$(FILTERS_DIR)/%.a \
 		$(call alwayslink,$(FILTERS_DIR)/$*.rungenstubs.o) \
+		$(FILTERS_DIR)/%.a \
 		$(GEN_AOT_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@
 
 RUNARGS ?=
@@ -1509,12 +1509,12 @@ $(FILTERS_DIR)/multi_rungen: $(BUILD_DIR)/RunGenMain.o $(BIN_DIR)/$(TARGET)/runt
 	$(CXX) -std=c++11 -I$(FILTERS_DIR) \
 			$(BUILD_DIR)/RunGenMain.o \
 			$(BIN_DIR)/$(TARGET)/runtime.a \
-			$(FILTERS_DIR)/blur2x2.a \
-			$(FILTERS_DIR)/cxx_mangling.a \
-			$(FILTERS_DIR)/pyramid.a \
 			$(call alwayslink,$(FILTERS_DIR)/blur2x2.rungenstubs.o) \
 			$(call alwayslink,$(FILTERS_DIR)/cxx_mangling.rungenstubs.o) \
 			$(call alwayslink,$(FILTERS_DIR)/pyramid.rungenstubs.o) \
+			$(FILTERS_DIR)/blur2x2.a \
+			$(FILTERS_DIR)/cxx_mangling.a \
+			$(FILTERS_DIR)/pyramid.a \
 			$(GEN_AOT_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@
 
 $(BIN_DIR)/tutorial_%: $(ROOT_DIR)/tutorial/%.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h

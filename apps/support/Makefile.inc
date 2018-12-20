@@ -114,8 +114,8 @@ $(BIN)/%.rungen: $(BIN)/RunGenMain.o $(BIN)/%.a $(BIN)/%.rungenstubs.o
 	$(CXX) $(CXXFLAGS) -I$(BIN) \
 		-DHL_RUNGEN_FILTER_HEADER=\"$*.h\" \
 		$(BIN)/RunGenMain.o \
-		$(BIN)/$*.a \
 		$(call alwayslink,$(BIN)/$*.rungenstubs.o) \
+		$(BIN)/$*.a \
 		-o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS)
 
 RUNARGS ?=
