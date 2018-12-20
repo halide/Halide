@@ -46,6 +46,12 @@ using std::map;
 using std::set;
 using std::pair;
 
+int64_t get_shared_memory_limit() {
+    // HL_SHARED_MEMORY_LIMIT is in KB
+    std::string limit = get_env_variable("HL_SHARED_MEMORY_LIMIT");
+    return atoi(limit.c_str()) * 1024; // Convert to bytes
+}
+
 uint64_t get_dropout_threshold() {
     string random_dropout_str = get_env_variable("HL_RANDOM_DROPOUT");
     if (!random_dropout_str.empty()) {
@@ -1403,7 +1409,7 @@ vector<vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, int fa
                 }
                 // Additional tiling options may have inner extents that are not
                 // multiples of 32 so skip them for the vector dimension
-                if (d != vector_dim) {
+                if (!GPU || d != vector_dim) {
                     for (int outer = 1; outer <= s[d]; outer *= factor) {
                         int inner = (s[d] + outer - 1) / outer;
                         if (is_one && outer == 1) continue;
@@ -3111,6 +3117,28 @@ struct State {
         binfile.close();
     }
 
+    bool exceeds_shared_memory_limit(const ScheduleFeatures& feat, const FunctionDAG::Node* node) {
+        if (!GPU) {
+            return false;
+        }
+
+        static int64_t limit = get_shared_memory_limit();
+
+        if (limit == 0) {
+            return false;
+        }
+
+        // If the working set is too large on the GPU, shared memory will be
+        // exhausted, so reject any such schedules
+        for (const auto& c : root->children) {
+            if (c->node == node && feat.working_set > limit) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     bool calculate_cost(const FunctionDAG &dag, const MachineParams &params, ThroughputPredictorPipeline *throughput_predictor, bool verbose = false) {
         StageMap<ScheduleFeatures> features;
         compute_featurization(dag, params, &features);
@@ -3137,6 +3165,10 @@ struct State {
                 if (feat.points_computed_total + feat.inlined_calls > 10 * feat.points_computed_minimum) {
                     cost = 1e50;
                     return true;
+                }
+
+                if (exceeds_shared_memory_limit(feat, it.key()->node)) {
+                    return false;
                 }
             }
 
@@ -3177,6 +3209,10 @@ struct State {
             for (auto it = features.begin(); it != features.end(); it++) {
                 auto &stage = *(it.key());
                 const auto &feat = it.value();
+
+                if (exceeds_shared_memory_limit(feat, it.key()->node)) {
+                    return false;
+                }
                 // Reject silly schedules. They're not even useful for
                 // training data, as they potentially take the age of
                 // the universe to benchmark. We define 'silly' as
@@ -3518,7 +3554,7 @@ struct State {
                 uint64_t current_parallel_loop = 0;
 
                 // Count the number of parallel loops.
-                for (auto it = p.second.vars.rbegin(); it != p.second.vars.rend(); it++) {
+                for (auto it = p.second->vars.rbegin(); it != p.second->vars.rend(); it++) {
                     if (!it->exists) continue;
                     if (!it->parallel) break;
 
@@ -3539,11 +3575,11 @@ struct State {
                         if (current_parallel_loop >= 6) break;
 
                         if (current_parallel_loop < n_parallel_loops/2) {
-                            p.second.schedule_source << "\n    .gpu_blocks(" << it->var.name() << ")";
+                            p.second->schedule_source << "\n    .gpu_blocks(" << it->var.name() << ")";
                             stage.gpu_blocks(it->var);
                             current_parallel_loop++;
                         } else {
-                            p.second.schedule_source << "\n    .gpu_threads(" << it->var.name() << ")";
+                            p.second->schedule_source << "\n    .gpu_threads(" << it->var.name() << ")";
                             stage.gpu_threads(it->var);
                             current_parallel_loop++;
                         }
