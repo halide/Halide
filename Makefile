@@ -35,6 +35,16 @@ else
   INSTALL_NAME_TOOL_LD_FLAGS=
 endif
 
+ifeq ($(UNAME), Darwin)
+define alwayslink
+	-Wl,-force_load,$(1)
+endef
+else
+define alwayslink
+	-Wl,--whole-archive $(1) -Wl,-no-whole-archive
+endef
+endif
+
 BAZEL ?= $(shell which bazel)
 
 SHELL = bash
@@ -1471,15 +1481,41 @@ $(BUILD_DIR)/RunGenMain.o: $(ROOT_DIR)/tools/RunGenMain.cpp $(RUNTIME_EXPORTED_I
 	@mkdir -p $(@D)
 	$(CXX) -c $< $(TEST_CXX_FLAGS) $(IMAGE_IO_CXX_FLAGS) -I$(INCLUDE_DIR) -I $(SRC_DIR)/runtime -I$(ROOT_DIR)/tools -o $@
 
-$(FILTERS_DIR)/%.rungen: $(BUILD_DIR)/RunGenMain.o $(BIN_DIR)/$(TARGET)/runtime.a $(ROOT_DIR)/tools/RunGenStubs.cpp $(FILTERS_DIR)/%.a
+$(FILTERS_DIR)/%.rungenstubs.o: $(ROOT_DIR)/tools/RunGenStubs.cpp $(FILTERS_DIR)/%.h
 	@mkdir -p $(@D)
-	$(CXX) -std=c++11 -DHL_RUNGEN_FILTER_HEADER=\"$*.h\" -I$(FILTERS_DIR) $^ $(GEN_AOT_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@
+	$(CXX) -c $< $(TEST_CXX_FLAGS) -DHL_RUNGEN_FILTER_HEADER=\"$*.h\" -I$(FILTERS_DIR) -o $@
+
+$(FILTERS_DIR)/%.rungen: $(BUILD_DIR)/RunGenMain.o $(BIN_DIR)/$(TARGET)/runtime.a $(FILTERS_DIR)/%.rungenstubs.o $(FILTERS_DIR)/%.a
+	@mkdir -p $(@D)
+	$(CXX) -std=c++11 -I$(FILTERS_DIR) \
+		$(BUILD_DIR)/RunGenMain.o \
+		$(BIN_DIR)/$(TARGET)/runtime.a \
+		$(FILTERS_DIR)/%.a \
+		$(call alwayslink,$(FILTERS_DIR)/$*.rungenstubs.o) \
+		$(GEN_AOT_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@
 
 RUNARGS ?=
 
 $(FILTERS_DIR)/%.run: $(FILTERS_DIR)/%.rungen
 	$(CURDIR)/$< $(RUNARGS)
 	@-echo
+
+# Test linking multiple filters into a single RunGen instance
+$(FILTERS_DIR)/multi_rungen: $(BUILD_DIR)/RunGenMain.o $(BIN_DIR)/$(TARGET)/runtime.a \
+														 $(FILTERS_DIR)/blur2x2.rungenstubs.o $(FILTERS_DIR)/blur2x2.a \
+														 $(FILTERS_DIR)/cxx_mangling.rungenstubs.o $(FILTERS_DIR)/cxx_mangling.a \
+														 $(FILTERS_DIR)/pyramid.rungenstubs.o $(FILTERS_DIR)/pyramid.a
+	@mkdir -p $(@D)
+	$(CXX) -std=c++11 -I$(FILTERS_DIR) \
+			$(BUILD_DIR)/RunGenMain.o \
+			$(BIN_DIR)/$(TARGET)/runtime.a \
+			$(FILTERS_DIR)/blur2x2.a \
+			$(FILTERS_DIR)/cxx_mangling.a \
+			$(FILTERS_DIR)/pyramid.a \
+			$(call alwayslink,$(FILTERS_DIR)/blur2x2.rungenstubs.o) \
+			$(call alwayslink,$(FILTERS_DIR)/cxx_mangling.rungenstubs.o) \
+			$(call alwayslink,$(FILTERS_DIR)/pyramid.rungenstubs.o) \
+			$(GEN_AOT_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@
 
 $(BIN_DIR)/tutorial_%: $(ROOT_DIR)/tutorial/%.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h
 	@ if [[ $@ == *_run ]]; then \

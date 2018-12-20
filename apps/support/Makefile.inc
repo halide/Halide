@@ -90,14 +90,33 @@ ifneq (, $(findstring metal,$(HL_TARGET)))
   LDFLAGS += -framework Metal -framework Foundation
 endif
 
+ifeq ($(UNAME), Darwin)
+define alwayslink
+    -Wl,-force_load,$(1)
+endef
+else
+define alwayslink
+    -Wl,--whole-archive $(1) -Wl,-no-whole-archive
+endef
+endif
+
 $(BIN)/RunGenMain.o: $(HALIDE_DISTRIB_PATH)/tools/RunGenMain.cpp $(HALIDE_DISTRIB_PATH)/tools/RunGen.h
 	@mkdir -p $(@D)
 	@$(CXX) -c $< $(CXXFLAGS) $(IMAGE_IO_CXX_FLAGS) -I$(BIN) -o $@
 
+$(BIN)/%.rungenstubs.o: $(HALIDE_DISTRIB_PATH)/tools/RunGenStubs.cpp $(BIN)/%.a
+	@mkdir -p $(@D)
+	$(CXX) -c $< $(CXXFLAGS) -DHL_RUNGEN_FILTER_HEADER=\"$*.h\" -I$(BIN) -o $@
+
 # Really, .SECONDARY is what we want, but it won't accept wildcards
 .PRECIOUS: $(BIN)/%.rungen
-$(BIN)/%.rungen: $(BIN)/%.a $(BIN)/RunGenMain.o $(HALIDE_DISTRIB_PATH)/tools/RunGenStubs.cpp
-	$(CXX) $(CXXFLAGS) -I$(BIN) -DHL_RUNGEN_FILTER_HEADER=\"$*.h\" $^ -o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS)
+$(BIN)/%.rungen: $(BIN)/RunGenMain.o $(BIN)/%.a $(BIN)/%.rungenstubs.o
+	$(CXX) $(CXXFLAGS) -I$(BIN) \
+		-DHL_RUNGEN_FILTER_HEADER=\"$*.h\" \
+		$(BIN)/RunGenMain.o \
+		$(BIN)/$*.a \
+		$(call alwayslink,$(BIN)/$*.rungenstubs.o) \
+		-o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS)
 
 RUNARGS ?=
 
