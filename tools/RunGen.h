@@ -784,8 +784,8 @@ struct ArgData {
 class RunGen {
 public:
     RunGen(int (*halide_argv_call)(void **args),
-               const struct halide_filter_metadata_t *(*halide_metadata_call)()) :
-        halide_argv_call(halide_argv_call), md(halide_metadata_call()) {
+               const struct halide_filter_metadata_t *halide_metadata) :
+        halide_argv_call(halide_argv_call), md(halide_metadata) {
         if (md->version != halide_filter_metadata_t::VERSION) {
             fail() << "Unexpected metadata version " << md->version;
         }
