@@ -74,11 +74,16 @@ private:
 
 // Given a pathname of the form /path/to/name.ext, append suffix before ext to produce /path/to/namesuffix.ext
 std::string add_suffix(const std::string &path, const std::string &suffix) {
-    const auto found = path.rfind(".");
-    if (found == std::string::npos) {
-        return path + suffix;
+    size_t last_path = std::min(path.rfind('/'), path.rfind('\\'));
+    if (last_path == std::string::npos) {
+        last_path = 0;
     }
-    return path.substr(0, found) + suffix + path.substr(found);
+    size_t dot = path.find('.', last_path);
+    if (dot == std::string::npos) {
+        return path + suffix;
+    } else {
+        return path.substr(0, dot) + suffix + path.substr(dot);
+    }
 }
 
 // Given a pathname of the form /path/to/name.old, replace extension to produce /path/to/name.new.
@@ -105,6 +110,7 @@ Outputs add_suffixes(const Outputs &in, const std::string &suffix) {
     if (!in.stmt_name.empty()) out.stmt_name = add_suffix(in.stmt_name, suffix);
     if (!in.stmt_html_name.empty()) out.stmt_html_name = add_suffix(in.stmt_html_name, suffix);
     if (!in.schedule_name.empty()) out.schedule_name = add_suffix(in.schedule_name, suffix);
+    if (!in.registration_name.empty()) out.registration_name = add_suffix(in.registration_name, suffix);
     return out;
 }
 
