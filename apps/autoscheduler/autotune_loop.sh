@@ -71,8 +71,7 @@ make_sample_lib() {
 make_sample_stubs() {
     D=${1}
     FNAME=${2}
-    c++ \
-        -std=c++11 \
+    c++ -std=c++11 \
         -c ../../tools/RunGenStubs.cpp \
         -DHL_RUNGEN_FILTER_HEADER="\"${D}/${FNAME}.h\"" \
         -I ${D} \
@@ -102,6 +101,14 @@ benchmark_sample() {
     ./bin/augment_sample ${SAMPLES_DIR}/sample.sample $R $P $S
 }
 
+alwayslink() {
+    if [[ `uname` == "Darwin" ]]; then
+        echo "-Wl,-force_load,${1}"
+    else
+        echo "-Wl,--whole-archive ${1} -Wl,--no-whole-archive"
+    fi
+}
+
 # Don't clobber existing samples
 FIRST=$(ls ${SAMPLES} | cut -d_ -f2 | sort -n | tail -n1)
 
@@ -129,22 +136,14 @@ for ((i=$((FIRST+1));i<1000000;i++)); do
     done
     wait
 
-    if [[ `uname` == "Darwin" ]]; then
-        STUBS=
-        for f in `ls ${DIR}/*/*.rungenstubs.o`; do
-            STUBS="${STUBS} -Wl,-force_load,${f}"
-        done
-    else
-        STUBS="-Wl,--whole-archive"
-        for f in `ls ${DIR}/*/*.rungenstubs.o`; do
-            STUBS="${STUBS} ${f}"
-        done
-        STUBS="${STUBS} -Wl,-no-whole-archive"
-    fi
+    STUBS=
+    for f in `ls ${DIR}/*/*.rungenstubs.o`; do
+        ALWAYS=`alwayslink $f`
+        STUBS="${STUBS} ${ALWAYS}"
+    done
 
     echo Linking batch_${i}...
-    c++ \
-        -std=c++11 \
+    c++ -std=c++11 \
         ../../tools/RunGenMain.cpp \
         -I ../../include \
         ${STUBS} \

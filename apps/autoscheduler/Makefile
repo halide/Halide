@@ -63,17 +63,11 @@ $(BIN)/demo.a: $(BIN)/demo.generator $(BIN)/libauto_schedule.so
 	HL_MACHINE_PARAMS=32,1,1 HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=weights \
 	$(BIN)/demo.generator -g demo -o $(BIN) -f demo -e static_library,h target=$(HL_TARGET) auto_schedule=true -p $(BIN)/libauto_schedule.so
 
-$(BIN)/demo.rungenstubs.o: $(HALIDE_DISTRIB_PATH)/tools/RunGenStubs.cpp $(BIN)/demo.h
+# No need to use --whole-archive (etc) if we have just a single stub and it's compiled directly
+# into the final executable.
+$(BIN)/demo.rungen: $(BIN)/RunGenMain.o $(BIN)/demo.a $(HALIDE_DISTRIB_PATH)/tools/RunGenStubs.cpp
 	@mkdir -p $(@D)
-	$(CXX) -c $< $(CXXFLAGS) -DHL_RUNGEN_FILTER_HEADER=\"demo.h\" -I$(BIN) -o $@
-
-$(BIN)/demo.rungen: $(BIN)/RunGenMain.o $(BIN)/demo.a $(BIN)/demo.rungenstubs.o
-	$(CXX) \
-		$(BIN)/RunGenMain.o \
-		$(BIN)/runtime.a \
-		$(call alwayslink,$(BIN)/demo.rungenstubs.o) \
-		$(BIN)/demo.a \
-		 -o $@ $(HALIDE_SYSTEM_LIBS) $(IMAGE_IO_FLAGS)
+	$(CXX) -I $(BIN) -DHL_RUNGEN_FILTER_HEADER="\"demo.h\"" $^ -o $@ $(HALIDE_SYSTEM_LIBS) $(IMAGE_IO_FLAGS)
 
 # demonstrates single-shot use of the autoscheduler
 demo: $(BIN)/demo.rungen
