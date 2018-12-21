@@ -651,6 +651,7 @@ void compile_multitarget(const std::string &fn_name,
         Outputs sub_out = add_suffixes(output_files, suffix);
         internal_assert(sub_out.object_name.empty());
         sub_out.object_name = temp_dir.add_temp_object_file(output_files.static_library_name, suffix, target);
+        sub_out.registration_name.clear();
         debug(1) << "compile_multitarget: compile_sub_target " << sub_out.object_name << "\n";
         sub_module.compile(sub_out);
 
@@ -751,6 +752,14 @@ void compile_multitarget(const std::string &fn_name,
         Outputs header_out = Outputs().c_header(output_files.c_header_name);
         debug(1) << "compile_multitarget: c_header_name " << header_out.c_header_name << "\n";
         header_module.compile(header_out);
+    }
+
+    if (!output_files.registration_name.empty()) {
+        debug(1) << "compile_multitarget: registration_name " << output_files.registration_name << "\n";
+        Module registration_module(fn_name, base_target);
+        registration_module.append(LoweredFunc(fn_name, base_target_args, {}, LinkageType::ExternalPlusMetadata));
+        Outputs registration_out = Outputs().registration(output_files.registration_name);
+        registration_module.compile(registration_out);
     }
 
     if (!output_files.static_library_name.empty()) {
