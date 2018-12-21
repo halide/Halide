@@ -3,8 +3,16 @@
 
 #include <stdint.h>
 #include <iostream>
+#include <cstring>
+
+namespace Halide {
+namespace Internal {
 
 struct PipelineFeatures {
+    PipelineFeatures() {
+        std::memset(this, 0, sizeof(PipelineFeatures));
+    }
+
     // A featurization of the compute done by a Func, to
     // feed the neural network.
 
@@ -161,7 +169,7 @@ struct ScheduleFeatures {
 
     int64_t vector_size = 0; // The vectorization factor (#simd lanes) to be used to compute this stage. Wasted work if it's smaller than the stage's native vector size (which is in the pipeline features).
 
-    int native_vector_size = 0; // The native vector size for the narrowest type used.
+    int64_t native_vector_size = 0; // The native vector size for the narrowest type used.
 
     int64_t num_vectors = 0; // Number of vectors computed (Assuming sliding worked)
     int64_t num_scalars = 0; // Number of scalars computed (e.g. from tails of loops)
@@ -206,5 +214,8 @@ struct ScheduleFeatures {
 
     }
 };
+
+}
+}
 
 #endif
