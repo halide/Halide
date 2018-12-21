@@ -4,6 +4,9 @@
 #include <stdint.h>
 #include <iostream>
 
+namespace Halide {
+namespace Internal {
+
 struct PipelineFeatures {
     // A featurization of the compute done by a Func, to
     // feed the neural network.
@@ -206,5 +209,8 @@ struct ScheduleFeatures {
 
     }
 };
+
+}
+}
 
 #endif
