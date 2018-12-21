@@ -108,6 +108,80 @@ Outputs add_suffixes(const Outputs &in, const std::string &suffix) {
     return out;
 }
 
+void emit_registration(const Module &m, std::ostream &stream) {
+    /*
+        This relies on the filter library being linked in a way that doesn't
+        dead-strip "unused" initialization code; this may mean that you need to
+        explicitly link with with --whole-archive (or the equivalent) to ensure
+        that the registration code isn't omitted. Sadly, there's no portable way
+        to do this, so you may need to take care in your make/build/etc files:
+
+        Linux:      -Wl,--whole-archive "/path/to/library" -Wl,-no-whole-archive
+        Darwin/OSX: -Wl,-force_load,/path/to/library
+        VS2015 R2+: /WHOLEARCHIVE:/path/to/library.lib
+        Bazel:      alwayslink=1
+
+        Note also that registration files deliberately have no #includes, and
+        are specifically designed to be legal to concatenate into a single
+        source file; it should be equivalent to compile-and-link multiple
+        registration files separately, or to concatenate multiple registration
+        files into a single one which is then compiled.
+    */
+
+    const std::string registration_template = R"INLINE_CODE(
+// MACHINE GENERATED -- DO NOT EDIT
+
+extern "C" {
+struct halide_filter_metadata_t;
+void halide_register_argv_and_metadata(
+    int (*filter_argv_call)(void **),
+    const struct halide_filter_metadata_t *filter_metadata
+);
+}
+
+$NSOPEN$
+extern int $SHORTNAME$_argv(void **args);
+extern const struct halide_filter_metadata_t *$SHORTNAME$_metadata();
+$NSCLOSE$
+
+namespace $NREGS$ {
+namespace {
+struct Registerer {
+    Registerer() {
+        halide_register_argv_and_metadata(::$FULLNAME$_argv, ::$FULLNAME$_metadata());
+    }
+};
+static Registerer registerer;
+}  // namespace
+}  // $NREGS$
+
+)INLINE_CODE";
+
+    for (const auto &f : m.functions()) {
+        if (f.linkage == LinkageType::ExternalPlusMetadata) {
+            std::vector<std::string> namespaces;
+            std::string simple_name = extract_namespaces(f.name, namespaces);
+            std::string nsopen, nsclose;
+            for (const auto &ns : namespaces) {
+                nsopen += "namespace " + ns + " { ";
+                nsclose += "}";
+            }
+            if (!m.target().has_feature(Target::CPlusPlusMangling)) {
+                internal_assert(namespaces.empty());
+                nsopen = "extern \"C\" {";
+                nsclose = "}";
+            }
+            std::string nsreg = "halide_nsreg_" + replace_all(f.name, "::", "_");
+            std::string s = replace_all(registration_template, "$NSOPEN$", nsopen);
+            s = replace_all(s, "$SHORTNAME$", simple_name);
+            s = replace_all(s, "$NSCLOSE$", nsclose);
+            s = replace_all(s, "$FULLNAME$", f.name);
+            s = replace_all(s, "$NREGS$", nsreg);
+            stream << s;
+        }
+    }
+}
+
 }  // namespace
 
 struct ModuleContents {
@@ -256,6 +330,7 @@ Module link_modules(const std::string &name, const std::vector<Module> &modules)
 
     return output;
 }
+
 
 Buffer<uint8_t> Module::compile_to_buffer() const {
     // TODO: This Hexagon specific code should be removed as soon as possible.
@@ -448,6 +523,13 @@ void Module::compile(const Outputs &output_files_arg) const {
         } else {
            file << contents->auto_schedule;
         }
+    }
+    if (!output_files.registration_name.empty()) {
+        debug(1) << "Module.compile(): registration_name " << output_files.registration_name << "\n";
+        std::ofstream file(output_files.registration_name);
+        emit_registration(*this, file);
+        file.close();
+        internal_assert(!file.fail());
     }
 }
 
