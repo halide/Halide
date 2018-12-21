@@ -1525,10 +1525,10 @@ $(FILTERS_DIR)/multi_rungen2.registration.cpp: $(FILTERS_DIR)/blur2x2.registrati
 	cat $^ > $@
 
 $(FILTERS_DIR)/multi_rungen2: $(BUILD_DIR)/RunGenMain.o $(BIN_DIR)/$(TARGET)/runtime.a \
+														 $(FILTERS_DIR)/multi_rungen2.registration.cpp \
 														 $(FILTERS_DIR)/blur2x2.a \
 														 $(FILTERS_DIR)/cxx_mangling.a \
-														 $(FILTERS_DIR)/pyramid.a \
-														 $(FILTERS_DIR)/multi_rungen2.registration.cpp
+														 $(FILTERS_DIR)/pyramid.a
 	@mkdir -p $(@D)
 	$(CXX) -std=c++11 -I$(FILTERS_DIR) $^ $(GEN_AOT_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@
 
