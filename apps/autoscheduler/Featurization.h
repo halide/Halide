@@ -3,11 +3,16 @@
 
 #include <stdint.h>
 #include <iostream>
+#include <cstring>
 
 namespace Halide {
 namespace Internal {
 
 struct PipelineFeatures {
+    PipelineFeatures() {
+        std::memset(this, 0, sizeof(PipelineFeatures));
+    }
+
     // A featurization of the compute done by a Func, to
     // feed the neural network.
 
