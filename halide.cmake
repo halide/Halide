@@ -73,22 +73,7 @@ function(halide_generator NAME)
     add_dependencies("${GENLIB}" ${HALIDE_COMPILER_LIB})
 
     _halide_get_static_library_actual_path(${GENLIB} GENLIB_ACTUAL_PATH)
-
-    # We need to ensure that the libraries are linked in with --whole-archive
-    # (or the equivalent), to ensure that the Generator-registration code
-    # isn't omitted. Sadly, there's no portable way to do this, so we do some
-    # special-casing here:
-    if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
-      target_link_libraries("${NAME}_binary" PRIVATE "${GENLIB}")
-      set_target_properties("${NAME}_binary" PROPERTIES LINK_FLAGS -Wl,-force_load,${GENLIB_ACTUAL_PATH})
-    elseif(MSVC)
-      # Note that this requires VS2015 R2+
-      target_link_libraries("${NAME}_binary" PRIVATE "${GENLIB}")
-      set_target_properties("${NAME}_binary" PROPERTIES LINK_FLAGS "/WHOLEARCHIVE:${GENLIB}.lib")
-    else()
-      # Assume Linux or similar
-      target_link_libraries("${NAME}_binary" PRIVATE -Wl,--whole-archive "${GENLIB}" -Wl,-no-whole-archive)
-    endif()
+    _halide_force_link_library("${NAME}_binary" "${GENLIB}")
   endif()
 
   _halide_genfiles_dir(${BASENAME} GENFILES_DIR)
@@ -649,6 +634,25 @@ function(_halide_add_exec_generator_target EXEC_TARGET)
   foreach(OUT ${args_OUTPUTS})
     set_source_files_properties(${OUT} PROPERTIES GENERATED TRUE)
   endforeach()
+endfunction()
+
+function(_halide_force_link_library NAME LIB)
+  # We need to ensure that the libraries are linked in with --whole-archive
+  # (or the equivalent), to ensure that the Generator-registration code
+  # isn't omitted. Sadly, there's no portable way to do this, so we do some
+  # special-casing here:
+  _halide_get_static_library_actual_path(${LIB} LIB_ACTUAL_PATH)
+  if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
+    target_link_libraries("${NAME}" PRIVATE "${LIB}")
+    set_target_properties("${NAME}" PROPERTIES LINK_FLAGS -Wl,-force_load,${GENLIB_ACTUAL_PATH})
+  elseif(MSVC)
+    # Note that this requires VS2015 R2+
+    target_link_libraries("${NAME}" PRIVATE "${LIB}")
+    set_target_properties("${NAME}" PROPERTIES LINK_FLAGS "/WHOLEARCHIVE:${LIB}.lib")
+  else()
+    # Assume Linux or similar
+    target_link_libraries("${NAME}" PRIVATE -Wl,--whole-archive "${LIB}" -Wl,-no-whole-archive)
+  endif()
 endfunction()
 
 # ----------------------- Configuration code
