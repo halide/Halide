@@ -1023,7 +1023,7 @@ struct LoopNest {
         outer->innermost = false;
         outer->parallel = true;
         outer->tileable = false;
-        
+
         // First make an inner loop representing a 1x1x1... tile
         inner->size.resize(size.size(), 1);
         inner->innermost = innermost;
@@ -1031,7 +1031,7 @@ struct LoopNest {
         inner->inlined = inlined;
         inner->bounds = bounds;
         inner->store_at = store_at;
-        
+
         auto b = inner->get_bounds(node)->make_copy();
 
         // Then move factors from the outer loop to the inner loop
@@ -1063,7 +1063,7 @@ struct LoopNest {
             } else {
                 // Pick some number of loop iterations per parallel tasks
                 int64_t inner_size = 1;
-                outer_extent = outer->size[l];                
+                outer_extent = outer->size[l];
                 while (parallelism_found * outer_extent > parallelism_required) {
                     inner_size++;
                     outer_extent = (outer->size[l] + inner_size - 1) / inner_size;
@@ -1972,6 +1972,7 @@ struct State {
 
 
             // HACK: May only vectorize across x, if there is one
+            /*
             for (int v = 0; v < node->func.dimensions(); v++) {
                 if (node->func.args()[v] == "x") {
                     vector_dims.clear();
@@ -1979,6 +1980,7 @@ struct State {
                     break;
                 }
             }
+            */
 
 
             // 2) Realize it somewhere
@@ -1999,7 +2001,7 @@ struct State {
                         num_children++;
                         accept_child(std::move(child));
                     }
-                }                
+                }
             }
         } else {
             // Deciding on parallel tasks
