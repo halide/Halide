@@ -26,7 +26,7 @@ COST_MODEL_LIBS=\
 $(BIN)/cost_model/cost_model.a \
 $(BIN)/cost_model/train_cost_model.a \
 
-$(BIN)/cost_model.generator: cost_model_generator.cpp Derivative.cpp Derivative.h DerivativeUtils.cpp DerivativeUtils.h cost_model_schedule.h $(GENERATOR_DEPS)
+$(BIN)/cost_model.generator: cost_model_generator.cpp Derivative.cpp Derivative.h DerivativeUtils.cpp DerivativeUtils.h cost_model_schedule.h NetworkSize.h $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -g $(filter-out %.h,$^) -o $@ $(HALIDE_SYSTEM_LIBS)
 
@@ -45,7 +45,7 @@ $(BIN)/libauto_schedule.so: AutoSchedule.cpp DefaultCostModel.cpp FunctionDAG.h 
 	@mkdir -p $(@D)
 	$(CXX) -shared $(USE_EXPORT_DYNAMIC) -fPIC $(CXXFLAGS) -g -I $(BIN)/cost_model AutoSchedule.cpp DefaultCostModel.cpp $(WEIGHT_OBJECTS) $(COST_MODEL_LIBS) $(BIN)/runtime.a -O3 -o $@ $(HALIDE_SYSTEM_LIBS)
 
-$(BIN)/train_cost_model: train_cost_model.cpp DefaultCostModel.cpp CostModel.h $(COST_MODEL_LIBS) $(WEIGHT_OBJECTS) $(BIN)/runtime.a
+$(BIN)/train_cost_model: train_cost_model.cpp DefaultCostModel.cpp CostModel.h NetworkSize.h $(COST_MODEL_LIBS) $(WEIGHT_OBJECTS) $(BIN)/runtime.a
 	$(CXX) $(CXXFLAGS) -I $(BIN)/cost_model -O3 $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(USE_OPEN_MP)
 
 $(BIN)/augment_sample: augment_sample.cpp

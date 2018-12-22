@@ -210,6 +210,7 @@ struct LoopNest {
         stage_idx = n.stage_idx;
         innermost = n.innermost;
         tileable = n.tileable;
+        parallel = n.parallel;
         vector_dim = n.vector_dim;
         vectorized_loop_index = n.vectorized_loop_index;
     };
@@ -443,7 +444,7 @@ struct LoopNest {
             return;
         }
 
-        int64_t parallel_tasks = 1;
+        int64_t parallel_tasks = parallel_loop_instances;
         if (parallel) {
             parallel_tasks = parallel_loop_instances;
         } else if (parent->is_root()) {
@@ -1022,7 +1023,7 @@ struct LoopNest {
         outer->size = size;
         outer->innermost = false;
         outer->parallel = true;
-        outer->tileable = false;
+        outer->tileable = true;
 
         // First make an inner loop representing a 1x1x1... tile
         inner->size.resize(size.size(), 1);
@@ -1038,7 +1039,7 @@ struct LoopNest {
         auto parent_bounds = parent->get_bounds(node);
 
         // We want this many parallel tasks remaining in the outer loop
-        int64_t parallelism_required = params.parallelism; // TODO: 8 should be searched over
+        int64_t parallelism_required = params.parallelism * 8; // TODO: times some factor to be searched over
 
         // So far we've found nothing
         int64_t parallelism_found = 1;
@@ -1060,14 +1061,12 @@ struct LoopNest {
                     // minimally.
                     outer_extent = std::min(outer->size[l], (params.parallelism + parallelism_found - 1) / parallelism_found);
                 }
+            } else if (outer->size[l] * parallelism_found < parallelism_required * 2) {
+                outer_extent = outer->size[l];
             } else {
                 // Pick some number of loop iterations per parallel tasks
-                int64_t inner_size = 1;
-                outer_extent = outer->size[l];
-                while (parallelism_found * outer_extent > parallelism_required) {
-                    inner_size++;
-                    outer_extent = (outer->size[l] + inner_size - 1) / inner_size;
-                }
+                int64_t inner_size = (outer->size[l] * parallelism_found) / parallelism_required;
+                outer_extent = (outer->size[l] + inner_size - 1) / inner_size;
             }
 
             inner->size[l] = (outer->size[l] + outer_extent - 1) / outer_extent;
@@ -1182,6 +1181,8 @@ struct LoopNest {
                 inner->vectorized_loop_index = outer->vectorized_loop_index = vectorized_loop_index;
                 outer->size = size;
                 outer->innermost = false;
+                outer->parallel = parallel;
+                inner->parallel = false;
 
                 // First make an inner loop representing a 1x1x1... tile
                 inner->size.resize(size.size(), 1);
