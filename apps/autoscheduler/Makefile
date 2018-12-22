@@ -61,11 +61,11 @@ $(BIN)/demo.generator: demo_generator.cpp $(GENERATOR_DEPS)
 # To use the autoscheduler, set a few environment variables and use the -p flag to the generator to load the autoscheduler as a plugin
 $(BIN)/demo.a: $(BIN)/demo.generator $(BIN)/libauto_schedule.so
 	HL_MACHINE_PARAMS=32,1,1 HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=weights \
-	$(BIN)/demo.generator -g demo -o $(BIN) -f demo -e static_library,h target=$(HL_TARGET) auto_schedule=true -p $(BIN)/libauto_schedule.so
+	$(BIN)/demo.generator -g demo -o $(BIN) -f demo target=$(HL_TARGET) auto_schedule=true -p $(BIN)/libauto_schedule.so
 
 # No need to use --whole-archive (etc) if we have just a single stub and it's compiled directly
 # into the final executable.
-$(BIN)/demo.rungen: $(BIN)/RunGenMain.o $(BIN)/demo.a $(HALIDE_DISTRIB_PATH)/tools/RunGenStubs.cpp
+$(BIN)/demo.rungen: $(BIN)/RunGenMain.o $(BIN)/demo.a $(BIN)/demo.registration.cpp
 	@mkdir -p $(@D)
 	$(CXX) -I $(BIN) -DHL_RUNGEN_FILTER_HEADER="\"demo.h\"" $^ -o $@ $(HALIDE_SYSTEM_LIBS) $(IMAGE_IO_FLAGS)
 

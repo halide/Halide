@@ -946,6 +946,8 @@ public:
                     return i;
                 }
             }
+            assert(false);
+            return 0;
         }
 
         void print() {

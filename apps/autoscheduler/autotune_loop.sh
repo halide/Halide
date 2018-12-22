@@ -33,7 +33,7 @@ mkdir -p ${SAMPLES}
 BATCH_SIZE=32
 
 # Build a single sample of the pipeline with a random schedule
-make_sample_lib() {
+make_sample() {
     D=${1}
     SEED=${2}
     FNAME=${3}
@@ -61,52 +61,39 @@ make_sample_lib() {
         -g ${PIPELINE} \
         -f ${FNAME} \
         -o ${D} \
-        -e stmt,assembly,static_library,h \
+        -e stmt,assembly,static_library,h,registration \
         target=${HL_TARGET} \
         auto_schedule=true \
         -p bin/libauto_schedule.so \
             2> ${D}/compile_log.txt
-}
 
-make_sample_stubs() {
-    D=${1}
-    FNAME=${2}
-    c++ -std=c++11 \
-        -c ../../tools/RunGenStubs.cpp \
-        -DHL_RUNGEN_FILTER_HEADER="\"${D}/${FNAME}.h\"" \
-        -I ${D} \
-        -o ${D}/${FNAME}.rungenstubs.o \
-            2> ${D}/compile_log.txt
+    c++ \
+        -std=c++11 \
+        -I ../../include \
+        ../../tools/RunGenMain.cpp \
+        ${D}/${FNAME}.registration.cpp \
+        ${D}/${FNAME}.a \
+        -o ${D}/bench \
+        -ljpeg -ldl -lpthread -lz -lpng
 }
 
 # Benchmark one of the random samples
 benchmark_sample() {
-    SAMPLES_DIR=${1}
-    FNAME=${3}
-    BATCH_DIR=${4}
+    D=${1}
     HL_NUM_THREADS=32 \
-        ${BATCH_DIR}/bench \
-        --name=${FNAME} \
+        ${D}/bench \
         --output_extents=estimate \
         --default_input_buffers=random:0:estimate_then_auto \
         --default_input_scalars=estimate \
         --benchmarks=all \
         --benchmark_min_time=1 \
-            | tee ${SAMPLES_DIR}/bench.txt
+            | tee ${D}/bench.txt
 
     # Add the runtime, pipeline id, and schedule id to the feature file
-    R=$(cut -d' ' -f8 < ${SAMPLES_DIR}/bench.txt)
+    R=$(cut -d' ' -f8 < ${D}/bench.txt)
     P=0
     S=$2
-    ./bin/augment_sample ${SAMPLES_DIR}/sample.sample $R $P $S
-}
-
-alwayslink() {
-    if [[ `uname` == "Darwin" ]]; then
-        echo "-Wl,-force_load,${1}"
-    else
-        echo "-Wl,--whole-archive ${1} -Wl,--no-whole-archive"
-    fi
+    ./bin/augment_sample ${D}/sample.sample $R $P $S
 }
 
 # Don't clobber existing samples
@@ -124,38 +111,14 @@ for ((i=$((FIRST+1));i<1000000;i++)); do
     for ((b=0;b<${BATCH_SIZE};b++)); do
         S=$(printf "%d%02d" $i $b)
         FNAME=$(printf "%s_batch_%02d_sample_%02d" ${PIPELINE} $i $b)
-        make_sample_lib "${DIR}/${b}" $S $FNAME &
+        make_sample "${DIR}/${b}" $S $FNAME &
     done
     wait
-
-    echo Compiling ${BATCH_SIZE} stubs for batch_${i}...
-    for ((b=0;b<${BATCH_SIZE};b++)); do
-        S=$(printf "%d%02d" $i $b)
-        FNAME=$(printf "%s_batch_%02d_sample_%02d" ${PIPELINE} $i $b)
-        make_sample_stubs "${DIR}/${b}" $FNAME &
-    done
-    wait
-
-    STUBS=
-    for f in `ls ${DIR}/*/*.rungenstubs.o`; do
-        ALWAYS=`alwayslink $f`
-        STUBS="${STUBS} ${ALWAYS}"
-    done
-
-    echo Linking batch_${i}...
-    c++ -std=c++11 \
-        ../../tools/RunGenMain.cpp \
-        -I ../../include \
-        ${STUBS} \
-        ${DIR}/*/*.a \
-        -o ${DIR}/bench -ljpeg -ldl -lpthread -lz -lpng \
-            2> ${DIR}/compile_log.txt
 
     # benchmark them serially using rungen
     for ((b=0;b<${BATCH_SIZE};b++)); do
         S=$(printf "%d%02d" $i $b)
-        FNAME=$(printf "%s_batch_%02d_sample_%02d" ${PIPELINE} $i $b)
-        benchmark_sample "${DIR}/${b}" $S $FNAME "${DIR}"
+        benchmark_sample "${DIR}/${b}" $S
     done
 
     # retrain model weights on all samples seen so far
