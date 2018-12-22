@@ -9,11 +9,7 @@ $(BIN)/weights_head1_conv1_bias.o \
 $(BIN)/weights_head2_conv1_weight.o \
 $(BIN)/weights_head2_conv1_bias.o \
 $(BIN)/weights_trunk_conv1_weight.o \
-$(BIN)/weights_trunk_conv1_bias.o \
-$(BIN)/weights_schedule_mean.o \
-$(BIN)/weights_schedule_std.o \
-$(BIN)/weights_pipeline_mean.o \
-$(BIN)/weights_pipeline_std.o \
+$(BIN)/weights_trunk_conv1_bias.o 
 
 $(BIN)/weights_%.cpp:
 	@mkdir -p $(@D)
@@ -46,7 +42,7 @@ $(BIN)/libauto_schedule.so: AutoSchedule.cpp DefaultCostModel.cpp FunctionDAG.h 
 	$(CXX) -shared $(USE_EXPORT_DYNAMIC) -fPIC $(CXXFLAGS) -g -I $(BIN)/cost_model AutoSchedule.cpp DefaultCostModel.cpp $(WEIGHT_OBJECTS) $(COST_MODEL_LIBS) $(BIN)/runtime.a -O3 -o $@ $(HALIDE_SYSTEM_LIBS)
 
 $(BIN)/train_cost_model: train_cost_model.cpp DefaultCostModel.cpp CostModel.h NetworkSize.h $(COST_MODEL_LIBS) $(WEIGHT_OBJECTS) $(BIN)/runtime.a
-	$(CXX) $(CXXFLAGS) -I $(BIN)/cost_model -O3 $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(USE_OPEN_MP)
+	$(CXX) $(CXXFLAGS) -Wall -I $(BIN)/cost_model -O3 $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(USE_OPEN_MP)
 
 $(BIN)/augment_sample: augment_sample.cpp
 	$(CXX) $< -O3 -o $@
