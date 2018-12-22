@@ -131,7 +131,7 @@ class DefaultCostModel : public CostModel {
         if (!schedule_feat_queue.data() ||
             schedule_feat_queue.dim(2).extent() < max_num_stages) {
             assert(cursor == 0);
-            schedule_feat_queue = Runtime::Buffer<float>(batch_size, 30, max_num_stages);
+            schedule_feat_queue = Runtime::Buffer<float>(batch_size, head2_w, max_num_stages);
             if (!costs.data()) {
                 assert(!cost_ptrs.data());
                 costs = Runtime::Buffer<float>(batch_size);
