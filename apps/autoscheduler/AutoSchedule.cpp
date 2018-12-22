@@ -1698,7 +1698,7 @@ struct State {
 
             int num_stages = (int)features.size();
 
-            const int schedule_feat_size = 26;
+            const size_t schedule_feat_size = sizeof(ScheduleFeatures) / sizeof(int64_t);
 
             Runtime::Buffer<float> schedule_features;
 
@@ -1715,7 +1715,7 @@ struct State {
                     internal_assert(features.contains(&*it)) << n.func.name() << "\n";
                     const auto &feat = features.get(&*it);
                     const int64_t *sched_stats = (const int64_t *)(&feat);
-                    for (int i = 0; i < schedule_feat_size; i++) {
+                    for (size_t i = 0; i < schedule_feat_size; i++) {
                         schedule_features(i, stage) = sched_stats[i];
                     }
 
@@ -2280,10 +2280,14 @@ void configure_pipeline_features(const FunctionDAG &dag,
     static_assert(sizeof(PipelineFeatures) - 7 * sizeof(int) ==
                   sizeof(int) * pipeline_feat_size,
                   "Incorrect size for pipeline features");
-    const int num_stages = dag.nodes[0].stages[0].max_id; // TODO: Add getter to DAG for this.
+    int num_stages = 0;
+    for (const auto &n : dag.nodes) {
+        if (!n.is_input) num_stages += (int)n.stages.size();
+    }    
     Runtime::Buffer<float> pipeline_features(56, 7, num_stages);
     int stage = 0;
     for (const auto &n : dag.nodes) {
+        if (n.is_input) continue;
         for (auto it = n.stages.rbegin(); it != n.stages.rend(); it++) {
             const auto &s = *it;
             const int *pipeline_feats = (const int *)(&(s.features)) + 7;
