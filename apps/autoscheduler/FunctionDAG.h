@@ -961,12 +961,13 @@ struct FunctionDAG {
                     visit_memory_access(op->type, op->args, PipelineFeatures::AccessType::LoadFunc);
                     op_bucket(PipelineFeatures::OpType::FuncCall, op->type)++;
                 }
-            } else if (op->call_type == Call::Extern || op->call_type == Call::PureExtern) {
+            } else if (op->call_type == Call::Extern || op->call_type == Call::PureExtern ||
+                       op->call_type == Call::Intrinsic || op->call_type == Call::PureIntrinsic) {
                 op_bucket(PipelineFeatures::OpType::ExternCall, op->type)++;
             } else if (op->call_type == Call::Image) {
                 visit_memory_access(op->type, op->args, PipelineFeatures::AccessType::LoadImage);
                 op_bucket(PipelineFeatures::OpType::ImageCall, op->type)++;
-            }
+            } TODO: lerp!
         }
 
         struct DerivativeResult {
