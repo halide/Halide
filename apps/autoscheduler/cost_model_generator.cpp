@@ -241,14 +241,14 @@ public:
 
         Expr num_tasks = max(1, inner_parallelism * outer_parallelism);
         Expr tasks_per_core = num_tasks / num_cores;
-        Expr idle_core_wastage = ceil(tasks_per_core) / tasks_per_core;
+        Expr idle_core_wastage = ceil(tasks_per_core) / max(1, tasks_per_core);
         compute_cost *= idle_core_wastage;
 
         Expr load_cost = (num_realizations * unique_lines_read_per_realization * relu1(5, w, n) +
-                          num_realizations * unique_bytes_read_per_realization * relu1(7, w, n) +
-                          num_vectors * vector_loads_per_vector * relu1(9, w, n) +
-                          num_scalars * scalar_loads_per_scalar * relu1(11, w, n) +
-                          num_vectors * scalar_loads_per_vector * relu1(13, w, n));
+                          num_realizations * unique_bytes_read_per_realization * relu1(6, w, n) +
+                          num_vectors * vector_loads_per_vector * relu1(7, w, n) +
+                          num_scalars * scalar_loads_per_scalar * relu1(8, w, n) +
+                          num_vectors * scalar_loads_per_vector * relu1(9, w, n));
 
         // Estimate the number of cache misses on the data that this writes to and their cost
         Expr lines_written_per_realization = inner_parallelism * (bytes_at_task / max(1, innermost_bytes_at_task));
@@ -257,10 +257,12 @@ public:
         // parallelism, because for stages with internal parallelism,
         // most values produced will be consumed on another core, so
         // they will get punted out to L3 no matter how small.
-        Expr alpha = select(inner_parallelism > 1, relu1(15, w, n),
-                            relu1(16, w, n));
-        Expr beta = select(inner_parallelism > 1, relu1(16, w, n),
-                           relu1(18, w, n));
+        Expr alpha = select(inner_parallelism > 1, relu1(10, w, n),
+                            w == 0, relu1(11, w, n), // TODO: incorrect for multi-output pipelines. Add an is_output feature.
+                            relu1(12, w, n));
+        Expr beta = select(inner_parallelism > 1, relu1(13, w, n),
+                           w == 0, relu1(14, w, n),
+                           relu1(15, w, n));
 
         Expr store_cost = num_realizations * (lines_written_per_realization * alpha +
                                               bytes_at_realization * beta);
@@ -367,7 +369,7 @@ public:
             // Maximize
             Expr dp = abs(p1 - p2);
             Expr correct_order = significance * select((r1 > r2) == (p1 > p2), 1/(dp + 1), 1 + dp);
-            err(n) = 1e-10f * correct_order + delta + 1e-5f * regularize;
+            err(n) = correct_order + 1e-10f * delta + 1e-5f * regularize;
 
             Expr loss = sum(err(r_batch));
 
