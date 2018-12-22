@@ -35,6 +35,8 @@ struct PipelineSample {
     int32_t num_stages;
     Runtime::Buffer<float> pipeline_features;
     map<uint64_t, Sample> schedules;
+    uint64_t fastest_schedule;
+    float fastest_runtime;
 };
 
 uint64_t hash_floats(uint64_t h, float *begin, float *end) {
@@ -112,10 +114,12 @@ map<int, PipelineSample> load_samples() {
         }
 
         PipelineSample &ps = result[pipeline_id];
+
         if (ps.pipeline_features.data() == nullptr) {
             ps.pipeline_id = pipeline_id;
             ps.num_stages = (int)num_stages;
             ps.pipeline_features = Runtime::Buffer<float>(56, 7, num_stages);
+            ps.fastest_runtime = 1e30f;
             for (size_t i = 0; i < num_stages; i++) {
                 for (int x = 0; x < 56; x++) {
                     for (int y = 0; y < 7; y++) {
@@ -138,6 +142,11 @@ map<int, PipelineSample> load_samples() {
                             &scratch[i * features_per_stage + 30]);
         }
 
+        if (runtime < ps.fastest_runtime) {
+            ps.fastest_runtime = runtime;
+            ps.fastest_schedule = schedule_hash;
+        }        
+        
         auto it = ps.schedules.find(schedule_hash);
         if (it != ps.schedules.end()) {
             // Keep the smallest runtime at the front
@@ -256,7 +265,7 @@ int main(int argc, char **argv) {
         tpp.emplace_back(CostModel::make_default(weights_dir, randomize_weights));
     }
 
-    float rates[] = {0.00001f};
+    float rates[] = {0.0001f};
 
     int num_cores = atoi(getenv_safe("HL_NUM_THREADS").c_str());
 
@@ -308,6 +317,7 @@ int main(int argc, char **argv) {
 
                         size_t batch_size = std::min((size_t)1024, p.second.schedules.size());
 
+                        size_t fastest_idx = 0;
                         Runtime::Buffer<float> runtimes(batch_size);
 
                         size_t first = 0;
@@ -317,14 +327,25 @@ int main(int argc, char **argv) {
 
                         for (size_t j = 0; j < batch_size; j++) {
                             auto it = p.second.schedules.begin();
-                            std::advance(it, j + first);
+                            if (j == 0) {
+                                // Batch element zero is always the fastest known schedule                        
+                                it = p.second.schedules.find(p.second.fastest_schedule);
+                                assert(it != p.second.schedules.end());
+                            } else {
+                                std::advance(it, j + first);
+                            }
                             auto &sched = it->second;
                             Runtime::Buffer<float> buf;
                             tp->enqueue(p.second.num_stages, &buf, &sched.prediction[model]);
                             runtimes(j) = sched.runtimes[0];
+                            if (runtimes(j) < runtimes(fastest_idx)) {
+                                fastest_idx = j;
+                            }
                             buf.copy_from(sched.schedule_features);
                         }
 
+                        assert(fastest_idx == 0);
+                        
                         float loss = 0.0f;
                         if (train) {
                             loss = tp->backprop(runtimes, learning_rate);
@@ -350,26 +371,14 @@ int main(int argc, char **argv) {
 
                         if (true) {
                             int good = 0, bad = 0;
-                            int attempts = 0;
-                            while (attempts < batch_size * 10) {
-                                attempts++;
-                                int j1 = rand() % p.second.schedules.size();
-                                int j2 = rand() % p.second.schedules.size();
-                                auto it1 = p.second.schedules.begin();
-                                auto it2 = p.second.schedules.begin();
-                                std::advance(it1, j1);
-                                std::advance(it2, j2);
-                                auto &sched1 = it1->second;
-                                auto &sched2 = it2->second;
-                                if (sched1.prediction[model] == 0 || sched2.prediction[model] == 0) continue;
-                                if (sched1.runtimes[0] > 1.3f*sched2.runtimes[0] ||
-                                    sched2.runtimes[0] > 1.3f*sched1.runtimes[0]) {
-                                    if ((sched1.prediction[model] > sched2.prediction[model]) ==
-                                        (sched1.runtimes[0] > sched2.runtimes[0])) {
-                                        good++;
-                                    } else {
-                                        bad++;
-                                    }
+                            for (auto &sched : p.second.schedules) {
+                                auto &ref = p.second.schedules[p.second.fastest_schedule];
+                                if (sched.second.prediction[model] == 0) continue;
+                                assert(sched.second.runtimes[0] >= ref.runtimes[0]);
+                                if (sched.second.prediction[model] >= ref.prediction[model]) {
+                                    good++;
+                                } else {
+                                    bad++;
                                 }
                             }
                             if (train) {

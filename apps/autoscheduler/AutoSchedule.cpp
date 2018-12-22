@@ -1022,7 +1022,8 @@ struct LoopNest {
         outer->size = size;
         outer->innermost = false;
         outer->parallel = true;
-
+        outer->tileable = false;
+        
         // First make an inner loop representing a 1x1x1... tile
         inner->size.resize(size.size(), 1);
         inner->innermost = innermost;
@@ -1030,14 +1031,14 @@ struct LoopNest {
         inner->inlined = inlined;
         inner->bounds = bounds;
         inner->store_at = store_at;
-
+        
         auto b = inner->get_bounds(node)->make_copy();
 
         // Then move factors from the outer loop to the inner loop
         auto parent_bounds = parent->get_bounds(node);
 
         // We want this many parallel tasks remaining in the outer loop
-        int64_t parallelism_required = params.parallelism * 8; // TODO: 8 should be searched over
+        int64_t parallelism_required = params.parallelism; // TODO: 8 should be searched over
 
         // So far we've found nothing
         int64_t parallelism_found = 1;
@@ -1062,16 +1063,16 @@ struct LoopNest {
             } else {
                 // Pick some number of loop iterations per parallel tasks
                 int64_t inner_size = 1;
-                outer_extent = outer->size[l];
-                while (parallelism_found * outer_extent > 2 * parallelism_required) {
-                    inner_size *= 2;
+                outer_extent = outer->size[l];                
+                while (parallelism_found * outer_extent > parallelism_required) {
+                    inner_size++;
                     outer_extent = (outer->size[l] + inner_size - 1) / inner_size;
                 }
             }
 
             inner->size[l] = (outer->size[l] + outer_extent - 1) / outer_extent;
             outer->size[l] = outer_extent;
-            const auto &p = parent_bounds->loops(stage_idx, i);
+            const auto &p = parent_bounds->loops(stage_idx, l);
             int64_t min = p.first;
             int64_t extent = p.second - min + 1;
             extent = (extent + outer_extent - 1) / outer_extent;
@@ -1105,16 +1106,6 @@ struct LoopNest {
             int64_t e = p.second - p.first + 1;
             int64_t ep = p_parent.second - p_parent.first + 1;
             if (ep >= f->vector_size && e < f->vector_size) return result;
-
-            // Don't descend into loops if the bounds computed don't shrink
-            int64_t total_size_parent = 1, total_size = 1;
-            for (int i = 0; i < f->func.dimensions(); i++) {
-                const auto &p = get_bounds(f)->region_computed(v);
-                const auto &p_parent = parent->get_bounds(f)->region_computed(v);
-                total_size_parent *= p_parent.second - p_parent.first + 1;
-                total_size *= p.second - p.first + 1;
-            }
-            if (total_size_parent <= total_size) return result;
         }
 
         // Figure out which child we can fuse this into
@@ -1284,7 +1275,6 @@ struct LoopNest {
             // Don't slide over a split vector dimension (why?)
             may_slide &= (children[child]->vectorized_loop_index == -1 ||
                           child_size[children[child]->vectorized_loop_index] == 1);
-
             for (int store_here = 0; store_here < 2; store_here++) {
                 if (store_here && !may_slide) {
                     // We place all our parallel loops at the root
@@ -1692,7 +1682,7 @@ struct State {
             for (auto it = features.begin(); it != features.end(); it++) {
                 if (!it.key()->node->func.is_wrapper()) { // It's OK to repeatedly stage data
                     auto &feat = it.value();
-                    if (feat.points_computed_total + feat.inlined_calls > 2 * feat.points_computed_minimum) {
+                    if (feat.points_computed_total + feat.inlined_calls > 10 * feat.points_computed_minimum) {
                         cost = 1e50;
                         return true;
                     }
@@ -1700,7 +1690,7 @@ struct State {
             }
 
             // Avoid code size explosion from recursive inlining.
-            if (root->max_inlined_calls() > 100) {
+            if (root->max_inlined_calls() >= 16) {
                 cost = 1e50;
                 return true;
             }
@@ -1906,8 +1896,8 @@ struct State {
             return;
         }
 
-        int next_node = num_funcs_scheduled % dag.nodes.size();
-        int phase = num_funcs_scheduled / dag.nodes.size();
+        int next_node = num_funcs_scheduled / 2;
+        int phase = num_funcs_scheduled % 2;
 
         // Enumerate all legal ways to schedule the next Func
         const FunctionDAG::Node *node = &dag.nodes[next_node];
@@ -1980,7 +1970,7 @@ struct State {
                 vector_dims.push_back(0);
             }
 
-            /*
+
             // HACK: May only vectorize across x, if there is one
             for (int v = 0; v < node->func.dimensions(); v++) {
                 if (node->func.args()[v] == "x") {
@@ -1989,7 +1979,7 @@ struct State {
                     break;
                 }
             }
-            */
+
 
             // 2) Realize it somewhere
             for (int vector_dim : vector_dims) {
@@ -2009,7 +1999,7 @@ struct State {
                         num_children++;
                         accept_child(std::move(child));
                     }
-                }
+                }                
             }
         } else {
             // Deciding on parallel tasks

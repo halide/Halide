@@ -2,6 +2,7 @@
 #include "Derivative.h"
 
 #include "cost_model_schedule.h"
+#include "NetworkSize.h"
 
 using namespace Halide;
 
@@ -128,6 +129,7 @@ public:
     // Some extra inputs for training mode. Really should be conditional on 'training'.
     Input<float> learning_rate{ "learning_rate", 1.0f };
     Input<int> timestep{ "timestep", 0 }; // Needed by ADAM
+    Input<int> reference{ "reference", 0 }; // Which schedule should we compare everything to for the pairwise ranking loss?
     Input<Buffer<float>> true_runtime{ "true_runtime", 1 };
 
     Output<Buffer<float>> prediction_output{ "prediction_output", 1 };
@@ -154,10 +156,6 @@ public:
 
         Func normalized_schedule_features("normalized_schedule_features");
         normalized_schedule_features(n, c, s) = fast_log(schedule_features(n, c, s) + 1);
-
-        const int head1_channels = 24, head1_w = 56, head1_h = 7;
-        const int head2_channels = 96, head2_w = 30;
-        const int conv1_channels = 24;
 
         Func squashed_head1_filter("squashed_head1_filter");
         squashed_head1_filter(c, w, n) = sigmoid(head1_filter(c, w, n));
@@ -241,24 +239,16 @@ public:
 
         compute_cost += innermost_loops;
 
-        Expr num_tasks = max(1, inner_parallelism);
-        Expr cores_per_realization = num_cores / max(1, outer_parallelism);
-        Expr idle_core_wastage = (0.5f * cores_per_realization + num_tasks) / num_tasks;
-        idle_core_wastage = min(idle_core_wastage, 1.1f);
-        idle_core_wastage *= ceil(num_tasks / (cores_per_realization + 1e-10f)) * (cores_per_realization / num_tasks);
-
+        Expr num_tasks = max(1, inner_parallelism * outer_parallelism);
+        Expr tasks_per_core = num_tasks / num_cores;
+        Expr idle_core_wastage = ceil(tasks_per_core) / tasks_per_core;
         compute_cost *= idle_core_wastage;
 
-        Expr load_cost = (num_realizations * unique_lines_read_per_realization * allocation_bytes_read_per_realization * relu1(5, w, n) +
-                          num_realizations * unique_lines_read_per_realization * unique_bytes_read_per_realization * relu1(6, w, n) +
-                          num_realizations * unique_bytes_read_per_realization * allocation_bytes_read_per_realization * relu1(7, w, n) +
-                          num_realizations * unique_bytes_read_per_realization * unique_bytes_read_per_realization * relu1(8, w, n) +
-                          num_vectors * vector_loads_per_vector * allocation_bytes_read_per_realization * relu1(9, w, n) +
-                          num_vectors * vector_loads_per_vector * unique_bytes_read_per_realization * relu1(10, w, n) +
-                          num_scalars * scalar_loads_per_scalar * allocation_bytes_read_per_realization * relu1(11, w, n) +
-                          num_scalars * scalar_loads_per_scalar * unique_bytes_read_per_realization * relu1(12, w, n) +
-                          num_vectors * scalar_loads_per_vector * allocation_bytes_read_per_realization * relu1(13, w, n) +
-                          num_vectors * scalar_loads_per_vector * unique_bytes_read_per_realization * relu1(14, w, n)) * 1e-6f;
+        Expr load_cost = (num_realizations * unique_lines_read_per_realization * relu1(5, w, n) +
+                          num_realizations * unique_bytes_read_per_realization * relu1(7, w, n) +
+                          num_vectors * vector_loads_per_vector * relu1(9, w, n) +
+                          num_scalars * scalar_loads_per_scalar * relu1(11, w, n) +
+                          num_vectors * scalar_loads_per_vector * relu1(13, w, n));
 
         // Estimate the number of cache misses on the data that this writes to and their cost
         Expr lines_written_per_realization = inner_parallelism * (bytes_at_task / max(1, innermost_bytes_at_task));
@@ -272,11 +262,8 @@ public:
         Expr beta = select(inner_parallelism > 1, relu1(16, w, n),
                            relu1(18, w, n));
 
-        Expr store_cache_misses = num_realizations * (lines_written_per_realization * alpha +
-                                                      bytes_at_realization * beta);
-        // Expr store_cache_misses = num_vectors * alpha + num_scalars * beta;
-        Expr cost_of_store_miss = bytes_at_production * 1e-6f;
-        Expr store_cost = store_cache_misses * cost_of_store_miss;
+        Expr store_cost = num_realizations * (lines_written_per_realization * alpha +
+                                              bytes_at_realization * beta);
 
         // Now account for false sharing of cache lines. The
         // probability of a store hitting a cache line also hit by
@@ -312,7 +299,7 @@ public:
 
         Expr cost_of_parallelism = cost_of_parallel_tasks + cost_of_parallel_launches;
 
-        Expr cost = compute_cost + load_cost + store_cost + cost_of_malloc + cost_of_parallelism;
+        Expr cost = compute_cost + store_cost + load_cost + store_cost + cost_of_malloc + cost_of_parallelism;
 
         // Keep the schedule fixed by adding a dependence to all 24 out channels
         for (int i = 0; i < 24; i++) {
@@ -355,14 +342,15 @@ public:
             RDom r_conv1_output(0, conv1_channels, 0, num_stages);
             Expr regularize = sum(-min(conv1_stage2(r_conv1_output.x, r_conv1_output.y, n), 0));
 
-            Expr n2 = (n + 1) % batch_size;
+            Expr n2 = clamp(reference, 0, batch_size-1);
             Expr scale = 1.0f / max(1, true_runtime(0));
             Expr p1 = prediction(n) * scale, p2 = prediction(n2) * scale;
             Expr r1 = true_runtime(n) * scale, r2 = true_runtime(n2) * scale;
 
             // The network should predict runtime.
-            Expr delta = pow(1/(r1 + 1e-5f) - 1/(p1 + 1e-5f), 2);
-
+            // Expr delta = pow(1/(r1 + 1e-5f) - 1/(p1 + 1e-5f), 2);
+            Expr delta = pow(r1 - p1, 2);
+            
             // More importantly, the network should predict runtimes
             // in the correct order
 
@@ -379,7 +367,7 @@ public:
             // Maximize
             Expr dp = abs(p1 - p2);
             Expr correct_order = significance * select((r1 > r2) == (p1 > p2), 1/(dp + 1), 1 + dp);
-            err(n) = correct_order + 1e-20f * delta + 1e-3f * regularize;
+            err(n) = correct_order + 1e-10f * delta + 1e-5f * regularize;
 
             Expr loss = sum(err(r_batch));
 
@@ -443,7 +431,7 @@ public:
                 Var ci, wi;
                 if (!training) {
                     relu.compute_at(prediction_output, n).store_at(prediction_output, no)
-                        .tile(c, w, ci, wi, vec*3, 4, TailStrategy::RoundUp)
+                        .tile(c, w, ci, wi, vec, 4, TailStrategy::RoundUp)
                         .vectorize(ci, vec).unroll(ci);
                     conv.compute_at(relu, c);
                 } else {
@@ -475,6 +463,8 @@ public:
             // conv+relu layers
             schedule_conv(head2_conv, head2_relu, r_head2.x);
             schedule_conv(conv1_stage2, relu1, r1_stage2.x);
+
+            relu1.debug_to_file("relu1.tmp");
         }
     }
 };

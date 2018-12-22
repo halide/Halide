@@ -5,6 +5,11 @@
 using namespace Halide;
 
 inline void do_cost_model_schedule(Halide::Pipeline p) {
+    for (int i = 0; i < 91; i++) {
+        p.get_func(i).compute_root();
+    }
+    return;
+
     Func loss_output = p.get_func(91);
     Func sum_1 = p.get_func(90);
     Func f2 = p.get_func(89);
@@ -233,7 +238,7 @@ inline void do_cost_model_schedule(Halide::Pipeline p) {
         .reorder(v324i, v324, r895_x, r895_y, r895_z)
         .serial(r895_z);
     filter1_im_0_d_def__.update(1)
-        .split(v324, v324, v324i, 12, TailStrategy::RoundUp)
+        .split(v324, v324, v324i, 8, TailStrategy::RoundUp)
         .split(v324i, v324i, v324ii, 8, TailStrategy::GuardWithIf)
         .unroll(v324i)
         .vectorize(v324ii)
@@ -314,7 +319,7 @@ inline void do_cost_model_schedule(Halide::Pipeline p) {
         .serial(v2570)
         .serial(v2569);
     updated_head2_filter.update(1)
-        .split(v2569, v2569, v2569i, 24, TailStrategy::GuardWithIf)
+        .split(v2569, v2569, v2569i, 8, TailStrategy::GuardWithIf)
         .split(v2569i, v2569i, v2569ii, 8, TailStrategy::GuardWithIf)
         .unroll(v2569i)
         .vectorize(v2569ii)
@@ -322,7 +327,7 @@ inline void do_cost_model_schedule(Halide::Pipeline p) {
         .serial(v2570)
         .serial(v2569);
     updated_head2_filter.update(2)
-        .split(v2569, v2569, v2569i, 24, TailStrategy::GuardWithIf)
+        .split(v2569, v2569, v2569i, 8, TailStrategy::GuardWithIf)
         .split(v2569i, v2569i, v2569ii, 8, TailStrategy::GuardWithIf)
         .unroll(v2569i)
         .vectorize(v2569ii)
@@ -330,7 +335,7 @@ inline void do_cost_model_schedule(Halide::Pipeline p) {
         .serial(v2570)
         .serial(v2569);
     updated_head2_filter.update(3)
-        .split(v2569, v2569, v2569i, 24, TailStrategy::GuardWithIf)
+        .split(v2569, v2569, v2569i, 8, TailStrategy::GuardWithIf)
         .split(v2569i, v2569i, v2569ii, 8, TailStrategy::GuardWithIf)
         .unroll(v2569i)
         .vectorize(v2569ii)
@@ -350,7 +355,7 @@ inline void do_cost_model_schedule(Halide::Pipeline p) {
         .compute_at(updated_head2_filter, v2569i)
         .reorder(v376i, v376, v377);
     head2_filter_im_0_d_def__
-        .split(v376, v376, v376i, 24, TailStrategy::RoundUp)
+        .split(v376, v376, v376i, 8, TailStrategy::RoundUp)
         .split(v376i, v376i, v376ii, 8, TailStrategy::RoundUp)
         .unroll(v376i)
         .vectorize(v376ii)
@@ -359,7 +364,7 @@ inline void do_cost_model_schedule(Halide::Pipeline p) {
         .serial(v377)
         .serial(v376);
     head2_filter_im_0_d_def__.update(0)
-        .split(v376, v376, v376i, 24, TailStrategy::RoundUp)
+        .split(v376, v376, v376i, 8, TailStrategy::RoundUp)
         .split(v376i, v376i, v376ii, 8, TailStrategy::GuardWithIf)
         .unroll(v376i)
         .vectorize(v376ii)
@@ -647,7 +652,7 @@ inline void do_cost_model_schedule(Halide::Pipeline p) {
         .serial(r227_y)
         .serial(r227_x);
     conv1_stage2_1_d_def__.update(1)
-        .split(c, c, ci, 3, TailStrategy::RoundUp)
+        .split(c, c, ci, 1, TailStrategy::RoundUp)
         .split(n, n, ni, 16, TailStrategy::RoundUp)
         .split(w, w, wi, 2, TailStrategy::RoundUp)
         .split(ni, ni, nii, 8, TailStrategy::GuardWithIf)
@@ -952,7 +957,7 @@ inline void do_cost_model_schedule(Halide::Pipeline p) {
         .compute_at(f1, ni)
         .reorder(ni, n, w);
     conv1_stage2
-        .split(c, c, ci, 12, TailStrategy::ShiftInwards)
+        .split(c, c, ci, 8, TailStrategy::ShiftInwards)
         .split(n, n, ni, 40, TailStrategy::ShiftInwards)
         .split(ci, ci, cii, 8, TailStrategy::ShiftInwards)
         .split(cii, cii, ciii, 8, TailStrategy::ShiftInwards)
