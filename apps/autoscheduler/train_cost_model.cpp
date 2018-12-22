@@ -265,8 +265,6 @@ int main(int argc, char **argv) {
         tpp.emplace_back(CostModel::make_default(weights_dir, randomize_weights));
     }
 
-    float rates[] = {0.0001f};
-
     int num_cores = atoi(getenv_safe("HL_NUM_THREADS").c_str());
 
     int batches = atoi(argv[1]);
@@ -288,6 +286,8 @@ int main(int argc, char **argv) {
         samples.erase(p.first);
     }
 
+    float rates[] = {0.001f};
+    
     for (float learning_rate : rates) {
         float loss_sum[models] = {0}, loss_sum_counter[models] = {0};
         float correct_ordering_rate_sum[models] = {0};
@@ -325,15 +325,9 @@ int main(int argc, char **argv) {
                             first = rand() % (p.second.schedules.size() - 1024);
                         }
 
+                        auto it = p.second.schedules.begin();
+                        std::advance(it, first);
                         for (size_t j = 0; j < batch_size; j++) {
-                            auto it = p.second.schedules.begin();
-                            if (j == 0) {
-                                // Batch element zero is always the fastest known schedule                        
-                                it = p.second.schedules.find(p.second.fastest_schedule);
-                                assert(it != p.second.schedules.end());
-                            } else {
-                                std::advance(it, j + first);
-                            }
                             auto &sched = it->second;
                             Runtime::Buffer<float> buf;
                             tp->enqueue(p.second.num_stages, &buf, &sched.prediction[model]);
@@ -342,10 +336,9 @@ int main(int argc, char **argv) {
                                 fastest_idx = j;
                             }
                             buf.copy_from(sched.schedule_features);
+                            it++;
                         }
 
-                        assert(fastest_idx == 0);
-                        
                         float loss = 0.0f;
                         if (train) {
                             loss = tp->backprop(runtimes, learning_rate);
@@ -353,17 +346,17 @@ int main(int argc, char **argv) {
                             loss_sum[model] += loss;
                             loss_sum_counter[model] ++;
 
+                            auto it = p.second.schedules.begin();
+                            std::advance(it, first);
                             for (size_t j = 0; j < batch_size; j++) {
-                                auto it = p.second.schedules.begin();
-                                std::advance(it, j + first);
                                 auto &sched = it->second;
-
                                 float m = sched.runtimes[0] / (sched.prediction[model] + 1e-10f);
                                 if (m > worst_miss) {
                                     worst_miss = m;
                                     worst_miss_pipeline_id = p.first;
                                     worst_miss_schedule_id = it->first;
                                 }
+                                it++;
                             }
                         } else {
                             tp->evaluate_costs();
