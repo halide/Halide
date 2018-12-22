@@ -111,6 +111,7 @@ class DefaultCostModel : public CostModel {
 
     void set_pipeline_features(const Runtime::Buffer<float> &pipeline_feats, int n) {
         pipeline_feat_queue = pipeline_feats;
+        assert(n > 0);
         num_cores = n;
     }
 
@@ -191,14 +192,6 @@ class DefaultCostModel : public CostModel {
 
         Runtime::Buffer<float> dst = costs.cropped(0, 0, cursor);
 
-        /*
-        pipeline_feat_queue.for_each_value([&](float f) { assert(!std::isnan(f)); });
-        schedule_feat_queue.for_each_value([&](float f) { assert(!std::isnan(f)); });
-        for_each_weight([&](const Runtime::Buffer<float> &buf) {
-                buf.for_each_value([&](float f) { assert(!std::isnan(f)); });
-            });
-        */
-
         int fastest_idx = 0;
         for (int i = 0; i < cursor; i++) {
             if (true_runtimes(i) < true_runtimes(fastest_idx)) {
@@ -223,12 +216,28 @@ class DefaultCostModel : public CostModel {
                          dst,
                          loss);
 
+        bool any_nans = false;
         for (int i = 0; i < cursor; i++) {
             assert(cost_ptrs(i));
             *(cost_ptrs(i)) = dst(i);
-            assert(!std::isnan(dst(i)));
-            assert(true_runtimes(0) > 0);
+            if (std::isnan(dst(i))) {
+                any_nans = true;
+                std::cerr << "Prediction " << i << " is NaN. True runtime is " << true_runtimes(i) << "\n";
+                std::cerr << "Checking pipeline features for NaNs...\n";
+                pipeline_feat_queue.for_each_value([&](float f) { if (std::isnan(f)) abort(); });
+                std::cerr << "None found\n";
+                std::cerr << "Checking schedule features for NaNs...\n";
+                schedule_feat_queue.for_each_value([&](float f) { if (std::isnan(f)) abort(); });
+                std::cerr << "None found\n";
+                std::cerr << "Checking network weights for NaNs...\n";
+                for_each_weight([&](const Runtime::Buffer<float> &buf) {
+                        buf.for_each_value([&](float f) { if (std::isnan(f)) abort(); });
+                    });
+                std::cerr << "None found\n";
+            }
+            assert(true_runtimes(i) > 0);
         }
+        if (any_nans) abort();
 
         if (!weights_server_hostname.empty()) {
             // Send gradients, receive new weights
