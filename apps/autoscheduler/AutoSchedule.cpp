@@ -444,14 +444,14 @@ struct LoopNest {
             return;
         }
 
-        int64_t parallel_tasks = parallel_loop_instances;
+        int64_t parallel_tasks = 1; 
         if (parallel) {
             parallel_tasks = parallel_loop_instances;
         } else if (parent->is_root()) {
             // We haven't picked a parallel tiling yet. Just assume an
             // appropriate number of loops above will be parallelized
             parallel_tasks = params.parallelism;
-        }
+        } 
 
         int64_t subparallelism = parallel_tasks * parallelism;
 
@@ -1273,6 +1273,7 @@ struct LoopNest {
             may_slide &= num_ones == ((int)child_size.size() - 1);
             // Don't slide funcs with update stages
             may_slide &= f->stages.size() == 1;
+
             // Don't slide over a split vector dimension (why?)
             may_slide &= (children[child]->vectorized_loop_index == -1 ||
                           child_size[children[child]->vectorized_loop_index] == 1);
@@ -1683,7 +1684,7 @@ struct State {
             for (auto it = features.begin(); it != features.end(); it++) {
                 if (!it.key()->node->func.is_wrapper()) { // It's OK to repeatedly stage data
                     auto &feat = it.value();
-                    if (feat.points_computed_total + feat.inlined_calls > 10 * feat.points_computed_minimum) {
+                    if (feat.points_computed_total + feat.inlined_calls > 1000 * feat.points_computed_minimum) {
                         cost = 1e50;
                         return true;
                     }
@@ -1691,7 +1692,7 @@ struct State {
             }
 
             // Avoid code size explosion from recursive inlining.
-            if (root->max_inlined_calls() >= 16) {
+            if (root->max_inlined_calls() >= 256) {
                 cost = 1e50;
                 return true;
             }
