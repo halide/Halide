@@ -179,6 +179,10 @@ map<int, PipelineSample> load_samples() {
                     }
                     sample.schedule_features(x, i) = f;
                 }
+                // Patch a bug in the featurization in the training data
+                if (sample.schedule_features(0, i) > 1) { // If multiple realizations
+                    sample.schedule_features(8, i) = 1; // No inner parallelism
+                }
             }
             if (ok) {
                 ps.schedules.emplace(schedule_hash, std::move(sample));
@@ -286,7 +290,7 @@ int main(int argc, char **argv) {
         samples.erase(p.first);
     }
 
-    float rates[] = {0.001f};
+    float rates[] = {0.0001f};
     
     for (float learning_rate : rates) {
         float loss_sum[models] = {0}, loss_sum_counter[models] = {0};
