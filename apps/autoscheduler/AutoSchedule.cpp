@@ -1680,7 +1680,7 @@ struct State {
             for (auto it = features.begin(); it != features.end(); it++) {
                 if (!it.key()->node->func.is_wrapper()) { // It's OK to repeatedly stage data
                     auto &feat = it.value();
-                    if (feat.points_computed_total + feat.inlined_calls > 1000 * feat.points_computed_minimum) {
+                    if (feat.points_computed_total + feat.inlined_calls > 10 * feat.points_computed_minimum) {
                         cost = 1e50;
                         return true;
                     }
