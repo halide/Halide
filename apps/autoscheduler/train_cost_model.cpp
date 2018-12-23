@@ -98,7 +98,7 @@ map<int, PipelineSample> load_samples() {
         const size_t num_stages = num_features / features_per_stage;
 
         const float runtime = scratch[num_features];
-        if (runtime <= 0 || runtime > 1000) { // Don't try to predict runtime over 1s
+        if (runtime <= 0 || runtime > 10000) { // Don't try to predict runtime over 1s
             std::cout << "Implausible runtime in ms: " << runtime << "\n";
             continue;
         }
@@ -145,8 +145,8 @@ map<int, PipelineSample> load_samples() {
         if (runtime < ps.fastest_runtime) {
             ps.fastest_runtime = runtime;
             ps.fastest_schedule = schedule_hash;
-        }        
-        
+        }
+
         auto it = ps.schedules.find(schedule_hash);
         if (it != ps.schedules.end()) {
             // Keep the smallest runtime at the front
@@ -291,7 +291,7 @@ int main(int argc, char **argv) {
     }
 
     float rates[] = {0.0001f};
-    
+
     for (float learning_rate : rates) {
         float loss_sum[models] = {0}, loss_sum_counter[models] = {0};
         float correct_ordering_rate_sum[models] = {0};
@@ -305,6 +305,13 @@ int main(int argc, char **argv) {
             float worst_miss = 0;
             uint64_t worst_miss_pipeline_id = 0;
             uint64_t worst_miss_schedule_id = 0;
+
+            struct Inversion {
+                string f1, f2;
+                float p1, p2;
+                float r1, r2;
+                float badness = 0;
+            } worst_inversion;
 
             #pragma omp parallel for
             for (int model = 0; model < models; model++) {
@@ -375,6 +382,17 @@ int main(int argc, char **argv) {
                                 if (sched.second.prediction[model] >= ref.prediction[model]) {
                                     good++;
                                 } else {
+                                    float badness = (sched.second.runtimes[0] - ref.runtimes[0]) * (ref.prediction[model] - sched.second.prediction[model]);
+                                    badness /= (ref.runtimes[0] * ref.runtimes[0]);
+                                    if (badness > worst_inversion.badness) {
+                                        worst_inversion.badness = badness;
+                                        worst_inversion.r1 = ref.runtimes[0];
+                                        worst_inversion.r2 = sched.second.runtimes[0];
+                                        worst_inversion.p1 = ref.prediction[model];
+                                        worst_inversion.p2 = sched.second.prediction[model];
+                                        worst_inversion.f1 = ref.filename;
+                                        worst_inversion.f2 = sched.second.filename;
+                                    }
                                     bad++;
                                 }
                             }
@@ -425,6 +443,11 @@ int main(int argc, char **argv) {
             } else {
                 std::cout << "\n";
             }
+
+            std::cout << "Worst inversion:\n"
+                      << worst_inversion.f1 << " predicted: " << worst_inversion.p1 << " actual: " << worst_inversion.r1 << "\n"
+                      << worst_inversion.f2 << " predicted: " << worst_inversion.p2 << " actual: " << worst_inversion.r2 << "\n";
+
             tpp[best_model]->save_weights();
         }
     }

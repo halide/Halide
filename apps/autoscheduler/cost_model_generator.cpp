@@ -465,8 +465,6 @@ public:
             // conv+relu layers
             schedule_conv(head2_conv, head2_relu, r_head2.x);
             schedule_conv(conv1_stage2, relu1, r1_stage2.x);
-
-            relu1.debug_to_file("relu1.tmp");
         }
     }
 };
