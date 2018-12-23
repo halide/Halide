@@ -18,6 +18,52 @@ using std::pair;
 using std::vector;
 using std::map;
 using std::string;
+using std::unique_ptr;
+
+// An optional rational type used when analyzing memory dependencies
+struct OptionalRational {
+    bool exists;
+    int64_t numerator, denominator;
+
+    void operator+=(const OptionalRational &other) {
+        if (!exists || !other.exists) {
+            exists = false;
+            return;
+        }
+        int64_t l = lcm(denominator, other.denominator);
+        numerator *= l / denominator;
+        denominator *= l / denominator;
+        numerator += other.numerator * (l / other.denominator);
+        int64_t g = gcd(numerator, denominator);
+        numerator /= g;
+        denominator /= g;
+    }
+
+    bool is_one() const {
+        return exists && (numerator == denominator);
+    }
+
+    bool is_zero() const {
+        return exists && (numerator == 0);
+    }
+
+    bool is_small_integer() const {
+        return exists && (numerator == denominator ||
+                          numerator == denominator * 2 ||
+                          numerator == denominator * 3 ||
+                          numerator == denominator * 4);
+    }
+
+    bool operator==(const OptionalRational &other) const {
+        return (exists == other.exists) && (numerator * other.denominator == denominator * other.numerator);
+    }
+
+    bool operator!=(const OptionalRational &other) const {
+        return !(*this == other);
+    }
+};
+
+
 
 // A concrete set of bounds for a Func. These are created and
 // destroyed very frequently while exploring scheduling options, so we
@@ -335,11 +381,13 @@ struct FunctionDAG {
             // Ids for perfect hashing on stages.
             int id, max_id;
 
+            vector<Edge *> incoming_edges;
+
             Stage(Halide::Stage s) : stage(s) {}
         };
         vector<Stage> stages;
 
-        vector<const Edge *> outgoing_edges, incoming_edges;
+        vector<Edge *> outgoing_edges;
 
         // Max vector size across the stages
         int vector_size;
@@ -410,12 +458,53 @@ struct FunctionDAG {
         };
         vector<pair<BoundInfo, BoundInfo>> bounds;
 
-        FunctionDAG::Node *producer, *consumer;
-        int consumer_stage;
+        FunctionDAG::Node *producer;
+        FunctionDAG::Node::Stage *consumer;
 
         // The number of calls the consumer makes to the producer, per
         // point in the loop nest of the consumer.
         int calls;
+
+        // What is the derivative of the coordinate accessed in the
+        // producer w.r.t the loops of the consumer. Either a constant
+        // or null.
+        class LoadJacobian {
+            vector<vector<OptionalRational>> coeffs;
+            int c;
+
+        public:
+            LoadJacobian(vector<vector<OptionalRational>> &&matrix) :
+                coeffs(matrix), c(1) {}
+
+            const OptionalRational &operator()(int producer_storage_dim, int consumer_loop_dim) const {
+                return coeffs[producer_storage_dim][consumer_loop_dim];
+            }
+
+            // To avoid redundantly re-recording copies of the same
+            // load Jacobian, we keep a count of how many times a
+            // load with this Jacobian occurs.
+            int count() const {return c;}
+
+            bool merge(const LoadJacobian &other) {
+                if (other.coeffs.size() != coeffs.size()) return false;
+                for (size_t i = 0; i < coeffs.size(); i++) {
+                    if (other.coeffs[i].size() != coeffs[i].size()) return false;
+                    for (size_t j = 0; j < coeffs[i].size(); j++) {
+                        if (other.coeffs[i][j] != coeffs[i][j]) return false;
+                    }
+                }
+                c += other.count();
+                return true;
+            }
+        };
+        vector<LoadJacobian> load_jacobians;
+
+        void add_load_jacobian(LoadJacobian j1) {
+            for (auto &j2 : load_jacobians) {
+                if (j2.merge(j1)) return;
+            }
+            load_jacobians.emplace_back(std::move(j1));
+        }
 
         // Given a loop nest of the consumer stage, expand a region
         // required of the producer to be large enough to include all
@@ -424,14 +513,14 @@ struct FunctionDAG {
                               pair<int64_t, int64_t> *producer_required) const {
 
             // Create a map from the symbolic loop variables to the actual loop size
-            const auto &symbolic_loop = consumer->stages[consumer_stage].loop;
+            const auto &symbolic_loop = consumer->loop;
             map<string, Expr> s;
             if (!all_bounds_affine) {
                 for (size_t i = 0; i < symbolic_loop.size(); i++) {
                     auto p = consumer_loop[i];
                     const string &var = symbolic_loop[i].var;
-                    s[consumer->func.name() + "." + var + ".min"] = (int)p.first;
-                    s[consumer->func.name() + "." + var + ".max"] = (int)p.second;
+                    s[consumer->node->func.name() + "." + var + ".min"] = (int)p.first;
+                    s[consumer->node->func.name() + "." + var + ".max"] = (int)p.second;
                     // debug(0) << consumer->func.name() << " " << var << " " << p.first << " " << p.second << "\n";
                 }
             }
@@ -542,10 +631,14 @@ struct FunctionDAG {
 
             for (int s = 0; s <= (int)consumer.updates().size(); s++) {
                 stage_count++;
-
                 Halide::Stage halide_stage = Func(consumer);
                 if (s > 0) halide_stage = Func(consumer).update(s-1);
                 Node::Stage stage(halide_stage);
+                node.stages.emplace_back(std::move(stage));
+            }
+
+            for (int s = 0; s <= (int)consumer.updates().size(); s++) {
+                auto &stage = node.stages[s];
                 stage.node = &node;
                 // stage.name = "get_func(" + std::to_string(i - 1) + ")";
                 stage.name = consumer.name();
@@ -752,8 +845,6 @@ struct FunctionDAG {
 
                 stage.index = s;
 
-                node.stages.emplace_back(std::move(stage));
-
                 exprs = apply_param_estimates.mutate(exprs);
 
                 FuncValueBounds func_value_bounds = compute_function_value_bounds(order, env);
@@ -772,8 +863,7 @@ struct FunctionDAG {
                     if (it != env.end() && p.first != consumer.name()) {
                         // Discard loads from input images and self-loads
                         Edge edge;
-                        edge.consumer = node_map.at(consumer);
-                        edge.consumer_stage = s;
+                        edge.consumer = &stage;
                         edge.producer = node_map.at(env[p.first]);
                         edge.all_bounds_affine = true;
 
@@ -781,9 +871,9 @@ struct FunctionDAG {
                             // Whenever a relationship is unbounded, we must inline
                             internal_assert(in.is_bounded())
                                 << "Unbounded producer->consumer relationship: "
-                                << edge.producer->func.name() << " -> " << edge.consumer->func.name() << "\n";
-                            Edge::BoundInfo min(simplify(in.min), edge.consumer->stages[s]);
-                            Edge::BoundInfo max(simplify(in.max), edge.consumer->stages[s]);
+                                << edge.producer->func.name() << " -> " << edge.consumer->name << "\n";
+                            Edge::BoundInfo min(simplify(in.min), *edge.consumer);
+                            Edge::BoundInfo max(simplify(in.max), *edge.consumer);
                             edge.bounds.emplace_back(std::move(min), std::move(max));
                             edge.all_bounds_affine &= edge.bounds.back().first.affine;
                             edge.all_bounds_affine &= edge.bounds.back().second.affine;
@@ -955,59 +1045,25 @@ struct FunctionDAG {
             IRVisitor::visit(op);
             if (op->call_type == Call::Halide) {
                 if (op->name == func.name()) {
-                    visit_memory_access(op->type, op->args, PipelineFeatures::AccessType::LoadSelf);
+                    visit_memory_access(op->name, op->type, op->args, PipelineFeatures::AccessType::LoadSelf);
                     op_bucket(PipelineFeatures::OpType::SelfCall, op->type)++;
                 } else {
-                    visit_memory_access(op->type, op->args, PipelineFeatures::AccessType::LoadFunc);
+                    visit_memory_access(op->name, op->type, op->args, PipelineFeatures::AccessType::LoadFunc);
                     op_bucket(PipelineFeatures::OpType::FuncCall, op->type)++;
                 }
             } else if (op->call_type == Call::Extern || op->call_type == Call::PureExtern ||
                        op->call_type == Call::Intrinsic || op->call_type == Call::PureIntrinsic) {
                 op_bucket(PipelineFeatures::OpType::ExternCall, op->type)++;
             } else if (op->call_type == Call::Image) {
-                visit_memory_access(op->type, op->args, PipelineFeatures::AccessType::LoadImage);
+                visit_memory_access(op->name, op->type, op->args, PipelineFeatures::AccessType::LoadImage);
                 op_bucket(PipelineFeatures::OpType::ImageCall, op->type)++;
             } // TODO: separate out different math calls a little better (sqrt vs sin vs lerp)
         }
 
-        struct DerivativeResult {
-            bool exists;
-            int64_t numerator, denominator;
-
-            void operator+=(const DerivativeResult &other) {
-                if (!exists || !other.exists) {
-                    exists = false;
-                    return;
-                }
-                int64_t l = lcm(denominator, other.denominator);
-                numerator *= l / denominator;
-                denominator *= l / denominator;
-                numerator += other.numerator * (l / other.denominator);
-                int64_t g = gcd(numerator, denominator);
-                numerator /= g;
-                denominator /= g;
-            }
-
-            bool is_one() const {
-                return exists && (numerator == denominator);
-            }
-
-            bool is_zero() const {
-                return exists && (numerator == 0);
-            }
-
-            bool is_small_integer() const {
-                return exists && (numerator == denominator ||
-                                  numerator == denominator * 2 ||
-                                  numerator == denominator * 3 ||
-                                  numerator == denominator * 4);
-            }
-        };
-
         // Take the derivative of an integer index expression. If it's
         // a rational constant, return it, otherwise return a sentinel
         // value.
-        DerivativeResult differentiate(const Expr &e, const string &v) {
+        OptionalRational differentiate(const Expr &e, const string &v) {
             if (!expr_uses_var(e, v)) {
                 return {true, 0, 1};
             } else if (e.as<Variable>()) {
@@ -1044,9 +1100,9 @@ struct FunctionDAG {
             }
         }
 
-        void visit_memory_access(Type t, const vector<Expr> &args, PipelineFeatures::AccessType type) {
+        void visit_memory_access(const std::string &name, Type t, const vector<Expr> &args, PipelineFeatures::AccessType type) {
             // Compute matrix of partial derivatives of args w.r.t. loop params
-            vector<vector<Expr>> matrix;
+            vector<vector<OptionalRational>> matrix;
             vector<size_t> ones_per_row(args.size(), 0),
                 zeros_per_row(args.size(), 0),
                 ones_per_col(stage.loop.size(), 0),
@@ -1062,6 +1118,7 @@ struct FunctionDAG {
                     zeros_per_col[j] += deriv.is_zero();
                     ones_per_col[j] += deriv.is_one();
                     is_pointwise &= (i == j ? deriv.is_one() : deriv.is_zero());
+                    matrix[i][j] = deriv;
                 }
             }
             bool is_transpose = (args.size() == stage.loop.size());
@@ -1087,17 +1144,23 @@ struct FunctionDAG {
             stage.features.transpose_accesses[(int)type][(int)type_class] += is_transpose;
             stage.features.broadcast_accesses[(int)type][(int)type_class] += is_broadcast;
             stage.features.slice_accesses[(int)type][(int)type_class] += is_slice;
+
+            for (auto *e : stage.incoming_edges) {
+                if (e->producer->func.name() == name) {
+                    e->add_load_jacobian(std::move(matrix));
+                }
+            }
         }
 
     public:
         Featurizer(Function &func, Node::Stage &stage, size_t vector_dim) :
             func(func), stage(stage), vector_dim(vector_dim) {}
 
-        void visit_store_args(Type t, vector<Expr> args) {
+        void visit_store_args(const std::string &name, Type t, vector<Expr> args) {
             for (auto &e : args) {
                 e = common_subexpression_elimination(simplify(e)); // Get things into canonical form
             }
-            visit_memory_access(t, args, PipelineFeatures::AccessType::Store);
+            visit_memory_access(name, t, args, PipelineFeatures::AccessType::Store);
         }
     };
 
@@ -1120,7 +1183,7 @@ struct FunctionDAG {
                 memset(&stage.features, 0, sizeof(stage.features));
 
                 for (auto v : def.values()) {
-                    featurizer.visit_store_args(v.type(), def.args());
+                    featurizer.visit_store_args(node.func.name(), v.type(), def.args());
                     v = common_subexpression_elimination(simplify(v)); // Get things into canonical form
                     v.accept(&featurizer);
                 }
@@ -1152,7 +1215,7 @@ struct FunctionDAG {
             }
         }
         for (const Edge &e : edges) {
-            debug(0) << "Edge: " << e.producer->func.name() << " -> " << e.consumer->func.name() << '\n'
+            debug(0) << "Edge: " << e.producer->func.name() << " -> " << e.consumer->name << '\n'
                      << "  Footprint: \n";
             int j = 0;
             for (const auto &i : e.bounds) {
@@ -1161,6 +1224,28 @@ struct FunctionDAG {
                 j++;
             }
 
+            debug(0) << "  Load Jacobians:\n";
+            for (const auto &jac : e.load_jacobians) {
+                if (jac.count() > 1) {
+                    debug(0) << "  " << jac.count() << " x\n";
+                }
+                for (int i = 0; i < e.producer->func.dimensions(); i++) {
+                    debug(0) << "    [";
+
+                    for (size_t j = 0; j < e.consumer->loop.size(); j++) {
+                        const auto &c = jac(i, j);
+                        if (!c.exists) {
+                            debug(0) << " _  ";
+                        } else if (c.denominator == 1) {
+                            debug(0) << " " << c.numerator << "  ";
+                        } else {
+                            debug(0) << c.numerator << "/" << c.denominator << " ";
+                        }
+                    }
+                    debug(0) << "]\n";
+                }
+                debug(0) << "\n";
+            }
         }
     }
 
