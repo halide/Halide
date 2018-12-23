@@ -18,7 +18,8 @@ using std::pair;
 using std::vector;
 using std::map;
 using std::string;
-
+using std::unique_ptr;
+ 
 // A concrete set of bounds for a Func. These are created and
 // destroyed very frequently while exploring scheduling options, so we
 // have a custom allocator and memory pool. Much like IR nodes, we
@@ -335,11 +336,13 @@ struct FunctionDAG {
             // Ids for perfect hashing on stages.
             int id, max_id;
 
+            vector<const Edge *> incoming_edges;
+            
             Stage(Halide::Stage s) : stage(s) {}
         };
         vector<Stage> stages;
 
-        vector<const Edge *> outgoing_edges, incoming_edges;
+        vector<const Edge *> outgoing_edges;
 
         // Max vector size across the stages
         int vector_size;
@@ -410,13 +413,38 @@ struct FunctionDAG {
         };
         vector<pair<BoundInfo, BoundInfo>> bounds;
 
-        FunctionDAG::Node *producer, *consumer;
-        int consumer_stage;
+        FunctionDAG::Node *producer;
+        FunctionDAG::Node::Stage *consumer;
 
         // The number of calls the consumer makes to the producer, per
         // point in the loop nest of the consumer.
         int calls;
 
+        // What is the derivative of the coordinate accessed in the
+        // producer w.r.t the loops of the consumer. Either a constant
+        // or null.
+        class LoadJacobian {
+            vector<vector<unique_ptr<int64_t>>> coeffs;
+        public:
+            LoadJacobian(const vector<vector<Expr>> &matrix) {
+                coeffs.resize(matrix.size());
+                for (size_t j = 0; j < matrix.size(); j++) {
+                    auto &row = matrix[j];
+                    coeffs[j].resize(row.size());
+                    for (size_t i = 0; i < row.size(); i++) {
+                        if (const int64_t *c = as_const_int(row[i])) {
+                            coeffs[j][i] = std::unique_ptr<int64_t>(new int64_t(*c));
+                        } 
+                    }
+                }                            
+            }
+            
+            const int64_t *operator()(int producer_storage_dim, int consumer_loop_dim) const {
+                return coeffs[producer_storage_dim][consumer_loop_dim].get();
+            }
+        };
+        vector<LoadJacobian> load_jacobians;
+        
         // Given a loop nest of the consumer stage, expand a region
         // required of the producer to be large enough to include all
         // points required.
@@ -424,14 +452,14 @@ struct FunctionDAG {
                               pair<int64_t, int64_t> *producer_required) const {
 
             // Create a map from the symbolic loop variables to the actual loop size
-            const auto &symbolic_loop = consumer->stages[consumer_stage].loop;
+            const auto &symbolic_loop = consumer->loop;
             map<string, Expr> s;
             if (!all_bounds_affine) {
                 for (size_t i = 0; i < symbolic_loop.size(); i++) {
                     auto p = consumer_loop[i];
                     const string &var = symbolic_loop[i].var;
-                    s[consumer->func.name() + "." + var + ".min"] = (int)p.first;
-                    s[consumer->func.name() + "." + var + ".max"] = (int)p.second;
+                    s[consumer->node->func.name() + "." + var + ".min"] = (int)p.first;
+                    s[consumer->node->func.name() + "." + var + ".max"] = (int)p.second;
                     // debug(0) << consumer->func.name() << " " << var << " " << p.first << " " << p.second << "\n";
                 }
             }
@@ -542,10 +570,14 @@ struct FunctionDAG {
 
             for (int s = 0; s <= (int)consumer.updates().size(); s++) {
                 stage_count++;
-
                 Halide::Stage halide_stage = Func(consumer);
                 if (s > 0) halide_stage = Func(consumer).update(s-1);
                 Node::Stage stage(halide_stage);
+                node.stages.emplace_back(std::move(stage));
+            }
+            
+            for (int s = 0; s <= (int)consumer.updates().size(); s++) {
+                auto &stage = node.stages[s];
                 stage.node = &node;
                 // stage.name = "get_func(" + std::to_string(i - 1) + ")";
                 stage.name = consumer.name();
@@ -752,8 +784,6 @@ struct FunctionDAG {
 
                 stage.index = s;
 
-                node.stages.emplace_back(std::move(stage));
-
                 exprs = apply_param_estimates.mutate(exprs);
 
                 FuncValueBounds func_value_bounds = compute_function_value_bounds(order, env);
@@ -772,8 +802,7 @@ struct FunctionDAG {
                     if (it != env.end() && p.first != consumer.name()) {
                         // Discard loads from input images and self-loads
                         Edge edge;
-                        edge.consumer = node_map.at(consumer);
-                        edge.consumer_stage = s;
+                        edge.consumer = &stage;
                         edge.producer = node_map.at(env[p.first]);
                         edge.all_bounds_affine = true;
 
@@ -781,9 +810,9 @@ struct FunctionDAG {
                             // Whenever a relationship is unbounded, we must inline
                             internal_assert(in.is_bounded())
                                 << "Unbounded producer->consumer relationship: "
-                                << edge.producer->func.name() << " -> " << edge.consumer->func.name() << "\n";
-                            Edge::BoundInfo min(simplify(in.min), edge.consumer->stages[s]);
-                            Edge::BoundInfo max(simplify(in.max), edge.consumer->stages[s]);
+                                << edge.producer->func.name() << " -> " << edge.consumer->name << "\n";
+                            Edge::BoundInfo min(simplify(in.min), *edge.consumer);
+                            Edge::BoundInfo max(simplify(in.max), *edge.consumer);
                             edge.bounds.emplace_back(std::move(min), std::move(max));
                             edge.all_bounds_affine &= edge.bounds.back().first.affine;
                             edge.all_bounds_affine &= edge.bounds.back().second.affine;
@@ -1087,6 +1116,10 @@ struct FunctionDAG {
             stage.features.transpose_accesses[(int)type][(int)type_class] += is_transpose;
             stage.features.broadcast_accesses[(int)type][(int)type_class] += is_broadcast;
             stage.features.slice_accesses[(int)type][(int)type_class] += is_slice;
+
+            // for (const auto *e : stage.incoming_edges
+            
+                     // stage.load_jacobians.emplace_back(matrix);
         }
 
     public:
@@ -1151,8 +1184,8 @@ struct FunctionDAG {
                 n.stages[i].features.dump();
             }
         }
-        for (const Edge &e : edges) {
-            debug(0) << "Edge: " << e.producer->func.name() << " -> " << e.consumer->func.name() << '\n'
+        for (const Edge &e : edges) {            
+            debug(0) << "Edge: " << e.producer->func.name() << " -> " << e.consumer->name << '\n'
                      << "  Footprint: \n";
             int j = 0;
             for (const auto &i : e.bounds) {

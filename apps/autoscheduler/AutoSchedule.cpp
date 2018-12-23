@@ -322,13 +322,23 @@ struct LoopNest {
 
         int64_t working_set_here = 0;
 
-        int64_t loop_instances = 1, parallel_loop_instances = 1;
+        int64_t loop_instances = 1, parallel_tasks = 1;
         bool in_impure = false;
         for (int idx = (int)size.size() - 1; idx >= 0; idx--) {
             size_t i = size[idx];
             loop_instances *= i;
             if (stage->loop[idx].pure && !in_impure) {
-                parallel_loop_instances *= i;
+                if (parallel || (parent->is_root() && parallel_tasks < params.parallelism)) {
+                    // Either we've picked our parallel tiling, or
+                    // it's not yet determined. Assume we'll not split
+                    // any loops and just stop after we hit the
+                    // required number of cores
+                    parallel_tasks *= i;
+                    if (!parallel && parallel_tasks > params.parallelism * 8) {
+                        // We would split this loop
+                        parallel_tasks = params.parallelism * 8;
+                    }
+                }
             } else if (i != 1) {
                 in_impure = true;
             }
@@ -435,7 +445,7 @@ struct LoopNest {
                 if (node->stages.size() == 1 && !node->is_output) {
                     int64_t points_computed_minimum_if_inlined = 0;
                     for (auto *e : node->outgoing_edges) {
-                        points_computed_minimum_if_inlined += features->get(&(e->consumer->stages[e->consumer_stage])).points_computed_minimum * e->calls;
+                        points_computed_minimum_if_inlined += features->get(e->consumer).points_computed_minimum * e->calls;
                     }
                     feat.points_computed_minimum = std::min(feat.points_computed_minimum, points_computed_minimum_if_inlined);
                 }
@@ -443,15 +453,6 @@ struct LoopNest {
 
             return;
         }
-
-        int64_t parallel_tasks = 1; 
-        if (parallel) {
-            parallel_tasks = parallel_loop_instances;
-        } else if (parent->is_root()) {
-            // We haven't picked a parallel tiling yet. Just assume an
-            // appropriate number of loops above will be parallelized
-            parallel_tasks = params.parallelism;
-        } 
 
         int64_t subparallelism = parallel_tasks * parallelism;
 
@@ -559,17 +560,12 @@ struct LoopNest {
             }
             internal_assert(consumer_instances != 0) << node->func.name() << " " << innermost << " " << instances << " " << feat.num_realizations << "\n";
 
-            vector<const FunctionDAG::Node *> pending;
-            pending.push_back(node);
+            vector<const FunctionDAG::Node::Stage *> pending;
+            pending.push_back(stage);
             while (!pending.empty()) {
                 const auto &next = pending.back()->incoming_edges;
                 pending.pop_back();
                 for (const auto *e : next) {
-                    if (e->consumer == node && e->consumer_stage != stage_idx) {
-                        // This edge not actually connected to this stage
-                        continue;
-                    }
-
                     if (!sites.contains(&(e->producer->stages[0]))) {
                         // Not yet scheduled. Optimistically treat it as free.
                         continue;
@@ -579,7 +575,7 @@ struct LoopNest {
 
                     if (site.inlined) {
                         // Recursively examine the inputs
-                        pending.push_back(e->producer);
+                        pending.push_back(&(e->producer->stages[0]));
                         continue;
                     }
 
@@ -760,13 +756,13 @@ struct LoopNest {
             }
             for (const auto *e : f->outgoing_edges) {
                 // Ignore consumers outside of this loop nest
-                if (!computes(e->consumer)) {
+                if (!computes(e->consumer->node)) {
                     // debug(0) << "Skipping edge from " << e->producer->func.name() << " to " << e->consumer->func.name() << "\n";
                     continue;
                 }
                 // debug(0) << "Expanding footprint along edge " << e->producer->func.name() << " -> " << e->consumer->func.name() << "\n";
-                const auto &c_bounds = get_bounds(e->consumer);
-                const auto *consumer_loop = &(c_bounds->loops(e->consumer_stage, 0)); // For the concrete sizes of the loop
+                const auto &c_bounds = get_bounds(e->consumer->node);
+                const auto *consumer_loop = &(c_bounds->loops(e->consumer->index, 0)); // For the concrete sizes of the loop
                 e->expand_footprint(consumer_loop, &(bound->region_required(0)));
             }
         }
@@ -829,10 +825,10 @@ struct LoopNest {
             if (c->calls(f)) return true;
         }
         for (const auto *e : f->outgoing_edges) {
-            if (e->consumer == node && e->consumer_stage == stage_idx) {
+            if (e->consumer == stage) {
                 return true;
             }
-            if (inlined.contains(e->consumer)) {
+            if (inlined.contains(e->consumer->node)) {
                 return true;
             }
         }
@@ -856,22 +852,20 @@ struct LoopNest {
         }
         if (is_root()) return false;
 
-        auto check = [&](const FunctionDAG::Node *n) {
-            for (const auto *e : n->incoming_edges) {
+        auto check = [&](const FunctionDAG::Node::Stage *s) {
+            for (const auto *e : s->incoming_edges) {
                 if (e->producer->is_input) return true;
             }
 
-            for (const auto &s : n->stages) {
-                for (int t = 0; t < (int)PipelineFeatures::ScalarType::NumScalarTypes; t++) {
-                    if (s.features.op_histogram[(int)PipelineFeatures::OpType::ImageCall][t] > 0) return true;
-                }
+            for (int t = 0; t < (int)PipelineFeatures::ScalarType::NumScalarTypes; t++) {
+                if (s->features.op_histogram[(int)PipelineFeatures::OpType::ImageCall][t] > 0) return true;
             }
             return false;
         };
 
-        if (check(node)) return true;
+        if (check(stage)) return true;
         for (auto it = inlined.begin(); it != inlined.end(); it++) {
-            if (check(it.key())) return true;
+            if (check(&(it.key()->stages[0]))) return true;
         }
         return false;
     }
@@ -904,10 +898,10 @@ struct LoopNest {
         if (innermost) {
             int64_t calls = 0;
             for (const auto *e : f->outgoing_edges) {
-                if (inlined.contains(e->consumer)) {
-                    calls += inlined.get(e->consumer) * e->calls;
+                if (inlined.contains(e->consumer->node)) {
+                    calls += inlined.get(e->consumer->node) * e->calls;
                 }
-                if (e->consumer == node) {
+                if (e->consumer == stage) {
                     calls += e->calls;
                 }
             }
@@ -1039,7 +1033,9 @@ struct LoopNest {
         auto parent_bounds = parent->get_bounds(node);
 
         // We want this many parallel tasks remaining in the outer loop
-        int64_t parallelism_required = params.parallelism * 8; // TODO: times some factor to be searched over
+        int64_t parallelism_required = params.parallelism * 6;
+        // TODO: times some factor to be searched over. 6 is nice
+        // because you can further tile it by 2 or 3.
 
         // So far we've found nothing
         int64_t parallelism_found = 1;
@@ -1065,8 +1061,7 @@ struct LoopNest {
                 outer_extent = outer->size[l];
             } else {
                 // Pick some number of loop iterations per parallel tasks
-                int64_t inner_size = (outer->size[l] * parallelism_found) / parallelism_required;
-                outer_extent = (outer->size[l] + inner_size - 1) / inner_size;
+                outer_extent = parallelism_required / parallelism_found;
             }
 
             inner->size[l] = (outer->size[l] + outer_extent - 1) / outer_extent;
@@ -1155,10 +1150,9 @@ struct LoopNest {
             for (auto t : tilings) {
                 if (parent->is_root()) {
                     const auto &l = stage->loop;
-                    // Skip root-level tilings that provide
-                    // insufficient parallelism to avoid nested
-                    // parallelism, and root-level tilings that would
-                    // force serialization of dimensions we have
+                    // Skip root-level tilings that would leave too
+                    // many cores idle, and root-level tilings that
+                    // would force serialization of dimensions we have
                     // decided to parallelize over in an earlier pass.
                     int total = 1;
                     size_t idx = 0;
@@ -1168,7 +1162,9 @@ struct LoopNest {
                         }
                         idx++;
                     }
-                    if (total < params.parallelism) continue;
+                    const double tasks_per_core = (double)total / params.parallelism;
+                    const double idle_cores = std::ceil(tasks_per_core) / tasks_per_core;
+                    if (idle_cores > 1.1) continue;
                 }
 
                 // Tile this loop and place the computation at some coarser granularity
@@ -1731,11 +1727,10 @@ struct State {
                 const auto &feat = it.value();
                 // Reject silly schedules. They're not even useful for
                 // training data, as they potentially take the age of
-                // the universe to benchmark. We define 'silly' as
-                // doing more than 10x redundant recompute for any one
-                // stage.
-                //if (feat.points_computed_total + feat.inlined_calls > 10*feat.points_computed_minimum) return false;
-
+                // the universe to benchmark.
+                if (feat.points_computed_total + feat.inlined_calls > 1000*feat.points_computed_minimum) return false;
+                if (feat.inlined_calls >= 64) return false;
+                
                 double compute_cost = 0;
                 const int *pipeline_feat = (const int *)(&stage.features.op_histogram[0][0]);
                 double per_element_compute_cost = 0;
@@ -1743,6 +1738,11 @@ struct State {
                     per_element_compute_cost += pipeline_feat[i];
                 }
 
+                if (feat.inlined_calls > 0) {
+                    const double per_element_compute_cost_of_memcpy = 1 + 2*stage.node->func.dimensions();
+                    per_element_compute_cost = std::max(0.0, per_element_compute_cost - per_element_compute_cost_of_memcpy);
+                }
+                
                 // Assume that narrow types are cheaper because they
                 // vectorize wider, and just count the number of
                 // vectors computed.
@@ -1751,13 +1751,6 @@ struct State {
                 // Figure out vector overcompute
                 const int native_vector_size = feat.native_vector_size;
                 const double idle_simd_lanes = (double)native_vector_size / feat.vector_size;
-
-                // Inlining saves a call node, which in our cost
-                // model costs...
-                const double per_element_compute_cost_of_memcpy = 1 + 2*stage.node->func.dimensions();
-                const double per_element_compute_cost_inlined = std::max(0.0, per_element_compute_cost - per_element_compute_cost_of_memcpy);
-                const double compute_cost_inlined = per_element_compute_cost_inlined * feat.inlined_calls;
-                compute_cost += compute_cost_inlined;
                 compute_cost *= idle_simd_lanes;
 
                 {
@@ -1904,8 +1897,8 @@ struct State {
         // Enumerate all legal ways to schedule the next Func
         const FunctionDAG::Node *node = &dag.nodes[next_node];
         for (const auto *e : node->outgoing_edges) {
-            internal_assert(root->computes(e->consumer))
-                << "Partially scheduled code doesn't compute " << e->consumer->func.name()
+            internal_assert(root->computes(e->consumer->node))
+                << "Partially scheduled code doesn't compute " << e->consumer->name
                 << ", which is one of the consumers of " << node->func.name();
         }
 
@@ -1925,7 +1918,7 @@ struct State {
             dump();
             debug(0) << node->func.name() << " is consumed by:\n";
             for (const auto *e : node->outgoing_edges) {
-                debug(0) << e->consumer->func.name() << " stage " << e->consumer_stage << "\n";
+                debug(0) << e->consumer->name << "\n";
                 debug(0) << "Which in turn consumes:\n";
                 for (const auto *e2 : e->consumer->incoming_edges) {
                     debug(0) << "  " << e2->producer->func.name() << "\n";
@@ -1974,7 +1967,7 @@ struct State {
 
 
             // HACK: May only vectorize across x, if there is one
-            /*
+            
             for (int v = 0; v < node->func.dimensions(); v++) {
                 if (node->func.args()[v] == "x") {
                     vector_dims.clear();
@@ -1982,8 +1975,7 @@ struct State {
                     break;
                 }
             }
-            */
-
+            
 
             // 2) Realize it somewhere
             for (int vector_dim : vector_dims) {
@@ -2107,7 +2099,6 @@ struct State {
             vector<VarOrRVar> vars;
             int64_t parallel_tasks = 1;
             vector<VarOrRVar> parallel_vars;
-            debug(0) << p.first->node->func.name() << "\n";
             bool any_parallel_vars = false, any_parallel_rvars = false;
             for (auto it = p.second->vars.rbegin(); it != p.second->vars.rend(); it++) {
                 if (!it->exists || it->extent == 1) continue;
@@ -2116,7 +2107,6 @@ struct State {
                 any_parallel_vars |= !it->var.is_rvar;
                 parallel_tasks *= it->extent;
                 parallel_vars.push_back(it->var);
-                debug(0) << "Parallel var: " << it->var.name() << " " << it->var.is_rvar << "\n";
             }
 
             if (p.second->vars.size() > 1) {
@@ -2135,8 +2125,6 @@ struct State {
                 p.second->schedule_source << ")";
                 stage.reorder(vars);
             }
-
-            debug(0) << any_parallel_vars << " " << any_parallel_rvars << "\n";
 
             // Halide doesn't let you fuse an RVar with a Var, even if
             // they are both pure.
@@ -2594,7 +2582,7 @@ std::string generate_schedules_new(const std::vector<Function> &outputs,
     if (get_env_variable("HL_USE_MANUAL_COST_MODEL") != "1") {
         cost_model = CostModel::make_default(weights_dir, randomize_weights, weights_server_hostname, weights_server_port, weights_server_experiment_id);
     }
-
+    
     IntrusivePtr<State> optimal;
 
     if (time_limit) {
