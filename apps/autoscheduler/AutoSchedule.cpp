@@ -1061,7 +1061,7 @@ struct LoopNest {
                 outer_extent = outer->size[l];
             } else {
                 // Pick some number of loop iterations per parallel tasks
-                outer_extent = parallelism_required / parallelism_found;
+                outer_extent = std::max((int64_t)1, parallelism_required / parallelism_found);
             }
 
             inner->size[l] = (outer->size[l] + outer_extent - 1) / outer_extent;
