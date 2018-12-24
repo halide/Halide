@@ -364,5 +364,30 @@ int main(int argc, char **argv) {
 
     }
 
+    if (1) {
+        ImageParam im(Float(32), 2);
+        // An inlinable Func used at the start and at the end of a long stencil chain.        
+        const int N = 8;
+        Func f[N];
+        f[0] = Func("inline_me");
+        f[0](x, y) = im(x, y); // inline me!
+        for (int i = 1; i < N; i++) {
+            Expr e = 0;
+            for (int dy = -1; dy <= 1; dy++) {
+                for (int dx = -1; dx <= 1; dx++) {
+                    e += f[i-1](x + dx, y + dy);
+                }
+            }
+            f[i](x, y) = e;
+        }
+
+        Func g("output");
+        // Access it in a way that makes it insane not to inline.
+        g(x, y) = f[N-1](x, y) + f[0](clamp(cast<int>(sin(x) * 10000), 0, 100000), clamp(cast<int>(sin(x*y) * 10000), 0, 100000));
+        g.estimate(x, 0, 2048).estimate(y, 0, 2048);
+
+        Pipeline(g).auto_schedule(target, params);        
+    }
+    
     return 0;
 }

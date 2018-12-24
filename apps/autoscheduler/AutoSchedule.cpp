@@ -561,13 +561,13 @@ struct LoopNest {
             }
             internal_assert(consumer_instances != 0) << node->func.name() << " " << innermost << " " << instances << " " << feat.num_realizations << "\n";
 
-            vector<pair<const FunctionDAG::Node::Stage *, int>> pending;
-            pending.emplace_back(stage, 1);
+            vector<const FunctionDAG::Node::Stage *> pending;
+            pending.emplace_back(stage);
+            vector<pair<LoadJacobian, FunctionDAG::Node *>> jacobians;
             while (!pending.empty()) {
                 auto p = pending.back();
                 pending.pop_back();
-                const auto &next_edges = p.first->incoming_edges;
-                int64_t next_count = p.second;
+                const auto &next_edges = p->incoming_edges;
                 for (const auto *e : next_edges) {
                     if (!sites.contains(&(e->producer->stages[0]))) {
                         // Not yet scheduled. Optimistically treat it as free.
@@ -576,9 +576,29 @@ struct LoopNest {
 
                     const auto &site = sites.get(&(e->producer->stages[0]));
 
+                    if (e->consumer == stage) {
+                        for (auto &j : e->load_jacobians) {
+                            jacobians.emplace_back(j, e->producer);
+                        }
+                    } else {
+                        // Consumer was inlined. Concat the jacobians to look through it.
+                        decltype(jacobians) new_jacobians;
+                        for (auto &j1 : jacobians) {
+                            if (e->consumer->node == j1.second) {
+                                for (auto &j2 : e->load_jacobians) {
+                                    LoadJacobian j = j2 * j1.first;
+                                    new_jacobians.emplace_back(j, e->producer);
+                                }
+                            } else {
+                                new_jacobians.emplace_back(std::move(j1));
+                            }
+                        }
+                        jacobians.swap(new_jacobians);
+                    }
+
                     if (site.inlined) {
                         // Recursively examine the inputs
-                        pending.emplace_back(&(e->producer->stages[0]), next_count * e->calls);
+                        pending.emplace_back(&(e->producer->stages[0]));
                         continue;
                     }
 
@@ -601,9 +621,10 @@ struct LoopNest {
 
                     if (innermost) {
                         // Grab the jacobians that describe the memory dependence
-                        const auto &jacobians = e->producer->transitive_load_jacobians(stage);
                         for (const auto &jac : jacobians) {
-                            int64_t n = jac.count() * next_count;
+                            if (jac.second != e->producer) continue;
+                            int64_t n = jac.first.count();
+                            // internal_assert(n < 1024 * 1024 * 1024) << "Implausibly large n: " << jac.count() << " " << next_count << "\n";
                             // Classify
                             bool vector_broadcast = true;
                             bool dense_vector_load = true;
@@ -613,7 +634,7 @@ struct LoopNest {
                             int producer_innermost_dim = e->producer->is_input ? 0 : site.produce->vector_dim;
                             if (vectorized_loop_index >= 0) {
                                 for (int i = 0; i < e->producer->func.dimensions(); i++) {
-                                    auto stride = jac(i, vectorized_loop_index);
+                                    auto stride = jac.first(i, vectorized_loop_index);
                                     vector_broadcast &= stride == 0;
                                     if (i == producer_innermost_dim) {
                                         dense_vector_load &= (stride >= -1 && stride <= 1);

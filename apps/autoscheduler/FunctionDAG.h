@@ -12,6 +12,7 @@
 
 namespace Halide {
 namespace Internal {
+
 namespace {
 
 using std::pair;
@@ -516,86 +517,6 @@ struct FunctionDAG {
 
         BoundContents *make_bound() const {
             return bounds_memory_layout->make();
-        }
-
-        // Does a Func depend on the values computed by this Func, possibly via other Funcs?
-        mutable map<const Node *, bool> consumers_cache;
-        bool consumed_by(const Node *consumer) const {
-            if (id < consumer->id) {
-                // The stages are in topological order so
-                return false;
-            }
-
-            auto it = consumers_cache.find(consumer);
-            if (it != consumers_cache.end()) {
-                return it->second;
-            }
-
-            bool result = false;
-            for (const auto *e : outgoing_edges) {
-                if (e->consumer->node == consumer ||
-                    e->consumer->node->consumed_by(consumer)) {
-                    result = true;
-                    break;
-                }
-            }
-
-            consumers_cache.emplace(consumer, result);
-            return result;
-        }
-
-        // As some downstream consumer's loop varies, what are the
-        // strides on all transitive accesses to this func in each
-        // dimension, assuming everything in between is pure and has
-        // been inlined.
-        mutable map<const Stage *, std::unique_ptr<vector<LoadJacobian>>> transitive_load_jacobians_cache;
-        const vector<LoadJacobian> &transitive_load_jacobians(const Stage *consumer) const {
-            auto it = transitive_load_jacobians_cache.find(consumer);
-            if (it != transitive_load_jacobians_cache.end()) {
-                return *(it->second);
-            }
-
-            std::unique_ptr<vector<LoadJacobian>> result(new vector<LoadJacobian>);
-            for (const auto *e : outgoing_edges) {
-                const Node *intermediate = e->consumer->node;
-                if (e->consumer == consumer) {
-                    result->insert(result->end(), e->load_jacobians.begin(), e->load_jacobians.end());
-                } else if ((true || intermediate->consumed_by(consumer->node)) &&
-                           intermediate->stages.size() == 1) {
-                    for (const auto &j1 : intermediate->transitive_load_jacobians(consumer)) {
-                        for (const auto &j2 : e->load_jacobians) {
-                            // j1 maps from consumer loop dimensions
-                            // to the intermediate storage dimensions,
-                            // and j2 maps from the intermediate
-                            // storage dimensions to the storage
-                            // dimensions of this node. We therefore
-                            // multiply them as matrices in the
-                            // following order:
-                            LoadJacobian j = j2 * j1;
-                            bool inserted = false;
-                            // Try to merge it with existing Jacobians
-                            for (auto &j3 : *result) {
-                                if (j3.merge(j)) {
-                                    inserted = true;
-                                    break;
-                                }
-                            }
-                            if (!inserted) {
-                                result->emplace_back(std::move(j));
-                            }
-                        }
-                    }
-                }
-            }
-
-            debug(0) << "Jacobians from " << func.name() << " to " << consumer->name << "\n";
-            for (const auto &j : *result) {
-                j.dump("  ");
-            }
-
-            const auto &ret = *result;
-            transitive_load_jacobians_cache.emplace(consumer, std::move(result));
-            return ret;
         }
     };
 
