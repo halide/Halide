@@ -71,11 +71,11 @@ Type random_type() {
     return T;
 }
 
-Expr random_expr(vector<Expr> inputs, int depth, int func_size);
+Expr random_expr_inner(vector<Expr> inputs, int depth, int func_size);
 
 Expr random_condition(vector<Expr> inputs, int depth, int func_size) {
-    Expr a = random_expr(inputs, depth, func_size);
-    Expr b = random_expr(inputs, depth, func_size);
+    Expr a = random_expr_inner(inputs, depth, func_size);
+    Expr b = random_expr_inner(inputs, depth, func_size);
     int op = rng() % comp_bin_op_count;
     return make_comp_bin_op[op](a, b);
 }
@@ -87,7 +87,7 @@ Expr make_leaf(vector<Expr> inputs) {
     return chosen_input;
 }
 
-Expr random_expr(vector<Expr> inputs, int depth, int func_size) {
+Expr random_expr_inner(vector<Expr> inputs, int depth, int func_size) {
     const int op_count = bin_op_count + bool_bin_op_count + 9;
     const int func_size_thresh = 1e4; // if input is too large do not use trig functions
 
@@ -102,14 +102,14 @@ Expr random_expr(vector<Expr> inputs, int depth, int func_size) {
     {
         // Get a random type
         Type convertT = random_type();
-        auto e1 = random_expr(inputs, depth, func_size);
+        auto e1 = random_expr_inner(inputs, depth, func_size);
         return cast(convertT, e1);
     }
     case 1: // select operation
     {
         auto c = random_condition(inputs, depth-2, func_size); // arbitrarily chose to make condition expression shorter
-        auto e1 = random_expr(inputs, depth-1, func_size);
-        auto e2 = random_expr(inputs, depth-2, func_size);
+        auto e1 = random_expr_inner(inputs, depth-1, func_size);
+        auto e2 = random_expr_inner(inputs, depth-2, func_size);
         // make sure e1 and e2 have the same type
         if (e1.type() != e2.type()) {
             e2 = cast(e1.type(), e2);
@@ -118,7 +118,7 @@ Expr random_expr(vector<Expr> inputs, int depth, int func_size) {
     }
     case 2: // unary boolean op
     {
-        auto e1 = random_expr(inputs, depth-1, func_size);
+        auto e1 = random_expr_inner(inputs, depth-1, func_size);
         if (e1.type().is_bool()) {
             return !e1;
         }
@@ -128,29 +128,29 @@ Expr random_expr(vector<Expr> inputs, int depth, int func_size) {
     {
         if (func_size > func_size_thresh)
             break;
-        auto e1 = random_expr(inputs, depth-1, func_size);
+        auto e1 = random_expr_inner(inputs, depth-1, func_size);
         return sin(cast<float>(e1));
     }
     case 4: // tanh
     {
         if (func_size > func_size_thresh)
             break;
-        auto e1 = random_expr(inputs, depth-1, func_size);
+        auto e1 = random_expr_inner(inputs, depth-1, func_size);
         return tanh(cast<float>(e1));
     }
     case 5: // exp
     {
-        auto e1 = random_expr(inputs, depth-1, func_size);
+        auto e1 = random_expr_inner(inputs, depth-1, func_size);
         return fast_exp(cast<float>(e1));
     }
     case 6: // sqrt
     {
-        auto e1 = random_expr(inputs, depth-1, func_size);
+        auto e1 = random_expr_inner(inputs, depth-1, func_size);
         return sqrt(cast<float>(e1));
     }
     case 7: // log
     {
-        auto e1 = random_expr(inputs, depth-1, func_size);
+        auto e1 = random_expr_inner(inputs, depth-1, func_size);
         return fast_log(cast<float>(e1));
     }
     case 8: // condition
@@ -159,8 +159,8 @@ Expr random_expr(vector<Expr> inputs, int depth, int func_size) {
     }
     default: // binary op
         make_bin_op_fn maker;
-        auto e1 = random_expr(inputs, depth-1, func_size);
-        auto e2 = random_expr(inputs, depth-2, func_size);
+        auto e1 = random_expr_inner(inputs, depth-1, func_size);
+        auto e2 = random_expr_inner(inputs, depth-2, func_size);
         if (e1.type().is_bool() && e2.type().is_bool()) {
             maker = make_bool_bin_op[op % bool_bin_op_count];
         } else {
@@ -171,7 +171,7 @@ Expr random_expr(vector<Expr> inputs, int depth, int func_size) {
     }
 
     // selected case did not return an expression, try again
-    return random_expr(inputs, depth, func_size);
+    return random_expr_inner(inputs, depth, func_size);
 }
 
 Expr rand_value(Type t) {
@@ -186,6 +186,10 @@ Expr rand_value(Type t) {
         assert(false);
         return undef(t);
     }
+}
+
+Expr random_expr(vector<Expr> inputs, int depth, int func_size) {
+    return Internal::simplify(Internal::common_subexpression_elimination(random_expr_inner(inputs, depth, func_size)));
 }
 
 // Generator to produce a random pipeline. The generated pipeline will
