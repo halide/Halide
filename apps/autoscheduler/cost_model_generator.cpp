@@ -225,6 +225,8 @@ public:
         Expr scalar_loads_per_scalar = schedule_features(n, idx++, w);
         Expr bytes_at_task = schedule_features(n, idx++, w);
         Expr innermost_bytes_at_task = schedule_features(n, idx++, w);
+        Expr unique_bytes_read_per_vector = schedule_features(n, idx++, w);
+        Expr unique_lines_read_per_vector = schedule_features(n, idx++, w);
         assert(idx == head2_w);
 
         // Count up the number of things computed
@@ -248,7 +250,12 @@ public:
                           num_realizations * unique_bytes_read_per_realization * relu1(6, w, n) +
                           num_vectors * vector_loads_per_vector * relu1(7, w, n) +
                           num_scalars * scalar_loads_per_scalar * relu1(8, w, n) +
-                          num_vectors * scalar_loads_per_vector * relu1(9, w, n));
+                          num_vectors * scalar_loads_per_vector * relu1(9, w, n) + 
+                          num_scalars * unique_bytes_read_per_vector * relu1(10, w, n) +
+                          num_vectors * unique_bytes_read_per_vector * relu1(11, w, n) + 
+                          num_scalars * unique_lines_read_per_vector * relu1(12, w, n) +
+                          num_vectors * unique_lines_read_per_vector * relu1(13, w, n));    
+
 
         // Estimate the number of cache misses on the data that this writes to and their cost
         Expr lines_written_per_realization = inner_parallelism * (bytes_at_task / max(1, innermost_bytes_at_task));
@@ -257,12 +264,12 @@ public:
         // parallelism, because for stages with internal parallelism,
         // most values produced will be consumed on another core, so
         // they will get punted out to L3 no matter how small.
-        Expr alpha = select(inner_parallelism > 1, relu1(10, w, n),
-                            w == 0, relu1(11, w, n), // TODO: incorrect for multi-output pipelines. Add an is_output feature.
-                            relu1(12, w, n));
-        Expr beta = select(inner_parallelism > 1, relu1(13, w, n),
-                           w == 0, relu1(14, w, n),
-                           relu1(15, w, n));
+        Expr alpha = select(inner_parallelism > 1, relu1(14, w, n),
+                            w == 0, relu1(15, w, n),
+                            relu1(16, w, n));
+        Expr beta = select(inner_parallelism > 1, relu1(17, w, n),
+                           w == 0, relu1(18, w, n),
+                           relu1(19, w, n));
 
         Expr store_cost = num_realizations * (lines_written_per_realization * alpha +
                                               bytes_at_realization * beta);
@@ -272,7 +279,7 @@ public:
         // another core is inversely proportional to
         // innermost_bytes_at_task, and the cost is paid on every
         // store.
-        Expr cost_of_false_sharing = select(inner_parallelism > 1, relu1(19, w, n) * (num_vectors + num_scalars) / max(1, innermost_bytes_at_task), 0.0f);
+        Expr cost_of_false_sharing = select(inner_parallelism > 1, relu1(20, w, n) * (num_vectors + num_scalars) / max(1, innermost_bytes_at_task), 0.0f);
 
         store_cost += cost_of_false_sharing;
 
@@ -285,21 +292,21 @@ public:
         Expr num_page_faults = bytes_at_production;
 
         // And page faults are serviced serially, so the total CPU time gets multiplied by the thread count again!
-        Expr cost_of_page_faults = num_page_faults * max_threads_hitting_same_page_fault * inner_parallelism * outer_parallelism * relu1(20, w, n);
+        Expr cost_of_page_faults = num_page_faults * max_threads_hitting_same_page_fault * inner_parallelism * outer_parallelism * relu1(21, w, n);
 
         store_cost += cost_of_page_faults;
 
         // Malloc aint free. Small allocations should go on the stack, but this isn't totally reliable.
-        Expr cost_of_malloc = relu1(21, w, n) * num_realizations;
+        Expr cost_of_malloc = relu1(22, w, n) * num_realizations;
 
         // Penalize working sets that start to fall out of cache
         // Expr cost_of_working_set = ...
 
-        Expr cost_of_parallel_launches = num_productions * select(inner_parallelism > 1, relu1(22, w, n), 0.0f);
+        // Expr cost_of_parallel_launches = num_productions * select(inner_parallelism > 1, relu1(23, w, n), 0.0f);
 
         Expr cost_of_parallel_tasks = num_productions * (inner_parallelism - 1) * relu1(23, w, n);
 
-        Expr cost_of_parallelism = cost_of_parallel_tasks + cost_of_parallel_launches;
+        Expr cost_of_parallelism = cost_of_parallel_tasks; // + cost_of_parallel_launches;
 
         Expr cost = compute_cost + store_cost + load_cost + store_cost + cost_of_malloc + cost_of_parallelism;
 

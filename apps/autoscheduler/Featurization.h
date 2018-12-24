@@ -67,21 +67,8 @@ struct PipelineFeatures {
     int pointwise_accesses[(int)AccessType::NumAccessTypes][(int)ScalarType::NumScalarTypes],  // Square identity matrix. f(x - 2, y + 8, z + param)
         transpose_accesses[(int)AccessType::NumAccessTypes][(int)ScalarType::NumScalarTypes],         // Square permutation matrix. f(y + 1, z - 3, x)
         broadcast_accesses[(int)AccessType::NumAccessTypes][(int)ScalarType::NumScalarTypes],         // Each row sums to 1. Each column sums to 1 or 0. f(y, x)
-        slice_accesses[(int)AccessType::NumAccessTypes][(int)ScalarType::NumScalarTypes],             // Each row sums to 1 or 0. Each column sums to 1. f(z, y, x, 4)
-
-
-    // The following four features are dead (always zero), now that we
-    // actually search over which dimension to vectorize over:
-        vectorizable_accesses[(int)AccessType::NumAccessTypes][(int)ScalarType::NumScalarTypes], // First (vectorized) col is 1, 0, 0, ... f(x+y, z*y, y/z)
-        strided_accesses[(int)AccessType::NumAccessTypes][(int)ScalarType::NumScalarTypes],      // First col is [(int)2,3,4], 0, 0, ...        f(3*x + 1, z/8, y/z)
-        scalar_accesses[(int)AccessType::NumAccessTypes][(int)ScalarType::NumScalarTypes],       // First col is all zero                  f(y, 2, z*8)
-        gather_scatter_accesses[(int)AccessType::NumAccessTypes][(int)ScalarType::NumScalarTypes];            // Not one of the three categories above  f(x, x, sqrt(y))
-
-    // TODO: We should possibly feed these Jacobians directly
-    // to the net rather than computing the properties above.
-
-    // TODO: strided captures downsamples. What about upsamples?
-
+        slice_accesses[(int)AccessType::NumAccessTypes][(int)ScalarType::NumScalarTypes];             // Each row sums to 1 or 0. Each column sums to 1. f(z, y, x, 4)
+    
     void dump() const {
         for (int i = 0; i < (int)ScalarType::NumScalarTypes; i++) {
             const char *type_names[] = {"Bool", "UInt8", "UInt16", "UInt32", "UInt64", "Float", "Double"};
@@ -90,40 +77,36 @@ struct PipelineFeatures {
 
 
             std::cerr << "    Featurization for type " << type_names[i] << '\n'
-                     << "     Op histogram:\n"
-                     << "      Constant:   " << op_histogram[(int)OpType::Const][i] << '\n'
-                     << "      Cast:       " << op_histogram[(int)OpType::Cast][i] << '\n'
-                     << "      Variable:   " << op_histogram[(int)OpType::Variable][i] << '\n'
-                     << "      Param:      " << op_histogram[(int)OpType::Param][i] << '\n'
-                     << "      Add:        " << op_histogram[(int)OpType::Add][i] << '\n'
-                     << "      Sub:        " << op_histogram[(int)OpType::Sub][i] << '\n'
-                     << "      Mod:        " << op_histogram[(int)OpType::Mod][i] << '\n'
-                     << "      Mul:        " << op_histogram[(int)OpType::Mul][i] << '\n'
-                     << "      Div:        " << op_histogram[(int)OpType::Div][i] << '\n'
-                     << "      Min:        " << op_histogram[(int)OpType::Min][i] << '\n'
-                     << "      Max:        " << op_histogram[(int)OpType::Max][i] << '\n'
-                     << "      EQ:         " << op_histogram[(int)OpType::EQ][i] << '\n'
-                     << "      NE:         " << op_histogram[(int)OpType::NE][i] << '\n'
-                     << "      LT:         " << op_histogram[(int)OpType::LT][i] << '\n'
-                     << "      LE:         " << op_histogram[(int)OpType::LE][i] << '\n'
-                     << "      And:        " << op_histogram[(int)OpType::And][i] << '\n'
-                     << "      Or:         " << op_histogram[(int)OpType::Or][i] << '\n'
-                     << "      Not:        " << op_histogram[(int)OpType::Not][i] << '\n'
-                     << "      Select:     " << op_histogram[(int)OpType::Select][i] << '\n'
-                     << "      ImageCall:  " << op_histogram[(int)OpType::ImageCall][i] << '\n'
-                     << "      FuncCall:   " << op_histogram[(int)OpType::FuncCall][i] << '\n'
-                     << "      SelfCall:   " << op_histogram[(int)OpType::SelfCall][i] << '\n'
-                     << "      ExternCall: " << op_histogram[(int)OpType::ExternCall][i] << '\n'
-                     << "      Let:        " << op_histogram[(int)OpType::Let][i] << '\n'
-                     << "     Memory access patterns. Columns are calls to other Funcs, self-calls, input image access, and stores\n"
-                     << "      Pointwise:      " << pointwise_accesses[0][i] << ' ' << pointwise_accesses[1][i] << ' ' << pointwise_accesses[2][i] << ' ' << pointwise_accesses[3][i] << '\n'
-                     << "      Transpose:      " << transpose_accesses[0][i] << ' ' << transpose_accesses[1][i] << ' ' << transpose_accesses[2][i] << ' ' << transpose_accesses[3][i] << '\n'
-                     << "      Broadcast:      " << broadcast_accesses[0][i] << ' ' << broadcast_accesses[1][i] << ' ' << broadcast_accesses[2][i] << ' ' << broadcast_accesses[3][i] << '\n'
-                     << "      Slice:          " << slice_accesses[0][i] << ' ' << slice_accesses[1][i] << ' ' << slice_accesses[2][i] << ' ' << slice_accesses[3][i] << '\n'
-                     << "      Vectorizable:   " << vectorizable_accesses[0][i] << ' ' << vectorizable_accesses[1][i] << ' ' << vectorizable_accesses[2][i] << ' ' << vectorizable_accesses[3][i] << '\n'
-                     << "      Strided:        " << strided_accesses[0][i] << ' ' << strided_accesses[1][i] << ' ' << strided_accesses[2][i] << ' ' << strided_accesses[3][i] << '\n'
-                     << "      Scalar:         " << scalar_accesses[0][i] << ' ' << scalar_accesses[1][i] << ' ' << scalar_accesses[2][i] << ' ' << scalar_accesses[3][i] << '\n'
-                     << "      Gather/Scatter: " << gather_scatter_accesses[0][i] << ' ' << gather_scatter_accesses[1][i] << ' ' << gather_scatter_accesses[2][i] << ' ' << gather_scatter_accesses[3][i] << '\n';
+                      << "     Op histogram:\n"
+                      << "      Constant:   " << op_histogram[(int)OpType::Const][i] << '\n'
+                      << "      Cast:       " << op_histogram[(int)OpType::Cast][i] << '\n'
+                      << "      Variable:   " << op_histogram[(int)OpType::Variable][i] << '\n'
+                      << "      Param:      " << op_histogram[(int)OpType::Param][i] << '\n'
+                      << "      Add:        " << op_histogram[(int)OpType::Add][i] << '\n'
+                      << "      Sub:        " << op_histogram[(int)OpType::Sub][i] << '\n'
+                      << "      Mod:        " << op_histogram[(int)OpType::Mod][i] << '\n'
+                      << "      Mul:        " << op_histogram[(int)OpType::Mul][i] << '\n'
+                      << "      Div:        " << op_histogram[(int)OpType::Div][i] << '\n'
+                      << "      Min:        " << op_histogram[(int)OpType::Min][i] << '\n'
+                      << "      Max:        " << op_histogram[(int)OpType::Max][i] << '\n'
+                      << "      EQ:         " << op_histogram[(int)OpType::EQ][i] << '\n'
+                      << "      NE:         " << op_histogram[(int)OpType::NE][i] << '\n'
+                      << "      LT:         " << op_histogram[(int)OpType::LT][i] << '\n'
+                      << "      LE:         " << op_histogram[(int)OpType::LE][i] << '\n'
+                      << "      And:        " << op_histogram[(int)OpType::And][i] << '\n'
+                      << "      Or:         " << op_histogram[(int)OpType::Or][i] << '\n'
+                      << "      Not:        " << op_histogram[(int)OpType::Not][i] << '\n'
+                      << "      Select:     " << op_histogram[(int)OpType::Select][i] << '\n'
+                      << "      ImageCall:  " << op_histogram[(int)OpType::ImageCall][i] << '\n'
+                      << "      FuncCall:   " << op_histogram[(int)OpType::FuncCall][i] << '\n'
+                      << "      SelfCall:   " << op_histogram[(int)OpType::SelfCall][i] << '\n'
+                      << "      ExternCall: " << op_histogram[(int)OpType::ExternCall][i] << '\n'
+                      << "      Let:        " << op_histogram[(int)OpType::Let][i] << '\n'
+                      << "     Memory access patterns. Columns are calls to other Funcs, self-calls, input image access, and stores\n"
+                      << "      Pointwise:      " << pointwise_accesses[0][i] << ' ' << pointwise_accesses[1][i] << ' ' << pointwise_accesses[2][i] << ' ' << pointwise_accesses[3][i] << '\n'
+                      << "      Transpose:      " << transpose_accesses[0][i] << ' ' << transpose_accesses[1][i] << ' ' << transpose_accesses[2][i] << ' ' << transpose_accesses[3][i] << '\n'
+                      << "      Broadcast:      " << broadcast_accesses[0][i] << ' ' << broadcast_accesses[1][i] << ' ' << broadcast_accesses[2][i] << ' ' << broadcast_accesses[3][i] << '\n'
+                      << "      Slice:          " << slice_accesses[0][i] << ' ' << slice_accesses[1][i] << ' ' << slice_accesses[2][i] << ' ' << slice_accesses[3][i] << '\n';
         }
     }
 
@@ -180,37 +163,42 @@ struct ScheduleFeatures {
     int64_t bytes_at_task = 0;
     int64_t innermost_bytes_at_task = 0;
 
+    int64_t unique_bytes_read_per_vector = 0;
+    int64_t unique_lines_read_per_vector = 0;    
+    
     void dump() const {
         std::cerr << "    num_realizations:                      " << num_realizations << '\n'
-                 << "    num_productions:                       " << num_productions << '\n'
-                 << "    points_computed_per_realization:       " << points_computed_per_realization << '\n'
-                 << "    points_computed_per_production:        " << points_computed_per_production << '\n'
-                 << "    points_computed_total:                 " << points_computed_total << '\n'
-                 << "    points_computed_minimum:               " << points_computed_minimum << '\n'
-                 << "    innermost_loop_extent:                 " << innermost_loop_extent << '\n'
-                 << "    innermost_pure_loop_extent:            " << innermost_pure_loop_extent << '\n'
-                 << "    inner_parallelism:                     " << inner_parallelism << '\n'
-                 << "    outer_parallelism:                     " << outer_parallelism << '\n'
-                 << "    bytes_at_realization:                  " << bytes_at_realization << '\n'
-                 << "    bytes_at_production:                   " << bytes_at_production << '\n'
-                 << "    bytes_at_root:                         " << bytes_at_root << '\n'
-                 << "    innermost_bytes_at_realization:        " << innermost_bytes_at_realization << '\n'
-                 << "    innermost_bytes_at_production:         " << innermost_bytes_at_production << '\n'
-                 << "    innermost_bytes_at_root:               " << innermost_bytes_at_root << '\n'
-                 << "    inlined_calls:                         " << inlined_calls << '\n'
-                 << "    unique_bytes_read_per_realization:     " << unique_bytes_read_per_realization << '\n'
-                 << "    unique_lines_read_per_realization:     " << unique_lines_read_per_realization << '\n'
-                 << "    allocation_bytes_read_per_realization: " << allocation_bytes_read_per_realization << '\n'
-                 << "    working_set:                           " << working_set << '\n'
-                 << "    vector_size:                           " << vector_size << '\n'
-                 << "    native_vector_size:                    " << native_vector_size << '\n'
-                 << "    num_vectors:                           " << num_vectors << '\n'
-                 << "    num_scalars:                           " << num_scalars << '\n'
-                 << "    scalar_loads_per_vector:               " << scalar_loads_per_vector << '\n'
-                 << "    vector_loads_per_vector:               " << vector_loads_per_vector << '\n'
-                 << "    scalar_loads_per_scalar:               " << scalar_loads_per_scalar << '\n'
-                 << "    bytes_at_task:                         " << bytes_at_task << '\n'
-                 << "    innermost_bytes_at_task:               " << innermost_bytes_at_task << '\n';
+                  << "    num_productions:                       " << num_productions << '\n'
+                  << "    points_computed_per_realization:       " << points_computed_per_realization << '\n'
+                  << "    points_computed_per_production:        " << points_computed_per_production << '\n'
+                  << "    points_computed_total:                 " << points_computed_total << '\n'
+                  << "    points_computed_minimum:               " << points_computed_minimum << '\n'
+                  << "    innermost_loop_extent:                 " << innermost_loop_extent << '\n'
+                  << "    innermost_pure_loop_extent:            " << innermost_pure_loop_extent << '\n'
+                  << "    inner_parallelism:                     " << inner_parallelism << '\n'
+                  << "    outer_parallelism:                     " << outer_parallelism << '\n'
+                  << "    bytes_at_realization:                  " << bytes_at_realization << '\n'
+                  << "    bytes_at_production:                   " << bytes_at_production << '\n'
+                  << "    bytes_at_root:                         " << bytes_at_root << '\n'
+                  << "    innermost_bytes_at_realization:        " << innermost_bytes_at_realization << '\n'
+                  << "    innermost_bytes_at_production:         " << innermost_bytes_at_production << '\n'
+                  << "    innermost_bytes_at_root:               " << innermost_bytes_at_root << '\n'
+                  << "    inlined_calls:                         " << inlined_calls << '\n'
+                  << "    unique_bytes_read_per_realization:     " << unique_bytes_read_per_realization << '\n'
+                  << "    unique_lines_read_per_realization:     " << unique_lines_read_per_realization << '\n'
+                  << "    allocation_bytes_read_per_realization: " << allocation_bytes_read_per_realization << '\n'
+                  << "    working_set:                           " << working_set << '\n'
+                  << "    vector_size:                           " << vector_size << '\n'
+                  << "    native_vector_size:                    " << native_vector_size << '\n'
+                  << "    num_vectors:                           " << num_vectors << '\n'
+                  << "    num_scalars:                           " << num_scalars << '\n'
+                  << "    scalar_loads_per_vector:               " << scalar_loads_per_vector << '\n'
+                  << "    vector_loads_per_vector:               " << vector_loads_per_vector << '\n'
+                  << "    scalar_loads_per_scalar:               " << scalar_loads_per_scalar << '\n'
+                  << "    bytes_at_task:                         " << bytes_at_task << '\n'
+                  << "    innermost_bytes_at_task:               " << innermost_bytes_at_task << '\n'
+                  << "    unique_bytes_read_per_vector:          " << unique_bytes_read_per_vector << '\n'
+                  << "    unique_lines_read_per_vector:          " << unique_lines_read_per_vector << '\n';
 
     }
 };

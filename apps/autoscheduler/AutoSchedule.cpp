@@ -35,6 +35,7 @@
 #include "FunctionDAG.h"
 #include "PerfectHashMap.h"
 #include "Errors.h"
+#include "NetworkSize.h"
 
 namespace Halide {
 namespace Internal {
@@ -744,6 +745,8 @@ struct LoopNest {
             feat.vector_loads_per_vector = num_dense_loads + 2 * num_stride_2_loads + 3 * num_stride_3_loads + 4 * num_stride_4_loads;
             feat.scalar_loads_per_vector = num_broadcasts + feat.vector_size * num_gathers;
             feat.scalar_loads_per_scalar = num_loads;
+            feat.unique_bytes_read_per_vector = bytes_loaded;
+            feat.unique_lines_read_per_vector = lines_loaded;
         }
 
         // Track features for inlined Funcs
@@ -2317,7 +2320,7 @@ void configure_pipeline_features(const FunctionDAG &dag,
                                  const MachineParams &params,
                                  CostModel *cost_model) {
     cost_model->reset();
-    const int pipeline_feat_size = 56 * 7;
+    const int pipeline_feat_size = head1_w * head1_h;
     static_assert(sizeof(PipelineFeatures) - 7 * sizeof(int) ==
                   sizeof(int) * pipeline_feat_size,
                   "Incorrect size for pipeline features");
@@ -2325,7 +2328,7 @@ void configure_pipeline_features(const FunctionDAG &dag,
     for (const auto &n : dag.nodes) {
         if (!n.is_input) num_stages += (int)n.stages.size();
     }
-    Runtime::Buffer<float> pipeline_features(56, 7, num_stages);
+    Runtime::Buffer<float> pipeline_features(head1_w, head1_h, num_stages);
     int stage = 0;
     for (const auto &n : dag.nodes) {
         if (n.is_input) continue;

@@ -10,6 +10,7 @@
 #include <fstream>
 
 #include "CostModel.h"
+#include "NetworkSize.h"
 
 namespace {
 
@@ -79,7 +80,7 @@ map<int, PipelineSample> load_samples() {
         file.read((char *)(scratch.data()), scratch.size() * sizeof(float));
         const size_t floats_read = file.gcount() / sizeof(float);
         const size_t num_features = floats_read - 3;
-        const size_t features_per_stage = 30 + 57 * 7;
+        const size_t features_per_stage = head2_w + (head1_w + 1) * head1_h;
         file.close();
         // Note we do not check file.fail(). The various failure cases
         // are handled below by checking the number of floats read. We
@@ -118,12 +119,12 @@ map<int, PipelineSample> load_samples() {
         if (ps.pipeline_features.data() == nullptr) {
             ps.pipeline_id = pipeline_id;
             ps.num_stages = (int)num_stages;
-            ps.pipeline_features = Runtime::Buffer<float>(56, 7, num_stages);
+            ps.pipeline_features = Runtime::Buffer<float>(head1_w, head1_h, num_stages);
             ps.fastest_runtime = 1e30f;
             for (size_t i = 0; i < num_stages; i++) {
-                for (int x = 0; x < 56; x++) {
-                    for (int y = 0; y < 7; y++) {
-                        float f = scratch[i * features_per_stage + (x + 1) * 7 + y + 30];
+                for (int x = 0; x < head1_w; x++) {
+                    for (int y = 0; y < head1_h; y++) {
+                        float f = scratch[i * features_per_stage + (x + 1) * 7 + y + head2_w];
                         if (f < 0 || std::isnan(f)) {
                             std::cout << "Negative or NaN pipeline feature: " << x << " " << y << " " << i << " " << f << "\n";
                         }
@@ -139,7 +140,7 @@ map<int, PipelineSample> load_samples() {
             schedule_hash =
                 hash_floats(schedule_hash,
                             &scratch[i * features_per_stage],
-                            &scratch[i * features_per_stage + 30]);
+                            &scratch[i * features_per_stage + head2_w]);
         }
 
         if (runtime < ps.fastest_runtime) {
@@ -166,11 +167,11 @@ map<int, PipelineSample> load_samples() {
                 sample.prediction[i] = 0.0;
             }
             sample.schedule_id = schedule_id;
-            sample.schedule_features = Runtime::Buffer<float>(30, num_stages);
+            sample.schedule_features = Runtime::Buffer<float>(head2_w, num_stages);
 
             bool ok = true;
             for (size_t i = 0; i < num_stages; i++) {
-                for (int x = 0; x < 30; x++) {
+                for (int x = 0; x < head2_w; x++) {
                     float f = scratch[i * features_per_stage + x];
                     if (f < 0 || f > 1e14 || std::isnan(f)) {
                         std::cout << "Negative or implausibly large schedule feature: " << i << " " << x << " " << f << "\n";
