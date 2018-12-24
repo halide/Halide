@@ -2281,8 +2281,7 @@ public:
     }
 
     void resort() {
-        std::sort(storage.begin(), storage.begin() + sz, CompareStats{});
-        // std::make_heap(storage.begin(), storage.begin() + sz, CompareStates{});
+        std::make_heap(storage.begin(), storage.begin() + sz, CompareStates{});
     }
 
     void clear() {

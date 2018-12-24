@@ -132,7 +132,7 @@ public:
         for (size_t i = 0; i < coeffs.size(); i++) {
             if (other.coeffs[i].size() != coeffs[i].size()) return false;
             for (size_t j = 0; j < coeffs[i].size(); j++) {
-                if (other.coeffs[i][j] != coeffs[i][j]) return false;
+                if (!(other.coeffs[i][j] == coeffs[i][j])) return false;
             }
         }
         c += other.count();
