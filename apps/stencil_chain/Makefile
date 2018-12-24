@@ -6,7 +6,7 @@ all: $(BIN)/process
 
 $(BIN)/stencil_chain.generator: stencil_chain_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS) -rdynamic
 
 $(BIN)/stencil_chain.a: $(BIN)/stencil_chain.generator
 	@mkdir -p $(@D)
@@ -14,7 +14,7 @@ $(BIN)/stencil_chain.a: $(BIN)/stencil_chain.generator
 
 $(BIN)/stencil_chain_auto_schedule.a: $(BIN)/stencil_chain.generator
 	@mkdir -p $(@D)
-	$^ -g stencil_chain -o $(BIN) -f stencil_chain_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true
+	HL_MACHINE_PARAMS=32,1,1 HL_WEIGHTS_DIR=../autoscheduler/weights HL_PERMIT_FAILED_UNROLL=1 $^ -g stencil_chain -o $(BIN) -f stencil_chain_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true -p ../autoscheduler/bin/libauto_schedule.so -e stmt,assembly,static_library,h
 
 $(BIN)/process: process.cpp $(BIN)/stencil_chain.a $(BIN)/stencil_chain_auto_schedule.a
 	@mkdir -p $(@D)
