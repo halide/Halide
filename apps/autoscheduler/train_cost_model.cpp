@@ -444,14 +444,21 @@ int main(int argc, char **argv) {
                 std::cout << "\n";
             }
 
-            std::cout << "Worst inversion:\n"
-                      << worst_inversion.f1 << " predicted: " << worst_inversion.p1 << " actual: " << worst_inversion.r1 << "\n"
-                      << worst_inversion.f2 << " predicted: " << worst_inversion.p2 << " actual: " << worst_inversion.r2 << "\n";
+            if (worst_inversion.badness > 0) {
+                std::cout << "Worst inversion:\n"
+                          << worst_inversion.f1 << " predicted: " << worst_inversion.p1 << " actual: " << worst_inversion.r1 << "\n"
+                          << worst_inversion.f2 << " predicted: " << worst_inversion.p2 << " actual: " << worst_inversion.r2 << "\n";
+            }
 
             tpp[best_model]->save_weights();
+
+            if (loss_sum[best_model] < 1e-5f) {
+                std::cout << "Zero loss, returning early\n";
+                return 0;
+            }
         }
     }
-
+    
     // tpp.save_weights();
 
     return 0;
