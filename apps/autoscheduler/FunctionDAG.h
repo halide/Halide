@@ -22,8 +22,11 @@ using std::unique_ptr;
 
 // An optional rational type used when analyzing memory dependencies
 struct OptionalRational {
-    bool exists;
-    int64_t numerator, denominator;
+    bool exists = false;
+    int64_t numerator = 0, denominator = 0;
+
+    OptionalRational() = default;
+    OptionalRational(bool e, int64_t n, int64_t d) : exists(e), numerator(n), denominator(d) {}
 
     void operator+=(const OptionalRational &other) {
         if (!exists || !other.exists) {
@@ -32,38 +35,149 @@ struct OptionalRational {
         }
         int64_t l = lcm(denominator, other.denominator);
         numerator *= l / denominator;
-        denominator *= l / denominator;
+        denominator = l;
         numerator += other.numerator * (l / other.denominator);
         int64_t g = gcd(numerator, denominator);
         numerator /= g;
         denominator /= g;
     }
 
-    bool is_one() const {
-        return exists && (numerator == denominator);
+    OptionalRational operator*(const OptionalRational &other) const {
+        if ((*this) == 0) return *this;
+        if (other == 0) return other;
+        int64_t num = numerator * other.numerator;
+        int64_t den = denominator * other.denominator;
+        bool e = exists && other.exists;
+        return OptionalRational {e, num, den};
     }
 
-    bool is_zero() const {
-        return exists && (numerator == 0);
+    bool operator<(int x) const {
+        if (!exists) return false;
+        if (denominator > 0) {
+            return numerator < x * denominator;
+        } else {
+            return numerator > x * denominator;
+        }
     }
 
-    bool is_small_integer() const {
-        return exists && (numerator == denominator ||
-                          numerator == denominator * 2 ||
-                          numerator == denominator * 3 ||
-                          numerator == denominator * 4);
+    bool operator<=(int x) const {
+        if (!exists) return false;
+        if (denominator > 0) {
+            return numerator <= x * denominator;
+        } else {
+            return numerator >= x * denominator;
+        }
+    }
+
+    bool operator>(int x) const {
+        if (!exists) return false;
+        return !((*this) <= x);
+    }
+
+    bool operator>=(int x) const {
+        if (!exists) return false;
+        return !((*this) < x);
+    }
+
+    bool operator==(int x) const {
+        return exists && (numerator == (x * denominator));
     }
 
     bool operator==(const OptionalRational &other) const {
         return (exists == other.exists) && (numerator * other.denominator == denominator * other.numerator);
     }
-
-    bool operator!=(const OptionalRational &other) const {
-        return !(*this == other);
-    }
 };
 
+// Records the derivative of the coordinate accessed in some
+// producer w.r.t the loops of the consumer.
+class LoadJacobian {
+    vector<vector<OptionalRational>> coeffs;
+    int64_t c;
 
+public:
+    LoadJacobian(vector<vector<OptionalRational>> &&matrix, int64_t c = 1) :
+        coeffs(matrix), c(c) {}
+
+    size_t producer_storage_dims() const {
+        return coeffs.size();
+    }
+
+    size_t consumer_loop_dims() const {
+        if (coeffs.empty()) {
+            // The producer is scalar, and we don't know how
+            // many consumer loops there are.
+            return 0;
+        }
+        return coeffs[0].size();
+    }
+
+    const OptionalRational &operator()(int producer_storage_dim, int consumer_loop_dim) const {
+        static OptionalRational zero {true, 0, 1};
+        if (coeffs.empty()) {
+            // The producer is scalar, so all strides are zero.
+            return zero;
+        }
+        return coeffs[producer_storage_dim][consumer_loop_dim];
+    }
+
+    // To avoid redundantly re-recording copies of the same
+    // load Jacobian, we keep a count of how many times a
+    // load with this Jacobian occurs.
+    int64_t count() const {return c;}
+
+    // Try to merge another LoadJacobian into this one, increasing the
+    // count if the coefficients match.
+    bool merge(const LoadJacobian &other) {
+        if (other.coeffs.size() != coeffs.size()) return false;
+        for (size_t i = 0; i < coeffs.size(); i++) {
+            if (other.coeffs[i].size() != coeffs[i].size()) return false;
+            for (size_t j = 0; j < coeffs[i].size(); j++) {
+                if (other.coeffs[i][j] != coeffs[i][j]) return false;
+            }
+        }
+        c += other.count();
+        return true;
+    }
+
+    LoadJacobian operator*(const LoadJacobian &other) const {
+        vector<vector<OptionalRational>> matrix;
+        internal_assert(consumer_loop_dims() == other.producer_storage_dims());
+        matrix.resize(producer_storage_dims());
+        for (size_t i = 0; i < producer_storage_dims(); i++) {
+            matrix[i].resize(other.consumer_loop_dims());
+            for (size_t j = 0; j < other.consumer_loop_dims(); j++) {
+                matrix[i][j] = OptionalRational {true, 0, 1};
+                for (size_t k = 0; k < consumer_loop_dims(); k++) {
+                    matrix[i][j] += (*this)(i, k) * other(k, j);
+                }
+            }
+        }
+        LoadJacobian result(std::move(matrix), count() * other.count());
+        return result;
+    }
+
+    void dump(const char *prefix) const {
+        if (count() > 1) {
+            debug(0) << prefix << count() << " x\n";
+        }
+        for (size_t i = 0; i < producer_storage_dims(); i++) {
+            debug(0) << prefix << "  [";
+
+            for (size_t j = 0; j < consumer_loop_dims(); j++) {
+                const auto &c = (*this)(i, j);
+                if (!c.exists) {
+                    debug(0) << " _  ";
+                } else if (c.denominator == 1) {
+                    debug(0) << " " << c.numerator << "  ";
+                } else {
+                    debug(0) << c.numerator << "/" << c.denominator << " ";
+                }
+            }
+            debug(0) << "]\n";
+        }
+        debug(0) << "\n";
+    }
+};
 
 // A concrete set of bounds for a Func. These are created and
 // destroyed very frequently while exploring scheduling options, so we
@@ -403,6 +517,86 @@ struct FunctionDAG {
         BoundContents *make_bound() const {
             return bounds_memory_layout->make();
         }
+
+        // Does a Func depend on the values computed by this Func, possibly via other Funcs?
+        mutable map<const Node *, bool> consumers_cache;
+        bool consumed_by(const Node *consumer) const {
+            if (id < consumer->id) {
+                // The stages are in topological order so
+                return false;
+            }
+
+            auto it = consumers_cache.find(consumer);
+            if (it != consumers_cache.end()) {
+                return it->second;
+            }
+
+            bool result = false;
+            for (const auto *e : outgoing_edges) {
+                if (e->consumer->node == consumer ||
+                    e->consumer->node->consumed_by(consumer)) {
+                    result = true;
+                    break;
+                }
+            }
+
+            consumers_cache.emplace(consumer, result);
+            return result;
+        }
+
+        // As some downstream consumer's loop varies, what are the
+        // strides on all transitive accesses to this func in each
+        // dimension, assuming everything in between is pure and has
+        // been inlined.
+        mutable map<const Stage *, std::unique_ptr<vector<LoadJacobian>>> transitive_load_jacobians_cache;
+        const vector<LoadJacobian> &transitive_load_jacobians(const Stage *consumer) const {
+            auto it = transitive_load_jacobians_cache.find(consumer);
+            if (it != transitive_load_jacobians_cache.end()) {
+                return *(it->second);
+            }
+
+            std::unique_ptr<vector<LoadJacobian>> result(new vector<LoadJacobian>);
+            for (const auto *e : outgoing_edges) {
+                const Node *intermediate = e->consumer->node;
+                if (e->consumer == consumer) {
+                    result->insert(result->end(), e->load_jacobians.begin(), e->load_jacobians.end());
+                } else if ((true || intermediate->consumed_by(consumer->node)) &&
+                           intermediate->stages.size() == 1) {
+                    for (const auto &j1 : intermediate->transitive_load_jacobians(consumer)) {
+                        for (const auto &j2 : e->load_jacobians) {
+                            // j1 maps from consumer loop dimensions
+                            // to the intermediate storage dimensions,
+                            // and j2 maps from the intermediate
+                            // storage dimensions to the storage
+                            // dimensions of this node. We therefore
+                            // multiply them as matrices in the
+                            // following order:
+                            LoadJacobian j = j2 * j1;
+                            bool inserted = false;
+                            // Try to merge it with existing Jacobians
+                            for (auto &j3 : *result) {
+                                if (j3.merge(j)) {
+                                    inserted = true;
+                                    break;
+                                }
+                            }
+                            if (!inserted) {
+                                result->emplace_back(std::move(j));
+                            }
+                        }
+                    }
+                }
+            }
+
+            debug(0) << "Jacobians from " << func.name() << " to " << consumer->name << "\n";
+            for (const auto &j : *result) {
+                j.dump("  ");
+            }
+
+            const auto &ret = *result;
+            transitive_load_jacobians_cache.emplace(consumer, std::move(result));
+            return ret;
+        }
     };
 
     struct Edge {
@@ -465,38 +659,6 @@ struct FunctionDAG {
         // point in the loop nest of the consumer.
         int calls;
 
-        // What is the derivative of the coordinate accessed in the
-        // producer w.r.t the loops of the consumer. Either a constant
-        // or null.
-        class LoadJacobian {
-            vector<vector<OptionalRational>> coeffs;
-            int c;
-
-        public:
-            LoadJacobian(vector<vector<OptionalRational>> &&matrix) :
-                coeffs(matrix), c(1) {}
-
-            const OptionalRational &operator()(int producer_storage_dim, int consumer_loop_dim) const {
-                return coeffs[producer_storage_dim][consumer_loop_dim];
-            }
-
-            // To avoid redundantly re-recording copies of the same
-            // load Jacobian, we keep a count of how many times a
-            // load with this Jacobian occurs.
-            int count() const {return c;}
-
-            bool merge(const LoadJacobian &other) {
-                if (other.coeffs.size() != coeffs.size()) return false;
-                for (size_t i = 0; i < coeffs.size(); i++) {
-                    if (other.coeffs[i].size() != coeffs[i].size()) return false;
-                    for (size_t j = 0; j < coeffs[i].size(); j++) {
-                        if (other.coeffs[i][j] != coeffs[i][j]) return false;
-                    }
-                }
-                c += other.count();
-                return true;
-            }
-        };
         vector<LoadJacobian> load_jacobians;
 
         void add_load_jacobian(LoadJacobian j1) {
@@ -1113,11 +1275,11 @@ struct FunctionDAG {
                 matrix[i].resize(stage.loop.size());
                 for (size_t j = 0; j < stage.loop.size(); j++) {
                     auto deriv = differentiate(args[i], stage.loop[j].var);
-                    zeros_per_row[i] += deriv.is_zero();
-                    ones_per_row[i] += deriv.is_one();
-                    zeros_per_col[j] += deriv.is_zero();
-                    ones_per_col[j] += deriv.is_one();
-                    is_pointwise &= (i == j ? deriv.is_one() : deriv.is_zero());
+                    zeros_per_row[i] += deriv == 0;
+                    ones_per_row[i] += deriv == 1;
+                    zeros_per_col[j] += deriv == 0;
+                    ones_per_col[j] += deriv == 1;
+                    is_pointwise &= (i == j ? deriv == 1 : deriv == 0);
                     matrix[i][j] = deriv;
                 }
             }
@@ -1226,25 +1388,7 @@ struct FunctionDAG {
 
             debug(0) << "  Load Jacobians:\n";
             for (const auto &jac : e.load_jacobians) {
-                if (jac.count() > 1) {
-                    debug(0) << "  " << jac.count() << " x\n";
-                }
-                for (int i = 0; i < e.producer->func.dimensions(); i++) {
-                    debug(0) << "    [";
-
-                    for (size_t j = 0; j < e.consumer->loop.size(); j++) {
-                        const auto &c = jac(i, j);
-                        if (!c.exists) {
-                            debug(0) << " _  ";
-                        } else if (c.denominator == 1) {
-                            debug(0) << " " << c.numerator << "  ";
-                        } else {
-                            debug(0) << c.numerator << "/" << c.denominator << " ";
-                        }
-                    }
-                    debug(0) << "]\n";
-                }
-                debug(0) << "\n";
+                jac.dump("  ");
             }
         }
     }

@@ -550,7 +550,8 @@ struct LoopNest {
 
         *working_set += working_set_here;
 
-        int64_t bytes_loaded = 0, lines_loaded = 0, allocation_bytes_loaded = 0, vectors_loaded = 0, scalars_loaded = 0, elements_loaded = 0;
+        int64_t bytes_loaded = 0, lines_loaded = 0, allocation_bytes_loaded = 0;
+        int64_t num_dense_loads = 0, num_broadcasts = 0, num_gathers = 0, num_stride_2_loads = 0, num_stride_3_loads = 0, num_stride_4_loads = 0, num_loads = 0;
         if (innermost || at_production) {
             // Pick the site at which we will compute the footprint relationship
             const auto *consumer_store_site = innermost ? parent : sites.get(&(node->stages[0])).store;
@@ -560,12 +561,14 @@ struct LoopNest {
             }
             internal_assert(consumer_instances != 0) << node->func.name() << " " << innermost << " " << instances << " " << feat.num_realizations << "\n";
 
-            vector<const FunctionDAG::Node::Stage *> pending;
-            pending.push_back(stage);
+            vector<pair<const FunctionDAG::Node::Stage *, int>> pending;
+            pending.emplace_back(stage, 1);
             while (!pending.empty()) {
-                const auto &next = pending.back()->incoming_edges;
+                auto p = pending.back();
                 pending.pop_back();
-                for (const auto *e : next) {
+                const auto &next_edges = p.first->incoming_edges;
+                int64_t next_count = p.second;
+                for (const auto *e : next_edges) {
                     if (!sites.contains(&(e->producer->stages[0]))) {
                         // Not yet scheduled. Optimistically treat it as free.
                         continue;
@@ -575,7 +578,7 @@ struct LoopNest {
 
                     if (site.inlined) {
                         // Recursively examine the inputs
-                        pending.push_back(&(e->producer->stages[0]));
+                        pending.emplace_back(&(e->producer->stages[0]), next_count * e->calls);
                         continue;
                     }
 
@@ -585,18 +588,62 @@ struct LoopNest {
                     const auto &producer_compute_bounds = producer_compute_site->get_bounds(e->producer);
                     const auto &producer_store_bounds = producer_store_site->get_bounds(e->producer);
                     int64_t footprint = e->producer->bytes_per_point;
-                    int64_t vector_footprint = 1;
                     int64_t compute_footprint = footprint;
                     int64_t store_footprint = footprint;
                     int64_t line_footprint = 1;
                     int64_t compute_line_footprint = 1;
                     int64_t store_line_footprint = 1;
 
-                    bool dense_vector_loads = true;
-
                     if (e->producer->is_input) {
                         internal_assert(producer_store_site->is_root());
                         internal_assert(producer_compute_site->is_root());
+                    }
+
+                    if (innermost) {
+                        // Grab the jacobians that describe the memory dependence
+                        const auto &jacobians = e->producer->transitive_load_jacobians(stage);
+                        for (const auto &jac : jacobians) {
+                            int64_t n = jac.count() * next_count;
+                            // Classify
+                            bool vector_broadcast = true;
+                            bool dense_vector_load = true;
+                            bool stride_2_vector_load = true;
+                            bool stride_3_vector_load = true;
+                            bool stride_4_vector_load = true;
+                            int producer_innermost_dim = e->producer->is_input ? 0 : site.produce->vector_dim;
+                            if (vectorized_loop_index >= 0) {
+                                for (int i = 0; i < e->producer->func.dimensions(); i++) {
+                                    auto stride = jac(i, vectorized_loop_index);
+                                    vector_broadcast &= stride == 0;
+                                    if (i == producer_innermost_dim) {
+                                        dense_vector_load &= (stride >= -1 && stride <= 1);
+                                        stride_2_vector_load &= stride == 2;
+                                        stride_3_vector_load &= stride == 3;
+                                        stride_4_vector_load &= stride == 4;
+                                    } else {
+                                        dense_vector_load &= stride == 0;
+                                        stride_2_vector_load &= stride == 0;
+                                        stride_3_vector_load &= stride == 0;
+                                        stride_4_vector_load &= stride == 0;
+                                        // TODO: Check for strided loads across non-innermost dims, and use to count the number of pages, cache lines, etc
+                                    }
+                                }
+                            }
+                            num_loads += n;
+                            if (dense_vector_load) {
+                                num_dense_loads += n;
+                            } else if (stride_2_vector_load) {
+                                num_stride_2_loads += n;
+                            } else if (stride_3_vector_load) {
+                                num_stride_3_loads += n;
+                            } else if (stride_4_vector_load) {
+                                num_stride_4_loads += n;
+                            } else if (vector_broadcast) {
+                                num_broadcasts += n;
+                            } else {
+                                num_gathers += n;
+                            }
+                        }
                     }
 
                     for (int i = 0; i < e->producer->func.dimensions(); i++) {
@@ -615,29 +662,12 @@ struct LoopNest {
                         store_footprint *= store_extent;
 
                         bool dense = i == (e->producer->is_input ? 0 : site.produce->vector_dim);
-
-                        if (dense) {
-                            dense_vector_loads = extent >= feat.vector_size;
-                            // TODO: This is not exactly correct. The
-                            // footprint can be larger than a vector
-                            // without the loads being contiguous
-                            // vector loads - e.g. consider a lookup
-                            // into an 8-element LUT.
-                            vector_footprint *= (extent + stage->vector_size - 1) / stage->vector_size;
-                        } else {
+                        if (!dense) {
                             line_footprint *= extent;
                             compute_line_footprint *= compute_extent;
                             store_line_footprint *= store_extent;
-                            vector_footprint *= extent;
                         }
                     }
-
-                    if (dense_vector_loads) {
-                        vectors_loaded += vector_footprint;
-                    } else {
-                        scalars_loaded += footprint / e->producer->bytes_per_point;
-                    }
-                    elements_loaded += footprint / e->producer->bytes_per_point;
 
                     int64_t store_instances_per_consumption = 1;
 
@@ -690,9 +720,9 @@ struct LoopNest {
 
         if (innermost) {
             feat.points_computed_per_production = subinstances / feat.num_productions;
-            feat.vector_loads_per_vector = vectors_loaded;
-            feat.scalar_loads_per_vector = scalars_loaded;
-            feat.scalar_loads_per_scalar = (elements_loaded + subinstances - 1) / subinstances;
+            feat.vector_loads_per_vector = num_dense_loads + 2 * num_stride_2_loads + 3 * num_stride_3_loads + 4 * num_stride_4_loads;
+            feat.scalar_loads_per_vector = num_broadcasts + feat.vector_size * num_gathers;
+            feat.scalar_loads_per_scalar = num_loads;
         }
 
         // Track features for inlined Funcs
@@ -1680,7 +1710,7 @@ struct State {
             for (auto it = features.begin(); it != features.end(); it++) {
                 if (!it.key()->node->func.is_wrapper()) { // It's OK to repeatedly stage data
                     auto &feat = it.value();
-                    if (feat.points_computed_total + feat.inlined_calls > 1000 * feat.points_computed_minimum) {
+                    if (feat.points_computed_total + feat.inlined_calls > 10 * feat.points_computed_minimum) {
                         cost = 1e50;
                         return true;
                     }
@@ -1730,7 +1760,7 @@ struct State {
                 // the universe to benchmark.
                 if (feat.points_computed_total + feat.inlined_calls > 1000*feat.points_computed_minimum) return false;
                 if (feat.inlined_calls >= 64) return false;
-                
+
                 double compute_cost = 0;
                 const int *pipeline_feat = (const int *)(&stage.features.op_histogram[0][0]);
                 double per_element_compute_cost = 0;
@@ -1742,7 +1772,7 @@ struct State {
                     const double per_element_compute_cost_of_memcpy = 1 + 2*stage.node->func.dimensions();
                     per_element_compute_cost = std::max(0.0, per_element_compute_cost - per_element_compute_cost_of_memcpy);
                 }
-                
+
                 // Assume that narrow types are cheaper because they
                 // vectorize wider, and just count the number of
                 // vectors computed.
@@ -1967,7 +1997,7 @@ struct State {
 
 
             // HACK: May only vectorize across x, if there is one
-            
+            /*
             for (int v = 0; v < node->func.dimensions(); v++) {
                 if (node->func.args()[v] == "x") {
                     vector_dims.clear();
@@ -1975,7 +2005,8 @@ struct State {
                     break;
                 }
             }
-            
+            */
+
 
             // 2) Realize it somewhere
             for (int vector_dim : vector_dims) {
@@ -2250,7 +2281,8 @@ public:
     }
 
     void resort() {
-        std::make_heap(storage.begin(), storage.begin() + sz, CompareStates{});
+        std::sort(storage.begin(), storage.begin() + sz, CompareStats{});
+        // std::make_heap(storage.begin(), storage.begin() + sz, CompareStates{});
     }
 
     void clear() {
@@ -2272,7 +2304,7 @@ void configure_pipeline_features(const FunctionDAG &dag,
     int num_stages = 0;
     for (const auto &n : dag.nodes) {
         if (!n.is_input) num_stages += (int)n.stages.size();
-    }    
+    }
     Runtime::Buffer<float> pipeline_features(56, 7, num_stages);
     int stage = 0;
     for (const auto &n : dag.nodes) {
@@ -2582,7 +2614,7 @@ std::string generate_schedules_new(const std::vector<Function> &outputs,
     if (get_env_variable("HL_USE_MANUAL_COST_MODEL") != "1") {
         cost_model = CostModel::make_default(weights_dir, randomize_weights, weights_server_hostname, weights_server_port, weights_server_experiment_id);
     }
-    
+
     IntrusivePtr<State> optimal;
 
     if (time_limit) {
