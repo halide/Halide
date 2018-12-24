@@ -368,7 +368,7 @@ public:
 
             // Maximize
             Expr dp = abs(p1 - p2);
-            Expr correct_order = significance * select((r1 > r2) == (p1 > p2), 1/(dp + 1), 1 + dp);
+            Expr correct_order = significance * select((r1 > r2) == (p1 > p2), max(0, 1 - dp), 1 + dp);
             err(n) = correct_order + 1e-10f * delta + 1e-5f * regularize;
 
             Expr loss = sum(err(r_batch));
