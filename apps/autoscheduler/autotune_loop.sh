@@ -45,7 +45,7 @@ make_sample() {
         beam=50
     else
         # The other samples are random probes biased by the cost model
-        dropout=50
+        dropout=98
         beam=1
     fi
     HL_PERMIT_FAILED_UNROLL=1 \
@@ -65,7 +65,7 @@ make_sample() {
         target=${HL_TARGET} \
         auto_schedule=true \
         -p bin/libauto_schedule.so \
-            2> ${D}/compile_log.txt
+            2> ${D}/compile_log.txt || echo "Compilation failed"
 
     c++ \
         -std=c++11 \
@@ -80,6 +80,7 @@ make_sample() {
 
 # Benchmark one of the random samples
 benchmark_sample() {
+    sleep 5
     D=${1}
     HL_NUM_THREADS=32 \
         ${D}/bench \
@@ -88,13 +89,13 @@ benchmark_sample() {
         --default_input_scalars=estimate \
         --benchmarks=all \
         --benchmark_min_time=1 \
-            | tee ${D}/bench.txt
+            | tee ${D}/bench.txt || echo "Benchmarking failed"
 
     # Add the runtime, pipeline id, and schedule id to the feature file
     R=$(cut -d' ' -f8 < ${D}/bench.txt)
     P=0
     S=$2
-    ./bin/augment_sample ${D}/sample.sample $R $P $S
+    ./bin/augment_sample ${D}/sample.sample $R $P $S || echo "Augment sample failed"
 }
 
 # Don't clobber existing samples
@@ -125,6 +126,6 @@ for ((i=$((FIRST+1));i<1000000;i++)); do
     # retrain model weights on all samples seen so far
     echo Retraining model...
     find ${SAMPLES} | grep sample$ | \
-        HL_NUM_THREADS=32 HL_WEIGHTS_DIR=weights HL_BEST_SCHEDULE_FILE=${PWD}/samples/best.txt ./bin/train_cost_model 1000
+        HL_NUM_THREADS=32 HL_WEIGHTS_DIR=weights HL_BEST_SCHEDULE_FILE=${PWD}/samples/best.txt ./bin/train_cost_model 10000
 
 done
