@@ -214,12 +214,15 @@ public:
     Output<Buffer<float>> output{"output", 3};
 
     void set_upcast_types(Type input_type, Type& mult_type, Type& sum_type) {
-        if (input_type.is_int() && rand_int(0,1)) {
+        if (input_type.is_bool()) {
+            mult_type = UInt(8);
+            sum_type = UInt(8);
+        } else if (!input_type.is_float() && rand_int(0,1)) {
             int input_bits = input_type.bits();
             int mult_bits = std::min(32, 2*input_bits);
             int sum_bits = std::min(32, 2*mult_bits);
-            mult_type = Int(mult_bits);
-            sum_type = Int(sum_bits);
+            mult_type = input_type.with_bits(mult_bits);
+            sum_type = input_type.with_bits(sum_bits);
         } else {
             mult_type = input_type;
             sum_type = input_type;
@@ -240,7 +243,7 @@ public:
     }
 
     Func get_conv_weights(Type t) {
-        if (t == UInt(8)) return uint8_weights;
+        if (t == UInt(8) || t == Bool()) return uint8_weights;
         else if (t == UInt(16)) return uint16_weights;
         else if (t == UInt(32)) return uint32_weights;
         else if (t == Int(8)) return int8_weights;
