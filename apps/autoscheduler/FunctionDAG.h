@@ -1120,7 +1120,10 @@ struct FunctionDAG {
             op_bucket(PipelineFeatures::OpType::Select, op->type)++;
             IRVisitor::visit(op);
         }
+        Scope<Expr> lets;
+
         void visit(const Let *op) override {
+            ScopedBinding<Expr> bind(lets, op->name, op->value);
             op_bucket(PipelineFeatures::OpType::Let, op->type)++;
             IRVisitor::visit(op);
         }
@@ -1146,7 +1149,13 @@ struct FunctionDAG {
         // Take the derivative of an integer index expression. If it's
         // a rational constant, return it, otherwise return a sentinel
         // value.
+
+        // The derivative of each let w.r.t each var. The keys are
+        // just the var names separated by a space.
+        Scope<OptionalRational> dlets;
+
         OptionalRational differentiate(const Expr &e, const string &v) {
+            debug(0) << "Differentiating " << e << " w.r.t. " << v << "\n";
             if (is_const(e)) {
                 return {true, 0, 1};
             } else if (const Variable *var = e.as<Variable>()) {
@@ -1162,8 +1171,17 @@ struct FunctionDAG {
                 if (var->param.defined()) {
                     // An argument
                     return {true, 0, 1};
+                } else if (lets.contains(var->name)) {
+                    string key = v + " " + var->name;
+                    if (dlets.contains(key)) {
+                        return dlets.get(key);
+                    }
+                    auto a = differentiate(lets.get(var->name), v);
+                    dlets.push(key, a);
+                    return a;
                 }
-                // Some mystery temporary. Who knows what it depends on. (TODO: We could track this if we wanted to)
+                // Some mystery variable. Who knows what it depends on.
+                internal_error << "Encountered unbound variable in call args: " << var->name << "\n";
                 return {false, 0, 0};
             } else if (const Add *op = e.as<Add>()) {
                 auto a = differentiate(op->a, v);
@@ -1176,27 +1194,57 @@ struct FunctionDAG {
                 a += b;
                 return a;
             } else if (const Mul *op = e.as<Mul>()) {
+                auto a = differentiate(op->a, v);
                 if (const int64_t *ib = as_const_int(op->b)) {
-                    auto a = differentiate(op->a, v);
                     a.numerator *= *ib;
+                    return a;
+                } else if (a == 0 && differentiate(op->b, v) == 0) {
                     return a;
                 } else {
                     return {false, 0, 0};
                 }
             } else if (const Div *op = e.as<Div>()) {
+                auto a = differentiate(op->a, v);
                 if (const int64_t *ib = as_const_int(op->b)) {
-                    auto a = differentiate(op->a, v);
                     if (a.numerator != 0) {
                         a.denominator *= *ib;
                     }
                     return a;
+                } else if (a == 0 && differentiate(op->b, v) == 0) {
+                    return a;
                 } else {
                     return {false, 0, 0};
                 }
-            } else {
-                // TODO: min, max?
-                return {false, 0, 0};
+            } else if (const Min *op = e.as<Min>()) {
+                auto a = differentiate(op->a, v);
+                auto b = differentiate(op->b, v);
+                debug(0) << a.exists << " " << a.numerator << " " << a.denominator << " "
+                         << b.exists << " " << b.numerator << " " << b.denominator << "\n";
+                if (a == 0 && b == 0) return a;
+            } else if (const Max *op = e.as<Max>()) {
+                auto a = differentiate(op->a, v);
+                auto b = differentiate(op->b, v);
+                if (a == 0 && b == 0) return a;
+            } else if (const Cast *op = e.as<Cast>()) {
+                auto a = differentiate(op->value, v);
+                if (a == 0) {
+                    return a;
+                }
+            } else if (const Call *op = e.as<Call>()) {
+                if (op->is_intrinsic(Call::likely)) {
+                    // TODO: Should a likely on one side of a min/max dominate?
+                    return differentiate(op->args[0], v);
+                }
+                bool all_zero = true;
+                for (auto e : op->args) {
+                    all_zero &= (differentiate(e, v) == 0);
+                }
+                if (all_zero) {
+                    return {true, 0, 1};
+                }
             }
+
+            return {false, 0, 0};
         }
 
         void visit_memory_access(const std::string &name, Type t, const vector<Expr> &args, PipelineFeatures::AccessType type) {
@@ -1211,9 +1259,6 @@ struct FunctionDAG {
             for (size_t i = 0; i < args.size(); i++) {
                 matrix[i].resize(stage.loop.size());
                 for (size_t j = 0; j < stage.loop.size(); j++) {
-                    // TODO: This is overconservative in the face of
-                    // containing lets. It assumes any temporary vars
-                    // depend on all of the loop variables.
                     auto deriv = differentiate(args[i], stage.loop[j].var);
                     zeros_per_row[i] += deriv == 0;
                     ones_per_row[i] += deriv == 1;
