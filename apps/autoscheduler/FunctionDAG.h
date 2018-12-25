@@ -1147,10 +1147,24 @@ struct FunctionDAG {
         // a rational constant, return it, otherwise return a sentinel
         // value.
         OptionalRational differentiate(const Expr &e, const string &v) {
-            if (!expr_uses_var(e, v)) {
+            if (is_const(e)) {
                 return {true, 0, 1};
-            } else if (e.as<Variable>()) {
-                return {true, 1, 1};
+            } else if (const Variable *var = e.as<Variable>()) {
+                if (var->name == v) {
+                    return {true, 1, 1};
+                }
+                for (const auto &l : stage.loop) {
+                    if (var->name == l.var) {
+                        // Some other loop variable
+                        return {true, 0, 1};
+                    }
+                }
+                if (var->param.defined()) {
+                    // An argument
+                    return {true, 0, 1};
+                }
+                // Some mystery temporary. Who knows what it depends on. (TODO: We could track this if we wanted to)
+                return {false, 0, 0};
             } else if (const Add *op = e.as<Add>()) {
                 auto a = differentiate(op->a, v);
                 a += differentiate(op->b, v);
@@ -1172,7 +1186,9 @@ struct FunctionDAG {
             } else if (const Div *op = e.as<Div>()) {
                 if (const int64_t *ib = as_const_int(op->b)) {
                     auto a = differentiate(op->a, v);
-                    a.denominator *= *ib;
+                    if (a.numerator != 0) {
+                        a.denominator *= *ib;
+                    }
                     return a;
                 } else {
                     return {false, 0, 0};
@@ -1195,6 +1211,9 @@ struct FunctionDAG {
             for (size_t i = 0; i < args.size(); i++) {
                 matrix[i].resize(stage.loop.size());
                 for (size_t j = 0; j < stage.loop.size(); j++) {
+                    // TODO: This is overconservative in the face of
+                    // containing lets. It assumes any temporary vars
+                    // depend on all of the loop variables.
                     auto deriv = differentiate(args[i], stage.loop[j].var);
                     zeros_per_row[i] += deriv == 0;
                     ones_per_row[i] += deriv == 1;
