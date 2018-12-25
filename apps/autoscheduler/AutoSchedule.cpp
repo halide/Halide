@@ -1038,8 +1038,8 @@ struct LoopNest {
     }
 
     // Return all possible ways to parallelize this loop
-    vector<IntrusivePtr<const LoopNest>> parallelize_in_tiles(const MachineParams &params, const LoopNest *parent) const {
-        // For now we use a single fixed strategy
+    IntrusivePtr<const LoopNest> parallelize_in_tiles(const MachineParams &params, int tasks_per_physical_core,
+                                                      const LoopNest *parent, bool *entirely_parallelized) const {
         int64_t total_pure_extent = 1;
         bool any_impure = false;
         for (size_t i = 0; i < stage->loop.size(); i++) {
@@ -1050,15 +1050,24 @@ struct LoopNest {
             }
         }
 
-        vector<IntrusivePtr<const LoopNest>> result;
-        if (total_pure_extent < params.parallelism * 2 && !any_impure) {
+        // We use a strategy of parallelizing outer loops inwards,
+        // parameterized by the multiple of the core count to aim
+        // for.
+
+        // We want this many parallel tasks remaining in the outer loop
+        int64_t parallelism_required = (params.parallelism * tasks_per_physical_core + 1) / 2;
+
+        if (total_pure_extent <= parallelism_required) {
             // No splits to be made
             LoopNest *child = new LoopNest;
             child->copy_from(*this);
             child->parallel = true;
-            result.emplace_back(child);
-            return result;
+            *entirely_parallelized = true;
+            return child;
         }
+
+        // So far we've found nothing
+        int64_t parallelism_found = 1;
 
         // Split this loop and move factors to the inner loop
         LoopNest *inner = new LoopNest, *outer = new LoopNest;
@@ -1086,17 +1095,10 @@ struct LoopNest {
         // Then move factors from the outer loop to the inner loop
         auto parent_bounds = parent->get_bounds(node);
 
-        // We want this many parallel tasks remaining in the outer loop
-        int64_t parallelism_required = params.parallelism * 6;
-        // TODO: times some factor to be searched over. 6 is nice
-        // because you can further tile it by 2 or 3.
-
-        // So far we've found nothing
-        int64_t parallelism_found = 1;
-
         // End at -1, which will be the vectorized loop
         for (int i = (int)stage->loop.size() - 1; i >= -1; i--) {
-            int l = (i == -1) ? vectorized_loop_index : i;
+            int l = i;
+            if (i == -1) l = vectorized_loop_index;
             if (l == -1) break; // There's no vectorized loop
             if (i == vectorized_loop_index) continue; // We will handle the vectorized loop last
 
@@ -1117,7 +1119,6 @@ struct LoopNest {
                 // Pick some number of loop iterations per parallel tasks
                 outer_extent = std::max((int64_t)1, parallelism_required / parallelism_found);
             }
-
             inner->size[l] = (outer->size[l] + outer_extent - 1) / outer_extent;
             outer->size[l] = outer_extent;
             const auto &p = parent_bounds->loops(stage_idx, l);
@@ -1131,8 +1132,7 @@ struct LoopNest {
         outer->set_bounds(node, b);
 
         outer->children.emplace_back(inner);
-        result.emplace_back(outer);
-        return result;
+        return outer;
     }
 
     // Return all possible ways to compute f in tiles.
@@ -2053,27 +2053,39 @@ struct State {
                 }
             }
         } else {
-            // Deciding on parallel tasks
-
-            auto child = make_child();
-            LoopNest *new_root = new LoopNest;
-            new_root->copy_from(*root);
-
-            for (int i = 0; i < (int)root->children.size(); i++) {
-                if (root->children[i]->node == node) {
-                    // For now assume that parallelize in tiles returns a single option
-                    new_root->children[i] =
-                        new_root->children[i]->parallelize_in_tiles(params, root.get())[0];
+            // Deciding on parallel tasks. Iterate over the
+            // approximate number of parallel tasks to produce per
+            // pair of cores (pair of cores because sometimes it's a
+            // mistake to use hyperthreading).
+            const int factors[] = {1, 2, 4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128};
+            bool entirely_parallelized = false;
+            for (int f : factors) {
+                auto child = make_child();
+                LoopNest *new_root = new LoopNest;
+                new_root->copy_from(*root);
+                for (auto &c : new_root->children) {
+                    if (c->node == node) {
+                        c = c->parallelize_in_tiles(params, f, new_root, &entirely_parallelized);
+                    }
                 }
+                child->root = new_root;
+                child->num_funcs_scheduled++;
+                if (child->calculate_cost(dag, params, cost_model)) {
+                    num_children++;
+                    accept_child(std::move(child));
+                }
+                if (entirely_parallelized) break;
             }
 
-            child->root = new_root;
-            child->num_funcs_scheduled++;
-            if (child->calculate_cost(dag, params, cost_model)) {
+            if (num_children == 0) {
+                // The Func must not be compute_root, so just return a copy of the parent state
                 num_children++;
+                auto child = make_child();
+                child->num_funcs_scheduled++;
                 accept_child(std::move(child));
             }
         }
+
 
         if (num_children == 0) {
             debug(0) << "Warning: Found no legal way to schedule "
@@ -2081,6 +2093,7 @@ struct State {
             dump();
             internal_error << "Aborted";
         }
+
     }
 
     void dump() const {
