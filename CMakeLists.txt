@@ -439,7 +439,6 @@ foreach(F mex_halide.m
           GenGen.cpp
           RunGen.h
           RunGenMain.cpp
-          RunGenStubs.cpp
           halide_benchmark.h
           halide_image.h
           halide_image_io.h
