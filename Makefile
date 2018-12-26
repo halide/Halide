@@ -1064,7 +1064,7 @@ GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/nested_externs.runge
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/old_buffer_t.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/tiled_blur.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/extern_output.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
-test_rungen: $(GENERATOR_BUILD_RUNGEN_TESTS)
+test_rungen: $(GENERATOR_BUILD_RUNGEN_TESTS) $(FILTERS_DIR)/multi_rungen $(FILTERS_DIR)/multi_rungen2
 
 test_generator: $(GENERATOR_AOT_TESTS) $(GENERATOR_AOTCPP_TESTS) $(GENERATOR_JIT_TESTS) $(GENERATOR_BUILD_RUNGEN_TESTS)
 
@@ -1199,7 +1199,7 @@ $(BIN_DIR)/external_code.generator: $(BUILD_DIR)/GenGen.o $(BIN_DIR)/libHalide.$
 
 NAME_MANGLING_TARGET=$(NON_EMPTY_TARGET)-c_plus_plus_name_mangling
 
-GEN_AOT_OUTPUTS=-e static_library,h,cpp
+GEN_AOT_OUTPUTS=-e static_library,h,cpp,registration
 
 # By default, %.a/.h are produced by executing %.generator. Runtimes are not included in these.
 # (We explicitly also generate .cpp output here as well, as additional test surface for the C++ backend.)
@@ -1211,6 +1211,9 @@ $(FILTERS_DIR)/%.h: $(FILTERS_DIR)/%.a
 	@echo $@ produced implicitly by $^
 
 $(FILTERS_DIR)/%.cpp: $(FILTERS_DIR)/%.a
+	@echo $@ produced implicitly by $^
+
+$(FILTERS_DIR)/%.registration.cpp: $(FILTERS_DIR)/%.a
 	@echo $@ produced implicitly by $^
 
 $(FILTERS_DIR)/%.stub.h: $(BIN_DIR)/%.generator
@@ -1371,7 +1374,7 @@ $(FILTERS_DIR)/stubtest.a: $(BIN_DIR)/stubtest.generator
 
 $(FILTERS_DIR)/external_code.a: $(BIN_DIR)/external_code.generator
 	@mkdir -p $(@D)
-	$(CURDIR)/$< -g external_code -e static_library,h -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime external_code_is_bitcode=true
+	$(CURDIR)/$< -g external_code -e static_library,h,registration -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime external_code_is_bitcode=true
 
 $(FILTERS_DIR)/external_code.cpp: $(BIN_DIR)/external_code.generator
 	@mkdir -p $(@D)
@@ -1481,16 +1484,16 @@ $(BUILD_DIR)/RunGenMain.o: $(ROOT_DIR)/tools/RunGenMain.cpp $(RUNTIME_EXPORTED_I
 	@mkdir -p $(@D)
 	$(CXX) -c $< $(TEST_CXX_FLAGS) $(IMAGE_IO_CXX_FLAGS) -I$(INCLUDE_DIR) -I $(SRC_DIR)/runtime -I$(ROOT_DIR)/tools -o $@
 
-$(FILTERS_DIR)/%.rungenstubs.o: $(ROOT_DIR)/tools/RunGenStubs.cpp $(FILTERS_DIR)/%.h
+$(FILTERS_DIR)/%.registration.o: $(FILTERS_DIR)/%.registration.cpp
 	@mkdir -p $(@D)
-	$(CXX) -c $< $(TEST_CXX_FLAGS) -DHL_RUNGEN_FILTER_HEADER=\"$*.h\" -I$(FILTERS_DIR) -o $@
+	$(CXX) -c $< $(TEST_CXX_FLAGS) -o $@
 
-$(FILTERS_DIR)/%.rungen: $(BUILD_DIR)/RunGenMain.o $(BIN_DIR)/$(TARGET)/runtime.a $(FILTERS_DIR)/%.rungenstubs.o $(FILTERS_DIR)/%.a
+$(FILTERS_DIR)/%.rungen: $(BUILD_DIR)/RunGenMain.o $(BIN_DIR)/$(TARGET)/runtime.a $(FILTERS_DIR)/%.registration.o $(FILTERS_DIR)/%.a
 	@mkdir -p $(@D)
 	$(CXX) -std=c++11 -I$(FILTERS_DIR) \
 		$(BUILD_DIR)/RunGenMain.o \
 		$(BIN_DIR)/$(TARGET)/runtime.a \
-		$(call alwayslink,$(FILTERS_DIR)/$*.rungenstubs.o) \
+		$(call alwayslink,$(FILTERS_DIR)/$*.registration.o) \
 		$(FILTERS_DIR)/$*.a \
 		$(GEN_AOT_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@
 
@@ -1502,20 +1505,32 @@ $(FILTERS_DIR)/%.run: $(FILTERS_DIR)/%.rungen
 
 # Test linking multiple filters into a single RunGen instance
 $(FILTERS_DIR)/multi_rungen: $(BUILD_DIR)/RunGenMain.o $(BIN_DIR)/$(TARGET)/runtime.a \
-														 $(FILTERS_DIR)/blur2x2.rungenstubs.o $(FILTERS_DIR)/blur2x2.a \
-														 $(FILTERS_DIR)/cxx_mangling.rungenstubs.o $(FILTERS_DIR)/cxx_mangling.a \
-														 $(FILTERS_DIR)/pyramid.rungenstubs.o $(FILTERS_DIR)/pyramid.a
+														 $(FILTERS_DIR)/blur2x2.registration.o $(FILTERS_DIR)/blur2x2.a \
+														 $(FILTERS_DIR)/cxx_mangling.registration.o $(FILTERS_DIR)/cxx_mangling.a \
+														 $(FILTERS_DIR)/pyramid.registration.o $(FILTERS_DIR)/pyramid.a
 	@mkdir -p $(@D)
 	$(CXX) -std=c++11 -I$(FILTERS_DIR) \
 			$(BUILD_DIR)/RunGenMain.o \
 			$(BIN_DIR)/$(TARGET)/runtime.a \
-			$(call alwayslink,$(FILTERS_DIR)/blur2x2.rungenstubs.o) \
-			$(call alwayslink,$(FILTERS_DIR)/cxx_mangling.rungenstubs.o) \
-			$(call alwayslink,$(FILTERS_DIR)/pyramid.rungenstubs.o) \
+			$(call alwayslink,$(FILTERS_DIR)/blur2x2.registration.o) \
+			$(call alwayslink,$(FILTERS_DIR)/cxx_mangling.registration.o) \
+			$(call alwayslink,$(FILTERS_DIR)/pyramid.registration.o) \
 			$(FILTERS_DIR)/blur2x2.a \
 			$(FILTERS_DIR)/cxx_mangling.a \
 			$(FILTERS_DIR)/pyramid.a \
 			$(GEN_AOT_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@
+
+# Test concatenating multiple registration files as well, which should also work
+$(FILTERS_DIR)/multi_rungen2.registration.cpp: $(FILTERS_DIR)/blur2x2.registration.cpp $(FILTERS_DIR)/cxx_mangling.registration.cpp $(FILTERS_DIR)/pyramid.registration.cpp
+	cat $^ > $@
+
+$(FILTERS_DIR)/multi_rungen2: $(BUILD_DIR)/RunGenMain.o $(BIN_DIR)/$(TARGET)/runtime.a \
+														 $(FILTERS_DIR)/multi_rungen2.registration.cpp \
+														 $(FILTERS_DIR)/blur2x2.a \
+														 $(FILTERS_DIR)/cxx_mangling.a \
+														 $(FILTERS_DIR)/pyramid.a
+	@mkdir -p $(@D)
+	$(CXX) -std=c++11 -I$(FILTERS_DIR) $^ $(GEN_AOT_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@
 
 $(BIN_DIR)/tutorial_%: $(ROOT_DIR)/tutorial/%.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h
 	@ if [[ $@ == *_run ]]; then \
@@ -1853,7 +1868,6 @@ install: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR
 	cp $(ROOT_DIR)/tools/GenGen.cpp $(PREFIX)/share/halide/tools
 	cp $(ROOT_DIR)/tools/RunGen.h $(PREFIX)/share/halide/tools
 	cp $(ROOT_DIR)/tools/RunGenMain.cpp $(PREFIX)/share/halide/tools
-	cp $(ROOT_DIR)/tools/RunGenStubs.cpp $(PREFIX)/share/halide/tools
 	cp $(ROOT_DIR)/tools/halide_image.h $(PREFIX)/share/halide/tools
 	cp $(ROOT_DIR)/tools/halide_image_io.h $(PREFIX)/share/halide/tools
 	cp $(ROOT_DIR)/tools/halide_image_info.h $(PREFIX)/share/halide/tools
@@ -1919,7 +1933,6 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
 	cp $(ROOT_DIR)/tools/GenGen.cpp $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/RunGen.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/RunGenMain.cpp $(DISTRIB_DIR)/tools
-	cp $(ROOT_DIR)/tools/RunGenStubs.cpp $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_benchmark.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_image.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_image_io.h $(DISTRIB_DIR)/tools
