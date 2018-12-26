@@ -553,7 +553,7 @@ struct LoopNest {
 
         int64_t bytes_loaded = 0, lines_loaded = 0, allocation_bytes_loaded = 0;
         int64_t num_dense_loads = 0, num_broadcasts = 0, num_gathers = 0, num_stride_2_loads = 0, num_stride_3_loads = 0, num_stride_4_loads = 0, num_loads = 0;
-        if (innermost || at_production) {
+        if (innermost || at_production || (at_task && parallel)) { // These are the sites at which we compute load footprints
             // Pick the site at which we will compute the footprint relationship
             const auto *consumer_store_site = innermost ? parent : sites.get(&(node->stages[0])).store;
             int64_t consumer_instances = innermost ? instances : feat.num_realizations;
@@ -747,6 +747,14 @@ struct LoopNest {
             feat.scalar_loads_per_scalar = num_loads;
             feat.unique_bytes_read_per_vector = bytes_loaded;
             feat.unique_lines_read_per_vector = lines_loaded;
+        }
+
+        if (at_task && parallel) {
+            feat.unique_bytes_read_per_task = bytes_loaded;
+            feat.unique_lines_read_per_task = lines_loaded;
+        } else if (at_production) {
+            feat.unique_bytes_read_per_task = feat.unique_bytes_read_per_realization;
+            feat.unique_lines_read_per_task = feat.unique_lines_read_per_realization;
         }
 
         // Track features for inlined Funcs
@@ -1038,7 +1046,7 @@ struct LoopNest {
     }
 
     // Return all possible ways to parallelize this loop
-    IntrusivePtr<const LoopNest> parallelize_in_tiles(const MachineParams &params, int tasks_per_physical_core,
+    IntrusivePtr<const LoopNest> parallelize_in_tiles(const MachineParams &params, int tasks_per_physical_core, int outermost_dim,
                                                       const LoopNest *parent, bool *entirely_parallelized) const {
         int64_t total_pure_extent = 1;
         bool any_impure = false;
@@ -1095,18 +1103,31 @@ struct LoopNest {
         // Then move factors from the outer loop to the inner loop
         auto parent_bounds = parent->get_bounds(node);
 
+        // Figure out which loop index corresponds to the outermost_dim storage dimension
+        int outermost_loop_index = -1;
+        for (size_t i = 0; i < stage->loop.size(); i++) {
+            if (stage->loop[i].var == node->func.args()[outermost_dim]) {
+                outermost_loop_index = (int)i;
+            }
+        }
+
         // End at -1, which will be the vectorized loop
-        for (int i = (int)stage->loop.size() - 1; i >= -1; i--) {
+        for (int i = (int)stage->loop.size(); i >= -1; i--) {
             int l = i;
             if (i == -1) l = vectorized_loop_index;
-            if (l == -1) break; // There's no vectorized loop
+            if (i == stage->loop.size()) l = outermost_dim;
+
             if (i == vectorized_loop_index) continue; // We will handle the vectorized loop last
+            if (i == outermost_dim) continue; // Already handled
+
+            if (i == -1 && vectorized_loop_index == outermost_dim) break; // vectorized loop was already handled as the outermost loop
+            if (l == -1) break; // There's no vectorized/outermost loop
 
             int64_t outer_extent = 1;
             if (!stage->loop[l].pure) {
                 // Not parallelizeable. We must move this inwards.
                 outer_extent = 1;
-            } else if (i == -1) {
+            } else if (l == vectorized_loop_index) {
                 if (parallelism_found < params.parallelism) {
                     // Things are dire. We need to parallelize across
                     // the innermost storage dimension. Do it
@@ -2055,24 +2076,27 @@ struct State {
         } else {
             // Deciding on parallel tasks. Iterate over the
             // approximate number of parallel tasks to produce per
-            // pair of cores (pair of cores because sometimes it's a
-            // mistake to use hyperthreading).
-            const int factors[] = {1, 2, 4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128};
-            bool entirely_parallelized = false;
-            for (int f : factors) {
-                auto child = make_child();
-                LoopNest *new_root = new LoopNest;
-                new_root->copy_from(*root);
-                for (auto &c : new_root->children) {
-                    if (c->node == node) {
-                        c = c->parallelize_in_tiles(params, f, new_root, &entirely_parallelized);
+            // thread.
+            const int factors[] = {1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64};
+            for (int outermost_dim = 0; outermost_dim < node->func.dimensions(); outermost_dim++) {
+                // TODO: reorder the selected outermost dim to be outermost in the storage order (as long as it's not the vector dim)
+                bool entirely_parallelized = false;
+                for (int f : factors) {
+                    auto child = make_child();
+                    LoopNest *new_root = new LoopNest;
+                    new_root->copy_from(*root);
+                    for (auto &c : new_root->children) {
+                        if (c->node == node) {
+                            c = c->parallelize_in_tiles(params, f, outermost_dim, new_root, &entirely_parallelized);
+                        }
                     }
-                }
-                child->root = new_root;
-                child->num_funcs_scheduled++;
-                if (child->calculate_cost(dag, params, cost_model)) {
-                    num_children++;
-                    accept_child(std::move(child));
+                    child->root = new_root;
+                    child->num_funcs_scheduled++;
+                    if (child->calculate_cost(dag, params, cost_model)) {
+                        num_children++;
+                        accept_child(std::move(child));
+                    }
+                    if (entirely_parallelized) break;
                 }
                 if (entirely_parallelized) break;
             }
@@ -2196,7 +2220,7 @@ struct State {
 
             // Halide doesn't let you fuse an RVar with a Var, even if
             // they are both pure.
-            bool can_fuse = false; // !(any_parallel_vars && any_parallel_rvars);
+            bool can_fuse = !(any_parallel_vars && any_parallel_rvars);
 
             if (can_fuse) {
                 for (size_t i = 1; i < parallel_vars.size(); i++) {
@@ -2418,7 +2442,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
         internal_assert(s->num_funcs_scheduled == s->parent->num_funcs_scheduled + 1);
 
         int progress = s->num_funcs_scheduled * beam_size + expanded;
-        size_t max_progress = dag.nodes.size() * beam_size;
+        size_t max_progress = dag.nodes.size() * beam_size * 2;
         tick(double(progress) / max_progress);
         s->penalized = false;
 

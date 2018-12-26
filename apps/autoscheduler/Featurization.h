@@ -68,7 +68,7 @@ struct PipelineFeatures {
         transpose_accesses[(int)AccessType::NumAccessTypes][(int)ScalarType::NumScalarTypes],         // Square permutation matrix. f(y + 1, z - 3, x)
         broadcast_accesses[(int)AccessType::NumAccessTypes][(int)ScalarType::NumScalarTypes],         // Each row sums to 1. Each column sums to 1 or 0. f(y, x)
         slice_accesses[(int)AccessType::NumAccessTypes][(int)ScalarType::NumScalarTypes];             // Each row sums to 1 or 0. Each column sums to 1. f(z, y, x, 4)
-    
+
     void dump() const {
         for (int i = 0; i < (int)ScalarType::NumScalarTypes; i++) {
             const char *type_names[] = {"Bool", "UInt8", "UInt16", "UInt32", "UInt64", "Float", "Double"};
@@ -164,8 +164,11 @@ struct ScheduleFeatures {
     int64_t innermost_bytes_at_task = 0;
 
     int64_t unique_bytes_read_per_vector = 0;
-    int64_t unique_lines_read_per_vector = 0;    
-    
+    int64_t unique_lines_read_per_vector = 0;
+
+    int64_t unique_bytes_read_per_task = 0;
+    int64_t unique_lines_read_per_task = 0;
+
     void dump() const {
         std::cerr << "    num_realizations:                      " << num_realizations << '\n'
                   << "    num_productions:                       " << num_productions << '\n'
@@ -198,7 +201,9 @@ struct ScheduleFeatures {
                   << "    bytes_at_task:                         " << bytes_at_task << '\n'
                   << "    innermost_bytes_at_task:               " << innermost_bytes_at_task << '\n'
                   << "    unique_bytes_read_per_vector:          " << unique_bytes_read_per_vector << '\n'
-                  << "    unique_lines_read_per_vector:          " << unique_lines_read_per_vector << '\n';
+                  << "    unique_lines_read_per_vector:          " << unique_lines_read_per_vector << '\n'
+                  << "    unique_bytes_read_per_task:            " << unique_bytes_read_per_task << '\n'
+                  << "    unique_lines_read_per_task:            " << unique_lines_read_per_task << '\n';
 
     }
 };

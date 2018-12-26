@@ -5,7 +5,7 @@
 using namespace Halide;
 
 inline void do_cost_model_schedule(Halide::Pipeline p) {
-    for (int i = 0; i < 91; i++) {
+    for (int i = 0; i < 92; i++) {
         p.get_func(i).compute_root();
     }
     return;
