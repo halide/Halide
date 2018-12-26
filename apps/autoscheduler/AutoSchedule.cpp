@@ -37,8 +37,6 @@
 #include "Errors.h"
 #include "NetworkSize.h"
 
-#define GPU true
-
 namespace Halide {
 namespace Internal {
 
@@ -49,6 +47,10 @@ using std::vector;
 using std::map;
 using std::set;
 using std::pair;
+
+bool gpu_mode() {
+    return atoi(get_env_variable("HL_GPU_MODE").c_str());
+}
 
 int64_t get_shared_memory_limit() {
     // HL_SHARED_MEMORY_LIMIT is in KB
@@ -126,7 +128,7 @@ vector<vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, int fa
 
                 // Additional tiling options may have inner extents that are not
                 // multiples of 32 so skip them for the vector dimension
-                if (!GPU || d != vector_dim) {
+                if (!gpu_mode() || d != vector_dim) {
                     for (int outer = 1; outer <= s[d]; outer *= factor) {
                         int inner = (s[d] + outer - 1) / outer;
                         if (is_one && outer == 1) continue;
@@ -140,7 +142,7 @@ vector<vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, int fa
                     }
                 }
 
-                if (!GPU) {
+                if (!gpu_mode()) {
                     // The sequence above (in terms of the inner loop) goes 1 2 4 8 16 ...
                     // but 3 is an important inner tiling factor for matrix multiply ops.
                     int inner3 = (d == vector_dim) ? 3*vector_size : 3;
@@ -1218,7 +1220,7 @@ struct LoopNest {
 
             for (auto t : tilings) {
                 // params.parallelism is currently only relevant for CPU
-                if (parent->is_root() && !GPU) {
+                if (parent->is_root() && !gpu_mode()) {
                     const auto &l = stage->loop;
                     // Skip root-level tilings that would leave too
                     // many cores idle, and root-level tilings that
@@ -1473,7 +1475,7 @@ struct LoopNest {
 
             if (!size.empty()) {
                 if (innermost) {
-                    if (!GPU && vectorized_loop_index >= 0) {
+                    if (!gpu_mode() && vectorized_loop_index >= 0) {
                         auto &v = state.vars[vectorized_loop_index];
                         internal_assert(v.exists);
                         // Is the result of a split
@@ -1729,7 +1731,7 @@ struct State {
     }
 
     bool exceeds_shared_memory_limit(const ScheduleFeatures& feat, const FunctionDAG::Node* node) {
-        if (!GPU) {
+        if (!gpu_mode()) {
             return false;
         }
 
@@ -2212,7 +2214,7 @@ struct State {
             // parallelize.
             vector<VarOrRVar> vars;
             vector<VarOrRVar> parallel_vars;
-            if (!GPU) {
+            if (!gpu_mode()) {
                 int64_t parallel_tasks = 1;
                 bool any_parallel_vars = false, any_parallel_rvars = false;
                 for (auto it = p.second->vars.rbegin(); it != p.second->vars.rend(); it++) {
@@ -2282,7 +2284,7 @@ struct State {
             // they are both pure.
             bool can_fuse = false; // !(any_parallel_vars && any_parallel_rvars);
 
-            if (!GPU) {
+            if (!gpu_mode()) {
                 if (can_fuse) {
                     for (size_t i = 1; i < parallel_vars.size(); i++) {
                         // Outermost, and next outermost. Preserve the inner
