@@ -380,6 +380,8 @@ int main(int argc, char **argv) {
                                 auto &ref = p.second.schedules[p.second.fastest_schedule];
                                 if (sched.second.prediction[model] == 0) continue;
                                 assert(sched.second.runtimes[0] >= ref.runtimes[0]);
+                                float runtime_ratio = sched.second.runtimes[0] / ref.runtimes[0];
+                                if (runtime_ratio <= 1.1) continue; // Within 10% of the runtime of the best
                                 if (sched.second.prediction[model] >= ref.prediction[model]) {
                                     good++;
                                 } else {
@@ -459,7 +461,7 @@ int main(int argc, char **argv) {
             }
         }
     }
-    
+
     // tpp.save_weights();
 
     return 0;
