@@ -147,7 +147,7 @@ function(halide_library_from_generator BASENAME)
     endif()
   endforeach()
 
-  set(OUTPUTS static_library h)
+  set(OUTPUTS static_library h registration)
   foreach(E ${args_EXTRA_OUTPUTS})
     if("${E}" STREQUAL "cpp")
       message(FATAL_ERROR "halide_library('${BASENAME}') doesn't support 'cpp' in EXTRA_OUTPUTS; please depend on '${BASENAME}_cc' instead.")
@@ -208,6 +208,8 @@ function(halide_library_from_generator BASENAME)
       list(APPEND OUTPUT_FILES "${GENFILES_DIR}/${BASENAME}.schedule")
     elseif ("${OUTPUT}" STREQUAL "html")
       list(APPEND OUTPUT_FILES "${GENFILES_DIR}/${BASENAME}.html")
+    elseif ("${OUTPUT}" STREQUAL "registration")
+      list(APPEND OUTPUT_FILES "${GENFILES_DIR}/${BASENAME}.registration.cpp")
     endif()
   endforeach()
 
@@ -250,8 +252,7 @@ function(halide_library_from_generator BASENAME)
 
   # Code to build the BASENAME.rungen target
   set(RUNGEN "${BASENAME}.rungen")
-  add_executable("${RUNGEN}" "${HALIDE_TOOLS_DIR}/RunGenStubs.cpp")
-  target_compile_definitions("${RUNGEN}" PRIVATE "-DHL_RUNGEN_FILTER_HEADER=\"${BASENAME}.h\"")
+  add_executable("${RUNGEN}" "${GENFILES_DIR}/${BASENAME}.registration.cpp")
   target_link_libraries("${RUNGEN}" PRIVATE _halide_library_from_generator_rungen "${BASENAME}")
   # Not all Generators will build properly with RunGen (e.g., missing
   # external dependencies), so exclude them from the "ALL" targets
