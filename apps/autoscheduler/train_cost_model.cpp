@@ -1,13 +1,20 @@
+#include <cmath>
 #include <iomanip>
 #include <set>
 #include <sstream>
 #include <string>
 #include <unistd.h>
 #include <vector>
+#include <map>
+#include <iostream>
+#include <fstream>
 
-#include "ThroughputPredictorPipeline.h"
+#include "CostModel.h"
+#include "NetworkSize.h"
 
 namespace {
+
+using namespace Halide;
 
 using std::vector;
 using std::string;
@@ -29,6 +36,8 @@ struct PipelineSample {
     int32_t num_stages;
     Runtime::Buffer<float> pipeline_features;
     map<uint64_t, Sample> schedules;
+    uint64_t fastest_schedule;
+    float fastest_runtime;
 };
 
 uint64_t hash_floats(uint64_t h, float *begin, float *end) {
@@ -71,8 +80,13 @@ map<int, PipelineSample> load_samples() {
         file.read((char *)(scratch.data()), scratch.size() * sizeof(float));
         const size_t floats_read = file.gcount() / sizeof(float);
         const size_t num_features = floats_read - 3;
-        const size_t features_per_stage = 26 + 57 * 7;
+        const size_t features_per_stage = head2_w + (head1_w + 1) * head1_h;
         file.close();
+        // Note we do not check file.fail(). The various failure cases
+        // are handled below by checking the number of floats read. We
+        // expect truncated files if the benchmarking or
+        // autoscheduling procedure crashes and want to filter them
+        // out with a warning.
 
         if (floats_read == scratch.size()) {
             std::cout << "Too-large sample: " << s << " " << floats_read << "\n";
@@ -85,7 +99,7 @@ map<int, PipelineSample> load_samples() {
         const size_t num_stages = num_features / features_per_stage;
 
         const float runtime = scratch[num_features];
-        if (runtime <= 0 || runtime > 1000) { // Don't try to predict runtime over 1s
+        if (runtime <= 0 || runtime > 10000) { // Don't try to predict runtime over 1s
             std::cout << "Implausible runtime in ms: " << runtime << "\n";
             continue;
         }
@@ -101,14 +115,20 @@ map<int, PipelineSample> load_samples() {
         }
 
         PipelineSample &ps = result[pipeline_id];
+
         if (ps.pipeline_features.data() == nullptr) {
             ps.pipeline_id = pipeline_id;
             ps.num_stages = (int)num_stages;
-            ps.pipeline_features = Runtime::Buffer<float>(56, 7, num_stages);
+            ps.pipeline_features = Runtime::Buffer<float>(head1_w, head1_h, num_stages);
+            ps.fastest_runtime = 1e30f;
             for (size_t i = 0; i < num_stages; i++) {
-                for (int x = 0; x < 56; x++) {
-                    for (int y = 0; y < 7; y++) {
-                        ps.pipeline_features(x, y, i) = scratch[i * features_per_stage + (x + 1) * 7 + y + 26];
+                for (int x = 0; x < head1_w; x++) {
+                    for (int y = 0; y < head1_h; y++) {
+                        float f = scratch[i * features_per_stage + (x + 1) * 7 + y + head2_w];
+                        if (f < 0 || std::isnan(f)) {
+                            std::cout << "Negative or NaN pipeline feature: " << x << " " << y << " " << i << " " << f << "\n";
+                        }
+                        ps.pipeline_features(x, y, i) = f;
                     }
                 }
             }
@@ -120,7 +140,12 @@ map<int, PipelineSample> load_samples() {
             schedule_hash =
                 hash_floats(schedule_hash,
                             &scratch[i * features_per_stage],
-                            &scratch[i * features_per_stage + 26]);
+                            &scratch[i * features_per_stage + head2_w]);
+        }
+
+        if (runtime < ps.fastest_runtime) {
+            ps.fastest_runtime = runtime;
+            ps.fastest_schedule = schedule_hash;
         }
 
         auto it = ps.schedules.find(schedule_hash);
@@ -142,18 +167,22 @@ map<int, PipelineSample> load_samples() {
                 sample.prediction[i] = 0.0;
             }
             sample.schedule_id = schedule_id;
-            sample.schedule_features = Runtime::Buffer<float>(26, num_stages);
+            sample.schedule_features = Runtime::Buffer<float>(head2_w, num_stages);
 
             bool ok = true;
             for (size_t i = 0; i < num_stages; i++) {
-                for (int x = 0; x < 26; x++) {
+                for (int x = 0; x < head2_w; x++) {
                     float f = scratch[i * features_per_stage + x];
-                    if (f < 0 || f > 1e14) {
+                    if (f < 0 || f > 1e14 || std::isnan(f)) {
                         std::cout << "Negative or implausibly large schedule feature: " << i << " " << x << " " << f << "\n";
                         // Something must have overflowed
                         ok = false;
                     }
                     sample.schedule_features(x, i) = f;
+                }
+                // Patch a bug in the featurization in the training data
+                if (sample.schedule_features(0, i) > 1) { // If multiple realizations
+                    sample.schedule_features(8, i) = 1; // No inner parallelism
                 }
             }
             if (ok) {
@@ -211,115 +240,226 @@ map<int, PipelineSample> load_samples() {
             std::ofstream f(e, std::ios_base::trunc);
             f << o.str();
             f.close();
+            assert(!f.fail());
         }
     }
 
     return result;
 }
 
+string getenv_safe(const char *key) {
+    const char *value = getenv(key);
+    if (!value) value = "";
+    return value;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
+    using std::string;
+
     auto samples = load_samples();
 
+    string randomize_weights_str = getenv_safe("HL_RANDOMIZE_WEIGHTS");
+    bool randomize_weights = randomize_weights_str == "1";
+    string weights_dir = getenv_safe("HL_WEIGHTS_DIR");
+
     // Iterate through the pipelines
-    ThroughputPredictorPipeline tpp[models];
+    vector<std::unique_ptr<CostModel>> tpp;
+    for (int i = 0; i < models; i++) {
+        tpp.emplace_back(CostModel::make_default(weights_dir, randomize_weights));
+    }
 
-    float rates[] = {0.01f};
+    int num_cores = atoi(getenv_safe("HL_NUM_THREADS").c_str());
 
-    int num_cores = atoi(getenv("HL_NUM_THREADS"));
+    int batches = atoi(argv[1]);
+    int epochs = (batches + (int)(samples.size()) - 1) / (int)(samples.size());
+
+    std::cout.setf(std::ios::fixed, std::ios::floatfield);
+    std::cout.precision(4);
+
+    std::cout << "Iterating over " << samples.size() << " samples\n";
+
+    decltype(samples) validation_set;
+    for (auto p : samples) {
+        if ((rand() & 3) == 0) {
+            validation_set.insert(p);
+        }
+    }
+
+    for (auto p : validation_set) {
+        samples.erase(p.first);
+    }
+
+    float rates[] = {0.0001f};
 
     for (float learning_rate : rates) {
-        for (int batch = 0; batch < atoi(argv[1]); batch++) {
+        float loss_sum[models] = {0}, loss_sum_counter[models] = {0};
+        float correct_ordering_rate_sum[models] = {0};
+        float correct_ordering_rate_count[models] = {0};
+        float v_correct_ordering_rate_sum[models] = {0};
+        float v_correct_ordering_rate_count[models] = {0};
+
+        for (int e = 0; e < epochs; e++) {
             int counter = 0;
-            float loss_sum[models] = {0}, loss_sum_counter[models] = {0};
-            float correct_ordering_rate_sum[models] = {0};
-            float correct_ordering_rate_count[models] = {0};
-            std::cout << "Iterating over " << samples.size() << " samples... ";
+
+            float worst_miss = 0;
+            uint64_t worst_miss_pipeline_id = 0;
+            uint64_t worst_miss_schedule_id = 0;
+
+            struct Inversion {
+                string f1, f2;
+                float p1, p2;
+                float r1, r2;
+                float badness = 0;
+            } worst_inversion;
+
             #pragma omp parallel for
             for (int model = 0; model < models; model++) {
-                loss_sum[model] = loss_sum_counter[model] = correct_ordering_rate_sum[model] = correct_ordering_rate_count[model] = 0;
-                auto &tp = tpp[model];
+                for (int train = 0; train < 2; train++) {
+                    auto &tp = tpp[model];
 
-                for (auto &p : samples) {
-                    if (p.second.schedules.size() < 8) continue;
-                    tp.reset();
-                    tp.set_pipeline_features(p.second.pipeline_features, num_cores);
+                    for (auto &p : train ? samples : validation_set) {
+                        if (models > 1 && rand() & 1) continue; // If we are training multiple models, allow them to diverge.
+                        if (p.second.schedules.size() < 8) {
+                            continue;
+                        }
+                        tp->reset();
+                        tp->set_pipeline_features(p.second.pipeline_features, num_cores);
 
-                    size_t batch_size = std::min((size_t)1024, p.second.schedules.size());
+                        size_t batch_size = std::min((size_t)1024, p.second.schedules.size());
 
-                    Runtime::Buffer<float> runtimes(batch_size);
+                        size_t fastest_idx = 0;
+                        Runtime::Buffer<float> runtimes(batch_size);
 
-                    size_t first = 0;
-                    if (p.second.schedules.size() > 1024) {
-                        first = rand() % (p.second.schedules.size() - 1024);
-                    }
+                        size_t first = 0;
+                        if (p.second.schedules.size() > 1024) {
+                            first = rand() % (p.second.schedules.size() - 1024);
+                        }
 
-                    for (size_t j = 0; j < batch_size; j++) {
                         auto it = p.second.schedules.begin();
-                        std::advance(it, j + first);
-                        auto &sched = it->second;
-                        Runtime::Buffer<float> buf;
-                        tp.enqueue(p.second.num_stages, &buf, &sched.prediction[model]);
-                        runtimes(j) = sched.runtimes[0];
-                        buf.copy_from(sched.schedule_features);
-                    }
+                        std::advance(it, first);
+                        for (size_t j = 0; j < batch_size; j++) {
+                            auto &sched = it->second;
+                            Runtime::Buffer<float> buf;
+                            tp->enqueue(p.second.num_stages, &buf, &sched.prediction[model]);
+                            runtimes(j) = sched.runtimes[0];
+                            if (runtimes(j) < runtimes(fastest_idx)) {
+                                fastest_idx = j;
+                            }
+                            buf.copy_from(sched.schedule_features);
+                            it++;
+                        }
 
-                    float loss = tp.backprop(runtimes, learning_rate);
-                    loss_sum[model] += loss;
-                    loss_sum_counter[model] ++;
+                        float loss = 0.0f;
+                        if (train) {
+                            loss = tp->backprop(runtimes, learning_rate);
+                            assert(!std::isnan(loss));
+                            loss_sum[model] += loss;
+                            loss_sum_counter[model] ++;
 
-                    if (true) {
-                        int good = 0, bad = 0;
-                        int attempts = 0;
-                        while (good + bad < batch_size && attempts < batch_size * 2) {
-                            attempts++;
-                            int j1 = rand() % p.second.schedules.size();
-                            int j2 = rand() % p.second.schedules.size();
-                            auto it1 = p.second.schedules.begin();
-                            auto it2 = p.second.schedules.begin();
-                            std::advance(it1, j1);
-                            std::advance(it2, j2);
-                            auto &sched1 = it1->second;
-                            auto &sched2 = it2->second;
-                            if (sched1.prediction[model] == 0 || sched2.prediction[model] == 0) continue;
-                            if (sched1.runtimes[0] > 1.5f*sched2.runtimes[0] ||
-                                sched2.runtimes[0] > 1.5f*sched1.runtimes[0]) {
-                                if ((sched1.prediction[model] > sched2.prediction[model]) ==
-                                    (sched1.runtimes[0] > sched2.runtimes[0])) {
+                            auto it = p.second.schedules.begin();
+                            std::advance(it, first);
+                            for (size_t j = 0; j < batch_size; j++) {
+                                auto &sched = it->second;
+                                float m = sched.runtimes[0] / (sched.prediction[model] + 1e-10f);
+                                if (m > worst_miss) {
+                                    worst_miss = m;
+                                    worst_miss_pipeline_id = p.first;
+                                    worst_miss_schedule_id = it->first;
+                                }
+                                it++;
+                            }
+                        } else {
+                            tp->evaluate_costs();
+                        }
+
+                        if (true) {
+                            int good = 0, bad = 0;
+                            for (auto &sched : p.second.schedules) {
+                                auto &ref = p.second.schedules[p.second.fastest_schedule];
+                                if (sched.second.prediction[model] == 0) continue;
+                                assert(sched.second.runtimes[0] >= ref.runtimes[0]);
+                                if (sched.second.prediction[model] >= ref.prediction[model]) {
                                     good++;
                                 } else {
+                                    float badness = (sched.second.runtimes[0] - ref.runtimes[0]) * (ref.prediction[model] - sched.second.prediction[model]);
+                                    badness /= (ref.runtimes[0] * ref.runtimes[0]);
+                                    if (badness > worst_inversion.badness) {
+                                        worst_inversion.badness = badness;
+                                        worst_inversion.r1 = ref.runtimes[0];
+                                        worst_inversion.r2 = sched.second.runtimes[0];
+                                        worst_inversion.p1 = ref.prediction[model];
+                                        worst_inversion.p2 = sched.second.prediction[model];
+                                        worst_inversion.f1 = ref.filename;
+                                        worst_inversion.f2 = sched.second.filename;
+                                    }
                                     bad++;
                                 }
                             }
+                            if (train) {
+                                correct_ordering_rate_sum[model] += good;
+                                correct_ordering_rate_count[model] += good + bad;
+                            } else {
+                                v_correct_ordering_rate_sum[model] += good;
+                                v_correct_ordering_rate_count[model] += good + bad;
+                            }
                         }
-                        correct_ordering_rate_sum[model] += good;
-                        correct_ordering_rate_count[model] += good + bad;
                     }
                 }
+
                 counter++;
             }
 
-            std::cout << "RMS errors:";
+            std::cout << "Loss: ";
             for (int model = 0; model < models; model++) {
-                std::cout << " " << loss_sum[model] / loss_sum_counter[model];
+                std::cout << loss_sum[model] / loss_sum_counter[model] << " ";
+                loss_sum[model] *= 0.9f;
+                loss_sum_counter[model] *= 0.9f;
             }
-            std::cout << ", Correct ordering rate:";
+            if (models > 1) std::cout << "\n";
+            std::cout << " Rate: ";
             int best_model = 0;
             float best_rate = 0;
             for (int model = 0; model < models; model++) {
                 float rate = correct_ordering_rate_sum[model] / correct_ordering_rate_count[model];
+                std::cout << rate << " ";
+                correct_ordering_rate_sum[model] *= 0.9f;
+                correct_ordering_rate_count[model] *= 0.9f;
+
+                rate = v_correct_ordering_rate_sum[model] / v_correct_ordering_rate_count[model];
                 if (rate < best_rate) {
                     best_model = model;
                     best_rate = rate;
                 }
-                std::cout << " " << rate;
+                std::cout << rate << " ";
+                v_correct_ordering_rate_sum[model] *= 0.9f;
+                v_correct_ordering_rate_count[model] *= 0.9f;
             }
-            std::cout << "\n";
-            tpp[best_model].save_weights();
+
+            if (models > 1) std::cout << "\n";
+            if (samples.count(worst_miss_pipeline_id)) {
+                std::cout << " Worst: " << worst_miss << " " << samples[worst_miss_pipeline_id].schedules[worst_miss_schedule_id].filename << "\n";
+                // samples[worst_miss_pipeline_id].schedules.erase(worst_miss_schedule_id);
+            } else {
+                std::cout << "\n";
+            }
+
+            if (worst_inversion.badness > 0) {
+                std::cout << "Worst inversion:\n"
+                          << worst_inversion.f1 << " predicted: " << worst_inversion.p1 << " actual: " << worst_inversion.r1 << "\n"
+                          << worst_inversion.f2 << " predicted: " << worst_inversion.p2 << " actual: " << worst_inversion.r2 << "\n";
+            }
+
+            tpp[best_model]->save_weights();
+
+            if (loss_sum[best_model] < 1e-5f) {
+                std::cout << "Zero loss, returning early\n";
+                return 0;
+            }
         }
     }
-
+    
     // tpp.save_weights();
 
     return 0;

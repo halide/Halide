@@ -35,14 +35,14 @@ Building Halide
 
 #### TL;DR
 
-Have llvm-5.0 or greater installed and run 'make' in the root
+Have llvm-6.0 or greater installed and run 'make' in the root
 directory of the repository (where this README is).
 
 #### Acquiring LLVM
 
 Building halide requires at least llvm 6.0, along with the matching
 version of clang. llvm-config and clang must be somewhere in the
-path. If your OS does not have packages for llvm-5.0, you can find
+path. If your OS does not have packages for llvm-6.0, you can find
 binaries for it at http://llvm.org/releases/download.html. Download an
 appropriate package and then either install it, or at least put the
 bin subdirectory in your path. (This works well on OS X and Ubuntu.)

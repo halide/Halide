@@ -26,7 +26,7 @@ public:
             .bound(x, 0, W)
             .bound(y, 0, H)
             .bound(n, 0, N);
-        
+
         relu.dim(0).set_bounds(0, CO).set_stride(1)
             .dim(1).set_bounds(0, W).set_stride(CO)
             .dim(2).set_bounds(0, H).set_stride(CO * W)

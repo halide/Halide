@@ -14,6 +14,9 @@
 #include "cost_model.h"
 #include "train_cost_model.h"
 
+#include "CostModel.h"
+#include "NetworkSize.h"
+
 extern "C" float weights_pipeline_mean[];
 extern "C" int weights_pipeline_mean_length;
 extern "C" float weights_pipeline_std[];
@@ -40,25 +43,27 @@ using namespace Halide;
 
 Runtime::Buffer<float> buffer_from_file(const std::string &filename, const std::vector<int> &shape) {
     Runtime::Buffer<float> buf(shape);
-    buf.fill(0.0f);
 
-    std::ifstream i(filename.c_str());
+    std::ifstream i(filename, std::ios_base::binary);
     i.read((char *)(buf.data()), buf.size_in_bytes());
+    i.close();
+
+    if (i.fail()) {
+        std::cerr << "Could not load buffer from file: " << filename << "\n Using random values instead.\n";
+        buf.for_each_value([](float &f) {
+                f = ((float)rand()) / RAND_MAX - 0.5f;
+            });
+    }
 
     return buf;
 }
 
 void buffer_to_file(const Runtime::Buffer<float> &buf, const std::string &filename) {
-    std::ofstream o(filename.c_str());
+    std::ofstream o(filename, std::ios_base::trunc | std::ios_base::binary);
     o.write((const char *)(buf.data()), buf.size_in_bytes());
+    o.close();
+    assert(!o.fail());
 }
-
-struct Stats {
-    Runtime::Buffer<float> pipeline_mean;
-    Runtime::Buffer<float> pipeline_std;
-    Runtime::Buffer<float> schedule_mean;
-    Runtime::Buffer<float> schedule_std;
-};
 
 struct Weights {
     Runtime::Buffer<float> head1_filter;
@@ -71,37 +76,34 @@ struct Weights {
     Runtime::Buffer<float> conv1_bias;
 };
 
-class ThroughputPredictorPipeline {
-    std::string weights_dir;
+class DefaultCostModel : public CostModel {
     Weights weights;
-    Stats stats;
     Runtime::Buffer<float> schedule_feat_queue, pipeline_feat_queue, costs;
     Runtime::Buffer<double *> cost_ptrs;
     int cursor, num_stages, num_cores;
 
+    std::string weights_dir;
+    bool randomize_weights;
     std::string weights_server_hostname;
-    int weights_server_port = 0;
-    int weights_server_experiment_id = 0;
+    int weights_server_port;
+    int weights_server_experiment_id;
 
  public:
 
-    ThroughputPredictorPipeline() {
-        if (char *e = getenv("HL_WEIGHTS_DIR")) {
-            weights_dir = e;
-        }
-        load_weights();
-        load_stats();
+    DefaultCostModel(const std::string &weights_dir,
+                     bool randomize_weights,
+                     const std::string &weights_server_hostname,
+                     int weights_server_port,
+                     int weights_server_experiment_id) :
+        weights_dir(weights_dir),
+        randomize_weights(randomize_weights),
+        weights_server_hostname(weights_server_hostname),
+        weights_server_port(weights_server_port),
+        weights_server_experiment_id(weights_server_experiment_id) {
 
-        if (char *e = getenv("HL_WEIGHTS_SERVER_HOSTNAME")) {
-            weights_server_hostname = e;
-        }
+        load_weights();
+
         if (!weights_server_hostname.empty()) {
-            if (char *e = getenv("HL_WEIGHTS_SERVER_PORT")) {
-                weights_server_port = std::atoi(e);
-            }
-            if (char *e = getenv("HL_WEIGHTS_SERVER_EXPERIMENT_ID")) {
-                weights_server_experiment_id = std::atoi(e);
-            }
             std::cerr << "Using weights server " << weights_server_hostname << ":" << weights_server_port << "/" << weights_server_experiment_id << "\n";
             send_weights_to_weights_server();
         }
@@ -109,6 +111,7 @@ class ThroughputPredictorPipeline {
 
     void set_pipeline_features(const Runtime::Buffer<float> &pipeline_feats, int n) {
         pipeline_feat_queue = pipeline_feats;
+        assert(n > 0);
         num_cores = n;
     }
 
@@ -129,7 +132,7 @@ class ThroughputPredictorPipeline {
         if (!schedule_feat_queue.data() ||
             schedule_feat_queue.dim(2).extent() < max_num_stages) {
             assert(cursor == 0);
-            schedule_feat_queue = Runtime::Buffer<float>(batch_size, 26, max_num_stages);
+            schedule_feat_queue = Runtime::Buffer<float>(batch_size, head2_w, max_num_stages);
             if (!costs.data()) {
                 assert(!cost_ptrs.data());
                 costs = Runtime::Buffer<float>(batch_size);
@@ -159,7 +162,7 @@ class ThroughputPredictorPipeline {
         conv1_filter_update, conv1_bias_update;
     int timestep = 0;
 
-    float backprop(Runtime::Buffer<const float> true_runtimes, float learning_rate) {
+    float backprop(const Runtime::Buffer<const float> &true_runtimes, float learning_rate) {
         assert(cursor != 0);
         assert(pipeline_feat_queue.data());
         assert(schedule_feat_queue.data());
@@ -189,45 +192,52 @@ class ThroughputPredictorPipeline {
 
         Runtime::Buffer<float> dst = costs.cropped(0, 0, cursor);
 
-        /*
-        pipeline_feat_queue.for_each_value([&](float f) { assert(!std::isnan(f)); });
-        schedule_feat_queue.for_each_value([&](float f) { assert(!std::isnan(f)); });
-        for_each_weight([&](const Runtime::Buffer<float> &buf) {
-                buf.for_each_value([&](float f) { assert(!std::isnan(f)); });
-            });
-        */
-
+        int fastest_idx = 0;
+        for (int i = 0; i < cursor; i++) {
+            if (true_runtimes(i) < true_runtimes(fastest_idx)) {
+                fastest_idx = i;
+            }
+        }
+        
         train_cost_model(num_stages,
                          cursor,
                          num_cores,
                          pipeline_feat_queue,
                          schedule_feat_queue,
-                         stats.pipeline_mean,
-                         stats.pipeline_std,
-                         stats.schedule_mean,
-                         stats.schedule_std,
                          weights.head1_filter, weights.head1_bias,
                          weights.head2_filter, weights.head2_bias,
                          weights.conv1_filter, weights.conv1_bias,
                          learning_rate, timestep++,
-                         true_runtimes,
+                         fastest_idx,
+                         true_runtimes.alias(),
                          head1_filter_update, head1_bias_update,
                          head2_filter_update, head2_bias_update,
                          conv1_filter_update, conv1_bias_update,
                          dst,
                          loss);
 
-
-        double err = 0;
+        bool any_nans = false;
         for (int i = 0; i < cursor; i++) {
             assert(cost_ptrs(i));
             *(cost_ptrs(i)) = dst(i);
-            double delta = (true_runtimes(i) - dst(i)) / true_runtimes(0);
-            err += delta * delta;
+            if (std::isnan(dst(i))) {
+                any_nans = true;
+                std::cerr << "Prediction " << i << " is NaN. True runtime is " << true_runtimes(i) << "\n";
+                std::cerr << "Checking pipeline features for NaNs...\n";
+                pipeline_feat_queue.for_each_value([&](float f) { if (std::isnan(f)) abort(); });
+                std::cerr << "None found\n";
+                std::cerr << "Checking schedule features for NaNs...\n";
+                schedule_feat_queue.for_each_value([&](float f) { if (std::isnan(f)) abort(); });
+                std::cerr << "None found\n";
+                std::cerr << "Checking network weights for NaNs...\n";
+                for_each_weight([&](const Runtime::Buffer<float> &buf) {
+                        buf.for_each_value([&](float f) { if (std::isnan(f)) abort(); });
+                    });
+                std::cerr << "None found\n";
+            }
+            assert(true_runtimes(i) > 0);
         }
-        err /= cursor;
-        err = std::sqrt(err);
-
+        if (any_nans) abort();
 
         if (!weights_server_hostname.empty()) {
             // Send gradients, receive new weights
@@ -258,7 +268,7 @@ class ThroughputPredictorPipeline {
 
         assert(cursor != 0);
 
-        return err;
+        return loss();
     }
 
     void evaluate_costs() {
@@ -276,14 +286,10 @@ class ThroughputPredictorPipeline {
                    num_cores,
                    pipeline_feat_queue,
                    schedule_feat_queue,
-                   stats.pipeline_mean,
-                   stats.pipeline_std,
-                   stats.schedule_mean,
-                   stats.schedule_std,
                    weights.head1_filter, weights.head1_bias,
                    weights.head2_filter, weights.head2_bias,
                    weights.conv1_filter, weights.conv1_bias,
-                   0.0f, 0, nullptr,
+                   0.0f, 0, 0, nullptr,
                    dst, loss);
 
         for (int i = 0; i < cursor; i++) {
@@ -299,64 +305,43 @@ class ThroughputPredictorPipeline {
         assert(!weights_dir.empty());
 
         if (weights_dir.empty()) {
-            weights.head1_filter = Runtime::Buffer<float>(weights_head1_conv1_weight, 24, 56, 7);
+            weights.head1_filter = Runtime::Buffer<float>(weights_head1_conv1_weight, head1_channels, head1_w, head1_h);
             assert(weights_head1_conv1_weight_length == (int)weights.head1_filter.size_in_bytes());
 
-            weights.head1_bias = Runtime::Buffer<float>(weights_head1_conv1_bias, 24);
+            weights.head1_bias = Runtime::Buffer<float>(weights_head1_conv1_bias, head1_channels);
             assert(weights_head1_conv1_bias_length == (int)weights.head1_bias.size_in_bytes());
 
-            weights.head2_filter = Runtime::Buffer<float>(weights_head2_conv1_weight, 24, 26);
+            weights.head2_filter = Runtime::Buffer<float>(weights_head2_conv1_weight, head2_channels, head2_w);
             assert(weights_head2_conv1_weight_length == (int)weights.head2_filter.size_in_bytes());
 
-            weights.head2_bias = Runtime::Buffer<float>(weights_head2_conv1_bias, 24);
+            weights.head2_bias = Runtime::Buffer<float>(weights_head2_conv1_bias, head2_channels);
             assert(weights_head2_conv1_bias_length == (int)weights.head2_bias.size_in_bytes());
 
-            weights.conv1_filter = Runtime::Buffer<float>(weights_trunk_conv1_weight, 16, 48, 3);
+            weights.conv1_filter = Runtime::Buffer<float>(weights_trunk_conv1_weight, conv1_channels, head1_channels + head2_channels);
             assert(weights_trunk_conv1_weight_length == (int)weights.conv1_filter.size_in_bytes());
 
-            weights.conv1_bias = Runtime::Buffer<float>(weights_trunk_conv1_bias, 16);
+            weights.conv1_bias = Runtime::Buffer<float>(weights_trunk_conv1_bias, conv1_channels);
             assert(weights_trunk_conv1_bias_length == (int)weights.conv1_bias.size_in_bytes());
         } else {
-            weights.head1_filter = buffer_from_file(weights_dir + "/head1_conv1_weight.data", {24, 56, 7});
-            weights.head1_bias = buffer_from_file(weights_dir + "/head1_conv1_bias.data", {24});
+            weights.head1_filter = buffer_from_file(weights_dir + "/head1_conv1_weight.data", {head1_channels, head1_w, head1_h});
+            weights.head1_bias = buffer_from_file(weights_dir + "/head1_conv1_bias.data", {head1_channels});
 
-            weights.head2_filter = buffer_from_file(weights_dir + "/head2_conv1_weight.data", {24, 26});
-            weights.head2_bias = buffer_from_file(weights_dir + "/head2_conv1_bias.data", {24});
+            weights.head2_filter = buffer_from_file(weights_dir + "/head2_conv1_weight.data", {head2_channels, head2_w});
+            weights.head2_bias = buffer_from_file(weights_dir + "/head2_conv1_bias.data", {head2_channels});
 
-            weights.conv1_filter = buffer_from_file(weights_dir + "/trunk_conv1_weight.data", {16, 48, 3});
-            weights.conv1_bias = buffer_from_file(weights_dir + "/trunk_conv1_bias.data", {16});
+            weights.conv1_filter = buffer_from_file(weights_dir + "/trunk_conv1_weight.data", {conv1_channels, head1_channels + head2_channels});
+            weights.conv1_bias = buffer_from_file(weights_dir + "/trunk_conv1_bias.data", {conv1_channels});
         }
 
-        if (char *e = getenv("HL_RANDOMIZE_WEIGHTS")) {
-            if (std::string(e) == "1") {
-                // Fill the weights with random values
-                for_each_weight([](Runtime::Buffer<float> &w) {
-                        w.for_each_value([](float &f) {
-                                f = ((float)rand()) / RAND_MAX; // - 0.5f;
-                            });
-                    });
-            }
-        }
-    }
-
-    void load_stats() {
-        if (weights_dir.empty()) {
-            stats.pipeline_mean = Runtime::Buffer<float>(weights_pipeline_mean, 56, 7);
-            assert(weights_pipeline_mean_length == (int)stats.pipeline_mean.size_in_bytes());
-
-            stats.pipeline_std = Runtime::Buffer<float>(weights_pipeline_std,  56, 7);
-            assert(weights_pipeline_std_length == (int)stats.pipeline_std.size_in_bytes());
-
-            stats.schedule_mean = Runtime::Buffer<float>(weights_schedule_mean, 26);
-            assert(weights_schedule_mean_length == (int)stats.schedule_mean.size_in_bytes());
-
-            stats.schedule_std = Runtime::Buffer<float>(weights_schedule_std, 26);
-            assert(weights_schedule_std_length == (int)stats.schedule_std.size_in_bytes());
-        } else {
-            stats.pipeline_mean = buffer_from_file(weights_dir + "/pipeline_mean.data", {56, 7});
-            stats.pipeline_std = buffer_from_file(weights_dir + "/pipeline_std.data", {56, 7});
-            stats.schedule_mean = buffer_from_file(weights_dir + "/schedule_mean.data", {26});
-            stats.schedule_std = buffer_from_file(weights_dir + "/schedule_std.data", {26});
+        if (randomize_weights) {
+            srand(time(NULL));
+            std::cout << "Randomizing weights\n";
+            // Fill the weights with random values
+            for_each_weight([](Runtime::Buffer<float> &w) {
+                    w.for_each_value([](float &f) {
+                            f = ((float)rand()) / RAND_MAX - 0.5f;
+                        });
+                });
         }
     }
 
@@ -503,3 +488,14 @@ class ThroughputPredictorPipeline {
     }
 
 };
+
+
+
+
+std::unique_ptr<CostModel> CostModel::make_default(const std::string &weights_dir,
+                                                   bool randomize_weights,
+                                                   const std::string &weights_server_hostname,
+                                                   int weights_server_port,
+                                                   int weights_server_experiment_id) {
+    return std::unique_ptr<CostModel>(new DefaultCostModel(weights_dir, randomize_weights, weights_server_hostname, weights_server_port, weights_server_experiment_id));
+}
