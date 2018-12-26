@@ -3,6 +3,7 @@
 #include <fstream>
 #include <iostream>
 #include <map>
+#include <random>
 
 #include <unistd.h>
 #include <sys/types.h>
@@ -49,9 +50,11 @@ Runtime::Buffer<float> buffer_from_file(const std::string &filename, const std::
     i.close();
 
     if (i.fail()) {
-        std::cerr << "Could not load buffer from file: " << filename << "\n Using random values instead.\n";
-        buf.for_each_value([](float &f) {
-                f = ((float)rand()) / RAND_MAX - 0.5f;
+        auto seed = time(NULL);
+        std::mt19937 rng((uint32_t) seed);
+        std::cerr << "Could not load buffer from file: " << filename << "\n Using random values with seed = " << seed << " instead.\n";
+        buf.for_each_value([&rng](float &f) {
+                f = ((float)rng()) / rng.max() - 0.5f;
             });
     }
 
@@ -198,7 +201,7 @@ class DefaultCostModel : public CostModel {
                 fastest_idx = i;
             }
         }
-        
+
         train_cost_model(num_stages,
                          cursor,
                          num_cores,
@@ -334,12 +337,13 @@ class DefaultCostModel : public CostModel {
         }
 
         if (randomize_weights) {
-            srand(time(NULL));
-            std::cout << "Randomizing weights\n";
+            auto seed = time(NULL);
+            std::cout << "Randomizing weights using seed = " << seed << "\n";
+            std::mt19937 rng((uint32_t) seed);
             // Fill the weights with random values
-            for_each_weight([](Runtime::Buffer<float> &w) {
-                    w.for_each_value([](float &f) {
-                            f = ((float)rand()) / RAND_MAX - 0.5f;
+            for_each_weight([&rng](Runtime::Buffer<float> &w) {
+                    w.for_each_value([&rng](float &f) {
+                            f = ((float)rng()) / rng.max() - 0.5f;
                         });
                 });
         }

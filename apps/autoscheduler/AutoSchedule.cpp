@@ -27,6 +27,7 @@
 #include <unordered_set>
 #include <fstream>
 #include <sstream>
+#include <random>
 
 #include "Halide.h"
 #include "halide_benchmark.h"
@@ -48,7 +49,7 @@ using std::map;
 using std::set;
 using std::pair;
 
-uint64_t get_dropout_threshold() {
+uint32_t get_dropout_threshold() {
     string random_dropout_str = get_env_variable("HL_RANDOM_DROPOUT");
     if (!random_dropout_str.empty()) {
         return atoi(random_dropout_str.c_str());
@@ -57,13 +58,9 @@ uint64_t get_dropout_threshold() {
     }
 }
 
-static uint64_t random_dropout_threshold = 100;
-
-bool random_dropout() {
-    static bool init =
-        []() {random_dropout_threshold = get_dropout_threshold(); return true;}();
-    (void)init;
-    uint64_t r = rand();
+bool random_dropout(std::mt19937 &rng) {
+    static uint32_t random_dropout_threshold = get_dropout_threshold();
+    uint32_t r = rng();
     bool drop_it = (r % 100) >= random_dropout_threshold;
     return drop_it;
 }
@@ -2365,6 +2362,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
                                           vector<Function> outputs,
                                           const MachineParams &params,
                                           CostModel *cost_model,
+                                          std::mt19937 &rng,
                                           int beam_size,
                                           int pass_idx,
                                           std::unordered_set<uint64_t> &permitted_hashes) {
@@ -2471,7 +2469,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
                 }
             }
 
-            if (pending.size() > 1 && random_dropout()) {
+            if (pending.size() > 1 && random_dropout(rng)) {
                 // debug(0) << "Dropping state\n";
                 continue;
             }
@@ -2569,6 +2567,7 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
                                      vector<Function> outputs,
                                      const MachineParams &params,
                                      CostModel *cost_model,
+                                     std::mt19937 &rng,
                                      int beam_size) {
 
     IntrusivePtr<State> best;
@@ -2582,7 +2581,7 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
     }
 
     for (int i = 0; i < num_passes; i++) {
-        auto pass = optimal_schedule_pass(dag, outputs, params, cost_model, beam_size, i, permitted_hashes);
+        auto pass = optimal_schedule_pass(dag, outputs, params, cost_model, rng, beam_size, i, permitted_hashes);
         debug(0) << "\nPass " << i << " result:\n";
         pass->dump();
 
@@ -2609,7 +2608,7 @@ std::string generate_schedules_new(const std::vector<Function> &outputs,
         seed = atoi(seed_str.c_str());
     }
     debug(0) << "Dropout seed = " << seed << '\n';
-    srand(seed);
+    std::mt19937 rng((uint32_t) seed);
 
     string beam_size_str = get_env_variable("HL_BEAM_SIZE");
     size_t beam_size = 20;
@@ -2657,7 +2656,7 @@ std::string generate_schedules_new(const std::vector<Function> &outputs,
         // Use a fixed running time
         auto start = std::chrono::steady_clock::now();
         for (size_t beam_size = 1; ; beam_size *= 2) {
-            auto s = optimal_schedule(dag, outputs, params, cost_model.get(), beam_size);
+            auto s = optimal_schedule(dag, outputs, params, cost_model.get(), rng, beam_size);
             if (beam_size == 1 || s->cost < optimal->cost) {
                 optimal = s;
             }
@@ -2669,7 +2668,7 @@ std::string generate_schedules_new(const std::vector<Function> &outputs,
         }
     } else {
         // Use a fixed beam size
-        optimal = optimal_schedule(dag, outputs, params, cost_model.get(), beam_size);
+        optimal = optimal_schedule(dag, outputs, params, cost_model.get(), rng, beam_size);
     }
 
     debug(0) << "Cost evaluated this many times: " << State::cost_calculations << '\n';
