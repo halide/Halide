@@ -1156,7 +1156,7 @@ struct FunctionDAG {
 
         OptionalRational differentiate(const Expr &e, const string &v) {
             debug(0) << "Differentiating " << e << " w.r.t. " << v << "\n";
-            if (is_const(e)) {
+            if (!expr_uses_var(e, v, lets)) {
                 return {true, 0, 1};
             } else if (const Variable *var = e.as<Variable>()) {
                 if (var->name == v) {
@@ -1198,8 +1198,6 @@ struct FunctionDAG {
                 if (const int64_t *ib = as_const_int(op->b)) {
                     a.numerator *= *ib;
                     return a;
-                } else if (a == 0 && differentiate(op->b, v) == 0) {
-                    return a;
                 } else {
                     return {false, 0, 0};
                 }
@@ -1210,37 +1208,13 @@ struct FunctionDAG {
                         a.denominator *= *ib;
                     }
                     return a;
-                } else if (a == 0 && differentiate(op->b, v) == 0) {
-                    return a;
                 } else {
                     return {false, 0, 0};
-                }
-            } else if (const Min *op = e.as<Min>()) {
-                auto a = differentiate(op->a, v);
-                auto b = differentiate(op->b, v);
-                debug(0) << a.exists << " " << a.numerator << " " << a.denominator << " "
-                         << b.exists << " " << b.numerator << " " << b.denominator << "\n";
-                if (a == 0 && b == 0) return a;
-            } else if (const Max *op = e.as<Max>()) {
-                auto a = differentiate(op->a, v);
-                auto b = differentiate(op->b, v);
-                if (a == 0 && b == 0) return a;
-            } else if (const Cast *op = e.as<Cast>()) {
-                auto a = differentiate(op->value, v);
-                if (a == 0) {
-                    return a;
                 }
             } else if (const Call *op = e.as<Call>()) {
                 if (op->is_intrinsic(Call::likely)) {
                     // TODO: Should a likely on one side of a min/max dominate?
                     return differentiate(op->args[0], v);
-                }
-                bool all_zero = true;
-                for (auto e : op->args) {
-                    all_zero &= (differentiate(e, v) == 0);
-                }
-                if (all_zero) {
-                    return {true, 0, 1};
                 }
             }
 
