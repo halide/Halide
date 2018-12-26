@@ -72,6 +72,9 @@ map<int, PipelineSample> load_samples() {
     while (!std::cin.eof()) {
         string s;
         std::cin >> s;
+        if (s.empty()) {
+            continue;
+        }
         if (!ends_with(s, ".sample")) {
             std::cout << "Skipping file: " << s << "\n";
             continue;
@@ -262,12 +265,16 @@ int main(int argc, char **argv) {
 
     string randomize_weights_str = getenv_safe("HL_RANDOMIZE_WEIGHTS");
     bool randomize_weights = randomize_weights_str == "1";
-    string weights_dir = getenv_safe("HL_WEIGHTS_DIR");
+    string weights_in_dir = getenv_safe("HL_WEIGHTS_DIR");
+    string weights_out_dir = getenv_safe("HL_WEIGHTS_OUT_DIR");
+    if (weights_out_dir.empty()) {
+        weights_out_dir = weights_in_dir;
+    }
 
     // Iterate through the pipelines
     vector<std::unique_ptr<CostModel>> tpp;
     for (int i = 0; i < models; i++) {
-        tpp.emplace_back(CostModel::make_default(weights_dir, randomize_weights));
+        tpp.emplace_back(CostModel::make_default(weights_in_dir, weights_out_dir, randomize_weights));
     }
 
     int num_cores = atoi(getenv_safe("HL_NUM_THREADS").c_str());
