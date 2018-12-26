@@ -65,7 +65,7 @@ make_sample() {
         -g ${PIPELINE} \
         -f ${FNAME} \
         -o ${D} \
-        -e stmt,assembly,static_library,h \
+        -e stmt,assembly,static_library,h,registration \
         target=${HL_TARGET} \
         auto_schedule=true \
         -p bin/libauto_schedule.so \
@@ -73,10 +73,9 @@ make_sample() {
 
     c++ \
         -std=c++11 \
-        -DHL_RUNGEN_FILTER_HEADER="\"${D}/${FNAME}.h\"" \
         -I ../../include \
         ../../tools/RunGenMain.cpp \
-        ../../tools/RunGenStubs.cpp  \
+        ${D}/*.registration.cpp \
         ${D}/*.a \
         -o ${D}/bench \
         -ljpeg -ldl -lpthread -lz -lpng
@@ -113,7 +112,7 @@ for ((i=$((FIRST+1));i<1000000;i++)); do
     # Copy the weights being used into the batch folder so that we can repro failures
     mkdir -p ${DIR}
     cp weights/* ${SAMPLES}/batch_${i}/
-    
+
     echo Compiling ${BATCH_SIZE} samples for batch_${i}...
     for ((b=0;b<${BATCH_SIZE};b++)); do
         S=$(printf "%d%02d" $i $b)
