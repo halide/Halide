@@ -257,8 +257,8 @@ public:
                           num_vectors * unique_bytes_read_per_vector * relu1(11, w, n) +
                           num_scalars * unique_lines_read_per_vector * relu1(12, w, n) +
                           num_vectors * unique_lines_read_per_vector * relu1(13, w, n) +
-                          inner_parallelism * unique_bytes_read_per_task * relu1(14, w, n) +
-                          inner_parallelism * unique_lines_read_per_task * relu1(15, w, n));
+                          num_tasks * unique_bytes_read_per_task * relu1(14, w, n) +
+                          num_tasks * unique_lines_read_per_task * relu1(15, w, n));
 
         // Estimate the number of cache misses on the data that this writes to and their cost
         Expr lines_written_per_realization = inner_parallelism * (bytes_at_task / max(1, innermost_bytes_at_task));

@@ -285,23 +285,33 @@ struct LoopNest {
     }
 
     struct Sites {
-        const LoopNest *compute = nullptr, *store = nullptr, *produce = nullptr, *innermost = nullptr;
+        const LoopNest *compute = nullptr, *store = nullptr, *produce = nullptr, *innermost = nullptr, *task = nullptr;
         bool inlined = false;
     };
 
     void get_sites(StageMap<Sites> &sites,
+                   const LoopNest *task = nullptr,
                    const LoopNest *parent = nullptr) const {
+        if (!task && !is_root()) {
+            task = this;
+        }
         for (auto c : children) {
-            c->get_sites(sites, this);
+            c->get_sites(sites, task, this);
         }
         if (parent && node != parent->node) {
             auto &s = sites.get_or_create(stage);
             s.compute = parent;
             s.produce = this;
+            if (parent->is_root()) {
+                s.task = this;
+            }
         }
         for (auto f : store_at) {
             for (const auto &s : f->stages) {
                 sites.get_or_create(&s).store = this;
+                if (task) {
+                    sites.get_or_create(&s).task = task;
+                }
             }
         }
         for (auto it = inlined.begin(); it != inlined.end(); it++) {
@@ -551,11 +561,13 @@ struct LoopNest {
 
         *working_set += working_set_here;
 
-        int64_t bytes_loaded = 0, lines_loaded = 0, allocation_bytes_loaded = 0;
+        int64_t bytes_loaded = 0, lines_loaded = 0, allocation_bytes_loaded = 0, off_core_bytes_loaded = 0, off_core_lines_loaded = 0;
         int64_t num_dense_loads = 0, num_broadcasts = 0, num_gathers = 0, num_stride_2_loads = 0, num_stride_3_loads = 0, num_stride_4_loads = 0, num_loads = 0;
-        if (innermost || at_production || (at_task && parallel)) { // These are the sites at which we compute load footprints
+        if (innermost || at_production) { // These are the sites at which we compute load footprints
             // Pick the site at which we will compute the footprint relationship
-            const auto *consumer_store_site = innermost ? parent : sites.get(&(node->stages[0])).store;
+            const auto &consumer_site = sites.get(&(node->stages[0]));
+            const auto *consumer_store_site = innermost ? parent : consumer_site.store;
+            const auto *consumer_task_site = consumer_site.task;
             int64_t consumer_instances = innermost ? instances : feat.num_realizations;
             if (consumer_instances == 0) {
                 root.dump(" ");
@@ -565,6 +577,7 @@ struct LoopNest {
             vector<const FunctionDAG::Node::Stage *> pending;
             pending.emplace_back(stage);
             vector<pair<LoadJacobian, FunctionDAG::Node *>> jacobians;
+            set<const FunctionDAG::Node *> done;
             while (!pending.empty()) {
                 auto p = pending.back();
                 pending.pop_back();
@@ -606,14 +619,17 @@ struct LoopNest {
                     const auto *producer_compute_site = site.compute;
                     const auto *producer_store_site = site.store;
                     const auto &bounds = consumer_store_site->get_bounds(e->producer);
+                    const auto &task_bounds = consumer_task_site->get_bounds(e->producer);
                     const auto &producer_compute_bounds = producer_compute_site->get_bounds(e->producer);
                     const auto &producer_store_bounds = producer_store_site->get_bounds(e->producer);
                     int64_t footprint = e->producer->bytes_per_point;
                     int64_t compute_footprint = footprint;
                     int64_t store_footprint = footprint;
+                    int64_t task_footprint = footprint;
                     int64_t line_footprint = 1;
                     int64_t compute_line_footprint = 1;
                     int64_t store_line_footprint = 1;
+                    int64_t task_line_footprint = 1;
 
                     if (e->producer->is_input) {
                         internal_assert(producer_store_site->is_root());
@@ -668,26 +684,40 @@ struct LoopNest {
                         }
                     }
 
+                    // Already dealt with the footprints for this producer via some other path
+                    if (done.find(e->producer) != done.end()) {
+                        continue;
+                    }
+
+                    done.insert(e->producer);
+
                     for (int i = 0; i < e->producer->func.dimensions(); i++) {
                         auto p = bounds->region_required(i);
                         auto compute_p = producer_compute_bounds->region_computed(i);
                         auto store_p = producer_store_bounds->region_required(i);
+                        auto task_p = task_bounds->region_required(i);
 
                         internal_assert(store_p.first <= store_p.second) << store_p.first << " " << store_p.second << "\n";
                         internal_assert(compute_p.first <= compute_p.second) << compute_p.first << " " << compute_p.second << "\n";
+                        internal_assert(task_p.first <= task_p.second) << task_p.first << " " << task_p.second << "\n";
 
                         int64_t extent = p.second - p.first + 1;
                         int64_t compute_extent = compute_p.second - compute_p.first + 1;
                         int64_t store_extent = store_p.second - store_p.first + 1;
+                        int64_t task_extent = task_p.second - task_p.first + 1;
+
                         footprint *= extent;
                         compute_footprint *= compute_extent;
                         store_footprint *= store_extent;
+                        task_footprint *= task_extent;
+
 
                         bool dense = i == (e->producer->is_input ? 0 : site.produce->vector_dim);
                         if (!dense) {
                             line_footprint *= extent;
                             compute_line_footprint *= compute_extent;
                             store_line_footprint *= store_extent;
+                            task_line_footprint *= task_extent;
                         }
                     }
 
@@ -717,6 +747,12 @@ struct LoopNest {
                         bytes_loaded += footprint;
                         lines_loaded += line_footprint;
                     }
+
+                    if (producer_store_site->is_root()) {
+                        off_core_bytes_loaded += task_footprint;
+                        off_core_lines_loaded += task_line_footprint;
+                    }
+
                 }
             }
         }
@@ -726,9 +762,11 @@ struct LoopNest {
             // computable at the production site because that's where
             // the consumers are.
             internal_assert(bytes_loaded >= 0) << "Negative bytes loaded: " << bytes_loaded << "\n";
-            feat.unique_bytes_read_per_realization = bytes_loaded;
             feat.allocation_bytes_read_per_realization = allocation_bytes_loaded;
+            feat.unique_bytes_read_per_realization = bytes_loaded;
             feat.unique_lines_read_per_realization = lines_loaded;
+            feat.unique_bytes_read_per_task = off_core_bytes_loaded;
+            feat.unique_lines_read_per_task = off_core_lines_loaded;
 
             if (!at_pure_production) {
                 // Also pessimistically assume this update definition relies on the entirety of the produced region so far.
@@ -747,14 +785,6 @@ struct LoopNest {
             feat.scalar_loads_per_scalar = num_loads;
             feat.unique_bytes_read_per_vector = bytes_loaded;
             feat.unique_lines_read_per_vector = lines_loaded;
-        }
-
-        if (at_task && parallel) {
-            feat.unique_bytes_read_per_task = bytes_loaded;
-            feat.unique_lines_read_per_task = lines_loaded;
-        } else if (at_production) {
-            feat.unique_bytes_read_per_task = feat.unique_bytes_read_per_realization;
-            feat.unique_lines_read_per_task = feat.unique_lines_read_per_realization;
         }
 
         // Track features for inlined Funcs
