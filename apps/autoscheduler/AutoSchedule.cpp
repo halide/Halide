@@ -14,6 +14,7 @@
     HL_SEED
     HL_USE_MANUAL_COST_MODEL
     HL_WEIGHTS_DIR
+    HL_WEIGHTS_OUT_DIR
 
 */
 #include <set>
@@ -2672,7 +2673,11 @@ std::string generate_schedules_new(const std::vector<Function> &outputs,
         time_limit = atof(time_limit_str.c_str());
     }
 
-    string weights_dir = get_env_variable("HL_WEIGHTS_DIR");
+    string weights_in_dir = get_env_variable("HL_WEIGHTS_DIR");
+    string weights_out_dir = get_env_variable("HL_WEIGHTS_OUT_DIR");
+    if (weights_out_dir.empty()) {
+        weights_out_dir = weights_in_dir;
+    }
 
     string randomize_weights_str = get_env_variable("HL_RANDOMIZE_WEIGHTS");
     bool randomize_weights = randomize_weights_str == "1";
@@ -2697,7 +2702,7 @@ std::string generate_schedules_new(const std::vector<Function> &outputs,
 
     std::unique_ptr<CostModel> cost_model;
     if (get_env_variable("HL_USE_MANUAL_COST_MODEL") != "1") {
-        cost_model = CostModel::make_default(weights_dir, randomize_weights, weights_server_hostname, weights_server_port, weights_server_experiment_id);
+        cost_model = CostModel::make_default(weights_in_dir, weights_out_dir, randomize_weights, weights_server_hostname, weights_server_port, weights_server_experiment_id);
     }
 
     IntrusivePtr<State> optimal;
