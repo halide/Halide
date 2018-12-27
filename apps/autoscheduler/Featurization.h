@@ -13,7 +13,7 @@ struct PipelineFeatures {
         std::memset(this, 0, sizeof(PipelineFeatures));
     }
 
-    static constexpr int NumFeaturesPerStage() {
+    static constexpr int NumFeatures() {
         constexpr int num_features = sizeof(PipelineFeatures) / sizeof(int);
         return num_features;
     }
@@ -120,7 +120,7 @@ struct PipelineFeatures {
 
 // The schedule-dependent portion of the featurization of a stage
 struct ScheduleFeatures {
-    static constexpr int NumFeaturesPerStage() {
+    static constexpr int NumFeatures() {
         constexpr int num_features = sizeof(ScheduleFeatures) / sizeof(int64_t);
         return num_features;
     }
