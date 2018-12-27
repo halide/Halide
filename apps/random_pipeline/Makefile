@@ -1,4 +1,5 @@
 include ../support/Makefile.inc
+include ../support/autoscheduler.inc
 
 all: $(BIN)/test
 
