@@ -17,7 +17,7 @@ SCHEDULES=1
 RANDOM_DROPOUT=100
 BEAM_SIZE=50
 
-make -C ../autoscheduler ../autoscheduler/bin/libauto_schedule.so
+make -C ../autoscheduler bin/libauto_schedule.so
 mkdir -p bin
 cp ../autoscheduler/bin/libauto_schedule.so bin/
 
