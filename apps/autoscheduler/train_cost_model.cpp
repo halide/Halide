@@ -294,7 +294,14 @@ int main(int argc, char **argv) {
         samples.erase(p.first);
     }
 
-    float rates[] = {0.0001f};
+    std::vector<float> rates;
+    if (argc == 2) {
+        rates.push_back(0.0001f);
+    } else {
+        for (int i = 2; i < argc; i++) {
+            rates.push_back(std::atof(argv[i]));
+        }
+    }
 
     for (float learning_rate : rates) {
         float loss_sum[models] = {0}, loss_sum_counter[models] = {0};

@@ -75,7 +75,7 @@ make_sample() {
         -g ${PIPELINE} \
         -f ${FNAME} \
         -o ${D} \
-        -e stmt,assembly,static_library,h \
+        -e stmt,assembly,static_library,h,registration \
         target=${HL_TARGET} \
         auto_schedule=true \
         -p bin/libauto_schedule.so \
@@ -83,10 +83,9 @@ make_sample() {
 
     c++ \
         -std=c++11 \
-        -DHL_RUNGEN_FILTER_HEADER="\"${D}/${FNAME}.h\"" \
         -I ../../include \
         ../../tools/RunGenMain.cpp \
-        ../../tools/RunGenStubs.cpp  \
+        ${D}/*.registration.cpp \
         ${D}/*.a \
         -o ${D}/bench \
         -ljpeg -ldl -lpthread -lz -lpng
