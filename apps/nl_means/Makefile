@@ -1,4 +1,5 @@
 include ../support/Makefile.inc
+include ../support/autoscheduler.inc
 
 BIN ?= bin
 
@@ -6,7 +7,7 @@ all: $(BIN)/process
 
 $(BIN)/nl_means.generator: nl_means_generator.cpp $(GENERATOR_DEPS)
 	@-mkdir -p $(BIN)
-	$(CXX) $(CXXFLAGS) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS) -rdynamic
+	$(CXX) $(CXXFLAGS) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS) $(USE_EXPORT_DYNAMIC)
 
 $(BIN)/nl_means.a: $(BIN)/nl_means.generator
 	@-mkdir -p $(BIN)

@@ -1,4 +1,5 @@
 include ../support/Makefile.inc
+include ../support/autoscheduler.inc
 
 BIN ?= bin
 
@@ -6,7 +7,7 @@ all: $(BIN)/process
 
 $(BIN)/stencil_chain.generator: stencil_chain_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS) -rdynamic
+	$(CXX) $(CXXFLAGS) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS) $(USE_EXPORT_DYNAMIC)
 
 $(BIN)/stencil_chain.a: $(BIN)/stencil_chain.generator
 	@mkdir -p $(@D)

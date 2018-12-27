@@ -39,6 +39,7 @@ struct PipelineSample {
     map<uint64_t, Sample> schedules;
     uint64_t fastest_schedule;
     float fastest_runtime;
+    uint64_t pipeline_hash;
 };
 
 uint64_t hash_floats(uint64_t h, float *begin, float *end) {
@@ -73,6 +74,9 @@ map<int, PipelineSample> load_samples() {
     while (!std::cin.eof()) {
         string s;
         std::cin >> s;
+        if (s.empty()) {
+            continue;
+        }
         if (!ends_with(s, ".sample")) {
             std::cout << "Skipping file: " << s << "\n";
             continue;
@@ -133,6 +137,9 @@ map<int, PipelineSample> load_samples() {
                     }
                 }
             }
+
+            ps.pipeline_hash = hash_floats(0, ps.pipeline_features.begin(), ps.pipeline_features.end());
+
         }
 
 
@@ -143,6 +150,8 @@ map<int, PipelineSample> load_samples() {
                             &scratch[i * features_per_stage],
                             &scratch[i * features_per_stage + head2_w]);
         }
+
+
 
         if (runtime < ps.fastest_runtime) {
             ps.fastest_runtime = runtime;
@@ -257,18 +266,23 @@ string getenv_safe(const char *key) {
 }  // namespace
 
 int main(int argc, char **argv) {
+
     using std::string;
 
     auto samples = load_samples();
 
     string randomize_weights_str = getenv_safe("HL_RANDOMIZE_WEIGHTS");
     bool randomize_weights = randomize_weights_str == "1";
-    string weights_dir = getenv_safe("HL_WEIGHTS_DIR");
+    string weights_in_dir = getenv_safe("HL_WEIGHTS_DIR");
+    string weights_out_dir = getenv_safe("HL_WEIGHTS_OUT_DIR");
+    if (weights_out_dir.empty()) {
+        weights_out_dir = weights_in_dir;
+    }
 
     // Iterate through the pipelines
     vector<std::unique_ptr<CostModel>> tpp;
     for (int i = 0; i < models; i++) {
-        tpp.emplace_back(CostModel::make_default(weights_dir, randomize_weights));
+        tpp.emplace_back(CostModel::make_default(weights_in_dir, weights_out_dir, randomize_weights));
     }
 
     int num_cores = atoi(getenv_safe("HL_NUM_THREADS").c_str());
@@ -285,7 +299,13 @@ int main(int argc, char **argv) {
     std::cout << "Iterating over " << samples.size() << " samples using seed = " << seed << "\n";
     decltype(samples) validation_set;
     for (auto p : samples) {
-        if ((rng() & 3) == 0) {
+        // Whether or not a pipeline is part of the validation set
+        // can't be a call to rand. It must be a fixed property of a
+        // hash of some aspect of it.  This way you don't accidentally
+        // do a training run where a validation set member was in the
+        // training set of a previous run. The id of the fastest
+        // schedule will do as a hash.
+        if ((p.second.pipeline_hash & 3) == 0) {
             validation_set.insert(p);
         }
     }
