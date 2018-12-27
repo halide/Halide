@@ -13,9 +13,10 @@ $(BIN)/stencil_chain.a: $(BIN)/stencil_chain.generator
 	@mkdir -p $(@D)
 	$^ -g stencil_chain -o $(BIN) -f stencil_chain target=$(HL_TARGET) auto_schedule=false
 
-$(BIN)/stencil_chain_auto_schedule.a: $(BIN)/stencil_chain.generator
+$(BIN)/stencil_chain_auto_schedule.a: $(BIN)/stencil_chain.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
-	HL_MACHINE_PARAMS=32,1,1 HL_WEIGHTS_DIR=../autoscheduler/weights HL_PERMIT_FAILED_UNROLL=1 $^ -g stencil_chain -o $(BIN) -f stencil_chain_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true -p ../autoscheduler/bin/libauto_schedule.so -e stmt,assembly,static_library,h
+	HL_MACHINE_PARAMS=32,1,1 HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/weights HL_PERMIT_FAILED_UNROLL=1 \
+	$< -g stencil_chain -o $(BIN) -f stencil_chain_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so -e stmt,assembly,static_library,h
 
 $(BIN)/process: process.cpp $(BIN)/stencil_chain.a $(BIN)/stencil_chain_auto_schedule.a
 	@mkdir -p $(@D)

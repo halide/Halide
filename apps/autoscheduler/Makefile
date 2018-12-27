@@ -12,9 +12,9 @@ $(BIN)/demo.generator: demo_generator.cpp $(GENERATOR_DEPS)
 	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 # To use the autoscheduler, set a few environment variables and use the -p flag to the generator to load the autoscheduler as a plugin
-$(BIN)/demo.a: $(BIN)/demo.generator $(BIN)/libauto_schedule.so
+$(BIN)/demo.a: $(BIN)/demo.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	HL_MACHINE_PARAMS=32,1,1 HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=weights \
-	$(BIN)/demo.generator -g demo -o $(BIN) -f demo target=$(HL_TARGET) auto_schedule=true -p $(BIN)/libauto_schedule.so
+	$(BIN)/demo.generator -g demo -o $(BIN) -f demo target=$(HL_TARGET) auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so
 
 $(BIN)/demo.rungen: $(BIN)/RunGenMain.o $(BIN)/demo.registration.cpp $(BIN)/demo.a
 	$(CXX) -I $(BIN) $^ -o $@ $(HALIDE_SYSTEM_LIBS) $(IMAGE_IO_FLAGS)
@@ -24,11 +24,11 @@ demo: $(BIN)/demo.rungen
 	$(BIN)/demo.rungen --benchmarks=all --benchmark_min_time=1 --default_input_buffers=random:0:auto --output_extents=estimate --default_input_scalars=estimate
 
 # demonstrates an autotuning loop
-autotune: $(BIN)/demo.generator $(BIN)/augment_sample $(BIN)/train_cost_model autotune_loop.sh $(BIN)/libauto_schedule.so
+autotune: $(BIN)/demo.generator $(AUTOSCHED_BIN)/augment_sample $(AUTOSCHED_BIN)/train_cost_model autotune_loop.sh $(AUTOSCHED_BIN)/libauto_schedule.so
 	bash autotune_loop.sh $(BIN)/demo.generator demo x86-64-avx2-disable_llvm_loop_unroll-disable_llvm_loop_vectorize
 
 # Simple jit-based test
-$(BIN)/test: test.cpp $(BIN)/libauto_schedule.so
+$(BIN)/test: test.cpp $(AUTOSCHED_BIN)/libauto_schedule.so
 	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) $< -o $@ $(LDFLAGS) $(LIB_HALIDE) $(HALIDE_SYSTEM_LIBS)
 
 test: $(BIN)/test
