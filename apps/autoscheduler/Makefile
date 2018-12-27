@@ -29,7 +29,7 @@ autotune: $(BIN)/demo.generator $(BIN)/augment_sample $(BIN)/train_cost_model au
 
 # Simple jit-based test
 $(BIN)/test: test.cpp $(BIN)/libauto_schedule.so
-	$(CXX) $(CXXFLAGS) -rdynamic $< -o $@ $(LDFLAGS) $(LIB_HALIDE) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) $< -o $@ $(LDFLAGS) $(LIB_HALIDE) $(HALIDE_SYSTEM_LIBS)
 
 test: $(BIN)/test
 	HL_WEIGHTS_DIR=weights LD_LIBRARY_PATH=$(BIN) $(BIN)/test
