@@ -14,8 +14,7 @@ struct PipelineFeatures {
     }
 
     static constexpr int num_features() {
-        constexpr int feature_cnt = sizeof(PipelineFeatures) / sizeof(int);
-        return feature_cnt;
+        return sizeof(PipelineFeatures) / sizeof(int);
     }
 
     // A featurization of the compute done by a Func, to
@@ -121,8 +120,7 @@ struct PipelineFeatures {
 // The schedule-dependent portion of the featurization of a stage
 struct ScheduleFeatures {
     static constexpr int num_features() {
-        constexpr int feature_cnt = sizeof(ScheduleFeatures) / sizeof(int64_t);
-        return feature_cnt;
+        return sizeof(ScheduleFeatures) / sizeof(int64_t);
     }
 
     int64_t num_realizations = 0; // Product of outer loops at store_at site
