@@ -302,16 +302,11 @@ struct LoopNest {
             auto &s = sites.get_or_create(stage);
             s.compute = parent;
             s.produce = this;
-            if (parent->is_root()) {
-                s.task = this;
-            }
+            s.task = task;
         }
         for (auto f : store_at) {
             for (const auto &s : f->stages) {
                 sites.get_or_create(&s).store = this;
-                if (task) {
-                    sites.get_or_create(&s).task = task;
-                }
             }
         }
         for (auto it = inlined.begin(); it != inlined.end(); it++) {
@@ -565,7 +560,7 @@ struct LoopNest {
         int64_t num_dense_loads = 0, num_broadcasts = 0, num_gathers = 0, num_stride_2_loads = 0, num_stride_3_loads = 0, num_stride_4_loads = 0, num_loads = 0;
         if (innermost || at_production) { // These are the sites at which we compute load footprints
             // Pick the site at which we will compute the footprint relationship
-            const auto &consumer_site = sites.get(&(node->stages[0]));
+            const auto &consumer_site = sites.get(stage);
             const auto *consumer_store_site = innermost ? parent : consumer_site.store;
             const auto *consumer_task_site = consumer_site.task;
             int64_t consumer_instances = innermost ? instances : feat.num_realizations;
