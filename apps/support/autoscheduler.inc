@@ -9,9 +9,15 @@ $(AUTOSCHED_BIN)/weights_head2_conv1_bias.o \
 $(AUTOSCHED_BIN)/weights_trunk_conv1_weight.o \
 $(AUTOSCHED_BIN)/weights_trunk_conv1_bias.o
 
-$(AUTOSCHED_BIN)/weights_%.cpp:
+# TODO(srj): depending on something not in the distrib folder isn't strictly
+# kosher, but this is still experimental
+$(AUTOSCHED_BIN)/binary2cpp: ../../tools/binary2cpp.cpp
 	@mkdir -p $(@D)
-	../../bin/binary2cpp weights_$* < $(AUTOSCHED_SRC)/weights/$*.data > $@
+	$(CXX) $< -o $@
+
+$(AUTOSCHED_BIN)/weights_%.cpp: $(AUTOSCHED_BIN)/binary2cpp
+	@mkdir -p $(@D)
+	$(AUTOSCHED_BIN)/binary2cpp weights_$* < $(AUTOSCHED_SRC)/weights/$*.data > $@
 
 $(AUTOSCHED_BIN)/weights_%.o: $(AUTOSCHED_BIN)/weights_%.cpp
 	$(CXX) -c $< -o $@
