@@ -2280,13 +2280,13 @@ struct State {
 
                 // Count the number of parallel loops.
                 for (auto it = p.second->vars.rbegin(); it != p.second->vars.rend(); it++) {
-                    if (!it->exists) continue;
+                    if (!it->exists || it->extent == 1) continue;
                     if (!it->parallel) break;
 
                     n_parallel_loops++;
                 }
 
-                // Tag with GPUBlock and GPUThread only if we have at least two
+                // Tag as GPUBlock and GPUThread only if we have at least two
                 // loops.  The first half of loop levels are tagged with GPUBlock
                 // and the second half with GPUThread.
                 // If the number of loop levels is more than 6, all the inner
@@ -2295,7 +2295,7 @@ struct State {
                 if (n_parallel_loops >= 2) {
                     // Tag the parallel loops.
                     for (auto it = p.second->vars.rbegin(); it != p.second->vars.rend(); it++) {
-                        if (!it->exists) continue;
+                        if (!it->exists || it->extent == 1) continue;
                         if (!it->parallel) break;
                         if (current_parallel_loop >= 6) break;
 
