@@ -8,6 +8,7 @@
 #include <map>
 #include <iostream>
 #include <fstream>
+#include <random>
 
 #include "CostModel.h"
 #include "NetworkSize.h"
@@ -292,8 +293,10 @@ int main(int argc, char **argv) {
     std::cout.setf(std::ios::fixed, std::ios::floatfield);
     std::cout.precision(4);
 
-    std::cout << "Iterating over " << samples.size() << " samples\n";
+    auto seed = time(NULL);
+    std::mt19937 rng((uint32_t) seed);
 
+    std::cout << "Iterating over " << samples.size() << " samples using seed = " << seed << "\n";
     decltype(samples) validation_set;
     for (auto p : samples) {
         // Whether or not a pipeline is part of the validation set
@@ -347,7 +350,7 @@ int main(int argc, char **argv) {
                     auto &tp = tpp[model];
 
                     for (auto &p : train ? samples : validation_set) {
-                        if (models > 1 && rand() & 1) continue; // If we are training multiple models, allow them to diverge.
+                        if (models > 1 && rng() & 1) continue; // If we are training multiple models, allow them to diverge.
                         if (p.second.schedules.size() < 8) {
                             continue;
                         }
@@ -361,7 +364,7 @@ int main(int argc, char **argv) {
 
                         size_t first = 0;
                         if (p.second.schedules.size() > 1024) {
-                            first = rand() % (p.second.schedules.size() - 1024);
+                            first = rng() % (p.second.schedules.size() - 1024);
                         }
 
                         auto it = p.second.schedules.begin();
