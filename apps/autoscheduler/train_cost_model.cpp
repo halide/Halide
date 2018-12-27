@@ -38,6 +38,7 @@ struct PipelineSample {
     map<uint64_t, Sample> schedules;
     uint64_t fastest_schedule;
     float fastest_runtime;
+    uint64_t pipeline_hash;
 };
 
 uint64_t hash_floats(uint64_t h, float *begin, float *end) {
@@ -132,6 +133,9 @@ map<int, PipelineSample> load_samples() {
                     }
                 }
             }
+
+            ps.pipeline_hash = hash_floats(0, ps.pipeline_features.begin(), ps.pipeline_features.end());
+
         }
 
 
@@ -142,6 +146,8 @@ map<int, PipelineSample> load_samples() {
                             &scratch[i * features_per_stage],
                             &scratch[i * features_per_stage + head2_w]);
         }
+
+
 
         if (runtime < ps.fastest_runtime) {
             ps.fastest_runtime = runtime;
@@ -256,6 +262,7 @@ string getenv_safe(const char *key) {
 }  // namespace
 
 int main(int argc, char **argv) {
+
     using std::string;
 
     auto samples = load_samples();
@@ -282,7 +289,13 @@ int main(int argc, char **argv) {
 
     decltype(samples) validation_set;
     for (auto p : samples) {
-        if ((rand() & 3) == 0) {
+        // Whether or not a pipeline is part of the validation set
+        // can't be a call to rand. It must be a fixed property of a
+        // hash of some aspect of it.  This way you don't accidentally
+        // do a training run where a validation set member was in the
+        // training set of a previous run. The id of the fastest
+        // schedule will do as a hash.
+        if ((p.second.pipeline_hash & 3) == 0) {
             validation_set.insert(p);
         }
     }
@@ -291,7 +304,14 @@ int main(int argc, char **argv) {
         samples.erase(p.first);
     }
 
-    float rates[] = {0.0001f};
+    std::vector<float> rates;
+    if (argc == 2) {
+        rates.push_back(0.0001f);
+    } else {
+        for (int i = 2; i < argc; i++) {
+            rates.push_back(std::atof(argv[i]));
+        }
+    }
 
     for (float learning_rate : rates) {
         float loss_sum[models] = {0}, loss_sum_counter[models] = {0};
@@ -380,6 +400,8 @@ int main(int argc, char **argv) {
                                 auto &ref = p.second.schedules[p.second.fastest_schedule];
                                 if (sched.second.prediction[model] == 0) continue;
                                 assert(sched.second.runtimes[0] >= ref.runtimes[0]);
+                                float runtime_ratio = sched.second.runtimes[0] / ref.runtimes[0];
+                                if (runtime_ratio <= 1.1) continue; // Within 10% of the runtime of the best
                                 if (sched.second.prediction[model] >= ref.prediction[model]) {
                                     good++;
                                 } else {
@@ -459,7 +481,7 @@ int main(int argc, char **argv) {
             }
         }
     }
-    
+
     // tpp.save_weights();
 
     return 0;

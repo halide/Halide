@@ -251,7 +251,10 @@ class PredicateLoadStore : public IRMutator2 {
         } else if (target.arch == Target::X86) {
             // Should only attempt to predicate store/load if the lane size is
             // no less than 4
-            return false; //(bit_size == 32) && (lanes >= 4);
+            // TODO: disabling for now due to trunk LLVM breakage.
+            // See: https://github.com/halide/Halide/issues/3534
+            // return (bit_size == 32) && (lanes >= 4);
+            return false;
         }
         // For other architecture, do not predicate vector load/store
         return false;

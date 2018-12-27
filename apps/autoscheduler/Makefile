@@ -9,7 +9,7 @@ $(BIN)/weights_head1_conv1_bias.o \
 $(BIN)/weights_head2_conv1_weight.o \
 $(BIN)/weights_head2_conv1_bias.o \
 $(BIN)/weights_trunk_conv1_weight.o \
-$(BIN)/weights_trunk_conv1_bias.o 
+$(BIN)/weights_trunk_conv1_bias.o
 
 $(BIN)/weights_%.cpp:
 	@mkdir -p $(@D)
@@ -32,7 +32,7 @@ $(BIN)/runtime.a: $(BIN)/cost_model.generator
 
 $(BIN)/cost_model/%.a: $(BIN)/cost_model.generator
 	@mkdir -p $(@D)
-	HL_PERMIT_FAILED_UNROLL=1 $^ -g $* -o $(BIN)/cost_model -f $* -e static_library,h target=$(HL_TARGET)-no_runtime auto_schedule=false
+	HL_PERMIT_FAILED_UNROLL=1 $^ -g $* -o $(BIN)/cost_model -f $* target=$(HL_TARGET)-no_runtime auto_schedule=false
 
 # It's important to use dynamic lookups for undefined symbols here: all of libHalide
 # is expected to be present (in the loading binary), so we explicitly make the symbols
@@ -57,10 +57,10 @@ $(BIN)/demo.generator: demo_generator.cpp $(GENERATOR_DEPS)
 # To use the autoscheduler, set a few environment variables and use the -p flag to the generator to load the autoscheduler as a plugin
 $(BIN)/demo.a: $(BIN)/demo.generator $(BIN)/libauto_schedule.so
 	HL_MACHINE_PARAMS=32,1,1 HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=weights \
-	$(BIN)/demo.generator -g demo -o $(BIN) -f demo -e static_library,h target=$(HL_TARGET) auto_schedule=true -p $(BIN)/libauto_schedule.so
+	$(BIN)/demo.generator -g demo -o $(BIN) -f demo target=$(HL_TARGET) auto_schedule=true -p $(BIN)/libauto_schedule.so
 
-$(BIN)/demo.rungen: $(BIN)/RunGenMain.o $(BIN)/demo.a $(HALIDE_DISTRIB_PATH)/tools/RunGenStubs.cpp
-	$(CXX) -I $(BIN) -DHL_RUNGEN_FILTER_HEADER="\"demo.h\"" $^ -o $@ $(HALIDE_SYSTEM_LIBS) $(IMAGE_IO_FLAGS)
+$(BIN)/demo.rungen: $(BIN)/RunGenMain.o $(BIN)/demo.registration.cpp $(BIN)/demo.a
+	$(CXX) -I $(BIN) $^ -o $@ $(HALIDE_SYSTEM_LIBS) $(IMAGE_IO_FLAGS)
 
 # demonstrates single-shot use of the autoscheduler
 demo: $(BIN)/demo.rungen

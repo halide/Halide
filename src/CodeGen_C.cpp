@@ -1611,38 +1611,6 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         }
         stream << "\n";
     }
-
-    if (is_header() && f.linkage == LinkageType::ExternalPlusMetadata) {
-        set_name_mangling_mode(NameMangling::CPlusPlus);
-
-        // Note that the code belows emits an inline function inside an anonymous
-        // namespace; normally this is considered a Very Bad Thing to do in a .h
-        // file; however, in this case it's quite deliberate, as we want to be
-        // able to include multiple variants of this in conjunction with RunGenStubs.cpp
-        // in a way that avoids possible name collisions. Normal users should never need
-        // to deal with this.
-        const string getter = R"INLINE_CODE(
-#ifdef HALIDE_REGISTER_ARGV_AND_METADATA
-
-#ifndef __cplusplus
-#error "HALIDE_REGISTER_ARGV_AND_METADATA requires C++"
-#endif  // __cplusplus
-
-extern "C" void halide_register_argv_and_metadata(
-    int (*filter_argv_call)(void **),
-    const struct halide_filter_metadata_t *filter_metadata
-);
-
-namespace {
-inline void HALIDE_REGISTER_ARGV_AND_METADATA () {
-    halide_register_argv_and_metadata(::$NAME$_argv, ::$NAME$_metadata());
-}
-}  // namespace
-
-#endif  // HALIDE_REGISTER_ARGV_AND_METADATA
-)INLINE_CODE";
-        stream << replace_all(getter, "$NAME$", f.name) << "\n\n";
-    }
 }
 
 void CodeGen_C::compile(const Buffer<> &buffer) {
