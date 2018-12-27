@@ -17,7 +17,7 @@ SCHEDULES=1
 RANDOM_DROPOUT=100
 BEAM_SIZE=50
 
-make -C ../autoscheduler bin/libauto_schedule.so
+make -C ../autoscheduler ../autoscheduler/bin/libauto_schedule.so
 mkdir -p bin
 cp ../autoscheduler/bin/libauto_schedule.so bin/
 
@@ -55,7 +55,7 @@ for ((b=1;b<2;b++)); do
 
         F=bin/host/pipeline_${P}_${STAGES}/schedule_0_${RANDOM_DROPOUT}_${BEAM_SIZE}_0/times.txt
         if [ ! -f $F ]; then HL_TARGET=host HL_SEED=0 PIPELINE_SEED=$P PIPELINE_STAGES=$STAGES HL_RANDOM_DROPOUT=${RANDOM_DROPOUT} HL_BEAM_SIZE=${BEAM_SIZE} HL_USE_MANUAL_COST_MODEL=0 HL_NUM_THREADS=32 HL_MACHINE_PARAMS=32,1,1 make bench 2>&1 | grep -v "Nothing to be done"; fi
-        
+
         grep '^Time' $F > /dev/null && echo $F >> results/files_master_${b}.txt
         for prof in ""; do
             for ((m=0;m<2;m++)); do
@@ -72,7 +72,7 @@ for ((b=1;b<2;b++)); do
     # Generate the success cases by taking the intersection of the results from the learned model and the manual model
     cat results/files_${b}_0.txt results/files_${b}_1.txt | sed "s/_..times.txt/_X\/times.txt/" | sort | uniq -d > results/files_new.txt
     cat results/files_new.txt results/files_master_${b}.txt | sed "s/-new_autoscheduler//;s/_..times.txt/_X\/times.txt/" |  sort | uniq -d  | sed "s/host/host-new_autoscheduler/" > results/files_common.txt
-    
+
     # Extract the runtimes
     echo "Extracting runtimes..."
     cat results/files_common.txt | sed "s/_X/_0/" | while read F; do grep '^Time' $F | cut -d: -f2 | cut -b2-; done > results/learned_runtimes_${b}.txt
@@ -96,5 +96,5 @@ for ((b=1;b<2;b++)); do
     # Extract the cost according to the hand-designed model (just the sum of a few of the features)
     echo "Extracting costs..."
     cat results/files_common.txt | sed "s/_X/_0/" | while read F; do echo $(grep '^State with cost' ${F/times/stderr} | cut -d' ' -f4 | cut -d: -f1 | sort -n | head -n2 | tail -n1); done  > results/learned_costs_${b}.txt
-    cat results/files_common.txt | sed "s/_X/_1/" | while read F; do echo $(grep '^State with cost' ${F/times/stderr} | cut -d' ' -f4 | cut -d: -f1 | sort -n | head -n1); done  > results/manual_costs_${b}.txt    
+    cat results/files_common.txt | sed "s/_X/_1/" | while read F; do echo $(grep '^State with cost' ${F/times/stderr} | cut -d' ' -f4 | cut -d: -f1 | sort -n | head -n1); done  > results/manual_costs_${b}.txt
 done
