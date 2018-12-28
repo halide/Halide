@@ -285,7 +285,7 @@ struct LoopNest {
 
     size_t funcs_realized_or_inlined() const {
         size_t count = inlined.size() + store_at.size();
-        for (auto c : children) {
+        for (const auto &c : children) {
             count += c->funcs_realized_or_inlined();
         }
         return count;
@@ -302,7 +302,7 @@ struct LoopNest {
         if (!task && !is_root()) {
             task = this;
         }
-        for (auto c : children) {
+        for (const auto &c : children) {
             c->get_sites(sites, task, this);
         }
         if (parent && node != parent->node) {
@@ -416,7 +416,7 @@ struct LoopNest {
         }
 
         if (is_root()) {
-            for (auto c : children) {
+            for (const auto &c : children) {
                 c->compute_features(params, sites, subinstances, parallelism, this, root, &working_set_here, features);
             }
 
@@ -549,7 +549,7 @@ struct LoopNest {
         }
 
         // Recurse inwards
-        for (auto c : children) {
+        for (const auto &c : children) {
             c->compute_features(params, sites, subinstances, subparallelism, this, root, &working_set_here, features);
         }
 
@@ -1814,8 +1814,8 @@ struct State {
 
             // Perform any quick rejection tests before enqueuing this
             for (auto it = features.begin(); it != features.end(); it++) {
-                auto &feat = it.value();
-                if (!it.key()->node->func.is_wrapper()) { // It's OK to repeatedly stage data
+                if (!it.key()->node->is_wrapper) { // It's OK to repeatedly stage data
+                    auto &feat = it.value();
                     if (feat.points_computed_total + feat.inlined_calls > 10 * feat.points_computed_minimum) {
                         cost = 1e50;
                         return true;
@@ -1835,8 +1835,6 @@ struct State {
 
             int num_stages = (int)features.size();
 
-            const size_t schedule_feat_size = sizeof(ScheduleFeatures) / sizeof(int64_t);
-
             Runtime::Buffer<float> schedule_features;
 
             // Won't actually run anything until we call evaluate_costs...
@@ -1852,10 +1850,9 @@ struct State {
                     internal_assert(features.contains(&*it)) << n.func.name() << "\n";
                     const auto &feat = features.get(&*it);
                     const int64_t *sched_stats = (const int64_t *)(&feat);
-                    for (size_t i = 0; i < schedule_feat_size; i++) {
+                    for (size_t i = 0; i < ScheduleFeatures::num_features(); i++) {
                         schedule_features(i, stage) = sched_stats[i];
                     }
-
                     stage += 1;
                 }
             }
