@@ -104,7 +104,7 @@ public:
     }
 
     size_t consumer_loop_dims() const {
-        if (coeffs.empty()) {
+        if (coeffs.empty() || coeffs[0].empty()) {
             // The producer is scalar, and we don't know how
             // many consumer loops there are.
             return 0;
@@ -142,7 +142,7 @@ public:
 
     LoadJacobian operator*(const LoadJacobian &other) const {
         vector<vector<OptionalRational>> matrix;
-        internal_assert(consumer_loop_dims() == other.producer_storage_dims());
+        internal_assert(consumer_loop_dims() == 0 || (consumer_loop_dims() == other.producer_storage_dims()));
         matrix.resize(producer_storage_dims());
         for (size_t i = 0; i < producer_storage_dims(); i++) {
             matrix[i].resize(other.consumer_loop_dims());

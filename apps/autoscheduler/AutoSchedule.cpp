@@ -548,7 +548,6 @@ struct LoopNest {
             for (const auto *node : store_at) {
                 working_set_here += features->get(&(node->stages[0])).bytes_at_production;
             }
-            // TODO: This seems like it would mask off allocations just inside an inner loop
             feat.working_set = working_set_here;
         }
 
@@ -1371,6 +1370,7 @@ struct LoopNest {
             // Don't slide over a split vector dimension (why?)
             may_slide &= (children[child]->vectorized_loop_index == -1 ||
                           child_size[children[child]->vectorized_loop_index] == 1);
+
             for (int store_here = 0; store_here < 2; store_here++) {
                 if (store_here && !may_slide) {
                     // We place all our parallel loops at the root
