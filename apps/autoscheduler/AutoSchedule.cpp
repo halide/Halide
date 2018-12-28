@@ -2263,9 +2263,9 @@ struct State {
             // parallelize.
             vector<VarOrRVar> vars;
             vector<VarOrRVar> parallel_vars;
+            bool any_parallel_vars = false, any_parallel_rvars = false;
             if (!gpu_mode()) {
                 int64_t parallel_tasks = 1;
-                bool any_parallel_vars = false, any_parallel_rvars = false;
                 for (auto it = p.second->vars.rbegin(); it != p.second->vars.rend(); it++) {
                     if (!it->exists || it->extent == 1) continue;
                     if (!it->parallel) break;
