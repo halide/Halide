@@ -1,4 +1,5 @@
 include ../support/Makefile.inc
+include ../support/autoscheduler.inc
 
 BIN ?= bin
 
@@ -6,15 +7,16 @@ all: $(BIN)/process
 
 $(BIN)/local_laplacian.generator: local_laplacian_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS) -rdynamic
+	$(CXX) $(CXXFLAGS) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS) $(USE_EXPORT_DYNAMIC)
 
 $(BIN)/local_laplacian.a: $(BIN)/local_laplacian.generator
 	@mkdir -p $(@D)
 	$^ -g local_laplacian -o $(BIN) -f local_laplacian target=$(HL_TARGET) auto_schedule=false
 
-$(BIN)/local_laplacian_auto_schedule.a: $(BIN)/local_laplacian.generator
+$(BIN)/local_laplacian_auto_schedule.a: $(BIN)/local_laplacian.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
-	HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=../autoscheduler/weights HL_MACHINE_PARAMS=32,1,1 $^ -g local_laplacian -o $(BIN) -f local_laplacian_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true -p ../autoscheduler/bin/libauto_schedule.so -e static_library,h,s,stmt
+	HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/weights HL_MACHINE_PARAMS=32,1,1 \
+	$< -g local_laplacian -o $(BIN) -f local_laplacian_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so -e static_library,h,s,stmt
 
 $(BIN)/process: process.cpp $(BIN)/local_laplacian.a $(BIN)/local_laplacian_auto_schedule.a
 	@mkdir -p $(@D)

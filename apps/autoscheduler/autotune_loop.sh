@@ -35,6 +35,16 @@ mkdir -p ${SAMPLES}
 # benchmarked serially.
 BATCH_SIZE=32
 
+TIMEOUT_CMD="timeout"
+if [ $(uname -s) = "Darwin" ] && ! which $TIMEOUT_CMD 2>&1 >/dev/null; then
+    # OSX doesn't have timeout; gtimeout is equivalent and available via Homebrew
+    TIMEOUT_CMD="gtimeout"
+    if ! which $TIMEOUT_CMD 2>&1 >/dev/null; then
+        echo "Can't find the command 'gtimeout'. Run 'brew install coreutils' to install it."
+        exit 1
+    fi
+fi
+
 # Build a single sample of the pipeline with a random schedule
 make_sample() {
     D=${1}
@@ -60,7 +70,7 @@ make_sample() {
         HL_RANDOM_DROPOUT=${dropout} \
         HL_BEAM_SIZE=${beam} \
         HL_MACHINE_PARAMS=32,1,1 \
-        timeout -k ${COMPILATION_TIMEOUT} ${COMPILATION_TIMEOUT} \
+        ${TIMEOUT_CMD} -k ${COMPILATION_TIMEOUT} ${COMPILATION_TIMEOUT} \
         ${GENERATOR} \
         -g ${PIPELINE} \
         -f ${FNAME} \
@@ -86,7 +96,7 @@ benchmark_sample() {
     sleep 1 # Give CPU clocks a chance to spin back up if we're thermally throttling
     D=${1}
     HL_NUM_THREADS=32 \
-        timeout -k ${BENCHMARKING_TIMEOUT} ${BENCHMARKING_TIMEOUT} \
+        ${TIMEOUT_CMD} -k ${BENCHMARKING_TIMEOUT} ${BENCHMARKING_TIMEOUT} \
         ${D}/bench \
         --output_extents=estimate \
         --default_input_buffers=random:0:estimate_then_auto \

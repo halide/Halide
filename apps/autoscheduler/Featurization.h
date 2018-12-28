@@ -13,6 +13,10 @@ struct PipelineFeatures {
         std::memset(this, 0, sizeof(PipelineFeatures));
     }
 
+    static constexpr int num_features() {
+        return sizeof(PipelineFeatures) / sizeof(int);
+    }
+
     // A featurization of the compute done by a Func, to
     // feed the neural network.
 
@@ -115,6 +119,10 @@ struct PipelineFeatures {
 
 // The schedule-dependent portion of the featurization of a stage
 struct ScheduleFeatures {
+    static constexpr int num_features() {
+        return sizeof(ScheduleFeatures) / sizeof(int64_t);
+    }
+
     int64_t num_realizations = 0; // Product of outer loops at store_at site
     int64_t num_productions = 0;  // Product of outer loops at compute_at site
     int64_t points_computed_per_realization = 0; // Number of times the innermost stmt happens per store_at
