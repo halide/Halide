@@ -1786,10 +1786,8 @@ struct State {
 
         // If the working set is too large on the GPU, shared memory will be
         // exhausted, so reject any such schedules
-        for (const auto& c : root->children) {
-            if (c->node == node && feat.working_set > limit) {
-                return true;
-            }
+        if (feat.inner_parallelism > 1 && feat.working_set > limit) {
+            return true;
         }
 
         return false;
