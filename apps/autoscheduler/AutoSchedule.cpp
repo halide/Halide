@@ -2289,24 +2289,23 @@ struct State {
                     n_parallel_loops++;
                 }
 
-                // Tag as GPUBlock and GPUThread only if we have at least two
-                // loops.  The first half of loop levels are tagged with GPUBlock
-                // and the second half with GPUThread.
-                // If the number of loop levels is more than 6, all the inner
-                // loops will be run by one thread. This should become a search
-                // space decision later.
+                // Tag as GPUBlock and GPUThread only if we have at least two loops.
+                // We want the loop structure to be GPU blocks -> serial loops -> GPU threads.
+                // We tag the first min(3, n_parallel_loops/2) loops to be GPU blocks and
+                // tag the last min(3, n_parallel_loops/2) loops to be GPU threads.
                 if (n_parallel_loops >= 2) {
-                    // Tag the parallel loops.
                     for (auto it = p.second->vars.rbegin(); it != p.second->vars.rend(); it++) {
                         if (!it->exists || it->extent == 1) continue;
                         if (!it->parallel) break;
-                        if (current_parallel_loop >= 6) break;
 
-                        if (current_parallel_loop < n_parallel_loops/2) {
+                        if (current_parallel_loop < std::min((uint64_t) 3, n_parallel_loops/2)) {
                             p.second->schedule_source << "\n    .gpu_blocks(" << it->var.name() << ")";
                             stage.gpu_blocks(it->var);
                             current_parallel_loop++;
-                        } else {
+                        } else if (current_parallel_loop < n_parallel_loops - std::min((uint64_t) 3, n_parallel_loops/2)) {
+                            continue;
+                        }
+                        else {
                             p.second->schedule_source << "\n    .gpu_threads(" << it->var.name() << ")";
                             stage.gpu_threads(it->var);
                             current_parallel_loop++;
