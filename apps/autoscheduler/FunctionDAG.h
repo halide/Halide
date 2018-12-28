@@ -15,10 +15,6 @@ namespace Internal {
 
 namespace {
 
-bool gpu_mode() {
-    return atoi(get_env_variable("HL_GPU_MODE").c_str());
-}
-
 using std::pair;
 using std::vector;
 using std::map;
@@ -900,7 +896,7 @@ struct FunctionDAG {
                     node.bytes_per_point = bytes_per_point;
                 }
 
-                if (gpu_mode()) {
+                if (target.has_gpu_feature()) {
                     stage.vector_size = 32; // warp size
                 } else {
                     stage.vector_size = target.natural_vector_size(checker.narrowest_type);

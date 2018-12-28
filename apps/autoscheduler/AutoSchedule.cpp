@@ -73,13 +73,13 @@ bool random_dropout(std::mt19937 &rng) {
     return drop_it;
 }
 
-vector<vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, int factor, bool allow_splits, int vector_dim, int vector_size) {
+vector<vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, int factor, bool allow_splits, int vector_dim, int vector_size, const Target& target) {
     vector<vector<int64_t>> result;
     if (d == -1) {
         result.push_back(vector<int64_t>());
     } else {
         vector<vector<int64_t>> v;
-        v = generate_tilings(s, d - 1, factor, allow_splits, vector_dim, vector_size);
+        v = generate_tilings(s, d - 1, factor, allow_splits, vector_dim, vector_size, target);
         // If we're already generated tons of tiling configs for the
         // inner loops, search the outer loops with coarser
         // granularity.
@@ -123,7 +123,7 @@ vector<vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, int fa
 
                 // Additional tiling options may have inner extents that are not
                 // multiples of 32 so skip them for the vector dimension
-                if (!gpu_mode() || d != vector_dim) {
+                if (!target.has_gpu_feature() || d != vector_dim) {
                     for (int outer = 1; outer <= s[d]; outer *= factor) {
                         int inner = (s[d] + outer - 1) / outer;
                         if (is_one && outer == 1) continue;
@@ -137,7 +137,7 @@ vector<vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, int fa
                     }
                 }
 
-                if (!gpu_mode()) {
+                if (!target.has_gpu_feature()) {
                     // The sequence above (in terms of the inner loop) goes 1 2 4 8 16 ...
                     // but 3 is an important inner tiling factor for matrix multiply ops.
                     int inner3 = (d == vector_dim) ? 3*vector_size : 3;
@@ -1196,6 +1196,7 @@ struct LoopNest {
     vector<IntrusivePtr<const LoopNest>> compute_in_tiles(const FunctionDAG::Node *f,
                                                           const LoopNest *parent,
                                                           const MachineParams &params,
+                                                          const Target &target,
                                                           int v,
                                                           bool in_realization) const {
         internal_assert(f);
@@ -1252,7 +1253,7 @@ struct LoopNest {
 
         if (tileable) {
             // Generate a list of tile sizes to try
-            auto tilings = generate_tilings(size, (int)(size.size() - 1), 2, !in_realization, vectorized_loop_index, innermost ? vector_size : 1);
+            auto tilings = generate_tilings(size, (int)(size.size() - 1), 2, !in_realization, vectorized_loop_index, innermost ? vector_size : 1, target);
 
             if (tilings.size() > 1000) {
                 debug(0) << "Warning: lots of tilings: " << tilings.size() << "\n";
@@ -1260,7 +1261,7 @@ struct LoopNest {
 
             for (auto t : tilings) {
                 // params.parallelism is currently only relevant for CPU
-                if (parent->is_root() && !gpu_mode()) {
+                if (parent->is_root() && !target.has_gpu_feature()) {
                     const auto &l = stage->loop;
                     // Skip root-level tilings that would leave too
                     // many cores idle, and root-level tilings that
@@ -1349,7 +1350,7 @@ struct LoopNest {
                     // don't have to worry about the constraints this
                     // places on parallelism, as we forced all the
                     // parallelism to the outer loop.
-                    auto opts = inner->compute_in_tiles(f, outer, params, v, true);
+                    auto opts = inner->compute_in_tiles(f, outer, params, target, v, true);
                     for (IntrusivePtr<const LoopNest> &n : opts) {
                         LoopNest *store_at_outer_compute_further_in = new LoopNest;
                         store_at_outer_compute_further_in->copy_from(*outer);
@@ -1392,7 +1393,7 @@ struct LoopNest {
                     // level, so this would constrain parallelism.
                     continue;
                 }
-                auto opts = children[child]->compute_in_tiles(f, this, params, v, store_here);
+                auto opts = children[child]->compute_in_tiles(f, this, params, target, v, store_here);
                 for (IntrusivePtr<const LoopNest> &n : opts) {
                     // (Only valid if one child calls f) Push the
                     // computation into the child. Possibly leaving
@@ -1432,11 +1433,12 @@ struct LoopNest {
                double num_cores,
                int depth,
                const LoopNest *parent,
-               const LoopNest *compute_site) const {
+               const LoopNest *compute_site,
+               const Target& target) const {
         if (is_root()) {
             for (auto &c : children) {
                 Func(c->node->func).compute_root();
-                c->apply(LoopLevel::root(), state_map, num_cores, 1, this, c.get());
+                c->apply(LoopLevel::root(), state_map, num_cores, 1, this, c.get(), target);
                 if (c->stage_idx == 0) {
                     auto &state = state_map.get(c->stage);
                     state->schedule_source << "\n    .compute_root()";
@@ -1516,7 +1518,7 @@ struct LoopNest {
 
             if (!size.empty()) {
                 if (innermost) {
-                    if (!gpu_mode() && vectorized_loop_index >= 0) {
+                    if (!target.has_gpu_feature() && vectorized_loop_index >= 0) {
                         auto &v = state.vars[vectorized_loop_index];
                         internal_assert(v.exists);
                         // Is the result of a split
@@ -1662,7 +1664,7 @@ struct LoopNest {
                 if (c->node != node) {
                     Func(c->node->func).compute_at(here);
                 }
-                c->apply(here, state_map, num_cores, depth + 1, this, compute_site);
+                c->apply(here, state_map, num_cores, depth + 1, this, compute_site, target);
                 if (c->node != node && c->stage_idx == 0) {
                     auto &state = *(state_map.get(c->stage));
                     state.schedule_source << "\n    .compute" << loop_level;
@@ -1771,8 +1773,8 @@ struct State {
         internal_assert(!binfile.fail()) << "Failed to write " << feature_file;
     }
 
-    bool exceeds_shared_memory_limit(const ScheduleFeatures& feat, const FunctionDAG::Node* node) {
-        if (!gpu_mode()) {
+    bool exceeds_shared_memory_limit(const Target &target, const ScheduleFeatures& feat, const FunctionDAG::Node* node) {
+        if (!target.has_gpu_feature()) {
             return false;
         }
 
@@ -1793,7 +1795,7 @@ struct State {
         return false;
     }
 
-    bool calculate_cost(const FunctionDAG &dag, const MachineParams &params, CostModel *cost_model, bool verbose = false) {
+    bool calculate_cost(const FunctionDAG &dag, const MachineParams &params, const Target& target, CostModel *cost_model, bool verbose = false) {
         StageMap<ScheduleFeatures> features;
         compute_featurization(dag, params, &features);
 
@@ -1821,7 +1823,7 @@ struct State {
                     }
                 }
 
-                if (exceeds_shared_memory_limit(feat, it.key()->node)) {
+                if (exceeds_shared_memory_limit(target, feat, it.key()->node)) {
                     return false;
                 }
             }
@@ -1865,7 +1867,7 @@ struct State {
                 auto &stage = *(it.key());
                 const auto &feat = it.value();
 
-                if (exceeds_shared_memory_limit(feat, it.key()->node)) {
+                if (exceeds_shared_memory_limit(target, feat, it.key()->node)) {
                     return false;
                 }
                 // Reject silly schedules. They're not even useful for
@@ -2026,6 +2028,7 @@ struct State {
 
     void generate_children(const FunctionDAG &dag,
                            const MachineParams &params,
+                           const Target &target,
                            CostModel *cost_model,
                            std::function<void(IntrusivePtr<State> &&)> &accept_child) const {
         internal_assert(root.defined() && root->is_root());
@@ -2084,7 +2087,7 @@ struct State {
                     child->root = new_root;
                     child->num_funcs_scheduled++;
                     // TODO: filter children here instead of calculating the cost of children we don't want.
-                    if (child->calculate_cost(dag, params, cost_model)) {
+                    if (child->calculate_cost(dag, params, target, cost_model)) {
                         internal_assert(child->root->computes(node)) << "Failed to inline " << node->func.name() << '\n';
                         num_children++;
                         accept_child(std::move(child));
@@ -2129,12 +2132,12 @@ struct State {
                 // stride==1 constraint instead of assuming 0.
                 if (vector_dim > 0 && (node->is_output || node->is_input)) break;
 
-                auto tile_options = root->compute_in_tiles(node, nullptr, params, vector_dim, false);
+                auto tile_options = root->compute_in_tiles(node, nullptr, params, target, vector_dim, false);
                 for (IntrusivePtr<const LoopNest> &n : tile_options) {
                     auto child = make_child();
                     child->root = std::move(n);
                     child->num_funcs_scheduled++;
-                    if (child->calculate_cost(dag, params, cost_model)) {
+                    if (child->calculate_cost(dag, params, target, cost_model)) {
                         internal_assert(child->root->computes(node)) << "Failed to inject realization of " << node->func.name() << '\n';
                         num_children++;
                         accept_child(std::move(child));
@@ -2160,7 +2163,7 @@ struct State {
                     }
                     child->root = new_root;
                     child->num_funcs_scheduled++;
-                    if (child->calculate_cost(dag, params, cost_model)) {
+                    if (child->calculate_cost(dag, params, target, cost_model)) {
                         num_children++;
                         accept_child(std::move(child));
                     }
@@ -2196,9 +2199,9 @@ struct State {
 
     string schedule_source;
 
-    void apply_schedule(const FunctionDAG &dag, const MachineParams &params) {
+    void apply_schedule(const FunctionDAG &dag, const MachineParams &params, const Target &target) {
         StageMap<std::unique_ptr<LoopNest::StageScheduleState>> state_map;
-        root->apply(LoopLevel::root(), state_map, params.parallelism, 0, nullptr, nullptr);
+        root->apply(LoopLevel::root(), state_map, params.parallelism, 0, nullptr, nullptr, target);
 
         std::ostringstream src;
 
@@ -2259,7 +2262,7 @@ struct State {
             vector<VarOrRVar> vars;
             vector<VarOrRVar> parallel_vars;
             bool any_parallel_vars = false, any_parallel_rvars = false;
-            if (!gpu_mode()) {
+            if (!target.has_gpu_feature()) {
                 int64_t parallel_tasks = 1;
                 for (auto it = p.second->vars.rbegin(); it != p.second->vars.rend(); it++) {
                     if (!it->exists || it->extent == 1) continue;
@@ -2328,7 +2331,7 @@ struct State {
             // they are both pure.
             bool can_fuse = !(any_parallel_vars && any_parallel_rvars);
 
-            if (!gpu_mode()) {
+            if (!target.has_gpu_feature()) {
                 if (can_fuse) {
                     for (size_t i = 1; i < parallel_vars.size(); i++) {
                         // Outermost, and next outermost. Preserve the inner
@@ -2496,6 +2499,7 @@ void configure_pipeline_features(const FunctionDAG &dag,
 IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
                                           vector<Function> outputs,
                                           const MachineParams &params,
+                                          const Target &target,
                                           CostModel *cost_model,
                                           std::mt19937 &rng,
                                           int beam_size,
@@ -2656,7 +2660,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
               state->calculate_cost(dag, params, nullptr, true);
             */
 
-            state->generate_children(dag, params, cost_model, enqueue_new_children);
+            state->generate_children(dag, params, target, cost_model, enqueue_new_children);
             expanded++;
         }
 
@@ -2679,7 +2683,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
                 auto state = q[choice_label];
                 debug(0) << "\n[" << choice_label << "]:\n";
                 state->dump();
-                state->calculate_cost(dag, params, cost_model, true);
+                state->calculate_cost(dag, params, target, cost_model, true);
             }
             cost_model->evaluate_costs();
 
@@ -2701,6 +2705,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
 IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
                                      vector<Function> outputs,
                                      const MachineParams &params,
+                                     const Target &target,
                                      CostModel *cost_model,
                                      std::mt19937 &rng,
                                      int beam_size) {
@@ -2716,7 +2721,7 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
     }
 
     for (int i = 0; i < num_passes; i++) {
-        auto pass = optimal_schedule_pass(dag, outputs, params, cost_model, rng, beam_size, i, permitted_hashes);
+        auto pass = optimal_schedule_pass(dag, outputs, params, target, cost_model, rng, beam_size, i, permitted_hashes);
         debug(0) << "\nPass " << i << " result:\n";
         pass->dump();
 
@@ -2795,7 +2800,7 @@ std::string generate_schedules_new(const std::vector<Function> &outputs,
         // Use a fixed running time
         auto start = std::chrono::steady_clock::now();
         for (size_t beam_size = 1; ; beam_size *= 2) {
-            auto s = optimal_schedule(dag, outputs, params, cost_model.get(), rng, beam_size);
+            auto s = optimal_schedule(dag, outputs, params, target, cost_model.get(), rng, beam_size);
             if (beam_size == 1 || s->cost < optimal->cost) {
                 optimal = s;
             }
@@ -2807,7 +2812,7 @@ std::string generate_schedules_new(const std::vector<Function> &outputs,
         }
     } else {
         // Use a fixed beam size
-        optimal = optimal_schedule(dag, outputs, params, cost_model.get(), rng, beam_size);
+        optimal = optimal_schedule(dag, outputs, params, target, cost_model.get(), rng, beam_size);
     }
 
     debug(0) << "Cost evaluated this many times: " << State::cost_calculations << '\n';
@@ -2815,10 +2820,10 @@ std::string generate_schedules_new(const std::vector<Function> &outputs,
     debug(0) << "** Optimal schedule:\n";
 
     // Just to get the debugging prints to fire
-    optimal->calculate_cost(dag, params, cost_model.get(), true);
+    optimal->calculate_cost(dag, params, target, cost_model.get(), true);
 
     // Apply the schedules
-    optimal->apply_schedule(dag, params);
+    optimal->apply_schedule(dag, params, target);
 
     // Print out the schedule
     optimal->dump();
