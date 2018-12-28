@@ -3,6 +3,7 @@
 #include <fstream>
 #include <iostream>
 #include <map>
+#include <random>
 
 #include <unistd.h>
 #include <sys/types.h>
@@ -49,9 +50,11 @@ Runtime::Buffer<float> buffer_from_file(const std::string &filename, const std::
     i.close();
 
     if (i.fail()) {
-        std::cerr << "Could not load buffer from file: " << filename << "\n Using random values instead.\n";
-        buf.for_each_value([](float &f) {
-                f = ((float)rand()) / RAND_MAX - 0.5f;
+        auto seed = time(NULL);
+        std::mt19937 rng((uint32_t) seed);
+        std::cerr << "Could not load buffer from file: " << filename << "\n Using random values with seed = " << seed << " instead.\n";
+        buf.for_each_value([&rng](float &f) {
+                f = ((float)rng()) / rng.max() - 0.5f;
             });
     }
 
@@ -82,20 +85,22 @@ class DefaultCostModel : public CostModel {
     Runtime::Buffer<double *> cost_ptrs;
     int cursor, num_stages, num_cores;
 
-    std::string weights_dir;
-    bool randomize_weights;
-    std::string weights_server_hostname;
-    int weights_server_port;
-    int weights_server_experiment_id;
+    const std::string weights_in_dir, weights_out_dir;
+    const bool randomize_weights;
+    const std::string weights_server_hostname;
+    const int weights_server_port;
+    const int weights_server_experiment_id;
 
  public:
 
-    DefaultCostModel(const std::string &weights_dir,
+    DefaultCostModel(const std::string &weights_in_dir,
+                     const std::string &weights_out_dir,
                      bool randomize_weights,
                      const std::string &weights_server_hostname,
                      int weights_server_port,
                      int weights_server_experiment_id) :
-        weights_dir(weights_dir),
+        weights_in_dir(weights_in_dir),
+        weights_out_dir(weights_out_dir),
         randomize_weights(randomize_weights),
         weights_server_hostname(weights_server_hostname),
         weights_server_port(weights_server_port),
@@ -198,7 +203,7 @@ class DefaultCostModel : public CostModel {
                 fastest_idx = i;
             }
         }
-        
+
         train_cost_model(num_stages,
                          cursor,
                          num_cores,
@@ -302,9 +307,9 @@ class DefaultCostModel : public CostModel {
 
     void load_weights() {
 
-        assert(!weights_dir.empty());
+        assert(!weights_in_dir.empty());
 
-        if (weights_dir.empty()) {
+        if (weights_in_dir.empty()) {
             weights.head1_filter = Runtime::Buffer<float>(weights_head1_conv1_weight, head1_channels, head1_w, head1_h);
             assert(weights_head1_conv1_weight_length == (int)weights.head1_filter.size_in_bytes());
 
@@ -323,37 +328,38 @@ class DefaultCostModel : public CostModel {
             weights.conv1_bias = Runtime::Buffer<float>(weights_trunk_conv1_bias, conv1_channels);
             assert(weights_trunk_conv1_bias_length == (int)weights.conv1_bias.size_in_bytes());
         } else {
-            weights.head1_filter = buffer_from_file(weights_dir + "/head1_conv1_weight.data", {head1_channels, head1_w, head1_h});
-            weights.head1_bias = buffer_from_file(weights_dir + "/head1_conv1_bias.data", {head1_channels});
+            weights.head1_filter = buffer_from_file(weights_in_dir + "/head1_conv1_weight.data", {head1_channels, head1_w, head1_h});
+            weights.head1_bias = buffer_from_file(weights_in_dir + "/head1_conv1_bias.data", {head1_channels});
 
-            weights.head2_filter = buffer_from_file(weights_dir + "/head2_conv1_weight.data", {head2_channels, head2_w});
-            weights.head2_bias = buffer_from_file(weights_dir + "/head2_conv1_bias.data", {head2_channels});
+            weights.head2_filter = buffer_from_file(weights_in_dir + "/head2_conv1_weight.data", {head2_channels, head2_w});
+            weights.head2_bias = buffer_from_file(weights_in_dir + "/head2_conv1_bias.data", {head2_channels});
 
-            weights.conv1_filter = buffer_from_file(weights_dir + "/trunk_conv1_weight.data", {conv1_channels, head1_channels + head2_channels});
-            weights.conv1_bias = buffer_from_file(weights_dir + "/trunk_conv1_bias.data", {conv1_channels});
+            weights.conv1_filter = buffer_from_file(weights_in_dir + "/trunk_conv1_weight.data", {conv1_channels, head1_channels + head2_channels});
+            weights.conv1_bias = buffer_from_file(weights_in_dir + "/trunk_conv1_bias.data", {conv1_channels});
         }
 
         if (randomize_weights) {
-            srand(time(NULL));
-            std::cout << "Randomizing weights\n";
+            auto seed = time(NULL);
+            std::cout << "Randomizing weights using seed = " << seed << "\n";
+            std::mt19937 rng((uint32_t) seed);
             // Fill the weights with random values
-            for_each_weight([](Runtime::Buffer<float> &w) {
-                    w.for_each_value([](float &f) {
-                            f = ((float)rand()) / RAND_MAX - 0.5f;
+            for_each_weight([&rng](Runtime::Buffer<float> &w) {
+                    w.for_each_value([&rng](float &f) {
+                            f = ((float)rng()) / rng.max() - 0.5f;
                         });
                 });
         }
     }
 
     void save_weights() {
-        if (weights_dir.empty()) return;
+        if (weights_out_dir.empty()) return;
 
-        buffer_to_file(weights.head1_filter, weights_dir + "/head1_conv1_weight.data");
-        buffer_to_file(weights.head1_bias, weights_dir + "/head1_conv1_bias.data");
-        buffer_to_file(weights.head2_filter, weights_dir + "/head2_conv1_weight.data");
-        buffer_to_file(weights.head2_bias, weights_dir + "/head2_conv1_bias.data");
-        buffer_to_file(weights.conv1_filter, weights_dir + "/trunk_conv1_weight.data");
-        buffer_to_file(weights.conv1_bias, weights_dir + "/trunk_conv1_bias.data");
+        buffer_to_file(weights.head1_filter, weights_out_dir + "/head1_conv1_weight.data");
+        buffer_to_file(weights.head1_bias, weights_out_dir + "/head1_conv1_bias.data");
+        buffer_to_file(weights.head2_filter, weights_out_dir + "/head2_conv1_weight.data");
+        buffer_to_file(weights.head2_bias, weights_out_dir + "/head2_conv1_bias.data");
+        buffer_to_file(weights.conv1_filter, weights_out_dir + "/trunk_conv1_weight.data");
+        buffer_to_file(weights.conv1_bias, weights_out_dir + "/trunk_conv1_bias.data");
     }
 
 
@@ -492,10 +498,11 @@ class DefaultCostModel : public CostModel {
 
 
 
-std::unique_ptr<CostModel> CostModel::make_default(const std::string &weights_dir,
+std::unique_ptr<CostModel> CostModel::make_default(const std::string &weights_in_dir,
+                                                   const std::string &weights_out_dir,
                                                    bool randomize_weights,
                                                    const std::string &weights_server_hostname,
                                                    int weights_server_port,
                                                    int weights_server_experiment_id) {
-    return std::unique_ptr<CostModel>(new DefaultCostModel(weights_dir, randomize_weights, weights_server_hostname, weights_server_port, weights_server_experiment_id));
+    return std::unique_ptr<CostModel>(new DefaultCostModel(weights_in_dir, weights_out_dir, randomize_weights, weights_server_hostname, weights_server_port, weights_server_experiment_id));
 }

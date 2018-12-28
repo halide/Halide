@@ -8,6 +8,10 @@ int main(int argc, char **argv) {
     }
 
     FILE *f = fopen(argv[1], "ab");
+    if (!f) {
+      fprintf(stderr, "Unable to open file: %s\n", argv[1]);
+      return -1;
+    }
 
     float r = atof(argv[2]) * 1000;
     int pid = atoi(argv[3]);

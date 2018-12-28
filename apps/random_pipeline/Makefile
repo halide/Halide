@@ -1,4 +1,5 @@
 include ../support/Makefile.inc
+include ../support/autoscheduler.inc
 
 all: $(BIN)/test
 
@@ -28,7 +29,7 @@ $(BIN)/runtime.a: $(BIN)/random_pipeline.generator
 
 $(BIN)/random_pipeline.generator: random_pipeline_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -rdynamic -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 $(BIN)/$(ID)/random_pipeline.a: $(BIN)/random_pipeline.generator
 	@mkdir -p $(@D)
