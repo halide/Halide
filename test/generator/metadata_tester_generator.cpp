@@ -142,6 +142,8 @@ public:
         i8.set_estimate(3);
         f32.set_estimate(48.5f);
 
+        array2_i8.set_estimate(0, 42);
+
         // Provide some bounds estimates for an Output<Func>.
         // Note that calling bound() implicitly calls estimate() as well.
         output
