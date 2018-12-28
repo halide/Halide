@@ -1749,10 +1749,16 @@ public:
         return ExternFuncArgument(this->exprs().at(0));
     }
 
-    void set_estimate(const T &value) {
+    template <typename T2 = T, typename std::enable_if<!std::is_array<T2>::value>::type * = nullptr>
+    void set_estimate(const TBase &value) {
         for (Parameter &p : this->parameters_) {
             p.set_estimate(Expr(value));
         }
+    }
+
+    template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
+    void set_estimate(size_t index, const TBase &value) {
+        this->parameters_.at(index).set_estimate(Expr(value));
     }
 };
 
