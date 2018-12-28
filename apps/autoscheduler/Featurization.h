@@ -136,7 +136,7 @@ struct ScheduleFeatures {
 
     int64_t points_computed_minimum = 0; // The minimum number of points that are actually required to be computed to produce a correct output.
 
-    int64_t innermost_loop_extent = 0; // Trip count of innermost serial loop
+    int64_t innermost_loop_extent = 0; // Trip count of innermost serial loop. Currently always equal to the next feature
     int64_t innermost_pure_loop_extent = 0; // Trip count of innermost loop over the innermost storage dimension
 
     int64_t inner_parallelism = 0; // The number of parallel jobs used in the production of this Func. 1 unless the Func is compute_root.

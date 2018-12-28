@@ -34,6 +34,11 @@ struct OptionalRational {
             exists = false;
             return;
         }
+        if (denominator == other.denominator) {
+            numerator += other.numerator;
+            return;
+        }
+
         int64_t l = lcm(denominator, other.denominator);
         numerator *= l / denominator;
         denominator = l;
@@ -104,7 +109,7 @@ public:
     }
 
     size_t consumer_loop_dims() const {
-        if (coeffs.empty()) {
+        if (coeffs.empty() || coeffs[0].empty()) {
             // The producer is scalar, and we don't know how
             // many consumer loops there are.
             return 0;
@@ -112,11 +117,10 @@ public:
         return coeffs[0].size();
     }
 
-    const OptionalRational &operator()(int producer_storage_dim, int consumer_loop_dim) const {
-        static OptionalRational zero {true, 0, 1};
+    OptionalRational operator()(int producer_storage_dim, int consumer_loop_dim) const {
         if (coeffs.empty()) {
             // The producer is scalar, so all strides are zero.
-            return zero;
+            return {true, 0, 1};
         }
         return coeffs[producer_storage_dim][consumer_loop_dim];
     }
@@ -142,7 +146,7 @@ public:
 
     LoadJacobian operator*(const LoadJacobian &other) const {
         vector<vector<OptionalRational>> matrix;
-        internal_assert(consumer_loop_dims() == other.producer_storage_dims());
+        internal_assert(consumer_loop_dims() == 0 || (consumer_loop_dims() == other.producer_storage_dims()));
         matrix.resize(producer_storage_dims());
         for (size_t i = 0; i < producer_storage_dims(); i++) {
             matrix[i].resize(other.consumer_loop_dims());
@@ -511,7 +515,7 @@ struct FunctionDAG {
         // at zero for each pipeline.
         int id, max_id;
 
-        bool is_output, is_input;
+        bool is_wrapper, is_output, is_input;
 
         std::unique_ptr<BoundContents::Layout> bounds_memory_layout;
 
@@ -967,7 +971,8 @@ struct FunctionDAG {
                     }
                 }
 
-                node.is_input = !node.func.has_update_definition() && node.func.is_wrapper() && !any_incoming_edges;
+                node.is_wrapper = node.func.is_wrapper();
+                node.is_input = !node.func.has_update_definition() && node.is_wrapper && !any_incoming_edges;
             }
         }
 

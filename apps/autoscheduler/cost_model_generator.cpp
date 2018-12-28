@@ -239,7 +239,7 @@ public:
                                     num_scalars * relu1(3, w, n)));
 
         // Account for all the code outside of the innermost loop. It's inversly proportional to the size of the innermost loop.
-        Expr innermost_loops = relu1(4, w, n) * (num_vectors + num_scalars) / max(1, innermost_loop_extent);
+        Expr innermost_loops = relu1(4, w, n) * (num_vectors + num_scalars) / max(1, innermost_pure_loop_extent);
 
         compute_cost += innermost_loops;
 
@@ -302,16 +302,16 @@ public:
         // Malloc aint free. Small allocations should go on the stack, but this isn't totally reliable.
         Expr cost_of_malloc = relu1(24, w, n) * num_realizations;
 
-        // Penalize working sets that start to fall out of cache
-        // Expr cost_of_working_set = working_set *
-
         Expr cost_of_parallel_launches = num_productions * select(inner_parallelism > 1, relu1(25, w, n), 0.0f);
 
         Expr cost_of_parallel_tasks = num_productions * (inner_parallelism - 1) * relu1(26, w, n);
 
         Expr cost_of_parallelism = cost_of_parallel_tasks + cost_of_parallel_launches;
 
-        Expr cost = compute_cost + store_cost + load_cost + store_cost + cost_of_malloc + cost_of_parallelism;
+        // Penalize working sets that start to fall out of cache
+        Expr cost_of_working_set = working_set * relu1(27, w, n);
+
+        Expr cost = compute_cost + store_cost + load_cost + store_cost + cost_of_malloc + cost_of_parallelism + cost_of_working_set;
 
         // Keep the schedule fixed by adding a dependence to all out channels
         for (int i = 0; i < conv1_channels; i++) {

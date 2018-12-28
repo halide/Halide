@@ -450,8 +450,8 @@ class AttemptStorageFoldingOfFunction : public IRMutator2 {
         // Try each dimension in turn from outermost in
         for (size_t i = box.size(); i > 0; i--) {
             int dim = (int)(i-1);
-            Expr min = simplify(box[dim].min);
-            Expr max = simplify(box[dim].max);
+            Expr min = simplify(common_subexpression_elimination(simplify(box[dim].min)));
+            Expr max = simplify(common_subexpression_elimination(simplify(box[dim].max)));
 
             Expr min_provided, max_provided, min_required, max_required;
             if (func.schedule().async() && !explicit_only) {

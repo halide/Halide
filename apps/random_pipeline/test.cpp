@@ -68,15 +68,25 @@ int main(int argc, char **argv) {
     input.allocate();
     input.fill(0.0f);
     uint8_weights.allocate();
+    uint8_weights.fill(0);
     uint16_weights.allocate();
+    uint16_weights.fill(0);
     uint32_weights.allocate();
+    uint32_weights.fill(0);
     int8_weights.allocate();
+    int8_weights.fill(0);
     int16_weights.allocate();
+    int16_weights.fill(0);
     int32_weights.allocate();
+    int32_weights.fill(0);
     float32_weights.allocate();
+    float32_weights.fill(0);
 
     printf("Input size: %d %d %d\n", input.width(), input.height(), input.channels());
 
+    BenchmarkConfig config;
+    config.accuracy = 0.01;
+    config.min_time = 0.5;
     double best = benchmark([&]() {
             random_pipeline(input,
                             uint8_weights,
@@ -87,7 +97,7 @@ int main(int argc, char **argv) {
                             int32_weights,
                             float32_weights,
                             output);
-    });
+        }, config);
     printf("Time: %g\n", best * 1e3);
 
     /*
