@@ -1751,14 +1751,22 @@ public:
 
     template <typename T2 = T, typename std::enable_if<!std::is_array<T2>::value>::type * = nullptr>
     void set_estimate(const TBase &value) {
+        Expr e = Expr(value);
+        if (std::is_same<T2, bool>::value) {
+          e = cast<bool>(e);
+        }
         for (Parameter &p : this->parameters_) {
-            p.set_estimate(Expr(value));
+            p.set_estimate(e);
         }
     }
 
     template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
     void set_estimate(size_t index, const TBase &value) {
-        this->parameters_.at(index).set_estimate(Expr(value));
+        Expr e = Expr(value);
+        if (std::is_same<T2, bool>::value) {
+          e = cast<bool>(e);
+        }
+        this->parameters_.at(index).set_estimate(e);
     }
 };
 
