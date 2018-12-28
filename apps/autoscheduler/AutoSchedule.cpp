@@ -48,10 +48,6 @@ using std::map;
 using std::set;
 using std::pair;
 
-bool gpu_mode() {
-    return atoi(get_env_variable("HL_GPU_MODE").c_str());
-}
-
 int64_t get_shared_memory_limit() {
     // HL_SHARED_MEMORY_LIMIT is in KB
     std::string limit = get_env_variable("HL_SHARED_MEMORY_LIMIT");
