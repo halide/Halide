@@ -413,6 +413,7 @@ void CameraPipe::generate() {
 
     // Schedule
     if (auto_schedule) {
+
         input.dim(0).set_bounds_estimate(0, 2592);
         input.dim(1).set_bounds_estimate(0, 1968);
 
@@ -422,9 +423,16 @@ void CameraPipe::generate() {
         matrix_7000.dim(1).set_bounds_estimate(0, 3);
 
         processed
-            .estimate(c, 0, 3)
-            .estimate(x, 0, 2592)
-            .estimate(y, 0, 1968);
+            .bound(c, 0, 3)
+            .bound(x, 0, 2592 - 32)
+            .bound(y, 0, 1968 - 48);
+
+        sharpen_strength.set_estimate(1.0f);
+        blackLevel.set_estimate(25);
+        whiteLevel.set_estimate(1023);
+        gamma.set_estimate(2);
+        contrast.set_estimate(50);
+        color_temp.set_estimate(3200);
 
     } else {
 

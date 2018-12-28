@@ -1,4 +1,5 @@
 include ../support/Makefile.inc
+include ../support/autoscheduler.inc
 
 all: $(BIN)/process
 
@@ -6,15 +7,15 @@ TIMING_ITERATIONS ?= 5
 
 $(BIN)/camera_pipe.generator: camera_pipe_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS) $(USE_EXPORT_DYNAMIC)
 
 $(BIN)/camera_pipe.a: $(BIN)/camera_pipe.generator
 	@mkdir -p $(@D)
-	$^ -g camera_pipe -o $(BIN) -f camera_pipe target=$(HL_TARGET) auto_schedule=false
+	$^ -g camera_pipe -o $(BIN) -f camera_pipe target=$(HL_TARGET) auto_schedule=false -e static_library,h,assembly,stmt
 
 $(BIN)/camera_pipe_auto_schedule.a: $(BIN)/camera_pipe.generator
 	@mkdir -p $(@D)
-	$^ -g camera_pipe -o $(BIN) -f camera_pipe_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true
+	$^ -g camera_pipe -o $(BIN) -f camera_pipe_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so -e static_library,h,assembly,stmt
 
 $(BIN)/viz/camera_pipe.a: $(BIN)/camera_pipe.generator
 	@mkdir -p $(@D)
