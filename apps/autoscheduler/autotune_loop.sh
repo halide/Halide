@@ -92,7 +92,6 @@ benchmark_sample() {
         --default_input_buffers=random:0:estimate_then_auto \
         --default_input_scalars=estimate \
         --benchmarks=all \
-        --benchmark_min_time=1 \
             | tee ${D}/bench.txt || echo "Benchmarking failed or timed out"
 
     # Add the runtime, pipeline id, and schedule id to the feature file
@@ -130,6 +129,6 @@ for ((i=$((FIRST+1));i<1000000;i++)); do
     # retrain model weights on all samples seen so far
     echo Retraining model...
     find ${SAMPLES} | grep sample$ | \
-        HL_NUM_THREADS=32 HL_WEIGHTS_DIR=weights HL_BEST_SCHEDULE_FILE=${PWD}/samples/best.txt ./bin/train_cost_model 1000
+        HL_NUM_THREADS=32 HL_WEIGHTS_DIR=weights HL_BEST_SCHEDULE_FILE=${PWD}/samples/best.txt ./bin/train_cost_model 1 0.001
 
 done
