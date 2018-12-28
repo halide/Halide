@@ -1,3 +1,5 @@
+#include <vector>
+
 #include "Monotonic.h"
 #include "IRMutator.h"
 #include "IROperator.h"
@@ -9,11 +11,15 @@ namespace Halide {
 namespace Internal {
 
 using std::string;
+using std::vector;
+using std::pair;
 
 class MonotonicVisitor : public IRVisitor {
     const string &var;
 
     Scope<Monotonic> scope;
+
+    vector<pair<string, Expr>> let_stack;
 
     void visit(const IntImm *) override {
         result = Monotonic::Constant;
@@ -244,8 +250,15 @@ class MonotonicVisitor : public IRVisitor {
             return;
         }
 
-        bool true_value_ge_false_value = can_prove(op->true_value >= op->false_value);
-        bool true_value_le_false_value = can_prove(op->true_value <= op->false_value);
+        auto wrap_lets = [&](Expr e) {
+            for (auto it = let_stack.rbegin(); it != let_stack.rend(); it++) {
+                e = Let::make(it->first, it->second, e);
+            }
+            return e;
+        };
+
+        bool true_value_ge_false_value = can_prove(wrap_lets(op->true_value >= op->false_value));
+        bool true_value_le_false_value = can_prove(wrap_lets(op->true_value <= op->false_value));
 
         bool switches_from_true_to_false = rcond == Monotonic::Decreasing;
         bool switches_from_false_to_true = rcond == Monotonic::Increasing;
@@ -313,9 +326,11 @@ class MonotonicVisitor : public IRVisitor {
             // because unknown variables are treated as constant.
             op->body.accept(this);
         } else {
+            let_stack.emplace_back(op->name, op->value);
             scope.push(op->name, result);
             op->body.accept(this);
             scope.pop(op->name);
+            let_stack.pop_back();
         }
     }
 

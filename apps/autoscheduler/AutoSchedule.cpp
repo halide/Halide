@@ -73,13 +73,13 @@ bool random_dropout(std::mt19937 &rng) {
     return drop_it;
 }
 
-vector<vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, int factor, bool allow_splits, int vector_dim, int vector_size, const Target& target) {
+vector<vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, int factor, bool allow_splits, const Target& target) {
     vector<vector<int64_t>> result;
     if (d == -1) {
         result.push_back(vector<int64_t>());
     } else {
         vector<vector<int64_t>> v;
-        v = generate_tilings(s, d - 1, factor, allow_splits, vector_dim, vector_size, target);
+        v = generate_tilings(s, d - 1, factor, allow_splits, target);
         // If we're already generated tons of tiling configs for the
         // inner loops, search the outer loops with coarser
         // granularity.
@@ -103,44 +103,39 @@ vector<vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, int fa
                     t.back() = 1;
                     result.push_back(t);
                 }
-                if (s[d] != 1 && !is_full && is_one && (d != vector_dim)) {
+                if (s[d] != 1 && !is_full && is_one) {
                     t.back() = s[d];
                     result.push_back(t);
                 }
             } else {
                 int max_inner = 0;
-                int first_inner = (d == vector_dim) ? vector_size : 1;
-                for (int inner = first_inner; inner < s[d]; inner *= factor) {
+                for (int inner = 1; inner < s[d]; inner *= factor) {
                     int outer = (s[d] + inner - 1) / inner;
                     if (is_one && outer == 1) continue;
                     if (is_full && outer == s[d]) continue;
                     // Stop when we hit inner sizes that would do too much recompute
-                    if (inner > first_inner && inner * outer * 7 > s[d] * 8) break;
+                    if (inner > 1 && inner * outer * 7 > s[d] * 8) break;
                     max_inner = inner;
                     t.back() = outer;
                     result.push_back(t);
                 }
 
-                // Additional tiling options may have inner extents that are not
-                // multiples of 32 so skip them for the vector dimension
-                if (!target.has_gpu_feature() || d != vector_dim) {
-                    for (int outer = 1; outer <= s[d]; outer *= factor) {
-                        int inner = (s[d] + outer - 1) / outer;
-                        if (is_one && outer == 1) continue;
-                        if (is_full && outer == s[d]) continue;
-                        // Stop when we get into the regime covered by the loop above.
-                        if (outer > 1 && inner < max_inner * 2) break;
-                        // Or when the wasted compute gets too bad.
-                        if (inner * outer * 7 > s[d] * 8) break;
-                        t.back() = outer;
-                        result.push_back(t);
-                    }
+                for (int outer = 1; outer <= s[d]; outer *= factor) {
+                    int inner = (s[d] + outer - 1) / outer;
+                    if (is_one && outer == 1) continue;
+                    if (is_full && outer == s[d]) continue;
+                    // Stop when we get into the regime covered by the loop above.
+                    if (outer > 1 && inner < max_inner * 2) break;
+                    // Or when the wasted compute gets too bad.
+                    if (inner * outer * 7 > s[d] * 8) break;
+                    t.back() = outer;
+                    result.push_back(t);
                 }
 
                 if (!target.has_gpu_feature()) {
                     // The sequence above (in terms of the inner loop) goes 1 2 4 8 16 ...
                     // but 3 is an important inner tiling factor for matrix multiply ops.
-                    int inner3 = (d == vector_dim) ? 3*vector_size : 3;
+                    int inner3 = 3;
                     int outer3 = (s[d] + inner3 - 1) / inner3;
                     if (factor == 2 && inner3 < s[d] && outer3 < s[d] && outer3 > 1) {
                         if (inner3 * outer3 * 7 <= s[d] * 8) {
@@ -407,7 +402,7 @@ struct LoopNest {
                 }
                 int64_t innermost_storage_extent = 1;
                 int v = sites.get(&(node->stages[s])).produce->vector_dim;
-                if (v >= 0) {
+                if (v >= 0 && node->func.dimensions() > 0) {
                     innermost_storage_extent = (bounds->region_computed(v).second -
                                                 bounds->region_computed(v).first + 1);
                 }
@@ -445,7 +440,7 @@ struct LoopNest {
                 if (p) {
                     int64_t innermost_storage_extent = 1;
                     int v = p->vector_dim;
-                    if (v >= 0) {
+                    if (v >= 0 && node->func.dimensions() > 0) {
                         innermost_storage_extent = root_bounds->region_computed(v).second - root_bounds->region_computed(v).first + 1;
                     }
                     feat.innermost_bytes_at_root = node->bytes_per_point * innermost_storage_extent;
@@ -547,7 +542,7 @@ struct LoopNest {
                 feat.bytes_at_production *= (p.second - p.first) + 1;
             }
             int64_t innermost_storage_extent = 1;
-            if (vector_dim >= 0) {
+            if (vector_dim >= 0 && node->func.dimensions() > 0) {
                 innermost_storage_extent = bounds->region_computed(vector_dim).second - bounds->region_computed(vector_dim).first + 1;
             }
             feat.innermost_bytes_at_production = node->bytes_per_point * innermost_storage_extent;
@@ -1082,7 +1077,7 @@ struct LoopNest {
     }
 
     // Return all possible ways to parallelize this loop
-    IntrusivePtr<const LoopNest> parallelize_in_tiles(const MachineParams &params, int tasks_per_physical_core, int outermost_dim,
+    IntrusivePtr<const LoopNest> parallelize_in_tiles(const MachineParams &params, int tasks_per_core, int outermost_dim,
                                                       const LoopNest *parent, bool *entirely_parallelized) const {
         int64_t total_pure_extent = 1;
         bool any_impure = false;
@@ -1099,7 +1094,7 @@ struct LoopNest {
         // for.
 
         // We want this many parallel tasks remaining in the outer loop
-        int64_t parallelism_required = (params.parallelism * tasks_per_physical_core + 1) / 2;
+        int64_t parallelism_required = params.parallelism * tasks_per_core;
 
         if (total_pure_extent <= parallelism_required) {
             // No splits to be made
@@ -1253,7 +1248,7 @@ struct LoopNest {
 
         if (tileable) {
             // Generate a list of tile sizes to try
-            auto tilings = generate_tilings(size, (int)(size.size() - 1), 2, !in_realization, vectorized_loop_index, innermost ? vector_size : 1, target);
+            auto tilings = generate_tilings(size, (int)(size.size() - 1), 2, !in_realization, target);
 
             if (tilings.size() > 1000) {
                 debug(0) << "Warning: lots of tilings: " << tilings.size() << "\n";
@@ -1275,6 +1270,7 @@ struct LoopNest {
                         }
                         idx++;
                     }
+
                     const double tasks_per_core = (double)total / params.parallelism;
                     const double idle_cores = std::ceil(tasks_per_core) / tasks_per_core;
                     if (idle_cores > 1.1) continue;
@@ -1345,6 +1341,7 @@ struct LoopNest {
 
                 bool may_slide = (!in_realization &&
                                   f->stages.size() == 1);
+
                 if (may_slide) {
                     // Store here, but compute further in. Currently
                     // don't have to worry about the constraints this
@@ -1371,21 +1368,25 @@ struct LoopNest {
             // Push the Func further inwards in the loop nest
 
             // See if it's appropriate to slide over this loop
-            const vector<int64_t> &child_size = children[child]->size;
-            int num_ones = 0;
-            for (auto s : child_size) {
-                num_ones += (s == 1) ? 1 : 0;
-            }
             // Can't slide at the root level, or no parallelism
             bool may_slide = !is_root();
+
+            const auto &c = children[child];
+            int num_ones = 0;
+            size_t child_loop = 0;
+            for (size_t i = 0; i < c->size.size(); i++) {
+                int64_t s = c->size[i];
+                num_ones += (s == 1) ? 1 : 0;
+            }
+
             // Only slide over single-dimensional loops
-            may_slide &= num_ones == ((int)child_size.size() - 1);
+            may_slide &= num_ones == ((int)c->size.size() - 1);
             // Don't slide funcs with update stages
             may_slide &= f->stages.size() == 1;
 
-            // Don't slide over a split vector dimension (why?)
-            may_slide &= (children[child]->vectorized_loop_index == -1 ||
-                          child_size[children[child]->vectorized_loop_index] == 1);
+            // Don't slide over the vector dimension
+            may_slide &= (c->vectorized_loop_index == -1 ||
+                          c->size[c->vectorized_loop_index] == 1);
 
             for (int store_here = 0; store_here < 2; store_here++) {
                 if (store_here && !may_slide) {
@@ -2143,6 +2144,20 @@ struct State {
                 }
             }
         } else {
+            bool should_parallelize = false;
+            for (auto &c : root->children) {
+                if (c->node == node) {
+                    should_parallelize = true;
+                }
+            }
+            if (!should_parallelize) {
+                // The Func must not be compute_root, so just return a copy of the parent state
+                num_children++;
+                auto child = make_child();
+                child->num_funcs_scheduled++;
+                accept_child(std::move(child));
+            }
+
             // Deciding on parallel tasks. Iterate over the
             // approximate number of parallel tasks to produce per
             // thread.
@@ -2168,14 +2183,6 @@ struct State {
                     if (entirely_parallelized) break;
                 }
                 if (entirely_parallelized) break;
-            }
-
-            if (num_children == 0) {
-                // The Func must not be compute_root, so just return a copy of the parent state
-                num_children++;
-                auto child = make_child();
-                child->num_funcs_scheduled++;
-                accept_child(std::move(child));
             }
         }
 

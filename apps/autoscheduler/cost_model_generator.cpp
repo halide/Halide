@@ -302,16 +302,16 @@ public:
         // Malloc aint free. Small allocations should go on the stack, but this isn't totally reliable.
         Expr cost_of_malloc = relu1(24, w, n) * num_realizations;
 
-        // Penalize working sets that start to fall out of cache
-        // Expr cost_of_working_set = working_set *
-
         Expr cost_of_parallel_launches = num_productions * select(inner_parallelism > 1, relu1(25, w, n), 0.0f);
 
         Expr cost_of_parallel_tasks = num_productions * (inner_parallelism - 1) * relu1(26, w, n);
 
         Expr cost_of_parallelism = cost_of_parallel_tasks + cost_of_parallel_launches;
 
-        Expr cost = compute_cost + store_cost + load_cost + store_cost + cost_of_malloc + cost_of_parallelism;
+        // Penalize working sets that start to fall out of cache
+        Expr cost_of_working_set = working_set * relu1(27, w, n);
+
+        Expr cost = compute_cost + store_cost + load_cost + store_cost + cost_of_malloc + cost_of_parallelism + cost_of_working_set;
 
         // Keep the schedule fixed by adding a dependence to all out channels
         for (int i = 0; i < conv1_channels; i++) {
