@@ -239,7 +239,7 @@ public:
                                     num_scalars * relu1(3, w, n)));
 
         // Account for all the code outside of the innermost loop. It's inversly proportional to the size of the innermost loop.
-        Expr innermost_loops = relu1(4, w, n) * (num_vectors + num_scalars) / max(1, innermost_loop_extent);
+        Expr innermost_loops = relu1(4, w, n) * (num_vectors + num_scalars) / max(1, innermost_pure_loop_extent);
 
         compute_cost += innermost_loops;
 

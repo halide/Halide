@@ -476,11 +476,12 @@ struct LoopNest {
             }
         } else {
             // These will get progressively overwritten as we visit the children
-            feat.innermost_loop_extent = size.empty() ? 1 : size[0];
             if (vectorized_loop_index >= 0 && vectorized_loop_index < size.size()) {
                 feat.innermost_pure_loop_extent = size[vectorized_loop_index];
+                feat.innermost_loop_extent = feat.innermost_pure_loop_extent;
             } else {
                 feat.innermost_pure_loop_extent = 1;
+                feat.innermost_loop_extent = 1;
             }
         }
 
@@ -1405,6 +1406,7 @@ struct LoopNest {
     struct StageScheduleState {
         double num_cores = 0; // How much parallelism do we need to exploit with this Func?
         int vector_dim = -1; // Which storage dimension is vectorized? We need to reorder it innermost.
+        int vectorized_loop_index = -1;
         struct FuncVar {
             VarOrRVar orig;
             VarOrRVar var;
@@ -1444,6 +1446,8 @@ struct LoopNest {
                 StageScheduleState *state = new StageScheduleState;
                 state->num_cores = num_cores;
                 state->vector_dim = vector_dim;
+                state->vectorized_loop_index = vectorized_loop_index;
+                size_t sz = state->vars.size();
                 for (size_t i = 0; i < symbolic_loop.size(); i++) {
                     StageScheduleState::FuncVar fv;
                     const auto &l = symbolic_loop[i];
@@ -1508,7 +1512,7 @@ struct LoopNest {
                 if (innermost) {
                     if (vectorized_loop_index >= 0) {
                         auto &v = state.vars[vectorized_loop_index];
-                        internal_assert(v.exists);
+                        internal_assert(v.exists) << v.var.name() << "\n";
                         // Is the result of a split
                         state.schedule_source
                             << "\n    .vectorize(" << v.var.name() << ")";
@@ -1615,7 +1619,12 @@ struct LoopNest {
                     }
 
                     bool found = false;
-                    for (const auto &v : state.vars) {
+                    if (vectorized_loop_index >= 0 &&
+                        vectorized_loop_index < state.vars.size() &&
+                        state.vars[vectorized_loop_index].exists) {
+                        here = LoopLevel(node->func, state.vars[vectorized_loop_index].var);
+                        found = true;
+                    } else for (const auto &v : state.vars) {
                         if (!v.exists) continue;
                         here = LoopLevel(node->func, v.var);
                         found = true;
@@ -2101,7 +2110,7 @@ struct State {
         } else {
             bool should_parallelize = false;
             for (auto &c : root->children) {
-                if (c->node == node) {
+                if (c->node == node && !c->size.empty()) {
                     should_parallelize = true;
                 }
             }
@@ -2216,6 +2225,20 @@ struct State {
             if (p.first->node->is_input) continue;
 
             Stage stage(p.first->stage);
+
+            // Reorder the innermost storage dimension to also be the innermost loop dimension within each group
+            {
+                auto &vars = p.second->vars;
+                if (!vars.empty()) {
+                    size_t one_level_size = p.first->loop.size();
+                    size_t tiling_levels = vars.size() / one_level_size;
+                    for (size_t g = 0; g < tiling_levels; g++) {
+                        for (int i = p.second->vectorized_loop_index; i > 0; i--) {
+                            std::swap(vars[g * one_level_size + i - 1], vars[g * one_level_size + i]);
+                        }
+                    }
+                }
+            }
 
             // Do all the reorders and pick which vars to
             // parallelize.
