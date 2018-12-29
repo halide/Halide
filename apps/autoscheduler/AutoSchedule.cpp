@@ -1043,7 +1043,7 @@ struct LoopNest {
                 internal_assert(l.second >= l.first) << i << " " << l.second << " " << l.first << "\n";
 
                 if (f->func.dimensions() &&
-                    node->size[i] >= node->stage->vector_size &&
+                    node->size[i] >= 1 &&
                     f->stages[s].loop[i].var == f->func.args()[v]) {
                     node->vectorized_loop_index = (int)i;
                     vector_size = (int64_t)(node->stage->vector_size);
