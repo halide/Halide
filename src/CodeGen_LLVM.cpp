@@ -936,7 +936,10 @@ Constant* CodeGen_LLVM::embed_constant_expr(Expr e, llvm::Type *t) {
     }
 
     internal_assert(!e.type().is_handle()) << "Should never see Handle types here.";
-    internal_assert(is_const(e)) << "Should never see Handle types here.";
+    if (!is_const(e)) {
+        e = simplify(e);
+        internal_assert(is_const(e)) << "Should only see constant values for estimates.";
+    }
 
     llvm::Value *val = codegen(e);
     llvm::Constant *constant = dyn_cast<llvm::Constant>(val);
