@@ -422,7 +422,7 @@ struct FunctionDAG {
 
         struct Loop {
             string var;
-            bool pure;
+            bool pure, rvar;
             Expr min, max;
 
             // Common case optimizations:
@@ -808,6 +808,7 @@ struct FunctionDAG {
                     l.min = in.min;
                     l.max = in.max;
                     l.pure = d.is_pure();
+                    l.rvar = d.is_rvar();
 
                     // Additional analysis to speed up evaluation of
                     // common cases. Loop bounds that are just one of
