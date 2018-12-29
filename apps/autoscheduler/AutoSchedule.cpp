@@ -2323,7 +2323,7 @@ struct State {
                             stage.gpu_blocks(it->var);
                             current_parallel_loop++;
                         } else if (current_parallel_loop < n_parallel_loops - std::min((uint64_t) 3, n_parallel_loops/2)) {
-                            continue;
+                            current_parallel_loop++;
                         }
                         else {
                             p.second->schedule_source << "\n    .gpu_threads(" << it->var.name() << ")";
