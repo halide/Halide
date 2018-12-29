@@ -592,7 +592,7 @@ public:
         vector<Expr> coords = make_arguments(f.func.args());
         coords[0] = coords[0] * stride + r.x; // only stride in w and h
         coords[1] = coords[1] * stride + r.y;
-        coords[2] += r.z;
+        coords[2] = r.z;
         conv(args) += cast(sum_type, cast(mult_type, weights(r.z, r.x, r.y, args[2]) * f.func(coords)));
 
         Stage out {conv, f.w, f.h, f.random_out_channels()};
