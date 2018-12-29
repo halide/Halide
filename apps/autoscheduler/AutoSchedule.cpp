@@ -476,12 +476,26 @@ struct LoopNest {
             }
         } else {
             // These will get progressively overwritten as we visit the children
+
+            bool reduction = false;
+            size_t idx = 0;
+            for (const auto &l : stage->loop) {
+                if (l.rvar) {
+                    reduction = true;
+                    feat.innermost_loop_extent = size[idx];
+                    break;
+                }
+                idx++;
+            }
+
             if (vectorized_loop_index >= 0 && vectorized_loop_index < size.size()) {
                 feat.innermost_pure_loop_extent = size[vectorized_loop_index];
-                feat.innermost_loop_extent = feat.innermost_pure_loop_extent;
             } else {
                 feat.innermost_pure_loop_extent = 1;
-                feat.innermost_loop_extent = 1;
+            }
+
+            if (!reduction) {
+                feat.innermost_loop_extent = feat.innermost_pure_loop_extent;
             }
         }
 
@@ -1068,8 +1082,11 @@ struct LoopNest {
     }
 
     // Return all possible ways to parallelize this loop
-    IntrusivePtr<const LoopNest> parallelize_in_tiles(const MachineParams &params, int tasks_per_core, int outermost_dim,
-                                                      const LoopNest *parent, bool *entirely_parallelized) const {
+    IntrusivePtr<const LoopNest> parallelize_in_tiles(const MachineParams &params,
+                                                      int tasks_per_core,
+                                                      int outermost_dim,
+                                                      const LoopNest *parent,
+                                                      bool *entirely_parallelized) const {
         int64_t total_pure_extent = 1;
         bool any_impure = false;
         for (size_t i = 0; i < stage->loop.size(); i++) {
@@ -1137,12 +1154,12 @@ struct LoopNest {
         for (int i = (int)stage->loop.size(); i >= -1; i--) {
             int l = i;
             if (i == -1) l = vectorized_loop_index;
-            if (i == stage->loop.size()) l = outermost_dim;
+            if (i == stage->loop.size()) l = outermost_loop_index;
 
             if (i == vectorized_loop_index) continue; // We will handle the vectorized loop last
-            if (i == outermost_dim) continue; // Already handled
+            if (i == outermost_loop_index) continue; // Already handled
 
-            if (i == -1 && vectorized_loop_index == outermost_dim) break; // vectorized loop was already handled as the outermost loop
+            if (i == -1 && vectorized_loop_index == outermost_loop_index) break; // vectorized loop was already handled as the outermost loop
             if (l == -1) break; // There's no vectorized/outermost loop
 
             int64_t outer_extent = 1;
@@ -1540,9 +1557,17 @@ struct LoopNest {
                         StageScheduleState::FuncVar &parent = state.vars[i];
 
                         int64_t factor = (parent.extent + size[i] - 1) / size[i];
+                        int64_t innermost_size = innermost_loop->size[i];
 
-                        if (child && innermost_loop->size[i] > factor) {
-                            factor = innermost_loop->size[i];
+                        if (child && i == vectorized_loop_index) {
+                            // Ensure the split is a multiple of the
+                            // vector size. With all these rounded
+                            // divs going on it can drift.
+                            factor = ((factor + innermost_size - 1) / innermost_size) * innermost_size;
+                        }
+
+                        if (child && innermost_size > factor) {
+                            factor = innermost_size;
                         }
 
                         if (!parent.exists || factor == 1) {
@@ -2125,7 +2150,7 @@ struct State {
             // Deciding on parallel tasks. Iterate over the
             // approximate number of parallel tasks to produce per
             // thread.
-            const int factors[] = {1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64};
+            const int factors[] = {1, 2, 3, 4, 6, 8, 12, 16};
             for (int outermost_dim = 0; outermost_dim < node->func.dimensions(); outermost_dim++) {
                 // TODO: reorder the selected outermost dim to be outermost in the storage order (as long as it's not the vector dim)
                 bool entirely_parallelized = false;
@@ -2234,6 +2259,9 @@ struct State {
                     size_t tiling_levels = vars.size() / one_level_size;
                     for (size_t g = 0; g < tiling_levels; g++) {
                         for (int i = p.second->vectorized_loop_index; i > 0; i--) {
+                            if (vars[g * one_level_size + i - 1].var.is_rvar) {
+                                break;
+                            }
                             std::swap(vars[g * one_level_size + i - 1], vars[g * one_level_size + i]);
                         }
                     }
