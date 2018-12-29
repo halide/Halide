@@ -1590,6 +1590,12 @@ struct LoopNest {
                             if (parent.var.is_rvar || (stage_idx != 0 && !parent.outermost)) {
                                 tail_strategy = TailStrategy::GuardWithIf;
                             }
+
+                            if (factor > parent.extent && tail_strategy == TailStrategy::ShiftInwards) {
+                                // Don't shift all the way off the image.
+                                tail_strategy = TailStrategy::GuardWithIf;
+                            }
+
                             s.split(parent.var, parent.var, inner, (int)factor, tail_strategy);
                             state.schedule_source
                                 << "\n    .split("
