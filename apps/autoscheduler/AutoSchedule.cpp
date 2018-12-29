@@ -132,16 +132,14 @@ vector<vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, int fa
                     result.push_back(t);
                 }
 
-                if (!target.has_gpu_feature()) {
-                    // The sequence above (in terms of the inner loop) goes 1 2 4 8 16 ...
-                    // but 3 is an important inner tiling factor for matrix multiply ops.
-                    int inner3 = 3;
-                    int outer3 = (s[d] + inner3 - 1) / inner3;
-                    if (factor == 2 && inner3 < s[d] && outer3 < s[d] && outer3 > 1) {
-                        if (inner3 * outer3 * 7 <= s[d] * 8) {
-                            t.back() = outer3;
-                            result.push_back(t);
-                        }
+                // The sequence above (in terms of the inner loop) goes 1 2 4 8 16 ...
+                // but 3 is an important inner tiling factor for matrix multiply ops.
+                int inner3 = 3;
+                int outer3 = (s[d] + inner3 - 1) / inner3;
+                if (factor == 2 && inner3 < s[d] && outer3 < s[d] && outer3 > 1) {
+                    if (inner3 * outer3 * 7 <= s[d] * 8) {
+                        t.back() = outer3;
+                        result.push_back(t);
                     }
                 }
             }
