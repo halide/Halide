@@ -17,9 +17,9 @@ SAMPLES=${PWD}/samples
 # SAMPLES=/mnt/e/samples
 
 # Build some tools we need.
-make -C ../autoscheduler bin/augment_sample
-make -C ../autoscheduler bin/train_cost_model
-make -C ../autoscheduler bin/libauto_schedule.so
+make -C ../autoscheduler ../autoscheduler/bin/augment_sample
+make -C ../autoscheduler ../autoscheduler/bin/train_cost_model
+make -C ../autoscheduler ../autoscheduler/bin/libauto_schedule.so
 cp ../autoscheduler/bin/augment_sample ../autoscheduler/bin/train_cost_model  ../autoscheduler/bin/libauto_schedule.so bin/
 
 mkdir -p ${SAMPLES}
