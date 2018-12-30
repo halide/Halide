@@ -157,7 +157,7 @@ int main(int argc, char **argv) {
         RDom r(1, 1023);
         s(x, y) = before[4](x, y);
         s(r, y) += s(r-1, y);
-        after[0](x, y) = s(x, y);
+        after[0](x, y) = s(y, x) + s(y, x+100);
         for (int i = 1; i < 5; i++) {
             after[i](x, y) = after[i-1](x, y) + 1;
         }
@@ -398,6 +398,21 @@ int main(int argc, char **argv) {
 
         h.estimate(x, 0, 1024).estimate(y, 0, 2048);
         Pipeline(h).auto_schedule(target, params);
+    }
+
+    if (1) {
+        // Vectorizing a pure var in an update using RoundUp
+
+        Func f("f"), g("g");
+
+        f(x, y) = x + y;
+        RDom r(0, 10);
+        f(x, y) += f(x, y) * r;
+
+        g(x, y) = f(x, y);
+
+        g.estimate(x, 0, 10).estimate(y, 0, 2048);
+        Pipeline(g).auto_schedule(target, params);
     }
 
     return 0;

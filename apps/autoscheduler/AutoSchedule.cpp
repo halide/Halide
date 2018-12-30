@@ -439,9 +439,8 @@ struct LoopNest {
                 }
 
                 feat.points_computed_minimum = 1;
-                int s = stage - &node->stages[0];
                 for (int i = 0; i < (int)stage->loop.size(); i++) {
-                    const auto &p = root_bounds->loops(s, i);
+                    const auto &p = root_bounds->loops(stage->index, i);
                     feat.points_computed_minimum *= (p.second - p.first + 1);
                 }
 
@@ -1035,9 +1034,10 @@ struct LoopNest {
                 // Initialize the loop nest
                 node->size[i] = l.second - l.first + 1;
                 total_extent *= node->size[i];
-                // Pick a representative loop iteration for the inner
-                // loop. With the way tiling is done below, it needs
-                // to be the first loop iteration.
+
+                // Use the first loop iteration to represent the inner
+                // loop. We'll shift it to a later one once we decide
+                // on vectorization.
                 single_point->loops(s, i) = {l.first, l.first};
 
                 internal_assert(l.second >= l.first) << i << " " << l.second << " " << l.first << "\n";
@@ -1047,9 +1047,21 @@ struct LoopNest {
                     f->stages[s].loop[i].var == f->func.args()[v]) {
                     node->vectorized_loop_index = (int)i;
                     vector_size = (int64_t)(node->stage->vector_size);
+                    auto &p = single_point->loops(s, i);
                     single_point->loops(s, i).second += vector_size - 1;
                     node->size[i] += vector_size - 1;
                     node->size[i] /= vector_size;
+
+                    // Shift the loops along by some multiple of the
+                    // vector size, to pick a more representative vector
+                    // than the first.
+                    int64_t shift = vector_size * (node->size[i] / 2);
+                    single_point->loops(s, i).first += shift;
+                    single_point->loops(s, i).second += shift;
+                } else {
+                    int64_t shift = node->size[i] / 2;
+                    single_point->loops(s, i).first += shift;
+                    single_point->loops(s, i).second += shift;
                 }
             }
             // Leave region required blank inside the computation of a Func
@@ -1179,12 +1191,20 @@ struct LoopNest {
                 // Pick some number of loop iterations per parallel tasks
                 outer_extent = std::max((int64_t)1, parallelism_required / parallelism_found);
             }
-            inner->size[l] = (outer->size[l] + outer_extent - 1) / outer_extent;
+            // Round down when computing the inner size, to ensure we
+            // get at least as many threads for the outer loop as we
+            // asked for.
+            inner->size[l] = std::max((int64_t)1, outer->size[l] / outer_extent);
+            // Recompute the outer size given the selected inner size
+            outer_extent = (outer->size[l] + inner->size[l] - 1) / inner->size[l];
+
             outer->size[l] = outer_extent;
             const auto &p = parent_bounds->loops(stage_idx, l);
             int64_t min = p.first;
             int64_t extent = p.second - min + 1;
             extent = (extent + outer_extent - 1) / outer_extent;
+            // Pick a better representative loop iteration
+            min += (outer_extent / 2) * extent;
             b->loops(stage_idx, l) = {min, min + extent - 1};
 
             parallelism_found *= outer_extent;
@@ -1311,32 +1331,22 @@ struct LoopNest {
                     auto parent_bounds = parent->get_bounds(node);
 
                     for (size_t i = 0; i < t.size(); i++) {
-                        int factor = t[i];
-                        inner->size[i] = (outer->size[i] + factor - 1) / factor;
-                        outer->size[i] = factor;
+                        int64_t outer_extent = t[i];
+                        inner->size[i] = (outer->size[i] + outer_extent - 1) / outer_extent;
+                        outer->size[i] = outer_extent;
                         const auto &p = parent_bounds->loops(stage_idx, i);
                         int64_t min = p.first;
-                        int64_t extent = p.second - min + 1;
-                        extent = (extent + factor - 1) / factor;
-                        b->loops(stage_idx, i) = {min, min + extent - 1};
+                        int64_t original_extent = p.second - min + 1;
+                        int64_t inner_extent = (original_extent + outer_extent - 1) / outer_extent;
+                        // Pick a more representative loop iteration
+                        min += (outer_extent / 2) * inner_extent;
+                        b->loops(stage_idx, i) = {min, min + inner_extent - 1};
                     }
 
                     // Region_{computed/required} on outer is now
                     // wrong, but it doesn't matter because consumers
                     // only look at the loops in get_bounds. Still,
                     // this is weird.
-
-                    if (false) {// HACK
-                        // Set those values to something clearly recognizable as non-meaningful.
-                        for (int i = 0; i < node->func.dimensions(); i++) {
-                            // The schedule depends on these!!! Chaos! Madness!
-                            b->region_required(i).first = 2020202;
-                            b->region_required(i).second = -2020202;
-                            b->region_computed(i).first = 2020202;
-                            b->region_computed(i).second = -2020202;
-                        }
-                    }
-
                     outer->set_bounds(node, b);
                 }
 
@@ -1824,6 +1834,21 @@ struct State {
                 if (!it.key()->node->is_wrapper) { // It's OK to repeatedly stage data
                     auto &feat = it.value();
                     if (feat.points_computed_total + feat.inlined_calls > 10 * feat.points_computed_minimum) {
+                        cost = 1e50;
+                        return true;
+                    } else if (feat.points_computed_total + feat.inlined_calls < feat.points_computed_minimum) {
+                        // Some kind of shift-invariance failure
+                        // probably. The representative loop iteration
+                        // picked does less than the average amount of
+                        // work that must be done by a loop iteration,
+                        // assuming no redundant work is done, so none
+                        // of the features can be trusted.
+                        user_warning << "Shift invariance failure for " << it.key()->name
+                                     << ", discarding potential schedule: "
+                                     << feat.points_computed_total
+                                     << " " << feat.inlined_calls
+                                     << " " << feat.points_computed_minimum << "\n";
+                        dump();
                         cost = 1e50;
                         return true;
                     }
