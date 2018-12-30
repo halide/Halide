@@ -1191,10 +1191,8 @@ struct LoopNest {
                 // Pick some number of loop iterations per parallel tasks
                 outer_extent = std::max((int64_t)1, parallelism_required / parallelism_found);
             }
-            // Round down when computing the inner size, to ensure we
-            // get at least as many threads for the outer loop as we
-            // asked for.
-            inner->size[l] = std::max((int64_t)1, outer->size[l] / outer_extent);
+
+            inner->size[l] = (outer->size[l] + outer_extent - 1) / outer_extent;
             // Recompute the outer size given the selected inner size
             outer_extent = (outer->size[l] + inner->size[l] - 1) / inner->size[l];
 
@@ -1277,7 +1275,7 @@ struct LoopNest {
             // Generate a list of tile sizes to try
             auto tilings = generate_tilings(size, (int)(size.size() - 1), 2, !in_realization);
 
-            if (tilings.size() > 1000) {
+            if (tilings.size() > 10000) {
                 debug(0) << "Warning: lots of tilings: " << tilings.size() << "\n";
             }
 
@@ -2046,6 +2044,22 @@ struct State {
         return s;
     }
 
+    IntrusivePtr<State> random_child(const FunctionDAG &dag,
+                                      const MachineParams &params,
+                                      std::mt19937 &rng) const {
+        int count = 0;
+        IntrusivePtr<State> child;
+        std::function<void(IntrusivePtr<State> &&)> accept = [&](IntrusivePtr<State> &&candidate) {
+            count++;
+            if (rng() % count == 0) {
+                child = std::move(candidate);
+            }
+        };
+
+        generate_children(dag, params, nullptr, accept);
+        return child;
+    }
+
     void generate_children(const FunctionDAG &dag,
                            const MachineParams &params,
                            CostModel *cost_model,
@@ -2615,8 +2629,6 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
             }
 
             if (state->num_funcs_scheduled == 2*(int)dag.nodes.size()) {
-                debug(0) << '\n';
-
                 if (false) {
                     debug(0) << "Optimal state?\n";
                     state->dump();
@@ -2735,6 +2747,49 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
     return best;
 }
 
+void estimate_num_schedules(FunctionDAG &dag,
+                            vector<Function> outputs,
+                            const MachineParams &params,
+                            std::mt19937 &rng) {
+
+    std::unordered_set<uint64_t> seen_states;
+
+    IntrusivePtr<State> initial{new State};
+    initial->root = new LoopNest;
+
+    auto draw_sample = [&]() {
+        auto prev = initial;
+        while (1) {
+            auto next = prev->random_child(dag, params, rng);
+            if (!next.defined()) return prev->structural_hash(10000000, params.parallelism);
+            prev = next;
+        }
+    };
+
+    // From https://arxiv.org/pdf/1512.07901.pdf
+    size_t w = 0, r = 0;
+    double w1 = 0;
+    while (1) {
+        // Overflow is well-defined for size_t
+        size_t next_w = w + seen_states.size();
+        if (next_w < w) {
+            w1 += w;
+            w = seen_states.size();
+        } else {
+            w = next_w;
+        }
+        uint64_t h = draw_sample();
+        if (seen_states.count(h)) {
+            r++;
+        } else {
+            seen_states.insert(h);
+        }
+
+        debug(0) << "Estimated number of schedules: " << ((w1 + w) / std::max(r, (size_t)1)) << " (" << r << ")\n";
+    }
+
+}
+
 }
 
 std::string generate_schedules_new(const std::vector<Function> &outputs,
@@ -2793,6 +2848,9 @@ std::string generate_schedules_new(const std::vector<Function> &outputs,
     if (get_env_variable("HL_USE_MANUAL_COST_MODEL") != "1") {
         cost_model = CostModel::make_default(weights_in_dir, weights_out_dir, randomize_weights, weights_server_hostname, weights_server_port, weights_server_experiment_id);
     }
+
+    // HACK
+    // estimate_num_schedules(dag, outputs, params, rng);
 
     IntrusivePtr<State> optimal;
 
