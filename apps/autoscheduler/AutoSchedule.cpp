@@ -2129,8 +2129,9 @@ struct State {
     }
 
     IntrusivePtr<State> random_child(const FunctionDAG &dag,
-                                      const MachineParams &params,
-                                      std::mt19937 &rng) const {
+                                     const MachineParams &params,
+                                     const Target &target,
+                                     std::mt19937 &rng) const {
         int count = 0;
         IntrusivePtr<State> child;
         std::function<void(IntrusivePtr<State> &&)> accept = [&](IntrusivePtr<State> &&candidate) {
@@ -2140,7 +2141,7 @@ struct State {
             }
         };
 
-        generate_children(dag, params, nullptr, accept);
+        generate_children(dag, params, target, nullptr, accept);
         return child;
     }
 
@@ -2847,6 +2848,7 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
 void estimate_num_schedules(FunctionDAG &dag,
                             vector<Function> outputs,
                             const MachineParams &params,
+                            const Target &target,
                             std::mt19937 &rng) {
 
     std::unordered_set<uint64_t> seen_states;
@@ -2857,7 +2859,7 @@ void estimate_num_schedules(FunctionDAG &dag,
     auto draw_sample = [&]() {
         auto prev = initial;
         while (1) {
-            auto next = prev->random_child(dag, params, rng);
+            auto next = prev->random_child(dag, params, target, rng);
             if (!next.defined()) return prev->structural_hash(10000000, params.parallelism);
             prev = next;
         }
