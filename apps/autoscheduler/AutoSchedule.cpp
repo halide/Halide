@@ -1521,13 +1521,19 @@ struct LoopNest {
 
             if (!size.empty()) {
                 if (innermost) {
-                    if (!target.has_gpu_feature() && vectorized_loop_index >= 0) {
+                    if (vectorized_loop_index >= 0) {
                         auto &v = state.vars[vectorized_loop_index];
                         internal_assert(v.exists) << v.var.name() << "\n";
                         // Is the result of a split
-                        state.schedule_source
-                            << "\n    .vectorize(" << v.var.name() << ")";
-                        s.vectorize(v.var);
+                        if (target.has_gpu_feature()) {
+                            state.schedule_source
+                                << "\n    .gpu_threads(" << v.var.name() << ")";
+                            s.gpu_threads(v.var);
+                        } else {
+                            state.schedule_source
+                                << "\n    .vectorize(" << v.var.name() << ")";
+                            s.vectorize(v.var);
+                        }
                     }
                 } else {
                     // Grab the innermost loop for this node
@@ -2324,51 +2330,14 @@ struct State {
             vector<VarOrRVar> vars;
             vector<VarOrRVar> parallel_vars;
             bool any_parallel_vars = false, any_parallel_rvars = false;
-            if (!target.has_gpu_feature()) {
-                int64_t parallel_tasks = 1;
-                for (auto it = p.second->vars.rbegin(); it != p.second->vars.rend(); it++) {
-                    if (!it->exists || it->extent == 1) continue;
-                    if (!it->parallel) break;
-                    any_parallel_rvars |= it->var.is_rvar;
-                    any_parallel_vars |= !it->var.is_rvar;
-                    parallel_tasks *= it->extent;
-                    parallel_vars.push_back(it->var);
-                }
-            } else {
-                uint64_t n_parallel_loops = 0;
-                uint64_t current_parallel_loop = 0;
-
-                // Count the number of parallel loops.
-                for (auto it = p.second->vars.rbegin(); it != p.second->vars.rend(); it++) {
-                    if (!it->exists || it->extent == 1) continue;
-                    if (!it->parallel) break;
-
-                    n_parallel_loops++;
-                }
-
-                // Tag as GPUBlock and GPUThread only if we have at least two loops.
-                // We want the loop structure to be GPU blocks -> serial loops -> GPU threads.
-                // We tag the first min(3, n_parallel_loops/2) loops to be GPU blocks and
-                // tag the last min(3, n_parallel_loops/2) loops to be GPU threads.
-                if (n_parallel_loops >= 2) {
-                    for (auto it = p.second->vars.rbegin(); it != p.second->vars.rend(); it++) {
-                        if (!it->exists || it->extent == 1) continue;
-                        if (!it->parallel) break;
-
-                        if (current_parallel_loop < std::min((uint64_t) 3, n_parallel_loops/2)) {
-                            p.second->schedule_source << "\n    .gpu_blocks(" << it->var.name() << ")";
-                            stage.gpu_blocks(it->var);
-                            current_parallel_loop++;
-                        } else if (current_parallel_loop < n_parallel_loops - std::min((uint64_t) 3, n_parallel_loops/2)) {
-                            current_parallel_loop++;
-                        }
-                        else {
-                            p.second->schedule_source << "\n    .gpu_threads(" << it->var.name() << ")";
-                            stage.gpu_threads(it->var);
-                            current_parallel_loop++;
-                        }
-                    }
-                }
+            int64_t parallel_tasks = 1;
+            for (auto it = p.second->vars.rbegin(); it != p.second->vars.rend(); it++) {
+                if (!it->exists || it->extent == 1) continue;
+                if (!it->parallel) break;
+                any_parallel_rvars |= it->var.is_rvar;
+                any_parallel_vars |= !it->var.is_rvar;
+                parallel_tasks *= it->extent;
+                parallel_vars.push_back(it->var);
             }
 
             if (p.second->vars.size() > 1) {
@@ -2392,22 +2361,30 @@ struct State {
             // they are both pure.
             bool can_fuse = !(any_parallel_vars && any_parallel_rvars);
 
-            if (!target.has_gpu_feature()) {
-                if (can_fuse) {
-                    for (size_t i = 1; i < parallel_vars.size(); i++) {
-                        // Outermost, and next outermost. Preserve the inner
-                        // name to not invalidate any compute_ats.
-                        p.second->schedule_source << "\n    .fuse(" << parallel_vars[i].name()
-                                                  << ", " << parallel_vars[i-1].name()
-                                                  << ", " << parallel_vars[i].name() << ")";
-                        stage.fuse(parallel_vars[i], parallel_vars[i-1], parallel_vars[i]);
-                    }
-                    if (!parallel_vars.empty()) {
+            if (can_fuse) {
+                for (size_t i = 1; i < parallel_vars.size(); i++) {
+                    // Outermost, and next outermost. Preserve the inner
+                    // name to not invalidate any compute_ats.
+                    p.second->schedule_source << "\n    .fuse(" << parallel_vars[i].name()
+                                              << ", " << parallel_vars[i-1].name()
+                                              << ", " << parallel_vars[i].name() << ")";
+                    stage.fuse(parallel_vars[i], parallel_vars[i-1], parallel_vars[i]);
+                }
+                if (!parallel_vars.empty()) {
+                    if (target.has_gpu_feature()) {
+                        p.second->schedule_source << "\n    .gpu_blocks(" << parallel_vars.back().name() << ")";
+                        stage.gpu_blocks(parallel_vars.back());
+                    } else {
                         p.second->schedule_source << "\n    .parallel(" << parallel_vars.back().name() << ")";
                         stage.parallel(parallel_vars.back());
                     }
-                } else {
-                    for (const auto &v : parallel_vars) {
+                }
+            } else {
+                for (const auto &v : parallel_vars) {
+                    if (target.has_gpu_feature()) {
+                        p.second->schedule_source << "\n    .gpu_blocks(" << v.name() << ")";
+                        stage.gpu_blocks(v);
+                    } else {
                         p.second->schedule_source << "\n    .parallel(" << v.name() << ")";
                         stage.parallel(v);
                     }
