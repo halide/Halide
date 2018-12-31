@@ -6,7 +6,7 @@ cd ~/Halide
 git reset --hard HEAD
 git checkout standalone_autoscheduler_arm_worker
 git pull
-make -j4
+make -j4 distrib
 cd apps/random_pipeline
 make clean
 make
