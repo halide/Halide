@@ -62,10 +62,7 @@ benchmark_sample() {
     ./bin/augment_sample ${D}/sample.sample $R $3 $2
 }
 
-# Don't clobber existing samples
-FIRST=$(ls ${SAMPLES} | cut -d_ -f2 | sort -n | tail -n1)
-
-for ((i=$((FIRST+1));i<1000000;i++)); do
+while [ 1 ]; do
     ID=$((RANDOM*100 + RANDOM))
 
     # Compile a batch of samples using the generator in parallel
