@@ -287,8 +287,7 @@ int main(int argc, char **argv) {
 
     int num_cores = atoi(getenv_safe("HL_NUM_THREADS").c_str());
 
-    int batches = atoi(argv[1]);
-    int epochs = (batches + (int)(samples.size()) - 1) / (int)(samples.size());
+    int epochs = atoi(argv[1]);
 
     std::cout.setf(std::ios::fixed, std::ios::floatfield);
     std::cout.precision(4);

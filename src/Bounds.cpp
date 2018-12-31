@@ -1213,9 +1213,16 @@ bool box_contains(const Box &outer, const Box &inner) {
     }
     Expr condition = const_true();
     for (size_t i = 0; i < inner.size(); i++) {
-        condition = (condition &&
-                     (outer[i].min <= inner[i].min) &&
-                     (outer[i].max >= inner[i].max));
+        if ((outer[i].has_lower_bound() && !inner[i].has_lower_bound()) ||
+            (outer[i].has_upper_bound() && !inner[i].has_upper_bound())) {
+            return false;
+        }
+        if (outer[i].has_lower_bound()) {
+            condition = condition && (outer[i].min <= inner[i].min);
+        }
+        if (outer[i].has_upper_bound()) {
+            condition = condition && (outer[i].max >= inner[i].max);
+        }
     }
     if (outer.maybe_unused()) {
         if (inner.maybe_unused()) {
@@ -1451,7 +1458,7 @@ private:
                     } else {
                         continue;
                     }
-                    
+
                     const Variable *var = op->args[var_index].as<Variable>();
                     if (var != nullptr && var->type == type_of<halide_buffer_t *>()) {
                         if (func.empty() || starts_with(var->name, func)) {

@@ -447,9 +447,8 @@ struct LoopNest {
                 }
 
                 feat.points_computed_minimum = 1;
-                int s = stage - &node->stages[0];
                 for (int i = 0; i < (int)stage->loop.size(); i++) {
-                    const auto &p = root_bounds->loops(s, i);
+                    const auto &p = root_bounds->loops(stage->index, i);
                     feat.points_computed_minimum *= (p.second - p.first + 1);
                 }
 
@@ -484,12 +483,26 @@ struct LoopNest {
             }
         } else {
             // These will get progressively overwritten as we visit the children
+
+            bool reduction = false;
+            size_t idx = 0;
+            for (const auto &l : stage->loop) {
+                if (l.rvar) {
+                    reduction = true;
+                    feat.innermost_loop_extent = size[idx];
+                    break;
+                }
+                idx++;
+            }
+
             if (vectorized_loop_index >= 0 && vectorized_loop_index < size.size()) {
                 feat.innermost_pure_loop_extent = size[vectorized_loop_index];
-                feat.innermost_loop_extent = feat.innermost_pure_loop_extent;
             } else {
                 feat.innermost_pure_loop_extent = 1;
-                feat.innermost_loop_extent = 1;
+            }
+
+            if (!reduction) {
+                feat.innermost_loop_extent = feat.innermost_pure_loop_extent;
             }
         }
 
@@ -1029,21 +1042,34 @@ struct LoopNest {
                 // Initialize the loop nest
                 node->size[i] = l.second - l.first + 1;
                 total_extent *= node->size[i];
-                // Pick a representative loop iteration for the inner
-                // loop. With the way tiling is done below, it needs
-                // to be the first loop iteration.
+
+                // Use the first loop iteration to represent the inner
+                // loop. We'll shift it to a later one once we decide
+                // on vectorization.
                 single_point->loops(s, i) = {l.first, l.first};
 
                 internal_assert(l.second >= l.first) << i << " " << l.second << " " << l.first << "\n";
 
                 if (f->func.dimensions() &&
-                    node->size[i] >= node->stage->vector_size &&
+                    node->size[i] >= 1 &&
                     f->stages[s].loop[i].var == f->func.args()[v]) {
                     node->vectorized_loop_index = (int)i;
                     vector_size = (int64_t)(node->stage->vector_size);
+                    auto &p = single_point->loops(s, i);
                     single_point->loops(s, i).second += vector_size - 1;
                     node->size[i] += vector_size - 1;
                     node->size[i] /= vector_size;
+
+                    // Shift the loops along by some multiple of the
+                    // vector size, to pick a more representative vector
+                    // than the first.
+                    int64_t shift = vector_size * (node->size[i] / 2);
+                    single_point->loops(s, i).first += shift;
+                    single_point->loops(s, i).second += shift;
+                } else {
+                    int64_t shift = node->size[i] / 2;
+                    single_point->loops(s, i).first += shift;
+                    single_point->loops(s, i).second += shift;
                 }
             }
             // Leave region required blank inside the computation of a Func
@@ -1076,8 +1102,11 @@ struct LoopNest {
     }
 
     // Return all possible ways to parallelize this loop
-    IntrusivePtr<const LoopNest> parallelize_in_tiles(const MachineParams &params, int tasks_per_core, int outermost_dim,
-                                                      const LoopNest *parent, bool *entirely_parallelized) const {
+    IntrusivePtr<const LoopNest> parallelize_in_tiles(const MachineParams &params,
+                                                      int tasks_per_core,
+                                                      int outermost_dim,
+                                                      const LoopNest *parent,
+                                                      bool *entirely_parallelized) const {
         int64_t total_pure_extent = 1;
         bool any_impure = false;
         for (size_t i = 0; i < stage->loop.size(); i++) {
@@ -1145,12 +1174,12 @@ struct LoopNest {
         for (int i = (int)stage->loop.size(); i >= -1; i--) {
             int l = i;
             if (i == -1) l = vectorized_loop_index;
-            if (i == stage->loop.size()) l = outermost_dim;
+            if (i == stage->loop.size()) l = outermost_loop_index;
 
             if (i == vectorized_loop_index) continue; // We will handle the vectorized loop last
-            if (i == outermost_dim) continue; // Already handled
+            if (i == outermost_loop_index) continue; // Already handled
 
-            if (i == -1 && vectorized_loop_index == outermost_dim) break; // vectorized loop was already handled as the outermost loop
+            if (i == -1 && vectorized_loop_index == outermost_loop_index) break; // vectorized loop was already handled as the outermost loop
             if (l == -1) break; // There's no vectorized/outermost loop
 
             int64_t outer_extent = 1;
@@ -1170,12 +1199,18 @@ struct LoopNest {
                 // Pick some number of loop iterations per parallel tasks
                 outer_extent = std::max((int64_t)1, parallelism_required / parallelism_found);
             }
+
             inner->size[l] = (outer->size[l] + outer_extent - 1) / outer_extent;
+            // Recompute the outer size given the selected inner size
+            outer_extent = (outer->size[l] + inner->size[l] - 1) / inner->size[l];
+
             outer->size[l] = outer_extent;
             const auto &p = parent_bounds->loops(stage_idx, l);
             int64_t min = p.first;
             int64_t extent = p.second - min + 1;
             extent = (extent + outer_extent - 1) / outer_extent;
+            // Pick a better representative loop iteration
+            min += (outer_extent / 2) * extent;
             b->loops(stage_idx, l) = {min, min + extent - 1};
 
             parallelism_found *= outer_extent;
@@ -1249,7 +1284,7 @@ struct LoopNest {
             // Generate a list of tile sizes to try
             auto tilings = generate_tilings(size, (int)(size.size() - 1), 2, !in_realization, target);
 
-            if (tilings.size() > 1000) {
+            if (tilings.size() > 10000) {
                 debug(0) << "Warning: lots of tilings: " << tilings.size() << "\n";
             }
 
@@ -1304,32 +1339,22 @@ struct LoopNest {
                     auto parent_bounds = parent->get_bounds(node);
 
                     for (size_t i = 0; i < t.size(); i++) {
-                        int factor = t[i];
-                        inner->size[i] = (outer->size[i] + factor - 1) / factor;
-                        outer->size[i] = factor;
+                        int64_t outer_extent = t[i];
+                        inner->size[i] = (outer->size[i] + outer_extent - 1) / outer_extent;
+                        outer->size[i] = outer_extent;
                         const auto &p = parent_bounds->loops(stage_idx, i);
                         int64_t min = p.first;
-                        int64_t extent = p.second - min + 1;
-                        extent = (extent + factor - 1) / factor;
-                        b->loops(stage_idx, i) = {min, min + extent - 1};
+                        int64_t original_extent = p.second - min + 1;
+                        int64_t inner_extent = (original_extent + outer_extent - 1) / outer_extent;
+                        // Pick a more representative loop iteration
+                        min += (outer_extent / 2) * inner_extent;
+                        b->loops(stage_idx, i) = {min, min + inner_extent - 1};
                     }
 
                     // Region_{computed/required} on outer is now
                     // wrong, but it doesn't matter because consumers
                     // only look at the loops in get_bounds. Still,
                     // this is weird.
-
-                    if (false) {// HACK
-                        // Set those values to something clearly recognizable as non-meaningful.
-                        for (int i = 0; i < node->func.dimensions(); i++) {
-                            // The schedule depends on these!!! Chaos! Madness!
-                            b->region_required(i).first = 2020202;
-                            b->region_required(i).second = -2020202;
-                            b->region_computed(i).first = 2020202;
-                            b->region_computed(i).second = -2020202;
-                        }
-                    }
-
                     outer->set_bounds(node, b);
                 }
 
@@ -1557,9 +1582,17 @@ struct LoopNest {
                         StageScheduleState::FuncVar &parent = state.vars[i];
 
                         int64_t factor = (parent.extent + size[i] - 1) / size[i];
+                        int64_t innermost_size = innermost_loop->size[i];
 
-                        if (child && innermost_loop->size[i] > factor) {
-                            factor = innermost_loop->size[i];
+                        if (child && i == vectorized_loop_index) {
+                            // Ensure the split is a multiple of the
+                            // vector size. With all these rounded
+                            // divs going on it can drift.
+                            factor = ((factor + innermost_size - 1) / innermost_size) * innermost_size;
+                        }
+
+                        if (child && innermost_size > factor) {
+                            factor = innermost_size;
                         }
 
                         if (!parent.exists || factor == 1) {
@@ -1582,6 +1615,12 @@ struct LoopNest {
                             if (parent.var.is_rvar || (stage_idx != 0 && !parent.outermost)) {
                                 tail_strategy = TailStrategy::GuardWithIf;
                             }
+
+                            if (factor > parent.extent && tail_strategy == TailStrategy::ShiftInwards) {
+                                // Don't shift all the way off the image.
+                                tail_strategy = TailStrategy::GuardWithIf;
+                            }
+
                             s.split(parent.var, parent.var, inner, (int)factor, tail_strategy);
                             state.schedule_source
                                 << "\n    .split("
@@ -1871,6 +1910,21 @@ struct State {
                     if (feat.points_computed_total + feat.inlined_calls > 10 * feat.points_computed_minimum) {
                         cost = 1e50;
                         return true;
+                    } else if (feat.points_computed_total + feat.inlined_calls < feat.points_computed_minimum) {
+                        // Some kind of shift-invariance failure
+                        // probably. The representative loop iteration
+                        // picked does less than the average amount of
+                        // work that must be done by a loop iteration,
+                        // assuming no redundant work is done, so none
+                        // of the features can be trusted.
+                        user_warning << "Shift invariance failure for " << it.key()->name
+                                     << ", discarding potential schedule: "
+                                     << feat.points_computed_total
+                                     << " " << feat.inlined_calls
+                                     << " " << feat.points_computed_minimum << "\n";
+                        dump();
+                        cost = 1e50;
+                        return true;
                     }
                 }
 
@@ -2074,6 +2128,22 @@ struct State {
         return s;
     }
 
+    IntrusivePtr<State> random_child(const FunctionDAG &dag,
+                                      const MachineParams &params,
+                                      std::mt19937 &rng) const {
+        int count = 0;
+        IntrusivePtr<State> child;
+        std::function<void(IntrusivePtr<State> &&)> accept = [&](IntrusivePtr<State> &&candidate) {
+            count++;
+            if (rng() % count == 0) {
+                child = std::move(candidate);
+            }
+        };
+
+        generate_children(dag, params, nullptr, accept);
+        return child;
+    }
+
     void generate_children(const FunctionDAG &dag,
                            const MachineParams &params,
                            const Target &target,
@@ -2210,7 +2280,7 @@ struct State {
             // Deciding on parallel tasks. Iterate over the
             // approximate number of parallel tasks to produce per
             // thread.
-            const int factors[] = {1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64};
+            const int factors[] = {1, 2, 3, 4, 6, 8, 12, 16};
             for (int outermost_dim = 0; outermost_dim < node->func.dimensions(); outermost_dim++) {
                 // TODO: reorder the selected outermost dim to be outermost in the storage order (as long as it's not the vector dim)
                 bool entirely_parallelized = false;
@@ -2319,6 +2389,9 @@ struct State {
                     size_t tiling_levels = vars.size() / one_level_size;
                     for (size_t g = 0; g < tiling_levels; g++) {
                         for (int i = p.second->vectorized_loop_index; i > 0; i--) {
+                            if (vars[g * one_level_size + i - 1].var.is_rvar) {
+                                break;
+                            }
                             std::swap(vars[g * one_level_size + i - 1], vars[g * one_level_size + i]);
                         }
                     }
@@ -2652,8 +2725,6 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
             }
 
             if (state->num_funcs_scheduled == 2*(int)dag.nodes.size()) {
-                debug(0) << '\n';
-
                 if (false) {
                     debug(0) << "Optimal state?\n";
                     state->dump();
@@ -2773,6 +2844,49 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
     return best;
 }
 
+void estimate_num_schedules(FunctionDAG &dag,
+                            vector<Function> outputs,
+                            const MachineParams &params,
+                            std::mt19937 &rng) {
+
+    std::unordered_set<uint64_t> seen_states;
+
+    IntrusivePtr<State> initial{new State};
+    initial->root = new LoopNest;
+
+    auto draw_sample = [&]() {
+        auto prev = initial;
+        while (1) {
+            auto next = prev->random_child(dag, params, rng);
+            if (!next.defined()) return prev->structural_hash(10000000, params.parallelism);
+            prev = next;
+        }
+    };
+
+    // From https://arxiv.org/pdf/1512.07901.pdf
+    size_t w = 0, r = 0;
+    double w1 = 0;
+    while (1) {
+        // Overflow is well-defined for size_t
+        size_t next_w = w + seen_states.size();
+        if (next_w < w) {
+            w1 += w;
+            w = seen_states.size();
+        } else {
+            w = next_w;
+        }
+        uint64_t h = draw_sample();
+        if (seen_states.count(h)) {
+            r++;
+        } else {
+            seen_states.insert(h);
+        }
+
+        debug(0) << "Estimated number of schedules: " << ((w1 + w) / std::max(r, (size_t)1)) << " (" << r << ")\n";
+    }
+
+}
+
 }
 
 std::string generate_schedules_new(const std::vector<Function> &outputs,
@@ -2831,6 +2945,9 @@ std::string generate_schedules_new(const std::vector<Function> &outputs,
     if (get_env_variable("HL_USE_MANUAL_COST_MODEL") != "1") {
         cost_model = CostModel::make_default(weights_in_dir, weights_out_dir, randomize_weights, weights_server_hostname, weights_server_port, weights_server_experiment_id);
     }
+
+    // HACK
+    // estimate_num_schedules(dag, outputs, params, rng);
 
     IntrusivePtr<State> optimal;
 
