@@ -22,6 +22,7 @@ make bin/random_pipeline.generator
 SAMPLES=${PWD}/samples
 
 # Build some tools we need.
+mkdir -p bin
 make -C ../autoscheduler ../autoscheduler/bin/augment_sample
 make -C ../autoscheduler ../autoscheduler/bin/train_cost_model
 make -C ../autoscheduler ../autoscheduler/bin/libauto_schedule.so
@@ -88,9 +89,9 @@ while [ 1 ]; do
     done
 
     # zip and upload them
-    find samples | zip -@ samples_${IP}_${ID}.zip
+    find ${SAMPLES} | zip -@ samples_${IP}_${ID}.zip
     bash ftp_up.sh samples_${IP}_${ID}.zip
     rm samples_${IP}_${ID}.zip
-    rm -rf samples    
+    rm -rf ${SAMPLES}    
 
 done
