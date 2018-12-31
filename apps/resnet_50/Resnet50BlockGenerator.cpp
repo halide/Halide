@@ -373,7 +373,8 @@ private:
   void softmax_layer(Tensor& input, Func output, int classes) {
       assert(input.shape[0] == classes);
       RDom r(0, classes);
-      output(c) = exp(input.f(c)) / sum(exp(input.f(r.x)));
+      exp_vals(c) = exp(input.f(c));
+      output(c) = exp_vals(c) / sum(exp_vals(r.x));
   }
 
 
