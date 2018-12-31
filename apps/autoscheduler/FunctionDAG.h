@@ -1161,7 +1161,6 @@ struct FunctionDAG {
         Scope<OptionalRational> dlets;
 
         OptionalRational differentiate(const Expr &e, const string &v) {
-            debug(0) << "Differentiating " << e << " w.r.t. " << v << "\n";
             if (!expr_uses_var(e, v, lets)) {
                 return {true, 0, 1};
             } else if (const Variable *var = e.as<Variable>()) {

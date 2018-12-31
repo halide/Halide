@@ -589,7 +589,8 @@ struct LoopNest {
                 const auto &next_edges = p->incoming_edges;
                 for (const auto *e : next_edges) {
                     if (!sites.contains(&(e->producer->stages[0]))) {
-                        // Not yet scheduled. Optimistically treat it as free.
+                        // TODO: This might be bad
+                        // Not yet scheduled. Treat it like an input.
                         continue;
                     }
 
@@ -879,14 +880,23 @@ struct LoopNest {
         if (!is_root()) {
             debug(0) << prefix << node->func.name();
             prefix += " ";
-        }
-        for (size_t i = 0; i < size.size(); i++) {
-            debug(0) << " " << size[i];
-            if (innermost && i == vectorized_loop_index) {
-                debug(0) << 'v';
+
+            for (size_t i = 0; i < size.size(); i++) {
+                debug(0) << " " << size[i];
+                if (innermost && i == vectorized_loop_index) {
+                    debug(0) << 'v';
+                }
             }
+            /*
+            const auto &bounds = get_bounds(node);
+            for (size_t i = 0; i < size.size(); i++) {
+                const auto &p = bounds->loops(stage->index, i);
+                debug(0) << " [" << p.first << ", " << p.second << "]";
+            }
+            */
+            debug(0) << " (" << vectorized_loop_index << ", " << vector_dim << ")";
         }
-        debug(0) << " (" << vectorized_loop_index << ", " << vector_dim << ")";
+
         if (tileable) {
             debug(0) << " t";
         }
@@ -2180,7 +2190,7 @@ struct State {
         } else {
             bool should_parallelize = false;
             for (auto &c : root->children) {
-                if (c->node == node && !c->size.empty()) {
+                if (c->node == node && node->func.dimensions() > 0) {
                     should_parallelize = true;
                 }
             }
