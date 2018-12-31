@@ -259,7 +259,7 @@ public:
         Func func;
         int w, h, c; // approx width and height and channels; TODO: ADD 4TH DIMENSION FOR BATCH SIZE
 
-        static constexpr int max_size = 10000000;
+        static constexpr int max_size = 200000000;
         static constexpr int min_size = 100;
         static constexpr int max_stride = 3; // for convs and pools
 
