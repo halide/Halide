@@ -1781,6 +1781,41 @@ struct State {
         internal_assert(!binfile.fail()) << "Failed to write " << feature_file;
     }
 
+    bool contains_store_at(const set<const FunctionDAG::Node *>& outermost_store_at, const IntrusivePtr<const LoopNest>& parent) {
+        for (const auto& c : parent->children) {
+            if (c->store_at.size() > 0) {
+                return true;
+            }
+
+            // At production for c: if not store_at root or outermost, then it
+            // must implicitly be store_at parent's level, so reject it
+            bool at_production = c->node != parent->node;
+            if (at_production && root->store_at.count(c->node) == 0 && outermost_store_at.count(c->node) == 0) {
+                return true;
+            }
+
+            if (contains_store_at(outermost_store_at, c)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // For GPU, only allow store_at root or inside the outermost loop nest. Any
+    // store_ats further in will be hoisted and expanded, increasing the
+    // amount of shared memory required.
+    bool contains_store_at_further_in_than_outermost() {
+        for (const auto& child : root->children) {
+            for (const auto& grandchild : child->children) {
+                if (contains_store_at(child->store_at, grandchild)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     bool exceeds_shared_memory_limit(const Target &target, const ScheduleFeatures& feat, const FunctionDAG::Node* node) {
         if (!target.has_gpu_feature()) {
             return false;
@@ -1814,6 +1849,10 @@ struct State {
                 debug(0) << "Schedule features for " << stage.stage.name() << "\n";
                 feat.dump();
             }
+        }
+
+        if (target.has_gpu_feature() && contains_store_at_further_in_than_outermost()) {
+            return false;
         }
 
         // use either deep network or linear model to predict cost
