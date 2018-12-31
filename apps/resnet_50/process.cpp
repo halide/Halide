@@ -218,41 +218,6 @@ int main(int argc, char **argv) {
     inputs[i] = rand_buffer(input_shapes[i]);
     block_outputs[i] = rand_buffer(output_shapes[i]);
   }
-  /**
-  Buffer<float> input0 = rand_buffer(input_shapes[0]);
-  Buffer<float> input1 = rand_buffer(input_shapes[1]);
-  Buffer<float> input2 = rand_buffer(input_shapes[2]);
-  Buffer<float> input3 = rand_buffer(input_shapes[3]);
-  Buffer<float> input4 = rand_buffer(input_shapes[4]);
-  Buffer<float> input5 = rand_buffer(input_shapes[5]);
-  Buffer<float> input6 = rand_buffer(input_shapes[6]);
-  Buffer<float> input7 = rand_buffer(input_shapes[7]);
-  Buffer<float> input8 = rand_buffer(input_shapes[8]);
-  Buffer<float> input9 = rand_buffer(input_shapes[9]);
-  Buffer<float> input10 = rand_buffer(input_shapes[10]);
-  Buffer<float> input11 = rand_buffer(input_shapes[11]);
-  Buffer<float> input12 = rand_buffer(input_shapes[12]);
-  Buffer<float> input13 = rand_buffer(input_shapes[13]);
-  Buffer<float> input14 = rand_buffer(input_shapes[14]);
-  Buffer<float> input15 = rand_buffer(input_shapes[15]);
-
-  Buffer<float> block_output0(output_shapes[0]);
-  Buffer<float> block_output1(output_shapes[1]);
-  Buffer<float> block_output2(output_shapes[2]);
-  Buffer<float> block_output3(output_shapes[3]);
-  Buffer<float> block_output4(output_shapes[4]);
-  Buffer<float> block_output5(output_shapes[5]);
-  Buffer<float> block_output6(output_shapes[6]);
-  Buffer<float> block_output7(output_shapes[7]);
-  Buffer<float> block_output8(output_shapes[8]);
-  Buffer<float> block_output9(output_shapes[9]);
-  Buffer<float> block_output10(output_shapes[10]);
-  Buffer<float> block_output11(output_shapes[11]);
-  Buffer<float> block_output12(output_shapes[12]);
-  Buffer<float> block_output13(output_shapes[13]);
-  Buffer<float> block_output14(output_shapes[14]);
-  Buffer<float> block_output15(output_shapes[15]);
-  **/
   Buffer<float> final_output(1000);
 
   std::string weight_dir = "./weights/";

@@ -26,16 +26,6 @@ def load_weights():
         print("%s,%s,%d" % (k, str(weight.shape), len(weight.shape)))
 
         data = weight.tobytes('C')
-        if k == "bn1.running_mean":
-            print(weight[0])
-            print(weight[1])
-            print(weight[2])
-            print(data)
-            reread = np.frombuffer(data, dtype=np.float32)
-            print(reread[0])
-            print(reread[1])
-            print(reread[2])
-            print(reread.shape)
         with open("weights/" + k.replace('.','_') + ".data", "wb") as f:
             f.write(data)
         with open("weights/" + k.replace('.', '_') + '_shape.data', 'wb') as f:
