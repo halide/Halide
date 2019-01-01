@@ -439,7 +439,6 @@ struct FunctionDAG {
             string accessor;
         };
 
-
         // Get the loop nest shape as a function of the region computed
         void loop_nest_for_region(int stage_idx,
                                   const pair<int64_t, int64_t> *computed,
@@ -501,6 +500,11 @@ struct FunctionDAG {
             int id, max_id;
 
             vector<Edge *> incoming_edges;
+
+            vector<bool> dependencies;
+            bool downstream_of(const Node &n) const {
+                return dependencies[n.id];
+            };
 
             Stage(Halide::Stage s) : stage(s) {}
         };
@@ -568,7 +572,7 @@ struct FunctionDAG {
                         }
                     }
                     internal_assert(consumer_dim >= 0) << "Could not find consumer loop variable: " << var->name << "\n";
-                    debug(2) << "Bound is affine: " << e << " == " << var << " * " << coeff << " + " << constant << "\n";
+                    debug(2) << "Bound is affine: " << e << " == " << var->name << " * " << coeff << " + " << constant << "\n";
                 } else {
                     affine = false;
                     debug(2) << "Bound is non-affine: " << e << "\n";
@@ -1005,6 +1009,34 @@ struct FunctionDAG {
         for (size_t i = 0; i < edges.size(); i++) {
             edges[i].producer->outgoing_edges.push_back(&(edges[i]));
             edges[i].consumer->incoming_edges.push_back(&(edges[i]));
+        }
+
+        // Compute transitive dependencies
+        for (size_t i = nodes.size(); i > 0; i--) {
+            auto &n = nodes[i-1];
+
+            for (auto &s : n.stages) {
+                s.dependencies.resize(nodes.size(), false);
+
+                for (auto *e : s.incoming_edges) {
+                    s.dependencies[e->producer->id] = true;
+                    for (auto &s2 : e->producer->stages) {
+                        for (size_t j = 0; j < nodes.size(); j++) {
+                            s.dependencies[j] = s.dependencies[j] || s2.dependencies[j];
+                        }
+                    }
+                }
+            }
+        }
+
+        for (auto &n1 : nodes) {
+            for (auto &s : n1.stages) {
+                for (auto &n2 : nodes) {
+                    if (s.downstream_of(n2)) {
+                        debug(0) << "Transitive edge: " << n2.func.name() << " -> " << s.name << "\n";
+                    }
+                }
+            }
         }
 
         // Compute features for the neural net

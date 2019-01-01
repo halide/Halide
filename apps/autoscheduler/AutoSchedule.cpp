@@ -251,19 +251,16 @@ struct LoopNest {
             for (const auto &c : children) {
                 for (int64_t s : c->size) {
                     if (depth == 1) {
-                        // Just take the most significant bit: is it more
-                        // or less than the parallelism factor.
-                        s = s >= parallelism ? 1 : 0;
+                        // Just take the most significant bit: is it one or not?
+                        s = (s > 1) ? 1 : 0;
                     }
                     hash_combine(h, s);
                 }
             }
         }
 
-        if (innermost) {
-            // Which dimension are we vectorized over?
-            hash_combine(h, vectorized_loop_index);
-        }
+        // Which dimension are we vectorized over?
+        hash_combine(h, vectorized_loop_index);
 
         if (depth > 1) {
             // Descend into children
@@ -307,7 +304,10 @@ struct LoopNest {
             }
         }
         for (auto it = inlined.begin(); it != inlined.end(); it++) {
-            sites.get_or_create(&(it.key()->stages[0])).inlined = true;
+            auto &s = sites.get_or_create(&(it.key()->stages[0]));
+            s.inlined = true;
+            s.compute = s.store = s.produce = s.innermost = this;
+            s.task = task;
         }
         if (innermost) {
             sites.get_or_create(stage).innermost = this;
@@ -588,13 +588,11 @@ struct LoopNest {
                 pending.pop_back();
                 const auto &next_edges = p->incoming_edges;
                 for (const auto *e : next_edges) {
-                    if (!sites.contains(&(e->producer->stages[0]))) {
-                        // TODO: This might be bad
-                        // Not yet scheduled. Treat it like an input.
-                        continue;
-                    }
+                    internal_assert(sites.contains(&(e->producer->stages[0]))) << "No site found for " << e->producer->func.name() << "\n";
 
                     const auto &site = sites.get(&(e->producer->stages[0]));
+
+                    bool producer_has_been_scheduled = e->producer->is_input || (site.produce != nullptr);
 
                     if (e->consumer == stage) {
                         for (auto &j : e->load_jacobians) {
@@ -654,12 +652,15 @@ struct LoopNest {
                             bool stride_2_vector_load = true;
                             bool stride_3_vector_load = true;
                             bool stride_4_vector_load = true;
-                            int producer_innermost_dim = e->producer->is_input ? 0 : site.produce->vector_dim;
+                            int producer_innermost_dim =
+                                (e->producer->is_input ? 0 : // Assume default storage layout for inputs
+                                 !producer_has_been_scheduled ? -1 :
+                                 site.produce->vector_dim);
                             if (vectorized_loop_index >= 0) {
                                 for (int i = 0; i < e->producer->func.dimensions(); i++) {
                                     auto stride = jac.first(i, vectorized_loop_index);
                                     vector_broadcast &= stride == 0;
-                                    if (i == producer_innermost_dim) {
+                                    if (i == producer_innermost_dim || !producer_has_been_scheduled) {
                                         dense_vector_load &= (stride >= -1 && stride <= 1);
                                         stride_2_vector_load &= stride == 2;
                                         stride_3_vector_load &= stride == 3;
@@ -697,6 +698,8 @@ struct LoopNest {
 
                     done.insert(e->producer);
 
+                    int64_t max_extent = 1, max_compute_extent = 1, max_store_extent = 1, max_task_extent = 1;
+
                     for (int i = 0; i < e->producer->func.dimensions(); i++) {
                         auto p = bounds->region_required(i);
                         auto compute_p = producer_compute_bounds->region_computed(i);
@@ -712,13 +715,18 @@ struct LoopNest {
                         int64_t store_extent = store_p.second - store_p.first + 1;
                         int64_t task_extent = task_p.second - task_p.first + 1;
 
+                        max_extent = std::max(extent, max_extent);
+                        max_compute_extent = std::max(compute_extent, max_compute_extent);
+                        max_store_extent = std::max(store_extent, max_store_extent);
+                        max_task_extent = std::max(task_extent, max_task_extent);
+
                         footprint *= extent;
                         compute_footprint *= compute_extent;
                         store_footprint *= store_extent;
                         task_footprint *= task_extent;
 
-
-                        bool dense = i == (e->producer->is_input ? 0 : site.produce->vector_dim);
+                        bool dense = ((e->producer->is_input && i == 0) ||
+                                      (site.produce != nullptr && i == site.produce->vector_dim));
                         if (!dense) {
                             line_footprint *= extent;
                             compute_line_footprint *= compute_extent;
@@ -727,9 +735,19 @@ struct LoopNest {
                         }
                     }
 
+                    if (!producer_has_been_scheduled) {
+                        // Optimistically assume it gets vectorized
+                        // along whatever dimension makes these
+                        // numbers the smallest.
+                        line_footprint /= max_extent;
+                        compute_line_footprint /= max_compute_extent;
+                        store_line_footprint /= max_store_extent;
+                        task_line_footprint /= max_task_extent;
+                    }
+
                     int64_t store_instances_per_consumption = 1;
 
-                    if (!e->producer->is_input) {
+                    if (producer_has_been_scheduled && !e->producer->is_input) {
                         const auto &producer_feat = features->get_or_create(&(e->producer->stages[0]));
 
                         if (producer_feat.num_realizations) {
@@ -852,12 +870,20 @@ struct LoopNest {
             for (int i = 0; i < f->func.dimensions(); i++) {
                 bound->region_required(i) = init;
             }
+
             for (const auto *e : f->outgoing_edges) {
                 // Ignore consumers outside of this loop nest
+                if (!is_root() &&
+                    (stage != e->consumer) &&
+                    !stage->downstream_of(*(e->consumer->node))) {
+                    continue;
+                }
+                /*
                 if (!computes(e->consumer->node)) {
                     // debug(0) << "Skipping edge from " << e->producer->func.name() << " to " << e->consumer->func.name() << "\n";
                     continue;
                 }
+                */
                 // debug(0) << "Expanding footprint along edge " << e->producer->func.name() << " -> " << e->consumer->func.name() << "\n";
                 const auto &c_bounds = get_bounds(e->consumer->node);
                 const auto *consumer_loop = &(c_bounds->loops(e->consumer->index, 0)); // For the concrete sizes of the loop
@@ -894,6 +920,7 @@ struct LoopNest {
                 debug(0) << " [" << p.first << ", " << p.second << "]";
             }
             */
+
             debug(0) << " (" << vectorized_loop_index << ", " << vector_dim << ")";
         }
 
@@ -1767,6 +1794,48 @@ struct State {
         return h;
     }
 
+    // Compute the parent and depth of every loop nest node
+    void compute_loop_nest_parents(map<const LoopNest *, pair<const LoopNest *, int>> &p,
+                                   const LoopNest *here, int depth) {
+        for (const auto &c : here->children) {
+            p.emplace(c.get(), pair<const LoopNest *, int>{here, depth});
+            compute_loop_nest_parents(p, c.get(), depth+1);
+        }
+    }
+
+    const LoopNest *deepest_common_ancestor(const map<const LoopNest *, pair<const LoopNest *, int>> &parent,
+                                            const LoopNest *a, const LoopNest *b) {
+        if (a->is_root()) return a;
+        if (b->is_root()) return b;
+        if (a == b) return a;
+
+        // Walk the deeper one up until they're at the same depth
+        auto it_a = parent.find(a);
+        auto it_b = parent.find(b);
+        internal_assert(it_a != parent.end() && it_b != parent.end());
+        while (it_a->second.second > it_b->second.second) {
+            a = it_a->second.first;
+            it_a = parent.find(a);
+        }
+        while (it_b->second.second > it_a->second.second) {
+            b = it_b->second.first;
+            it_b = parent.find(b);
+        }
+
+        while (1) {
+            // Walk each up one
+            a = it_a->second.first;
+            b = it_b->second.first;
+            if (a == b) return a;
+            it_a = parent.find(a);
+            it_b = parent.find(b);
+            internal_assert(it_a != parent.end() && it_b != parent.end());
+        }
+
+        // unreachable
+        return nullptr;
+    }
+
     void compute_featurization(const FunctionDAG &dag, const MachineParams &params, StageMap<ScheduleFeatures> *features) {
         StageMap<LoopNest::Sites> sites;
         sites.make_large(dag.nodes[0].stages[0].max_id);
@@ -1774,17 +1843,64 @@ struct State {
         internal_assert(root.defined());
         root->get_sites(sites);
 
-        // For the input nodes, the compute and store sites are root,
-        // and the produce and innermost sites are unset (nullptr)
+        // For the input nodes and unscheduled outputs, the compute
+        // and store sites are root, and the produce and innermost
+        // sites are unset (nullptr)
         for (const auto &n : dag.nodes) {
-            if (n.is_input) {
-                auto &s = sites.get_or_create(&(n.stages[0]));
-                s.compute = root.get();
-                s.store = root.get();
+            if (n.is_input || n.is_output) {
+                for (const auto &stage : n.stages) {
+                    auto &s = sites.get_or_create(&stage);
+                    if (s.compute == nullptr) {
+                        s.compute = root.get();
+                        s.store = root.get();
+                    }
+                }
+            }
+        }
+
+        // For the unscheduled nodes, give them sites as deep as they
+        // could possibly be. We'll ignore the possibility of inlining
+        // them for now.
+        map<const LoopNest *, pair<const LoopNest *, int>> parent;
+        compute_loop_nest_parents(parent, root.get(), 0);
+        for (const auto &n : dag.nodes) {
+            if (sites.contains(&(n.stages[0]))) {
+                continue;
+            }
+            const LoopNest *loop = nullptr;
+            for (const auto *e : n.outgoing_edges) {
+                const auto &consumer_site = sites.get(e->consumer);
+                const LoopNest *l = consumer_site.innermost;
+                if (!l) l = consumer_site.compute;
+                if (!l) {
+                    dump();
+                    internal_error << e->producer->func.name() << " -> " << e->consumer->name << "\n";
+                }
+                if (loop) {
+                    loop = deepest_common_ancestor(parent, l, loop);
+                } else {
+                    loop = l;
+                }
+            }
+            internal_assert(loop)
+                << "Could not compute plausible site for unscheduled Func: "
+                << n.func.name() << "\n";
+            for (auto &stage : n.stages) {
+                auto &site = sites.get_or_create(&stage);
+                site.compute = loop;
+                site.store = loop;
             }
         }
 
         root->compute_features(params, sites, 1, 1, nullptr, *root, nullptr, features);
+
+        for (const auto &n : dag.nodes) {
+            if (sites.get(&(n.stages[0])).produce == nullptr) {
+                internal_assert(!features->contains(&(n.stages[0])))
+                    << "Somehow an input or unscheduled node ended up in the featurization: "
+                    << n.func.name() << "\n";
+            }
+        }
     }
 
     void save_featurization(const FunctionDAG &dag, const MachineParams &params, const std::string &feature_file) {
@@ -1843,22 +1959,30 @@ struct State {
                     auto &feat = it.value();
                     if (feat.points_computed_total + feat.inlined_calls > 10 * feat.points_computed_minimum) {
                         cost = 1e50;
-                        return true;
-                    } else if (feat.points_computed_total + feat.inlined_calls < feat.points_computed_minimum) {
+                        return false;
+                    } else if (false && feat.points_computed_total + feat.inlined_calls < feat.points_computed_minimum) {
                         // Some kind of shift-invariance failure
                         // probably. The representative loop iteration
-                        // picked does less than the average amount of
-                        // work that must be done by a loop iteration,
-                        // assuming no redundant work is done, so none
-                        // of the features can be trusted.
+                        // picked does a lot less than the average
+                        // amount of work that must be done by a loop
+                        // iteration, assuming no redundant work is
+                        // done, so none of the features can be
+                        // trusted. A benign reason for this to occur
+                        // is if you either need 1 or 2 values from a
+                        // func depending on the loop iteration, and
+                        // we were unlucky and picked one of the
+                        // iterations that only required 1 value as
+                        // the representative one.
+                        /*
                         user_warning << "Shift invariance failure for " << it.key()->name
                                      << ", discarding potential schedule: "
                                      << feat.points_computed_total
                                      << " " << feat.inlined_calls
                                      << " " << feat.points_computed_minimum << "\n";
                         dump();
+                        */
                         cost = 1e50;
-                        return true;
+                        return false;
                     }
                 }
             }
@@ -1866,7 +1990,7 @@ struct State {
             // Avoid code size explosion from recursive inlining.
             if (root->max_inlined_calls() >= 256) {
                 cost = 1e50;
-                return true;
+                return false;
             }
 
             int num_stages = (int)features.size();
@@ -2587,6 +2711,8 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
         q.emplace(std::move(s));
     };
 
+    string cyos_str = get_env_variable("HL_CYOS");
+
     for (int i = 0; ; i++) {
         std::unordered_map<uint64_t, int> hashes;
         q.swap(pending);
@@ -2696,7 +2822,6 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
             q.resort();
         }
 
-        string cyos_str = get_env_variable("HL_CYOS");
         if (cyos_str == "1") {
             // Manually discard everything in the queue except for the user-chosen option
             // Print user choices.
