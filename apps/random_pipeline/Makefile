@@ -33,6 +33,7 @@ $(BIN)/random_pipeline.generator: random_pipeline_generator.cpp $(GENERATOR_DEPS
 
 $(BIN)/$(ID)/random_pipeline.a: $(BIN)/random_pipeline.generator
 	@mkdir -p $(@D)
+	HL_SHARED_MEMORY_LIMIT=24 \
 	HL_RANDOM_DROPOUT=$(HL_RANDOM_DROPOUT) \
 	HL_SEED=$(HL_SEED) \
 	HL_BEAM_SIZE=$(HL_BEAM_SIZE) \
