@@ -27,6 +27,7 @@
 #include <cassert>
 #include <fstream>
 #include <iostream>
+#include <random>
 
 using namespace Halide::Runtime;
 using namespace Halide::Tools;
@@ -51,14 +52,14 @@ void load_shape(std::string shapefile, int* dims, int &n, int &num_dims) {
   std::ifstream shape_input(shapefile, std::ios::binary);
   shape_input.read(reinterpret_cast<char*>(&d), sizeof(int));
   num_dims = d;
-  
+
   std::cout << num_dims << " shape: ";
   n = 1;
   for (int i = 0; i < num_dims; i++) {
     shape_input.read(reinterpret_cast<char*>(&dims[i]), sizeof(int));
     n *= dims[i];
     std::cout << dims[i] << " ";
-  } 
+  }
   std::cout << std::endl;
   shape_input.close();
 
@@ -163,7 +164,7 @@ typedef int (*FnPtr)(
             halide_buffer_t*,
             halide_buffer_t*);
 
-std::vector<FnPtr> blockFns = {resnet50block0, 
+std::vector<FnPtr> blockFns = {resnet50block0,
                               resnet50block1,
                               resnet50block2,
                               resnet50block3,
@@ -182,11 +183,14 @@ std::vector<FnPtr> blockFns = {resnet50block0,
 
 int main(int argc, char **argv) {
   const int NUMBLOCKS = 16;
-  int timing_iterations = atoi(argv[1]);
+  int timing_iterations = 10;
+  if (argc > 1) {
+      timing_iterations = atoi(argv[1]);
+  }
   //int macro_block_id = atoi(argv[2]);
   //int micro_block_id = atoi(argv[3]);
 
-  typedef std::vector<int> tensor_dim; 
+  typedef std::vector<int> tensor_dim;
   std::vector<tensor_dim> block_dims{
     {256, 56, 56},
     {512, 28, 28},
@@ -258,11 +262,11 @@ int main(int argc, char **argv) {
   shapefile = weight_dir + "conv1_weight_shape.data";
   datafile = weight_dir + "conv1_weight.data";
   conv1_weights = load_conv_params(shapefile, datafile);
- 
+
   shapefile = weight_dir + "bn1_running_mean_shape.data";
   datafile = weight_dir + "bn1_running_mean.data";
   conv1_mu = load_batch_norm_params(shapefile, datafile);
-  
+
   shapefile = weight_dir + "bn1_running_var_shape.data";
   datafile = weight_dir + "bn1_running_var.data";
   conv1_sig = load_batch_norm_params(shapefile, datafile);
@@ -270,16 +274,16 @@ int main(int argc, char **argv) {
   shapefile = weight_dir + "bn1_weight_shape.data";
   datafile = weight_dir + "bn1_weight.data";
   conv1_gamma = load_batch_norm_params(shapefile, datafile);
-  
+
   shapefile = weight_dir + "bn1_bias_shape.data";
   datafile = weight_dir + "bn1_bias.data";
   conv1_beta = load_batch_norm_params(shapefile, datafile);
-  
+
   std::string layer_names[NUMBLOCKS] = {"layer1_0", "layer1_1", "layer1_2",
                                  "layer2_0", "layer2_1", "layer2_2", "layer2_3",
                                  "layer3_0", "layer3_1", "layer3_2", "layer3_3", "layer3_4", "layer3_5",
                                  "layer4_0", "layer4_1", "layer4_2"};
-  
+
   std::string br1_names[4] = {"layer1_0_downsample", "layer2_0_downsample", "layer3_0_downsample", "layer4_0_downsample"};
 
 
@@ -308,7 +312,7 @@ int main(int argc, char **argv) {
   }
 
   // load branch 2 data
-  for (int i = 0; i < NUMBLOCKS; i++) { // 2:a,b,c -- 3:a,b,c,d -- 4:a,b,c,d,e,f --5:a,b,c 
+  for (int i = 0; i < NUMBLOCKS; i++) { // 2:a,b,c -- 3:a,b,c,d -- 4:a,b,c,d,e,f --5:a,b,c
     for (int j = 1; j <= 3; j++) { // conv 1, 2, 3 per block
       std::string section = std::to_string(j);
 
@@ -359,7 +363,7 @@ int main(int argc, char **argv) {
 
   Buffer<float> fc1000_weights = load_fc_weight(weight_shapefile, weight_datafile);
   Buffer<float> fc1000_bias = load_fc_bias(bias_shapefile, bias_datafile);
-  
+
   /** DONE LOADING WEIGHTS **/
   double best = benchmark(timing_iterations, 1, [&]() {
     for (int block_id = 0; block_id < NUMBLOCKS; block_id++) {

@@ -32,7 +32,6 @@ int find_index(int value, std::vector<int> vec) {
 
 class Resnet50Block: public Halide::Generator<Resnet50Block> {
 public:
-  GeneratorParam<int> macro_block_id{"macro_block_id", 0}; // 0 through 3 (2 - 5)
   GeneratorParam<int> block_id{"block_id", 0}; // 0 through 15 (1 - 16)
 
   Input<Buffer<float>> input{"input", 3};
@@ -157,6 +156,9 @@ public:
     Tensor pool5;
     Tensor fc1000;
     Tensor softmax;
+
+    int macro_block_id_table[16] = {0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 3, 3, 3};
+    int macro_block_id = macro_block_id_table[block_id];
 
     std::vector<int> branch1_indices{0,3,7,13};
 
