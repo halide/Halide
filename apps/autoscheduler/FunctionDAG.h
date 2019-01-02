@@ -425,6 +425,9 @@ struct FunctionDAG {
             bool pure, rvar;
             Expr min, max;
 
+            // Which pure dimension does this loop correspond to? Invalid if it's an rvar
+            int pure_dim;
+
             // Common case optimizations:
 
             // If true, the loop bounds are just the region computed in the given dimension
@@ -438,7 +441,6 @@ struct FunctionDAG {
             // A persistent fragment of source for getting this Var from its owner Func.
             string accessor;
         };
-
 
         // Get the loop nest shape as a function of the region computed
         void loop_nest_for_region(int stage_idx,
@@ -501,6 +503,11 @@ struct FunctionDAG {
             int id, max_id;
 
             vector<Edge *> incoming_edges;
+
+            vector<bool> dependencies;
+            bool downstream_of(const Node &n) const {
+                return dependencies[n.id];
+            };
 
             Stage(Halide::Stage s) : stage(s) {}
         };
@@ -568,7 +575,7 @@ struct FunctionDAG {
                         }
                     }
                     internal_assert(consumer_dim >= 0) << "Could not find consumer loop variable: " << var->name << "\n";
-                    debug(2) << "Bound is affine: " << e << " == " << var << " * " << coeff << " + " << constant << "\n";
+                    debug(2) << "Bound is affine: " << e << " == " << var->name << " * " << coeff << " + " << constant << "\n";
                 } else {
                     affine = false;
                     debug(2) << "Bound is non-affine: " << e << "\n";
@@ -716,6 +723,8 @@ struct FunctionDAG {
                 node.region_required.push_back(interval);
             }
 
+            auto pure_args = node.func.args();
+
             for (int s = 0; s <= (int)consumer.updates().size(); s++) {
                 stage_count++;
                 Halide::Stage halide_stage = Func(consumer);
@@ -809,6 +818,7 @@ struct FunctionDAG {
                     l.max = in.max;
                     l.pure = d.is_pure();
                     l.rvar = d.is_rvar();
+                    l.pure_dim = -1;
 
                     // Additional analysis to speed up evaluation of
                     // common cases. Loop bounds that are just one of
@@ -816,6 +826,9 @@ struct FunctionDAG {
                     // are common, as are constant bounds.
                     l.equals_region_computed = false;
                     for (int j = 0; j < consumer.dimensions(); j++) {
+                        if (l.var == pure_args[j]) {
+                            l.pure_dim = j;
+                        }
                         if (equal(l.min, node.region_computed[j].in.min) &&
                             equal(l.max, node.region_computed[j].in.max)) {
                             l.equals_region_computed = true;
@@ -1011,6 +1024,34 @@ struct FunctionDAG {
             edges[i].consumer->incoming_edges.push_back(&(edges[i]));
         }
 
+        // Compute transitive dependencies
+        for (size_t i = nodes.size(); i > 0; i--) {
+            auto &n = nodes[i-1];
+
+            for (auto &s : n.stages) {
+                s.dependencies.resize(nodes.size(), false);
+
+                for (auto *e : s.incoming_edges) {
+                    s.dependencies[e->producer->id] = true;
+                    for (auto &s2 : e->producer->stages) {
+                        for (size_t j = 0; j < nodes.size(); j++) {
+                            s.dependencies[j] = s.dependencies[j] || s2.dependencies[j];
+                        }
+                    }
+                }
+            }
+        }
+
+        for (auto &n1 : nodes) {
+            for (auto &s : n1.stages) {
+                for (auto &n2 : nodes) {
+                    if (s.downstream_of(n2)) {
+                        debug(0) << "Transitive edge: " << n2.func.name() << " -> " << s.name << "\n";
+                    }
+                }
+            }
+        }
+
         // Compute features for the neural net
         featurize();
     }
@@ -1165,7 +1206,6 @@ struct FunctionDAG {
         Scope<OptionalRational> dlets;
 
         OptionalRational differentiate(const Expr &e, const string &v) {
-            debug(0) << "Differentiating " << e << " w.r.t. " << v << "\n";
             if (!expr_uses_var(e, v, lets)) {
                 return {true, 0, 1};
             } else if (const Variable *var = e.as<Variable>()) {

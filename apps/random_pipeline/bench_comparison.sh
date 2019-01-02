@@ -56,7 +56,7 @@ for ((b=1;b<2;b++)); do
                 done
             done
         done
-    done | xargs -P48 -I{} bash -c "{}"
+    done | xargs -P16 -I{} bash -c "{}"
 
     # Benchmark them
     for ((p=0;p<$PIPELINES;p++)); do
@@ -122,6 +122,6 @@ for ((b=1;b<2;b++)); do
 
     # Extract the cost according to the hand-designed model (just the sum of a few of the features)
     echo "Extracting costs..."
-    cat results/files_common.txt | sed "s/_X/_0/" | while read F; do echo $(grep '^State with cost' ${F/times/stderr} | cut -d' ' -f4 | cut -d: -f1 | sort -n | head -n2 | tail -n1); done  > results/learned_costs_${b}.txt
+    cat results/files_common.txt | sed "s/_X/_0/" | while read F; do echo $(grep '^State with cost' ${F/times/stderr} | cut -d' ' -f4 | cut -d: -f1 | sort -n | grep -v 0.000000 | head -n1); done  > results/learned_costs_${b}.txt
     cat results/files_common.txt | sed "s/_X/_1/" | while read F; do echo $(grep '^State with cost' ${F/times/stderr} | cut -d' ' -f4 | cut -d: -f1 | sort -n | head -n1); done  > results/manual_costs_${b}.txt
 done

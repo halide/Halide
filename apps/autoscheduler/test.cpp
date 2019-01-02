@@ -394,6 +394,8 @@ int main(int argc, char **argv) {
 
         f(x, y) = x + y;;
         g() = f(3, 2);
+        RDom r(0, 100);
+        g() += r;
         h(x, y) = g() + x + y;
 
         h.estimate(x, 0, 1024).estimate(y, 0, 2048);
@@ -413,6 +415,38 @@ int main(int argc, char **argv) {
 
         g.estimate(x, 0, 10).estimate(y, 0, 2048);
         Pipeline(g).auto_schedule(target, params);
+    }
+
+    if (1) {
+        ImageParam im(Float(32), 2);
+
+        // A convolution pyramid
+        Func up[8], down[8];
+        int sz = 2048;
+        Func prev("input");
+        prev(x, y) = im(x, y);
+
+        const int N = 4;
+
+        for (int i = 0; i < N; i++) {
+            up[i] = Func("up" + std::to_string(i));
+            down[i] = Func("down" + std::to_string(i));
+            down[i](x, y) = prev(2*x-10, 2*y-10) + prev(2*x + 10, 2*y + 10);
+            prev = BoundaryConditions::repeat_edge(down[i], {{0, sz}, {0, sz}});
+            // prev = down[i];
+            sz /= 2;
+        }
+
+        for (int i = N-1; i >= 0; i--) {
+            up[i](x, y) = prev(x/2 + 10, y/2 + 10) + prev(x/2 - 10, y/2 - 10) + down[i](x, y);
+            prev = up[i];
+        }
+
+        Func out;
+        out(x, y) = up[0](x, y);
+
+        out.estimate(x, 0, 2048).estimate(y, 0, 2048);
+        Pipeline(out).auto_schedule(target, params);
     }
 
     return 0;

@@ -388,27 +388,28 @@ void StubEmitter::emit_inputs_struct() {
 
     stream << indent() << name << "() {}\n";
     stream << "\n";
+    if (!in_info.empty()) {
+        stream << indent() << name << "(\n";
+        indent_level++;
+        std::string comma = "";
+        for (auto in : in_info) {
+            stream << indent() << comma << "const " << in.c_type << "& " << in.name << "\n";
+            comma = ", ";
+        }
+        indent_level--;
+        stream << indent() << ") : \n";
+        indent_level++;
+        comma = "";
+        for (auto in : in_info) {
+            stream << indent() << comma << in.name << "(" << in.name << ")\n";
+            comma = ", ";
+        }
+        indent_level--;
+        stream << indent() << "{\n";
+        stream << indent() << "}\n";
 
-    stream << indent() << name << "(\n";
-    indent_level++;
-    std::string comma = "";
-    for (auto in : in_info) {
-        stream << indent() << comma << "const " << in.c_type << "& " << in.name << "\n";
-        comma = ", ";
+        indent_level--;
     }
-    indent_level--;
-    stream << indent() << ") : \n";
-    indent_level++;
-    comma = "";
-    for (auto in : in_info) {
-        stream << indent() << comma << in.name << "(" << in.name << ")\n";
-        comma = ", ";
-    }
-    indent_level--;
-    stream << indent() << "{\n";
-    stream << indent() << "}\n";
-
-    indent_level--;
     stream << indent() << "};\n";
     stream << "\n";
 }

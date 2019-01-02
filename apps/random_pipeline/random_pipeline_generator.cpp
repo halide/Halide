@@ -954,6 +954,8 @@ public:
                     return i;
                 }
             }
+            assert(false);
+            return num_states - 1;
         }
 
         void print() {
