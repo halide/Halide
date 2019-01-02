@@ -1861,7 +1861,25 @@ struct State {
         return false;
     }
 
-    bool exceeds_shared_memory_limit(const Target &target, const ScheduleFeatures& feat, const FunctionDAG::Node* node) {
+    std::pair<int64_t, int64_t> working_set_total(const StageMap<ScheduleFeatures>& features, const IntrusivePtr<const LoopNest>& loop_nest) {
+        int64_t working_set_r = 0;
+        int64_t working_set_p = 0;
+        for (const auto* n : loop_nest->store_at) {
+            working_set_r += features.get(&(n->stages[0])).bytes_at_realization;
+            working_set_p += features.get(&(n->stages[0])).bytes_at_production;
+        }
+
+        for (const auto& c : loop_nest->children) {
+            auto result = working_set_total(features, c);
+            working_set_r += result.first;
+            working_set_p += result.second;
+        }
+
+        return {working_set_r, working_set_p};
+    }
+
+    bool exceeds_shared_memory_limit(const StageMap<ScheduleFeatures>& features, const Target &target) {
+
         if (!target.has_gpu_feature()) {
             return false;
         }
@@ -1872,10 +1890,13 @@ struct State {
             return false;
         }
 
-        // If the working set is too large on the GPU, shared memory will be
-        // exhausted, so reject any such schedules
-        if (feat.inner_parallelism > 1 && feat.working_set > limit) {
-            return true;
+        for (const auto& c : root->children) {
+            // If the working set is too large on the GPU, shared memory will be
+            // exhausted, so reject any such schedules
+            auto result = working_set_total(features, c);
+            if (result.first > limit) {
+                return true;
+            }
         }
 
         return false;
@@ -1897,6 +1918,10 @@ struct State {
         }
 
         if (target.has_gpu_feature() && contains_store_at_further_in_than_outermost()) {
+            return false;
+        }
+
+        if (exceeds_shared_memory_limit(features, target)) {
             return false;
         }
 
@@ -1926,10 +1951,6 @@ struct State {
                         cost = 1e50;
                         return true;
                     }
-                }
-
-                if (exceeds_shared_memory_limit(target, feat, it.key()->node)) {
-                    return false;
                 }
             }
 
@@ -1969,9 +1990,6 @@ struct State {
                 auto &stage = *(it.key());
                 const auto &feat = it.value();
 
-                if (exceeds_shared_memory_limit(target, feat, it.key()->node)) {
-                    return false;
-                }
                 // Reject silly schedules. They're not even useful for
                 // training data, as they potentially take the age of
                 // the universe to benchmark.

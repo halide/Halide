@@ -651,7 +651,8 @@ public:
 
         Func resampled;
 
-        if (rand_bool()) {
+        // Linear interpolation causes issues on GPU so switch off for now
+        if (true) {//}rand_bool()) {
             // Nearest neighbour
             resampled = Func("upsampled_nn_" + f.func.args()[dim].name());
             vector<Expr> resampled_coords = make_arguments(f.func.args());
