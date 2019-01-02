@@ -247,7 +247,7 @@ struct LoopNest {
         hash_combine(h, -1);
 
         if (depth > 0) {
-            // What are their loop sizes?
+            // What are the loop sizes of the children?
             for (const auto &c : children) {
                 for (int64_t s : c->size) {
                     if (depth == 1) {
@@ -257,10 +257,10 @@ struct LoopNest {
                     hash_combine(h, s);
                 }
             }
-        }
 
-        // Which dimension are we vectorized over?
-        hash_combine(h, vectorized_loop_index);
+            // Which dimension are we vectorized over?
+            hash_combine(h, vectorized_loop_index);
+        }
 
         if (depth > 1) {
             // Descend into children
@@ -1132,38 +1132,8 @@ struct LoopNest {
 
     // Return all possible ways to parallelize this loop
     IntrusivePtr<const LoopNest> parallelize_in_tiles(const MachineParams &params,
-                                                      int tasks_per_core,
-                                                      int outermost_dim,
-                                                      const LoopNest *parent,
-                                                      bool *entirely_parallelized) const {
-        int64_t total_pure_extent = 1;
-        bool any_impure = false;
-        for (size_t i = 0; i < stage->loop.size(); i++) {
-            if (stage->loop[i].pure) {
-                total_pure_extent *= size[i];
-            } else if (size[i] > 1) {
-                any_impure = true;
-            }
-        }
-
-        // We use a strategy of parallelizing outer loops inwards,
-        // parameterized by the multiple of the core count to aim
-        // for.
-
-        // We want this many parallel tasks remaining in the outer loop
-        int64_t parallelism_required = params.parallelism * tasks_per_core;
-
-        if (total_pure_extent <= parallelism_required) {
-            // No splits to be made
-            LoopNest *child = new LoopNest;
-            child->copy_from(*this);
-            child->parallel = true;
-            *entirely_parallelized = true;
-            return child;
-        }
-
-        // So far we've found nothing
-        int64_t parallelism_found = 1;
+                                                      const vector<int64_t> &tiling,
+                                                      const LoopNest *parent) const {
 
         // Split this loop and move factors to the inner loop
         LoopNest *inner = new LoopNest, *outer = new LoopNest;
@@ -1191,58 +1161,25 @@ struct LoopNest {
         // Then move factors from the outer loop to the inner loop
         auto parent_bounds = parent->get_bounds(node);
 
-        // Figure out which loop index corresponds to the outermost_dim storage dimension
-        int outermost_loop_index = -1;
         for (size_t i = 0; i < stage->loop.size(); i++) {
-            if (stage->loop[i].var == node->func.args()[outermost_dim]) {
-                outermost_loop_index = (int)i;
-            }
-        }
+            int l = stage->loop[i].pure_dim;
+            if (l < 0) continue; // Not one of the pure dimensions. TODO: What about parallelizing pure rvars?
 
-        // End at -1, which will be the vectorized loop
-        for (int i = (int)stage->loop.size(); i >= -1; i--) {
-            int l = i;
-            if (i == -1) l = vectorized_loop_index;
-            if (i == stage->loop.size()) l = outermost_loop_index;
+            internal_assert(l < (int)tiling.size()) << l << " " << tiling.size() << "\n";
+            int64_t outer_extent = tiling[l];
 
-            if (i == vectorized_loop_index) continue; // We will handle the vectorized loop last
-            if (i == outermost_loop_index) continue; // Already handled
-
-            if (i == -1 && vectorized_loop_index == outermost_loop_index) break; // vectorized loop was already handled as the outermost loop
-            if (l == -1) break; // There's no vectorized/outermost loop
-
-            int64_t outer_extent = 1;
-            if (!stage->loop[l].pure) {
-                // Not parallelizeable. We must move this inwards.
-                outer_extent = 1;
-            } else if (l == vectorized_loop_index) {
-                if (parallelism_found < params.parallelism) {
-                    // Things are dire. We need to parallelize across
-                    // the innermost storage dimension. Do it
-                    // minimally.
-                    outer_extent = std::min(outer->size[l], (params.parallelism + parallelism_found - 1) / parallelism_found);
-                }
-            } else if (outer->size[l] * parallelism_found < parallelism_required * 2) {
-                outer_extent = outer->size[l];
-            } else {
-                // Pick some number of loop iterations per parallel tasks
-                outer_extent = std::max((int64_t)1, parallelism_required / parallelism_found);
-            }
-
-            inner->size[l] = (outer->size[l] + outer_extent - 1) / outer_extent;
+            inner->size[i] = (outer->size[i] + outer_extent - 1) / outer_extent;
             // Recompute the outer size given the selected inner size
-            outer_extent = (outer->size[l] + inner->size[l] - 1) / inner->size[l];
+            outer_extent = (outer->size[i] + inner->size[i] - 1) / inner->size[i];
 
-            outer->size[l] = outer_extent;
-            const auto &p = parent_bounds->loops(stage_idx, l);
+            outer->size[i] = outer_extent;
+            const auto &p = parent_bounds->loops(stage_idx, i);
             int64_t min = p.first;
             int64_t extent = p.second - min + 1;
             extent = (extent + outer_extent - 1) / outer_extent;
             // Pick a better representative loop iteration
             min += (outer_extent / 2) * extent;
-            b->loops(stage_idx, l) = {min, min + extent - 1};
-
-            parallelism_found *= outer_extent;
+            b->loops(stage_idx, i) = {min, min + extent - 1};
         }
         outer->set_bounds(node, b);
 
@@ -1618,7 +1555,7 @@ struct LoopNest {
                         if (!parent.exists || factor == 1) {
                             v.exists = false;
                             v.extent = 1;
-                        } else if (size[i] == 1 && !(child && child->innermost && i == vectorized_loop_index)) {
+                        } else if (size[i] == 1 && !(child && child->innermost && i == vectorized_loop_index && parent.var.name() == parent.orig.name())) {
                             // Not split in this dimension
                             v = parent;
                             v.parallel = false;
@@ -2313,8 +2250,14 @@ struct State {
             }
         } else {
             bool should_parallelize = false;
+            const vector<int64_t> *pure_size = nullptr;
+            int vector_dim = -1;
             for (auto &c : root->children) {
                 if (c->node == node && node->func.dimensions() > 0) {
+                    if (c->stage->index == 0) {
+                        pure_size = &(c->size);
+                        vector_dim = c->vector_dim;
+                    }
                     should_parallelize = true;
                 }
             }
@@ -2324,22 +2267,60 @@ struct State {
                 auto child = make_child();
                 child->num_funcs_scheduled++;
                 accept_child(std::move(child));
-            }
+            } else {
+                internal_assert(pure_size);
 
-            // Deciding on parallel tasks. Iterate over the
-            // approximate number of parallel tasks to produce per
-            // thread.
-            const int factors[] = {1, 2, 3, 4, 6, 8, 12, 16};
-            for (int outermost_dim = 0; outermost_dim < node->func.dimensions(); outermost_dim++) {
-                // TODO: reorder the selected outermost dim to be outermost in the storage order (as long as it's not the vector dim)
-                bool entirely_parallelized = false;
-                for (int f : factors) {
+                // Deciding on parallel task size/shape.
+                auto tilings = generate_tilings(*pure_size, node->func.dimensions() - 1, 2, true);
+
+                // We could just parallelize the outer loop entirely
+                tilings.push_back(*pure_size);
+
+                // Sort / filter the options
+                struct Option {
+                    vector<int64_t> tiling;
+                    double idle_core_wastage;
+                    bool entire;
+                    bool operator<(const Option &other) const {
+                        return idle_core_wastage < other.idle_core_wastage;
+                    }
+                };
+                vector<Option> options;
+                for (size_t i = 0; i < tilings.size(); i++) {
+                    auto &t = tilings[i];
+                    Option o;
+                    o.entire = (i == tilings.size() - 1);
+                    int64_t total = 1;
+                    for (size_t j = 0; j < pure_size->size(); j++) {
+                        t[j] = ((*pure_size)[j] + t[j] - 1) / t[j];
+                        total *= t[j];
+                    }
+                    t.swap(o.tiling);
+
+                    // Filter out the less useful options
+                    if (total > params.parallelism * 64) continue;
+                    if (total < params.parallelism && !o.entire) continue;
+
+                    // TODO: compute max wastage across all stages of
+                    // func instead of just the pure stage.
+                    const double tasks_per_core = ((double)total) / params.parallelism;
+                    o.idle_core_wastage = std::ceil(tasks_per_core) / tasks_per_core;
+                    options.emplace_back(std::move(o));
+                }
+                std::sort(options.begin(), options.end());
+
+                for (const auto &o : options) {
+                    if (num_children >= 1 && o.idle_core_wastage > 1.2) {
+                        // We have considered several options, and the
+                        // remaining ones leave lots of cores idle.
+                        break;
+                    }
                     auto child = make_child();
                     LoopNest *new_root = new LoopNest;
                     new_root->copy_from(*root);
                     for (auto &c : new_root->children) {
                         if (c->node == node) {
-                            c = c->parallelize_in_tiles(params, f, outermost_dim, new_root, &entirely_parallelized);
+                            c = c->parallelize_in_tiles(params, o.tiling, new_root);
                         }
                     }
                     child->root = new_root;
@@ -2348,9 +2329,11 @@ struct State {
                         num_children++;
                         accept_child(std::move(child));
                     }
-                    if (entirely_parallelized) break;
                 }
-                if (entirely_parallelized) break;
+
+
+
+
             }
         }
 

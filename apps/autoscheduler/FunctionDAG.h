@@ -425,6 +425,9 @@ struct FunctionDAG {
             bool pure, rvar;
             Expr min, max;
 
+            // Which pure dimension does this loop correspond to? Invalid if it's an rvar
+            int pure_dim;
+
             // Common case optimizations:
 
             // If true, the loop bounds are just the region computed in the given dimension
@@ -720,6 +723,8 @@ struct FunctionDAG {
                 node.region_required.push_back(interval);
             }
 
+            auto pure_args = node.func.args();
+
             for (int s = 0; s <= (int)consumer.updates().size(); s++) {
                 stage_count++;
                 Halide::Stage halide_stage = Func(consumer);
@@ -813,6 +818,7 @@ struct FunctionDAG {
                     l.max = in.max;
                     l.pure = d.is_pure();
                     l.rvar = d.is_rvar();
+                    l.pure_dim = -1;
 
                     // Additional analysis to speed up evaluation of
                     // common cases. Loop bounds that are just one of
@@ -820,6 +826,9 @@ struct FunctionDAG {
                     // are common, as are constant bounds.
                     l.equals_region_computed = false;
                     for (int j = 0; j < consumer.dimensions(); j++) {
+                        if (l.var == pure_args[j]) {
+                            l.pure_dim = j;
+                        }
                         if (equal(l.min, node.region_computed[j].in.min) &&
                             equal(l.max, node.region_computed[j].in.max)) {
                             l.equals_region_computed = true;
