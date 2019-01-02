@@ -331,7 +331,8 @@ struct LoopNest {
             size_t i = size[idx];
             loop_instances *= i;
             if (stage->loop[idx].pure && !in_impure) {
-                if (parallel || (parent->is_root() && parallel_tasks < params.parallelism)) {
+                if (params.parallelism > 1 &&
+                    (parallel || (parent->is_root() && parallel_tasks < params.parallelism))) {
                     // Either we've picked our parallel tiling, or
                     // it's not yet determined. Assume we'll not split
                     // any loops and just stop after we hit the
@@ -1456,7 +1457,7 @@ struct LoopNest {
                     const auto &p = parent_bounds->loops(stage_idx, i);
                     fv.extent = p.second - p.first + 1;
                     fv.outermost = true;
-                    fv.parallel = parent->is_root() && l.pure;
+                    fv.parallel = l.pure && parallel;
                     fv.exists = true;
                     fv.pure = l.pure;
                     state->vars.push_back(fv);
