@@ -1634,12 +1634,7 @@ struct LoopNest {
                     }
 
                     bool found = false;
-                    if (vectorized_loop_index >= 0 &&
-                        vectorized_loop_index < state.vars.size() &&
-                        state.vars[vectorized_loop_index].exists) {
-                        here = LoopLevel(node->func, state.vars[vectorized_loop_index].var);
-                        found = true;
-                    } else for (const auto &v : state.vars) {
+                    for (const auto &v : state.vars) {
                         if (!v.exists) continue;
                         here = LoopLevel(node->func, v.var);
                         found = true;
