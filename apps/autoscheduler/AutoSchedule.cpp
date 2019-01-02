@@ -558,10 +558,11 @@ struct LoopNest {
             c->compute_features(params, sites, subinstances, subparallelism, this, root, &working_set_here, features);
         }
 
+        for (const auto *node : store_at) {
+            working_set_here += features->get(&(node->stages[0])).bytes_at_production;
+        }
+
         if (at_production) {
-            for (const auto *node : store_at) {
-                working_set_here += features->get(&(node->stages[0])).bytes_at_production;
-            }
             feat.working_set = working_set_here;
         }
 
