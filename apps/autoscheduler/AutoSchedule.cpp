@@ -1413,7 +1413,7 @@ struct LoopNest {
             VarOrRVar var;
             string accessor;
             int64_t extent = 0;
-            bool outermost = false, parallel = false, exists = false, pure = false;
+            bool innermost_pure_dim = false, outermost = false, parallel = false, exists = false, pure = false;
             FuncVar() : orig(Var()), var(Var()) {}
         };
         vector<FuncVar> vars; // In order from innermost to outermost. Each group of d is one tiling.
@@ -1461,6 +1461,7 @@ struct LoopNest {
                     fv.parallel = l.pure && parallel;
                     fv.exists = true;
                     fv.pure = l.pure;
+                    fv.innermost_pure_dim = (i == vectorized_loop_index);
                     state->vars.push_back(fv);
                 }
                 state_map.emplace(stage, std::unique_ptr<StageScheduleState>(state));
@@ -1636,7 +1637,17 @@ struct LoopNest {
                     bool found = false;
                     for (const auto &v : state.vars) {
                         if (!v.exists) continue;
-                        here = LoopLevel(node->func, v.var);
+                        if (!v.var.is_rvar &&
+                            vectorized_loop_index >= 0 &&
+                            vectorized_loop_index < state.vars.size() &&
+                            state.vars[vectorized_loop_index].exists) {
+                            // The vectorized loop is actually the
+                            // innermost, not whatever pure loop we
+                            // just stumbled upon
+                            here = LoopLevel(node->func, state.vars[vectorized_loop_index].var);
+                        } else {
+                            here = LoopLevel(node->func, v.var);
+                        }
                         found = true;
                         break;
                     }
@@ -2431,13 +2442,25 @@ struct State {
             int64_t parallel_tasks = 1;
             vector<VarOrRVar> parallel_vars;
             bool any_parallel_vars = false, any_parallel_rvars = false;
+            VarOrRVar *innermost_parallel = nullptr;
             for (auto it = p.second->vars.rbegin(); it != p.second->vars.rend(); it++) {
                 if (!it->exists || it->extent == 1) continue;
                 if (!it->parallel) break;
                 any_parallel_rvars |= it->var.is_rvar;
                 any_parallel_vars |= !it->var.is_rvar;
                 parallel_tasks *= it->extent;
-                parallel_vars.push_back(it->var);
+                if (it->innermost_pure_dim) {
+                    innermost_parallel = &(it->var);
+                } else {
+                    parallel_vars.push_back(it->var);
+                }
+            }
+            // If we're parallelizing across the innermost storage
+            // dimension, we need to bubble that to the end of the
+            // parallel vars list, because it's actually the
+            // innermost.
+            if (innermost_parallel) {
+                parallel_vars.push_back(*innermost_parallel);
             }
 
             if (p.second->vars.size() > 1) {
