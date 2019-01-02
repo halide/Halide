@@ -887,12 +887,17 @@ public:
                            << scalar_to_string(arg.metadata->type, *arg.metadata->scalar_def);
                     arg.scalar_value = *arg.metadata->scalar_def;
                 } else if (arg.raw_string == "estimate") {
-                    if (!arg.metadata->scalar_estimate) {
-                        fail() << "Argument value for: " << arg.metadata->name << " was specified as using the estimate, but no estimate was found in the metadata.";
+                    if (!strcmp(arg.metadata->name, "__user_context")) {
+                      arg.scalar_value.u.handle = nullptr;
+                      info() << "Argument value for: __user_context is special-cased as: nullptr";
+                    } else {
+                      if (!arg.metadata->scalar_estimate) {
+                          fail() << "Argument value for: " << arg.metadata->name << " was specified as using the estimate, but no estimate was found in the metadata.";
+                      }
+                      info() << "Argument value for: " << arg.metadata->name << " is parsed from metadata as: "
+                             << scalar_to_string(arg.metadata->type, *arg.metadata->scalar_estimate);
+                      arg.scalar_value = *arg.metadata->scalar_estimate;
                     }
-                    info() << "Argument value for: " << arg.metadata->name << " is parsed from metadata as: "
-                           << scalar_to_string(arg.metadata->type, *arg.metadata->scalar_estimate);
-                    arg.scalar_value = *arg.metadata->scalar_estimate;
                 } else {
                     if (!parse_scalar(arg.metadata->type, arg.raw_string, &arg.scalar_value)) {
                         fail() << "Argument value for: " << arg_name << " could not be parsed as type "
