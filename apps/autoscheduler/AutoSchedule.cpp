@@ -1086,7 +1086,6 @@ struct LoopNest {
                     f->stages[s].loop[i].var == f->func.args()[v]) {
                     node->vectorized_loop_index = (int)i;
                     vector_size = (int64_t)(node->stage->vector_size);
-                    auto &p = single_point->loops(s, i);
                     single_point->loops(s, i).second += vector_size - 1;
                     node->size[i] += vector_size - 1;
                     node->size[i] /= vector_size;
@@ -1221,8 +1220,6 @@ struct LoopNest {
                 child = i;
             }
         }
-
-        const int vector_size = is_root() ? 1 : stage->vector_size;
 
         // HACK (when true)
         const bool force_only_output_compute_root = false;
@@ -1363,7 +1360,6 @@ struct LoopNest {
 
             const auto &c = children[child];
             int num_ones = 0;
-            size_t child_loop = 0;
             for (size_t i = 0; i < c->size.size(); i++) {
                 int64_t s = c->size[i];
                 num_ones += (s == 1) ? 1 : 0;
@@ -1448,7 +1444,6 @@ struct LoopNest {
                 state->num_cores = num_cores;
                 state->vector_dim = vector_dim;
                 state->vectorized_loop_index = vectorized_loop_index;
-                size_t sz = state->vars.size();
                 for (size_t i = 0; i < symbolic_loop.size(); i++) {
                     StageScheduleState::FuncVar fv;
                     const auto &l = symbolic_loop[i];
