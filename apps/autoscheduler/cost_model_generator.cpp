@@ -233,9 +233,9 @@ public:
 
         // Count up the number of things computed
         Expr compute_cost = select(inlined_calls == 0,
-                                   (num_vectors * relu1(0, w, n) +
+                                   (vector_size * num_vectors * relu1(0, w, n) +
                                     num_scalars * relu1(1, w, n)),
-                                   (num_vectors * relu1(2, w, n) +
+                                   (vector_size * num_vectors * relu1(2, w, n) +
                                     num_scalars * relu1(3, w, n)));
 
         // Account for all the code outside of the innermost loop. It's inversly proportional to the size of the innermost loop.
@@ -371,7 +371,7 @@ public:
             Expr significance = 1 - 1 / r1;
 
             // p1 should be at least 1 larger than p2, in units of the true runtime of the fastest schedule
-            Expr correct_order = significance * max(0, p2 + 1 - p1);
+            Expr correct_order = significance * (sqrt(1 + max(0, p2 + 1 - p1)) - 1);
             err(n) = correct_order + 1e-5f * regularize;
 
             Expr loss = sum(err(r_batch));
@@ -400,6 +400,7 @@ public:
         bias1.set_shape(conv1_channels);
         num_cores.set_estimate(32);
 
+        reference.set_estimate(0);
         batch_size.set_estimate(80);
         num_stages.set_estimate(13);
         prediction_output.dim(0).set_bounds_estimate(0, 80);
@@ -417,7 +418,7 @@ public:
             .dim(0).set_bounds_estimate(0, 80);
 
         // SCHEDULE
-        if (training) {
+        if (training && !auto_schedule) {
             do_cost_model_schedule(get_pipeline());
         } else if (auto_schedule) {
             // Blank

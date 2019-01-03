@@ -3,10 +3,11 @@
 
 #include "local_laplacian.h"
 #ifndef NO_AUTO_SCHEDULE
+#include "local_laplacian_classic_auto_schedule.h"
 #include "local_laplacian_auto_schedule.h"
 #endif
 
-#include "halide_benchmark.h"
+#include "benchmark_util.h"
 #include "HalideBuffer.h"
 #include "halide_image_io.h"
 
@@ -26,25 +27,21 @@ int main(int argc, char **argv) {
     int levels = atoi(argv[2]);
     float alpha = atof(argv[3]), beta = atof(argv[4]);
     Buffer<uint16_t> output(input.width(), input.height(), 3);
-    int timing = atoi(argv[5]);
+    const int samples = atoi(argv[5]);
+    const int iterations = 1;
 
-    local_laplacian(input, levels, alpha/(levels-1), beta, output);
-
-    // Timing code
-
-    // Manually-tuned version
-    double best_manual = benchmark(timing, 1, [&]() {
-        local_laplacian(input, levels, alpha/(levels-1), beta, output);
-    });
-    printf("Manually-tuned time: %gms\n", best_manual * 1e3);
-
-    #ifndef NO_AUTO_SCHEDULE
-    // Auto-scheduled version
-    double best_auto = benchmark(timing, 1, [&]() {
-        local_laplacian_auto_schedule(input, levels, alpha/(levels-1), beta, output);
-    });
-    printf("Auto-scheduled time: %gms\n", best_auto * 1e3);
+    three_way_bench(
+        [&]() { local_laplacian(input, levels, alpha/(levels-1), beta, output); },
+    #ifdef NO_AUTO_SCHEDULE
+        nullptr,
+        nullptr,
+    #else
+        [&]() { local_laplacian_classic_auto_schedule(input, levels, alpha/(levels-1), beta, output); },
+        [&]() { local_laplacian_auto_schedule(input, levels, alpha/(levels-1), beta, output); },
     #endif
+        samples,
+        iterations
+    );
 
     convert_and_save_image(output, argv[6]);
 

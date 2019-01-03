@@ -2,11 +2,10 @@
 #include <chrono>
 
 #include "stencil_chain.h"
-#ifndef NO_AUTO_SCHEDULE
+#include "stencil_chain_classic_auto_schedule.h"
 #include "stencil_chain_auto_schedule.h"
-#endif
 
-#include "halide_benchmark.h"
+#include "benchmark_util.h"
 #include "HalideBuffer.h"
 #include "halide_image_io.h"
 
@@ -26,26 +25,18 @@ int main(int argc, char **argv) {
     input.slice(2, 0);
 
     Buffer<uint16_t> output(input.width(), input.height());
-    int timing = atoi(argv[2]);
+    const int samples = atoi(argv[2]);
+    const int iterations = 1;
+
+    three_way_bench(
+        [&]() { stencil_chain(input, output); },
+        [&]() { stencil_chain_classic_auto_schedule(input, output); },
+        [&]() { stencil_chain_auto_schedule(input, output); },
+        samples,
+        iterations
+    );
 
     stencil_chain(input, output);
-
-    // Timing code
-
-    // Manually-tuned version
-    double best_manual = benchmark(timing, 1, [&]() {
-        stencil_chain(input, output);
-    });
-    printf("Manually-tuned time: %gms\n", best_manual * 1e3);
-
-    #ifndef NO_AUTO_SCHEDULE
-    // Auto-scheduled version
-    double best_auto = benchmark(timing, 1, [&]() {
-        stencil_chain_auto_schedule(input, output);
-    });
-    printf("Auto-scheduled time: %gms\n", best_auto * 1e3);
-    #endif
-
     convert_and_save_image(output, argv[3]);
 
     return 0;
