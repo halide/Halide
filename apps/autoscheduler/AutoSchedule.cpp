@@ -1164,10 +1164,15 @@ struct LoopNest {
 
         for (size_t i = 0; i < stage->loop.size(); i++) {
             int l = stage->loop[i].pure_dim;
-            if (l < 0) continue; // Not one of the pure dimensions. TODO: What about parallelizing pure rvars?
 
-            internal_assert(l < (int)tiling.size()) << l << " " << tiling.size() << "\n";
-            int64_t outer_extent = tiling[l];
+            int64_t outer_extent;
+            if (l >= 0) {
+                internal_assert(l < (int)tiling.size()) << l << " " << tiling.size() << "\n";
+                outer_extent = tiling[l];
+            } else {
+                // RVars are moved inwards
+                outer_extent = 1;
+            }
 
             inner->size[i] = (outer->size[i] + outer_extent - 1) / outer_extent;
             // Recompute the outer size given the selected inner size
