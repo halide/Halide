@@ -1697,6 +1697,7 @@ TEST_APPS=\
 	conv_layer \
 	fft \
 	harris \
+	hist \
 	interpolate \
 	lens_blur \
 	linear_algebra \
