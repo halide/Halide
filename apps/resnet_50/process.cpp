@@ -1,6 +1,21 @@
 #include "halide_benchmark.h"
 
-#include "resnet50block.h"
+#include "resnet50block0.h"
+#include "resnet50block1.h"
+#include "resnet50block2.h"
+#include "resnet50block3.h"
+#include "resnet50block4.h"
+#include "resnet50block5.h"
+#include "resnet50block6.h"
+#include "resnet50block7.h"
+#include "resnet50block8.h"
+#include "resnet50block9.h"
+#include "resnet50block10.h"
+#include "resnet50block11.h"
+#include "resnet50block12.h"
+#include "resnet50block13.h"
+#include "resnet50block14.h"
+#include "resnet50block15.h"
 
 #include "HalideBuffer.h"
 #include "halide_image_io.h"
@@ -12,7 +27,7 @@
 #include <cassert>
 #include <fstream>
 #include <iostream>
-#include <tuple>
+#include <random>
 
 using namespace Halide::Runtime;
 using namespace Halide::Tools;
@@ -24,6 +39,11 @@ buff_name[13], buff_name[14], buff_name[15]
 
 #define unroll_array_of_4_buffers(buff_name) buff_name[0], buff_name[1], buff_name[2], buff_name[3]
 
+#define unroll_array_of_16_params() halide_buffer_t*, halide_buffer_t*, halide_buffer_t*, halide_buffer_t*, \
+  halide_buffer_t*, halide_buffer_t*, halide_buffer_t*, halide_buffer_t*, \
+halide_buffer_t*, halide_buffer_t*, halide_buffer_t*, halide_buffer_t*, \
+halide_buffer_t*, halide_buffer_t*, halide_buffer_t*, halide_buffer_t*
+#define unroll_array_of_4_params() halide_buffer_t*, halide_buffer_t*, halide_buffer_t*, halide_buffer_t*
 
 /*** loading from file helpers ***/
 void load_shape(std::string shapefile, int* dims, int &n, int &num_dims) {
@@ -32,14 +52,14 @@ void load_shape(std::string shapefile, int* dims, int &n, int &num_dims) {
   std::ifstream shape_input(shapefile, std::ios::binary);
   shape_input.read(reinterpret_cast<char*>(&d), sizeof(int));
   num_dims = d;
-  
+
   std::cout << num_dims << " shape: ";
   n = 1;
   for (int i = 0; i < num_dims; i++) {
     shape_input.read(reinterpret_cast<char*>(&dims[i]), sizeof(int));
     n *= dims[i];
     std::cout << dims[i] << " ";
-  } 
+  }
   std::cout << std::endl;
   shape_input.close();
 
@@ -112,41 +132,99 @@ Buffer<float> rand_buffer(const std::vector<int> &shape) {
     return buf;
 }
 
-int main(int argc, char **argv) {
-  int timing_iterations = atoi(argv[1]);
-  int macro_block_id = atoi(argv[2]);
-  int micro_block_id = atoi(argv[3]);
+typedef int (*FnPtr)(
+            halide_buffer_t*,
+            halide_buffer_t*,
+            unroll_array_of_4_params(),
+            unroll_array_of_16_params(),
+            unroll_array_of_16_params(),
+            unroll_array_of_16_params(),
+            halide_buffer_t*,
+            unroll_array_of_4_params(),
+            unroll_array_of_16_params(),
+            unroll_array_of_16_params(),
+            unroll_array_of_16_params(),
+            halide_buffer_t*,
+            unroll_array_of_4_params(),
+            unroll_array_of_16_params(),
+            unroll_array_of_16_params(),
+            unroll_array_of_16_params(),
+            halide_buffer_t*,
+            unroll_array_of_4_params(),
+            unroll_array_of_16_params(),
+            unroll_array_of_16_params(),
+            unroll_array_of_16_params(),
+            halide_buffer_t*,
+            unroll_array_of_4_params(),
+            unroll_array_of_16_params(),
+            unroll_array_of_16_params(),
+            unroll_array_of_16_params(),
+            halide_buffer_t*,
+            halide_buffer_t*,
+            halide_buffer_t*,
+            halide_buffer_t*);
 
-  typedef std::vector<int> tensor_dim; 
+std::vector<FnPtr> blockFns = {resnet50block0,
+                              resnet50block1,
+                              resnet50block2,
+                              resnet50block3,
+                              resnet50block4,
+                              resnet50block5,
+                              resnet50block6,
+                              resnet50block7,
+                              resnet50block8,
+                              resnet50block9,
+                              resnet50block10,
+                              resnet50block11,
+                              resnet50block12,
+                              resnet50block13,
+                              resnet50block14,
+                              resnet50block15};
+
+int main(int argc, char **argv) {
+  const int NUMBLOCKS = 16;
+  int timing_iterations = 10;
+  if (argc > 1) {
+      timing_iterations = atoi(argv[1]);
+  }
+  //int macro_block_id = atoi(argv[2]);
+  //int micro_block_id = atoi(argv[3]);
+
+  typedef std::vector<int> tensor_dim;
   std::vector<tensor_dim> block_dims{
     {256, 56, 56},
     {512, 28, 28},
     {1024, 14, 14},
     {2048, 7, 7}
   };
-  printf("macro block %d\n", macro_block_id);
-  printf("micro block %d\n", micro_block_id);
 
-  tensor_dim output_dim = block_dims[macro_block_id];
-
-  std::vector<int> input_shape;
-  if (micro_block_id == 0) {
-    input_shape = {3, 224, 224};
-  } else if (has_branch1(micro_block_id)) {
-    input_shape = block_dims[macro_block_id-1];
-  } else {
-    input_shape = block_dims[macro_block_id];
+  /** setup inputs and outputs for each block **/
+  std::vector<std::vector<int>> input_shapes;
+  std::vector<std::vector<int>> output_shapes;
+  int macro_block = 0;
+  for (int micro_block = 0; micro_block < NUMBLOCKS; micro_block++) {
+    std::vector<int> input_shape;
+    if (micro_block == 0) {
+      input_shape = {3, 224, 224};
+    } else if (has_branch1(micro_block)) {
+      macro_block++;
+      input_shape = block_dims[macro_block-1];
+    } else {
+      input_shape = block_dims[macro_block];
+    }
+    input_shapes.push_back(input_shape);
+    output_shapes.push_back(block_dims[macro_block]);
   }
 
-  Buffer<float> input = rand_buffer(input_shape);
-  std::cout << input(10,5,5) << std::endl;
-  //Buffer<float> input(image, input_shape[0], input_shape[1], input_shape[2]);
-  Buffer<float> block_output(output_dim[0], output_dim[1], output_dim[2]);
+  std::vector<Buffer<float>> inputs(NUMBLOCKS);
+  std::vector<Buffer<float>> block_outputs(NUMBLOCKS);
+  for (int i = 0; i < NUMBLOCKS; i++) {
+    inputs[i] = rand_buffer(input_shapes[i]);
+    block_outputs[i] = rand_buffer(output_shapes[i]);
+  }
   Buffer<float> final_output(1000);
 
   std::string weight_dir = "./weights/";
-
-  int num_sections = 16;
 
   Buffer<float> conv1_weights;
   Buffer<float> conv1_mu;
@@ -184,11 +262,11 @@ int main(int argc, char **argv) {
   shapefile = weight_dir + "conv1_weight_shape.data";
   datafile = weight_dir + "conv1_weight.data";
   conv1_weights = load_conv_params(shapefile, datafile);
- 
+
   shapefile = weight_dir + "bn1_running_mean_shape.data";
   datafile = weight_dir + "bn1_running_mean.data";
   conv1_mu = load_batch_norm_params(shapefile, datafile);
-  
+
   shapefile = weight_dir + "bn1_running_var_shape.data";
   datafile = weight_dir + "bn1_running_var.data";
   conv1_sig = load_batch_norm_params(shapefile, datafile);
@@ -196,16 +274,16 @@ int main(int argc, char **argv) {
   shapefile = weight_dir + "bn1_weight_shape.data";
   datafile = weight_dir + "bn1_weight.data";
   conv1_gamma = load_batch_norm_params(shapefile, datafile);
-  
+
   shapefile = weight_dir + "bn1_bias_shape.data";
   datafile = weight_dir + "bn1_bias.data";
   conv1_beta = load_batch_norm_params(shapefile, datafile);
-  
-  std::string layer_names[num_sections] = {"layer1_0", "layer1_1", "layer1_2",
+
+  std::string layer_names[NUMBLOCKS] = {"layer1_0", "layer1_1", "layer1_2",
                                  "layer2_0", "layer2_1", "layer2_2", "layer2_3",
                                  "layer3_0", "layer3_1", "layer3_2", "layer3_3", "layer3_4", "layer3_5",
                                  "layer4_0", "layer4_1", "layer4_2"};
-  
+
   std::string br1_names[4] = {"layer1_0_downsample", "layer2_0_downsample", "layer3_0_downsample", "layer4_0_downsample"};
 
 
@@ -234,8 +312,8 @@ int main(int argc, char **argv) {
   }
 
   // load branch 2 data
-  for (int i = 0; i < 16; i++) {
-    for (int j = 1; j <= 3; j++) {
+  for (int i = 0; i < NUMBLOCKS; i++) { // 2:a,b,c -- 3:a,b,c,d -- 4:a,b,c,d,e,f --5:a,b,c
+    for (int j = 1; j <= 3; j++) { // conv 1, 2, 3 per block
       std::string section = std::to_string(j);
 
       std::string conv_shapefile = weight_dir + layer_names[i] + "_conv" + section + "_weight_shape.data";
@@ -286,9 +364,11 @@ int main(int argc, char **argv) {
   Buffer<float> fc1000_weights = load_fc_weight(weight_shapefile, weight_datafile);
   Buffer<float> fc1000_bias = load_fc_bias(bias_shapefile, bias_datafile);
 
+  /** DONE LOADING WEIGHTS **/
   double best = benchmark(timing_iterations, 1, [&]() {
-    resnet50block(
-            input,
+    for (int block_id = 0; block_id < NUMBLOCKS; block_id++) {
+      FnPtr blockfn = blockFns[block_id];
+      blockfn(inputs[block_id],
             conv1_gamma,
             unroll_array_of_4_buffers(br1_gamma),
             unroll_array_of_16_buffers(br2a_gamma),
@@ -316,11 +396,10 @@ int main(int argc, char **argv) {
             unroll_array_of_16_buffers(br2c_conv_weights),
             fc1000_weights,
             fc1000_bias,
-            block_output,
-            final_output
-    );
+            block_outputs[block_id],
+            final_output);
+    }
   });
-  std::cout << block_output(5,5,5) << std::endl;
 
   printf("Manually tuned time: %gms\n", best * 1e3);
 

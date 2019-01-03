@@ -355,31 +355,24 @@ public:
             Expr regularize = sum(-min(conv1_stage2(r_conv1_output.x, r_conv1_output.y, n), 0));
 
             Expr n2 = clamp(reference, 0, batch_size-1);
-            Expr scale = 1.0f / max(1, true_runtime(0));
-            Expr p1 = prediction(n) * scale, p2 = prediction(n2) * scale;
-            Expr r1 = true_runtime(n) * scale, r2 = true_runtime(n2) * scale;
+            Expr scale = 1.0f / true_runtime(n2);
+            Expr p1 = prediction(n) * scale;
+            Expr p2 = prediction(n2) * scale;
+            Expr r1 = true_runtime(n) * scale;
 
-            // The network should predict runtime.
-            Expr delta = pow(1/(r1 + 1e-5f) - 1/(p1 + 1e-5f), 2);
-            // Expr delta = pow(r1 - p1, 2);
-
-            // More importantly, the network should predict runtimes
-            // in the correct order
-
-            // A reward for being confident and correct, a penalty for
-            // being confident and wrong, and nothing when the result
-            // is not confident. Size of reward or penalty is also
-            // scaled by just how different the two true runtimes are.
+            // The network should predict runtimes in the correct
+            // order
 
             // Assume there's noise in the runtime measurements, and
             // use a similar sigmoid to determine the probability that
-            // A really *is* faster than B.
-            Expr significance = 1 - 1 / (abs(r1 - r2) + 1);
+            // A really *is* faster than B. We scale the absolute
+            // difference in runtime so that if a sample is 30% slower
+            // we're 90% confident that it is indeed slower.
+            Expr significance = 1 - 1 / r1;
 
-            // Maximize
-            Expr dp = abs(p1 - p2);
-            Expr correct_order = significance * select((r1 > r2) == (p1 > p2), max(0, 1 - dp), 1 + dp);
-            err(n) = correct_order + 1e-10f * delta + 1e-5f * regularize;
+            // p1 should be at least 1 larger than p2, in units of the true runtime of the fastest schedule
+            Expr correct_order = significance * max(0, p2 + 1 - p1);
+            err(n) = correct_order + 1e-5f * regularize;
 
             Expr loss = sum(err(r_batch));
 
@@ -444,13 +437,13 @@ public:
                 if (!training) {
                     relu.compute_at(prediction_output, n).store_at(prediction_output, no)
                         .tile(c, w, ci, wi, vec, 4, TailStrategy::RoundUp)
-                        .vectorize(ci, vec).unroll(ci);
+                        .vectorize(ci);
                     conv.compute_at(relu, c);
                 } else {
                     // In training mode, we need the conv activations pre-relu too
                     conv.in().compute_root()
                         .tile(c, w, ci, wi, vec, 1, TailStrategy::RoundUp)
-                        .vectorize(ci, vec).unroll(ci).unroll(wi).parallel(n, 8);
+                        .vectorize(ci).unroll(wi).parallel(n, 8);
                     conv.compute_at(conv.in(), c);
                     relu.compute_root().reorder_storage(c, w, n).reorder(c, w, n).vectorize(c, vec).parallel(n, 8);
                 }
@@ -458,8 +451,8 @@ public:
             };
 
             // Pipeline features processing
-            conv1_stage1.compute_root().vectorize(c, vec);
-            squashed_head1_filter.compute_root().vectorize(c, vec);
+            conv1_stage1.compute_root().vectorize(c);
+            squashed_head1_filter.compute_root().vectorize(c);
 
             // Schedule features processing. The number of schedule
             // features is not close to a multiple of 8, so vectorized

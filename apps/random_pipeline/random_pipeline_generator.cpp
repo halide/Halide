@@ -259,7 +259,7 @@ public:
         Func func;
         int w, h, c; // approx width and height and channels; TODO: ADD 4TH DIMENSION FOR BATCH SIZE
 
-        static constexpr int max_size = 10000000;
+        static constexpr int max_size = 100000000;
         static constexpr int min_size = 100;
         static constexpr int max_stride = 3; // for convs and pools
 
@@ -661,13 +661,20 @@ public:
             // Linear interpolation
             resampled = Func("upsampled_linear_" + f.func.args()[dim].name());
             vector<Expr> resampled_coords = make_arguments(f.func.args());
-            Expr x = cast<float>(resampled_coords[dim]) / factor;
-            resampled_coords[dim] = cast<int>(floor(x));
+            Expr x = resampled_coords[dim];
+            resampled_coords[dim] = x / factor;
             Expr s1 = f.func(resampled_coords);
             resampled_coords[dim] += 1;
             Expr s2 = f.func(resampled_coords);
-            Expr fx = x - floor(x);
-            resampled(f.func.args()) = lerp(s1, s2, fx);
+            x = x % factor;
+
+            Type mult_type, sum_type;
+            Type input_type = f.func.value().type();
+            set_upcast_types(input_type, mult_type, sum_type);
+            s1 = cast(sum_type, s1);
+            s2 = cast(sum_type, s2);
+
+            resampled(f.func.args()) = cast(input_type, ((factor - x) * s1 + x * s1) / (2*factor));
         }
 
         Stage s {resampled, f.w, f.h, f.c};

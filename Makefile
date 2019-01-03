@@ -1696,13 +1696,18 @@ TEST_APPS=\
 	c_backend \
 	conv_layer \
 	fft \
+	harris \
+	hist \
 	interpolate \
+	interpolate_generator \
 	lens_blur \
 	linear_algebra \
 	local_laplacian \
 	nl_means \
+	max_filter \
 	resize \
 	stencil_chain \
+	unsharp \
 	wavelet \
 
 .PHONY: test_apps
