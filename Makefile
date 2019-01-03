@@ -1703,6 +1703,7 @@ TEST_APPS=\
 	linear_algebra \
 	local_laplacian \
 	nl_means \
+	max_filter \
 	resize \
 	stencil_chain \
 	wavelet \
