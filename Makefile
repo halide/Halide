@@ -1699,6 +1699,7 @@ TEST_APPS=\
 	harris \
 	hist \
 	interpolate \
+	interpolate_generator \
 	lens_blur \
 	linear_algebra \
 	local_laplacian \
