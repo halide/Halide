@@ -24,7 +24,7 @@ int main(int argc, char **argv) {
     Halide::Runtime::Buffer<float> output(input.width()-6, input.height()-6);
 
     harris(input, output);
-    double min_t = benchmark(10, 10, [&]() {
+    double min_t = benchmark(30, 30, [&]() {
         harris(input, output);
         output.device_sync();
     });
@@ -34,7 +34,7 @@ int main(int argc, char **argv) {
     }
 
     harris_classic_auto_schedule(input, output);
-    min_t = benchmark(10, 10, [&]() {
+    min_t = benchmark(30, 30, [&]() {
         harris_classic_auto_schedule(input, output);
         output.device_sync();
     });
@@ -44,7 +44,7 @@ int main(int argc, char **argv) {
     }
 
     harris_auto_schedule(input, output);
-    min_t = benchmark(10, 10, [&]() {
+    min_t = benchmark(30, 30, [&]() {
         harris_auto_schedule(input, output);
         output.device_sync();
     });
