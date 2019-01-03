@@ -24,8 +24,16 @@ demo: $(BIN)/demo.rungen
 	$(BIN)/demo.rungen --benchmarks=all --benchmark_min_time=1 --default_input_buffers=random:0:auto --output_extents=estimate --default_input_scalars=estimate
 
 # demonstrates an autotuning loop
-autotune: $(BIN)/demo.generator $(AUTOSCHED_BIN)/augment_sample $(AUTOSCHED_BIN)/train_cost_model autotune_loop.sh $(AUTOSCHED_BIN)/libauto_schedule.so
-	bash autotune_loop.sh $(BIN)/demo.generator demo x86-64-avx2-disable_llvm_loop_unroll-disable_llvm_loop_vectorize
+# (using $(AUTOSCHED_BIN) and $(AUTOSCHED_SRC) here seems overkill, but makes copy-n-paste elsewhere easier)
+autotune: $(BIN)/demo.generator $(AUTOSCHED_BIN)/augment_sample $(AUTOSCHED_BIN)/train_cost_model $(AUTOSCHED_BIN)/libauto_schedule.so $(AUTOSCHED_SRC)/autotune_loop.sh
+	bash $(AUTOSCHED_SRC)/autotune_loop.sh \
+		$(BIN)/demo.generator \
+		demo \
+		x86-64-avx2-disable_llvm_loop_unroll-disable_llvm_loop_vectorize \
+		$(AUTOSCHED_SRC)/weights \
+		$(AUTOSCHED_BIN)
+
+	bash autotune_loop.sh $(BIN)/demo.generator demo x86-64-avx2-disable_llvm_loop_unroll-disable_llvm_loop_vectorize weights
 
 # Simple jit-based test
 $(BIN)/test: test.cpp $(AUTOSCHED_BIN)/libauto_schedule.so

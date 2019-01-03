@@ -19,9 +19,11 @@ public:
         Var x("x"), y("y"), c("c");
 
         // Algorithm
+        Func clamped = input;//Halide::BoundaryConditions::repeat_edge(input);
+
         Func gray("gray");
-        gray(x, y) = 0.299f * input(x, y, 0) + 0.587f * input(x, y, 1)
-                     + 0.114f * input(x, y, 2);
+        gray(x, y) = 0.299f * clamped(x, y, 0) + 0.587f * clamped(x, y, 1)
+                     + 0.114f * clamped(x, y, 2);
 
         Func Iy("Iy");
         Iy(x, y) = gray(x-1, y-1)*(-1.0f/12) + gray(x-1, y+1)*(1.0f/12) +
@@ -64,10 +66,13 @@ public:
 
         // Estimates (for autoscheduler; ignored otherwise)
         {
-            input.dim(0).set_bounds_estimate(0, 1530)
-                 .dim(1).set_bounds_estimate(0, 2554)
+            const int kWidth = 1530;
+            const int kHeight = 2560;
+            input.dim(0).set_bounds_estimate(0, kWidth)
+                 .dim(1).set_bounds_estimate(0, kHeight)
                  .dim(2).set_bounds_estimate(0, 3);
-            output.estimate(x, 0, 1530).estimate(y, 0, 2554);
+            output.dim(0).set_bounds_estimate(0, kWidth - 6)
+                  .dim(1).set_bounds_estimate(0, kHeight - 6);
         }
 
         // Schedule
@@ -78,10 +83,10 @@ public:
                 Ix.compute_at(output, x).gpu_threads(x, y);
                 Iy.compute_at(output, x).gpu_threads(x, y);
             } else {
-                const int v = natural_vector_size<float>();
-                output.split(y, y, yi, 32).parallel(y).vectorize(x, v);
-                Ix.store_at(output, y).compute_at(output, yi).vectorize(x, v);
-                Iy.store_at(output, y).compute_at(output, yi).vectorize(x, v);
+                const int kVectorWidth = natural_vector_size<float>();
+                output.split(y, y, yi, 32).parallel(y).vectorize(x, kVectorWidth);
+                Ix.store_at(output, y).compute_at(output, yi).vectorize(x, kVectorWidth);
+                Iy.store_at(output, y).compute_at(output, yi).vectorize(x, kVectorWidth);
                 Ix.compute_with(Iy, x);
             }
         }
