@@ -34,7 +34,7 @@ autotune: $(BIN)/hist.generator $(AUTOSCHED_BIN)/augment_sample $(AUTOSCHED_BIN)
 	bash $(AUTOSCHED_SRC)/autotune_loop.sh \
 		$(BIN)/hist.generator \
 		hist \
-		x86-64-avx2-disable_llvm_loop_unroll-disable_llvm_loop_vectorize \
+		x86-64-avx2 \
 		$(AUTOSCHED_SRC)/weights \
 		$(AUTOSCHED_BIN)
 

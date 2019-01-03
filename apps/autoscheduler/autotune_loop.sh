@@ -18,7 +18,7 @@ COMPILATION_TIMEOUT=120s
 BENCHMARKING_TIMEOUT=60s
 
 if [ -z ${HL_TARGET} ]; then
-HL_TARGET=x86-64-avx2-disable_llvm_loop_unroll-disable_loop_loop_vectorize
+HL_TARGET=x86-64-avx2
 fi
 
 if [ -z ${GENERATOR} ]; then
@@ -42,6 +42,14 @@ else
     cp ${START_WEIGHTS_DIR}/*.data ${WEIGHTS}/
     echo Copying starting weights from ${START_WEIGHTS_DIR} to ${WEIGHTS}
 fi
+
+# We could add these unconditionally, but it's easier to wade thru
+# results if we only add if needed
+for F in disable_llvm_loop_unroll disable_llvm_loop_vectorize; do
+    if [[ ! ${HL_TARGET} =~ .*${F}.* ]]; then
+        HL_TARGET="${HL_TARGET}-${F}"
+    fi
+done
 
 # A batch of this many samples is built in parallel, and then
 # benchmarked serially.

@@ -34,6 +34,6 @@ autotune: $(BIN)/harris.generator $(AUTOSCHED_BIN)/augment_sample $(AUTOSCHED_BI
 	bash $(AUTOSCHED_SRC)/autotune_loop.sh \
 		$(BIN)/harris.generator \
 		harris \
-		x86-64-avx2-disable_llvm_loop_unroll-disable_llvm_loop_vectorize \
+		x86-64-avx2 \
 		$(AUTOSCHED_SRC)/weights \
 		$(AUTOSCHED_BIN)
