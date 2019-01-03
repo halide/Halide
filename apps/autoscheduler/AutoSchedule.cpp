@@ -2876,6 +2876,11 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
         num_passes = 1;
     }
 
+    string num_passes_str = get_env_variable("HL_NUM_PASSES");
+    if (!num_passes_str.empty()) {
+        num_passes = std::atoi(num_passes_str.c_str());
+    }
+
     for (int i = 0; i < num_passes; i++) {
         auto pass = optimal_schedule_pass(dag, outputs, params, cost_model, rng, beam_size, i, permitted_hashes);
         debug(0) << "\nPass " << i << " result:\n";
