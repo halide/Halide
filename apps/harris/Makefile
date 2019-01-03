@@ -28,6 +28,6 @@ clean:
 	rm -rf $(BIN)
 
 test: $(BIN)/filter
-	$(BIN)/filter ../images/rgb.png $(BIN)/out.tiff $(BIN)/out-classic.tiff $(BIN)/out-auto.tiff
+	$(BIN)/filter ../images/rgb.png $(BIN)/out.tiff
 
 
