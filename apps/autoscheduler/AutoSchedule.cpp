@@ -472,7 +472,7 @@ struct LoopNest {
         ScheduleFeatures &feat = features->get_or_create(stage);
 
         if (innermost) {
-            if (vectorized_loop_index >= 0 && vectorized_loop_index < size.size()) {
+            if (vectorized_loop_index >= 0 && vectorized_loop_index < (int) size.size()) {
                 feat.vector_size = size[vectorized_loop_index];
             } else {
                 feat.vector_size = 1;
@@ -496,7 +496,7 @@ struct LoopNest {
                 idx++;
             }
 
-            if (vectorized_loop_index >= 0 && vectorized_loop_index < size.size()) {
+            if (vectorized_loop_index >= 0 && vectorized_loop_index < (int) size.size()) {
                 feat.innermost_pure_loop_extent = size[vectorized_loop_index];
             } else {
                 feat.innermost_pure_loop_extent = 1;
@@ -518,7 +518,7 @@ struct LoopNest {
                 int64_t innermost_storage_extent = 1;
                 for (int i = 0; i < node->func.dimensions(); i++) {
                     int64_t outer = 1;
-                    for (int l = 0; l < stage->loop.size(); l++) {
+                    for (size_t l = 0; l < stage->loop.size(); l++) {
                         if (stage->loop[l].var == node->func.args()[i]) {
                             outer = size[l];
                             break;
@@ -919,7 +919,7 @@ struct LoopNest {
 
             for (size_t i = 0; i < size.size(); i++) {
                 debug(0) << " " << size[i];
-                if (innermost && i == vectorized_loop_index) {
+                if (innermost && i == (size_t) vectorized_loop_index) {
                     debug(0) << 'v';
                 }
             }
@@ -1469,7 +1469,7 @@ struct LoopNest {
                     fv.parallel = l.pure && parallel;
                     fv.exists = true;
                     fv.pure = l.pure;
-                    fv.innermost_pure_dim = (i == vectorized_loop_index);
+                    fv.innermost_pure_dim = (i == (size_t) vectorized_loop_index);
                     state->vars.push_back(fv);
                 }
                 state_map.emplace(stage, std::unique_ptr<StageScheduleState>(state));
@@ -1552,7 +1552,7 @@ struct LoopNest {
                         int64_t factor = (parent.extent + size[i] - 1) / size[i];
                         int64_t innermost_size = innermost_loop->size[i];
 
-                        if (child && i == vectorized_loop_index) {
+                        if (child && i == (size_t) vectorized_loop_index) {
                             // Ensure the split is a multiple of the
                             // vector size. With all these rounded
                             // divs going on it can drift.
@@ -1566,7 +1566,7 @@ struct LoopNest {
                         if (!parent.exists || factor == 1) {
                             v.exists = false;
                             v.extent = 1;
-                        } else if (size[i] == 1 && !(child && child->innermost && i == vectorized_loop_index && parent.var.name() == parent.orig.name())) {
+                        } else if (size[i] == 1 && !(child && child->innermost && i == (size_t) vectorized_loop_index && parent.var.name() == parent.orig.name())) {
                             // Not split in this dimension
                             v = parent;
                             v.parallel = false;
@@ -1647,7 +1647,7 @@ struct LoopNest {
                         if (!v.exists) continue;
                         if (!v.var.is_rvar &&
                             vectorized_loop_index >= 0 &&
-                            vectorized_loop_index < state.vars.size() &&
+                            vectorized_loop_index < (int) state.vars.size() &&
                             state.vars[vectorized_loop_index].exists) {
                             // The vectorized loop is actually the
                             // innermost, not whatever pure loop we
