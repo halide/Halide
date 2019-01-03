@@ -1422,7 +1422,9 @@ struct LoopNest {
             bool innermost_pure_dim = false, outermost = false, parallel = false, exists = false, pure = false;
             FuncVar() : orig(Var()), var(Var()) {}
         };
+        bool parallel = false;
         vector<FuncVar> vars; // In order from innermost to outermost. Each group of d is one tiling.
+        vector<StageScheduleState*> ancestors; // From outermost in
         std::ostringstream schedule_source;
     };
 
@@ -1432,11 +1434,12 @@ struct LoopNest {
                int depth,
                const LoopNest *parent,
                const LoopNest *compute_site,
-               const Target& target) const {
+               const Target& target,
+               std::vector<StageScheduleState*>& ancestors) const {
         if (is_root()) {
             for (auto &c : children) {
                 Func(c->node->func).compute_root();
-                c->apply(LoopLevel::root(), state_map, num_cores, 1, this, c.get(), target);
+                c->apply(LoopLevel::root(), state_map, num_cores, 1, this, c.get(), target, ancestors);
                 if (c->stage_idx == 0) {
                     auto &state = state_map.get(c->stage);
                     state->schedule_source << "\n    .compute_root()";
@@ -1455,6 +1458,7 @@ struct LoopNest {
                 state->num_cores = num_cores;
                 state->vector_dim = vector_dim;
                 state->vectorized_loop_index = vectorized_loop_index;
+                state->ancestors = ancestors;
                 for (size_t i = 0; i < symbolic_loop.size(); i++) {
                     StageScheduleState::FuncVar fv;
                     const auto &l = symbolic_loop[i];
@@ -1694,7 +1698,9 @@ struct LoopNest {
                 if (c->node != node) {
                     Func(c->node->func).compute_at(here);
                 }
-                c->apply(here, state_map, num_cores, depth + 1, this, compute_site, target);
+                ancestors.push_back(state_map.get(stage).get());
+                c->apply(here, state_map, num_cores, depth + 1, this, compute_site, target, ancestors);
+                ancestors.pop_back();
                 if (c->node != node && c->stage_idx == 0) {
                     auto &state = *(state_map.get(c->stage));
                     state.schedule_source << "\n    .compute" << loop_level;
@@ -2462,7 +2468,8 @@ struct State {
 
     void apply_schedule(const FunctionDAG &dag, const MachineParams &params, const Target &target) {
         StageMap<std::unique_ptr<LoopNest::StageScheduleState>> state_map;
-        root->apply(LoopLevel::root(), state_map, params.parallelism, 0, nullptr, nullptr, target);
+        std::vector<LoopNest::StageScheduleState*> ancestors;
+        root->apply(LoopLevel::root(), state_map, params.parallelism, 0, nullptr, nullptr, target, ancestors);
 
         std::ostringstream src;
 
@@ -2610,6 +2617,25 @@ struct State {
                         p.second->schedule_source << "\n    .parallel(" << v.name() << ")";
                         stage.parallel(v);
                     }
+                }
+            }
+
+            if (!parallel_vars.empty()) {
+                p.second->parallel = true;
+            }
+
+            if (target.has_gpu_feature() && parallel_vars.empty()) {
+                bool has_enclosing_parallel_loop = false;
+                for (const auto* ancestor : p.second->ancestors) {
+                    if (ancestor->parallel) {
+                        has_enclosing_parallel_loop = true;
+                        break;
+                    }
+                }
+
+                if (!has_enclosing_parallel_loop) {
+                    stage.gpu_blocks(vars.back());
+                    p.second->parallel = true;
                 }
             }
 
