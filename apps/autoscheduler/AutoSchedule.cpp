@@ -2267,13 +2267,11 @@ struct State {
         } else {
             bool should_parallelize = false;
             const vector<int64_t> *pure_size = nullptr;
-            int vector_dim = -1;
             if (params.parallelism > 1) {
                 for (auto &c : root->children) {
                     if (c->node == node && node->func.dimensions() > 0) {
                         if (c->stage->index == 0) {
                             pure_size = &(c->size);
-                            vector_dim = c->vector_dim;
                         }
                         should_parallelize = true;
                     }
