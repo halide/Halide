@@ -79,9 +79,10 @@ public:
                 Iy.compute_at(output, x).gpu_threads(x, y);
             } else {
                 const int v = natural_vector_size<float>();
-                output.tile(x, y, xi, yi, 128, 128).vectorize(xi, v).parallel(y);
-                Ix.compute_at(output, x).vectorize(x, v);
-                Iy.compute_at(output, x).vectorize(x, v);
+                output.split(y, y, yi, 32).parallel(y).vectorize(x, v);
+                Ix.store_at(output, y).compute_at(output, yi).vectorize(x, v);
+                Iy.store_at(output, y).compute_at(output, yi).vectorize(x, v);
+                Ix.compute_with(Iy, x);
             }
         }
     }
