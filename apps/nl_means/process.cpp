@@ -1,10 +1,11 @@
-#include <cstdio>
+ #include <cstdio>
 #include <chrono>
 
 #include "nl_means.h"
+#include "nl_means_classic_auto_schedule.h"
 #include "nl_means_auto_schedule.h"
 
-#include "halide_benchmark.h"
+#include "benchmark_util.h"
 #include "HalideBuffer.h"
 #include "halide_image_io.h"
 
@@ -23,26 +24,19 @@ int main(int argc, char **argv) {
     int search_area = atoi(argv[3]);
     float sigma = atof(argv[4]);
     Buffer<float> output(input.width(), input.height(), 3);
-    int timing_iterations = atoi(argv[5]);
-
-    nl_means(input, patch_size, search_area, sigma, output);
-
-    // Timing code
+    const int samples = atoi(argv[5]);
+    const int iterations = 1;
 
     printf("Input size: %d by %d, patch size: %d, search area: %d, sigma: %f\n",
             input.width(), input.height(), patch_size, search_area, sigma);
 
-    // Manually-tuned version
-    double min_t_manual = benchmark(timing_iterations, 1, [&]() {
-        nl_means(input, patch_size, search_area, sigma, output);
-    });
-    printf("Manually-tuned time: %gms\n", min_t_manual * 1e3);
-
-    // Auto-scheduled version
-    double min_t_auto = benchmark(timing_iterations, 1, [&]() {
-        nl_means_auto_schedule(input, patch_size, search_area, sigma, output);
-    });
-    printf("Auto-scheduled time: %gms\n", min_t_auto * 1e3);
+    three_way_bench(
+        [&]() { nl_means(input, patch_size, search_area, sigma, output); },
+        [&]() { nl_means_classic_auto_schedule(input, patch_size, search_area, sigma, output); },
+        [&]() { nl_means_auto_schedule(input, patch_size, search_area, sigma, output); },
+        samples,
+        iterations
+    );
 
     convert_and_save_image(output, argv[6]);
 
