@@ -384,14 +384,6 @@ struct LoopNest {
                 if (!vectorized) {
                     feat.num_vectors = 0;
                 }
-                // num_vectors assumed that the vector size for the
-                // narrowest type also works for the other types, but
-                // the parts of the computation that use wider types
-                // will actually implicitly be unrolled into one
-                // vector per natural vector of the wider type. Assume
-                // that's where the bulk of the compute lies.
-                feat.num_vectors *= node->stages[s].vector_size / node->stages[s].output_vector_size;
-
                 feat.points_computed_total = feat.points_computed_per_realization * feat.num_realizations;
 
                 feat.bytes_at_realization = node->bytes_per_point;
