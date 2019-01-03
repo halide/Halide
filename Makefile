@@ -1696,6 +1696,7 @@ TEST_APPS=\
 	c_backend \
 	conv_layer \
 	fft \
+	harris \
 	interpolate \
 	lens_blur \
 	linear_algebra \
