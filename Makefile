@@ -1706,6 +1706,7 @@ TEST_APPS=\
 	max_filter \
 	resize \
 	stencil_chain \
+	unsharp \
 	wavelet \
 
 .PHONY: test_apps
