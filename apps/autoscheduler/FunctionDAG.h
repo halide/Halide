@@ -487,8 +487,14 @@ struct FunctionDAG {
             vector<Loop> loop;
             bool loop_nest_all_common_cases = false;
 
-            // The vectorization width that will be used.
+            // The vectorization width that will be used for
+            // compute. Corresponds to the natural width for the
+            // narrowest type used.
             int vector_size;
+
+            // The vector size used for storing outputs. Corresponds
+            // to the natural width for the output type.
+            int output_vector_size;
 
             // The featurization of the compute done
             PipelineFeatures features;
@@ -906,15 +912,21 @@ struct FunctionDAG {
                 CheckTypes checker;
                 exprs.accept(&checker);
 
+                Type widest_output_type = def.values()[0].type();
+
                 int bytes_per_point = 0;
                 for (const auto &e : def.values()) {
                     bytes_per_point += e.type().bytes();
+                    if (e.type().bytes() > widest_output_type.bytes()) {
+                        widest_output_type = e.type();
+                    }
                 }
                 if (s == 0) {
                     node.bytes_per_point = bytes_per_point;
                 }
 
                 stage.vector_size = target.natural_vector_size(checker.narrowest_type);
+                stage.output_vector_size = target.natural_vector_size(widest_output_type);
 
                 if (s == 0) {
                     node.vector_size = stage.vector_size;
