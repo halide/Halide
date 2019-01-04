@@ -1423,7 +1423,10 @@ struct LoopNest {
             FuncVar() : orig(Var()), var(Var()) {}
         };
         bool parallel = false;
+        bool vectorized = false;
+        FuncVar vectorized_var;
         vector<FuncVar> vars; // In order from innermost to outermost. Each group of d is one tiling.
+        vector<VarOrRVar> ordered_vars; // In order from innermost to outermost. Each group of d is one tiling.
         vector<StageScheduleState*> ancestors; // From outermost in
         std::ostringstream schedule_source;
     };
@@ -1530,10 +1533,14 @@ struct LoopNest {
                             state.schedule_source
                                 << "\n    .gpu_threads(" << v.var.name() << ")";
                             s.gpu_threads(v.var);
+                            state.vectorized = true;
+                            state.vectorized_var = v;
                         } else {
                             state.schedule_source
                                 << "\n    .vectorize(" << v.var.name() << ")";
                             s.vectorize(v.var);
+                            state.vectorized = true;
+                            state.vectorized_var = v;
                         }
                     }
                 } else {
@@ -2571,6 +2578,7 @@ struct State {
 
             if (p.second->vars.size() > 1) {
                 p.second->schedule_source << "\n    .reorder(";
+
                 bool first = true;
                 for (auto &v : p.second->vars) {
                     if (v.exists) {
@@ -2584,6 +2592,10 @@ struct State {
                 }
                 p.second->schedule_source << ")";
                 stage.reorder(vars);
+
+                if (target.has_gpu_feature()) {
+                    p.second->ordered_vars = vars;
+                }
             }
 
             // Halide doesn't let you fuse an RVar with a Var, even if
@@ -2624,21 +2636,6 @@ struct State {
                 p.second->parallel = true;
             }
 
-            if (target.has_gpu_feature() && parallel_vars.empty()) {
-                bool has_enclosing_parallel_loop = false;
-                for (const auto* ancestor : p.second->ancestors) {
-                    if (ancestor->parallel) {
-                        has_enclosing_parallel_loop = true;
-                        break;
-                    }
-                }
-
-                if (!has_enclosing_parallel_loop) {
-                    stage.gpu_blocks(vars.back());
-                    p.second->parallel = true;
-                }
-            }
-
             // Reorder the vector dimension innermost
             if (p.first->index == 0 && p.second->vector_dim > 0) {
                 vector<Var> storage_vars = Func(p.first->node->func).args();
@@ -2657,12 +2654,69 @@ struct State {
                 p.second->schedule_source << ")";
                 Func(p.first->node->func).reorder_storage(storage_vars);
             }
+        }
+
+
+        if (target.has_gpu_feature()) {
+            for (auto &p : state_map) {
+                if (p.first->node->is_input) continue;
+
+                Stage stage(p.first->stage);
+
+                if (!p.second->vectorized || p.second->parallel) {
+                    continue;
+                }
+
+                bool has_enclosing_parallel_loop = false;
+                for (const auto* ancestor : p.second->ancestors) {
+                    if (ancestor->parallel) {
+                        has_enclosing_parallel_loop = true;
+                        break;
+                    }
+                }
+
+                if (has_enclosing_parallel_loop) {
+                    continue;
+                }
+
+                // If a loop has been marked gpu_threads(), we need to ensure
+                // that it is inside a gpu_blocks() call to prevent an error.
+                // Split the vectorized loop to create a new outer var with
+                // extent = 1 and mark it gpu_blocks()
+                const auto& v = p.second->vectorized_var;
+                Var new_outer(v.var.name() + "_outer");
+                stage.split(v.var, new_outer, v.var, (int)v.extent);
+
+                auto& vars = p.second->ordered_vars;
+                vars.push_back(new_outer);
+
+                p.second->schedule_source << "\n    .reorder(";
+                bool first = true;
+                for (const auto& v : vars) {
+                    if (!first) {
+                        p.second->schedule_source << ", ";
+                    }
+                    p.second->schedule_source << v.name();
+                    first = false;
+                }
+                p.second->schedule_source << ")";
+
+                stage.reorder(vars);
+                stage.gpu_blocks(new_outer);
+                p.second->parallel = true;
+                p.second->schedule_source << "\n    .gpu_blocks(" << new_outer.name() << ")";
+            }
+        }
+
+        for (auto &p : state_map) {
+            if (p.first->node->is_input) continue;
 
             // Dump the schedule source string
             src << p.first->name
                 << p.second->schedule_source.str()
                 << ";\n";
         }
+
         schedule_source = src.str();
         bool in_quotes = false;
         for (auto &c : schedule_source) {
