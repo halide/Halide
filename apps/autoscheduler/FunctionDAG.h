@@ -487,8 +487,14 @@ struct FunctionDAG {
             vector<Loop> loop;
             bool loop_nest_all_common_cases = false;
 
-            // The vectorization width that will be used.
+            // The vectorization width that will be used for
+            // compute. Corresponds to the natural width for the
+            // narrowest type used.
             int vector_size;
+
+            // The vector size used for storing outputs. Corresponds
+            // to the natural width for the output type.
+            int output_vector_size;
 
             // The featurization of the compute done
             PipelineFeatures features;
@@ -906,9 +912,14 @@ struct FunctionDAG {
                 CheckTypes checker;
                 exprs.accept(&checker);
 
+                Type widest_output_type = def.values()[0].type();
+
                 int bytes_per_point = 0;
                 for (const auto &e : def.values()) {
                     bytes_per_point += e.type().bytes();
+                    if (e.type().bytes() > widest_output_type.bytes()) {
+                        widest_output_type = e.type();
+                    }
                 }
                 if (s == 0) {
                     node.bytes_per_point = bytes_per_point;
@@ -918,6 +929,7 @@ struct FunctionDAG {
                     stage.vector_size = 32; // warp size
                 } else {
                     stage.vector_size = target.natural_vector_size(checker.narrowest_type);
+                    stage.output_vector_size = target.natural_vector_size(widest_output_type);
                 }
 
                 if (s == 0) {
@@ -1061,7 +1073,6 @@ struct FunctionDAG {
 
         Function &func;
         Node::Stage &stage;
-        size_t vector_dim;
 
         int &op_bucket(PipelineFeatures::OpType op_type, Type scalar_type) {
             int type_bucket = (int)classify_type(scalar_type);
@@ -1324,8 +1335,8 @@ struct FunctionDAG {
         }
 
     public:
-        Featurizer(Function &func, Node::Stage &stage, size_t vector_dim) :
-            func(func), stage(stage), vector_dim(vector_dim) {}
+        Featurizer(Function &func, Node::Stage &stage) :
+            func(func), stage(stage) {}
 
         void visit_store_args(const std::string &name, Type t, vector<Expr> args) {
             for (auto &e : args) {
@@ -1346,7 +1357,7 @@ struct FunctionDAG {
                 while (vector_dim < stage.loop.size() && !stage.loop[vector_dim].pure) vector_dim++;
                 // bool vectorized = vector_dim < stage.loop.size();
 
-                Featurizer featurizer(node.func, stage, vector_dim);
+                Featurizer featurizer(node.func, stage);
 
                 Definition def = node.func.definition();
                 if (stage_idx > 0) def = node.func.updates()[stage_idx - 1];

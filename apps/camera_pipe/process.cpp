@@ -1,10 +1,10 @@
-#include "halide_benchmark.h"
-
 #include "camera_pipe.h"
 #ifndef NO_AUTO_SCHEDULE
+// #include "camera_pipe_classic_auto_schedule.h"
 #include "camera_pipe_auto_schedule.h"
 #endif
 
+#include "benchmark_util.h"
 #include "HalideBuffer.h"
 #include "halide_image_io.h"
 #include "halide_malloc_trace.h"
@@ -60,27 +60,24 @@ int main(int argc, char **argv) {
     float gamma = (float) atof(argv[3]);
     float contrast = (float) atof(argv[4]);
     float sharpen = (float) atof(argv[5]);
-    int timing_iterations = atoi(argv[6]);
+    const int samples = atoi(argv[6]);
+    const int iterations = 1;
     int blackLevel = 25;
     int whiteLevel = 1023;
 
-    double best;
-
-    best = benchmark(timing_iterations, 1, [&]() {
-        camera_pipe(input, matrix_3200, matrix_7000,
-                    color_temp, gamma, contrast, sharpen, blackLevel, whiteLevel,
-                    output);
-    });
-    fprintf(stderr, "Halide (manual):\t%gus\n", best * 1e6);
-
-    #ifndef NO_AUTO_SCHEDULE
-    best = benchmark(timing_iterations, 1, [&]() {
-        camera_pipe_auto_schedule(input, matrix_3200, matrix_7000,
-                                  color_temp, gamma, contrast, sharpen, blackLevel, whiteLevel,
-            output);
-    });
-    fprintf(stderr, "Halide (auto):\t%gus\n", best * 1e6);
+    three_way_bench(
+        [&]() { camera_pipe(input, matrix_3200, matrix_7000, color_temp, gamma, contrast, sharpen, blackLevel, whiteLevel, output); },
+    #ifdef NO_AUTO_SCHEDULE
+        nullptr,
+        nullptr,
+    #else
+        // TODO: camera_pipe fails under the classic autoscheduler with an internal error.
+        nullptr, // [&]() { camera_pipe_classic_auto_schedule(input, matrix_3200, matrix_7000, color_temp, gamma, contrast, sharpen, blackLevel, whiteLevel, output); },
+        [&]() { camera_pipe_auto_schedule(input, matrix_3200, matrix_7000, color_temp, gamma, contrast, sharpen, blackLevel, whiteLevel, output); },
     #endif
+        samples,
+        iterations
+    );
 
     fprintf(stderr, "output: %s\n", argv[7]);
     convert_and_save_image(output, argv[7]);

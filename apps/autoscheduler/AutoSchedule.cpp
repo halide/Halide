@@ -474,7 +474,7 @@ struct LoopNest {
         ScheduleFeatures &feat = features->get_or_create(stage);
 
         if (innermost) {
-            if (vectorized_loop_index >= 0 && vectorized_loop_index < size.size()) {
+            if (vectorized_loop_index >= 0 && vectorized_loop_index < (int) size.size()) {
                 feat.vector_size = size[vectorized_loop_index];
             } else {
                 feat.vector_size = 1;
@@ -498,7 +498,7 @@ struct LoopNest {
                 idx++;
             }
 
-            if (vectorized_loop_index >= 0 && vectorized_loop_index < size.size()) {
+            if (vectorized_loop_index >= 0 && vectorized_loop_index < (int) size.size()) {
                 feat.innermost_pure_loop_extent = size[vectorized_loop_index];
             } else {
                 feat.innermost_pure_loop_extent = 1;
@@ -520,7 +520,7 @@ struct LoopNest {
                 int64_t innermost_storage_extent = 1;
                 for (int i = 0; i < node->func.dimensions(); i++) {
                     int64_t outer = 1;
-                    for (int l = 0; l < stage->loop.size(); l++) {
+                    for (size_t l = 0; l < stage->loop.size(); l++) {
                         if (stage->loop[l].var == node->func.args()[i]) {
                             outer = size[l];
                             break;
@@ -921,7 +921,7 @@ struct LoopNest {
 
             for (size_t i = 0; i < size.size(); i++) {
                 debug(0) << " " << size[i];
-                if (innermost && i == vectorized_loop_index) {
+                if (innermost && i == (size_t) vectorized_loop_index) {
                     debug(0) << 'v';
                 }
             }
@@ -1174,10 +1174,15 @@ struct LoopNest {
 
         for (size_t i = 0; i < stage->loop.size(); i++) {
             int l = stage->loop[i].pure_dim;
-            if (l < 0) continue; // Not one of the pure dimensions. TODO: What about parallelizing pure rvars?
 
-            internal_assert(l < (int)tiling.size()) << l << " " << tiling.size() << "\n";
-            int64_t outer_extent = tiling[l];
+            int64_t outer_extent;
+            if (l >= 0) {
+                internal_assert(l < (int)tiling.size()) << l << " " << tiling.size() << "\n";
+                outer_extent = tiling[l];
+            } else {
+                // RVars are moved inwards
+                outer_extent = 1;
+            }
 
             inner->size[i] = (outer->size[i] + outer_extent - 1) / outer_extent;
             // Recompute the outer size given the selected inner size
@@ -1426,7 +1431,10 @@ struct LoopNest {
             FuncVar() : orig(Var()), var(Var()) {}
         };
         bool parallel = false;
+        bool vectorized = false;
+        FuncVar vectorized_var;
         vector<FuncVar> vars; // In order from innermost to outermost. Each group of d is one tiling.
+        vector<VarOrRVar> ordered_vars; // In order from innermost to outermost. Each group of d is one tiling.
         vector<StageScheduleState*> ancestors; // From outermost in
         std::ostringstream schedule_source;
     };
@@ -1474,7 +1482,7 @@ struct LoopNest {
                     fv.parallel = l.pure && parallel;
                     fv.exists = true;
                     fv.pure = l.pure;
-                    fv.innermost_pure_dim = (i == vectorized_loop_index);
+                    fv.innermost_pure_dim = (i == (size_t) vectorized_loop_index);
                     state->vars.push_back(fv);
                 }
                 state_map.emplace(stage, std::unique_ptr<StageScheduleState>(state));
@@ -1537,6 +1545,8 @@ struct LoopNest {
                                 << "\n    .vectorize(" << v.var.name() << ")";
                             s.vectorize(v.var);
                         }
+                        state.vectorized = true;
+                        state.vectorized_var = v;
                     }
                 } else {
                     // Grab the innermost loop for this node
@@ -1562,7 +1572,7 @@ struct LoopNest {
                         int64_t factor = (parent.extent + size[i] - 1) / size[i];
                         int64_t innermost_size = innermost_loop->size[i];
 
-                        if (child && i == vectorized_loop_index) {
+                        if (child && i == (size_t) vectorized_loop_index) {
                             // Ensure the split is a multiple of the
                             // vector size. With all these rounded
                             // divs going on it can drift.
@@ -1576,7 +1586,7 @@ struct LoopNest {
                         if (!parent.exists || factor == 1) {
                             v.exists = false;
                             v.extent = 1;
-                        } else if (size[i] == 1 && !(child && child->innermost && i == vectorized_loop_index && parent.var.name() == parent.orig.name())) {
+                        } else if (size[i] == 1 && !(child && child->innermost && i == (size_t) vectorized_loop_index && parent.var.name() == parent.orig.name())) {
                             // Not split in this dimension
                             v = parent;
                             v.parallel = false;
@@ -1657,7 +1667,7 @@ struct LoopNest {
                         if (!v.exists) continue;
                         if (!v.var.is_rvar &&
                             vectorized_loop_index >= 0 &&
-                            vectorized_loop_index < state.vars.size() &&
+                            vectorized_loop_index < (int) state.vars.size() &&
                             state.vars[vectorized_loop_index].exists) {
                             // The vectorized loop is actually the
                             // innermost, not whatever pure loop we
@@ -2366,13 +2376,11 @@ struct State {
         } else {
             bool should_parallelize = false;
             const vector<int64_t> *pure_size = nullptr;
-            int vector_dim = -1;
             if (params.parallelism > 1) {
                 for (auto &c : root->children) {
                     if (c->node == node && node->func.dimensions() > 0) {
                         if (c->stage->index == 0) {
                             pure_size = &(c->size);
-                            vector_dim = c->vector_dim;
                         }
                         should_parallelize = true;
                     }
@@ -2646,6 +2654,7 @@ struct State {
 
             if (p.second->vars.size() > 1) {
                 p.second->schedule_source << "\n    .reorder(";
+
                 bool first = true;
                 for (auto &v : p.second->vars) {
                     if (v.exists) {
@@ -2659,6 +2668,10 @@ struct State {
                 }
                 p.second->schedule_source << ")";
                 stage.reorder(vars);
+
+                if (target.has_gpu_feature()) {
+                    p.second->ordered_vars = vars;
+                }
             }
 
             // Halide doesn't let you fuse an RVar with a Var, even if
@@ -2699,21 +2712,6 @@ struct State {
                 p.second->parallel = true;
             }
 
-            if (target.has_gpu_feature() && parallel_vars.empty()) {
-                bool has_enclosing_parallel_loop = false;
-                for (const auto* ancestor : p.second->ancestors) {
-                    if (ancestor->parallel) {
-                        has_enclosing_parallel_loop = true;
-                        break;
-                    }
-                }
-
-                if (!has_enclosing_parallel_loop) {
-                    stage.gpu_blocks(vars.back());
-                    p.second->parallel = true;
-                }
-            }
-
             // Reorder the vector dimension innermost
             if (p.first->index == 0 && p.second->vector_dim > 0) {
                 vector<Var> storage_vars = Func(p.first->node->func).args();
@@ -2732,12 +2730,69 @@ struct State {
                 p.second->schedule_source << ")";
                 Func(p.first->node->func).reorder_storage(storage_vars);
             }
+        }
+
+
+        if (target.has_gpu_feature()) {
+            for (auto &p : state_map) {
+                if (p.first->node->is_input) continue;
+
+                Stage stage(p.first->stage);
+
+                if (!p.second->vectorized || p.second->parallel) {
+                    continue;
+                }
+
+                bool has_enclosing_parallel_loop = false;
+                for (const auto* ancestor : p.second->ancestors) {
+                    if (ancestor->parallel) {
+                        has_enclosing_parallel_loop = true;
+                        break;
+                    }
+                }
+
+                if (has_enclosing_parallel_loop) {
+                    continue;
+                }
+
+                // If a loop has been marked gpu_threads(), we need to ensure
+                // that it is inside a gpu_blocks() call to prevent an error.
+                // Split the vectorized loop to create a new outer var with
+                // extent = 1 and mark it gpu_blocks()
+                const auto& v = p.second->vectorized_var;
+                Var new_outer(v.var.name() + "_outer");
+                stage.split(v.var, new_outer, v.var, (int)v.extent);
+
+                auto& vars = p.second->ordered_vars;
+                vars.push_back(new_outer);
+
+                p.second->schedule_source << "\n    .reorder(";
+                bool first = true;
+                for (const auto& v : vars) {
+                    if (!first) {
+                        p.second->schedule_source << ", ";
+                    }
+                    p.second->schedule_source << v.name();
+                    first = false;
+                }
+                p.second->schedule_source << ")";
+
+                stage.reorder(vars);
+                stage.gpu_blocks(new_outer);
+                p.second->parallel = true;
+                p.second->schedule_source << "\n    .gpu_blocks(" << new_outer.name() << ")";
+            }
+        }
+
+        for (auto &p : state_map) {
+            if (p.first->node->is_input) continue;
 
             // Dump the schedule source string
             src << p.first->name
                 << p.second->schedule_source.str()
                 << ";\n";
         }
+
         schedule_source = src.str();
         bool in_quotes = false;
         for (auto &c : schedule_source) {
@@ -3078,6 +3133,11 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
     string cyos_str = get_env_variable("HL_CYOS");
     if (cyos_str == "1") {
         num_passes = 1;
+    }
+
+    string num_passes_str = get_env_variable("HL_NUM_PASSES");
+    if (!num_passes_str.empty()) {
+        num_passes = std::atoi(num_passes_str.c_str());
     }
 
     for (int i = 0; i < num_passes; i++) {

@@ -2,60 +2,34 @@
 #include <chrono>
 
 #include "conv_layer.h"
+#include "conv_layer_classic_auto_schedule.h"
 #include "conv_layer_auto_schedule.h"
 
-#include "halide_benchmark.h"
+#include "benchmark_util.h"
 #include "HalideBuffer.h"
 
 using namespace Halide::Tools;
 using namespace Halide::Runtime;
 
 int main(int argc, char **argv) {
-    Buffer<float> input(67, 67, 32, 4);
-    Buffer<float> filter(3, 3, 32, 32);
-    Buffer<float> bias(32);
 
-    for (int c = 0; c < input.dim(3).extent(); c++) {
-        for (int z = 0; z < input.channels(); z++) {
-            for (int y = 0; y < input.height(); y++) {
-                for (int x = 0; x < input.width(); x++) {
-                    input(x, y) = rand();
-                }
-            }
-        }
-    }
+    const int N = 5, CI = 120, CO = 24, W = 100, H = 80;
 
-    for (int c = 0; c < filter.dim(3).extent(); c++) {
-        for (int z = 0; z < filter.channels(); z++) {
-            for (int y = 0; y < filter.height(); y++) {
-                for (int x = 0; x < filter.width(); x++) {
-                    filter(x, y) = rand();
-                }
-            }
-        }
-    }
+    Buffer<float> input(CI, W+2, H+2, N);
+    Buffer<float> filter(CO, 3, 3, CI);
+    Buffer<float> bias(CO);
 
-    for (int x = 0; x < bias.width(); x++) {
-        bias(x) = rand();
-    }
+    input.for_each_value([&](float &f) {f = (double)rand()/RAND_MAX;});
+    filter.for_each_value([&](float &f) {f = (double)rand()/RAND_MAX;});
+    bias.for_each_value([&](float &f) {f = (double)rand()/RAND_MAX;});
 
-    Buffer<float> output(64, 64, 32, 4);
+    Buffer<float> output(CO, W, H, N);
 
-    conv_layer(input, filter, bias, output);
-
-    // Timing code
-
-    // Manually-tuned version
-    double min_t_manual = benchmark(10, 10, [&]() {
-        conv_layer(input, filter, bias, output);
-    });
-    printf("Manually-tuned time: %gms\n", min_t_manual * 1e3);
-
-    // Auto-scheduled version
-    double min_t_auto = benchmark(10, 10, [&]() {
-        conv_layer_auto_schedule(input, filter, bias, output);
-    });
-    printf("Auto-scheduled time: %gms\n", min_t_auto * 1e3);
+    three_way_bench(
+        [&]() { conv_layer(input, filter, bias, output); },
+        [&]() { conv_layer_classic_auto_schedule(input, filter, bias, output); },
+        [&]() { conv_layer_auto_schedule(input, filter, bias, output); }
+    );
 
     return 0;
 }
