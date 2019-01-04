@@ -75,7 +75,7 @@ make_sample() {
     if [[ $D == */0 ]]; then
         # Sample 0 in each batch is best effort beam search, with no randomness
         dropout=100
-        beam=50
+        beam=32
     else
         # The other samples are random probes biased by the cost model
         dropout=25
