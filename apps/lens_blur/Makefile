@@ -34,3 +34,11 @@ clean:
 	rm -rf $(BIN)
 
 test: $(BIN)/out.png
+
+autotune: $(BIN)/lens_blur.generator $(AUTOSCHED_BIN)/augment_sample $(AUTOSCHED_BIN)/train_cost_model $(AUTOSCHED_BIN)/libauto_schedule.so $(AUTOSCHED_SRC)/autotune_loop.sh
+	bash $(AUTOSCHED_SRC)/autotune_loop.sh \
+		$(BIN)/lens_blur.generator \
+		lens_blur \
+		x86-64-avx2 \
+		$(AUTOSCHED_SRC)/weights \
+		$(AUTOSCHED_BIN)

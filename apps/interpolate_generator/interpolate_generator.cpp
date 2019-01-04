@@ -75,7 +75,7 @@ public:
 
                 cpu_wrapper
                     .reorder(c, x, y)
-                    .bound(c, 0, 3)
+                    .bound(c, 0, 4)
                     .tile(x, y, xo, yo, xi, yi, input_.width()/4, input_.height()/4)
                     .vectorize(xi, 8);
 
@@ -122,7 +122,7 @@ public:
                 }
                 normalize
                     .reorder(c, x, y)
-                    .bound(c, 0, 3)
+                    .bound(c, 0, 4)
                     .unroll(c)
                     .tile(x, y, xi, yi, 2, 2)
                     .unroll(xi)
@@ -139,7 +139,7 @@ public:
         {
             input_.dim(0).set_bounds_estimate(0, 1536)
                   .dim(1).set_bounds_estimate(0, 2560)
-                  .dim(2).set_bounds_estimate(0, 3);
+                  .dim(2).set_bounds_estimate(0, 4);
             output_.dim(0).set_bounds_estimate(0, 1536)
                   .dim(1).set_bounds_estimate(0, 2560)
                   .dim(2).set_bounds_estimate(0, 3);
