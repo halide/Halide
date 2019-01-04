@@ -674,7 +674,7 @@ public:
             s1 = cast(sum_type, s1);
             s2 = cast(sum_type, s2);
 
-            resampled(f.func.args()) = cast(input_type, ((factor - x) * s1 + x * s1) / (2*factor));
+            resampled(f.func.args()) = cast(input_type, ((factor - x) * s1 + x * s2) / (2*factor));
         }
 
         Stage s {resampled, f.w, f.h, f.c};
