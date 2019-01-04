@@ -28,6 +28,13 @@ clean:
 	rm -rf $(BIN)
 
 test: $(BIN)/filter
-	$(BIN)/filter ../images/rgb.png $(BIN)/out.png $(BIN)/out-classic.png $(BIN)/out-auto.png
+	$(BIN)/filter ../images/rgb.png $(BIN)/out.png
 
+autotune: $(BIN)/hist.generator $(AUTOSCHED_BIN)/augment_sample $(AUTOSCHED_BIN)/train_cost_model $(AUTOSCHED_BIN)/libauto_schedule.so $(AUTOSCHED_SRC)/autotune_loop.sh
+	bash $(AUTOSCHED_SRC)/autotune_loop.sh \
+		$(BIN)/hist.generator \
+		hist \
+		x86-64-avx2 \
+		$(AUTOSCHED_SRC)/weights \
+		$(AUTOSCHED_BIN)
 

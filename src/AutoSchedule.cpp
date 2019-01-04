@@ -3042,9 +3042,13 @@ void validate_no_partial_schedules(const Function &f) {
     user_assert(f.schedule().compute_level().is_inlined())
         << "AutoSchedule: cannot auto-schedule function \"" << f.name()
         << "\" since it is scheduled to be computed at root\n";
+    /* Commented out because it's overzealous - it's OK to bound
+       outputs and anything else that is known to be compute_root.
+
     user_assert(f.schedule().bounds().empty())
         << "AutoSchedule: cannot auto-schedule function \"" << f.name()
         << "\" since it has partially specified bounds\n";
+    */
 
     int num_stages = f.updates().size() + 1;
     for (int stage = 0; stage < num_stages; ++stage) {
@@ -3535,7 +3539,7 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
 MachineParams MachineParams::generic() {
     std::string params = Internal::get_env_variable("HL_MACHINE_PARAMS");
     if (params.empty()) {
-        return MachineParams(16, 16 * 1024 * 1024, 40);
+        return MachineParams(32, 24 * 1024 * 1024, 160);
     } else {
         return MachineParams(params);
     }

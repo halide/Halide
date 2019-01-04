@@ -139,7 +139,7 @@ public:
         {
             input_.dim(0).set_bounds_estimate(0, 1536)
                   .dim(1).set_bounds_estimate(0, 2560)
-                  .dim(2).set_bounds_estimate(0, 3);
+                  .dim(2).set_bounds_estimate(0, 4);
             output_.dim(0).set_bounds_estimate(0, 1536)
                   .dim(1).set_bounds_estimate(0, 2560)
                   .dim(2).set_bounds_estimate(0, 3);
