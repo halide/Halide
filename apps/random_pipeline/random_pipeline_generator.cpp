@@ -189,7 +189,53 @@ Expr rand_value(Type t) {
 }
 
 Expr random_expr(vector<Expr> inputs, int depth, int func_size) {
-    return Internal::simplify(Internal::common_subexpression_elimination(random_expr_inner(inputs, depth, func_size)));
+    for (auto &e : inputs) {
+        e = Internal::simplify(e);
+    }
+
+    for (int attempts = 0; attempts < 10; attempts++) {
+        Expr result =
+            Internal::simplify(Internal::common_subexpression_elimination(random_expr_inner(inputs, depth, func_size)));
+
+        class Checker : public Internal::IRMutator2 {
+        public:
+            Expr mutate(const Expr &e) override {
+                exprs_to_find.erase(e);
+                return IRMutator2::mutate(e);
+            }
+            using Internal::IRMutator2::mutate;
+            std::set<Expr, Internal::IRDeepCompare> exprs_to_find;
+            Checker(const vector<Expr> &inputs) {
+                for (const auto &e : inputs) {
+                    exprs_to_find.insert(e);
+                }
+            }
+        } checker(inputs);
+
+        checker.mutate(result);
+
+        // Double check all the inputs are used
+        if (!checker.exprs_to_find.empty()) {
+            std::cerr << "In random expression: " << result << "\n"
+                      << "The following expressions were unused:\n";
+            for (auto &e : checker.exprs_to_find) {
+                std::cerr << e << "\n";
+            }
+        } else {
+            return result;
+        }
+    }
+
+    // We're having a hard time generating an expression that uses all the inputs. Just sum them.
+    Type t = inputs[0].type();
+    if (t.is_bool()) {
+        t = UInt(8);
+    }
+    Expr result = cast(t, 0);
+    for (const auto &e : inputs) {
+        result += e;
+    }
+    return result;
 }
 
 // Generator to produce a random pipeline. The generated pipeline will
