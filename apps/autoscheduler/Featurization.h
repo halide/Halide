@@ -16,7 +16,9 @@ struct PipelineFeatures {
     static constexpr int num_features() {
         return sizeof(PipelineFeatures) / sizeof(int);
     }
-
+    static constexpr int version() {
+        return 1;
+    }
     // A featurization of the compute done by a Func, to
     // feed the neural network.
 
@@ -121,6 +123,9 @@ struct PipelineFeatures {
 struct ScheduleFeatures {
     static constexpr int num_features() {
         return sizeof(ScheduleFeatures) / sizeof(int64_t);
+    }
+    static constexpr int version() {
+        return 1;
     }
 
     int64_t num_realizations = 0; // Product of outer loops at store_at site
