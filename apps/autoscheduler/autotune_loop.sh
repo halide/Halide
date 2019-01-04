@@ -132,7 +132,7 @@ benchmark_sample() {
 }
 
 # Don't clobber existing samples
-FIRST=$(ls -d ${SAMPLES}/batch_* 2>/dev/null | cut -d_ -f2 | sort -n | tail -n1)
+FIRST=$(ls -d ${SAMPLES}/batch_* 2>/dev/null | sed -e "s|.*/batch_||" | sort -n | tail -n1)
 
 for ((i=$((FIRST+1));i<1000000;i++)); do
     # Compile a batch of samples using the generator in parallel
