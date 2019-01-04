@@ -146,7 +146,7 @@ for ((i=$((FIRST+1));i<1000000;i++)); do
     for ((b=0;b<${BATCH_SIZE};b++)); do
         S=$(printf "%d%02d" $i $b)
         FNAME=$(printf "%s_batch_%02d_sample_%02d" ${PIPELINE} $i $b)
-        make_sample "${DIR}/${b}" $S $FNAME #&
+        make_sample "${DIR}/${b}" $S $FNAME &
     done
     wait
 
