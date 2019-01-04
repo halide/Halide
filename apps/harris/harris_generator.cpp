@@ -19,11 +19,9 @@ public:
         Var x("x"), y("y"), c("c");
 
         // Algorithm
-        Func clamped = input;//Halide::BoundaryConditions::repeat_edge(input);
-
         Func gray("gray");
-        gray(x, y) = 0.299f * clamped(x, y, 0) + 0.587f * clamped(x, y, 1)
-                     + 0.114f * clamped(x, y, 2);
+        gray(x, y) = 0.299f * input(x, y, 0) + 0.587f * input(x, y, 1)
+                     + 0.114f * input(x, y, 2);
 
         Func Iy("Iy");
         Iy(x, y) = gray(x-1, y-1)*(-1.0f/12) + gray(x-1, y+1)*(1.0f/12) +
