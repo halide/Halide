@@ -51,7 +51,7 @@ using std::set;
 using std::pair;
 
 #define MAX_THRADS_PER_BLOCK 1024
-#define TAG_MORE_LOOPS_WITH_GPU_THREADS_BLOCKS 1
+#define TAG_MORE_LOOPS_WITH_GPU_THREADS_BLOCKS 0
 
 int64_t get_shared_memory_limit() {
     // HL_SHARED_MEMORY_LIMIT is in KB
