@@ -99,7 +99,7 @@ make_sample() {
         target=${HL_TARGET} \
         auto_schedule=true \
         -p ${AUTOSCHED_BIN}/libauto_schedule.so \
-            2> ${D}/compile_log.txt || echo "Compilation failed or timed out"
+            2> ${D}/compile_log.txt || echo "Compilation failed or timed out for ${D}"
 
     c++ \
         -std=c++11 \
@@ -122,13 +122,13 @@ benchmark_sample() {
         --default_input_buffers=random:0:estimate_then_auto \
         --default_input_scalars=estimate \
         --benchmarks=all \
-            | tee ${D}/bench.txt || echo "Benchmarking failed or timed out"
+            | tee ${D}/bench.txt || echo "Benchmarking failed or timed out for ${D}"
 
     # Add the runtime, pipeline id, and schedule id to the feature file
     R=$(cut -d' ' -f8 < ${D}/bench.txt)
     P=0
     S=$2
-    ${AUTOSCHED_BIN}/augment_sample ${D}/sample.sample $R $P $S || echo "Augment sample failed (probably because benchmarking failed)"
+    ${AUTOSCHED_BIN}/augment_sample ${D}/sample.sample $R $P $S || echo "Augment sample failed for ${D} (probably because benchmarking failed)"
 }
 
 # Don't clobber existing samples
