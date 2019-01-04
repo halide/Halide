@@ -64,10 +64,13 @@ public:
 
         // Estimates (for autoscheduler; ignored otherwise)
         {
-            input.dim(0).set_bounds_estimate(0, 1530)
-                 .dim(1).set_bounds_estimate(0, 2554)
+            const int kWidth = 1530;
+            const int kHeight = 2560;
+            input.dim(0).set_bounds_estimate(0, kWidth)
+                 .dim(1).set_bounds_estimate(0, kHeight)
                  .dim(2).set_bounds_estimate(0, 3);
-            output.estimate(x, 0, 1530).estimate(y, 0, 2554);
+            output.dim(0).set_bounds_estimate(0, kWidth - 6)
+                  .dim(1).set_bounds_estimate(0, kHeight - 6);
         }
 
         // Schedule
@@ -78,10 +81,10 @@ public:
                 Ix.compute_at(output, x).gpu_threads(x, y);
                 Iy.compute_at(output, x).gpu_threads(x, y);
             } else {
-                const int v = natural_vector_size<float>();
-                output.split(y, y, yi, 32).parallel(y).vectorize(x, v);
-                Ix.store_at(output, y).compute_at(output, yi).vectorize(x, v);
-                Iy.store_at(output, y).compute_at(output, yi).vectorize(x, v);
+                const int kVectorWidth = natural_vector_size<float>();
+                output.split(y, y, yi, 32).parallel(y).vectorize(x, kVectorWidth);
+                Ix.store_at(output, y).compute_at(output, yi).vectorize(x, kVectorWidth);
+                Iy.store_at(output, y).compute_at(output, yi).vectorize(x, kVectorWidth);
                 Ix.compute_with(Iy, x);
             }
         }
