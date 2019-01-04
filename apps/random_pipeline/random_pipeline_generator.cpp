@@ -769,6 +769,8 @@ public:
     Stage all_to_all(Stage f, int dim) {
         std::cout << "All to all on dimension " << dim << '\n';
 
+        if (f.c > 16) return all_to_all_r(f, dim);
+
         vector<Expr> reduction_coords = make_arguments(f.func.args());
         Expr e = 0.f;
         for (int i = 0; i < f.c; i++) {
@@ -955,11 +957,12 @@ public:
         // use inverse transform sampling to sample next state given current state
         int sample_cdf(int state) {
             float sample_val = rand_float();
-            for (int i = 0; i < num_states; i++) {
+            for (int i = 0; i < num_states - 1; i++) {
                 if (get(state, i) >= sample_val) {
                     return i;
                 }
             }
+            return num_states - 1;
         }
 
         void print() {
@@ -1229,9 +1232,9 @@ public:
             output.estimate(output.args()[1], 0, 2000);
             output.estimate(output.args()[2], 0, 3);
 
-            output.dim(0).set_bounds(0, 2000);
-            output.dim(1).set_bounds(0, 2000);
-            output.dim(2).set_bounds(0, 3);
+            output.dim(0).set_bounds_estimate(0, 2000);
+            output.dim(1).set_bounds_estimate(0, 2000);
+            output.dim(2).set_bounds_estimate(0, 3);
         }
     }
 };
