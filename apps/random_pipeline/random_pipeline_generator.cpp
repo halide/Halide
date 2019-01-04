@@ -33,7 +33,7 @@ float rand_float() { return rand_int(0, 1 << 30) / (float)(1 << 30); }
 // At the base case where depth is 0, we just return a randomly
 // chosen input.
 
-Type expr_types[] = { UInt(8), UInt(16), UInt(32), Int(8), Int(16), Int(32), Float(32) };
+Type expr_types[] = { UInt(8), UInt(16), UInt(32), Int(8), Int(16), Int(32) };
 const int expr_type_count = sizeof(expr_types)/sizeof(expr_types[0]);
 
 typedef Expr (*make_bin_op_fn)(Expr, Expr);
@@ -124,6 +124,7 @@ Expr random_expr_inner(vector<Expr> inputs, int depth, int func_size) {
         }
         break;
     }
+#if 0
     case 3: // sin
     {
         if (func_size > func_size_thresh)
@@ -153,6 +154,7 @@ Expr random_expr_inner(vector<Expr> inputs, int depth, int func_size) {
         auto e1 = random_expr_inner(inputs, depth-1, func_size);
         return fast_log(cast<float>(e1));
     }
+#endif
     case 8: // condition
     {
         return random_condition(inputs, depth-1, func_size);
@@ -180,6 +182,7 @@ Expr rand_value(Type t) {
     } else if (t.is_int() || t.is_uint()) {
         return cast(t, rand_int(1, 127));
     } else if (t.is_float()) {
+      assert(false);
         return cast(t, rand_float());
     } else {
         // Shouldn't get here.
@@ -202,16 +205,18 @@ public:
     // The approximate max number of stages to generate in the random pipeline.
     GeneratorParam<int> max_stages{"max_stages", 20};
 
-    Input<Buffer<float>>  input{"input", 3};
+    Input<Buffer<int32_t>>  input{"input", 3};
     Input<Buffer<uint8_t>>  uint8_weights {"uint8_weights", 4};
     Input<Buffer<uint16_t>>  uint16_weights{"uint16_weights", 4};
     Input<Buffer<uint32_t>>  uint32_weights{"uint32_weights", 4};
     Input<Buffer<int8_t>>  int8_weights {"int8_weights", 4};
     Input<Buffer<int16_t>>  int16_weights{"int16_weights", 4};
     Input<Buffer<int32_t>>  int32_weights{"int32_weights", 4};
+#if 0
     Input<Buffer<float>>  float32_weights{"float32_weights", 4};
+#endif
 
-    Output<Buffer<float>> output{"output", 3};
+    Output<Buffer<int32_t>> output{"output", 3};
 
     void set_upcast_types(Type input_type, Type& mult_type, Type& sum_type) {
         if (input_type.is_bool()) {
@@ -250,8 +255,12 @@ public:
         else if (t == Int(16)) return int16_weights;
         else if (t == Int(32)) return int32_weights;
         else {
+#if 0
             assert(t == Float(32));
             return float32_weights;
+#else
+	    assert(false);
+#endif
         }
     }
 
@@ -1176,7 +1185,7 @@ public:
             Stage next = random_stage(stages, CDF, curr_stage_id);
             stages.push_back(next);
             if (!auto_schedule) {
-                stages.back().func.compute_root().reorder(x, c, y).vectorize(x, 8).parallel(y, 8);
+	        stages.back().func.hexagon().compute_root().reorder(x, c, y).vectorize(x, 8).parallel(y, 8);
             }
         }
 
@@ -1188,7 +1197,7 @@ public:
         output = casted.func;
 
         if (!auto_schedule) {
-            output.compute_root().reorder(x, c, y).vectorize(x, 8).parallel(y);
+	    output.hexagon().compute_root().reorder(x, c, y).vectorize(x, 8).parallel(y);
         }
 
         if (auto_schedule) {
@@ -1219,10 +1228,12 @@ public:
                 .dim(1).set_bounds_estimate(-5, 5)
                 .dim(2).set_bounds_estimate(-5, 5)
                 .dim(3).set_bounds_estimate(0, 512);
+#if 0
             float32_weights.dim(0).set_bounds_estimate(0, 512)
                 .dim(1).set_bounds_estimate(-5, 5)
                 .dim(2).set_bounds_estimate(-5, 5)
                 .dim(3).set_bounds_estimate(0, 512);
+#endif
 
             output.estimate(output.args()[0], 0, 2000);
             output.estimate(output.args()[0], 0, 2000);

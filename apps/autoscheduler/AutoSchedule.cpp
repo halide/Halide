@@ -1437,11 +1437,11 @@ struct LoopNest {
                const LoopNest *compute_site) const {
         if (is_root()) {
             for (auto &c : children) {
-                Func(c->node->func).compute_root();
+	        Func(c->node->func).compute_root().hexagon();
                 c->apply(LoopLevel::root(), state_map, num_cores, 1, this, c.get());
                 if (c->stage_idx == 0) {
                     auto &state = state_map.get(c->stage);
-                    state->schedule_source << "\n    .compute_root()";
+                    state->schedule_source << "\n    .compute_root().hexagon()";
                     // TODO: Omitting logic for printing store_root() assumes everything store_root is also compute root
                 }
             }
