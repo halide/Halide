@@ -50,6 +50,8 @@ using std::map;
 using std::set;
 using std::pair;
 
+#define MAX_THRADS_PER_BLOCK 1024
+#define TAG_MORE_LOOPS_WITH_GPU_THREADS_BLOCKS 1
 
 int64_t get_shared_memory_limit() {
     // HL_SHARED_MEMORY_LIMIT is in KB
@@ -1420,6 +1422,7 @@ struct LoopNest {
             string accessor;
             int64_t extent = 0;
             bool innermost_pure_dim = false, outermost = false, parallel = false, exists = false, pure = false;
+            bool gputhread = false, gpublock = false;
             FuncVar() : orig(Var()), var(Var()) {}
         };
         bool parallel = false;
@@ -1527,9 +1530,8 @@ struct LoopNest {
                         internal_assert(v.exists) << v.var.name() << "\n";
                         // Is the result of a split
                         if (target.has_gpu_feature()) {
-                            state.schedule_source
-                                << "\n    .gpu_threads(" << v.var.name() << ")";
-                            s.gpu_threads(v.var);
+                            // Mark this variable to be mapped to GPUThread later.
+                            v.gputhread = true;
                         } else {
                             state.schedule_source
                                 << "\n    .vectorize(" << v.var.name() << ")";
@@ -2545,21 +2547,94 @@ struct State {
             // Do all the reorders and pick which vars to
             // parallelize.
             vector<VarOrRVar> vars;
-            int64_t parallel_tasks = 1;
             vector<VarOrRVar> parallel_vars;
             bool any_parallel_vars = false, any_parallel_rvars = false;
             VarOrRVar *innermost_parallel = nullptr;
-            for (auto it = p.second->vars.rbegin(); it != p.second->vars.rend(); it++) {
-                if (!it->exists || it->extent == 1) continue;
-                if (!it->parallel) break;
-                any_parallel_rvars |= it->var.is_rvar;
-                any_parallel_vars |= !it->var.is_rvar;
-                parallel_tasks *= it->extent;
-                if (it->innermost_pure_dim) {
-                    innermost_parallel = &(it->var);
-                } else {
-                    parallel_vars.push_back(it->var);
+            if (!target.has_gpu_feature()) {
+                int64_t parallel_tasks = 1;
+                for (auto it = p.second->vars.rbegin(); it != p.second->vars.rend(); it++) {
+                    if (!it->exists || it->extent == 1) continue;
+                    if (!it->parallel) break;
+                    any_parallel_rvars |= it->var.is_rvar;
+                    any_parallel_vars |= !it->var.is_rvar;
+                    parallel_tasks *= it->extent;
+                    if (it->innermost_pure_dim) {
+                        innermost_parallel = &(it->var);
+                    } else {
+                        parallel_vars.push_back(it->var);
+                    }
                 }
+            } else {
+                // Algorithm for tagging loop levels as GPUBlock/GPUThreads:
+                //
+                // 1- Tag one parallel loop as GPUBlocks and tag the vectorized
+                //    loop level as GPUThread.
+                //
+                // 2- Tag the innermost loop levels as GPUThreads; continue
+                //    tagging until one of the following criteria is met:
+                //        (a) The total amount of threads created exceeds
+                //            MAX_THRADS_PER_BLOCK.
+                //        (b) A loop tagged as GPUBlock is reached.
+                //        (c) The total number of loops tagged as GPUThread exceeds 3.
+                //
+                // 3- Tag the remaining outer loop levels as GPUBlocks (a maximum of 3
+                //    loops can be tagged).
+
+                uint8_t n_loops_tagged_gpublocks = 0;
+                uint8_t n_loops_tagged_gputhread = 0;
+
+                // Tag one outermost parallel loop as GPUBlock and tag the
+                // vectorized loop as GPUThread. The vector loop has already been
+                // identified in previous passes and has gputhread set to true.
+                for (auto it = p.second->vars.rbegin(); it != p.second->vars.rend(); it++) {
+                    if (!it->exists || it->extent == 1) continue;
+
+                    if (it->parallel && n_loops_tagged_gpublocks == 0) {
+                        p.second->schedule_source << "\n    .gpu_blocks(" << it->var.name() << ")";
+                        stage.gpu_blocks(it->var);
+                        n_loops_tagged_gpublocks++;
+                        it->gpublock = true;
+                    }
+
+                    if (it->gputhread && n_loops_tagged_gputhread == 0) {
+                        p.second->schedule_source << "\n    .gpu_threads(" << it->var.name() << ")";
+                        stage.gpu_threads(it->var);
+                        n_loops_tagged_gputhread++;
+                    }
+                }
+
+#if TAG_MORE_LOOPS_WITH_GPU_THREADS_BLOCKS
+                int64_t total_threads = 1;
+
+                // Tag the innermost loop levels as GPUThread (maximum of 3).
+                for (auto it = p.second->vars.rend(); it != p.second->vars.rbegin(); it--) {
+                     if (!it->exists || it->extent == 1) continue;
+                     if (!it->parallel) continue;
+                     if (total_threads >= MAX_THRADS_PER_BLOCK) break;
+                     if (it->gpublock) break;
+                     if (n_loops_tagged_gputhread >= 3) break;
+
+                     p.second->schedule_source << "\n    .gpu_threads(" << it->var.name() << ")";
+                     stage.gpu_threads(it->var);
+                     total_threads *= it->extent;
+                     n_loops_tagged_gputhread++;
+                     it->gputhread = true;
+                }
+
+                // Tag more outer parallel loops as GPUBlock (maximum of 3).
+                for (auto it = p.second->vars.rbegin(); it != p.second->vars.rend(); it++) {
+                    if (!it->exists || it->extent == 1) continue;
+                    if (it->gpublock) continue;
+                    if (!it->parallel) break;
+                    if (it->gputhread) break;
+                    if (n_loops_tagged_gpublocks >= 3) break;
+
+                     p.second->schedule_source << "\n    .gpu_blocks(" << it->var.name() << ")";
+                     stage.gpu_blocks(it->var);
+                     n_loops_tagged_gpublocks++;
+                     it->gpublock = true;
+                }
+#endif
             }
             // If we're parallelizing across the innermost storage
             // dimension, we need to bubble that to the end of the
