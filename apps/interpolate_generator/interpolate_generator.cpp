@@ -75,7 +75,7 @@ public:
 
                 cpu_wrapper
                     .reorder(c, x, y)
-                    .bound(c, 0, 4)
+                    .bound(c, 0, 3)
                     .tile(x, y, xo, yo, xi, yi, input_.width()/4, input_.height()/4)
                     .vectorize(xi, 8);
 
@@ -122,7 +122,7 @@ public:
                 }
                 normalize
                     .reorder(c, x, y)
-                    .bound(c, 0, 4)
+                    .bound(c, 0, 3)
                     .unroll(c)
                     .tile(x, y, xi, yi, 2, 2)
                     .unroll(xi)
