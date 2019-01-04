@@ -1000,7 +1000,7 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
             auto module_producer = [&generator_name, &generator_args]
                 (const std::string &name, const Target &target) -> Module {
                     // Reset the counters so the function/variable names look
-                    // more consistent for different targets.
+                    // consistent for different targets.
                     reset_unique_name_counters();
 
                     auto sub_generator_args = generator_args;
