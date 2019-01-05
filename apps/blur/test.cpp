@@ -139,28 +139,28 @@ Buffer<uint16_t> blur_fast(Buffer<uint16_t> in) {
     return out;
 }
 
-#include "halide_blur.h"
+//#include "halide_blur.h"
 
-Buffer<uint16_t> blur_halide(Buffer<uint16_t> in) {
-    Buffer<uint16_t> out(in.width()-8, in.height()-2);
+//Buffer<uint16_t> blur_halide(Buffer<uint16_t> in) {
+    //Buffer<uint16_t> out(in.width()-8, in.height()-2);
 
-    // Call it once to initialize the halide runtime stuff
-    halide_blur(in, out);
-    // Copy-out result if it's device buffer and dirty.
-    out.copy_to_host();
+    //// Call it once to initialize the halide runtime stuff
+    //halide_blur(in, out);
+    //// Copy-out result if it's device buffer and dirty.
+    //out.copy_to_host();
 
-    t = benchmark(10, 1, [&]() {
-        // Compute the same region of the output as blur_fast (i.e., we're
-        // still being sloppy with boundary conditions)
-        halide_blur(in, out);
-        // Sync device execution if any.
-        out.device_sync();
-    });
+    //t = benchmark(10, 1, [&]() {
+        //// Compute the same region of the output as blur_fast (i.e., we're
+        //// still being sloppy with boundary conditions)
+        //halide_blur(in, out);
+        //// Sync device execution if any.
+        //out.device_sync();
+    //});
 
-    out.copy_to_host();
+    //out.copy_to_host();
 
-    return out;
-}
+    //return out;
+//}
 
 int main(int argc, char **argv) {
 #ifndef HALIDE_RUNTIME_HEXAGON
@@ -194,25 +194,25 @@ int main(int argc, char **argv) {
 
     return 0;
 
-    Buffer<uint16_t> blurry = blur(input);
-    double slow_time = t;
+    //Buffer<uint16_t> blurry = blur(input);
+    //double slow_time = t;
 
-    Buffer<uint16_t> speedy = blur_fast(input);
-    double fast_time = t;
+    //Buffer<uint16_t> speedy = blur_fast(input);
+    //double fast_time = t;
 
-    Buffer<uint16_t> halide = blur_halide(input);
-    double halide_time = t;
+    //Buffer<uint16_t> halide = blur_halide(input);
+    //double halide_time = t;
 
-    printf("times: %f %f %f\n", slow_time, fast_time, halide_time);
+    //printf("times: %f %f %f\n", slow_time, fast_time, halide_time);
 
-    for (int y = 64; y < input.height() - 64; y++) {
-        for (int x = 64; x < input.width() - 64; x++) {
-            if (blurry(x, y) != speedy(x, y) || blurry(x, y) != halide(x, y)) {
-                printf("difference at (%d,%d): %d %d %d\n", x, y, blurry(x, y), speedy(x, y), halide(x, y));
-                abort();
-            }
-        }
-    }
+    //for (int y = 64; y < input.height() - 64; y++) {
+        //for (int x = 64; x < input.width() - 64; x++) {
+            //if (blurry(x, y) != speedy(x, y) || blurry(x, y) != halide(x, y)) {
+                //printf("difference at (%d,%d): %d %d %d\n", x, y, blurry(x, y), speedy(x, y), halide(x, y));
+                //abort();
+            //}
+        //}
+    //}
 
     return 0;
 }
