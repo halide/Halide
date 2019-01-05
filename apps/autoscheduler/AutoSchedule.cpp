@@ -314,7 +314,8 @@ struct LoopNest {
         }
     }
 
-    void compute_features(const MachineParams &params,
+    void compute_features(const FunctionDAG &dag,
+                          const MachineParams &params,
                           const StageMap<Sites> &sites,
                           int64_t instances,
                           int64_t parallelism,
@@ -408,7 +409,7 @@ struct LoopNest {
 
         if (is_root()) {
             for (const auto &c : children) {
-                c->compute_features(params, sites, subinstances, parallelism, this, root, &working_set_here, features);
+                c->compute_features(dag, params, sites, subinstances, parallelism, this, root, &working_set_here, features);
             }
 
             // Figure out the root-level features for every Func
@@ -451,6 +452,39 @@ struct LoopNest {
                         points_computed_minimum_if_inlined += features->get(e->consumer).points_computed_minimum * e->calls;
                     }
                     feat.points_computed_minimum = std::min(feat.points_computed_minimum, points_computed_minimum_if_inlined);
+                }
+            }
+
+            // Inspect every edge in the dag to calculate cross-core traffic
+            if (params.parallelism > 1) {
+                for (const auto &edge : dag.edges) {
+                    const auto &producer_site = sites.get(&(edge.producer->stages[0]));
+                    const LoopNest *producer_task = producer_site.task;
+                    const LoopNest *consumer_task = sites.get(edge.consumer).task;
+                    if (producer_task == consumer_task) continue; // Produced and consumed on the same core
+                    bool producer_has_been_scheduled =
+                        edge.producer->is_input || (producer_site.produce != nullptr);
+                    int vector_dim = (edge.producer->is_input ? 0 :
+                                      !producer_has_been_scheduled ? -1 :
+                                      producer_site.produce->vector_dim);
+                    const auto &b = consumer_task->get_bounds(edge.producer);
+                    int64_t bytes = edge.producer->bytes_per_point, lines = 1;
+                    int64_t max_extent = 1;
+                    for (int i = 0; i < edge.producer->func.dimensions(); i++) {
+                        const auto &p = b->region_required(i);
+                        int64_t extent = p.second - p.first + 1;
+                        max_extent = std::max(extent, max_extent);
+                        bytes *= extent;
+                        if (i != vector_dim) {
+                            lines *= extent;
+                        }
+                    }
+                    if (!producer_has_been_scheduled) {
+                        lines /= max_extent;
+                    }
+                    auto &f = features->get(edge.consumer);
+                    f.unique_lines_read_per_task += lines;
+                    f.unique_bytes_read_per_task += bytes;
                 }
             }
 
@@ -555,7 +589,7 @@ struct LoopNest {
 
         // Recurse inwards
         for (const auto &c : children) {
-            c->compute_features(params, sites, subinstances, subparallelism, this, root, &working_set_here, features);
+            c->compute_features(dag, params, sites, subinstances, subparallelism, this, root, &working_set_here, features);
         }
 
         for (const auto *node : store_at) {
@@ -791,8 +825,6 @@ struct LoopNest {
             feat.allocation_bytes_read_per_realization = allocation_bytes_loaded;
             feat.unique_bytes_read_per_realization = bytes_loaded;
             feat.unique_lines_read_per_realization = lines_loaded;
-            feat.unique_bytes_read_per_task = off_core_bytes_loaded;
-            feat.unique_lines_read_per_task = off_core_lines_loaded;
 
             if (!at_pure_production) {
                 // Also pessimistically assume this update definition relies on the entirety of the produced region so far.
@@ -1361,7 +1393,7 @@ struct LoopNest {
 
             // See if it's appropriate to slide over this loop
             // Can't slide at the root level, or no parallelism
-            bool may_slide = !is_root();
+            bool may_slide = (params.parallelism == 1) || !is_root();
 
             const auto &c = children[child];
             int num_ones = 0;
@@ -1383,6 +1415,10 @@ struct LoopNest {
                 if (store_here && !may_slide) {
                     // We place all our parallel loops at the root
                     // level, so this would constrain parallelism.
+                    continue;
+                }
+                if (is_root() && num_ones == (int)c->size.size() && params.parallelism > 1) {
+                    // Don't fuse into serial loops, or we could never parallelize this Func.
                     continue;
                 }
                 auto opts = children[child]->compute_in_tiles(f, this, params, v, store_here);
@@ -1837,7 +1873,7 @@ struct State {
             }
         }
 
-        root->compute_features(params, sites, 1, 1, nullptr, *root, nullptr, features);
+        root->compute_features(dag, params, sites, 1, 1, nullptr, *root, nullptr, features);
 
         for (const auto &n : dag.nodes) {
             if (sites.get(&(n.stages[0])).produce == nullptr) {
@@ -2298,21 +2334,37 @@ struct State {
                     auto &t = tilings[i];
                     Option o;
                     o.entire = (i == tilings.size() - 1);
-                    int64_t total = 1;
                     for (size_t j = 0; j < pure_size->size(); j++) {
                         t[j] = ((*pure_size)[j] + t[j] - 1) / t[j];
-                        total *= t[j];
                     }
                     t.swap(o.tiling);
 
-                    // Filter out the less useful options
-                    if (total > params.parallelism * 64) continue;
-                    if (total < params.parallelism && !o.entire) continue;
+                    // Compute max idle cores across the other stages of the Func
+                    int64_t min_total = 0;
+                    o.idle_core_wastage = 1;
+                    for (const auto &c : root->children) {
+                        if (c->node == node) {
+                            int64_t total = 1;
+                            for (auto &l : c->stage->loop) {
+                                if (!l.rvar) {
+                                    total *= o.tiling[l.pure_dim];
+                                }
+                            }
+                            if (min_total != 0) {
+                                min_total = std::min(min_total, total);
+                            } else {
+                                min_total = total;
+                            }
+                            const double tasks_per_core = ((double)total) / params.parallelism;
+                            o.idle_core_wastage = std::max(o.idle_core_wastage,
+                                                           std::ceil(tasks_per_core) / tasks_per_core);
+                        }
+                    }
 
-                    // TODO: compute max wastage across all stages of
-                    // func instead of just the pure stage.
-                    const double tasks_per_core = ((double)total) / params.parallelism;
-                    o.idle_core_wastage = std::ceil(tasks_per_core) / tasks_per_core;
+                    // Filter out the less useful options
+                    if (min_total > params.parallelism * 16) continue;
+                    if (min_total < params.parallelism && !o.entire) continue;
+
                     options.emplace_back(std::move(o));
                 }
                 std::sort(options.begin(), options.end());
@@ -2481,7 +2533,6 @@ struct State {
             // Halide doesn't let you fuse an RVar with a Var, even if
             // they are both pure.
             bool can_fuse = !(any_parallel_vars && any_parallel_rvars);
-
             if (can_fuse) {
                 for (size_t i = 1; i < parallel_vars.size(); i++) {
                     // Outermost, and next outermost. Preserve the inner
