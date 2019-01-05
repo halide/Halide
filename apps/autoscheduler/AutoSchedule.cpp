@@ -479,25 +479,15 @@ struct LoopNest {
         } else {
             // These will get progressively overwritten as we visit the children
 
-            bool reduction = false;
             size_t idx = 0;
+            feat.innermost_loop_extent = 1;
+            feat.innermost_pure_loop_extent = 1;
             for (const auto &l : stage->loop) {
-                if (l.rvar) {
-                    reduction = true;
-                    feat.innermost_loop_extent = size[idx];
-                    break;
+                feat.innermost_loop_extent *= size[idx];
+                if (!l.rvar) {
+                    feat.innermost_pure_loop_extent *= size[idx];
                 }
                 idx++;
-            }
-
-            if (vectorized_loop_index >= 0 && vectorized_loop_index < (int) size.size()) {
-                feat.innermost_pure_loop_extent = size[vectorized_loop_index];
-            } else {
-                feat.innermost_pure_loop_extent = 1;
-            }
-
-            if (!reduction) {
-                feat.innermost_loop_extent = feat.innermost_pure_loop_extent;
             }
         }
 
@@ -681,7 +671,9 @@ struct LoopNest {
                                 }
                             }
                             num_loads += n;
-                            if (dense_vector_load) {
+                            if (vector_broadcast) {
+                                num_broadcasts += n;
+                            } else if (dense_vector_load) {
                                 num_dense_loads += n;
                             } else if (stride_2_vector_load) {
                                 num_stride_2_loads += n;
@@ -689,8 +681,6 @@ struct LoopNest {
                                 num_stride_3_loads += n;
                             } else if (stride_4_vector_load) {
                                 num_stride_4_loads += n;
-                            } else if (vector_broadcast) {
-                                num_broadcasts += n;
                             } else {
                                 num_gathers += n;
                             }
@@ -1214,13 +1204,27 @@ struct LoopNest {
 
         // Some pruning to not waste time on terrible states
         if (parent) {
+            const auto &bounds_here = get_bounds(f);
+            const auto &bounds_at_parent = parent->get_bounds(f);
+
             // Don't descend into loops that break our ability to
             // vectorize if we could have vectorized one level up.
-            const auto &p = get_bounds(f)->region_computed(v);
-            const auto &p_parent = parent->get_bounds(f)->region_computed(v);
+            const auto &p = bounds_here->region_computed(v);
+            const auto &p_parent = bounds_at_parent->region_computed(v);
             int64_t e = p.second - p.first + 1;
             int64_t ep = p_parent.second - p_parent.first + 1;
             if (ep >= f->vector_size && e < f->vector_size) return result;
+
+            // Don't descend into loops if the bounds required don't shrink
+            int64_t total_here = 1, total_at_parent = 1;
+            for (int i = 0; i < f->func.dimensions(); i++) {
+                const auto &range_here = bounds_here->region_computed(i);
+                const auto &range_at_parent = bounds_at_parent->region_computed(i);
+                total_here *= range_here.second - range_here.first + 1;
+                total_at_parent *= range_at_parent.second - range_at_parent.first + 1;
+            }
+
+            if (total_here >= total_at_parent) return result;
         }
 
         // Figure out which child we can fuse this into
