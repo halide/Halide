@@ -68,8 +68,10 @@ $(AUTOSCHED_BIN)/train_cost_model: $(AUTOSCHED_SRC)/train_cost_model.cpp \
 						 $(AUTOSCHED_COST_MODEL_LIBS) \
 						 $(AUTOSCHED_WEIGHT_OBJECTS) \
 						 $(AUTOSCHED_BIN)/auto_schedule_runtime.a
+	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -Wall -I $(AUTOSCHED_BIN)/cost_model -O3 $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(USE_OPEN_MP)
 
 $(AUTOSCHED_BIN)/augment_sample: $(AUTOSCHED_SRC)/augment_sample.cpp
+	@mkdir -p $(@D)
 	$(CXX) $< -O3 -o $@
 

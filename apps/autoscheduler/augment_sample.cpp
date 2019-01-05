@@ -13,7 +13,9 @@ int main(int argc, char **argv) {
       return -1;
     }
 
-    float r = atof(argv[2]) * 1000;
+    // Input runtime value is presumed to be in seconds,
+    // but sample file stores times in milliseconds.
+    float r = atof(argv[2]) * 1000.f;
     int pid = atoi(argv[3]);
     int sid = atoi(argv[4]);
 

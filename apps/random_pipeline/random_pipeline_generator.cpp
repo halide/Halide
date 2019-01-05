@@ -189,7 +189,53 @@ Expr rand_value(Type t) {
 }
 
 Expr random_expr(vector<Expr> inputs, int depth, int func_size) {
-    return Internal::simplify(Internal::common_subexpression_elimination(random_expr_inner(inputs, depth, func_size)));
+    for (auto &e : inputs) {
+        e = Internal::simplify(e);
+    }
+
+    for (int attempts = 0; attempts < 10; attempts++) {
+        Expr result =
+            Internal::simplify(Internal::common_subexpression_elimination(random_expr_inner(inputs, depth, func_size)));
+
+        class Checker : public Internal::IRMutator2 {
+        public:
+            Expr mutate(const Expr &e) override {
+                exprs_to_find.erase(e);
+                return IRMutator2::mutate(e);
+            }
+            using Internal::IRMutator2::mutate;
+            std::set<Expr, Internal::IRDeepCompare> exprs_to_find;
+            Checker(const vector<Expr> &inputs) {
+                for (const auto &e : inputs) {
+                    exprs_to_find.insert(e);
+                }
+            }
+        } checker(inputs);
+
+        checker.mutate(result);
+
+        // Double check all the inputs are used
+        if (!checker.exprs_to_find.empty()) {
+            std::cerr << "In random expression: " << result << "\n"
+                      << "The following expressions were unused:\n";
+            for (auto &e : checker.exprs_to_find) {
+                std::cerr << e << "\n";
+            }
+        } else {
+            return result;
+        }
+    }
+
+    // We're having a hard time generating an expression that uses all the inputs. Just sum them.
+    Type t = inputs[0].type();
+    if (t.is_bool()) {
+        t = UInt(8);
+    }
+    Expr result = cast(t, 0);
+    for (const auto &e : inputs) {
+        result += e;
+    }
+    return result;
 }
 
 // Generator to produce a random pipeline. The generated pipeline will
@@ -259,7 +305,7 @@ public:
         Func func;
         int w, h, c; // approx width and height and channels; TODO: ADD 4TH DIMENSION FOR BATCH SIZE
 
-        static constexpr int max_size = 200000000;
+        static constexpr int max_size = 100000000;
         static constexpr int min_size = 100;
         static constexpr int max_stride = 3; // for convs and pools
 
@@ -661,13 +707,20 @@ public:
             // Linear interpolation
             resampled = Func("upsampled_linear_" + f.func.args()[dim].name());
             vector<Expr> resampled_coords = make_arguments(f.func.args());
-            Expr x = cast<float>(resampled_coords[dim]) / factor;
-            resampled_coords[dim] = cast<int>(floor(x));
+            Expr x = resampled_coords[dim];
+            resampled_coords[dim] = x / factor;
             Expr s1 = f.func(resampled_coords);
             resampled_coords[dim] += 1;
             Expr s2 = f.func(resampled_coords);
-            Expr fx = x - floor(x);
-            resampled(f.func.args()) = lerp(s1, s2, fx);
+            x = x % factor;
+
+            Type mult_type, sum_type;
+            Type input_type = f.func.value().type();
+            set_upcast_types(input_type, mult_type, sum_type);
+            s1 = cast(sum_type, s1);
+            s2 = cast(sum_type, s2);
+
+            resampled(f.func.args()) = cast(input_type, ((factor - x) * s1 + x * s2) / (2*factor));
         }
 
         Stage s {resampled, f.w, f.h, f.c};
@@ -761,6 +814,8 @@ public:
     // Generate an all-to-all communication in dimension dim, statically unrolled.
     Stage all_to_all(Stage f, int dim) {
         std::cout << "All to all on dimension " << dim << '\n';
+
+        if (f.c > 16) return all_to_all_r(f, dim);
 
         vector<Expr> reduction_coords = make_arguments(f.func.args());
         Expr e = 0.f;
@@ -948,11 +1003,12 @@ public:
         // use inverse transform sampling to sample next state given current state
         int sample_cdf(int state) {
             float sample_val = rand_float();
-            for (int i = 0; i < num_states; i++) {
+            for (int i = 0; i < num_states - 1; i++) {
                 if (get(state, i) >= sample_val) {
                     return i;
                 }
             }
+            return num_states - 1;
         }
 
         void print() {
@@ -1222,9 +1278,9 @@ public:
             output.estimate(output.args()[1], 0, 2000);
             output.estimate(output.args()[2], 0, 3);
 
-            output.dim(0).set_bounds(0, 2000);
-            output.dim(1).set_bounds(0, 2000);
-            output.dim(2).set_bounds(0, 3);
+            output.dim(0).set_bounds_estimate(0, 2000);
+            output.dim(1).set_bounds_estimate(0, 2000);
+            output.dim(2).set_bounds_estimate(0, 3);
         }
     }
 };

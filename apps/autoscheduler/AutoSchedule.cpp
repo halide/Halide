@@ -314,7 +314,8 @@ struct LoopNest {
         }
     }
 
-    void compute_features(const MachineParams &params,
+    void compute_features(const FunctionDAG &dag,
+                          const MachineParams &params,
                           const StageMap<Sites> &sites,
                           int64_t instances,
                           int64_t parallelism,
@@ -408,7 +409,7 @@ struct LoopNest {
 
         if (is_root()) {
             for (const auto &c : children) {
-                c->compute_features(params, sites, subinstances, parallelism, this, root, &working_set_here, features);
+                c->compute_features(dag, params, sites, subinstances, parallelism, this, root, &working_set_here, features);
             }
 
             // Figure out the root-level features for every Func
@@ -454,6 +455,39 @@ struct LoopNest {
                 }
             }
 
+            // Inspect every edge in the dag to calculate cross-core traffic
+            if (params.parallelism > 1) {
+                for (const auto &edge : dag.edges) {
+                    const auto &producer_site = sites.get(&(edge.producer->stages[0]));
+                    const LoopNest *producer_task = producer_site.task;
+                    const LoopNest *consumer_task = sites.get(edge.consumer).task;
+                    if (producer_task == consumer_task) continue; // Produced and consumed on the same core
+                    bool producer_has_been_scheduled =
+                        edge.producer->is_input || (producer_site.produce != nullptr);
+                    int vector_dim = (edge.producer->is_input ? 0 :
+                                      !producer_has_been_scheduled ? -1 :
+                                      producer_site.produce->vector_dim);
+                    const auto &b = consumer_task->get_bounds(edge.producer);
+                    int64_t bytes = edge.producer->bytes_per_point, lines = 1;
+                    int64_t max_extent = 1;
+                    for (int i = 0; i < edge.producer->func.dimensions(); i++) {
+                        const auto &p = b->region_required(i);
+                        int64_t extent = p.second - p.first + 1;
+                        max_extent = std::max(extent, max_extent);
+                        bytes *= extent;
+                        if (i != vector_dim) {
+                            lines *= extent;
+                        }
+                    }
+                    if (!producer_has_been_scheduled) {
+                        lines /= max_extent;
+                    }
+                    auto &f = features->get(edge.consumer);
+                    f.unique_lines_read_per_task += lines;
+                    f.unique_bytes_read_per_task += bytes;
+                }
+            }
+
             return;
         }
 
@@ -464,7 +498,7 @@ struct LoopNest {
         ScheduleFeatures &feat = features->get_or_create(stage);
 
         if (innermost) {
-            if (vectorized_loop_index >= 0 && vectorized_loop_index < size.size()) {
+            if (vectorized_loop_index >= 0 && vectorized_loop_index < (int) size.size()) {
                 feat.vector_size = size[vectorized_loop_index];
             } else {
                 feat.vector_size = 1;
@@ -488,7 +522,7 @@ struct LoopNest {
                 idx++;
             }
 
-            if (vectorized_loop_index >= 0 && vectorized_loop_index < size.size()) {
+            if (vectorized_loop_index >= 0 && vectorized_loop_index < (int) size.size()) {
                 feat.innermost_pure_loop_extent = size[vectorized_loop_index];
             } else {
                 feat.innermost_pure_loop_extent = 1;
@@ -510,7 +544,7 @@ struct LoopNest {
                 int64_t innermost_storage_extent = 1;
                 for (int i = 0; i < node->func.dimensions(); i++) {
                     int64_t outer = 1;
-                    for (int l = 0; l < stage->loop.size(); l++) {
+                    for (size_t l = 0; l < stage->loop.size(); l++) {
                         if (stage->loop[l].var == node->func.args()[i]) {
                             outer = size[l];
                             break;
@@ -555,13 +589,14 @@ struct LoopNest {
 
         // Recurse inwards
         for (const auto &c : children) {
-            c->compute_features(params, sites, subinstances, subparallelism, this, root, &working_set_here, features);
+            c->compute_features(dag, params, sites, subinstances, subparallelism, this, root, &working_set_here, features);
+        }
+
+        for (const auto *node : store_at) {
+            working_set_here += features->get(&(node->stages[0])).bytes_at_production;
         }
 
         if (at_production) {
-            for (const auto *node : store_at) {
-                working_set_here += features->get(&(node->stages[0])).bytes_at_production;
-            }
             feat.working_set = working_set_here;
         }
 
@@ -790,8 +825,6 @@ struct LoopNest {
             feat.allocation_bytes_read_per_realization = allocation_bytes_loaded;
             feat.unique_bytes_read_per_realization = bytes_loaded;
             feat.unique_lines_read_per_realization = lines_loaded;
-            feat.unique_bytes_read_per_task = off_core_bytes_loaded;
-            feat.unique_lines_read_per_task = off_core_lines_loaded;
 
             if (!at_pure_production) {
                 // Also pessimistically assume this update definition relies on the entirety of the produced region so far.
@@ -910,7 +943,7 @@ struct LoopNest {
 
             for (size_t i = 0; i < size.size(); i++) {
                 debug(0) << " " << size[i];
-                if (innermost && i == vectorized_loop_index) {
+                if (innermost && i == (size_t) vectorized_loop_index) {
                     debug(0) << 'v';
                 }
             }
@@ -1085,7 +1118,6 @@ struct LoopNest {
                     f->stages[s].loop[i].var == f->func.args()[v]) {
                     node->vectorized_loop_index = (int)i;
                     vector_size = (int64_t)(node->stage->vector_size);
-                    auto &p = single_point->loops(s, i);
                     single_point->loops(s, i).second += vector_size - 1;
                     node->size[i] += vector_size - 1;
                     node->size[i] /= vector_size;
@@ -1164,10 +1196,15 @@ struct LoopNest {
 
         for (size_t i = 0; i < stage->loop.size(); i++) {
             int l = stage->loop[i].pure_dim;
-            if (l < 0) continue; // Not one of the pure dimensions. TODO: What about parallelizing pure rvars?
 
-            internal_assert(l < (int)tiling.size()) << l << " " << tiling.size() << "\n";
-            int64_t outer_extent = tiling[l];
+            int64_t outer_extent;
+            if (l >= 0) {
+                internal_assert(l < (int)tiling.size()) << l << " " << tiling.size() << "\n";
+                outer_extent = tiling[l];
+            } else {
+                // RVars are moved inwards
+                outer_extent = 1;
+            }
 
             inner->size[i] = (outer->size[i] + outer_extent - 1) / outer_extent;
             // Recompute the outer size given the selected inner size
@@ -1220,8 +1257,6 @@ struct LoopNest {
                 child = i;
             }
         }
-
-        const int vector_size = is_root() ? 1 : stage->vector_size;
 
         // HACK (when true)
         const bool force_only_output_compute_root = false;
@@ -1358,11 +1393,10 @@ struct LoopNest {
 
             // See if it's appropriate to slide over this loop
             // Can't slide at the root level, or no parallelism
-            bool may_slide = !is_root();
+            bool may_slide = (params.parallelism == 1) || !is_root();
 
             const auto &c = children[child];
             int num_ones = 0;
-            size_t child_loop = 0;
             for (size_t i = 0; i < c->size.size(); i++) {
                 int64_t s = c->size[i];
                 num_ones += (s == 1) ? 1 : 0;
@@ -1381,6 +1415,10 @@ struct LoopNest {
                 if (store_here && !may_slide) {
                     // We place all our parallel loops at the root
                     // level, so this would constrain parallelism.
+                    continue;
+                }
+                if (is_root() && num_ones == (int)c->size.size() && params.parallelism > 1) {
+                    // Don't fuse into serial loops, or we could never parallelize this Func.
                     continue;
                 }
                 auto opts = children[child]->compute_in_tiles(f, this, params, v, store_here);
@@ -1412,7 +1450,7 @@ struct LoopNest {
             VarOrRVar var;
             string accessor;
             int64_t extent = 0;
-            bool outermost = false, parallel = false, exists = false, pure = false;
+            bool innermost_pure_dim = false, outermost = false, parallel = false, exists = false, pure = false;
             FuncVar() : orig(Var()), var(Var()) {}
         };
         vector<FuncVar> vars; // In order from innermost to outermost. Each group of d is one tiling.
@@ -1447,7 +1485,6 @@ struct LoopNest {
                 state->num_cores = num_cores;
                 state->vector_dim = vector_dim;
                 state->vectorized_loop_index = vectorized_loop_index;
-                size_t sz = state->vars.size();
                 for (size_t i = 0; i < symbolic_loop.size(); i++) {
                     StageScheduleState::FuncVar fv;
                     const auto &l = symbolic_loop[i];
@@ -1460,6 +1497,7 @@ struct LoopNest {
                     fv.parallel = l.pure && parallel;
                     fv.exists = true;
                     fv.pure = l.pure;
+                    fv.innermost_pure_dim = (i == (size_t) vectorized_loop_index);
                     state->vars.push_back(fv);
                 }
                 state_map.emplace(stage, std::unique_ptr<StageScheduleState>(state));
@@ -1542,7 +1580,7 @@ struct LoopNest {
                         int64_t factor = (parent.extent + size[i] - 1) / size[i];
                         int64_t innermost_size = innermost_loop->size[i];
 
-                        if (child && i == vectorized_loop_index) {
+                        if (child && i == (size_t) vectorized_loop_index) {
                             // Ensure the split is a multiple of the
                             // vector size. With all these rounded
                             // divs going on it can drift.
@@ -1556,7 +1594,7 @@ struct LoopNest {
                         if (!parent.exists || factor == 1) {
                             v.exists = false;
                             v.extent = 1;
-                        } else if (size[i] == 1 && !(child && child->innermost && i == vectorized_loop_index && parent.var.name() == parent.orig.name())) {
+                        } else if (size[i] == 1 && !(child && child->innermost && i == (size_t) vectorized_loop_index && parent.var.name() == parent.orig.name())) {
                             // Not split in this dimension
                             v = parent;
                             v.parallel = false;
@@ -1633,14 +1671,19 @@ struct LoopNest {
                     }
 
                     bool found = false;
-                    if (vectorized_loop_index >= 0 &&
-                        vectorized_loop_index < state.vars.size() &&
-                        state.vars[vectorized_loop_index].exists) {
-                        here = LoopLevel(node->func, state.vars[vectorized_loop_index].var);
-                        found = true;
-                    } else for (const auto &v : state.vars) {
+                    for (const auto &v : state.vars) {
                         if (!v.exists) continue;
-                        here = LoopLevel(node->func, v.var);
+                        if (!v.var.is_rvar &&
+                            vectorized_loop_index >= 0 &&
+                            vectorized_loop_index < (int) state.vars.size() &&
+                            state.vars[vectorized_loop_index].exists) {
+                            // The vectorized loop is actually the
+                            // innermost, not whatever pure loop we
+                            // just stumbled upon
+                            here = LoopLevel(node->func, state.vars[vectorized_loop_index].var);
+                        } else {
+                            here = LoopLevel(node->func, v.var);
+                        }
                         found = true;
                         break;
                     }
@@ -1830,7 +1873,7 @@ struct State {
             }
         }
 
-        root->compute_features(params, sites, 1, 1, nullptr, *root, nullptr, features);
+        root->compute_features(dag, params, sites, 1, 1, nullptr, *root, nullptr, features);
 
         for (const auto &n : dag.nodes) {
             if (sites.get(&(n.stages[0])).produce == nullptr) {
@@ -2252,13 +2295,11 @@ struct State {
         } else {
             bool should_parallelize = false;
             const vector<int64_t> *pure_size = nullptr;
-            int vector_dim = -1;
             if (params.parallelism > 1) {
                 for (auto &c : root->children) {
                     if (c->node == node && node->func.dimensions() > 0) {
                         if (c->stage->index == 0) {
                             pure_size = &(c->size);
-                            vector_dim = c->vector_dim;
                         }
                         should_parallelize = true;
                     }
@@ -2293,21 +2334,37 @@ struct State {
                     auto &t = tilings[i];
                     Option o;
                     o.entire = (i == tilings.size() - 1);
-                    int64_t total = 1;
                     for (size_t j = 0; j < pure_size->size(); j++) {
                         t[j] = ((*pure_size)[j] + t[j] - 1) / t[j];
-                        total *= t[j];
                     }
                     t.swap(o.tiling);
 
-                    // Filter out the less useful options
-                    if (total > params.parallelism * 64) continue;
-                    if (total < params.parallelism && !o.entire) continue;
+                    // Compute max idle cores across the other stages of the Func
+                    int64_t min_total = 0;
+                    o.idle_core_wastage = 1;
+                    for (const auto &c : root->children) {
+                        if (c->node == node) {
+                            int64_t total = 1;
+                            for (auto &l : c->stage->loop) {
+                                if (!l.rvar) {
+                                    total *= o.tiling[l.pure_dim];
+                                }
+                            }
+                            if (min_total != 0) {
+                                min_total = std::min(min_total, total);
+                            } else {
+                                min_total = total;
+                            }
+                            const double tasks_per_core = ((double)total) / params.parallelism;
+                            o.idle_core_wastage = std::max(o.idle_core_wastage,
+                                                           std::ceil(tasks_per_core) / tasks_per_core);
+                        }
+                    }
 
-                    // TODO: compute max wastage across all stages of
-                    // func instead of just the pure stage.
-                    const double tasks_per_core = ((double)total) / params.parallelism;
-                    o.idle_core_wastage = std::ceil(tasks_per_core) / tasks_per_core;
+                    // Filter out the less useful options
+                    if (min_total > params.parallelism * 16) continue;
+                    if (min_total < params.parallelism && !o.entire) continue;
+
                     options.emplace_back(std::move(o));
                 }
                 std::sort(options.begin(), options.end());
@@ -2435,13 +2492,25 @@ struct State {
             int64_t parallel_tasks = 1;
             vector<VarOrRVar> parallel_vars;
             bool any_parallel_vars = false, any_parallel_rvars = false;
+            VarOrRVar *innermost_parallel = nullptr;
             for (auto it = p.second->vars.rbegin(); it != p.second->vars.rend(); it++) {
                 if (!it->exists || it->extent == 1) continue;
                 if (!it->parallel) break;
                 any_parallel_rvars |= it->var.is_rvar;
                 any_parallel_vars |= !it->var.is_rvar;
                 parallel_tasks *= it->extent;
-                parallel_vars.push_back(it->var);
+                if (it->innermost_pure_dim) {
+                    innermost_parallel = &(it->var);
+                } else {
+                    parallel_vars.push_back(it->var);
+                }
+            }
+            // If we're parallelizing across the innermost storage
+            // dimension, we need to bubble that to the end of the
+            // parallel vars list, because it's actually the
+            // innermost.
+            if (innermost_parallel) {
+                parallel_vars.push_back(*innermost_parallel);
             }
 
             if (p.second->vars.size() > 1) {
@@ -2464,7 +2533,6 @@ struct State {
             // Halide doesn't let you fuse an RVar with a Var, even if
             // they are both pure.
             bool can_fuse = !(any_parallel_vars && any_parallel_rvars);
-
             if (can_fuse) {
                 for (size_t i = 1; i < parallel_vars.size(); i++) {
                     // Outermost, and next outermost. Preserve the inner
@@ -2847,6 +2915,11 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
     string cyos_str = get_env_variable("HL_CYOS");
     if (cyos_str == "1") {
         num_passes = 1;
+    }
+
+    string num_passes_str = get_env_variable("HL_NUM_PASSES");
+    if (!num_passes_str.empty()) {
+        num_passes = std::atoi(num_passes_str.c_str());
     }
 
     for (int i = 0; i < num_passes; i++) {
