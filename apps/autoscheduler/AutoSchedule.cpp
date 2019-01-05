@@ -455,39 +455,6 @@ struct LoopNest {
                 }
             }
 
-            // Inspect every edge in the dag to calculate cross-core traffic
-            if (params.parallelism > 1) {
-                for (const auto &edge : dag.edges) {
-                    const auto &producer_site = sites.get(&(edge.producer->stages[0]));
-                    const LoopNest *producer_task = producer_site.task;
-                    const LoopNest *consumer_task = sites.get(edge.consumer).task;
-                    if (producer_task == consumer_task) continue; // Produced and consumed on the same core
-                    bool producer_has_been_scheduled =
-                        edge.producer->is_input || (producer_site.produce != nullptr);
-                    int vector_dim = (edge.producer->is_input ? 0 :
-                                      !producer_has_been_scheduled ? -1 :
-                                      producer_site.produce->vector_dim);
-                    const auto &b = consumer_task->get_bounds(edge.producer);
-                    int64_t bytes = edge.producer->bytes_per_point, lines = 1;
-                    int64_t max_extent = 1;
-                    for (int i = 0; i < edge.producer->func.dimensions(); i++) {
-                        const auto &p = b->region_required(i);
-                        int64_t extent = p.second - p.first + 1;
-                        max_extent = std::max(extent, max_extent);
-                        bytes *= extent;
-                        if (i != vector_dim) {
-                            lines *= extent;
-                        }
-                    }
-                    if (!producer_has_been_scheduled) {
-                        lines /= max_extent;
-                    }
-                    auto &f = features->get(edge.consumer);
-                    f.unique_lines_read_per_task += lines;
-                    f.unique_bytes_read_per_task += bytes;
-                }
-            }
-
             return;
         }
 
@@ -825,6 +792,8 @@ struct LoopNest {
             feat.allocation_bytes_read_per_realization = allocation_bytes_loaded;
             feat.unique_bytes_read_per_realization = bytes_loaded;
             feat.unique_lines_read_per_realization = lines_loaded;
+            feat.unique_bytes_read_per_task = off_core_bytes_loaded;
+            feat.unique_lines_read_per_task = off_core_lines_loaded;
 
             if (!at_pure_production) {
                 // Also pessimistically assume this update definition relies on the entirety of the produced region so far.
