@@ -2488,15 +2488,12 @@ struct State {
 
         // Algorithm for tagging loop levels as GPUBlock/GPUThreads:
         //
-        // 1- Tag one parallel loop as GPUBlocks and tag the vectorized
-        //    loop level as GPUThread.
+        // 1- Tag the outermost parallel loop as GPUBlock.
         //
         // 2- Tag the innermost loop levels as GPUThreads; continue
         //    tagging until one of the following criteria is met:
-        //        (a) The total amount of threads created exceeds
-        //            MAX_THREADS_PER_BLOCK.
-        //        (b) A loop tagged as GPUBlock is reached.
-        //        (c) The total number of loops tagged as GPUThread exceeds 3.
+        //        (a) The total amount of threads created exceeds MAX_THREADS_PER_BLOCK.
+        //        (b) The total number of loops tagged as GPUThread exceeds 3.
         //
         // 3- Tag the remaining outer loop levels as GPUBlocks (a maximum of 3
         //    loops can be tagged).
