@@ -15,11 +15,11 @@ $(BIN)/resnet50block.generator: Resnet50BlockGenerator.cpp $(GENERATOR_DEPS)
 $(BIN)/resnet50block%.a: $(BIN)/resnet50block.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
 	HL_MACHINE_PARAMS=1,1,1 HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=../autoscheduler/weights \
-	$(BIN)/resnet50block.generator -g resnet50block -o $(BIN) -f resnet50block$* target=$(HL_TARGET)-no_asserts auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so block_id=$*
+	$(BIN)/resnet50block.generator -g resnet50block -o $(BIN) -f resnet50block$* target=$(HL_TARGET)-debug auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so block_id=$*
 
 $(BIN)/process: process.cpp $(RESNET_BLOCKS) 
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g -I $(BIN) -Wall -O3 $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS)
+	$(CXX) $(CXXFLAGS) -g -I $(BIN) -Wall $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS)
 
 test: $(BIN)/process
 	$^ 10
