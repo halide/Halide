@@ -371,7 +371,7 @@ public:
             Expr significance = 1 - 1 / r1;
 
             // p1 should be at least 1 larger than p2, in units of the true runtime of the fastest schedule
-            Expr correct_order = significance * (sqrt(1 + max(0, p2 + 1 - p1)) - 1);
+            Expr correct_order = significance * max(0, p2 + 1 - p1);
             err(n) = correct_order + 1e-5f * regularize;
 
             Expr loss = sum(err(r_batch));
