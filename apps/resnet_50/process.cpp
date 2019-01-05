@@ -420,7 +420,6 @@ int main(int argc, char **argv) {
       }
 
       FnPtr blockfn = blockFns[block_id];
-      std::cout << "input dimensions: " << input.dim(0).extent() << "," << input.dim(1).extent() << "," << input.dim(2).extent() << std::endl;
 
       blockfn(input,
             conv1_gamma,
@@ -453,8 +452,6 @@ int main(int argc, char **argv) {
             block_outputs[block_id],
             final_output);
         input = block_outputs[block_id];
-        buffer_to_file(block_outputs[block_id], "block" + std::to_string(block_id) + "_output.bin");
-        std::cout << block_outputs[block_id].dim(0).extent() << " " << block_outputs[block_id].dim(1).extent() << " " << block_outputs[block_id].dim(2).extent();
     }
   });
   
@@ -465,7 +462,6 @@ int main(int argc, char **argv) {
   float max_val = -100;
   for (int i = 0; i < 1000; i++) {
     if (final_output(i) > max_val) {
-      std::cout << "output " << final_output(i) << " is greater than max val: " << max_val << std::endl;
       max_val = final_output(i);
       max_class = i;
     }
