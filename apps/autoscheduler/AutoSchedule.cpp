@@ -1507,8 +1507,13 @@ struct LoopNest {
                     // made more than once, use stack-scoped
                     // storage. Otherwise let the compiler pick heap
                     // or stack as it likes.
-                    Func(node->func).store_in(MemoryType::Stack);
-                    state.schedule_source << "\n    .store_in(MemoryType::Stack)";
+                    if (!target.has_gpu_feature()) {
+                        Func(node->func).store_in(MemoryType::Stack);
+                        state.schedule_source << "\n    .store_in(MemoryType::Stack)";
+                    } else {
+                        Func(node->func).store_in(MemoryType::GPUShared);
+                        state.schedule_source << "\n    .store_in(MemoryType::GPUShared)";
+                    }
                 }
             }
 
@@ -2508,33 +2513,34 @@ struct State {
         n_loops_tagged_gpublocks++;
 
         if (!TAG_MORE_LOOPS_WITH_GPU_THREADS_BLOCKS) {
-            //return;
+            return;
         }
-        std::cerr << "MARK OTHERS" << std::endl;
 
         int64_t total_threads = 1;
-        for (int i = parallel_vars.size() - 1; i > 1; i--) {
-            const auto &v = parallel_vars[i];
-
-            if (n_loops_tagged_gputhread < 3 && total_threads < MAX_THREADS_PER_BLOCK) {
-        std::cerr << "MARK OTHER THREADS" << std::endl;
-                state->schedule_source << "\n    .gpu_threads(" << v.name() << ")";
-                stage.gpu_threads(v);
-                state->vectorized = true;
-                n_loops_tagged_gputhread++;
-                total_threads *= extents[i];
-                continue;
+        int thread_idx = parallel_vars.size() - 1;
+        for (; thread_idx > 1; thread_idx--) {
+            if (n_loops_tagged_gputhread > 3 || total_threads >= MAX_THREADS_PER_BLOCK) {
+                break;
             }
 
-            if (n_loops_tagged_gpublocks < 3) {
-        std::cerr << "MARK OTHER BLOCKS" << std::endl;
-                state->schedule_source << "\n    .gpu_blocks(" << v.name() << ")";
-                stage.gpu_blocks(v);
-                n_loops_tagged_gpublocks++;
-                continue;
+            const auto &v = parallel_vars[thread_idx];
+
+            state->schedule_source << "\n    .gpu_threads(" << v.name() << ")";
+            stage.gpu_threads(v);
+            state->vectorized = true;
+            n_loops_tagged_gputhread++;
+            total_threads *= extents[thread_idx];
+        }
+
+        for (int block_idx = 1; block_idx <= thread_idx; block_idx++) {
+            if (n_loops_tagged_gpublocks > 3) {
+                break;
             }
 
-            break;
+            const auto &v = parallel_vars[block_idx];
+            state->schedule_source << "\n    .gpu_blocks(" << v.name() << ")";
+            stage.gpu_blocks(v);
+            n_loops_tagged_gpublocks++;
         }
     }
 
