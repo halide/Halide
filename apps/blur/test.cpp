@@ -10,6 +10,12 @@
 #include "halide_benchmark.h"
 #include "HalideBuffer.h"
 
+#include "halide_blur.h"
+#include "blur_classic_auto_schedule.h"
+#include "blur_auto_schedule.h"
+
+#include "benchmark_util.h"
+
 using namespace Halide::Runtime;
 using namespace Halide::Tools;
 
@@ -172,6 +178,21 @@ int main(int argc, char **argv) {
             input(x, y) = rand() & 0xfff;
         }
     }
+
+    Buffer<uint16_t> output(input.width()-8, input.height()-2);
+
+    // Call it once to initialize the halide runtime stuff
+    //halide_blur(input, out);
+    // Copy-out result if it's device buffer and dirty.
+    //out.copy_to_host();
+
+    three_way_bench(
+        [&]() { halide_blur(input, output); output.device_sync(); },
+        [&]() { blur_classic_auto_schedule(input, output); output.device_sync(); },
+        [&]() { blur_auto_schedule(input, output); output.device_sync(); }
+    );
+
+    return 0;
 
     Buffer<uint16_t> blurry = blur(input);
     double slow_time = t;
