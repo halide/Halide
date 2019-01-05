@@ -63,7 +63,7 @@ public:
 
         // Schedule
         if (!auto_schedule) {
-            if (get_target().has_gpu_feature()) {
+            /*if (get_target().has_gpu_feature()) {
                 Var xi, yi;
                 output_.compute_root()
                     .reorder(c, x, y)
@@ -77,7 +77,7 @@ public:
                 blur_y.compute_at(output_, x)
                     .unroll(x, 2)
                     .gpu_threads(x, y);
-            } else {
+            } else*/ {
                 blur_y.compute_at(output_, y).vectorize(x, 8);
                 ratio.compute_at(output_, y).vectorize(x, 8);
                 output_.vectorize(x, 8).parallel(y).reorder(x, c, y);
