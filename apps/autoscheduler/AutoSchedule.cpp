@@ -322,6 +322,7 @@ struct LoopNest {
                           const LoopNest *parent,
                           const LoopNest &root,
                           int64_t *working_set,
+                          std::set<pair<const FunctionDAG::Node *, const LoopNest *>> *cross_core_transfers,
                           StageMap<ScheduleFeatures> *features) const {
 
         int64_t working_set_here = 0;
@@ -409,7 +410,7 @@ struct LoopNest {
 
         if (is_root()) {
             for (const auto &c : children) {
-                c->compute_features(dag, params, sites, subinstances, parallelism, this, root, &working_set_here, features);
+                c->compute_features(dag, params, sites, subinstances, parallelism, this, root, &working_set_here, cross_core_transfers, features);
             }
 
             // Figure out the root-level features for every Func
@@ -452,39 +453,6 @@ struct LoopNest {
                         points_computed_minimum_if_inlined += features->get(e->consumer).points_computed_minimum * e->calls;
                     }
                     feat.points_computed_minimum = std::min(feat.points_computed_minimum, points_computed_minimum_if_inlined);
-                }
-            }
-
-            // Inspect every edge in the dag to calculate cross-core traffic
-            if (params.parallelism > 1) {
-                for (const auto &edge : dag.edges) {
-                    const auto &producer_site = sites.get(&(edge.producer->stages[0]));
-                    const LoopNest *producer_task = producer_site.task;
-                    const LoopNest *consumer_task = sites.get(edge.consumer).task;
-                    if (producer_task == consumer_task) continue; // Produced and consumed on the same core
-                    bool producer_has_been_scheduled =
-                        edge.producer->is_input || (producer_site.produce != nullptr);
-                    int vector_dim = (edge.producer->is_input ? 0 :
-                                      !producer_has_been_scheduled ? -1 :
-                                      producer_site.produce->vector_dim);
-                    const auto &b = consumer_task->get_bounds(edge.producer);
-                    int64_t bytes = edge.producer->bytes_per_point, lines = 1;
-                    int64_t max_extent = 1;
-                    for (int i = 0; i < edge.producer->func.dimensions(); i++) {
-                        const auto &p = b->region_required(i);
-                        int64_t extent = p.second - p.first + 1;
-                        max_extent = std::max(extent, max_extent);
-                        bytes *= extent;
-                        if (i != vector_dim) {
-                            lines *= extent;
-                        }
-                    }
-                    if (!producer_has_been_scheduled) {
-                        lines /= max_extent;
-                    }
-                    auto &f = features->get(edge.consumer);
-                    f.unique_lines_read_per_task += lines;
-                    f.unique_bytes_read_per_task += bytes;
                 }
             }
 
@@ -589,7 +557,7 @@ struct LoopNest {
 
         // Recurse inwards
         for (const auto &c : children) {
-            c->compute_features(dag, params, sites, subinstances, subparallelism, this, root, &working_set_here, features);
+            c->compute_features(dag, params, sites, subinstances, subparallelism, this, root, &working_set_here, cross_core_transfers, features);
         }
 
         for (const auto *node : store_at) {
@@ -630,24 +598,26 @@ struct LoopNest {
 
                     bool producer_has_been_scheduled = e->producer->is_input || (site.produce != nullptr);
 
-                    if (e->consumer == stage) {
-                        for (auto &j : e->load_jacobians) {
-                            jacobians.emplace_back(j, e->producer);
-                        }
-                    } else {
-                        // Consumer was inlined. Concat the jacobians to look through it.
-                        decltype(jacobians) new_jacobians;
-                        for (auto &j1 : jacobians) {
-                            if (e->consumer->node == j1.second) {
-                                for (auto &j2 : e->load_jacobians) {
-                                    LoadJacobian j = j2 * j1.first;
-                                    new_jacobians.emplace_back(j, e->producer);
-                                }
-                            } else {
-                                new_jacobians.emplace_back(std::move(j1));
+                    if (innermost) {
+                        if (e->consumer == stage) {
+                            for (auto &j : e->load_jacobians) {
+                                jacobians.emplace_back(j, e->producer);
                             }
+                        } else {
+                            // Consumer was inlined. Concat the jacobians to look through it.
+                            decltype(jacobians) new_jacobians;
+                            for (auto &j1 : jacobians) {
+                                if (e->consumer->node == j1.second) {
+                                    for (auto &j2 : e->load_jacobians) {
+                                        LoadJacobian j = j2 * j1.first;
+                                        new_jacobians.emplace_back(j, e->producer);
+                                    }
+                                } else {
+                                    new_jacobians.emplace_back(std::move(j1));
+                                }
+                            }
+                            jacobians.swap(new_jacobians);
                         }
-                        jacobians.swap(new_jacobians);
                     }
 
                     if (site.inlined) {
@@ -808,9 +778,14 @@ struct LoopNest {
                         lines_loaded += line_footprint;
                     }
 
-                    if (producer_store_site->is_root()) {
-                        off_core_bytes_loaded += task_footprint;
-                        off_core_lines_loaded += task_line_footprint;
+                    if (at_production && producer_store_site->is_root()) {
+                        pair<const FunctionDAG::Node *, const LoopNest *> task_pair(e->producer, consumer_task_site);
+                        const bool off_core_load_cost_already_paid = (cross_core_transfers->count(task_pair) > 0);
+                        if (!off_core_load_cost_already_paid) {
+                            off_core_bytes_loaded += task_footprint;
+                            off_core_lines_loaded += task_line_footprint;
+                            cross_core_transfers->insert(task_pair);
+                        }
                     }
 
                 }
@@ -825,6 +800,8 @@ struct LoopNest {
             feat.allocation_bytes_read_per_realization = allocation_bytes_loaded;
             feat.unique_bytes_read_per_realization = bytes_loaded;
             feat.unique_lines_read_per_realization = lines_loaded;
+            feat.unique_bytes_read_per_task = off_core_bytes_loaded;
+            feat.unique_lines_read_per_task = off_core_lines_loaded;
 
             if (!at_pure_production) {
                 // Also pessimistically assume this update definition relies on the entirety of the produced region so far.
@@ -1873,7 +1850,8 @@ struct State {
             }
         }
 
-        root->compute_features(dag, params, sites, 1, 1, nullptr, *root, nullptr, features);
+        std::set<pair<const FunctionDAG::Node *, const LoopNest *>> cross_core_transfers;
+        root->compute_features(dag, params, sites, 1, 1, nullptr, *root, nullptr, &cross_core_transfers, features);
 
         for (const auto &n : dag.nodes) {
             if (sites.get(&(n.stages[0])).produce == nullptr) {
@@ -2362,7 +2340,7 @@ struct State {
                     }
 
                     // Filter out the less useful options
-                    if (min_total > params.parallelism * 16) continue;
+                    if (min_total > params.parallelism * 64) continue;
                     if (min_total < params.parallelism && !o.entire) continue;
 
                     options.emplace_back(std::move(o));
