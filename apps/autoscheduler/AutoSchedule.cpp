@@ -1269,8 +1269,7 @@ struct LoopNest {
             }
 
             for (auto t : tilings) {
-                // params.parallelism is currently only relevant for CPU
-                if (parent->is_root() && !target.has_gpu_feature()) {
+                if (parent->is_root()) {
                     const auto &l = stage->loop;
                     // Skip root-level tilings that would leave too
                     // many cores idle, and root-level tilings that
