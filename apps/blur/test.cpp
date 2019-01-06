@@ -182,9 +182,9 @@ int main(int argc, char **argv) {
     Buffer<uint16_t> output(input.width()-8, input.height()-2);
 
     // Call it once to initialize the halide runtime stuff
-    //halide_blur(input, out);
+    //halide_blur(input, output);
     // Copy-out result if it's device buffer and dirty.
-    //out.copy_to_host();
+    //output.copy_to_host();
 
     three_way_bench(
         [&]() { halide_blur(input, output); output.device_sync(); },

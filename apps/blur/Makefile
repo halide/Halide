@@ -1,6 +1,8 @@
 include ../support/Makefile.inc
 include ../support/autoscheduler.inc
 
+HL_TARGET=host-cuda
+
 all: $(BIN)/test
 
 $(BIN)/halide_blur.generator: halide_blur_generator.cpp $(GENERATOR_DEPS)
@@ -26,8 +28,12 @@ $(BIN)/blur_classic_auto_schedule.a: $(BIN)/halide_blur.generator $(AUTOSCHED_BI
 
 $(BIN)/blur_auto_schedule.a: $(BIN)/halide_blur.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
-	HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/weights HL_MACHINE_PARAMS=32,1,1 \
-	$< -g halide_blur -f blur_auto_schedule -o $(BIN) target=$(HL_TARGET) auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so
+	HL_PERMIT_FAILED_UNROLL=1 \
+	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/weights \
+	HL_MACHINE_PARAMS=1000,1,1 \
+	HL_DEBUG_CODEGEN=1 \
+	HL_SHARED_MEMORY_LIMIT=24 \
+	$< -g halide_blur -f blur_auto_schedule -o $(BIN) target=$(HL_TARGET) auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so 2> stderr.txt > stdout.txt
 
 # -O2 is faster than -O3 for this app (O3 unrolls too much)
 $(BIN)/test: $(BIN)/libhalide_blur.a test.cpp $(BIN)/blur_auto_schedule.a $(BIN)/blur_classic_auto_schedule.a
