@@ -30,13 +30,13 @@ int main(int argc, char **argv) {
     Buffer<float> output(input.width(), input.height());
 
     three_way_bench(
-        [&]() { bilateral_grid(input, r_sigma, output); },
+        [&]() { bilateral_grid(input, r_sigma, output); output.device_sync(); },
     #ifdef NO_AUTO_SCHEDULE
         nullptr,
         nullptr,
     #else
-        [&]() { bilateral_grid_classic_auto_schedule(input, r_sigma, output); },
-        [&]() { bilateral_grid_auto_schedule(input, r_sigma, output); },
+        [&]() { bilateral_grid_classic_auto_schedule(input, r_sigma, output); output.device_sync(); },
+        [&]() { bilateral_grid_auto_schedule(input, r_sigma, output); output.device_sync(); },
     #endif
         samples,
         iterations

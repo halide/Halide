@@ -26,9 +26,9 @@ int main(int argc, char **argv) {
     Buffer<float> output(CO, W, H, N);
 
     three_way_bench(
-        [&]() { conv_layer(input, filter, bias, output); },
-        [&]() { conv_layer_classic_auto_schedule(input, filter, bias, output); },
-        [&]() { conv_layer_auto_schedule(input, filter, bias, output); }
+        [&]() { conv_layer(input, filter, bias, output); output.device_sync(); },
+        [&]() { conv_layer_classic_auto_schedule(input, filter, bias, output); output.device_sync(); },
+        [&]() { conv_layer_auto_schedule(input, filter, bias, output); output.device_sync(); }
     );
 
     return 0;

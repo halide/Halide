@@ -31,9 +31,9 @@ int main(int argc, char **argv) {
 
     // Timing code
     three_way_bench(
-        [&]() { lens_blur(left_im, right_im, slices, focus_depth, blur_radius_scale, aperture_samples, output); },
-        [&]() { lens_blur_classic_auto_schedule(left_im, right_im, slices, focus_depth, blur_radius_scale, aperture_samples, output); },
-        [&]() { lens_blur_auto_schedule(left_im, right_im, slices, focus_depth, blur_radius_scale, aperture_samples, output); },
+        [&]() { lens_blur(left_im, right_im, slices, focus_depth, blur_radius_scale, aperture_samples, output); output.device_sync(); },
+        [&]() { lens_blur_classic_auto_schedule(left_im, right_im, slices, focus_depth, blur_radius_scale, aperture_samples, output); output.device_sync(); },
+        [&]() { lens_blur_auto_schedule(left_im, right_im, slices, focus_depth, blur_radius_scale, aperture_samples, output); output.device_sync(); },
         samples,
         iterations
     );

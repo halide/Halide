@@ -29,9 +29,9 @@ int main(int argc, char **argv) {
     const int iterations = 1;
 
     three_way_bench(
-        [&]() { stencil_chain(input, output); },
-        [&]() { stencil_chain_classic_auto_schedule(input, output); },
-        [&]() { stencil_chain_auto_schedule(input, output); },
+        [&]() { stencil_chain(input, output); output.device_sync(); },
+        [&]() { stencil_chain_classic_auto_schedule(input, output); output.device_sync(); },
+        [&]() { stencil_chain_auto_schedule(input, output); output.device_sync(); },
         samples,
         iterations
     );

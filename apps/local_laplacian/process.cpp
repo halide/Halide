@@ -31,13 +31,13 @@ int main(int argc, char **argv) {
     const int iterations = 1;
 
     three_way_bench(
-        [&]() { local_laplacian(input, levels, alpha/(levels-1), beta, output); },
+        [&]() { local_laplacian(input, levels, alpha/(levels-1), beta, output); output.device_sync(); },
     #ifdef NO_AUTO_SCHEDULE
         nullptr,
         nullptr,
     #else
-        [&]() { local_laplacian_classic_auto_schedule(input, levels, alpha/(levels-1), beta, output); },
-        [&]() { local_laplacian_auto_schedule(input, levels, alpha/(levels-1), beta, output); },
+        [&]() { local_laplacian_classic_auto_schedule(input, levels, alpha/(levels-1), beta, output); output.device_sync(); },
+        [&]() { local_laplacian_auto_schedule(input, levels, alpha/(levels-1), beta, output); output.device_sync(); },
     #endif
         samples,
         iterations

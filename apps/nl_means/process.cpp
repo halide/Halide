@@ -31,9 +31,9 @@ int main(int argc, char **argv) {
             input.width(), input.height(), patch_size, search_area, sigma);
 
     three_way_bench(
-        [&]() { nl_means(input, patch_size, search_area, sigma, output); },
-        [&]() { nl_means_classic_auto_schedule(input, patch_size, search_area, sigma, output); },
-        [&]() { nl_means_auto_schedule(input, patch_size, search_area, sigma, output); },
+        [&]() { nl_means(input, patch_size, search_area, sigma, output); output.device_sync(); },
+        [&]() { nl_means_classic_auto_schedule(input, patch_size, search_area, sigma, output); output.device_sync(); },
+        [&]() { nl_means_auto_schedule(input, patch_size, search_area, sigma, output); output.device_sync(); },
         samples,
         iterations
     );

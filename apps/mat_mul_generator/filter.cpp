@@ -28,9 +28,9 @@ int main(int argc, char **argv) {
     }
 
     three_way_bench(
-        [&]() { mat_mul(mat_A, mat_B, output); },
-        [&]() { mat_mul_classic_auto_schedule(mat_A, mat_B, output); },
-        [&]() { mat_mul_auto_schedule(mat_A, mat_B, output); }
+        [&]() { mat_mul(mat_A, mat_B, output); output.device_sync(); },
+        [&]() { mat_mul_classic_auto_schedule(mat_A, mat_B, output); output.device_sync(); },
+        [&]() { mat_mul_auto_schedule(mat_A, mat_B, output); output.device_sync(); }
     );
 
     return 0;
