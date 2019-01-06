@@ -1,6 +1,8 @@
 include ../support/Makefile.inc
 include ../support/autoscheduler.inc
 
+HL_TARGET=host-cuda
+
 all: $(BIN)/process
 
 TIMING_ITERATIONS ?= 5
@@ -20,8 +22,12 @@ $(BIN)/camera_pipe.a: $(BIN)/camera_pipe.generator
 
 $(BIN)/camera_pipe_auto_schedule.a: $(BIN)/camera_pipe.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
-	HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/weights HL_MACHINE_PARAMS=32,1,1 \
-	$< -g camera_pipe -o $(BIN) -f camera_pipe_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so -e static_library,h,assembly,stmt
+	HL_PERMIT_FAILED_UNROLL=1 \
+	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/weights \
+	HL_MACHINE_PARAMS=32,1,1 \
+	HL_DEBUG_CODEGEN=1 \
+	HL_SHARED_MEMORY_LIMIT=24 \
+	$< -g camera_pipe -o $(BIN) -f camera_pipe_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so -e static_library,h,assembly,stmt 2> stderr.txt > stdout.txt
 
 $(BIN)/viz/camera_pipe.a: $(BIN)/camera_pipe.generator
 	@mkdir -p $(@D)
