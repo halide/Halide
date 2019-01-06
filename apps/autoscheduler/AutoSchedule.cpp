@@ -1395,7 +1395,6 @@ struct LoopNest {
 
                 bool may_slide = (!in_realization &&
                                   f->stages.size() == 1);
-                may_slide = false;
                 if (may_slide) {
                     // Store here, but compute further in. Currently
                     // don't have to worry about the constraints this
@@ -1424,7 +1423,6 @@ struct LoopNest {
             // See if it's appropriate to slide over this loop
             // Can't slide at the root level, or no parallelism
             bool may_slide = (params.parallelism == 1) || !is_root();
-            may_slide = false;
 
             const auto &c = children[child];
             int num_ones = 0;
