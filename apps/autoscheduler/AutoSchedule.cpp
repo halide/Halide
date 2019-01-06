@@ -479,7 +479,7 @@ struct LoopNest {
                     for (auto *e : node->outgoing_edges) {
                         points_computed_minimum_if_inlined += features->get(e->consumer).points_computed_minimum * e->calls;
                     }
-                    feat.points_computed_minimum = std::min(feat.points_computed_minimum, points_computed_minimum_if_inlined);
+                    feat.points_computed_minimum = std::min(feat.points_computed_minimum, (double)points_computed_minimum_if_inlined);
                 }
             }
 
@@ -604,7 +604,7 @@ struct LoopNest {
         *working_set += working_set_here;
 
         int64_t bytes_loaded = 0, lines_loaded = 0, allocation_bytes_loaded = 0, off_core_bytes_loaded = 0, off_core_lines_loaded = 0;
-        int64_t num_dense_loads = 0, num_broadcasts = 0, num_gathers = 0, num_stride_2_loads = 0, num_stride_3_loads = 0, num_stride_4_loads = 0, num_loads = 0;
+        double num_dense_loads = 0, num_broadcasts = 0, num_gathers = 0, num_stride_2_loads = 0, num_stride_3_loads = 0, num_stride_4_loads = 0, num_loads = 0;
         if (innermost || at_production) { // These are the sites at which we compute load footprints
             // Pick the site at which we will compute the footprint relationship
             const auto &consumer_site = sites.get(stage);
@@ -680,10 +680,14 @@ struct LoopNest {
                     }
 
                     if (innermost) {
+                        bool parent_unrolled =
+                            (feat.innermost_pure_loop_extent <= 16 &&
+                             parent->node == node);
+
                         // Grab the jacobians that describe the memory dependence
                         for (const auto &jac : jacobians) {
                             if (jac.second != e->producer) continue;
-                            int64_t n = jac.first.count();
+                            double n = jac.first.count();
                             // internal_assert(n < 1024 * 1024 * 1024) << "Implausibly large n: " << jac.count() << " " << next_count << "\n";
                             // Classify
                             bool vector_broadcast = true;
@@ -700,7 +704,7 @@ struct LoopNest {
                                     auto stride = jac.first(i, vectorized_loop_index);
                                     vector_broadcast &= stride == 0;
                                     if (i == producer_innermost_dim || !producer_has_been_scheduled) {
-                                        dense_vector_load &= (stride >= -1 && stride <= 1);
+                                        dense_vector_load &= stride == 1;
                                         stride_2_vector_load &= stride == 2;
                                         stride_3_vector_load &= stride == 3;
                                         stride_4_vector_load &= stride == 4;
@@ -713,6 +717,31 @@ struct LoopNest {
                                     }
                                 }
                             }
+
+                            // Is this load loop-invariant over an
+                            // unrolled block? If so, we amortize the
+                            // number of loads to account for LICM.
+                            int64_t amortization = 1;
+                            if (parent_unrolled) {
+                                for (size_t idx = 0; idx < stage->loop.size(); idx++) {
+                                    if (!stage->loop[idx].rvar) {
+                                        bool loop_invariant = true;
+                                        for (int i = 0; i < e->producer->func.dimensions(); i++) {
+                                            if (!(jac.first(i, idx) == 0)) {
+                                                loop_invariant = false;
+                                                break;
+                                            }
+                                        }
+                                        if (loop_invariant) {
+                                            amortization *= parent->size[idx];
+                                        }
+                                    }
+                                }
+                            }
+                            // TODO: LICM still acts for the innermost loop of non-unrolled things
+
+                            n /= amortization;
+
                             num_loads += n;
                             if (vector_broadcast) {
                                 num_broadcasts += n;
@@ -862,9 +891,9 @@ struct LoopNest {
             inlined_feat.inlined_calls += it.value() * subinstances;
             inlined_feat.num_vectors += it.value() * feat.num_vectors;
             inlined_feat.num_scalars += it.value() * feat.num_scalars;
-            inlined_feat.native_vector_size = (int64_t)(stage->vector_size);
+            inlined_feat.native_vector_size = stage->vector_size;
             if (inlined_feat.vector_size > 0) {
-                inlined_feat.vector_size = std::min(inlined_feat.vector_size, (int64_t)stage->vector_size);
+                inlined_feat.vector_size = std::min(inlined_feat.vector_size, (double)stage->vector_size);
             } else {
                 inlined_feat.vector_size = feat.vector_size;
             }
@@ -1915,20 +1944,18 @@ struct State {
             if (n.is_input) continue;
             for (size_t stage_idx = n.stages.size(); stage_idx > 0; stage_idx--) {
                 const auto &s = n.stages[stage_idx - 1];
-                const size_t num_schedule_features = sizeof(ScheduleFeatures) / sizeof(int64_t);
-                const size_t num_pipeline_features = sizeof(PipelineFeatures) / sizeof(int);
+                const size_t num_schedule_features = ScheduleFeatures::num_features();
+                const size_t num_pipeline_features = PipelineFeatures::num_features();
                 const auto &sched_feat = features.get(&s);
-                const int64_t *sched_ints = (const int64_t *)(&sched_feat);
-                const int *pipe_ints = (const int *)(&s.features);
 
                 float buf[num_schedule_features + num_pipeline_features];
                 // Save them as floats
                 for (size_t i = 0; i < num_schedule_features; i++) {
-                    buf[i] = sched_ints[i];
+                    buf[i] = sched_feat[i];
                 }
 
                 for (size_t i = 0; i < num_pipeline_features; i++) {
-                    buf[i + num_schedule_features] = pipe_ints[i];
+                    buf[i + num_schedule_features] = s.features[i];
                 }
 
                 binfile.write((const char *)buf, sizeof(buf));
@@ -2012,9 +2039,8 @@ struct State {
                 for (auto it = n.stages.rbegin(); it != n.stages.rend(); it++) {
                     internal_assert(features.contains(&*it)) << n.func.name() << "\n";
                     const auto &feat = features.get(&*it);
-                    const int64_t *sched_stats = (const int64_t *)(&feat);
                     for (size_t i = 0; i < ScheduleFeatures::num_features(); i++) {
-                        schedule_features(i, stage) = sched_stats[i];
+                        schedule_features(i, stage) = feat[i];
                     }
                     stage += 1;
                 }
@@ -2340,7 +2366,10 @@ struct State {
                 auto tilings = generate_tilings(*pure_size, node->func.dimensions() - 1, 2, true);
 
                 // We could just parallelize the outer loop entirely
-                tilings.push_back(*pure_size);
+
+                std::vector<int64_t> ones;
+                ones.resize(pure_size->size(), 1);
+                tilings.emplace_back(std::move(ones));
 
                 // Sort / filter the options
                 struct Option {
@@ -2356,6 +2385,7 @@ struct State {
                     auto &t = tilings[i];
                     Option o;
                     o.entire = (i == tilings.size() - 1);
+
                     for (size_t j = 0; j < pure_size->size(); j++) {
                         t[j] = ((*pure_size)[j] + t[j] - 1) / t[j];
                     }
@@ -2397,6 +2427,7 @@ struct State {
                         // remaining ones leave lots of cores idle.
                         break;
                     }
+
                     auto child = make_child();
                     LoopNest *new_root = new LoopNest;
                     new_root->copy_from(*root);
