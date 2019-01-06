@@ -95,6 +95,7 @@ public:
         input.dim(0).set_bounds_estimate(0, 1536);
         input.dim(1).set_bounds_estimate(0, 2560);
         input.dim(2).set_bounds_estimate(0, 3);
+
         // Provide estimates on the parameters
         levels.set_estimate(8);
         alpha.set_estimate(1);
@@ -103,6 +104,10 @@ public:
         output.estimate(x, 0, 1536)
               .estimate(y, 0, 2560)
               .estimate(c, 0, 3);
+
+        output.bound(x, 0, 1536)
+              .bound(y, 0, 2560)
+              .bound(c, 0, 3);
 
         if (auto_schedule) {
             // Nothing.

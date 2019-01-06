@@ -1,6 +1,8 @@
 include ../support/Makefile.inc
 include ../support/autoscheduler.inc
 
+HL_TARGET=host-cuda
+
 BIN ?= bin
 
 all: $(BIN)/process
@@ -19,8 +21,12 @@ $(BIN)/conv_layer_classic_auto_schedule.a: $(BIN)/conv_layer.generator $(AUTOSCH
 
 $(BIN)/conv_layer_auto_schedule.a: $(BIN)/conv_layer.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
-	HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/weights HL_MACHINE_PARAMS=32,1,1 \
-	$< -g conv_layer -f conv_layer_auto_schedule -o $(BIN) target=$(HL_TARGET) auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so
+	HL_PERMIT_FAILED_UNROLL=1 \
+	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/weights \
+	HL_MACHINE_PARAMS=1000,1,1 \
+	HL_DEBUG_CODEGEN=1 \
+	HL_SHARED_MEMORY_LIMIT=24 \
+	$< -g conv_layer -f conv_layer_auto_schedule -o $(BIN) target=$(HL_TARGET) auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so 2> stderr.txt > stdout.txt
 
 $(BIN)/process: process.cpp $(BIN)/conv_layer.a $(BIN)/conv_layer_auto_schedule.a $(BIN)/conv_layer_classic_auto_schedule.a
 	@-mkdir -p $(BIN)

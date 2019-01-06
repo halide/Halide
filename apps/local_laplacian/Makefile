@@ -3,6 +3,8 @@ include ../support/autoscheduler.inc
 
 BIN ?= bin
 
+HL_TARGET=host-cuda
+
 all: $(BIN)/process
 
 $(BIN)/local_laplacian.generator: local_laplacian_generator.cpp $(GENERATOR_DEPS)
@@ -19,8 +21,12 @@ $(BIN)/local_laplacian_classic_auto_schedule.a: $(BIN)/local_laplacian.generator
 
 $(BIN)/local_laplacian_auto_schedule.a: $(BIN)/local_laplacian.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
-	HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/weights HL_MACHINE_PARAMS=32,1,1 \
-	$< -g local_laplacian -o $(BIN) -f local_laplacian_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so -e static_library,h,s,stmt
+	HL_PERMIT_FAILED_UNROLL=1 \
+	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/weights \
+	HL_MACHINE_PARAMS=1000,1,1 \
+	HL_DEBUG_CODEGEN=1 \
+	HL_SHARED_MEMORY_LIMIT=48 \
+	$< -g local_laplacian -o $(BIN) -f local_laplacian_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so -e static_library,h,s,stmt 2> stderr.txt > stdout.txt
 
 $(BIN)/process: process.cpp $(BIN)/local_laplacian.a $(BIN)/local_laplacian_classic_auto_schedule.a $(BIN)/local_laplacian_auto_schedule.a
 	@mkdir -p $(@D)
