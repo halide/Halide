@@ -11,6 +11,7 @@ namespace {
 struct Tensor {
     Func f;
     std::vector<int> shape;
+    std::string name;
 };
 
 struct WeightShape {
@@ -69,7 +70,6 @@ public:
 
   Input<Buffer<float>> fc1000_weights{"fc1000_weights", 2};
   Input<Buffer<float>> fc1000_bias{"fc1_bias", 1};
-
   Output<Buffer<float>> block_output{"block_output", 3};
   Output<Buffer<float>> final_output{"final_output", 1};
 
@@ -88,40 +88,43 @@ public:
   WeightShape fc1000_ws = {1000, 1, 1, 0, 1}; // 1x1 conv with 2048 input channels and 1000 output channels
 
   // res2a, res2b, res2c all have shame shapes
-  WeightShape res2a_br2a_ws = {64, 1, 1, 0, 1};
   WeightShape res2x_br2a_ws = {64, 1, 1, 0, 1};
+  WeightShape res2a_br2b_ws = {64, 3, 3, 1, 1};
   WeightShape res2x_br2b_ws = {64, 3, 3, 1, 1};
   WeightShape res2x_br2c_ws = {256, 1, 1, 0, 1};
   WeightShape res2a_br1_ws = {256, 1, 1, 0, 1};
 
   // res3x is same for most layers
-  WeightShape res3a_br2a_ws = {128, 1, 1, 0, 2};
+  //WeightShape res3a_br2a_ws = {128, 1, 1, 0, 2};
   WeightShape res3x_br2a_ws = {128, 1, 1, 0, 1};
+  WeightShape res3a_br2b_ws = {128, 3, 3, 1, 2};
   WeightShape res3x_br2b_ws = {128, 3, 3, 1, 1};
   WeightShape res3x_br2c_ws = {512, 1, 1, 0, 1};
   WeightShape res3a_br1_ws = {512, 1, 1, 0, 2};
 
-  WeightShape res4a_br2a_ws = {256, 1, 1, 0, 2};
+  //WeightShape res4a_br2a_ws = {256, 1, 1, 0, 2};
   WeightShape res4x_br2a_ws = {256, 1, 1, 0, 1};
+  WeightShape res4a_br2b_ws = {256, 3, 3, 1, 2};
   WeightShape res4x_br2b_ws = {256, 3, 3, 1, 1};
   WeightShape res4x_br2c_ws = {1024, 1, 1, 0, 1};
   WeightShape res4a_br1_ws = {1024, 1, 1, 0, 2};
 
-  WeightShape res5a_br2a_ws = {512, 1, 1, 0, 2};
+  //WeightShape res5a_br2a_ws = {512, 1, 1, 0, 2};
   WeightShape res5x_br2a_ws = {512, 1, 1, 0, 1};
+  WeightShape res5a_br2b_ws = {512, 3, 3, 1, 2};
   WeightShape res5x_br2b_ws = {512, 3, 3, 1, 1};
   WeightShape res5x_br2c_ws = {2048, 1, 1, 0, 1};
   WeightShape res5a_br1_ws = {2048, 1, 1, 0, 2};
 
   WeightShape br1_ws[4] = {res2a_br1_ws, res3a_br1_ws, res4a_br1_ws, res5a_br1_ws};
-  WeightShape br2a_ws[16] = {res2a_br2a_ws, res2x_br2a_ws, res2x_br2a_ws,
-                             res3a_br2a_ws, res3x_br2a_ws, res3x_br2a_ws, res3x_br2a_ws,
-                             res4a_br2a_ws, res4x_br2a_ws, res4x_br2a_ws, res4x_br2a_ws, res4x_br2a_ws, res4x_br2a_ws,
-                             res5a_br2a_ws, res5x_br2a_ws, res5x_br2a_ws};
-  WeightShape br2b_ws[16] = {res2x_br2b_ws, res2x_br2b_ws, res2x_br2b_ws,
-                             res3x_br2b_ws, res3x_br2b_ws, res3x_br2b_ws, res3x_br2b_ws,
-                             res4x_br2b_ws, res4x_br2b_ws, res4x_br2b_ws, res4x_br2b_ws, res4x_br2b_ws, res4x_br2b_ws,
-                             res5x_br2b_ws, res5x_br2b_ws, res5x_br2b_ws};
+  WeightShape br2a_ws[16] = {res2x_br2a_ws, res2x_br2a_ws, res2x_br2a_ws,
+                             res3x_br2a_ws, res3x_br2a_ws, res3x_br2a_ws, res3x_br2a_ws,
+                             res4x_br2a_ws, res4x_br2a_ws, res4x_br2a_ws, res4x_br2a_ws, res4x_br2a_ws, res4x_br2a_ws,
+                             res5x_br2a_ws, res5x_br2a_ws, res5x_br2a_ws};
+  WeightShape br2b_ws[16] = {res2a_br2b_ws, res2x_br2b_ws, res2x_br2b_ws,
+                             res3a_br2b_ws, res3x_br2b_ws, res3x_br2b_ws, res3x_br2b_ws,
+                             res4a_br2b_ws, res4x_br2b_ws, res4x_br2b_ws, res4x_br2b_ws, res4x_br2b_ws, res4x_br2b_ws,
+                             res5a_br2b_ws, res5x_br2b_ws, res5x_br2b_ws};
   WeightShape br2c_ws[16] = {res2x_br2c_ws, res2x_br2c_ws, res2x_br2c_ws,
                              res3x_br2c_ws, res3x_br2c_ws, res3x_br2c_ws, res3x_br2c_ws,
                              res4x_br2c_ws, res4x_br2c_ws, res4x_br2c_ws, res4x_br2c_ws, res4x_br2c_ws, res4x_br2c_ws,
@@ -174,14 +177,16 @@ public:
       input_t.f = input;
       input_t.shape = input_shape;
 
-      Tensor conv1 = conv2D(input_t, conv1_ws, conv1_weights);
-      Tensor scaled1 = scale_layer(conv1, conv1_gamma, conv1_beta);
-      Tensor relu1 = relu_layer(scaled1);
-      Tensor pool1 = max_pool_layer(relu1, pool1_ws);
+      Tensor conv1 = conv2D(input_t, conv1_ws, conv1_weights, "conv1");
+      Tensor norm1 = norm_layer(conv1, conv1_mu, conv1_sig, "norm1");
+      Tensor scaled1 = scale_layer(norm1, conv1_gamma, conv1_beta, "scale1");
+      Tensor relu1 = relu_layer(scaled1, "relu1");
+      Tensor pool1 = max_pool_layer(relu1, pool1_ws, "pool1");
 
       br2a_input = pool1;
     } else {
       int br1_i = find_index(block_id, branch1_indices);
+
       if (br1_i >= 0) {
         input_shape = block_dims[macro_block_id-1];
       } else {
@@ -196,9 +201,9 @@ public:
     // build branch1 if this section has branch1
     int br1_i = find_index(block_id, branch1_indices);
     if (br1_i >= 0) {
-      br1_conv[br1_i] = conv2D(br2a_input, br1_ws[br1_i], br1_conv_weights[br1_i]);
-      br1_norm[br1_i] = norm_layer(br1_conv[br1_i], br1_mu[br1_i], br1_sig[br1_i]);
-      br1_scale[br1_i] = scale_layer(br1_norm[br1_i], br1_gamma[br1_i], br1_beta[br1_i]);
+      br1_conv[br1_i] = conv2D(br2a_input, br1_ws[br1_i], br1_conv_weights[br1_i], "br1_conv");
+      br1_norm[br1_i] = norm_layer(br1_conv[br1_i], br1_mu[br1_i], br1_sig[br1_i], "br1_norm");
+      br1_scale[br1_i] = scale_layer(br1_norm[br1_i], br1_gamma[br1_i], br1_beta[br1_i], "br1_scale");
       resunit_sum_input = br1_scale[br1_i];
     } else {
       resunit_sum_input = input_t;
@@ -206,40 +211,43 @@ public:
 
     // branch2a
     auto weights = br2a_conv_weights[block_id];
-    br2a_conv[block_id] = conv2D(br2a_input, br2a_ws[block_id], weights);
-    br2a_norm[block_id] = norm_layer(br2a_conv[block_id], br2a_mu[block_id], br2a_sig[block_id]);
-    br2a_scaled[block_id] = scale_layer(br2a_norm[block_id], br2a_gamma[block_id], br2a_beta[block_id]);
-    br2a_relu[block_id] = relu_layer(br2a_scaled[block_id]);
-
+    
+    br2a_conv[block_id] = conv2D(br2a_input, br2a_ws[block_id], weights, "block" + std::to_string(block_id) + "_2a_conv");
+    br2a_norm[block_id] = norm_layer(br2a_conv[block_id], br2a_mu[block_id], br2a_sig[block_id], "block" + std::to_string(block_id) + "_2a_norm");
+    br2a_scaled[block_id] = scale_layer(br2a_norm[block_id], br2a_gamma[block_id], br2a_beta[block_id], "block" + std::to_string(block_id) + "_2a_scale");
+    br2a_relu[block_id] = relu_layer(br2a_scaled[block_id], "2a_relu");
+  
     // branch 2b
     weights = br2b_conv_weights[block_id];
-    br2b_conv[block_id] = conv2D(br2a_relu[block_id], br2b_ws[block_id], weights);
-    br2b_norm[block_id] = norm_layer(br2b_conv[block_id], br2b_mu[block_id], br2b_sig[block_id]);
-    br2b_scaled[block_id] = scale_layer(br2b_norm[block_id], br2b_gamma[block_id], br2b_beta[block_id]);
-    br2b_relu[block_id] = relu_layer(br2b_scaled[block_id]);
+    br2b_conv[block_id] = conv2D(br2a_relu[block_id], br2b_ws[block_id], weights, "block" + std::to_string(block_id) + "_2b_conv");
+    br2b_norm[block_id] = norm_layer(br2b_conv[block_id], br2b_mu[block_id], br2b_sig[block_id], "block" + std::to_string(block_id) + "_2b_norm");
+    br2b_scaled[block_id] = scale_layer(br2b_norm[block_id], br2b_gamma[block_id], br2b_beta[block_id], "block" + std::to_string(block_id) + "_2b_scale");
+    br2b_relu[block_id] = relu_layer(br2b_scaled[block_id], "2b_relu");
 
     // branch 2c
     weights = br2c_conv_weights[block_id];
-    br2c_conv[block_id] = conv2D(br2b_relu[block_id], br2c_ws[block_id], weights);
-    br2c_norm[block_id] = norm_layer(br2c_conv[block_id], br2c_mu[block_id], br2c_sig[block_id]);
-    br2c_scaled[block_id] = scale_layer(br2c_norm[block_id], br2c_gamma[block_id], br2c_beta[block_id]);
+    br2c_conv[block_id] = conv2D(br2b_relu[block_id], br2c_ws[block_id], weights, "block" + std::to_string(block_id) + "_2c_conv");
+    br2c_norm[block_id] = norm_layer(br2c_conv[block_id], br2c_mu[block_id], br2c_sig[block_id], "block" + std::to_string(block_id) + "_2c_norm");
+    br2c_scaled[block_id] = scale_layer(br2c_norm[block_id], br2c_gamma[block_id], br2c_beta[block_id], "block" + std::to_string(block_id) + "_2c_scale");
 
     // create residual unit
-    resunit_sum[block_id] = sum_layer(resunit_sum_input, br2c_scaled[block_id]);
-    resunit_relu[block_id] = relu_layer(resunit_sum[block_id]);
+    resunit_sum[block_id] = sum_layer(resunit_sum_input, br2c_scaled[block_id], "block" + std::to_string(block_id) + "_res_sum");
+    resunit_relu[block_id] = relu_layer(resunit_sum[block_id], "block" + std::to_string(block_id) + "_res_relu");
     // output of each block is the residual unit
     block_output(c, i, j) = resunit_relu[block_id].f(c, i, j);
 
     // create final 3 layers
     if (block_id == 15) {
-        pool5 = avg_pool_layer(resunit_relu[block_id], pool5_ws);
-        fc1000 = fc_layer(pool5, fc1000_ws, fc1000_weights, fc1000_bias);
-        softmax_layer(fc1000, final_output, 1000);
+        pool5 = avg_pool_layer(resunit_relu[block_id], pool5_ws, "pool5");
+        fc1000 = fc_layer(pool5, fc1000_ws, fc1000_weights, fc1000_bias, "fc");
+        softmax_layer(fc1000, final_output, 1000, "softmax");
     }
 
     // provide bounds estimates on outputs
     final_output(c) = undef<float>();
+
     std::vector<int> output_dim = block_dims[macro_block_id];
+
     final_output.estimate(final_output.args()[0], 0, 1000);
     block_output.estimate(block_output.args()[0], 0, output_dim[0]);
     block_output.estimate(block_output.args()[1], 0, output_dim[1]);
@@ -247,6 +255,7 @@ public:
   }
 
 private:
+  float inf = 3.402823e+38f;
   Func pad(Func f, Expr width, Expr height) {
       std::vector<std::pair<Expr, Expr>> bounds(f.dimensions());
       bounds[1].first = 0;
@@ -266,7 +275,7 @@ private:
       out.shape.insert(out.shape.end(), new_shape, new_shape+3);
   }
 
-  Tensor conv2D(Tensor& input, WeightShape& weight_shape, Func weights) {
+  Tensor conv2D(Tensor& input, WeightShape& weight_shape, Func weights, std::string name) {
       int p = weight_shape.pad;
       Func padded;
       // pad input
@@ -275,40 +284,43 @@ private:
       } else {
           padded = input.f;
       }
-      RDom r(0, input.shape[0], -p, -p + weight_shape.w, -p, -p + weight_shape.h);
+      RDom r(0, input.shape[0], 0, weight_shape.w, 0, weight_shape.h);
       Func conv;
-      conv(c, i, j) += weights(r.x, r.y, r.z, c) * padded(r.x, weight_shape.stride * i + r.y, weight_shape.stride * j + r.z);
+      conv(c, i, j) += weights(c, r.y, r.z, r.x) * padded(r.x, weight_shape.stride * i + r.y - p, weight_shape.stride * j + r.z - p);
 
       Tensor output;
       output.f = conv;
+      output.name = name;
       compute_shape(input, output, weight_shape);
       return output;
   }
 
   // assumes input is 3D (c, w, h) where w and h = 1
-  Tensor fc_layer(Tensor& input, WeightShape& weight_shape, Func weights, Func bias) {
+  Tensor fc_layer(Tensor& input, WeightShape& weight_shape, Func weights, Func bias, std::string name) {
       RDom r(0, input.shape[0]);
       Func fc;
       fc(c) = bias(c);
-      fc(c) += weights(r.x, c) * input.f(r.x, 0, 0);
+      fc(c) += weights(c, r.x) * input.f(r.x, 0, 0);
 
       Tensor output;
       output.f = fc;
+      output.name = name;
       compute_shape(input, output, weight_shape);
+
       return output;
   }
 
-
-  Tensor relu_layer(Tensor& input) {
+  Tensor relu_layer(Tensor& input, std::string name) {
       Func relu;
-      relu(c, i, j) = max(0, input.f(c, i, j));
+      relu(c, i, j) = max(0.0f, input.f(c, i, j)); 
       Tensor output;
       output.f = relu;
       output.shape = input.shape;
+      output.name = name;
       return output;
   }
 
-  Tensor max_pool_layer(Tensor& input, WeightShape& weight_shape) {
+  Tensor max_pool_layer(Tensor& input, WeightShape& weight_shape, std::string name) {
       int p = weight_shape.pad;
       Func padded;
       if (p) {
@@ -316,16 +328,18 @@ private:
       } else {
           padded = input.f;
       }
-      RDom r(-p, -p + weight_shape.w, -p, -p + weight_shape.h);
+      RDom r(0, weight_shape.w, 0, weight_shape.h);
       Func pool;
-      pool(c, i, j) = maximum(padded(c, i + r.x, j + r.y));
+      pool(c, i, j) = maximum(padded(c, weight_shape.stride * i + r.x - p, weight_shape.stride * j + r.y - p));
       Tensor output;
       output.f = pool;
+      output.name = name;
       compute_shape(input, output, weight_shape);
+
       return output;
   }
 
-  Tensor avg_pool_layer(Tensor& input, WeightShape& weight_shape) {
+  Tensor avg_pool_layer(Tensor& input, WeightShape& weight_shape, std::string name) {
       int p = weight_shape.pad;
       Func padded;
       if (p) {
@@ -333,46 +347,53 @@ private:
       } else {
           padded = input.f;
       }
-      RDom r(-p, -p + weight_shape.w, -p, -p + weight_shape.h);
+      RDom r(0, weight_shape.w, 0, weight_shape.h);
       float scale = weight_shape.w * weight_shape.h;
       Func pool;
       float n = 1.0f/scale;
-      pool(c, i, j) += n * padded(c, weight_shape.stride * i + r.x, weight_shape.stride * j + r.y);
+      pool(c, i, j) +=  n * padded(c, weight_shape.stride * i + r.x - p, weight_shape.stride * j + r.y - p);
+
       Tensor output;
       output.f = pool;
+      output.name = name;
       compute_shape(input, output, weight_shape);
+      
       return output;
   }
 
-  Tensor norm_layer(Tensor& input, Func mu, Func sigma) {
+  Tensor norm_layer(Tensor& input, Func mu, Func sigma, std::string name) {
       Func normed;
-      normed(c, i, j)  = (input.f(c, i, j) - mu(c)) / (1e-12f + sigma(c));
+      Expr e = input.f(c,i,j);
+      normed(c, i, j) = (input.f(c, i, j) - mu(c)) / (sqrt(sigma(c) + 1e-5f));
       Tensor output;
       output.f = normed;
       output.shape = input.shape;
+      output.name = name;
       return output;
   }
 
-  Tensor scale_layer(Tensor& input, Func gamma, Func beta) {
+  Tensor scale_layer(Tensor& input, Func gamma, Func beta, std::string name) {
       Func scaled;
       scaled(c, i, j) = input.f(c, i, j) * gamma(c) + beta(c);
       Tensor output;
       output.f = scaled;
       output.shape = input.shape;
+      output.name = name;
       return output;
   }
 
-  Tensor sum_layer(Tensor& t1, Tensor& t2) {
+  Tensor sum_layer(Tensor& t1, Tensor& t2, std::string name) {
       assert(t1.shape == t2.shape);
       Func summed;
       summed(c, i, j) = t1.f(c, i, j) + t2.f(c, i, j);
       Tensor output;
       output.f = summed;
       output.shape = t1.shape;
+      output.name = name;
       return output;
   }
 
-  void softmax_layer(Tensor& input, Func output, int classes) {
+  void softmax_layer(Tensor& input, Func output, int classes, std::string name) {
       assert(input.shape[0] == classes);
       RDom r(0, classes);
       Func exp_vals;

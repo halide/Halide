@@ -449,5 +449,23 @@ int main(int argc, char **argv) {
         Pipeline(out).auto_schedule(target, params);
     }
 
+    if (1) {
+        ImageParam im(Float(32), 2);
+
+        Func f("f");
+        f(x, y) = im(x, y);
+
+        Func scan("scan");
+        scan(x, y) = f(x, y);
+        RDom r(1, 1999);
+        scan(x, r) += scan(x, r-1);
+        scan(x, 1999-r) += scan(x, 2000-r);
+        Func casted("casted");
+        casted(x, y) = scan(x, y);
+
+        casted.estimate(x, 0, 2000).estimate(y, 0, 2000);
+        Pipeline(casted).auto_schedule(target, params);
+    }
+
     return 0;
 }

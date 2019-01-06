@@ -28,6 +28,7 @@
 #include <fstream>
 #include <iostream>
 #include <random>
+#include <math.h>
 
 using namespace Halide::Runtime;
 using namespace Halide::Tools;
@@ -78,8 +79,14 @@ Buffer<float> buffer_from_file(const std::string &filename, const std::vector<in
                 f = ((float)rng()) / rng.max() - 0.5f;
             });
     }
-
     return buf;
+}
+
+void buffer_to_file(const Buffer<float> &buf, const std::string &filename) {
+    std::ofstream o(filename, std::ios_base::trunc | std::ios_base::binary);
+    o.write((const char *)(buf.data()), buf.size_in_bytes());
+    o.close();
+    assert(!o.fail());
 }
 
 Buffer<float> load_conv_params(std::string shapefile, std::string datafile) {
@@ -88,7 +95,10 @@ Buffer<float> load_conv_params(std::string shapefile, std::string datafile) {
   int num_dims;
   load_shape(shapefile, &dims[0], n, num_dims);
   assert (num_dims == 4);
-  return buffer_from_file(datafile, {dims[0], dims[1], dims[2], dims[3]});
+  Buffer<float> buff = buffer_from_file(datafile, {dims[0], dims[1], dims[2], dims[3]});
+  std::cout << "weight shape for " << datafile << std::endl;
+  std::cout << buff.dim(0).extent() << " " << buff.dim(1).extent() << " " <<buff.dim(2).extent() << " " << buff.dim(3).extent() << std::endl;
+  return buff;
 }
 
 Buffer<float> load_batch_norm_params(std::string shapefile, std::string datafile) {
@@ -98,6 +108,21 @@ Buffer<float> load_batch_norm_params(std::string shapefile, std::string datafile
   load_shape(shapefile, &dims[0], n, num_dims);
   assert (num_dims == 1);
   return buffer_from_file(datafile, {dims[0]});
+}
+
+Buffer<float> load_batch_norm_var(std::string shapefile, std::string datafile) {
+  int dims[1];
+  int n;
+  int num_dims;
+  load_shape(shapefile, &dims[0], n, num_dims);
+  assert (num_dims == 1);
+  Buffer<float> buf = buffer_from_file(datafile, {dims[0]});
+  for (int i = 0; i < dims[0]; i++) {
+    if (buf(i) == 0.0f) {
+      std::cout << "INVALID" << std::endl;
+    }
+  }
+  return buf;
 }
 
 Buffer<float> load_fc_weight(std::string shapefile, std::string datafile) {
@@ -130,6 +155,16 @@ Buffer<float> rand_buffer(const std::vector<int> &shape) {
             f = ((float)rng()) / rng.max() - 0.5f;
         });
     return buf;
+}
+
+void normalize(Buffer<float> buff, const std::vector<float> &mean, const std::vector<float> &std) {
+  for (int i = 0; i < buff.dim(1).extent(); i++) {
+    for (int j = 0; j < buff.dim(2).extent(); j++) {
+      buff(0, i, j) = (buff(0, i, j) - mean[0])/std[0];
+      buff(1, i, j) = (buff(1, i, j) - mean[1])/std[1];
+      buff(2, i, j) = (buff(2, i, j) - mean[2])/std[2];
+    }
+  }
 }
 
 typedef int (*FnPtr)(
@@ -187,8 +222,6 @@ int main(int argc, char **argv) {
   if (argc > 1) {
       timing_iterations = atoi(argv[1]);
   }
-  //int macro_block_id = atoi(argv[2]);
-  //int micro_block_id = atoi(argv[3]);
 
   typedef std::vector<int> tensor_dim;
   std::vector<tensor_dim> block_dims{
@@ -199,6 +232,7 @@ int main(int argc, char **argv) {
   };
 
   /** setup inputs and outputs for each block **/
+  std::vector<int> image_shape = {3, 224, 224};
   std::vector<std::vector<int>> input_shapes;
   std::vector<std::vector<int>> output_shapes;
   int macro_block = 0;
@@ -216,14 +250,22 @@ int main(int argc, char **argv) {
     output_shapes.push_back(block_dims[macro_block]);
   }
 
-  std::vector<Buffer<float>> inputs(NUMBLOCKS);
+  /**
+  Buffer<float> im_planar = load_and_convert_image("cropped_panda.jpg");
+  Buffer<float> image(3, 224, 224);
+  image.copy_from(im_planar.transposed({2, 0, 1}));
+  normalize(image, {0.485, 0.456, 0.406}, {0.229, 0.224, 0.225});
+  **/
+  // load image that is prenormalized and transposed
+  Buffer<float> image = buffer_from_file("processed_panda.bin", image_shape);
+  std::cout << image.dim(0).extent() << " " << image.dim(1).extent() << " " << image.dim(2).extent() << std::endl;
+
   std::vector<Buffer<float>> block_outputs(NUMBLOCKS);
   for (int i = 0; i < NUMBLOCKS; i++) {
-    inputs[i] = rand_buffer(input_shapes[i]);
-    block_outputs[i] = rand_buffer(output_shapes[i]);
+    block_outputs[i] = Buffer<float>(output_shapes[i]);
   }
   Buffer<float> final_output(1000);
-
+  
   std::string weight_dir = "./weights/";
 
   Buffer<float> conv1_weights;
@@ -269,7 +311,7 @@ int main(int argc, char **argv) {
 
   shapefile = weight_dir + "bn1_running_var_shape.data";
   datafile = weight_dir + "bn1_running_var.data";
-  conv1_sig = load_batch_norm_params(shapefile, datafile);
+  conv1_sig = load_batch_norm_var(shapefile, datafile);
 
   shapefile = weight_dir + "bn1_weight_shape.data";
   datafile = weight_dir + "bn1_weight.data";
@@ -285,7 +327,6 @@ int main(int argc, char **argv) {
                                  "layer4_0", "layer4_1", "layer4_2"};
 
   std::string br1_names[4] = {"layer1_0_downsample", "layer2_0_downsample", "layer3_0_downsample", "layer4_0_downsample"};
-
 
   // load branch 1 data
   for (int i = 0; i < 4; i++) {
@@ -306,7 +347,7 @@ int main(int argc, char **argv) {
 
     br1_conv_weights[i] = load_conv_params(conv_shapefile, conv_datafile);
     br1_mu[i] = load_batch_norm_params(mu_shapefile, mu_datafile);
-    br1_sig[i] = load_batch_norm_params(sig_shapefile, sig_datafile);
+    br1_sig[i] = load_batch_norm_var(sig_shapefile, sig_datafile);
     br1_gamma[i] = load_batch_norm_params(gamma_shapefile, gamma_datafile);
     br1_beta[i] = load_batch_norm_params(beta_shapefile, beta_datafile);
   }
@@ -334,21 +375,21 @@ int main(int argc, char **argv) {
       if (j == 1) {
         br2a_conv_weights[i] = load_conv_params(conv_shapefile, conv_datafile);
         br2a_mu[i] = load_batch_norm_params(mu_shapefile, mu_datafile);
-        br2a_sig[i] = load_batch_norm_params(sig_shapefile, sig_datafile);
+        br2a_sig[i] = load_batch_norm_var(sig_shapefile, sig_datafile);
         br2a_gamma[i] = load_batch_norm_params(gamma_shapefile, gamma_datafile);
         br2a_beta[i] = load_batch_norm_params(beta_shapefile, beta_datafile);
       }
       else if (j == 2) {
         br2b_conv_weights[i] = load_conv_params(conv_shapefile, conv_datafile);
         br2b_mu[i] = load_batch_norm_params(mu_shapefile, mu_datafile);
-        br2b_sig[i] = load_batch_norm_params(sig_shapefile, sig_datafile);
+        br2b_sig[i] = load_batch_norm_var(sig_shapefile, sig_datafile);
         br2b_gamma[i] = load_batch_norm_params(gamma_shapefile, gamma_datafile);
         br2b_beta[i] = load_batch_norm_params(beta_shapefile, beta_datafile);
       }
       else {
         br2c_conv_weights[i] = load_conv_params(conv_shapefile, conv_datafile);
         br2c_mu[i] = load_batch_norm_params(mu_shapefile, mu_datafile);
-        br2c_sig[i] = load_batch_norm_params(sig_shapefile, sig_datafile);
+        br2c_sig[i] = load_batch_norm_var(sig_shapefile, sig_datafile);
         br2c_gamma[i] = load_batch_norm_params(gamma_shapefile, gamma_datafile);
         br2c_beta[i] = load_batch_norm_params(beta_shapefile, beta_datafile);
       }
@@ -363,12 +404,24 @@ int main(int argc, char **argv) {
 
   Buffer<float> fc1000_weights = load_fc_weight(weight_shapefile, weight_datafile);
   Buffer<float> fc1000_bias = load_fc_bias(bias_shapefile, bias_datafile);
+  Buffer<float> input;
 
   /** DONE LOADING WEIGHTS **/
   double best = benchmark(timing_iterations, 1, [&]() {
-    for (int block_id = 0; block_id < NUMBLOCKS; block_id++) {
+    input = image;
+
+    for (int block_id = 0; block_id < 16; block_id++) {
+      std::vector<int> blockin_dim;
+      if (block_id == 0) {
+        blockin_dim = {64, 56, 56};
+      }
+      else {
+        blockin_dim = input_shapes[block_id];
+      }
+
       FnPtr blockfn = blockFns[block_id];
-      blockfn(inputs[block_id],
+
+      blockfn(input,
             conv1_gamma,
             unroll_array_of_4_buffers(br1_gamma),
             unroll_array_of_16_buffers(br2a_gamma),
@@ -398,9 +451,21 @@ int main(int argc, char **argv) {
             fc1000_bias,
             block_outputs[block_id],
             final_output);
+        input = block_outputs[block_id];
     }
   });
-
+  
   printf("Manually tuned time: %gms\n", best * 1e3);
+  // check final output
+  buffer_to_file(final_output, "res50gen_output.bin");
+  int max_class = -1;
+  float max_val = -100;
+  for (int i = 0; i < 1000; i++) {
+    if (final_output(i) > max_val) {
+      max_val = final_output(i);
+      max_class = i;
+    }
+  }
+  std::cout << " class: " << max_class << std::endl;
 
 }

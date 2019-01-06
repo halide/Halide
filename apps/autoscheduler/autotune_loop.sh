@@ -14,7 +14,7 @@ HL_TARGET=${3}
 START_WEIGHTS_DIR=${4}
 AUTOSCHED_BIN=${5}
 
-COMPILATION_TIMEOUT=120s
+COMPILATION_TIMEOUT=600s
 BENCHMARKING_TIMEOUT=60s
 
 if [ -z ${HL_TARGET} ]; then
@@ -75,7 +75,7 @@ make_sample() {
     if [[ $D == */0 ]]; then
         # Sample 0 in each batch is best effort beam search, with no randomness
         dropout=100
-        beam=50
+        beam=32
     else
         # The other samples are random probes biased by the cost model
         dropout=25
@@ -134,6 +134,13 @@ benchmark_sample() {
 # Don't clobber existing samples
 FIRST=$(ls -d ${SAMPLES}/batch_* 2>/dev/null | sed -e "s|.*/batch_||" | sort -n | tail -n1)
 
+if [ $(uname -s) = "Darwin" ]; then
+    LOCAL_CORES=`sysctl -n hw.ncpu`
+else
+    LOCAL_CORES=`nproc`
+fi
+echo Local number of cores detected as ${LOCAL_CORES}
+
 for ((i=$((FIRST+1));i<1000000;i++)); do
     # Compile a batch of samples using the generator in parallel
     DIR=${SAMPLES}/batch_${i}
@@ -142,13 +149,26 @@ for ((i=$((FIRST+1));i<1000000;i++)); do
     mkdir -p ${DIR}/weights_used/
     cp ${WEIGHTS}/* ${DIR}/weights_used/
 
-    echo Compiling ${BATCH_SIZE} samples for batch_${i}...
-    for ((b=0;b<${BATCH_SIZE};b++)); do
-        S=$(printf "%d%02d" $i $b)
-        FNAME=$(printf "%s_batch_%02d_sample_%02d" ${PIPELINE} $i $b)
-        make_sample "${DIR}/${b}" $S $FNAME &
+    # Do parallel compilation in batches, so that machines with fewer than BATCH_SIZE cores
+    # don't get swamped and timeout unnecessarily
+    GROUP_SIZE=${LOCAL_CORES}
+    if [[ ${GROUP_SIZE} -gt ${BATCH_SIZE} ]]; then
+        GROUP_SIZE=${BATCH_SIZE}
+    fi
+
+    for ((GROUP=0;GROUP<${BATCH_SIZE};GROUP+=${GROUP_SIZE})); do
+        LIMIT=$((GROUP+GROUP_SIZE))
+        if [[ ${LIMIT} -gt ${BATCH_SIZE} ]]; then
+            LIMIT=${BATCH_SIZE}
+        fi
+        echo Compiling samples ${GROUP}..$((LIMIT-1)) for batch_${i}...
+        for ((b=${GROUP};b<${LIMIT};b++)); do
+            S=$(printf "%d%02d" $i $b)
+            FNAME=$(printf "%s_batch_%02d_sample_%02d" ${PIPELINE} $i $b)
+            make_sample "${DIR}/${b}" $S $FNAME &
+        done
+        wait
     done
-    wait
 
     # benchmark them serially using rungen
     for ((b=0;b<${BATCH_SIZE};b++)); do
