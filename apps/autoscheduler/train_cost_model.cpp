@@ -153,11 +153,6 @@ map<int, PipelineSample> load_samples() {
 
 
 
-        if (runtime < ps.fastest_runtime) {
-            ps.fastest_runtime = runtime;
-            ps.fastest_schedule = schedule_hash;
-        }
-
         auto it = ps.schedules.find(schedule_hash);
         if (it != ps.schedules.end()) {
             // Keep the smallest runtime at the front
@@ -168,6 +163,10 @@ map<int, PipelineSample> load_samples() {
                 it->second.filename = s;
             } else {
                 it->second.runtimes.push_back(runtime);
+            }
+            if (runtime < ps.fastest_runtime) {
+                ps.fastest_runtime = runtime;
+                ps.fastest_schedule = schedule_hash;
             }
         } else {
             Sample sample;
@@ -190,12 +189,18 @@ map<int, PipelineSample> load_samples() {
                     }
                     sample.schedule_features(x, i) = f;
                 }
-                // Patch a bug in the featurization in the training data
-                if (sample.schedule_features(0, i) > 1) { // If multiple realizations
-                    sample.schedule_features(8, i) = 1; // No inner parallelism
+                /*
+                if (sample.schedule_features(0, i) != sample.schedule_features(1, i)) {
+                    std::cout << "Rejecting sliding window schedule for now\n";
+                    ok = false;
                 }
+                */
             }
             if (ok) {
+                if (runtime < ps.fastest_runtime) {
+                    ps.fastest_runtime = runtime;
+                    ps.fastest_schedule = schedule_hash;
+                }
                 ps.schedules.emplace(schedule_hash, std::move(sample));
                 num_unique++;
             }
@@ -305,7 +310,7 @@ int main(int argc, char **argv) {
             // do a training run where a validation set member was in the
             // training set of a previous run. The id of the fastest
             // schedule will do as a hash.
-            if ((p.second.pipeline_hash & 3) == 0) {
+            if ((p.second.pipeline_hash & 7) == 0) {
                 validation_set.insert(p);
             }
         }
@@ -339,6 +344,7 @@ int main(int argc, char **argv) {
             uint64_t worst_miss_schedule_id = 0;
 
             struct Inversion {
+                int pipeline_id;
                 string f1, f2;
                 float p1, p2;
                 float r1, r2;
@@ -416,16 +422,19 @@ int main(int argc, char **argv) {
                                 if (sched.second.prediction[model] >= ref.prediction[model]) {
                                     good++;
                                 } else {
-                                    float badness = (sched.second.runtimes[0] - ref.runtimes[0]) * (ref.prediction[model] - sched.second.prediction[model]);
-                                    badness /= (ref.runtimes[0] * ref.runtimes[0]);
-                                    if (badness > worst_inversion.badness) {
-                                        worst_inversion.badness = badness;
-                                        worst_inversion.r1 = ref.runtimes[0];
-                                        worst_inversion.r2 = sched.second.runtimes[0];
-                                        worst_inversion.p1 = ref.prediction[model];
-                                        worst_inversion.p2 = sched.second.prediction[model];
-                                        worst_inversion.f1 = ref.filename;
-                                        worst_inversion.f2 = sched.second.filename;
+                                    if (train) {
+                                        float badness = (sched.second.runtimes[0] - ref.runtimes[0]) * (ref.prediction[model] - sched.second.prediction[model]);
+                                        badness /= (ref.runtimes[0] * ref.runtimes[0]);
+                                        if (badness > worst_inversion.badness) {
+                                            worst_inversion.pipeline_id = p.first;
+                                            worst_inversion.badness = badness;
+                                            worst_inversion.r1 = ref.runtimes[0];
+                                            worst_inversion.r2 = sched.second.runtimes[0];
+                                            worst_inversion.p1 = ref.prediction[model];
+                                            worst_inversion.p2 = sched.second.prediction[model];
+                                            worst_inversion.f1 = ref.filename;
+                                            worst_inversion.f2 = sched.second.filename;
+                                        }
                                     }
                                     bad++;
                                 }
@@ -482,6 +491,7 @@ int main(int argc, char **argv) {
                 std::cout << "Worst inversion:\n"
                           << worst_inversion.f1 << " predicted: " << worst_inversion.p1 << " actual: " << worst_inversion.r1 << "\n"
                           << worst_inversion.f2 << " predicted: " << worst_inversion.p2 << " actual: " << worst_inversion.r2 << "\n";
+                samples.erase(worst_inversion.pipeline_id);
             }
 
             tpp[best_model]->save_weights();
