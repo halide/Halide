@@ -229,6 +229,11 @@ public:
         Expr unique_lines_read_per_vector = schedule_features(n, idx++, w);
         Expr unique_bytes_read_per_task = schedule_features(n, idx++, w);
         Expr unique_lines_read_per_task = schedule_features(n, idx++, w);
+
+        Expr working_set_at_task = schedule_features(n, idx++, w);
+        Expr working_set_at_production = schedule_features(n, idx++, w);
+        Expr working_set_at_realization = schedule_features(n, idx++, w);
+        Expr working_set_at_root = schedule_features(n, idx++, w);
         assert(idx == head2_w);
 
         // Count up the number of things computed

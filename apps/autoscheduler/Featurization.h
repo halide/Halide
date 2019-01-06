@@ -123,6 +123,10 @@ struct ScheduleFeatures {
         return sizeof(ScheduleFeatures) / sizeof(int64_t);
     }
 
+    static constexpr int version() {
+        return 2;
+    }
+
     int64_t num_realizations = 0; // Product of outer loops at store_at site
     int64_t num_productions = 0;  // Product of outer loops at compute_at site
     int64_t points_computed_per_realization = 0; // Number of times the innermost stmt happens per store_at
@@ -177,6 +181,11 @@ struct ScheduleFeatures {
     int64_t unique_bytes_read_per_task = 0;
     int64_t unique_lines_read_per_task = 0;
 
+    int64_t working_set_at_task = 0;
+    int64_t working_set_at_production = 0;
+    int64_t working_set_at_realization = 0;
+    int64_t working_set_at_root = 0;
+
     void dump() const {
         std::cerr << "    num_realizations:                      " << num_realizations << '\n'
                   << "    num_productions:                       " << num_productions << '\n'
@@ -211,7 +220,11 @@ struct ScheduleFeatures {
                   << "    unique_bytes_read_per_vector:          " << unique_bytes_read_per_vector << '\n'
                   << "    unique_lines_read_per_vector:          " << unique_lines_read_per_vector << '\n'
                   << "    unique_bytes_read_per_task:            " << unique_bytes_read_per_task << '\n'
-                  << "    unique_lines_read_per_task:            " << unique_lines_read_per_task << '\n';
+                  << "    unique_lines_read_per_task:            " << unique_lines_read_per_task << '\n'
+                  << "    working_set_at_task:                   " << working_set_at_task << '\n'
+                  << "    working_set_at_production:             " << working_set_at_production << '\n'
+                  << "    working_set_at_realization:            " << working_set_at_realization << '\n'
+                  << "    working_set_at_root:                   " << working_set_at_root << '\n';
 
     }
 };
