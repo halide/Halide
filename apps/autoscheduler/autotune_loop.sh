@@ -8,6 +8,9 @@ fi
 
 set -eu
 
+trap "exit" INT TERM
+trap "kill 0" EXIT
+
 GENERATOR=${1}
 PIPELINE=${2}
 HL_TARGET=${3}
@@ -78,7 +81,7 @@ make_sample() {
         beam=32
     else
         # The other samples are random probes biased by the cost model
-        dropout=25
+        dropout=90
         beam=1
     fi
     HL_PERMIT_FAILED_UNROLL=1 \
@@ -151,24 +154,22 @@ for ((i=$((FIRST+1));i<1000000;i++)); do
 
     # Do parallel compilation in batches, so that machines with fewer than BATCH_SIZE cores
     # don't get swamped and timeout unnecessarily
-    GROUP_SIZE=${LOCAL_CORES}
-    if [[ ${GROUP_SIZE} -gt ${BATCH_SIZE} ]]; then
-        GROUP_SIZE=${BATCH_SIZE}
-    fi
-
-    for ((GROUP=0;GROUP<${BATCH_SIZE};GROUP+=${GROUP_SIZE})); do
-        LIMIT=$((GROUP+GROUP_SIZE))
-        if [[ ${LIMIT} -gt ${BATCH_SIZE} ]]; then
-            LIMIT=${BATCH_SIZE}
-        fi
-        echo Compiling samples ${GROUP}..$((LIMIT-1)) for batch_${i}...
-        for ((b=${GROUP};b<${LIMIT};b++)); do
-            S=$(printf "%d%02d" $i $b)
-            FNAME=$(printf "%s_batch_%02d_sample_%02d" ${PIPELINE} $i $b)
-            make_sample "${DIR}/${b}" $S $FNAME &
+    echo Compiling samples
+    for ((b=0;b<${BATCH_SIZE};b++)); do        
+        while [[ 1 ]]; do
+              RUNNING=$(jobs -r | wc -l)
+              if [[ RUNNING -ge LOCAL_CORES ]]; then
+                  sleep 1
+              else
+                  break
+              fi
         done
-        wait
+
+        S=$(printf "%d%02d" $i $b)
+        FNAME=$(printf "%s_batch_%02d_sample_%02d" ${PIPELINE} $i $b)
+        make_sample "${DIR}/${b}" $S $FNAME &
     done
+    wait
 
     # benchmark them serially using rungen
     for ((b=0;b<${BATCH_SIZE};b++)); do
@@ -179,6 +180,6 @@ for ((i=$((FIRST+1));i<1000000;i++)); do
     # retrain model weights on all samples seen so far
     echo Retraining model...
     find ${SAMPLES} | grep sample$ | \
-        HL_NUM_THREADS=32 HL_WEIGHTS_DIR=${WEIGHTS} HL_BEST_SCHEDULE_FILE=${PWD}/samples/best.txt ${AUTOSCHED_BIN}/train_cost_model 1 0.001
+        HL_NUM_THREADS=32 HL_WEIGHTS_DIR=${WEIGHTS} HL_BEST_SCHEDULE_FILE=${PWD}/samples/best.txt ${AUTOSCHED_BIN}/train_cost_model ${BATCH_SIZE} 0.001
 
 done
