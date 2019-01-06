@@ -3,6 +3,8 @@ include ../support/autoscheduler.inc
 
 BIN ?= bin
 
+HL_TARGET=host-cuda
+
 all: $(BIN)/process
 
 $(BIN)/nl_means.generator: nl_means_generator.cpp $(GENERATOR_DEPS)
@@ -19,8 +21,12 @@ $(BIN)/nl_means_classic_auto_schedule.a: $(BIN)/nl_means.generator
 
 $(BIN)/nl_means_auto_schedule.a: $(BIN)/nl_means.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@-mkdir -p $(BIN)
-	HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/weights HL_MACHINE_PARAMS=32,1,1 \
-	$< -g nl_means -o $(BIN) -f nl_means_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so
+	HL_PERMIT_FAILED_UNROLL=1 \
+	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/weights \
+	HL_MACHINE_PARAMS=500,1,1 \
+	HL_DEBUG_CODEGEN=1 \
+	HL_SHARED_MEMORY_LIMIT=24 \
+	$< -g nl_means -o $(BIN) -f nl_means_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so 2> stderr.txt > stdout.txt
 
 $(BIN)/process: process.cpp $(BIN)/nl_means.a $(BIN)/nl_means_classic_auto_schedule.a $(BIN)/nl_means_auto_schedule.a
 	@-mkdir -p $(BIN)
