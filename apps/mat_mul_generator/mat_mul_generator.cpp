@@ -4,7 +4,7 @@ namespace {
 
 class MatMul : public Halide::Generator<MatMul> {
 public:
-    GeneratorParam<int>     matrix_size{"matrix_size", 992};
+    GeneratorParam<int>     matrix_size{"matrix_size", 1536};
 
     Input<Buffer<float>>    input_a{"input_a", 2};
     Input<Buffer<float>>    input_b{"input_b", 2};
