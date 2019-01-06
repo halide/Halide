@@ -330,7 +330,6 @@ struct LoopNest {
                           const LoopNest *parent,
                           const LoopNest &root,
                           int64_t *working_set,
-                          std::set<pair<const FunctionDAG::Node *, const LoopNest *>> *cross_core_transfers,
                           StageMap<ScheduleFeatures> *features) const {
 
         int64_t working_set_here = 0;
@@ -419,7 +418,7 @@ struct LoopNest {
         if (is_root()) {
             // TODO: This block of code is repeated below. Refactor
             for (const auto &c : children) {
-                c->compute_features(dag, params, sites, subinstances, parallelism, this, root, &working_set_here, cross_core_transfers, features);
+                c->compute_features(dag, params, sites, subinstances, parallelism, this, root, &working_set_here, features);
             }
 
             for (const auto *node : store_at) {
@@ -575,7 +574,7 @@ struct LoopNest {
 
         // Recurse inwards
         for (const auto &c : children) {
-            c->compute_features(dag, params, sites, subinstances, subparallelism, this, root, &working_set_here, cross_core_transfers, features);
+            c->compute_features(dag, params, sites, subinstances, subparallelism, this, root, &working_set_here, features);
         }
         for (const auto *node : store_at) {
             auto &feat = features->get(&(node->stages[0]));
@@ -813,15 +812,9 @@ struct LoopNest {
                     }
 
                     if (at_production && producer_store_site->is_root()) {
-                        pair<const FunctionDAG::Node *, const LoopNest *> task_pair(e->producer, consumer_task_site);
-                        const bool off_core_load_cost_already_paid = (cross_core_transfers->count(task_pair) > 0);
-                        if (!off_core_load_cost_already_paid) {
-                            off_core_bytes_loaded += task_footprint;
-                            off_core_lines_loaded += task_line_footprint;
-                            cross_core_transfers->insert(task_pair);
-                        }
+                        off_core_bytes_loaded += task_footprint;
+                        off_core_lines_loaded += task_line_footprint;
                     }
-
                 }
             }
         }
@@ -1902,8 +1895,7 @@ struct State {
             }
         }
 
-        std::set<pair<const FunctionDAG::Node *, const LoopNest *>> cross_core_transfers;
-        root->compute_features(dag, params, sites, 1, 1, nullptr, *root, nullptr, &cross_core_transfers, features);
+        root->compute_features(dag, params, sites, 1, 1, nullptr, *root, nullptr, features);
 
         for (const auto &n : dag.nodes) {
             if (sites.get(&(n.stages[0])).produce == nullptr) {
