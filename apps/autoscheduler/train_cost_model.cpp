@@ -104,7 +104,7 @@ map<int, PipelineSample> load_samples() {
         const size_t num_stages = num_features / features_per_stage;
 
         const float runtime = scratch[num_features];
-        if (runtime <= 0 || runtime > 10000) { // Don't try to predict runtime over 1s
+        if (runtime > 10000) { // Don't try to predict runtime over 10s
             std::cout << "Implausible runtime in ms: " << runtime << "\n";
             continue;
         }
@@ -297,20 +297,22 @@ int main(int argc, char **argv) {
 
     std::cout << "Iterating over " << samples.size() << " samples using seed = " << seed << "\n";
     decltype(samples) validation_set;
-    for (auto p : samples) {
-        // Whether or not a pipeline is part of the validation set
-        // can't be a call to rand. It must be a fixed property of a
-        // hash of some aspect of it.  This way you don't accidentally
-        // do a training run where a validation set member was in the
-        // training set of a previous run. The id of the fastest
-        // schedule will do as a hash.
-        if ((p.second.pipeline_hash & 3) == 0) {
-            validation_set.insert(p);
+    if (samples.size() > 1) {
+        for (auto p : samples) {
+            // Whether or not a pipeline is part of the validation set
+            // can't be a call to rand. It must be a fixed property of a
+            // hash of some aspect of it.  This way you don't accidentally
+            // do a training run where a validation set member was in the
+            // training set of a previous run. The id of the fastest
+            // schedule will do as a hash.
+            if ((p.second.pipeline_hash & 3) == 0) {
+                validation_set.insert(p);
+            }
         }
-    }
 
-    for (auto p : validation_set) {
-        samples.erase(p.first);
+        for (auto p : validation_set) {
+            samples.erase(p.first);
+        }
     }
 
     std::vector<float> rates;
@@ -410,7 +412,7 @@ int main(int argc, char **argv) {
                                 if (sched.second.prediction[model] == 0) continue;
                                 assert(sched.second.runtimes[0] >= ref.runtimes[0]);
                                 float runtime_ratio = sched.second.runtimes[0] / ref.runtimes[0];
-                                if (runtime_ratio <= 1.1) continue; // Within 10% of the runtime of the best
+                                if (runtime_ratio <= 1.3f) continue; // Within 30% of the runtime of the best
                                 if (sched.second.prediction[model] >= ref.prediction[model]) {
                                     good++;
                                 } else {

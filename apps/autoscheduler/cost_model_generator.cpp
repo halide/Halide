@@ -229,6 +229,11 @@ public:
         Expr unique_lines_read_per_vector = schedule_features(n, idx++, w);
         Expr unique_bytes_read_per_task = schedule_features(n, idx++, w);
         Expr unique_lines_read_per_task = schedule_features(n, idx++, w);
+
+        Expr working_set_at_task = schedule_features(n, idx++, w);
+        Expr working_set_at_production = schedule_features(n, idx++, w);
+        Expr working_set_at_realization = schedule_features(n, idx++, w);
+        Expr working_set_at_root = schedule_features(n, idx++, w);
         assert(idx == head2_w);
 
         // Count up the number of things computed
@@ -371,7 +376,7 @@ public:
             Expr significance = 1 - 1 / r1;
 
             // p1 should be at least 1 larger than p2, in units of the true runtime of the fastest schedule
-            Expr correct_order = significance * (sqrt(1 + max(0, p2 + 1 - p1)) - 1);
+            Expr correct_order = significance * max(0, p2 + 1 - p1);
             err(n) = correct_order + 1e-5f * regularize;
 
             Expr loss = sum(err(r_batch));
