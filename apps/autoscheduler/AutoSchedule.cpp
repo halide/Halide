@@ -952,7 +952,6 @@ struct LoopNest {
             // Use the bounds estimate
             for (int i = 0; i < f->func.dimensions(); i++) {
                 bound->region_required(i) = f->estimated_region_required[i];
-                internal_assert(!bound->region_required(i).constant_extent()) << "We don't handle .bound directives yet. This shouldn't be constant\n";
             }
         } else {
             internal_assert(!f->outgoing_edges.empty())
@@ -1275,7 +1274,7 @@ struct LoopNest {
             extent = (extent + outer_extent - 1) / outer_extent;
             // Pick a better representative loop iteration
             min += (outer_extent / 2) * extent;
-            bool compile_time_constant_bounds = (outer_extent > 1) && stage->loop[i].pure;
+            bool compile_time_constant_bounds = p.constant_extent() || ((outer_extent > 1) && stage->loop[i].pure);
             b->loops(stage_idx, i) = Span(min, min + extent - 1, compile_time_constant_bounds);
         }
         outer->set_bounds(node, b);

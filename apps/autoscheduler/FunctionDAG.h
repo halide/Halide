@@ -980,7 +980,15 @@ struct FunctionDAG {
                     for (auto b : consumer.schedule().estimates()) {
                         int64_t i_min = *as_const_int(b.min);
                         int64_t i_extent = *as_const_int(b.extent);
-                        estimates[b.var] = Span(i_min, i_min + i_extent - 1, false); // TODO: Last arg might be true if there's also an explicit bound
+                        estimates[b.var] = Span(i_min, i_min + i_extent - 1, false);
+                    }
+                    for (auto b : consumer.schedule().bounds()) {
+                        const int64_t *i_min = as_const_int(b.min);
+                        const int64_t *i_extent = as_const_int(b.extent);
+                        if (i_min && i_extent) {
+                            // It's a true bound, not just an estimate
+                            estimates[b.var] = Span(*i_min, *i_min + *i_extent - 1, true);
+                        }
                     }
                     // Set the bounds using the estimates
                     for (int i = 0; i < consumer.dimensions(); i++) {
