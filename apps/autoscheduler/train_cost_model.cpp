@@ -491,7 +491,14 @@ int main(int argc, char **argv) {
                 std::cout << "Worst inversion:\n"
                           << worst_inversion.f1 << " predicted: " << worst_inversion.p1 << " actual: " << worst_inversion.r1 << "\n"
                           << worst_inversion.f2 << " predicted: " << worst_inversion.p2 << " actual: " << worst_inversion.r2 << "\n";
-                samples.erase(worst_inversion.pipeline_id);
+                if (samples.size() > 5000) {
+                    // For robustness during training on large numbers
+                    // of random pipelines, we discard poorly
+                    // performing samples from the training set
+                    // only. Some of them are weird degenerate
+                    // pipelines.
+                    samples.erase(worst_inversion.pipeline_id);
+                }
             }
 
             tpp[best_model]->save_weights();
