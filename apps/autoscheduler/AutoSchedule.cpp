@@ -375,7 +375,7 @@ struct LoopNest {
                 bool vectorized = false;
                 for (int i = 0; i < (int)node->stages[s].loop.size(); i++) {
                     const auto &p = bounds->loops(s, i);
-                    int64_t extent = p.second - p.first + 1;
+                    int64_t extent = p.extent();
                     feat.points_computed_per_realization *= extent;
                     if (i == sites.get(&(node->stages[s])).produce->vectorized_loop_index) {
                         // Assumes that we're not going to split
@@ -398,13 +398,12 @@ struct LoopNest {
                 feat.bytes_at_realization = node->bytes_per_point;
                 for (int i = 0; i < node->func.dimensions(); i++) {
                     const auto &p = bounds->region_computed(i);
-                    feat.bytes_at_realization *= (p.second - p.first) + 1;
+                    feat.bytes_at_realization *= p.extent();
                 }
                 int64_t innermost_storage_extent = 1;
                 int v = sites.get(&(node->stages[s])).produce->vector_dim;
                 if (v >= 0 && node->func.dimensions() > 0) {
-                    innermost_storage_extent = (bounds->region_computed(v).second -
-                                                bounds->region_computed(v).first + 1);
+                    innermost_storage_extent = bounds->region_computed(v).extent();
                 }
                 feat.innermost_bytes_at_realization = node->bytes_per_point * innermost_storage_extent;
 
@@ -448,7 +447,7 @@ struct LoopNest {
                 feat.bytes_at_root = node->bytes_per_point;
                 for (int i = 0; i < node->func.dimensions(); i++) {
                     const auto &p = root_bounds->region_computed(i);
-                    feat.bytes_at_root *= (p.second - p.first) + 1;
+                    feat.bytes_at_root *= p.extent();
                 }
 
                 feat.working_set_at_root = working_set_here;
@@ -461,7 +460,7 @@ struct LoopNest {
                     int64_t innermost_storage_extent = 1;
                     int v = p->vector_dim;
                     if (v >= 0 && node->func.dimensions() > 0) {
-                        innermost_storage_extent = root_bounds->region_computed(v).second - root_bounds->region_computed(v).first + 1;
+                        innermost_storage_extent = root_bounds->region_computed(v).extent();
                     }
                     feat.innermost_bytes_at_root = node->bytes_per_point * innermost_storage_extent;
                 } else {
@@ -471,7 +470,7 @@ struct LoopNest {
                 feat.points_computed_minimum = 1;
                 for (int i = 0; i < (int)stage->loop.size(); i++) {
                     const auto &p = root_bounds->loops(stage->index, i);
-                    feat.points_computed_minimum *= (p.second - p.first + 1);
+                    feat.points_computed_minimum *= p.extent();
                 }
 
                 if (node->stages.size() == 1 && !node->is_output) {
@@ -536,7 +535,7 @@ struct LoopNest {
                         }
                     }
                     const auto &p = bounds->region_computed(i);
-                    int64_t extent = (p.second - p.first) + 1;
+                    int64_t extent = p.extent();
                     extent /= outer;
                     feat.bytes_at_task *= extent;
                     if (i == vector_dim) {
@@ -563,11 +562,11 @@ struct LoopNest {
             feat.bytes_at_production = node->bytes_per_point;
             for (int i = 0; i < node->func.dimensions(); i++) {
                 const auto &p = bounds->region_computed(i);
-                feat.bytes_at_production *= (p.second - p.first) + 1;
+                feat.bytes_at_production *= p.extent();
             }
             int64_t innermost_storage_extent = 1;
             if (vector_dim >= 0 && node->func.dimensions() > 0) {
-                innermost_storage_extent = bounds->region_computed(vector_dim).second - bounds->region_computed(vector_dim).first + 1;
+                innermost_storage_extent = bounds->region_computed(vector_dim).extent();
             }
             feat.innermost_bytes_at_production = node->bytes_per_point * innermost_storage_extent;
         }
@@ -774,14 +773,14 @@ struct LoopNest {
                         auto store_p = producer_store_bounds->region_required(i);
                         auto task_p = task_bounds->region_required(i);
 
-                        internal_assert(store_p.first <= store_p.second) << store_p.first << " " << store_p.second << "\n";
-                        internal_assert(compute_p.first <= compute_p.second) << compute_p.first << " " << compute_p.second << "\n";
-                        internal_assert(task_p.first <= task_p.second) << task_p.first << " " << task_p.second << "\n";
+                        internal_assert(store_p.min() <= store_p.max()) << store_p.min() << " " << store_p.max() << "\n";
+                        internal_assert(compute_p.min() <= compute_p.max()) << compute_p.min() << " " << compute_p.max() << "\n";
+                        internal_assert(task_p.min() <= task_p.max()) << task_p.min() << " " << task_p.max() << "\n";
 
-                        int64_t extent = p.second - p.first + 1;
-                        int64_t compute_extent = compute_p.second - compute_p.first + 1;
-                        int64_t store_extent = store_p.second - store_p.first + 1;
-                        int64_t task_extent = task_p.second - task_p.first + 1;
+                        int64_t extent = p.extent();
+                        int64_t compute_extent = compute_p.extent();
+                        int64_t store_extent = store_p.extent();
+                        int64_t task_extent = task_p.extent();
 
                         max_extent = std::max(extent, max_extent);
                         max_compute_extent = std::max(compute_extent, max_compute_extent);
@@ -938,7 +937,7 @@ struct LoopNest {
             internal_assert(!f->outgoing_edges.empty())
                 << "No consumers of " << f->func.name()
                 << " at loop over " << (is_root() ? "root" : node->func.name()) << '\n';
-            std::pair<int64_t, int64_t> init {INT64_MAX, INT64_MIN};
+            auto init = Span::empty_span();
             for (int i = 0; i < f->func.dimensions(); i++) {
                 bound->region_required(i) = init;
             }
@@ -1140,22 +1139,22 @@ struct LoopNest {
             for (size_t i = 0; i < loop_dim; i++) {
                 const auto &l = bounds->loops(s, i);
                 // Initialize the loop nest
-                node->size[i] = l.second - l.first + 1;
+                node->size[i] = l.extent();
                 total_extent *= node->size[i];
 
                 // Use the first loop iteration to represent the inner
                 // loop. We'll shift it to a later one once we decide
                 // on vectorization.
-                single_point->loops(s, i) = {l.first, l.first};
+                single_point->loops(s, i) = Span(l.min(), l.min(), true);
 
-                internal_assert(l.second >= l.first) << i << " " << l.second << " " << l.first << "\n";
+                internal_assert(l.max() >= l.min()) << i << " " << l.max() << " " << l.min() << "\n";
 
                 if (f->func.dimensions() &&
                     node->size[i] >= 1 &&
                     f->stages[s].loop[i].var == f->func.args()[v]) {
                     node->vectorized_loop_index = (int)i;
                     vector_size = (int64_t)(node->stage->vector_size);
-                    single_point->loops(s, i).second += vector_size - 1;
+                    single_point->loops(s, i).set_extent(vector_size);
                     node->size[i] += vector_size - 1;
                     node->size[i] /= vector_size;
 
@@ -1163,12 +1162,10 @@ struct LoopNest {
                     // vector size, to pick a more representative vector
                     // than the first.
                     int64_t shift = vector_size * (node->size[i] / 2);
-                    single_point->loops(s, i).first += shift;
-                    single_point->loops(s, i).second += shift;
+                    single_point->loops(s, i).translate(shift);
                 } else {
                     int64_t shift = node->size[i] / 2;
-                    single_point->loops(s, i).first += shift;
-                    single_point->loops(s, i).second += shift;
+                    single_point->loops(s, i).translate(shift);
                 }
             }
             // Leave region required blank inside the computation of a Func
@@ -1190,7 +1187,7 @@ struct LoopNest {
                 one_vector->innermost = true;
                 auto b = node->get_bounds(f)->make_copy();
                 // Set the region computed inside this node to be the first vector lane
-                b->loops(s, node->vectorized_loop_index).second = b->loops(s, node->vectorized_loop_index).first;
+                b->loops(s, node->vectorized_loop_index).set_extent(1);
                 one_vector->set_bounds(f, b);
                 one_vector->size[node->vectorized_loop_index] = vector_size;
 
@@ -1249,12 +1246,12 @@ struct LoopNest {
 
             outer->size[i] = outer_extent;
             const auto &p = parent_bounds->loops(stage_idx, i);
-            int64_t min = p.first;
-            int64_t extent = p.second - min + 1;
+            int64_t min = p.min();
+            int64_t extent = p.extent();
             extent = (extent + outer_extent - 1) / outer_extent;
             // Pick a better representative loop iteration
             min += (outer_extent / 2) * extent;
-            b->loops(stage_idx, i) = {min, min + extent - 1};
+            b->loops(stage_idx, i) = Span(min, min + extent - 1, false); // TODO: last arg is true if outer_extent > 1 and we're not in a guardwithif situation
         }
         outer->set_bounds(node, b);
 
@@ -1281,8 +1278,8 @@ struct LoopNest {
             // vectorize if we could have vectorized one level up.
             const auto &p = bounds_here->region_computed(v);
             const auto &p_parent = bounds_at_parent->region_computed(v);
-            int64_t e = p.second - p.first + 1;
-            int64_t ep = p_parent.second - p_parent.first + 1;
+            int64_t e = p.extent();
+            int64_t ep = p_parent.extent();
             if (ep >= f->vector_size && e < f->vector_size) return result;
 
             // Don't descend into loops if the bounds required don't shrink
@@ -1290,8 +1287,8 @@ struct LoopNest {
             for (int i = 0; i < f->func.dimensions(); i++) {
                 const auto &range_here = bounds_here->region_computed(i);
                 const auto &range_at_parent = bounds_at_parent->region_computed(i);
-                total_here *= range_here.second - range_here.first + 1;
-                total_at_parent *= range_at_parent.second - range_at_parent.first + 1;
+                total_here *= range_here.extent();
+                total_at_parent *= range_at_parent.extent();
             }
 
             if (total_here >= total_at_parent) return result;
@@ -1394,12 +1391,12 @@ struct LoopNest {
                         inner->size[i] = (outer->size[i] + outer_extent - 1) / outer_extent;
                         outer->size[i] = outer_extent;
                         const auto &p = parent_bounds->loops(stage_idx, i);
-                        int64_t min = p.first;
-                        int64_t original_extent = p.second - min + 1;
+                        int64_t min = p.min();
+                        int64_t original_extent = p.extent();
                         int64_t inner_extent = (original_extent + outer_extent - 1) / outer_extent;
                         // Pick a more representative loop iteration
                         min += (outer_extent / 2) * inner_extent;
-                        b->loops(stage_idx, i) = {min, min + inner_extent - 1};
+                        b->loops(stage_idx, i) = Span(min, min + inner_extent - 1, false); // TODO: last arg should be true if outer_extent > 1 and we're not in a guardwithif situation
                     }
 
                     // Region_{computed/required} on outer is now
@@ -1543,7 +1540,7 @@ struct LoopNest {
                     fv.orig = fv.var;
                     fv.accessor = l.accessor;
                     const auto &p = parent_bounds->loops(stage_idx, i);
-                    fv.extent = p.second - p.first + 1;
+                    fv.extent = p.extent();
                     fv.outermost = true;
                     fv.parallel = l.pure && parallel;
                     fv.exists = true;
@@ -1572,7 +1569,7 @@ struct LoopNest {
                 double bytes = node->bytes_per_point;
                 for (int i = 0; i < node->func.dimensions(); i++) {
                     const auto &p = parent_bounds->region_computed(i);
-                    bytes *= p.second - p.first + 1;
+                    bytes *= p.extent();
                 }
                 if (bytes < 64000 && depth > 2) {
                     // If it's probably a small allocation, and it's
@@ -2300,7 +2297,7 @@ struct State {
             vector<int> vector_dims;
             for (int v = 0; v < node->func.dimensions(); v++) {
                 const auto &p = root->get_bounds(node)->region_computed(v);
-                if (p.second - p.first + 1 >= node->vector_size) {
+                if (p.extent() >= node->vector_size) {
                     vector_dims.push_back(v);
                 }
             }
