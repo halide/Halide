@@ -381,7 +381,7 @@ private:
         if (!op->type.is_float() && (!op->type.is_int() || op->type.bits() < 32)) {
             if (a.is_bounded() && b.is_bounded()) {
                 // Try to prove it can't overflow. (Be sure to use uint32 for unsigned
-                // types so that the case of 65535*655535 won't misleadingly fail.)
+                // types so that the case of 65535*65535 won't misleadingly fail.)
                 Type t = op->type.is_uint() ? UInt(32) : Int(32);
                 Expr test1 = (cast(t, a.min) * cast(t, b.min) == cast(t, a.min * b.min));
                 Expr test2 = (cast(t, a.min) * cast(t, b.max) == cast(t, a.min * b.max));
