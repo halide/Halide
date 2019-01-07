@@ -15,7 +15,7 @@ $(BIN)/lens_blur.a: $(BIN)/lens_blur.generator
 	@-mkdir -p $(BIN)
 	$< -g lens_blur -o $(BIN) -f lens_blur target=$(HL_TARGET) auto_schedule=false
 
-$(BIN)/lens_blur_classic_auto_schedule.a: $(BIN)/lens_blur.generator
+$(BIN)/lens_blur_classic_auto_schedule.a: $(BIN)/lens_blur.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@-mkdir -p $(BIN)
 	HL_PERMIT_FAILED_UNROLL=1 \
 	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/weights \

@@ -15,7 +15,7 @@ $(BIN)/stencil_chain.a: $(BIN)/stencil_chain.generator
 	@mkdir -p $(@D)
 	$^ -g stencil_chain -o $(BIN) -f stencil_chain target=$(HL_TARGET) auto_schedule=false
 
-$(BIN)/stencil_chain_classic_auto_schedule.a: $(BIN)/stencil_chain.generator
+$(BIN)/stencil_chain_classic_auto_schedule.a: $(BIN)/stencil_chain.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
 	HL_PERMIT_FAILED_UNROLL=1 \
 	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/weights \
