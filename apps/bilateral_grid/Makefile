@@ -21,9 +21,9 @@ $(BIN)/bilateral_grid_auto_schedule.a: $(BIN)/bilateral_grid.generator $(AUTOSCH
 	@mkdir -p $(@D)
 	HL_PERMIT_FAILED_UNROLL=1 \
 	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/weights \
-	HL_MACHINE_PARAMS=32,1,1 \
+	HL_MACHINE_PARAMS=1024,1,1 \
 	HL_DEBUG_CODEGEN=1 \
-	HL_SHARED_MEMORY_LIMIT=24 \
+	HL_SHARED_MEMORY_LIMIT=8 \
 	$< -g bilateral_grid -o $(BIN) -f bilateral_grid_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so -e static_library,h,schedule 2> stderr.txt > stdout.txt
 
 $(BIN)/viz/bilateral_grid.a: $(BIN)/bilateral_grid.generator
