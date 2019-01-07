@@ -2645,8 +2645,8 @@ void Partitioner::generate_group_cpu_schedule(
 
     if (g.output.func.has_extern_definition()) {
         internal_assert(g.members.size() == 1);
-        Func(g_out).compute_root();
-        sched.push_schedule(g_out.name(), g.output.stage_num, "compute_root()", {});
+        Func(g_out).compute_root().hexagon();
+        sched.push_schedule(g_out.name(), g.output.stage_num, "compute_root().hexagon()", {});
         return;
     }
 
@@ -2661,8 +2661,8 @@ void Partitioner::generate_group_cpu_schedule(
         int stage_num = g.output.stage_num;
         f_handle = Func(g_out).update(stage_num - 1);
     } else {
-        Func(g_out).compute_root();
-        sched.push_schedule(f_handle.name(), g.output.stage_num, "compute_root()", {});
+      Func(g_out).compute_root().hexagon();
+        sched.push_schedule(f_handle.name(), g.output.stage_num, "compute_root().hexagon()", {});
     }
 
     // Realize tiling and update the dimension estimates
@@ -2868,8 +2868,8 @@ void Partitioner::generate_group_cpu_schedule(
             } else {
                 user_warning << "Degenerate tiling. No dimensions are tiled" << '\n';
                 user_warning << "Computing \"" <<  mem.func.name() << "\" at root" << '\n';
-                Func(mem.func).compute_root();
-                sched.push_schedule(mem_handle.name(), mem.stage_num, "compute_root()", {});
+                Func(mem.func).compute_root().hexagon();
+                sched.push_schedule(mem_handle.name(), mem.stage_num, "compute_root().hexagon()", {});
             }
         }
 
