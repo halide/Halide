@@ -190,6 +190,38 @@ public:
 // treat them as immutable once created and wrapped in a Bound object
 // so that they can be shared safely across scheduling alternatives.
 
+class Span {
+    int64_t first, second; // TODO: rename to min/max
+    bool constant_extent_;
+public:
+    int64_t min() const {return first;}
+    int64_t max() const {return second;}
+    int64_t extent() const {return second - first + 1;}
+    bool constant_extent() const {return constant_extent_;}
+
+    void union_with(const Span &other) {
+        first = std::min(first, other.min());
+        second = std::max(second, other.max());
+        constant_extent_ &= other.constant_extent();
+    }
+
+    void set_extent(int64_t e) {
+        second = first + e - 1;
+    }
+
+    void translate(int64_t x) {
+        first += x;
+        second += x;
+    }
+
+    Span(int64_t a, int64_t b, bool c) : first(a), second(b), constant_extent_(c) {}
+    Span() = default;
+    Span(const Span &other) = default;
+    static Span empty_span() {
+        return Span(INT64_MAX, INT64_MIN, true);
+    }
+};
+
 struct BoundContents;
 using Bound = IntrusivePtr<const BoundContents>;
 struct BoundContents {
@@ -197,33 +229,33 @@ struct BoundContents {
     struct Layout;
     const Layout *layout = nullptr;
 
-    pair<int64_t, int64_t> *data() const {
+    Span *data() const {
         // This struct is a header
-        return (pair<int64_t, int64_t> *)(const_cast<BoundContents *>(this) + 1);
+        return (Span *)(const_cast<BoundContents *>(this) + 1);
     }
 
-    pair<int64_t, int64_t> &region_required(int i) {
+    Span &region_required(int i) {
         return data()[i];
     }
 
-    pair<int64_t, int64_t> &region_computed(int i) {
+    Span &region_computed(int i) {
         return data()[i + layout->computed_offset];
     }
 
-    pair<int64_t, int64_t> &loops(int i, int j) {
+    Span &loops(int i, int j) {
         return data()[j + layout->loop_offset[i]];
     }
 
 
-    const pair<int64_t, int64_t> &region_required(int i) const {
+    const Span &region_required(int i) const {
         return data()[i];
     }
 
-    const pair<int64_t, int64_t> &region_computed(int i) const {
+    const Span &region_computed(int i) const {
         return data()[i + layout->computed_offset];
     }
 
-    const pair<int64_t, int64_t> &loops(int i, int j) const {
+    const Span &loops(int i, int j) const {
         return data()[j + layout->loop_offset[i]];
     }
 
@@ -256,7 +288,7 @@ struct BoundContents {
     // layout of those data structures once ahead of time, and make each
     // individual instance just use that.
     struct Layout {
-        // number of pair<int64_t, int64_t> to allocate
+        // number of Span to allocate
         int total_size;
 
         // region_required has size func->dimensions() and comes first in the memory layout
@@ -287,7 +319,7 @@ struct BoundContents {
         void operator=(Layout &&) = delete;
 
         void allocate_some_more() const {
-            size_t size_of_one = sizeof(BoundContents) + total_size * sizeof(pair<int64_t, int64_t>);
+            size_t size_of_one = sizeof(BoundContents) + total_size * sizeof(Span);
             const size_t number_per_block = std::max((size_t)8, 4096 / size_of_one); // Make a page of them, or 8, whichever is larger.
             const size_t bytes_to_allocate = std::max(size_of_one * number_per_block, (size_t)4096);
             unsigned char *mem = (unsigned char *)malloc(bytes_to_allocate);
@@ -371,7 +403,7 @@ struct FunctionDAG {
 
         // A concrete region required from a bounds estimate. Only
         // defined for outputs.
-        vector<pair<int64_t, int64_t>> estimated_region_required;
+        vector<Span> estimated_region_required;
 
         // The region computed of a Func, in terms of the region
         // required. For simple Funcs this is identical to the
@@ -392,13 +424,13 @@ struct FunctionDAG {
 
         // Expand a region required into a region computed, using the
         // symbolic intervals above.
-        void required_to_computed(const pair<int64_t, int64_t> *required,
-                                  pair<int64_t, int64_t> *computed) const {
+        void required_to_computed(const Span *required,
+                                  Span *computed) const {
             map<string, Expr> required_map;
             if (!region_computed_all_common_cases) {
                 for (int i = 0; i < func.dimensions(); i++) {
-                    required_map[region_required[i].min.as<Variable>()->name] = (int)required[i].first;
-                    required_map[region_required[i].max.as<Variable>()->name] = (int)required[i].second;
+                    required_map[region_required[i].min.as<Variable>()->name] = (int)required[i].min();
+                    required_map[region_required[i].max.as<Variable>()->name] = (int)required[i].max();
                 }
             }
             for (int i = 0; i < func.dimensions(); i++) {
@@ -406,16 +438,16 @@ struct FunctionDAG {
                 if (comp.equals_required) {
                     computed[i] = required[i];
                 } else if (comp.equals_union_of_required_with_constants) {
-                    computed[i].first = std::min(required[i].first, comp.c_min);
-                    computed[i].second = std::max(required[i].second, comp.c_max);
+                    computed[i] = Span(std::min(required[i].min(), comp.c_min),
+                                       std::max(required[i].max(), comp.c_max),
+                                       false);
                 } else {
                     Expr min = simplify(substitute(required_map, comp.in.min));
                     Expr max = simplify(substitute(required_map, comp.in.max));
                     const int64_t *imin = as_const_int(min);
                     const int64_t *imax = as_const_int(max);
                     internal_assert(imin && imax) << min << ", " << max << '\n';
-                    computed[i].first = *imin;
-                    computed[i].second = *imax;
+                    computed[i] = Span(*imin, *imax, false);
                 }
             }
         }
@@ -444,15 +476,15 @@ struct FunctionDAG {
 
         // Get the loop nest shape as a function of the region computed
         void loop_nest_for_region(int stage_idx,
-                                  const pair<int64_t, int64_t> *computed,
-                                  pair<int64_t, int64_t> *loop) const {
+                                  const Span *computed,
+                                  Span *loop) const {
             // debug(0) << "Loop nest for region func " << func.name() << " stage " << stage_idx << "\n";
             const auto &s = stages[stage_idx];
             map<string, Expr> computed_map;
             if (!s.loop_nest_all_common_cases) {
                 for (int i = 0; i < func.dimensions(); i++) {
-                    computed_map[region_required[i].min.as<Variable>()->name] = (int)computed[i].first;
-                    computed_map[region_required[i].max.as<Variable>()->name] = (int)computed[i].second;
+                    computed_map[region_required[i].min.as<Variable>()->name] = (int)computed[i].min();
+                    computed_map[region_required[i].max.as<Variable>()->name] = (int)computed[i].max();
                 }
             }
 
@@ -461,15 +493,14 @@ struct FunctionDAG {
                 if (l.equals_region_computed) {
                     loop[i] = computed[l.region_computed_dim];
                 } else if (l.bounds_are_constant) {
-                    loop[i].first = l.c_min;
-                    loop[i].second = l.c_max;
+                    loop[i] = Span(l.c_min, l.c_max, true);
                 } else {
                     Expr min = simplify(substitute(computed_map, l.min));
                     Expr max = simplify(substitute(computed_map, l.max));
                     const int64_t *imin = as_const_int(min);
                     const int64_t *imax = as_const_int(max);
                     internal_assert(imin && imax) << min << ", " << max << '\n';
-                    loop[i] = std::make_pair(*imin, *imax);
+                    loop[i] = Span(*imin, *imax, false); // TODO: figure out if the bounds are constant
                 }
                 // debug(0) << i << ": " << loop[i].first << " " << loop[i].second << "\n";
             }
@@ -609,8 +640,8 @@ struct FunctionDAG {
         // Given a loop nest of the consumer stage, expand a region
         // required of the producer to be large enough to include all
         // points required.
-        void expand_footprint(const pair<int64_t, int64_t> *consumer_loop,
-                              pair<int64_t, int64_t> *producer_required) const {
+        void expand_footprint(const Span *consumer_loop,
+                              Span *producer_required) const {
 
             // Create a map from the symbolic loop variables to the actual loop size
             const auto &symbolic_loop = consumer->loop;
@@ -619,8 +650,8 @@ struct FunctionDAG {
                 for (size_t i = 0; i < symbolic_loop.size(); i++) {
                     auto p = consumer_loop[i];
                     const string &var = symbolic_loop[i].var;
-                    s[consumer->node->func.name() + "." + var + ".min"] = (int)p.first;
-                    s[consumer->node->func.name() + "." + var + ".max"] = (int)p.second;
+                    s[consumer->node->func.name() + "." + var + ".min"] = (int)p.min();
+                    s[consumer->node->func.name() + "." + var + ".max"] = (int)p.max();
                     // debug(0) << consumer->func.name() << " " << var << " " << p.first << " " << p.second << "\n";
                 }
             }
@@ -631,22 +662,27 @@ struct FunctionDAG {
                 // Get bounds required of this dimension of the
                 // producer in terms of a symbolic region of the
                 // consumer.
+                bool bounds_are_constant = true;
                 auto eval_bound = [&](const BoundInfo &b) {
                     if (b.affine) {
                         // Common-case performance optimization
                         const auto &src_pair = consumer_loop[b.consumer_dim];
-                        int64_t src = b.uses_max ? src_pair.second : src_pair.first;
+                        int64_t src = b.uses_max ? src_pair.max() : src_pair.min();
+                        bounds_are_constant &= src_pair.constant_extent();
                         return src * b.coeff + b.constant;
                     } else {
                         Expr substituted = substitute(s, b.expr);
                         Expr e = simplify(substituted);
                         const int64_t *i = as_const_int(e);
                         internal_assert(i) << "Should be constant: " << b.expr << " -> " << substituted << " -> " << e << '\n';
+                        bounds_are_constant = false;
                         return *i;
                     }
                 };
-                producer_required[i].first = std::min(producer_required[i].first, eval_bound(bounds[i].first));
-                producer_required[i].second = std::max(producer_required[i].second, eval_bound(bounds[i].second));
+                producer_required[i].union_with(Span(eval_bound(bounds[i].first),
+                                                     eval_bound(bounds[i].second),
+                                                     bounds_are_constant));
+                // TODO: constant_extent flag?
             }
         }
 
@@ -941,11 +977,11 @@ struct FunctionDAG {
 
                 if (node.is_output) {
                     // Get the bounds estimate
-                    map<string, pair<int64_t, int64_t>> estimates;
+                    map<string, Span> estimates;
                     for (auto b : consumer.schedule().estimates()) {
                         int64_t i_min = *as_const_int(b.min);
                         int64_t i_extent = *as_const_int(b.extent);
-                        estimates[b.var] = {i_min, i_min + i_extent - 1};
+                        estimates[b.var] = Span(i_min, i_min + i_extent - 1, false); // TODO: Last arg might be true if there's also an explicit bound
                     }
                     // Set the bounds using the estimates
                     for (int i = 0; i < consumer.dimensions(); i++) {
