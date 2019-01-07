@@ -1127,8 +1127,7 @@ struct LoopNest {
             node->stage = &f->stages[s];
             node->innermost = true;
             node->vectorized_loop_index = -1;
-            // TODO: rvars are not tileable
-            node->tileable = tileable;
+            node->tileable = tileable; // && s == 0; // HACK: forbid tiling update stages when uncommented
             // Set up a bound for the inside of the
             // loop. computed/required is still the full region, but
             // the loop nest will be a single representative point.
@@ -1501,6 +1500,7 @@ struct LoopNest {
             VarOrRVar var;
             string accessor;
             int64_t extent = 0;
+            size_t index = 0;
             bool innermost_pure_dim = false, outermost = false, parallel = false, exists = false, pure = false;
             FuncVar() : orig(Var()), var(Var()) {}
         };
@@ -1548,8 +1548,14 @@ struct LoopNest {
                     fv.parallel = l.pure && parallel;
                     fv.exists = true;
                     fv.pure = l.pure;
+                    fv.index = i;
                     fv.innermost_pure_dim = (i == (size_t) vectorized_loop_index);
                     state->vars.push_back(fv);
+                }
+                // Bubble the innermost pure dimension to the front of the pure dimensions
+                for (int i = vectorized_loop_index - 1;
+                     i >= 0 && state->vars[i].pure; i--) {
+                    std::swap(state->vars[i], state->vars[i+1]);
                 }
                 state_map.emplace(stage, std::unique_ptr<StageScheduleState>(state));
             }
@@ -1600,8 +1606,10 @@ struct LoopNest {
             if (!size.empty()) {
                 if (innermost) {
                     if (vectorized_loop_index >= 0) {
-                        auto &v = state.vars[vectorized_loop_index];
-                        internal_assert(v.exists) << v.var.name() << "\n";
+                        size_t i = 0;
+                        while (!state.vars[i].innermost_pure_dim) i++;
+                        auto &v = state.vars[i];
+                        internal_assert(v.innermost_pure_dim && v.exists) << v.var.name() << "\n";
                         // Is the result of a split
                         state.schedule_source
                             << "\n    .vectorize(" << v.var.name() << ")";
@@ -1628,10 +1636,10 @@ struct LoopNest {
                         StageScheduleState::FuncVar v;
                         StageScheduleState::FuncVar &parent = state.vars[i];
 
-                        int64_t factor = (parent.extent + size[i] - 1) / size[i];
-                        int64_t innermost_size = innermost_loop->size[i];
+                        int64_t factor = (parent.extent + size[parent.index] - 1) / size[parent.index];
+                        int64_t innermost_size = innermost_loop->size[parent.index];
 
-                        if (child && i == (size_t) vectorized_loop_index) {
+                        if (child && parent.innermost_pure_dim) {
                             // Ensure the split is a multiple of the
                             // vector size. With all these rounded
                             // divs going on it can drift.
@@ -1645,7 +1653,10 @@ struct LoopNest {
                         if (!parent.exists || factor == 1) {
                             v.exists = false;
                             v.extent = 1;
-                        } else if (size[i] == 1 && !(child && child->innermost && i == (size_t) vectorized_loop_index && parent.var.name() == parent.orig.name())) {
+                        } else if (size[parent.index] == 1 && !(child &&
+                                                                child->innermost &&
+                                                                parent.innermost_pure_dim &&
+                                                                parent.var.name() == parent.orig.name())) {
                             // Not split in this dimension
                             v = parent;
                             v.parallel = false;
@@ -1677,7 +1688,7 @@ struct LoopNest {
                                 << factor << ", "
                                 << "TailStrategy::" << tail_strategy << ")";
                             v = parent;
-                            parent.extent = size[i];
+                            parent.extent = size[parent.index];
                             v.var = inner;
                             v.accessor.clear();
                             v.extent = factor;
@@ -1692,7 +1703,7 @@ struct LoopNest {
 
                         int64_t product_of_pure_loops = 1;
                         for (size_t i = 0; i < symbolic_loop.size(); i++) {
-                            if (symbolic_loop[i].pure) {
+                            if (state.vars[i].pure) {
                                 product_of_pure_loops *= state.vars[i].extent;
                             }
                         }
@@ -1724,17 +1735,7 @@ struct LoopNest {
                     bool found = false;
                     for (const auto &v : state.vars) {
                         if (!v.exists) continue;
-                        if (!v.var.is_rvar &&
-                            vectorized_loop_index >= 0 &&
-                            vectorized_loop_index < (int) state.vars.size() &&
-                            state.vars[vectorized_loop_index].exists) {
-                            // The vectorized loop is actually the
-                            // innermost, not whatever pure loop we
-                            // just stumbled upon
-                            here = LoopLevel(node->func, state.vars[vectorized_loop_index].var);
-                        } else {
-                            here = LoopLevel(node->func, v.var);
-                        }
+                        here = LoopLevel(node->func, v.var);
                         found = true;
                         break;
                     }
@@ -2451,7 +2452,7 @@ struct State {
             debug(0) << "Warning: Found no legal way to schedule "
                      << node->func.name() << " in the following State:\n";
             dump();
-            internal_error << "Aborted";
+            // internal_error << "Aborted";
         }
 
     }
@@ -2522,48 +2523,19 @@ struct State {
 
             Stage stage(p.first->stage);
 
-            // Reorder the innermost storage dimension to also be the innermost loop dimension within each group
-            {
-                auto &vars = p.second->vars;
-                if (!vars.empty()) {
-                    size_t one_level_size = p.first->loop.size();
-                    size_t tiling_levels = vars.size() / one_level_size;
-                    for (size_t g = 0; g < tiling_levels; g++) {
-                        for (int i = p.second->vectorized_loop_index; i > 0; i--) {
-                            if (vars[g * one_level_size + i - 1].var.is_rvar) {
-                                break;
-                            }
-                            std::swap(vars[g * one_level_size + i - 1], vars[g * one_level_size + i]);
-                        }
-                    }
-                }
-            }
-
             // Do all the reorders and pick which vars to
             // parallelize.
             vector<VarOrRVar> vars;
             int64_t parallel_tasks = 1;
             vector<VarOrRVar> parallel_vars;
             bool any_parallel_vars = false, any_parallel_rvars = false;
-            VarOrRVar *innermost_parallel = nullptr;
             for (auto it = p.second->vars.rbegin(); it != p.second->vars.rend(); it++) {
                 if (!it->exists || it->extent == 1) continue;
                 if (!it->parallel) break;
                 any_parallel_rvars |= it->var.is_rvar;
                 any_parallel_vars |= !it->var.is_rvar;
                 parallel_tasks *= it->extent;
-                if (it->innermost_pure_dim) {
-                    innermost_parallel = &(it->var);
-                } else {
-                    parallel_vars.push_back(it->var);
-                }
-            }
-            // If we're parallelizing across the innermost storage
-            // dimension, we need to bubble that to the end of the
-            // parallel vars list, because it's actually the
-            // innermost.
-            if (innermost_parallel) {
-                parallel_vars.push_back(*innermost_parallel);
+                parallel_vars.push_back(it->var);
             }
 
             if (p.second->vars.size() > 1) {
