@@ -15,7 +15,7 @@ $(BIN)/nl_means.a: $(BIN)/nl_means.generator
 	@-mkdir -p $(BIN)
 	$^ -g nl_means -o $(BIN) -f nl_means target=$(HL_TARGET) auto_schedule=false
 
-$(BIN)/nl_means_classic_auto_schedule.a: $(BIN)/nl_means.generator
+$(BIN)/nl_means_classic_auto_schedule.a: $(BIN)/nl_means.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@-mkdir -p $(BIN)
 	HL_PERMIT_FAILED_UNROLL=1 \
 	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/weights \
