@@ -13,7 +13,7 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    const int matrix_size = 992;
+    const int matrix_size = 1536;
 
     Halide::Runtime::Buffer<float> mat_A(matrix_size, matrix_size);
     Halide::Runtime::Buffer<float> mat_B(matrix_size, matrix_size);
