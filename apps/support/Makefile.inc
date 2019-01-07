@@ -25,6 +25,8 @@ CXXFLAGS += -std=c++11 -I $(HALIDE_DISTRIB_PATH)/include/ -I $(HALIDE_DISTRIB_PA
 
 ifeq (0, $(HALIDE_RTTI))
 CXXFLAGS += -fno-rtti
+else
+CXXFLAGS += -frtti
 endif
 
 ifeq ($(UNAME), Darwin)

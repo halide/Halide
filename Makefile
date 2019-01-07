@@ -1704,6 +1704,7 @@ TEST_APPS=\
 	linear_algebra \
 	local_laplacian \
 	nl_means \
+	mat_mul_generator \
 	max_filter \
 	resize \
 	stencil_chain \

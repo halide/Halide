@@ -20,9 +20,8 @@ BEST_BALANCE=160
 CACHE_SIZES=${BEST_CACHE_SIZE}
 BALANCES=${BEST_BALANCE}
 
-
 RANDOM_DROPOUT=100
-BEAM_SIZE=50
+BEAM_SIZE=32
 
 make -C ../autoscheduler ../autoscheduler/bin/libauto_schedule.so
 mkdir -p bin
@@ -31,13 +30,15 @@ cp ../autoscheduler/bin/libauto_schedule.so bin/
 # Build the shared things by building one pipeline
 HL_TARGET=x86-64-avx2 HL_SEED=root PIPELINE_SEED=0 HL_RANDOM_DROPOUT=${RANDOM_DROPOUT} HL_BEAM_SIZE=${BEAM_SIZE} make build
 
-for ((b=1;b<2;b++)); do
+for ((b=2;b<3;b++)); do
     echo Batch $b
     rm -f results/files_*.txt
 
     # Build lots of pipelines
     for ((p=0;p<$PIPELINES;p++)); do
         P=$((b * $PIPELINES + p))
+        #if [[ $P != 288 ]]; then continue; fi
+
         STAGES=$(((P % 30) + 10))
         echo echo Building pipeline $P
         #echo "HL_TARGET=x86-64-avx2 HL_SEED=root PIPELINE_SEED=$P PIPELINE_STAGES=$STAGES HL_RANDOM_DROPOUT=${RANDOM_DROPOUT} HL_BEAM_SIZE=${BEAM_SIZE} make build 2>&1 | grep -v Nothing.to.be.done"
@@ -47,7 +48,7 @@ for ((b=1;b<2;b++)); do
             done
         done
         for prof in ""; do
-            for ((m=0;m<2;m++)); do
+            for ((m=0;m<1;m++)); do
                 for ((s=0;s<$SCHEDULES;s++)); do
                     echo "NEW_AUTOSCHEDULER=1 HL_TARGET=x86-64-avx2${prof} HL_SEED=$s PIPELINE_SEED=$P PIPELINE_STAGES=$STAGES HL_RANDOM_DROPOUT=${RANDOM_DROPOUT} HL_BEAM_SIZE=${BEAM_SIZE} HL_USE_MANUAL_COST_MODEL=${m} HL_NUM_THREADS=32 HL_MACHINE_PARAMS=32,1,1 make build 2>&1 | grep -v Nothing.to.be.done"
                 done
@@ -58,6 +59,9 @@ for ((b=1;b<2;b++)); do
     # Benchmark them
     for ((p=0;p<$PIPELINES;p++)); do
         P=$((b * $PIPELINES + p))
+
+        #if [[ $P != 288 ]]; then continue; fi
+        
         STAGES=$(((P % 30) + 10))
         echo Benchmarking pipeline $P
         #F=bin/x86-64-avx2/pipeline_${P}_${STAGES}/schedule_root_${RANDOM_DROPOUT}_${BEAM_SIZE}_0/times.txt
@@ -73,7 +77,7 @@ for ((b=1;b<2;b++)); do
         done                
 
         for prof in ""; do
-            for ((m=0;m<2;m++)); do
+            for ((m=0;m<1;m++)); do
                 for ((s=0;s<$SCHEDULES;s++)); do
                     F=bin/x86-64-avx2${prof}-new_autoscheduler/pipeline_${P}_${STAGES}/schedule_${s}_${RANDOM_DROPOUT}_${BEAM_SIZE}_${m}/times.txt
                     if [ ! -f $F ]; then NEW_AUTOSCHEDULER=1 HL_TARGET=x86-64-avx2${prof} HL_SEED=$s PIPELINE_SEED=$P PIPELINE_STAGES=$STAGES HL_RANDOM_DROPOUT=${RANDOM_DROPOUT} HL_BEAM_SIZE=${BEAM_SIZE} HL_USE_MANUAL_COST_MODEL=${m} HL_NUM_THREADS=32 HL_MACHINE_PARAMS=32,1,1 make bench 2>&1 | grep -v "Nothing to be done"; fi
@@ -85,18 +89,17 @@ for ((b=1;b<2;b++)); do
     done
 
     # Generate the success cases by taking the intersection of the results from the learned model and the manual model
-    cat results/files_${b}_0.txt results/files_${b}_1.txt | sed "s/_..times.txt/_X\/times.txt/" | sort | uniq -d > results/files_new.txt
+    cat results/files_${b}_0.txt | sed "s/_..times.txt/_X\/times.txt/" > results/files_new.txt
     cat results/files_new.txt results/files_master_${b}_${BEST_CACHE_SIZE}_${BEST_BALANCE}.txt | sed "s/-new_autoscheduler//;s/-${BEST_CACHE_SIZE}-${BEST_BALANCE}//;s/_..times.txt/_X\/times.txt/" |  sort | uniq -d  | sed "s/x86-64-avx2/x86-64-avx2-new_autoscheduler/" > results/files_common1.txt
 
     # Generate the list of pipelines that actually load from the input
-    grep -r 'input\[' bin/x86-64-avx2-new_autoscheduler/* | cut -d/ -f1-3 | sort | uniq | while read F; do echo ${F}/schedule_0_100_50_X/times.txt; done > results/files_valid.txt
+    grep -r 'input\[' bin/x86-64-avx2-new_autoscheduler/* | cut -d/ -f1-3 | sort | uniq | while read F; do echo ${F}/schedule_0_100_${BEAM_SIZE}_X/times.txt; done > results/files_valid.txt
 
     cat results/files_valid.txt results/files_common1.txt | sort | uniq -d > results/files_common.txt
     
     # Extract the runtimes
     echo "Extracting runtimes..."
     cat results/files_common.txt | sed "s/_X/_0/" | while read F; do grep '^Time' $F | cut -d: -f2 | cut -b2-; done > results/learned_runtimes_${b}.txt
-    cat results/files_common.txt | sed "s/_X/_1/" | while read F; do grep '^Time' $F | cut -d: -f2 | cut -b2-; done > results/manual_runtimes_${b}.txt
 
     # Extract the compute_root runtimes
     echo "Extracting compute_root runtimes..."
@@ -120,5 +123,4 @@ for ((b=1;b<2;b++)); do
     # Extract the cost according to the hand-designed model (just the sum of a few of the features)
     echo "Extracting costs..."
     cat results/files_common.txt | sed "s/_X/_0/" | while read F; do echo $(grep '^State with cost' ${F/times/stderr} | cut -d' ' -f4 | cut -d: -f1 | sort -n | grep -v 0.000000 | head -n1); done  > results/learned_costs_${b}.txt
-    cat results/files_common.txt | sed "s/_X/_1/" | while read F; do echo $(grep '^State with cost' ${F/times/stderr} | cut -d' ' -f4 | cut -d: -f1 | sort -n | head -n1); done  > results/manual_costs_${b}.txt
 done

@@ -5,7 +5,7 @@ all: $(BIN)/filter
 
 $(BIN)/bilateral_grid.generator: bilateral_grid_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 $(BIN)/bilateral_grid.a: $(BIN)/bilateral_grid.generator
 	@mkdir -p $(@D)
@@ -24,7 +24,7 @@ $(BIN)/viz/bilateral_grid.a: $(BIN)/bilateral_grid.generator
 	@mkdir -p $(@D)
 	$^ -g bilateral_grid -o $(BIN)/viz target=$(HL_TARGET)-trace_all
 
-$(BIN)/filter: $(BIN)/bilateral_grid.a $(BIN)/bilateral_grid_classic_auto_schedule.a $(BIN)/bilateral_grid_auto_schedule.a filter.cpp
+$(BIN)/filter: filter.cpp $(BIN)/bilateral_grid.a $(BIN)/bilateral_grid_classic_auto_schedule.a $(BIN)/bilateral_grid_auto_schedule.a
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -O3 -ffast-math -Wall -Werror -I$(BIN) $^ -o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS)
 
@@ -61,3 +61,11 @@ $(BIN)/viz_auto.mp4: $(BIN)/filter_viz ../support/viz_auto.sh ../../bin/HalideTr
 
 viz_auto: $(BIN)/viz_auto.mp4
 	$(HL_VIDEOPLAYER) $^
+
+autotune: $(BIN)/bilateral_grid.generator $(AUTOSCHED_BIN)/augment_sample $(AUTOSCHED_BIN)/train_cost_model $(AUTOSCHED_BIN)/libauto_schedule.so $(AUTOSCHED_SRC)/autotune_loop.sh
+	bash $(AUTOSCHED_SRC)/autotune_loop.sh \
+		$(BIN)/bilateral_grid.generator \
+		bilateral_grid \
+		x86-64-avx2 \
+		$(AUTOSCHED_SRC)/weights \
+		$(AUTOSCHED_BIN)

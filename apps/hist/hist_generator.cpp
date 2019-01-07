@@ -28,7 +28,7 @@ public:
         Func hist_rows("hist_rows");
         hist_rows(x, y) = 0;
         RDom rx(0, 1536);
-        Expr bin = u8(clamp(Y(rx, y), 0, 255));
+        Expr bin = cast<int>(clamp(Y(rx, y), 0, 255));
         hist_rows(bin, y) += 1;
 
         Func hist("hist");
@@ -43,7 +43,7 @@ public:
 
         Func eq("equalize");
 
-        Expr cdf_bin = u8(clamp(Y(x, y), 0 , 255));
+        Expr cdf_bin = u8(clamp(Y(x, y), 0, 255));
         eq(x, y) = clamp(cdf(cdf_bin) * (255.0f/(input.height() * input.width())), 0 , 255);
 
         Expr red = u8(clamp(eq(x, y) + (Cr(x, y) - 128) * 1.4f, 0, 255));

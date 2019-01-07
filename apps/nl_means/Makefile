@@ -34,3 +34,11 @@ clean:
 	rm -rf $(BIN)
 
 test: $(BIN)/out.png
+
+autotune: $(BIN)/nl_means.generator $(AUTOSCHED_BIN)/augment_sample $(AUTOSCHED_BIN)/train_cost_model $(AUTOSCHED_BIN)/libauto_schedule.so $(AUTOSCHED_SRC)/autotune_loop.sh
+	bash $(AUTOSCHED_SRC)/autotune_loop.sh \
+		$(BIN)/nl_means.generator \
+		nl_means \
+		x86-64-avx2 \
+		$(AUTOSCHED_SRC)/weights \
+		$(AUTOSCHED_BIN)

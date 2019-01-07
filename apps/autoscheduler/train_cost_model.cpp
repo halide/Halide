@@ -104,7 +104,7 @@ map<int, PipelineSample> load_samples() {
         const size_t num_stages = num_features / features_per_stage;
 
         const float runtime = scratch[num_features];
-        if (runtime <= 0 || runtime > 10000) { // Don't try to predict runtime over 1s
+        if (runtime > 10000) { // Don't try to predict runtime over 10s
             std::cout << "Implausible runtime in ms: " << runtime << "\n";
             continue;
         }
@@ -153,11 +153,6 @@ map<int, PipelineSample> load_samples() {
 
 
 
-        if (runtime < ps.fastest_runtime) {
-            ps.fastest_runtime = runtime;
-            ps.fastest_schedule = schedule_hash;
-        }
-
         auto it = ps.schedules.find(schedule_hash);
         if (it != ps.schedules.end()) {
             // Keep the smallest runtime at the front
@@ -168,6 +163,10 @@ map<int, PipelineSample> load_samples() {
                 it->second.filename = s;
             } else {
                 it->second.runtimes.push_back(runtime);
+            }
+            if (runtime < ps.fastest_runtime) {
+                ps.fastest_runtime = runtime;
+                ps.fastest_schedule = schedule_hash;
             }
         } else {
             Sample sample;
@@ -190,12 +189,18 @@ map<int, PipelineSample> load_samples() {
                     }
                     sample.schedule_features(x, i) = f;
                 }
-                // Patch a bug in the featurization in the training data
-                if (sample.schedule_features(0, i) > 1) { // If multiple realizations
-                    sample.schedule_features(8, i) = 1; // No inner parallelism
+                /*
+                if (sample.schedule_features(0, i) != sample.schedule_features(1, i)) {
+                    std::cout << "Rejecting sliding window schedule for now\n";
+                    ok = false;
                 }
+                */
             }
             if (ok) {
+                if (runtime < ps.fastest_runtime) {
+                    ps.fastest_runtime = runtime;
+                    ps.fastest_schedule = schedule_hash;
+                }
                 ps.schedules.emplace(schedule_hash, std::move(sample));
                 num_unique++;
             }
@@ -297,20 +302,22 @@ int main(int argc, char **argv) {
 
     std::cout << "Iterating over " << samples.size() << " samples using seed = " << seed << "\n";
     decltype(samples) validation_set;
-    for (auto p : samples) {
-        // Whether or not a pipeline is part of the validation set
-        // can't be a call to rand. It must be a fixed property of a
-        // hash of some aspect of it.  This way you don't accidentally
-        // do a training run where a validation set member was in the
-        // training set of a previous run. The id of the fastest
-        // schedule will do as a hash.
-        if ((p.second.pipeline_hash & 3) == 0) {
-            validation_set.insert(p);
+    if (samples.size() > 1) {
+        for (auto p : samples) {
+            // Whether or not a pipeline is part of the validation set
+            // can't be a call to rand. It must be a fixed property of a
+            // hash of some aspect of it.  This way you don't accidentally
+            // do a training run where a validation set member was in the
+            // training set of a previous run. The id of the fastest
+            // schedule will do as a hash.
+            if ((p.second.pipeline_hash & 7) == 0) {
+                validation_set.insert(p);
+            }
         }
-    }
 
-    for (auto p : validation_set) {
-        samples.erase(p.first);
+        for (auto p : validation_set) {
+            samples.erase(p.first);
+        }
     }
 
     std::vector<float> rates;
@@ -337,6 +344,7 @@ int main(int argc, char **argv) {
             uint64_t worst_miss_schedule_id = 0;
 
             struct Inversion {
+                int pipeline_id;
                 string f1, f2;
                 float p1, p2;
                 float r1, r2;
@@ -410,20 +418,23 @@ int main(int argc, char **argv) {
                                 if (sched.second.prediction[model] == 0) continue;
                                 assert(sched.second.runtimes[0] >= ref.runtimes[0]);
                                 float runtime_ratio = sched.second.runtimes[0] / ref.runtimes[0];
-                                if (runtime_ratio <= 1.1) continue; // Within 10% of the runtime of the best
+                                if (runtime_ratio <= 1.3f) continue; // Within 30% of the runtime of the best
                                 if (sched.second.prediction[model] >= ref.prediction[model]) {
                                     good++;
                                 } else {
-                                    float badness = (sched.second.runtimes[0] - ref.runtimes[0]) * (ref.prediction[model] - sched.second.prediction[model]);
-                                    badness /= (ref.runtimes[0] * ref.runtimes[0]);
-                                    if (badness > worst_inversion.badness) {
-                                        worst_inversion.badness = badness;
-                                        worst_inversion.r1 = ref.runtimes[0];
-                                        worst_inversion.r2 = sched.second.runtimes[0];
-                                        worst_inversion.p1 = ref.prediction[model];
-                                        worst_inversion.p2 = sched.second.prediction[model];
-                                        worst_inversion.f1 = ref.filename;
-                                        worst_inversion.f2 = sched.second.filename;
+                                    if (train) {
+                                        float badness = (sched.second.runtimes[0] - ref.runtimes[0]) * (ref.prediction[model] - sched.second.prediction[model]);
+                                        badness /= (ref.runtimes[0] * ref.runtimes[0]);
+                                        if (badness > worst_inversion.badness) {
+                                            worst_inversion.pipeline_id = p.first;
+                                            worst_inversion.badness = badness;
+                                            worst_inversion.r1 = ref.runtimes[0];
+                                            worst_inversion.r2 = sched.second.runtimes[0];
+                                            worst_inversion.p1 = ref.prediction[model];
+                                            worst_inversion.p2 = sched.second.prediction[model];
+                                            worst_inversion.f1 = ref.filename;
+                                            worst_inversion.f2 = sched.second.filename;
+                                        }
                                     }
                                     bad++;
                                 }
@@ -480,6 +491,14 @@ int main(int argc, char **argv) {
                 std::cout << "Worst inversion:\n"
                           << worst_inversion.f1 << " predicted: " << worst_inversion.p1 << " actual: " << worst_inversion.r1 << "\n"
                           << worst_inversion.f2 << " predicted: " << worst_inversion.p2 << " actual: " << worst_inversion.r2 << "\n";
+                if (samples.size() > 5000) {
+                    // For robustness during training on large numbers
+                    // of random pipelines, we discard poorly
+                    // performing samples from the training set
+                    // only. Some of them are weird degenerate
+                    // pipelines.
+                    samples.erase(worst_inversion.pipeline_id);
+                }
             }
 
             tpp[best_model]->save_weights();
