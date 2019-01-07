@@ -162,6 +162,7 @@ struct ScheduleFeatures {
 
     double innermost_loop_extent = 0; // Trip count of innermost serial loop. Currently always equal to the next feature
     double innermost_pure_loop_extent = 0; // Trip count of innermost loop over the innermost storage dimension
+    double unrolled_loop_extent = 0;
 
     double inner_parallelism = 0; // The number of parallel jobs used in the production of this Func. 1 unless the Func is compute_root.
     double outer_parallelism = 0; // The number of times this Func could be realized in parallel. 1 when the Func is compute_root.
@@ -215,6 +216,7 @@ struct ScheduleFeatures {
                   << "    points_computed_minimum:               " << points_computed_minimum << '\n'
                   << "    innermost_loop_extent:                 " << innermost_loop_extent << '\n'
                   << "    innermost_pure_loop_extent:            " << innermost_pure_loop_extent << '\n'
+                  << "    unrolled_loop_extent:                  " << unrolled_loop_extent << '\n'
                   << "    inner_parallelism:                     " << inner_parallelism << '\n'
                   << "    outer_parallelism:                     " << outer_parallelism << '\n'
                   << "    bytes_at_realization:                  " << bytes_at_realization << '\n'
