@@ -199,6 +199,7 @@ public:
         Expr points_computed_minimum = schedule_features(n, idx++, w);
         Expr innermost_loop_extent = schedule_features(n, idx++, w);
         Expr innermost_pure_loop_extent = schedule_features(n, idx++, w);
+        Expr unrolled_loop_extent = schedule_features(n, idx++, w);
 
         Expr inner_parallelism = schedule_features(n, idx++, w);
         Expr outer_parallelism = schedule_features(n, idx++, w);
@@ -229,7 +230,6 @@ public:
         Expr unique_lines_read_per_vector = schedule_features(n, idx++, w);
         Expr unique_bytes_read_per_task = schedule_features(n, idx++, w);
         Expr unique_lines_read_per_task = schedule_features(n, idx++, w);
-
         Expr working_set_at_task = schedule_features(n, idx++, w);
         Expr working_set_at_production = schedule_features(n, idx++, w);
         Expr working_set_at_realization = schedule_features(n, idx++, w);
@@ -242,11 +242,6 @@ public:
                                     num_scalars * relu1(1, w, n)),
                                    (vector_size * num_vectors * relu1(2, w, n) +
                                     num_scalars * relu1(3, w, n)));
-
-        // Account for all the code outside of the innermost loop. It's inversly proportional to the size of the innermost loop.
-        Expr innermost_loops = relu1(4, w, n) * (num_vectors + num_scalars) / max(1, innermost_pure_loop_extent);
-
-        compute_cost += innermost_loops;
 
         Expr num_tasks = max(1, inner_parallelism * outer_parallelism);
         Expr tasks_per_core = num_tasks / num_cores;

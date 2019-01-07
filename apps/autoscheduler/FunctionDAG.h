@@ -202,7 +202,7 @@ public:
     void union_with(const Span &other) {
         first = std::min(first, other.min());
         second = std::max(second, other.max());
-        constant_extent_ &= other.constant_extent();
+        constant_extent_ = constant_extent_ && other.constant_extent();
     }
 
     void set_extent(int64_t e) {
@@ -500,7 +500,7 @@ struct FunctionDAG {
                     const int64_t *imin = as_const_int(min);
                     const int64_t *imax = as_const_int(max);
                     internal_assert(imin && imax) << min << ", " << max << '\n';
-                    loop[i] = Span(*imin, *imax, false); // TODO: figure out if the bounds are constant
+                    loop[i] = Span(*imin, *imax, false);
                 }
                 // debug(0) << i << ": " << loop[i].first << " " << loop[i].second << "\n";
             }
@@ -679,10 +679,9 @@ struct FunctionDAG {
                         return *i;
                     }
                 };
-                producer_required[i].union_with(Span(eval_bound(bounds[i].first),
-                                                     eval_bound(bounds[i].second),
-                                                     bounds_are_constant));
-                // TODO: constant_extent flag?
+                int64_t a = eval_bound(bounds[i].first);
+                int64_t b = eval_bound(bounds[i].second);
+                producer_required[i].union_with(Span(a, b, bounds_are_constant));
             }
         }
 
