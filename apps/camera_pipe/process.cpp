@@ -1,6 +1,6 @@
 #include "camera_pipe.h"
 #ifndef NO_AUTO_SCHEDULE
-// #include "camera_pipe_classic_auto_schedule.h"
+#include "camera_pipe_classic_auto_schedule.h"
 #include "camera_pipe_auto_schedule.h"
 #endif
 
@@ -71,8 +71,7 @@ int main(int argc, char **argv) {
         nullptr,
         nullptr,
     #else
-        // TODO: camera_pipe fails under the classic autoscheduler with an internal error.
-        nullptr, // [&]() { camera_pipe_classic_auto_schedule(input, matrix_3200, matrix_7000, color_temp, gamma, contrast, sharpen, blackLevel, whiteLevel, output); output.device_sync(); },
+        [&]() { camera_pipe_classic_auto_schedule(input, matrix_3200, matrix_7000, color_temp, gamma, contrast, sharpen, blackLevel, whiteLevel, output); output.device_sync(); },
         [&]() { camera_pipe_auto_schedule(input, matrix_3200, matrix_7000, color_temp, gamma, contrast, sharpen, blackLevel, whiteLevel, output); output.device_sync(); },
     #endif
         samples,

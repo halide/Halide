@@ -59,6 +59,11 @@ int64_t get_shared_memory_limit() {
     return atoi(limit.c_str()) * 1024; // Convert to bytes
 }
 
+bool compute_root_and_inline_only() {
+    static bool only = get_env_variable("HL_COMPUTE_ROOT_AND_INLINE_ONLY") == "1";
+    return only;
+}
+
 uint32_t get_dropout_threshold() {
     string random_dropout_str = get_env_variable("HL_RANDOM_DROPOUT");
     if (!random_dropout_str.empty()) {
@@ -1310,7 +1315,7 @@ struct LoopNest {
             result.emplace_back(r.release());
         }
 
-        if (f->is_output) {
+        if (f->is_output || compute_root_and_inline_only()) {
             // Not permitted to compute at tiles of some consumer
             return result;
         }
