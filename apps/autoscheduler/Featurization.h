@@ -17,6 +17,10 @@ struct PipelineFeatures {
         return sizeof(PipelineFeatures) / sizeof(int);
     }
 
+    static constexpr int version() {
+        return 3;
+    }
+
     int &operator[](int idx) {
         return ((int *)(this))[idx];
     }
