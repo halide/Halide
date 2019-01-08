@@ -2414,7 +2414,7 @@ struct State {
                     t.swap(o.tiling);
 
                     // Compute max idle cores across the other stages of the Func
-                    int64_t min_total = 0;
+                    int64_t min_total = 0, max_total = 0;
                     o.idle_core_wastage = 1;
                     for (const auto &c : root->children) {
                         if (c->node == node) {
@@ -2429,6 +2429,7 @@ struct State {
                             } else {
                                 min_total = total;
                             }
+                            max_total = std::max(max_total, total);
                             const double tasks_per_core = ((double)total) / params.parallelism;
                             o.idle_core_wastage = std::max(o.idle_core_wastage,
                                                            std::ceil(tasks_per_core) / tasks_per_core);
@@ -2436,8 +2437,11 @@ struct State {
                     }
 
                     // Filter out the less useful options
-                    if (min_total > params.parallelism * 64) continue;
-                    if (min_total < params.parallelism && !o.entire) continue;
+                    bool ok =
+                        ((o.entire || min_total > params.parallelism) &&
+                         (max_total <= params.parallelism * 64));
+
+                    if (!ok) continue;
 
                     options.emplace_back(std::move(o));
                 }
