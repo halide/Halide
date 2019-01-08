@@ -15,7 +15,7 @@ $(BIN)/resnet50block.generator: Resnet50BlockGenerator.cpp $(GENERATOR_DEPS)
 $(BIN)/resnet50block%.a: $(BIN)/resnet50block.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
 	HL_MACHINE_PARAMS=1,1,1 HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=../autoscheduler/weights \
-	$(BIN)/resnet50block.generator -g resnet50block -o $(BIN) -f resnet50block$* target=$(HL_TARGET) auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so block_id=$*
+	$(BIN)/resnet50block.generator -g resnet50block -o $(BIN) -f resnet50block$* target=$(HL_TARGET) auto_schedule=true block_id=$* -p $(AUTOSCHED_BIN)/libauto_schedule.so
 
 $(BIN)/pytorch_weights/ok:
 	@mkdir -p $(@D)
@@ -31,3 +31,11 @@ test: $(BIN)/process $(BIN)/pytorch_weights/ok
 
 clean:
 	rm -rf $(BIN)
+
+autotune: $(BIN)/resnet50block.generator $(AUTOSCHED_BIN)/augment_sample $(AUTOSCHED_BIN)/train_cost_model $(AUTOSCHED_BIN)/libauto_schedule.so $(AUTOSCHED_SRC)/autotune_loop.sh
+	bash $(AUTOSCHED_SRC)/autotune_loop.sh \
+		$(BIN)/resnet50block.generator \
+		resnet50block \
+		x86-64-avx2 \
+		$(AUTOSCHED_SRC)/weights \
+		$(AUTOSCHED_BIN)
