@@ -705,26 +705,26 @@ Expr RegionCosts::input_region_size(const map<string, Box> &input_regions) {
 }
 
 void RegionCosts::disp_func_costs() {
-    debug(0) << "===========================" << '\n';
-    debug(0) << "Pipeline per element costs:" << '\n';
-    debug(0) << "===========================" << '\n';
+    DEBUG(0) << "===========================" << '\n';
+    DEBUG(0) << "Pipeline per element costs:" << '\n';
+    DEBUG(0) << "===========================" << '\n';
     for (const auto &kv : env) {
         int stage = 0;
         for (const auto &cost : func_cost[kv.first]) {
             if (kv.second.has_extern_definition()) {
-                debug(0) << "Extern func\n";
+                DEBUG(0) << "Extern func\n";
             } else {
                 Definition def = get_stage_definition(kv.second, stage);
                 for (const auto &e : def.values()) {
-                    debug(0) << simplify(e) << '\n';
+                    DEBUG(0) << simplify(e) << '\n';
                 }
             }
-            debug(0) << "(" << kv.first << ", " << stage << ") -> ("
+            DEBUG(0) << "(" << kv.first << ", " << stage << ") -> ("
                      << cost.arith << ", " << cost.memory << ")" << '\n';
             stage++;
         }
     }
-    debug(0) << "===========================" << '\n';
+    DEBUG(0) << "===========================" << '\n';
 }
 
 bool is_func_trivial_to_inline(const Function &func) {

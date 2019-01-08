@@ -2030,7 +2030,7 @@ void fuzz_test_rule(Before &&before, After &&after, Predicate &&pred,
     if (!tested.insert(reinterpret_bits<uint32_t>(wildcard_type)).second) return;
 
     // Print it in a form where it can be piped into a python/z3 validator
-    debug(0) << "validate('" << before << "', '" << after << "', '" << pred << "', " << Type(wildcard_type) << ", " << Type(output_type) << ")\n";
+    DEBUG(0) << "validate('" << before << "', '" << after << "', '" << pred << "', " << Type(wildcard_type) << ", " << Type(output_type) << ")\n";
 
     // Substitute some random constants into the before and after
     // expressions and see if the rule holds true. This should catch
@@ -2120,18 +2120,18 @@ void fuzz_test_rule(Before &&before, After &&after, Predicate &&pred,
         }
 
         if (!ok) {
-            debug(0) << "Fails with values:\n";
+            DEBUG(0) << "Fails with values:\n";
             for (int i = 0; i < max_wild; i++) {
                 halide_scalar_value_t val;
                 state.get_bound_const(i, val, wildcard_type);
-                debug(0) << " c" << i << ": " << make_const_expr(val, wildcard_type) << "\n";
+                DEBUG(0) << " c" << i << ": " << make_const_expr(val, wildcard_type) << "\n";
             }
             for (int i = 0; i < max_wild; i++) {
-                debug(0) << " _" << i << ": " << Expr(state.get_binding(i)) << "\n";
+                DEBUG(0) << " _" << i << ": " << Expr(state.get_binding(i)) << "\n";
             }
-            debug(0) << " Before: " << make_const_expr(val_before, output_type) << "\n";
-            debug(0) << " After:  " << make_const_expr(val_after, output_type) << "\n";
-            debug(0) << val_before.u.u64 << " " << val_after.u.u64 << "\n";
+            DEBUG(0) << " Before: " << make_const_expr(val_before, output_type) << "\n";
+            DEBUG(0) << " After:  " << make_const_expr(val_after, output_type) << "\n";
+            DEBUG(0) << val_before.u.u64 << " " << val_after.u.u64 << "\n";
             internal_error;
         }
     }
@@ -2207,12 +2207,12 @@ struct Rewriter {
         if (before.template match<0>(instance, state)) {
             build_replacement(after);
             #if HALIDE_DEBUG_MATCHED_RULES
-            debug(0) << instance << " -> " << result << " via " << before << " -> " << after << "\n";
+            DEBUG(0) << instance << " -> " << result << " via " << before << " -> " << after << "\n";
             #endif
             return true;
         } else {
             #if HALIDE_DEBUG_UNMATCHED_RULES
-            debug(0) << instance << " does not match " << before << "\n";
+            DEBUG(0) << instance << " does not match " << before << "\n";
             #endif
             return false;
         }
@@ -2225,12 +2225,12 @@ struct Rewriter {
         if (before.template match<0>(instance, state)) {
             result = after;
             #if HALIDE_DEBUG_MATCHED_RULES
-            debug(0) << instance << " -> " << result << " via " << before << " -> " << after << "\n";
+            DEBUG(0) << instance << " -> " << result << " via " << before << " -> " << after << "\n";
             #endif
             return true;
         } else {
             #if HALIDE_DEBUG_UNMATCHED_RULES
-            debug(0) << instance << " does not match " << before << "\n";
+            DEBUG(0) << instance << " does not match " << before << "\n";
             #endif
             return false;
         }
@@ -2246,12 +2246,12 @@ struct Rewriter {
         if (before.template match<0>(instance, state)) {
             result = make_const(output_type, after);
             #if HALIDE_DEBUG_MATCHED_RULES
-            debug(0) << instance << " -> " << result << " via " << before << " -> " << after << "\n";
+            DEBUG(0) << instance << " -> " << result << " via " << before << " -> " << after << "\n";
             #endif
             return true;
         } else {
             #if HALIDE_DEBUG_UNMATCHED_RULES
-            debug(0) << instance << " does not match " << before << "\n";
+            DEBUG(0) << instance << " does not match " << before << "\n";
             #endif
             return false;
         }
@@ -2275,12 +2275,12 @@ struct Rewriter {
             evaluate_predicate(pred, state)) {
             build_replacement(after);
             #if HALIDE_DEBUG_MATCHED_RULES
-            debug(0) << instance << " -> " << result << " via " << before << " -> " << after << " when " << pred << "\n";
+            DEBUG(0) << instance << " -> " << result << " via " << before << " -> " << after << " when " << pred << "\n";
             #endif
             return true;
         } else {
             #if HALIDE_DEBUG_UNMATCHED_RULES
-            debug(0) << instance << " does not match " << before << "\n";
+            DEBUG(0) << instance << " does not match " << before << "\n";
             #endif
             return false;
         }
@@ -2297,12 +2297,12 @@ struct Rewriter {
             evaluate_predicate(pred, state)) {
             result = after;
             #if HALIDE_DEBUG_MATCHED_RULES
-            debug(0) << instance << " -> " << result << " via " << before << " -> " << after << " when " << pred << "\n";
+            DEBUG(0) << instance << " -> " << result << " via " << before << " -> " << after << " when " << pred << "\n";
             #endif
             return true;
         } else {
             #if HALIDE_DEBUG_UNMATCHED_RULES
-            debug(0) << instance << " does not match " << before << "\n";
+            DEBUG(0) << instance << " does not match " << before << "\n";
             #endif
             return false;
         }
@@ -2322,12 +2322,12 @@ struct Rewriter {
             evaluate_predicate(pred, state)) {
             result = make_const(output_type, after);
             #if HALIDE_DEBUG_MATCHED_RULES
-            debug(0) << instance << " -> " << result << " via " << before << " -> " << after << " when " << pred << "\n";
+            DEBUG(0) << instance << " -> " << result << " via " << before << " -> " << after << " when " << pred << "\n";
             #endif
             return true;
         } else {
             #if HALIDE_DEBUG_UNMATCHED_RULES
-            debug(0) << instance << " does not match " << before << "\n";
+            DEBUG(0) << instance << " does not match " << before << "\n";
             #endif
             return false;
         }

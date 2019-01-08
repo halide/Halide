@@ -992,7 +992,7 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
 
     if (!generator_name.empty()) {
         std::string base_path = compute_base_path(output_dir, function_name, file_base_name);
-        debug(1) << "Generator " << generator_name << " has base_path " << base_path << "\n";
+        DEBUG(1) << "Generator " << generator_name << " has base_path " << base_path << "\n";
         if (emit_options.emit_cpp_stub) {
             // When generating cpp_stub, we ignore all generator args passed in, and supply a fake Target.
             auto gen = GeneratorRegistry::create(generator_name, GeneratorContext(Target()));

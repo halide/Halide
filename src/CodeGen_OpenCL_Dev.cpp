@@ -399,9 +399,9 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Allocate *op) {
     } else {
         open_scope();
 
-        debug(2) << "Allocate " << op->name << " on device\n";
+        DEBUG(2) << "Allocate " << op->name << " on device\n";
 
-        debug(3) << "Pushing allocation called " << op->name << " onto the symbol table\n";
+        DEBUG(3) << "Pushing allocation called " << op->name << " onto the symbol table\n";
 
         // Allocation is not a shared memory allocation, just make a local declaration.
         // It must have a constant size.
@@ -513,7 +513,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Min *op) {
 void CodeGen_OpenCL_Dev::add_kernel(Stmt s,
                                     const string &name,
                                     const vector<DeviceArgument> &args) {
-    debug(2) << "CodeGen_OpenCL_Dev::compile " << name << "\n";
+    DEBUG(2) << "CodeGen_OpenCL_Dev::compile " << name << "\n";
 
     // TODO: do we have to uniquify these names, or can we trust that they are safe?
     cur_kernel_name = name;
@@ -538,11 +538,11 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
                                                       const string &name,
                                                       const vector<DeviceArgument> &args) {
 
-    debug(2) << "Adding OpenCL kernel " << name << "\n";
+    DEBUG(2) << "Adding OpenCL kernel " << name << "\n";
 
-    debug(2) << "Eliminating bool vectors\n";
+    DEBUG(2) << "Eliminating bool vectors\n";
     s = eliminate_bool_vectors(s);
-    debug(2) << "After eliminating bool vectors:\n" << s << "\n";
+    DEBUG(2) << "After eliminating bool vectors:\n" << s << "\n";
 
     // Figure out which arguments should be passed in __constant.
     // Such arguments should be:
@@ -644,7 +644,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
 }
 
 void CodeGen_OpenCL_Dev::init_module() {
-    debug(2) << "OpenCL device codegen init_module\n";
+    DEBUG(2) << "OpenCL device codegen init_module\n";
 
     // wipe the internal kernel source
     src_stream.str("");
@@ -759,7 +759,7 @@ void CodeGen_OpenCL_Dev::init_module() {
 
 vector<char> CodeGen_OpenCL_Dev::compile_to_src() {
     string str = src_stream.str();
-    debug(1) << "OpenCL kernel:\n" << str << "\n";
+    DEBUG(1) << "OpenCL kernel:\n" << str << "\n";
     vector<char> buffer(str.begin(), str.end());
     buffer.push_back(0);
     return buffer;

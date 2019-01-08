@@ -68,9 +68,9 @@ ErrorReport::ErrorReport(const char *file, int line, const char *condition_strin
 
     if (flags & User) {
         // Only mention where inside of libHalide the error tripped if we have debug level > 0
-        debug(1) << "User error triggered at " << file << ":" << line << "\n";
+        DEBUG(1) << "User error triggered at " << file << ":" << line << "\n";
         if (condition_string) {
-            debug(1) << "Condition failed: " << condition_string << "\n";
+            DEBUG(1) << "Condition failed: " << condition_string << "\n";
         }
         if (flags & Warning) {
             msg << "Warning";

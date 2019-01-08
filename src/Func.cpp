@@ -217,7 +217,7 @@ std::pair<int, int> Func::add_implicit_vars(vector<Var> &args) const {
         int i = 0;
         iter = args.erase(iter);
         while ((int)args.size() < dimensions()) {
-            Internal::debug(2) << "Adding implicit var " << i << " to call to " << name() << "\n";
+            Internal::DEBUG(2) << "Adding implicit var " << i << " to call to " << name() << "\n";
             iter = args.insert(iter, Var::implicit(i++));
             iter++;
             count++;
@@ -247,7 +247,7 @@ std::pair<int, int> Func::add_implicit_vars(vector<Expr> &args) const {
         int i = 0;
         iter = args.erase(iter);
         while ((int)args.size() < dimensions()) {
-            Internal::debug(2) << "Adding implicit var " << i << " to call to " << name() << "\n";
+            Internal::DEBUG(2) << "Adding implicit var " << i << " to call to " << name() << "\n";
             iter = args.insert(iter, Var::implicit(i++));
             iter++;
             count++;
@@ -369,7 +369,7 @@ class SubstituteSelfReference : public IRMutator2 {
         internal_assert(c);
 
         if ((c->call_type == Call::Halide) && (func == c->name)) {
-            debug(4) << "...Replace call to Func \"" << c->name << "\" with "
+            DEBUG(4) << "...Replace call to Func \"" << c->name << "\" with "
                      << "\"" << substitute.name() << "\"\n";
             vector<Expr> args;
             args.insert(args.end(), c->args.begin(), c->args.end());
@@ -444,7 +444,7 @@ bool apply_split(const Split &s, vector<ReductionVariable> &rvars,
     Expr old_max, old_min, old_extent;
 
     if (it != rvars.end()) {
-        debug(4) << "  Splitting " << it->var << " into " << s.outer << " and " << s.inner << "\n";
+        DEBUG(4) << "  Splitting " << it->var << " into " << s.outer << " and " << s.inner << "\n";
 
         old_max = simplify(it->min + it->extent - 1);
         old_min = it->min;
@@ -478,7 +478,7 @@ bool apply_fuse(const Split &s, vector<ReductionVariable> &rvars,
 
     Expr inner_min, inner_extent, outer_min, outer_extent;
     if ((iter_outer != rvars.end()) && (iter_inner != rvars.end())) {
-        debug(4) << "  Fusing " << s.outer << " and " << s.inner << " into " << s.old_var << "\n";
+        DEBUG(4) << "  Fusing " << s.outer << " and " << s.inner << " into " << s.old_var << "\n";
 
         inner_min = iter_inner->min;
         inner_extent = iter_inner->extent;
@@ -511,7 +511,7 @@ bool apply_purify(const Split &s, vector<ReductionVariable> &rvars,
     const auto &iter = std::find_if(rvars.begin(), rvars.end(),
         [&s](const ReductionVariable &rv) { return (s.old_var == rv.var); });
     if (iter != rvars.end()) {
-        debug(4) << "  Purify RVar " << iter->var << " into Var " << s.outer
+        DEBUG(4) << "  Purify RVar " << iter->var << " into Var " << s.outer
                  << ", deleting it from the rvars list\n";
         rvars.erase(iter);
 
@@ -532,7 +532,7 @@ bool apply_rename(const Split &s, vector<ReductionVariable> &rvars,
     const auto &iter = std::find_if(rvars.begin(), rvars.end(),
         [&s](const ReductionVariable &rv) { return (s.old_var == rv.var); });
     if (iter != rvars.end()) {
-        debug(4) << "  Renaming " << iter->var << " into " << s.outer << "\n";
+        DEBUG(4) << "  Renaming " << iter->var << " into " << s.outer << "\n";
         iter->var = s.outer;
 
         vector<ApplySplitResult> splits_result = apply_split(s, true, "", dim_extent_alignment);
@@ -890,7 +890,7 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
 }
 
 void Stage::split(const string &old, const string &outer, const string &inner, Expr factor, bool exact, TailStrategy tail) {
-    debug(4) << "In schedule for " << name() << ", split " << old << " into "
+    DEBUG(4) << "In schedule for " << name() << ", split " << old << " into "
              << outer << " and " << inner << " with factor of " << factor << "\n";
     vector<Dim> &dims = definition.schedule().dims();
 
@@ -1066,7 +1066,7 @@ Stage &Stage::fuse(VarOrRVar inner, VarOrRVar outer, VarOrRVar fused) {
                                     << "into RVar " << fused.name() << "\n";
     }
 
-    debug(4) << "In schedule for " << name() << ", fuse " << outer.name()
+    DEBUG(4) << "In schedule for " << name() << ", fuse " << outer.name()
              << " and " << inner.name() << " into " << fused.name() << "\n";
 
     // Replace the old dimensions with the new dimension in the dims list
@@ -1184,7 +1184,7 @@ Stage &Stage::purify(VarOrRVar old_var, VarOrRVar new_var) {
         << " to " << (new_var.is_rvar ? "RVar " : "Var ") << new_var.name()
         << "; purify must take a RVar as old_Var and a Var as new_var\n";
 
-    debug(4) << "In schedule for " << name() << ", purify RVar "
+    DEBUG(4) << "In schedule for " << name() << ", purify RVar "
              << old_var.name() << " to Var " << new_var.name() << "\n";
 
     StageSchedule &schedule = definition.schedule();
@@ -1218,7 +1218,7 @@ Stage &Stage::purify(VarOrRVar old_var, VarOrRVar new_var) {
 }
 
 void Stage::remove(const string &var) {
-    debug(4) << "In schedule for " << name() << ", remove " << var << "\n";
+    DEBUG(4) << "In schedule for " << name() << ", remove " << var << "\n";
 
     StageSchedule &schedule = definition.schedule();
 
@@ -1258,7 +1258,7 @@ void Stage::remove(const string &var) {
     for (size_t i = splits.size(); i > 0; i--) {
         bool is_removed = false;
         if (splits[i-1].is_fuse()) {
-            debug(4) << "    checking fuse " << splits[i-1].inner << " and "
+            DEBUG(4) << "    checking fuse " << splits[i-1].inner << " and "
                      << splits[i-1].inner << " into " << splits[i-1].old_var << "\n";
             if (splits[i-1].inner == old_name ||
                 splits[i-1].outer == old_name) {
@@ -1275,7 +1275,7 @@ void Stage::remove(const string &var) {
                 removed_vars.insert(splits[i-1].inner);
             }
         } else if (splits[i-1].is_split()) {
-            debug(4) << "    splitting " << splits[i-1].old_var << " into "
+            DEBUG(4) << "    splitting " << splits[i-1].old_var << " into "
                      << splits[i-1].outer << " and " << splits[i-1].inner << "\n";
             if (should_remove(splits[i-1].inner)) {
                 is_removed = true;
@@ -1292,7 +1292,7 @@ void Stage::remove(const string &var) {
                     << dump_argument_list();
             }
         } else {
-            debug(4) << "    replace/rename " << splits[i-1].old_var
+            DEBUG(4) << "    replace/rename " << splits[i-1].old_var
                      << " into " << splits[i-1].outer << "\n";
             if (should_remove(splits[i-1].outer)) {
                 is_removed = true;
@@ -1326,7 +1326,7 @@ Stage &Stage::rename(VarOrRVar old_var, VarOrRVar new_var) {
             << " to RVar " << new_var.name() << "\n";
     }
 
-    debug(4) << "In schedule for " << name() << ", rename " << old_var.name()
+    DEBUG(4) << "In schedule for " << name() << ", rename " << old_var.name()
              << " to " << new_var.name() << "\n";
 
     StageSchedule &schedule = definition.schedule();
@@ -2590,7 +2590,7 @@ vector<Expr> FuncRef::args_with_implicit_vars(const vector<Expr> &e) const {
             internal_assert(implicit_count == 0)
                 << "Pure definition can't possibly already have implicit variables defined\n";
 
-            Internal::debug(2) << "Adding " << count.count << " implicit vars to LHS of " << func.name() << "\n";
+            Internal::DEBUG(2) << "Adding " << count.count << " implicit vars to LHS of " << func.name() << "\n";
 
             vector<Expr>::iterator iter = a.begin() + implicit_placeholder_pos;
             for (int i = 0; i < count.count; i++) {

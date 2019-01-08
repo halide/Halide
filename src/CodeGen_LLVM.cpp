@@ -513,7 +513,7 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
 
     init_module();
 
-    debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
+    DEBUG(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
 
     module->setModuleIdentifier(input.name());
 
@@ -563,7 +563,7 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
     add_external_code(input);
 
     // Generate the code for this module.
-    debug(1) << "Generating llvm bitcode...\n";
+    DEBUG(1) << "Generating llvm bitcode...\n";
     for (const auto &b : input.buffers()) {
         compile_buffer(b);
     }
@@ -585,11 +585,11 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
         }
     }
 
-    debug(2) << module.get() << "\n";
+    DEBUG(2) << module.get() << "\n";
 
     // Verify the module is ok
     internal_assert(!verifyModule(*module, &llvm::errs()));
-    debug(2) << "Done generating llvm bitcode\n";
+    DEBUG(2) << "Done generating llvm bitcode\n";
 
     // Optimize
     CodeGen_LLVM::optimize_module();
@@ -646,7 +646,7 @@ void CodeGen_LLVM::begin_func(LinkageType linkage, const std::string& name,
         }
     }
 
-    debug(1) << "Generating llvm bitcode prolog for function " << name << "...\n";
+    DEBUG(1) << "Generating llvm bitcode prolog for function " << name << "...\n";
 
     // Null out the destructor block.
     destructor_block = nullptr;
@@ -719,7 +719,7 @@ void CodeGen_LLVM::compile_func(const LoweredFunc &f, const std::string &simple_
     }
 
      // Generate the function body.
-    debug(1) << "Generating llvm bitcode for function " << f.name << "...\n";
+    DEBUG(1) << "Generating llvm bitcode for function " << f.name << "...\n";
     f.body.accept(this);
 
     // Clean up and return.
@@ -984,7 +984,7 @@ llvm::Function *CodeGen_LLVM::add_argv_wrapper(const std::string &name) {
             wrapper_args.push_back(builder->CreateLoad(ptr));
         }
     }
-    debug(4) << "Creating call from wrapper to actual function\n";
+    DEBUG(4) << "Creating call from wrapper to actual function\n";
     llvm::CallInst *result = builder->CreateCall(function, wrapper_args);
     // This call should never inline
     result->setIsNoInline();
@@ -1107,7 +1107,7 @@ llvm::Type *CodeGen_LLVM::llvm_type_of(Type t) {
 }
 
 void CodeGen_LLVM::optimize_module() {
-    debug(3) << "Optimizing module\n";
+    DEBUG(3) << "Optimizing module\n";
 
     if (debug::debug_level() >= 3) {
         module->print(dbgs(), nullptr, false, true);
@@ -1119,7 +1119,7 @@ void CodeGen_LLVM::optimize_module() {
     public:
         MyFunctionPassManager(llvm::Module *m) : legacy::FunctionPassManager(m) {}
         void add(Pass *p) override {
-            debug(2) << "Adding function pass: " << p->getPassName().str() << "\n";
+            DEBUG(2) << "Adding function pass: " << p->getPassName().str() << "\n";
             legacy::FunctionPassManager::add(p);
         }
     };
@@ -1127,7 +1127,7 @@ void CodeGen_LLVM::optimize_module() {
     class MyModulePassManager : public legacy::PassManager {
     public:
         void add(Pass *p) override {
-            debug(2) << "Adding module pass: " << p->getPassName().str() << "\n";
+            DEBUG(2) << "Adding module pass: " << p->getPassName().str() << "\n";
             legacy::PassManager::add(p);
         }
     };
@@ -1201,7 +1201,7 @@ void CodeGen_LLVM::optimize_module() {
     function_pass_manager.doFinalization();
     module_pass_manager.run(*module);
 
-    debug(3) << "After LLVM optimizations:\n";
+    DEBUG(3) << "After LLVM optimizations:\n";
     if (debug::debug_level() >= 2) {
         module->print(dbgs(), nullptr, false, true);
     }
@@ -1244,7 +1244,7 @@ bool CodeGen_LLVM::sym_exists(const string &name) const {
 
 Value *CodeGen_LLVM::codegen(Expr e) {
     internal_assert(e.defined());
-    debug(4) << "Codegen: " << e.type() << ", " << e << "\n";
+    DEBUG(4) << "Codegen: " << e.type() << ", " << e << "\n";
     value = nullptr;
     e.accept(this);
     internal_assert(value) << "Codegen of an expr did not produce an llvm value\n";
@@ -1253,7 +1253,7 @@ Value *CodeGen_LLVM::codegen(Expr e) {
 
 void CodeGen_LLVM::codegen(Stmt s) {
     internal_assert(s.defined());
-    debug(3) << "Codegen: " << s << "\n";
+    DEBUG(3) << "Codegen: " << s << "\n";
     value = nullptr;
     s.accept(this);
 }
@@ -2039,7 +2039,7 @@ void CodeGen_LLVM::scalarize(Expr e) {
 void CodeGen_LLVM::codegen_predicated_vector_store(const Store *op) {
     const Ramp *ramp = op->index.as<Ramp>();
     if (ramp && is_one(ramp->stride)) { // Dense vector store
-        debug(4) << "Predicated dense vector store\n\t" << Stmt(op) << "\n";
+        DEBUG(4) << "Predicated dense vector store\n\t" << Stmt(op) << "\n";
         Value *vpred = codegen(op->predicate);
         Halide::Type value_type = op->value.type();
         Value *val = codegen(op->value);
@@ -2085,7 +2085,7 @@ void CodeGen_LLVM::codegen_predicated_vector_store(const Store *op) {
             add_tbaa_metadata(store_inst, op->name, slice_index);
         }
     } else { // It's not dense vector store, we need to scalarize it
-        debug(4) << "Scalarize predicated vector store\n";
+        DEBUG(4) << "Scalarize predicated vector store\n";
         Type value_type = op->value.type().element_of();
         Value *vpred = codegen(op->predicate);
         Value *vval = codegen(op->value);
@@ -2118,7 +2118,7 @@ void CodeGen_LLVM::codegen_predicated_vector_store(const Store *op) {
 }
 
 Value *CodeGen_LLVM::codegen_dense_vector_load(const Load *load, Value *vpred) {
-    debug(4) << "Vectorize predicated dense vector load:\n\t" << Expr(load) << "\n";
+    DEBUG(4) << "Vectorize predicated dense vector load:\n\t" << Expr(load) << "\n";
 
     const Ramp *ramp = load->index.as<Ramp>();
     internal_assert(ramp && is_one(ramp->stride)) << "Should be dense vector load\n";
@@ -2192,7 +2192,7 @@ void CodeGen_LLVM::codegen_predicated_vector_load(const Load *op) {
         Value *vpred = codegen(op->predicate);
         value = codegen_dense_vector_load(op, vpred);
     } else if (ramp && stride && stride->value == -1) {
-        debug(4) << "Predicated dense vector load with stride -1\n\t" << Expr(op) << "\n";
+        DEBUG(4) << "Predicated dense vector load with stride -1\n\t" << Expr(op) << "\n";
         vector<int> indices(ramp->lanes);
         for (int i = 0; i < ramp->lanes; i++) {
             indices[i] = ramp->lanes - 1 - i;
@@ -2214,7 +2214,7 @@ void CodeGen_LLVM::codegen_predicated_vector_load(const Load *op) {
     } else { // It's not dense vector load, we need to scalarize it
         Expr load_expr = Load::make(op->type, op->name, op->index, op->image,
                                     op->param, const_true(op->type.lanes()));
-        debug(4) << "Scalarize predicated vector load\n\t" << load_expr << "\n";
+        DEBUG(4) << "Scalarize predicated vector load\n\t" << load_expr << "\n";
         Expr pred_load = Call::make(load_expr.type(),
                                     Call::if_then_else,
                                     {op->predicate, load_expr, make_zero(load_expr.type())},
@@ -2709,7 +2709,7 @@ void CodeGen_LLVM::visit(const Call *op) {
                                                        NameMangling::Default,
                                                        current_function_args,
                                                        get_target()).extern_name;
-                debug(1) << "Did not find function " << sub_fn_name
+                DEBUG(1) << "Did not find function " << sub_fn_name
                          << ", assuming extern \"C\" " << extern_sub_fn_name << "\n";
                 vector<llvm::Type *> arg_types;
                 for (const auto &arg : function->args()) {
@@ -2724,7 +2724,7 @@ void CodeGen_LLVM::visit(const Call *op) {
 
             llvm::GlobalValue *sub_fn_ptr = module->getNamedValue(extern_sub_fn_name);
             if (!sub_fn_ptr) {
-                debug(1) << "Did not find function ptr " << extern_sub_fn_name << ", assuming extern \"C\".\n";
+                DEBUG(1) << "Did not find function ptr " << extern_sub_fn_name << ", assuming extern \"C\".\n";
                 sub_fn_ptr = new GlobalVariable(*module, sub_fn->getType(),
                                                 /*isConstant*/ true, GlobalValue::ExternalLinkage,
                                                 /*initializer*/ nullptr, extern_sub_fn_name);
@@ -2915,7 +2915,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         bool takes_user_context = function_takes_user_context(op->name);
         if (takes_user_context) {
             internal_assert(fn) << "External function " << op->name << " is marked as taking user_context, but is not in the runtime module. Check if runtime_api.cpp needs to be rebuilt.\n";
-            debug(4) << "Adding user_context to " << op->name << " args\n";
+            DEBUG(4) << "Adding user_context to " << op->name << " args\n";
             args.insert(args.begin(), get_user_context());
         }
 
@@ -2940,9 +2940,9 @@ void CodeGen_LLVM::visit(const Call *op) {
 
             fn = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, name, module.get());
             fn->setCallingConv(CallingConv::C);
-            debug(4) << "Did not find " << op->name << ". Declared it extern \"C\".\n";
+            DEBUG(4) << "Did not find " << op->name << ". Declared it extern \"C\".\n";
         } else {
-            debug(4) << "Found " << op->name << "\n";
+            DEBUG(4) << "Found " << op->name << "\n";
 
             // TODO: Say something more accurate here as there is now
             // partial information in the handle_type field, but it is
@@ -2969,7 +2969,7 @@ void CodeGen_LLVM::visit(const Call *op) {
                     }
 
                     if (t != args[i]->getType()) {
-                        debug(4) << "Pointer casting argument to extern call: "
+                        DEBUG(4) << "Pointer casting argument to extern call: "
                                  << halide_arg << "\n";
                         args[i] = builder->CreatePointerCast(args[i], t);
                     }
@@ -3492,7 +3492,7 @@ void CodeGen_LLVM::do_parallel_tasks(const vector<ParallelTask> &tasks) {
             internal_assert(do_par_for) << "Could not find halide_do_par_for in initial module\n";
             do_par_for->addParamAttr(4, Attribute::NoAlias);
             Value *args[] = {get_user_context(), task_ptr, min, extent, closure_ptr};
-            debug(4) << "Creating call to do_par_for\n";
+            DEBUG(4) << "Creating call to do_par_for\n";
             result = builder->CreateCall(do_par_for, args);
         } else {
             // Populate the task struct

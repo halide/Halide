@@ -180,7 +180,7 @@ private:
     using IRMutator2::visit;
 
     Stmt add_placeholder_prefetch(const string &loop_var, PrefetchDirective p, Stmt body) {
-        debug(5) << "...Injecting placeholder prefetch for " << loop_var << "\n";
+        DEBUG(5) << "...Injecting placeholder prefetch for " << loop_var << "\n";
         p.var = loop_var;
         internal_assert(body.defined());
         if (p.param.defined()) {
@@ -262,7 +262,7 @@ class ReducePrefetchDimension : public IRMutator2 {
                 stmt = For::make(index_names[i], 0, call->args[(i+max_dim)*2 + 2],
                                  ForType::Serial, DeviceAPI::None, stmt);
             }
-            debug(5) << "\nReduce prefetch to " << max_dim << " dim:\n"
+            DEBUG(5) << "\nReduce prefetch to " << max_dim << " dim:\n"
                      << "Before:\n" << Expr(call) << "\nAfter:\n" << stmt << "\n";
         }
         return stmt;
@@ -326,7 +326,7 @@ class SplitPrefetch : public IRMutator2 {
                 stmt = For::make(index_names[i], 0, extents[i],
                                  ForType::Serial, DeviceAPI::None, stmt);
             }
-            debug(5) << "\nSplit prefetch to max of " << max_byte_size << " bytes:\n"
+            DEBUG(5) << "\nSplit prefetch to max of " << max_byte_size << " bytes:\n"
                      << "Before:\n" << Expr(call) << "\nAfter:\n" << stmt << "\n";
         }
         return stmt;

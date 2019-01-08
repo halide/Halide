@@ -86,7 +86,7 @@ class IsNoOp : public IRVisitor {
             }
             // If the value being stored is the same as the value loaded,
             // this is a no-op
-            debug(3) << "Considering store: " << Stmt(op) << "\n";
+            DEBUG(3) << "Considering store: " << Stmt(op) << "\n";
 
             // Early-out: There's no way for that to be true if the
             // RHS does not load from the buffer being stored to.
@@ -103,10 +103,10 @@ class IsNoOp : public IRVisitor {
             // that makes the expr harder to solve, i.e. the solver will just give up
             // and return a conservative false on call to and_condition_over_domain().
             is_no_op = simplify(common_subexpression_elimination(is_no_op));
-            debug(3) << "Anding condition over domain... " << is_no_op << "\n";
+            DEBUG(3) << "Anding condition over domain... " << is_no_op << "\n";
             is_no_op = and_condition_over_domain(is_no_op, Scope<Interval>::empty_scope());
             condition = make_and(condition, is_no_op);
-            debug(3) << "Condition is now " << condition << "\n";
+            DEBUG(3) << "Condition is now " << condition << "\n";
         }
     }
 
@@ -120,9 +120,9 @@ class IsNoOp : public IRVisitor {
         Scope<Interval> varying;
         varying.push(op->name, Interval(op->min, op->min + op->extent - 1));
         condition = simplify(common_subexpression_elimination(condition));
-        debug(3) << "About to relax over " << op->name << " : " << condition << "\n";
+        DEBUG(3) << "About to relax over " << op->name << " : " << condition << "\n";
         condition = and_condition_over_domain(condition, varying);
-        debug(3) << "Relaxed: " << condition << "\n";
+        DEBUG(3) << "Relaxed: " << condition << "\n";
         condition = make_and(old_condition, make_or(condition, simplify(op->extent <= 0)));
     }
 
@@ -185,7 +185,7 @@ class SimplifyUsingBounds : public IRMutator2 {
 
     // Can we prove a condition over the non-rectangular domain of the for loops we're in?
     bool provably_true_over_domain(Expr test) {
-        debug(3) << "Attempting to prove: " << test << "\n";
+        DEBUG(3) << "Attempting to prove: " << test << "\n";
         for (size_t i = containing_loops.size(); i > 0; i--) {
             // Because the domain is potentially non-rectangular, we
             // need to take each variable one-by-one, simplifying in
@@ -226,7 +226,7 @@ class SimplifyUsingBounds : public IRMutator2 {
                 test = and_condition_over_domain(test, s);
             }
             test = simplify(test);
-            debug(3) << " -> " << test << "\n";
+            DEBUG(3) << " -> " << test << "\n";
         }
         return is_one(test);
     }
@@ -339,20 +339,20 @@ class TrimNoOps : public IRMutator2 {
     Stmt visit(const For *op) override {
         // Bounds of GPU loops can't depend on outer gpu loop vars
         if (CodeGen_GPU_Dev::is_gpu_var(op->name)) {
-            debug(3) << "TrimNoOps found gpu loop var: " << op->name << "\n";
+            DEBUG(3) << "TrimNoOps found gpu loop var: " << op->name << "\n";
             return IRMutator2::visit(op);
         }
 
         Stmt body = mutate(op->body);
 
-        debug(3) << "\n\n ***** Trim no ops in loop over " << op->name << "\n";
+        DEBUG(3) << "\n\n ***** Trim no ops in loop over " << op->name << "\n";
 
         IsNoOp is_no_op;
         body.accept(&is_no_op);
-        debug(3) << "Condition is " << is_no_op.condition << "\n";
+        DEBUG(3) << "Condition is " << is_no_op.condition << "\n";
         is_no_op.condition = simplify(simplify(common_subexpression_elimination(is_no_op.condition)));
 
-        debug(3) << "Simplified condition is " << is_no_op.condition << "\n";
+        DEBUG(3) << "Simplified condition is " << is_no_op.condition << "\n";
 
         if (is_one(is_no_op.condition)) {
             // This loop is definitely useless
@@ -367,7 +367,7 @@ class TrimNoOps : public IRMutator2 {
         // something.
         Interval i = solve_for_outer_interval(!is_no_op.condition, op->name);
 
-        debug(3) << "Interval is: " << i.min << ", " << i.max << "\n";
+        DEBUG(3) << "Interval is: " << i.min << ", " << i.max << "\n";
 
         if (i.is_everything()) {
             // Nope.
@@ -418,7 +418,7 @@ class TrimNoOps : public IRMutator2 {
         stmt = LetStmt::make(old_max_name, old_max, stmt);
         stmt = simplify(stmt);
 
-        debug(3) << "Rewrote loop.\n"
+        DEBUG(3) << "Rewrote loop.\n"
                  << "Old: " << Stmt(op) << "\n"
                  << "New: " << stmt << "\n";
 

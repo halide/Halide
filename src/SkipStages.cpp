@@ -378,14 +378,14 @@ private:
 
     Stmt visit(const Realize *op) override {
         if (op->name == func) {
-            debug(3) << "Finding compute predicate for " << op->name << "\n";
+            DEBUG(3) << "Finding compute predicate for " << op->name << "\n";
             PredicateFinder find_compute(op->name, true);
             op->body.accept(&find_compute);
 
-            debug(3) << "Simplifying compute predicate for " << op->name << ": " << find_compute.predicate << "\n";
+            DEBUG(3) << "Simplifying compute predicate for " << op->name << ": " << find_compute.predicate << "\n";
             Expr compute_predicate = simplify(common_subexpression_elimination(find_compute.predicate));
 
-            debug(3) << "Compute predicate for " << op->name << " : " << compute_predicate << "\n";
+            DEBUG(3) << "Compute predicate for " << op->name << " : " << compute_predicate << "\n";
 
             if (expr_uses_vars(compute_predicate, vector_vars)) {
                 // Don't try to skip stages if the predicate may vary
@@ -397,18 +397,18 @@ private:
 
             if (!is_one(compute_predicate)) {
 
-                debug(3) << "Finding allocate predicate for " << op->name << "\n";
+                DEBUG(3) << "Finding allocate predicate for " << op->name << "\n";
                 PredicateFinder find_alloc(op->name, false);
                 op->body.accept(&find_alloc);
-                debug(3) << "Simplifying allocate predicate for " << op->name << "\n";
+                DEBUG(3) << "Simplifying allocate predicate for " << op->name << "\n";
                 Expr alloc_predicate = simplify(common_subexpression_elimination(find_alloc.predicate));
 
-                debug(3) << "Allocate predicate for " << op->name << " : " << alloc_predicate << "\n";
+                DEBUG(3) << "Allocate predicate for " << op->name << " : " << alloc_predicate << "\n";
 
                 ProductionGuarder g(op->name, compute_predicate, alloc_predicate);
                 Stmt body = g.mutate(op->body);
 
-                debug(3) << "Done guarding computation for " << op->name << "\n";
+                DEBUG(3) << "Done guarding computation for " << op->name << "\n";
 
                 return Realize::make(op->name, op->types, op->memory_type, op->bounds,
                                      alloc_predicate, body);
@@ -506,9 +506,9 @@ Stmt skip_stages(Stmt stmt, const vector<string> &order) {
     MightBeSkippable check;
     stmt.accept(&check);
     for (size_t i = order.size()-1; i > 0; i--) {
-        debug(2) << "skip_stages checking " << order[i-1] << "\n";
+        DEBUG(2) << "skip_stages checking " << order[i-1] << "\n";
         if (check.candidates.count(order[i-1])) {
-            debug(2) << "skip_stages can skip " << order[i-1] << "\n";
+            DEBUG(2) << "skip_stages can skip " << order[i-1] << "\n";
             StageSkipper skipper(order[i-1]);
             Stmt new_stmt = skipper.mutate(stmt);
             if (!new_stmt.same_as(stmt)) {

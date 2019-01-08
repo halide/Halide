@@ -500,7 +500,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator2 {
                 explicit_factor = storage_dim.fold_factor;
             }
 
-            debug(3) << "\nConsidering folding " << func.name() << " over for loop over " << op->name << " dimension " << i - 1 << '\n'
+            DEBUG(3) << "\nConsidering folding " << func.name() << " over for loop over " << op->name << " dimension " << i - 1 << '\n'
                      << "Min: " << min << '\n'
                      << "Max: " << max << '\n'
                      << "Extent: " << extent << '\n'
@@ -581,7 +581,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator2 {
                     }
                 } else {
                     // Can't do much with this dimension
-                    debug(3) << "Not folding because loop min or max not monotonic in the loop variable\n"
+                    DEBUG(3) << "Not folding because loop min or max not monotonic in the loop variable\n"
                              << "min = " << min << "\n"
                              << "max = " << max << "\n";
                     continue;
@@ -626,7 +626,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator2 {
                         if (success) {
                             factor = e;
                         } else {
-                            debug(3) << "Not folding because extent not bounded by a constant not greater than " << max_fold << "\n"
+                            DEBUG(3) << "Not folding because extent not bounded by a constant not greater than " << max_fold << "\n"
                                      << "extent = " << extent << "\n"
                                      << "max extent = " << max_extent << "\n";
                             // Try the next dimension
@@ -637,7 +637,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator2 {
 
             internal_assert(factor.defined());
 
-            debug(3) << "Proceeding with factor " << factor << "\n";
+            DEBUG(3) << "Proceeding with factor " << factor << "\n";
 
             Fold fold = {(int)i - 1, factor};
             dims_folded.push_back(fold);
@@ -751,7 +751,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator2 {
                 break;
             } else {
                 stmt = op;
-                debug(3) << "Not folding because loop min or max not monotonic in the loop variable\n"
+                DEBUG(3) << "Not folding because loop min or max not monotonic in the loop variable\n"
                          << "min_initial = " << min_initial << "\n"
                          << "min_steady = " << min_steady << "\n"
                          << "max_initial = " << max_initial << "\n"
@@ -827,7 +827,7 @@ class StorageFolding : public IRMutator2 {
         // more than one produce node for this func.
         bool explicit_only = count_producers(body, op->name) != 1;
         AttemptStorageFoldingOfFunction folder(func, explicit_only);
-        debug(3) << "Attempting to fold " << op->name << "\n";
+        DEBUG(3) << "Attempting to fold " << op->name << "\n";
         body = folder.mutate(body);
 
         if (body.same_as(op->body)) {

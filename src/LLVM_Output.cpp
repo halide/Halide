@@ -310,7 +310,7 @@ namespace {
 // llvm::CloneModule has issues with debug info. As a workaround,
 // serialize it to bitcode in memory, and then parse the bitcode back in.
 std::unique_ptr<llvm::Module> clone_module(const llvm::Module &module_in) {
-    Internal::debug(2) << "Cloning module " << module_in.getName().str() << "\n";
+    Internal::DEBUG(2) << "Cloning module " << module_in.getName().str() << "\n";
 
     // Write the module to a buffer.
     llvm::SmallVector<char, 16> clone_buffer;
@@ -332,8 +332,8 @@ std::unique_ptr<llvm::Module> clone_module(const llvm::Module &module_in) {
 }  // namespace
 
 void emit_file(const llvm::Module &module_in, Internal::LLVMOStream& out, llvm::TargetMachine::CodeGenFileType file_type) {
-    Internal::debug(1) << "emit_file.Compiling to native code...\n";
-    Internal::debug(2) << "Target triple: " << module_in.getTargetTriple() << "\n";
+    Internal::DEBUG(1) << "emit_file.Compiling to native code...\n";
+    Internal::DEBUG(2) << "Target triple: " << module_in.getTargetTriple() << "\n";
 
     // Work on a copy of the module to avoid modifying the original.
     std::unique_ptr<llvm::Module> module = clone_module(module_in);

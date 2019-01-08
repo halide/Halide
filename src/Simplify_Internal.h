@@ -45,12 +45,12 @@ public:
 
     Expr mutate(const Expr &e, ConstBounds *b) {
         const std::string spaces(debug_indent, ' ');
-        debug(1) << spaces << "Simplifying Expr: " << e << "\n";
+        DEBUG(1) << spaces << "Simplifying Expr: " << e << "\n";
         debug_indent++;
         Expr new_e = Super::dispatch(e, b);
         debug_indent--;
         if (!new_e.same_as(e)) {
-            debug(1)
+            DEBUG(1)
                 << spaces << "Before: " << e << "\n"
                 << spaces << "After:  " << new_e << "\n";
         }
@@ -70,12 +70,12 @@ public:
 #if LOG_STMT_MUTATIONS
     Stmt mutate(const Stmt &s) {
         const std::string spaces(debug_indent, ' ');
-        debug(1) << spaces << "Simplifying Stmt: " << s << "\n";
+        DEBUG(1) << spaces << "Simplifying Stmt: " << s << "\n";
         debug_indent++;
         Stmt new_s = Super::dispatch(s);
         debug_indent--;
         if (!new_s.same_as(s)) {
-            debug(1)
+            DEBUG(1)
                 << spaces << "Before: " << s << "\n"
                 << spaces << "After:  " << new_s << "\n";
         }

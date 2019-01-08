@@ -137,10 +137,10 @@ class CanonicalizeGPUVars : public IRMutator2 {
 
             if (op->for_type == ForType::GPUBlock) {
                 name = gpu_name(v, get_block_name(counter.nblocks));
-                debug(5) << "Replacing " << op->name << " with GPU block name " << name << "\n";
+                DEBUG(5) << "Replacing " << op->name << " with GPU block name " << name << "\n";
             } else if (op->for_type == ForType::GPUThread) {
                 name = gpu_name(v, get_thread_name(counter.nlanes + counter.nthreads));
-                debug(5) << "Replacing " << op->name << " with GPU thread name " << name << "\n";
+                DEBUG(5) << "Replacing " << op->name << " with GPU thread name " << name << "\n";
             } else if (op->for_type == ForType::GPULane) {
                 user_assert(counter.nlanes == 0) << "Cannot nest multiple loops over gpu lanes: " << name << "\n";
                 name = gpu_name(v, get_thread_name(0));

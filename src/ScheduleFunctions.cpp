@@ -336,7 +336,7 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
         Expr v = def.values()[i];
         v = qualify(prefix, v);
         values[i] = v;
-        debug(3) << "Value " << i << " = " << v << "\n";
+        DEBUG(3) << "Value " << i << " = " << v << "\n";
     }
 
     // Default stored locations
@@ -344,7 +344,7 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
         Expr s = def.args()[i];
         s = qualify(prefix, s);
         site[i] = s;
-        debug(3) << "Site " << i << " = " << s << "\n";
+        DEBUG(3) << "Site " << i << " = " << s << "\n";
     }
 
     // Make the (multi-dimensional multi-valued) store node.
@@ -914,7 +914,7 @@ class ShiftLoopNest : public IRMutator2 {
         Stmt stmt = IRMutator2::visit(op);
         const auto &iter = shifts.find(op->name);
         if (iter != shifts.end()) {
-            debug(5) << "...Shifting for loop \"" << op->name << "\" by " << iter->second << "\n";
+            DEBUG(5) << "...Shifting for loop \"" << op->name << "\" by " << iter->second << "\n";
             op = stmt.as<For>();
             internal_assert(op);
             Expr adjusted = Variable::make(Int(32), op->name) + iter->second;
@@ -971,7 +971,7 @@ protected:
     using IRMutator2::visit;
 
     Stmt visit(const For *for_loop) override {
-        debug(3) << "Injecting " << funcs << " entering for-loop over " << for_loop->name << "\n";
+        DEBUG(3) << "Injecting " << funcs << " entering for-loop over " << for_loop->name << "\n";
         Stmt body = for_loop->body;
 
         // Dig through any placeholder prefetches
@@ -1007,7 +1007,7 @@ protected:
             function_is_used_in_stmt(funcs[0], for_loop)) {
 
             // If we're trying to inline an extern function, schedule it here and bail out
-            debug(2) << "Injecting realization of " << funcs[0].name() << " around node " << Stmt(for_loop) << "\n";
+            DEBUG(2) << "Injecting realization of " << funcs[0].name() << " around node " << Stmt(for_loop) << "\n";
             Stmt stmt = build_realize(build_pipeline_group(for_loop), funcs[0], is_output_list[0]);
             _found_store_level = _found_compute_level = true;
             return stmt;
@@ -1016,13 +1016,13 @@ protected:
         body = mutate(body);
 
         if (compute_level.match(for_loop->name)) {
-            debug(3) << "Found compute level at " << for_loop->name << "\n";
+            DEBUG(3) << "Found compute level at " << for_loop->name << "\n";
             body = build_pipeline_group(body);
             _found_compute_level = true;
         }
 
         if (_found_compute_level && store_level.match(for_loop->name)) {
-            debug(3) << "Found store level at " << for_loop->name << "\n";
+            DEBUG(3) << "Found store level at " << for_loop->name << "\n";
             body = build_realize_group(body);
             _found_store_level = true;
         }
@@ -2085,16 +2085,16 @@ Stmt schedule_functions(const vector<Function> &outputs,
         }
 
         if (group_should_be_inlined(funcs)) {
-            debug(1) << "Inlining " << funcs[0].name() << '\n';
+            DEBUG(1) << "Inlining " << funcs[0].name() << '\n';
             s = inline_function(s, funcs[0]);
         } else {
-            debug(1) << "Injecting realization of " << funcs << '\n';
+            DEBUG(1) << "Injecting realization of " << funcs << '\n';
             InjectFunctionRealization injector(funcs, is_output_list, target, env);
             s = injector.mutate(s);
             internal_assert(injector.found_store_level() && injector.found_compute_level());
         }
 
-        debug(2) << s << '\n';
+        DEBUG(2) << s << '\n';
     }
 
     // We can remove the loop over root now

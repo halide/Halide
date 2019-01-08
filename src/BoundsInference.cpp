@@ -227,7 +227,7 @@ public:
                         }
                     }
                     if (all_equal) {
-                        debug(4) << "compute_exprs: all values (size: " << vec.size() << ") "
+                        DEBUG(4) << "compute_exprs: all values (size: " << vec.size() << ") "
                                  << "(" << val << ") are equal, combine them together\n";
                         internal_assert(val.defined());
                         vec.clear();
@@ -794,9 +794,9 @@ public:
 
         // Dump the stages post-inlining for debugging
         /*
-        debug(0) << "Bounds inference stages after inlining: \n";
+        DEBUG(0) << "Bounds inference stages after inlining: \n";
         for (size_t i = 0; i < stages.size(); i++) {
-            debug(0) << " " << i << ") " << stages[i].name << "\n";
+            DEBUG(0) << " " << i << ") " << stages[i].name << "\n";
         }
         */
 
@@ -876,13 +876,13 @@ public:
                     // Dump out the region required of each stage for debugging.
 
                     /*
-                    debug(0) << "Box required of " << producer.name
+                    DEBUG(0) << "Box required of " << producer.name
                              << " by " << consumer.name
                              << " stage " << consumer.stage << ":\n";
                     for (size_t k = 0; k < b.size(); k++) {
-                        debug(0) << "  " << b[k].min << " ... " << b[k].max << "\n";
+                        DEBUG(0) << "  " << b[k].min << " ... " << b[k].max << "\n";
                     }
-                    debug(0) << "\n";
+                    DEBUG(0) << "\n";
                     */
 
 

@@ -217,7 +217,7 @@ private:
     using IRVisitor::visit;
     void visit(const Variable *op) override {
         if (CodeGen_GPU_Dev::is_gpu_var(op->name)) {
-            debug(3) << "Found gpu loop var: " << op->name << "\n";
+            DEBUG(3) << "Found gpu loop var: " << op->name << "\n";
             uses_gpu = true;
         }
     }
@@ -707,7 +707,7 @@ class VectorSubs : public IRMutator2 {
     Stmt visit(const IfThenElse *op) override {
         Expr cond = mutate(op->condition);
         int lanes = cond.type().lanes();
-        debug(3) << "Vectorizing over " << var << "\n"
+        DEBUG(3) << "Vectorizing over " << var << "\n"
                  << "Old: " << op->condition << "\n"
                  << "New: " << cond << "\n";
 
@@ -732,8 +732,8 @@ class VectorSubs : public IRMutator2 {
                 vectorize_predicate = p.is_vectorized();
             }
 
-            debug(4) << "IfThenElse should vectorize predicate over var " << var << "? " << vectorize_predicate << "; cond: " << cond << "\n";
-            debug(4) << "Predicated stmt:\n" << predicated_stmt << "\n";
+            DEBUG(4) << "IfThenElse should vectorize predicate over var " << var << "? " << vectorize_predicate << "; cond: " << cond << "\n";
+            DEBUG(4) << "Predicated stmt:\n" << predicated_stmt << "\n";
 
             // First check if the condition is marked as likely.
             const Call *c = cond.as<Call>();
@@ -762,30 +762,30 @@ class VectorSubs : public IRMutator2 {
                         IfThenElse::make(all_true,
                                          then_case,
                                          scalarize(without_likelies));
-                    debug(4) << "...With all_true likely: \n" << stmt << "\n";
+                    DEBUG(4) << "...With all_true likely: \n" << stmt << "\n";
                     return stmt;
                 } else {
                     Stmt stmt =
                         IfThenElse::make(all_true,
                                          then_case,
                                          predicated_stmt);
-                    debug(4) << "...Predicated IfThenElse: \n" << stmt << "\n";
+                    DEBUG(4) << "...Predicated IfThenElse: \n" << stmt << "\n";
                     return stmt;
                 }
             } else {
                 // It's some arbitrary vector condition.
                 if (!vectorize_predicate) {
-                    debug(4) << "...Scalarizing vector predicate: \n" << Stmt(op) << "\n";
+                    DEBUG(4) << "...Scalarizing vector predicate: \n" << Stmt(op) << "\n";
                     return scalarize(op);
                 } else {
                     Stmt stmt = predicated_stmt;
-                    debug(4) << "...Predicated IfThenElse: \n" << stmt << "\n";
+                    DEBUG(4) << "...Predicated IfThenElse: \n" << stmt << "\n";
                     return stmt;
                 }
             }
         } else {
             // It's an if statement on a scalar, we're ok to vectorize the innards.
-            debug(3) << "Not scalarizing if then else\n";
+            DEBUG(3) << "Not scalarizing if then else\n";
             if (cond.same_as(op->condition) &&
                 then_case.same_as(op->then_case) &&
                 else_case.same_as(op->else_case)) {
@@ -932,7 +932,7 @@ class VectorSubs : public IRMutator2 {
             }
         }
 
-        debug(0) << e << " -> " << result << "\n";
+        DEBUG(0) << e << " -> " << result << "\n";
 
         return result;
     }

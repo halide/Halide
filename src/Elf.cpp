@@ -566,7 +566,7 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
 
         append_padding(output, alignment);
         uint64_t offset = output.size();
-        debug(2) << "Writing section " << s.get_name() << " at offset " << offset << "\n";
+        DEBUG(2) << "Writing section " << s.get_name() << " at offset " << offset << "\n";
         const std::vector<char> &contents = s.get_contents();
         append(output, contents.begin(), contents.end());
         if (contents.size() < s.get_size()) {
@@ -711,7 +711,7 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
                 continue;
             }
 
-            debug(2) << "Defining PLT entry for " << sym->get_name() << "\n";
+            DEBUG(2) << "Defining PLT entry for " << sym->get_name() << "\n";
             plt_symbols.push_back(linker->add_plt_entry(*sym, plt, got, got_sym));
 
             plt_def = &plt_symbols.back();
@@ -833,14 +833,14 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
     uint16_t hash_idx = write_section(hash, sizeof(hash_table[0]));
 
     auto do_relocations = [&](const Section &s) {
-        debug(2) << "Processing relocations for section " << s.get_name() << "\n";
+        DEBUG(2) << "Processing relocations for section " << s.get_name() << "\n";
         for (const Relocation &r : s.relocations()) {
             const Symbol *sym = get_symbol(r);
             if (needs_plt_entry(r)) {
                 // This relocation is a function call, we need to use the PLT entry for this symbol.
                 auto plt_def = plt_defs.find(sym);
                 internal_assert(plt_def != plt_defs.end());
-                debug(2) << "Using PLT entry " << plt_def->second->get_name() << " for symbol " << sym->get_name() << "\n";
+                DEBUG(2) << "Using PLT entry " << plt_def->second->get_name() << " for symbol " << sym->get_name() << "\n";
                 sym = plt_def->second;
             }
 
@@ -849,14 +849,14 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
             uint64_t sym_offset = 0;
             if (sym && sym->is_defined()) {
                 sym_offset = get_section_offset(*sym->get_section()) + sym->get_offset();
-                debug(2) << "Symbol " << sym->get_name() << " is defined at " << sym_offset << "\n";
+                DEBUG(2) << "Symbol " << sym->get_name() << " is defined at " << sym_offset << "\n";
             }
             Relocation new_reloc = linker->relocate(fixup_offset, fixup_addr, r.get_type(), sym, sym_offset, r.get_addend(), got);
             if (new_reloc.get_type() != 0) {
                 // The linker wants a dynamic relocation here. This
                 // section must be writable at runtime.
                 internal_assert(s.is_writable());
-                debug(2) << "Linker returned new relocation type " << new_reloc.get_type() << "\n";
+                DEBUG(2) << "Linker returned new relocation type " << new_reloc.get_type() << "\n";
                 new_reloc.set_offset(new_reloc.get_offset() - get_section_offset(got));
                 got.add_relocation(new_reloc);
             }

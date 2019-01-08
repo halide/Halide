@@ -136,7 +136,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
         allocation.ptr = create_alloca_at_entry(llvm_type_of(type), 1, false, name);
         allocation.stack_bytes = stack_bytes;
         cur_stack_alloc_total += allocation.stack_bytes;
-        debug(4) << "cur_stack_alloc_total += " << allocation.stack_bytes << " -> " << cur_stack_alloc_total << " for " << name << "\n";
+        DEBUG(4) << "cur_stack_alloc_total += " << allocation.stack_bytes << " -> " << cur_stack_alloc_total << " for " << name << "\n";
     } else if (!new_expr.defined() && stack_bytes != 0) {
 
         // Try to find a free stack allocation we can use.
@@ -157,7 +157,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
             }
         }
         if (it != free_stack_allocs.end()) {
-            debug(4) << "Reusing freed stack allocation of " << it->stack_bytes
+            DEBUG(4) << "Reusing freed stack allocation of " << it->stack_bytes
                      << " bytes for allocation " << name
                      << " of " << stack_bytes << " bytes.\n";
             // Use a free alloc we found.
@@ -168,7 +168,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
             // This allocation isn't free anymore.
             free_stack_allocs.erase(it);
         } else {
-            debug(4) << "Allocating " << stack_bytes << " bytes on the stack for " << name << "\n";
+            DEBUG(4) << "Allocating " << stack_bytes << " bytes on the stack for " << name << "\n";
             // We used to do the alloca locally and save and restore the
             // stack pointer, but this makes llvm generate streams of
             // spill/reloads.
@@ -180,7 +180,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
             allocation.stack_bytes = stack_bytes;
         }
         cur_stack_alloc_total += allocation.stack_bytes;
-        debug(4) << "cur_stack_alloc_total += " << allocation.stack_bytes << " -> " << cur_stack_alloc_total << " for " << name << "\n";
+        DEBUG(4) << "cur_stack_alloc_total += " << allocation.stack_bytes << " -> " << cur_stack_alloc_total << " for " << name << "\n";
     } else if (memory_type == MemoryType::Stack && !new_expr.defined()) {
         // Try to find a free pseudostack allocation we can use.
         vector<Allocation>::iterator it = free_stack_allocs.end();
@@ -199,7 +199,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
         }
         Value *slot = nullptr;
         if (it != free_stack_allocs.end()) {
-            debug(4) << "Reusing freed pseudostack allocation from " << it->name
+            DEBUG(4) << "Reusing freed pseudostack allocation from " << it->name
                      << " for " << name << "\n";
             slot = it->pseudostack_slot;
             allocation.name = it->name;
@@ -249,12 +249,12 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
             ++arg_iter;  // skip the user context *
             llvm_size = builder->CreateIntCast(llvm_size, arg_iter->getType(), false);
 
-            debug(4) << "Creating call to halide_malloc for allocation " << name
+            DEBUG(4) << "Creating call to halide_malloc for allocation " << name
                      << " of size " << type.bytes();
             for (Expr e : extents) {
-                debug(4) << " x " << e;
+                DEBUG(4) << " x " << e;
             }
-            debug(4) << "\n";
+            DEBUG(4) << "\n";
             Value *args[2] = { get_user_context(), llvm_size };
 
             Value *call = builder->CreateCall(malloc_fn, args);
@@ -291,7 +291,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
     }
 
     // Push the allocation base pointer onto the symbol table
-    debug(3) << "Pushing allocation called " << name << " onto the symbol table\n";
+    DEBUG(3) << "Pushing allocation called " << name << " onto the symbol table\n";
 
     allocations.push(name, allocation);
 
@@ -305,7 +305,7 @@ void CodeGen_Posix::free_allocation(const std::string &name) {
         // Remember this allocation so it can be re-used by a later allocation.
         free_stack_allocs.push_back(alloc);
         cur_stack_alloc_total -= alloc.stack_bytes;
-        debug(4) << "cur_stack_alloc_total -= " << alloc.stack_bytes << " -> " << cur_stack_alloc_total << " for " << name << "\n";
+        DEBUG(4) << "cur_stack_alloc_total -= " << alloc.stack_bytes << " -> " << cur_stack_alloc_total << " for " << name << "\n";
     } else if (alloc.pseudostack_slot) {
         // Don't call the destructor yet - the lifetime persists until function exit.
         free_stack_allocs.push_back(alloc);

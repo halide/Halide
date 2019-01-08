@@ -389,7 +389,7 @@ std::string dir_make_temp() {
         std::string dir = tmp_dir + name.str();
         BOOL result = CreateDirectoryA(dir.c_str(), nullptr);
         if (result) {
-            debug(1) << "temp dir is: " << dir << "\n";
+            DEBUG(1) << "temp dir is: " << dir << "\n";
             return dir;
         }
         // If name already existed, just loop and try again.
@@ -466,11 +466,11 @@ void halide_toc_impl(const char *file, int line) {
     std::chrono::duration<double> diff = t2 - t1.time;
     tick_stack.pop_back();
     for (size_t i = 0; i < tick_stack.size(); i++) {
-        debug(0) << "  ";
+        DEBUG(0) << "  ";
     }
     string f = file;
     f = split_string(f, "/").back();
-    debug(0) << t1.file << ":" << t1.line << " ... " << f << ":" << line << " : " << diff.count() * 1000 << " ms\n";
+    DEBUG(0) << t1.file << ":" << t1.line << " ... " << f << ":" << line << " : " << diff.count() * 1000 << " ms\n";
 }
 
 }  // namespace Internal

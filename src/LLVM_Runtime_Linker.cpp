@@ -630,7 +630,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
         module_type = ModuleAOT;
     }
 
-    //    Halide::Internal::debug(0) << "Getting initial module type " << (int)module_type << "\n";
+    //    Halide::Internal::DEBUG(0) << "Getting initial module type " << (int)module_type << "\n";
 
     internal_assert(t.bits == 32 || t.bits == 64)
         << "Bad target: " << t.to_string();

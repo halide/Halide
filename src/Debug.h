@@ -38,7 +38,7 @@ std::ostream &operator<<(std::ostream &, const LoweredFunc &);
  * follows:
  *
  \code
- debug(verbosity) << "The expression is " << expr << std::endl;
+ DEBUG(verbosity) << "The expression is " << expr << std::endl;
  \endcode
  *
  * verbosity of 0 always prints, 1 should print after every major
@@ -48,14 +48,21 @@ std::ostream &operator<<(std::ostream &, const LoweredFunc &);
  * HL_DEBUG_CODEGEN
  */
 
+#define DEBUG(level) debug(level, __FILE__, __LINE__)
+
 class debug {
     const bool logging;
 
 public:
-    debug(int verbosity) : logging(verbosity <= debug_level()) {}
+    debug(int verbosity, const std::string &file, const int line)
+        : logging(verbosity <= debug_level()) {
+        if (logging) {
+            std::cerr << "[" << file << ":" << line << "] ";
+        }
+    }
 
     template<typename T>
-    debug &operator<<(T&& x) {
+    debug &operator<<(T &&x) {
         if (logging) {
             std::cerr << std::forward<T>(x);
         }

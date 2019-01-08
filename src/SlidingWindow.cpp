@@ -56,7 +56,7 @@ class ExpandExpr : public IRMutator2 {
     Expr visit(const Variable *var) override {
         if (scope.contains(var->name)) {
             Expr expr = scope.get(var->name);
-            debug(3) << "Fully expanded " << var->name << " -> " << expr << "\n";
+            DEBUG(3) << "Fully expanded " << var->name << " -> " << expr << "\n";
             return expr;
         } else {
             return var;
@@ -72,7 +72,7 @@ public:
 Expr expand_expr(Expr e, const Scope<Expr> &scope) {
     ExpandExpr ee(scope);
     Expr result = ee.mutate(e);
-    debug(3) << "Expanded " << e << " into " << result << "\n";
+    DEBUG(3) << "Expanded " << e << " into " << result << "\n";
     return result;
 }
 
@@ -120,7 +120,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator2 {
             int dim_idx = 0;
             Expr min_required, max_required;
 
-            debug(3) << "Considering sliding " << func.name()
+            DEBUG(3) << "Considering sliding " << func.name()
                      << " along loop variable " << loop_var << "\n"
                      << "Region provided:\n";
 
@@ -135,7 +135,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator2 {
                 min_req = expand_expr(min_req, scope);
                 max_req = expand_expr(max_req, scope);
 
-                debug(3) << func_args[i] << ":" << min_req << ", " << max_req  << "\n";
+                DEBUG(3) << func_args[i] << ":" << min_req << ", " << max_req  << "\n";
                 if (expr_depends_on_var(min_req, loop_var) ||
                     expr_depends_on_var(max_req, loop_var)) {
                     if (!dim.empty()) {
@@ -162,7 +162,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator2 {
             }
 
             if (!min_required.defined()) {
-                debug(3) << "Could not perform sliding window optimization of "
+                DEBUG(3) << "Could not perform sliding window optimization of "
                          << func.name() << " over " << loop_var << " because multiple "
                          << "dimensions of the function dependended on the loop var\n";
                 return stmt;
@@ -178,7 +178,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator2 {
                 }
             }
             if (!pure) {
-                debug(3) << "Could not performance sliding window optimization of "
+                DEBUG(3) << "Could not performance sliding window optimization of "
                          << func.name() << " over " << loop_var << " because the function "
                          << "scatters along the related axis.\n";
                 return stmt;
@@ -201,7 +201,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator2 {
             }
 
             if (!can_slide_up && !can_slide_down) {
-                debug(3) << "Not sliding " << func.name()
+                DEBUG(3) << "Not sliding " << func.name()
                          << " over dimension " << dim
                          << " along loop variable " << loop_var
                          << " because I couldn't prove it moved monotonically along that dimension\n"
@@ -212,7 +212,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator2 {
 
             // Ok, we've isolated a function, a dimension to slide
             // along, and loop variable to slide over.
-            debug(3) << "Sliding " << func.name()
+            DEBUG(3) << "Sliding " << func.name()
                      << " over dimension " << dim
                      << " along loop variable " << loop_var << "\n";
 
@@ -224,7 +224,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator2 {
             // If there's no overlap between adjacent iterations, we shouldn't slide.
             if (can_prove(min_required >= prev_max_plus_one) ||
                 can_prove(max_required <= prev_min_minus_one)) {
-                debug(3) << "Not sliding " << func.name()
+                DEBUG(3) << "Not sliding " << func.name()
                          << " over dimension " << dim
                          << " along loop variable " << loop_var
                          << " there's no overlap in the region computed across iterations\n"
@@ -245,7 +245,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator2 {
             Expr early_stages_min_required = new_min;
             Expr early_stages_max_required = new_max;
 
-            debug(3) << "Sliding " << func.name() << ", " << dim << "\n"
+            DEBUG(3) << "Sliding " << func.name() << ", " << dim << "\n"
                      << "Pushing min up from " << min_required << " to " << new_min << "\n"
                      << "Shrinking max from " << max_required << " to " << new_max << "\n";
 
@@ -299,7 +299,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator2 {
             return For::make(op->name, op->min, op->extent, op->for_type, op->device_api, l->body);
         } else if (is_monotonic(min, loop_var) != Monotonic::Constant ||
                    is_monotonic(extent, loop_var) != Monotonic::Constant) {
-            debug(3) << "Not entering loop over " << op->name
+            DEBUG(3) << "Not entering loop over " << op->name
                      << " because the bounds depend on the var we're sliding over: "
                      << min << ", " << extent << "\n";
             return op;
@@ -338,7 +338,7 @@ class SlidingWindowOnFunction : public IRMutator2 {
     using IRMutator2::visit;
 
     Stmt visit(const For *op) override {
-        debug(3) << " Doing sliding window analysis over loop: " << op->name << "\n";
+        DEBUG(3) << " Doing sliding window analysis over loop: " << op->name << "\n";
 
         Stmt new_body = op->body;
 
@@ -385,7 +385,7 @@ class SlidingWindow : public IRMutator2 {
 
         Stmt new_body = op->body;
 
-        debug(3) << "Doing sliding window analysis on realization of " << op->name << "\n";
+        DEBUG(3) << "Doing sliding window analysis on realization of " << op->name << "\n";
 
         new_body = SlidingWindowOnFunction(iter->second).mutate(new_body);
 

@@ -325,7 +325,7 @@ void Function::deep_copy(FunctionPtr copy, DeepCopyMap &copied_map) const {
     // self-reference, e.g. self-reference in an Definition.
     copied_map[contents] = copy;
 
-    debug(4) << "Deep-copy function contents: \"" << contents->name << "\"\n";
+    DEBUG(4) << "Deep-copy function contents: \"" << contents->name << "\"\n";
 
     copy->name = contents->name;
     copy->origin_name = contents->origin_name;
@@ -1009,7 +1009,7 @@ class SubstituteCalls : public IRMutator2 {
             substitutions.count(c->func)) {
             FunctionPtr subs = substitutions[c->func];
             internal_assert(subs.defined()) << "Function not in environment: " << subs->name << "\n";
-            debug(4) << "...Replace call to Func \"" << c->name << "\" with "
+            DEBUG(4) << "...Replace call to Func \"" << c->name << "\" with "
                      << "\"" << subs->name << "\"\n";
             expr = Call::make(c->type, subs->name, c->args, c->call_type,
                               subs, c->value_index,
@@ -1025,7 +1025,7 @@ public:
 }  // anonymous namespace
 
 Function &Function::substitute_calls(const map<FunctionPtr, FunctionPtr> &substitutions) {
-    debug(4) << "Substituting calls in " << name() << "\n";
+    DEBUG(4) << "Substituting calls in " << name() << "\n";
     if (substitutions.empty()) {
         return *this;
     }
@@ -1082,10 +1082,10 @@ pair<vector<Function>, map<string, Function>> deep_copy(
         const auto &iter = copied_map.find(func.get_contents());
         if (iter != copied_map.end()) {
             FunctionPtr ptr = iter->second;
-            debug(4) << "Adding deep-copied version to outputs: " << func.name() << "\n";
+            DEBUG(4) << "Adding deep-copied version to outputs: " << func.name() << "\n";
             copy_outputs.push_back(Function(ptr));
         } else {
-            debug(4) << "Adding original version to outputs: " << func.name() << "\n";
+            DEBUG(4) << "Adding original version to outputs: " << func.name() << "\n";
             copy_outputs.push_back(func);
         }
     }

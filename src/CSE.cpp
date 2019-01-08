@@ -224,7 +224,7 @@ public:
         // If it's not the sort of thing we want to extract as a let,
         // just use the generic visitor to increment use counts for
         // the children.
-        debug(4) << "Include: " << e << "; should extract: " << should_extract(e, lift_all) << "\n";
+        DEBUG(4) << "Include: " << e << "; should extract: " << should_extract(e, lift_all) << "\n";
         if (!should_extract(e, lift_all)) {
             e.accept(this);
             return;
@@ -288,7 +288,7 @@ Expr common_subexpression_elimination(const Expr &e_in, bool lift_all) {
     // Early-out for trivial cases.
     if (is_const(e) || e.as<Variable>()) return e;
 
-    debug(4) << "\n\n\nInput to letify " << e << "\n";
+    DEBUG(4) << "\n\n\nInput to letify " << e << "\n";
 
     GVN gvn;
     e = gvn.mutate(e);
@@ -296,7 +296,7 @@ Expr common_subexpression_elimination(const Expr &e_in, bool lift_all) {
     ComputeUseCounts count_uses(gvn, lift_all);
     count_uses.include(e);
 
-    debug(4) << "Canonical form without lets " << e << "\n";
+    DEBUG(4) << "Canonical form without lets " << e << "\n";
 
     // Figure out which ones we'll pull out as lets and variables.
     vector<pair<string, Expr>> lets;
@@ -311,14 +311,14 @@ Expr common_subexpression_elimination(const Expr &e_in, bool lift_all) {
             // Point references to this expr to the variable instead.
             replacements[e.expr] = Variable::make(e.expr.type(), name);
         }
-        debug(4) << i << ": " << e.expr << ", " << e.use_count << "\n";
+        DEBUG(4) << i << ": " << e.expr << ", " << e.use_count << "\n";
     }
 
     // Rebuild the expr to include references to the variables:
     Replacer replacer(replacements);
     e = replacer.mutate(e);
 
-    debug(4) << "With variables " << e << "\n";
+    DEBUG(4) << "With variables " << e << "\n";
 
     // Wrap the final expr in the lets.
     for (size_t i = lets.size(); i > 0; i--) {
@@ -330,7 +330,7 @@ Expr common_subexpression_elimination(const Expr &e_in, bool lift_all) {
         e = Let::make(lets[i-1].first, value, e);
     }
 
-    debug(4) << "With lets: " << e << "\n";
+    DEBUG(4) << "With lets: " << e << "\n";
 
     return e;
 }
@@ -532,7 +532,7 @@ void cse_test() {
         check(e, correct);
     }
 
-    debug(0) << "common_subexpression_elimination test passed\n";
+    DEBUG(0) << "common_subexpression_elimination test passed\n";
 }
 
 }  // namespace Internal

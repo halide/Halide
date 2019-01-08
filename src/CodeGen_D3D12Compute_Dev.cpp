@@ -598,9 +598,9 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Allocate *op)
     } else {
         open_scope();
 
-        debug(2) << "Allocate " << op->name << " on device\n";
+        DEBUG(2) << "Allocate " << op->name << " on device\n";
 
-        debug(3) << "Pushing allocation called " << op->name << " onto the symbol table\n";
+        DEBUG(3) << "Pushing allocation called " << op->name << " onto the symbol table\n";
 
         // Allocation is not a shared memory allocation, just make a local declaration.
         // It must have a constant size.
@@ -797,7 +797,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Cast *op)
 void CodeGen_D3D12Compute_Dev::add_kernel(Stmt s,
                                    const string &name,
                                    const vector<DeviceArgument> &args) {
-    debug(2) << "CodeGen_D3D12Compute_Dev::compile " << name << "\n";
+    DEBUG(2) << "CodeGen_D3D12Compute_Dev::compile " << name << "\n";
 
     // TODO: do we have to uniquify these names, or can we trust that they are safe?
     cur_kernel_name = name;
@@ -822,7 +822,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
                                                     const string &name,
                                                     const vector<DeviceArgument> &args) {
 
-    debug(2) << "Adding D3D12Compute kernel " << name << "\n";
+    DEBUG(2) << "Adding D3D12Compute kernel " << name << "\n";
 
     // Figure out which arguments should be passed in constant.
     // Such arguments should be:
@@ -951,7 +951,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
     FindUninitializedSharedLoads fusl;
     s = fusl.mutate(s);
     if (fusl.bad_load_expr) {
-        debug(1) << "Found a potential load-before-initialization on __shared buffer!\n";
+        DEBUG(1) << "Found a potential load-before-initialization on __shared buffer!\n";
         // use IRMutator to inject a zero-initialization before the load
         struct ZeroInitializeSharedMemory : public IRMutator2 {
             using IRMutator2::mutate;
@@ -960,7 +960,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
                     return IRMutator2::mutate(op);
                 }
 
-                debug(1) << "Patching __shared buffer with zero-intialization...\n";
+                DEBUG(1) << "Patching __shared buffer with zero-intialization...\n";
 
                 const Load* lop = uninitialized_load_expr;
                 Stmt initialization = Store::make(lop->name, Expr(0), lop->index, Parameter(), lop->predicate);
@@ -999,7 +999,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
                 numthreads[index] = int_limit->value;
                 user_assert(numthreads[index] > 0) << "For D3D12Compute, 'numthreads[" << index << "]' values must be greater than zero.\n";
             }
-            debug(4) << "Thread group size for index " << index << " is " << numthreads[index] << "\n";
+            DEBUG(4) << "Thread group size for index " << index << " is " << numthreads[index] << "\n";
             loop->body.accept(this);
         }
         int thread_loop_workgroup_index(const string &name)
@@ -1078,7 +1078,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
 }
 
 void CodeGen_D3D12Compute_Dev::init_module() {
-    debug(2) << "D3D12Compute device codegen init_module\n";
+    DEBUG(2) << "D3D12Compute device codegen init_module\n";
 
     // wipe the internal kernel source
     src_stream.str("");
@@ -1163,7 +1163,7 @@ void CodeGen_D3D12Compute_Dev::init_module() {
 
 vector<char> CodeGen_D3D12Compute_Dev::compile_to_src() {
     string str = src_stream.str();
-    debug(1) << "D3D12Compute kernel:\n" << str << "\n";
+    DEBUG(1) << "D3D12Compute kernel:\n" << str << "\n";
     vector<char> buffer(str.begin(), str.end());
     buffer.push_back(0);
     return buffer;

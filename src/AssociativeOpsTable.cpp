@@ -318,7 +318,7 @@ const vector<AssociativePattern> &get_ops_table(const vector<Expr> &exprs) {
     static vector<AssociativePattern> empty;
 
     if (exprs.size() > 2) {
-        debug(5) << "Returning empty table since tuple size is larger than 2\n";
+        DEBUG(5) << "Returning empty table since tuple size is larger than 2\n";
         return empty;
     }
 
@@ -329,43 +329,43 @@ const vector<AssociativePattern> &get_ops_table(const vector<Expr> &exprs) {
 
     RootExpr root = RootExpr::Unknown;
     if (exprs[0].as<Halide::Internal::Add>()) {
-        debug(5) << "Returning Add root table for type " << print_types(types) << "\n";
+        DEBUG(5) << "Returning Add root table for type " << print_types(types) << "\n";
         root = RootExpr::Add;
     } else if (exprs[0].as<Halide::Internal::Sub>()) {
-        debug(5) << "Returning Sub root table for type " << print_types(types) << "\n";
+        DEBUG(5) << "Returning Sub root table for type " << print_types(types) << "\n";
         root = RootExpr::Sub;
     } else if (exprs[0].as<Halide::Internal::Mul>()) {
-        debug(5) << "Returning Mul root table for type " << print_types(types) << "\n";
+        DEBUG(5) << "Returning Mul root table for type " << print_types(types) << "\n";
         root = RootExpr::Mul;
     } else if (exprs[0].as<Halide::Internal::Min>()) {
-        debug(5) << "Returning Min root table for type " << print_types(types) << "\n";
+        DEBUG(5) << "Returning Min root table for type " << print_types(types) << "\n";
         root = RootExpr::Min;
     } else if (exprs[0].as<Halide::Internal::Max>()) {
-        debug(5) << "Returning Max root table for type " << print_types(types) << "\n";
+        DEBUG(5) << "Returning Max root table for type " << print_types(types) << "\n";
         root = RootExpr::Max;
     } else if (exprs[0].as<Halide::Internal::Select>()) {
-        debug(5) << "Returning Select root table for type " << print_types(types) << "\n";
+        DEBUG(5) << "Returning Select root table for type " << print_types(types) << "\n";
         root = RootExpr::Select;
     } else if (exprs[0].as<Halide::Internal::And>()) {
-        debug(5) << "Returning And root table for type " << print_types(types) << "\n";
+        DEBUG(5) << "Returning And root table for type " << print_types(types) << "\n";
         root = RootExpr::And;
     } else if (exprs[0].as<Halide::Internal::Or>()) {
-        debug(5) << "Returning Or root table for type " << print_types(types) << "\n";
+        DEBUG(5) << "Returning Or root table for type " << print_types(types) << "\n";
         root = RootExpr::Or;
     } else if (exprs[0].as<Halide::Internal::Cast>()) {
-        debug(5) << "Returning Cast root table for type " << print_types(types) << "\n";
+        DEBUG(5) << "Returning Cast root table for type " << print_types(types) << "\n";
         root = RootExpr::Cast;
     }
 
     if (root != RootExpr::Unknown) {
         const vector<AssociativePattern> &table = get_ops_table_helper(types, root, exprs.size());
-        debug(7) << "Table size: " << table.size() << "\n";
+        DEBUG(7) << "Table size: " << table.size() << "\n";
         for (const auto &p : table) {
-            debug(7) << p;
+            DEBUG(7) << p;
         }
         return table;
     }
-    debug(5) << "Returning empty table\n";
+    DEBUG(5) << "Returning empty table\n";
     return empty;
 }
 

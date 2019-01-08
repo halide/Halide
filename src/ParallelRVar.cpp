@@ -142,17 +142,17 @@ bool can_parallelize_rvar(const string &v,
     if (pred.defined() || !equal(const_true(), pred)) {
         Expr this_pred = pred;
         Expr other_pred = renamer.mutate(pred);
-        debug(3) << "......this thread predicate: " << this_pred << "\n";
-        debug(3) << "......other thread predicate: " << other_pred << "\n";
+        DEBUG(3) << "......this thread predicate: " << this_pred << "\n";
+        DEBUG(3) << "......other thread predicate: " << other_pred << "\n";
         hazard = hazard && this_pred && other_pred;
     }
 
-    debug(3) << "Attempting to falsify: " << hazard << "\n";
+    DEBUG(3) << "Attempting to falsify: " << hazard << "\n";
     // Pull out common non-boolean terms
     hazard = common_subexpression_elimination(hazard);
     hazard = SubstituteInBooleanLets().mutate(hazard);
     hazard = simplify(hazard, false, bounds);
-    debug(3) << "Simplified to: " << hazard << "\n";
+    DEBUG(3) << "Simplified to: " << hazard << "\n";
 
     // strip lets
     while (const Let *l = hazard.as<Let>()) {

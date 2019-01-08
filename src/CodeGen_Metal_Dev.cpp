@@ -389,9 +389,9 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Allocate *op) {
     } else {
         open_scope();
 
-        debug(2) << "Allocate " << op->name << " on device\n";
+        DEBUG(2) << "Allocate " << op->name << " on device\n";
 
-        debug(3) << "Pushing allocation called " << op->name << " onto the symbol table\n";
+        DEBUG(3) << "Pushing allocation called " << op->name << " onto the symbol table\n";
 
         // Allocation is not a shared memory allocation, just make a local declaration.
         // It must have a constant size.
@@ -439,7 +439,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Cast *op) {
 void CodeGen_Metal_Dev::add_kernel(Stmt s,
                                    const string &name,
                                    const vector<DeviceArgument> &args) {
-    debug(2) << "CodeGen_Metal_Dev::compile " << name << "\n";
+    DEBUG(2) << "CodeGen_Metal_Dev::compile " << name << "\n";
 
     // TODO: do we have to uniquify these names, or can we trust that they are safe?
     cur_kernel_name = name;
@@ -464,7 +464,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::add_kernel(Stmt s,
                                                     const string &name,
                                                     const vector<DeviceArgument> &args) {
 
-    debug(2) << "Adding Metal kernel " << name << "\n";
+    DEBUG(2) << "Adding Metal kernel " << name << "\n";
 
     // Figure out which arguments should be passed in constant.
     // Such arguments should be:
@@ -594,7 +594,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::add_kernel(Stmt s,
 }
 
 void CodeGen_Metal_Dev::init_module() {
-    debug(2) << "Metal device codegen init_module\n";
+    DEBUG(2) << "Metal device codegen init_module\n";
 
     // wipe the internal kernel source
     src_stream.str("");
@@ -644,7 +644,7 @@ void CodeGen_Metal_Dev::init_module() {
 
 vector<char> CodeGen_Metal_Dev::compile_to_src() {
     string str = src_stream.str();
-    debug(1) << "Metal kernel:\n" << str << "\n";
+    DEBUG(1) << "Metal kernel:\n" << str << "\n";
     vector<char> buffer(str.begin(), str.end());
     buffer.push_back(0);
     return buffer;

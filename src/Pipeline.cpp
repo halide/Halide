@@ -322,7 +322,7 @@ vector<Argument> Pipeline::infer_arguments(Stmt body) {
     // (we'll embed those in the binary by default), and minus the user_context arg.
     vector<Argument> result;
     for (const InferredArgument &arg : contents->inferred_args) {
-        debug(2) << "Inferred argument: " << arg.arg.type << " " << arg.arg.name << "\n";
+        DEBUG(2) << "Inferred argument: " << arg.arg.type << " " << arg.arg.name << "\n";
         if (!arg.buffer.defined() &&
             arg.arg.name != contents->user_context_arg.arg.name) {
             result.push_back(arg.arg);
@@ -393,7 +393,7 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
 
     if (same_compile) {
         // We can avoid relowering and just reuse the existing module.
-        debug(2) << "Reusing old module\n";
+        DEBUG(2) << "Reusing old module\n";
     } else {
         vector<IRMutator2 *> custom_passes;
         for (CustomLoweringPass p : contents->custom_lowering_passes) {
@@ -425,13 +425,13 @@ void *Pipeline::compile_jit(const Target &target_arg) {
     target.set_feature(Target::JIT);
     target.set_feature(Target::UserContext);
 
-    debug(2) << "jit-compiling for: " << target_arg << "\n";
+    DEBUG(2) << "jit-compiling for: " << target_arg << "\n";
 
     // If we're re-jitting for the same target, we can just keep the
     // old jit module.
     if (contents->jit_target == target &&
         contents->jit_module.compiled()) {
-        debug(2) << "Reusing old jit module compiled for :\n" << contents->jit_target << "\n";
+        DEBUG(2) << "Reusing old jit module compiled for :\n" << contents->jit_target << "\n";
         return contents->jit_module.main_function();
     }
 
@@ -472,7 +472,7 @@ void *Pipeline::compile_jit(const Target &target_arg) {
             program_name = "unknown" + unique_name('_').substr(1);
         }
         string file_name = program_name + "_" + name + "_" + unique_name('g').substr(1) + ".bc";
-        debug(4) << "Saving bitcode to: " << file_name << "\n";
+        DEBUG(4) << "Saving bitcode to: " << file_name << "\n";
         module.compile(Outputs().bitcode(file_name));
     }
 
@@ -663,7 +663,7 @@ struct JITFuncCallContext {
         }
         JITSharedRuntime::init_jit_user_context(jit_context, user_context, local_handlers);
 
-        debug(2) << "custom_print: " << (void *)jit_context.handlers.custom_print << '\n'
+        DEBUG(2) << "custom_print: " << (void *)jit_context.handlers.custom_print << '\n'
                  << "custom_malloc: " << (void *)jit_context.handlers.custom_malloc << '\n'
                  << "custom_free: " << (void *)jit_context.handlers.custom_free << '\n'
                  << "custom_do_task: " << (void *)jit_context.handlers.custom_do_task << '\n'
@@ -753,19 +753,19 @@ void Pipeline::prepare_jit_call_arguments(RealizationArg &outputs, const Target 
                         // Unbound
                         args_result.store[arg_index++] = nullptr;
                     }
-                    debug(2) << "JIT input ImageParam argument ";
+                    DEBUG(2) << "JIT input ImageParam argument ";
                 } else {
                     args_result.store[arg_index++] = p.scalar_address();
-                    debug(2) << "JIT input scalar argument ";
+                    DEBUG(2) << "JIT input scalar argument ";
                 }
             }
         } else {
-            debug(2) << "JIT input Image argument ";
+            DEBUG(2) << "JIT input Image argument ";
             internal_assert(arg.buffer.defined());
             args_result.store[arg_index++] = arg.buffer.raw_buffer();
         }
         const void *ptr = args_result.store[arg_index - 1];
-        debug(2) << arg.arg.name << " @ " << ptr << "\n";
+        DEBUG(2) << arg.arg.name << " @ " << ptr << "\n";
     }
 
     // Then the outputs
@@ -773,16 +773,16 @@ void Pipeline::prepare_jit_call_arguments(RealizationArg &outputs, const Target 
         for (size_t i = 0; i < outputs.r->size(); i++) {
             const halide_buffer_t *buf = (*outputs.r)[i].raw_buffer();
             args_result.store[arg_index++] = buf;
-            debug(2) << "JIT output buffer @ " << (const void *)buf << ", " << (const void *)buf->host << "\n";
+            DEBUG(2) << "JIT output buffer @ " << (const void *)buf << ", " << (const void *)buf->host << "\n";
         }
     } else if (outputs.buf) {
         args_result.store[arg_index++] = outputs.buf;
-        debug(2) << "JIT output buffer @ " << (const void *)outputs.buf << ", " << (const void *)outputs.buf->host << "\n";
+        DEBUG(2) << "JIT output buffer @ " << (const void *)outputs.buf << ", " << (const void *)outputs.buf->host << "\n";
     } else {
         for (const Buffer<> &buffer : *outputs.buffer_list) {
             const halide_buffer_t *buf = buffer.raw_buffer();
             args_result.store[arg_index++] = buf;
-            debug(2) << "JIT output buffer @ " << (const void *)buf << ", " << (const void *)buf->host << "\n";
+            DEBUG(2) << "JIT output buffer @ " << (const void *)buf << ", " << (const void *)buf->host << "\n";
         }
     }
 
@@ -842,7 +842,7 @@ void Pipeline::realize(RealizationArg outputs, const Target &t,
     Target target = t;
     user_assert(defined()) << "Can't realize an undefined Pipeline\n";
 
-    debug(2) << "Realizing Pipeline for " << target << "\n";
+    DEBUG(2) << "Realizing Pipeline for " << target << "\n";
 
     if (outputs.r) {
         for (size_t i = 0; i < outputs.r->size(); i++) {
@@ -944,9 +944,9 @@ void Pipeline::realize(RealizationArg outputs, const Target &t,
     // halide_runtime_error, which either calls abort() or throws an
     // exception.
 
-    debug(2) << "Calling jitted function\n";
+    DEBUG(2) << "Calling jitted function\n";
     int exit_status = contents->jit_module.argv_function()(args.store);
-    debug(2) << "Back from jitted function. Exit status was " << exit_status << "\n";
+    DEBUG(2) << "Back from jitted function. Exit status was " << exit_status << "\n";
 
     // If we're profiling, report runtimes and reset profiler stats.
     if (target.has_feature(Target::Profile)) {
@@ -1006,7 +1006,7 @@ void Pipeline::infer_input_bounds(RealizationArg outputs, const ParamMap &param_
 
     // No need to query if all the inputs are bound already.
     if (query_indices.empty()) {
-        debug(2) << "All inputs are bound. No need for bounds inference\n";
+        DEBUG(2) << "All inputs are bound. No need for bounds inference\n";
         return;
     }
 
@@ -1019,10 +1019,10 @@ void Pipeline::infer_input_bounds(RealizationArg outputs, const ParamMap &param_
             tb.orig = tb.query;
         }
 
-        Internal::debug(2) << "Calling jitted function\n";
+        Internal::DEBUG(2) << "Calling jitted function\n";
         int exit_status = contents->jit_module.argv_function()(args.store);
         jit_context.report_if_error(exit_status);
-        Internal::debug(2) << "Back from jitted function\n";
+        Internal::DEBUG(2) << "Back from jitted function\n";
         bool changed = false;
 
         // Check if there were any changes
@@ -1047,7 +1047,7 @@ void Pipeline::infer_input_bounds(RealizationArg outputs, const ParamMap &param_
         << " didn't converge after " << max_iters
         << " iterations. There may be unsatisfiable constraints\n";
 
-    debug(2) << "Bounds inference converged after " << iter << " iterations\n";
+    DEBUG(2) << "Bounds inference converged after " << iter << " iterations\n";
 
     // Now allocate the resulting buffers
     for (size_t i : query_indices) {

@@ -476,7 +476,7 @@ void prune_varying_attributes(Stmt loop_stmt, std::map<std::string, Expr>& varyi
     for (const std::pair<std::string, Expr> &i : varying) {
         const std::string &name = i.first;
         if (find.variables.find(name) == find.variables.end()) {
-            debug(2) << "Removed varying attribute " << name << "\n";
+            DEBUG(2) << "Removed varying attribute " << name << "\n";
             remove_list.push_back(name);
         }
     }

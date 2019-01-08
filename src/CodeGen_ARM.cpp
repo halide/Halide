@@ -256,10 +256,10 @@ void CodeGen_ARM::visit(const Cast *op) {
 
     for (size_t i = 0; i < casts.size() ; i++) {
         const Pattern &pattern = casts[i];
-        //debug(4) << "Trying pattern: " << patterns[i].intrin << " " << patterns[i].pattern << "\n";
+        //DEBUG(4) << "Trying pattern: " << patterns[i].intrin << " " << patterns[i].pattern << "\n";
         if (expr_match(pattern.pattern, op, matches)) {
 
-            //debug(4) << "Match!\n";
+            //DEBUG(4) << "Match!\n";
             if (pattern.type == Pattern::Simple) {
                 value = call_pattern(pattern, t, matches);
                 return;
@@ -269,13 +269,13 @@ void CodeGen_ARM::visit(const Cast *op) {
                 for (size_t i = 0; i < matches.size(); i++) {
                     internal_assert(matches[i].type().bits() == t.bits() * 2);
                     internal_assert(matches[i].type().lanes() == t.lanes());
-                    // debug(4) << "Attemping to narrow " << matches[i] << " to " << t << "\n";
+                    // DEBUG(4) << "Attemping to narrow " << matches[i] << " to " << t << "\n";
                     matches[i] = lossless_cast(t, matches[i]);
                     if (!matches[i].defined()) {
-                        // debug(4) << "failed\n";
+                        // DEBUG(4) << "failed\n";
                         all_narrow = false;
                     } else {
-                        // debug(4) << "success: " << matches[i] << "\n";
+                        // DEBUG(4) << "success: " << matches[i] << "\n";
                         internal_assert(matches[i].type() == t);
                     }
                 }
@@ -420,7 +420,7 @@ void CodeGen_ARM::visit(const Mul *op) {
             // generate a new Mul with flipped widen(broadcast(scalar))
             Expr new_a = Cast::make(op->type,
                                     Broadcast::make(cast_a->value, lanes));
-            debug(4) << "Replaced: " << op->a << "\n  with: " << new_a << "\n";
+            DEBUG(4) << "Replaced: " << op->a << "\n  with: " << new_a << "\n";
             value = codegen(new_a * op->b);
             return;
         }
@@ -432,7 +432,7 @@ void CodeGen_ARM::visit(const Mul *op) {
         if (cast_b && cast_b->value.type().bits() < op->type.bits()) {
             Expr new_b = Cast::make(op->type,
                                    Broadcast::make(cast_b->value, lanes));
-            debug(4) << "Replaced: " << op->b << "\n  with: " << new_b << "\n";
+            DEBUG(4) << "Replaced: " << op->b << "\n  with: " << new_b << "\n";
             value = codegen(op->a * new_b);
             return;
         }
@@ -820,7 +820,7 @@ void CodeGen_ARM::visit(const Store *op) {
             Value *base = codegen_buffer_pointer(op->name, op->value.type().element_of(), ramp->base);
             Value *stride = codegen(ramp->stride * op->value.type().bytes());
             Value *val = codegen(op->value);
-            debug(4) << "Creating call to " << builtin.str() << "\n";
+            DEBUG(4) << "Creating call to " << builtin.str() << "\n";
             Value *store_args[] = {base, stride, val};
             Instruction *store = builder->CreateCall(fn, store_args);
             (void)store;
@@ -951,7 +951,7 @@ void CodeGen_ARM::visit(const Load *op) {
         if (fn) {
             Value *base = codegen_buffer_pointer(op->name, op->type.element_of(), ramp->base);
             Value *stride = codegen(ramp->stride * op->type.bytes());
-            debug(4) << "Creating call to " << builtin.str() << "\n";
+            DEBUG(4) << "Creating call to " << builtin.str() << "\n";
             Value *args[] = {base, stride};
             Instruction *load = builder->CreateCall(fn, args, builtin.str());
             add_tbaa_metadata(load, op->name, op->index);

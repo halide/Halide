@@ -53,7 +53,7 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
                                  const std::vector<DeviceArgument> &args) {
     internal_assert(module != nullptr);
 
-    debug(2) << "In CodeGen_PTX_Dev::add_kernel\n";
+    DEBUG(2) << "In CodeGen_PTX_Dev::add_kernel\n";
 
     // Now deduce the types of the arguments to our function
     vector<llvm::Type *> arg_types(args.size());
@@ -109,7 +109,7 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
     BasicBlock *body_block = BasicBlock::Create(*context, "body", function);
     builder->SetInsertPoint(body_block);
 
-    debug(1) << "Generating llvm bitcode for kernel...\n";
+    DEBUG(1) << "Generating llvm bitcode for kernel...\n";
     // Ok, we have a module, function, context, and a builder
     // pointing at a brand new basic block. We're good to go.
     stmt.accept(this);
@@ -139,7 +139,7 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
     // Finally, verify the module is ok
     verifyModule(*module);
 
-    debug(2) << "Done generating llvm bitcode for PTX\n";
+    DEBUG(2) << "Done generating llvm bitcode for PTX\n";
 
     // Clear the symbol table
     for (size_t i = 0; i < arg_sym_names.size(); i++) {
@@ -208,10 +208,10 @@ void CodeGen_PTX_Dev::visit(const Allocate *alloc) {
         Value *shared_base = Constant::getNullValue(PointerType::get(i8_t, 3));
         sym_push(alloc->name, shared_base);
     } else {
-        debug(2) << "Allocate " << alloc->name << " on device\n";
+        DEBUG(2) << "Allocate " << alloc->name << " on device\n";
 
         string allocation_name = alloc->name;
-        debug(3) << "Pushing allocation called " << allocation_name << " onto the symbol table\n";
+        DEBUG(3) << "Pushing allocation called " << allocation_name << " onto the symbol table\n";
 
         // Jump back to the entry and generate an alloca. Note that by
         // jumping back we're rendering any expression we carry back
@@ -324,7 +324,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
 
     #ifdef WITH_PTX
 
-    debug(2) << "In CodeGen_PTX_Dev::compile_to_src";
+    DEBUG(2) << "In CodeGen_PTX_Dev::compile_to_src";
 
     // DISABLED - hooked in here to force PrintBeforeAll option - seems to be the only way?
     /*char* argv[] = { "llc", "-print-before-all" };*/
@@ -440,15 +440,15 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     if (debug::debug_level() >= 2) {
         dump();
     }
-    debug(2) << "Done with CodeGen_PTX_Dev::compile_to_src";
+    DEBUG(2) << "Done with CodeGen_PTX_Dev::compile_to_src";
 
-    debug(1) << "PTX kernel:\n" << outstr.c_str() << "\n";
+    DEBUG(1) << "PTX kernel:\n" << outstr.c_str() << "\n";
 
     vector<char> buffer(outstr.begin(), outstr.end());
 
     // Dump the SASS too if the cuda SDK is in the path
     if (debug::debug_level() >= 2) {
-        debug(2) << "Compiling PTX to SASS. Will fail if CUDA SDK is not installed (and in the path).\n";
+        DEBUG(2) << "Compiling PTX to SASS. Will fail if CUDA SDK is not installed (and in the path).\n";
 
         TemporaryFile ptx(get_current_kernel_name(), ".ptx");
         TemporaryFile sass(get_current_kernel_name(), ".sass");

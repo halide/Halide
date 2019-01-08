@@ -292,11 +292,11 @@ Stmt add_image_checks(Stmt s,
         }
 
         if (touched.maybe_unused()) {
-            debug(3) << "Image " << name << " is only used when " << touched.used << "\n";
+            DEBUG(3) << "Image " << name << " is only used when " << touched.used << "\n";
         }
 
         // Check that the region passed in (after applying constraints) is within the region used
-        debug(3) << "In image " << name << " region touched is:\n";
+        DEBUG(3) << "In image " << name << " region touched is:\n";
 
         for (int j = 0; j < dimensions; j++) {
             string dim = std::to_string(j);
@@ -442,7 +442,7 @@ Stmt add_image_checks(Stmt s,
             Expr extent_proposed = Variable::make(Int(32), extent_name + ".proposed");
             Expr min_proposed = Variable::make(Int(32), min_name + ".proposed");
 
-            debug(2) << "Injecting constraints for " << name << "." << i << "\n";
+            DEBUG(2) << "Injecting constraints for " << name << "." << i << "\n";
             if (is_secondary_output_buffer) {
                 // For multi-output (Tuple) pipelines, output buffers
                 // beyond the first implicitly have their min and extent

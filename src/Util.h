@@ -369,7 +369,7 @@ using make_index_sequence = make_integer_sequence<size_t, N>;
 
 // Helpers for timing blocks of code. Put 'TIC;' at the start and
 // 'TOC;' at the end. Timing is reported at the toc via
-// debug(0). The calls can be nested and will pretty-print
+// DEBUG(0). The calls can be nested and will pretty-print
 // appropriately. Took this idea from matlab via Jon Barron.
 //
 // Note that this uses global state internally, and is not thread-safe

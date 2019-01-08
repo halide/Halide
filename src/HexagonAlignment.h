@@ -25,15 +25,15 @@ public:
      */
     template<typename T>
     bool is_aligned_impl(const T *op, int native_lanes, int *aligned_offset) {
-        debug(3) << "HexagonAlignmentAnalyzer: Check if " << op->index << " is aligned to a "
+        DEBUG(3) << "HexagonAlignmentAnalyzer: Check if " << op->index << " is aligned to a "
                  << required_alignment << " byte boundary\n";
-        debug(3) << "native_lanes: " << native_lanes << "\n";
+        DEBUG(3) << "native_lanes: " << native_lanes << "\n";
         Expr index = op->index;
         const Ramp *ramp = index.as<Ramp>();
         if (ramp) {
             index = ramp->base;
         } else if (index.type().is_vector()) {
-            debug(3) << "Is Unaligned\n";
+            DEBUG(3) << "Is Unaligned\n";
             return false;
         }
         // If this is a parameter, the base_alignment should be
@@ -51,10 +51,10 @@ public:
                                                  alignment_info);
         }
         if (known_alignment && (*aligned_offset == 0)) {
-            debug(3) << "Is Aligned\n";
+            DEBUG(3) << "Is Aligned\n";
             return true;
         }
-        debug(3) << "Is Unaligned\n";
+        DEBUG(3) << "Is Unaligned\n";
         return false;
     }
     bool is_aligned(const Load *op, int *aligned_offset) {

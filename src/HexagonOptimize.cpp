@@ -251,7 +251,7 @@ Expr replace_pattern(Expr x, const vector<Expr> &matches, const Pattern &p) {
 // matched operands. Prior to substitution, the matches are mutated
 // with op_mutator.
 Expr apply_patterns(Expr x, const vector<Pattern> &patterns, const Target &target, IRMutator2 *op_mutator) {
-    debug(3) << "apply_patterns " << x << "\n";
+    DEBUG(3) << "apply_patterns " << x << "\n";
     vector<Expr> matches;
     for (const Pattern &p : patterns) {
         if (!check_pattern_target(p.flags, target)) {
@@ -259,10 +259,10 @@ Expr apply_patterns(Expr x, const vector<Pattern> &patterns, const Target &targe
         }
 
         if (expr_match(p.pattern, x, matches)) {
-            debug(3) << "matched " << p.pattern << "\n";
-            debug(3) << "matches:\n";
+            DEBUG(3) << "matched " << p.pattern << "\n";
+            DEBUG(3) << "matches:\n";
             for (Expr i : matches) {
-                debug(3) << i << "\n";
+                DEBUG(3) << i << "\n";
             }
 
             if (!process_match_flags(matches, p.flags)) {
@@ -275,7 +275,7 @@ Expr apply_patterns(Expr x, const vector<Pattern> &patterns, const Target &targe
             }
 
             x = replace_pattern(x, matches, p);
-            debug(3) << "rewrote to: " << x << "\n";
+            DEBUG(3) << "rewrote to: " << x << "\n";
             return x;
         }
     }
@@ -1036,7 +1036,7 @@ private:
             // rewrites above.
             for (auto i : cast_rewrites) {
                 if (expr_match(i.first, cast, matches)) {
-                    debug(3) << "rewriting cast to: " << i.first << " from " << cast << "\n";
+                    DEBUG(3) << "rewriting cast to: " << i.first << " from " << cast << "\n";
                     Expr replacement = with_lanes(i.second, op->type.lanes());
                     Expr expr = substitute("*", matches[0], replacement);
                     return mutate(expr);

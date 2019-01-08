@@ -226,9 +226,9 @@ std::string print_sections(const Object &obj) {
 
 void do_reloc(char *addr, uint32_t mask, uintptr_t val, bool is_signed, bool verify) {
     uint32_t inst = *((uint32_t *)addr);
-    debug(4) << "Relocation in instruction: " << hex(inst) << "\n";
-    debug(4) << "val: " << hex(val) << "\n";
-    debug(4) << "mask: " << hex(mask) << "\n";
+    DEBUG(4) << "Relocation in instruction: " << hex(inst) << "\n";
+    DEBUG(4) << "val: " << hex(val) << "\n";
+    DEBUG(4) << "mask: " << hex(mask) << "\n";
 
     if (!mask) {
         // The mask depends on the instruction. To implement
@@ -236,30 +236,30 @@ void do_reloc(char *addr, uint32_t mask, uintptr_t val, bool is_signed, bool ver
         // instruction_encodings.txt
         // First print the bits so I can search for it in the
         // instruction encodings.
-        debug(4) << "Instruction bits: ";
+        DEBUG(4) << "Instruction bits: ";
         for (int i = 31; i >=0; i--) {
-            debug(4) << (int)((inst >> i) & 1);
+            DEBUG(4) << (int)((inst >> i) & 1);
         }
-        debug(4) << "\n";
+        DEBUG(4) << "\n";
 
         if ((inst & (3 << 14)) == 0) {
             // Some instructions are actually pairs of 16-bit
             // subinstructions. See section 3.7 in the
             // programmer's reference.
-            debug(4) << "Duplex!\n";
+            DEBUG(4) << "Duplex!\n";
 
             int iclass = ((inst >> 29) << 1) | ((inst >> 13) & 1);
-            debug(4) << "Class: " << hex(iclass) << "\n";
-            debug(4) << "Hi: ";
+            DEBUG(4) << "Class: " << hex(iclass) << "\n";
+            DEBUG(4) << "Hi: ";
             for (int i = 28; i >= 16; i--) {
-                debug(4) << (int)((inst >> i) & 1);
+                DEBUG(4) << (int)((inst >> i) & 1);
             }
-            debug(4) << "\n";
-            debug(4) << "Lo: ";
+            DEBUG(4) << "\n";
+            DEBUG(4) << "Lo: ";
             for (int i = 12; i >= 0; i--) {
-                debug(4) << (int)((inst >> i) & 1);
+                DEBUG(4) << (int)((inst >> i) & 1);
             }
-            debug(4) << "\n";
+            DEBUG(4) << "\n";
 
             // We only know how to do the ones where the high
             // subinstruction is an immediate assignment. (marked
@@ -281,15 +281,15 @@ void do_reloc(char *addr, uint32_t mask, uintptr_t val, bool is_signed, bool ver
         } else if ((inst >> 24) == 72) {
             // Example instruction encoding that has this high byte (ignoring bits 1 and 2):
             // 0100 1ii0  000i iiii  PPit tttt  iiii iiii
-            debug(4) << "Instruction-specific case A\n";
+            DEBUG(4) << "Instruction-specific case A\n";
             mask = 0x061f20ff;
         } else if ((inst >> 24) == 73) {
             // 0100 1ii1  000i iiii  PPii iiii  iiid dddd
-            debug(4) << "Instruction-specific case B\n";
+            DEBUG(4) << "Instruction-specific case B\n";
             mask = 0x061f3fe0;
         } else if ((inst >> 24) == 120) {
             // 0111 1000  ii-i iiii  PPii iiii  iiid dddd
-            debug(4) << "Instruction-specific case C\n";
+            DEBUG(4) << "Instruction-specific case C\n";
             mask = 0x00df3fe0;
         } else if ((inst >> 16) == 27209) {
             // 0110 1010  0100 1001  PP-i iiii  i--d dddd
@@ -358,7 +358,7 @@ void do_reloc(char *addr, uint32_t mask, uintptr_t val, bool is_signed, bool ver
         << "Relocation overflow inst=" << hex(inst)
         << "mask=" << hex(mask) << " val=" << hex(old_val) << "\n";
 
-    debug(4) << "Relocated instruction: " << hex(inst) << "\n";
+    DEBUG(4) << "Relocated instruction: " << hex(inst) << "\n";
 
     *((uint32_t *)addr) = inst;
 }
@@ -379,7 +379,7 @@ void do_relocation(uint32_t fixup_offset, char *fixup_addr, uint32_t type,
     for (const Relocation &r : got.relocations()) {
         if (r.get_symbol() == sym) {
             G = r.get_offset();
-            debug(2) << "Reusing G=" << G << " for symbol " << sym->get_name() << "\n";
+            DEBUG(2) << "Reusing G=" << G << " for symbol " << sym->get_name() << "\n";
             break;
         }
     }
@@ -524,7 +524,7 @@ void do_relocation(uint32_t fixup_offset, char *fixup_addr, uint32_t type,
     }
 
     if (needs_got_entry && G == got.contents_size()) {
-        debug(2) << "Adding GOT entry " << G << " for symbol " << sym->get_name() << "\n";
+        DEBUG(2) << "Adding GOT entry " << G << " for symbol " << sym->get_name() << "\n";
         got.append_contents((uint32_t)0);
         got.add_relocation(Relocation(R_HEX_GLOB_DAT, G, 0, sym));
     }
@@ -590,7 +590,7 @@ public:
             0x00, 0xc0, 0x9c, 0x52, //   jumpr r28
         };
 
-        debug(2) << "Adding PLT entry for symbol " << sym.get_name() << "\n";
+        DEBUG(2) << "Adding PLT entry for symbol " << sym.get_name() << "\n";
 
         // Add a GOT entry for this symbol.
         uint64_t got_offset = got.contents_size();
@@ -891,7 +891,7 @@ public:
         }
 
         // TODO: This can probably go away due to general debug info at the submodule compile level.
-        debug(1) << "Hexagon device code module: " << device_code << "\n";
+        DEBUG(1) << "Hexagon device code module: " << device_code << "\n";
 
         return s;
     }
@@ -956,7 +956,7 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
     if (!bitcode_dump_path.empty()) {
         auto fd_ostream = make_raw_fd_ostream(bitcode_dump_path);
         compile_llvm_module_to_llvm_bitcode(*llvm_module, *fd_ostream);
-        debug(0) << "Wrote Hexagon device bitcode to " << bitcode_dump_path;
+        DEBUG(0) << "Wrote Hexagon device bitcode to " << bitcode_dump_path;
     }
 
     llvm::SmallVector<char, 4096> object;
@@ -965,11 +965,11 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
 
     int min_debug_level = device_code.name() == runtime_module_name ? 3 : 2;
     if (debug::debug_level() >= min_debug_level) {
-        debug(0) << "Hexagon device code assembly: " << "\n";
+        DEBUG(0) << "Hexagon device code assembly: " << "\n";
         llvm::SmallString<4096> assembly;
         llvm::raw_svector_ostream assembly_stream(assembly);
         compile_llvm_module_to_assembly(*llvm_module, assembly_stream);
-        debug(0) << assembly.c_str() << "\n";
+        DEBUG(0) << assembly.c_str() << "\n";
     }
 
     auto obj = Elf::Object::parse_object(object.data(), object.size());
@@ -1005,7 +1005,7 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
         ctors->prepend_contents((uint32_t) 0);
     }
 
-    debug(2) << print_sections(*obj);
+    DEBUG(2) << print_sections(*obj);
 
     // Link into a shared object.
     std::string soname = "lib" + device_code.name() + ".so";
@@ -1029,7 +1029,7 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
         TemporaryFile input("hvx_unsigned", ".so");
         TemporaryFile output("hvx_signed", ".so");
 
-        debug(1) << "Signing Hexagon code: " << input.pathname() << " -> " << output.pathname() << "\n";
+        DEBUG(1) << "Signing Hexagon code: " << input.pathname() << " -> " << output.pathname() << "\n";
 
         {
             std::ofstream f(input.pathname(), std::ios::out|std::ios::binary);
@@ -1040,7 +1040,7 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
             f.close();
         }
 
-        debug(1) << "Signing tool: (" << signer << ")\n";
+        DEBUG(1) << "Signing tool: (" << signer << ")\n";
         std::string cmd = signer + " " + input.pathname() + " " + output.pathname();
         int result = system(cmd.c_str());
         internal_assert(result == 0)

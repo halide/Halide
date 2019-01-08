@@ -245,7 +245,7 @@ class LoopCarryOverLoop : public IRMutator2 {
     }
 
     Stmt lift_carried_values_out_of_stmt(const Stmt &orig_stmt) {
-        debug(4) << "About to lift carried values out of stmt: " << orig_stmt << "\n";
+        DEBUG(4) << "About to lift carried values out of stmt: " << orig_stmt << "\n";
 
         // The stmts, as graphs (lets subtituted in). We must only use
         // graph-aware methods to touch these, lest we incur
@@ -256,7 +256,7 @@ class LoopCarryOverLoop : public IRMutator2 {
         FindLoads find_loads;
         graph_stmt.accept(&find_loads);
 
-        debug(4) << "Found " << find_loads.result.size() << " loads\n";
+        DEBUG(4) << "Found " << find_loads.result.size() << " loads\n";
 
         // Group equal loads
         vector<vector<const Load *>> loads;
@@ -301,7 +301,7 @@ class LoopCarryOverLoop : public IRMutator2 {
                     next_predicates[j].defined() &&
                     graph_equal(predicates[i], next_predicates[j])) {
                     chains.push_back({j, i});
-                    debug(3) << "Found carried value:\n"
+                    DEBUG(3) << "Found carried value:\n"
                              << i << ":  -> " << Expr(loads[i][0]) << "\n"
                              << j << ":  -> " << Expr(loads[j][0]) << "\n";
                 }
@@ -346,9 +346,9 @@ class LoopCarryOverLoop : public IRMutator2 {
                   [&](const vector<int> &c1, const vector<int> &c2){return c1.size() > c2.size();});
 
         for (const vector<int> &c : chains) {
-            debug(3) << "Found chain of carried values:\n";
+            DEBUG(3) << "Found chain of carried values:\n";
             for (int i : c) {
-                debug(3) << i << ":  <- " << indices[i] << "\n";
+                DEBUG(3) << i << ":  <- " << indices[i] << "\n";
             }
         }
 

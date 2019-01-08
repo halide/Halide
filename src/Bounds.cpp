@@ -1035,10 +1035,10 @@ private:
 };
 
 Interval bounds_of_expr_in_scope(Expr expr, const Scope<Interval> &scope, const FuncValueBounds &fb, bool const_bound) {
-    //debug(3) << "computing bounds_of_expr_in_scope " << expr << "\n";
+    //DEBUG(3) << "computing bounds_of_expr_in_scope " << expr << "\n";
     Bounds b(&scope, fb, const_bound);
     expr.accept(&b);
-    //debug(3) << "bounds_of_expr_in_scope " << expr << " = " << simplify(b.interval.min) << ", " << simplify(b.interval.max) << "\n";
+    //DEBUG(3) << "bounds_of_expr_in_scope " << expr << " = " << simplify(b.interval.min) << ", " << simplify(b.interval.max) << "\n";
     Type expected = expr.type().element_of();
     if (b.interval.has_lower_bound()) {
         internal_assert(b.interval.min.type() == expected)
@@ -2184,7 +2184,7 @@ FuncValueBounds compute_function_value_bounds(const vector<string> &order,
                 fb[key] = result;
             }
 
-            debug(2) << "Bounds on value " << j
+            DEBUG(2) << "Bounds on value " << j
                      << " for func " << order[i]
                      << " are: " << result.min << ", " << result.max << "\n";
         }

@@ -74,9 +74,9 @@ struct SharedOpenCLContext {
 void load_opengl() {
 #if defined(__linux__)
     if (have_symbol("glXGetCurrentContext") && have_symbol("glDeleteTextures")) {
-        debug(1) << "OpenGL support code already linked in...\n";
+        DEBUG(1) << "OpenGL support code already linked in...\n";
     } else {
-        debug(1) << "Looking for OpenGL support code...\n";
+        DEBUG(1) << "Looking for OpenGL support code...\n";
         string error;
         llvm::sys::DynamicLibrary::LoadLibraryPermanently("libGL.so.1", &error);
         user_assert(error.empty()) << "Could not find libGL.so\n";
@@ -85,9 +85,9 @@ void load_opengl() {
     }
 #elif defined(__APPLE__)
     if (have_symbol("aglCreateContext") && have_symbol("glDeleteTextures")) {
-        debug(1) << "OpenGL support code already linked in...\n";
+        DEBUG(1) << "OpenGL support code already linked in...\n";
     } else {
-        debug(1) << "Looking for OpenGL support code...\n";
+        DEBUG(1) << "Looking for OpenGL support code...\n";
         string error;
         llvm::sys::DynamicLibrary::LoadLibraryPermanently("/System/Library/Frameworks/AGL.framework/AGL", &error);
         user_assert(error.empty()) << "Could not find AGL.framework\n";
@@ -102,9 +102,9 @@ void load_opengl() {
 void load_metal() {
 #if defined(__APPLE__)
     if (have_symbol("MTLCreateSystemDefaultDevice")) {
-        debug(1) << "Metal framework already linked in...\n";
+        DEBUG(1) << "Metal framework already linked in...\n";
     } else {
-        debug(1) << "Looking for Metal framework...\n";
+        DEBUG(1) << "Looking for Metal framework...\n";
         string error;
         llvm::sys::DynamicLibrary::LoadLibraryPermanently("/System/Library/Frameworks/Metal.framework/Metal", &error);
         user_assert(error.empty()) << "Could not find Metal.framework\n";
@@ -153,7 +153,7 @@ namespace {
 
 // Retrieve a function pointer from an llvm module, possibly by compiling it.
 JITModule::Symbol compile_and_get_function(ExecutionEngine &ee, const string &name) {
-    debug(2) << "JIT Compiling " << name << "\n";
+    DEBUG(2) << "JIT Compiling " << name << "\n";
     llvm::Function *fn = ee.FindFunctionNamed(name.c_str());
     void *f = (void *)ee.getFunctionAddress(name);
     if (!f) {
@@ -162,7 +162,7 @@ JITModule::Symbol compile_and_get_function(ExecutionEngine &ee, const string &na
 
     JITModule::Symbol symbol(f, fn->getFunctionType());
 
-    debug(2) << "Function " << name << " is at " << f << "\n";
+    DEBUG(2) << "Function " << name << " is at " << f << "\n";
 
     return symbol;
 }
@@ -216,7 +216,7 @@ public:
             // relocations, which gets really confusing to debug, because
             // gdb's view of the code uses the dcache, so the disassembly
             // isn't right.
-            debug(2) << "Flushing cache from " << (void *)start
+            DEBUG(2) << "Flushing cache from " << (void *)start
                      << " to " << (void *)end << "\n";
             __builtin___clear_cache((char*)start, (char*)end);
 #endif
@@ -260,8 +260,8 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
     CodeGen_LLVM::initialize_llvm();
 
     // Make the execution engine
-    debug(2) << "Creating new execution engine\n";
-    debug(2) << "Target triple: " << m->getTargetTriple() << "\n";
+    DEBUG(2) << "Creating new execution engine\n";
+    DEBUG(2) << "Target triple: " << m->getTargetTriple() << "\n";
     string error_string;
 
     string mcpu;
@@ -315,7 +315,7 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
 
     // Retrieve function pointers from the compiled module (which also
     // triggers compilation)
-    debug(1) << "JIT compiling " << module_name
+    DEBUG(1) << "JIT compiling " << module_name
              << " for " << target.to_string() << "\n";
 
     std::map<std::string, Symbol> exports;
@@ -333,7 +333,7 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
         exports[requested_exports[i]] = compile_and_get_function(*ee, requested_exports[i]);
     }
 
-    debug(2) << "Finalizing object\n";
+    DEBUG(2) << "Finalizing object\n";
     ee->finalizeObject();
 #if LLVM_VERSION < 70
     memory_manager->work_around_llvm_bugs();
@@ -592,7 +592,7 @@ function_t hook_function(const std::map<std::string, JITModule::Symbol> &exports
 void adjust_module_ref_count(void *arg, int32_t count) {
     JITModuleContents *module = (JITModuleContents *)arg;
 
-    debug(2) << "Adjusting refcount for module " << module->name << " by " << count << "\n";
+    DEBUG(2) << "Adjusting refcount for module " << module->name << " by " << count << "\n";
 
     if (count > 0) {
         module->ref_count.increment();

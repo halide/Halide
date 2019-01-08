@@ -86,7 +86,7 @@ vector<Definition> propagate_specialization_in_definition(Definition &def, const
         // Go ahead and save the simplified condition now
         it->condition = c;
         if (is_zero(c) || seen_const_true) {
-            debug(1) << "Erasing unreachable specialization ("
+            DEBUG(1) << "Erasing unreachable specialization ("
                 << old_c << ") -> (" << c << ") for function \"" << name << "\"\n";
             it = specializations.erase(it);
         } else {
@@ -100,7 +100,7 @@ vector<Definition> propagate_specialization_in_definition(Definition &def, const
     // schedule with the one from the final Specialization and prune it from
     // the list. This may leave the list of Specializations empty.
     if (!specializations.empty() && is_one(specializations.back().condition) && specializations.back().failure_message.empty()) {
-        debug(1) << "Replacing default Schedule with const-true specialization for function \"" << name << "\"\n";
+        DEBUG(1) << "Replacing default Schedule with const-true specialization for function \"" << name << "\"\n";
         const Definition s_def = specializations.back().definition;
         specializations.pop_back();
 

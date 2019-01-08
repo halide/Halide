@@ -753,12 +753,12 @@ class FuseGPUThreadLoopsSingleKernel : public IRMutator2 {
             Stmt body = op->body;
 
             // This is the innermost loop over blocks.
-            debug(3) << "Fusing thread block:\n" << body << "\n\n";
+            DEBUG(3) << "Fusing thread block:\n" << body << "\n\n";
 
             NormalizeDimensionality n(block_size, op->device_api);
             body = n.mutate(body);
 
-            debug(3) << "Normalized dimensionality:\n" << body << "\n\n";
+            DEBUG(3) << "Normalized dimensionality:\n" << body << "\n\n";
 
             Expr block_size_x = block_size.dimensions() ? block_size.extent(0) : 1;
             ExtractRegisterAllocations register_allocs;
@@ -770,7 +770,7 @@ class FuseGPUThreadLoopsSingleKernel : public IRMutator2 {
                 }
             }
 
-            debug(3) << "Extracted register-level allocations:\n" << body << "\n\n";
+            DEBUG(3) << "Extracted register-level allocations:\n" << body << "\n\n";
 
             if (register_allocs.has_thread_loop) {
                 // If there's no loop over threads, everything is already synchronous.
@@ -778,12 +778,12 @@ class FuseGPUThreadLoopsSingleKernel : public IRMutator2 {
                 body = i.mutate(body);
             }
 
-            debug(3) << "Injected synchronization:\n" << body << "\n\n";
+            DEBUG(3) << "Injected synchronization:\n" << body << "\n\n";
 
             ReplaceForWithIf f(block_size);
             body = f.mutate(body);
 
-            debug(3) << "Replaced for with if:\n" << body << "\n\n";
+            DEBUG(3) << "Replaced for with if:\n" << body << "\n\n";
 
             // There is always a loop over thread_id_x
             string thread_id = "." + thread_names[0];
@@ -800,11 +800,11 @@ class FuseGPUThreadLoopsSingleKernel : public IRMutator2 {
             thread_id.clear();
             body = register_allocs.rewrap(body, thread_id);
 
-            debug(3) << "Rewrapped in for loops:\n" << body << "\n\n";
+            DEBUG(3) << "Rewrapped in for loops:\n" << body << "\n\n";
 
             // Add back in the shared allocations
             body = shared_mem.rewrap(body);
-            debug(3) << "Add back in shared allocations:\n" << body << "\n\n";
+            DEBUG(3) << "Add back in shared allocations:\n" << body << "\n\n";
 
             if (body.same_as(op->body)) {
                 return op;
@@ -849,7 +849,7 @@ class FuseGPUThreadLoops : public IRMutator2 {
             ExtractSharedAllocations shared_mem(op->device_api);
             loop = shared_mem.mutate(loop);
 
-            debug(3) << "Pulled out shared allocations:\n" << loop << "\n\n";
+            DEBUG(3) << "Pulled out shared allocations:\n" << loop << "\n\n";
 
             // Mutate the inside of the kernel
             return FuseGPUThreadLoopsSingleKernel(block_size, shared_mem).mutate(loop);

@@ -42,7 +42,7 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ConstBounds *bounds) {
         Expr new_var = Variable::make(f.new_value.type(), f.new_name);
         Expr replacement = new_var;
 
-        debug(4) << "simplify let " << op->name << " = " << f.value << " in...\n";
+        DEBUG(4) << "simplify let " << op->name << " = " << f.value << " in...\n";
 
         while (1) {
             const Variable *var = f.new_value.template as<Variable>();
@@ -148,7 +148,7 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ConstBounds *bounds) {
             f.new_value = Expr();
             replacement = Expr();
         } else {
-            debug(4) << "new let " << f.new_name << " = " << f.new_value << " in ... " << replacement << " ...\n";
+            DEBUG(4) << "new let " << f.new_name << " = " << f.new_value << " in ... " << replacement << " ...\n";
         }
 
         VarInfo info;

@@ -150,7 +150,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const For *loop) 
             << "kernel loop must be either gpu block or gpu thread\n";
         internal_assert(is_zero(loop->min));
 
-        debug(4) << "loop extent is " << loop->extent << "\n";
+        DEBUG(4) << "loop extent is " << loop->extent << "\n";
         //
         //  Need to extract workgroup size.
         //
@@ -164,7 +164,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const For *loop) 
                 "but two different ones were encountered " << workgroup_size[index] << " and " << new_workgroup_size <<
                 " in dimension " << index << ".\n";
             workgroup_size[index] = new_workgroup_size;
-            debug(4) << "Workgroup size for index " << index << " is " << workgroup_size[index] << "\n";
+            DEBUG(4) << "Workgroup size for index " << index << " is " << workgroup_size[index] << "\n";
         }
 
         do_indent();
@@ -254,7 +254,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Select *op)
 void CodeGen_OpenGLCompute_Dev::add_kernel(Stmt s,
                                            const string &name,
                                            const vector<DeviceArgument> &args) {
-    debug(2) << "CodeGen_OpenGLCompute_Dev::compile " << name << "\n";
+    DEBUG(2) << "CodeGen_OpenGLCompute_Dev::compile " << name << "\n";
 
     // TODO: do we have to uniquify these names, or can we trust that they are safe?
     cur_kernel_name = name;
@@ -281,7 +281,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::add_kernel(Stmt s,
                                                                     const string &name,
                                                                     const vector<DeviceArgument> &args) {
 
-    debug(2) << "Adding OpenGLCompute kernel " << name << "\n";
+    DEBUG(2) << "Adding OpenGLCompute kernel " << name << "\n";
     cache.clear();
 
     if (target.os == Target::Android) {
@@ -346,7 +346,7 @@ void CodeGen_OpenGLCompute_Dev::init_module() {
 }
 
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Allocate *op) {
-    debug(2) << "OpenGLCompute: Allocate " << op->name << " of type " << op->type << " on device\n";
+    DEBUG(2) << "OpenGLCompute: Allocate " << op->name << " of type " << op->type << " on device\n";
 
     do_indent();
     Allocation alloc;
@@ -380,7 +380,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Allocate *o
 }
 
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Free *op) {
-    debug(2) << "OpenGLCompute: Free on device for " << op->name << "\n";
+    DEBUG(2) << "OpenGLCompute: Free on device for " << op->name << "\n";
 
     allocations.pop(op->name);
 }
@@ -401,7 +401,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const IntImm *op)
 
 vector<char> CodeGen_OpenGLCompute_Dev::compile_to_src() {
     string str = src_stream.str();
-    debug(1) << "GLSL Compute source:\n" << str << '\n';
+    DEBUG(1) << "GLSL Compute source:\n" << str << '\n';
     vector<char> buffer(str.begin(), str.end());
     buffer.push_back(0);
     return buffer;

@@ -124,7 +124,7 @@ private:
             internal_assert(int_size != NULL); // Stack size is always a const int
             func_stack_current[idx] += *int_size;
             func_stack_peak[idx] = std::max(func_stack_peak[idx], func_stack_current[idx]);
-            debug(3) << "  Allocation on stack: " << op->name << "(" << size << ") in pipeline " << pipeline_name
+            DEBUG(3) << "  Allocation on stack: " << op->name << "(" << size << ") in pipeline " << pipeline_name
                      << "; current: " << func_stack_current[idx] << "; peak: " << func_stack_peak[idx] << "\n";
         }
 
@@ -146,7 +146,7 @@ private:
 
         if (!is_zero(size) && !on_stack && profiling_memory) {
             Expr profiler_pipeline_state = Variable::make(Handle(), "profiler_pipeline_state");
-            debug(3) << "  Allocation on heap: " << op->name << "(" << size << ") in pipeline " << pipeline_name << "\n";
+            DEBUG(3) << "  Allocation on heap: " << op->name << "(" << size << ") in pipeline " << pipeline_name << "\n";
             Expr set_task = Call::make(Int(32), "halide_profiler_memory_allocate",
                                        {profiler_pipeline_state, idx, size}, Call::Extern);
             stmt = Block::make(Evaluate::make(set_task), stmt);
@@ -168,7 +168,7 @@ private:
 
             if (!alloc.on_stack) {
                 if (profiling_memory) {
-                    debug(3) << "  Free on heap: " << op->name << "(" << alloc.size << ") in pipeline " << pipeline_name << "\n";
+                    DEBUG(3) << "  Free on heap: " << op->name << "(" << alloc.size << ") in pipeline " << pipeline_name << "\n";
                     Expr set_task = Call::make(Int(32), "halide_profiler_memory_free",
                                                {profiler_pipeline_state, idx, alloc.size}, Call::Extern);
                     stmt = Block::make(Evaluate::make(set_task), stmt);
@@ -178,7 +178,7 @@ private:
                 internal_assert(int_size != nullptr);
 
                 func_stack_current[idx] -= *int_size;
-                debug(3) << "  Free on stack: " << op->name << "(" << alloc.size << ") in pipeline " << pipeline_name
+                DEBUG(3) << "  Free on stack: " << op->name << "(" << alloc.size << ") in pipeline " << pipeline_name
                          << "; current: " << func_stack_current[idx] << "; peak: " << func_stack_peak[idx] << "\n";
             }
         }

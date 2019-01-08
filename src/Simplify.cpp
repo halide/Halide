@@ -345,8 +345,8 @@ bool can_prove(Expr e, const Scope<Interval> &bounds) {
             }
         }
 
-        debug(0) << "Failed to prove, but could not find a counter-example:\n " << e << "\n";
-        debug(0) << "Original expression:\n" << orig << "\n";
+        DEBUG(0) << "Failed to prove, but could not find a counter-example:\n " << e << "\n";
+        DEBUG(0) << "Original expression:\n" << orig << "\n";
         return false;
     }
 

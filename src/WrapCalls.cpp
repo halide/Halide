@@ -29,7 +29,7 @@ void insert_func_wrapper_helper(map<FunctionPtr, SubstitutionMap> &func_wrappers
     SubstitutionMap &wrappers_map = func_wrappers_map[in_func];
     for (auto iter = wrappers_map.begin(); iter != wrappers_map.end(); ++iter) {
         if (iter->second.same_as(wrapped_func)) {
-            debug(4) << "Merging wrapper of " << Function(in_func).name()
+            DEBUG(4) << "Merging wrapper of " << Function(in_func).name()
                      << " [" << Function(iter->first).name()
                      << ", " << Function(iter->second).name()
                      << "] with [" << Function(wrapped_func).name() << ", "
@@ -37,7 +37,7 @@ void insert_func_wrapper_helper(map<FunctionPtr, SubstitutionMap> &func_wrappers
             iter->second = wrapper;
             return;
         } else if (wrapper.same_as(iter->first)) {
-            debug(4) << "Merging wrapper of " << Function(in_func).name()
+            DEBUG(4) << "Merging wrapper of " << Function(in_func).name()
                      << " [" << Function(wrapped_func).name()
                      << ", " << Function(wrapper).name()
                      << "] with [" << Function(iter->first).name()
@@ -105,7 +105,7 @@ map<string, Function> wrap_func_calls(const map<string, Function> &env) {
                         // so we don't want to rewrite the calls done by the
                         // wrapper. We also shouldn't rewrite the original
                         // function itself.
-                        debug(4) << "Skip over replacing \"" << in_func
+                        DEBUG(4) << "Skip over replacing \"" << in_func
                                  << "\" with \"" << Function(wrapper).name() << "\"\n";
                         continue;
                     }
@@ -115,7 +115,7 @@ map<string, Function> wrap_func_calls(const map<string, Function> &env) {
                         // Custom wrapper always takes precedence over global wrapper
                         continue;
                     }
-                    debug(4) << "Global wrapper: replacing reference of \""
+                    DEBUG(4) << "Global wrapper: replacing reference of \""
                              << wrapped_fname <<  "\" in \"" << in_func
                              << "\" with \"" << Function(wrapper).name() << "\"\n";
                     insert_func_wrapper_helper(func_wrappers_map,
@@ -123,7 +123,7 @@ map<string, Function> wrap_func_calls(const map<string, Function> &env) {
                                                wrapped_func, wrapper);
                 }
             } else { // Custom wrapper
-                debug(4) << "Custom wrapper: replacing reference of \""
+                DEBUG(4) << "Custom wrapper: replacing reference of \""
                          << wrapped_fname <<  "\" in \"" << in_func << "\" with \""
                          << Function(wrapper).name() << "\"\n";
 
@@ -139,7 +139,7 @@ map<string, Function> wrap_func_calls(const map<string, Function> &env) {
                     // g(x) = f(x) + 1;
                     // f.in(g);
                     // f.realize(..);
-                    debug(4) << "    skip custom wrapper for " << in_func << " [" << wrapped_fname
+                    DEBUG(4) << "    skip custom wrapper for " << in_func << " [" << wrapped_fname
                              << " -> " << Function(wrapper).name() << "] since it's not in the pipeline\n";
                     continue;
                 }

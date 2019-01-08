@@ -38,7 +38,7 @@ void Closure::visit(const For *op) {
 void Closure::found_buffer_ref(const string &name, Type type,
                                bool read, bool written, Halide::Buffer<> image) {
     if (!ignore.contains(name)) {
-        debug(3) << "Adding buffer " << name << " to closure\n";
+        DEBUG(3) << "Adding buffer " << name << " to closure\n";
         Buffer &ref = buffers[name];
         ref.type = type.element_of(); // TODO: Validate type is the same as existing refs?
         ref.read = ref.read || read;
@@ -50,7 +50,7 @@ void Closure::found_buffer_ref(const string &name, Type type,
             ref.dimensions = image.dimensions();
         }
     } else {
-        debug(3) << "Not adding " << name << " to closure\n";
+        DEBUG(3) << "Not adding " << name << " to closure\n";
     }
 }
 
@@ -81,9 +81,9 @@ void Closure::visit(const Allocate *op) {
 
 void Closure::visit(const Variable *op) {
     if (ignore.contains(op->name)) {
-        debug(3) << "Not adding " << op->name << " to closure\n";
+        DEBUG(3) << "Not adding " << op->name << " to closure\n";
     } else {
-        debug(3) << "Adding " << op->name << " to closure\n";
+        DEBUG(3) << "Adding " << op->name << " to closure\n";
         vars[op->name] = op->type;
     }
 }

@@ -102,27 +102,27 @@ CodeGen_GPU_Host<CodeGen_CPU>::CodeGen_GPU_Host(Target target) : CodeGen_CPU(tar
     // The code is in reverse order to allow later tests to override
     // earlier ones.
     if (target.has_feature(Target::OpenGL)) {
-        debug(1) << "Constructing OpenGL device codegen\n";
+        DEBUG(1) << "Constructing OpenGL device codegen\n";
         cgdev[DeviceAPI::GLSL] = new CodeGen_OpenGL_Dev(target);
     }
     if (target.has_feature(Target::OpenGLCompute)) {
-        debug(1) << "Constructing OpenGL Compute device codegen\n";
+        DEBUG(1) << "Constructing OpenGL Compute device codegen\n";
         cgdev[DeviceAPI::OpenGLCompute] = new CodeGen_OpenGLCompute_Dev(target);
     }
     if (target.has_feature(Target::CUDA)) {
-        debug(1) << "Constructing CUDA device codegen\n";
+        DEBUG(1) << "Constructing CUDA device codegen\n";
         cgdev[DeviceAPI::CUDA] = new CodeGen_PTX_Dev(target);
     }
     if (target.has_feature(Target::OpenCL)) {
-        debug(1) << "Constructing OpenCL device codegen\n";
+        DEBUG(1) << "Constructing OpenCL device codegen\n";
         cgdev[DeviceAPI::OpenCL] = new CodeGen_OpenCL_Dev(target);
     }
     if (target.has_feature(Target::Metal)) {
-        debug(1) << "Constructing Metal device codegen\n";
+        DEBUG(1) << "Constructing Metal device codegen\n";
         cgdev[DeviceAPI::Metal] = new CodeGen_Metal_Dev(target);
     }
     if (target.has_feature(Target::D3D12Compute)) {
-        debug(1) << "Constructing Direct3D 12 Compute device codegen\n";
+        DEBUG(1) << "Constructing Direct3D 12 Compute device codegen\n";
         cgdev[DeviceAPI::D3D12Compute] = new CodeGen_D3D12Compute_Dev(target);
     }
 
@@ -187,7 +187,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile_func(const LoweredFunc &f,
             continue;
         }
 
-        debug(2) << "Generating init_kernels for " << api_unique_name << "\n";
+        DEBUG(2) << "Generating init_kernels for " << api_unique_name << "\n";
 
         std::vector<char> kernel_src = gpu_codegen->compile_to_src();
 
@@ -224,7 +224,7 @@ template<typename CodeGen_CPU>
 void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
     if (CodeGen_GPU_Dev::is_gpu_var(loop->name)) {
         // We're in the loop over outermost block dimension
-        debug(2) << "Kernel launch: " << loop->name << "\n";
+        DEBUG(2) << "Kernel launch: " << loop->name << "\n";
 
         internal_assert(loop->device_api != DeviceAPI::Default_GPU)
             << "A concrete device API should have been selected before codegen.";
@@ -232,7 +232,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         ExtractBounds bounds;
         loop->accept(&bounds);
 
-        debug(2) << "Kernel bounds: ("
+        DEBUG(2) << "Kernel bounds: ("
                  << bounds.num_threads[0] << ", "
                  << bounds.num_threads[1] << ", "
                  << bounds.num_threads[2] << ", "
@@ -343,7 +343,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
 
         // get the actual name of the generated kernel for this loop
         kernel_name = gpu_codegen->get_current_kernel_name();
-        debug(2) << "Compiled launch to kernel \"" << kernel_name << "\"\n";
+        DEBUG(2) << "Compiled launch to kernel \"" << kernel_name << "\"\n";
         Value *entry_name_str = builder->CreateGlobalStringPtr(kernel_name, "entry_name");
 
         llvm::Type *target_size_t_type = (target.bits == 32) ? i32_t : i64_t;
@@ -491,13 +491,13 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         // cuLaunchKernel. How should we handle blkid[3]?
         internal_assert(is_one(bounds.num_threads[3]) && is_one(bounds.num_blocks[3]))
             << bounds.num_threads[3] << ", " << bounds.num_blocks[3] << "\n";
-        debug(4) << "CodeGen_GPU_Host get_user_context returned " << get_user_context() << "\n";
-        debug(3) << "bounds.num_blocks[0] = " << bounds.num_blocks[0] << "\n";
-        debug(3) << "bounds.num_blocks[1] = " << bounds.num_blocks[1] << "\n";
-        debug(3) << "bounds.num_blocks[2] = " << bounds.num_blocks[2] << "\n";
-        debug(3) << "bounds.num_threads[0] = " << bounds.num_threads[0] << "\n";
-        debug(3) << "bounds.num_threads[1] = " << bounds.num_threads[1] << "\n";
-        debug(3) << "bounds.num_threads[2] = " << bounds.num_threads[2] << "\n";
+        DEBUG(4) << "CodeGen_GPU_Host get_user_context returned " << get_user_context() << "\n";
+        DEBUG(3) << "bounds.num_blocks[0] = " << bounds.num_blocks[0] << "\n";
+        DEBUG(3) << "bounds.num_blocks[1] = " << bounds.num_blocks[1] << "\n";
+        DEBUG(3) << "bounds.num_blocks[2] = " << bounds.num_blocks[2] << "\n";
+        DEBUG(3) << "bounds.num_threads[0] = " << bounds.num_threads[0] << "\n";
+        DEBUG(3) << "bounds.num_threads[1] = " << bounds.num_threads[1] << "\n";
+        DEBUG(3) << "bounds.num_threads[2] = " << bounds.num_threads[2] << "\n";
 
         Constant *zero = ConstantInt::get(i32_t, 0);
         Value *zeros[] = {zero, zero};
@@ -564,7 +564,7 @@ Value *CodeGen_GPU_Host<CodeGen_CPU>::get_module_state(const std::string &api_un
                                           false, GlobalVariable::InternalLinkage,
                                           ConstantPointerNull::get(void_ptr_type),
                                           name);
-        debug(4) << "Created device module state global variable\n";
+        DEBUG(4) << "Created device module state global variable\n";
     }
 
     return module_state;

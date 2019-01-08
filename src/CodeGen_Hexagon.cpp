@@ -209,7 +209,7 @@ private:
                 Stmt epilog = IfThenElse::make(uses_hvx_var,
                                                call_halide_qurt_hvx_lock(target));
                 s = Block::make({prolog, new_for, epilog});
-                debug(4) << "Wrapping prolog & epilog around par loop\n" << s << "\n";
+                DEBUG(4) << "Wrapping prolog & epilog around par loop\n" << s << "\n";
             } else {
                 // We do not substitute false for "uses_hvx" into the body as we do in the true
                 // case because we want to defer that to an enclosing scope. The logic is that
@@ -294,61 +294,61 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
 
     Stmt body = f.body;
 
-    debug(1) << "Unpredicating loads and stores...\n";
+    DEBUG(1) << "Unpredicating loads and stores...\n";
     // Before running unpredicate_loads_stores, replace dense vector
     // predicated loads with sloppy scalarized predicates.
     body = sloppy_unpredicate_loads(body);
     body = unpredicate_loads_stores(body);
-    debug(2) << "Lowering after unpredicating loads/stores:\n" << body << "\n\n";
+    DEBUG(2) << "Lowering after unpredicating loads/stores:\n" << body << "\n\n";
 
     if (target.has_feature(Target::HVX_v65)) {
         // Generate vscatter-vgathers before optimize_hexagon_shuffles.
-        debug(1) << "Looking for vscatter-vgather...\n";
+        DEBUG(1) << "Looking for vscatter-vgather...\n";
         body = scatter_gather_generator(body);
     }
 
-    debug(1) << "Optimizing shuffles...\n";
+    DEBUG(1) << "Optimizing shuffles...\n";
     // vlut always indexes 64 bytes of the LUT at a time, even in 128 byte mode.
     const int lut_alignment = 64;
     body = optimize_hexagon_shuffles(body, lut_alignment);
-    debug(2) << "Lowering after optimizing shuffles:\n" << body << "\n\n";
+    DEBUG(2) << "Lowering after optimizing shuffles:\n" << body << "\n\n";
 
     // Generating vtmpy before CSE and align_loads makes it easier to match
     // patterns for vtmpy.
     #if 0
     // TODO(aankit): Re-enable this after fixing complexity issue.
-    debug(1) << "Generating vtmpy...\n";
+    DEBUG(1) << "Generating vtmpy...\n";
     body = vtmpy_generator(body);
-    debug(2) << "Lowering after generating vtmpy:\n" << body << "\n\n";
+    DEBUG(2) << "Lowering after generating vtmpy:\n" << body << "\n\n";
     #endif
 
-    debug(1) << "Aligning loads for HVX....\n";
+    DEBUG(1) << "Aligning loads for HVX....\n";
     body = align_loads(body, target.natural_vector_size(Int(8)), alignment_info);
     body = common_subexpression_elimination(body);
     // Don't simplify here, otherwise it will re-collapse the loads we
     // want to carry across loop iterations.
-    debug(2) << "Lowering after aligning loads:\n" << body << "\n\n";
+    DEBUG(2) << "Lowering after aligning loads:\n" << body << "\n\n";
 
-    debug(1) << "Carrying values across loop iterations...\n";
+    DEBUG(1) << "Carrying values across loop iterations...\n";
     // Use at most 16 vector registers for carrying values.
     body = loop_carry(body, 16);
     body = simplify(body);
-    debug(2) << "Lowering after forwarding stores:\n" << body << "\n\n";
+    DEBUG(2) << "Lowering after forwarding stores:\n" << body << "\n\n";
 
     // We can't deal with bool vectors, convert them to integer vectors.
-    debug(1) << "Eliminating boolean vectors from Hexagon code...\n";
+    DEBUG(1) << "Eliminating boolean vectors from Hexagon code...\n";
     body = eliminate_bool_vectors(body);
-    debug(2) << "Lowering after eliminating boolean vectors: " << body << "\n\n";
+    DEBUG(2) << "Lowering after eliminating boolean vectors: " << body << "\n\n";
 
     // Optimize the IR for Hexagon.
-    debug(1) << "Optimizing Hexagon instructions...\n";
+    DEBUG(1) << "Optimizing Hexagon instructions...\n";
     body = optimize_hexagon_instructions(body, target, alignment_info);
 
-    debug(1) << "Adding calls to qurt_hvx_lock, if necessary...\n";
+    DEBUG(1) << "Adding calls to qurt_hvx_lock, if necessary...\n";
     body = inject_hvx_lock_unlock(body, target);
 
-    debug(1) << "Hexagon function body:\n";
-    debug(1) << body << "\n";
+    DEBUG(1) << "Hexagon function body:\n";
+    DEBUG(1) << body << "\n";
 
     body.accept(this);
 
@@ -2151,12 +2151,12 @@ void CodeGen_Hexagon::visit(const Allocate *alloc) {
         ++arg_iter;  // skip the user context *
         llvm_size = builder->CreateIntCast(llvm_size, arg_iter->getType(), false);
 
-        debug(4) << "Creating call to halide_locked_cache_malloc for allocation " << alloc->name
+        DEBUG(4) << "Creating call to halide_locked_cache_malloc for allocation " << alloc->name
                  << " of size " << alloc->type.bytes();
         for (Expr e : alloc->extents) {
-            debug(4) << " x " << e;
+            DEBUG(4) << " x " << e;
         }
-        debug(4) << "\n";
+        DEBUG(4) << "\n";
         Value *args[2] = { get_user_context(), llvm_size };
 
         Value *call = builder->CreateCall(alloc_fn, args);
@@ -2185,7 +2185,7 @@ void CodeGen_Hexagon::visit(const Allocate *alloc) {
         allocation.destructor_function = free_fn;
 
         // Push the allocation base pointer onto the symbol table
-        debug(3) << "Pushing allocation called " << alloc->name << " onto the symbol table\n";
+        DEBUG(3) << "Pushing allocation called " << alloc->name << " onto the symbol table\n";
         allocations.push(alloc->name, allocation);
 
         sym_push(alloc->name, allocation.ptr);

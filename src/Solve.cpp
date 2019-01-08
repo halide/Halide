@@ -44,19 +44,19 @@ public:
         map<Expr, CacheEntry, ExprCompare>::iterator iter = cache.find(e);
         if (iter == cache.end()) {
             // Not in the cache, call the base class version.
-            debug(4) << "Mutating " << e << " (" << uses_var << ")\n";
+            DEBUG(4) << "Mutating " << e << " (" << uses_var << ")\n";
             bool old_uses_var = uses_var;
             uses_var = false;
             Expr new_e = IRMutator2::mutate(e);
             CacheEntry entry = {new_e, uses_var};
             uses_var = old_uses_var || uses_var;
             cache[e] = entry;
-            debug(4) << "(Miss) Rewrote " << e << " -> " << new_e << " (" << uses_var << ")\n";
+            DEBUG(4) << "(Miss) Rewrote " << e << " -> " << new_e << " (" << uses_var << ")\n";
             return new_e;
         } else {
             // Cache hit.
             uses_var = uses_var || iter->second.uses_var;
-            debug(4) << "(Hit) Rewrote " << e << " -> " << iter->second.expr << " (" << uses_var << ")\n";
+            DEBUG(4) << "(Hit) Rewrote " << e << " -> " << iter->second.expr << " (" << uses_var << ")\n";
             return iter->second.expr;
         }
     }
@@ -109,7 +109,7 @@ private:
 
     // Admit defeat. Isolated in a method for ease of debugging.
     Expr fail(Expr e) {
-        debug(3) << "Failed to solve: " << e << "\n";
+        DEBUG(3) << "Failed to solve: " << e << "\n";
         failed = true;
         return Expr();
     }
@@ -861,12 +861,12 @@ class SolveForInterval : public IRVisitor {
         op->b.accept(this);
         Interval ib = result;
         if (target) {
-            debug(3) << "And intersecting: " << Expr(op) << "\n"
+            DEBUG(3) << "And intersecting: " << Expr(op) << "\n"
                      << "  " << ia.min << " " << ia.max << "\n"
                      << "  " << ib.min << " " << ib.max << "\n";
             result = Interval::make_intersection(ia, ib);
         } else {
-            debug(3) << "And union:" << Expr(op) << "\n"
+            DEBUG(3) << "And union:" << Expr(op) << "\n"
                      << "  " << ia.min << " " << ia.max << "\n"
                      << "  " << ib.min << " " << ib.max << "\n";
             result = interval_union(ia, ib);
@@ -879,12 +879,12 @@ class SolveForInterval : public IRVisitor {
         op->b.accept(this);
         Interval ib = result;
         if (!target) {
-            debug(3) << "Or intersecting:" << Expr(op) << "\n"
+            DEBUG(3) << "Or intersecting:" << Expr(op) << "\n"
                      << "  " << ia.min << " " << ia.max << "\n"
                      << "  " << ib.min << " " << ib.max << "\n";
             result = Interval::make_intersection(ia, ib);
         } else {
-            debug(3) << "Or union:" << Expr(op) << "\n"
+            DEBUG(3) << "Or union:" << Expr(op) << "\n"
                      << "  " << ia.min << " " << ia.max << "\n"
                      << "  " << ib.min << " " << ib.max << "\n";
             result = interval_union(ia, ib);
@@ -1377,7 +1377,7 @@ SolverResult solve_expression(Expr e, const std::string &variable, const Scope<E
     Expr new_e = solver.mutate(e);
     // The process has expanded lets. Re-collect them.
     new_e = common_subexpression_elimination(new_e);
-    debug(3) << "Solved expr for " << variable << " :\n"
+    DEBUG(3) << "Solved expr for " << variable << " :\n"
              << "  " << e << "\n"
              << "  " << new_e << "\n";
     return {new_e, !solver.failed};
@@ -1659,7 +1659,7 @@ void solve_test() {
         SolverResult solved = solve_expression(expr, "y");
     }
 
-    debug(0) << "Solve test passed\n";
+    DEBUG(0) << "Solve test passed\n";
 }
 
 }  // namespace Internal

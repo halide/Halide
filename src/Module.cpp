@@ -29,10 +29,10 @@ public:
     TemporaryObjectFileDir() : dir_path(dir_make_temp()) {}
     ~TemporaryObjectFileDir() {
         for (const auto &f : dir_files) {
-            debug(1) << "file_unlink: " << f << "\n";
+            DEBUG(1) << "file_unlink: " << f << "\n";
             file_unlink(f);
         }
-        debug(1) << "dir_rmdir: " << dir_path << "\n";
+        DEBUG(1) << "dir_rmdir: " << dir_path << "\n";
         dir_rmdir(dir_path);
     }
     std::string add_temp_object_file(const std::string &base_path_name,
@@ -54,7 +54,7 @@ public:
         }
         std::string base_name = base_path_name.substr(std::max(slash_idx, backslash_idx));
         std::string name = dir_path + "/" + base_name + suffix + ext;
-        debug(1) << "add_temp_object_file: " << name << "\n";
+        DEBUG(1) << "add_temp_object_file: " << name << "\n";
         if (in_front) {
             dir_files.insert(dir_files.begin(), name);
         } else {
@@ -354,11 +354,11 @@ Buffer<uint8_t> Module::compile_to_buffer() const {
     compile_llvm_module_to_object(*llvm_module, object_stream);
 
     if (debug::debug_level() >= 2) {
-        debug(2) << "Submodule assembly for " << name() << ": " << "\n";
+        DEBUG(2) << "Submodule assembly for " << name() << ": " << "\n";
         llvm::SmallString<4096> assembly;
         llvm::raw_svector_ostream assembly_stream(assembly);
         compile_llvm_module_to_assembly(*llvm_module, assembly_stream);
-        debug(2) << assembly.c_str() << "\n";
+        DEBUG(2) << assembly.c_str() << "\n";
     }
 
     Buffer<uint8_t> result(object.size(), name());
@@ -424,13 +424,13 @@ void Module::compile(const Outputs &output_files_arg) const {
     // clear the output after writing it, otherwise the output will
     // be overwritten by recursive calls after submodules are resolved.
     if (!output_files.stmt_name.empty()) {
-        debug(1) << "Module.compile(): stmt_name " << output_files.stmt_name << "\n";
+        DEBUG(1) << "Module.compile(): stmt_name " << output_files.stmt_name << "\n";
         std::ofstream file(output_files.stmt_name);
         file << *this;
         output_files.stmt_name.clear();
     }
     if (!output_files.stmt_html_name.empty()) {
-        debug(1) << "Module.compile(): stmt_html_name " << output_files.stmt_html_name << "\n";
+        DEBUG(1) << "Module.compile(): stmt_html_name " << output_files.stmt_html_name << "\n";
         Internal::print_to_html(output_files.stmt_html_name, *this);
         output_files.stmt_html_name.clear();
     }
@@ -451,7 +451,7 @@ void Module::compile(const Outputs &output_files_arg) const {
         std::unique_ptr<llvm::Module> llvm_module(compile_module_to_llvm_module(*this, context));
 
         if (!output_files.object_name.empty()) {
-            debug(1) << "Module.compile(): object_name " << output_files.object_name << "\n";
+            DEBUG(1) << "Module.compile(): object_name " << output_files.object_name << "\n";
             auto out = make_raw_fd_ostream(output_files.object_name);
             compile_llvm_module_to_object(*llvm_module, *out);
         }
@@ -464,33 +464,33 @@ void Module::compile(const Outputs &output_files_arg) const {
             TemporaryObjectFileDir temp_dir;
             {
                 std::string object_name = temp_dir.add_temp_object_file(output_files.static_library_name, "", target());
-                debug(1) << "Module.compile(): temporary object_name " << object_name << "\n";
+                DEBUG(1) << "Module.compile(): temporary object_name " << object_name << "\n";
                 auto out = make_raw_fd_ostream(object_name);
                 compile_llvm_module_to_object(*llvm_module, *out);
                 out->flush();  // create_static_library() is happier if we do this
             }
-            debug(1) << "Module.compile(): static_library_name " << output_files.static_library_name << "\n";
+            DEBUG(1) << "Module.compile(): static_library_name " << output_files.static_library_name << "\n";
             Target base_target(target().os, target().arch, target().bits);
             create_static_library(temp_dir.files(), base_target, output_files.static_library_name);
         }
         if (!output_files.assembly_name.empty()) {
-            debug(1) << "Module.compile(): assembly_name " << output_files.assembly_name << "\n";
+            DEBUG(1) << "Module.compile(): assembly_name " << output_files.assembly_name << "\n";
             auto out = make_raw_fd_ostream(output_files.assembly_name);
             compile_llvm_module_to_assembly(*llvm_module, *out);
         }
         if (!output_files.bitcode_name.empty()) {
-            debug(1) << "Module.compile(): bitcode_name " << output_files.bitcode_name << "\n";
+            DEBUG(1) << "Module.compile(): bitcode_name " << output_files.bitcode_name << "\n";
             auto out = make_raw_fd_ostream(output_files.bitcode_name);
             compile_llvm_module_to_llvm_bitcode(*llvm_module, *out);
         }
         if (!output_files.llvm_assembly_name.empty()) {
-            debug(1) << "Module.compile(): llvm_assembly_name " << output_files.llvm_assembly_name << "\n";
+            DEBUG(1) << "Module.compile(): llvm_assembly_name " << output_files.llvm_assembly_name << "\n";
             auto out = make_raw_fd_ostream(output_files.llvm_assembly_name);
             compile_llvm_module_to_llvm_assembly(*llvm_module, *out);
         }
     }
     if (!output_files.c_header_name.empty()) {
-        debug(1) << "Module.compile(): c_header_name " << output_files.c_header_name << "\n";
+        DEBUG(1) << "Module.compile(): c_header_name " << output_files.c_header_name << "\n";
         std::ofstream file(output_files.c_header_name);
         Internal::CodeGen_C cg(file,
                                target(),
@@ -500,7 +500,7 @@ void Module::compile(const Outputs &output_files_arg) const {
         cg.compile(*this);
     }
     if (!output_files.c_source_name.empty()) {
-        debug(1) << "Module.compile(): c_source_name " << output_files.c_source_name << "\n";
+        DEBUG(1) << "Module.compile(): c_source_name " << output_files.c_source_name << "\n";
         std::ofstream file(output_files.c_source_name);
         Internal::CodeGen_C cg(file,
                                target(),
@@ -509,7 +509,7 @@ void Module::compile(const Outputs &output_files_arg) const {
         cg.compile(*this);
     }
     if (!output_files.python_extension_name.empty()) {
-        debug(1) << "Module.compile(): python_extension_name " << output_files.python_extension_name << "\n";
+        DEBUG(1) << "Module.compile(): python_extension_name " << output_files.python_extension_name << "\n";
         std::string c_header_name = output_files.c_header_name;
         if (c_header_name.empty()) {
           // If we we're not generating a header right now, guess the filename.
@@ -522,7 +522,7 @@ void Module::compile(const Outputs &output_files_arg) const {
         python_extension_gen.compile(*this);
     }
     if (!output_files.schedule_name.empty()) {
-        debug(1) << "Module.compile(): schedule_name " << output_files.schedule_name << "\n";
+        DEBUG(1) << "Module.compile(): schedule_name " << output_files.schedule_name << "\n";
         std::ofstream file(output_files.schedule_name);
         if (contents->auto_schedule.empty()) {
            file << "// auto_schedule_outputs() was not called for this Generator.\n";
@@ -531,7 +531,7 @@ void Module::compile(const Outputs &output_files_arg) const {
         }
     }
     if (!output_files.registration_name.empty()) {
-        debug(1) << "Module.compile(): registration_name " << output_files.registration_name << "\n";
+        DEBUG(1) << "Module.compile(): registration_name " << output_files.registration_name << "\n";
         std::ofstream file(output_files.registration_name);
         emit_registration(*this, file);
         file.close();
@@ -577,7 +577,7 @@ void compile_multitarget(const std::string &fn_name,
     // If only one target, don't bother with the runtime feature detection wrapping.
     const bool needs_wrapper = (targets.size() > 1);
     if (targets.size() == 1) {
-        debug(1) << "compile_multitarget: single target is " << base_target.to_string() << "\n";
+        DEBUG(1) << "compile_multitarget: single target is " << base_target.to_string() << "\n";
         module_producer(fn_name, base_target).compile(output_files);
         return;
     }
@@ -652,7 +652,7 @@ void compile_multitarget(const std::string &fn_name,
         internal_assert(sub_out.object_name.empty());
         sub_out.object_name = temp_dir.add_temp_object_file(output_files.static_library_name, suffix, target);
         sub_out.registration_name.clear();
-        debug(1) << "compile_multitarget: compile_sub_target " << sub_out.object_name << "\n";
+        DEBUG(1) << "compile_multitarget: compile_sub_target " << sub_out.object_name << "\n";
         sub_module.compile(sub_out);
 
         uint64_t cur_target_features[kFeaturesWordCount] = {0};
@@ -701,7 +701,7 @@ void compile_multitarget(const std::string &fn_name,
         }
         Outputs runtime_out = Outputs().object(
             temp_dir.add_temp_object_file(output_files.static_library_name, "_runtime", runtime_target));
-        debug(1) << "compile_multitarget: compile_standalone_runtime " << runtime_out.static_library_name << "\n";
+        DEBUG(1) << "compile_multitarget: compile_standalone_runtime " << runtime_out.static_library_name << "\n";
         compile_standalone_runtime(runtime_out, runtime_target);
     }
 
@@ -740,7 +740,7 @@ void compile_multitarget(const std::string &fn_name,
 
         Outputs wrapper_out = Outputs().object(
             temp_dir.add_temp_object_file(output_files.static_library_name, "_wrapper", base_target, /* in_front*/ true));
-        debug(1) << "compile_multitarget: wrapper " << wrapper_out.object_name << "\n";
+        DEBUG(1) << "compile_multitarget: wrapper " << wrapper_out.object_name << "\n";
         wrapper_module.compile(wrapper_out);
     }
 
@@ -750,12 +750,12 @@ void compile_multitarget(const std::string &fn_name,
         // Add a wrapper to accept old buffer_ts
         add_legacy_wrapper(header_module, header_module.functions().back());
         Outputs header_out = Outputs().c_header(output_files.c_header_name);
-        debug(1) << "compile_multitarget: c_header_name " << header_out.c_header_name << "\n";
+        DEBUG(1) << "compile_multitarget: c_header_name " << header_out.c_header_name << "\n";
         header_module.compile(header_out);
     }
 
     if (!output_files.registration_name.empty()) {
-        debug(1) << "compile_multitarget: registration_name " << output_files.registration_name << "\n";
+        DEBUG(1) << "compile_multitarget: registration_name " << output_files.registration_name << "\n";
         Module registration_module(fn_name, base_target);
         registration_module.append(LoweredFunc(fn_name, base_target_args, {}, LinkageType::ExternalPlusMetadata));
         Outputs registration_out = Outputs().registration(output_files.registration_name);
@@ -763,7 +763,7 @@ void compile_multitarget(const std::string &fn_name,
     }
 
     if (!output_files.static_library_name.empty()) {
-        debug(1) << "compile_multitarget: static_library_name " << output_files.static_library_name << "\n";
+        DEBUG(1) << "compile_multitarget: static_library_name " << output_files.static_library_name << "\n";
         create_static_library(temp_dir.files(), base_target, output_files.static_library_name);
     }
 }

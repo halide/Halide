@@ -516,7 +516,7 @@ class PartitionLoops : public IRMutator2 {
             return IRMutator2::visit(op);
         }
 
-        debug(3) << "\n\n**** Partitioning loop over " << op->name << "\n";
+        DEBUG(3) << "\n\n**** Partitioning loop over " << op->name << "\n";
 
         vector<Expr> min_vals, max_vals;
         vector<Simplification> middle_simps, prologue_simps, epilogue_simps;
@@ -531,7 +531,7 @@ class PartitionLoops : public IRMutator2 {
                 s.tight &= equal(outer.min, s.interval.min) && equal(outer.max, s.interval.max);
             }
 
-            debug(3) << "\nSimplification: \n"
+            DEBUG(3) << "\nSimplification: \n"
                      << "  condition: " << s.condition << "\n"
                      << "  old: " << s.old_expr << "\n"
                      << "  new: " << s.likely_value << "\n"
@@ -745,7 +745,7 @@ class PartitionLoops : public IRMutator2 {
             return IRMutator2::visit(op);
         }
 
-        debug(3) << "Partition loop.\n"
+        DEBUG(3) << "Partition loop.\n"
                  << "Old: " << Stmt(op) << "\n"
                  << "New: " << stmt << "\n";
 

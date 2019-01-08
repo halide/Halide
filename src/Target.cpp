@@ -366,7 +366,7 @@ bool merge_string(Target &t, const std::string &target) {
     vector<string> tokens;
     size_t first_dash;
     while ((first_dash = rest.find('-')) != string::npos) {
-        //Internal::debug(0) << first_dash << ", " << rest << "\n";
+        //Internal::DEBUG(0) << first_dash << ", " << rest << "\n";
         tokens.push_back(rest.substr(0, first_dash));
         rest = rest.substr(first_dash + 1);
     }

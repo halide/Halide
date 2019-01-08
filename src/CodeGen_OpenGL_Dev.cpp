@@ -88,7 +88,7 @@ Expr call_builtin(const Type &result_type, const string &func,
 
 CodeGen_OpenGL_Dev::CodeGen_OpenGL_Dev(const Target &target)
     : target(target) {
-    debug(1) << "Creating GLSL codegen\n";
+    DEBUG(1) << "Creating GLSL codegen\n";
     glc = new CodeGen_GLSL(src_stream, target);
 }
 
@@ -110,7 +110,7 @@ void CodeGen_OpenGL_Dev::init_module() {
 
 vector<char> CodeGen_OpenGL_Dev::compile_to_src() {
     string str = src_stream.str();
-    debug(1) << "GLSL source:\n" << str << '\n';
+    DEBUG(1) << "GLSL source:\n" << str << '\n';
     vector<char> buffer(str.begin(), str.end());
     buffer.push_back(0);
     return buffer;
@@ -446,7 +446,7 @@ void CodeGen_GLSL::visit(const For *loop) {
         internal_assert(loop->for_type == ForType::GPUBlock)
             << "kernel loop must be gpu block\n";
 
-        debug(1) << "Dropping loop " << loop->name << " (" << loop->min << ", " << loop->extent << ")\n";
+        DEBUG(1) << "Dropping loop " << loop->name << " (" << loop->min << ", " << loop->extent << ")\n";
 
         string idx;
         if (ends_with(loop->name, ".__block_id_x")) {
@@ -742,7 +742,7 @@ void CodeGen_GLSL::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::glsl_varying)) {
         // Varying attributes should be substituted out by this point in
         // codegen.
-        debug(2) << "Found skipped varying attribute: " << op->args[0] << "\n";
+        DEBUG(2) << "Found skipped varying attribute: " << op->args[0] << "\n";
 
         // Output the tagged expression.
         print_expr(op->args[1]);
