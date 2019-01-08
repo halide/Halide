@@ -301,17 +301,12 @@ int main(int argc, char **argv) {
     image = buffer_from_file(input_file, {3, 224, 224});
     std::cout << "Loading prenormalized, transposed image from " << input_file << std::endl;
   } else {
-    // TODO(srj): this path doesn't work; in theory this is the process used to
-    // get cropped_panda_preprocessed but in practice the results differ.
-    // Leave in for now, pending investigation.
-    assert(0);
-
     Buffer<float> im_in = load_and_convert_image(input_file);
     std::cout << "Loading image from " << input_file << std::endl;
     assert(im_in.dimensions() == 3);
-    // Reorder so that that channels is the first dimension
-    image = Buffer<float>(im_in.extent(2), im_in.extent(0), im_in.extent(1));
-    image.copy_from(im_in.transposed({2, 0, 1}));
+    // Reorder dimensions
+    image = Buffer<float>(im_in.extent(2), im_in.extent(1), im_in.extent(0));
+    image.copy_from(im_in.transposed({2, 1, 0}));
     normalize(image, ImageNet_mean, ImageNet_std);
   }
 

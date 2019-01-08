@@ -27,7 +27,7 @@ $(BIN)/process: process.cpp $(RESNET_BLOCKS)
 	$(CXX) $(CXXFLAGS) -g -I $(BIN) -Wall $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS)
 
 test: $(BIN)/process $(BIN)/pytorch_weights/ok
-	$< 10 $(BIN)/pytorch_weights cropped_panda_preprocessed.bin $(BIN)/res50gen_output.bin
+	$< 10 $(BIN)/pytorch_weights cropped_panda.jpg $(BIN)/res50gen_output.bin
 
 clean:
 	rm -rf $(BIN)
