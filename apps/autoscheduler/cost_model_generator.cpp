@@ -236,6 +236,8 @@ public:
         Expr working_set_at_root = schedule_features(n, idx++, w);
         assert(idx == head2_w);
 
+
+
         // Count up the number of things computed
         Expr compute_cost = select(inlined_calls == 0,
                                    (vector_size * num_vectors * relu1(0, w, n) +
@@ -313,6 +315,10 @@ public:
 
         Expr cost = compute_cost + store_cost + load_cost + store_cost + cost_of_malloc + cost_of_parallelism + cost_of_working_set;
 
+
+        // Aggressively simplified model
+        //Expr cost = relu1(0, w, n) * (num_vectors * vector_size + num_scalars) + relu1(1, w, n);
+
         // Keep the schedule fixed by adding a dependence to all out channels
         for (int i = 0; i < conv1_channels; i++) {
             cost += 0.0f * relu1(i, w, n);
@@ -371,8 +377,9 @@ public:
             Expr significance = 1 - 1 / r1;
 
             // p1 should be at least 1 larger than p2, in units of the true runtime of the fastest schedule
-            Expr correct_order = significance * max(0, p2 + 1 - p1);
-            err(n) = correct_order + 1e-5f * regularize;
+            //Expr correct_order = significance * max(0, p2 + 1 - p1);
+            Expr delta = pow(1.0f/max(p1, 1e-10f) - 1.0f/r1, 2);
+            err(n) = delta + 1e-5f * regularize;
 
             Expr loss = sum(err(r_batch));
 
