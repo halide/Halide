@@ -17,13 +17,17 @@ $(BIN)/resnet50block%.a: $(BIN)/resnet50block.generator $(AUTOSCHED_BIN)/libauto
 	HL_MACHINE_PARAMS=1,1,1 HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=../autoscheduler/weights \
 	$(BIN)/resnet50block.generator -g resnet50block -o $(BIN) -f resnet50block$* target=$(HL_TARGET) auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so block_id=$*
 
-$(BIN)/process: process.cpp $(RESNET_BLOCKS) 
+$(BIN)/pytorch_weights/ok:
+	@mkdir -p $(@D)
+	python3 load_weights.py $(@D)
+	echo "ok" > $@
+
+$(BIN)/process: process.cpp $(RESNET_BLOCKS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -g -I $(BIN) -Wall $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS)
 
-test: $(BIN)/process
-	$^ 10
+test: $(BIN)/process $(BIN)/pytorch_weights/ok
+	$< 10 $(BIN)/pytorch_weights cropped_panda_preprocessed.bin $(BIN)/res50gen_output.bin
 
 clean:
 	rm -rf $(BIN)
-

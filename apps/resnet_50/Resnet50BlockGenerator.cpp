@@ -211,12 +211,12 @@ public:
 
     // branch2a
     auto weights = br2a_conv_weights[block_id];
-    
+
     br2a_conv[block_id] = conv2D(br2a_input, br2a_ws[block_id], weights, "block" + std::to_string(block_id) + "_2a_conv");
     br2a_norm[block_id] = norm_layer(br2a_conv[block_id], br2a_mu[block_id], br2a_sig[block_id], "block" + std::to_string(block_id) + "_2a_norm");
     br2a_scaled[block_id] = scale_layer(br2a_norm[block_id], br2a_gamma[block_id], br2a_beta[block_id], "block" + std::to_string(block_id) + "_2a_scale");
     br2a_relu[block_id] = relu_layer(br2a_scaled[block_id], "2a_relu");
-  
+
     // branch 2b
     weights = br2b_conv_weights[block_id];
     br2b_conv[block_id] = conv2D(br2a_relu[block_id], br2b_ws[block_id], weights, "block" + std::to_string(block_id) + "_2b_conv");
@@ -255,7 +255,6 @@ public:
   }
 
 private:
-  float inf = 3.402823e+38f;
   Func pad(Func f, Expr width, Expr height) {
       std::vector<std::pair<Expr, Expr>> bounds(f.dimensions());
       bounds[1].first = 0;
@@ -312,7 +311,7 @@ private:
 
   Tensor relu_layer(Tensor& input, std::string name) {
       Func relu;
-      relu(c, i, j) = max(0.0f, input.f(c, i, j)); 
+      relu(c, i, j) = max(0.0f, input.f(c, i, j));
       Tensor output;
       output.f = relu;
       output.shape = input.shape;
@@ -357,7 +356,7 @@ private:
       output.f = pool;
       output.name = name;
       compute_shape(input, output, weight_shape);
-      
+
       return output;
   }
 
