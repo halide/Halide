@@ -33,8 +33,6 @@ autotune: $(BIN)/demo.generator $(AUTOSCHED_BIN)/augment_sample $(AUTOSCHED_BIN)
 		$(AUTOSCHED_SRC)/weights \
 		$(AUTOSCHED_BIN)
 
-	bash autotune_loop.sh $(BIN)/demo.generator demo x86-64-avx2-disable_llvm_loop_unroll-disable_llvm_loop_vectorize weights
-
 # Simple jit-based test
 $(BIN)/test: test.cpp $(AUTOSCHED_BIN)/libauto_schedule.so
 	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) $< -o $@ $(LDFLAGS) $(LIB_HALIDE) $(HALIDE_SYSTEM_LIBS)
