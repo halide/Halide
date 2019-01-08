@@ -5,6 +5,7 @@
 #include "Debug.h"
 #include "Deinterleave.h"
 #include "ExprUsesVar.h"
+#include "Func.h"
 #include "IR.h"
 #include "IREquality.h"
 #include "IRMutator.h"
@@ -379,11 +380,13 @@ private:
         // Assume no overflow for float, int32, and int64
         if (!op->type.is_float() && (!op->type.is_int() || op->type.bits() < 32)) {
             if (a.is_bounded() && b.is_bounded()) {
-                // Try to prove it can't overflow
-                Expr test1 = (cast<int>(a.min) * cast<int>(b.min) == cast<int>(a.min * b.min));
-                Expr test2 = (cast<int>(a.min) * cast<int>(b.max) == cast<int>(a.min * b.max));
-                Expr test3 = (cast<int>(a.max) * cast<int>(b.min) == cast<int>(a.max * b.min));
-                Expr test4 = (cast<int>(a.max) * cast<int>(b.max) == cast<int>(a.max * b.max));
+                // Try to prove it can't overflow. (Be sure to use uint32 for unsigned
+                // types so that the case of 65535*65535 won't misleadingly fail.)
+                Type t = op->type.is_uint() ? UInt(32) : Int(32);
+                Expr test1 = (cast(t, a.min) * cast(t, b.min) == cast(t, a.min * b.min));
+                Expr test2 = (cast(t, a.min) * cast(t, b.max) == cast(t, a.min * b.max));
+                Expr test3 = (cast(t, a.max) * cast(t, b.min) == cast(t, a.max * b.min));
+                Expr test4 = (cast(t, a.max) * cast(t, b.max) == cast(t, a.max * b.max));
                 if (!can_prove(test1 && test2 && test3 && test4)) {
                     bounds_of_type(op->type);
                 }
@@ -2451,6 +2454,27 @@ void bounds_test() {
     internal_assert(equal(simplify(r2[0].max), 19));
 
     boxes_touched_test();
+
+    {
+        // Ensure that unnecessary integer overflow doesn't happen
+        // in cases involving unsigned integer math
+
+        Var x;
+        Func f;
+        Expr e1 = cast<uint16_t>(x);   // range 0..0xffff, type=uint16
+        Expr e2 = cast<uint32_t>(e1);  // range 0..0xffff, type=uint32
+        Expr e3 = e2 * e2;             // range 0..0xfffe0001, type=uint32
+        f(x) = e3;
+
+        vector<string> order = {f.name()};
+        map<string, Function> env = {{f.name(), f.function()}};
+        FuncValueBounds r = compute_function_value_bounds(order, env);
+        internal_assert(r.size() == 1);
+        internal_assert(r.begin()->first.first == f.name());
+        internal_assert(r.begin()->first.second == 0);
+        internal_assert(*as_const_uint(r.begin()->second.min) == 0);
+        internal_assert(*as_const_uint(r.begin()->second.max) == 0xfffe0001);
+    }
 
     std::cout << "Bounds test passed" << std::endl;
 }
