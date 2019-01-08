@@ -2,8 +2,6 @@
 #include <tuple>
 #include "Halide.h"
 
-//using namespace Halide;
-
 namespace {
 
 struct Tensor {
