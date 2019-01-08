@@ -32,10 +32,17 @@ test: $(BIN)/process $(BIN)/pytorch_weights/ok
 clean:
 	rm -rf $(BIN)
 
+# These are all similar enough that we can just use the same weights, and rotate
+# between different variants for each tuning batch. The autotune_loop.sh script will
+# add these as extra generator arguments in a round-robin fashion if they are
+# supplied as the sixth argument.
+AUTOTUNE_ARG_SETS ?= $(foreach block,0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15,block_id=$(block);block_id=$(block))
+
 autotune: $(BIN)/resnet50block.generator $(AUTOSCHED_BIN)/augment_sample $(AUTOSCHED_BIN)/train_cost_model $(AUTOSCHED_BIN)/libauto_schedule.so $(AUTOSCHED_SRC)/autotune_loop.sh
 	bash $(AUTOSCHED_SRC)/autotune_loop.sh \
 		$(BIN)/resnet50block.generator \
 		resnet50block \
 		x86-64-avx2 \
 		$(AUTOSCHED_SRC)/weights \
-		$(AUTOSCHED_BIN)
+		$(AUTOSCHED_BIN) \
+		"${AUTOTUNE_ARG_SETS}"
