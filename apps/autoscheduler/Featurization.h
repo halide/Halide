@@ -17,6 +17,18 @@ struct PipelineFeatures {
         return sizeof(PipelineFeatures) / sizeof(int);
     }
 
+    static constexpr int version() {
+        return 3;
+    }
+
+    int &operator[](int idx) {
+        return ((int *)(this))[idx];
+    }
+
+    const int &operator[](int idx) const {
+        return ((const int *)(this))[idx];
+    }
+
     // A featurization of the compute done by a Func, to
     // feed the neural network.
 
@@ -120,62 +132,80 @@ struct PipelineFeatures {
 // The schedule-dependent portion of the featurization of a stage
 struct ScheduleFeatures {
     static constexpr int num_features() {
-        return sizeof(ScheduleFeatures) / sizeof(int64_t);
+        return sizeof(ScheduleFeatures) / sizeof(double);
     }
 
-    int64_t num_realizations = 0; // Product of outer loops at store_at site
-    int64_t num_productions = 0;  // Product of outer loops at compute_at site
-    int64_t points_computed_per_realization = 0; // Number of times the innermost stmt happens per store_at
-    int64_t points_computed_per_production = 0;  // Number of times the innermost stmt happens per compute_at
-    int64_t points_computed_total = 0;
+    static constexpr int version() {
+        return 3;
+    }
+
+    double &operator[](int idx) {
+        return ((double *)(this))[idx];
+    }
+
+    const double &operator[](int idx) const {
+        return ((const double *)(this))[idx];
+    }
+
+    double num_realizations = 0; // Product of outer loops at store_at site
+    double num_productions = 0;  // Product of outer loops at compute_at site
+    double points_computed_per_realization = 0; // Number of times the innermost stmt happens per store_at
+    double points_computed_per_production = 0;  // Number of times the innermost stmt happens per compute_at
+    double points_computed_total = 0;
     // points_computed_total
     //  == num_realizations * points_computed_per_realization
     //  ~= num_productions * points_computed_per_production
     // Only approximately equal because of the simplifications made
     // regarding the modeling of sliding window
 
-    int64_t points_computed_minimum = 0; // The minimum number of points that are actually required to be computed to produce a correct output.
+    double points_computed_minimum = 0; // The minimum number of points that are actually required to be computed to produce a correct output.
 
-    int64_t innermost_loop_extent = 0; // Trip count of innermost serial loop. Currently always equal to the next feature
-    int64_t innermost_pure_loop_extent = 0; // Trip count of innermost loop over the innermost storage dimension
+    double innermost_loop_extent = 0; // Trip count of innermost serial loop. Currently always equal to the next feature
+    double innermost_pure_loop_extent = 0; // Trip count of innermost loop over the innermost storage dimension
+    double unrolled_loop_extent = 0;
 
-    int64_t inner_parallelism = 0; // The number of parallel jobs used in the production of this Func. 1 unless the Func is compute_root.
-    int64_t outer_parallelism = 0; // The number of times this Func could be realized in parallel. 1 when the Func is compute_root.
+    double inner_parallelism = 0; // The number of parallel jobs used in the production of this Func. 1 unless the Func is compute_root.
+    double outer_parallelism = 0; // The number of times this Func could be realized in parallel. 1 when the Func is compute_root.
 
-    int64_t bytes_at_realization = 0; // Size of the region computed at the store_at site, measured in bytes
-    int64_t bytes_at_production = 0; // Size of the region computed at the compute_at site, measured in bytes
-    int64_t bytes_at_root = 0; // The same at root, regardless of where it's actually scheduled
-    int64_t innermost_bytes_at_realization = 0;
-    int64_t innermost_bytes_at_production = 0;
-    int64_t innermost_bytes_at_root = 0;
+    double bytes_at_realization = 0; // Size of the region computed at the store_at site, measured in bytes
+    double bytes_at_production = 0; // Size of the region computed at the compute_at site, measured in bytes
+    double bytes_at_root = 0; // The same at root, regardless of where it's actually scheduled
+    double innermost_bytes_at_realization = 0;
+    double innermost_bytes_at_production = 0;
+    double innermost_bytes_at_root = 0;
 
-    int64_t inlined_calls = 0; // For inlined Funcs, how many calls are made to this Func total
+    double inlined_calls = 0; // For inlined Funcs, how many calls are made to this Func total
 
     // Logically these features should be grouped earlier, but the convnet currently doesn't know about them
-    int64_t unique_bytes_read_per_realization = 0; // Number of unique bytes loaded from all inputs per production
-    int64_t unique_lines_read_per_realization = 0; // Number of unique contiguous segments of memory loaded from all inputs per production
-    int64_t allocation_bytes_read_per_realization = 0; // The sum of the sizes of the allocations accessed. Gives a hint as to the likely locality of it.
+    double unique_bytes_read_per_realization = 0; // Number of unique bytes loaded from all inputs per production
+    double unique_lines_read_per_realization = 0; // Number of unique contiguous segments of memory loaded from all inputs per production
+    double allocation_bytes_read_per_realization = 0; // The sum of the sizes of the allocations accessed. Gives a hint as to the likely locality of it.
 
-    int64_t working_set = 0; // The sum of the sizes of the allocations within the production of this Func. Probably a good thing if it fits in cache.
+    double working_set = 0; // The sum of the sizes of the allocations within the production of this Func. Probably a good thing if it fits in cache.
 
-    int64_t vector_size = 0; // The vectorization factor (#simd lanes) to be used to compute this stage. Wasted work if it's smaller than the stage's native vector size (which is in the pipeline features).
+    double vector_size = 0; // The vectorization factor (#simd lanes) to be used to compute this stage. Wasted work if it's smaller than the stage's native vector size (which is in the pipeline features).
 
-    int64_t native_vector_size = 0; // The native vector size for the narrowest type used.
+    double native_vector_size = 0; // The native vector size for the narrowest type used.
 
-    int64_t num_vectors = 0; // Number of vectors computed (Assuming sliding worked)
-    int64_t num_scalars = 0; // Number of scalars computed (e.g. from tails of loops)
-    int64_t scalar_loads_per_vector = 0;
-    int64_t vector_loads_per_vector = 0;
-    int64_t scalar_loads_per_scalar = 0;
+    double num_vectors = 0; // Number of vectors computed (Assuming sliding worked)
+    double num_scalars = 0; // Number of scalars computed (e.g. from tails of loops)
+    double scalar_loads_per_vector = 0;
+    double vector_loads_per_vector = 0;
+    double scalar_loads_per_scalar = 0;
 
-    int64_t bytes_at_task = 0;
-    int64_t innermost_bytes_at_task = 0;
+    double bytes_at_task = 0;
+    double innermost_bytes_at_task = 0;
 
-    int64_t unique_bytes_read_per_vector = 0;
-    int64_t unique_lines_read_per_vector = 0;
+    double unique_bytes_read_per_vector = 0;
+    double unique_lines_read_per_vector = 0;
 
-    int64_t unique_bytes_read_per_task = 0;
-    int64_t unique_lines_read_per_task = 0;
+    double unique_bytes_read_per_task = 0;
+    double unique_lines_read_per_task = 0;
+
+    double working_set_at_task = 0;
+    double working_set_at_production = 0;
+    double working_set_at_realization = 0;
+    double working_set_at_root = 0;
 
     void dump() const {
         std::cerr << "    num_realizations:                      " << num_realizations << '\n'
@@ -186,6 +216,7 @@ struct ScheduleFeatures {
                   << "    points_computed_minimum:               " << points_computed_minimum << '\n'
                   << "    innermost_loop_extent:                 " << innermost_loop_extent << '\n'
                   << "    innermost_pure_loop_extent:            " << innermost_pure_loop_extent << '\n'
+                  << "    unrolled_loop_extent:                  " << unrolled_loop_extent << '\n'
                   << "    inner_parallelism:                     " << inner_parallelism << '\n'
                   << "    outer_parallelism:                     " << outer_parallelism << '\n'
                   << "    bytes_at_realization:                  " << bytes_at_realization << '\n'
@@ -211,7 +242,11 @@ struct ScheduleFeatures {
                   << "    unique_bytes_read_per_vector:          " << unique_bytes_read_per_vector << '\n'
                   << "    unique_lines_read_per_vector:          " << unique_lines_read_per_vector << '\n'
                   << "    unique_bytes_read_per_task:            " << unique_bytes_read_per_task << '\n'
-                  << "    unique_lines_read_per_task:            " << unique_lines_read_per_task << '\n';
+                  << "    unique_lines_read_per_task:            " << unique_lines_read_per_task << '\n'
+                  << "    working_set_at_task:                   " << working_set_at_task << '\n'
+                  << "    working_set_at_production:             " << working_set_at_production << '\n'
+                  << "    working_set_at_realization:            " << working_set_at_realization << '\n'
+                  << "    working_set_at_root:                   " << working_set_at_root << '\n';
 
     }
 };

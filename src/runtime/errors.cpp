@@ -93,10 +93,10 @@ WEAK int halide_error_constraints_make_required_region_smaller(void *user_contex
                                                                int constrained_min, int constrained_extent,
                                                                int required_min, int required_extent) {
     int required_max = required_min + required_extent - 1;
-    int constrained_max = constrained_min + required_extent - 1;
+    int constrained_max = constrained_min + constrained_extent - 1;
     error(user_context)
         << "Applying the constraints on " << buffer_name
-        << " to the required region made it smaller. "
+        << " to the required region made it smaller in dimension " << dimension << ". "
         << "Required size: " << required_min << " to " << required_max << ". "
         << "Constrained size: " << constrained_min << " to " << constrained_max << ".";
     return halide_error_code_constraints_make_required_region_smaller;
