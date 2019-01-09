@@ -31,16 +31,17 @@
 #include <random>
 
 #include "Halide.h"
-#include "halide_benchmark.h"
 #include "CostModel.h"
 #include "Featurization.h"
 #include "FunctionDAG.h"
 #include "PerfectHashMap.h"
 #include "Errors.h"
 #include "NetworkSize.h"
+#include "AutoSchedule.h"
 
 namespace Halide {
 namespace Internal {
+namespace Autoscheduler {
 
 // How small should an innermost loop cluster be before you just
 // entirely unroll the thing. Sized for an architecture with 16 vector
@@ -1859,16 +1860,6 @@ struct LoopNest {
 
 };
 
-}
-
-template<>
-RefCount &ref_count<LoopNest>(const LoopNest *t) {return t->ref_count;}
-
-template<>
-void destroy<LoopNest>(const LoopNest *t) {delete t;}
-
-namespace {
-
 struct State {
     mutable RefCount ref_count;
     IntrusivePtr<const LoopNest> root;
@@ -2702,16 +2693,6 @@ struct State {
 
 int State::cost_calculations = 0;
 
-}
-
-template<>
-RefCount &ref_count<State>(const State *t) {return t->ref_count;}
-
-template<>
-void destroy<State>(const State *t) {delete t;}
-
-namespace {
-
 // A priority queue of states, sorted according to increasing
 // cost. Never shrinks, to avoid reallocations.
 // Can't use std::priority_queue because it doesn't support unique_ptr.
@@ -3210,6 +3191,30 @@ std::string generate_schedules_new(const std::vector<Function> &outputs,
     return "";
 }
 
+
+ void find_and_apply_schedule(FunctionDAG& dag, const std::vector<Function> &outputs, const MachineParams &params, CostModel* cost_model, int beam_size, StageMap<ScheduleFeatures>* schedule_features) {
+
+    std::mt19937 rng(12345);
+    IntrusivePtr<State> optimal = optimal_schedule(dag, outputs, params, cost_model, rng, beam_size);
+
+    //debug(0) << "Cost evaluated this many times: " << State::cost_calculations << '\n';
+
+    //debug(0) << "** Optimal schedule:\n";
+
+    // Just to get the debugging prints to fire
+    //optimal->calculate_cost(dag, params, cost_model.get(), true);
+
+    // Apply the schedules
+    optimal->apply_schedule(dag, params);
+
+    // Print out the schedule
+    //optimal->dump();
+
+    if (schedule_features) {
+      optimal->compute_featurization(dag, params, schedule_features);
+    }
+}
+
 // Register this as the autoscheduler
 struct AutoScheduler {
     AutoScheduler() {
@@ -3225,6 +3230,21 @@ struct AutoScheduler {
         return generate_schedules_new(outputs, target, params);
     }
 } auto_scheduler;
+
+}
+
+
+template<>
+RefCount &ref_count<Autoscheduler::LoopNest>(const Autoscheduler::LoopNest *t) {return t->ref_count;}
+
+template<>
+void destroy<Autoscheduler::LoopNest>(const Autoscheduler::LoopNest *t) {delete t;}
+
+template<>
+RefCount &ref_count<Autoscheduler::State>(const Autoscheduler::State *t) {return t->ref_count;}
+
+template<>
+void destroy<Autoscheduler::State>(const Autoscheduler::State *t) {delete t;}
 
 }
 }

@@ -1,21 +1,55 @@
 #include "halide_benchmark.h"
 
-#include "resnet50block0.h"
-#include "resnet50block1.h"
-#include "resnet50block2.h"
-#include "resnet50block3.h"
-#include "resnet50block4.h"
-#include "resnet50block5.h"
-#include "resnet50block6.h"
-#include "resnet50block7.h"
-#include "resnet50block8.h"
-#include "resnet50block9.h"
-#include "resnet50block10.h"
-#include "resnet50block11.h"
-#include "resnet50block12.h"
-#include "resnet50block13.h"
-#include "resnet50block14.h"
-#include "resnet50block15.h"
+#include "resnet50block_manual0.h"
+#include "resnet50block_manual1.h"
+#include "resnet50block_manual2.h"
+#include "resnet50block_manual3.h"
+#include "resnet50block_manual4.h"
+#include "resnet50block_manual5.h"
+#include "resnet50block_manual6.h"
+#include "resnet50block_manual7.h"
+#include "resnet50block_manual8.h"
+#include "resnet50block_manual9.h"
+#include "resnet50block_manual10.h"
+#include "resnet50block_manual11.h"
+#include "resnet50block_manual12.h"
+#include "resnet50block_manual13.h"
+#include "resnet50block_manual14.h"
+#include "resnet50block_manual15.h"
+
+#include "resnet50block_classic_auto_schedule0.h"
+#include "resnet50block_classic_auto_schedule1.h"
+#include "resnet50block_classic_auto_schedule2.h"
+#include "resnet50block_classic_auto_schedule3.h"
+#include "resnet50block_classic_auto_schedule4.h"
+#include "resnet50block_classic_auto_schedule5.h"
+#include "resnet50block_classic_auto_schedule6.h"
+#include "resnet50block_classic_auto_schedule7.h"
+#include "resnet50block_classic_auto_schedule8.h"
+#include "resnet50block_classic_auto_schedule9.h"
+#include "resnet50block_classic_auto_schedule10.h"
+#include "resnet50block_classic_auto_schedule11.h"
+#include "resnet50block_classic_auto_schedule12.h"
+#include "resnet50block_classic_auto_schedule13.h"
+#include "resnet50block_classic_auto_schedule14.h"
+#include "resnet50block_classic_auto_schedule15.h"
+
+#include "resnet50block_auto_schedule0.h"
+#include "resnet50block_auto_schedule1.h"
+#include "resnet50block_auto_schedule2.h"
+#include "resnet50block_auto_schedule3.h"
+#include "resnet50block_auto_schedule4.h"
+#include "resnet50block_auto_schedule5.h"
+#include "resnet50block_auto_schedule6.h"
+#include "resnet50block_auto_schedule7.h"
+#include "resnet50block_auto_schedule8.h"
+#include "resnet50block_auto_schedule9.h"
+#include "resnet50block_auto_schedule10.h"
+#include "resnet50block_auto_schedule11.h"
+#include "resnet50block_auto_schedule12.h"
+#include "resnet50block_auto_schedule13.h"
+#include "resnet50block_auto_schedule14.h"
+#include "resnet50block_auto_schedule15.h"
 
 #include "HalideBuffer.h"
 #include "halide_image_io.h"
@@ -29,6 +63,10 @@
 #include <iostream>
 #include <random>
 #include <math.h>
+
+namespace {
+
+constexpr bool verbose = false;
 
 using namespace Halide::Runtime;
 using namespace Halide::Tools;
@@ -109,30 +147,31 @@ uint32_t fill_buffer_with_random(Buffer<float> &buf, uint32_t seed) {
     return seed;
 }
 
-Buffer<float> rand_buffer(const std::vector<int> &shape) {
-    Buffer<float> buf(shape);
-    uint32_t seed = time(NULL);
-    fill_buffer_with_random(buf, seed);
-    return buf;
-}
-
 /*** loading from file helpers ***/
 void load_shape(const std::string &shapefile, int* dims, int &n, int &num_dims) {
-  std::cout << leaf(shapefile) << " num_dims : ";
+  if (verbose) {
+    std::cout << leaf(shapefile) << " num_dims : ";
+  }
   int d;
   std::ifstream shape_input(shapefile, std::ios::binary);
   shape_input.read(reinterpret_cast<char*>(&d), sizeof(int));
   assert(!shape_input.fail());
   num_dims = d;
 
-  std::cout << num_dims << " shape: ";
+  if (verbose) {
+    std::cout << num_dims << " shape: ";
+  }
   n = 1;
   for (int i = 0; i < num_dims; i++) {
     shape_input.read(reinterpret_cast<char*>(&dims[i]), sizeof(int));
     n *= dims[i];
-    std::cout << dims[i] << " ";
+    if (verbose) {
+      std::cout << dims[i] << " ";
+    }
   }
-  std::cout << std::endl;
+  if (verbose) {
+    std::cout << std::endl;
+  }
   shape_input.close();
 
 }
@@ -164,8 +203,10 @@ Buffer<float> load_conv_params(const std::string &shapefile, const std::string &
   load_shape(shapefile, &dims[0], n, num_dims);
   assert(num_dims == 4);
   Buffer<float> buff = buffer_from_file(datafile, {dims[0], dims[1], dims[2], dims[3]});
-  std::cout << "weight shape for " << datafile << std::endl;
-  std::cout << buff.dim(0).extent() << " " << buff.dim(1).extent() << " " <<buff.dim(2).extent() << " " << buff.dim(3).extent() << std::endl;
+  if (verbose) {
+    std::cout << "weight shape for " << datafile << std::endl;
+    std::cout << buff.dim(0).extent() << " " << buff.dim(1).extent() << " " <<buff.dim(2).extent() << " " << buff.dim(3).extent() << std::endl;
+  }
   return buff;
 }
 
@@ -187,7 +228,7 @@ Buffer<float> load_batch_norm_var(const std::string &shapefile, const std::strin
   Buffer<float> buf = buffer_from_file(datafile, {dims[0]});
   for (int i = 0; i < dims[0]; i++) {
     if (buf(i) == 0.0f) {
-      std::cout << "INVALID" << std::endl;
+      std::cerr << "INVALID" << std::endl;
     }
   }
   return buf;
@@ -253,34 +294,90 @@ typedef int (*FnPtr)(
             halide_buffer_t*,
             halide_buffer_t*);
 
-std::vector<FnPtr> blockFns = {resnet50block0,
-                              resnet50block1,
-                              resnet50block2,
-                              resnet50block3,
-                              resnet50block4,
-                              resnet50block5,
-                              resnet50block6,
-                              resnet50block7,
-                              resnet50block8,
-                              resnet50block9,
-                              resnet50block10,
-                              resnet50block11,
-                              resnet50block12,
-                              resnet50block13,
-                              resnet50block14,
-                              resnet50block15};
+const FnPtr blockFns[3][16] = {
+  {
+    resnet50block_manual0,
+    resnet50block_manual1,
+    resnet50block_manual2,
+    resnet50block_manual3,
+    resnet50block_manual4,
+    resnet50block_manual5,
+    resnet50block_manual6,
+    resnet50block_manual7,
+    resnet50block_manual8,
+    resnet50block_manual9,
+    resnet50block_manual10,
+    resnet50block_manual11,
+    resnet50block_manual12,
+    resnet50block_manual13,
+    resnet50block_manual14,
+    resnet50block_manual15
+  },
+  {
+    resnet50block_classic_auto_schedule0,
+    resnet50block_classic_auto_schedule1,
+    resnet50block_classic_auto_schedule2,
+    resnet50block_classic_auto_schedule3,
+    resnet50block_classic_auto_schedule4,
+    resnet50block_classic_auto_schedule5,
+    resnet50block_classic_auto_schedule6,
+    resnet50block_classic_auto_schedule7,
+    resnet50block_classic_auto_schedule8,
+    resnet50block_classic_auto_schedule9,
+    resnet50block_classic_auto_schedule10,
+    resnet50block_classic_auto_schedule11,
+    resnet50block_classic_auto_schedule12,
+    resnet50block_classic_auto_schedule13,
+    resnet50block_classic_auto_schedule14,
+    resnet50block_classic_auto_schedule15
+  },
+  {
+    resnet50block_auto_schedule0,
+    resnet50block_auto_schedule1,
+    resnet50block_auto_schedule2,
+    resnet50block_auto_schedule3,
+    resnet50block_auto_schedule4,
+    resnet50block_auto_schedule5,
+    resnet50block_auto_schedule6,
+    resnet50block_auto_schedule7,
+    resnet50block_auto_schedule8,
+    resnet50block_auto_schedule9,
+    resnet50block_auto_schedule10,
+    resnet50block_auto_schedule11,
+    resnet50block_auto_schedule12,
+    resnet50block_auto_schedule13,
+    resnet50block_auto_schedule14,
+    resnet50block_auto_schedule15
+  },
+};
+
+}  // namespace
 
 int main(int argc, char **argv) {
-  if (argc != 5) {
-      printf("Usage: %s iterations pytorch_weights_dir inputfile outputfile\n", argv[0]);
+  if (argc != 6) {
+      std::cout << "Usage: process iterations scheduletype pytorch_weights_dir inputfile outputfile\n";
       return 1;
   }
 
   const int NUMBLOCKS = 16;
   const int timing_iterations = atoi(argv[1]);
-  std::string weight_dir = argv[2];
-  std::string input_file = argv[3];
-  std::string output_file = argv[4];
+  std::string schedule_type_name = argv[2];
+  std::string weight_dir = argv[3];
+  std::string input_file = argv[4];
+  std::string output_file = argv[5];
+
+  std::map<std::string, int> schedule_type_map = {
+    {"manual", 0},
+    {"classic_auto_schedule", 1},
+    {"auto_schedule", 2},
+  };
+
+  const auto it = schedule_type_map.find(schedule_type_name);
+  if (it == schedule_type_map.end()) {
+    std::cout << "scheduletype must be one of manual, auto_schedule, classic_auto_schedule\n";
+    return 1;
+  }
+  const int schedule_type = it->second;
 
   if (weight_dir.back() != '/') weight_dir += '/';
 
@@ -492,7 +589,7 @@ int main(int argc, char **argv) {
         blockin_dim = input_shapes[block_id];
       }
 
-      FnPtr blockfn = blockFns[block_id];
+      FnPtr blockfn = blockFns[schedule_type][block_id];
 
       blockfn(input,
             conv1_gamma,
@@ -528,7 +625,7 @@ int main(int argc, char **argv) {
     }
   });
 
-  printf("Manually tuned time: %gms\n", best * 1e3);
+  std::cout << "Manually tuned time: " << best * 1e3 << "ms for schedule_type=" << schedule_type_name << "\n";
   buffer_to_file(final_output, output_file);
 
   // check final output
