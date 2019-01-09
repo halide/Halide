@@ -4,6 +4,7 @@
 #include "lens_blur.h"
 #include "lens_blur_classic_auto_schedule.h"
 #include "lens_blur_auto_schedule.h"
+#include "bilateral_grid_simple_auto_schedule.h"
 
 #include "benchmark_util.h"
 #include "HalideBuffer.h"
@@ -30,13 +31,16 @@ int main(int argc, char **argv) {
     const int iterations = 10;
 
     // Timing code
-    three_way_bench(
-        [&]() { lens_blur(left_im, right_im, slices, focus_depth, blur_radius_scale, aperture_samples, output); output.device_sync(); },
-        [&]() { lens_blur_classic_auto_schedule(left_im, right_im, slices, focus_depth, blur_radius_scale, aperture_samples, output); output.device_sync(); },
-        [&]() { lens_blur_auto_schedule(left_im, right_im, slices, focus_depth, blur_radius_scale, aperture_samples, output); output.device_sync(); },
+    multi_way_bench({
+        {"Manual", [&]() { lens_blur(left_im, right_im, slices, focus_depth, blur_radius_scale, aperture_samples, output); output.device_sync(); }},
+        {"Classic auto-scheduled", [&]() { lens_blur_classic_auto_schedule(left_im, right_im, slices, focus_depth, blur_radius_scale, aperture_samples, output); output.device_sync(); }},
+        {"Auto-scheduled", [&]() { lens_blur_auto_schedule(left_im, right_im, slices, focus_depth, blur_radius_scale, aperture_samples, output); output.device_sync(); }},
+        {"Simple auto-scheduled", [&]() { lens_blur_simple_auto_schedule(left_im, right_im, slices, focus_depth, blur_radius_scale, aperture_samples, output); output.device_sync(); }}
+        },
         samples,
         iterations
     );
+
 
     convert_and_save_image(output, argv[7]);
 

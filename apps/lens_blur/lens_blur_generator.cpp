@@ -1,4 +1,5 @@
 #include "Halide.h"
+#include "../autoscheduler/SimpleAutoSchedule.h"
 
 #include <algorithm>
 
@@ -170,43 +171,73 @@ public:
                 .estimate(y, 0, 2560)
                 .estimate(c, 0, 3);
         } else if (get_target().has_gpu_feature()) {
-            // Manual GPU schedule
-            Var xi("xi"), yi("yi"), zi("zi");
-            cost_pyramid_push[0].compute_root()
-                .reorder(c, z, x, y)
-                .bound(c, 0, 2)
-                .unroll(c)
-                .gpu_tile(x, y, xi, yi, 16, 16);
-            cost.compute_at(cost_pyramid_push[0], xi);
-            cost_confidence.compute_at(cost_pyramid_push[0], xi);
+            std::string use_simple_autoscheduler =
+                Halide::Internal::get_env_variable("HL_USE_SIMPLE_AUTOSCHEDULER");
+            if (use_simple_autoscheduler == "1") {
+                Halide::SimpleAutoscheduleOptions options;
+                options.gpu = get_target().has_gpu_feature();
+                options.gpu_tile_channel = 1;
+                Func output_func = final;
+                Halide::simple_autoschedule(output_func,
+                                    {{"left_im.min.0", 0},
+                                     {"left_im.extent.0", 1536},
+                                     {"left_im.min.1", 0},
+                                     {"left_im.extent.1", 2560},
+                                     {"left_im.min.2", 0},
+                                     {"left_im.extent.2", 3},
+                                     {"right_im.min.0", 0},
+                                     {"right_im.extent.0", 1536},
+                                     {"right_im.min.1", 0},
+                                     {"right_im.extent.1", 2560},
+                                     {"right_im.min.2", 0},
+                                     {"right_im.extent.2", 3},
+                                     {"slices", 32},
+                                     {"focus_depth", 13},
+                                     {"blur_radius_scale", 0.5f},
+                                     {"aperture_samples", 32}},
+                                    {{0, 1536},
+                                     {0, 2560},
+                                     {0, 3}},
+                                    options);
+            } else {
+                // Manual GPU schedule
+                Var xi("xi"), yi("yi"), zi("zi");
+                cost_pyramid_push[0].compute_root()
+                    .reorder(c, z, x, y)
+                    .bound(c, 0, 2)
+                    .unroll(c)
+                    .gpu_tile(x, y, xi, yi, 16, 16);
+                cost.compute_at(cost_pyramid_push[0], xi);
+                cost_confidence.compute_at(cost_pyramid_push[0], xi);
 
-            for (int i = 1; i < 8; i++) {
-                cost_pyramid_push[i].compute_root()
-                    .gpu_tile(x, y, z, xi, yi, zi, 8, 8, 8);
-                cost_pyramid_pull[i].compute_root()
-                    .gpu_tile(x, y, z, xi, yi, zi, 8, 8, 8);
+                for (int i = 1; i < 8; i++) {
+                    cost_pyramid_push[i].compute_root()
+                        .gpu_tile(x, y, z, xi, yi, zi, 8, 8, 8);
+                    cost_pyramid_pull[i].compute_root()
+                        .gpu_tile(x, y, z, xi, yi, zi, 8, 8, 8);
+                }
+
+                depth.compute_root()
+                    .gpu_tile(x, y, xi, yi, 16, 16);
+                input_with_alpha.compute_root()
+                    .reorder(c, x, y).unroll(c).gpu_tile(x, y, xi, yi, 16, 16);
+                worst_case_bokeh_radius_y
+                    .compute_root()
+                    .gpu_tile(x, y, xi, yi, 16, 16);
+                worst_case_bokeh_radius
+                    .compute_root()
+                    .gpu_tile(x, y, xi, yi, 16, 16);
+                final.compute_root()
+                    .reorder(c, x, y)
+                    .bound(c, 0, 3)
+                    .unroll(c)
+                    .gpu_tile(x, y, xi, yi, 16, 16);
+
+                output.compute_at(final, xi);
+                output.update().reorder(c, x, s).unroll(c);
+                sample_weight.compute_at(output, x);
+                sample_locations.compute_at(output, x);
             }
-
-            depth.compute_root()
-                .gpu_tile(x, y, xi, yi, 16, 16);
-            input_with_alpha.compute_root()
-                .reorder(c, x, y).unroll(c).gpu_tile(x, y, xi, yi, 16, 16);
-            worst_case_bokeh_radius_y
-                .compute_root()
-                .gpu_tile(x, y, xi, yi, 16, 16);
-            worst_case_bokeh_radius
-                .compute_root()
-                .gpu_tile(x, y, xi, yi, 16, 16);
-            final.compute_root()
-                .reorder(c, x, y)
-                .bound(c, 0, 3)
-                .unroll(c)
-                .gpu_tile(x, y, xi, yi, 16, 16);
-
-            output.compute_at(final, xi);
-            output.update().reorder(c, x, s).unroll(c);
-            sample_weight.compute_at(output, x);
-            sample_locations.compute_at(output, x);
         } else {
             // Manual CPU schedule
             cost_pyramid_push[0].compute_root()
