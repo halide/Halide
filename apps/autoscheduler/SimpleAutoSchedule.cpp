@@ -141,7 +141,9 @@ bool inline_all_element_wise_functions(const std::vector<Function> &outputs,
             debug(4) << "Inline function \"" << order[i] << "\" since it is called only by "
                      << caller << " in element-wise manner\n";
             internal_assert(order[i] != caller);
-            inline_function(env.at(caller), get_element(env, order[i]));
+            Function f1 = get_element(env, order[i]);
+            f1.schedule().store_level().lock();
+            inline_function(env.at(caller), f1);
         }
     }
     return inlined;

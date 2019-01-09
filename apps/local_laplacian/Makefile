@@ -7,7 +7,7 @@ HL_TARGET=host-cuda
 
 all: $(BIN)/process
 
-$(BIN)/local_laplacian.generator: local_laplacian_generator.cpp $(GENERATOR_DEPS)
+$(BIN)/local_laplacian.generator: local_laplacian_generator.cpp ../autoscheduler/SimpleAutoSchedule.h ../autoscheduler/SimpleAutoSchedule.cpp ../autoscheduler/DerivativeUtils.h ../autoscheduler/DerivativeUtils.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS) $(USE_EXPORT_DYNAMIC)
 
@@ -34,7 +34,12 @@ $(BIN)/local_laplacian_auto_schedule.a: $(BIN)/local_laplacian.generator $(AUTOS
 	HL_SHARED_MEMORY_LIMIT=48 \
 	$< -g local_laplacian -o $(BIN) -f local_laplacian_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so -e static_library,h,s,stmt 2> stderr.txt > stdout.txt
 
-$(BIN)/process: process.cpp $(BIN)/local_laplacian.a $(BIN)/local_laplacian_classic_auto_schedule.a $(BIN)/local_laplacian_auto_schedule.a
+$(BIN)/local_laplacian_simple_auto_schedule.a: $(BIN)/local_laplacian.generator
+	@mkdir -p $(@D)
+	HL_USE_SIMPLE_AUTOSCHEDULER=1 \
+	$< -g local_laplacian -o $(BIN) -f local_laplacian_simple_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=false -e static_library,h
+
+$(BIN)/process: process.cpp $(BIN)/local_laplacian.a $(BIN)/local_laplacian_classic_auto_schedule.a $(BIN)/local_laplacian_auto_schedule.a $(BIN)/local_laplacian_simple_auto_schedule.a
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -I$(BIN) -Wall -O3 $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS)
 

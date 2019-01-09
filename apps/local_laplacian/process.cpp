@@ -5,6 +5,7 @@
 #ifndef NO_AUTO_SCHEDULE
 #include "local_laplacian_classic_auto_schedule.h"
 #include "local_laplacian_auto_schedule.h"
+#include "local_laplacian_simple_auto_schedule.h"
 #endif
 
 #include "benchmark_util.h"
@@ -30,18 +31,18 @@ int main(int argc, char **argv) {
     const int samples = atoi(argv[5]);
     const int iterations = 1;
 
-    three_way_bench(
-        [&]() { local_laplacian(input, levels, alpha/(levels-1), beta, output); output.device_sync(); },
-    #ifdef NO_AUTO_SCHEDULE
-        nullptr,
-        nullptr,
-    #else
-        [&]() { local_laplacian_classic_auto_schedule(input, levels, alpha/(levels-1), beta, output); output.device_sync(); },
-        [&]() { local_laplacian_auto_schedule(input, levels, alpha/(levels-1), beta, output); output.device_sync(); },
+    multi_way_bench({
+        {"Manual", [&]() { local_laplacian(input, levels, alpha/(levels-1), beta, output); output.device_sync(); }},
+    #ifndef NO_AUTO_SCHEDULE
+        {"Classic auto-scheduled", [&]() { local_laplacian_classic_auto_schedule(input, levels, alpha/(levels-1), beta, output); output.device_sync(); }},
+        {"Auto-scheduled", [&]() { local_laplacian_auto_schedule(input, levels, alpha/(levels-1), beta, output); output.device_sync(); }},
+        {"Simple auto-scheduled", [&]() { local_laplacian_simple_auto_schedule(input, levels, alpha/(levels-1), beta, output); output.device_sync(); }}
     #endif
+        },
         samples,
         iterations
     );
+
 
     convert_and_save_image(output, argv[6]);
 

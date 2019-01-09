@@ -1,5 +1,6 @@
 #include "Halide.h"
 #include "halide_trace_config.h"
+#include "../autoscheduler/SimpleAutoSchedule.h"
 
 namespace {
 
@@ -112,21 +113,44 @@ public:
         if (auto_schedule) {
             // Nothing.
         } else if (get_target().has_gpu_feature()) {
-            // gpu schedule
-            remap.compute_root();
-            Var xi, yi;
-            output.compute_root().gpu_tile(x, y, xi, yi, 16, 8);
-            for (int j = 0; j < J; j++) {
-                int blockw = 16, blockh = 8;
-                if (j > 3) {
-                    blockw = 2;
-                    blockh = 2;
+            std::string use_simple_autoscheduler =
+                Halide::Internal::get_env_variable("HL_USE_SIMPLE_AUTOSCHEDULER");
+            if (use_simple_autoscheduler == "1") {
+                Halide::SimpleAutoscheduleOptions options;
+                options.gpu = get_target().has_gpu_feature();
+                options.gpu_tile_channel = 3;
+                Func output_func = output;
+                Halide::simple_autoschedule(output_func,
+                                    {{"levels", 8},
+                                     {"alpha", 1.f},
+                                     {"beta", 1.f},
+                                     {"input.min.0", 0},
+                                     {"input.extent.0", 1536},
+                                     {"input.min.1", 0},
+                                     {"input.extent.1", 2560},
+                                     {"input.min.2", 0},
+                                     {"input.extent.2", 3}},
+                                    {{0, 1536},
+                                     {0, 2560},
+                                     {0, 3}},
+                                    options);
+            } else {
+                // gpu schedule
+                remap.compute_root();
+                Var xi, yi;
+                output.compute_root().gpu_tile(x, y, xi, yi, 16, 8);
+                for (int j = 0; j < J; j++) {
+                    int blockw = 16, blockh = 8;
+                    if (j > 3) {
+                        blockw = 2;
+                        blockh = 2;
+                    }
+                    if (j > 0) {
+                        inGPyramid[j].compute_root().gpu_tile(x, y, xi, yi, blockw, blockh);
+                        gPyramid[j].compute_root().reorder(k, x, y).gpu_tile(x, y, xi, yi, blockw, blockh);
+                    }
+                    outGPyramid[j].compute_root().gpu_tile(x, y, xi, yi, blockw, blockh);
                 }
-                if (j > 0) {
-                    inGPyramid[j].compute_root().gpu_tile(x, y, xi, yi, blockw, blockh);
-                    gPyramid[j].compute_root().reorder(k, x, y).gpu_tile(x, y, xi, yi, blockw, blockh);
-                }
-                outGPyramid[j].compute_root().gpu_tile(x, y, xi, yi, blockw, blockh);
             }
         } else {
             // cpu schedule
