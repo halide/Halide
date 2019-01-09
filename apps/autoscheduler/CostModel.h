@@ -3,7 +3,7 @@
 
 #include "HalideBuffer.h"
 
-namespace halide {
+namespace Halide {
 class CostModel {
 public:
     virtual ~CostModel() = default;
