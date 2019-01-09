@@ -158,12 +158,17 @@ public:
         normalized_schedule_features(n, c, s) = fast_log(schedule_features(n, c, s) + 1);
 
         Func squashed_head1_filter("squashed_head1_filter");
-        squashed_head1_filter(c, w, n) = sigmoid(head1_filter(c, w, n));
+        squashed_head1_filter(c, s, n) = sigmoid(head1_filter(c, s, n));
+
+        // Explicitly broadcast the weights across the batch, to avoid
+        // an rfactor in the reverse-mode schedule.
+        Func squashed_head1_filter_broadcast("squashed_head1_filter_broadcast");
+        squashed_head1_filter_broadcast(c, w, s, n) = squashed_head1_filter(c, s, n);
 
         Func head1_conv("head1_conv");
         RDom r_head1(0, head1_w, 0, head1_h);
         head1_conv(c, w) = head1_bias(c);
-        head1_conv(c, w) += squashed_head1_filter(c, r_head1.x, r_head1.y) * pipeline_features(r_head1.x, r_head1.y, w);
+        head1_conv(c, w) += squashed_head1_filter_broadcast(c, w, r_head1.x, r_head1.y) * pipeline_features(r_head1.x, r_head1.y, w);
 
         // No point in a relu - the inputs and weights are positive
 
