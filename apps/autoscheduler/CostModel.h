@@ -3,6 +3,7 @@
 
 #include "HalideBuffer.h"
 
+namespace Halide {
 class CostModel {
 public:
     virtual ~CostModel() = default;
@@ -20,5 +21,6 @@ public:
                                                    int weights_server_port = 0,
                                                    int weights_server_experiment_id = 0);
 };
+}
 
 #endif

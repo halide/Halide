@@ -13,8 +13,6 @@
 namespace Halide {
 namespace Internal {
 
-namespace {
-
 using std::pair;
 using std::vector;
 using std::map;
@@ -1459,6 +1457,6 @@ private:
 
 };
 
-}}}
+}}
 
 #endif
