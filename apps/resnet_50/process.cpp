@@ -291,34 +291,18 @@ int main(int argc, char **argv) {
     {2048, 7, 7}
   };
 
-  const std::vector<float> ImageNet_mean = {0.485, 0.456, 0.406};
-  const std::vector<float> ImageNet_std = {0.229, 0.224, 0.225};
-
-  Buffer<float> image;
-  if (extension(input_file) == "bin") {
-    // load image that is prenormalized and transposed
-    //  (TODO: image size is hardcoded for panda)
-    image = buffer_from_file(input_file, {3, 224, 224});
-    std::cout << "Loading prenormalized, transposed image from " << input_file << std::endl;
-  } else {
-    Buffer<float> im_in = load_and_convert_image(input_file);
-    std::cout << "Loading image from " << input_file << std::endl;
-    assert(im_in.dimensions() == 3);
-    // Reorder dimensions
-    image = Buffer<float>(im_in.extent(2), im_in.extent(1), im_in.extent(0));
-    image.copy_from(im_in.transposed({2, 1, 0}));
-    normalize(image, ImageNet_mean, ImageNet_std);
-  }
-
   /** setup inputs and outputs for each block **/
-  std::vector<int> image_shape = {image.extent(0), image.extent(1), image.extent(2)};
+  constexpr int kImageWidth = 224;
+  constexpr int kImageHeight = 224;
+  constexpr int kImageChannels = 3;
+  std::vector<int> image_shape = {kImageChannels, kImageHeight, kImageWidth};
   std::vector<std::vector<int>> input_shapes;
   std::vector<std::vector<int>> output_shapes;
   int macro_block = 0;
   for (int micro_block = 0; micro_block < NUMBLOCKS; micro_block++) {
     std::vector<int> input_shape;
     if (micro_block == 0) {
-      input_shape = {3, 224, 224};
+      input_shape = image_shape;
     } else if (has_branch1(micro_block)) {
       macro_block++;
       input_shape = block_dims[macro_block-1];
@@ -327,6 +311,28 @@ int main(int argc, char **argv) {
     }
     input_shapes.push_back(input_shape);
     output_shapes.push_back(block_dims[macro_block]);
+  }
+
+  const std::vector<float> ImageNet_mean = {0.485, 0.456, 0.406};
+  const std::vector<float> ImageNet_std = {0.229, 0.224, 0.225};
+
+  Buffer<float> image;
+  if (extension(input_file) == "bin") {
+    // load image that is prenormalized and transposed
+    // (we'll just assume it matches canonical size and dimensions)
+    image = buffer_from_file(input_file, image_shape);
+    std::cout << "Loading prenormalized, transposed image from " << input_file << std::endl;
+  } else {
+    Buffer<float> im_in = load_and_convert_image(input_file);
+    std::cout << "Loading image from " << input_file << std::endl;
+    if (im_in.dimensions() != 3 || im_in.width() != kImageWidth || im_in.height() != kImageHeight || im_in.channels() != kImageChannels) {
+      std::cerr << "ResNet requires an image of exactly " << kImageWidth << "x" << kImageHeight << "x" << kImageChannels;
+      exit(1);
+    }
+    // Reorder dimensions
+    image = Buffer<float>(kImageChannels, kImageHeight, kImageWidth);
+    image.copy_from(im_in.transposed({2, 1, 0}));
+    normalize(image, ImageNet_mean, ImageNet_std);
   }
 
   std::vector<Buffer<float>> block_outputs(NUMBLOCKS);
