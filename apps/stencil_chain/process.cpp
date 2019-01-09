@@ -4,6 +4,7 @@
 #include "stencil_chain.h"
 #include "stencil_chain_classic_auto_schedule.h"
 #include "stencil_chain_auto_schedule.h"
+#include "stencil_chain_simple_auto_schedule.h"
 
 #include "benchmark_util.h"
 #include "HalideBuffer.h"
@@ -28,10 +29,12 @@ int main(int argc, char **argv) {
     const int samples = atoi(argv[2]);
     const int iterations = 1;
 
-    three_way_bench(
-        [&]() { stencil_chain(input, output); output.device_sync(); },
-        [&]() { stencil_chain_classic_auto_schedule(input, output); output.device_sync(); },
-        [&]() { stencil_chain_auto_schedule(input, output); output.device_sync(); },
+    multi_way_bench({
+        {"Manual", [&]() { stencil_chain(input, output); output.device_sync(); }},
+        {"Classic auto-scheduled", [&]() { stencil_chain_classic_auto_schedule(input, output); output.device_sync(); }},
+        {"Auto-schedueld", [&]() { stencil_chain_auto_schedule(input, output); output.device_sync(); }},
+        {"Simple auto-scheduled", [&]() { stencil_chain_simple_auto_schedule(input, output); output.device_sync();}}
+        },
         samples,
         iterations
     );

@@ -1,4 +1,5 @@
 #include "Halide.h"
+#include "../autoscheduler/SimpleAutoSchedule.h"
 
 namespace {
 
@@ -43,17 +44,34 @@ public:
             output.estimate(x, 0, width)
                 .estimate(y, 0, height);
         } else {
-            // CPU schedule. No fusion.
-            Var yi, yo, xo, xi, t;
-            for (size_t i = 1; i < stages.size() - 1; i++) {
-                Func s = stages[i];
-                s.store_at(output, t).compute_at(output, yi).vectorize(s.args()[0], 16);
+            std::string use_simple_autoscheduler =
+                Halide::Internal::get_env_variable("HL_USE_SIMPLE_AUTOSCHEDULER");
+            if (use_simple_autoscheduler == "1") {
+                Halide::SimpleAutoscheduleOptions options;
+                options.gpu = get_target().has_gpu_feature();
+                options.gpu_tile_channel = 1;
+                Func output_func = output;
+                Halide::simple_autoschedule(output_func,
+                                    {{"input.min.0", 0},
+                                     {"input.extent.0", 1536},
+                                     {"input.min.1", 0},
+                                     {"input.extent.1", 2560}},
+                                    {{0, 1536},
+                                     {0, 2560}},
+                                    options);
+            } else {
+                // CPU schedule. No fusion.
+                Var yi, yo, xo, xi, t;
+                for (size_t i = 1; i < stages.size() - 1; i++) {
+                    Func s = stages[i];
+                    s.store_at(output, t).compute_at(output, yi).vectorize(s.args()[0], 16);
+                }
+                output.compute_root()
+                    .tile(x, y, xo, yo, xi, yi, 512, 512)
+                    .fuse(xo, yo, t)
+                    .parallel(t)
+                    .vectorize(xi, 16);
             }
-            output.compute_root()
-                .tile(x, y, xo, yo, xi, yi, 512, 512)
-                .fuse(xo, yo, t)
-                .parallel(t)
-                .vectorize(xi, 16);
         }
     }
 };
