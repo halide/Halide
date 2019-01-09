@@ -2053,9 +2053,9 @@ struct State {
             for (auto it = features.begin(); it != features.end(); it++) {
                 if (!it.key()->node->is_wrapper) { // It's OK to repeatedly stage data
                     auto &feat = it.value();
-                    if (feat.points_computed_total + feat.inlined_calls > 10 * feat.points_computed_minimum) {
+                    if (feat.points_computed_total + feat.inlined_calls > 8 * feat.points_computed_minimum) {
                         cost = 1e50;
-                        return false;
+                        return true; //false;
                     } else if (false && feat.points_computed_total + feat.inlined_calls < feat.points_computed_minimum) {
                         // Some kind of shift-invariance failure
                         // probably. The representative loop iteration
@@ -2359,6 +2359,24 @@ struct State {
                 }
             }
 
+            // Some search-space pruning. If a node is pointwise, and
+            // so are all its inputs and so is its sole output, and
+            // inlining it is legal, just inline it. This saves time
+            // on long chains of pointwise things.
+            bool must_inline = node->is_pointwise && (num_children > 0) && (node->outgoing_edges.size() == 1);
+            if (must_inline) {
+                for (const auto *e : node->stages[0].incoming_edges) {
+                    must_inline &= e->producer->is_pointwise;
+                }
+                for (const auto *e : node->outgoing_edges) {
+                    must_inline &= e->consumer->node->is_pointwise;
+                }
+                if (must_inline) {
+                    return;
+                }
+            }
+
+
             // Construct a list of plausible dimensions to vectorize over
             // TODO: Pre-prune the list of sane dimensions to
             // vectorize a Func over to reduce branching factor.
@@ -2483,7 +2501,7 @@ struct State {
                     // Filter out the less useful options
                     bool ok =
                         ((o.entire || min_total > params.parallelism) &&
-                         (max_total <= params.parallelism * 64));
+                         (max_total <= params.parallelism * 8));
 
                     if (!ok) continue;
 
@@ -3090,7 +3108,7 @@ std::string generate_schedules_new(const std::vector<Function> &outputs,
     std::mt19937 rng((uint32_t) seed);
 
     string beam_size_str = get_env_variable("HL_BEAM_SIZE");
-    size_t beam_size = 20;
+    size_t beam_size = 32;
     if (!beam_size_str.empty()) {
         beam_size = atoi(beam_size_str.c_str());
     }
