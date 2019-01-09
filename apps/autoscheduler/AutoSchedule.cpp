@@ -41,6 +41,7 @@
 
 namespace Halide {
 namespace Internal {
+namespace Autoscheduler {
 
 // How small should an innermost loop cluster be before you just
 // entirely unroll the thing. Sized for an architecture with 16 vector
@@ -1859,16 +1860,6 @@ struct LoopNest {
 
 };
 
-}
-
-template<>
-RefCount &ref_count<LoopNest>(const LoopNest *t) {return t->ref_count;}
-
-template<>
-void destroy<LoopNest>(const LoopNest *t) {delete t;}
-
-namespace {
-
 struct State {
     mutable RefCount ref_count;
     IntrusivePtr<const LoopNest> root;
@@ -2702,16 +2693,6 @@ struct State {
 
 int State::cost_calculations = 0;
 
-}
-
-template<>
-RefCount &ref_count<State>(const State *t) {return t->ref_count;}
-
-template<>
-void destroy<State>(const State *t) {delete t;}
-
-namespace {
-
 // A priority queue of states, sorted according to increasing
 // cost. Never shrinks, to avoid reallocations.
 // Can't use std::priority_queue because it doesn't support unique_ptr.
@@ -3249,6 +3230,21 @@ struct AutoScheduler {
         return generate_schedules_new(outputs, target, params);
     }
 } auto_scheduler;
+
+}
+
+
+template<>
+RefCount &ref_count<Autoscheduler::LoopNest>(const Autoscheduler::LoopNest *t) {return t->ref_count;}
+
+template<>
+void destroy<Autoscheduler::LoopNest>(const Autoscheduler::LoopNest *t) {delete t;}
+
+template<>
+RefCount &ref_count<Autoscheduler::State>(const Autoscheduler::State *t) {return t->ref_count;}
+
+template<>
+void destroy<Autoscheduler::State>(const Autoscheduler::State *t) {delete t;}
 
 }
 }

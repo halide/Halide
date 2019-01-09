@@ -12,6 +12,7 @@
 
 namespace Halide {
 namespace Internal {
+namespace Autoscheduler {
 
 using std::pair;
 using std::vector;
@@ -366,19 +367,6 @@ struct BoundContents {
         }
     };
 };
-
-}
-
-template<>
-RefCount &ref_count<BoundContents>(const BoundContents *t) {return t->ref_count;}
-
-template<>
-void destroy<BoundContents>(const BoundContents *t) {
-    // Release it back into the memory pool to be reused
-    t->layout->release(t);
-}
-
-namespace {
 
 // A representation of the function DAG. The nodes and edges are both
 // in reverse realization order, so if you want to walk backwards up
@@ -1468,6 +1456,17 @@ private:
     void operator=(const FunctionDAG &other) = delete;
 
 };
+
+}
+
+template<>
+RefCount &ref_count<Autoscheduler::BoundContents>(const Autoscheduler::BoundContents *t) {return t->ref_count;}
+
+template<>
+void destroy<Autoscheduler::BoundContents>(const Autoscheduler::BoundContents *t) {
+    // Release it back into the memory pool to be reused
+    t->layout->release(t);
+}
 
 }}
 
