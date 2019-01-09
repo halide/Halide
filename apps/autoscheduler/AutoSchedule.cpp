@@ -31,13 +31,13 @@
 #include <random>
 
 #include "Halide.h"
-#include "halide_benchmark.h"
 #include "CostModel.h"
 #include "Featurization.h"
 #include "FunctionDAG.h"
 #include "PerfectHashMap.h"
 #include "Errors.h"
 #include "NetworkSize.h"
+#include "AutoSchedule.h"
 
 namespace Halide {
 namespace Internal {
@@ -3208,6 +3208,30 @@ std::string generate_schedules_new(const std::vector<Function> &outputs,
     }
 
     return "";
+}
+
+
+ void find_and_apply_schedule(FunctionDAG& dag, const std::vector<Function> &outputs, const MachineParams &params, CostModel* cost_model, int beam_size, StageMap<ScheduleFeatures>* schedule_features) {
+
+    std::mt19937 rng(12345);
+    IntrusivePtr<State> optimal = optimal_schedule(dag, outputs, params, cost_model, rng, beam_size);
+
+    //debug(0) << "Cost evaluated this many times: " << State::cost_calculations << '\n';
+
+    //debug(0) << "** Optimal schedule:\n";
+
+    // Just to get the debugging prints to fire
+    //optimal->calculate_cost(dag, params, cost_model.get(), true);
+
+    // Apply the schedules
+    optimal->apply_schedule(dag, params);
+
+    // Print out the schedule
+    //optimal->dump();
+
+    if (schedule_features) {
+      optimal->compute_featurization(dag, params, schedule_features);
+    }
 }
 
 // Register this as the autoscheduler
