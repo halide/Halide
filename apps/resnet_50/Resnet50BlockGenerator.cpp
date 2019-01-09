@@ -1,15 +1,11 @@
-// We directly include the headers from the Halide source tree to
-// avoid a build dependency on Halide.h
 #include <unordered_map>
 #include <tuple>
 #include "Halide.h"
 
-using namespace Halide;
-
 namespace {
 
 struct Tensor {
-    Func f;
+    Halide::Func f;
     std::vector<int> shape;
     std::string name;
 };
@@ -73,7 +69,7 @@ public:
   Output<Buffer<float>> block_output{"block_output", 3};
   Output<Buffer<float>> final_output{"final_output", 1};
 
-  std::vector<std::vector<int>> block_dims{
+  const std::vector<std::vector<int>> block_dims{
     {256, 56, 56},
     {512, 28, 28},
     {1024, 14, 14},
@@ -82,57 +78,59 @@ public:
 
   /** list out shapes of each layers weights **/
   // weight shapes: out channels, kernel_w, kernel_h, pad, stride. In channels infered by input tensor shape
-  WeightShape conv1_ws = {64, 7, 7, 3, 2};
-  WeightShape pool1_ws = {64, 3, 3, 1, 2};
-  WeightShape pool5_ws = {2048, 7, 7, 0, 1};
-  WeightShape fc1000_ws = {1000, 1, 1, 0, 1}; // 1x1 conv with 2048 input channels and 1000 output channels
+  const WeightShape conv1_ws = {64, 7, 7, 3, 2};
+  const WeightShape pool1_ws = {64, 3, 3, 1, 2};
+  const WeightShape pool5_ws = {2048, 7, 7, 0, 1};
+  const WeightShape fc1000_ws = {1000, 1, 1, 0, 1}; // 1x1 conv with 2048 input channels and 1000 output channels
 
   // res2a, res2b, res2c all have shame shapes
-  WeightShape res2x_br2a_ws = {64, 1, 1, 0, 1};
-  WeightShape res2a_br2b_ws = {64, 3, 3, 1, 1};
-  WeightShape res2x_br2b_ws = {64, 3, 3, 1, 1};
-  WeightShape res2x_br2c_ws = {256, 1, 1, 0, 1};
-  WeightShape res2a_br1_ws = {256, 1, 1, 0, 1};
+  const WeightShape res2x_br2a_ws = {64, 1, 1, 0, 1};
+  const WeightShape res2a_br2b_ws = {64, 3, 3, 1, 1};
+  const WeightShape res2x_br2b_ws = {64, 3, 3, 1, 1};
+  const WeightShape res2x_br2c_ws = {256, 1, 1, 0, 1};
+  const WeightShape res2a_br1_ws = {256, 1, 1, 0, 1};
 
   // res3x is same for most layers
   //WeightShape res3a_br2a_ws = {128, 1, 1, 0, 2};
-  WeightShape res3x_br2a_ws = {128, 1, 1, 0, 1};
-  WeightShape res3a_br2b_ws = {128, 3, 3, 1, 2};
-  WeightShape res3x_br2b_ws = {128, 3, 3, 1, 1};
-  WeightShape res3x_br2c_ws = {512, 1, 1, 0, 1};
-  WeightShape res3a_br1_ws = {512, 1, 1, 0, 2};
+  const WeightShape res3x_br2a_ws = {128, 1, 1, 0, 1};
+  const WeightShape res3a_br2b_ws = {128, 3, 3, 1, 2};
+  const WeightShape res3x_br2b_ws = {128, 3, 3, 1, 1};
+  const WeightShape res3x_br2c_ws = {512, 1, 1, 0, 1};
+  const WeightShape res3a_br1_ws = {512, 1, 1, 0, 2};
 
   //WeightShape res4a_br2a_ws = {256, 1, 1, 0, 2};
-  WeightShape res4x_br2a_ws = {256, 1, 1, 0, 1};
-  WeightShape res4a_br2b_ws = {256, 3, 3, 1, 2};
-  WeightShape res4x_br2b_ws = {256, 3, 3, 1, 1};
-  WeightShape res4x_br2c_ws = {1024, 1, 1, 0, 1};
-  WeightShape res4a_br1_ws = {1024, 1, 1, 0, 2};
+  const WeightShape res4x_br2a_ws = {256, 1, 1, 0, 1};
+  const WeightShape res4a_br2b_ws = {256, 3, 3, 1, 2};
+  const WeightShape res4x_br2b_ws = {256, 3, 3, 1, 1};
+  const WeightShape res4x_br2c_ws = {1024, 1, 1, 0, 1};
+  const WeightShape res4a_br1_ws = {1024, 1, 1, 0, 2};
 
   //WeightShape res5a_br2a_ws = {512, 1, 1, 0, 2};
-  WeightShape res5x_br2a_ws = {512, 1, 1, 0, 1};
-  WeightShape res5a_br2b_ws = {512, 3, 3, 1, 2};
-  WeightShape res5x_br2b_ws = {512, 3, 3, 1, 1};
-  WeightShape res5x_br2c_ws = {2048, 1, 1, 0, 1};
-  WeightShape res5a_br1_ws = {2048, 1, 1, 0, 2};
+  const WeightShape res5x_br2a_ws = {512, 1, 1, 0, 1};
+  const WeightShape res5a_br2b_ws = {512, 3, 3, 1, 2};
+  const WeightShape res5x_br2b_ws = {512, 3, 3, 1, 1};
+  const WeightShape res5x_br2c_ws = {2048, 1, 1, 0, 1};
+  const WeightShape res5a_br1_ws = {2048, 1, 1, 0, 2};
 
-  WeightShape br1_ws[4] = {res2a_br1_ws, res3a_br1_ws, res4a_br1_ws, res5a_br1_ws};
-  WeightShape br2a_ws[16] = {res2x_br2a_ws, res2x_br2a_ws, res2x_br2a_ws,
-                             res3x_br2a_ws, res3x_br2a_ws, res3x_br2a_ws, res3x_br2a_ws,
-                             res4x_br2a_ws, res4x_br2a_ws, res4x_br2a_ws, res4x_br2a_ws, res4x_br2a_ws, res4x_br2a_ws,
-                             res5x_br2a_ws, res5x_br2a_ws, res5x_br2a_ws};
-  WeightShape br2b_ws[16] = {res2a_br2b_ws, res2x_br2b_ws, res2x_br2b_ws,
-                             res3a_br2b_ws, res3x_br2b_ws, res3x_br2b_ws, res3x_br2b_ws,
-                             res4a_br2b_ws, res4x_br2b_ws, res4x_br2b_ws, res4x_br2b_ws, res4x_br2b_ws, res4x_br2b_ws,
-                             res5a_br2b_ws, res5x_br2b_ws, res5x_br2b_ws};
-  WeightShape br2c_ws[16] = {res2x_br2c_ws, res2x_br2c_ws, res2x_br2c_ws,
-                             res3x_br2c_ws, res3x_br2c_ws, res3x_br2c_ws, res3x_br2c_ws,
-                             res4x_br2c_ws, res4x_br2c_ws, res4x_br2c_ws, res4x_br2c_ws, res4x_br2c_ws, res4x_br2c_ws,
-                             res5x_br2c_ws, res5x_br2c_ws, res5x_br2c_ws};
+  const WeightShape br1_ws[4] = {res2a_br1_ws, res3a_br1_ws, res4a_br1_ws, res5a_br1_ws};
+  const WeightShape br2a_ws[16] = {res2x_br2a_ws, res2x_br2a_ws, res2x_br2a_ws,
+                                   res3x_br2a_ws, res3x_br2a_ws, res3x_br2a_ws, res3x_br2a_ws,
+                                   res4x_br2a_ws, res4x_br2a_ws, res4x_br2a_ws, res4x_br2a_ws, res4x_br2a_ws, res4x_br2a_ws,
+                                   res5x_br2a_ws, res5x_br2a_ws, res5x_br2a_ws};
+  const WeightShape br2b_ws[16] = {res2a_br2b_ws, res2x_br2b_ws, res2x_br2b_ws,
+                                   res3a_br2b_ws, res3x_br2b_ws, res3x_br2b_ws, res3x_br2b_ws,
+                                   res4a_br2b_ws, res4x_br2b_ws, res4x_br2b_ws, res4x_br2b_ws, res4x_br2b_ws, res4x_br2b_ws,
+                                   res5a_br2b_ws, res5x_br2b_ws, res5x_br2b_ws};
+  const WeightShape br2c_ws[16] = {res2x_br2c_ws, res2x_br2c_ws, res2x_br2c_ws,
+                                   res3x_br2c_ws, res3x_br2c_ws, res3x_br2c_ws, res3x_br2c_ws,
+                                   res4x_br2c_ws, res4x_br2c_ws, res4x_br2c_ws, res4x_br2c_ws, res4x_br2c_ws, res4x_br2c_ws,
+                                   res5x_br2c_ws, res5x_br2c_ws, res5x_br2c_ws};
 
   Var c, i, j;
 
   void generate() {
+
+    // Algorithm
 
     /** Declare arrays of other functions and build the requested block **/
     Tensor br1_conv[4];
@@ -240,18 +238,24 @@ public:
     if (block_id == 15) {
         pool5 = avg_pool_layer(resunit_relu[block_id], pool5_ws, "pool5");
         fc1000 = fc_layer(pool5, fc1000_ws, fc1000_weights, fc1000_bias, "fc");
-        softmax_layer(fc1000, final_output, 1000, "softmax");
+        final_output = softmax_layer(fc1000, 1000, "softmax");
+    } else {
+      final_output(c) = Halide::undef<float>();
     }
 
-    // provide bounds estimates on outputs
-    final_output(c) = undef<float>();
-
-    std::vector<int> output_dim = block_dims[macro_block_id];
+    // Estimates
+    const std::vector<int> output_dim = block_dims[macro_block_id];
 
     final_output.estimate(final_output.args()[0], 0, 1000);
     block_output.estimate(block_output.args()[0], 0, output_dim[0]);
     block_output.estimate(block_output.args()[1], 0, output_dim[1]);
     block_output.estimate(block_output.args()[2], 0, output_dim[2]);
+
+    // Schedule
+    if (!auto_schedule) {
+      // No hand schedule present yet
+    }
+
   }
 
 private:
@@ -261,20 +265,18 @@ private:
       bounds[1].second = width;
       bounds[2].first = 0;
       bounds[2].second = height;
-      return BoundaryConditions::constant_exterior(f, 0.0f, bounds);
+      return Halide::BoundaryConditions::constant_exterior(f, 0.0f, bounds);
   }
 
-  void compute_shape(Tensor& in, Tensor& out, WeightShape& params) {
-      assert(out.shape.empty());
+  std::vector<int> compute_shape(const Tensor& in, const WeightShape& params) {
       int w = (1.0/params.stride) * (params.pad * 2 + in.shape[1] - params.w + 1 + params.stride - 1);
       int h = (1.0/params.stride) * (params.pad * 2 + in.shape[2] - params.h + 1 + params.stride - 1);
       int c = params.c;
 
-      int new_shape[3] = {c, w, h};
-      out.shape.insert(out.shape.end(), new_shape, new_shape+3);
+      return {c, w, h};
   }
 
-  Tensor conv2D(Tensor& input, WeightShape& weight_shape, Func weights, std::string name) {
+  Tensor conv2D(const Tensor& input, const WeightShape& weight_shape, const Func& weights, const std::string& name) {
       int p = weight_shape.pad;
       Func padded;
       // pad input
@@ -290,12 +292,12 @@ private:
       Tensor output;
       output.f = conv;
       output.name = name;
-      compute_shape(input, output, weight_shape);
+      output.shape = compute_shape(input, weight_shape);
       return output;
   }
 
   // assumes input is 3D (c, w, h) where w and h = 1
-  Tensor fc_layer(Tensor& input, WeightShape& weight_shape, Func weights, Func bias, std::string name) {
+  Tensor fc_layer(const Tensor& input, const WeightShape& weight_shape, const Func& weights, const Func& bias, const std::string& name) {
       RDom r(0, input.shape[0]);
       Func fc;
       fc(c) = bias(c);
@@ -304,12 +306,12 @@ private:
       Tensor output;
       output.f = fc;
       output.name = name;
-      compute_shape(input, output, weight_shape);
+      output.shape = compute_shape(input, weight_shape);
 
       return output;
   }
 
-  Tensor relu_layer(Tensor& input, std::string name) {
+  Tensor relu_layer(const Tensor& input, const std::string& name) {
       Func relu;
       relu(c, i, j) = max(0.0f, input.f(c, i, j));
       Tensor output;
@@ -319,7 +321,7 @@ private:
       return output;
   }
 
-  Tensor max_pool_layer(Tensor& input, WeightShape& weight_shape, std::string name) {
+  Tensor max_pool_layer(const Tensor& input, const WeightShape& weight_shape, const std::string& name) {
       int p = weight_shape.pad;
       Func padded;
       if (p) {
@@ -333,12 +335,12 @@ private:
       Tensor output;
       output.f = pool;
       output.name = name;
-      compute_shape(input, output, weight_shape);
+      output.shape = compute_shape(input, weight_shape);
 
       return output;
   }
 
-  Tensor avg_pool_layer(Tensor& input, WeightShape& weight_shape, std::string name) {
+  Tensor avg_pool_layer(const Tensor& input, const WeightShape& weight_shape, const std::string& name) {
       int p = weight_shape.pad;
       Func padded;
       if (p) {
@@ -355,12 +357,12 @@ private:
       Tensor output;
       output.f = pool;
       output.name = name;
-      compute_shape(input, output, weight_shape);
+      output.shape = compute_shape(input, weight_shape);
 
       return output;
   }
 
-  Tensor norm_layer(Tensor& input, Func mu, Func sigma, std::string name) {
+  Tensor norm_layer(const Tensor& input, const Func& mu, const Func& sigma, const std::string& name) {
       Func normed;
       Expr e = input.f(c,i,j);
       normed(c, i, j) = (input.f(c, i, j) - mu(c)) / (sqrt(sigma(c) + 1e-5f));
@@ -371,7 +373,7 @@ private:
       return output;
   }
 
-  Tensor scale_layer(Tensor& input, Func gamma, Func beta, std::string name) {
+  Tensor scale_layer(const Tensor& input, const Func& gamma, const Func& beta, const std::string& name) {
       Func scaled;
       scaled(c, i, j) = input.f(c, i, j) * gamma(c) + beta(c);
       Tensor output;
@@ -381,7 +383,7 @@ private:
       return output;
   }
 
-  Tensor sum_layer(Tensor& t1, Tensor& t2, std::string name) {
+  Tensor sum_layer(const Tensor& t1, const Tensor& t2, const std::string& name) {
       assert(t1.shape == t2.shape);
       Func summed;
       summed(c, i, j) = t1.f(c, i, j) + t2.f(c, i, j);
@@ -392,12 +394,14 @@ private:
       return output;
   }
 
-  void softmax_layer(Tensor& input, Func output, int classes, std::string name) {
+  Func softmax_layer(const Tensor& input, const int classes, const std::string& name) {
       assert(input.shape[0] == classes);
       RDom r(0, classes);
       Func exp_vals;
       exp_vals(c) = exp(input.f(c));
+      Func output("output");
       output(c) = exp_vals(c) / sum(exp_vals(r.x));
+      return output;
   }
 
 
