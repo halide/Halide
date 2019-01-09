@@ -5,7 +5,7 @@ HL_TARGET=host-cuda
 
 all: $(BIN)/filter
 
-$(BIN)/bilateral_grid.generator: bilateral_grid_generator.cpp $(GENERATOR_DEPS)
+$(BIN)/bilateral_grid.generator: bilateral_grid_generator.cpp ../autoscheduler/SimpleAutoSchedule.h ../autoscheduler/SimpleAutoSchedule.cpp ../autoscheduler/DerivativeUtils.h ../autoscheduler/DerivativeUtils.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
@@ -32,11 +32,16 @@ $(BIN)/bilateral_grid_auto_schedule.a: $(BIN)/bilateral_grid.generator $(AUTOSCH
 	HL_SHARED_MEMORY_LIMIT=8 \
 	$< -g bilateral_grid -o $(BIN) -f bilateral_grid_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so -e static_library,h,schedule 2> stderr.txt > stdout.txt
 
+$(BIN)/bilateral_grid_simple_auto_schedule.a: $(BIN)/bilateral_grid.generator
+	@mkdir -p $(@D)
+	HL_USE_SIMPLE_AUTOSCHEDULER=1 \
+	$< -g bilateral_grid -o $(BIN) -f bilateral_grid_simple_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=false -e static_library,h
+
 $(BIN)/viz/bilateral_grid.a: $(BIN)/bilateral_grid.generator
 	@mkdir -p $(@D)
 	$^ -g bilateral_grid -o $(BIN)/viz target=$(HL_TARGET)-trace_all
 
-$(BIN)/filter: filter.cpp $(BIN)/bilateral_grid.a $(BIN)/bilateral_grid_classic_auto_schedule.a $(BIN)/bilateral_grid_auto_schedule.a
+$(BIN)/filter: filter.cpp $(BIN)/bilateral_grid.a $(BIN)/bilateral_grid_classic_auto_schedule.a $(BIN)/bilateral_grid_auto_schedule.a $(BIN)/bilateral_grid_simple_auto_schedule.a
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -O3 -ffast-math -Wall -Werror -I$(BIN) $^ -o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS)
 

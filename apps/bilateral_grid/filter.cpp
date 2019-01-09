@@ -6,6 +6,7 @@
 #ifndef NO_AUTO_SCHEDULE
 #include "bilateral_grid_classic_auto_schedule.h"
 #include "bilateral_grid_auto_schedule.h"
+#include "bilateral_grid_simple_auto_schedule.h"
 #endif
 
 #include "benchmark_util.h"
@@ -29,15 +30,14 @@ int main(int argc, char **argv) {
     Buffer<float> input = load_and_convert_image(argv[1]);
     Buffer<float> output(input.width(), input.height());
 
-    three_way_bench(
-        [&]() { bilateral_grid(input, r_sigma, output); output.device_sync(); },
-    #ifdef NO_AUTO_SCHEDULE
-        nullptr,
-        nullptr,
-    #else
-        [&]() { bilateral_grid_classic_auto_schedule(input, r_sigma, output); output.device_sync(); },
-        [&]() { bilateral_grid_auto_schedule(input, r_sigma, output); output.device_sync(); },
+    multi_way_bench({
+        {"Manual", [&]() { bilateral_grid(input, r_sigma, output); output.device_sync(); }},
+    #ifndef NO_AUTO_SCHEDULE
+        {"Classic auto-scheduled", [&]() { bilateral_grid_classic_auto_schedule(input, r_sigma, output); output.device_sync(); }},
+        {"Auto-scheduled", [&]() { bilateral_grid_auto_schedule(input, r_sigma, output); output.device_sync(); }},
+        {"Simple auto-scheduled", [&]() { bilateral_grid_simple_auto_schedule(input, r_sigma, output); output.device_sync(); }}
     #endif
+        },
         samples,
         iterations
     );
