@@ -7,7 +7,7 @@ HL_TARGET=host-cuda
 
 all: $(BIN)/process
 
-$(BIN)/nl_means.generator: nl_means_generator.cpp $(GENERATOR_DEPS)
+$(BIN)/nl_means.generator: nl_means_generator.cpp ../autoscheduler/SimpleAutoSchedule.h ../autoscheduler/SimpleAutoSchedule.cpp ../autoscheduler/DerivativeUtils.h ../autoscheduler/DerivativeUtils.cpp $(GENERATOR_DEPS)
 	@-mkdir -p $(BIN)
 	$(CXX) $(CXXFLAGS) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS) $(USE_EXPORT_DYNAMIC)
 
@@ -34,7 +34,12 @@ $(BIN)/nl_means_auto_schedule.a: $(BIN)/nl_means.generator $(AUTOSCHED_BIN)/liba
 	HL_SHARED_MEMORY_LIMIT=24 \
 	$< -g nl_means -o $(BIN) -f nl_means_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so 2> stderr.txt > stdout.txt
 
-$(BIN)/process: process.cpp $(BIN)/nl_means.a $(BIN)/nl_means_classic_auto_schedule.a $(BIN)/nl_means_auto_schedule.a
+$(BIN)/nl_means_simple_auto_schedule.a: $(BIN)/nl_means.generator
+	@mkdir -p $(@D)
+	HL_USE_SIMPLE_AUTOSCHEDULER=1 \
+	$< -g nl_means -o $(BIN) -f nl_means_simple_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=false -e static_library,h
+
+$(BIN)/process: process.cpp $(BIN)/nl_means.a $(BIN)/nl_means_classic_auto_schedule.a $(BIN)/nl_means_auto_schedule.a $(BIN)/nl_means_simple_auto_schedule.a
 	@-mkdir -p $(BIN)
 	$(CXX) $(CXXFLAGS) -I$(BIN) -Wall -O3 $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS)
 

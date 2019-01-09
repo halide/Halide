@@ -1,4 +1,5 @@
 #include "Halide.h"
+#include "../autoscheduler/SimpleAutoSchedule.h"
 
 namespace {
 
@@ -108,26 +109,49 @@ public:
                 .reorder(x, y, c, s_dom.x, s_dom.y)
                 .gpu_threads(x, y);
         }*/ else {
-            non_local_means.compute_root()
-                .reorder(c, x, y)
-                .tile(x, y, tx, ty, x, y, 16, 8)
-                .parallel(ty)
-                .vectorize(x, 8);
-            blur_d_y.compute_at(non_local_means, tx)
-                .reorder(y, x)
-                .vectorize(x, 8);
-            d.compute_at(non_local_means, tx)
-                .vectorize(x, 8);
-            non_local_means_sum.compute_at(non_local_means, x)
-                .reorder(c, x, y)
-                .bound(c, 0, 4).unroll(c)
-                .vectorize(x, 8);
-            non_local_means_sum.update(0)
-                .reorder(c, x, y, s_dom.x, s_dom.y)
-                .unroll(c)
-                .vectorize(x, 8);
-            blur_d.compute_at(non_local_means_sum, x)
-                .vectorize(x, 8);
+            std::string use_simple_autoscheduler =
+                Halide::Internal::get_env_variable("HL_USE_SIMPLE_AUTOSCHEDULER");
+            if (use_simple_autoscheduler == "1") {
+                Halide::SimpleAutoscheduleOptions options;
+                options.gpu = get_target().has_gpu_feature();
+                options.gpu_tile_channel = 3;
+                Func output_func = non_local_means;
+                Halide::simple_autoschedule(output_func,
+                                    {{"input.min.0", 0},
+                                     {"input.extent.0", 1536},
+                                     {"input.min.1", 0},
+                                     {"input.extent.1", 2560},
+                                     {"input.min.2", 0},
+                                     {"input.extent.2", 3},
+                                     {"patch_size", 7},
+                                     {"search_area", 7},
+                                     {"sigma", 0.12f}},
+                                    {{0, 1536},
+                                     {0, 2560},
+                                     {0, 3}},
+                                    options);
+            } else {
+                non_local_means.compute_root()
+                    .reorder(c, x, y)
+                    .tile(x, y, tx, ty, x, y, 16, 8)
+                    .parallel(ty)
+                    .vectorize(x, 8);
+                blur_d_y.compute_at(non_local_means, tx)
+                    .reorder(y, x)
+                    .vectorize(x, 8);
+                d.compute_at(non_local_means, tx)
+                    .vectorize(x, 8);
+                non_local_means_sum.compute_at(non_local_means, x)
+                    .reorder(c, x, y)
+                    .bound(c, 0, 4).unroll(c)
+                    .vectorize(x, 8);
+                non_local_means_sum.update(0)
+                    .reorder(c, x, y, s_dom.x, s_dom.y)
+                    .unroll(c)
+                    .vectorize(x, 8);
+                blur_d.compute_at(non_local_means_sum, x)
+                    .vectorize(x, 8);
+            }
         }
     }
 };

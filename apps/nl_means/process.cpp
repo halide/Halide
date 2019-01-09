@@ -4,6 +4,7 @@
 #include "nl_means.h"
 #include "nl_means_classic_auto_schedule.h"
 #include "nl_means_auto_schedule.h"
+#include "nl_means_simple_auto_schedule.h"
 
 #include "benchmark_util.h"
 #include "HalideBuffer.h"
@@ -30,10 +31,14 @@ int main(int argc, char **argv) {
     printf("Input size: %d by %d, patch size: %d, search area: %d, sigma: %f\n",
             input.width(), input.height(), patch_size, search_area, sigma);
 
-    three_way_bench(
-        [&]() { nl_means(input, patch_size, search_area, sigma, output); output.device_sync(); },
-        [&]() { nl_means_classic_auto_schedule(input, patch_size, search_area, sigma, output); output.device_sync(); },
-        [&]() { nl_means_auto_schedule(input, patch_size, search_area, sigma, output); output.device_sync(); },
+    multi_way_bench({
+        {"Manual", [&]() { nl_means(input, patch_size, search_area, sigma, output); output.device_sync(); }},
+    #ifndef NO_AUTO_SCHEDULE
+        {"Classic auto-scheduled", [&]() { nl_means_classic_auto_schedule(input, patch_size, search_area, sigma, output); output.device_sync(); }},
+        {"Auto-scheduled", [&]() { nl_means_auto_schedule(input, patch_size, search_area, sigma, output); output.device_sync(); }},
+        {"Simple auto-scheduled", [&]() { nl_means_simple_auto_schedule(input, patch_size, search_area, sigma, output); output.device_sync(); }}
+    #endif
+        },
         samples,
         iterations
     );
