@@ -1,8 +1,8 @@
 # Build the generator to autotune. This script will be autotuning the
 # autoscheduler's cost model training pipeline, which is large enough
 # to be interesting.
-if [ $# -ne 5 ]; then
-  echo "Usage: $0 /path/to/some.generator generatorname halide_target weights_dir autoschedule_bin_dir"
+if [ $# -lt 5 -o $# -gt 6 ]; then
+  echo "Usage: $0 /path/to/some.generator generatorname halide_target weights_dir autoschedule_bin_dir [generator_args_sets]"
   exit
 fi
 
@@ -16,6 +16,20 @@ PIPELINE=${2}
 HL_TARGET=${3}
 START_WEIGHTS_DIR=${4}
 AUTOSCHED_BIN=${5}
+
+# Read the generator-arg sets into an array. Each set is delimited
+# by space; multiple values within each set are are delimited with ;
+# e.g. "set1arg1=1;set1arg2=foo set2=bar set3arg1=3.14;set4arg2=42"
+if [ $# -ge 6 ]; then
+    IFS=' ' read -r -a GENERATOR_ARGS_SETS_ARRAY <<< "${6}"
+else
+    declare -a GENERATOR_ARGS_SETS_ARRAY=
+fi
+
+# Ensure the length is at least 1
+if [ ${#GENERATOR_ARGS_SETS_ARRAY[@]} -eq 0 ]; then
+    GENERATOR_ARGS_SETS_ARRAY=( '' )
+fi
 
 COMPILATION_TIMEOUT=600s
 BENCHMARKING_TIMEOUT=60s
@@ -73,6 +87,7 @@ make_sample() {
     D=${1}
     SEED=${2}
     FNAME=${3}
+    EXTRA_GENERATOR_ARGS=${4}
     mkdir -p ${D}
     rm -f "${D}/sample.sample"
     if [[ $D == */0 ]]; then
@@ -101,6 +116,7 @@ make_sample() {
         -e stmt,assembly,static_library,h,registration \
         target=${HL_TARGET} \
         auto_schedule=true \
+        ${EXTRA_GENERATOR_ARGS} \
         -p ${AUTOSCHED_BIN}/libauto_schedule.so \
             2> ${D}/compile_log.txt || echo "Compilation failed or timed out for ${D}"
 
@@ -144,18 +160,24 @@ else
 fi
 echo Local number of cores detected as ${LOCAL_CORES}
 
-for ((i=$((FIRST+1));i<1000000;i++)); do
+for ((BATCH_ID=$((FIRST+1));BATCH_ID<1000000;BATCH_ID++)); do
     # Compile a batch of samples using the generator in parallel
-    DIR=${SAMPLES}/batch_${i}
+    DIR=${SAMPLES}/batch_${BATCH_ID}
 
     # Copy the weights being used into the batch folder so that we can repro failures
     mkdir -p ${DIR}/weights_used/
     cp ${WEIGHTS}/* ${DIR}/weights_used/
 
+    EXTRA_ARGS_IDX=$((BATCH_ID % ${#GENERATOR_ARGS_SETS_ARRAY[@]}))
+    EXTRA_GENERATOR_ARGS=${GENERATOR_ARGS_SETS_ARRAY[EXTRA_ARGS_IDX]/;/ }
+    if [ ! -z "${EXTRA_GENERATOR_ARGS}" ]; then
+        echo "Adding extra generator args (${EXTRA_GENERATOR_ARGS}) for batch_${BATCH_ID}"
+    fi
+
     # Do parallel compilation in batches, so that machines with fewer than BATCH_SIZE cores
     # don't get swamped and timeout unnecessarily
     echo Compiling samples
-    for ((b=0;b<${BATCH_SIZE};b++)); do        
+    for ((SAMPLE_ID=0;SAMPLE_ID<${BATCH_SIZE};SAMPLE_ID++)); do
         while [[ 1 ]]; do
               RUNNING=$(jobs -r | wc -l)
               if [[ RUNNING -ge LOCAL_CORES ]]; then
@@ -165,21 +187,21 @@ for ((i=$((FIRST+1));i<1000000;i++)); do
               fi
         done
 
-        S=$(printf "%d%02d" $i $b)
-        FNAME=$(printf "%s_batch_%02d_sample_%02d" ${PIPELINE} $i $b)
-        make_sample "${DIR}/${b}" $S $FNAME &
+        S=$(printf "%d%02d" $BATCH_ID $SAMPLE_ID)
+        FNAME=$(printf "%s_batch_%02d_sample_%02d" ${PIPELINE} $BATCH_ID $SAMPLE_ID)
+        make_sample "${DIR}/${SAMPLE_ID}" $S $FNAME "$EXTRA_GENERATOR_ARGS" &
     done
     wait
 
     # benchmark them serially using rungen
-    for ((b=0;b<${BATCH_SIZE};b++)); do
-        S=$(printf "%d%02d" $i $b)
-        benchmark_sample "${DIR}/${b}" $S
+    for ((SAMPLE_ID=0;SAMPLE_ID<${BATCH_SIZE};SAMPLE_ID++)); do
+        S=$(printf "%d%02d" $BATCH_ID $SAMPLE_ID)
+        benchmark_sample "${DIR}/${SAMPLE_ID}" $S
     done
 
     # retrain model weights on all samples seen so far
     echo Retraining model...
     find ${SAMPLES} | grep sample$ | \
-        HL_NUM_THREADS=32 HL_WEIGHTS_DIR=${WEIGHTS} HL_BEST_SCHEDULE_FILE=${PWD}/samples/best.txt ${AUTOSCHED_BIN}/train_cost_model ${BATCH_SIZE} 0.001
+        HL_NUM_THREADS=32 HL_WEIGHTS_DIR=${WEIGHTS} HL_BEST_SCHEDULE_FILE=${PWD}/samples/best.txt ${AUTOSCHED_BIN}/train_cost_model ${BATCH_SIZE} 0.0001
 
 done

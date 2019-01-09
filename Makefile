@@ -1707,6 +1707,7 @@ TEST_APPS=\
 	mat_mul_generator \
 	max_filter \
 	resize \
+	resnet_50 \
 	stencil_chain \
 	unsharp \
 	wavelet \
