@@ -2,6 +2,7 @@
 #ifndef NO_AUTO_SCHEDULE
 #include "camera_pipe_classic_auto_schedule.h"
 #include "camera_pipe_auto_schedule.h"
+#include "camera_pipe_simple_auto_schedule.h"
 #endif
 
 #include "benchmark_util.h"
@@ -74,6 +75,18 @@ int main(int argc, char **argv) {
         [&]() { camera_pipe_classic_auto_schedule(input, matrix_3200, matrix_7000, color_temp, gamma, contrast, sharpen, blackLevel, whiteLevel, output); output.device_sync(); },
         [&]() { camera_pipe_auto_schedule(input, matrix_3200, matrix_7000, color_temp, gamma, contrast, sharpen, blackLevel, whiteLevel, output); output.device_sync(); },
     #endif
+        samples,
+        iterations
+    );
+
+    multi_way_bench({
+        {"Manual", [&]() { camera_pipe(input, matrix_3200, matrix_7000, color_temp, gamma, contrast, sharpen, blackLevel, whiteLevel, output); output.device_sync(); }},
+    #ifndef NO_AUTO_SCHEDULE
+        {"Classic auto-scheduled", [&]() { camera_pipe_classic_auto_schedule(input, matrix_3200, matrix_7000, color_temp, gamma, contrast, sharpen, blackLevel, whiteLevel, output); output.device_sync(); }},
+        {"Auto-scheduled", [&]() { camera_pipe_auto_schedule(input, matrix_3200, matrix_7000, color_temp, gamma, contrast, sharpen, blackLevel, whiteLevel, output); output.device_sync(); }},
+        {"Simple auto-scheduled", [&]() { camera_pipe_simple_auto_schedule(input, matrix_3200, matrix_7000, color_temp, gamma, contrast, sharpen, blackLevel, whiteLevel, output); output.device_sync(); }}
+    #endif
+        },
         samples,
         iterations
     );

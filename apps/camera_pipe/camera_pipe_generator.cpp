@@ -1,6 +1,7 @@
 #include "Halide.h"
 #include <stdint.h>
 #include "halide_trace_config.h"
+#include "../autoscheduler/SimpleAutoSchedule.h"
 
 namespace {
 
@@ -43,6 +44,13 @@ public:
     // Inputs and outputs
     Input<Func> deinterleaved{ "deinterleaved", Int(16), 3 };
     Output<Func> output{ "output", Int(16), 3 };
+
+    bool use_simple_autoscheduler = false;
+
+    Demosaic() {
+        use_simple_autoscheduler =
+            Halide::Internal::get_env_variable("HL_USE_SIMPLE_AUTOSCHEDULER") == "1";
+    }
 
     // Defines outputs using inputs
     void generate() {
@@ -153,7 +161,7 @@ public:
     void schedule() {
         Pipeline p(output);
 
-        if (!auto_schedule) {
+        if (!auto_schedule && !use_simple_autoscheduler) {
             int vec = get_target().natural_vector_size(UInt(16));
             bool use_hexagon = get_target().features_any_of({Target::HVX_64, Target::HVX_128});
             if (get_target().has_feature(Target::HVX_64)) {
@@ -221,6 +229,12 @@ public:
 
     void generate();
 
+    bool use_simple_autoscheduler = false;
+
+    CameraPipe() {
+        use_simple_autoscheduler =
+            Halide::Internal::get_env_variable("HL_USE_SIMPLE_AUTOSCHEDULER") == "1";
+    }
 private:
 
     Func hot_pixel_suppression(Func input);
@@ -264,7 +278,7 @@ Func CameraPipe::color_correct(Func input) {
     Expr val =  (matrix_3200(x, y) * alpha + matrix_7000(x, y) * (1 - alpha));
     matrix(x, y) = cast<int16_t>(val * 256.0f); // Q8.8 fixed point
 
-    if (!auto_schedule) {
+    if (!auto_schedule && !use_simple_autoscheduler) {
         matrix.compute_root();
     }
 
@@ -324,7 +338,7 @@ Func CameraPipe::apply_curve(Func input) {
     // makeLUT add guard band outside of (minRaw, maxRaw]:
     curve(x) = select(x <= minRaw, 0, select(x > maxRaw, 255, val));
 
-    if (!auto_schedule) {
+    if (!auto_schedule && !use_simple_autoscheduler) {
         // It's a LUT, compute it once ahead of time.
         curve.compute_root();
     }
@@ -359,7 +373,7 @@ Func CameraPipe::sharpen(Func input) {
     // Convert the sharpening strength to 2.5 fixed point. This allows sharpening in the range [0, 4].
     Func sharpen_strength_x32("sharpen_strength_x32");
     sharpen_strength_x32() = u8_sat(sharpen_strength * 32);
-    if (!auto_schedule) {
+    if (!auto_schedule && !use_simple_autoscheduler) {
         sharpen_strength_x32.compute_root();
     }
 
@@ -435,76 +449,105 @@ void CameraPipe::generate() {
         color_temp.set_estimate(3200);
 
     } else {
-
-        Expr out_width = processed.width();
-        Expr out_height = processed.height();
-        // In HVX 128, we need 2 threads to saturate HVX with work,
-        //and in HVX 64 we need 4 threads, and on other devices,
-        // we might need many threads.
-        Expr strip_size;
-        if (get_target().has_feature(Target::HVX_128)) {
-            strip_size = processed.dim(1).extent() / 2;
-        } else if (get_target().has_feature(Target::HVX_64)) {
-            strip_size = processed.dim(1).extent() / 4;
+        if (use_simple_autoscheduler) {
+            Halide::SimpleAutoscheduleOptions options;
+            options.gpu = get_target().has_gpu_feature();
+            options.gpu_tile_channel = 1;
+            Func output_func = processed;
+            Halide::simple_autoschedule(output_func,
+                    {{"sharpen_strength", 1.0f},
+                     {"blackLevel", 25},
+                     {"whiteLevel", 1023},
+                     {"gamma", 2.f},
+                     {"contrast", 50.f},
+                     {"color_temp", 3200.f},
+                     {"input.min.0", 0},
+                     {"input.extent.0", 2592},
+                     {"input.min.1", 0},
+                     {"input.extent.1", 1968},
+                     {"matrix3200.min.0", 0},
+                     {"matrix3200.extent.0", 4},
+                     {"matrix3200.min.1", 0},
+                     {"matrix3200.extent.1", 3},
+                     {"matrix7000.min.0", 0},
+                     {"matrix7000.extent.0", 4},
+                     {"matrix7000.min.1", 0},
+                     {"matrix7000.extent.1", 3}},
+                    {{0, 2592-32},
+                     {0, 1968-48},
+                     {0, 3}},
+                    options);
         } else {
-            strip_size = 32;
+            Expr out_width = processed.width();
+            Expr out_height = processed.height();
+            // In HVX 128, we need 2 threads to saturate HVX with work,
+            //and in HVX 64 we need 4 threads, and on other devices,
+            // we might need many threads.
+            Expr strip_size;
+            if (get_target().has_feature(Target::HVX_128)) {
+                strip_size = processed.dim(1).extent() / 2;
+            } else if (get_target().has_feature(Target::HVX_64)) {
+                strip_size = processed.dim(1).extent() / 4;
+            } else {
+                strip_size = 32;
+            }
+            strip_size = (strip_size / 2) * 2;
+
+            int vec = get_target().natural_vector_size(UInt(16));
+            if (get_target().has_feature(Target::HVX_64)) {
+                vec = 32;
+            } else if (get_target().has_feature(Target::HVX_128)) {
+                vec = 64;
+            }
+            processed.compute_root()
+                .reorder(c, x, y)
+                .split(y, yi, yii, 2, TailStrategy::RoundUp)
+                .split(yi, yo, yi, strip_size / 2)
+                .vectorize(x, 2*vec, TailStrategy::RoundUp)
+                .unroll(c)
+                .parallel(yo);
+
+            denoised.compute_at(processed, yi).store_at(processed, yo)
+                .prefetch(input, y, 2)
+                .fold_storage(y, 16)
+                .tile(x, y, x, y, xi, yi, 2*vec, 2)
+                .vectorize(xi)
+                .unroll(yi);
+
+            deinterleaved.compute_at(processed, yi).store_at(processed, yo)
+                .fold_storage(y, 8)
+                .reorder(c, x, y)
+                .vectorize(x, 2*vec, TailStrategy::RoundUp)
+                .unroll(c);
+
+            curved.compute_at(processed, yi).store_at(processed, yo)
+                .reorder(c, x, y)
+                .tile(x, y, x, y, xi, yi, 2*vec, 2, TailStrategy::RoundUp)
+                .vectorize(xi)
+                .unroll(yi)
+                .unroll(c);
+            corrected.compute_at(curved, x)
+                .reorder(c, x, y)
+                .vectorize(x)
+                .unroll(c);
+
+            demosaiced->intermed_compute_at.set({processed, yi});
+            demosaiced->intermed_store_at.set({processed, yo});
+            demosaiced->output_compute_at.set({curved, x});
+
+            if (get_target().features_any_of({Target::HVX_64, Target::HVX_128})) {
+                processed.hexagon();
+                denoised.align_storage(x, vec);
+                deinterleaved.align_storage(x, vec);
+                corrected.align_storage(x, vec);
+            }
+
+            // We can generate slightly better code if we know the splits divide the extent.
+            processed
+                .bound(c, 0, 3)
+                .bound(x, 0, ((out_width)/(2*vec))*(2*vec))
+                .bound(y, 0, (out_height/strip_size)*strip_size);
         }
-        strip_size = (strip_size / 2) * 2;
-
-        int vec = get_target().natural_vector_size(UInt(16));
-        if (get_target().has_feature(Target::HVX_64)) {
-            vec = 32;
-        } else if (get_target().has_feature(Target::HVX_128)) {
-            vec = 64;
-        }
-        processed.compute_root()
-            .reorder(c, x, y)
-            .split(y, yi, yii, 2, TailStrategy::RoundUp)
-            .split(yi, yo, yi, strip_size / 2)
-            .vectorize(x, 2*vec, TailStrategy::RoundUp)
-            .unroll(c)
-            .parallel(yo);
-
-        denoised.compute_at(processed, yi).store_at(processed, yo)
-            .prefetch(input, y, 2)
-            .fold_storage(y, 16)
-            .tile(x, y, x, y, xi, yi, 2*vec, 2)
-            .vectorize(xi)
-            .unroll(yi);
-
-        deinterleaved.compute_at(processed, yi).store_at(processed, yo)
-            .fold_storage(y, 8)
-            .reorder(c, x, y)
-            .vectorize(x, 2*vec, TailStrategy::RoundUp)
-            .unroll(c);
-
-        curved.compute_at(processed, yi).store_at(processed, yo)
-            .reorder(c, x, y)
-            .tile(x, y, x, y, xi, yi, 2*vec, 2, TailStrategy::RoundUp)
-            .vectorize(xi)
-            .unroll(yi)
-            .unroll(c);
-        corrected.compute_at(curved, x)
-            .reorder(c, x, y)
-            .vectorize(x)
-            .unroll(c);
-
-        demosaiced->intermed_compute_at.set({processed, yi});
-        demosaiced->intermed_store_at.set({processed, yo});
-        demosaiced->output_compute_at.set({curved, x});
-
-        if (get_target().features_any_of({Target::HVX_64, Target::HVX_128})) {
-            processed.hexagon();
-            denoised.align_storage(x, vec);
-            deinterleaved.align_storage(x, vec);
-            corrected.align_storage(x, vec);
-        }
-
-        // We can generate slightly better code if we know the splits divide the extent.
-        processed
-            .bound(c, 0, 3)
-            .bound(x, 0, ((out_width)/(2*vec))*(2*vec))
-            .bound(y, 0, (out_height/strip_size)*strip_size);
 
         /* Optional tags to specify layout for HalideTraceViz */
         {
