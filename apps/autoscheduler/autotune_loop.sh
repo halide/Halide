@@ -8,8 +8,8 @@ fi
 
 set -eu
 
-trap "exit" INT TERM
-trap "kill 0" EXIT
+#trap "exit" INT TERM
+#trap "kill 0" EXIT
 
 GENERATOR=${1}
 PIPELINE=${2}
@@ -96,7 +96,7 @@ make_sample() {
         beam=32
     else
         # The other samples are random probes biased by the cost model
-        dropout=90
+        dropout=1  # 1% chance of operating entirely greedily
         beam=1
     fi
     HL_PERMIT_FAILED_UNROLL=1 \
@@ -151,7 +151,7 @@ benchmark_sample() {
 }
 
 # Don't clobber existing samples
-FIRST=$(ls -d ${SAMPLES}/batch_* 2>/dev/null | sed -e "s|.*/batch_||" | sort -n | tail -n1)
+FIRST=$(ls -d ${SAMPLES}/batch_* 2>/dev/null | sed -e "s|.*/batch_||;s|_.*||" | sort -n | tail -n1)
 
 if [ $(uname -s) = "Darwin" ]; then
     LOCAL_CORES=`sysctl -n hw.ncpu`
@@ -160,43 +160,52 @@ else
 fi
 echo Local number of cores detected as ${LOCAL_CORES}
 
-for ((BATCH_ID=$((FIRST+1));BATCH_ID<1000000;BATCH_ID++)); do
-    # Compile a batch of samples using the generator in parallel
-    DIR=${SAMPLES}/batch_${BATCH_ID}
+NUM_BATCHES=1
 
-    # Copy the weights being used into the batch folder so that we can repro failures
-    mkdir -p ${DIR}/weights_used/
-    cp ${WEIGHTS}/* ${DIR}/weights_used/
+for ((BATCH_ID=$((FIRST+1));BATCH_ID<$((FIRST+1+NUM_BATCHES));BATCH_ID++)); do
 
-    EXTRA_ARGS_IDX=$((BATCH_ID % ${#GENERATOR_ARGS_SETS_ARRAY[@]}))
-    EXTRA_GENERATOR_ARGS=${GENERATOR_ARGS_SETS_ARRAY[EXTRA_ARGS_IDX]/;/ }
-    if [ ! -z "${EXTRA_GENERATOR_ARGS}" ]; then
-        echo "Adding extra generator args (${EXTRA_GENERATOR_ARGS}) for batch_${BATCH_ID}"
-    fi
+    SECONDS=0
+    
+    for ((EXTRA_ARGS_IDX=0;EXTRA_ARGS_IDX<${#GENERATOR_ARGS_SETS_ARRAY[@]};EXTRA_ARGS_IDX++)); do
 
-    # Do parallel compilation in batches, so that machines with fewer than BATCH_SIZE cores
-    # don't get swamped and timeout unnecessarily
-    echo Compiling samples
-    for ((SAMPLE_ID=0;SAMPLE_ID<${BATCH_SIZE};SAMPLE_ID++)); do
-        while [[ 1 ]]; do
-              RUNNING=$(jobs -r | wc -l)
-              if [[ RUNNING -ge LOCAL_CORES ]]; then
-                  sleep 1
-              else
-                  break
-              fi
+        # Compile a batch of samples using the generator in parallel
+        DIR=${SAMPLES}/batch_${BATCH_ID}_${EXTRA_ARGS_IDX}
+
+        # Copy the weights being used into the batch folder so that we can repro failures
+        mkdir -p ${DIR}/weights_used/
+        cp ${WEIGHTS}/* ${DIR}/weights_used/
+
+        EXTRA_GENERATOR_ARGS=${GENERATOR_ARGS_SETS_ARRAY[EXTRA_ARGS_IDX]/;/ }
+        if [ ! -z "${EXTRA_GENERATOR_ARGS}" ]; then
+            echo "Adding extra generator args (${EXTRA_GENERATOR_ARGS}) for batch_${BATCH_ID}"
+        fi
+
+        echo ${EXTRA_GENERATOR_ARGS} > ${DIR}/extra_generator_args.txt
+    
+        # Do parallel compilation in batches, so that machines with fewer than BATCH_SIZE cores
+        # don't get swamped and timeout unnecessarily
+        echo Compiling samples
+        for ((SAMPLE_ID=0;SAMPLE_ID<${BATCH_SIZE};SAMPLE_ID++)); do
+            while [[ 1 ]]; do
+                RUNNING=$(jobs -r | wc -l)
+                if [[ RUNNING -ge LOCAL_CORES ]]; then
+                    sleep 1
+                else
+                    break
+                fi
+            done
+
+            S=$(printf "%d%02d" $BATCH_ID $SAMPLE_ID)
+            FNAME=$(printf "%s_batch_%02d_sample_%02d" ${PIPELINE} $BATCH_ID $SAMPLE_ID)
+            make_sample "${DIR}/${SAMPLE_ID}" $S $FNAME "$EXTRA_GENERATOR_ARGS" &
         done
+        wait
 
-        S=$(printf "%d%02d" $BATCH_ID $SAMPLE_ID)
-        FNAME=$(printf "%s_batch_%02d_sample_%02d" ${PIPELINE} $BATCH_ID $SAMPLE_ID)
-        make_sample "${DIR}/${SAMPLE_ID}" $S $FNAME "$EXTRA_GENERATOR_ARGS" &
-    done
-    wait
-
-    # benchmark them serially using rungen
-    for ((SAMPLE_ID=0;SAMPLE_ID<${BATCH_SIZE};SAMPLE_ID++)); do
-        S=$(printf "%d%02d" $BATCH_ID $SAMPLE_ID)
-        benchmark_sample "${DIR}/${SAMPLE_ID}" $S
+        # benchmark them serially using rungen
+        for ((SAMPLE_ID=0;SAMPLE_ID<${BATCH_SIZE};SAMPLE_ID++)); do
+            S=$(printf "%d%02d" $BATCH_ID $SAMPLE_ID)
+            benchmark_sample "${DIR}/${SAMPLE_ID}" $S
+        done
     done
 
     # retrain model weights on all samples seen so far
@@ -204,4 +213,5 @@ for ((BATCH_ID=$((FIRST+1));BATCH_ID<1000000;BATCH_ID++)); do
     find ${SAMPLES} | grep sample$ | \
         HL_NUM_THREADS=32 HL_WEIGHTS_DIR=${WEIGHTS} HL_BEST_SCHEDULE_FILE=${PWD}/samples/best.txt ${AUTOSCHED_BIN}/train_cost_model ${BATCH_SIZE} 0.0001
 
+    echo Batch ${BATCH_ID} took ${SECONDS} seconds to compile, benchmark, and retrain
 done
