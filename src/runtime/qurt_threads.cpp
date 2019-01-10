@@ -34,7 +34,23 @@ int halide_host_cpu_count() {
 
 #define STACK_SIZE 256*1024
 
+WEAK uint16_t halide_qurt_default_thread_priority = 100;
+
+WEAK void halide_set_default_thread_priority(int priority) {
+    if (priority > 0xFF) {
+        priority = 0xFF;        // Clamp to max priority
+    } else if (priority <= 0) {
+        return;                 // Ignore settings of zero and below
+    }
+    halide_qurt_default_thread_priority = priority;
+}
+
+WEAK int halide_get_default_thread_priority() {
+    return halide_qurt_default_thread_priority;
+}
+
 WEAK struct halide_thread *halide_spawn_thread(void (*f)(void *), void *closure) {
+    uint16_t priority = halide_get_default_thread_priority();;
     spawned_thread *t = (spawned_thread *)malloc(sizeof(spawned_thread));
     t->f = f;
     t->closure = closure;
@@ -44,7 +60,7 @@ WEAK struct halide_thread *halide_spawn_thread(void (*f)(void *), void *closure)
     qurt_thread_attr_init(&thread_attr);
     qurt_thread_attr_set_stack_addr(&thread_attr, t->stack);
     qurt_thread_attr_set_stack_size(&thread_attr, STACK_SIZE);
-    qurt_thread_attr_set_priority(&thread_attr, 255);
+    qurt_thread_attr_set_priority(&thread_attr, priority);
     qurt_thread_create(&t->handle.val, &thread_attr, &spawn_thread_helper, t);
     return (halide_thread *)t;
 }

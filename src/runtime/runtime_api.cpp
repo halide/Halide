@@ -105,6 +105,7 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_hexagon_run,
     (void *)&halide_hexagon_set_performance,
     (void *)&halide_hexagon_set_performance_mode,
+    (void *)&halide_hexagon_set_thread_priority,
     (void *)&halide_hexagon_wrap_device_handle,
     (void *)&halide_int64_to_string,
     (void *)&halide_join_thread,

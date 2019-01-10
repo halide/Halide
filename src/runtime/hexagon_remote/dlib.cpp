@@ -508,6 +508,17 @@ void *mmap_dlsym(void *from, const char *name) {
     return (void *)dlib->get_symbol_addr(sym);
 }
 
+void *mmap_dlsym_libs(const char *name) {
+    void *S = halide_get_symbol(name);
+    for (dlib_t *i = loaded_libs; i && !S; i = i->next) {
+        // TODO: We really should only look in
+        // libraries with an soname that is marked
+        // DT_NEEDED in this library.
+        S = mmap_dlsym(i, name);
+    }
+    return S;
+}
+
 int mmap_dlclose(void *dlib) {
     // Remove this library from the list of loaded libs.
     if (loaded_libs == dlib) {

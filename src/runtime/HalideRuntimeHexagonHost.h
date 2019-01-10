@@ -79,7 +79,7 @@ typedef enum halide_hexagon_power_mode_t {
  * @param mipsPerThread - mips requested per thread, to establish a minimal clock frequency per HW thread
  * @param mipsTotal - Total mips requested, to establish total number of MIPS required across all HW threads
  * @param set_bus_bw - Set to TRUE to request bus_bw
- * @param bwMeagabytesPerSec - Max bus BW requested (megabytes per second)
+ * @param bwMegabytesPerSec - Max bus BW requested (megabytes per second)
  * @param busbwUsagePercentage - Percentage of time during which bwBytesPerSec BW is required from the bus (0..100)
  * @param set_latency - Set to TRUE to set latency
  * @param latency - maximum hardware wakeup latency in microseconds.  The
@@ -111,6 +111,16 @@ typedef halide_hexagon_power_t halide_hvx_power_perf_t;
 // @{
 extern int halide_hexagon_set_performance_mode(void *user_context, halide_hexagon_power_mode_t mode);
 extern int halide_hexagon_set_performance(void *user_context, halide_hexagon_power_t *perf);
+// @}
+
+/** Set the priority for Hexagon threads.
+ * - Valid priority values range from 1 to 255
+ * - Smaller number for higher priority
+ * - The highest priority for a user thread is 1, 0 reserved for OS usage
+ * - If not set, Halide thread priority will default to 100
+ * - This should be called before running a pipeline. */
+// @{
+extern int halide_hexagon_set_thread_priority(void *user_context, int priority);
 // @}
 
 /** These are forward declared here to allow clients to override the
