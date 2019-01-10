@@ -1,4 +1,5 @@
 #include "Halide.h"
+#include "../autoscheduler/SimpleAutoSchedule.h"
 
 namespace {
 
@@ -77,9 +78,29 @@ public:
         if (!auto_schedule) {
             Var xi("xi"), yi("yi");
             if (get_target().has_gpu_feature()) {
-                output.gpu_tile(x, y, xi, yi, 14, 14);
-                Ix.compute_at(output, x).gpu_threads(x, y);
-                Iy.compute_at(output, x).gpu_threads(x, y);
+                std::string use_simple_autoscheduler =
+                    Halide::Internal::get_env_variable("HL_USE_SIMPLE_AUTOSCHEDULER");
+                if (use_simple_autoscheduler == "1") {
+                    Halide::SimpleAutoscheduleOptions options;
+                    options.gpu = get_target().has_gpu_feature();
+                    options.gpu_tile_channel = 1;
+                    Func output_func = output;
+                    Halide::simple_autoschedule(output_func,
+                            {
+                            {"input.min.0", 0},
+                            {"input.extent.0", 1530},
+                            {"input.min.1", 0},
+                            {"input.extent.1", 2560},
+                            {"input.min.2", 0},
+                            {"input.extent.2", 3}},
+                            {{0, 1530 - 6},
+                             {0, 2560 - 6}},
+                            options);
+                } else {
+                    output.gpu_tile(x, y, xi, yi, 14, 14);
+                    Ix.compute_at(output, x).gpu_threads(x, y);
+                    Iy.compute_at(output, x).gpu_threads(x, y);
+                }
             } else {
                 const int kVectorWidth = natural_vector_size<float>();
                 output.split(y, y, yi, 32).parallel(y).vectorize(x, kVectorWidth);
