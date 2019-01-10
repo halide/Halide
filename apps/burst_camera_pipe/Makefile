@@ -18,7 +18,7 @@ $(BIN)/burst_camera_pipe.a: $(BIN)/burst_camera_pipe.generator
 
 $(BIN)/burst_camera_pipe_classic_auto_schedule.a: $(BIN)/burst_camera_pipe.generator
 	@mkdir -p $(@D)
-	$< -g burst_camera_pipe -f burst_camera_pipe_classic_auto_schedule -o $(BIN) target=$(HL_TARGET_LARGE) auto_schedule=true
+	$< -g burst_camera_pipe -f burst_camera_pipe_classic_auto_schedule -o $(BIN) target=$(HL_TARGET_LARGE) auto_schedule=true machine_params=$(HL_MACHINE_PARAMS)
 
 $(BIN)/burst_camera_pipe_auto_schedule.a: $(BIN)/burst_camera_pipe.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
