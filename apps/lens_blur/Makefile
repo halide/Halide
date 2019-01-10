@@ -19,7 +19,7 @@ $(BIN)/lens_blur_classic_auto_schedule.a: $(BIN)/lens_blur.generator
 
 $(BIN)/lens_blur_auto_schedule.a: $(BIN)/lens_blur.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@-mkdir -p $(BIN)
-	HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/weights HL_MACHINE_PARAMS=32,1,1 \
+	HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/weights \
 	$< -g lens_blur -o $(BIN) -f lens_blur_auto_schedule target=$(HL_TARGET)-large_buffers-no_runtime auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so -e static_library,h,assembly,stmt
 
 $(BIN)/process: process.cpp $(BIN)/lens_blur.a $(BIN)/lens_blur_classic_auto_schedule.a $(BIN)/lens_blur_auto_schedule.a

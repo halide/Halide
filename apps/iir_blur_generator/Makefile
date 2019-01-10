@@ -17,7 +17,7 @@ $(BIN)/iir_blur_classic_auto_schedule.a: $(BIN)/iir_blur.generator $(AUTOSCHED_B
 
 $(BIN)/iir_blur_auto_schedule.a: $(BIN)/iir_blur.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
-	HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/weights HL_MACHINE_PARAMS=32,1,1 \
+	HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/weights \
 	$< -g iir_blur -f iir_blur_auto_schedule -o $(BIN) target=$(HL_TARGET) auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so
 
 $(BIN)/process: process.cpp $(BIN)/iir_blur.a $(BIN)/iir_blur_auto_schedule.a $(BIN)/iir_blur_classic_auto_schedule.a
