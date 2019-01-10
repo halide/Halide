@@ -414,8 +414,8 @@ void CameraPipe::generate() {
     // Schedule
     if (auto_schedule) {
 
-        input.dim(0).set_bounds_estimate(0, 2592);
-        input.dim(1).set_bounds_estimate(0, 1968);
+        input.dim(0).set_bounds(0, 2592);
+        input.dim(1).set_bounds(0, 1968);
 
         matrix_3200.dim(0).set_bounds_estimate(0, 4);
         matrix_3200.dim(1).set_bounds_estimate(0, 3);
