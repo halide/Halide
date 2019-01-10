@@ -7,6 +7,7 @@ using namespace Halide;
 
 #include "halide_benchmark.h"
 #include "halide_image_io.h"
+#include "../autoscheduler/SimpleAutoSchedule.h"
 
 using namespace Halide;
 using namespace Halide::Tools;
@@ -19,7 +20,7 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    ImageParam input(Float(32), 3);
+    ImageParam input(Float(32), 3, "input");
 
     // Input must have four color channels - rgba
     input.dim(2).set_bounds(0, 4);
@@ -78,7 +79,13 @@ int main(int argc, char **argv) {
     int sched;
     Target target = get_target_from_environment();
     if (target.has_gpu_feature()) {
-        sched = 4;
+        std::string use_simple_autoscheduler =
+            Halide::Internal::get_env_variable("HL_USE_SIMPLE_AUTOSCHEDULER");
+        if (use_simple_autoscheduler == "1") {
+            sched = 5;
+        } else {
+            sched = 4;
+        }
     } else {
         sched = 2;
     }
@@ -196,6 +203,27 @@ int main(int argc, char **argv) {
 
         // The cpu wrapper is our new output Func
         normalize = cpu_wrapper;
+
+        break;
+    }
+    case 5:
+    {
+        std::cout << "GPU simple auto-schedule." << std::endl;
+        Halide::SimpleAutoscheduleOptions options;
+        options.gpu = target.has_gpu_feature();
+        options.gpu_tile_channel = 1;
+        Func output_func = normalize;
+        Halide::simple_autoschedule(output_func,
+                {{"input.min.0", 0},
+                 {"input.extent.0", 1536},
+                 {"input.min.1", 0},
+                 {"input.extent.1", 2560},
+                 {"input.min.2", 0},
+                 {"input.extent.2", 4}},
+                {{0, 1536},
+                 {0, 2560},
+                 {0, 3}},
+                options);
 
         break;
     }
