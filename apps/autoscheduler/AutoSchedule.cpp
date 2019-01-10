@@ -2492,13 +2492,14 @@ struct State {
                             max_total = std::max(max_total, total);
                             const double tasks_per_core = ((double)total) / params.parallelism;
                             o.idle_core_wastage = std::max(o.idle_core_wastage,
-                                                           std::ceil(tasks_per_core) / tasks_per_core);
+                                                           std::ceil(tasks_per_core) /
+                                                           tasks_per_core);
                         }
                     }
 
                     // Filter out the less useful options
                     bool ok =
-                        ((o.entire || min_total > params.parallelism) &&
+                        ((o.entire || min_total >= params.parallelism) &&
                          (max_total <= params.parallelism * 8));
 
                     if (!ok) continue;
