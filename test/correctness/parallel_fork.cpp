@@ -1,7 +1,7 @@
-#include <stdio.h>
 #include "Halide.h"
 #include "halide_benchmark.h"
 
+#include <stdio.h>
 #include <chrono>
 #include <thread>
 #include <atomic>
