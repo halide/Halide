@@ -3,6 +3,7 @@
 #include "mat_mul.h"
 #include "mat_mul_classic_auto_schedule.h"
 #include "mat_mul_auto_schedule.h"
+#include "mat_mul_simple_auto_schedule.h"
 
 #include "benchmark_util.h"
 #include "HalideBuffer.h"
@@ -27,11 +28,12 @@ int main(int argc, char **argv) {
         }
     }
 
-    three_way_bench(
-        [&]() { mat_mul(mat_A, mat_B, output); output.device_sync(); },
-        [&]() { mat_mul_classic_auto_schedule(mat_A, mat_B, output); output.device_sync(); },
-        [&]() { mat_mul_auto_schedule(mat_A, mat_B, output); output.device_sync(); }
-    );
+    multi_way_bench({
+        {"Manual", [&]() { mat_mul(mat_A, mat_B, output); output.device_sync(); }},
+        {"Classic auto-schedule", [&]() { mat_mul_classic_auto_schedule(mat_A, mat_B, output); output.device_sync(); }},
+        {"Auto-schedule", [&]() { mat_mul_auto_schedule(mat_A, mat_B, output); output.device_sync(); }},
+        {"Simple auto-schedule", [&]() { mat_mul_simple_auto_schedule(mat_A, mat_B, output); output.device_sync(); }}
+        });
 
     return 0;
 }

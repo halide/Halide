@@ -5,7 +5,7 @@ HL_TARGET=host-cuda
 
 all: $(BIN)/test
 
-$(BIN)/mat_mul.generator: mat_mul_generator.cpp $(GENERATOR_DEPS)
+$(BIN)/mat_mul.generator: mat_mul_generator.cpp ../autoscheduler/SimpleAutoSchedule.h ../autoscheduler/SimpleAutoSchedule.cpp ../autoscheduler/DerivativeUtils.h ../autoscheduler/DerivativeUtils.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS) $(USE_EXPORT_DYNAMIC)
 
@@ -32,7 +32,12 @@ $(BIN)/mat_mul_auto_schedule.a: $(BIN)/mat_mul.generator $(AUTOSCHED_BIN)/libaut
 	HL_SHARED_MEMORY_LIMIT=24 \
 	$< -g mat_mul -f mat_mul_auto_schedule -o $(BIN) target=$(HL_TARGET) auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so 2> stderr.txt > stdout.txt
 
-$(BIN)/filter: filter.cpp $(BIN)/mat_mul.a $(BIN)/mat_mul_auto_schedule.a $(BIN)/mat_mul_classic_auto_schedule.a
+$(BIN)/mat_mul_simple_auto_schedule.a: $(BIN)/mat_mul.generator
+	@mkdir -p $(@D)
+	HL_USE_SIMPLE_AUTOSCHEDULER=1 \
+	$< -g mat_mul -o $(BIN) -f mat_mul_simple_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=false -e static_library,h
+
+$(BIN)/filter: filter.cpp $(BIN)/mat_mul.a $(BIN)/mat_mul_auto_schedule.a $(BIN)/mat_mul_classic_auto_schedule.a $(BIN)/mat_mul_simple_auto_schedule.a
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -I$(BIN) -Wall -O3 $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS)
 

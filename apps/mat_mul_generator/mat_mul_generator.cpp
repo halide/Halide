@@ -1,4 +1,5 @@
 #include "Halide.h"
+#include "../autoscheduler/SimpleAutoSchedule.h"
 
 namespace {
 
@@ -24,24 +25,45 @@ public:
 
         // Schedule
         if (!auto_schedule) {
-            Var xi("xi"), yi("yi"), yii("yii"), xii("xii"), xy("xy");
-            output.tile(x, y, xi, yi, 24, 32)
-                .fuse(x, y, xy)
-                .parallel(xy)
-                .split(yi, yi, yii, 4)
-                .vectorize(xi, 8)
-                .unroll(xi)
-                .unroll(yii);
+            std::string use_simple_autoscheduler =
+                Halide::Internal::get_env_variable("HL_USE_SIMPLE_AUTOSCHEDULER");
+            if (use_simple_autoscheduler == "1") {
+                Halide::SimpleAutoscheduleOptions options;
+                options.gpu = get_target().has_gpu_feature();
+                options.gpu_tile_channel = 1;
+                Func output_func = output;
+                Halide::simple_autoschedule(output_func,
+                                    {{"input_a.min.0", 0},
+                                     {"input_a.extent.0", matrix_size},
+                                     {"input_a.min.1", 0},
+                                     {"input_a.extent.1", matrix_size},
+                                     {"input_b.min.0", 0},
+                                     {"input_b.extent.0", matrix_size},
+                                     {"input_b.min.1", 0},
+                                     {"input_b.extent.1", matrix_size}},
+                                    {{0, matrix_size},
+                                     {0, matrix_size}},
+                                    options);
+            } else {
+                Var xi("xi"), yi("yi"), yii("yii"), xii("xii"), xy("xy");
+                output.tile(x, y, xi, yi, 24, 32)
+                    .fuse(x, y, xy)
+                    .parallel(xy)
+                    .split(yi, yi, yii, 4)
+                    .vectorize(xi, 8)
+                    .unroll(xi)
+                    .unroll(yii);
 
-            matrix_mul.compute_at(output, yi)
-                .vectorize(x, 8).unroll(y);
+                matrix_mul.compute_at(output, yi)
+                    .vectorize(x, 8).unroll(y);
 
-            matrix_mul.update(0)
-                .reorder(x, y, k)
-                .vectorize(x, 8)
-                .unroll(x)
-                .unroll(y)
-                .unroll(k, 2);
+                matrix_mul.update(0)
+                    .reorder(x, y, k)
+                    .vectorize(x, 8)
+                    .unroll(x)
+                    .unroll(y)
+                    .unroll(k, 2);
+            }
         }
 
         // Always specify bounds for outputs, whether autoscheduled or not
