@@ -133,21 +133,23 @@ Func demosaic(Func input, Expr width, Expr height, bool skip_schedule) {
 
     // resulting demosaicked function
 
-    output(x, y, c) = input(x, y);                                              // initialize each channel to input mosaicked image
+    Expr R_row = y % 2 == 0;
+    Expr B_row = !R_row;
+    Expr R_col = x % 2 == 0;
+    Expr B_col = !R_col;
+    Expr at_R = c == 0;
+    Expr at_G = c == 1;
+    Expr at_B = c == 2;
 
-    // red
-    output(r1.x * 2 + 1, r1.y * 2,     0) = d1(r1.x * 2 + 1, r1.y * 2);         // R at green in R row, B column
-    output(r1.x * 2,     r1.y * 2 + 1, 0) = d2(r1.x * 2,     r1.y * 2 + 1);     // R at green in B row, R column
-    output(r1.x * 2 + 1, r1.y * 2 + 1, 0) = d3(r1.x * 2 + 1, r1.y * 2 + 1);     // R at blue in B row, B column
-
-    // green
-    output(r1.x * 2,     r1.y * 2,     1) = d0(r1.x * 2,     r1.y * 2);         // G at R locations
-    output(r1.x * 2 + 1, r1.y * 2 + 1, 1) = d0(r1.x * 2 + 1, r1.y * 2 + 1);     // G at B locations
-
-    // blue
-    output(r1.x * 2,     r1.y * 2 + 1, 2) = d1(r1.x * 2,     r1.y * 2 + 1);     // B at green in B row, R column
-    output(r1.x * 2 + 1, r1.y * 2,     2) = d2(r1.x * 2 + 1, r1.y * 2);         // B at green in R row, B column
-    output(r1.x * 2,     r1.y * 2,     2) = d3(r1.x * 2,     r1.y * 2);         // B at red in R row, R column
+    output(x, y, c) = select(at_R && R_row && B_col, d1(x, y),
+                             at_R && B_row && R_col, d2(x, y),
+                             at_R && B_row && B_col, d3(x, y),
+                             at_G && R_row && R_col, d0(x, y),
+                             at_G && B_row && B_col, d0(x, y),
+                             at_B && B_row && R_col, d1(x, y),
+                             at_B && R_row && B_col, d2(x, y),
+                             at_B && R_row && R_col, d3(x, y),
+                             input(x, y));
 
     ///////////////////////////////////////////////////////////////////////////
     // schedule
@@ -163,16 +165,10 @@ Func demosaic(Func input, Expr width, Expr height, bool skip_schedule) {
         d2.compute_root().parallel(y).vectorize(x, 16);
         d3.compute_root().parallel(y).vectorize(x, 16);
 
-        output.compute_root().parallel(y).vectorize(x, 16);
-
-        output.update(0).parallel(r1.y);
-        output.update(1).parallel(r1.y);
-        output.update(2).parallel(r1.y);
-        output.update(3).parallel(r1.y);
-        output.update(4).parallel(r1.y);
-        output.update(5).parallel(r1.y);
-        output.update(6).parallel(r1.y);
-        output.update(7).parallel(r1.y);
+        output.compute_root().parallel(y)
+            .align_bounds(x, 2).unroll(x, 2)
+            .align_bounds(y, 2).unroll(y, 2)
+            .vectorize(x, 16);
     }
     return output;
 }
