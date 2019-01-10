@@ -1,7 +1,11 @@
 # set -x
 
 # Let the ftp server know we've started
-IP=$( ifconfig eth0 | grep 192.168 | cut -d: -f2 | cut -d' ' -f1 )
+#IP=$( ifconfig eth0 | grep 192.168 | cut -d: -f2 | cut -d' ' -f1 )
+HOSTNAME=$( hostname )
+CPUS=$( grep processor /proc/cpuinfo | tail -n1 | cut -d: -f2 | bc )
+CPUS=$((CPUS+1))
+IP=${CPUS}-core_${hostname}
 touch ___started.${IP}.txt
 bash ./ftp_up.sh ___started.${IP}.txt
 rm ___started.${IP}.txt
