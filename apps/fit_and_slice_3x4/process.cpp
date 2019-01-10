@@ -35,8 +35,8 @@ int main(int argc, char **argv) {
     });
 
     three_way_bench(
-        0,//[&]() { fit_and_slice_3x4(r_sigma, s_sigma, low_res_in, low_res_out, high_res_in, high_res_out); },
-        0,//[&]() { fit_and_slice_3x4_classic_auto_schedule(r_sigma, s_sigma, low_res_in, low_res_out, high_res_in, high_res_out); },
+        [&]() { fit_and_slice_3x4(r_sigma, s_sigma, low_res_in, low_res_out, high_res_in, high_res_out); },
+        [&]() { fit_and_slice_3x4_classic_auto_schedule(r_sigma, s_sigma, low_res_in, low_res_out, high_res_in, high_res_out); },
         [&]() { fit_and_slice_3x4_auto_schedule(r_sigma, s_sigma, low_res_in, low_res_out, high_res_in, high_res_out); }
     );
 
