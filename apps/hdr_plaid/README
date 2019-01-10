@@ -1,17 +1,17 @@
-This is a simple adaptation of https://github.com/timothybrooks/hdr-plus,
-by Timothy Brooks and Suhaas Reddy, with minimal changes added to wrap the
-code in a Generator and allow for disabling manual scheduling
-(for auto-schedule purposes), and some constant matrices were converted from
-Funcs to inlined constant Buffers; code dealing with reading Raw files (via dcraw)
-has been omitted.
+This is an adaptation of https://github.com/timothybrooks/hdr-plus, by
+Timothy Brooks and Suhaas Reddy, with minimal changes added to wrap
+the code in a Generator and allow for disabling manual scheduling (for
+auto-schedule purposes). Code dealing with reading Raw files (via
+dcraw) has been omitted.
 
-It has been renamed "hdr_plaid" here to avoid any possible confusion with
-Google's HDR+ code (with which it shares no code).
+While it is a simplifed implementation of HDR+, the align-and-merge
+algorithm is substantially different, and it shares no code with
+Google's HDR+.
 
 Additional modifications were made to make the code more idiomatic
 Halide. Small constant Funcs (e.g. convolution kernels and color
-matrices) were rewritten to use embedded Buffers instead of Func with
-lots of trivial update definitions, and demosaic_output was rewritten
-to use a select tree instead of an large strided RDom, which forces 9
-compute_root passes over that one Func and makes it impossible to
-schedule well for humans or autoscheduling algorithms.
+matrices) were rewritten to use embedded Buffers instead of a Func
+with many trivial update definitions, and demosaic_output was
+rewritten to use a select tree instead of an large strided RDom, which
+forces 9 compute_root passes over that one Func and makes it
+impossible to schedule well for humans or autoscheduling algorithms.
