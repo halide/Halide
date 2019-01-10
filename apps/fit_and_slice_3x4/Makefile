@@ -17,7 +17,7 @@ $(BIN)/fit_and_slice_3x4_classic_auto_schedule.a: $(BIN)/fit_and_slice_3x4.gener
 
 $(BIN)/fit_and_slice_3x4_auto_schedule.a: $(BIN)/fit_and_slice_3x4.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
-	HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/weights HL_MACHINE_PARAMS=32,1,1 \
+	HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/weights \
 	$< -g fit_and_slice_3x4 -f fit_and_slice_3x4_auto_schedule -o $(BIN) target=$(HL_TARGET) auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so
 
 $(BIN)/process: process.cpp $(BIN)/fit_and_slice_3x4.a $(BIN)/fit_and_slice_3x4_auto_schedule.a $(BIN)/fit_and_slice_3x4_classic_auto_schedule.a
