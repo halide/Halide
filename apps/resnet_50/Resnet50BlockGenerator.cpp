@@ -250,10 +250,10 @@ public:
     // Estimates
     const std::vector<int> output_dim = block_dims[macro_block_id];
 
-    final_output.estimate(final_output.args()[0], 0, 1000);
-    block_output.estimate(block_output.args()[0], 0, output_dim[0]);
-    block_output.estimate(block_output.args()[1], 0, output_dim[1]);
-    block_output.estimate(block_output.args()[2], 0, output_dim[2]);
+    final_output.bound(final_output.args()[0], 0, 1000);
+    block_output.bound(block_output.args()[0], 0, output_dim[0]);
+    block_output.bound(block_output.args()[1], 0, output_dim[1]);
+    block_output.bound(block_output.args()[2], 0, output_dim[2]);
     if (classic_auto_schedule_estimates) {
       // classic auto-scheduler requires explicit estimates for everything,
       // whether or not they can be inferred
@@ -264,30 +264,15 @@ public:
     if (!auto_schedule) {
       // Really dumb compute-root-everything schedule
       if (block_id == 0) {
-        conv1.f.compute_root();
-        norm1.f.compute_root();
-        scaled1.f.compute_root();
         relu1.f.compute_root();
         pool1.f.compute_root();
       }
       for (int i = 0; i < 4; i++) {
-        br1_conv[i].f.compute_root();
-        br1_norm[i].f.compute_root();
         br1_scale[i].f.compute_root();
       }
       for (int i = 0; i < 16; i++) {
-        br2a_conv[i].f.compute_root();
-        br2a_norm[i].f.compute_root();
-        br2a_scaled[i].f.compute_root();
         br2a_relu[i].f.compute_root();
-        br2b_conv[i].f.compute_root();
-        br2b_norm[i].f.compute_root();
-        br2b_scaled[i].f.compute_root();
         br2b_relu[i].f.compute_root();
-        br2c_conv[i].f.compute_root();
-        br2c_norm[i].f.compute_root();
-        br2c_scaled[i].f.compute_root();
-        resunit_sum[i].f.compute_root();
         resunit_relu[i].f.compute_root();
       }
       pool5.f.compute_root();
@@ -298,8 +283,9 @@ public:
   }
 
 private:
-  // derived by running manual pipeline in debug mode and
-  // just copying the values actually passed in for block 0.
+    // Estimates for the master autoscheduler. Not required for our
+    // new algorithm. Derived by running manual pipeline in debug mode
+    // and just copying the values actually passed in for block 0.
   void do_class_auto_schedule_estimate() {
       input.dim(0).set_bounds_estimate(0, 3)
         .dim(1).set_bounds_estimate(0, 224)
