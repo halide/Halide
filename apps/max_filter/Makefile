@@ -11,9 +11,9 @@ $(BIN)/max_filter.a: $(BIN)/max_filter.generator
 	@mkdir -p $(@D)
 	$< -g max_filter -f max_filter -o $(BIN) target=$(HL_TARGET) auto_schedule=false
 
-$(BIN)/max_filter_classic_auto_schedule.a: $(BIN)/max_filter.generator 
+$(BIN)/max_filter_classic_auto_schedule.a: $(BIN)/max_filter.generator
 	@mkdir -p $(@D)
-	$< -g max_filter -f max_filter_classic_auto_schedule -o $(BIN) target=$(HL_TARGET) auto_schedule=true
+	$< -g max_filter -f max_filter_classic_auto_schedule -o $(BIN) target=$(HL_TARGET) auto_schedule=true machine_params=$(HL_MACHINE_PARAMS)
 
 $(BIN)/max_filter_auto_schedule.a: $(BIN)/max_filter.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)

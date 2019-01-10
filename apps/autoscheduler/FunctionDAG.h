@@ -551,6 +551,8 @@ struct FunctionDAG {
 
         bool is_pointwise; // Only uses pointwise calls
 
+        bool is_boundary_condition; // Pointwise calls + clamping on all indices
+
         std::unique_ptr<BoundContents::Layout> bounds_memory_layout;
 
         BoundContents *make_bound() const {
@@ -915,10 +917,13 @@ struct FunctionDAG {
                         calls[op->name]++;
                         IRVisitor::visit(op);
                         check_type(op->type);
-                        if (is_pointwise && (op->call_type == Call::Halide || op->call_type == Call::Image)) {
+                        if (op->call_type == Call::Halide || op->call_type == Call::Image) {
                             is_pointwise &= op->args.size() == func.args().size();
+                            // TODO: actually sniff the coordinates
+                            // accessed, instead of only catching the
+                            // built-in boundary condition primitive.
                             if (is_pointwise) {
-                                for (size_t i = 0; is_pointwise && i < op->args.size(); i++) {
+                                for (size_t i = 0; i < op->args.size(); i++) {
                                     const Variable *v = op->args[i].as<Variable>();
                                     is_pointwise &= (v != nullptr) && (v->name == func.args()[i]);
                                 }
@@ -1036,6 +1041,10 @@ struct FunctionDAG {
                 // Now create the edges that lead to this func
                 bool any_incoming_edges = false;
                 node.is_pointwise = !node.func.has_update_definition();
+
+                // TODO: peephole the boundary condition call pattern instead of assuming the user used the builtin
+                node.is_boundary_condition = node.is_pointwise && starts_with(node.func.name(), "repeat_edge");
+
                 auto boxes = boxes_required(exprs, stage_scope_with_symbolic_rvar_bounds, func_value_bounds);
                 for (auto &p : boxes) {
                     auto it = env.find(p.first);
@@ -1449,6 +1458,7 @@ struct FunctionDAG {
                 n.stages[i].features.dump();
             }
             debug(0) << "  pointwise: " << n.is_pointwise
+                     << " boundary condition: " << n.is_boundary_condition
                      << " wrapper: " << n.is_wrapper
                      << " input: " << n.is_input
                      << " output: " << n.is_output << "\n";

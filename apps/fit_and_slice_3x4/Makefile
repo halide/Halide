@@ -13,7 +13,7 @@ $(BIN)/fit_and_slice_3x4.a: $(BIN)/fit_and_slice_3x4.generator
 
 $(BIN)/fit_and_slice_3x4_classic_auto_schedule.a: $(BIN)/fit_and_slice_3x4.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
-	$< -g fit_and_slice_3x4 -f fit_and_slice_3x4_classic_auto_schedule -o $(BIN) target=$(HL_TARGET) auto_schedule=true
+	$< -g fit_and_slice_3x4 -f fit_and_slice_3x4_classic_auto_schedule -o $(BIN) target=$(HL_TARGET) auto_schedule=true machine_params=$(HL_MACHINE_PARAMS)
 
 $(BIN)/fit_and_slice_3x4_auto_schedule.a: $(BIN)/fit_and_slice_3x4.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)

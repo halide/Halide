@@ -2367,7 +2367,7 @@ struct State {
                     must_inline &= e->producer->is_pointwise;
                 }
                 for (const auto *e : node->outgoing_edges) {
-                    must_inline &= e->consumer->node->is_pointwise;
+                    must_inline &= (e->consumer->node->is_pointwise || e->consumer->node->is_boundary_condition);
                 }
                 if (must_inline) {
                     return;
@@ -2500,7 +2500,7 @@ struct State {
                     // Filter out the less useful options
                     bool ok =
                         ((o.entire || min_total >= params.parallelism) &&
-                         (max_total <= params.parallelism * 8));
+                         (max_total <= params.parallelism * 16));
 
                     if (!ok) continue;
 

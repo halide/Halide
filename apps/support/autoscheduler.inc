@@ -75,3 +75,9 @@ $(AUTOSCHED_BIN)/augment_sample: $(AUTOSCHED_SRC)/augment_sample.cpp
 	@mkdir -p $(@D)
 	$(CXX) $< -O3 -o $@
 
+
+# This is the value that machine_params defaults to if no custom value is specified;
+# see MachineParams::generic()
+HL_MACHINE_PARAMS ?= 32,25165824,160
+
+

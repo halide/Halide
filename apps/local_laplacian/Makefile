@@ -15,7 +15,7 @@ $(BIN)/local_laplacian.a: $(BIN)/local_laplacian.generator
 
 $(BIN)/local_laplacian_classic_auto_schedule.a: $(BIN)/local_laplacian.generator
 	@mkdir -p $(@D)
-	$< -g local_laplacian -o $(BIN) -f local_laplacian_classic_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true
+	$< -g local_laplacian -o $(BIN) -f local_laplacian_classic_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true machine_params=$(HL_MACHINE_PARAMS)
 
 $(BIN)/local_laplacian_auto_schedule.a: $(BIN)/local_laplacian.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
