@@ -982,7 +982,27 @@ struct FunctionDAG {
                     for (auto b : consumer.schedule().estimates()) {
                         int64_t i_min = *as_const_int(b.min);
                         int64_t i_extent = *as_const_int(b.extent);
-                        estimates[b.var] = Span(i_min, i_min + i_extent - 1, false);
+
+                        if (false) {
+                            // HACK: Some methods we compare to
+                            // compile for statically known
+                            // input/output sizes. We don't need to -
+                            // we take estimates but the compiled code
+                            // doesn't enforce them. If you want to
+                            // make a comparison fair and target a
+                            // fixed size, use this branch of the
+                            // if. In practice I don't see a runtime
+                            // difference, so I left it disabled.  In
+                            // theory, Sizes being constant makes it
+                            // possible to do things like unroll
+                            // across color channels, so it affects
+                            // the scheduling space.  TODO: Make this
+                            // a documented env var
+                            Func(node.func).bound(b.var, b.min, b.extent);
+                            estimates[b.var] = Span(i_min, i_min + i_extent - 1, true);
+                        } else {
+                            estimates[b.var] = Span(i_min, i_min + i_extent - 1, false);
+                        }
                     }
                     for (auto b : consumer.schedule().bounds()) {
                         const int64_t *i_min = as_const_int(b.min);
