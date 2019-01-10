@@ -13,7 +13,7 @@ $(BIN)/hist.a: $(BIN)/hist.generator
 
 $(BIN)/hist_classic_auto_schedule.a: $(BIN)/hist.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
-	$< -g hist -f hist_classic_auto_schedule -o $(BIN) target=$(HL_TARGET) auto_schedule=true
+	$< -g hist -f hist_classic_auto_schedule -o $(BIN) target=$(HL_TARGET) auto_schedule=true machine_params=$(HL_MACHINE_PARAMS)
 
 $(BIN)/hist_auto_schedule.a: $(BIN)/hist.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
