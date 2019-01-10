@@ -4,6 +4,7 @@
 #include "conv_layer.h"
 #include "conv_layer_classic_auto_schedule.h"
 #include "conv_layer_auto_schedule.h"
+#include "conv_layer_simple_auto_schedule.h"
 
 #include "benchmark_util.h"
 #include "HalideBuffer.h"
@@ -25,11 +26,12 @@ int main(int argc, char **argv) {
 
     Buffer<float> output(CO, W, H, N);
 
-    three_way_bench(
-        [&]() { conv_layer(input, filter, bias, output); output.device_sync(); },
-        [&]() { conv_layer_classic_auto_schedule(input, filter, bias, output); output.device_sync(); },
-        [&]() { conv_layer_auto_schedule(input, filter, bias, output); output.device_sync(); }
-    );
+    multi_way_bench({
+        {"Manual", [&]() { conv_layer(input, filter, bias, output); output.device_sync(); }},
+        {"Classic auto-schedule", [&]() { conv_layer_classic_auto_schedule(input, filter, bias, output); output.device_sync(); }},
+        {"Auto-schedule", [&]() { conv_layer_auto_schedule(input, filter, bias, output); output.device_sync(); }},
+        {"Simple auto-schedule", [&]() { conv_layer_simple_auto_schedule(input, filter, bias, output); output.device_sync(); }}
+    });
 
     return 0;
 }

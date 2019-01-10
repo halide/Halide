@@ -1,4 +1,5 @@
 #include "Halide.h"
+#include "../autoscheduler/SimpleAutoSchedule.h"
 
 namespace {
 
@@ -109,18 +110,53 @@ public:
 
             // Best schedule for (N = 5, CI = 120, CO = 24, W = 120, H
             // = 80).
-            Var co, ci, xo, xi, yo, yi, t;
-            f_ReLU.split(c, co, ci, 24)
-                .split(x, xo, xi, 4)
-                .reorder(ci, xi, xo, y, n, co)
-                .vectorize(ci, 8).unroll(ci).unroll(xi)
-                .parallel(y).parallel(n).parallel(co);
-            f_conv.compute_at(f_ReLU, xo)
-                .vectorize(c, 8).unroll(c).unroll(x).unroll(y)
-                .update().reorder(c, x, y, r.x, r.y, r.z, n)
-                .vectorize(c, 8).unroll(c).unroll(x).unroll(y).unroll(r.x, 2);
-            filter.in().compute_at(f_conv, r.x).vectorize(_0, 8).unroll(_0).unroll(_3);
-            input.in().compute_at(f_conv, x).unroll(_0);
+            
+            std::string use_simple_autoscheduler =
+                Halide::Internal::get_env_variable("HL_USE_SIMPLE_AUTOSCHEDULER");
+            if (use_simple_autoscheduler == "1") {
+                Halide::SimpleAutoscheduleOptions options;
+                options.gpu = get_target().has_gpu_feature();
+                options.gpu_tile_channel = 4;
+                Func output_func = f_ReLU;
+                Halide::simple_autoschedule(output_func,
+                                    {{"input.min.0", 0},
+                                     {"input.extent.0", CI},
+                                     {"input.min.1", 0},
+                                     {"input.extent.1", W-2},
+                                     {"input.min.2", 0},
+                                     {"input.extent.2", H-2},
+                                     {"input.min.3", 0},
+                                     {"input.extent.3", N},
+                                     {"filter.min.0", 0},
+                                     {"filter.extent.0", CO},
+                                     {"filter.min.1", 0},
+                                     {"filter.extent.1", 3},
+                                     {"filter.min.2", 0},
+                                     {"filter.extent.2", 3},
+                                     {"filter.min.3", 0},
+                                     {"filter.extent.3", CI},
+                                     {"bias.min.0", 0},
+                                     {"bias.extent.0", CO}},
+                                    {{0, W},
+                                     {0, H},
+                                     {0, CO},
+                                     {0, N}},
+                                    options);
+
+            } else {
+                Var co, ci, xo, xi, yo, yi, t;
+                f_ReLU.split(c, co, ci, 24)
+                    .split(x, xo, xi, 4)
+                    .reorder(ci, xi, xo, y, n, co)
+                    .vectorize(ci, 8).unroll(ci).unroll(xi)
+                    .parallel(y).parallel(n).parallel(co);
+                f_conv.compute_at(f_ReLU, xo)
+                    .vectorize(c, 8).unroll(c).unroll(x).unroll(y)
+                    .update().reorder(c, x, y, r.x, r.y, r.z, n)
+                    .vectorize(c, 8).unroll(c).unroll(x).unroll(y).unroll(r.x, 2);
+                filter.in().compute_at(f_conv, r.x).vectorize(_0, 8).unroll(_0).unroll(_3);
+                input.in().compute_at(f_conv, x).unroll(_0);
+            }
 
             // Sane schedule that should work for any size
             // f_ReLU.parallel(n).parallel(y).vectorize(c, 8);
