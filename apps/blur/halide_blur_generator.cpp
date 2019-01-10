@@ -1,4 +1,5 @@
 #include "Halide.h"
+#include "../autoscheduler/SimpleAutoSchedule.h"
 
 namespace {
 
@@ -51,39 +52,56 @@ public:
         // How to schedule it
         if (!auto_schedule) {
             if (get_target().has_gpu_feature()) {
-                // GPU schedule.
-                switch (schedule) {
-                case BlurGPUSchedule::Inline:
-                    // - Fully inlining.
-                    blur_y.gpu_tile(x, y, xi, yi, tile_x, tile_y);
-                    break;
-                case BlurGPUSchedule::Cache:
-                    // - Cache blur_x calculation.
-                    blur_y.gpu_tile(x, y, xi, yi, tile_x, tile_y);
-                    blur_x.compute_at(blur_y, x).gpu_threads(x, y);
-                    break;
-                case BlurGPUSchedule::Slide: {
-                    // - Instead caching blur_x calculation explicitly, the
-                    //   alternative is to allow each work-item in OpenCL or thread
-                    //   in CUDA to calculate more rows of blur_y so that temporary
-                    //   blur_x calculation is re-used implicitly. This achieves
-                    //   the similar schedule of sliding window.
-                    Var y_inner("y_inner");
-                    blur_y.split(y, y, y_inner, tile_y).reorder(y_inner, x).unroll(y_inner)
-                        .gpu_tile(x, y, xi, yi, tile_x, 1);
-                    break;
-                }
-                case BlurGPUSchedule::SlideVectorize: {
-                    // Vectorization factor.
-                    int factor = sizeof(int)/sizeof(short);
-                    Var y_inner("y_inner");
-                    blur_y.vectorize(x, factor)
-                        .split(y, y, y_inner, tile_y).reorder(y_inner, x).unroll(y_inner)
-                        .gpu_tile(x, y, xi, yi, tile_x, 1);
-                    break;
-                }
-                default:
-                    break;
+                std::string use_simple_autoscheduler =
+                    Halide::Internal::get_env_variable("HL_USE_SIMPLE_AUTOSCHEDULER");
+                if (use_simple_autoscheduler == "1") {
+                    Halide::SimpleAutoscheduleOptions options;
+                    options.gpu = get_target().has_gpu_feature();
+                    options.gpu_tile_channel = 1;
+                    Func output_func = blur_y;
+                    Halide::simple_autoschedule(output_func,
+                            {{"input.min.0", 0},
+                             {"input.extent.0", 6408},
+                             {"input.min.1", 0},
+                             {"input.extent.1", 4802}},
+                            {{0, 6408},
+                             {0, 4802}},
+                            options);
+                } else {
+                    // GPU schedule.
+                    switch (schedule) {
+                    case BlurGPUSchedule::Inline:
+                        // - Fully inlining.
+                        blur_y.gpu_tile(x, y, xi, yi, tile_x, tile_y);
+                        break;
+                    case BlurGPUSchedule::Cache:
+                        // - Cache blur_x calculation.
+                        blur_y.gpu_tile(x, y, xi, yi, tile_x, tile_y);
+                        blur_x.compute_at(blur_y, x).gpu_threads(x, y);
+                        break;
+                    case BlurGPUSchedule::Slide: {
+                        // - Instead caching blur_x calculation explicitly, the
+                        //   alternative is to allow each work-item in OpenCL or thread
+                        //   in CUDA to calculate more rows of blur_y so that temporary
+                        //   blur_x calculation is re-used implicitly. This achieves
+                        //   the similar schedule of sliding window.
+                        Var y_inner("y_inner");
+                        blur_y.split(y, y, y_inner, tile_y).reorder(y_inner, x).unroll(y_inner)
+                            .gpu_tile(x, y, xi, yi, tile_x, 1);
+                        break;
+                    }
+                    case BlurGPUSchedule::SlideVectorize: {
+                        // Vectorization factor.
+                        int factor = sizeof(int)/sizeof(short);
+                        Var y_inner("y_inner");
+                        blur_y.vectorize(x, factor)
+                            .split(y, y, y_inner, tile_y).reorder(y_inner, x).unroll(y_inner)
+                            .gpu_tile(x, y, xi, yi, tile_x, 1);
+                        break;
+                    }
+                    default:
+                        break;
+                    }
                 }
             } else if (get_target().features_any_of({Target::HVX_64, Target::HVX_128})) {
                 // Hexagon schedule.

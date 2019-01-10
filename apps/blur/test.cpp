@@ -13,6 +13,7 @@
 #include "halide_blur.h"
 #include "blur_classic_auto_schedule.h"
 #include "blur_auto_schedule.h"
+#include "blur_simple_auto_schedule.h"
 
 #include "benchmark_util.h"
 
@@ -186,10 +187,11 @@ int main(int argc, char **argv) {
     // Copy-out result if it's device buffer and dirty.
     //output.copy_to_host();
 
-    three_way_bench(
-        [&]() { halide_blur(input, output); output.device_sync(); },
-        [&]() { blur_classic_auto_schedule(input, output); output.device_sync(); },
-        [&]() { blur_auto_schedule(input, output); output.device_sync(); }
+    multi_way_bench({
+       {"Manual", [&]() { halide_blur(input, output); output.device_sync(); }},
+       {"Classic auto-scheduled", [&]() { blur_classic_auto_schedule(input, output); output.device_sync(); }},
+       {"Auto-scheduled", [&]() { blur_auto_schedule(input, output); output.device_sync(); }},
+       {"Simple auto-scheduled", [&]() {blur_simple_auto_schedule(input, output); output.device_sync(); }}}
     );
 
     return 0;

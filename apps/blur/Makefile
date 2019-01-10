@@ -5,7 +5,7 @@ HL_TARGET=host-cuda
 
 all: $(BIN)/test
 
-$(BIN)/halide_blur.generator: halide_blur_generator.cpp $(GENERATOR_DEPS)
+$(BIN)/halide_blur.generator: halide_blur_generator.cpp ../autoscheduler/SimpleAutoSchedule.h ../autoscheduler/SimpleAutoSchedule.cpp ../autoscheduler/DerivativeUtils.h ../autoscheduler/DerivativeUtils.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS) $(USE_EXPORT_DYNAMIC)
 
@@ -41,8 +41,13 @@ $(BIN)/blur_auto_schedule.a: $(BIN)/halide_blur.generator $(AUTOSCHED_BIN)/libau
 	HL_SHARED_MEMORY_LIMIT=24 \
 	$< -g halide_blur -f blur_auto_schedule -o $(BIN) target=$(HL_TARGET) auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so 2> stderr.txt > stdout.txt
 
+$(BIN)/blur_simple_auto_schedule.a: $(BIN)/halide_blur.generator
+	@mkdir -p $(@D)
+	HL_USE_SIMPLE_AUTOSCHEDULER=1 \
+	$< -g halide_blur -o $(BIN) -f blur_simple_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=false -e static_library,h
+
 # -O2 is faster than -O3 for this app (O3 unrolls too much)
-$(BIN)/test: $(BIN)/libhalide_blur.a test.cpp $(BIN)/blur_auto_schedule.a $(BIN)/blur_classic_auto_schedule.a
+$(BIN)/test: $(BIN)/libhalide_blur.a test.cpp $(BIN)/blur_auto_schedule.a $(BIN)/blur_classic_auto_schedule.a $(BIN)/blur_simple_auto_schedule.a
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(OPENMP_FLAGS) -Wall -O2 -I$(BIN) $^ -L./bin -lhalide_blur -o $(BIN)/test $(LDFLAGS) $(CUDA_LDFLAGS)
 
