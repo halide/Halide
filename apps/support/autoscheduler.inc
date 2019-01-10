@@ -35,7 +35,7 @@ $(AUTOSCHED_BIN)/cost_model.generator: $(AUTOSCHED_SRC)/cost_model_generator.cpp
 							$(AUTOSCHED_SRC)/NetworkSize.h \
 							$(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g $(filter-out %.h,$^) -o $@ $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) -g $(filter-out %.h,$^) -o $@ $(HALIDE_SYSTEM_LIBS) $(USE_EXPORT_DYNAMIC)
 
 $(AUTOSCHED_BIN)/auto_schedule_runtime.a: $(AUTOSCHED_BIN)/cost_model.generator
 	@mkdir -p $(@D)
@@ -43,7 +43,7 @@ $(AUTOSCHED_BIN)/auto_schedule_runtime.a: $(AUTOSCHED_BIN)/cost_model.generator
 
 $(AUTOSCHED_BIN)/cost_model/%.a: $(AUTOSCHED_BIN)/cost_model.generator
 	@mkdir -p $(@D)
-	HL_PERMIT_FAILED_UNROLL=1 $^ -g $* -o $(AUTOSCHED_BIN)/cost_model -f $* target=$(HL_TARGET)-no_runtime auto_schedule=false
+	HL_PERMIT_FAILED_UNROLL=1 $^ -g $* -o $(AUTOSCHED_BIN)/cost_model -f $* target=$(HL_TARGET)-no_runtime auto_schedule=false -e stmt,static_library,h,assembly
 
 # It's important to use dynamic lookups for undefined symbols here: all of libHalide
 # is expected to be present (in the loading binary), so we explicitly make the symbols
