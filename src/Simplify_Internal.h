@@ -177,6 +177,10 @@ public:
 
         ScopedFact(Simplify *s) : simplify(s) {}
         ~ScopedFact();
+
+        // allow move but not copy
+        ScopedFact(const ScopedFact& that) = delete;
+        ScopedFact(ScopedFact&& that) = default;
     };
 
     // Tell the simplifier to learn from and exploit a boolean

@@ -163,6 +163,7 @@ option(TARGET_D3D12COMPUTE "Include Direct3D 12 Compute target" ON)
 option(HALIDE_SHARED_LIBRARY "Build as a shared library" ON)
 option(HALIDE_ENABLE_RTTI "Enable RTTI" ${LLVM_ENABLE_RTTI})
 option(HALIDE_ENABLE_EXCEPTIONS "Enable exceptions" ${LLVM_ENABLE_EH})
+option(HALIDE_USE_CODEMODEL_LARGE "Use the Large LLVM codemodel" OFF)
 
 if (HALIDE_SHARED_LIBRARY)
   set(HALIDE_LIBRARY_TYPE SHARED)
@@ -217,6 +218,9 @@ if (NOT MSVC)
   if (HALIDE_ENABLE_EXCEPTIONS)
     add_compile_options(-DWITH_EXCEPTIONS)
   endif()
+  if (HALIDE_USE_CODEMODEL_LARGE)
+    add_compile_options(-DHALIDE_USE_CODEMODEL_LARGE)
+  endif()
 else()
   add_compile_options(/W3)
   add_compile_options(/wd4018)  # disable "signed/unsigned mismatch"
@@ -228,6 +232,9 @@ else()
   endif()
   if (HALIDE_ENABLE_EXCEPTIONS)
     add_compile_options(/DWITH_EXCEPTIONS)
+  endif()
+  if (HALIDE_USE_CODEMODEL_LARGE)
+    add_compile_options(/DHALIDE_USE_CODEMODEL_LARGE)
   endif()
 endif()
 
@@ -432,7 +439,6 @@ foreach(F mex_halide.m
           GenGen.cpp
           RunGen.h
           RunGenMain.cpp
-          RunGenStubs.cpp
           halide_benchmark.h
           halide_image.h
           halide_image_io.h

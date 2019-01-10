@@ -1,8 +1,9 @@
-// Verifies that constraints on the input ImageParam propagates to the output
-// function.
+#include "Halide.h"
+
 #include <iostream>
 
-#include "Halide.h"
+// Verifies that constraints on the input ImageParam propagates to the output
+// function.
 
 using namespace Halide;
 using namespace Halide::Internal;

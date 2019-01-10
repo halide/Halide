@@ -499,6 +499,7 @@ private:
 
     /** Embed a constant expression as a global variable. */
     llvm::Constant *embed_constant_expr(Expr e, llvm::Type *t);
+    llvm::Constant *embed_constant_scalar_value_t(Expr e);
 
     llvm::Function *add_argv_wrapper(const std::string &name);
 

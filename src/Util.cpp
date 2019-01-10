@@ -23,6 +23,9 @@
 #define CAN_GET_RUNNING_PROGRAM_NAME
 #include <linux/limits.h>  // For PATH_MAX
 #endif
+#if defined(_MSC_VER) && !defined(NOMINMAX)
+#define NOMINMAX
+#endif
 #ifdef _WIN32
 #include <windows.h>
 #include <Objbase.h>  // needed for CoCreateGuid
@@ -112,6 +115,11 @@ int unique_count(size_t h) {
     return unique_name_counters[h]++;
 }
 }  // namespace
+
+void reset_unique_name_counters() {
+    for (int i = 0; i < num_unique_name_counters; ++i)
+        unique_name_counters[i].store(0);
+}
 
 // There are three possible families of names returned by the methods below:
 // 1) char pattern: (char that isn't '$') + number (e.g. v234)

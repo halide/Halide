@@ -65,7 +65,7 @@ Value *CodeGen_Posix::codegen_allocation_size(const std::string &name, Type type
     // For constant-sized allocations this check should simplify away.
     size_check = common_subexpression_elimination(simplify(size_check));
     if (!is_one(size_check)) {
-        create_assertion(codegen(size_check),
+        create_assertion(codegen(size_check || !condition),
                          Call::make(Int(32), "halide_error_buffer_allocation_too_large",
                                     {name, total_size, max_size}, Call::Extern));
     }
@@ -203,8 +203,14 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
                      << " for " << name << "\n";
             slot = it->pseudostack_slot;
             allocation.name = it->name;
-            // We've already registered a destructor for this slot
             allocation.destructor = it->destructor;
+            // We've already created a destructor stack entry for this
+            // pseudostack allocation, but we may not have actually
+            // registered the destructor if we're reusing an
+            // allocation that occurs conditionally. TODO: Why not
+            // just register the destructor at entry?
+
+            builder->CreateStore(builder->CreatePointerCast(slot, i8_t->getPointerTo()), allocation.destructor);
             free_stack_allocs.erase(it);
         } else {
             // Stack allocation with a dynamic size

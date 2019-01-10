@@ -1,12 +1,28 @@
 #include "RunGen.h"
 
-extern "C" int halide_rungen_redirect_argv(void **args);
-extern "C" const struct halide_filter_metadata_t *halide_rungen_redirect_metadata();
-
 using namespace Halide::RunGen;
 using Halide::Tools::BenchmarkConfig;
 
 namespace {
+
+struct RegisteredFilter {
+    struct RegisteredFilter *next;
+    int (*filter_argv_call)(void **);
+    const struct halide_filter_metadata_t *filter_metadata;
+};
+
+RegisteredFilter *registered_filters = nullptr;
+
+extern "C" void halide_register_argv_and_metadata(
+    int (*filter_argv_call)(void **),
+    const struct halide_filter_metadata_t *filter_metadata) {
+
+    auto *rf = new RegisteredFilter();
+    rf->next = registered_filters;
+    rf->filter_argv_call = filter_argv_call;
+    rf->filter_metadata = filter_metadata;
+    registered_filters = rf;
+}
 
 std::string replace_all(const std::string &str,
                         const std::string &find,
@@ -282,7 +298,63 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    RunGen r(halide_rungen_redirect_argv, halide_rungen_redirect_metadata);
+    // Look for --name
+    std::string filter_name;
+    for (int i = 1; i < argc; ++i) {
+        if (argv[i][0] == '-') {
+            const char *p = argv[i] + 1; // skip -
+            if (p[0] == '-') {
+                p++; // allow -- as well, because why not
+            }
+            std::vector<std::string> v = split_string(p, "=");
+            std::string flag_name = v[0];
+            std::string flag_value = v.size() > 1 ? v[1] : "";
+            if (v.size() > 2) {
+                fail() << "Invalid argument: " << argv[i];
+            }
+            if (flag_name != "name") {
+                continue;
+            }
+            if (!filter_name.empty()) {
+                fail() << "--name cannot be specified twice.";
+            }
+            filter_name = flag_value;
+            if (filter_name.empty()) {
+                fail() << "--name cannot be empty.";
+            }
+        }
+    }
+
+    auto *rf = registered_filters;
+    if (filter_name.empty()) {
+        // Just choose the first one.
+        if (rf->next != nullptr) {
+            std::ostringstream o;
+            o << "Must specify --name if multiple filters are registered; registered filters are:\n";
+            for (auto *rf = registered_filters ; rf != nullptr; rf = rf->next) {
+                o << "  " << rf->filter_metadata->name << "\n";
+            }
+            o << "\n";
+            fail() << o.str();
+        }
+    } else {
+        for ( ; rf != nullptr; rf = rf->next) {
+            if (filter_name == rf->filter_metadata->name) {
+                break;
+            }
+        }
+        if (rf == nullptr) {
+            std::ostringstream o;
+            o << "Filter " << filter_name << " not found; registered filters are:\n";
+            for (auto *rf = registered_filters ; rf != nullptr; rf = rf->next) {
+                o << "  " << rf->filter_metadata->name << "\n";
+            }
+            o << "\n";
+            fail() << o.str();
+        }
+    }
+
+    RunGen r(rf->filter_argv_call, rf->filter_metadata);
 
     std::string user_specified_output_shape;
     std::set<std::string> seen_args;
@@ -306,7 +378,9 @@ int main(int argc, char **argv) {
             if (v.size() > 2) {
                 fail() << "Invalid argument: " << argv[i];
             }
-            if (flag_name == "verbose") {
+            if (flag_name == "name") {
+                continue;
+            } else if (flag_name == "verbose") {
                 if (flag_value.empty()) {
                     flag_value = "true";
                 }

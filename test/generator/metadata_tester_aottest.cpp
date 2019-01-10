@@ -638,7 +638,7 @@ void check_metadata(const halide_filter_metadata_t &md, bool expect_ucon_at_0) {
           nullptr,
           nullptr,
           nullptr,
-          nullptr,
+          make_scalar<int8_t>(42),
           nullptr,
         },
         {
