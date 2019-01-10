@@ -31,16 +31,17 @@
 #include <random>
 
 #include "Halide.h"
-#include "halide_benchmark.h"
 #include "CostModel.h"
 #include "Featurization.h"
 #include "FunctionDAG.h"
 #include "PerfectHashMap.h"
 #include "Errors.h"
 #include "NetworkSize.h"
+#include "AutoSchedule.h"
 
 namespace Halide {
 namespace Internal {
+namespace Autoscheduler {
 
 // How small should an innermost loop cluster be before you just
 // entirely unroll the thing. Sized for an architecture with 16 vector
@@ -78,8 +79,15 @@ uint32_t get_dropout_threshold() {
     }
 }
 
-bool random_dropout(std::mt19937 &rng) {
-    static uint32_t random_dropout_threshold = get_dropout_threshold();
+bool random_dropout(std::mt19937 &rng, size_t num_decisions) {
+    static double random_dropout_threshold = get_dropout_threshold();
+
+    // The random dropout threshold is the chance that we operate
+    // entirely greedily and never discard anything.
+    random_dropout_threshold /= 100;
+    random_dropout_threshold = 1 - std::pow(1 - random_dropout_threshold, num_decisions);
+    random_dropout_threshold *= 100;
+
     uint32_t r = rng();
     bool drop_it = (r % 100) >= random_dropout_threshold;
     return drop_it;
@@ -1899,16 +1907,6 @@ struct LoopNest {
 
 };
 
-}
-
-template<>
-RefCount &ref_count<LoopNest>(const LoopNest *t) {return t->ref_count;}
-
-template<>
-void destroy<LoopNest>(const LoopNest *t) {delete t;}
-
-namespace {
-
 struct State {
     mutable RefCount ref_count;
     IntrusivePtr<const LoopNest> root;
@@ -2177,9 +2175,9 @@ struct State {
             for (auto it = features.begin(); it != features.end(); it++) {
                 auto &feat = it.value();
                 if (!it.key()->node->is_wrapper) { // It's OK to repeatedly stage data
-                    if (feat.points_computed_total + feat.inlined_calls > 10 * feat.points_computed_minimum) {
+                    if (feat.points_computed_total + feat.inlined_calls > 8 * feat.points_computed_minimum) {
                         cost = 1e50;
-                        return false;
+                        return true; //false;
                     } else if (false && feat.points_computed_total + feat.inlined_calls < feat.points_computed_minimum) {
                         // Some kind of shift-invariance failure
                         // probably. The representative loop iteration
@@ -2486,6 +2484,24 @@ struct State {
                 }
             }
 
+            // Some search-space pruning. If a node is pointwise, and
+            // so are all its inputs and so is its sole output, and
+            // inlining it is legal, just inline it. This saves time
+            // on long chains of pointwise things.
+            bool must_inline = node->is_pointwise && (num_children > 0) && (node->outgoing_edges.size() == 1);
+            if (must_inline) {
+                for (const auto *e : node->stages[0].incoming_edges) {
+                    must_inline &= e->producer->is_pointwise;
+                }
+                for (const auto *e : node->outgoing_edges) {
+                    must_inline &= (e->consumer->node->is_pointwise || e->consumer->node->is_boundary_condition);
+                }
+                if (must_inline) {
+                    return;
+                }
+            }
+
+
             // Construct a list of plausible dimensions to vectorize over
             // TODO: Pre-prune the list of sane dimensions to
             // vectorize a Func over to reduce branching factor.
@@ -2603,14 +2619,15 @@ struct State {
                             max_total = std::max(max_total, total);
                             const double tasks_per_core = ((double)total) / params.parallelism;
                             o.idle_core_wastage = std::max(o.idle_core_wastage,
-                                                           std::ceil(tasks_per_core) / tasks_per_core);
+                                                           std::ceil(tasks_per_core) /
+                                                           tasks_per_core);
                         }
                     }
 
                     // Filter out the less useful options
                     bool ok =
-                        ((o.entire || min_total > params.parallelism) &&
-                         (max_total <= params.parallelism * 64));
+                        ((o.entire || min_total >= params.parallelism) &&
+                         (max_total <= params.parallelism * 16));
 
                     if (!ok) continue;
 
@@ -2952,16 +2969,6 @@ struct State {
 
 int State::cost_calculations = 0;
 
-}
-
-template<>
-RefCount &ref_count<State>(const State *t) {return t->ref_count;}
-
-template<>
-void destroy<State>(const State *t) {delete t;}
-
-namespace {
-
 // A priority queue of states, sorted according to increasing
 // cost. Never shrinks, to avoid reallocations.
 // Can't use std::priority_queue because it doesn't support unique_ptr.
@@ -3172,7 +3179,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
                 }
             }
 
-            if (pending.size() > 1 && random_dropout(rng)) {
+            if (pending.size() > 1 && random_dropout(rng, dag.nodes.size() * 2)) {
                 // debug(0) << "Dropping state\n";
                 continue;
             }
@@ -3361,7 +3368,7 @@ std::string generate_schedules_new(const std::vector<Function> &outputs,
     std::mt19937 rng((uint32_t) seed);
 
     string beam_size_str = get_env_variable("HL_BEAM_SIZE");
-    size_t beam_size = 20;
+    size_t beam_size = 32;
     if (!beam_size_str.empty()) {
         beam_size = atoi(beam_size_str.c_str());
     }
@@ -3478,6 +3485,21 @@ struct AutoScheduler {
         return generate_schedules_new(outputs, target, params);
     }
 } auto_scheduler;
+
+}
+
+
+template<>
+RefCount &ref_count<Autoscheduler::LoopNest>(const Autoscheduler::LoopNest *t) {return t->ref_count;}
+
+template<>
+void destroy<Autoscheduler::LoopNest>(const Autoscheduler::LoopNest *t) {delete t;}
+
+template<>
+RefCount &ref_count<Autoscheduler::State>(const Autoscheduler::State *t) {return t->ref_count;}
+
+template<>
+void destroy<Autoscheduler::State>(const Autoscheduler::State *t) {delete t;}
 
 }
 }

@@ -64,7 +64,7 @@ public:
 
         // Estimates (for autoscheduler; ignored otherwise)
         {
-            const int kWidth = 1530;
+            const int kWidth = 1536;
             const int kHeight = 2560;
             input.dim(0).set_bounds_estimate(0, kWidth)
                  .dim(1).set_bounds_estimate(0, kHeight)
