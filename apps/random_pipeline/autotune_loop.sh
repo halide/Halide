@@ -29,7 +29,7 @@ mkdir -p weights
 # benchmarked serially. Set to number of cores.
 BATCH_SIZE=32
 
-HL_TARGET=x86-64-avx2-disable_llvm_loop_vectorize-disable_llvm_loop_unroll
+HL_TARGET=x86-64-avx2-disable_llvm_loop_vectorize-disable_llvm_loop_unroll-cuda
 
 # Build a single sample of the pipeline with a random schedule
 make_sample() {
@@ -38,10 +38,10 @@ make_sample() {
     rm -f "${D}/sample.sample"
     if [[ $D == */0 ]]; then
         # Sample 0 in each batch is best effort beam search, with no randomness
-        HL_MACHINE_PARAMS=32,1,1 HL_PERMIT_FAILED_UNROLL=1 HL_SEED=${2} HL_FEATURE_FILE=${D}/sample.sample HL_WEIGHTS_DIR=${PWD}/weights HL_RANDOM_DROPOUT=100 HL_BEAM_SIZE=20 ${GENERATOR} -g ${PIPELINE} -o ${D} -e static_library,h,stmt,assembly,registration target=${HL_TARGET} auto_schedule=true max_stages=12 seed=${3} -p ${PWD}/bin/libauto_schedule.so 2> ${D}/compile_log_stderr.txt > ${D}/compile_log_stdout.txt
+        HL_MACHINE_PARAMS=32,1,1 HL_PERMIT_FAILED_UNROLL=1 HL_SEED=${2} HL_FEATURE_FILE=${D}/sample.sample HL_WEIGHTS_DIR=${PWD}/weights HL_RANDOM_DROPOUT=100 HL_BEAM_SIZE=20 HL_SHARED_MEMORY_LIMIT=32 ${GENERATOR} -g ${PIPELINE} -o ${D} -e static_library,h,stmt,assembly,registration target=${HL_TARGET} auto_schedule=true max_stages=12 seed=${3} -p ${PWD}/bin/libauto_schedule.so 2> ${D}/compile_log_stderr.txt > ${D}/compile_log_stdout.txt
     else
         # The other samples are random probes biased by the cost model
-        HL_MACHINE_PARAMS=32,1,1 HL_PERMIT_FAILED_UNROLL=1 HL_SEED=${2} HL_FEATURE_FILE=${D}/sample.sample HL_WEIGHTS_DIR=${PWD}/weights HL_RANDOM_DROPOUT=80 HL_BEAM_SIZE=1 ${GENERATOR} -g ${PIPELINE} -o ${D} -e static_library,h,stmt,assembly,registration target=${HL_TARGET} auto_schedule=true max_stages=12 seed=${3} -p ${PWD}/bin/libauto_schedule.so 2> ${D}/compile_log_stderr.txt > ${D}/compile_log_stdout.txt
+        HL_MACHINE_PARAMS=32,1,1 HL_PERMIT_FAILED_UNROLL=1 HL_SEED=${2} HL_FEATURE_FILE=${D}/sample.sample HL_WEIGHTS_DIR=${PWD}/weights HL_RANDOM_DROPOUT=80 HL_BEAM_SIZE=1 HL_SHARED_MEMORY_LIMIT=32 ${GENERATOR} -g ${PIPELINE} -o ${D} -e static_library,h,stmt,assembly,registration target=${HL_TARGET} auto_schedule=true max_stages=12 seed=${3} -p ${PWD}/bin/libauto_schedule.so 2> ${D}/compile_log_stderr.txt > ${D}/compile_log_stdout.txt
     fi
 
     c++ -std=c++11 -I ../../include ../../tools/RunGenMain.cpp ${D}/*.registration.cpp ${D}/*.a -o ${D}/bench -ljpeg -ldl -lpthread -lz -lpng
@@ -91,6 +91,6 @@ for ((i=$((FIRST+1));i<1000000;i++)); do
 
     # retrain model weights on all samples seen so far
     echo Retraining model...
-    find ${SAMPLES} | grep sample$ | HL_NUM_THREADS=32 HL_WEIGHTS_DIR=weights ./bin/train_cost_model 1000
+    find ${SAMPLES} | grep sample$ | HL_NUM_THREADS=32 HL_WEIGHTS_DIR=weights ./bin/train_cost_model 32
 
 done
