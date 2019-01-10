@@ -100,14 +100,13 @@ make_sample() {
         beam=1
     fi
     HL_PERMIT_FAILED_UNROLL=1 \
-        HL_MACHINE_PARAMS=32,1,1 \
         HL_SEED=${SEED} \
         HL_SCHEDULE_FILE=${D}/schedule.txt \
         HL_FEATURE_FILE=${D}/sample.sample \
         HL_WEIGHTS_DIR=${WEIGHTS} \
         HL_RANDOM_DROPOUT=${dropout} \
         HL_BEAM_SIZE=${beam} \
-        HL_MACHINE_PARAMS=32,1,1 \
+        HL_MACHINE_PARAMS=16,1,1 \
         ${TIMEOUT_CMD} -k ${COMPILATION_TIMEOUT} ${COMPILATION_TIMEOUT} \
         ${GENERATOR} \
         -g ${PIPELINE} \
