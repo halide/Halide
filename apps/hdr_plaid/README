@@ -1,0 +1,8 @@
+This is a simple adaptation of https://github.com/timothybrooks/hdr-plus,
+by Timothy Brooks and Suhaas Reddy, with minimal changes added to wrap the
+code in a Generator and allow for disabling manual scheduling
+(for auto-schedule purposes); code dealing with reading Raw files (via dcraw)
+has been omitted.
+
+It has been renamed "hdr_plaid" here to avoid any possible confusion with
+Google's HDR+ code (with which it shares no code).
