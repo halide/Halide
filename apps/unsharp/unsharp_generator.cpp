@@ -1,4 +1,5 @@
 #include "Halide.h"
+#include "../autoscheduler/SimpleAutoSchedule.h"
 
 namespace {
 
@@ -78,9 +79,29 @@ public:
                     .unroll(x, 2)
                     .gpu_threads(x, y);
             } else*/ {
-                blur_y.compute_at(output_, y).vectorize(x, 8);
-                ratio.compute_at(output_, y).vectorize(x, 8);
-                output_.vectorize(x, 8).parallel(y).reorder(x, c, y);
+                std::string use_simple_autoscheduler =
+                    Halide::Internal::get_env_variable("HL_USE_SIMPLE_AUTOSCHEDULER");
+                if (use_simple_autoscheduler == "1") {
+                    Halide::SimpleAutoscheduleOptions options;
+                    options.gpu = get_target().has_gpu_feature();
+                    options.gpu_tile_channel = 3;
+                    Func output_func = output_;
+                    Halide::simple_autoschedule(output_func,
+                            {{"input.min.0", 0},
+                             {"input.extent.0", 1536},
+                             {"input.min.1", 0},
+                             {"input.extent.1", 2560},
+                             {"input.min.2", 0},
+                             {"input.extent.2", 3}},
+                            {{0, 1536},
+                             {0, 2560},
+                             {0, 3}},
+                            options);
+                } else {
+                    blur_y.compute_at(output_, y).vectorize(x, 8);
+                    ratio.compute_at(output_, y).vectorize(x, 8);
+                    output_.vectorize(x, 8).parallel(y).reorder(x, c, y);
+                }
             }
         }
     }
