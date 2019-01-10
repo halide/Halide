@@ -5,7 +5,7 @@ HL_TARGET=host-cuda
 
 all: $(BIN)/test
 
-$(BIN)/hist.generator: hist_generator.cpp $(GENERATOR_DEPS)
+$(BIN)/hist.generator: hist_generator.cpp ../autoscheduler/SimpleAutoSchedule.h ../autoscheduler/SimpleAutoSchedule.cpp ../autoscheduler/DerivativeUtils.h ../autoscheduler/DerivativeUtils.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS) $(USE_EXPORT_DYNAMIC)
 
@@ -32,7 +32,12 @@ $(BIN)/hist_auto_schedule.a: $(BIN)/hist.generator $(AUTOSCHED_BIN)/libauto_sche
 	HL_SHARED_MEMORY_LIMIT=24 \
 	$< -g hist -f hist_auto_schedule -o $(BIN) target=$(HL_TARGET) auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so 2> stderr.txt > stdout.txt
 
-$(BIN)/filter: filter.cpp $(BIN)/hist.a $(BIN)/hist_auto_schedule.a $(BIN)/hist_classic_auto_schedule.a
+$(BIN)/hist_simple_auto_schedule.a: $(BIN)/hist.generator
+	@mkdir -p $(@D)
+	HL_USE_SIMPLE_AUTOSCHEDULER=1 \
+	$< -g hist -o $(BIN) -f hist_simple_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=false -e static_library,h
+
+$(BIN)/filter: filter.cpp $(BIN)/hist.a $(BIN)/hist_auto_schedule.a $(BIN)/hist_classic_auto_schedule.a $(BIN)/hist_simple_auto_schedule.a
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -I$(BIN) -Wall -O3 $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS)
 
