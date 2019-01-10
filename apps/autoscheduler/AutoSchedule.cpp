@@ -65,8 +65,15 @@ uint32_t get_dropout_threshold() {
     }
 }
 
-bool random_dropout(std::mt19937 &rng) {
-    static uint32_t random_dropout_threshold = get_dropout_threshold();
+bool random_dropout(std::mt19937 &rng, size_t num_decisions) {
+    static double random_dropout_threshold = get_dropout_threshold();
+
+    // The random dropout threshold is the chance that we operate
+    // entirely greedily and never discard anything.
+    random_dropout_threshold /= 100;
+    random_dropout_threshold = 1 - std::pow(1 - random_dropout_threshold, num_decisions);
+    random_dropout_threshold *= 100;
+
     uint32_t r = rng();
     bool drop_it = (r % 100) >= random_dropout_threshold;
     return drop_it;
@@ -2902,7 +2909,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
                 }
             }
 
-            if (pending.size() > 1 && random_dropout(rng)) {
+            if (pending.size() > 1 && random_dropout(rng, dag.nodes.size() * 2)) {
                 // debug(0) << "Dropping state\n";
                 continue;
             }
