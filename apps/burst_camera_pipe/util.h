@@ -2,8 +2,8 @@
     Adapted (with permission) from https://github.com/timothybrooks/hdr-plus
 */
 
-#ifndef HDRPLAID_UTIL_H_
-#define HDRPLAID_UTIL_H_
+#ifndef BURST_CAMERA_PIPE_UTIL_H_
+#define BURST_CAMERA_PIPE_UTIL_H_
 
 #include "Halide.h"
 

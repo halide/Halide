@@ -1,9 +1,9 @@
 #include <cstdio>
 #include <random>
 
-#include "hdr_plaid.h"
-#include "hdr_plaid_classic_auto_schedule.h"
-#include "hdr_plaid_auto_schedule.h"
+#include "burst_camera_pipe.h"
+#include "burst_camera_pipe_classic_auto_schedule.h"
+#include "burst_camera_pipe_auto_schedule.h"
 
 #include "benchmark_util.h"
 #include "halide_image_io.h"
@@ -38,9 +38,9 @@ int main(int argc, char **argv) {
     });
 
     three_way_bench(
-        [&]() { hdr_plaid(inputs, black_point, white_point, white_balance_r, white_balance_g0, white_balance_g1, white_balance_b, compression, gain, output); },
-        [&]() { hdr_plaid_classic_auto_schedule(inputs, black_point, white_point, white_balance_r, white_balance_g0, white_balance_g1, white_balance_b, compression, gain, output); },
-        [&]() { hdr_plaid_auto_schedule(inputs, black_point, white_point, white_balance_r, white_balance_g0, white_balance_g1, white_balance_b, compression, gain, output); }
+        [&]() { burst_camera_pipe(inputs, black_point, white_point, white_balance_r, white_balance_g0, white_balance_g1, white_balance_b, compression, gain, output); },
+        [&]() { burst_camera_pipe_classic_auto_schedule(inputs, black_point, white_point, white_balance_r, white_balance_g0, white_balance_g1, white_balance_b, compression, gain, output); },
+        [&]() { burst_camera_pipe_auto_schedule(inputs, black_point, white_point, white_balance_r, white_balance_g0, white_balance_g1, white_balance_b, compression, gain, output); }
     );
 
     if (argc == 2) {

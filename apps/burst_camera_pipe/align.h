@@ -2,8 +2,8 @@
     Adapted (with permission) from https://github.com/timothybrooks/hdr-plus
 */
 
-#ifndef HDRPLAID_ALIGN_H_
-#define HDRPLAID_ALIGN_H_
+#ifndef BURST_CAMERA_PIPE_ALIGN_H_
+#define BURST_CAMERA_PIPE_ALIGN_H_
 
 #define T_SIZE 32           // Size of a tile in the bayer mosaiced image
 #define T_SIZE_2 16         // Half of T_SIZE and the size of a tile throughout the alignment pyramid

@@ -10,7 +10,7 @@
 
 namespace {
 
-class HdrPlaid : public Halide::Generator<HdrPlaid> {
+class BurstCameraPipe : public Halide::Generator<BurstCameraPipe> {
 public:
     // 'inputs' is really a series of raw 2d frames; extent[2] specifies the count
     Input<Buffer<uint16_t>> inputs{"inputs", 3};
@@ -65,4 +65,4 @@ public:
 
 }  // namespace
 
-HALIDE_REGISTER_GENERATOR(HdrPlaid, hdr_plaid)
+HALIDE_REGISTER_GENERATOR(BurstCameraPipe, burst_camera_pipe)
