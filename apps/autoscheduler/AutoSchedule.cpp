@@ -2508,6 +2508,17 @@ struct State {
                 }
                 std::sort(options.begin(), options.end());
 
+                // If none of the options were acceptable, don't
+                // parallelize. This tends to happen for things like
+                // compute_root color matrices.
+                if (options.empty()) {
+                    num_children++;
+                    auto child = make_child();
+                    child->num_funcs_scheduled++;
+                    accept_child(std::move(child));
+                    return;
+                }
+
                 for (const auto &o : options) {
                     if (num_children >= 1 && o.idle_core_wastage > 1.2) {
                         // We have considered several options, and the
