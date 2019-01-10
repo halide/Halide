@@ -68,10 +68,15 @@ Func white_balance(Func input, Expr width, Expr height, const WhiteBalance &wb, 
  */
 Func demosaic(Func input, Expr width, Expr height, bool skip_schedule) {
 
-    Func f0("demosaic_f0");             // G at R locations; G at B locations
-    Func f1("demosaic_f1");             // R at green in R row, B column; B at green in B row, R column
-    Func f2("demosaic_f2");             // R at green in B row, R column; B at green in R row, B column
-    Func f3("demosaic_f3");             // R at blue in B row, B column; B at red in R row, R column
+    Buffer<int32_t> f0(5, 5, "demosaic_f0");             // G at R locations; G at B locations
+    Buffer<int32_t> f1(5, 5, "demosaic_f1");             // R at green in R row, B column; B at green in B row, R column
+    Buffer<int32_t> f2(5, 5, "demosaic_f2");             // R at green in B row, R column; B at green in R row, B column
+    Buffer<int32_t> f3(5, 5, "demosaic_f3");             // R at blue in B row, B column; B at red in R row, R column
+
+    f0.translate({-2, -2});
+    f1.translate({-2, -2});
+    f2.translate({-2, -2});
+    f3.translate({-2, -2});
 
     Func d0("demosaic_0");
     Func d1("demosaic_1");
@@ -90,10 +95,10 @@ Func demosaic(Func input, Expr width, Expr height, bool skip_schedule) {
 
     // demosaic filters
 
-    f0(x,y) = 0;
-    f1(x,y) = 0;
-    f2(x,y) = 0;
-    f3(x,y) = 0;
+    f0.fill(0);
+    f1.fill(0);
+    f2.fill(0);
+    f3.fill(0);
 
     int f0_sum = 8;
     int f1_sum = 16;
@@ -155,11 +160,6 @@ Func demosaic(Func input, Expr width, Expr height, bool skip_schedule) {
     // schedule
     ///////////////////////////////////////////////////////////////////////////
     if (!skip_schedule) {
-        f0.compute_root().parallel(y).parallel(x);
-        f1.compute_root().parallel(y).parallel(x);
-        f2.compute_root().parallel(y).parallel(x);
-        f3.compute_root().parallel(y).parallel(x);
-
         d0.compute_root().parallel(y).vectorize(x, 16);
         d1.compute_root().parallel(y).vectorize(x, 16);
         d2.compute_root().parallel(y).vectorize(x, 16);
@@ -181,7 +181,9 @@ Func demosaic(Func input, Expr width, Expr height, bool skip_schedule) {
  */
 Func bilateral_filter(Func input, Expr width, Expr height, bool skip_schedule) {
 
-    Func k("gauss_kernel");
+    Buffer<float> k(7, 7, "gauss_kernel");
+    k.translate({-3, -3});
+
     Func weights("bilateral_weights");
     Func total_weights("bilateral_total_weights");
     Func bilateral("bilateral");
@@ -192,8 +194,7 @@ Func bilateral_filter(Func input, Expr width, Expr height, bool skip_schedule) {
 
     // gaussian kernel
 
-    k(dx, dy) = f32(0.f);
-
+    k.fill(0.f);
     k(-3, -3) = 0.000690f; k(-2, -3) = 0.002646f; k(-1, -3) = 0.005923f; k(0, -3) = 0.007748f; k(1, -3) = 0.005923f; k(2, -3) = 0.002646f; k(3, -3) = 0.000690f;
     k(-3, -2) = 0.002646f; k(-2, -2) = 0.010149f; k(-1, -2) = 0.022718f; k(0, -2) = 0.029715f; k(1, -2) = 0.022718f; k(2, -2) = 0.010149f; k(3, -2) = 0.002646f;
     k(-3, -1) = 0.005923f; k(-2, -1) = 0.022718f; k(-1, -1) = 0.050855f; k(0, -1) = 0.066517f; k(1, -1) = 0.050855f; k(2, -1) = 0.022718f; k(3, -1) = 0.005923f;
@@ -233,8 +234,6 @@ Func bilateral_filter(Func input, Expr width, Expr height, bool skip_schedule) {
     // schedule
     ///////////////////////////////////////////////////////////////////////////
     if (!skip_schedule) {
-        k.parallel(dy).parallel(dx).compute_root();
-
         weights.compute_at(output, y).vectorize(x, 16);
 
         output.compute_root().parallel(y).vectorize(x, 16);
@@ -526,16 +525,13 @@ Func tone_map(Func input, Expr width, Expr height, Expr comp, Expr gain, bool sk
  */
 Func srgb(Func input, bool skip_schedule) {
 
-    Func srgb_matrix("srgb_matrix");
+    Buffer<float> srgb_matrix(3, 3, "srgb_matrix");
     Func output("srgb_output");
 
     Var x, y, c;
     RDom r(0, 3);
 
     // srgb conversion matrix;
-
-    srgb_matrix(x, y) = 0.f;
-
     srgb_matrix(0, 0) =  1.964399f; srgb_matrix(1, 0) = -1.119710f; srgb_matrix(2, 0) =  0.155311f;
     srgb_matrix(0, 1) = -0.241156f; srgb_matrix(1, 1) =  1.673722f; srgb_matrix(2, 1) = -0.432566f;
     srgb_matrix(0, 2) =  0.013887f; srgb_matrix(1, 2) = -0.549820f; srgb_matrix(2, 2) =  1.535933f;
@@ -544,12 +540,6 @@ Func srgb(Func input, bool skip_schedule) {
 
     output(x, y, c) = u16_sat(sum(srgb_matrix(r, c) * input(x, y, r)));
 
-    ///////////////////////////////////////////////////////////////////////////
-    // schedule
-    ///////////////////////////////////////////////////////////////////////////
-    if (!skip_schedule) {
-        srgb_matrix.compute_root().parallel(y).parallel(x);
-    }
     return output;
 }
 
@@ -638,18 +628,17 @@ Func sharpen(Func input, float strength, bool skip_schedule) {
 }
 
 /*
- * u8bit_interleaved -- Converts to 8 bits and interleaves color channels so
- * output can be easily written to an output file.
+ * u8bit -- Converts to 8 bits.
  */
-Func u8bit_interleaved(Func input, bool skip_schedule) {
+Func u8bit(Func input, bool skip_schedule) {
 
-    Func output("_8bit_interleaved_output");
+    Func output("_8bit_output");
 
     Var c, x, y;
 
     // Convert to 8 bit
 
-    output(c, x, y) = u8_sat(input(x, y, c) / 256);
+    output(x, y, c) = u8_sat(input(x, y, c) / 256);
 
     ///////////////////////////////////////////////////////////////////////////
     // schedule
@@ -711,5 +700,5 @@ Func finish(Func input, Expr width, Expr height, Expr bp, Expr wp, const WhiteBa
 
     Func sharpen_output = sharpen(contrast_output, sharpen_strength, skip_schedule);
 
-    return u8bit_interleaved(contrast_output, skip_schedule);
+    return u8bit(contrast_output, skip_schedule);
 }
