@@ -86,7 +86,7 @@ int main(int argc, char **argv) {
 
     BenchmarkConfig config;
     config.accuracy = 0.01;
-    config.min_time = 0.5;
+    config.min_time = 1.0;
     double best = benchmark([&]() {
             random_pipeline(input,
                             uint8_weights,

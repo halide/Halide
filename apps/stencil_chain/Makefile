@@ -18,21 +18,19 @@ $(BIN)/stencil_chain.a: $(BIN)/stencil_chain.generator
 $(BIN)/stencil_chain_classic_auto_schedule.a: $(BIN)/stencil_chain.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
 	HL_PERMIT_FAILED_UNROLL=1 \
-	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/weights \
-	HL_MACHINE_PARAMS=1000,1,1 \
+	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu_weights \
 	HL_DEBUG_CODEGEN=1 \
 	HL_SHARED_MEMORY_LIMIT=24 \
 	HL_COMPUTE_ROOT_AND_INLINE_ONLY=1 \
-	$< -g stencil_chain -o $(BIN) -f stencil_chain_classic_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so -e stmt,assembly,static_library,h 2> stderr_classic.txt > stdout_classic.txt
+	$< -g stencil_chain -o $(BIN) -f stencil_chain_classic_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so machine_params=$(HL_MACHINE_PARAMS) -e stmt,assembly,static_library,h 2> stderr_classic.txt > stdout_classic.txt
 
 $(BIN)/stencil_chain_auto_schedule.a: $(BIN)/stencil_chain.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
 	HL_PERMIT_FAILED_UNROLL=1 \
-	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/weights \
-	HL_MACHINE_PARAMS=1000,1,1 \
+	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu_weights \
 	HL_DEBUG_CODEGEN=1 \
-	HL_SHARED_MEMORY_LIMIT=24 \
-	$< -g stencil_chain -o $(BIN) -f stencil_chain_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so -e stmt,assembly,static_library,h 2> stderr.txt > stdout.txt
+	HL_SHARED_MEMORY_LIMIT=8 \
+	$< -g stencil_chain -o $(BIN) -f stencil_chain_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so machine_params=$(HL_MACHINE_PARAMS) -e stmt,assembly,static_library,h 2> stderr.txt > stdout.txt
 
 $(BIN)/process: process.cpp $(BIN)/stencil_chain.a $(BIN)/stencil_chain_classic_auto_schedule.a $(BIN)/stencil_chain_auto_schedule.a
 	@mkdir -p $(@D)

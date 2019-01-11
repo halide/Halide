@@ -29,6 +29,7 @@ struct PipelineFeatures {
         return ((const int *)(this))[idx];
     }
 
+
     // A featurization of the compute done by a Func, to
     // feed the neural network.
 

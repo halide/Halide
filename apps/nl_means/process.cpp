@@ -24,8 +24,6 @@ int main(int argc, char **argv) {
     int search_area = atoi(argv[3]);
     float sigma = atof(argv[4]);
     Buffer<float> output(input.width(), input.height(), 3);
-    const int samples = atoi(argv[5]);
-    const int iterations = 1;
 
     printf("Input size: %d by %d, patch size: %d, search area: %d, sigma: %f\n",
             input.width(), input.height(), patch_size, search_area, sigma);
@@ -33,9 +31,7 @@ int main(int argc, char **argv) {
     three_way_bench(
         [&]() { nl_means(input, patch_size, search_area, sigma, output); output.device_sync(); },
         [&]() { nl_means_classic_auto_schedule(input, patch_size, search_area, sigma, output); output.device_sync(); },
-        [&]() { nl_means_auto_schedule(input, patch_size, search_area, sigma, output); output.device_sync(); },
-        samples,
-        iterations
+        [&]() { nl_means_auto_schedule(input, patch_size, search_area, sigma, output); output.device_sync(); }
     );
 
     convert_and_save_image(output, argv[6]);
