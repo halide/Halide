@@ -11,13 +11,13 @@ $(BIN)/max_filter.a: $(BIN)/max_filter.generator
 	@mkdir -p $(@D)
 	$< -g max_filter -f max_filter -o $(BIN) target=$(HL_TARGET) auto_schedule=false
 
-$(BIN)/max_filter_classic_auto_schedule.a: $(BIN)/max_filter.generator $(AUTOSCHED_BIN)/libauto_schedule.so
+$(BIN)/max_filter_classic_auto_schedule.a: $(BIN)/max_filter.generator
 	@mkdir -p $(@D)
-	$< -g max_filter -f max_filter_classic_auto_schedule -o $(BIN) target=$(HL_TARGET) auto_schedule=true
+	$< -g max_filter -f max_filter_classic_auto_schedule -o $(BIN) target=$(HL_TARGET) auto_schedule=true machine_params=$(HL_MACHINE_PARAMS)
 
 $(BIN)/max_filter_auto_schedule.a: $(BIN)/max_filter.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
-	HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/weights HL_MACHINE_PARAMS=32,1,1 \
+	HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/weights \
 	$< -g max_filter -f max_filter_auto_schedule -o $(BIN) target=$(HL_TARGET) auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so
 
 $(BIN)/filter: filter.cpp $(BIN)/max_filter.a $(BIN)/max_filter_auto_schedule.a $(BIN)/max_filter_classic_auto_schedule.a

@@ -12,8 +12,7 @@
 
 namespace Halide {
 namespace Internal {
-
-namespace {
+namespace Autoscheduler {
 
 using std::pair;
 using std::vector;
@@ -369,19 +368,6 @@ struct BoundContents {
     };
 };
 
-}
-
-template<>
-RefCount &ref_count<BoundContents>(const BoundContents *t) {return t->ref_count;}
-
-template<>
-void destroy<BoundContents>(const BoundContents *t) {
-    // Release it back into the memory pool to be reused
-    t->layout->release(t);
-}
-
-namespace {
-
 // A representation of the function DAG. The nodes and edges are both
 // in reverse realization order, so if you want to walk backwards up
 // the DAG, just iterate the nodes or edges in-order.
@@ -559,7 +545,18 @@ struct FunctionDAG {
         // at zero for each pipeline.
         int id, max_id;
 
-        bool is_wrapper, is_output, is_input;
+        // Just func->dimensions(), but we ask for it so many times
+        // that's it's worth avoiding the function call into
+        // libHalide.
+        int dimensions;
+
+        bool is_wrapper; // Is a single pointwise call to another Func
+
+        bool is_output, is_input;
+
+        bool is_pointwise; // Only uses pointwise calls
+
+        bool is_boundary_condition; // Pointwise calls + clamping on all indices
 
         std::unique_ptr<BoundContents::Layout> bounds_memory_layout;
 
@@ -900,8 +897,8 @@ struct FunctionDAG {
                     exprs_vector.push_back(def.predicate());
                 }
                 Expr exprs = Call::make(Int(32), "dummy", exprs_vector, Call::Extern);
-                // Do the cost analysis. Simplistic for now - just counts
-                // leaf nodes in the expression trees.
+
+                // Walk over the expressions involved sniffing types
                 class CheckTypes : public IRVisitor {
                     using IRVisitor::visit;
 
@@ -925,6 +922,18 @@ struct FunctionDAG {
                         calls[op->name]++;
                         IRVisitor::visit(op);
                         check_type(op->type);
+                        if (op->call_type == Call::Halide || op->call_type == Call::Image) {
+                            is_pointwise &= op->args.size() == func.args().size();
+                            // TODO: actually sniff the coordinates
+                            // accessed, instead of only catching the
+                            // built-in boundary condition primitive.
+                            if (is_pointwise) {
+                                for (size_t i = 0; i < op->args.size(); i++) {
+                                    const Variable *v = op->args[i].as<Variable>();
+                                    is_pointwise &= (v != nullptr) && (v->name == func.args()[i]);
+                                }
+                            }
+                        }
                     }
 
                     void visit(const Cast *op) override {
@@ -939,12 +948,15 @@ struct FunctionDAG {
                             narrowest_type = t;
                         }
                     }
+                    Function func;
                 public:
+                    bool is_pointwise = true;
                     int leaves = 0;
                     Type narrowest_type;
                     map<string, int> calls;
+                    CheckTypes(Function f) : func(f) {}
                 };
-                CheckTypes checker;
+                CheckTypes checker(consumer);
                 exprs.accept(&checker);
 
                 Type widest_output_type = def.values()[0].type();
@@ -980,7 +992,27 @@ struct FunctionDAG {
                     for (auto b : consumer.schedule().estimates()) {
                         int64_t i_min = *as_const_int(b.min);
                         int64_t i_extent = *as_const_int(b.extent);
-                        estimates[b.var] = Span(i_min, i_min + i_extent - 1, false);
+
+                        if (false) {
+                            // HACK: Some methods we compare to
+                            // compile for statically known
+                            // input/output sizes. We don't need to -
+                            // we take estimates but the compiled code
+                            // doesn't enforce them. If you want to
+                            // make a comparison fair and target a
+                            // fixed size, use this branch of the
+                            // if. In practice I don't see a runtime
+                            // difference, so I left it disabled.  In
+                            // theory, Sizes being constant makes it
+                            // possible to do things like unroll
+                            // across color channels, so it affects
+                            // the scheduling space.  TODO: Make this
+                            // a documented env var
+                            Func(node.func).bound(b.var, b.min, b.extent);
+                            estimates[b.var] = Span(i_min, i_min + i_extent - 1, true);
+                        } else {
+                            estimates[b.var] = Span(i_min, i_min + i_extent - 1, false);
+                        }
                     }
                     for (auto b : consumer.schedule().bounds()) {
                         const int64_t *i_min = as_const_int(b.min);
@@ -1013,6 +1045,11 @@ struct FunctionDAG {
 
                 // Now create the edges that lead to this func
                 bool any_incoming_edges = false;
+                node.is_pointwise = !node.func.has_update_definition();
+
+                // TODO: peephole the boundary condition call pattern instead of assuming the user used the builtin
+                node.is_boundary_condition = node.is_pointwise && starts_with(node.func.name(), "repeat_edge");
+
                 auto boxes = boxes_required(exprs, stage_scope_with_symbolic_rvar_bounds, func_value_bounds);
                 for (auto &p : boxes) {
                     auto it = env.find(p.first);
@@ -1036,12 +1073,14 @@ struct FunctionDAG {
                         }
                         edge.calls = checker.calls[edge.producer->func.name()];
                         any_incoming_edges = true;
+                        node.is_pointwise &= checker.is_pointwise;
                         edges.emplace_back(std::move(edge));
                     }
                 }
 
                 node.is_wrapper = node.func.is_wrapper();
                 node.is_input = !node.func.has_update_definition() && node.is_wrapper && !any_incoming_edges;
+                node.dimensions = node.func.dimensions();
             }
         }
 
@@ -1088,16 +1127,6 @@ struct FunctionDAG {
                         for (size_t j = 0; j < nodes.size(); j++) {
                             s.dependencies[j] = s.dependencies[j] || s2.dependencies[j];
                         }
-                    }
-                }
-            }
-        }
-
-        for (auto &n1 : nodes) {
-            for (auto &s : n1.stages) {
-                for (auto &n2 : nodes) {
-                    if (s.downstream_of(n2)) {
-                        debug(0) << "Transitive edge: " << n2.func.name() << " -> " << s.name << "\n";
                     }
                 }
             }
@@ -1434,6 +1463,11 @@ struct FunctionDAG {
                 }
                 n.stages[i].features.dump();
             }
+            debug(0) << "  pointwise: " << n.is_pointwise
+                     << " boundary condition: " << n.is_boundary_condition
+                     << " wrapper: " << n.is_wrapper
+                     << " input: " << n.is_input
+                     << " output: " << n.is_output << "\n";
         }
         for (const Edge &e : edges) {
             debug(0) << "Edge: " << e.producer->func.name() << " -> " << e.consumer->name << '\n'
@@ -1459,6 +1493,17 @@ private:
 
 };
 
-}}}
+}
+
+template<>
+RefCount &ref_count<Autoscheduler::BoundContents>(const Autoscheduler::BoundContents *t) {return t->ref_count;}
+
+template<>
+void destroy<Autoscheduler::BoundContents>(const Autoscheduler::BoundContents *t) {
+    // Release it back into the memory pool to be reused
+    t->layout->release(t);
+}
+
+}}
 
 #endif

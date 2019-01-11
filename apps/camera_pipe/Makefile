@@ -16,11 +16,11 @@ $(BIN)/camera_pipe.a: $(BIN)/camera_pipe.generator
 # TODO: this fails with an internal_assert failure in the classic AutoScheduler.
 # $(BIN)/camera_pipe_classic_auto_schedule.a: $(BIN)/camera_pipe.generator
 # 	@mkdir -p $(@D)
-# 	$< -g camera_pipe -o $(BIN) -f camera_pipe_classic_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true
+# 	$< -g camera_pipe -o $(BIN) -f camera_pipe_classic_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true machine_params=$(HL_MACHINE_PARAMS)
 
 $(BIN)/camera_pipe_auto_schedule.a: $(BIN)/camera_pipe.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
-	HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/weights HL_MACHINE_PARAMS=32,1,1 \
+	HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/weights \
 	$< -g camera_pipe -o $(BIN) -f camera_pipe_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so -e static_library,h,assembly,stmt
 
 $(BIN)/viz/camera_pipe.a: $(BIN)/camera_pipe.generator

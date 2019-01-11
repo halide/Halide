@@ -25,15 +25,11 @@ int main(int argc, char **argv) {
     input.slice(2, 0);
 
     Buffer<uint16_t> output(input.width(), input.height());
-    const int samples = atoi(argv[2]);
-    const int iterations = 1;
 
     three_way_bench(
         [&]() { stencil_chain(input, output); },
         [&]() { stencil_chain_classic_auto_schedule(input, output); },
-        [&]() { stencil_chain_auto_schedule(input, output); },
-        samples,
-        iterations
+        [&]() { stencil_chain_auto_schedule(input, output); }
     );
 
     stencil_chain(input, output);
