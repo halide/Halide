@@ -410,13 +410,13 @@ struct LoopNest {
                 feat.points_computed_total = feat.points_computed_per_realization * feat.num_realizations;
 
                 feat.bytes_at_realization = node->bytes_per_point;
-                for (int i = 0; i < node->func.dimensions(); i++) {
+                for (int i = 0; i < node->dimensions; i++) {
                     const auto &p = bounds->region_computed(i);
                     feat.bytes_at_realization *= p.extent();
                 }
                 int64_t innermost_storage_extent = 1;
                 int v = sites.get(&(node->stages[s])).produce->vector_dim;
-                if (v >= 0 && node->func.dimensions() > 0) {
+                if (v >= 0 && node->dimensions > 0) {
                     innermost_storage_extent = bounds->region_computed(v).extent();
                 }
                 feat.innermost_bytes_at_realization = node->bytes_per_point * innermost_storage_extent;
@@ -459,7 +459,7 @@ struct LoopNest {
                 const auto &root_bounds = root.get_bounds(node);
 
                 feat.bytes_at_root = node->bytes_per_point;
-                for (int i = 0; i < node->func.dimensions(); i++) {
+                for (int i = 0; i < node->dimensions; i++) {
                     const auto &p = root_bounds->region_computed(i);
                     feat.bytes_at_root *= p.extent();
                 }
@@ -473,7 +473,7 @@ struct LoopNest {
                 if (p) {
                     int64_t innermost_storage_extent = 1;
                     int v = p->vector_dim;
-                    if (v >= 0 && node->func.dimensions() > 0) {
+                    if (v >= 0 && node->dimensions > 0) {
                         innermost_storage_extent = root_bounds->region_computed(v).extent();
                     }
                     feat.innermost_bytes_at_root = node->bytes_per_point * innermost_storage_extent;
@@ -540,7 +540,7 @@ struct LoopNest {
                 const auto &bounds = get_bounds(node);
                 feat.bytes_at_task = node->bytes_per_point;
                 int64_t innermost_storage_extent = 1;
-                for (int i = 0; i < node->func.dimensions(); i++) {
+                for (int i = 0; i < node->dimensions; i++) {
                     int64_t outer = 1;
                     for (size_t l = 0; l < stage->loop.size(); l++) {
                         if (stage->loop[l].var == node->func.args()[i]) {
@@ -585,7 +585,7 @@ struct LoopNest {
                     int vector_dim = (e->producer->is_input ? 0 :
                                       site.produce != nullptr ? site.produce->vector_dim :
                                       -1);
-                    for (int i = 0; i < e->producer->func.dimensions(); i++) {
+                    for (int i = 0; i < e->producer->dimensions; i++) {
                         int64_t extent = b->region_required(i).extent();
                         max_extent = std::max(extent, max_extent);
                         bytes *= extent;
@@ -620,12 +620,12 @@ struct LoopNest {
             const auto &bounds = parent->get_bounds(node);
 
             feat.bytes_at_production = node->bytes_per_point;
-            for (int i = 0; i < node->func.dimensions(); i++) {
+            for (int i = 0; i < node->dimensions; i++) {
                 const auto &p = bounds->region_computed(i);
                 feat.bytes_at_production *= p.extent();
             }
             int64_t innermost_storage_extent = 1;
-            if (vector_dim >= 0 && node->func.dimensions() > 0) {
+            if (vector_dim >= 0 && node->dimensions > 0) {
                 innermost_storage_extent = bounds->region_computed(vector_dim).extent();
             }
             feat.innermost_bytes_at_production = node->bytes_per_point * innermost_storage_extent;
@@ -778,7 +778,7 @@ struct LoopNest {
                                  !producer_has_been_scheduled ? -1 :
                                  site.produce->vector_dim);
                             if (vectorized_loop_index >= 0) {
-                                for (int i = 0; i < e->producer->func.dimensions(); i++) {
+                                for (int i = 0; i < e->producer->dimensions; i++) {
                                     auto stride = jac.first(i, vectorized_loop_index);
                                     vector_broadcast &= stride == 0;
                                     if (i == producer_innermost_dim || !producer_has_been_scheduled) {
@@ -804,7 +804,7 @@ struct LoopNest {
                                 for (size_t idx = 0; idx < stage->loop.size(); idx++) {
                                     if (!stage->loop[idx].rvar) {
                                         bool loop_invariant = true;
-                                        for (int i = 0; i < e->producer->func.dimensions(); i++) {
+                                        for (int i = 0; i < e->producer->dimensions; i++) {
                                             if (!(jac.first(i, idx) == 0)) {
                                                 loop_invariant = false;
                                                 break;
@@ -846,7 +846,7 @@ struct LoopNest {
 
                     int64_t max_extent = 1, max_compute_extent = 1, max_store_extent = 1, max_task_extent = 1;
 
-                    for (int i = 0; i < e->producer->func.dimensions(); i++) {
+                    for (int i = 0; i < e->producer->dimensions; i++) {
                         auto p = bounds->region_required(i);
                         auto compute_p = producer_compute_bounds->region_computed(i);
                         auto store_p = producer_store_bounds->region_required(i);
@@ -1002,7 +1002,7 @@ struct LoopNest {
             internal_assert(f->outgoing_edges.empty()) << "Outputs that access other outputs not yet supported\n";
             // It's an output.
             // Use the bounds estimate
-            for (int i = 0; i < f->func.dimensions(); i++) {
+            for (int i = 0; i < f->dimensions; i++) {
                 bound->region_required(i) = f->estimated_region_required[i];
             }
         } else {
@@ -1010,7 +1010,7 @@ struct LoopNest {
                 << "No consumers of " << f->func.name()
                 << " at loop over " << (is_root() ? "root" : node->func.name()) << '\n';
             auto init = Span::empty_span();
-            for (int i = 0; i < f->func.dimensions(); i++) {
+            for (int i = 0; i < f->dimensions; i++) {
                 bound->region_required(i) = init;
             }
 
@@ -1224,7 +1224,7 @@ struct LoopNest {
 
                 internal_assert(l.max() >= l.min()) << i << " " << l.max() << " " << l.min() << "\n";
 
-                if (f->func.dimensions() &&
+                if (f->dimensions &&
                     node->size[i] >= 1 &&
                     f->stages[s].loop[i].var == f->func.args()[v]) {
                     node->vectorized_loop_index = (int)i;
@@ -1360,7 +1360,7 @@ struct LoopNest {
 
             // Don't descend into loops if the bounds required don't shrink
             int64_t total_here = 1, total_at_parent = 1;
-            for (int i = 0; i < f->func.dimensions(); i++) {
+            for (int i = 0; i < f->dimensions; i++) {
                 const auto &range_here = bounds_here->region_computed(i);
                 const auto &range_at_parent = bounds_at_parent->region_computed(i);
                 total_here *= range_here.extent();
@@ -1647,7 +1647,7 @@ struct LoopNest {
             if (stage_idx == 0 && parent->node != node) {
                 // Pick a memory type
                 double bytes = node->bytes_per_point;
-                for (int i = 0; i < node->func.dimensions(); i++) {
+                for (int i = 0; i < node->dimensions; i++) {
                     const auto &p = parent_bounds->region_computed(i);
                     bytes *= p.extent();
                 }
@@ -2129,7 +2129,7 @@ struct State {
                 }
 
                 if (feat.inlined_calls > 0) {
-                    const double per_element_compute_cost_of_memcpy = 1 + 2*stage.node->func.dimensions();
+                    const double per_element_compute_cost_of_memcpy = 1 + 2*stage.node->dimensions;
                     per_element_compute_cost = std::max(0.0, per_element_compute_cost - per_element_compute_cost_of_memcpy);
                 }
 
@@ -2379,7 +2379,7 @@ struct State {
             // TODO: Pre-prune the list of sane dimensions to
             // vectorize a Func over to reduce branching factor.
             vector<int> vector_dims;
-            for (int v = 0; v < node->func.dimensions(); v++) {
+            for (int v = 0; v < node->dimensions; v++) {
                 const auto &p = root->get_bounds(node)->region_computed(v);
                 if (p.extent() >= node->vector_size) {
                     vector_dims.push_back(v);
@@ -2392,7 +2392,7 @@ struct State {
 
             // HACK: May only vectorize across x, if there is one
             /*
-            for (int v = 0; v < node->func.dimensions(); v++) {
+            for (int v = 0; v < node->dimensions; v++) {
                 if (node->func.args()[v] == "x") {
                     vector_dims.clear();
                     vector_dims.push_back(v);
@@ -2427,7 +2427,7 @@ struct State {
             const vector<int64_t> *pure_size = nullptr;
             if (params.parallelism > 1) {
                 for (auto &c : root->children) {
-                    if (c->node == node && node->func.dimensions() > 0) {
+                    if (c->node == node && node->dimensions > 0) {
                         if (c->stage->index == 0) {
                             pure_size = &(c->size);
                         }
@@ -2445,7 +2445,7 @@ struct State {
                 internal_assert(pure_size);
 
                 // Deciding on parallel task size/shape.
-                auto tilings = generate_tilings(*pure_size, node->func.dimensions() - 1, 2, true);
+                auto tilings = generate_tilings(*pure_size, node->dimensions - 1, 2, true);
 
                 // We could just parallelize the outer loop entirely
 
@@ -3087,6 +3087,8 @@ std::string generate_schedules_new(const std::vector<Function> &outputs,
                                    const Target &target,
                                    const MachineParams &params) {
 
+    HALIDE_TIC;
+
     State::cost_calculations = 0;
     string seed_str = get_env_variable("HL_SEED");
     int seed = (int)time(NULL);
@@ -3163,6 +3165,8 @@ std::string generate_schedules_new(const std::vector<Function> &outputs,
         // Use a fixed beam size
         optimal = optimal_schedule(dag, outputs, params, cost_model.get(), rng, beam_size);
     }
+
+    HALIDE_TOC;
 
     debug(0) << "Cost evaluated this many times: " << State::cost_calculations << '\n';
 
