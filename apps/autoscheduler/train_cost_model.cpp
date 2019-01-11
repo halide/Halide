@@ -104,7 +104,7 @@ map<int, PipelineSample> load_samples() {
         const size_t num_stages = num_features / features_per_stage;
 
         const float runtime = scratch[num_features];
-        if (runtime > 10000) { // Don't try to predict runtime over 10s
+        if (runtime > 100000) { // Don't try to predict runtime over 100s
             std::cout << "Implausible runtime in ms: " << runtime << "\n";
             continue;
         }
