@@ -15,7 +15,7 @@ $(BIN)/lens_blur.a: $(BIN)/lens_blur.generator
 
 $(BIN)/lens_blur_classic_auto_schedule.a: $(BIN)/lens_blur.generator
 	@-mkdir -p $(BIN)
-	$< -g lens_blur -o $(BIN) -f lens_blur_classic_auto_schedule target=$(HL_TARGET)-large_buffers-no_runtime auto_schedule=true
+	$< -g lens_blur -o $(BIN) -f lens_blur_classic_auto_schedule target=$(HL_TARGET)-large_buffers-no_runtime auto_schedule=true machine_params=$(HL_MACHINE_PARAMS)
 
 $(BIN)/lens_blur_auto_schedule.a: $(BIN)/lens_blur.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@-mkdir -p $(BIN)

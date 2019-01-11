@@ -13,7 +13,7 @@ $(BIN)/unsharp.a: $(BIN)/unsharp.generator
 
 $(BIN)/unsharp_classic_auto_schedule.a: $(BIN)/unsharp.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
-	$< -g unsharp -f unsharp_classic_auto_schedule -o $(BIN) target=$(HL_TARGET) auto_schedule=true
+	$< -g unsharp -f unsharp_classic_auto_schedule -o $(BIN) target=$(HL_TARGET) auto_schedule=true machine_params=$(HL_MACHINE_PARAMS)
 
 $(BIN)/unsharp_auto_schedule.a: $(BIN)/unsharp.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)

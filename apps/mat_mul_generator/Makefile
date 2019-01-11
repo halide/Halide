@@ -13,7 +13,7 @@ $(BIN)/mat_mul.a: $(BIN)/mat_mul.generator
 
 $(BIN)/mat_mul_classic_auto_schedule.a: $(BIN)/mat_mul.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
-	$< -g mat_mul -f mat_mul_classic_auto_schedule -o $(BIN) target=$(HL_TARGET) auto_schedule=true
+	$< -g mat_mul -f mat_mul_classic_auto_schedule -o $(BIN) target=$(HL_TARGET) auto_schedule=true machine_params=$(HL_MACHINE_PARAMS)
 
 $(BIN)/mat_mul_auto_schedule.a: $(BIN)/mat_mul.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)

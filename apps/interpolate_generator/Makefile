@@ -13,7 +13,7 @@ $(BIN)/interpolate.a: $(BIN)/interpolate.generator
 
 $(BIN)/interpolate_classic_auto_schedule.a: $(BIN)/interpolate.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
-	$< -g interpolate -f interpolate_classic_auto_schedule -o $(BIN) target=$(HL_TARGET) auto_schedule=true
+	$< -g interpolate -f interpolate_classic_auto_schedule -o $(BIN) target=$(HL_TARGET) auto_schedule=true machine_params=$(HL_MACHINE_PARAMS)
 
 $(BIN)/interpolate_auto_schedule.a: $(BIN)/interpolate.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
