@@ -152,6 +152,12 @@ Type format_descriptor_to_type(const std::string &fd) {
 
     #undef HANDLE_BUFFER_TYPE
 
+    // The string 'l' corresponds to np.int_, which is essentially
+    // a C 'long'; return a 32 or 64 bit int as appropriate.
+    if (fd == "l") {
+      return sizeof(long) == 8 ? type_of<int64_t>() : type_of<int32_t>();
+    }
+
     throw py::value_error("Unsupported Buffer<> type.");
     return Type();
 }
