@@ -96,7 +96,7 @@ make_sample() {
         beam=32
     else
         # The other samples are random probes biased by the cost model
-        dropout=1  # 1% chance of operating entirely greedily
+        dropout=5  # 5% chance of operating entirely greedily
         beam=1
     fi
     HL_PERMIT_FAILED_UNROLL=1 \

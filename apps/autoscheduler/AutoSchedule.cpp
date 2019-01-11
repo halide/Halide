@@ -70,12 +70,13 @@ bool random_dropout(std::mt19937 &rng, size_t num_decisions) {
 
     // The random dropout threshold is the chance that we operate
     // entirely greedily and never discard anything.
-    random_dropout_threshold /= 100;
-    random_dropout_threshold = std::pow(random_dropout_threshold, 1.0f / num_decisions);
-    random_dropout_threshold *= 100;
+    double t = random_dropout_threshold;
+    t /= 100;
+    t = std::pow(t, 1.0f / num_decisions);
+    t *= 100;
 
     uint32_t r = rng();
-    bool drop_it = (r % 100) >= random_dropout_threshold;
+    bool drop_it = (r % 100) >= t;
     return drop_it;
 }
 
