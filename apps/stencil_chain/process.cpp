@@ -26,8 +26,6 @@ int main(int argc, char **argv) {
     input.slice(2, 0);
 
     Buffer<uint16_t> output(input.width(), input.height());
-    const int samples = atoi(argv[2]);
-    const int iterations = 1;
 
     multi_way_bench({
         {"Manual", [&]() { stencil_chain(input, output); output.device_sync(); }},

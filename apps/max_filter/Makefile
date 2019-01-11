@@ -13,24 +13,22 @@ $(BIN)/max_filter.a: $(BIN)/max_filter.generator
 	@mkdir -p $(@D)
 	$< -g max_filter -f max_filter -o $(BIN) target=$(HL_TARGET) auto_schedule=false
 
-$(BIN)/max_filter_classic_auto_schedule.a: $(BIN)/max_filter.generator $(AUTOSCHED_BIN)/libauto_schedule.so
+$(BIN)/max_filter_classic_auto_schedule.a: $(BIN)/max_filter.generator
 	@mkdir -p $(@D)
 	HL_PERMIT_FAILED_UNROLL=1 \
 	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/weights \
-	HL_MACHINE_PARAMS=1000,1,1 \
 	HL_DEBUG_CODEGEN=1 \
 	HL_SHARED_MEMORY_LIMIT=24 \
 	HL_COMPUTE_ROOT_AND_INLINE_ONLY=1 \
-	$< -g max_filter -f max_filter_classic_auto_schedule -o $(BIN) target=$(HL_TARGET) auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so -e static_library,h,assembly,stmt 2> stderr_classic.txt > stdout_classic.txt
+	$< -g max_filter -f max_filter_classic_auto_schedule -o $(BIN) target=$(HL_TARGET) auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so machine_params=$(HL_MACHINE_PARAMS) -e static_library,h,assembly,stmt 2> stderr_classic.txt > stdout_classic.txt
 
 $(BIN)/max_filter_auto_schedule.a: $(BIN)/max_filter.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
 	HL_PERMIT_FAILED_UNROLL=1 \
 	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/weights \
-	HL_MACHINE_PARAMS=1000,1,1 \
 	HL_DEBUG_CODEGEN=1 \
 	HL_SHARED_MEMORY_LIMIT=24 \
-	$< -g max_filter -f max_filter_auto_schedule -o $(BIN) target=$(HL_TARGET) auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so 2> stderr.txt > stdout.txt
+	$< -g max_filter -f max_filter_auto_schedule -o $(BIN) target=$(HL_TARGET) auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so machine_params=$(HL_MACHINE_PARAMS) 2> stderr.txt > stdout.txt
 
 $(BIN)/max_filter_simple_auto_schedule.a: $(BIN)/max_filter.generator
 	@mkdir -p $(@D)

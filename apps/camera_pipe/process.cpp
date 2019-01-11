@@ -61,8 +61,6 @@ int main(int argc, char **argv) {
     float gamma = (float) atof(argv[3]);
     float contrast = (float) atof(argv[4]);
     float sharpen = (float) atof(argv[5]);
-    const int samples = atoi(argv[6]);
-    const int iterations = 1;
     int blackLevel = 25;
     int whiteLevel = 1023;
 
@@ -75,8 +73,6 @@ int main(int argc, char **argv) {
         [&]() { camera_pipe_classic_auto_schedule(input, matrix_3200, matrix_7000, color_temp, gamma, contrast, sharpen, blackLevel, whiteLevel, output); output.device_sync(); },
         [&]() { camera_pipe_auto_schedule(input, matrix_3200, matrix_7000, color_temp, gamma, contrast, sharpen, blackLevel, whiteLevel, output); output.device_sync(); },
     #endif
-        samples,
-        iterations
     );
 
     multi_way_bench({

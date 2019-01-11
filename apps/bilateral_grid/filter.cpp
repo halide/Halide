@@ -24,8 +24,6 @@ int main(int argc, char **argv) {
     }
 
     float r_sigma = (float) atof(argv[3]);
-    const int samples = atoi(argv[4]);
-    const int iterations = 10;
 
     Buffer<float> input = load_and_convert_image(argv[1]);
     Buffer<float> output(input.width(), input.height());

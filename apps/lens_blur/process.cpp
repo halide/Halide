@@ -27,8 +27,6 @@ int main(int argc, char **argv) {
     float blur_radius_scale = atof(argv[4]);
     uint32_t aperture_samples = atoi(argv[5]);
     Buffer<float> output(left_im.width(), left_im.height(), 3);
-    const int samples = atoi(argv[6]);
-    const int iterations = 10;
 
     // Timing code
     multi_way_bench({

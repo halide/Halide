@@ -28,8 +28,6 @@ int main(int argc, char **argv) {
     int levels = atoi(argv[2]);
     float alpha = atof(argv[3]), beta = atof(argv[4]);
     Buffer<uint16_t> output(input.width(), input.height(), 3);
-    const int samples = atoi(argv[5]);
-    const int iterations = 1;
 
     multi_way_bench({
         {"Manual", [&]() { local_laplacian(input, levels, alpha/(levels-1), beta, output); output.device_sync(); }},
