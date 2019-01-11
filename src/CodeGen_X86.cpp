@@ -219,6 +219,8 @@ void CodeGen_X86::visit(const Cast *op) {
     };
 
     static Pattern patterns[] = {
+#if LLVM_VERSION < 80
+        // Names for these intrinsics vary between LLVM versions
         {Target::AVX2, true, Int(8, 32), 0, "llvm.x86.avx2.padds.b",
          i8_sat(wild_i16x_ + wild_i16x_)},
         {Target::FeatureEnd, true, Int(8, 16), 0, "llvm.x86.sse2.padds.b",
@@ -227,27 +229,6 @@ void CodeGen_X86::visit(const Cast *op) {
          i8_sat(wild_i16x_ - wild_i16x_)},
         {Target::FeatureEnd, true, Int(8, 16), 0, "llvm.x86.sse2.psubs.b",
          i8_sat(wild_i16x_ - wild_i16x_)},
-#if LLVM_VERSION < 80
-        // Older LLVM versions support this as an intrinsic
-        {Target::AVX2, true, UInt(8, 32), 0, "llvm.x86.avx2.paddus.b",
-         u8_sat(wild_u16x_ + wild_u16x_)},
-        {Target::FeatureEnd, true, UInt(8, 16), 0, "llvm.x86.sse2.paddus.b",
-         u8_sat(wild_u16x_ + wild_u16x_)},
-        {Target::AVX2, true, UInt(8, 32), 0, "llvm.x86.avx2.psubus.b",
-         u8(max(wild_i16x_ - wild_i16x_, 0))},
-        {Target::FeatureEnd, true, UInt(8, 16), 0, "llvm.x86.sse2.psubus.b",
-         u8(max(wild_i16x_ - wild_i16x_, 0))},
-#else
-        // LLVM 8.0+ require using helpers from x86.ll
-        {Target::AVX2, true, UInt(8, 32), 0, "paddusbx32",
-         u8_sat(wild_u16x_ + wild_u16x_)},
-        {Target::FeatureEnd, true, UInt(8, 16), 0, "paddusbx16",
-         u8_sat(wild_u16x_ + wild_u16x_)},
-        {Target::AVX2, true, UInt(8, 32), 0, "psubusbx32",
-         u8(max(wild_i16x_ - wild_i16x_, 0))},
-        {Target::FeatureEnd, true, UInt(8, 16), 0, "psubusbx16",
-         u8(max(wild_i16x_ - wild_i16x_, 0))},
-#endif
         {Target::AVX2, true, Int(16, 16), 0, "llvm.x86.avx2.padds.w",
          i16_sat(wild_i32x_ + wild_i32x_)},
         {Target::FeatureEnd, true, Int(16, 8), 0, "llvm.x86.sse2.padds.w",
@@ -256,8 +237,36 @@ void CodeGen_X86::visit(const Cast *op) {
          i16_sat(wild_i32x_ - wild_i32x_)},
         {Target::FeatureEnd, true, Int(16, 8), 0, "llvm.x86.sse2.psubs.w",
          i16_sat(wild_i32x_ - wild_i32x_)},
+#else
+        // Names for these intrinsics vary between LLVM versions
+        {Target::AVX2, true, Int(8, 32), 0, "llvm.sadd.sat.v32i8",
+         i8_sat(wild_i16x_ + wild_i16x_)},
+        {Target::FeatureEnd, true, Int(8, 16), 0, "llvm.sadd.sat.v16i8",
+         i8_sat(wild_i16x_ + wild_i16x_)},
+        {Target::AVX2, true, Int(8, 32), 0, "llvm.ssub.sat.v32i8",
+         i8_sat(wild_i16x_ - wild_i16x_)},
+        {Target::FeatureEnd, true, Int(8, 16), 0, "llvm.ssub.sat.v16i8",
+         i8_sat(wild_i16x_ - wild_i16x_)},
+
+        {Target::AVX2, true, Int(16, 16), 0, "llvm.sadd.sat.v16i16",
+         i16_sat(wild_i32x_ + wild_i32x_)},
+        {Target::FeatureEnd, true, Int(16, 8), 0, "llvm.sadd.sat.v8i16",
+         i16_sat(wild_i32x_ + wild_i32x_)},
+        {Target::AVX2, true, Int(16, 16), 0, "llvm.ssub.sat.v16i16",
+         i16_sat(wild_i32x_ - wild_i32x_)},
+        {Target::FeatureEnd, true, Int(16, 8), 0, "llvm.ssub.sat.v8i16",
+         i16_sat(wild_i32x_ - wild_i32x_)},
+#endif
 #if LLVM_VERSION < 80
-        // Older LLVM versions support this as an intrinsic
+        // Older LLVM versions support these as intrinsics
+        {Target::AVX2, true, UInt(8, 32), 0, "llvm.x86.avx2.paddus.b",
+         u8_sat(wild_u16x_ + wild_u16x_)},
+        {Target::FeatureEnd, true, UInt(8, 16), 0, "llvm.x86.sse2.paddus.b",
+         u8_sat(wild_u16x_ + wild_u16x_)},
+        {Target::AVX2, true, UInt(8, 32), 0, "llvm.x86.avx2.psubus.b",
+         u8(max(wild_i16x_ - wild_i16x_, 0))},
+        {Target::FeatureEnd, true, UInt(8, 16), 0, "llvm.x86.sse2.psubus.b",
+         u8(max(wild_i16x_ - wild_i16x_, 0))},
         {Target::AVX2, true, UInt(16, 16), 0, "llvm.x86.avx2.paddus.w",
          u16_sat(wild_u32x_ + wild_u32x_)},
         {Target::FeatureEnd, true, UInt(16, 8), 0, "llvm.x86.sse2.paddus.w",
@@ -268,6 +277,14 @@ void CodeGen_X86::visit(const Cast *op) {
          u16(max(wild_i32x_ - wild_i32x_, 0))},
 #else
         // LLVM 8.0+ require using helpers from x86.ll
+        {Target::AVX2, true, UInt(8, 32), 0, "paddusbx32",
+         u8_sat(wild_u16x_ + wild_u16x_)},
+        {Target::FeatureEnd, true, UInt(8, 16), 0, "paddusbx16",
+         u8_sat(wild_u16x_ + wild_u16x_)},
+        {Target::AVX2, true, UInt(8, 32), 0, "psubusbx32",
+         u8(max(wild_i16x_ - wild_i16x_, 0))},
+        {Target::FeatureEnd, true, UInt(8, 16), 0, "psubusbx16",
+         u8(max(wild_i16x_ - wild_i16x_, 0))},
         {Target::AVX2, true, UInt(16, 16), 0, "padduswx16",
          u16_sat(wild_u32x_ + wild_u32x_)},
         {Target::FeatureEnd, true, UInt(16, 8), 0, "padduswx8",
