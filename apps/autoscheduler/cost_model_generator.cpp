@@ -158,12 +158,17 @@ public:
         normalized_schedule_features(n, c, s) = fast_log(schedule_features(n, c, s) + 1);
 
         Func squashed_head1_filter("squashed_head1_filter");
-        squashed_head1_filter(c, w, n) = sigmoid(head1_filter(c, w, n));
+        squashed_head1_filter(c, s, n) = sigmoid(head1_filter(c, s, n));
+
+        // Explicitly broadcast the weights across the batch, to avoid
+        // an rfactor in the reverse-mode schedule.
+        Func squashed_head1_filter_broadcast("squashed_head1_filter_broadcast");
+        squashed_head1_filter_broadcast(c, w, s, n) = squashed_head1_filter(c, s, n);
 
         Func head1_conv("head1_conv");
         RDom r_head1(0, head1_w, 0, head1_h);
         head1_conv(c, w) = head1_bias(c);
-        head1_conv(c, w) += squashed_head1_filter(c, r_head1.x, r_head1.y) * pipeline_features(r_head1.x, r_head1.y, w);
+        head1_conv(c, w) += squashed_head1_filter_broadcast(c, w, r_head1.x, r_head1.y) * pipeline_features(r_head1.x, r_head1.y, w);
 
         // No point in a relu - the inputs and weights are positive
 
@@ -235,6 +240,8 @@ public:
         Expr working_set_at_realization = schedule_features(n, idx++, w);
         Expr working_set_at_root = schedule_features(n, idx++, w);
         assert(idx == head2_w);
+
+
 
         // Count up the number of things computed
         Expr compute_cost = select(inlined_calls == 0,
@@ -313,6 +320,10 @@ public:
 
         Expr cost = compute_cost + store_cost + load_cost + store_cost + cost_of_malloc + cost_of_parallelism + cost_of_working_set;
 
+
+        // Aggressively simplified model
+        //Expr cost = relu1(0, w, n) * (num_vectors * vector_size + num_scalars) + relu1(1, w, n);
+
         // Keep the schedule fixed by adding a dependence to all out channels
         for (int i = 0; i < conv1_channels; i++) {
             cost += 0.0f * relu1(i, w, n);
@@ -371,8 +382,9 @@ public:
             Expr significance = 1 - 1 / r1;
 
             // p1 should be at least 1 larger than p2, in units of the true runtime of the fastest schedule
-            Expr correct_order = significance * max(0, p2 + 1 - p1);
-            err(n) = correct_order + 1e-5f * regularize;
+            //Expr correct_order = significance * max(0, p2 + 1 - p1);
+            Expr delta = pow(1.0f/max(p1, 1e-10f) - 1.0f/r1, 2);
+            err(n) = delta + 1e-5f * regularize;
 
             Expr loss = sum(err(r_batch));
 

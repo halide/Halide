@@ -1,15 +1,11 @@
-// We directly include the headers from the Halide source tree to
-// avoid a build dependency on Halide.h
 #include <unordered_map>
 #include <tuple>
 #include "Halide.h"
 
-using namespace Halide;
-
 namespace {
 
 struct Tensor {
-    Func f;
+    Halide::Func f;
     std::vector<int> shape;
     std::string name;
 };
@@ -34,6 +30,7 @@ int find_index(int value, std::vector<int> vec) {
 class Resnet50Block: public Halide::Generator<Resnet50Block> {
 public:
   GeneratorParam<int> block_id{"block_id", 0}; // 0 through 15 (1 - 16)
+  GeneratorParam<bool> classic_auto_schedule_estimates{"classic_auto_schedule_estimates", false};
 
   Input<Buffer<float>> input{"input", 3};
   /** parameter values for scaling layers **/
@@ -69,11 +66,11 @@ public:
   Input<Buffer<float>[16]> br2c_conv_weights{"br2c_conv_weights", 4};
 
   Input<Buffer<float>> fc1000_weights{"fc1000_weights", 2};
-  Input<Buffer<float>> fc1000_bias{"fc1_bias", 1};
+  Input<Buffer<float>> fc1000_bias{"fc1000_bias", 1};
   Output<Buffer<float>> block_output{"block_output", 3};
   Output<Buffer<float>> final_output{"final_output", 1};
 
-  std::vector<std::vector<int>> block_dims{
+  const std::vector<std::vector<int>> block_dims{
     {256, 56, 56},
     {512, 28, 28},
     {1024, 14, 14},
@@ -82,57 +79,59 @@ public:
 
   /** list out shapes of each layers weights **/
   // weight shapes: out channels, kernel_w, kernel_h, pad, stride. In channels infered by input tensor shape
-  WeightShape conv1_ws = {64, 7, 7, 3, 2};
-  WeightShape pool1_ws = {64, 3, 3, 1, 2};
-  WeightShape pool5_ws = {2048, 7, 7, 0, 1};
-  WeightShape fc1000_ws = {1000, 1, 1, 0, 1}; // 1x1 conv with 2048 input channels and 1000 output channels
+  const WeightShape conv1_ws = {64, 7, 7, 3, 2};
+  const WeightShape pool1_ws = {64, 3, 3, 1, 2};
+  const WeightShape pool5_ws = {2048, 7, 7, 0, 1};
+  const WeightShape fc1000_ws = {1000, 1, 1, 0, 1}; // 1x1 conv with 2048 input channels and 1000 output channels
 
   // res2a, res2b, res2c all have shame shapes
-  WeightShape res2x_br2a_ws = {64, 1, 1, 0, 1};
-  WeightShape res2a_br2b_ws = {64, 3, 3, 1, 1};
-  WeightShape res2x_br2b_ws = {64, 3, 3, 1, 1};
-  WeightShape res2x_br2c_ws = {256, 1, 1, 0, 1};
-  WeightShape res2a_br1_ws = {256, 1, 1, 0, 1};
+  const WeightShape res2x_br2a_ws = {64, 1, 1, 0, 1};
+  const WeightShape res2a_br2b_ws = {64, 3, 3, 1, 1};
+  const WeightShape res2x_br2b_ws = {64, 3, 3, 1, 1};
+  const WeightShape res2x_br2c_ws = {256, 1, 1, 0, 1};
+  const WeightShape res2a_br1_ws = {256, 1, 1, 0, 1};
 
   // res3x is same for most layers
   //WeightShape res3a_br2a_ws = {128, 1, 1, 0, 2};
-  WeightShape res3x_br2a_ws = {128, 1, 1, 0, 1};
-  WeightShape res3a_br2b_ws = {128, 3, 3, 1, 2};
-  WeightShape res3x_br2b_ws = {128, 3, 3, 1, 1};
-  WeightShape res3x_br2c_ws = {512, 1, 1, 0, 1};
-  WeightShape res3a_br1_ws = {512, 1, 1, 0, 2};
+  const WeightShape res3x_br2a_ws = {128, 1, 1, 0, 1};
+  const WeightShape res3a_br2b_ws = {128, 3, 3, 1, 2};
+  const WeightShape res3x_br2b_ws = {128, 3, 3, 1, 1};
+  const WeightShape res3x_br2c_ws = {512, 1, 1, 0, 1};
+  const WeightShape res3a_br1_ws = {512, 1, 1, 0, 2};
 
   //WeightShape res4a_br2a_ws = {256, 1, 1, 0, 2};
-  WeightShape res4x_br2a_ws = {256, 1, 1, 0, 1};
-  WeightShape res4a_br2b_ws = {256, 3, 3, 1, 2};
-  WeightShape res4x_br2b_ws = {256, 3, 3, 1, 1};
-  WeightShape res4x_br2c_ws = {1024, 1, 1, 0, 1};
-  WeightShape res4a_br1_ws = {1024, 1, 1, 0, 2};
+  const WeightShape res4x_br2a_ws = {256, 1, 1, 0, 1};
+  const WeightShape res4a_br2b_ws = {256, 3, 3, 1, 2};
+  const WeightShape res4x_br2b_ws = {256, 3, 3, 1, 1};
+  const WeightShape res4x_br2c_ws = {1024, 1, 1, 0, 1};
+  const WeightShape res4a_br1_ws = {1024, 1, 1, 0, 2};
 
   //WeightShape res5a_br2a_ws = {512, 1, 1, 0, 2};
-  WeightShape res5x_br2a_ws = {512, 1, 1, 0, 1};
-  WeightShape res5a_br2b_ws = {512, 3, 3, 1, 2};
-  WeightShape res5x_br2b_ws = {512, 3, 3, 1, 1};
-  WeightShape res5x_br2c_ws = {2048, 1, 1, 0, 1};
-  WeightShape res5a_br1_ws = {2048, 1, 1, 0, 2};
+  const WeightShape res5x_br2a_ws = {512, 1, 1, 0, 1};
+  const WeightShape res5a_br2b_ws = {512, 3, 3, 1, 2};
+  const WeightShape res5x_br2b_ws = {512, 3, 3, 1, 1};
+  const WeightShape res5x_br2c_ws = {2048, 1, 1, 0, 1};
+  const WeightShape res5a_br1_ws = {2048, 1, 1, 0, 2};
 
-  WeightShape br1_ws[4] = {res2a_br1_ws, res3a_br1_ws, res4a_br1_ws, res5a_br1_ws};
-  WeightShape br2a_ws[16] = {res2x_br2a_ws, res2x_br2a_ws, res2x_br2a_ws,
-                             res3x_br2a_ws, res3x_br2a_ws, res3x_br2a_ws, res3x_br2a_ws,
-                             res4x_br2a_ws, res4x_br2a_ws, res4x_br2a_ws, res4x_br2a_ws, res4x_br2a_ws, res4x_br2a_ws,
-                             res5x_br2a_ws, res5x_br2a_ws, res5x_br2a_ws};
-  WeightShape br2b_ws[16] = {res2a_br2b_ws, res2x_br2b_ws, res2x_br2b_ws,
-                             res3a_br2b_ws, res3x_br2b_ws, res3x_br2b_ws, res3x_br2b_ws,
-                             res4a_br2b_ws, res4x_br2b_ws, res4x_br2b_ws, res4x_br2b_ws, res4x_br2b_ws, res4x_br2b_ws,
-                             res5a_br2b_ws, res5x_br2b_ws, res5x_br2b_ws};
-  WeightShape br2c_ws[16] = {res2x_br2c_ws, res2x_br2c_ws, res2x_br2c_ws,
-                             res3x_br2c_ws, res3x_br2c_ws, res3x_br2c_ws, res3x_br2c_ws,
-                             res4x_br2c_ws, res4x_br2c_ws, res4x_br2c_ws, res4x_br2c_ws, res4x_br2c_ws, res4x_br2c_ws,
-                             res5x_br2c_ws, res5x_br2c_ws, res5x_br2c_ws};
+  const WeightShape br1_ws[4] = {res2a_br1_ws, res3a_br1_ws, res4a_br1_ws, res5a_br1_ws};
+  const WeightShape br2a_ws[16] = {res2x_br2a_ws, res2x_br2a_ws, res2x_br2a_ws,
+                                   res3x_br2a_ws, res3x_br2a_ws, res3x_br2a_ws, res3x_br2a_ws,
+                                   res4x_br2a_ws, res4x_br2a_ws, res4x_br2a_ws, res4x_br2a_ws, res4x_br2a_ws, res4x_br2a_ws,
+                                   res5x_br2a_ws, res5x_br2a_ws, res5x_br2a_ws};
+  const WeightShape br2b_ws[16] = {res2a_br2b_ws, res2x_br2b_ws, res2x_br2b_ws,
+                                   res3a_br2b_ws, res3x_br2b_ws, res3x_br2b_ws, res3x_br2b_ws,
+                                   res4a_br2b_ws, res4x_br2b_ws, res4x_br2b_ws, res4x_br2b_ws, res4x_br2b_ws, res4x_br2b_ws,
+                                   res5a_br2b_ws, res5x_br2b_ws, res5x_br2b_ws};
+  const WeightShape br2c_ws[16] = {res2x_br2c_ws, res2x_br2c_ws, res2x_br2c_ws,
+                                   res3x_br2c_ws, res3x_br2c_ws, res3x_br2c_ws, res3x_br2c_ws,
+                                   res4x_br2c_ws, res4x_br2c_ws, res4x_br2c_ws, res4x_br2c_ws, res4x_br2c_ws, res4x_br2c_ws,
+                                   res5x_br2c_ws, res5x_br2c_ws, res5x_br2c_ws};
 
   Var c, i, j;
 
   void generate() {
+
+    // Algorithm
 
     /** Declare arrays of other functions and build the requested block **/
     Tensor br1_conv[4];
@@ -171,17 +170,20 @@ public:
     Tensor br2a_input;
     Tensor resunit_sum_input;
 
+    // used only for block_id == 0
+    Tensor conv1, norm1, scaled1, relu1, pool1;
+
     /** if block_id is 0 build the (stem) conv1 section **/
     if (block_id == 0) {
       input_shape = {3, 224, 224};
       input_t.f = input;
       input_t.shape = input_shape;
 
-      Tensor conv1 = conv2D(input_t, conv1_ws, conv1_weights, "conv1");
-      Tensor norm1 = norm_layer(conv1, conv1_mu, conv1_sig, "norm1");
-      Tensor scaled1 = scale_layer(norm1, conv1_gamma, conv1_beta, "scale1");
-      Tensor relu1 = relu_layer(scaled1, "relu1");
-      Tensor pool1 = max_pool_layer(relu1, pool1_ws, "pool1");
+      conv1 = conv2D(input_t, conv1_ws, conv1_weights, "conv1");
+      norm1 = norm_layer(conv1, conv1_mu, conv1_sig, "norm1");
+      scaled1 = scale_layer(norm1, conv1_gamma, conv1_beta, "scale1");
+      relu1 = relu_layer(scaled1, "relu1");
+      pool1 = max_pool_layer(relu1, pool1_ws, "pool1");
 
       br2a_input = pool1;
     } else {
@@ -211,12 +213,12 @@ public:
 
     // branch2a
     auto weights = br2a_conv_weights[block_id];
-    
+
     br2a_conv[block_id] = conv2D(br2a_input, br2a_ws[block_id], weights, "block" + std::to_string(block_id) + "_2a_conv");
     br2a_norm[block_id] = norm_layer(br2a_conv[block_id], br2a_mu[block_id], br2a_sig[block_id], "block" + std::to_string(block_id) + "_2a_norm");
     br2a_scaled[block_id] = scale_layer(br2a_norm[block_id], br2a_gamma[block_id], br2a_beta[block_id], "block" + std::to_string(block_id) + "_2a_scale");
     br2a_relu[block_id] = relu_layer(br2a_scaled[block_id], "2a_relu");
-  
+
     // branch 2b
     weights = br2b_conv_weights[block_id];
     br2b_conv[block_id] = conv2D(br2a_relu[block_id], br2b_ws[block_id], weights, "block" + std::to_string(block_id) + "_2b_conv");
@@ -240,42 +242,501 @@ public:
     if (block_id == 15) {
         pool5 = avg_pool_layer(resunit_relu[block_id], pool5_ws, "pool5");
         fc1000 = fc_layer(pool5, fc1000_ws, fc1000_weights, fc1000_bias, "fc");
-        softmax_layer(fc1000, final_output, 1000, "softmax");
+        final_output = softmax_layer(fc1000, 1000, "softmax");
+    } else {
+      final_output(c) = Halide::undef<float>();
     }
 
-    // provide bounds estimates on outputs
-    final_output(c) = undef<float>();
+    // Estimates
+    const std::vector<int> output_dim = block_dims[macro_block_id];
 
-    std::vector<int> output_dim = block_dims[macro_block_id];
+    final_output.bound(final_output.args()[0], 0, 1000);
+    block_output.bound(block_output.args()[0], 0, output_dim[0]);
+    block_output.bound(block_output.args()[1], 0, output_dim[1]);
+    block_output.bound(block_output.args()[2], 0, output_dim[2]);
+    if (classic_auto_schedule_estimates) {
+      // classic auto-scheduler requires explicit estimates for everything,
+      // whether or not they can be inferred
+      do_class_auto_schedule_estimate();
+    }
 
-    final_output.estimate(final_output.args()[0], 0, 1000);
-    block_output.estimate(block_output.args()[0], 0, output_dim[0]);
-    block_output.estimate(block_output.args()[1], 0, output_dim[1]);
-    block_output.estimate(block_output.args()[2], 0, output_dim[2]);
+    // Schedule
+    if (!auto_schedule) {
+      // Really dumb compute-root-everything schedule
+      if (block_id == 0) {
+        relu1.f.compute_root();
+        pool1.f.compute_root();
+      }
+      for (int i = 0; i < 4; i++) {
+        br1_scale[i].f.compute_root();
+      }
+      for (int i = 0; i < 16; i++) {
+        br2a_relu[i].f.compute_root();
+        br2b_relu[i].f.compute_root();
+        resunit_relu[i].f.compute_root();
+      }
+      pool5.f.compute_root();
+      fc1000.f.compute_root();
+      softmax.f.compute_root();
+    }
+
   }
 
 private:
-  float inf = 3.402823e+38f;
+    // Estimates for the master autoscheduler. Not required for our
+    // new algorithm. Derived by running manual pipeline in debug mode
+    // and just copying the values actually passed in for block 0.
+  void do_class_auto_schedule_estimate() {
+      input.dim(0).set_bounds_estimate(0, 3)
+        .dim(1).set_bounds_estimate(0, 224)
+        .dim(2).set_bounds_estimate(0, 224);
+      conv1_gamma.dim(0).set_bounds_estimate(0, 64);
+      br1_gamma[0].dim(0).set_bounds_estimate(0, 256);
+      br1_gamma[1].dim(0).set_bounds_estimate(0, 512);
+      br1_gamma[2].dim(0).set_bounds_estimate(0, 1024);
+      br1_gamma[3].dim(0).set_bounds_estimate(0, 2048);
+      br2a_gamma[0].dim(0).set_bounds_estimate(0, 64);
+      br2a_gamma[1].dim(0).set_bounds_estimate(0, 64);
+      br2a_gamma[2].dim(0).set_bounds_estimate(0, 64);
+      br2a_gamma[3].dim(0).set_bounds_estimate(0, 128);
+      br2a_gamma[4].dim(0).set_bounds_estimate(0, 128);
+      br2a_gamma[5].dim(0).set_bounds_estimate(0, 128);
+      br2a_gamma[6].dim(0).set_bounds_estimate(0, 128);
+      br2a_gamma[7].dim(0).set_bounds_estimate(0, 256);
+      br2a_gamma[8].dim(0).set_bounds_estimate(0, 256);
+      br2a_gamma[9].dim(0).set_bounds_estimate(0, 256);
+      br2a_gamma[10].dim(0).set_bounds_estimate(0, 256);
+      br2a_gamma[11].dim(0).set_bounds_estimate(0, 256);
+      br2a_gamma[12].dim(0).set_bounds_estimate(0, 256);
+      br2a_gamma[13].dim(0).set_bounds_estimate(0, 512);
+      br2a_gamma[14].dim(0).set_bounds_estimate(0, 512);
+      br2a_gamma[15].dim(0).set_bounds_estimate(0, 512);
+      br2b_gamma[0].dim(0).set_bounds_estimate(0, 64);
+      br2b_gamma[1].dim(0).set_bounds_estimate(0, 64);
+      br2b_gamma[2].dim(0).set_bounds_estimate(0, 64);
+      br2b_gamma[3].dim(0).set_bounds_estimate(0, 128);
+      br2b_gamma[4].dim(0).set_bounds_estimate(0, 128);
+      br2b_gamma[5].dim(0).set_bounds_estimate(0, 128);
+      br2b_gamma[6].dim(0).set_bounds_estimate(0, 128);
+      br2b_gamma[7].dim(0).set_bounds_estimate(0, 256);
+      br2b_gamma[8].dim(0).set_bounds_estimate(0, 256);
+      br2b_gamma[9].dim(0).set_bounds_estimate(0, 256);
+      br2b_gamma[10].dim(0).set_bounds_estimate(0, 256);
+      br2b_gamma[11].dim(0).set_bounds_estimate(0, 256);
+      br2b_gamma[12].dim(0).set_bounds_estimate(0, 256);
+      br2b_gamma[13].dim(0).set_bounds_estimate(0, 512);
+      br2b_gamma[14].dim(0).set_bounds_estimate(0, 512);
+      br2b_gamma[15].dim(0).set_bounds_estimate(0, 512);
+      br2c_gamma[0].dim(0).set_bounds_estimate(0, 256);
+      br2c_gamma[1].dim(0).set_bounds_estimate(0, 256);
+      br2c_gamma[2].dim(0).set_bounds_estimate(0, 256);
+      br2c_gamma[3].dim(0).set_bounds_estimate(0, 512);
+      br2c_gamma[4].dim(0).set_bounds_estimate(0, 512);
+      br2c_gamma[5].dim(0).set_bounds_estimate(0, 512);
+      br2c_gamma[6].dim(0).set_bounds_estimate(0, 512);
+      br2c_gamma[7].dim(0).set_bounds_estimate(0, 1024);
+      br2c_gamma[8].dim(0).set_bounds_estimate(0, 1024);
+      br2c_gamma[9].dim(0).set_bounds_estimate(0, 1024);
+      br2c_gamma[10].dim(0).set_bounds_estimate(0, 1024);
+      br2c_gamma[11].dim(0).set_bounds_estimate(0, 1024);
+      br2c_gamma[12].dim(0).set_bounds_estimate(0, 1024);
+      br2c_gamma[13].dim(0).set_bounds_estimate(0, 2048);
+      br2c_gamma[14].dim(0).set_bounds_estimate(0, 2048);
+      br2c_gamma[15].dim(0).set_bounds_estimate(0, 2048);
+      conv1_beta.dim(0).set_bounds_estimate(0, 64);
+      br1_beta[0].dim(0).set_bounds_estimate(0, 256);
+      br1_beta[1].dim(0).set_bounds_estimate(0, 512);
+      br1_beta[2].dim(0).set_bounds_estimate(0, 1024);
+      br1_beta[3].dim(0).set_bounds_estimate(0, 2048);
+      br2a_beta[0].dim(0).set_bounds_estimate(0, 64);
+      br2a_beta[1].dim(0).set_bounds_estimate(0, 64);
+      br2a_beta[2].dim(0).set_bounds_estimate(0, 64);
+      br2a_beta[3].dim(0).set_bounds_estimate(0, 128);
+      br2a_beta[4].dim(0).set_bounds_estimate(0, 128);
+      br2a_beta[5].dim(0).set_bounds_estimate(0, 128);
+      br2a_beta[6].dim(0).set_bounds_estimate(0, 128);
+      br2a_beta[7].dim(0).set_bounds_estimate(0, 256);
+      br2a_beta[8].dim(0).set_bounds_estimate(0, 256);
+      br2a_beta[9].dim(0).set_bounds_estimate(0, 256);
+      br2a_beta[10].dim(0).set_bounds_estimate(0, 256);
+      br2a_beta[11].dim(0).set_bounds_estimate(0, 256);
+      br2a_beta[12].dim(0).set_bounds_estimate(0, 256);
+      br2a_beta[13].dim(0).set_bounds_estimate(0, 512);
+      br2a_beta[14].dim(0).set_bounds_estimate(0, 512);
+      br2a_beta[15].dim(0).set_bounds_estimate(0, 512);
+      br2b_beta[0].dim(0).set_bounds_estimate(0, 64);
+      br2b_beta[1].dim(0).set_bounds_estimate(0, 64);
+      br2b_beta[2].dim(0).set_bounds_estimate(0, 64);
+      br2b_beta[3].dim(0).set_bounds_estimate(0, 128);
+      br2b_beta[4].dim(0).set_bounds_estimate(0, 128);
+      br2b_beta[5].dim(0).set_bounds_estimate(0, 128);
+      br2b_beta[6].dim(0).set_bounds_estimate(0, 128);
+      br2b_beta[7].dim(0).set_bounds_estimate(0, 256);
+      br2b_beta[8].dim(0).set_bounds_estimate(0, 256);
+      br2b_beta[9].dim(0).set_bounds_estimate(0, 256);
+      br2b_beta[10].dim(0).set_bounds_estimate(0, 256);
+      br2b_beta[11].dim(0).set_bounds_estimate(0, 256);
+      br2b_beta[12].dim(0).set_bounds_estimate(0, 256);
+      br2b_beta[13].dim(0).set_bounds_estimate(0, 512);
+      br2b_beta[14].dim(0).set_bounds_estimate(0, 512);
+      br2b_beta[15].dim(0).set_bounds_estimate(0, 512);
+      br2c_beta[0].dim(0).set_bounds_estimate(0, 256);
+      br2c_beta[1].dim(0).set_bounds_estimate(0, 256);
+      br2c_beta[2].dim(0).set_bounds_estimate(0, 256);
+      br2c_beta[3].dim(0).set_bounds_estimate(0, 512);
+      br2c_beta[4].dim(0).set_bounds_estimate(0, 512);
+      br2c_beta[5].dim(0).set_bounds_estimate(0, 512);
+      br2c_beta[6].dim(0).set_bounds_estimate(0, 512);
+      br2c_beta[7].dim(0).set_bounds_estimate(0, 1024);
+      br2c_beta[8].dim(0).set_bounds_estimate(0, 1024);
+      br2c_beta[9].dim(0).set_bounds_estimate(0, 1024);
+      br2c_beta[10].dim(0).set_bounds_estimate(0, 1024);
+      br2c_beta[11].dim(0).set_bounds_estimate(0, 1024);
+      br2c_beta[12].dim(0).set_bounds_estimate(0, 1024);
+      br2c_beta[13].dim(0).set_bounds_estimate(0, 2048);
+      br2c_beta[14].dim(0).set_bounds_estimate(0, 2048);
+      br2c_beta[15].dim(0).set_bounds_estimate(0, 2048);
+      conv1_mu.dim(0).set_bounds_estimate(0, 64);
+      br1_mu[0].dim(0).set_bounds_estimate(0, 256);
+      br1_mu[1].dim(0).set_bounds_estimate(0, 512);
+      br1_mu[2].dim(0).set_bounds_estimate(0, 1024);
+      br1_mu[3].dim(0).set_bounds_estimate(0, 2048);
+      br2a_mu[0].dim(0).set_bounds_estimate(0, 64);
+      br2a_mu[1].dim(0).set_bounds_estimate(0, 64);
+      br2a_mu[2].dim(0).set_bounds_estimate(0, 64);
+      br2a_mu[3].dim(0).set_bounds_estimate(0, 128);
+      br2a_mu[4].dim(0).set_bounds_estimate(0, 128);
+      br2a_mu[5].dim(0).set_bounds_estimate(0, 128);
+      br2a_mu[6].dim(0).set_bounds_estimate(0, 128);
+      br2a_mu[7].dim(0).set_bounds_estimate(0, 256);
+      br2a_mu[8].dim(0).set_bounds_estimate(0, 256);
+      br2a_mu[9].dim(0).set_bounds_estimate(0, 256);
+      br2a_mu[10].dim(0).set_bounds_estimate(0, 256);
+      br2a_mu[11].dim(0).set_bounds_estimate(0, 256);
+      br2a_mu[12].dim(0).set_bounds_estimate(0, 256);
+      br2a_mu[13].dim(0).set_bounds_estimate(0, 512);
+      br2a_mu[14].dim(0).set_bounds_estimate(0, 512);
+      br2a_mu[15].dim(0).set_bounds_estimate(0, 512);
+      br2b_mu[0].dim(0).set_bounds_estimate(0, 64);
+      br2b_mu[1].dim(0).set_bounds_estimate(0, 64);
+      br2b_mu[2].dim(0).set_bounds_estimate(0, 64);
+      br2b_mu[3].dim(0).set_bounds_estimate(0, 128);
+      br2b_mu[4].dim(0).set_bounds_estimate(0, 128);
+      br2b_mu[5].dim(0).set_bounds_estimate(0, 128);
+      br2b_mu[6].dim(0).set_bounds_estimate(0, 128);
+      br2b_mu[7].dim(0).set_bounds_estimate(0, 256);
+      br2b_mu[8].dim(0).set_bounds_estimate(0, 256);
+      br2b_mu[9].dim(0).set_bounds_estimate(0, 256);
+      br2b_mu[10].dim(0).set_bounds_estimate(0, 256);
+      br2b_mu[11].dim(0).set_bounds_estimate(0, 256);
+      br2b_mu[12].dim(0).set_bounds_estimate(0, 256);
+      br2b_mu[13].dim(0).set_bounds_estimate(0, 512);
+      br2b_mu[14].dim(0).set_bounds_estimate(0, 512);
+      br2b_mu[15].dim(0).set_bounds_estimate(0, 512);
+      br2c_mu[0].dim(0).set_bounds_estimate(0, 256);
+      br2c_mu[1].dim(0).set_bounds_estimate(0, 256);
+      br2c_mu[2].dim(0).set_bounds_estimate(0, 256);
+      br2c_mu[3].dim(0).set_bounds_estimate(0, 512);
+      br2c_mu[4].dim(0).set_bounds_estimate(0, 512);
+      br2c_mu[5].dim(0).set_bounds_estimate(0, 512);
+      br2c_mu[6].dim(0).set_bounds_estimate(0, 512);
+      br2c_mu[7].dim(0).set_bounds_estimate(0, 1024);
+      br2c_mu[8].dim(0).set_bounds_estimate(0, 1024);
+      br2c_mu[9].dim(0).set_bounds_estimate(0, 1024);
+      br2c_mu[10].dim(0).set_bounds_estimate(0, 1024);
+      br2c_mu[11].dim(0).set_bounds_estimate(0, 1024);
+      br2c_mu[12].dim(0).set_bounds_estimate(0, 1024);
+      br2c_mu[13].dim(0).set_bounds_estimate(0, 2048);
+      br2c_mu[14].dim(0).set_bounds_estimate(0, 2048);
+      br2c_mu[15].dim(0).set_bounds_estimate(0, 2048);
+      conv1_sig.dim(0).set_bounds_estimate(0, 64);
+      br1_sig[0].dim(0).set_bounds_estimate(0, 256);
+      br1_sig[1].dim(0).set_bounds_estimate(0, 512);
+      br1_sig[2].dim(0).set_bounds_estimate(0, 1024);
+      br1_sig[3].dim(0).set_bounds_estimate(0, 2048);
+      br2a_sig[0].dim(0).set_bounds_estimate(0, 64);
+      br2a_sig[1].dim(0).set_bounds_estimate(0, 64);
+      br2a_sig[2].dim(0).set_bounds_estimate(0, 64);
+      br2a_sig[3].dim(0).set_bounds_estimate(0, 128);
+      br2a_sig[4].dim(0).set_bounds_estimate(0, 128);
+      br2a_sig[5].dim(0).set_bounds_estimate(0, 128);
+      br2a_sig[6].dim(0).set_bounds_estimate(0, 128);
+      br2a_sig[7].dim(0).set_bounds_estimate(0, 256);
+      br2a_sig[8].dim(0).set_bounds_estimate(0, 256);
+      br2a_sig[9].dim(0).set_bounds_estimate(0, 256);
+      br2a_sig[10].dim(0).set_bounds_estimate(0, 256);
+      br2a_sig[11].dim(0).set_bounds_estimate(0, 256);
+      br2a_sig[12].dim(0).set_bounds_estimate(0, 256);
+      br2a_sig[13].dim(0).set_bounds_estimate(0, 512);
+      br2a_sig[14].dim(0).set_bounds_estimate(0, 512);
+      br2a_sig[15].dim(0).set_bounds_estimate(0, 512);
+      br2b_sig[0].dim(0).set_bounds_estimate(0, 64);
+      br2b_sig[1].dim(0).set_bounds_estimate(0, 64);
+      br2b_sig[2].dim(0).set_bounds_estimate(0, 64);
+      br2b_sig[3].dim(0).set_bounds_estimate(0, 128);
+      br2b_sig[4].dim(0).set_bounds_estimate(0, 128);
+      br2b_sig[5].dim(0).set_bounds_estimate(0, 128);
+      br2b_sig[6].dim(0).set_bounds_estimate(0, 128);
+      br2b_sig[7].dim(0).set_bounds_estimate(0, 256);
+      br2b_sig[8].dim(0).set_bounds_estimate(0, 256);
+      br2b_sig[9].dim(0).set_bounds_estimate(0, 256);
+      br2b_sig[10].dim(0).set_bounds_estimate(0, 256);
+      br2b_sig[11].dim(0).set_bounds_estimate(0, 256);
+      br2b_sig[12].dim(0).set_bounds_estimate(0, 256);
+      br2b_sig[13].dim(0).set_bounds_estimate(0, 512);
+      br2b_sig[14].dim(0).set_bounds_estimate(0, 512);
+      br2b_sig[15].dim(0).set_bounds_estimate(0, 512);
+      br2c_sig[0].dim(0).set_bounds_estimate(0, 256);
+      br2c_sig[1].dim(0).set_bounds_estimate(0, 256);
+      br2c_sig[2].dim(0).set_bounds_estimate(0, 256);
+      br2c_sig[3].dim(0).set_bounds_estimate(0, 512);
+      br2c_sig[4].dim(0).set_bounds_estimate(0, 512);
+      br2c_sig[5].dim(0).set_bounds_estimate(0, 512);
+      br2c_sig[6].dim(0).set_bounds_estimate(0, 512);
+      br2c_sig[7].dim(0).set_bounds_estimate(0, 1024);
+      br2c_sig[8].dim(0).set_bounds_estimate(0, 1024);
+      br2c_sig[9].dim(0).set_bounds_estimate(0, 1024);
+      br2c_sig[10].dim(0).set_bounds_estimate(0, 1024);
+      br2c_sig[11].dim(0).set_bounds_estimate(0, 1024);
+      br2c_sig[12].dim(0).set_bounds_estimate(0, 1024);
+      br2c_sig[13].dim(0).set_bounds_estimate(0, 2048);
+      br2c_sig[14].dim(0).set_bounds_estimate(0, 2048);
+      br2c_sig[15].dim(0).set_bounds_estimate(0, 2048);
+      conv1_weights.dim(0).set_bounds_estimate(0, 64)
+        .dim(1).set_bounds_estimate(0, 7)
+        .dim(2).set_bounds_estimate(0, 7)
+        .dim(3).set_bounds_estimate(0, 3);
+      br1_conv_weights[0].dim(0).set_bounds_estimate(0, 256)
+        .dim(1).set_bounds_estimate(0, 1)
+        .dim(2).set_bounds_estimate(0, 1)
+        .dim(3).set_bounds_estimate(0, 64);
+      br1_conv_weights[1].dim(0).set_bounds_estimate(0, 512)
+        .dim(1).set_bounds_estimate(0, 1)
+        .dim(2).set_bounds_estimate(0, 1)
+        .dim(3).set_bounds_estimate(0, 256);
+      br1_conv_weights[2].dim(0).set_bounds_estimate(0, 1024)
+        .dim(1).set_bounds_estimate(0, 1)
+        .dim(2).set_bounds_estimate(0, 1)
+        .dim(3).set_bounds_estimate(0, 512);
+      br1_conv_weights[3].dim(0).set_bounds_estimate(0, 2048)
+        .dim(1).set_bounds_estimate(0, 1)
+        .dim(2).set_bounds_estimate(0, 1)
+        .dim(3).set_bounds_estimate(0, 1024);
+      br2a_conv_weights[0].dim(0).set_bounds_estimate(0, 64)
+        .dim(1).set_bounds_estimate(0, 1)
+        .dim(2).set_bounds_estimate(0, 1)
+        .dim(3).set_bounds_estimate(0, 64);
+      br2a_conv_weights[1].dim(0).set_bounds_estimate(0, 64)
+        .dim(1).set_bounds_estimate(0, 1)
+        .dim(2).set_bounds_estimate(0, 1)
+        .dim(3).set_bounds_estimate(0, 256);
+      br2a_conv_weights[2].dim(0).set_bounds_estimate(0, 64)
+        .dim(1).set_bounds_estimate(0, 1)
+        .dim(2).set_bounds_estimate(0, 1)
+        .dim(3).set_bounds_estimate(0, 256);
+      br2a_conv_weights[3].dim(0).set_bounds_estimate(0, 128)
+        .dim(1).set_bounds_estimate(0, 1)
+        .dim(2).set_bounds_estimate(0, 1)
+        .dim(3).set_bounds_estimate(0, 256);
+      br2a_conv_weights[4].dim(0).set_bounds_estimate(0, 128)
+        .dim(1).set_bounds_estimate(0, 1)
+        .dim(2).set_bounds_estimate(0, 1)
+        .dim(3).set_bounds_estimate(0, 512);
+      br2a_conv_weights[5].dim(0).set_bounds_estimate(0, 128)
+        .dim(1).set_bounds_estimate(0, 1)
+        .dim(2).set_bounds_estimate(0, 1)
+        .dim(3).set_bounds_estimate(0, 512);
+      br2a_conv_weights[6].dim(0).set_bounds_estimate(0, 128)
+        .dim(1).set_bounds_estimate(0, 1)
+        .dim(2).set_bounds_estimate(0, 1)
+        .dim(3).set_bounds_estimate(0, 512);
+      br2a_conv_weights[7].dim(0).set_bounds_estimate(0, 256)
+        .dim(1).set_bounds_estimate(0, 1)
+        .dim(2).set_bounds_estimate(0, 1)
+        .dim(3).set_bounds_estimate(0, 512);
+      br2a_conv_weights[8].dim(0).set_bounds_estimate(0, 256)
+        .dim(1).set_bounds_estimate(0, 1)
+        .dim(2).set_bounds_estimate(0, 1)
+        .dim(3).set_bounds_estimate(0, 1024);
+      br2a_conv_weights[9].dim(0).set_bounds_estimate(0, 256)
+        .dim(1).set_bounds_estimate(0, 1)
+        .dim(2).set_bounds_estimate(0, 1)
+        .dim(3).set_bounds_estimate(0, 1024);
+      br2a_conv_weights[10].dim(0).set_bounds_estimate(0, 256)
+        .dim(1).set_bounds_estimate(0, 1)
+        .dim(2).set_bounds_estimate(0, 1)
+        .dim(3).set_bounds_estimate(0, 1024);
+      br2a_conv_weights[11].dim(0).set_bounds_estimate(0, 256)
+        .dim(1).set_bounds_estimate(0, 1)
+        .dim(2).set_bounds_estimate(0, 1)
+        .dim(3).set_bounds_estimate(0, 1024);
+      br2a_conv_weights[12].dim(0).set_bounds_estimate(0, 256)
+        .dim(1).set_bounds_estimate(0, 1)
+        .dim(2).set_bounds_estimate(0, 1)
+        .dim(3).set_bounds_estimate(0, 1024);
+      br2a_conv_weights[13].dim(0).set_bounds_estimate(0, 512)
+        .dim(1).set_bounds_estimate(0, 1)
+        .dim(2).set_bounds_estimate(0, 1)
+        .dim(3).set_bounds_estimate(0, 1024);
+      br2a_conv_weights[14].dim(0).set_bounds_estimate(0, 512)
+        .dim(1).set_bounds_estimate(0, 1)
+        .dim(2).set_bounds_estimate(0, 1)
+        .dim(3).set_bounds_estimate(0, 2048);
+      br2a_conv_weights[15].dim(0).set_bounds_estimate(0, 512)
+        .dim(1).set_bounds_estimate(0, 1)
+        .dim(2).set_bounds_estimate(0, 1)
+        .dim(3).set_bounds_estimate(0, 2048);
+      br2b_conv_weights[0].dim(0).set_bounds_estimate(0, 64)
+        .dim(1).set_bounds_estimate(0, 3)
+        .dim(2).set_bounds_estimate(0, 3)
+        .dim(3).set_bounds_estimate(0, 64);
+      br2b_conv_weights[1].dim(0).set_bounds_estimate(0, 64)
+        .dim(1).set_bounds_estimate(0, 3)
+        .dim(2).set_bounds_estimate(0, 3)
+        .dim(3).set_bounds_estimate(0, 64);
+      br2b_conv_weights[2].dim(0).set_bounds_estimate(0, 64)
+        .dim(1).set_bounds_estimate(0, 3)
+        .dim(2).set_bounds_estimate(0, 3)
+        .dim(3).set_bounds_estimate(0, 64);
+      br2b_conv_weights[3].dim(0).set_bounds_estimate(0, 128)
+        .dim(1).set_bounds_estimate(0, 3)
+        .dim(2).set_bounds_estimate(0, 3)
+        .dim(3).set_bounds_estimate(0, 128);
+      br2b_conv_weights[4].dim(0).set_bounds_estimate(0, 128)
+        .dim(1).set_bounds_estimate(0, 3)
+        .dim(2).set_bounds_estimate(0, 3)
+        .dim(3).set_bounds_estimate(0, 128);
+      br2b_conv_weights[5].dim(0).set_bounds_estimate(0, 128)
+        .dim(1).set_bounds_estimate(0, 3)
+        .dim(2).set_bounds_estimate(0, 3)
+        .dim(3).set_bounds_estimate(0, 128);
+      br2b_conv_weights[6].dim(0).set_bounds_estimate(0, 128)
+        .dim(1).set_bounds_estimate(0, 3)
+        .dim(2).set_bounds_estimate(0, 3)
+        .dim(3).set_bounds_estimate(0, 128);
+      br2b_conv_weights[7].dim(0).set_bounds_estimate(0, 256)
+        .dim(1).set_bounds_estimate(0, 3)
+        .dim(2).set_bounds_estimate(0, 3)
+        .dim(3).set_bounds_estimate(0, 256);
+      br2b_conv_weights[8].dim(0).set_bounds_estimate(0, 256)
+        .dim(1).set_bounds_estimate(0, 3)
+        .dim(2).set_bounds_estimate(0, 3)
+        .dim(3).set_bounds_estimate(0, 256);
+      br2b_conv_weights[9].dim(0).set_bounds_estimate(0, 256)
+        .dim(1).set_bounds_estimate(0, 3)
+        .dim(2).set_bounds_estimate(0, 3)
+        .dim(3).set_bounds_estimate(0, 256);
+      br2b_conv_weights[10].dim(0).set_bounds_estimate(0, 256)
+        .dim(1).set_bounds_estimate(0, 3)
+        .dim(2).set_bounds_estimate(0, 3)
+        .dim(3).set_bounds_estimate(0, 256);
+      br2b_conv_weights[11].dim(0).set_bounds_estimate(0, 256)
+        .dim(1).set_bounds_estimate(0, 3)
+        .dim(2).set_bounds_estimate(0, 3)
+        .dim(3).set_bounds_estimate(0, 256);
+      br2b_conv_weights[12].dim(0).set_bounds_estimate(0, 256)
+        .dim(1).set_bounds_estimate(0, 3)
+        .dim(2).set_bounds_estimate(0, 3)
+        .dim(3).set_bounds_estimate(0, 256);
+      br2b_conv_weights[13].dim(0).set_bounds_estimate(0, 512)
+        .dim(1).set_bounds_estimate(0, 3)
+        .dim(2).set_bounds_estimate(0, 3)
+        .dim(3).set_bounds_estimate(0, 512);
+      br2b_conv_weights[14].dim(0).set_bounds_estimate(0, 512)
+        .dim(1).set_bounds_estimate(0, 3)
+        .dim(2).set_bounds_estimate(0, 3)
+        .dim(3).set_bounds_estimate(0, 512);
+      br2b_conv_weights[15].dim(0).set_bounds_estimate(0, 512)
+        .dim(1).set_bounds_estimate(0, 3)
+        .dim(2).set_bounds_estimate(0, 3)
+        .dim(3).set_bounds_estimate(0, 512);
+      br2c_conv_weights[0].dim(0).set_bounds_estimate(0, 256)
+        .dim(1).set_bounds_estimate(0, 1)
+        .dim(2).set_bounds_estimate(0, 1)
+        .dim(3).set_bounds_estimate(0, 64);
+      br2c_conv_weights[1].dim(0).set_bounds_estimate(0, 256)
+        .dim(1).set_bounds_estimate(0, 1)
+        .dim(2).set_bounds_estimate(0, 1)
+        .dim(3).set_bounds_estimate(0, 64);
+      br2c_conv_weights[2].dim(0).set_bounds_estimate(0, 256)
+        .dim(1).set_bounds_estimate(0, 1)
+        .dim(2).set_bounds_estimate(0, 1)
+        .dim(3).set_bounds_estimate(0, 64);
+      br2c_conv_weights[3].dim(0).set_bounds_estimate(0, 512)
+        .dim(1).set_bounds_estimate(0, 1)
+        .dim(2).set_bounds_estimate(0, 1)
+        .dim(3).set_bounds_estimate(0, 128);
+      br2c_conv_weights[4].dim(0).set_bounds_estimate(0, 512)
+        .dim(1).set_bounds_estimate(0, 1)
+        .dim(2).set_bounds_estimate(0, 1)
+        .dim(3).set_bounds_estimate(0, 128);
+      br2c_conv_weights[5].dim(0).set_bounds_estimate(0, 512)
+        .dim(1).set_bounds_estimate(0, 1)
+        .dim(2).set_bounds_estimate(0, 1)
+        .dim(3).set_bounds_estimate(0, 128);
+      br2c_conv_weights[6].dim(0).set_bounds_estimate(0, 512)
+        .dim(1).set_bounds_estimate(0, 1)
+        .dim(2).set_bounds_estimate(0, 1)
+        .dim(3).set_bounds_estimate(0, 128);
+      br2c_conv_weights[7].dim(0).set_bounds_estimate(0, 1024)
+        .dim(1).set_bounds_estimate(0, 1)
+        .dim(2).set_bounds_estimate(0, 1)
+        .dim(3).set_bounds_estimate(0, 256);
+      br2c_conv_weights[8].dim(0).set_bounds_estimate(0, 1024)
+        .dim(1).set_bounds_estimate(0, 1)
+        .dim(2).set_bounds_estimate(0, 1)
+        .dim(3).set_bounds_estimate(0, 256);
+      br2c_conv_weights[9].dim(0).set_bounds_estimate(0, 1024)
+        .dim(1).set_bounds_estimate(0, 1)
+        .dim(2).set_bounds_estimate(0, 1)
+        .dim(3).set_bounds_estimate(0, 256);
+      br2c_conv_weights[10].dim(0).set_bounds_estimate(0, 1024)
+        .dim(1).set_bounds_estimate(0, 1)
+        .dim(2).set_bounds_estimate(0, 1)
+        .dim(3).set_bounds_estimate(0, 256);
+      br2c_conv_weights[11].dim(0).set_bounds_estimate(0, 1024)
+        .dim(1).set_bounds_estimate(0, 1)
+        .dim(2).set_bounds_estimate(0, 1)
+        .dim(3).set_bounds_estimate(0, 256);
+      br2c_conv_weights[12].dim(0).set_bounds_estimate(0, 1024)
+        .dim(1).set_bounds_estimate(0, 1)
+        .dim(2).set_bounds_estimate(0, 1)
+        .dim(3).set_bounds_estimate(0, 256);
+      br2c_conv_weights[13].dim(0).set_bounds_estimate(0, 2048)
+        .dim(1).set_bounds_estimate(0, 1)
+        .dim(2).set_bounds_estimate(0, 1)
+        .dim(3).set_bounds_estimate(0, 512);
+      br2c_conv_weights[14].dim(0).set_bounds_estimate(0, 2048)
+        .dim(1).set_bounds_estimate(0, 1)
+        .dim(2).set_bounds_estimate(0, 1)
+        .dim(3).set_bounds_estimate(0, 512);
+      br2c_conv_weights[15].dim(0).set_bounds_estimate(0, 2048)
+        .dim(1).set_bounds_estimate(0, 1)
+        .dim(2).set_bounds_estimate(0, 1)
+        .dim(3).set_bounds_estimate(0, 512);
+      fc1000_weights.dim(0).set_bounds_estimate(0, 1000)
+        .dim(1).set_bounds_estimate(0, 2048);
+      fc1000_bias.dim(0).set_bounds_estimate(0, 1000);
+  }
+
   Func pad(Func f, Expr width, Expr height) {
       std::vector<std::pair<Expr, Expr>> bounds(f.dimensions());
       bounds[1].first = 0;
       bounds[1].second = width;
       bounds[2].first = 0;
       bounds[2].second = height;
-      return BoundaryConditions::constant_exterior(f, 0.0f, bounds);
+      return Halide::BoundaryConditions::constant_exterior(f, 0.0f, bounds);
   }
 
-  void compute_shape(Tensor& in, Tensor& out, WeightShape& params) {
-      assert(out.shape.empty());
+  std::vector<int> compute_shape(const Tensor& in, const WeightShape& params) {
       int w = (1.0/params.stride) * (params.pad * 2 + in.shape[1] - params.w + 1 + params.stride - 1);
       int h = (1.0/params.stride) * (params.pad * 2 + in.shape[2] - params.h + 1 + params.stride - 1);
       int c = params.c;
 
-      int new_shape[3] = {c, w, h};
-      out.shape.insert(out.shape.end(), new_shape, new_shape+3);
+      return {c, w, h};
   }
 
-  Tensor conv2D(Tensor& input, WeightShape& weight_shape, Func weights, std::string name) {
+  Tensor conv2D(const Tensor& input, const WeightShape& weight_shape, const Func& weights, const std::string& name) {
       int p = weight_shape.pad;
       Func padded;
       // pad input
@@ -291,12 +752,12 @@ private:
       Tensor output;
       output.f = conv;
       output.name = name;
-      compute_shape(input, output, weight_shape);
+      output.shape = compute_shape(input, weight_shape);
       return output;
   }
 
   // assumes input is 3D (c, w, h) where w and h = 1
-  Tensor fc_layer(Tensor& input, WeightShape& weight_shape, Func weights, Func bias, std::string name) {
+  Tensor fc_layer(const Tensor& input, const WeightShape& weight_shape, const Func& weights, const Func& bias, const std::string& name) {
       RDom r(0, input.shape[0]);
       Func fc;
       fc(c) = bias(c);
@@ -305,14 +766,14 @@ private:
       Tensor output;
       output.f = fc;
       output.name = name;
-      compute_shape(input, output, weight_shape);
+      output.shape = compute_shape(input, weight_shape);
 
       return output;
   }
 
-  Tensor relu_layer(Tensor& input, std::string name) {
+  Tensor relu_layer(const Tensor& input, const std::string& name) {
       Func relu;
-      relu(c, i, j) = max(0.0f, input.f(c, i, j)); 
+      relu(c, i, j) = max(0.0f, input.f(c, i, j));
       Tensor output;
       output.f = relu;
       output.shape = input.shape;
@@ -320,7 +781,7 @@ private:
       return output;
   }
 
-  Tensor max_pool_layer(Tensor& input, WeightShape& weight_shape, std::string name) {
+  Tensor max_pool_layer(const Tensor& input, const WeightShape& weight_shape, const std::string& name) {
       int p = weight_shape.pad;
       Func padded;
       if (p) {
@@ -334,12 +795,12 @@ private:
       Tensor output;
       output.f = pool;
       output.name = name;
-      compute_shape(input, output, weight_shape);
+      output.shape = compute_shape(input, weight_shape);
 
       return output;
   }
 
-  Tensor avg_pool_layer(Tensor& input, WeightShape& weight_shape, std::string name) {
+  Tensor avg_pool_layer(const Tensor& input, const WeightShape& weight_shape, const std::string& name) {
       int p = weight_shape.pad;
       Func padded;
       if (p) {
@@ -356,12 +817,12 @@ private:
       Tensor output;
       output.f = pool;
       output.name = name;
-      compute_shape(input, output, weight_shape);
-      
+      output.shape = compute_shape(input, weight_shape);
+
       return output;
   }
 
-  Tensor norm_layer(Tensor& input, Func mu, Func sigma, std::string name) {
+  Tensor norm_layer(const Tensor& input, const Func& mu, const Func& sigma, const std::string& name) {
       Func normed;
       Expr e = input.f(c,i,j);
       normed(c, i, j) = (input.f(c, i, j) - mu(c)) / (sqrt(sigma(c) + 1e-5f));
@@ -372,7 +833,7 @@ private:
       return output;
   }
 
-  Tensor scale_layer(Tensor& input, Func gamma, Func beta, std::string name) {
+  Tensor scale_layer(const Tensor& input, const Func& gamma, const Func& beta, const std::string& name) {
       Func scaled;
       scaled(c, i, j) = input.f(c, i, j) * gamma(c) + beta(c);
       Tensor output;
@@ -382,7 +843,7 @@ private:
       return output;
   }
 
-  Tensor sum_layer(Tensor& t1, Tensor& t2, std::string name) {
+  Tensor sum_layer(const Tensor& t1, const Tensor& t2, const std::string& name) {
       assert(t1.shape == t2.shape);
       Func summed;
       summed(c, i, j) = t1.f(c, i, j) + t2.f(c, i, j);
@@ -393,12 +854,14 @@ private:
       return output;
   }
 
-  void softmax_layer(Tensor& input, Func output, int classes, std::string name) {
+  Func softmax_layer(const Tensor& input, const int classes, const std::string& name) {
       assert(input.shape[0] == classes);
       RDom r(0, classes);
       Func exp_vals;
       exp_vals(c) = exp(input.f(c));
+      Func output("output");
       output(c) = exp_vals(c) / sum(exp_vals(r.x));
+      return output;
   }
 
 
