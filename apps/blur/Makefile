@@ -38,7 +38,7 @@ $(BIN)/blur_auto_schedule.a: $(BIN)/halide_blur.generator $(AUTOSCHED_BIN)/libau
 	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/weights \
 	HL_MACHINE_PARAMS=1000,1,1 \
 	HL_DEBUG_CODEGEN=1 \
-	HL_SHARED_MEMORY_LIMIT=24 \
+	HL_SHARED_MEMORY_LIMIT=2 \
 	$< -g halide_blur -f blur_auto_schedule -o $(BIN) target=$(HL_TARGET) auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so 2> stderr.txt > stdout.txt
 
 # -O2 is faster than -O3 for this app (O3 unrolls too much)
