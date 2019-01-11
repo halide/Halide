@@ -3,13 +3,13 @@ BENCHMARKS="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stenci
 
 # Set EXPLORE_PARAMETERS to 1 if you want to run a script that explores
 # different architecture parameters.
-EXPLORE_PARAMETERS=0
+EXPLORE_PARAMETERS=1
 
 
 for b in $BENCHMARKS; do
 	echo "Running benchmarks $b"
 	if [ "${EXPLORE_PARAMETERS}" -ne 0 ]; then
-		./find_gpu_parameters.sh $b
+		./explore_gpu_parameters.sh $b
 	else
 		./run_one_benchmark.sh $b
 	fi
