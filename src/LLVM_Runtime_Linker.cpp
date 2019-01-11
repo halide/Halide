@@ -92,6 +92,7 @@ DECLARE_CPP_INITMOD(float16_t)
 DECLARE_CPP_INITMOD(gpu_device_selection)
 DECLARE_CPP_INITMOD(hexagon_dma)
 DECLARE_CPP_INITMOD(hexagon_host)
+DECLARE_CPP_INITMOD(hvx_sysmon)
 DECLARE_CPP_INITMOD(ios_io)
 DECLARE_CPP_INITMOD(linux_clock)
 DECLARE_CPP_INITMOD(linux_host_cpu_count)
@@ -863,6 +864,9 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 if (t.has_feature(Target::HVX_v65)) {
                     modules.push_back(get_initmod_qurt_hvx_vtcm(c, bits_64,
                                                                 debug));
+                }
+                if (t.has_feature(Target::HVX_sysmon)) {
+                    modules.push_back(get_initmod_hvx_sysmon(c, bits_64, debug));
                 }
 
             } else {

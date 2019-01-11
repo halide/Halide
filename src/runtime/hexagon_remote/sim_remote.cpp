@@ -46,6 +46,11 @@ void log_printf(const char *fmt, ...) {
 
 extern "C" {
 
+void halide_sysmon_marker(uint32_t sysmon_id) {}
+void halide_sysmon_start(void) {}
+void halide_sysmon_stop(void) {}
+void halide_set_sysmon_marker(uint32_t marker) {}
+
 void halide_print(void *user_context, const char *str) {
     log_printf("%s", str);
 }

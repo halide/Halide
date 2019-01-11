@@ -84,6 +84,7 @@ struct Target {
         HVX_v65 = halide_target_feature_hvx_v65,
         HVX_v66 = halide_target_feature_hvx_v66,
         HVX_shared_object = halide_target_feature_hvx_use_shared_object,
+        HVX_sysmon = halide_target_feature_hvx_sysmon,
         FuzzFloatStores = halide_target_feature_fuzz_float_stores,
         SoftFloatABI = halide_target_feature_soft_float_abi,
         MSAN = halide_target_feature_msan,

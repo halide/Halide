@@ -1285,7 +1285,8 @@ typedef enum halide_target_feature_t {
     halide_target_feature_embed_bitcode = 57,  ///< Emulate clang -fembed-bitcode flag.
     halide_target_feature_disable_llvm_loop_vectorize = 58,  ///< Disable loop vectorization in LLVM. (Ignored for non-LLVM targets.)
     halide_target_feature_disable_llvm_loop_unroll = 59,  ///< Disable loop unrolling in LLVM. (Ignored for non-LLVM targets.)
-    halide_target_feature_end = 60 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
+    halide_target_feature_hvx_sysmon = 60, ///< Enable Hexagon sysmon markers.
+    halide_target_feature_end = 61 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 
 /** This function is called internally by Halide in some situations to determine

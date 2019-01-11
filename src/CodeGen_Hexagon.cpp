@@ -1,4 +1,5 @@
 #include <iostream>
+#include <iomanip>
 #include <mutex>
 #include <sstream>
 
@@ -275,6 +276,141 @@ private:
     Target target;
 };
 
+// HVX sysmon markers
+//
+// When the hvx_sysmon target is specified, sysmon markers are added
+// to the generated code to help correlate between a given point in
+// the collected sysmon profile and the corresponding section in the
+// Halide source.  Markers are currently inserted at the:
+//
+//   - entry of the Hexagon function
+//   - specified producer/consumer sites
+//
+// using support routines in runtime/hexagon_remote/sim_remote.cpp &
+// runtime/hvx_sysmon.cpp.
+//
+// Since these markers introduce a small amount of runtime overhead, the
+// max_depth is also specified to limit the depth of producers/consumers
+// that are tagged.  By default, the max_depth is set to 1.  The env var
+// HL_SYSMON_MAXDEPTH is provided to allow the user to increase the
+// amount of sysmon tracing.
+//
+// For example, given the producers/consumers as seen in the camera_pipe
+// print_loop_nest() output:
+//
+//      for __outermost in [0, 0]<Hexagon>:
+//        parallel v1.v4:
+//                    produce denoised:
+//                    consume denoised:
+//                      produce deinterleaved:
+//                      consume deinterleaved:
+//                        produce g_b:
+//                        consume g_b:
+//                          produce g_r:
+//                          consume g_r:
+//                              produce output:
+//                              consume output:
+//                                produce corrected:
+//                                consume corrected:
+//
+// If max_depth is set to 1, markers will be generated for the
+// producer/consumer for denoised.  If max_depth is set to 2, we also get
+// markers for deinterleaved.  For max_depth 3, also g_b...and so on.
+//
+//     export HL_TGT=hvx_128-hvx_sysmon
+//     env HL_SYSMON_MAXDEPTH=3 test-camera-android-128 ...
+//     ...
+//     Adding sysmon markers: max_depth(3)
+//     HVX sysmon_id:1 offload_rpc.curved.s0.__outermost
+//     HVX sysmon_id:2 consume:denoised
+//     HVX sysmon_id:3 produce:denoised
+//     HVX sysmon_id:4 produce:deinterleaved
+//     HVX sysmon_id:5 consume:deinterleaved
+//     HVX sysmon_id:6 produce:g_b
+//     HVX sysmon_id:7 consume:g_b
+// 
+// It is good to keep the max_depth to as small as possible since
+// increasing values will result in increasing levels of overhead:
+//
+//     camera_pipe/SDM845:
+//        hvx_128                                  Halide:  8690us
+//        hvx_128-hxv_sysmon      max sysmon_id:3  Halide:  9586us
+//        + HL_SYSMON_MAXDEPTH=2  max sysmon_id:5  Halide: 10488us
+//        + HL_SYSMON_MAXDEPTH=3  max sysmon_id:7  Halide: 11335us
+//        + HL_SYSMON_MAXDEPTH=4  max sysmon_id:9  Halide: 12172us
+//        + HL_SYSMON_MAXDEPTH=5  max sysmon_id:11 Halide: 25774us
+//        + HL_SYSMON_MAXDEPTH=6  max sysmon_id:13 Halide: 36159us
+//
+
+// Inject runtime call to start/stop sysmon tracing
+Stmt inject_sysmon_start(Stmt stmt) {
+    Expr sysmon_start = Call::make(Int(32), "halide_sysmon_start", {}, Call::Extern);
+    stmt = Block::make(Evaluate::make(sysmon_start), stmt);
+    Expr sysmon_stop = Call::make(Int(32), "halide_sysmon_stop", {}, Call::Extern);
+    stmt = Block::make(stmt, Evaluate::make(sysmon_stop));
+    return stmt;
+}
+
+// Get the value of the next sysmon marker ID
+int next_sysmon_marker() {
+    static int sysmon_id = 0;
+    sysmon_id++;
+    return(sysmon_id);
+}
+
+// Inject runtime call to switch to a new sysmon marker
+Stmt inject_sysmon_marker(Stmt stmt, const string &simple_name, int sysmon_id) {
+    if (sysmon_id < 0) {  // No ID given, get next ID
+        sysmon_id = next_sysmon_marker();
+    }
+    std::cout << "HVX sysmon_id:" << std::left << std::setw(3) << sysmon_id << " " << simple_name << "\n";
+    Expr set_marker = Call::make(Int(32), "halide_sysmon_marker", {sysmon_id}, Call::Extern);
+    stmt = Block::make(Evaluate::make(set_marker), stmt);
+    return stmt;
+}
+
+// Inject sysmon markers for producers/consumers down to a specified
+// maximum depth
+class InjectHVXSysmon : public IRMutator2 {
+public:
+    InjectHVXSysmon(const Target &t, const int max_depth) :
+        target(t), depth(0), maxdepth(max_depth) {}
+private:
+    using IRMutator2::visit;
+    Stmt visit(const ProducerConsumer *op) {
+        string name;
+        if (op->is_producer) {
+            name = std::string("produce:") + op->name;
+        } else {
+            name = std::string("consume:") + op->name;
+        }
+        if (target.has_feature(Target::HVX_sysmon)) {
+            int sysmon_id = -1;
+            if (depth < maxdepth) {
+                sysmon_id = next_sysmon_marker(); // Get ID before visiting body
+            }
+            depth++;
+            Stmt body = mutate(op->body);
+            depth--;
+            if (sysmon_id >= 0) {
+                body = inject_sysmon_marker(body, name, sysmon_id);
+            }
+            return ProducerConsumer::make(op->name, op->is_producer, body);
+        } else {
+            return IRMutator2::visit(op);
+        }
+    }
+
+    Target target;
+    int depth, maxdepth;
+};
+
+Stmt inject_sysmon(Stmt body, const Target &target, const int max_depth) {
+    InjectHVXSysmon i(target, max_depth);
+    body = i.mutate(body);
+    return body;
+}
+
 Stmt inject_hvx_lock_unlock(Stmt body, const Target &target) {
     InjectHVXLocks i(target);
     body = i.mutate(body);
@@ -343,6 +479,16 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
     // Optimize the IR for Hexagon.
     debug(1) << "Optimizing Hexagon instructions...\n";
     body = optimize_hexagon_instructions(body, target, alignment_info);
+
+    // Add Hexagon sysmon markers.
+    if (target.has_feature(Target::HVX_sysmon)) {
+        int max_depth = 1;      // maximum nesting depth for sysmon markers
+        max_depth = (getenv("HL_SYSMON_MAXDEPTH")) ? atoi(getenv("HL_SYSMON_MAXDEPTH")) : max_depth;
+        std::cout << "Adding sysmon markers: max_depth(" << max_depth << ")\n";
+        body = inject_sysmon_marker(body, simple_name, -1); // function entry
+        body = inject_sysmon(body, target, max_depth);  // within function
+        body = inject_sysmon_start(body);               // start/stop around function
+    }
 
     debug(1) << "Adding calls to qurt_hvx_lock, if necessary...\n";
     body = inject_hvx_lock_unlock(body, target);
