@@ -302,8 +302,10 @@ int main(int argc, char **argv) {
 
     std::cout << "Iterating over " << samples.size() << " samples using seed = " << seed << "\n";
     decltype(samples) validation_set;
+    uint64_t unique_schedules = 0;
     if (samples.size() > 1) {
         for (auto p : samples) {
+            unique_schedules += p.second.schedules.size();
             // Whether or not a pipeline is part of the validation set
             // can't be a call to rand. It must be a fixed property of a
             // hash of some aspect of it.  This way you don't accidentally
@@ -319,6 +321,8 @@ int main(int argc, char **argv) {
             samples.erase(p.first);
         }
     }
+
+    std::cout << "Number of unique schedules: " << unique_schedules << "\n";
 
     std::vector<float> rates;
     if (argc == 2) {
