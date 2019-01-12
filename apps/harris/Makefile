@@ -49,5 +49,5 @@ autotune: $(BIN)/harris.generator $(AUTOSCHED_BIN)/augment_sample $(AUTOSCHED_BI
 		$(BIN)/harris.generator \
 		harris \
 		$(HL_TARGET) \
-		$(AUTOSCHED_SRC)/weights \
+		$(AUTOSCHED_SRC)/gpu_weights \
 		$(AUTOSCHED_BIN)
