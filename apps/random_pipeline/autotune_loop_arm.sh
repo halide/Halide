@@ -113,9 +113,10 @@ while [ 1 ]; do
     done
 
     # zip and upload them
-    find ${SAMPLES} -name 'sample.sample' | zip -@ samples_${HOST_ID}_${ID}.zip
-    bash ftp_up.sh samples_${HOST_ID}_${ID}.zip
+    GENERATION=gen3
+    find ${SAMPLES} -not -name bench -and -not -name random_pipeline.a | zip -@ samples_${HOST_ID}_${ID}.zip
+    bash ftp_up.sh samples_${HOST_ID}_${ID}.zip ${GENERATION}
     rm samples_${HOST_ID}_${ID}.zip
-    rm -rf ${SAMPLES}    
+    rm -rf ${SAMPLES}
 
 done
