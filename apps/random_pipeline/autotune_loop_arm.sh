@@ -19,6 +19,7 @@ trap finish EXIT
 GENERATOR=./bin/random_pipeline.generator
 PIPELINE=random_pipeline
 make bin/random_pipeline.generator
+make bin/RunGenMain.o
 
 SAMPLES=${PWD}/samples
 
@@ -40,9 +41,6 @@ TARGET_PARALLELISM=${CPUS}
 
 HL_TARGET=host-disable_llvm_loop_vectorize-disable_llvm_loop_unroll
 
-echo "Build RunGen base"
-c++ -std=c++11 -I ../../include/ ../../tools/RunGenMain.cpp -c -o RunGenMain.o
-
 # Build a single sample of the pipeline with a random schedule
 make_sample() {
     D=${1}
@@ -57,7 +55,7 @@ make_sample() {
         HL_MACHINE_PARAMS=${TARGET_PARALLELISM},1,1 HL_PERMIT_FAILED_UNROLL=1 HL_SEED=${2} HL_FEATURE_FILE=${D}/sample.sample HL_WEIGHTS_DIR=${PWD}/weights HL_RANDOM_DROPOUT=80 HL_BEAM_SIZE=1 ${GENERATOR} -g ${PIPELINE} -o ${D} -e static_library,h,stmt,assembly,registration target=${HL_TARGET} auto_schedule=true max_stages=12 seed=${3} -p ${PWD}/bin/libauto_schedule.so 2> ${D}/compile_log_stderr.txt > ${D}/compile_log_stdout.txt
     fi
 
-    c++ -std=c++11 RunGenMain.o ${D}/*.registration.cpp ${D}/*.a -o ${D}/bench -ljpeg -ldl -lpthread -lz -lpng
+    c++ -std=c++11 bin/RunGenMain.o ${D}/*.registration.cpp ${D}/*.a -o ${D}/bench -ljpeg -ldl -lpthread -lz -lpng
 }
 
 # Benchmark one of the random samples
