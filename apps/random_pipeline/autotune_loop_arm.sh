@@ -113,7 +113,7 @@ while [ 1 ]; do
     done
 
     # zip and upload them
-    find ${SAMPLES} | zip -@ samples_${HOST_ID}_${ID}.zip
+    find ${SAMPLES} -name 'sample.sample' | zip -@ samples_${HOST_ID}_${ID}.zip
     bash ftp_up.sh samples_${HOST_ID}_${ID}.zip
     rm samples_${HOST_ID}_${ID}.zip
     rm -rf ${SAMPLES}    
