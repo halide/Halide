@@ -188,6 +188,15 @@ elif [ "$1" = "reassemble" ]; then
         IFS=';' read -r -a fields <<< "${i}"
 
         APPDIR=${fields[0]}
+
+        rm -rf ${APPS_DIR}/${APPDIR}/bin
+        mkdir -p ${APPS_DIR}/${APPDIR}/bin
+    done
+
+    for i in ${INFO[@]}; do
+        IFS=';' read -r -a fields <<< "${i}"
+
+        APPDIR=${fields[0]}
         GENERATOR=${fields[1]}
         if [ ${#fields[@]} -le 2 ]; then
             SUBDIR=
@@ -206,12 +215,10 @@ elif [ "$1" = "reassemble" ]; then
         fi
 
         DST_DIR=${APPS_DIR}/${APPDIR}/bin
-        rm -rf ${DST_DIR}
-        mkdir -p ${DST_DIR}
         cp ${SRC_DIR}/${APPDIR}/${GENERATOR}${MANUAL}${SUFFIX}*.{a,h,registration.cpp} ${DST_DIR}/
-        cp ${SRC_DIR}/${APPDIR}/${GENERATOR}_classic_auto_schedule${SUFFIX}.{a,h,registration.cpp} ${SCRIPT_DIR}/${APPDIR}/
-        cp ${SRC_DIR}/${APPDIR}/${GENERATOR}_beamsize${BEAMSIZE}_auto_schedule${SUFFIX}.{a,h,registration.cpp} ${DST_DIR}/${APPDIR}/
-        for f in ${DST_DIR}/${APPDIR}/_auto_schedule${SUFFIX}.*; do echo mv "$f" "${f/_beamsize${BEAMSIZE}_auto_schedule/_auto_schedule}"; done
+        cp ${SRC_DIR}/${APPDIR}/${GENERATOR}_classic_auto_schedule${SUFFIX}.{a,h,registration.cpp} ${DST_DIR}/
+        cp ${SRC_DIR}/${APPDIR}/${GENERATOR}_beamsize${BEAMSIZE}_auto_schedule${SUFFIX}.{a,h,registration.cpp} ${DST_DIR}/
+        for f in ${DST_DIR}/${GENERATOR}_beamsize${BEAMSIZE}_auto_schedule${SUFFIX}.*; do mv "$f" "${f/_beamsize${BEAMSIZE}_auto_schedule/_auto_schedule}"; done
     done
 
 else
