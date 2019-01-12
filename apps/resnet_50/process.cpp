@@ -623,8 +623,10 @@ int main(int argc, char **argv) {
             final_output);
         input = block_outputs[block_id];
     }
+    final_output.device_sync();
   });
 
+  final_output.copy_to_host();
   std::cout << "Manually tuned time: " << best * 1e3 << "ms for schedule_type=" << schedule_type_name << "\n";
   buffer_to_file(final_output, output_file);
 

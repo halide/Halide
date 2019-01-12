@@ -26,9 +26,9 @@ int main(int argc, char **argv) {
     });
 
     three_way_bench(
-        [&]() { iir_blur(input, alpha, output); },
-        [&]() { iir_blur_classic_auto_schedule(input, alpha, output); },
-        [&]() { iir_blur_auto_schedule(input, alpha, output); }
+        [&]() { iir_blur(input, alpha, output); output.device_sync(); },
+        [&]() { iir_blur_classic_auto_schedule(input, alpha, output); output.device_sync(); },
+        [&]() { iir_blur_auto_schedule(input, alpha, output); output.device_sync(); }
     );
 
     return 0;
