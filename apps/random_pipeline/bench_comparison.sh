@@ -11,7 +11,7 @@ trap finish EXIT
 
 mkdir -p results
 
-PIPELINES=1
+PIPELINES=100
 SCHEDULES=1
 
 BEST_CACHE_SIZE=24000000
