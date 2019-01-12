@@ -25,6 +25,11 @@ TARG=${HL_TARGET:=arm-64-linux}
 
 echo Using target ${HL_TARGET}
 
+cd ${APPS_DIR}/autoscheduler
+
+# Make this first so subtasks won't get into contention over it
+make ../autoscheduler/bin/libauto_schedule.so
+
 # APPDIR;GENERATOR;SUBDIR;MANUAL;SUFFIX
 declare -a INFO=( \
   "bgu;fit_and_slice_3x4;;" \
@@ -69,11 +74,6 @@ if [ "$1" = "generate" ]; then
 
     echo Generating to ${DST_DIR}...
     mkdir -p ${DST_DIR}
-
-    cd ${APPS_DIR}/autoscheduler
-
-    # Make this first so subtasks won't get into contention over it
-    make ../autoscheduler/bin/libauto_schedule.so
 
     wait_for_core()
     {
@@ -188,9 +188,11 @@ elif [ "$1" = "reassemble" ]; then
         IFS=';' read -r -a fields <<< "${i}"
 
         APPDIR=${fields[0]}
+        GENERATOR=${fields[1]}
 
         rm -rf ${APPS_DIR}/${APPDIR}/bin
         mkdir -p ${APPS_DIR}/${APPDIR}/bin
+        touch ${APPS_DIR}/${APPDIR}/bin/${GENERATOR}.generator
     done
 
     for i in ${INFO[@]}; do
@@ -219,6 +221,7 @@ elif [ "$1" = "reassemble" ]; then
         cp ${SRC_DIR}/${APPDIR}/${GENERATOR}_classic_auto_schedule${SUFFIX}.{a,h,registration.cpp} ${DST_DIR}/
         cp ${SRC_DIR}/${APPDIR}/${GENERATOR}_beamsize${BEAMSIZE}_auto_schedule${SUFFIX}.{a,h,registration.cpp} ${DST_DIR}/
         for f in ${DST_DIR}/${GENERATOR}_beamsize${BEAMSIZE}_auto_schedule${SUFFIX}.*; do mv "$f" "${f/_beamsize${BEAMSIZE}_auto_schedule/_auto_schedule}"; done
+        touch ${DST_DIR}/*.{a,h,registration.cpp}
     done
 
 else
