@@ -127,7 +127,7 @@ if [ "$1" = "generate" ]; then
         # to avoid bg task contention
         echo Building ${APPDIR}/${GENERATOR}.generator...
         BIN=bin HL_TARGET=arm-64-linux make bin/${GENERATOR}.generator &> /dev/null
-        cp --no-clobber bin/${GENERATOR}.generator bin1/
+        cp -n bin/${GENERATOR}.generator bin1/
 
         wait_for_core
         echo Starting ${APPDIR}/${GENERATOR}${SUFFIX} 1...
