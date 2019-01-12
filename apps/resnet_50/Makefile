@@ -2,7 +2,8 @@ include ../support/Makefile.inc
 include ../support/autoscheduler.inc
 
 BIN ?= bin
-HL_TARGET ?= host
+
+HL_TARGET ?= host-cuda
 
 all: $(BIN)/process
 
@@ -56,7 +57,7 @@ autotune: $(BIN)/resnet50block.generator $(AUTOSCHED_BIN)/augment_sample $(AUTOS
 	bash $(AUTOSCHED_SRC)/autotune_loop.sh \
 		$(BIN)/resnet50block.generator \
 		resnet50block \
-		x86-64-avx2 \
+		$(HL_TARGET) \
 		$(AUTOSCHED_SRC)/weights \
 		$(AUTOSCHED_BIN) \
 		"${AUTOTUNE_ARG_SETS}"

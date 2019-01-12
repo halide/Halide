@@ -3,6 +3,8 @@ include ../support/autoscheduler.inc
 
 BIN ?= bin
 
+HL_TARGET=host-cuda
+
 $(BIN)/fit_and_slice_3x4.generator: fit_and_slice_3x4_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS) $(USE_EXPORT_DYNAMIC)
@@ -34,6 +36,6 @@ autotune: $(BIN)/fit_and_slice_3x4.generator $(AUTOSCHED_BIN)/augment_sample $(A
 	bash $(AUTOSCHED_SRC)/autotune_loop.sh \
 		$(BIN)/fit_and_slice_3x4.generator \
 		fit_and_slice_3x4 \
-		x86-64-avx2 \
+		$(HL_TARGET) \
 		$(AUTOSCHED_SRC)/weights \
 		$(AUTOSCHED_BIN)
