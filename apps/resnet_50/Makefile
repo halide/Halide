@@ -2,7 +2,7 @@ include ../support/Makefile.inc
 include ../support/autoscheduler.inc
 
 BIN ?= bin
-HL_TARGET ?= host
+HL_TARGET=host-cuda
 
 all: $(BIN)/process
 
@@ -16,13 +16,21 @@ $(BIN)/resnet50block_manual%.a: $(BIN)/resnet50block.generator
 
 $(BIN)/resnet50block_classic_auto_schedule%.a: $(BIN)/resnet50block.generator
 	@mkdir -p $(@D)
-	$(BIN)/resnet50block.generator -g resnet50block -o $(BIN) -f resnet50block_classic_auto_schedule$* target=$(HL_TARGET) auto_schedule=true classic_auto_schedule_estimates=true block_id=$*
+	HL_PERMIT_FAILED_UNROLL=1 \
+	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu_weights \
+	HL_DEBUG_CODEGEN=1 \
+	HL_SHARED_MEMORY_LIMIT=24 \
+	HL_COMPUTE_ROOT_AND_INLINE_ONLY=1 \
+	$(BIN)/resnet50block.generator -g resnet50block -o $(BIN) -f resnet50block_classic_auto_schedule$* target=$(HL_TARGET) auto_schedule=true classic_auto_schedule_estimates=true block_id=$* -p $(AUTOSCHED_BIN)/libauto_schedule.so machine_params=$(HL_MACHINE_PARAMS) -e static_library,h,assembly,stmt 2> stderr_classic.txt > stdout_classic.txt
 
 # To use the autoscheduler, set a few environment variables and use the -p flag to the generator to load the autoscheduler as a plugin
 $(BIN)/resnet50block_auto_schedule%.a: $(BIN)/resnet50block.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
-	HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu_weights \
-	$(BIN)/resnet50block.generator -g resnet50block -o $(BIN) -f resnet50block_auto_schedule$* target=$(HL_TARGET) auto_schedule=true block_id=$* -p $(AUTOSCHED_BIN)/libauto_schedule.so
+	HL_PERMIT_FAILED_UNROLL=1 \
+	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu_weights \
+	HL_DEBUG_CODEGEN=1 \
+	HL_SHARED_MEMORY_LIMIT=24 \
+	$(BIN)/resnet50block.generator -g resnet50block -o $(BIN) -f resnet50block_auto_schedule$* target=$(HL_TARGET) auto_schedule=true block_id=$* -p $(AUTOSCHED_BIN)/libauto_schedule.so machine_params=$(HL_MACHINE_PARAMS) 2> stderr.txt > stdout.txt
 
 $(BIN)/pytorch_weights/ok:
 	@mkdir -p $(@D)
