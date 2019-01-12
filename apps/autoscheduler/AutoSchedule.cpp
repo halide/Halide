@@ -1,20 +1,44 @@
 /*
-    Env vars used (directly or indirectly):
+  This file is the core of the autoscheduler. Most of the code here is
+  about navigating the search space and computing the
+  featurization. This also contains the top-level interface into the
+  autoscheduler. Interesting functions below are:
+  TODO
 
-    TODO(someone): document all these
+  Environment variables used (directly or indirectly):
 
-    HL_AUTO_SCHEDULE_TIME_LIMIT
-    HL_BEAM_SIZE
-    HL_CYOS
-    HL_FEATURE_FILE -> output
-    HL_MACHINE_PARAMS
-    HL_PERMIT_FAILED_UNROLL
-    HL_RANDOM_DROPOUT
-    HL_SCHEDULE_FILE
-    HL_SEED
-    HL_USE_MANUAL_COST_MODEL
-    HL_WEIGHTS_DIR
-    HL_WEIGHTS_OUT_DIR
+  HL_BEAM_SIZE
+  Beam size to use in the beam search. Defaults to 32. Use 1 to get a greedy search instead.
+
+  HL_CYOS
+  "Choose-your-own-schedule". If set to 1, lets you navigate the search tree by hand in the terminal. Whee! This is for debugging the autoscheduler.
+
+  HL_FEATURE_FILE -> output
+  Write out a training sample for the selected schedule into this file. Needs to be augmented with the runtime using augment_sample before it can be used to train.
+
+  HL_MACHINE_PARAMS
+  An architecture description string. Used by Halide master to configure the cost model. We only use the first term. Set it to the number of cores to target.
+
+  HL_PERMIT_FAILED_UNROLL
+  Set to 1 to tell Halide not to freak out if we try to unroll a loop that doesn't have a constant extent. Should generally not be necessary, but sometimes the autoscheduler's model for what will and will not turn into a constant during lowering is inaccurate, because Halide isn't perfect at constant-folding.
+
+  HL_SCHEDULE_FILE
+  Write out a human-and-machine readable block of scheduling source code for the selected schedule into this file.
+
+  HL_RANDOM_DROPOUT
+  percent chance of accepting each state in the beam. Normalized by the number of decisions made, so 5 would be there's a 5 percent chance of never rejecting any states.
+
+  HL_SEED
+  Random seed used by the random dropout.
+
+  HL_WEIGHTS_DIR
+  When training or schedule, read weights from this directory
+
+  HL_WEIGHTS_OUT_DIR
+  When training, output updated weights here
+
+  HL_NO_SUBTILING
+  If set to 1, limits the search space to that of Mullapudi et al.
 
 */
 #include <set>
@@ -79,6 +103,20 @@ bool random_dropout(std::mt19937 &rng, size_t num_decisions) {
     uint32_t r = rng();
     bool drop_it = (r % 100) >= t;
     return drop_it;
+}
+
+bool get_may_subtile() {
+    string no_subtiling_str = get_env_variable("HL_NO_SUBTILING");
+    if (no_subtiling_str == "1") {
+        return false;
+    } else {
+        return true;
+    }
+}
+
+bool may_subtile() {
+    static bool b = get_may_subtile();
+    return b;
 }
 
 vector<vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, int factor, bool allow_splits) {
@@ -1196,6 +1234,11 @@ struct LoopNest {
     void compute_here(const FunctionDAG::Node *f, bool tileable, int v) {
         const auto &bounds = get_bounds(f);
 
+        if (!may_subtile()) {
+            // This loop is no longer tileable
+            this->tileable = false;
+        }
+
         for (int s = (int)f->stages.size() - 1; s >= 0; s--) {
             LoopNest *node = new LoopNest;
             node->node = f;
@@ -1203,7 +1246,7 @@ struct LoopNest {
             node->stage = &f->stages[s];
             node->innermost = true;
             node->vectorized_loop_index = -1;
-            node->tileable = tileable; // && s == 0; // HACK: forbid tiling update stages when uncommented
+            node->tileable = tileable && (is_root() || may_subtile());
             // Set up a bound for the inside of the
             // loop. computed/required is still the full region, but
             // the loop nest will be a single representative point.
@@ -1284,13 +1327,13 @@ struct LoopNest {
         inner->node      = outer->node      = node;
         inner->stage     = outer->stage     = stage;
         inner->stage_idx = outer->stage_idx = stage_idx;
-        inner->tileable  = outer->tileable  = tileable;
+        inner->tileable  = outer->tileable  = tileable && may_subtile();
         inner->vector_dim = outer->vector_dim = vector_dim;
         inner->vectorized_loop_index = outer->vectorized_loop_index = vectorized_loop_index;
         outer->size = size;
         outer->innermost = false;
         outer->parallel = true;
-        outer->tileable = true;
+        outer->tileable = may_subtile();
 
         // First make an inner loop representing a 1x1x1... tile
         inner->size.resize(size.size(), 1);
@@ -1441,7 +1484,7 @@ struct LoopNest {
                 inner->node      = outer->node      = node;
                 inner->stage     = outer->stage     = stage;
                 inner->stage_idx = outer->stage_idx = stage_idx;
-                inner->tileable  = outer->tileable  = tileable;
+                inner->tileable  = outer->tileable  = tileable && may_subtile();
                 inner->vector_dim = outer->vector_dim = vector_dim;
                 inner->vectorized_loop_index = outer->vectorized_loop_index = vectorized_loop_index;
                 outer->size = size;
@@ -1516,7 +1559,8 @@ struct LoopNest {
             }
         }
 
-        if (child >= 0 && !called_by_multiple_children && !in_realization) {
+        if (child >= 0 && !called_by_multiple_children && !in_realization &&
+            (may_subtile() || is_root())) {
             // Push the Func further inwards in the loop nest
 
             // See if it's appropriate to slide over this loop
@@ -2302,6 +2346,14 @@ struct State {
         int next_node = num_funcs_scheduled / 2;
         int phase = num_funcs_scheduled % 2;
 
+        if (!may_subtile()) {
+            // When emulating the older search space, we do all
+            // parallelizing last, so that it is independent of the
+            // tiling decisions.
+            next_node = num_funcs_scheduled % dag.nodes.size();
+            phase = num_funcs_scheduled / dag.nodes.size();
+        }
+
         // Enumerate all legal ways to schedule the next Func
         const FunctionDAG::Node *node = &dag.nodes[next_node];
         for (const auto *e : node->outgoing_edges) {
@@ -2522,7 +2574,7 @@ struct State {
                 }
 
                 for (const auto &o : options) {
-                    if (num_children >= 1 && o.idle_core_wastage > 1.2) {
+                    if (num_children >= 1 && (o.idle_core_wastage > 1.2 || !may_subtile())) {
                         // We have considered several options, and the
                         // remaining ones leave lots of cores idle.
                         break;
@@ -2533,7 +2585,28 @@ struct State {
                     new_root->copy_from(*root);
                     for (auto &c : new_root->children) {
                         if (c->node == node) {
-                            c = c->parallelize_in_tiles(params, o.tiling, new_root);
+                            if (may_subtile()) {
+                                c = c->parallelize_in_tiles(params, o.tiling, new_root);
+                            } else {
+                                // Emulate the single parallelization
+                                // option from the old autoscheduler's
+                                // search space - just keep
+                                // parallelizing outer loops until
+                                // enough are parallel.
+                                vector<int64_t> tiling = c->size;
+                                int64_t total = 1;
+                                for (size_t i = c->size.size(); i > 0; i--) {
+                                    if (!c->stage->loop[i-1].pure || total >= params.parallelism) {
+                                        tiling[i-1] = 1;
+                                    }
+                                    while (tiling[i-1] > 1 &&
+                                           total * tiling[i-1] > params.parallelism * 8) {
+                                        tiling[i-1] /= 2;
+                                    }
+                                    total *= tiling[i-1];
+                                }
+                                c = c->parallelize_in_tiles(params, tiling, new_root);
+                            }
                         }
                     }
                     child->root = new_root;
