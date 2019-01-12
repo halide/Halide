@@ -15,6 +15,7 @@
 // limitations under the License.
 
 #include "Halide.h"
+#include "../autoscheduler/SimpleAutoSchedule.h"
 
 namespace {
 
@@ -378,8 +379,8 @@ public:
             slice_loc_z(x, y) = {zi, zf};
 
             interpolated_matrix_z(x, y, c) =
-                lerp(interpolated_matrix_x(x, y, slice_loc_z(x, y)[0], c),
-                     interpolated_matrix_x(x, y, slice_loc_z(x, y)[0]+1, c),
+                lerp(interpolated_matrix_x(x, y, clamp(slice_loc_z(x, y)[0], 0, num_intensity_bins), c),
+                     interpolated_matrix_x(x, y, clamp(slice_loc_z(x, y)[0]+1, 0, num_intensity_bins+1), c),
                      slice_loc_z(x, y)[1]);
 
             // Multiply by 3x4 by 4x1.
@@ -398,86 +399,122 @@ public:
 
         // Schedule
         if (!auto_schedule) {
-            // Fitting the curves.
+            std::string use_simple_autoscheduler =
+                Halide::Internal::get_env_variable("HL_USE_SIMPLE_AUTOSCHEDULER");
+            if (use_simple_autoscheduler == "1") {
+                Halide::SimpleAutoscheduleOptions options;
+                options.gpu = get_target().has_gpu_feature();
+                options.gpu_tile_channel = 3;
+                Func output_func = output;
+                Halide::simple_autoschedule(output_func,
+                                    {{"r_sigma", 1.f / 8.f},
+                                     {"s_sigma", 16},
+                                     {"splat_loc.min.0", 0},
+                                     {"splat_loc.extent.0", 192},
+                                     {"splat_loc.min.1", 0},
+                                     {"splat_loc.extent.1", 320},
+                                     {"splat_loc.min.2", 0},
+                                     {"splat_loc.extent.2", 3},
+                                     {"values.min.0", 0},
+                                     {"values.extent.0", 192},
+                                     {"values.min.1", 0},
+                                     {"values.extent.1", 320},
+                                     {"values.min.2", 0},
+                                     {"values.extent.2", 3},
+                                     {"slice_loc.min.0", 0},
+                                     {"slice_loc.extent.0", 1536},
+                                     {"slice_loc.min.1", 0},
+                                     {"slice_loc.extent.1", 2560},
+                                     {"slice_loc.min.2", 0},
+                                     {"slice_loc.extent.2", 3},
+                                     },
+                                    {{0, 1536},
+                                     {0, 2560},
+                                     {0, 3}},
+                                    options);
 
-            // Compute the per tile histograms and splatting locations within
-            // rows of the blur in z.
-            histogram
-                .compute_at(blurz, y);
-            histogram.update()
-                .reorder(c, r.x, r.y, x, y)
-                .unroll(c);
+            } else {
+                // Fitting the curves.
 
-            gray_splat_loc
-                .compute_at(blurz, y)
-                .vectorize(x, 8);
+                // Compute the per tile histograms and splatting locations within
+                // rows of the blur in z.
+                histogram
+                    .compute_at(blurz, y);
+                histogram.update()
+                    .reorder(c, r.x, r.y, x, y)
+                    .unroll(c);
 
-            // Compute the blur in z at root
-            blurz
-                .compute_root()
-                .reorder(c, z, x, y)
-                .parallel(y)
-                .vectorize(x, 8);
+                gray_splat_loc
+                    .compute_at(blurz, y)
+                    .vectorize(x, 8);
 
-            // The blurs of the Gram matrices across x and y will be computed
-            // within the outer loops of the matrix solve.
-            blury
-                .compute_at(line, z)
-                .vectorize(x, 4);
+                // Compute the blur in z at root
+                blurz
+                    .compute_root()
+                    .reorder(c, z, x, y)
+                    .parallel(y)
+                    .vectorize(x, 8);
 
-            blurx
-                .compute_at(line, x)
-                .vectorize(x);
+                // The blurs of the Gram matrices across x and y will be computed
+                // within the outer loops of the matrix solve.
+                blury
+                    .compute_at(line, z)
+                    .vectorize(x, 4);
 
-            // The matrix solve. Store c innermost, because subsequent stages
-            // will do vectorized loads from this across c. If you just want
-            // the matrices, you probably want to remove this reorder storage
-            // call.
-            line
-                .compute_root()
-                .reorder_storage(c, x, y, z)
-                .reorder(c, x, z, y)
-                .parallel(y)
-                .vectorize(x, 8)
-                .bound(c, 0, 12)
-                .unroll(c);
+                blurx
+                    .compute_at(line, x)
+                    .vectorize(x);
 
-            // Applying the curves.
+                // The matrix solve. Store c innermost, because subsequent stages
+                // will do vectorized loads from this across c. If you just want
+                // the matrices, you probably want to remove this reorder storage
+                // call.
+                line
+                    .compute_root()
+                    .reorder_storage(c, x, y, z)
+                    .reorder(c, x, z, y)
+                    .parallel(y)
+                    .vectorize(x, 8)
+                    .bound(c, 0, 12)
+                    .unroll(c);
 
-            // You should really do the trilerp on the GPU in a shader. We can
-            // make the CPU implementation a little faster though by factoring
-            // it into a few stages. At scanline of output we first slice out
-            // a 2D array of matrices that we'll bilerp into. We'll be
-            // accessing it in vectors across the c dimension, so store c
-            // innermost.
-            interpolated_matrix_y
-                .compute_root()
-                .reorder_storage(c, x, y, z)
-                .bound(c, 0, 12)
-                .vectorize(c, 4);
+                // Applying the curves.
 
-            // Compute the output in vectors across x.
-            slice
-                .compute_root()
-                .parallel(y)
-                .vectorize(x, 8)
-                .reorder(c, x, y)
-                .bound(c, 0, 3)
-                .unroll(c);
+                // You should really do the trilerp on the GPU in a shader. We can
+                // make the CPU implementation a little faster though by factoring
+                // it into a few stages. At scanline of output we first slice out
+                // a 2D array of matrices that we'll bilerp into. We'll be
+                // accessing it in vectors across the c dimension, so store c
+                // innermost.
+                interpolated_matrix_y
+                    .compute_root()
+                    .reorder_storage(c, x, y, z)
+                    .bound(c, 0, 12)
+                    .vectorize(c, 4);
 
-            // Computing where to slice vectorizes nicely across x.
-            gray_slice_loc
-                .compute_root()
-                .vectorize(x, 8);
+                // Compute the output in vectors across x.
+                slice
+                    .compute_root()
+                    .parallel(y)
+                    .vectorize(x, 8)
+                    .reorder(c, x, y)
+                    .bound(c, 0, 3)
+                    .unroll(c);
 
-            slice_loc_z
-                .compute_root()
-                .vectorize(x, 8);
+                // Computing where to slice vectorizes nicely across x.
+                gray_slice_loc
+                    .compute_root()
+                    .vectorize(x, 8);
 
-            // But sampling the matrix vectorizes better across c.
-            interpolated_matrix_z
-                .compute_root()
-                .vectorize(c, 4);
+                slice_loc_z
+                    .compute_root()
+                    .vectorize(x, 8);
+
+                // But sampling the matrix vectorizes better across c.
+                interpolated_matrix_z
+                    .compute_root()
+                    .vectorize(c, 4);
+            }
         }
 
         // Estimates
