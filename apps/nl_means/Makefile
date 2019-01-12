@@ -54,5 +54,5 @@ autotune: $(BIN)/nl_means.generator $(AUTOSCHED_BIN)/augment_sample $(AUTOSCHED_
 		$(BIN)/nl_means.generator \
 		nl_means \
 		$(HL_TARGET) \
-		$(AUTOSCHED_SRC)/weights \
+		$(AUTOSCHED_SRC)/gpu_weights \
 		$(AUTOSCHED_BIN)
