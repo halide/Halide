@@ -1,10 +1,11 @@
 # set -x
 
+GENERATION=gen3
 # Let the ftp server know we've started
 CPUS=$( nproc )
 HOST_ID="${CPUS}-core_${HOSTNAME}"
 touch ___started.${HOST_ID}.txt
-bash ./ftp_up.sh ___started.${HOST_ID}.txt
+bash ./ftp_up.sh ___started.${HOST_ID}.txt ${GENERATION}
 rm ___started.${HOST_ID}.txt
 
 # Install a watchdog to kill benchmarking processes that take too long
@@ -113,7 +114,7 @@ while [ 1 ]; do
     done
 
     # zip and upload them
-    GENERATION=gen3
+    # ** UPDATE GENERATION? **
     find ${SAMPLES} -not -name bench -and -not -name random_pipeline.a | zip -@ samples_${HOST_ID}_${ID}.zip
     bash ftp_up.sh samples_${HOST_ID}_${ID}.zip ${GENERATION}
     rm samples_${HOST_ID}_${ID}.zip
