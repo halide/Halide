@@ -622,6 +622,7 @@ int main(int argc, char **argv) {
             block_outputs[block_id],
             final_output);
         input = block_outputs[block_id];
+        final_output.device_sync();
     }
   });
 
