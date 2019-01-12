@@ -19,8 +19,8 @@ $(BIN)/stencil_chain_classic_auto_schedule.a: $(BIN)/stencil_chain.generator
 
 $(BIN)/stencil_chain_auto_schedule.a: $(BIN)/stencil_chain.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
-	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/weights HL_PERMIT_FAILED_UNROLL=1 \
-	$< -g stencil_chain -o $(BIN) -f stencil_chain_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so -e stmt,assembly,static_library,h
+	HL_WEIGHTS_DIR=$(AUTOSCHED_WEIGHTS_DIR) HL_PERMIT_FAILED_UNROLL=1 \
+	$< -g stencil_chain -o $(BIN) -f stencil_chain_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so -e stmt,assembly,static_library,h,registration
 
 $(BIN)/process: process.cpp $(BIN)/stencil_chain.a $(BIN)/stencil_chain_classic_auto_schedule.a $(BIN)/stencil_chain_auto_schedule.a
 	@mkdir -p $(@D)
@@ -40,5 +40,5 @@ autotune: $(BIN)/stencil_chain.generator $(AUTOSCHED_BIN)/augment_sample $(AUTOS
 		$(BIN)/stencil_chain.generator \
 		stencil_chain \
 		x86-64-avx2 \
-		$(AUTOSCHED_SRC)/weights \
+		$(AUTOSCHED_WEIGHTS_DIR) \
 		$(AUTOSCHED_BIN)

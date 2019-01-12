@@ -17,7 +17,7 @@ $(BIN)/harris_classic_auto_schedule.a: $(BIN)/harris.generator $(AUTOSCHED_BIN)/
 
 $(BIN)/harris_auto_schedule.a: $(BIN)/harris.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
-	HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/weights \
+	HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=$(AUTOSCHED_WEIGHTS_DIR) \
 	$< -g harris -f harris_auto_schedule -o $(BIN) target=$(HL_TARGET) auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so
 
 $(BIN)/filter: filter.cpp $(BIN)/harris.a $(BIN)/harris_auto_schedule.a $(BIN)/harris_classic_auto_schedule.a
@@ -35,5 +35,5 @@ autotune: $(BIN)/harris.generator $(AUTOSCHED_BIN)/augment_sample $(AUTOSCHED_BI
 		$(BIN)/harris.generator \
 		harris \
 		x86-64-avx2 \
-		$(AUTOSCHED_SRC)/weights \
+		$(AUTOSCHED_WEIGHTS_DIR) \
 		$(AUTOSCHED_BIN)

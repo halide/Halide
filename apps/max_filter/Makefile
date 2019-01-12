@@ -17,7 +17,7 @@ $(BIN)/max_filter_classic_auto_schedule.a: $(BIN)/max_filter.generator
 
 $(BIN)/max_filter_auto_schedule.a: $(BIN)/max_filter.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
-	HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/weights \
+	HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=$(AUTOSCHED_WEIGHTS_DIR) \
 	$< -g max_filter -f max_filter_auto_schedule -o $(BIN) target=$(HL_TARGET) auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so
 
 $(BIN)/filter: filter.cpp $(BIN)/max_filter.a $(BIN)/max_filter_auto_schedule.a $(BIN)/max_filter_classic_auto_schedule.a
@@ -35,5 +35,5 @@ autotune: $(BIN)/max_filter.generator $(AUTOSCHED_BIN)/augment_sample $(AUTOSCHE
 		$(BIN)/max_filter.generator \
 		max_filter \
 		x86-64-avx2 \
-		$(AUTOSCHED_SRC)/weights \
+		$(AUTOSCHED_WEIGHTS_DIR) \
 		$(AUTOSCHED_BIN)

@@ -17,7 +17,7 @@ $(BIN)/hist_classic_auto_schedule.a: $(BIN)/hist.generator $(AUTOSCHED_BIN)/liba
 
 $(BIN)/hist_auto_schedule.a: $(BIN)/hist.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
-	HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/weights \
+	HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=$(AUTOSCHED_WEIGHTS_DIR) \
 	$< -g hist -f hist_auto_schedule -o $(BIN) target=$(HL_TARGET) auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so
 
 $(BIN)/filter: filter.cpp $(BIN)/hist.a $(BIN)/hist_auto_schedule.a $(BIN)/hist_classic_auto_schedule.a
@@ -35,6 +35,6 @@ autotune: $(BIN)/hist.generator $(AUTOSCHED_BIN)/augment_sample $(AUTOSCHED_BIN)
 		$(BIN)/hist.generator \
 		hist \
 		x86-64-avx2 \
-		$(AUTOSCHED_SRC)/weights \
+		$(AUTOSCHED_WEIGHTS_DIR) \
 		$(AUTOSCHED_BIN)
 

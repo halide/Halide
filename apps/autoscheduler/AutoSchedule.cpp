@@ -3116,6 +3116,7 @@ std::string generate_schedules_new(const std::vector<Function> &outputs,
     if (!beam_size_str.empty()) {
         beam_size = atoi(beam_size_str.c_str());
     }
+std::cerr<<"HEY MY BEAM SIZE IS "<<beam_size<<"\n";
 
     string time_limit_str = get_env_variable("HL_AUTO_SCHEDULE_TIME_LIMIT");
     double time_limit = 0;

@@ -22,7 +22,7 @@ $(BIN)/burst_camera_pipe_classic_auto_schedule.a: $(BIN)/burst_camera_pipe.gener
 
 $(BIN)/burst_camera_pipe_auto_schedule.a: $(BIN)/burst_camera_pipe.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
-	HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/weights \
+	HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=$(AUTOSCHED_WEIGHTS_DIR) \
 	$< -g burst_camera_pipe -f burst_camera_pipe_auto_schedule -o $(BIN) target=$(HL_TARGET_LARGE) auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so
 
 $(BIN)/process: process.cpp $(BIN)/burst_camera_pipe.a $(BIN)/burst_camera_pipe_classic_auto_schedule.a $(BIN)/burst_camera_pipe_auto_schedule.a
@@ -40,5 +40,5 @@ autotune: $(BIN)/burst_camera_pipe.generator $(AUTOSCHED_BIN)/augment_sample $(A
 		$(BIN)/burst_camera_pipe.generator \
 		burst_camera_pipe \
 		x86-64-avx2 \
-		$(AUTOSCHED_SRC)/weights \
+		$(AUTOSCHED_WEIGHTS_DIR) \
 		$(AUTOSCHED_BIN)

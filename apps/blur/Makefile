@@ -17,7 +17,7 @@ $(BIN)/%/halide_blur_classic_auto_schedule.a: $(BIN)/halide_blur.generator $(AUT
 
 $(BIN)/%/halide_blur_auto_schedule.a: $(BIN)/halide_blur.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
-	HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/weights \
+	HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=$(AUTOSCHED_WEIGHTS_DIR) \
 	$< -g halide_blur -f halide_blur_auto_schedule -o $(BIN)/$* target=$(HL_TARGET) auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so
 
 # g++ on OS X might actually be system clang without openmp
@@ -44,5 +44,5 @@ autotune: $(BIN)/halide_blur.generator $(AUTOSCHED_BIN)/augment_sample $(AUTOSCH
 		$(BIN)/halide_blur.generator \
 		halide_blur \
 		x86-64-avx2 \
-		$(AUTOSCHED_SRC)/weights \
+		$(AUTOSCHED_WEIGHTS_DIR) \
 		$(AUTOSCHED_BIN)

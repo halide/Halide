@@ -1,6 +1,8 @@
 AUTOSCHED_SRC ?= ../autoscheduler
 AUTOSCHED_BIN ?= $(AUTOSCHED_SRC)/bin
 
+AUTOSCHED_WEIGHTS_DIR ?= $(AUTOSCHED_SRC)/weights
+
 AUTOSCHED_WEIGHT_OBJECTS=\
 $(AUTOSCHED_BIN)/weights_head1_conv1_weight.o \
 $(AUTOSCHED_BIN)/weights_head1_conv1_bias.o \
@@ -17,7 +19,7 @@ $(AUTOSCHED_BIN)/binary2cpp: ../../tools/binary2cpp.cpp
 
 $(AUTOSCHED_BIN)/weights_%.cpp: $(AUTOSCHED_BIN)/binary2cpp
 	@mkdir -p $(@D)
-	$(AUTOSCHED_BIN)/binary2cpp weights_$* < $(AUTOSCHED_SRC)/weights/$*.data > $@
+	$(AUTOSCHED_BIN)/binary2cpp weights_$* < $(AUTOSCHED_WEIGHTS_DIR)/$*.data > $@
 
 $(AUTOSCHED_BIN)/weights_%.o: $(AUTOSCHED_BIN)/weights_%.cpp
 	$(CXX) -c $< -o $@
@@ -39,11 +41,11 @@ $(AUTOSCHED_BIN)/cost_model.generator: $(AUTOSCHED_SRC)/cost_model_generator.cpp
 
 $(AUTOSCHED_BIN)/auto_schedule_runtime.a: $(AUTOSCHED_BIN)/cost_model.generator
 	@mkdir -p $(@D)
-	$^ -r auto_schedule_runtime -o $(AUTOSCHED_BIN) target=$(HL_TARGET)
+	$^ -r auto_schedule_runtime -o $(AUTOSCHED_BIN) target=host
 
 $(AUTOSCHED_BIN)/cost_model/%.a: $(AUTOSCHED_BIN)/cost_model.generator
 	@mkdir -p $(@D)
-	HL_PERMIT_FAILED_UNROLL=1 $^ -g $* -o $(AUTOSCHED_BIN)/cost_model -f $* target=$(HL_TARGET)-no_runtime auto_schedule=false -e stmt,static_library,h,assembly
+	HL_PERMIT_FAILED_UNROLL=1 $^ -g $* -o $(AUTOSCHED_BIN)/cost_model -f $* target=host-no_runtime auto_schedule=false -e stmt,static_library,h,assembly
 
 # It's important to use dynamic lookups for undefined symbols here: all of libHalide
 # is expected to be present (in the loading binary), so we explicitly make the symbols

@@ -13,7 +13,7 @@ $(BIN)/demo.generator: demo_generator.cpp $(GENERATOR_DEPS)
 
 # To use the autoscheduler, set a few environment variables and use the -p flag to the generator to load the autoscheduler as a plugin
 $(BIN)/demo.a: $(BIN)/demo.generator $(AUTOSCHED_BIN)/libauto_schedule.so
-	HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=weights \
+	HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=$(AUTOSCHED_WEIGHTS_DIR) \
 	$(BIN)/demo.generator -g demo -o $(BIN) -f demo target=$(HL_TARGET) auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so
 
 $(BIN)/demo.rungen: $(BIN)/RunGenMain.o $(BIN)/demo.registration.cpp $(BIN)/demo.a
@@ -30,7 +30,7 @@ autotune: $(BIN)/demo.generator $(AUTOSCHED_BIN)/augment_sample $(AUTOSCHED_BIN)
 		$(BIN)/demo.generator \
 		demo \
 		x86-64-avx2 \
-		$(AUTOSCHED_SRC)/weights \
+		$(AUTOSCHED_WEIGHTS_DIR) \
 		$(AUTOSCHED_BIN)
 
 # Simple jit-based test
@@ -38,7 +38,7 @@ $(BIN)/test: test.cpp $(AUTOSCHED_BIN)/libauto_schedule.so
 	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) $< -o $@ $(LDFLAGS) $(LIB_HALIDE) $(HALIDE_SYSTEM_LIBS)
 
 test: $(BIN)/test
-	HL_WEIGHTS_DIR=weights LD_LIBRARY_PATH=$(BIN) $(BIN)/test
+	HL_WEIGHTS_DIR=$(AUTOSCHED_WEIGHTS_DIR) LD_LIBRARY_PATH=$(BIN) $(BIN)/test
 
 clean:
 	rm -rf $(BIN)

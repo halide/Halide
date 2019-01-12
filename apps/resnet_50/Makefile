@@ -12,7 +12,7 @@ $(BIN)/resnet50block.generator: Resnet50BlockGenerator.cpp $(GENERATOR_DEPS)
 
 $(BIN)/resnet50block_manual%.a: $(BIN)/resnet50block.generator
 	@mkdir -p $(@D)
-	$(BIN)/resnet50block.generator -g resnet50block -o $(BIN) -e static_library,h,stmt -f resnet50block_manual$* target=$(HL_TARGET) auto_schedule=false block_id=$*
+	$(BIN)/resnet50block.generator -g resnet50block -o $(BIN) -e static_library,h,stmt,registration -f resnet50block_manual$* target=$(HL_TARGET) auto_schedule=false block_id=$*
 
 $(BIN)/resnet50block_classic_auto_schedule%.a: $(BIN)/resnet50block.generator
 	@mkdir -p $(@D)
@@ -21,7 +21,7 @@ $(BIN)/resnet50block_classic_auto_schedule%.a: $(BIN)/resnet50block.generator
 # To use the autoscheduler, set a few environment variables and use the -p flag to the generator to load the autoscheduler as a plugin
 $(BIN)/resnet50block_auto_schedule%.a: $(BIN)/resnet50block.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
-	HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/weights \
+	HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=$(AUTOSCHED_WEIGHTS_DIR) \
 	$(BIN)/resnet50block.generator -g resnet50block -o $(BIN) -f resnet50block_auto_schedule$* target=$(HL_TARGET) auto_schedule=true block_id=$* -p $(AUTOSCHED_BIN)/libauto_schedule.so
 
 $(BIN)/pytorch_weights/ok:
@@ -57,6 +57,6 @@ autotune: $(BIN)/resnet50block.generator $(AUTOSCHED_BIN)/augment_sample $(AUTOS
 		$(BIN)/resnet50block.generator \
 		resnet50block \
 		x86-64-avx2 \
-		$(AUTOSCHED_SRC)/weights \
+		$(AUTOSCHED_WEIGHTS_DIR) \
 		$(AUTOSCHED_BIN) \
 		"${AUTOTUNE_ARG_SETS}"

@@ -11,7 +11,7 @@ $(BIN)/camera_pipe.generator: camera_pipe_generator.cpp $(GENERATOR_DEPS)
 
 $(BIN)/camera_pipe.a: $(BIN)/camera_pipe.generator
 	@mkdir -p $(@D)
-	$< -g camera_pipe -o $(BIN) -f camera_pipe target=$(HL_TARGET) auto_schedule=false -e static_library,h,assembly,stmt
+	$< -g camera_pipe -o $(BIN) -f camera_pipe target=$(HL_TARGET) auto_schedule=false -e static_library,h,assembly,stmt,registration
 
 # TODO: this fails with an internal_assert failure in the classic AutoScheduler.
 # $(BIN)/camera_pipe_classic_auto_schedule.a: $(BIN)/camera_pipe.generator
@@ -20,8 +20,8 @@ $(BIN)/camera_pipe.a: $(BIN)/camera_pipe.generator
 
 $(BIN)/camera_pipe_auto_schedule.a: $(BIN)/camera_pipe.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
-	HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/weights \
-	$< -g camera_pipe -o $(BIN) -f camera_pipe_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so -e static_library,h,assembly,stmt
+	HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=$(AUTOSCHED_WEIGHTS_DIR) \
+	$< -g camera_pipe -o $(BIN) -f camera_pipe_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so -e static_library,h,assembly,stmt,registration
 
 $(BIN)/viz/camera_pipe.a: $(BIN)/camera_pipe.generator
 	@mkdir -p $(@D)
@@ -62,5 +62,5 @@ autotune: $(BIN)/camera_pipe.generator $(AUTOSCHED_BIN)/augment_sample $(AUTOSCH
 		$(BIN)/camera_pipe.generator \
 		camera_pipe \
 		x86-64-avx2 \
-		$(AUTOSCHED_SRC)/weights \
+		$(AUTOSCHED_WEIGHTS_DIR) \
 		$(AUTOSCHED_BIN)
