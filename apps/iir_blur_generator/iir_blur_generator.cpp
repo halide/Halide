@@ -2,6 +2,7 @@
 // for a 2D image.
 
 #include "Halide.h"
+#include "../autoscheduler/SimpleAutoSchedule.h"
 
 using namespace Halide;
 using namespace Halide::BoundaryConditions;
@@ -72,16 +73,38 @@ public:
         Expr width = input.width();
         Expr height = input.height();
 
+        std::string use_simple_autoscheduler =
+            Halide::Internal::get_env_variable("HL_USE_SIMPLE_AUTOSCHEDULER");
+        bool skip_schedule = use_simple_autoscheduler == "1" || auto_schedule;
+
         // First, blur the columns of the input.
-        Func blury_T = blur_cols_transpose(input, height, alpha, auto_schedule);
+        Func blury_T = blur_cols_transpose(input, height, alpha, skip_schedule);
 
         // Blur the columns again (the rows of the original).
-        Func blur = blur_cols_transpose(blury_T, width, alpha, auto_schedule);
+        Func blur = blur_cols_transpose(blury_T, width, alpha, skip_schedule);
 
         // Scheduling is done inside blur_cols_transpose.
         output(x, y, c) = blur(x, y, c);
 
         // Estimates
+        if (use_simple_autoscheduler == "1") {
+            Halide::SimpleAutoscheduleOptions options;
+            options.gpu = get_target().has_gpu_feature();
+            options.gpu_tile_channel = 1;
+            Func output_func = output;
+            Halide::simple_autoschedule(output_func,
+                    {{"alpha", 0.1f},
+                     {"input.min.0", 0},
+                     {"input.extent.0", 1536},
+                     {"input.min.1", 0},
+                     {"input.extent.1", 2560},
+                     {"input.min.2", 0},
+                     {"input.extent.2", 3}},
+                    {{0, 1536},
+                     {0, 2560},
+                     {0, 3}},
+                    options);
+        }
         {
             input.dim(0).set_bounds_estimate(0, 1536)
                    .dim(1).set_bounds_estimate(0, 2560)
