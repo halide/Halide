@@ -5,7 +5,7 @@ HL_TARGET=host-cuda
 
 all: $(BIN)/test
 
-$(BIN)/interpolate.generator: interpolate_generator.cpp $(GENERATOR_DEPS)
+$(BIN)/interpolate.generator: interpolate_generator.cpp ../autoscheduler/SimpleAutoSchedule.h ../autoscheduler/SimpleAutoSchedule.cpp ../autoscheduler/DerivativeUtils.h ../autoscheduler/DerivativeUtils.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS) $(USE_EXPORT_DYNAMIC)
 
@@ -30,7 +30,12 @@ $(BIN)/interpolate_auto_schedule.a: $(BIN)/interpolate.generator $(AUTOSCHED_BIN
 	HL_SHARED_MEMORY_LIMIT=12 \
 	$< -g interpolate -f interpolate_auto_schedule -o $(BIN) target=$(HL_TARGET) auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so machine_params=$(HL_MACHINE_PARAMS) 2> stderr.txt > stdout.txt
 
-$(BIN)/filter: filter.cpp $(BIN)/interpolate.a $(BIN)/interpolate_auto_schedule.a $(BIN)/interpolate_classic_auto_schedule.a
+$(BIN)/interpolate_simple_auto_schedule.a: $(BIN)/interpolate.generator
+	@mkdir -p $(@D)
+	HL_USE_SIMPLE_AUTOSCHEDULER=1 \
+	$< -g interpolate -o $(BIN) -f interpolate_simple_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=false -e static_library,h
+
+$(BIN)/filter: filter.cpp $(BIN)/interpolate.a $(BIN)/interpolate_auto_schedule.a $(BIN)/interpolate_classic_auto_schedule.a $(BIN)/interpolate_simple_auto_schedule.a
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -I$(BIN) -Wall -O3 $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS)
 
