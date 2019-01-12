@@ -830,7 +830,7 @@ public:
         Expr e = 0.f;
         for (int i = 0; i < f.c; i++) {
             reduction_coords[dim] = i;
-            e += f.func(reduction_coords) * (i + 1) * (f.func.args()[dim] + 1);
+            e += f.func(reduction_coords) * ((i + 1) * f.c + (f.func.args()[dim] + 1));
         }
 
         Func all("all");
@@ -847,7 +847,7 @@ public:
         RDom r(0, f.c);
         reduction_coords[dim] = r;
         Func all("all_r");
-        all(f.func.args()) += f.func(reduction_coords) * (r + 1) * (f.func.args()[dim] + 1);
+        all(f.func.args()) += f.func(reduction_coords) * ((r + 1) * f.c + (f.func.args()[dim] + 1));
 
         return {all, f.w, f.h, f.random_out_channels()};
     }
@@ -860,7 +860,7 @@ public:
         RDom r(0, f.c);
         reduction_coords[dim] = r;
         Func all("all_w");
-        all(f.func.args()) = sum(f.func(reduction_coords) * (r + 1) * (f.func.args()[dim] + 1));
+        all(f.func.args()) = sum(f.func(reduction_coords) * ((r + 1) * f.c + (f.func.args()[dim] + 1)));
 
         return {all, f.w, f.h, f.random_out_channels()};
     }
@@ -1284,7 +1284,6 @@ public:
                 .dim(3).set_bounds_estimate(0, 512);
 #endif
 
-            output.estimate(output.args()[0], 0, 2000);
             output.estimate(output.args()[0], 0, 2000);
             output.estimate(output.args()[1], 0, 2000);
             output.estimate(output.args()[2], 0, 3);
