@@ -27,23 +27,23 @@ echo Using target ${HL_TARGET}
 
 # APPDIR;GENERATOR;SUBDIR;MANUAL;SUFFIX
 declare -a INFO=( \
-  "bgu;fit_and_slice_3x4;;" \
-  "bilateral_grid;bilateral_grid;;" \
-  "blur;halide_blur;${TARG}/;;" \
-  "burst_camera_pipe;burst_camera_pipe;;" \
-  "camera_pipe;camera_pipe;;" \
-  "conv_layer;conv_layer;;" \
-  "harris;harris;;" \
-  "hist;hist;;" \
-  "iir_blur_generator;iir_blur;;" \
-  "interpolate_generator;interpolate;;" \
-  "lens_blur;lens_blur;;" \
-  "local_laplacian;local_laplacian;;" \
-  "mat_mul_generator;mat_mul;;" \
-  "max_filter;max_filter;;" \
-  "nl_means;nl_means;;" \
-  "stencil_chain;stencil_chain;;" \
-  "unsharp;unsharp;;" \
+  # "bgu;fit_and_slice_3x4;;" \
+  # "bilateral_grid;bilateral_grid;;" \
+  # "blur;halide_blur;${TARG}/;;" \
+  # "burst_camera_pipe;burst_camera_pipe;;" \
+  # "camera_pipe;camera_pipe;;" \
+  # "conv_layer;conv_layer;;" \
+  # "harris;harris;;" \
+  # "hist;hist;;" \
+  # "iir_blur_generator;iir_blur;;" \
+  # "interpolate_generator;interpolate;;" \
+  # "lens_blur;lens_blur;;" \
+  # "local_laplacian;local_laplacian;;" \
+  # "mat_mul_generator;mat_mul;;" \
+  # "max_filter;max_filter;;" \
+  # "nl_means;nl_means;;" \
+  # "stencil_chain;stencil_chain;;" \
+  # "unsharp;unsharp;;" \
 )
 
 for i in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
@@ -91,6 +91,14 @@ if [ "$1" = "generate" ]; then
         IFS=';' read -r -a fields <<< "${i}"
 
         APPDIR=${fields[0]}
+
+        rm -rf ${APPS_DIR}/${APPDIR}/bin ${APPS_DIR}/${APPDIR}/bin1
+    done
+
+    for i in ${INFO[@]}; do
+        IFS=';' read -r -a fields <<< "${i}"
+
+        APPDIR=${fields[0]}
         GENERATOR=${fields[1]}
         if [ ${#fields[@]} -le 2 ]; then
             SUBDIR=
@@ -110,8 +118,6 @@ if [ "$1" = "generate" ]; then
 
         mkdir -p ${DST_DIR}/${APPDIR}
         cd ${APPS_DIR}/${APPDIR}
-
-        rm -rf bin bin1
 
         wait_for_core
         # This is synchronous; must be sure it's build before firing off the invocations,
