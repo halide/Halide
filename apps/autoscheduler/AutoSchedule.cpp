@@ -2508,10 +2508,11 @@ struct State {
             vector<int> vector_dims;
             for (int v = 0; v < node->func.dimensions(); v++) {
                 const auto &p = root->get_bounds(node)->region_computed(v);
-                if (p.extent() >= node->vector_size) {
+                if ((node->is_output && v == 0) || p.extent() >= node->vector_size) {
                     vector_dims.push_back(v);
                 }
             }
+
             if (vector_dims.empty()) {
                 vector_dims.push_back(0);
             }
