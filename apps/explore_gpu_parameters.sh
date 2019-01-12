@@ -32,9 +32,10 @@ if [ "${EXPLORE_MACHINE_PARAMS}" -ne 0 ]; then
 		echo "START_NEW_RUN for HL_MACHINE_PARAMS=$i,1,1" >> $OUTPUT_FILE;
 		HL_MACHINE_PARAMS=$i,1,1 make -B test &>> $OUTPUT_FILE;	
 		grep "START_NEW_RUN" $OUTPUT_FILE 
-		grep "Manually-tuned time" $OUTPUT_FILE
-		grep "Classic auto-scheduled time" $OUTPUT_FILE
+		grep "Manual" $OUTPUT_FILE
+		grep "Classic auto-scheduled" $OUTPUT_FILE
 		grep "Auto-scheduled" $OUTPUT_FILE
+        grep "Simple auto-scheduled" $OUTPUT_FILE
 	done
 fi
 
@@ -44,9 +45,10 @@ if [ "${EXPLORE_SHARED_MEMORY_SIZE}" -ne 0 ]; then
 		echo "START_NEW_RUN for HL_SHARED_MEMORY_LIMIT=$i" >> $OUTPUT_FILE;
 		HL_SHARED_MEMORY_LIMIT=$i make -B test &>> $OUTPUT_FILE;
 		grep "START_NEW_RUN" $OUTPUT_FILE 
-		grep "Manually-tuned time" $OUTPUT_FILE
-		grep "Classic auto-scheduled time" $OUTPUT_FILE
+		grep "Manual" $OUTPUT_FILE
+		grep "Classic auto-scheduled" $OUTPUT_FILE
 		grep "Auto-scheduled" $OUTPUT_FILE
+        grep "Simple auto-scheduled" $OUTPUT_FILE
 	done
 fi
 

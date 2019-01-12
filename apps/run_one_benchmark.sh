@@ -14,8 +14,9 @@ cd $BENCH;
 
 rm -rf $OUTPUT_FILE
 make -B test &> $OUTPUT_FILE;
-grep "Manually-tuned time" $OUTPUT_FILE
-grep "Classic auto-scheduled time" $OUTPUT_FILE
+grep "Manual" $OUTPUT_FILE
+grep "Classic auto-scheduled" $OUTPUT_FILE
 grep "Auto-scheduled" $OUTPUT_FILE
+grep "Simple auto-scheduled" $OUTPUT_FILE
 
 cd -
