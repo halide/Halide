@@ -1,6 +1,6 @@
 #!/bin/bash
 
-aws s3 cp "$1" "s3://io.halide.autoscheduler.siggraph-2019-arm/"
+aws s3 cp "$1" "s3://io.halide.autoscheduler.siggraph-2019-arm/gen1/"
 #echo "
 #  verbose
 #  open 192.168.86.250
