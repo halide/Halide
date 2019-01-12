@@ -119,7 +119,7 @@ if [ "$1" = "generate" ]; then
         echo Building ${APPDIR}/${GENERATOR}.generator...
         BIN=bin HL_TARGET=arm-64-linux make bin/${GENERATOR}.generator &> /dev/null
         mkdir bin1
-        cp bin/${GENERATOR}.generator bin/1
+        cp bin/${GENERATOR}.generator bin1/
 
         wait_for_core
         echo Starting ${APPDIR}/${GENERATOR}${SUFFIX} 1...
