@@ -545,6 +545,11 @@ struct FunctionDAG {
         // at zero for each pipeline.
         int id, max_id;
 
+        // Just func->dimensions(), but we ask for it so many times
+        // that's it's worth avoiding the function call into
+        // libHalide.
+        int dimensions;
+
         bool is_wrapper; // Is a single pointwise call to another Func
 
         bool is_output, is_input;
@@ -1079,6 +1084,7 @@ struct FunctionDAG {
 
                 node.is_wrapper = node.func.is_wrapper();
                 node.is_input = !node.func.has_update_definition() && node.is_wrapper && !any_incoming_edges;
+                node.dimensions = node.func.dimensions();
             }
         }
 

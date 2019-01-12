@@ -1,6 +1,6 @@
-#include <stdio.h>
 #include "Halide.h"
 
+#include <stdio.h>
 #include <math.h>
 #include <algorithm>
 #include <future>
