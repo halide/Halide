@@ -4,6 +4,7 @@
 #include "burst_camera_pipe.h"
 #include "burst_camera_pipe_classic_auto_schedule.h"
 #include "burst_camera_pipe_auto_schedule.h"
+#include "burst_camera_pipe_simple_auto_schedule.h"
 
 #include "benchmark_util.h"
 #include "halide_image_io.h"
@@ -37,11 +38,12 @@ int main(int argc, char **argv) {
         f = (uint16_t) rng();
     });
 
-    three_way_bench(
-        [&]() { burst_camera_pipe(inputs, black_point, white_point, white_balance_r, white_balance_g0, white_balance_g1, white_balance_b, compression, gain, output); },
-        [&]() { burst_camera_pipe_classic_auto_schedule(inputs, black_point, white_point, white_balance_r, white_balance_g0, white_balance_g1, white_balance_b, compression, gain, output); },
-        [&]() { burst_camera_pipe_auto_schedule(inputs, black_point, white_point, white_balance_r, white_balance_g0, white_balance_g1, white_balance_b, compression, gain, output); }
-    );
+    multi_way_bench({
+        {"Manual", [&]() { burst_camera_pipe(inputs, black_point, white_point, white_balance_r, white_balance_g0, white_balance_g1, white_balance_b, compression, gain, output); }},
+        {"Classic auto-scheduled", [&]() { burst_camera_pipe_classic_auto_schedule(inputs, black_point, white_point, white_balance_r, white_balance_g0, white_balance_g1, white_balance_b, compression, gain, output); }},
+        {"Auto-scheduled", [&]() { burst_camera_pipe_auto_schedule(inputs, black_point, white_point, white_balance_r, white_balance_g0, white_balance_g1, white_balance_b, compression, gain, output); }},
+        {"Simple auto-scheduled", [&]() { burst_camera_pipe_auto_schedule(inputs, black_point, white_point, white_balance_r, white_balance_g0, white_balance_g1, white_balance_b, compression, gain, output); }}
+    });
 
     if (argc == 2) {
         Halide::Tools::convert_and_save_image(output, argv[1]);

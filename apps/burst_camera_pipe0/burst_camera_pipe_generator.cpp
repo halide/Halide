@@ -3,6 +3,7 @@
 */
 
 #include "Halide.h"
+#include "../autoscheduler/SimpleAutoSchedule.h"
 
 #include "align.h"
 #include "merge.h"
@@ -28,7 +29,9 @@ public:
 
     void generate() {
         // Algorithm
-        bool skip_schedule = auto_schedule;
+        std::string use_simple_autoscheduler =
+            Halide::Internal::get_env_variable("HL_USE_SIMPLE_AUTOSCHEDULER");
+        bool skip_schedule = use_simple_autoscheduler == "1" || auto_schedule;
         Func alignment = align(inputs, inputs.width(), inputs.height(), skip_schedule);
         Func merged = merge(inputs, inputs.width(), inputs.height(), inputs.dim(2).extent(), alignment, skip_schedule);
         WhiteBalance wb = { white_balance_r, white_balance_g0, white_balance_g1, white_balance_b };
@@ -38,6 +41,31 @@ public:
 
         // Schedule
         // (n/a, handled inside included functions)
+        if (use_simple_autoscheduler == "1") {
+            Halide::SimpleAutoscheduleOptions options;
+            options.gpu = get_target().has_gpu_feature();
+            options.gpu_tile_channel = 1;
+            Func output_func = output;
+            Halide::simple_autoschedule(output_func,
+                    {{"black_point", 2050},
+                     {"white_point", 15464},
+                     {"white_balance_r", 2.29102f},
+                     {"white_balance_g0", 1.f},
+                     {"white_balance_g1", 1.f},
+                     {"white_balance_b", 1.26855f},
+                     {"compression", 3.8f},
+                     {"gain", 1.1f},
+                     {"input.min.0", 0},
+                     {"input.extent.0", 5218},
+                     {"input.min.1", 0},
+                     {"input.extent.1", 3482},
+                     {"input.min.2", 0},
+                     {"input.extent.2", 7}},
+                    {{0, 5218},
+                     {0, 3482},
+                     {0, 7}},
+                    options);
+        }
 
         // Estimates
         {

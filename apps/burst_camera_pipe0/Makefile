@@ -8,7 +8,7 @@ SRCS = burst_camera_pipe_generator.cpp align.cpp finish.cpp merge.cpp util.cpp
 # 'classic' will exceed 2GB in some allocations, so enable -large
 HL_TARGET_LARGE=$(HL_TARGET)-large_buffers
 
-$(BIN)/burst_camera_pipe.generator: $(SRCS) $(GENERATOR_DEPS)
+$(BIN)/burst_camera_pipe.generator: $(SRCS) ../autoscheduler/SimpleAutoSchedule.h ../autoscheduler/SimpleAutoSchedule.cpp ../autoscheduler/DerivativeUtils.h ../autoscheduler/DerivativeUtils.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS) $(USE_EXPORT_DYNAMIC)
 
@@ -25,7 +25,12 @@ $(BIN)/burst_camera_pipe_auto_schedule.a: $(BIN)/burst_camera_pipe.generator $(A
 	HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/weights \
 	$< -g burst_camera_pipe -f burst_camera_pipe_auto_schedule -o $(BIN) target=$(HL_TARGET_LARGE) auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so
 
-$(BIN)/process: process.cpp $(BIN)/burst_camera_pipe.a $(BIN)/burst_camera_pipe_classic_auto_schedule.a $(BIN)/burst_camera_pipe_auto_schedule.a
+$(BIN)/burst_camera_pipesimple_auto_schedule.a: $(BIN)/bilateral_grid.generator
+	@mkdir -p $(@D)
+	HL_USE_SIMPLE_AUTOSCHEDULER=1 \
+	$< -g bilateral_grid -o $(BIN) -f burst_camera_pipesimple_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=false -e static_library,h
+
+$(BIN)/process: process.cpp $(BIN)/burst_camera_pipe.a $(BIN)/burst_camera_pipe_classic_auto_schedule.a $(BIN)/burst_camera_pipe_auto_schedule.a $(BIN)/busrt_camera_pipeline_simple_auto_schedule.a
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -I$(BIN) -Wall -O3 $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS)
 
