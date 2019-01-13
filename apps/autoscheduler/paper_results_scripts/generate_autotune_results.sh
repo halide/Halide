@@ -4,7 +4,7 @@ echo "Using Halide in " $HALIDE
 
 export CXX="ccache c++"
 
-export HL_MACHINE_PARAMS=16,24000000,160
+export HL_MACHINE_PARAMS=32,24000000,160
 export HL_PERMIT_FAILED_UNROLL=1
 export HL_WEIGHTS_DIR=${PWD}/${HALIDE}/apps/autoscheduler/weights
 export HL_TARGET=x86-64-avx2

@@ -19,15 +19,15 @@ export HL_RANDOM_DROPOUT=100
 # export HL_NUM_PASSES=1
 
 # beam search
-# export HL_BEAM_SIZE=32
-# export HL_NUM_PASSES=5
+export HL_BEAM_SIZE=32
+export HL_NUM_PASSES=5
 
 # ablation where we restrict to old space
 # export HL_NO_SUBTILING=1
 
 # ablation where instead of coarse to fine, we just enlarge the beam
-export HL_BEAM_SIZE=160
-export HL_NUM_PASSES=1
+# export HL_BEAM_SIZE=160
+# export HL_NUM_PASSES=1
 
 APPS="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate_generator conv_layer mat_mul_generator iir_blur_generator resnet_50 bgu"
 
@@ -48,7 +48,7 @@ make -j -C ${HALIDE}/apps/interpolate_generator bin/filter
 make -j -C ${HALIDE}/apps/conv_layer bin/process
 make -j -C ${HALIDE}/apps/mat_mul_generator bin/filter
 make -j -C ${HALIDE}/apps/iir_blur_generator bin/process
-make -j -C ${HALIDE}/apps/resnet_50 bin/process bin/pytorch_weights/ok
+make -j -C ${HALIDE}/apps/resnet_50 test
 make -j -C ${HALIDE}/apps/bgu bin/process
 
 # benchmark everything
