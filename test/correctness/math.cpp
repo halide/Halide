@@ -1,6 +1,6 @@
+#include "Halide.h"
 #include <stdio.h>
 #include <math.h>
-#include "Halide.h"
 #include <iostream>
 #include <limits>
 

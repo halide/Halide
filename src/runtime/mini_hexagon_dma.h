@@ -14,7 +14,6 @@ typedef unsigned long addr_t;
 
 typedef unsigned int qurt_size_t;
 typedef unsigned int qurt_mem_pool_t;
-//TODO: Change to uint32_t in later releases after DMA Driver API Change
 #define HALIDE_HEXAGON_ENUM  enum __attribute__((aligned(4)))
 
 __inline static int align(int x,int a) {
@@ -22,7 +21,6 @@ __inline static int align(int x,int a) {
 } 
 
 HALIDE_HEXAGON_ENUM { QURT_EOK = 0 };
-
 
 /*!
  * Power Corner vote

@@ -1,9 +1,8 @@
-// from issue #3221
-
 #include "Halide.h"
 
 using namespace Halide;
 
+// from issue #3221
 int main(int argc, char *argv[]) {
 
     Target t = get_jit_target_from_environment();

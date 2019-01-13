@@ -2,7 +2,7 @@ BENCHMARKS="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stenci
 
 # Set EXPLORE_PARAMETERS to 1 if you want to run a script that explores
 # different architecture parameters.
-EXPLORE_PARAMETERS=1
+EXPLORE_PARAMETERS=0
 
 
 for b in $BENCHMARKS; do

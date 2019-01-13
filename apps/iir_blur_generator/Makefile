@@ -3,6 +3,8 @@ include ../support/autoscheduler.inc
 
 BIN ?= bin
 
+HL_TARGET=host-cuda
+
 $(BIN)/iir_blur.generator: iir_blur_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS) $(USE_EXPORT_DYNAMIC)
@@ -31,9 +33,10 @@ test: $(BIN)/process
 	$(BIN)/process
 
 autotune: $(BIN)/iir_blur.generator $(AUTOSCHED_BIN)/augment_sample $(AUTOSCHED_BIN)/train_cost_model $(AUTOSCHED_BIN)/libauto_schedule.so $(AUTOSCHED_SRC)/autotune_loop.sh
+	HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/weights \
 	bash $(AUTOSCHED_SRC)/autotune_loop.sh \
 		$(BIN)/iir_blur.generator \
 		iir_blur \
-		x86-64-avx2 \
+		$(HL_TARGET) \
 		$(AUTOSCHED_SRC)/weights \
 		$(AUTOSCHED_BIN)

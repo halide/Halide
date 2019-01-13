@@ -96,7 +96,7 @@ make_sample() {
         beam=32
     else
         # The other samples are random probes biased by the cost model
-        dropout=1  # 1% chance of operating entirely greedily
+        dropout=5  # 5% chance of operating entirely greedily
         beam=1
     fi
     HL_PERMIT_FAILED_UNROLL=1 \
@@ -106,7 +106,7 @@ make_sample() {
         HL_WEIGHTS_DIR=${WEIGHTS} \
         HL_RANDOM_DROPOUT=${dropout} \
         HL_BEAM_SIZE=${beam} \
-        HL_MACHINE_PARAMS=16,1,1 \
+        HL_MACHINE_PARAMS=32,1,1 \
         ${TIMEOUT_CMD} -k ${COMPILATION_TIMEOUT} ${COMPILATION_TIMEOUT} \
         ${GENERATOR} \
         -g ${PIPELINE} \

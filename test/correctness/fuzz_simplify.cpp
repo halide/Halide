@@ -1,5 +1,5 @@
-#include <stdio.h>
 #include "Halide.h"
+#include <stdio.h>
 #include <time.h>
 #include <random>
 
