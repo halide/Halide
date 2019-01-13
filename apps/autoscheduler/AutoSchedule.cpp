@@ -16,6 +16,7 @@
   optimal_schedule_pass        Runs a single pass of beam search
   LoopNest::compute_features   Recursively walks over a loop nest tree, computing our featurization using Halide's analysis tools.
   LoopNest::apply              Actually applied a computed schedule to a Halide pipeline
+  State::generate_children     Generators successor states to a state in the beam search
 
   Environment variables used (directly or indirectly):
 
@@ -2240,224 +2241,77 @@ struct State {
             }
         }
 
-        // use either deep network or linear model to predict cost
-        if (cost_model) {
+        internal_assert(cost_model);
 
-            // Perform any quick rejection tests before enqueuing this
-            for (auto it = features.begin(); it != features.end(); it++) {
-                if (!it.key()->node->is_wrapper) { // It's OK to repeatedly stage data
-                    auto &feat = it.value();
-                    if (feat.points_computed_total + feat.inlined_calls > 8 * feat.points_computed_minimum) {
-                        cost = 1e50;
-                        return true; //false;
-                    } else if (false && feat.points_computed_total + feat.inlined_calls < feat.points_computed_minimum) {
-                        // Some kind of shift-invariance failure
-                        // probably. The representative loop iteration
-                        // picked does a lot less than the average
-                        // amount of work that must be done by a loop
-                        // iteration, assuming no redundant work is
-                        // done, so none of the features can be
-                        // trusted. A benign reason for this to occur
-                        // is if you either need 1 or 2 values from a
-                        // func depending on the loop iteration, and
-                        // we were unlucky and picked one of the
-                        // iterations that only required 1 value as
-                        // the representative one.
-                        /*
-                        user_warning << "Shift invariance failure for " << it.key()->name
-                                     << ", discarding potential schedule: "
-                                     << feat.points_computed_total
-                                     << " " << feat.inlined_calls
-                                     << " " << feat.points_computed_minimum << "\n";
-                        dump();
-                        */
-                        cost = 1e50;
-                        return false;
-                    }
+        // Perform some addition pruning before burdening the cost model with silly states
+        for (auto it = features.begin(); it != features.end(); it++) {
+            if (!it.key()->node->is_wrapper) { // It's OK to repeatedly stage data
+                auto &feat = it.value();
+                if (feat.points_computed_total + feat.inlined_calls > 8 * feat.points_computed_minimum) {
+                    cost = 1e50;
+                    // Keep it in the beam but at the back, just so we
+                    // have the invariant that every state produces at
+                    // least one child.
+                    return true;
                 }
-            }
-
-            // Avoid code size explosion from recursive inlining.
-            if (root->max_inlined_calls() >= 256) {
-                cost = 1e50;
-                return false;
-            }
-
-            int num_stages = (int)features.size();
-
-            Runtime::Buffer<float> schedule_features;
-
-            // Won't actually run anything until we call evaluate_costs...
-            cost_model->enqueue(num_stages, &schedule_features, &cost);
-
-            // index of current stage whose features we are reading
-            int stage = 0;
-            // load schedule features into input buffer
-            for (const auto &n : dag.nodes) {
-                if (n.is_input) continue; // Inputs are computed outside of the pipeline and don't count.
-                if (stage >= num_stages) break;
-                for (auto it = n.stages.rbegin(); it != n.stages.rend(); it++) {
-                    internal_assert(features.contains(&*it)) << n.func.name() << "\n";
-                    const auto &feat = features.get(&*it);
-                    for (size_t i = 0; i < ScheduleFeatures::num_features(); i++) {
-                        schedule_features(i, stage) = feat[i];
-                    }
-                    stage += 1;
-                }
-            }
-            internal_assert(stage == num_stages);
-        } else {
-            // We have no throughput predictor.
-            for (auto it = features.begin(); it != features.end(); it++) {
-                auto &stage = *(it.key());
-                const auto &feat = it.value();
-                // Reject silly schedules. They're not even useful for
-                // training data, as they potentially take the age of
-                // the universe to benchmark.
-                if (feat.points_computed_total + feat.inlined_calls > 1000*feat.points_computed_minimum) return false;
-                if (feat.inlined_calls >= 64) return false;
-
-                double compute_cost = 0;
-                const int *pipeline_feat = (const int *)(&stage.features.op_histogram[0][0]);
-                double per_element_compute_cost = 0;
-                for (size_t i = 0; i < sizeof(stage.features.op_histogram) / sizeof(int); i++) {
-                    per_element_compute_cost += pipeline_feat[i];
-                }
-
-                if (feat.inlined_calls > 0) {
-                    const double per_element_compute_cost_of_memcpy = 1 + 2*stage.node->dimensions;
-                    per_element_compute_cost = std::max(0.0, per_element_compute_cost - per_element_compute_cost_of_memcpy);
-                }
-
-                // Assume that narrow types are cheaper because they
-                // vectorize wider, and just count the number of
-                // vectors computed.
-                compute_cost = per_element_compute_cost * (feat.num_vectors + feat.num_scalars);
-
-                // Figure out vector overcompute
-                const int native_vector_size = feat.native_vector_size;
-                const double idle_simd_lanes = (double)native_vector_size / feat.vector_size;
-                compute_cost *= idle_simd_lanes;
-
-                {
-                    // Few parallel tasks may be a bad idea due to
-                    // waiting for the long pole to finish.  Say
-                    // we have a huge number of tasks relative to
-                    // cores. We'd expect their start times to
-                    // eventually become evenly spaced, which
-                    // means we get a little triangle of idle
-                    // cores with total area 0.5 * task_size *
-                    // num_cores at the end. This bloats the total
-                    // amount of work by:
-                    //   (0.5 * task_size * num_cores + task_size * num_tasks) / (task_size * num_tasks)
-                    // = (0.5 * num_cores + num_tasks) / num_tasks
-
-                    internal_assert(feat.inner_parallelism > 0 && feat.outer_parallelism > 0);
-
-                    const double num_tasks = feat.inner_parallelism;
-                    const double num_cores = (double)params.parallelism / feat.outer_parallelism;
-                    double idle_core_wastage = (0.5 * num_cores + num_tasks) / num_tasks;
-
-                    // Evaluated at num_tasks = num_cores, this
-                    // gives a ridiculous 1.5x multiplier. Our
-                    // argument doesn't hold because the tasks
-                    // start synchronized. Just cap it at 20%
-                    // wastage.
-                    idle_core_wastage = std::min(idle_core_wastage, 1.2);
-
-                    if (verbose) {
-                        debug(0) << "idle_core_wastage_1 = " << idle_core_wastage << "\n";
-                    }
-
-                    // Cores can also be idle if the number of
-                    // tasks is small and not a multiple of the
-                    // number of cores. E.g. 9 tasks on 8 cores
-                    // takes about the same amount of time as 16
-                    // tasks.
-                    idle_core_wastage *= std::ceil(num_tasks / num_cores) * (num_cores / num_tasks);
-
-                    compute_cost *= idle_core_wastage;
-
-                    if (verbose) {
-                        debug(0) << "idle_core_wastage_2 = " << idle_core_wastage << "\n";
-                    }
-                }
-
-                double cold_cache_misses = 0, cost_of_cold_miss = 0, capacity_cache_misses = 0, cost_of_capacity_miss = 0;
-                if (feat.inlined_calls == 0) {
-                    // Estimate the number of cold cache misses on the data that this reads from and their cost
-                    // Cost dominated by lines not bytes due to streaming prefetchers
-                    cold_cache_misses = (feat.unique_lines_read_per_realization +
-                                         feat.unique_bytes_read_per_realization * 1e-3);
-
-                    cold_cache_misses *= feat.num_realizations;
-                    //int64_t footprint = std::min(feat.allocation_bytes_read_per_realization, feat.bytes_read_per_realization);
-                    int64_t footprint = feat.allocation_bytes_read_per_realization;
-                    //cost_of_miss = std::sqrt(footprint) * 40 * 5e-3;
-                    cost_of_cold_miss = footprint * 40 * 1e-4;
-
-                    // Now estimate the number of capacity-related cache misses using the total number of bytes read.
-
-                    // We have a number of unique bytes read. Call the
-                    // cache level large enough to fit it L(n+1). The
-                    // next cache level in is Ln. How many misses will
-                    // we incur in Ln? If we load randomly within the
-                    // footprint, we'll miss some constant fraction of
-                    // the time. The cost of such a miss is the cost
-                    // of going out to cache level L(n+1). Note that
-                    // *cold* misses, by contrast, go out to the cache
-                    // level that fits the entire source allocation,
-                    // not just the footprint accessed of it.
-                    capacity_cache_misses = feat.num_vectors * (feat.vector_loads_per_vector + feat.scalar_loads_per_vector);
-                    capacity_cache_misses += feat.num_scalars * feat.scalar_loads_per_scalar;
-                    capacity_cache_misses *= 1e-2;
-                    cost_of_capacity_miss = feat.unique_bytes_read_per_realization * 40 * 1e-4;
-
-                    // We'll assume multiway caches work well and ignore the other 'C' (conflict cache misses).
-                }
-
-                double memory_load_cost = cold_cache_misses * cost_of_cold_miss + capacity_cache_misses * cost_of_capacity_miss;
-
-                double cache_misses = 0, cost_of_miss = 0;
-                if (feat.inlined_calls == 0) {
-                    // Estimate the number of cache misses on the data that this writes to and their cost
-                    int64_t lines_written_per_realization = feat.inner_parallelism * (feat.bytes_at_task / feat.innermost_bytes_at_task);
-                    cache_misses = 1e1 * lines_written_per_realization + feat.bytes_at_realization * 1e-2;
-                    cache_misses *= feat.num_realizations;
-                    //cost_of_miss = std::sqrt(feat.bytes_at_production) * 40 * 5e-3;
-                    cost_of_miss = feat.bytes_at_production * 40 * 2e-6;
-                }
-
-                double memory_store_cost = cache_misses * cost_of_miss;
-
-                // Penalize writing partial cache lines. Assume a cache line is two simd vectors.
-                const double native_cache_line_size = 2 * idle_simd_lanes; // two full vectors
-                const double cache_line_wastage = std::max(1.0, native_cache_line_size / feat.innermost_pure_loop_extent);
-                memory_store_cost *= cache_line_wastage;
-
-                // Malloc aint free. Small allocations should go on the stack, but this isn't totally reliable.
-                double cost_of_mallocs = feat.num_realizations * 1e2;
-
-                // Penalize working sets that start to fall out of cache
-                double ws = 1e-6 * feat.working_set;
-                double cost_of_working_set = ws * ws * ws * 40 * feat.num_realizations;
-
-                if (verbose) {
-                    debug(0) << "Cost model for " << stage.stage.name() << " "
-                             << compute_cost << " + "
-                             << memory_load_cost << " + "
-                             << memory_store_cost << " + "
-                             << cost_of_mallocs << " + "
-                             << cost_of_working_set << '\n';
-                }
-
-                cost += compute_cost + memory_load_cost + memory_store_cost + cost_of_mallocs + cost_of_working_set;
             }
         }
+
+        // Avoid code size explosion from recursive inlining.
+        if (root->max_inlined_calls() >= 256) {
+            cost = 1e50;
+            return false;
+        }
+
+        int num_stages = (int)features.size();
+
+        Runtime::Buffer<float> schedule_features;
+
+        // Tell the cost model about this state. It won't actually
+        // evaluate it until we call evaluate_costs (or if it runs out
+        // of internal buffer space), so that the evaluations can be
+        // batched.
+        cost_model->enqueue(num_stages, &schedule_features, &cost);
+
+        // index of current stage whose features we are reading
+        int stage = 0;
+        // load schedule features into input buffer
+        for (const auto &n : dag.nodes) {
+
+            // Inputs are computed outside of the pipeline and don't count.
+            if (n.is_input) continue;
+
+            // The remaining stage are not yet
+            // scheduled. Optimistically assume their internal costs
+            // will not depend on the decisions made already, so
+            // there's no point adding it on to the total because it's
+            // the same across all states.  An underestimate of the
+            // cost for loading from these unscheduled stages is
+            // already baked into the scheduled stages that consume
+            // them.
+            if (stage >= num_stages) break;
+
+            // Load up the schedule features for all stages of this Func.
+            for (auto it = n.stages.rbegin(); it != n.stages.rend(); it++) {
+                internal_assert(features.contains(&*it)) << n.func.name() << "\n";
+                const auto &feat = features.get(&*it);
+                for (size_t i = 0; i < ScheduleFeatures::num_features(); i++) {
+                    schedule_features(i, stage) = feat[i];
+                }
+                stage += 1;
+            }
+        }
+        // Check we considered everything we were supposed to.
+        internal_assert(stage == num_stages);
+
         cost_calculations++;
         return true;
     }
 
+    // Make a child copy of this state. The loop nest is const (we
+    // make mutated copies of it, rather than mutating it), so we can
+    // continue to point to the same one and so this is a cheap
+    // operation.
     IntrusivePtr<State> make_child() const {
         State *s = new State;
         s->parent = this;
@@ -2467,22 +2321,7 @@ struct State {
         return s;
     }
 
-    IntrusivePtr<State> random_child(const FunctionDAG &dag,
-                                      const MachineParams &params,
-                                      std::mt19937 &rng) const {
-        int count = 0;
-        IntrusivePtr<State> child;
-        std::function<void(IntrusivePtr<State> &&)> accept = [&](IntrusivePtr<State> &&candidate) {
-            count++;
-            if (rng() % count == 0) {
-                child = std::move(candidate);
-            }
-        };
-
-        generate_children(dag, params, nullptr, accept);
-        return child;
-    }
-
+    // Generate the successor states to this state
     void generate_children(const FunctionDAG &dag,
                            const MachineParams &params,
                            CostModel *cost_model,
@@ -2550,13 +2389,9 @@ struct State {
                     new_root->inline_func(node);
                     child->root = new_root;
                     child->num_decisions_made++;
-                    // TODO: filter children here instead of calculating the cost of children we don't want.
                     if (child->calculate_cost(dag, params, cost_model)) {
-                        internal_assert(child->root->computes(node)) << "Failed to inline " << node->func.name() << '\n';
                         num_children++;
                         accept_child(std::move(child));
-                    } else {
-                        // Discarding state....
                     }
                 }
             }
@@ -2565,23 +2400,26 @@ struct State {
             // so are all its inputs and so is its sole output, and
             // inlining it is legal, just inline it. This saves time
             // on long chains of pointwise things.
-            bool must_inline = node->is_pointwise && (num_children > 0) && (node->outgoing_edges.size() == 1);
+            bool must_inline = (node->is_pointwise &&
+                                (num_children > 0) &&
+                                (node->outgoing_edges.size() == 1));
             if (must_inline) {
                 for (const auto *e : node->stages[0].incoming_edges) {
                     must_inline &= e->producer->is_pointwise;
                 }
                 for (const auto *e : node->outgoing_edges) {
-                    must_inline &= (e->consumer->node->is_pointwise || e->consumer->node->is_boundary_condition);
+                    must_inline &= (e->consumer->node->is_pointwise ||
+                                    e->consumer->node->is_boundary_condition);
                 }
                 if (must_inline) {
                     return;
                 }
             }
 
-
-            // Construct a list of plausible dimensions to vectorize over
-            // TODO: Pre-prune the list of sane dimensions to
-            // vectorize a Func over to reduce branching factor.
+            // Construct a list of plausible dimensions to vectorize
+            // over. Currently all of them. TODO: Pre-prune the list
+            // of sane dimensions to vectorize a Func over to reduce
+            // branching factor.
             vector<int> vector_dims;
             for (int v = 0; v < node->dimensions; v++) {
                 const auto &p = root->get_bounds(node)->region_computed(v);
@@ -2593,25 +2431,14 @@ struct State {
                 vector_dims.push_back(0);
             }
 
-
-            // HACK: May only vectorize across x, if there is one
-            /*
-            for (int v = 0; v < node->dimensions; v++) {
-                if (node->func.args()[v] == "x") {
-                    vector_dims.clear();
-                    vector_dims.push_back(v);
-                    break;
-                }
-            }
-            */
-
-
             // 2) Realize it somewhere
             for (int vector_dim : vector_dims) {
                 // Outputs must be vectorized over their innermost
                 // dimension, because we don't have control of the
-                // storage. TODO: Go inspect to see which dimension has a
-                // stride==1 constraint instead of assuming 0.
+                // storage layout. TODO: Inspect the output to see
+                // which dimension has a stride==1 constraint instead
+                // of assuming 0. The user may have changed the
+                // default.
                 if (vector_dim > 0 && (node->is_output || node->is_input)) break;
 
                 auto tile_options = root->compute_in_tiles(node, nullptr, params, vector_dim, false);
@@ -2620,13 +2447,14 @@ struct State {
                     child->root = std::move(n);
                     child->num_decisions_made++;
                     if (child->calculate_cost(dag, params, cost_model)) {
-                        internal_assert(child->root->computes(node)) << "Failed to inject realization of " << node->func.name() << '\n';
                         num_children++;
                         accept_child(std::move(child));
                     }
                 }
             }
         } else {
+            // We are parallelizing the loops of the func we just injected a realization for.
+
             bool should_parallelize = false;
             const vector<int64_t> *pure_size = nullptr;
             if (params.parallelism > 1) {
@@ -2639,8 +2467,11 @@ struct State {
                     }
                 }
             }
+
             if (!should_parallelize) {
-                // The Func must not be compute_root, so just return a copy of the parent state
+                // The Func must be scalar, or not compute_root, or
+                // we're not asking to use multiple cores.  Just
+                // return a copy of the parent state
                 num_children++;
                 auto child = make_child();
                 child->num_decisions_made++;
@@ -2648,11 +2479,10 @@ struct State {
             } else {
                 internal_assert(pure_size);
 
-                // Deciding on parallel task size/shape.
+                // Generate some candidate parallel task shapes.
                 auto tilings = generate_tilings(*pure_size, node->dimensions - 1, 2, true);
 
-                // We could just parallelize the outer loop entirely
-
+                // We could also just parallelize the outer loop entirely
                 std::vector<int64_t> ones;
                 ones.resize(pure_size->size(), 1);
                 tilings.emplace_back(std::move(ones));
@@ -2738,11 +2568,11 @@ struct State {
                             if (may_subtile()) {
                                 c = c->parallelize_in_tiles(params, o.tiling, new_root);
                             } else {
-                                // Emulate the single parallelization
-                                // option from the old autoscheduler's
-                                // search space - just keep
-                                // parallelizing outer loops until
-                                // enough are parallel.
+                                // We're emulating the old
+                                // autoscheduler for an ablation, so
+                                // emulate its parallelism strategy:
+                                // just keep parallelizing outer loops
+                                // until enough are parallel.
                                 vector<int64_t> tiling = c->size;
                                 int64_t total = 1;
                                 for (size_t i = c->size.size(); i > 0; i--) {
@@ -2774,7 +2604,8 @@ struct State {
             debug(0) << "Warning: Found no legal way to schedule "
                      << node->func.name() << " in the following State:\n";
             dump();
-            // internal_error << "Aborted";
+            // All our children died. Maybe other states have had
+            // children. Carry on.
         }
 
     }
@@ -2787,6 +2618,9 @@ struct State {
 
     string schedule_source;
 
+    // Apply the schedule represented by this state to a Halide
+    // Pipeline. Also generate source code for the schedule for the
+    // user to copy-paste to freeze this schedule as permanent artifact.
     void apply_schedule(const FunctionDAG &dag, const MachineParams &params) {
         StageMap<std::unique_ptr<LoopNest::StageScheduleState>> state_map;
         root->apply(LoopLevel::root(), state_map, params.parallelism, 0, nullptr, nullptr);
@@ -2924,6 +2758,7 @@ struct State {
                 << p.second->schedule_source.str()
                 << ";\n";
         }
+        // Sanitize the names of things to make them legal source code.
         schedule_source = src.str();
         bool in_quotes = false;
         for (auto &c : schedule_source) {
@@ -2933,8 +2768,7 @@ struct State {
     }
 };
 
-
-
+// Keep track of how many times we evaluated a state.
 int State::cost_calculations = 0;
 
 // A priority queue of states, sorted according to increasing
