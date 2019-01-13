@@ -34,6 +34,8 @@ cp ../autoscheduler/bin/augment_sample ../autoscheduler/bin/train_cost_model  ..
 mkdir -p ${SAMPLES}
 mkdir -p weights
 
+cp ../autoscheduler/arm_weights/* weights/
+
 # A batch of this many samples is built in parallel, and then
 # benchmarked serially. Set to number of cores.
 BATCH_SIZE=32
@@ -69,7 +71,7 @@ echo Parallel builds: ${PARALLEL_BUILDS:=CPUS-1}
 
 while [ 1 ]; do
     # Grab the current weights
-    aws s3 sync "s3://io.halide.autoscheduler.siggraph-2019-arm/weights" weights
+    aws s3 sync "s3://io.halide.autoscheduler.siggraph-2019-arm/weights" weights || echo "Failed to grab weights from s3"
 
     ID=$((RANDOM*100 + RANDOM))
 
