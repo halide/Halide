@@ -15,12 +15,20 @@ $(BIN)/iir_blur.a: $(BIN)/iir_blur.generator
 
 $(BIN)/iir_blur_classic_auto_schedule.a: $(BIN)/iir_blur.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
-	$< -g iir_blur -f iir_blur_classic_auto_schedule -o $(BIN) target=$(HL_TARGET) auto_schedule=true machine_params=$(HL_MACHINE_PARAMS)
+	HL_PERMIT_FAILED_UNROLL=1 \
+	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu_weights \
+	HL_DEBUG_CODEGEN=1 \
+	HL_SHARED_MEMORY_LIMIT=24 \
+	HL_COMPUTE_ROOT_AND_INLINE_ONLY=1 \
+	$< -g iir_blur -f iir_blur_classic_auto_schedule -o $(BIN) target=$(HL_TARGET) auto_schedule=true machine_params=$(HL_MACHINE_PARAMS) -e static_library,h,assembly,stmt 2> stderr_classic.txt > stdout_classic.txt
 
 $(BIN)/iir_blur_auto_schedule.a: $(BIN)/iir_blur.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
-	HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/weights \
-	$< -g iir_blur -f iir_blur_auto_schedule -o $(BIN) target=$(HL_TARGET) auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so
+	HL_PERMIT_FAILED_UNROLL=1 \
+	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu_weights \
+	HL_DEBUG_CODEGEN=1 \
+	HL_SHARED_MEMORY_LIMIT=24 \
+	$< -g iir_blur -f iir_blur_auto_schedule -o $(BIN) target=$(HL_TARGET) auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so machine_params=$(HL_MACHINE_PARAMS) 2> stderr.txt > stdout.txt
 
 $(BIN)/process: process.cpp $(BIN)/iir_blur.a $(BIN)/iir_blur_auto_schedule.a $(BIN)/iir_blur_classic_auto_schedule.a
 	@mkdir -p $(@D)
