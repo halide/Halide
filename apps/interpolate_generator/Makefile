@@ -49,5 +49,5 @@ autotune: $(BIN)/interpolate.generator $(AUTOSCHED_BIN)/augment_sample $(AUTOSCH
 		$(BIN)/interpolate.generator \
 		interpolate \
 		$(HL_TARGET) \
-		$(AUTOSCHED_SRC)/weights \
+		$(AUTOSCHED_SRC)/gpu_weights \
 		$(AUTOSCHED_BIN)

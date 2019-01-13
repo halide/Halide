@@ -50,5 +50,5 @@ autotune: $(BIN)/unsharp.generator $(AUTOSCHED_BIN)/augment_sample $(AUTOSCHED_B
 		$(BIN)/unsharp.generator \
 		unsharp \
 		$(HL_TARGET) \
-		$(AUTOSCHED_SRC)/weights \
+		$(AUTOSCHED_SRC)/gpu_weights \
 		$(AUTOSCHED_BIN)

@@ -81,5 +81,5 @@ autotune: $(BIN)/bilateral_grid.generator $(AUTOSCHED_BIN)/augment_sample $(AUTO
 		$(BIN)/bilateral_grid.generator \
 		bilateral_grid \
 		$(HL_TARGET) \
-		$(AUTOSCHED_SRC)/weights \
+		$(AUTOSCHED_SRC)/gpu_weights \
 		$(AUTOSCHED_BIN)

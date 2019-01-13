@@ -70,6 +70,6 @@ autotune: $(BIN)/resnet50block.generator $(AUTOSCHED_BIN)/augment_sample $(AUTOS
 		$(BIN)/resnet50block.generator \
 		resnet50block \
 		$(HL_TARGET) \
-		$(AUTOSCHED_SRC)/weights \
+		$(AUTOSCHED_SRC)/gpu_weights \
 		$(AUTOSCHED_BIN) \
 		"${AUTOTUNE_ARG_SETS}"

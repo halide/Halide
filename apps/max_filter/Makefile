@@ -49,5 +49,5 @@ autotune: $(BIN)/max_filter.generator $(AUTOSCHED_BIN)/augment_sample $(AUTOSCHE
 		$(BIN)/max_filter.generator \
 		max_filter \
 		$(HL_TARGET) \
-		$(AUTOSCHED_SRC)/weights \
+		$(AUTOSCHED_SRC)/gpu_weights \
 		$(AUTOSCHED_BIN)

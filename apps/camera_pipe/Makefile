@@ -75,5 +75,5 @@ autotune: $(BIN)/camera_pipe.generator $(AUTOSCHED_BIN)/augment_sample $(AUTOSCH
 		$(BIN)/camera_pipe.generator \
 		camera_pipe \
 		$(HL_TARGET) \
-		$(AUTOSCHED_SRC)/weights \
+		$(AUTOSCHED_SRC)/gpu_weights \
 		$(AUTOSCHED_BIN)

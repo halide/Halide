@@ -54,5 +54,5 @@ autotune: $(BIN)/stencil_chain.generator $(AUTOSCHED_BIN)/augment_sample $(AUTOS
 		$(BIN)/stencil_chain.generator \
 		stencil_chain \
 		$(HL_TARGET) \
-		$(AUTOSCHED_SRC)/weights \
+		$(AUTOSCHED_SRC)/gpu_weights \
 		$(AUTOSCHED_BIN)

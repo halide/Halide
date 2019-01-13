@@ -54,5 +54,5 @@ autotune: $(BIN)/conv_layer.generator $(AUTOSCHED_BIN)/augment_sample $(AUTOSCHE
 		$(BIN)/conv_layer.generator \
 		conv_layer \
 		$(HL_TARGET) \
-		$(AUTOSCHED_SRC)/weights \
+		$(AUTOSCHED_SRC)/gpu_weights \
 		$(AUTOSCHED_BIN)

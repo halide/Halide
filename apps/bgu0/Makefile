@@ -51,5 +51,5 @@ autotune: $(BIN)/fit_and_slice_3x4.generator $(AUTOSCHED_BIN)/augment_sample $(A
 		$(BIN)/fit_and_slice_3x4.generator \
 		fit_and_slice_3x4 \
 		$(HL_TARGET) \
-		$(AUTOSCHED_SRC)/weights \
+		$(AUTOSCHED_SRC)/gpu_weights \
 		$(AUTOSCHED_BIN)

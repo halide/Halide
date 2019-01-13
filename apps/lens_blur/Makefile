@@ -54,5 +54,5 @@ autotune: $(BIN)/lens_blur.generator $(AUTOSCHED_BIN)/augment_sample $(AUTOSCHED
 		$(BIN)/lens_blur.generator \
 		lens_blur \
 		$(HL_TARGET)-large_buffers \
-		$(AUTOSCHED_SRC)/weights \
+		$(AUTOSCHED_SRC)/gpu_weights \
 		$(AUTOSCHED_BIN)
