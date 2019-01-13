@@ -35,9 +35,7 @@ int main(int argc, char **argv) {
         {"Auto-scheduled", [&]() { bilateral_grid_auto_schedule(input, r_sigma, output); output.device_sync(); }},
         {"Simple auto-scheduled", [&]() { bilateral_grid_simple_auto_schedule(input, r_sigma, output); output.device_sync(); }}
     #endif
-        },
-        samples,
-        iterations
+        }
     );
 
     convert_and_save_image(output, argv[2]);
