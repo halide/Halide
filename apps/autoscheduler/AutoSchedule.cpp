@@ -1121,7 +1121,7 @@ struct LoopNest {
     const Bound &get_bounds(const FunctionDAG::Node *f) const {
         if (bounds.contains(f)) {
             const Bound &b = bounds.get(f);
-            b->validate();
+            // b->validate();
             return b;
         }
         auto bound = f->make_bound();
@@ -1175,7 +1175,7 @@ struct LoopNest {
         }
 
         const Bound &b = set_bounds(f, bound);
-        b->validate();
+        // b->validate();
         return b;
     }
 
