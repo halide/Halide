@@ -98,7 +98,10 @@ for ((b=2;b<3;b++)); do
 
     echo "Extracting runtimes..."
     cat results/files_${b}_0.txt | while read F; do
+        grep "^State with cost" ${F/times/stderr} | cut -d' ' -f4 | cut -d: -f1 | sort -n | head -n2 | tail -n1 >> results/predicted.txt
+
         grep "^Time: " $F | cut -d" " -f 2 >> results/new_autoscheduler.txt
+
         S=$(echo $F | sed "s/.txt/_simple_autoschedule.txt/")
         grep "^Time: " $S | cut -d" " -f 2 >> results/simple_autoscheduler.txt
     done
