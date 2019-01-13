@@ -1,6 +1,6 @@
 # set -x
 
-GENERATION=gen3
+GENERATION=gen4
 # Let the ftp server know we've started
 CPUS=$( nproc )
 HOST_ID="${CPUS}-core_${HOSTNAME}"
