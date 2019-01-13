@@ -1,6 +1,6 @@
 # set -x
 
-GENERATION=gen4
+GENERATION=gen6
 # Let the ftp server know we've started
 CPUS=$( nproc )
 HOST_ID="${CPUS}-core_${HOSTNAME}"
@@ -33,8 +33,6 @@ cp ../autoscheduler/bin/augment_sample ../autoscheduler/bin/train_cost_model  ..
 
 mkdir -p ${SAMPLES}
 mkdir -p weights
-# Start from the x86 weights
-cp ../autoscheduler/weights/* weights/
 
 # A batch of this many samples is built in parallel, and then
 # benchmarked serially. Set to number of cores.
@@ -70,6 +68,9 @@ benchmark_sample() {
 echo Parallel builds: ${PARALLEL_BUILDS:=CPUS-1}
 
 while [ 1 ]; do
+    # Grab the current weights
+    aws s3 sync "s3://io.halide.autoscheduler.siggraph-2019-arm/weights" weights
+
     ID=$((RANDOM*100 + RANDOM))
 
     # Compile a batch of samples using the generator in parallel
