@@ -7,12 +7,21 @@ all: $(BIN)/test
 
 $(BIN)/halide_blur.generator: halide_blur_generator.cpp ../autoscheduler/SimpleAutoSchedule.h ../autoscheduler/SimpleAutoSchedule.cpp ../autoscheduler/DerivativeUtils.h ../autoscheduler/DerivativeUtils.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS) $(USE_EXPORT_DYNAMIC)
+	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 $(BIN)/libhalide_blur.a: $(BIN)/halide_blur.generator
 	@mkdir -p $(@D)
 	$< -g halide_blur -o $(BIN) target=$(HL_TARGET) auto_schedule=false
 	@mv $(BIN)/halide_blur.a $(BIN)/libhalide_blur.a
+
+$(BIN)/%/halide_blur_classic_auto_schedule.a: $(BIN)/halide_blur.generator $(AUTOSCHED_BIN)/libauto_schedule.so
+	@mkdir -p $(@D)
+	$< -g halide_blur -f halide_blur_classic_auto_schedule -o $(BIN)/$* target=$(HL_TARGET) auto_schedule=true machine_params=$(HL_MACHINE_PARAMS)
+
+$(BIN)/%/halide_blur_auto_schedule.a: $(BIN)/halide_blur.generator $(AUTOSCHED_BIN)/libauto_schedule.so
+	@mkdir -p $(@D)
+	HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/weights \
+	$< -g halide_blur -f halide_blur_auto_schedule -o $(BIN)/$* target=$(HL_TARGET) auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so
 
 # g++ on OS X might actually be system clang without openmp
 CXX_VERSION=$(shell $(CXX) --version)
@@ -56,3 +65,11 @@ clean:
 
 test: $(BIN)/test
 	$(BIN)/test
+
+autotune: $(BIN)/halide_blur.generator $(AUTOSCHED_BIN)/augment_sample $(AUTOSCHED_BIN)/train_cost_model $(AUTOSCHED_BIN)/libauto_schedule.so $(AUTOSCHED_SRC)/autotune_loop.sh
+	bash $(AUTOSCHED_SRC)/autotune_loop.sh \
+		$(BIN)/halide_blur.generator \
+		halide_blur \
+		x86-64-avx2 \
+		$(AUTOSCHED_SRC)/weights \
+		$(AUTOSCHED_BIN)

@@ -1,4 +1,5 @@
 #include "Halide.h"
+#include "../autoscheduler/SimpleAutoSchedule.h"
 #include <iostream>
 #include <iomanip>
 #include <random>
@@ -1200,6 +1201,10 @@ public:
     }
 
     void generate() {
+        std::string use_simple_autoscheduler =
+            Halide::Internal::get_env_variable("HL_USE_SIMPLE_AUTOSCHEDULER");
+        bool skip_schedule = auto_schedule || use_simple_autoscheduler == "1";
+
         rng.seed((int)seed);
 
         // create transition matrix between stages
@@ -1225,7 +1230,7 @@ public:
             std::cout << "Approx size: " << stages.back().w << ", " << stages.back().h << ", " << stages.back().c << "\n";
             Stage next = random_stage(stages, CDF, curr_stage_id);
             stages.push_back(next);
-            if (!auto_schedule) {
+            if (!skip_schedule) {
                 stages.back().func.compute_root().reorder(x, c, y).vectorize(x, 8).parallel(y, 8);
             }
         }
@@ -1238,7 +1243,82 @@ public:
         output = casted.func;
 
         if (!auto_schedule) {
-            output.compute_root().reorder(x, c, y).vectorize(x, 8).parallel(y);
+            if (use_simple_autoscheduler == "1") {
+                Halide::SimpleAutoscheduleOptions options;
+                options.gpu = get_target().has_gpu_feature();
+                options.gpu_tile_channel = 3;
+                Func output_func = output;
+                Halide::simple_autoschedule(output_func,
+                                    {{"input.min.0", 0},
+                                     {"input.extent.0", 2000},
+                                     {"input.min.1", 0},
+                                     {"input.extent.1", 2000},
+                                     {"input.min.2", 0},
+                                     {"input.extent.2", 3},
+                                     {"uint8_weights.min.0", 0},
+                                     {"uint8_weights.extent.0", 512},
+                                     {"uint8_weights.min.1", -5},
+                                     {"uint8_weights.extent.1", 5},
+                                     {"uint8_weights.min.2", -5},
+                                     {"uint8_weights.extent.2", 5},
+                                     {"uint8_weights.min.3", 0},
+                                     {"uint8_weights.extent.3", 512},
+                                     {"uint16_weights.min.0", 0},
+                                     {"uint16_weights.extent.0", 512},
+                                     {"uint16_weights.min.1", -5},
+                                     {"uint16_weights.extent.1", 5},
+                                     {"uint16_weights.min.2", -5},
+                                     {"uint16_weights.extent.2", 5},
+                                     {"uint16_weights.min.3", 0},
+                                     {"uint16_weights.extent.3", 512},
+                                     {"uint32_weights.min.0", 0},
+                                     {"uint32_weights.extent.0", 512},
+                                     {"uint32_weights.min.1", -5},
+                                     {"uint32_weights.extent.1", 5},
+                                     {"uint32_weights.min.2", -5},
+                                     {"uint32_weights.extent.2", 5},
+                                     {"uint32_weights.min.3", 0},
+                                     {"uint32_weights.extent.3", 512},
+                                     {"int8_weights.min.0", 0},
+                                     {"int8_weights.extent.0", 512},
+                                     {"int8_weights.min.1", -5},
+                                     {"int8_weights.extent.1", 5},
+                                     {"int8_weights.min.2", -5},
+                                     {"int8_weights.extent.2", 5},
+                                     {"int8_weights.min.3", 0},
+                                     {"int8_weights.extent.3", 512},
+                                     {"int16_weights.min.0", 0},
+                                     {"int16_weights.extent.0", 512},
+                                     {"int16_weights.min.1", -5},
+                                     {"int16_weights.extent.1", 5},
+                                     {"int16_weights.min.2", -5},
+                                     {"int16_weights.extent.2", 5},
+                                     {"int16_weights.min.3", 0},
+                                     {"int16_weights.extent.3", 512},
+                                     {"int32_weights.min.0", 0},
+                                     {"int32_weights.extent.0", 512},
+                                     {"int32_weights.min.1", -5},
+                                     {"int32_weights.extent.1", 5},
+                                     {"int32_weights.min.2", -5},
+                                     {"int32_weights.extent.2", 5},
+                                     {"int32_weights.min.3", 0},
+                                     {"int32_weights.extent.3", 512},
+                                     {"float32_weights.min.0", 0},
+                                     {"float32_weights.extent.0", 512},
+                                     {"float32_weights.min.1", -5},
+                                     {"float32_weights.extent.1", 5},
+                                     {"float32_weights.min.2", -5},
+                                     {"float32_weights.extent.2", 5},
+                                     {"float32_weights.min.3", 0},
+                                     {"float32_weights.extent.3", 512}
+                                     },
+                                    {{0, 2000},
+                                     {0, 2000},
+                                     {0, 3}},
+                                    options);
+            } else {
+                output.compute_root().reorder(x, c, y).vectorize(x, 8).parallel(y);
+            }
         }
 
         if (auto_schedule) {

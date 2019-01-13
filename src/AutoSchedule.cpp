@@ -2759,6 +2759,13 @@ void Partitioner::generate_group_cpu_schedule(
     vectorize_stage(g, f_handle, g.output.stage_num, def, g_out, true, t,
                     rvars, stg_estimates, sched);
 
+    // TODO(srj): this is a temporary workaround for a possible flaw in the
+    // autoscheduler; apps/hdr_plaid will cause us to try to vectorize the same
+    // Func twice. This is just a quick hack to prevent that. More investigation
+    // is warranted.
+    set<string> vectorized;
+    vectorized.insert(f_handle.name());
+
     // Parallelize definition
     Expr def_par = 1;
     // TODO: Investigate if it is better to pull one large dimension and
@@ -2882,6 +2889,12 @@ void Partitioner::generate_group_cpu_schedule(
                 reorder_dims(mem_handle, mem.stage_num, mem_def, mem_strides, sched);
             }
         }
+
+        if (vectorized.count(mem_handle.name())) {
+            user_warning << "WORKAROUND: Skipping possibly-redundant vectorize for stage " << mem_handle.name() << "\n";
+            continue;
+        }
+        vectorized.insert(mem_handle.name());
 
         vectorize_stage(g, mem_handle, mem.stage_num, mem_def, mem.func, false,
                         t, mem_rvars, mem_estimates, sched);
@@ -3539,7 +3552,7 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
 MachineParams MachineParams::generic() {
     std::string params = Internal::get_env_variable("HL_MACHINE_PARAMS");
     if (params.empty()) {
-        return MachineParams(32, 24 * 1024 * 1024, 160);
+        return MachineParams(32, 24000000, 160);
     } else {
         return MachineParams(params);
     }

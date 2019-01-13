@@ -37,8 +37,9 @@ public:
         Func blur_x("blur_x");
         Var x("x"), y("y"), xi("xi"), yi("yi");
 
-        // The algorithm
-        blur_x(x, y) = (input(x, y) + input(x+1, y) + input(x+2, y))/3;
+        // Algorithm
+        Func input_clamped = Halide::BoundaryConditions::repeat_edge(input);
+        blur_x(x, y) = (input_clamped(x, y) + input_clamped(x+1, y) + input_clamped(x+2, y))/3;
         blur_y(x, y) = (blur_x(x, y) + blur_x(x, y+1) + blur_x(x, y+2))/3;
  
         // Estimates (for autoscheduler; ignored otherwise)
@@ -49,7 +50,7 @@ public:
                   .dim(1).set_bounds_estimate(0, 4802);
         }
 
-        // How to schedule it
+        // Schedule
         if (!auto_schedule) {
             if (get_target().has_gpu_feature()) {
                 std::string use_simple_autoscheduler =
@@ -121,6 +122,14 @@ public:
                 blur_y.split(y, y, yi, 8).parallel(y).vectorize(x, 8);
                 blur_x.store_at(blur_y, y).compute_at(blur_y, yi).vectorize(x, 8);
             }
+        }
+
+        // Estimates
+        {
+            input.dim(0).set_bounds_estimate(0, 6408)
+                   .dim(1).set_bounds_estimate(0, 4802);
+            blur_y.dim(0).set_bounds_estimate(0, 6408)
+                   .dim(1).set_bounds_estimate(0, 4802);
         }
     }
 };

@@ -29,7 +29,7 @@ $(BIN)/stencil_chain_auto_schedule.a: $(BIN)/stencil_chain.generator $(AUTOSCHED
 	HL_PERMIT_FAILED_UNROLL=1 \
 	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu_weights \
 	HL_DEBUG_CODEGEN=1 \
-	HL_SHARED_MEMORY_LIMIT=8 \
+	HL_SHARED_MEMORY_LIMIT=2 \
 	$< -g stencil_chain -o $(BIN) -f stencil_chain_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so machine_params=$(HL_MACHINE_PARAMS) -e stmt,assembly,static_library,h 2> stderr.txt > stdout.txt
 
 $(BIN)/stencil_chain_simple_auto_schedule.a: $(BIN)/stencil_chain.generator
@@ -51,9 +51,13 @@ clean:
 test: $(BIN)/out.png
 
 autotune: $(BIN)/stencil_chain.generator $(AUTOSCHED_BIN)/augment_sample $(AUTOSCHED_BIN)/train_cost_model $(AUTOSCHED_BIN)/libauto_schedule.so $(AUTOSCHED_SRC)/autotune_loop.sh
+	HL_PERMIT_FAILED_UNROLL=1 \
+	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu_weights \
+	HL_DEBUG_CODEGEN=1 \
+	HL_SHARED_MEMORY_LIMIT=2 \
 	bash $(AUTOSCHED_SRC)/autotune_loop.sh \
 		$(BIN)/stencil_chain.generator \
 		stencil_chain \
-		x86-64-avx2 \
-		$(AUTOSCHED_SRC)/weights \
+		$(HL_TARGET) \
+		$(AUTOSCHED_SRC)/gpu_weights \
 		$(AUTOSCHED_BIN)

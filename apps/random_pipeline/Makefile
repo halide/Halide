@@ -27,7 +27,7 @@ endif
 $(BIN)/runtime.a: $(BIN)/random_pipeline.generator
 	$^ -r runtime target=$(HL_TARGET) -o $(BIN)
 
-$(BIN)/random_pipeline.generator: random_pipeline_generator.cpp $(GENERATOR_DEPS)
+$(BIN)/random_pipeline.generator: random_pipeline_generator.cpp ../autoscheduler/SimpleAutoSchedule.h ../autoscheduler/SimpleAutoSchedule.cpp ../autoscheduler/DerivativeUtils.h ../autoscheduler/DerivativeUtils.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
@@ -44,7 +44,12 @@ $(BIN)/$(ID)/random_pipeline.a: $(BIN)/random_pipeline.generator
 	HL_WEIGHTS_DIR=$(PWD)/../autoscheduler/gpu_weights \
 	$^ -g random_pipeline -o $(BIN)/$(ID) -f random_pipeline target=$(HL_TARGET)-no_runtime auto_schedule=$(AUTO_SCHEDULE) seed=$(PIPELINE_SEED) max_stages=$(PIPELINE_STAGES) $(GEN_GEN_ARGS) 2> $(BIN)/$(ID)/stderr.txt > $(BIN)/$(ID)/stdout.txt
 
-$(BIN)/$(ID)/test: test.cpp $(BIN)/$(ID)/random_pipeline.a $(BIN)/runtime.a
+$(BIN)/$(ID)/random_pipeline_simple_auto_schedule.a: $(BIN)/random_pipeline.generator
+	@mkdir -p $(@D)
+	HL_USE_SIMPLE_AUTOSCHEDULER=1 \
+	$< -g random_pipeline -o $(BIN)/$(ID) -f random_pipeline_simple_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=false -e static_library,h seed=$(PIPELINE_SEED) max_stages=$(PIPELINE_STAGES)
+
+$(BIN)/$(ID)/test: test.cpp $(BIN)/$(ID)/random_pipeline.a $(BIN)/$(ID)/random_pipeline_simple_auto_schedule.a $(BIN)/runtime.a
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -I$(BIN)/$(ID) -Wall -O3 $^ -o $@ $(LDFLAGS)
 

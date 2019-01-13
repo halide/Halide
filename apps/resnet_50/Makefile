@@ -2,6 +2,7 @@ include ../support/Makefile.inc
 include ../support/autoscheduler.inc
 
 BIN ?= bin
+
 HL_TARGET=host-cuda
 
 all: $(BIN)/process
@@ -61,10 +62,14 @@ clean:
 AUTOTUNE_ARG_SETS ?= $(foreach block,0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15,block_id=$(block))
 
 autotune: $(BIN)/resnet50block.generator $(AUTOSCHED_BIN)/augment_sample $(AUTOSCHED_BIN)/train_cost_model $(AUTOSCHED_BIN)/libauto_schedule.so $(AUTOSCHED_SRC)/autotune_loop.sh
+	HL_PERMIT_FAILED_UNROLL=1 \
+	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu_weights \
+	HL_DEBUG_CODEGEN=1 \
+	HL_SHARED_MEMORY_LIMIT=24 \
 	bash $(AUTOSCHED_SRC)/autotune_loop.sh \
 		$(BIN)/resnet50block.generator \
 		resnet50block \
-		x86-64-avx2 \
-		$(AUTOSCHED_SRC)/weights \
+		$(HL_TARGET) \
+		$(AUTOSCHED_SRC)/gpu_weights \
 		$(AUTOSCHED_BIN) \
 		"${AUTOTUNE_ARG_SETS}"

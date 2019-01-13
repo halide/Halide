@@ -1,8 +1,8 @@
+#include "Halide.h"
+#include "HalideRuntime.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include "Halide.h"
-#include "HalideRuntime.h"
 
 using namespace Halide;
 

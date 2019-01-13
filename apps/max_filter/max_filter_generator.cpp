@@ -22,7 +22,7 @@ public:
         // A sequence of vertically-max-filtered versions of the input,
         // each filtered twice as tall as the previous slice. All filters
         // are downward-looking.
-        Func vert_log;
+        Func vert_log("vert_log");
         vert_log(x, y, c, t) = input(x, y, c);
         RDom r(-radius, input_.height() + radius, 1, slices-1);
         vert_log(x, r.x, c, r.y) = max(vert_log(x, r.x, c, r.y - 1),
@@ -32,18 +32,18 @@ public:
         // by maxing two samples from its floor log 2 (e.g. maxing two
         // 8-high overlapping samples). This next Func tells us which
         // slice to draw from for a given radius:
-        Func slice_for_radius;
+        Func slice_for_radius("slice_for_radius");
         slice_for_radius(t) = cast<int>(floor(log(2*t+1) / logf(2)));
 
         // Produce every possible vertically-max-filtered version of the image:
-        Func vert;
+        Func vert("vert");
         // t is the blur radius
         Expr slice = clamp(slice_for_radius(t), 0, slices);
         Expr first_sample = vert_log(x, y - t, c, slice);
         Expr second_sample = vert_log(x, y + t + 1 - clamp(1 << slice, 0, 2*radius), c, slice);
         vert(x, y, c, t) = max(first_sample, second_sample);
 
-        Func filter_height;
+        Func filter_height("filter_height");
         RDom dy(0, radius+1);
         filter_height(x) = sum(select(x*x + dy*dy < (radius+0.25f)*(radius+0.25f), 1, 0));
 
