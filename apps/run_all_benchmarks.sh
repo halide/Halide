@@ -1,5 +1,4 @@
-BENCHMARKS="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain unsharp harris interpolate_generator max_filter hist conv_layer iir_blur_generator bgu0"
-# resnet matmul
+BENCHMARKS="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain unsharp harris interpolate_generator max_filter hist conv_layer iir_blur_generator bgu0 resnet_50 mat_mul_generator"
 
 # Set EXPLORE_PARAMETERS to 1 if you want to run a script that explores
 # different architecture parameters.
