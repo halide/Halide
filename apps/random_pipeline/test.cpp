@@ -10,6 +10,7 @@ using namespace Halide::Runtime;
 using namespace Halide::Tools;
 
 #include "random_pipeline.h"
+#include "random_pipeline_simple_auto_schedule.h"
 
 typedef void *(*halide_malloc_t)(void *, size_t);
 typedef void (*halide_free_t)(void *, void *);
@@ -27,6 +28,18 @@ void *my_malloc(void *ucon, size_t sz) {
 }
 
 int main(int argc, char **argv) {
+    if (argc != 2) {
+        printf("Usage: ./test use_simple_autoschedule\n");
+        return 1;
+    }
+
+    bool use_simple_autoschedule = atoi(argv[1]);
+
+    auto random_pipeline_fn = random_pipeline;
+    if (use_simple_autoschedule) {
+        random_pipeline_fn = random_pipeline_simple_auto_schedule;
+    }
+
     Buffer<float> output(2000, 2000, 3);
 
     for (int y = 0; y < output.height(); y++) {
@@ -55,7 +68,7 @@ int main(int argc, char **argv) {
     assert(int32_weights.is_bounds_query());
     assert(float32_weights.is_bounds_query());
 
-    random_pipeline(input,
+    random_pipeline_fn(input,
                     uint8_weights,
                     uint16_weights,
                     uint32_weights,
@@ -88,7 +101,7 @@ int main(int argc, char **argv) {
     config.accuracy = 0.01;
     config.min_time = 1.0;
     double best = benchmark([&]() {
-            random_pipeline(input,
+            random_pipeline_fn(input,
                             uint8_weights,
                             uint16_weights,
                             uint32_weights,

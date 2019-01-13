@@ -57,7 +57,11 @@ clean:
 	rm -rf $(BIN)
 
 $(BIN)/$(ID)/times.txt: $(BIN)/$(ID)/test
-	$(BIN)/$(ID)/test > $(BIN)/$(ID)/times.txt
+	$(BIN)/$(ID)/test 0 > $(BIN)/$(ID)/times.txt
+
+$(BIN)/$(ID)/times_simple_autoschedule.txt: $(BIN)/$(ID)/test
+	$(BIN)/$(ID)/test 1 > $(BIN)/$(ID)/times_simple_autoschedule.txt
 
 build: $(BIN)/$(ID)/test
 bench: $(BIN)/$(ID)/times.txt
+bench_simple_autoschedule: $(BIN)/$(ID)/times_simple_autoschedule.txt
