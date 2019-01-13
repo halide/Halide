@@ -3552,7 +3552,7 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
 MachineParams MachineParams::generic() {
     std::string params = Internal::get_env_variable("HL_MACHINE_PARAMS");
     if (params.empty()) {
-        return MachineParams(32, 24 * 1024 * 1024, 160);
+        return MachineParams(4, 4 * 1024 * 1024, 30);
     } else {
         return MachineParams(params);
     }
