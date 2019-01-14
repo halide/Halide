@@ -51,6 +51,23 @@
 #include "resnet50block_auto_schedule14.h"
 #include "resnet50block_auto_schedule15.h"
 
+#include "resnet50block_simple_auto_schedule0.h"
+#include "resnet50block_simple_auto_schedule1.h"
+#include "resnet50block_simple_auto_schedule2.h"
+#include "resnet50block_simple_auto_schedule3.h"
+#include "resnet50block_simple_auto_schedule4.h"
+#include "resnet50block_simple_auto_schedule5.h"
+#include "resnet50block_simple_auto_schedule6.h"
+#include "resnet50block_simple_auto_schedule7.h"
+#include "resnet50block_simple_auto_schedule8.h"
+#include "resnet50block_simple_auto_schedule9.h"
+#include "resnet50block_simple_auto_schedule10.h"
+#include "resnet50block_simple_auto_schedule11.h"
+#include "resnet50block_simple_auto_schedule12.h"
+#include "resnet50block_simple_auto_schedule13.h"
+#include "resnet50block_simple_auto_schedule14.h"
+#include "resnet50block_simple_auto_schedule15.h"
+
 #include "HalideBuffer.h"
 #include "halide_image_io.h"
 #include "halide_malloc_trace.h"
@@ -370,11 +387,12 @@ int main(int argc, char **argv) {
     {"manual", 0},
     {"classic_auto_schedule", 1},
     {"auto_schedule", 2},
+    {"simple_auto_schedule", 3},
   };
 
   const auto it = schedule_type_map.find(schedule_type_name);
   if (it == schedule_type_map.end()) {
-    std::cout << "scheduletype must be one of manual, auto_schedule, classic_auto_schedule\n";
+    std::cout << "scheduletype must be one of manual, auto_schedule, classic_auto_schedule, simple_auto_schedule\n";
     return 1;
   }
   const int schedule_type = it->second;

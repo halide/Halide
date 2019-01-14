@@ -33,10 +33,10 @@ $(BIN)/resnet50block_auto_schedule%.a: $(BIN)/resnet50block.generator $(AUTOSCHE
 	HL_SHARED_MEMORY_LIMIT=24 \
 	$(BIN)/resnet50block.generator -g resnet50block -o $(BIN) -f resnet50block_auto_schedule$* target=$(HL_TARGET) auto_schedule=true block_id=$* -p $(AUTOSCHED_BIN)/libauto_schedule.so machine_params=$(HL_MACHINE_PARAMS) 2> stderr.txt > stdout.txt
 
-$(BIN)/resnet50block_simple_auto_schedule.a: $(BIN)/resnet50block.generator
+$(BIN)/resnet50block_simple_auto_schedule%.a: $(BIN)/resnet50block.generator
 	@mkdir -p $(@D)
 	HL_USE_SIMPLE_AUTOSCHEDULER=1 \
-	$< -g resnet50block -o $(BIN) -f resnet50block_simple_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=false -e static_library,h
+	$< -g resnet50block -o $(BIN) -f resnet50block_simple_auto_schedule$* target=$(HL_TARGET)-no_runtime auto_schedule=false -e static_library,h
 
 $(BIN)/pytorch_weights/ok:
 	@mkdir -p $(@D)
@@ -46,16 +46,18 @@ $(BIN)/pytorch_weights/ok:
 RESNET_BLOCK_LIBS_MANUAL ?= $(foreach block,0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15,$(BIN)/resnet50block_manual$(block).a)
 RESNET_BLOCK_LIBS_CLASSIC_AUTO_SCHEDULE ?= $(foreach block,0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15,$(BIN)/resnet50block_classic_auto_schedule$(block).a)
 RESNET_BLOCK_LIBS_AUTO_SCHEDULE ?= $(foreach block,0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15,$(BIN)/resnet50block_auto_schedule$(block).a)
+RESNET_BLOCK_LIBS_SIMPLE_AUTO_SCHEDULE ?= $(foreach block,0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15,$(BIN)/resnet50block_simple_auto_schedule$(block).a)
 
-$(BIN)/process: process.cpp $(RESNET_BLOCK_LIBS_MANUAL) $(RESNET_BLOCK_LIBS_CLASSIC_AUTO_SCHEDULE) $(RESNET_BLOCK_LIBS_AUTO_SCHEDULE) $(BIN)/resnet50block_simple_auto_schedule.a
+$(BIN)/process: process.cpp $(RESNET_BLOCK_LIBS_MANUAL) $(RESNET_BLOCK_LIBS_CLASSIC_AUTO_SCHEDULE) $(RESNET_BLOCK_LIBS_AUTO_SCHEDULE) $(RESNET_BLOCK_LIBS_SIMPLE_AUTO_SCHEDULE)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -g -I $(BIN) -Wall $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS)
 
-# test_manual, test_auto_schedule, test_classic_auto_schedule
+# test_manual, test_auto_schedule, test_classic_auto_schedule,
+# test_simple_auto_schedule
 test_%: $(BIN)/process $(BIN)/pytorch_weights/ok
 	$< 10 $* $(BIN)/pytorch_weights cropped_panda.jpg $(BIN)/res50gen_output.bin
 
-test: test_manual test_classic_auto_schedule test_auto_schedule
+test: test_manual test_classic_auto_schedule test_auto_schedule test_simple_auto_schedule
 
 clean:
 	rm -rf $(BIN)
