@@ -66,17 +66,9 @@ uint32_t get_dropout_threshold() {
 }
 
 bool random_dropout(std::mt19937 &rng, size_t num_decisions) {
-    static double random_dropout_threshold = get_dropout_threshold();
-
-    // The random dropout threshold is the chance that we operate
-    // entirely greedily and never discard anything.
-    double t = random_dropout_threshold;
-    t /= 100;
-    t = std::pow(t, 1.0f / num_decisions);
-    t *= 100;
-
+    static uint32_t random_dropout_threshold = get_dropout_threshold();
     uint32_t r = rng();
-    bool drop_it = (r % 100) >= t;
+    bool drop_it = (r % 100) >= random_dropout_threshold;
     return drop_it;
 }
 
