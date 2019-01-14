@@ -1,6 +1,7 @@
 #include <iostream>
 
 #include "Bounds.h"
+#include "ConciseCasts.h"
 #include "CSE.h"
 #include "Debug.h"
 #include "Deinterleave.h"
@@ -211,37 +212,62 @@ private:
             // If we cast to an int32 or greater, assume that it won't
             // overflow. Signed 32-bit integer overflow is undefined.
             could_overflow = false;
-        } else if (a.is_bounded() && from.can_represent(to)) {
-            // The other case to consider is narrowing where the
-            // bounds of the original fit into the narrower type. We
-            // can only really prove that this is the case if they're
-            // constants, so try to make the constants first.
+        } else if (a.is_bounded()) {
+            if (from.can_represent(to)) {
+                // The other case to consider is narrowing where the
+                // bounds of the original fit into the narrower type. We
+                // can only really prove that this is the case if they're
+                // constants, so try to make the constants first.
 
-            // First constant-fold
-            a.min = simplify(a.min);
-            a.max = simplify(a.max);
+                // First constant-fold
+                a.min = simplify(a.min);
+                a.max = simplify(a.max);
 
-            // Then try to strip off junk mins and maxes.
-            bool old_constant_bound = const_bound;
-            const_bound = true;
-            a.min.accept(this);
-            Expr lower_bound = interval.has_lower_bound() ? interval.min : Expr();
-            a.max.accept(this);
-            Expr upper_bound = interval.has_upper_bound() ? interval.max : Expr();
-            const_bound = old_constant_bound;
+                // Then try to strip off junk mins and maxes.
+                bool old_constant_bound = const_bound;
+                const_bound = true;
+                a.min.accept(this);
+                Expr lower_bound = interval.has_lower_bound() ? interval.min : Expr();
+                a.max.accept(this);
+                Expr upper_bound = interval.has_upper_bound() ? interval.max : Expr();
+                const_bound = old_constant_bound;
 
-            if (lower_bound.defined() && upper_bound.defined()) {
-                // Cast them to the narrow type and back and see if
-                // they're provably unchanged.
-                Expr test =
-                    (cast(from, cast(to, lower_bound)) == lower_bound &&
-                     cast(from, cast(to, upper_bound)) == upper_bound);
-                if (can_prove(test)) {
+                if (lower_bound.defined() && upper_bound.defined()) {
+                    // Cast them to the narrow type and back and see if
+                    // they're provably unchanged.
+                    Expr test =
+                        (cast(from, cast(to, lower_bound)) == lower_bound &&
+                         cast(from, cast(to, upper_bound)) == upper_bound);
+                    if (can_prove(test)) {
+                        could_overflow = false;
+                        // Relax the bounds to the constants we found. Not
+                        // strictly necessary, but probably helpful to
+                        // keep the expressions small.
+                        a = Interval(lower_bound, upper_bound);
+                    }
+                }
+            } else {
+                // a is bounded, but from and to can't necessarily represent
+                // each other; however, if the bounds can be simplified to
+                // constants, they might fit regardless of types.
+                a.min = simplify(a.min);
+                a.max = simplify(a.max);
+                auto *umin = as_const_uint(a.min);
+                auto *umax = as_const_uint(a.max);
+                if (umin && umax && to.can_represent(*umin) && to.can_represent(*umax)) {
                     could_overflow = false;
-                    // Relax the bounds to the constants we found. Not
-                    // strictly necessary, but probably helpful to
-                    // keep the expressions small.
-                    a = Interval(lower_bound, upper_bound);
+                } else {
+                    auto *imin = as_const_int(a.min);
+                    auto *imax = as_const_int(a.max);
+                    if (imin && imax && to.can_represent(*imin) && to.can_represent(*imax)) {
+                        could_overflow = false;
+                    } else {
+                        auto *fmin = as_const_float(a.min);
+                        auto *fmax = as_const_float(a.max);
+                        if (fmin && fmax && to.can_represent(*fmin) && to.can_represent(*fmax)) {
+                            could_overflow = false;
+                        }
+                    }
                 }
             }
         }
@@ -2407,6 +2433,21 @@ void constant_bound_test() {
 
         check_constant_bound(absd(x, y), Expr((float)0), Expr((float)20));
     }
+
+    {
+        using namespace ConciseCasts;
+
+        Param<int8_t> i("i"), x("x"), y("y"), d("d");
+        Expr cl = i16(i);
+        Expr cr1 = i16(x);
+        Expr cr2 = i16(y);
+        Expr fraction = (d & (int16_t)((1 << 7) - 1));
+        Expr cr = i16((((cr2 - cr1) * fraction) >> 7) + cr1);
+
+        check_constant_bound(absd(cr, cl), Expr((uint16_t)0), Expr((uint16_t)510));
+        check_constant_bound(i16(absd(cr, cl)), Expr((int16_t)0), Expr((int16_t)510));
+    }
+
 
     check_constant_bound(Load::make(Int(32), "buf", 0, Buffer<>(), Parameter(), const_true()) * 20,
                          Interval::neg_inf, Interval::pos_inf);
