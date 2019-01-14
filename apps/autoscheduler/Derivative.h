@@ -1,3 +1,8 @@
+// The work of Li et al. on differentiating Halide programs has not
+// yet been merged into Halide master, but it exists in a branch. We
+// have lifted this file and the associated .cpp file from that
+// branch: https://github.com/halide/Halide/pull/3220
+
 #ifndef HALIDE_DERIVATIVE_H
 #define HALIDE_DERIVATIVE_H
 

@@ -1,3 +1,7 @@
+// This file is a wrapper around the cost model that loads and saves
+// weights, and maintains state of various kinds. For the actual cost
+// model, see cost_model_generator.cpp
+
 #include <algorithm>
 #include <cmath>
 #include <fstream>
