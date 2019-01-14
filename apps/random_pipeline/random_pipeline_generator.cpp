@@ -27,12 +27,10 @@ int rand_int(int min, int max) { return (rng() % (max - min + 1)) + min; }
 bool rand_bool() { return rng() % 2 == 0; }
 float rand_float() { return rand_int(0, 1 << 30) / (float)(1 << 30); }
 
-// Generate random expressions
-// Given a vector of expresions and a tree depth, recursively
-// generates an expression by combining subexpressions.
-// At the base case where depth is 0, we just return a randomly
-// chosen input.
-
+// Generate random expressions. Given a vector of expresions and a
+// tree depth, recursively generates an expression by combining
+// subexpressions.  At the base case where depth is 0, we just return
+// a randomly chosen input.
 Type expr_types[] = { UInt(8), UInt(16), UInt(32), Int(8), Int(16), Int(32), Float(32) };
 const int expr_type_count = sizeof(expr_types)/sizeof(expr_types[0]);
 
@@ -133,8 +131,10 @@ Expr random_expr_inner(vector<Expr> inputs, int depth, int func_size) {
     }
     case 4: // tanh
     {
-        if (func_size > func_size_thresh)
+        if (func_size > func_size_thresh) {
+            // Don't use expensive ops if the function is very large
             break;
+        }
         auto e1 = random_expr_inner(inputs, depth-1, func_size);
         return tanh(cast<float>(e1));
     }
@@ -303,7 +303,11 @@ public:
 
     struct Stage {
         Func func;
-        int w, h, c; // approx width and height and channels; TODO: ADD 4TH DIMENSION FOR BATCH SIZE
+
+        // approx width and height and channels. Used to preserve
+        // spatial scale when combining stages, and to track the total
+        // sizes of things.
+        int w, h, c;
 
         static constexpr int max_size = 100000000;
         static constexpr int min_size = 100;
@@ -404,9 +408,7 @@ public:
         return {conv, f.w, f.h, f.c};
     }
 
-    /*****
-     * convolutional net type layers
-     *****/
+    // Generate a padding layer (a zero boundary condition)
     Stage padding(Stage f) {
         std::cout << "Padding\n";
         std::vector<std::pair<Expr, Expr>> bounds(3); // assuming all stages have 3 dims
@@ -436,11 +438,6 @@ public:
 
     Stage activation(Stage f) {
         return relu_layer(f);
-        /*
-        int activation_type = rand_int(0,1);
-        if (activation_type == 0) return relu_layer(f);
-        else return tanh_layer(f);
-        */
     }
 
     Stage relu_layer(Stage f) {
@@ -470,7 +467,6 @@ public:
         return {activation, f.w, f.h, f.c};
     }
 
-    /*** pooling stages ***/
     Stage pool2D_unrolled(Stage f, int kernel_min, int kernel_max) {
         vector<Var> args = f.func.args();
         Func pooled2D("pooled2D" + args[0].name() + args[1].name());
@@ -571,8 +567,7 @@ public:
         return {pooled2D_w, (f.w + stride - 1) / stride, (f.h + stride - 1) / stride, f.c};
     }
 
-    /******* set of 2 dimensional (non separable) convs *********/
-    // Generate a random convolution of one dimension of f, statically unrolled.
+    // Convolution in the deep learning sense of the word.
     Stage convolve2D_unrolled(Stage f, int kernel_min, int kernel_max) {
         std::cout << "Convolving 2D dimension 1: " << 0
                   << " dimension 2: " << 1
@@ -770,8 +765,10 @@ public:
         return s;
     }
 
+    // A random pointwise combination of two stages.
     Stage binary_op(Stage f, Stage g) {
         std::cout << "Binary op\n";
+        // They are first resized to match scales.
         if (f.w != g.w || f.h != g.h || f.c != g.c) {
             if (f.size() < g.size()) {
                 f = resample_to(f, g.w, g.h, g.c);
@@ -811,7 +808,9 @@ public:
         return {unary, f.w, f.h, f.c};
     }
 
-    // Generate an all-to-all communication in dimension dim, statically unrolled.
+    // Generate an all-to-all communication in dimension dim,
+    // statically unrolled. Currently only every applied over the
+    // channels dimension.
     Stage all_to_all(Stage f, int dim) {
         std::cout << "All to all on dimension " << dim << '\n';
 
@@ -875,19 +874,8 @@ public:
         return {scan, f.w, f.h, f.c};
     }
 
-    // Transpose
-    Stage transpose(Stage f) {
-        std::cout << "Transpose\n";
-        Func transpose("transpose");
-        vector<Expr> coords = make_arguments(f.func.args());
-        vector<Expr> swizzled_coords = coords;
-        std::swap(swizzled_coords[0], swizzled_coords[1]);
-
-        transpose(coords) = f.func(swizzled_coords);
-
-        return {transpose, f.h, f.w, f.c};
-    }
-
+    // Do a data-dependent looking into one stage using another as the
+    // index.
     Stage slice(Stage f, Stage g) {
         std::cout << "Slice\n";
         if (f.c > g.c) {
@@ -906,8 +894,8 @@ public:
         return {sliced, f.w, f.h, f.c};
     }
 
+    // Construct a tiled histogram of regions of a stage.
     Stage tiled_histogram(Stage f) {
-        // Make a histogram of NxN patches of f, preserving total size
         std::cout << "Tiled histogram\n";
 
         int old_c = f.c;
@@ -931,6 +919,7 @@ public:
         return {hist, f.w / box_size, f.h / box_size, histogram_buckets};
     }
 
+    // Resample a stage to a different size.
     Stage resample_to(Stage f, int w, int h, int c) {
         std::cout << "Resampling from " << f.w << ", " << f.h << ", " << f.c << " to " << w << ", " << h << ", " << c << "\n";
         Stage out = f;
@@ -975,121 +964,14 @@ public:
         return {casted, f.w, f.h, f.c};
     }
 
-    struct TransitionCDF {
-        int num_states;
-        int size;
-        vector<float> cdf;
-
-        void initialize(int n) {
-            num_states = n;
-            size = n*n;
-            for (int i = 0; i < size; i++) {
-                cdf.push_back(0.0f);
-            }
-        }
-
-        float get(int i, int j) {
-            int index = i*num_states+j;
-            assert(index < size);
-            return cdf[index];
-        }
-
-        void set(int i, int j, float val) {
-            int index = i*num_states+j;
-            assert(index < size);
-            cdf[index] = val;
-        }
-
-        // use inverse transform sampling to sample next state given current state
-        int sample_cdf(int state) {
-            float sample_val = rand_float();
-            for (int i = 0; i < num_states - 1; i++) {
-                if (get(state, i) >= sample_val) {
-                    return i;
-                }
-            }
-            return num_states - 1;
-        }
-
-        void print() {
-            std::cout << std::setprecision(2) << std::fixed;
-            for (int i = 0; i < num_states; i++) {
-                for (int j = 0; j < num_states; j++) {
-                    std::cout << " | " << get(i,j);
-                }
-                std::cout << " |\n";
-            }
-        }
-    };
-
-    // helper function to generate probability transition matrix between stages
-    struct TransitionMatrix {
-        int num_states; // number of states
-        int size;
-
-        // vector representaiton of 2D transition matrix.
-        // value at (i,j) is probability of moving from state i to state j
-        vector<float> probabilities;
-
-        float get(int i, int j) {
-            int index = i*num_states+j;
-            assert(index < size);
-            return probabilities[i*num_states+j];
-        }
-
-        void set(int i, int j, float val) {
-            int index = i*num_states+j;
-            assert(index < size);
-            probabilities[index] = val;
-        }
-
-        void set_cdf(TransitionCDF& cdf) {
-            assert(cdf.size == size);
-            assert(cdf.num_states == num_states);
-
-            for (int i = 0; i < num_states; i++) {
-                float sum = 0.0f;
-                for (int j = 0; j < num_states; j++) {
-                    sum += get(i,j);
-                    cdf.set(i,j,sum);
-                }
-            }
-        }
-
-        void initialize(int n) {
-            num_states = n;
-            size = n*n;
-            // transition to every state equally likely
-            float transition_prob = 1.0f/(num_states);
-            for (int i = 0; i < size; i++) {
-                probabilities.push_back(transition_prob);
-            }
-        }
-
-        void print() {
-            std::cout << std::setprecision(2) << std::fixed;
-            for (int i = 0; i < num_states; i++) {
-                for (int j = 0; j < num_states; j++) {
-                    std::cout << " | " << get(i,j);
-                }
-                std::cout << " |\n";
-            }
-        }
-    };
-
-
-    // Generate a random stage using f as an input.
-    Stage random_stage(const vector<Stage> &s, TransitionCDF& CDF, int& curr_stage_id) {
+    // Add a random new stage onto the end of the pipeline.
+    Stage random_stage(const vector<Stage> &s) {
         int m = (int)s.size() - 1;
         int i2 = m > 0 ? rand_int(0, m - 1) : 0;
         int i1 = m > 0 ? rand_int(i2 + 1, m) : 0;
         Stage f = s[i1], g = s[i2];
 
-        // generate stage based on transition probabilities
-        int stage_type = CDF.sample_cdf(curr_stage_id);
-        // set current stage id to the chosen stage for next iteration
-        curr_stage_id = stage_type;
-
+        int stage_type = rand_int(0, 17);
 
         if (stage_type == 0) {
             int dim = rand_int(0, 1);
@@ -1136,78 +1018,22 @@ public:
         } else if (stage_type == 12) {
             int dim = rand_int(0, 2);
             return scan(f, dim);
-        } else if (stage_type == 13 && false) {
-            // TODO: transpose disabled for now because f(x, y) + f(y, x) totally breaks the bounds inference done by the autoscheduler.
-            return transpose(f);
-        } else if (stage_type == 14 && f.size() < 10000) {
+        } else if (stage_type == 13 && f.size() < 10000) {
             return unary_op(f);
-        } else if (stage_type == 15 && f.w > 32 && f.h > 32) {
+        } else if (stage_type == 14 && f.w > 32 && f.h > 32) {
             return tiled_histogram(f);
-        } else if (stage_type == 16) {
+        } else if (stage_type == 15) {
             return slice(f, g);
         } else if (i1 != i2) {
             return binary_op(f, g);
         } else {
-            return random_stage(s, CDF, curr_stage_id);
-        }
-    }
-
-    // Insert transition probabilities for deep network type stages
-    void setup_transitions(TransitionMatrix& P) {
-        int conv2D_id = 3;
-        int pool2D_id = 4;
-        int activation_id = 5;
-        int padding_id = 6;
-        float escape_prob; // prob of leaving a convnet state
-
-        // P(activation | conv) = 0.8
-        escape_prob = 0.2f/(num_stage_types-1);
-        for (int i = 0; i < num_stage_types; i++) {
-            if (i == activation_id) {
-                P.set(conv2D_id, i, 0.8f);
-            } else {
-                P.set(conv2D_id, i, escape_prob);
-            }
-        }
-        // P(padding | activation) = P(pool | activation) = 0.4
-        escape_prob = 0.2f/(num_stage_types-2);
-        for (int i = 0; i < num_stage_types; i++) {
-            if (i == padding_id || i == pool2D_id) {
-                P.set(activation_id, i, 0.4f);
-            } else {
-                P.set(activation_id, i, escape_prob);
-            }
-        }
-        // P(conv | padding) = P(pool | padding) = 0.4
-        escape_prob = 0.2f/(num_stage_types-2);
-        for (int i = 0; i < num_stage_types; i++) {
-            if (i == conv2D_id || i == pool2D_id) {
-                P.set(padding_id, i, 0.4f);
-            } else {
-                P.set(padding_id, i, escape_prob);
-            }
-        }
-        // P(conv | pool) = 0.8
-        escape_prob = 0.2f/(num_stage_types-1);
-        for (int i = 0; i < num_stage_types; i++) {
-            if (i == conv2D_id) {
-                P.set(pool2D_id, i, 0.8f);
-            } else {
-                P.set(pool2D_id, i, escape_prob);
-            }
+            // Try again
+            return random_stage(s);
         }
     }
 
     void generate() {
         rng.seed((int)seed);
-
-        // create transition matrix between stages
-        TransitionMatrix P;
-        P.initialize(num_stage_types);
-        setup_transitions(P);
-        TransitionCDF CDF;
-        CDF.initialize(num_stage_types);
-        P.set_cdf(CDF);
 
         Var x("x"), y("y"), c("c");
 
@@ -1217,12 +1043,10 @@ public:
         vector<Stage> stages;
         // Assume input starts at ~2000x2000
         stages.emplace_back(Stage{first, 2000, 2000, 3});
-        // set starting stage type to a random stage
-        int curr_stage_id = rand_int(0, num_stage_types-1);
 
         for (int i = 0; i < max_stages - 2; i++) {
             std::cout << "Approx size: " << stages.back().w << ", " << stages.back().h << ", " << stages.back().c << "\n";
-            Stage next = random_stage(stages, CDF, curr_stage_id);
+            Stage next = random_stage(stages);
             stages.push_back(next);
             if (!auto_schedule) {
                 stages.back().func.compute_root().reorder(x, c, y).vectorize(x, 8).parallel(y, 8);
