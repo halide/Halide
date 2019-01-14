@@ -37,7 +37,7 @@ $(BIN)/lens_blur_simple_auto_schedule.a: $(BIN)/lens_blur.generator
 	HL_USE_SIMPLE_AUTOSCHEDULER=1 \
 	$< -g lens_blur -o $(BIN) -f lens_blur_simple_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=false -e static_library,h
 
-$(BIN)/process: process.cpp $(BIN)/lens_blur.a $(BIN)/lens_blur_classic_auto_schedule.a $(BIN)/lens_blur_auto_schedule.a $(BIN)/lens_blur_simple_auto_schedule
+$(BIN)/process: process.cpp $(BIN)/lens_blur.a $(BIN)/lens_blur_classic_auto_schedule.a $(BIN)/lens_blur_auto_schedule.a $(BIN)/lens_blur_simple_auto_schedule.a
 	@-mkdir -p $(BIN)
 	$(CXX) $(CXXFLAGS) -I$(BIN) -Wall -O3 $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS)
 
