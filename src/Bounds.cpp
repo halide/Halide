@@ -960,6 +960,11 @@ private:
                 b.accept(this);
                 Interval b_interval = interval;
 
+                a_interval.min = simplify(a_interval.min);
+                a_interval.max = simplify(a_interval.max);
+                b_interval.min = simplify(b_interval.min);
+                b_interval.max = simplify(b_interval.max);
+
                 if (a_interval.is_bounded() && b_interval.is_bounded()) {
                     // Cast to 64-bit type to minimize cast-out-of-range issues;
                     // edge cases if the type is 64-bit in the first place are still
