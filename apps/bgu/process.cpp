@@ -4,6 +4,7 @@
 #include "fit_and_slice_3x4.h"
 #include "fit_and_slice_3x4_classic_auto_schedule.h"
 #include "fit_and_slice_3x4_auto_schedule.h"
+#include "fit_and_slice_3x4_simple_auto_schedule.h"
 
 #include "benchmark_util.h"
 #include "HalideBuffer.h"
