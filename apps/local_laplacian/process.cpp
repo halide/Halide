@@ -36,9 +36,7 @@ int main(int argc, char **argv) {
         {"Auto-scheduled", [&]() { local_laplacian_auto_schedule(input, levels, alpha/(levels-1), beta, output); output.device_sync(); }},
         {"Simple auto-scheduled", [&]() { local_laplacian_simple_auto_schedule(input, levels, alpha/(levels-1), beta, output); output.device_sync(); }}
     #endif
-        },
-        samples,
-        iterations
+        }
     );
 
 

@@ -32,9 +32,7 @@ int main(int argc, char **argv) {
         {"Classic auto-scheduled", [&]() { stencil_chain_classic_auto_schedule(input, output); output.device_sync(); }},
         {"Auto-schedueld", [&]() { stencil_chain_auto_schedule(input, output); output.device_sync(); }},
         {"Simple auto-scheduled", [&]() { stencil_chain_simple_auto_schedule(input, output); output.device_sync();}}
-        },
-        samples,
-        iterations
+        }
     );
 
     stencil_chain(input, output);

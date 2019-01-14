@@ -34,9 +34,7 @@ int main(int argc, char **argv) {
         {"Classic auto-scheduled", [&]() { lens_blur_classic_auto_schedule(left_im, right_im, slices, focus_depth, blur_radius_scale, aperture_samples, output); output.device_sync(); }},
         {"Auto-scheduled", [&]() { lens_blur_auto_schedule(left_im, right_im, slices, focus_depth, blur_radius_scale, aperture_samples, output); output.device_sync(); }},
         {"Simple auto-scheduled", [&]() { lens_blur_simple_auto_schedule(left_im, right_im, slices, focus_depth, blur_radius_scale, aperture_samples, output); output.device_sync(); }}
-        },
-        samples,
-        iterations
+        }
     );
 
 

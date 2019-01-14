@@ -34,9 +34,7 @@ int main(int argc, char **argv) {
         {"Classic auto-scheduled", [&]() { nl_means_classic_auto_schedule(input, patch_size, search_area, sigma, output); output.device_sync(); }},
         {"Auto-scheduled", [&]() { nl_means_auto_schedule(input, patch_size, search_area, sigma, output); output.device_sync(); }},
         {"Simple auto-scheduled", [&]() { nl_means_simple_auto_schedule(input, patch_size, search_area, sigma, output); output.device_sync(); }}
-        },
-        samples,
-        iterations
+        }
     );
 
     convert_and_save_image(output, argv[6]);

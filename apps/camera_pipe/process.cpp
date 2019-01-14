@@ -82,9 +82,7 @@ int main(int argc, char **argv) {
         {"Auto-scheduled", [&]() { camera_pipe_auto_schedule(input, matrix_3200, matrix_7000, color_temp, gamma, contrast, sharpen, blackLevel, whiteLevel, output); output.device_sync(); }},
         {"Simple auto-scheduled", [&]() { camera_pipe_simple_auto_schedule(input, matrix_3200, matrix_7000, color_temp, gamma, contrast, sharpen, blackLevel, whiteLevel, output); output.device_sync(); }}
     #endif
-        },
-        samples,
-        iterations
+        }
     );
 
     fprintf(stderr, "output: %s\n", argv[7]);
