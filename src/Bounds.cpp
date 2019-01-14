@@ -87,6 +87,58 @@ public:
     }
 private:
 
+#ifndef DO_TRACK_BOUNDS_INTERVALS
+#define DO_TRACK_BOUNDS_INTERVALS 0
+#endif
+
+#if DO_TRACK_BOUNDS_INTERVALS
+
+    static int &get_logging() {
+        static int do_log = 1;
+        return do_log;
+    }
+
+    int interval_log_indent = 0;
+
+    void log_interval(const std::string &msg) const {
+        if (get_logging()) {
+            std::string spaces(interval_log_indent, ' ');
+            debug(0) << spaces << msg << "\n"
+                << spaces << "  mn=" << interval.min << "\n"
+                << spaces << "  mx=" << interval.max << "\n";
+        }
+    }
+
+    void log_interval_msg(const std::string &msg) {
+        if (get_logging()) {
+            std::string spaces(interval_log_indent, ' ');
+            debug(0) << spaces << msg << "\n";
+        }
+    }
+
+    struct IntervalLogger {
+        Bounds *self;
+        std::string name;
+        IntervalLogger(Bounds *self, const char* pretty_function) : self(self) {
+            name = replace_all(pretty_function, "virtual void Halide::Internal::","");
+            name = replace_all(name, "(const Halide::Internal::","(");
+            self->log_interval_msg("Enter " + name);
+            self->interval_log_indent++;
+        }
+        ~IntervalLogger() {
+            self->interval_log_indent--;
+            self->log_interval("Exit  " + name);
+        }
+    };
+
+    #define TRACK_BOUNDS_INTERVAL IntervalLogger log_me_here_(this, __PRETTY_FUNCTION__)
+
+#else
+
+    #define TRACK_BOUNDS_INTERVAL do { } while (0)
+
+#endif
+
     // Compute the intrinsic bounds of a function.
     void bounds_of_func(string name, int value_index, Type t) {
         // if we can't get a good bound from the function, fall back to the bounds of the type.
@@ -118,18 +170,22 @@ private:
     using IRVisitor::visit;
 
     void visit(const IntImm *op) override {
+        TRACK_BOUNDS_INTERVAL;
         interval = Interval::single_point(op);
     }
 
     void visit(const UIntImm *op) override {
+        TRACK_BOUNDS_INTERVAL;
         interval = Interval::single_point(op);
     }
 
     void visit(const FloatImm *op) override {
+        TRACK_BOUNDS_INTERVAL;
         interval = Interval::single_point(op);
     }
 
     void visit(const Cast *op) override {
+        TRACK_BOUNDS_INTERVAL;
         op->value.accept(this);
         Interval a = interval;
 
@@ -206,6 +262,7 @@ private:
     }
 
     void visit(const Variable *op) override {
+        TRACK_BOUNDS_INTERVAL;
         if (const_bound) {
             bounds_of_type(op->type);
             if (scope.contains(op->name)) {
@@ -243,6 +300,7 @@ private:
     }
 
     void visit(const Add *op) override {
+        TRACK_BOUNDS_INTERVAL;
         op->a.accept(this);
         Interval a = interval;
         op->b.accept(this);
@@ -282,6 +340,7 @@ private:
     }
 
     void visit(const Sub *op) override {
+        TRACK_BOUNDS_INTERVAL;
         op->a.accept(this);
         Interval a = interval;
         op->b.accept(this);
@@ -328,6 +387,7 @@ private:
     }
 
     void visit(const Mul *op) override {
+        TRACK_BOUNDS_INTERVAL;
         op->a.accept(this);
         Interval a = interval;
 
@@ -397,6 +457,7 @@ private:
     }
 
     void visit(const Div *op) override {
+        TRACK_BOUNDS_INTERVAL;
         op->a.accept(this);
         Interval a = interval;
 
@@ -450,6 +511,7 @@ private:
     }
 
     void visit(const Mod *op) override {
+        TRACK_BOUNDS_INTERVAL;
         op->a.accept(this);
         Interval a = interval;
 
@@ -490,6 +552,7 @@ private:
     }
 
     void visit(const Min *op) override {
+        TRACK_BOUNDS_INTERVAL;
         op->a.accept(this);
         Interval a = interval;
 
@@ -506,6 +569,7 @@ private:
 
 
     void visit(const Max *op) override {
+        TRACK_BOUNDS_INTERVAL;
         op->a.accept(this);
         Interval a = interval;
 
@@ -548,22 +612,27 @@ private:
     }
 
     void visit(const LT *op) override {
+        TRACK_BOUNDS_INTERVAL;
         visit_compare<LT>(op->a, op->b);
     }
 
     void visit(const LE *op) override {
+        TRACK_BOUNDS_INTERVAL;
         visit_compare<LE>(op->a, op->b);
     }
 
     void visit(const GT *op) override {
+        TRACK_BOUNDS_INTERVAL;
         visit_compare<LT>(op->b, op->a);
     }
 
     void visit(const GE *op) override {
+        TRACK_BOUNDS_INTERVAL;
         visit_compare<LE>(op->b, op->a);
     }
 
     void visit(const EQ *op) override {
+        TRACK_BOUNDS_INTERVAL;
         op->a.accept(this);
         Interval a = interval;
 
@@ -587,6 +656,7 @@ private:
     }
 
     void visit(const NE *op) override {
+        TRACK_BOUNDS_INTERVAL;
         op->a.accept(this);
         Interval a = interval;
 
@@ -618,6 +688,7 @@ private:
     }
 
     void visit(const And *op) override {
+        TRACK_BOUNDS_INTERVAL;
         op->a.accept(this);
         Interval a = interval;
 
@@ -644,6 +715,7 @@ private:
     }
 
     void visit(const Or *op) override {
+        TRACK_BOUNDS_INTERVAL;
         op->a.accept(this);
         Interval a = interval;
 
@@ -668,6 +740,7 @@ private:
     }
 
     void visit(const Not *op) override {
+        TRACK_BOUNDS_INTERVAL;
         op->a.accept(this);
         Interval a = interval;
 
@@ -682,6 +755,7 @@ private:
     }
 
     void visit(const Select *op) override {
+        TRACK_BOUNDS_INTERVAL;
         op->true_value.accept(this);
         if (!interval.is_bounded()) {
             // Uses interval produced by op->true_value which might be half bound.
@@ -769,6 +843,7 @@ private:
     }
 
     void visit(const Load *op) override {
+        TRACK_BOUNDS_INTERVAL;
         op->index.accept(this);
         if (!const_bound && interval.is_single_point() && is_one(op->predicate)) {
             // If the index is const and it is not a predicated load,
@@ -784,6 +859,7 @@ private:
     }
 
     void visit(const Ramp *op) override {
+        TRACK_BOUNDS_INTERVAL;
         // Treat the ramp lane as a free variable
         string var_name = unique_name('t');
         Expr var = Variable::make(op->base.type(), var_name);
@@ -794,10 +870,12 @@ private:
     }
 
     void visit(const Broadcast *op) override {
+        TRACK_BOUNDS_INTERVAL;
         op->value.accept(this);
     }
 
     void visit(const Call *op) override {
+        TRACK_BOUNDS_INTERVAL;
         // Using the strict_float feature flag wraps a strict_float()
         // call around every Expr that is of type float, so it's easy
         // to get nestings that are many levels deep; the bounds of this
@@ -860,6 +938,39 @@ private:
             } else {
                 // If the argument is unbounded on one side, then the max is unbounded.
                 interval.max = Interval::pos_inf;
+            }
+        } else if (op->is_intrinsic(Call::absd)) {
+            internal_assert(!t.is_handle());
+            if (t.is_float()) {
+                Expr e = abs(op->args[0] - op->args[1]);
+                e.accept(this);
+            } else {
+                // absd() for int types will always produce a uint result
+                internal_assert(t.is_uint());
+
+                // Recover what the matched types for the args were
+                Expr a = op->args[0];
+                Expr b = op->args[1];
+                match_types(a, b);
+                internal_assert(a.type() == b.type());
+
+                a.accept(this);
+                Interval a_interval = interval;
+
+                b.accept(this);
+                Interval b_interval = interval;
+
+                if (a_interval.is_bounded() && b_interval.is_bounded()) {
+                    // Cast to 64-bit type to minimize cast-out-of-range issues;
+                    // edge cases if the type is 64-bit in the first place are still
+                    // possible but we can live with those.
+                    Type wide_t = a.type().is_int() ? Int(64) : UInt(64);
+                    interval.max = cast(t, max(cast(wide_t, a_interval.max) - cast(wide_t, b_interval.min),
+                                           cast(wide_t, b_interval.max) - cast(wide_t, a_interval.min)));
+                    interval.min = make_zero(t);
+                } else {
+                    bounds_of_type(t);
+                }
             }
         } else if (op->is_intrinsic(Call::unsafe_promise_clamped)) {
             Expr full_clamp = clamp(op->args[0], op->args[1], op->args[2]);
@@ -934,6 +1045,7 @@ private:
     }
 
     void visit(const Let *op) override {
+        TRACK_BOUNDS_INTERVAL;
         op->value.accept(this);
         Interval val = interval;
 
@@ -989,6 +1101,7 @@ private:
     }
 
     void visit(const Shuffle *op) override {
+        TRACK_BOUNDS_INTERVAL;
         Interval result = Interval::nothing();
         for (Expr i : op->vectors) {
             i.accept(this);
@@ -2276,6 +2389,18 @@ void constant_bound_test() {
         // These two overflow
         check_constant_bound(x - y, Expr((uint8_t)0), Expr((uint8_t)255));
         check_constant_bound(x*y, Expr((uint8_t)0), Expr((uint8_t)255));
+
+        check_constant_bound(absd(x, y), Expr((uint8_t)0), Expr((uint8_t)20));
+        check_constant_bound(absd(cast<int16_t>(x), cast<int16_t>(y)), Expr((uint16_t)0), Expr((uint16_t)20));
+    }
+
+
+    {
+        Param<float> x("x"), y("y");
+        x.set_range(Expr((float)10), Expr((float)20));
+        y.set_range(Expr((float)5), Expr((float)30));
+
+        check_constant_bound(absd(x, y), Expr((float)0), Expr((float)20));
     }
 
     check_constant_bound(Load::make(Int(32), "buf", 0, Buffer<>(), Parameter(), const_true()) * 20,
