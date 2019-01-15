@@ -881,6 +881,9 @@ private:
             op->args[1].accept(this);
         } else if (op->is_intrinsic(Call::shift_left) ||
                    op->is_intrinsic(Call::shift_right) ||
+                   op->is_intrinsic(Call::bitwise_not) ||
+                   op->is_intrinsic(Call::bitwise_xor) ||
+                   op->is_intrinsic(Call::bitwise_or) ||
                    op->is_intrinsic(Call::bitwise_and)) {
             Expr simplified = simplify(op);
             if (!equal(simplified, op)) {
