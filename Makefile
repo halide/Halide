@@ -1887,7 +1887,6 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
 						   $(INCLUDE_DIR)/Halide.h \
 						   $(RUNTIME_EXPORTED_INCLUDES) \
 						   $(ROOT_DIR)/README*.md \
-						   $(BUILD_DIR)/halide_config.bzl \
                $(BUILD_DIR)/halide_config.cmake \
                $(BUILD_DIR)/halide_config.make \
 						   $(ROOT_DIR)/halide.cmake
@@ -1932,8 +1931,7 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
 		halide/BUILD \
 		halide/README*.md \
 		halide/WORKSPACE \
-		halide/*.bzl \
-		halide/*.cmake \
+
 		halide/tools/mex_halide.m \
 		halide/tools/*.cpp \
 		halide/tools/halide_benchmark.h \
