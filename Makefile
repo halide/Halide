@@ -1484,7 +1484,7 @@ test_generator_nested_externs:
 
 $(BUILD_DIR)/RunGenMain.o: $(ROOT_DIR)/tools/RunGenMain.cpp $(RUNTIME_EXPORTED_INCLUDES) $(ROOT_DIR)/tools/RunGen.h
 	@mkdir -p $(@D)
-	$(CXX) -c $< $(TEST_CXX_FLAGS) $(IMAGE_IO_CXX_FLAGS) -I$(INCLUDE_DIR) -I $(SRC_DIR)/runtime -I$(ROOT_DIR)/tools -o $@
+	$(CXX) -c $< $(TEST_CXX_FLAGS) $(OPTIMIZE) $(IMAGE_IO_CXX_FLAGS) -I$(INCLUDE_DIR) -I $(SRC_DIR)/runtime -I$(ROOT_DIR)/tools -o $@
 
 $(FILTERS_DIR)/%.registration.o: $(FILTERS_DIR)/%.registration.cpp
 	@mkdir -p $(@D)
