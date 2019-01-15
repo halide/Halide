@@ -974,10 +974,8 @@ private:
                 // absd() for int types will always produce a uint result
                 internal_assert(t.is_uint());
 
-                // Recover what the matched types for the args were
                 Expr a = op->args[0];
                 Expr b = op->args[1];
-                match_types(a, b);
                 internal_assert(a.type() == b.type());
 
                 a.accept(this);
@@ -986,19 +984,9 @@ private:
                 b.accept(this);
                 Interval b_interval = interval;
 
-                a_interval.min = simplify(a_interval.min);
-                a_interval.max = simplify(a_interval.max);
-                b_interval.min = simplify(b_interval.min);
-                b_interval.max = simplify(b_interval.max);
-
                 if (a_interval.is_bounded() && b_interval.is_bounded()) {
-                    // Cast to 64-bit type to minimize cast-out-of-range issues;
-                    // edge cases if the type is 64-bit in the first place are still
-                    // possible but we can live with those.
-                    Type wide_t = a.type().is_int() ? Int(64) : UInt(64);
-                    interval.max = cast(t, max(cast(wide_t, a_interval.max) - cast(wide_t, b_interval.min),
-                                           cast(wide_t, b_interval.max) - cast(wide_t, a_interval.min)));
                     interval.min = make_zero(t);
+                    interval.max = max(absd(a_interval.max, b_interval.min), absd(a_interval.min, b_interval.max));
                 } else {
                     bounds_of_type(t);
                 }
