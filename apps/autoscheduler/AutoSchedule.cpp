@@ -2947,7 +2947,9 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
         std::unordered_map<uint64_t, int> hashes;
         q.swap(pending);
 
-        internal_assert(!pending.empty());
+        if (pending.empty()) {
+	  throw std::domain_error("Failed to find a valid schedule");
+        }
 
         if ((int)pending.size() > beam_size * 10000) {
             debug(0) << "Warning: Huge number of states generated (" << pending.size() << ").\n";
