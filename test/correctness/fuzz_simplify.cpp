@@ -91,6 +91,12 @@ Expr random_condition(Type T, int depth, bool maybe_scalar) {
     return make_bin_op[op](a, b);
 }
 
+Expr make_absd(Expr a, Expr b) {
+    // random_expr() assumes that the result type is the same as the input type,
+    // which isn't true for all absd variants, so force the issue.
+    return cast(a.type(), absd(a, b));
+}
+
 Expr random_expr(Type T, int depth, bool overflow_undef) {
     typedef Expr (*make_bin_op_fn)(Expr, Expr);
     static make_bin_op_fn make_bin_op[] = {
@@ -101,6 +107,7 @@ Expr random_expr(Type T, int depth, bool overflow_undef) {
         Max::make,
         Div::make,
         Mod::make,
+        make_absd
      };
 
     static make_bin_op_fn make_bool_bin_op[] = {

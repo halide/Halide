@@ -167,6 +167,35 @@ Expr Simplify::visit(const Call *op, ConstBounds *bounds) {
         } else {
             return abs(a);
         }
+    } else if (op->is_intrinsic(Call::absd)) {
+        // Constant evaluate absd(a, b).
+        ConstBounds a_bounds, b_bounds;
+        Expr a = mutate(op->args[0], &a_bounds);
+        Expr b = mutate(op->args[1], &b_bounds);
+
+        Type ta = a.type();
+        // absd() should enforce identical types for a and b when the node is created
+        internal_assert(ta == b.type());
+
+        int64_t ia = 0, ib = 0;
+        uint64_t ua = 0, ub = 0;
+        double fa = 0, fb = 0;
+        if (ta.is_int() && const_int(a, &ia) && const_int(b, &ib)) {
+            // Note that absd(int, int) always produces a uint result
+            internal_assert(op->type.is_uint());
+            const uint64_t d = ia > ib ? (uint64_t)(ia - ib) : (uint64_t)(ib - ia);
+            return make_const(op->type, d);
+        } else if (ta.is_uint() && const_uint(a, &ua) && const_uint(b, &ub)) {
+            const uint64_t d = ua > ub ? ua - ub : ub - ua;
+            return make_const(op->type, d);
+        } else if (const_float(a, &fa) && const_float(b, &fb)) {
+            const double d = fa > fb ? fa - fb : fb - fa;
+            return make_const(op->type, d);
+        } else if (a.same_as(op->args[0]) && b.same_as(op->args[1])) {
+            return op;
+        } else {
+            return absd(a, b);
+        }
     } else if (op->call_type == Call::PureExtern &&
                op->name == "is_nan_f32") {
         Expr arg = mutate(op->args[0], nullptr);
