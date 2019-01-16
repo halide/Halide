@@ -7,6 +7,7 @@
 #include "Deinterleave.h"
 #include "ExprUsesVar.h"
 #include "Func.h"
+#include "InlineReductions.h"
 #include "IR.h"
 #include "IREquality.h"
 #include "IRMutator.h"
@@ -2314,6 +2315,18 @@ FuncValueBounds compute_function_value_bounds(const vector<string> &order,
                 }
 
                 fb[key] = result;
+            } else {
+                // If the Func is impure, we may still be able to specify a bounds-of-type here
+                Type t = f.output_types()[j].element_of();
+                if ((t.is_uint() || t.is_int()) && t.bits() <= 16) {
+                    result = Interval(t.min(), t.max());
+                } else {
+                  result = Interval::everything();
+                }
+                fb[key] = result;
+
+                // TODO: if a Function is impure, but the RDoms used by the update functions
+                // are all constant, it may be profitable to calculate the bounds here too
             }
 
             debug(2) << "Bounds on value " << j
@@ -2439,6 +2452,28 @@ void constant_bound_test() {
 
     check_constant_bound(Load::make(Int(32), "buf", 0, Buffer<>(), Parameter(), const_true()) * 20,
                          Interval::neg_inf, Interval::pos_inf);
+
+    {
+        // Ensure that unnecessary integer overflow doesn't happen
+        // in cases involving unsigned integer math
+        Param<uint16_t> e1("e1");      // range 0..0xffff, type=uint16
+        Expr e2 = cast<uint32_t>(e1);  // range 0..0xffff, type=uint32
+        Expr e3 = e2 * e2;             // range 0..0xfffe0001, type=uint32
+        check_constant_bound(e3, Expr((uint32_t)0), Expr((uint32_t)0xfffe0001));
+    }
+
+    {
+        RDom r(0, 4);
+
+        // bounds of an expression with impure >= 32 bit expr will be unbounded
+        Expr e32 = sum(cast<int32_t>(r.x));
+        check_constant_bound(e32, Interval::neg_inf, Interval::pos_inf);
+
+        // bounds of an expression with impure < 32 bit expr will be bounds-of-type
+        Expr e16 = sum(cast<int16_t>(r.x));
+        check_constant_bound(e16, Int(16).min(), Int(16).max());
+    }
+
 }
 
 void boxes_touched_test() {
@@ -2606,27 +2641,6 @@ void bounds_test() {
     internal_assert(equal(simplify(r2[0].max), 19));
 
     boxes_touched_test();
-
-    {
-        // Ensure that unnecessary integer overflow doesn't happen
-        // in cases involving unsigned integer math
-
-        Var x;
-        Func f;
-        Expr e1 = cast<uint16_t>(x);   // range 0..0xffff, type=uint16
-        Expr e2 = cast<uint32_t>(e1);  // range 0..0xffff, type=uint32
-        Expr e3 = e2 * e2;             // range 0..0xfffe0001, type=uint32
-        f(x) = e3;
-
-        vector<string> order = {f.name()};
-        map<string, Function> env = {{f.name(), f.function()}};
-        FuncValueBounds r = compute_function_value_bounds(order, env);
-        internal_assert(r.size() == 1);
-        internal_assert(r.begin()->first.first == f.name());
-        internal_assert(r.begin()->first.second == 0);
-        internal_assert(*as_const_uint(r.begin()->second.min) == 0);
-        internal_assert(*as_const_uint(r.begin()->second.max) == 0xfffe0001);
-    }
 
     std::cout << "Bounds test passed" << std::endl;
 }
