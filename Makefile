@@ -1932,10 +1932,7 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
 		halide/lib \
 		halide/include \
 		halide/tutorial \
-		halide/BUILD \
 		halide/README*.md \
-		halide/WORKSPACE \
-
 		halide/tools/mex_halide.m \
 		halide/tools/*.cpp \
 		halide/tools/halide_benchmark.h \
