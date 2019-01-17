@@ -47,6 +47,9 @@
 #if LLVM_VERSION >= 90
 #include <llvm/Transforms/Instrumentation/ThreadSanitizer.h>
 #endif
+#if LLVM_VERSION >= 80
+#include <llvm/IR/PassTimingInfo.h>
+#endif
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
