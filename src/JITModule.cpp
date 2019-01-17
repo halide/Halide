@@ -250,6 +250,10 @@ JITModule::JITModule(const Module &m, const LoweredFunc &fn,
     std::vector<JITModule> shared_runtime = JITSharedRuntime::get(llvm_module.get(), m.target());
     deps_with_runtime.insert(deps_with_runtime.end(), shared_runtime.begin(), shared_runtime.end());
     compile_module(std::move(llvm_module), fn.name, m.target(), deps_with_runtime);
+    // If -time-passes is in HL_LLVM_ARGS, this will print llvm passes time statstics otherwise its no-op.
+#if LLVM_VERSION >= 80
+    llvm::reportAndResetTimings();
+#endif
 }
 
 void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &function_name, const Target &target,
@@ -338,7 +342,6 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
 #if LLVM_VERSION < 70
     memory_manager->work_around_llvm_bugs();
 #endif
-
     // Do any target-specific post-compilation module meddling
     for (size_t i = 0; i < listeners.size(); i++) {
         ee->UnregisterJITEventListener(listeners[i]);
