@@ -713,7 +713,6 @@ WEAK int halide_metal_run(void *user_context,
     mtl_compute_pipeline_state *pipeline_state = new_compute_pipeline_state_with_function(metal_context.device, function);
     if (pipeline_state == 0) {
         error(user_context) << "Metal: Could not allocate pipeline state.\n";
-        release_ns_object(function);
         return -1;
     }
     set_compute_pipeline_state(encoder, pipeline_state);
@@ -763,7 +762,6 @@ WEAK int halide_metal_run(void *user_context,
             if (args_buffer == 0) {
                 error(user_context) << "Metal: Could not allocate arguments buffer.\n";
                 release_ns_object(pipeline_state);
-                release_ns_object(function);
                 return -1;
             }
             args_ptr = (char *)buffer_contents(args_buffer);
@@ -815,8 +813,11 @@ WEAK int halide_metal_run(void *user_context,
 
     commit_command_buffer(command_buffer);
 
+    // We deliberately don't release the function here; this was causing
+    // crashes on Mojave (issues #3395 and #3408).
+    // We're still releasing the pipeline state object, as that seems to not
+    // cause zombied objects.
     release_ns_object(pipeline_state);
-    release_ns_object(function);
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);

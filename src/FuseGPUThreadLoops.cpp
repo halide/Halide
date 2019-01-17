@@ -69,8 +69,8 @@ class InjectThreadBarriers : public IRMutator2 {
 public:
     InjectThreadBarriers() : in_threads(false) {
         barrier =
-            Evaluate::make(Call::make(Int(32), "halide_gpu_thread_barrier",
-                                      vector<Expr>(), Call::Extern));
+            Evaluate::make(Call::make(Int(32), Call::gpu_thread_barrier,
+                                      vector<Expr>(), Call::Intrinsic));
     }
 };
 

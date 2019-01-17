@@ -1,10 +1,13 @@
 #include <iostream>
 
 #include "Bounds.h"
+#include "ConciseCasts.h"
 #include "CSE.h"
 #include "Debug.h"
 #include "Deinterleave.h"
 #include "ExprUsesVar.h"
+#include "Func.h"
+#include "InlineReductions.h"
 #include "IR.h"
 #include "IREquality.h"
 #include "IRMutator.h"
@@ -86,6 +89,58 @@ public:
     }
 private:
 
+#ifndef DO_TRACK_BOUNDS_INTERVALS
+#define DO_TRACK_BOUNDS_INTERVALS 0
+#endif
+
+#if DO_TRACK_BOUNDS_INTERVALS
+
+    static int &get_logging() {
+        static int do_log = 1;
+        return do_log;
+    }
+
+    int interval_log_indent = 0;
+
+    void log_interval(const std::string &msg) const {
+        if (get_logging()) {
+            std::string spaces(interval_log_indent, ' ');
+            debug(0) << spaces << msg << "\n"
+                << spaces << "  mn=" << interval.min << "\n"
+                << spaces << "  mx=" << interval.max << "\n";
+        }
+    }
+
+    void log_interval_msg(const std::string &msg) {
+        if (get_logging()) {
+            std::string spaces(interval_log_indent, ' ');
+            debug(0) << spaces << msg << "\n";
+        }
+    }
+
+    struct IntervalLogger {
+        Bounds *self;
+        std::string name;
+        IntervalLogger(Bounds *self, const char* pretty_function) : self(self) {
+            name = replace_all(pretty_function, "virtual void Halide::Internal::","");
+            name = replace_all(name, "(const Halide::Internal::","(");
+            self->log_interval_msg("Enter " + name);
+            self->interval_log_indent++;
+        }
+        ~IntervalLogger() {
+            self->interval_log_indent--;
+            self->log_interval("Exit  " + name);
+        }
+    };
+
+    #define TRACK_BOUNDS_INTERVAL IntervalLogger log_me_here_(this, __PRETTY_FUNCTION__)
+
+#else
+
+    #define TRACK_BOUNDS_INTERVAL do { } while (0)
+
+#endif
+
     // Compute the intrinsic bounds of a function.
     void bounds_of_func(string name, int value_index, Type t) {
         // if we can't get a good bound from the function, fall back to the bounds of the type.
@@ -117,18 +172,22 @@ private:
     using IRVisitor::visit;
 
     void visit(const IntImm *op) override {
+        TRACK_BOUNDS_INTERVAL;
         interval = Interval::single_point(op);
     }
 
     void visit(const UIntImm *op) override {
+        TRACK_BOUNDS_INTERVAL;
         interval = Interval::single_point(op);
     }
 
     void visit(const FloatImm *op) override {
+        TRACK_BOUNDS_INTERVAL;
         interval = Interval::single_point(op);
     }
 
     void visit(const Cast *op) override {
+        TRACK_BOUNDS_INTERVAL;
         op->value.accept(this);
         Interval a = interval;
 
@@ -154,37 +213,62 @@ private:
             // If we cast to an int32 or greater, assume that it won't
             // overflow. Signed 32-bit integer overflow is undefined.
             could_overflow = false;
-        } else if (a.is_bounded() && from.can_represent(to)) {
-            // The other case to consider is narrowing where the
-            // bounds of the original fit into the narrower type. We
-            // can only really prove that this is the case if they're
-            // constants, so try to make the constants first.
+        } else if (a.is_bounded()) {
+            if (from.can_represent(to)) {
+                // The other case to consider is narrowing where the
+                // bounds of the original fit into the narrower type. We
+                // can only really prove that this is the case if they're
+                // constants, so try to make the constants first.
 
-            // First constant-fold
-            a.min = simplify(a.min);
-            a.max = simplify(a.max);
+                // First constant-fold
+                a.min = simplify(a.min);
+                a.max = simplify(a.max);
 
-            // Then try to strip off junk mins and maxes.
-            bool old_constant_bound = const_bound;
-            const_bound = true;
-            a.min.accept(this);
-            Expr lower_bound = interval.has_lower_bound() ? interval.min : Expr();
-            a.max.accept(this);
-            Expr upper_bound = interval.has_upper_bound() ? interval.max : Expr();
-            const_bound = old_constant_bound;
+                // Then try to strip off junk mins and maxes.
+                bool old_constant_bound = const_bound;
+                const_bound = true;
+                a.min.accept(this);
+                Expr lower_bound = interval.has_lower_bound() ? interval.min : Expr();
+                a.max.accept(this);
+                Expr upper_bound = interval.has_upper_bound() ? interval.max : Expr();
+                const_bound = old_constant_bound;
 
-            if (lower_bound.defined() && upper_bound.defined()) {
-                // Cast them to the narrow type and back and see if
-                // they're provably unchanged.
-                Expr test =
-                    (cast(from, cast(to, lower_bound)) == lower_bound &&
-                     cast(from, cast(to, upper_bound)) == upper_bound);
-                if (can_prove(test)) {
+                if (lower_bound.defined() && upper_bound.defined()) {
+                    // Cast them to the narrow type and back and see if
+                    // they're provably unchanged.
+                    Expr test =
+                        (cast(from, cast(to, lower_bound)) == lower_bound &&
+                         cast(from, cast(to, upper_bound)) == upper_bound);
+                    if (can_prove(test)) {
+                        could_overflow = false;
+                        // Relax the bounds to the constants we found. Not
+                        // strictly necessary, but probably helpful to
+                        // keep the expressions small.
+                        a = Interval(lower_bound, upper_bound);
+                    }
+                }
+            } else {
+                // a is bounded, but from and to can't necessarily represent
+                // each other; however, if the bounds can be simplified to
+                // constants, they might fit regardless of types.
+                a.min = simplify(a.min);
+                a.max = simplify(a.max);
+                auto *umin = as_const_uint(a.min);
+                auto *umax = as_const_uint(a.max);
+                if (umin && umax && to.can_represent(*umin) && to.can_represent(*umax)) {
                     could_overflow = false;
-                    // Relax the bounds to the constants we found. Not
-                    // strictly necessary, but probably helpful to
-                    // keep the expressions small.
-                    a = Interval(lower_bound, upper_bound);
+                } else {
+                    auto *imin = as_const_int(a.min);
+                    auto *imax = as_const_int(a.max);
+                    if (imin && imax && to.can_represent(*imin) && to.can_represent(*imax)) {
+                        could_overflow = false;
+                    } else {
+                        auto *fmin = as_const_float(a.min);
+                        auto *fmax = as_const_float(a.max);
+                        if (fmin && fmax && to.can_represent(*fmin) && to.can_represent(*fmax)) {
+                            could_overflow = false;
+                        }
+                    }
                 }
             }
         }
@@ -205,6 +289,7 @@ private:
     }
 
     void visit(const Variable *op) override {
+        TRACK_BOUNDS_INTERVAL;
         if (const_bound) {
             bounds_of_type(op->type);
             if (scope.contains(op->name)) {
@@ -242,6 +327,7 @@ private:
     }
 
     void visit(const Add *op) override {
+        TRACK_BOUNDS_INTERVAL;
         op->a.accept(this);
         Interval a = interval;
         op->b.accept(this);
@@ -281,6 +367,7 @@ private:
     }
 
     void visit(const Sub *op) override {
+        TRACK_BOUNDS_INTERVAL;
         op->a.accept(this);
         Interval a = interval;
         op->b.accept(this);
@@ -327,6 +414,7 @@ private:
     }
 
     void visit(const Mul *op) override {
+        TRACK_BOUNDS_INTERVAL;
         op->a.accept(this);
         Interval a = interval;
 
@@ -379,11 +467,13 @@ private:
         // Assume no overflow for float, int32, and int64
         if (!op->type.is_float() && (!op->type.is_int() || op->type.bits() < 32)) {
             if (a.is_bounded() && b.is_bounded()) {
-                // Try to prove it can't overflow
-                Expr test1 = (cast<int>(a.min) * cast<int>(b.min) == cast<int>(a.min * b.min));
-                Expr test2 = (cast<int>(a.min) * cast<int>(b.max) == cast<int>(a.min * b.max));
-                Expr test3 = (cast<int>(a.max) * cast<int>(b.min) == cast<int>(a.max * b.min));
-                Expr test4 = (cast<int>(a.max) * cast<int>(b.max) == cast<int>(a.max * b.max));
+                // Try to prove it can't overflow. (Be sure to use uint32 for unsigned
+                // types so that the case of 65535*65535 won't misleadingly fail.)
+                Type t = op->type.is_uint() ? UInt(32) : Int(32);
+                Expr test1 = (cast(t, a.min) * cast(t, b.min) == cast(t, a.min * b.min));
+                Expr test2 = (cast(t, a.min) * cast(t, b.max) == cast(t, a.min * b.max));
+                Expr test3 = (cast(t, a.max) * cast(t, b.min) == cast(t, a.max * b.min));
+                Expr test4 = (cast(t, a.max) * cast(t, b.max) == cast(t, a.max * b.max));
                 if (!can_prove(test1 && test2 && test3 && test4)) {
                     bounds_of_type(op->type);
                 }
@@ -394,6 +484,7 @@ private:
     }
 
     void visit(const Div *op) override {
+        TRACK_BOUNDS_INTERVAL;
         op->a.accept(this);
         Interval a = interval;
 
@@ -447,6 +538,7 @@ private:
     }
 
     void visit(const Mod *op) override {
+        TRACK_BOUNDS_INTERVAL;
         op->a.accept(this);
         Interval a = interval;
 
@@ -487,6 +579,7 @@ private:
     }
 
     void visit(const Min *op) override {
+        TRACK_BOUNDS_INTERVAL;
         op->a.accept(this);
         Interval a = interval;
 
@@ -503,6 +596,7 @@ private:
 
 
     void visit(const Max *op) override {
+        TRACK_BOUNDS_INTERVAL;
         op->a.accept(this);
         Interval a = interval;
 
@@ -545,22 +639,27 @@ private:
     }
 
     void visit(const LT *op) override {
+        TRACK_BOUNDS_INTERVAL;
         visit_compare<LT>(op->a, op->b);
     }
 
     void visit(const LE *op) override {
+        TRACK_BOUNDS_INTERVAL;
         visit_compare<LE>(op->a, op->b);
     }
 
     void visit(const GT *op) override {
+        TRACK_BOUNDS_INTERVAL;
         visit_compare<LT>(op->b, op->a);
     }
 
     void visit(const GE *op) override {
+        TRACK_BOUNDS_INTERVAL;
         visit_compare<LE>(op->b, op->a);
     }
 
     void visit(const EQ *op) override {
+        TRACK_BOUNDS_INTERVAL;
         op->a.accept(this);
         Interval a = interval;
 
@@ -584,6 +683,7 @@ private:
     }
 
     void visit(const NE *op) override {
+        TRACK_BOUNDS_INTERVAL;
         op->a.accept(this);
         Interval a = interval;
 
@@ -615,6 +715,7 @@ private:
     }
 
     void visit(const And *op) override {
+        TRACK_BOUNDS_INTERVAL;
         op->a.accept(this);
         Interval a = interval;
 
@@ -641,6 +742,7 @@ private:
     }
 
     void visit(const Or *op) override {
+        TRACK_BOUNDS_INTERVAL;
         op->a.accept(this);
         Interval a = interval;
 
@@ -665,6 +767,7 @@ private:
     }
 
     void visit(const Not *op) override {
+        TRACK_BOUNDS_INTERVAL;
         op->a.accept(this);
         Interval a = interval;
 
@@ -679,6 +782,7 @@ private:
     }
 
     void visit(const Select *op) override {
+        TRACK_BOUNDS_INTERVAL;
         op->true_value.accept(this);
         if (!interval.is_bounded()) {
             // Uses interval produced by op->true_value which might be half bound.
@@ -766,6 +870,7 @@ private:
     }
 
     void visit(const Load *op) override {
+        TRACK_BOUNDS_INTERVAL;
         op->index.accept(this);
         if (!const_bound && interval.is_single_point() && is_one(op->predicate)) {
             // If the index is const and it is not a predicated load,
@@ -781,6 +886,7 @@ private:
     }
 
     void visit(const Ramp *op) override {
+        TRACK_BOUNDS_INTERVAL;
         // Treat the ramp lane as a free variable
         string var_name = unique_name('t');
         Expr var = Variable::make(op->base.type(), var_name);
@@ -791,10 +897,12 @@ private:
     }
 
     void visit(const Broadcast *op) override {
+        TRACK_BOUNDS_INTERVAL;
         op->value.accept(this);
     }
 
     void visit(const Call *op) override {
+        TRACK_BOUNDS_INTERVAL;
         // Using the strict_float feature flag wraps a strict_float()
         // call around every Expr that is of type float, so it's easy
         // to get nestings that are many levels deep; the bounds of this
@@ -857,6 +965,32 @@ private:
             } else {
                 // If the argument is unbounded on one side, then the max is unbounded.
                 interval.max = Interval::pos_inf;
+            }
+        } else if (op->is_intrinsic(Call::absd)) {
+            internal_assert(!t.is_handle());
+            if (t.is_float()) {
+                Expr e = abs(op->args[0] - op->args[1]);
+                e.accept(this);
+            } else {
+                // absd() for int types will always produce a uint result
+                internal_assert(t.is_uint());
+
+                Expr a = op->args[0];
+                Expr b = op->args[1];
+                internal_assert(a.type() == b.type());
+
+                a.accept(this);
+                Interval a_interval = interval;
+
+                b.accept(this);
+                Interval b_interval = interval;
+
+                if (a_interval.is_bounded() && b_interval.is_bounded()) {
+                    interval.min = make_zero(t);
+                    interval.max = max(absd(a_interval.max, b_interval.min), absd(a_interval.min, b_interval.max));
+                } else {
+                    bounds_of_type(t);
+                }
             }
         } else if (op->is_intrinsic(Call::unsafe_promise_clamped)) {
             Expr full_clamp = clamp(op->args[0], op->args[1], op->args[2]);
@@ -931,6 +1065,7 @@ private:
     }
 
     void visit(const Let *op) override {
+        TRACK_BOUNDS_INTERVAL;
         op->value.accept(this);
         Interval val = interval;
 
@@ -986,6 +1121,7 @@ private:
     }
 
     void visit(const Shuffle *op) override {
+        TRACK_BOUNDS_INTERVAL;
         Interval result = Interval::nothing();
         for (Expr i : op->vectors) {
             i.accept(this);
@@ -1368,6 +1504,43 @@ private:
 
     using IRGraphVisitor::visit;
 
+    bool box_from_extended_crop(Expr e, Box &b) {
+        const Call *call_expr = e.as<Call>();
+        if (call_expr != nullptr) {
+            if (call_expr->name == Call::buffer_crop) {
+                internal_assert(call_expr->args.size() == 5) << "Call::buffer_crop call with unexpected number of arguments.\n";
+                const Variable *in_buf = call_expr->args[2].as<Variable>();
+                const Call *mins_struct = call_expr->args[3].as<Call>();
+                const Call *extents_struct = call_expr->args[4].as<Call>();
+                // Ignore crops that apply to a different buffer than the one being looked for.
+                if (in_buf != nullptr && (in_buf->name == (func + ".buffer"))) {
+                    internal_assert(mins_struct != nullptr && extents_struct != nullptr &&
+                                    mins_struct->name == Call::make_struct &&
+                                    extents_struct->name == Call::make_struct) << "BoxesTouched::box_from_extended_crop -- unexpected buffer_crop form.\n";
+                    b.resize(mins_struct->args.size());
+                    b.used = const_true();
+                    for (size_t i = 0; i < mins_struct->args.size(); i++) {
+                        Interval min_interval = bounds_of_expr_in_scope(mins_struct->args[i], scope, func_bounds);
+                        Interval max_interval = bounds_of_expr_in_scope(mins_struct->args[i] + extents_struct->args[i] - 1, scope, func_bounds);
+                        b[i] = Interval(min_interval.min, max_interval.max);
+                    }
+                    return true;
+                }
+            } else if (call_expr->name == Call::buffer_set_bounds) {
+                internal_assert(call_expr->args.size() == 4) << "Call::buffer_set_bounds call with unexpected number of arguments.\n";
+                const IntImm *dim = call_expr->args[1].as<IntImm>();
+                if (dim != nullptr && box_from_extended_crop(call_expr->args[0], b)) {
+                    internal_assert(dim->value >= 0 && dim->value < (int64_t)b.size()) << "box_from_extended_crop setting bounds for out of range dim.\n";
+                    Interval min_interval = bounds_of_expr_in_scope(call_expr->args[2], scope, func_bounds);
+                    Interval max_interval = bounds_of_expr_in_scope(call_expr->args[2] + call_expr->args[3] - 1, scope, func_bounds);
+                    b[dim->value] = Interval(min_interval.min, max_interval.max);
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     void visit(const Call *op) override {
         if (consider_calls) {
             if (op->is_intrinsic(Call::if_then_else)) {
@@ -1399,36 +1572,31 @@ private:
             }
         }
 
-        if (op->is_extern() && in_producer) {
+        if (op->is_extern() && (in_producer || consider_calls)) {
             if (op->name == "halide_buffer_copy") {
                 // Call doesn't yet have user_context inserted, so size is 3.
                 internal_assert(op->args.size() == 3) << "Unexpected arg list size for halide_buffer_copy\n";
-                if (equal(op->args[1], make_device_interface_call(DeviceAPI::Host))) {
-                    const Variable *var = op->args[2].as<Variable>();
+                for (int i = 0; i < 2; i++) {
+                    // If considering calls, merge in the source bounds.
+                    // If considering provides, merge in the destination bounds.
+                    int var_index;
+                    if (i == 0 && consider_calls) {
+                        var_index = 0;
+                    } else if (i == 1 && consider_provides && in_producer) {
+                        var_index = 2;
+                    } else {
+                        continue;
+                    }
+
+                    const Variable *var = op->args[var_index].as<Variable>();
                     if (var != nullptr && var->type == type_of<halide_buffer_t *>()) {
                         if (func.empty() || starts_with(var->name, func)) {
                             const auto iter = buffer_lets.find(var->name);
                             if (iter != buffer_lets.end()) {
-                                const Call *crop_call = iter->second.as<Call>();
-                                if (crop_call != nullptr && crop_call->name == Call::buffer_crop && crop_call->args.size() == 5) {
-                                    const Variable *in_buf = crop_call->args[2].as<Variable>();
-                                    const Call *mins_struct = crop_call->args[3].as<Call>();
-                                    const Call *extents_struct = crop_call->args[4].as<Call>();
-                                    if (in_buf != nullptr && mins_struct != nullptr && extents_struct != nullptr &&
-                                        (in_buf->name == (func + ".buffer")) &&
-                                        mins_struct->name == Call::make_struct && extents_struct->name == Call::make_struct) {
-                                        Box b(mins_struct->args.size());
-                                        b.used = const_true();
-                                        for (size_t i = 0; i < mins_struct->args.size(); i++) {
-                                            Interval min_interval = bounds_of_expr_in_scope(mins_struct->args[i], scope, func_bounds);
-                                            Interval max_interval = bounds_of_expr_in_scope(mins_struct->args[i] + extents_struct->args[i] - 1, scope, func_bounds);
-                                            b[i] = Interval(min_interval.min, max_interval.max);
-                                        }
-                                        merge_boxes(boxes[func], b);
-                                    }
+                                Box b;
+                                if (box_from_extended_crop(iter->second, b)) {
+                                    merge_boxes(boxes[func], b);
                                 }
-
-
                             }
                         }
                     }
@@ -1486,12 +1654,6 @@ private:
 
     template<typename LetOrLetStmt>
     void visit_let(const LetOrLetStmt *op) {
-        std::string named_buffer_let;
-        if (op->value.type() == type_of<struct halide_buffer_t *>()) {
-            named_buffer_let = op->name;
-            buffer_lets[named_buffer_let] = op->value;
-        }
-
         using is_let_stmt = typename std::is_same<LetOrLetStmt, LetStmt>;
 
         // LetStmts can be deeply stacked, and this visitor is called
@@ -1514,6 +1676,10 @@ private:
             frames.emplace_back(op);
             Frame &f = frames.back();
             push_var(op->name);
+
+            if (op->value.type() == type_of<struct halide_buffer_t *>()) {
+                buffer_lets[op->name] = op->value;
+            }
 
             if (is_let_stmt::value) {
                 f.vi = get_var_instance(op->name);
@@ -1570,6 +1736,10 @@ private:
             // Pop the value bounds
             scope.pop(it->op->name);
 
+            if (it->op->value.type() == type_of<struct halide_buffer_t *>()) {
+                buffer_lets.erase(it->op->name);
+            }
+
             if (!it->min_name.empty()) {
                 // We made up new names for the bounds of the
                 // value, and need to rewrap any boxes we're
@@ -1620,10 +1790,6 @@ private:
             }
 
             pop_var(it->op->name);
-        }
-
-        if (!named_buffer_let.empty()) {
-            buffer_lets.erase(named_buffer_let);
         }
     }
 
@@ -2149,6 +2315,18 @@ FuncValueBounds compute_function_value_bounds(const vector<string> &order,
                 }
 
                 fb[key] = result;
+            } else {
+                // If the Func is impure, we may still be able to specify a bounds-of-type here
+                Type t = f.output_types()[j].element_of();
+                if ((t.is_uint() || t.is_int()) && t.bits() <= 16) {
+                    result = Interval(t.min(), t.max());
+                } else {
+                  result = Interval::everything();
+                }
+                fb[key] = result;
+
+                // TODO: if a Function is impure, but the RDoms used by the update functions
+                // are all constant, it may be profitable to calculate the bounds here too
             }
 
             debug(2) << "Bounds on value " << j
@@ -2243,10 +2421,59 @@ void constant_bound_test() {
         // These two overflow
         check_constant_bound(x - y, Expr((uint8_t)0), Expr((uint8_t)255));
         check_constant_bound(x*y, Expr((uint8_t)0), Expr((uint8_t)255));
+
+        check_constant_bound(absd(x, y), Expr((uint8_t)0), Expr((uint8_t)20));
+        check_constant_bound(absd(cast<int16_t>(x), cast<int16_t>(y)), Expr((uint16_t)0), Expr((uint16_t)20));
     }
+
+
+    {
+        Param<float> x("x"), y("y");
+        x.set_range(Expr((float)10), Expr((float)20));
+        y.set_range(Expr((float)5), Expr((float)30));
+
+        check_constant_bound(absd(x, y), Expr((float)0), Expr((float)20));
+    }
+
+    {
+        using namespace ConciseCasts;
+
+        Param<int8_t> i("i"), x("x"), y("y"), d("d");
+        Expr cl = i16(i);
+        Expr cr1 = i16(x);
+        Expr cr2 = i16(y);
+        Expr fraction = (d & (int16_t)((1 << 7) - 1));
+        Expr cr = i16((((cr2 - cr1) * fraction) >> 7) + cr1);
+
+        check_constant_bound(absd(cr, cl), Expr((uint16_t)0), Expr((uint16_t)510));
+        check_constant_bound(i16(absd(cr, cl)), Expr((int16_t)0), Expr((int16_t)510));
+    }
+
 
     check_constant_bound(Load::make(Int(32), "buf", 0, Buffer<>(), Parameter(), const_true()) * 20,
                          Interval::neg_inf, Interval::pos_inf);
+
+    {
+        // Ensure that unnecessary integer overflow doesn't happen
+        // in cases involving unsigned integer math
+        Param<uint16_t> e1("e1");      // range 0..0xffff, type=uint16
+        Expr e2 = cast<uint32_t>(e1);  // range 0..0xffff, type=uint32
+        Expr e3 = e2 * e2;             // range 0..0xfffe0001, type=uint32
+        check_constant_bound(e3, Expr((uint32_t)0), Expr((uint32_t)0xfffe0001));
+    }
+
+    {
+        RDom r(0, 4);
+
+        // bounds of an expression with impure >= 32 bit expr will be unbounded
+        Expr e32 = sum(cast<int32_t>(r.x));
+        check_constant_bound(e32, Interval::neg_inf, Interval::pos_inf);
+
+        // bounds of an expression with impure < 32 bit expr will be bounds-of-type
+        Expr e16 = sum(cast<int16_t>(r.x));
+        check_constant_bound(e16, Int(16).min(), Int(16).max());
+    }
+
 }
 
 void boxes_touched_test() {

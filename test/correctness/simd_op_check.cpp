@@ -311,12 +311,14 @@ struct Test {
 
             // TODO: Re-enable this after fixing #3281
             //check("paddusb", 8*w, u8(min(u16(u8_1) + u16(u8_2), max_u8)));
-            check("psubusb", 8*w, u8(max(i16(u8_1) - i16(u8_2), 0)));
+            // TODO: Re-enable this after fixing #3281
+            //check("psubusb", 8*w, u8(max(i16(u8_1) - i16(u8_2), 0)));
             check("paddsw",  4*w, i16_sat(i32(i16_1) + i32(i16_2)));
             check("psubsw",  4*w, i16_sat(i32(i16_1) - i32(i16_2)));
             // TODO: Re-enable this after fixing #3281
             //check("paddusw", 4*w, u16(min(u32(u16_1) + u32(u16_2), max_u16)));
-            check("psubusw", 4*w, u16(max(i32(u16_1) - i32(u16_2), 0)));
+            // TODO: Re-enable this after fixing #3281
+            //check("psubusw", 4*w, u16(max(i32(u16_1) - i32(u16_2), 0)));
             check("pmulhw",  4*w, i16((i32(i16_1) * i32(i16_2)) / (256*256)));
             check("pmulhw",  4*w, i16((i32(i16_1) * i32(i16_2)) >> 16));
 
@@ -953,7 +955,10 @@ struct Test {
             check(arm32 ? "vmla.i32" : "mla", 2*w, u32_1 + u32_2*u32_3);
             if (w == 1 || w == 2) {
                 // Older llvms don't always fuse this at non-native widths
-                check(arm32 ? "vmla.f32" : "fmla", 2*w, f32_1 + f32_2*f32_3);
+                // TODO: Re-enable this after fixing https://github.com/halide/Halide/issues/3477
+                // check(arm32 ? "vmla.f32" : "fmla", 2*w, f32_1 + f32_2*f32_3);
+                if (!arm32)
+                    check(arm32 ? "vmla.f32" : "fmla", 2*w, f32_1 + f32_2*f32_3);
             }
 
             // VMLS     I, F    F, D    Multiply Subtract
@@ -965,7 +970,10 @@ struct Test {
             check(arm32 ? "vmls.i32" : "mls", 2*w, u32_1 - u32_2*u32_3);
             if (w == 1 || w == 2) {
                 // Older llvms don't always fuse this at non-native widths
-                check(arm32 ? "vmls.f32" : "fmls", 2*w, f32_1 - f32_2*f32_3);
+                // TODO: Re-enable this after fixing https://github.com/halide/Halide/issues/3477
+                // check(arm32 ? "vmls.f32" : "fmls", 2*w, f32_1 - f32_2*f32_3);
+                if (!arm32)
+                    check(arm32 ? "vmls.f32" : "fmls", 2*w, f32_1 - f32_2*f32_3);
             }
 
             // VMLAL    I       -       Multiply Accumulate Long

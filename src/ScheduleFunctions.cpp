@@ -1119,8 +1119,8 @@ private:
 
     // Compute the shift factor required to align iteration of
     // a function stage with its fused parent loop nest.
-    static void compute_shift_factor(const map<string, bool> &skip, const Function &f, const string &prefix,
-                                     const Definition &def, map<string, Expr> &bounds, map<string, Expr> &shifts) {
+    static void compute_shift_factor(const Function &f, const string &prefix, const Definition &def,
+                                     map<string, Expr> &bounds, map<string, Expr> &shifts) {
         if (!def.defined()) {
             return;
         }
@@ -1129,84 +1129,78 @@ private:
         const LoopLevel &fuse_level = def.schedule().fuse_level().level;
         const map<string, LoopAlignStrategy> &align_strategy = def.schedule().fuse_level().align;
 
+        if (fuse_level.is_inlined() || fuse_level.is_root()) {
+            return;
+        }
+
         int start_fuse;
-        if (!fuse_level.is_inlined() && !fuse_level.is_root()) {
-            if (!skip.find(fuse_level.func())->second) {
-                {
-                    const auto &iter = std::find_if(dims.begin(), dims.end(),
-                                                    [&fuse_level](const Dim &d) {
-                                                        return var_name_match(d.var, fuse_level.var().name());
-                                                    });
-                    internal_assert(iter != dims.end());
-                    start_fuse = (int)(iter - dims.begin());
-                }
-                for (int i = start_fuse; i < (int) dims.size() - 1; ++i) {
-                    const string &var = dims[i].var;
-                    Expr shift_val;
+        {
+            const auto &iter = std::find_if(dims.begin(), dims.end(),
+                                            [&fuse_level](const Dim &d) {
+                                                return var_name_match(d.var, fuse_level.var().name());
+                                            });
+            internal_assert(iter != dims.end());
+            start_fuse = (int)(iter - dims.begin());
+        }
+        for (int i = start_fuse; i < (int) dims.size() - 1; ++i) {
+            const string &var = dims[i].var;
+            Expr shift_val;
 
-                    auto iter = align_strategy.begin();
-                    for (; iter != align_strategy.end(); ++iter) {
-                        if (var_name_match(var, iter->first)) {
-                            break;
-                        }
-                    }
-
-                    if ((iter == align_strategy.end()) ||
-                        (iter->second == LoopAlignStrategy::NoAlign) ||
-                        (iter->second == LoopAlignStrategy::Auto)) {
-                        continue;
-                    }
-
-                    string parent_prefix = fuse_level.func() + ".s" + std::to_string(fuse_level.stage_index()) + ".";
-
-                    auto it_min = bounds.find(prefix + var + ".loop_min");
-                    auto it_max = bounds.find(prefix + var + ".loop_max");
-                    internal_assert((it_min != bounds.end()) && (it_max != bounds.end()));
-
-                    if (iter->second == LoopAlignStrategy::AlignStart) {
-                        const auto &parent_min = bounds.find(parent_prefix + var + ".loop_min");
-                        internal_assert(parent_min != bounds.end());
-                        shift_val = parent_min->second - it_min->second;
-                    } else {
-                        const auto &parent_max = bounds.find(parent_prefix + var + ".loop_max");
-                        internal_assert(parent_max != bounds.end());
-                        shift_val = parent_max->second - it_max->second;
-                    }
-
-                    internal_assert(shift_val.defined());
-                    shifts.emplace(prefix + var, simplify(-shift_val));
-                    it_min->second = simplify(shift_val + it_min->second);
-                    it_max->second = simplify(shift_val + it_max->second);
+            auto iter = align_strategy.begin();
+            for (; iter != align_strategy.end(); ++iter) {
+                if (var_name_match(var, iter->first)) {
+                    break;
                 }
             }
+
+            if ((iter == align_strategy.end()) ||
+                (iter->second == LoopAlignStrategy::NoAlign) ||
+                (iter->second == LoopAlignStrategy::Auto)) {
+                continue;
+            }
+
+            string parent_prefix = fuse_level.func() + ".s" + std::to_string(fuse_level.stage_index()) + ".";
+
+            auto it_min = bounds.find(prefix + var + ".loop_min");
+            auto it_max = bounds.find(prefix + var + ".loop_max");
+            internal_assert((it_min != bounds.end()) && (it_max != bounds.end()));
+
+            if (iter->second == LoopAlignStrategy::AlignStart) {
+                const auto &parent_min = bounds.find(parent_prefix + var + ".loop_min");
+                internal_assert(parent_min != bounds.end());
+                shift_val = parent_min->second - it_min->second;
+            } else {
+                const auto &parent_max = bounds.find(parent_prefix + var + ".loop_max");
+                internal_assert(parent_max != bounds.end());
+                shift_val = parent_max->second - it_max->second;
+            }
+
+            internal_assert(shift_val.defined());
+            shifts.emplace(prefix + var, simplify(-shift_val));
+            it_min->second = simplify(shift_val + it_min->second);
+            it_max->second = simplify(shift_val + it_max->second);
         }
     }
 
-    Stmt build_produce_definition(const map<string, bool> &skip, const Function &f, const string &prefix,
-                                  const Definition &def, bool is_update, map<string, Expr> &replacements,
-                                  vector<pair<string, Expr>> &add_lets) {
+    Stmt build_produce_definition(const Function &f, const string &prefix, const Definition &def, bool is_update,
+        map<string, Expr> &replacements, vector<pair<string, Expr>> &add_lets) {
         const vector<Dim> &dims = def.schedule().dims(); // From inner to outer
         const LoopLevel &fuse_level = def.schedule().fuse_level().level;
 
         size_t start_fuse = dims.size();
         if (!fuse_level.is_inlined() && !fuse_level.is_root()) {
-            if (!skip.find(fuse_level.func())->second) {
-                const auto &iter = std::find_if(dims.begin(), dims.end(),
-                                                [&fuse_level](const Dim &d) {
-                                                    return var_name_match(d.var, fuse_level.var().name());
-                                                });
-                internal_assert(iter != dims.end());
-                start_fuse = (size_t)(iter - dims.begin());
-            }
+            const auto &iter = std::find_if(dims.begin(), dims.end(),
+                                            [&fuse_level](const Dim &d) {
+                                                return var_name_match(d.var, fuse_level.var().name());
+                                            });
+            internal_assert(iter != dims.end());
+            start_fuse = (size_t)(iter - dims.begin());
         }
 
         // The bounds of the child fused loops should be replaced to refer to the
         // parent fused loop. Here, we are only collecting the ones we should
         // replace. The actual replacement is done later.
         for (const FusedPair &pair : def.schedule().fused_pairs()) {
-            if (skip.find(pair.func_2)->second) {
-                continue;
-            }
             const auto &f2_it = env.find(pair.func_2);
             internal_assert(f2_it != env.end());
             const vector<Dim> &dims_2 =
@@ -1244,41 +1238,35 @@ private:
         return produce;
     }
 
-    void collect_all_dependence_helper(const map<string, bool> &skip, const string &prefix, const Definition &def,
-                                       const FusedPair &p, vector<FusedPair> &dependence, set<string> &visited) {
+    void collect_all_dependence_helper(const string &prefix, const Definition &def, const FusedPair &p,
+                                       vector<FusedPair> &dependence, set<string> &visited) {
         visited.insert(prefix);
         dependence.push_back(p);
         for (const FusedPair &pair : def.schedule().fused_pairs()) {
-            if (skip.find(pair.func_2)->second) {
-                continue;
-            }
             const auto &iter = env.find(pair.func_2);
             internal_assert(iter != env.end());
             const Function &f = iter->second;
             string prefix_2 = pair.func_2 + ".s" + std::to_string(pair.stage_2) + "." + pair.var_name;
             if (visited.find(prefix_2) == visited.end()) {
                 const Definition &def_2 = (pair.stage_2 == 0) ? f.definition() : f.update((int)(pair.stage_2 - 1));
-                collect_all_dependence_helper(skip, prefix_2, def_2, pair, dependence, visited);
+                collect_all_dependence_helper(prefix_2, def_2, pair, dependence, visited);
             }
         }
     }
 
     // Collect all fused pairs that directly/indirectly related to 'def'
-    vector<FusedPair> collect_all_dependence(const map<string, bool> &skip, const Definition &def) {
+    vector<FusedPair> collect_all_dependence(const Definition &def) {
         set<string> visited;
         vector<FusedPair> dependence;
 
         for (const FusedPair &pair : def.schedule().fused_pairs()) {
-            if (skip.find(pair.func_2)->second) {
-                continue;
-            }
             const auto &iter = env.find(pair.func_2);
             internal_assert(iter != env.end());
             const Function &f = iter->second;
             string prefix = pair.func_2 + ".s" + std::to_string(pair.stage_2) + "." + pair.var_name;
             if (visited.find(prefix) == visited.end()) {
                 const Definition &def_2 = (pair.stage_2 == 0) ? f.definition() : f.update((int)(pair.stage_2 - 1));
-                collect_all_dependence_helper(skip, prefix, def_2, pair, dependence, visited);
+                collect_all_dependence_helper(prefix, def_2, pair, dependence, visited);
             }
         }
         return dependence;
@@ -1286,8 +1274,7 @@ private:
 
     // Replace the bounds of the parent fused loop (i.e. the first one to be
     // realized in the group) with union of the bounds of the fused group.
-    Stmt replace_parent_bound_with_union_bound(const map<string, bool> &skip, const Function &f, Stmt produce,
-                                               const map<string, Expr> &bounds) {
+    Stmt replace_parent_bound_with_union_bound(const Function &f, Stmt produce, const map<string, Expr> &bounds) {
         string prefix = f.name() + ".s0";
         const Definition &def = f.definition();
 
@@ -1299,13 +1286,10 @@ private:
 
         map<string, Expr> replacements;
 
-        vector<FusedPair> dependence = collect_all_dependence(skip, def);
+        vector<FusedPair> dependence = collect_all_dependence(def);
 
         // Compute the union of the bounds of the fused loops.
         for (const FusedPair &pair : dependence) {
-            if (skip.find(pair.func_2)->second) {
-                continue;
-            }
             const auto &f2_it = env.find(pair.func_2);
             internal_assert(f2_it != env.end());
             const vector<Dim> &dims_2 =
@@ -1364,21 +1348,12 @@ private:
 
 
     Stmt build_pipeline_group(Stmt consumer) {
-        map<string, bool> skip;
-
         size_t num_skipped = 0;
-        bool skip_last_func = false;
-        bool found_parent = false;
-        auto parent_index = funcs.size(); // The last function in the group that is not skipped
         for (size_t i = 0; i < funcs.size(); ++i) {
-            skip_last_func = function_is_already_realized_in_stmt(funcs[i], consumer) ||
-                              !(function_is_used_in_stmt(funcs[i], consumer) || is_output_list[i]);
-            skip[funcs[i].name()] = skip_last_func;
-            if (skip_last_func) {
+            bool should_skip = function_is_already_realized_in_stmt(funcs[i], consumer) ||
+                               !(function_is_used_in_stmt(funcs[i], consumer) || is_output_list[i]);
+            if (should_skip) {
                 num_skipped += 1;
-            } else {
-                parent_index = i;
-                found_parent = true;
             }
         }
 
@@ -1387,12 +1362,7 @@ private:
             return consumer;
         }
 
-        user_assert(!skip_last_func)
-        << "Invalid compute_with: the 'parent' function \"" << funcs[funcs.size() - 1].name()
-        << "\" in fused group " << funcs << " is not used at the compute_at level "
-        << compute_level.to_string() << ".\n";
-
-        internal_assert(found_parent);
+        user_assert(num_skipped == 0) << "Fused groups must either be entirely used or unused\n";
 
         // Build the loops.
         Stmt producer;
@@ -1401,15 +1371,12 @@ private:
 
         for (auto iter = funcs.rbegin(); iter != funcs.rend(); iter++) {
             const auto &f = *iter;
-            if (skip[f.name()]) {
-                continue;
-            }
 
             if (f.has_extern_definition()) {
                 const Stmt &produceDef = Internal::build_extern_produce(env, f, target);
                 producer = inject_stmt(producer, produceDef, LoopLevel::inlined().lock());
             } else {
-                const Stmt &produceDef = build_produce_definition(skip, f, f.name() + ".s0.", f.definition(), false,
+                const Stmt &produceDef = build_produce_definition(f, f.name() + ".s0.", f.definition(), false,
                                                                   replacements, add_lets);
                 producer = inject_stmt(producer, produceDef, f.definition().schedule().fuse_level().level);
             }
@@ -1417,7 +1384,7 @@ private:
             for (size_t j = 0; j < f.updates().size(); ++j) {
                 string defPrefix = f.name() + ".s" + std::to_string(j + 1) + ".";
                 const Definition &def = f.updates()[j];
-                const Stmt &updateDef = build_produce_definition(skip, f, defPrefix, def, true, replacements, add_lets);
+                const Stmt &updateDef = build_produce_definition(f, defPrefix, def, true, replacements, add_lets);
                 producer = inject_stmt(producer, updateDef, def.schedule().fuse_level().level);
             }
         }
@@ -1439,12 +1406,10 @@ private:
         map<string, Expr> shifts;
         for (auto i = funcs.size(); i-- > 0;) {
             const auto& func = funcs[i];
-            if (!skip[func.name()]) {
-                compute_shift_factor(skip, func, func.name() + ".s0.", func.definition(), bounds, shifts);
-                for (size_t j = 0; j < func.updates().size(); ++j) {
-                    string prefix = func.name() + ".s" + std::to_string(j + 1) + ".";
-                    compute_shift_factor(skip, func, prefix, func.updates()[j], bounds, shifts);
-                }
+            compute_shift_factor(func, func.name() + ".s0.", func.definition(), bounds, shifts);
+            for (size_t j = 0; j < func.updates().size(); ++j) {
+                string prefix = func.name() + ".s" + std::to_string(j + 1) + ".";
+                compute_shift_factor(func, prefix, func.updates()[j], bounds, shifts);
             }
         }
         // Shift the loops.
@@ -1457,18 +1422,16 @@ private:
 
         // Replace the bounds of parent fused loop with union of bounds of
         // the fused loops.
-        producer = replace_parent_bound_with_union_bound(skip, funcs[parent_index], producer, bounds);
+        producer = replace_parent_bound_with_union_bound(funcs.back(), producer, bounds);
 
         // Add the producer nodes.
         for (const auto &i : funcs) {
-            if (!skip[i.name()]) {
-                producer = ProducerConsumer::make_produce(i.name(), producer);
-            }
+            producer = ProducerConsumer::make_produce(i.name(), producer);
         }
 
         // Add the consumer nodes.
         for (size_t i = 0; i < funcs.size(); i++) {
-            if (!skip[funcs[i].name()] && !is_output_list[i]) {
+            if (!is_output_list[i]) {
                 consumer = ProducerConsumer::make_consume(funcs[i].name(), consumer);
             }
         }

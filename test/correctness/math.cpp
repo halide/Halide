@@ -1,6 +1,6 @@
+#include "Halide.h"
 #include <stdio.h>
 #include <math.h>
-#include "Halide.h"
 #include <iostream>
 #include <limits>
 
@@ -31,7 +31,8 @@ bool relatively_equal(value_t a, value_t b, Target target) {
 
         // For HLSL, try again with a lower error threshold, as it might be using
         // fast but approximated trigonometric functions:
-        if (target.supports_device_api(DeviceAPI::D3D12Compute))
+        if (target.supports_device_api(DeviceAPI::D3D12Compute) ||
+            target.supports_device_api(DeviceAPI::OpenGLCompute))
         {
             // this threshold value has been empirically determined since there
             // is no clear documentation on the precision of these algorithms
@@ -79,6 +80,9 @@ uint32_t absd(uint32_t a, uint32_t b) { return a < b ? b - a : a - b; }
         test_##name(x) = name(in(x));                                   \
         if (target.has_gpu_feature()) {                                 \
             test_##name.gpu_tile(x, xi, 8);                             \
+        } if (target.has_feature(Target::OpenGLCompute)) {              \
+            test_##name.gpu_tile(x, xi, 8, TailStrategy::Auto,          \
+                                 DeviceAPI::OpenGLCompute);             \
         } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) { \
             test_##name.hexagon();                                      \
         }                                                               \
@@ -104,6 +108,9 @@ uint32_t absd(uint32_t a, uint32_t b) { return a < b ? b - a : a - b; }
         test_##name(x) = name(in(0, x), in(1, x));                                  \
         if (target.has_gpu_feature()) {                                             \
             test_##name.gpu_tile(x, xi, 8);                                         \
+        } if (target.has_feature(Target::OpenGLCompute)) {              \
+            test_##name.gpu_tile(x, xi, 8, TailStrategy::Auto,          \
+                                 DeviceAPI::OpenGLCompute);             \
         } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {     \
             test_##name.hexagon();                                                  \
         }                                                                           \

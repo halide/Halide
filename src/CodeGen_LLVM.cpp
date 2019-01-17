@@ -393,13 +393,11 @@ void CodeGen_LLVM::init_context() {
     fast_flags.setNoSignedZeros();
     // Don't use approximate reciprocals for division. It's too inaccurate even for Halide.
     // fast_flags.setAllowReciprocal();
-    #if LLVM_VERSION >= 60
     // Theoretically, setAllowReassoc could be setUnsafeAlgebra for earlier versions, but that
     // turns on all the flags.
     fast_flags.setAllowReassoc();
     fast_flags.setAllowContract(true);
     fast_flags.setApproxFunc();
-    #endif
     builder->setFastMathFlags(fast_flags);
 
     // Define some types
@@ -548,10 +546,10 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
     internal_assert(scalar_value_t_type) << "Did not find halide_scalar_value_t in initial module";
 
     device_interface_t_type = module->getTypeByName("struct.halide_device_interface_t");
-    internal_assert(scalar_value_t_type) << "Did not find halide_device_interface_t in initial module";
+    internal_assert(device_interface_t_type) << "Did not find halide_device_interface_t in initial module";
 
     pseudostack_slot_t_type = module->getTypeByName("struct.halide_pseudostack_slot_t");
-    internal_assert(scalar_value_t_type) << "Did not find halide_pseudostack_slot_t in initial module";
+    internal_assert(pseudostack_slot_t_type) << "Did not find halide_pseudostack_slot_t in initial module";
 
     semaphore_t_type = module->getTypeByName("struct.halide_semaphore_t");
     internal_assert(semaphore_t_type) << "Did not find halide_semaphore_t in initial module";
@@ -600,7 +598,7 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
         std::string halide_command = "halide target=" + target.to_string();
         embed_bitcode(module.get(), halide_command);
     }
-    
+
     input_module = nullptr;
 
     // Disown the module and return it.
@@ -633,17 +631,9 @@ void CodeGen_LLVM::begin_func(LinkageType linkage, const std::string& name,
             << " already exists in the same module\n";
         if (func_t != function->getFunctionType()) {
             std::cerr << "Desired function type for " << extern_name << ":\n";
-            #if LLVM_VERSION >= 50
             func_t->print(dbgs(), true);
-            #else
-            func_t->dump();
-            #endif
             std::cerr << "Declared function type of " << extern_name << ":\n";
-            #if LLVM_VERSION >= 50
             function->getFunctionType()->print(dbgs(), true);
-            #else
-            function->getFunctionType()->dump();
-            #endif
             user_error << "Cannot create a function with a declaration of mismatched type.\n";
         }
     }
@@ -652,11 +642,7 @@ void CodeGen_LLVM::begin_func(LinkageType linkage, const std::string& name,
     // Mark the buffer args as no alias
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer()) {
-            #if LLVM_VERSION < 50
-            function->setDoesNotAlias(i+1);
-            #else
             function->addParamAttr(i, Attribute::NoAlias);
-            #endif
         }
     }
 
@@ -724,11 +710,7 @@ void CodeGen_LLVM::compile_func(const LoweredFunc &f, const std::string &simple_
             module->getFunction("halide_msan_annotate_buffer_is_initialized_as_destructor");
         internal_assert(annotate_buffer_fn)
             << "Could not find halide_msan_annotate_buffer_is_initialized_as_destructor in module\n";
-        #if LLVM_VERSION < 50
-        annotate_buffer_fn->setDoesNotAlias(1);
-        #else
         annotate_buffer_fn->addParamAttr(0, Attribute::NoAlias);
-        #endif
         for (const auto &arg : f.args) {
             if (arg.kind == Argument::OutputBuffer) {
                 register_destructor(annotate_buffer_fn, sym_get(arg.name + ".buffer"), OnSuccess);
@@ -896,12 +878,68 @@ void CodeGen_LLVM::compile_buffer(const Buffer<> &buf) {
     sym_push(buf.name() + ".buffer", global_ptr);
 }
 
-Constant* CodeGen_LLVM::embed_constant_expr(Expr e) {
+Constant* CodeGen_LLVM::embed_constant_scalar_value_t(Expr e) {
     if (!e.defined()) {
         return Constant::getNullValue(scalar_value_t_type->getPointerTo());
     }
 
     internal_assert(!e.type().is_handle()) << "Should never see Handle types here.";
+
+    llvm::Value *val = codegen(e);
+    llvm::Constant *constant = dyn_cast<llvm::Constant>(val);
+    internal_assert(constant);
+
+    // Verify that the size of the LLVM value is the size we expected.
+    internal_assert((uint64_t) constant->getType()->getPrimitiveSizeInBits() == (uint64_t) e.type().bits());
+
+    // It's important that we allocate a full scalar_value_t_type here,
+    // even if the type of the value is smaller; downstream consumers should
+    // be able to correctly load an entire scalar_value_t_type regardless of its
+    // type, and if we emit just (say) a uint8 value here, the pointer may be
+    // misaligned and/or the storage after may be unmapped. LLVM doesn't support
+    // unions directly, so we'll fake it by making a constant array of the elements
+    // we need, setting the first to the constant we want, and setting the rest
+    // to all-zeros. (This happens to work because sizeof(halide_scalar_value_t) is evenly
+    // divisible by sizeof(any-union-field.)
+
+    const size_t value_size = e.type().bytes();
+    internal_assert(value_size > 0 && value_size <= sizeof(halide_scalar_value_t));
+
+    const size_t array_size = sizeof(halide_scalar_value_t) / value_size;
+    internal_assert(array_size * value_size == sizeof(halide_scalar_value_t));
+
+    vector<Constant *> array_entries(array_size, Constant::getNullValue(constant->getType()));
+    array_entries[0] = constant;
+
+    llvm::ArrayType *array_type = ArrayType::get(constant->getType(), array_size);
+    GlobalVariable *storage = new GlobalVariable(
+        *module,
+        array_type,
+        /*isConstant*/ true,
+        GlobalValue::PrivateLinkage,
+        ConstantArray::get(array_type, array_entries));
+
+    // Ensure that the storage is aligned for halide_scalar_value_t
+    storage->setAlignment((unsigned) sizeof(halide_scalar_value_t));
+
+    Constant *zero[] = {ConstantInt::get(i32_t, 0)};
+    return ConstantExpr::getBitCast(
+        ConstantExpr::getInBoundsGetElementPtr(array_type, storage, zero),
+        scalar_value_t_type->getPointerTo());
+}
+
+Constant* CodeGen_LLVM::embed_constant_expr(Expr e, llvm::Type *t) {
+    internal_assert(t != scalar_value_t_type);
+
+    if (!e.defined()) {
+        return Constant::getNullValue(t->getPointerTo());
+    }
+
+    internal_assert(!e.type().is_handle()) << "Should never see Handle types here.";
+    if (!is_const(e)) {
+        e = simplify(e);
+        internal_assert(is_const(e)) << "Should only see constant values for estimates.";
+    }
 
     llvm::Value *val = codegen(e);
     llvm::Constant *constant = dyn_cast<llvm::Constant>(val);
@@ -917,7 +955,7 @@ Constant* CodeGen_LLVM::embed_constant_expr(Expr e) {
     Constant *zero[] = {ConstantInt::get(i32_t, 0)};
     return ConstantExpr::getBitCast(
         ConstantExpr::getInBoundsGetElementPtr(constant->getType(), storage, zero),
-        scalar_value_t_type->getPointerTo());
+        t->getPointerTo());
 }
 
 // Make a wrapper to call the function with an array of pointer
@@ -980,22 +1018,50 @@ llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_
         };
         Constant *type = ConstantStruct::get(type_t_type, type_fields);
 
-        Expr def = args[arg].def;
-        Expr min = args[arg].min;
-        Expr max = args[arg].max;
+        auto argument_estimates = args[arg].argument_estimates;
         if (args[arg].type.is_handle()) {
             // Handle values are always emitted into metadata as "undefined", regardless of
             // what sort of Expr is provided.
-            def = min = max = Expr();
+            argument_estimates = ArgumentEstimates{};
         }
+
+        Constant *buffer_estimates_array_ptr;
+        if (args[arg].is_buffer() && !argument_estimates.buffer_estimates.empty()) {
+            internal_assert((int) argument_estimates.buffer_estimates.size() == args[arg].dimensions);
+            vector<Constant *> buffer_estimates_array_entries;
+            for (const auto &be : argument_estimates.buffer_estimates) {
+                Expr min = be.min;
+                if (min.defined()) min = cast<int64_t>(min);
+                Expr extent = be.extent;
+                if (extent.defined()) extent = cast<int64_t>(extent);
+                buffer_estimates_array_entries.push_back(embed_constant_expr(min, i64_t));
+                buffer_estimates_array_entries.push_back(embed_constant_expr(extent, i64_t));
+            }
+
+            llvm::ArrayType *buffer_estimates_array = ArrayType::get(i64_t->getPointerTo(), buffer_estimates_array_entries.size());
+            GlobalVariable *buffer_estimates_array_storage = new GlobalVariable(
+                *module,
+                buffer_estimates_array,
+                /*isConstant*/ true,
+                GlobalValue::PrivateLinkage,
+                ConstantArray::get(buffer_estimates_array, buffer_estimates_array_entries));
+
+            Value *zeros[] = {zero, zero};
+            buffer_estimates_array_ptr = ConstantExpr::getInBoundsGetElementPtr(buffer_estimates_array, buffer_estimates_array_storage, zeros);
+        } else {
+            buffer_estimates_array_ptr = Constant::getNullValue(i64_t->getPointerTo()->getPointerTo());
+        }
+
         Constant *argument_fields[] = {
             create_string_constant(map_string(args[arg].name)),
             ConstantInt::get(i32_t, args[arg].kind),
             ConstantInt::get(i32_t, args[arg].dimensions),
             type,
-            embed_constant_expr(def),
-            embed_constant_expr(min),
-            embed_constant_expr(max)
+            embed_constant_scalar_value_t(argument_estimates.scalar_def),
+            embed_constant_scalar_value_t(argument_estimates.scalar_min),
+            embed_constant_scalar_value_t(argument_estimates.scalar_max),
+            embed_constant_scalar_value_t(argument_estimates.scalar_estimate),
+            buffer_estimates_array_ptr
         };
         arguments_array_entries.push_back(ConstantStruct::get(argument_t_type, argument_fields));
     }
@@ -1007,9 +1073,11 @@ llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_
         GlobalValue::PrivateLinkage,
         ConstantArray::get(arguments_array, arguments_array_entries));
 
+    Constant *version = ConstantInt::get(i32_t, halide_filter_metadata_t::VERSION);
+
     Value *zeros[] = {zero, zero};
     Constant *metadata_fields[] = {
-        /* version */ zero,
+        /* version */ version,
         /* num_arguments */ ConstantInt::get(i32_t, num_args),
         /* arguments */ ConstantExpr::getInBoundsGetElementPtr(arguments_array, arguments_array_storage, zeros),
         /* target */ create_string_constant(map_string(target.to_string())),
@@ -1042,11 +1110,7 @@ void CodeGen_LLVM::optimize_module() {
     debug(3) << "Optimizing module\n";
 
     if (debug::debug_level() >= 3) {
-        #if LLVM_VERSION >= 50
         module->print(dbgs(), nullptr, false, true);
-        #else
-        module->dump();
-        #endif
     }
 
     // We override PassManager::add so that we have an opportunity to
@@ -1077,19 +1141,14 @@ void CodeGen_LLVM::optimize_module() {
 
     PassManagerBuilder b;
     b.OptLevel = 3;
-#if LLVM_VERSION >= 50
     b.Inliner = createFunctionInliningPass(b.OptLevel, 0, false);
-#else
-    b.Inliner = createFunctionInliningPass(b.OptLevel, 0);
-#endif
-    b.LoopVectorize = true;
-    b.SLPVectorize = true;
+    b.LoopVectorize = !get_target().has_feature(Target::DisableLLVMLoopVectorize);
+    b.DisableUnrollLoops = get_target().has_feature(Target::DisableLLVMLoopUnroll);
+    b.SLPVectorize = true;  // Note: SLP vectorization has no analogue in the Halide scheduling model
 
-#if LLVM_VERSION >= 50
     if (TM) {
         TM->adjustPassManager(b);
     }
-#endif
 
     if (get_target().has_feature(Target::ASAN)) {
         auto addAddressSanitizerPasses = [](const PassManagerBuilder &builder, legacy::PassManagerBase &pm) {
@@ -1108,7 +1167,11 @@ void CodeGen_LLVM::optimize_module() {
 
     if (get_target().has_feature(Target::TSAN)) {
         auto addThreadSanitizerPass = [](const PassManagerBuilder &builder, legacy::PassManagerBase &pm) {
+#if LLVM_VERSION >= 90
+            pm.add(createThreadSanitizerLegacyPassPass());
+#else
             pm.add(createThreadSanitizerPass());
+#endif
         };
         b.addExtension(PassManagerBuilder::EP_OptimizerLast, addThreadSanitizerPass);
         b.addExtension(PassManagerBuilder::EP_EnabledOnOptLevel0, addThreadSanitizerPass);
@@ -1144,11 +1207,7 @@ void CodeGen_LLVM::optimize_module() {
 
     debug(3) << "After LLVM optimizations:\n";
     if (debug::debug_level() >= 2) {
-        #if LLVM_VERSION >= 50
         module->print(dbgs(), nullptr, false, true);
-        #else
-        module->dump();
-        #endif
     }
 }
 
@@ -3343,11 +3402,7 @@ void CodeGen_LLVM::do_parallel_tasks(const vector<ParallelTask> &tasks) {
 
         llvm::Value *task_ptr = builder->CreatePointerCast(function, fn_type->getPointerTo());
 
-        #if LLVM_VERSION < 50
-        function->setDoesNotAlias(closure_arg_idx + 1);
-        #else
         function->addParamAttr(closure_arg_idx, Attribute::NoAlias);
-        #endif
 
         set_function_attributes_for_target(function, target);
 
@@ -3439,11 +3494,7 @@ void CodeGen_LLVM::do_parallel_tasks(const vector<ParallelTask> &tasks) {
         if (use_do_par_for) {
             llvm::Function *do_par_for = module->getFunction("halide_do_par_for");
             internal_assert(do_par_for) << "Could not find halide_do_par_for in initial module\n";
-            #if LLVM_VERSION < 50
-            do_par_for->setDoesNotAlias(5);
-            #else
             do_par_for->addParamAttr(4, Attribute::NoAlias);
-            #endif
             Value *args[] = {get_user_context(), task_ptr, min, extent, closure_ptr};
             debug(4) << "Creating call to do_par_for\n";
             result = builder->CreateCall(do_par_for, args);
@@ -3473,11 +3524,7 @@ void CodeGen_LLVM::do_parallel_tasks(const vector<ParallelTask> &tasks) {
     if (!result) {
         llvm::Function *do_parallel_tasks = module->getFunction("halide_do_parallel_tasks");
         internal_assert(do_parallel_tasks) << "Could not find halide_do_parallel_tasks in initial module\n";
-        #if LLVM_VERSION < 50
-        do_parallel_tasks->setDoesNotAlias(3);
-        #else
         do_parallel_tasks->addParamAttr(2, Attribute::NoAlias);
-        #endif
         Value *task_parent = sym_get("__task_parent", false);
         if (!task_parent) {
             task_parent = ConstantPointerNull::get(i8_t->getPointerTo()); // void*

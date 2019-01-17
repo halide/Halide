@@ -12,7 +12,7 @@ all: $(BIN)/runner
 
 $(BIN)/mat_mul.generator: mat_mul_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 $(BIN)/mat_mul.a: $(BIN)/mat_mul.generator
 	@mkdir -p $(@D)

@@ -14,7 +14,7 @@ protected:
     using IRVisitor::visit;
 
     void visit(const Call *op) override {
-        if (op->name == "halide_gpu_thread_barrier") {
+        if (op->is_intrinsic(Call::gpu_thread_barrier)) {
             count++;
         }
         IRVisitor::visit(op);

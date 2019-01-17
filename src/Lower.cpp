@@ -369,7 +369,7 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
         for (Parameter buf : out.output_buffers()) {
             public_args.push_back(Argument(buf.name(),
                                            Argument::OutputBuffer,
-                                           buf.type(), buf.dimensions()));
+                                           buf.type(), buf.dimensions(), buf.get_argument_estimates()));
         }
     }
 
@@ -453,9 +453,6 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     if (!t.has_feature(Target::JIT)) {
         add_legacy_wrapper(result_module, main_func);
     }
-
-    // Also append any wrappers for extern stages that expect the old buffer_t
-    wrap_legacy_extern_stages(result_module);
 
     return result_module;
 }

@@ -4,7 +4,7 @@ all: $(BIN)/filter
 
 $(BIN)/bilateral_grid.generator: bilateral_grid_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 $(BIN)/bilateral_grid.a: $(BIN)/bilateral_grid.generator
 	@mkdir -p $(@D)
@@ -37,10 +37,14 @@ $(BIN)/out.png: $(BIN)/filter
 	@mkdir -p $(@D)
 	$(BIN)/filter $(IMAGES)/gray.png $(BIN)/out.png 0.1 10
 
+$(BIN)/out.tiff: $(BIN)/filter
+	@mkdir -p $(@D)
+	$(BIN)/filter $(IMAGES)/gray.png $(BIN)/out.tiff 0.1 10
+
 clean:
 	rm -rf $(BIN)
 
-test: $(BIN)/out.png
+test: $(BIN)/out.png $(BIN)/out.tiff
 
 viz: $(BIN)/bilateral_grid.mp4
 	$(HL_VIDEOPLAYER) $^
