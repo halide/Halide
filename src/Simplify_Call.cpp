@@ -169,7 +169,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         }
     } else if (op->is_intrinsic(Call::absd)) {
         // Constant evaluate absd(a, b).
-        ConstBounds a_bounds, b_bounds;
+        ExprInfo a_bounds, b_bounds;
         Expr a = mutate(op->args[0], &a_bounds);
         Expr b = mutate(op->args[1], &b_bounds);
 
