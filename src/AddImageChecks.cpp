@@ -13,6 +13,49 @@ using std::pair;
 using std::string;
 using std::vector;
 
+namespace {
+
+// Sotres buffer asserts Stmt's ordered by buffer name and assert type.
+class BufferAsserts {
+public:
+    enum Type { DimsNoOverflow,
+                Constrained,
+                Proposed,
+                Required,
+                ElemSize,
+                HostAllignment,
+                HostNonNull,
+    };
+
+    void add_buffer(const string &buffer_name) {
+        buffer_names_.insert(buffer_name);
+    }
+
+    void insert(const BufferAsserts::Type &type, const string &buffer_name, const Stmt &stmt) {
+        asserts_data_[buffer_name][type].push_back(stmt);
+    }
+
+    // Iterates over the asserts of a certain types and run apply functor to each Stmt.
+    void process_types(std::function<void(const Stmt &)> apply, const std::vector<Type> &types) {
+        for (const std::string &buffer : buffer_names_) {
+            auto typed_asserts = asserts_data_.find(buffer);
+            if (typed_asserts == asserts_data_.end()) continue;
+            for (const Type type : types) {
+                auto asserts = typed_asserts->second.find(type);
+                if (asserts == typed_asserts->second.end()) continue;
+                for (const Stmt &stmt : asserts->second) {
+                    apply(stmt);
+                }
+            }
+        }
+    }
+
+private:
+    std::map<string, std::map<Type, std::vector<Stmt>>> asserts_data_;
+    std::set<string> buffer_names_;
+};
+}  // namespace
+
 /* Find all the externally referenced buffers in a stmt */
 class FindBuffers : public IRGraphVisitor {
 public:
@@ -20,8 +63,8 @@ public:
         Buffer<> image;
         Parameter param;
         Type type;
-        int dimensions{0};
-        bool used_on_host{false};
+        int dimensions{ 0 };
+        bool used_on_host{ false };
     };
 
     map<string, Result> buffers;
@@ -47,13 +90,13 @@ public:
             Result &r = buffers[op->name];
             r.image = op->image;
             r.type = op->type.element_of();
-            r.dimensions = (int)op->args.size();
+            r.dimensions = (int) op->args.size();
             r.used_on_host = r.used_on_host || (!in_device_loop);
         } else if (op->param.defined()) {
             Result &r = buffers[op->name];
             r.param = op->param;
             r.type = op->type.element_of();
-            r.dimensions = (int)op->args.size();
+            r.dimensions = (int) op->args.size();
             r.used_on_host = r.used_on_host || (!in_device_loop);
         }
     }
@@ -136,13 +179,8 @@ Stmt add_image_checks(Stmt s,
     vector<pair<string, Expr>> lets_required;
     vector<pair<string, Expr>> lets_constrained;
     vector<pair<string, Expr>> lets_proposed;
-    vector<Stmt> dims_no_overflow_asserts;
-    vector<Stmt> asserts_required;
-    vector<Stmt> asserts_constrained;
-    vector<Stmt> asserts_proposed;
-    vector<Stmt> asserts_elem_size;
-    vector<Stmt> asserts_host_alignment;
-    vector<Stmt> asserts_host_non_null;
+
+    BufferAsserts buffer_asserts;
     vector<Stmt> buffer_rewrites;
 
     // Inject the code that conditionally returns if we're in inference mode
@@ -204,8 +242,10 @@ Stmt add_image_checks(Stmt s,
             }
         }
 
+        buffer_asserts.add_buffer(name);
+
         Box touched = boxes[buffer_name];
-        internal_assert(touched.empty() || (int)(touched.size()) == dimensions);
+        internal_assert(touched.empty() || (int) (touched.size()) == dimensions);
 
         // The buffer may be used in one or more extern stage. If so we need to
         // expand the box touched to include the results of the
@@ -237,9 +277,9 @@ Stmt add_image_checks(Stmt s,
                                                 param.name() + ".bounds_query." + extern_user);
                 for (int j = 0; j < dimensions; j++) {
                     Expr min = Call::make(Int(32), Call::buffer_get_min,
-                                          {query_buf, j}, Call::Extern);
+                                          { query_buf, j }, Call::Extern);
                     Expr max = Call::make(Int(32), Call::buffer_get_max,
-                                          {query_buf, j}, Call::Extern);
+                                          { query_buf, j }, Call::Extern);
                     query_box.push_back(Interval(min, max));
                 }
                 merge_boxes(touched, query_box);
@@ -252,7 +292,7 @@ Stmt add_image_checks(Stmt s,
         Expr handle = Variable::make(type_of<buffer_t *>(), name + ".buffer",
                                      image, param, rdom);
         Expr inference_mode = Call::make(Bool(), Call::buffer_is_bounds_query,
-                                         {handle}, Call::Extern);
+                                         { handle }, Call::Extern);
         maybe_return_condition = maybe_return_condition || inference_mode;
 
         // Come up with a name to refer to this buffer in the error messages
@@ -268,15 +308,16 @@ Stmt add_image_checks(Stmt s,
             Expr type_bits = Variable::make(UInt(8), type_bits_name, image, param, rdom);
             Expr type_lanes = Variable::make(UInt(16), type_lanes_name, image, param, rdom);
             Expr error = Call::make(Int(32), "halide_error_bad_type",
-                                    {error_name,
-                                     type_code, make_const(UInt(8), (int)type.code()),
-                                     type_bits, make_const(UInt(8), type.bits()),
-                                     type_lanes, make_const(UInt(16), type.lanes())},
+                                    { error_name,
+                                      type_code, make_const(UInt(8), (int) type.code()),
+                                      type_bits, make_const(UInt(8), type.bits()),
+                                      type_lanes, make_const(UInt(16), type.lanes()) },
                                     Call::Extern);
-            asserts_elem_size.push_back(
-                AssertStmt::make((type_code == type.code()) &&
-                                 (type_bits == type.bits()) &&
-                                 (type_lanes == type.lanes()), error));
+            buffer_asserts.insert(BufferAsserts::ElemSize, name,
+                                  AssertStmt::make((type_code == type.code()) &&
+                                                       (type_bits == type.bits()) &&
+                                                       (type_lanes == type.lanes()),
+                                                   error));
         }
 
         // Check the dimensions matches the internally-understood dimensions
@@ -284,11 +325,11 @@ Stmt add_image_checks(Stmt s,
             string dimensions_name = name + ".dimensions";
             Expr dimensions_given = Variable::make(Int(32), dimensions_name, image, param, rdom);
             Expr error = Call::make(Int(32), "halide_error_bad_dimensions",
-                                    {error_name,
-                                     dimensions_given, make_const(Int(32), dimensions)},
+                                    { error_name,
+                                      dimensions_given, make_const(Int(32), dimensions) },
                                     Call::Extern);
-            asserts_elem_size.push_back(
-                AssertStmt::make(dimensions_given == dimensions, error));
+            buffer_asserts.insert(BufferAsserts::ElemSize, name,
+                                  AssertStmt::make(dimensions_given == dimensions, error));
         }
 
         if (touched.maybe_unused()) {
@@ -340,11 +381,10 @@ Stmt add_image_checks(Stmt s,
             Expr oob_condition = actual_min <= min_required_var && actual_max >= max_required;
 
             Expr oob_error = Call::make(Int(32), "halide_error_access_out_of_bounds",
-                                        {error_name, j, min_required_var, max_required, actual_min, actual_max},
+                                        { error_name, j, min_required_var, max_required, actual_min, actual_max },
                                         Call::Extern);
 
-            asserts_required.push_back(AssertStmt::make(oob_condition, oob_error));
-
+            buffer_asserts.insert(BufferAsserts::Required, name, AssertStmt::make(oob_condition, oob_error));
 
             // Come up with a required stride to use in bounds
             // inference mode. We don't assert it. It's just used to
@@ -356,7 +396,7 @@ Stmt add_image_checks(Stmt s,
             if (j == 0) {
                 stride_required = 1;
             } else {
-                string last_dim = std::to_string(j-1);
+                string last_dim = std::to_string(j - 1);
                 stride_required = (Variable::make(Int(32), name + ".stride." + last_dim + ".required") *
                                    Variable::make(Int(32), name + ".extent." + last_dim + ".required"));
             }
@@ -373,9 +413,9 @@ Stmt add_image_checks(Stmt s,
             Expr max_extent = make_const(UInt(64), 0x7fffffff);
             Expr actual_size = abs(cast<int64_t>(actual_extent) * actual_stride);
             Expr allocation_size_error = Call::make(Int(32), "halide_error_buffer_allocation_too_large",
-                                                    {name, actual_size, max_size}, Call::Extern);
+                                                    { name, actual_size, max_size }, Call::Extern);
             Stmt check = AssertStmt::make(actual_size <= max_size, allocation_size_error);
-            dims_no_overflow_asserts.push_back(check);
+            buffer_asserts.insert(BufferAsserts::DimsNoOverflow, name, check);
 
             // Don't repeat extents check for secondary buffers as extents must be the same as for the first one.
             if (!is_secondary_output_buffer) {
@@ -383,21 +423,21 @@ Stmt add_image_checks(Stmt s,
                     lets_overflow.push_back({ name + ".total_extent." + dim, cast<int64_t>(actual_extent) });
                 } else {
                     max_size = cast<int64_t>(max_size);
-                    Expr last_dim = Variable::make(Int(64), name + ".total_extent." + std::to_string(j-1));
+                    Expr last_dim = Variable::make(Int(64), name + ".total_extent." + std::to_string(j - 1));
                     Expr this_dim = actual_extent * last_dim;
                     Expr this_dim_var = Variable::make(Int(64), name + ".total_extent." + dim);
                     lets_overflow.push_back({ name + ".total_extent." + dim, this_dim });
                     Expr error = Call::make(Int(32), "halide_error_buffer_extents_too_large",
-                                            {name, this_dim_var, max_size}, Call::Extern);
+                                            { name, this_dim_var, max_size }, Call::Extern);
                     Stmt check = AssertStmt::make(this_dim_var <= max_size, error);
-                    dims_no_overflow_asserts.push_back(check);
+                    buffer_asserts.insert(BufferAsserts::DimsNoOverflow, name, check);
                 }
 
                 // It is never legal to have a negative buffer extent.
                 Expr negative_extent_condition = actual_extent >= 0;
                 Expr negative_extent_error = Call::make(Int(32), "halide_error_buffer_extents_negative",
-                                                        {error_name, j, actual_extent}, Call::Extern);
-                asserts_required.push_back(AssertStmt::make(negative_extent_condition, negative_extent_error));
+                                                        { error_name, j, actual_extent }, Call::Extern);
+                buffer_asserts.insert(BufferAsserts::Required, name, AssertStmt::make(negative_extent_condition, negative_extent_error));
             }
         }
 
@@ -405,7 +445,7 @@ Stmt add_image_checks(Stmt s,
         BufferBuilder builder;
         builder.buffer_memory = Variable::make(type_of<struct halide_buffer_t *>(), name + ".buffer");
         builder.shape_memory = Call::make(type_of<struct halide_dimension_t *>(),
-                                          Call::buffer_get_shape, {builder.buffer_memory},
+                                          Call::buffer_get_shape, { builder.buffer_memory },
                                           Call::Extern);
         builder.type = type;
         builder.dimensions = dimensions;
@@ -432,7 +472,7 @@ Stmt add_image_checks(Stmt s,
 
             Expr stride_orig = Variable::make(Int(32), stride_name, image, param, rdom);
             Expr extent_orig = Variable::make(Int(32), extent_name, image, param, rdom);
-            Expr min_orig    = Variable::make(Int(32), min_name, image, param, rdom);
+            Expr min_orig = Variable::make(Int(32), min_name, image, param, rdom);
 
             Expr stride_required = Variable::make(Int(32), stride_name + ".required");
             Expr extent_required = Variable::make(Int(32), extent_name + ".required");
@@ -456,24 +496,24 @@ Stmt add_image_checks(Stmt s,
                         << "as the first output buffer.\n";
 
                     stride_constrained = param.stride_constraint(i);
-                } else if (image.defined() && (int)i < image.dimensions()) {
+                } else if (image.defined() && (int) i < image.dimensions()) {
                     stride_constrained = image.dim(i).stride();
                 }
 
                 std::string min0_name = buffer_name + ".0.min." + dim;
-                if (replace_with_constrained.count(min0_name) > 0 ) {
+                if (replace_with_constrained.count(min0_name) > 0) {
                     min_constrained = replace_with_constrained[min0_name];
                 } else {
                     min_constrained = Variable::make(Int(32), min0_name);
                 }
 
                 std::string extent0_name = buffer_name + ".0.extent." + dim;
-                if (replace_with_constrained.count(extent0_name) > 0 ) {
+                if (replace_with_constrained.count(extent0_name) > 0) {
                     extent_constrained = replace_with_constrained[extent0_name];
                 } else {
                     extent_constrained = Variable::make(Int(32), extent0_name);
                 }
-            } else if (image.defined() && (int)i < image.dimensions()) {
+            } else if (image.defined() && (int) i < image.dimensions()) {
                 stride_constrained = image.dim(i).stride();
                 extent_constrained = image.dim(i).extent();
                 min_constrained = image.dim(i).min();
@@ -486,7 +526,7 @@ Stmt add_image_checks(Stmt s,
             if (stride_constrained.defined()) {
                 // Come up with a suggested stride by passing the
                 // required region through this constraint.
-                constraints.push_back({ stride_orig, stride_constrained});
+                constraints.push_back({ stride_orig, stride_constrained });
                 stride_constrained = substitute(replace_with_required, stride_constrained);
                 lets_proposed.push_back({ stride_name + ".proposed", stride_constrained });
             } else {
@@ -515,9 +555,9 @@ Stmt add_image_checks(Stmt s,
             Expr max_required = min_required + extent_required - 1;
             Expr check = (min_proposed <= min_required) && (max_proposed >= max_required);
             Expr error = Call::make(Int(32), "halide_error_constraints_make_required_region_smaller",
-                                    {error_name, i, min_proposed, max_proposed, min_required, max_required},
+                                    { error_name, i, min_proposed, max_proposed, min_required, max_required },
                                     Call::Extern);
-            asserts_proposed.push_back(AssertStmt::make((!inference_mode) || check, error));
+            buffer_asserts.insert(BufferAsserts::Proposed, name, AssertStmt::make((!inference_mode) || check, error));
 
             // stride_required is just a suggestion. It's ok if the
             // constraints shuffle them around in ways that make it
@@ -525,7 +565,7 @@ Stmt add_image_checks(Stmt s,
             /*
             check = (stride_proposed >= stride_required);
             error = "Applying the constraints to the required stride made it smaller";
-            asserts_proposed.push_back(AssertStmt::make((!inference_mode) || check, error, vector<Expr>()));
+            buffer_asserts.process_types(apply_functor, BufferAsserts::Proposed, name, AssertStmt::make((!inference_mode) || check, error, vector<Expr>()));
             */
         }
 
@@ -546,24 +586,24 @@ Stmt add_image_checks(Stmt s,
             Expr error = 0;
             if (!no_asserts) {
                 error = Call::make(Int(32), "halide_error_constraint_violated",
-                                   {name, var, constrained_var_str, constrained_var},
+                                   { name, var, constrained_var_str, constrained_var },
                                    Call::Extern);
             }
 
             // Check the var passed in equals the constrained version (when not in inference mode)
-            asserts_constrained.push_back(AssertStmt::make(var == constrained_var, error));
+            buffer_asserts.insert(BufferAsserts::Constrained, name, AssertStmt::make(var == constrained_var, error));
         }
 
         // For the buffers used on host, check the host field is non-null
         Expr host_ptr = Variable::make(Handle(), name, image, param, ReductionDomain());
         if (used_on_host) {
             Expr error = Call::make(Int(32), "halide_error_host_is_null",
-                                    {error_name}, Call::Extern);
+                                    { error_name }, Call::Extern);
             Expr check = (host_ptr != make_zero(host_ptr.type()));
             if (touched.maybe_unused()) {
                 check = !touched.used || check;
             }
-            asserts_host_non_null.push_back(AssertStmt::make(check, error));
+            buffer_asserts.insert(BufferAsserts::HostNonNull, name, AssertStmt::make(check, error));
         }
 
         // and check alignment of the host field
@@ -572,29 +612,27 @@ Stmt add_image_checks(Stmt s,
             Expr u64t_host_ptr = reinterpret<uint64_t>(host_ptr);
             Expr align_condition = (u64t_host_ptr % alignment_required) == 0;
             Expr error = Call::make(Int(32), "halide_error_unaligned_host_ptr",
-                                    {name, alignment_required}, Call::Extern);
-            asserts_host_alignment.push_back(AssertStmt::make(align_condition, error));
+                                    { name, alignment_required }, Call::Extern);
+            buffer_asserts.insert(BufferAsserts::HostAllignment, name, AssertStmt::make(align_condition, error));
         }
     }
+
+    auto make_block = [&](const Stmt &stmt) {
+        s = Block::make(stmt, s);
+    };
 
     // Inject the code that checks the host pointers.
     if (!no_asserts) {
-        for (size_t i = asserts_host_non_null.size(); i > 0; i--) {
-            s = Block::make(asserts_host_non_null[i-1], s);
-        }
-        for (size_t i = asserts_host_alignment.size(); i > 0; i--) {
-            s = Block::make(asserts_host_alignment[i-1], s);
-        }
+        buffer_asserts.process_types(
+            make_block,
+            { BufferAsserts::DimsNoOverflow, BufferAsserts::HostNonNull, BufferAsserts::HostAllignment });
     }
+
     // Inject the code that checks that no dimension math overflows
     if (!no_asserts) {
-        for (size_t i = dims_no_overflow_asserts.size(); i > 0; i--) {
-            s = Block::make(dims_no_overflow_asserts[i-1], s);
-        }
-
         // Inject the code that defines the proposed sizes.
         for (size_t i = lets_overflow.size(); i > 0; i--) {
-            s = LetStmt::make(lets_overflow[i-1].first, lets_overflow[i-1].second, s);
+            s = LetStmt::make(lets_overflow[i - 1].first, lets_overflow[i - 1].second, s);
         }
     }
 
@@ -611,20 +649,14 @@ Stmt add_image_checks(Stmt s,
     // Inject the code that checks the constraints are correct. We
     // need these regardless of how NoAsserts is set, because they are
     // what gets Halide to actually exploit the constraint.
-    for (size_t i = asserts_constrained.size(); i > 0; i--) {
-        s = Block::make(asserts_constrained[i-1], s);
-    }
+
+    buffer_asserts.process_types(make_block, { BufferAsserts::Constrained });
 
     if (!no_asserts) {
         // Inject the code that checks for out-of-bounds access to the buffers.
-        for (size_t i = asserts_required.size(); i > 0; i--) {
-            s = Block::make(asserts_required[i-1], s);
-        }
-
-        // Inject the code that checks that elem_sizes are ok.
-        for (size_t i = asserts_elem_size.size(); i > 0; i--) {
-            s = Block::make(asserts_elem_size[i-1], s);
-        }
+        buffer_asserts.process_types(
+            make_block,
+            { BufferAsserts::Required, BufferAsserts::ElemSize });
     }
 
     // Inject the code that returns early for inference mode.
@@ -633,30 +665,28 @@ Stmt add_image_checks(Stmt s,
 
         // Inject the code that does the buffer rewrites for inference mode.
         for (size_t i = buffer_rewrites.size(); i > 0; i--) {
-            s = Block::make(buffer_rewrites[i-1], s);
+            s = Block::make(buffer_rewrites[i - 1], s);
         }
     }
 
     if (!no_asserts) {
         // Inject the code that checks the proposed sizes still pass the bounds checks
-        for (size_t i = asserts_proposed.size(); i > 0; i--) {
-            s = Block::make(asserts_proposed[i-1], s);
-        }
+        buffer_asserts.process_types(make_block, { BufferAsserts::Proposed });
     }
 
     // Inject the code that defines the proposed sizes.
     for (size_t i = lets_proposed.size(); i > 0; i--) {
-        s = LetStmt::make(lets_proposed[i-1].first, lets_proposed[i-1].second, s);
+        s = LetStmt::make(lets_proposed[i - 1].first, lets_proposed[i - 1].second, s);
     }
 
     // Inject the code that defines the constrained sizes.
     for (size_t i = lets_constrained.size(); i > 0; i--) {
-        s = LetStmt::make(lets_constrained[i-1].first, lets_constrained[i-1].second, s);
+        s = LetStmt::make(lets_constrained[i - 1].first, lets_constrained[i - 1].second, s);
     }
 
     // Inject the code that defines the required sizes produced by bounds inference.
     for (size_t i = lets_required.size(); i > 0; i--) {
-        s = LetStmt::make(lets_required[i-1].first, lets_required[i-1].second, s);
+        s = LetStmt::make(lets_required[i - 1].first, lets_required[i - 1].second, s);
     }
 
     return s;
