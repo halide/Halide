@@ -336,10 +336,20 @@ ModulusRemainder ModulusRemainder::unify(const ModulusRemainder &a, const Modulu
 ModulusRemainder ModulusRemainder::intersect(const ModulusRemainder &a, const ModulusRemainder &b) {
     // We have x == ma * y + ra == mb * z + rb
 
+    // We want to synthesize these two facts into one modulus
+    // remainder relationship. We are permitted to be
+    // conservatively-large, so it's OK if some elements of the result
+    // only satisfy one of the two constraints.
+
     // For coprime ma and mb you want to use the Chinese remainder
     // theorem. In our case, the moduli will almost always be
     // powers of two, so we should just return the smaller of the two
     // sets (the one with the larger modulus).
+
+    // This is enough for all the cases we care about currently, and
+    // technically satisfies the requirements of the function, but
+    // clearly something more clever could go here.
+
     return (a.modulus > b.modulus) ? a : b;
 }
 
