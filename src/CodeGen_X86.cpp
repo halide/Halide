@@ -94,12 +94,7 @@ void CodeGen_X86::visit(const GT *op) {
         // split it up ourselves.
 
         Type t = op->a.type();
-        int vec_bits = t.lanes() * t.bits();
-        int natural_vec_bits = target.natural_vector_size(t) * t.bits();
-        int slice_bits = ((vec_bits > 256 && natural_vec_bits > 256) ? 512 :
-                          (vec_bits > 128 && natural_vec_bits > 128) ? 256 :
-                          128);
-        int slice_size = slice_bits / t.bits();
+        int slice_size = vector_lanes_for_slice(t);
 
         Value *a = codegen(op->a), *b = codegen(op->b);
         vector<Value *> result;
@@ -131,12 +126,7 @@ void CodeGen_X86::visit(const EQ *op) {
         // split it up ourselves.
 
         Type t = op->a.type();
-        int vec_bits = t.lanes() * t.bits();
-        int natural_vec_bits = target.natural_vector_size(t) * t.bits();
-        int slice_bits = ((vec_bits > 256 && natural_vec_bits > 256) ? 512 :
-                          (vec_bits > 128 && natural_vec_bits > 128) ? 256 :
-                          128);
-        int slice_size = slice_bits / t.bits();
+        int slice_size = vector_lanes_for_slice(t);
 
         Value *a = codegen(op->a), *b = codegen(op->b);
         vector<Value *> result;
@@ -182,12 +172,7 @@ void CodeGen_X86::visit(const Select *op) {
         Value *true_val = codegen(op->true_value);
         Value *false_val = codegen(op->false_value);
         Type t = op->true_value.type();
-        int vec_bits = t.lanes() * t.bits();
-        int natural_vec_bits = target.natural_vector_size(t) * t.bits();
-        int slice_bits = ((vec_bits > 256 && natural_vec_bits > 256) ? 512 :
-                          (vec_bits > 128 && natural_vec_bits > 128) ? 256 :
-                          128);
-        int slice_size = slice_bits / t.bits();
+        int slice_size = vector_lanes_for_slice(t);
 
         vector<Value *> result;
         for (int i = 0; i < t.lanes(); i += slice_size) {
@@ -473,6 +458,18 @@ int CodeGen_X86::native_vector_bits() const {
     } else {
         return 128;
     }
+}
+
+int CodeGen_X86::vector_lanes_for_slice(Type t) const {
+    // We don't want to pad all the way out to natural_vector_size,
+    // because llvm generates crappy code. Better to use a smaller
+    // type if we can.
+    int vec_bits = t.lanes() * t.bits();
+    int natural_vec_bits = target.natural_vector_size(t) * t.bits();
+    int slice_bits = ((vec_bits > 256 && natural_vec_bits > 256) ? 512 :
+                      (vec_bits > 128 && natural_vec_bits > 128) ? 256 :
+                      128);
+    return slice_bits / t.bits();
 }
 
 }  // namespace Internal
