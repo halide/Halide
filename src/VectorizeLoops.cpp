@@ -199,12 +199,12 @@ class RewriteAccessToVectorAlloc : public IRMutator2 {
 
     Expr visit(const Load *op) override {
         return Load::make(op->type, op->name, mutate_index(op->name, op->index),
-                          op->image, op->param, mutate(op->predicate));
+                          op->image, op->param, mutate(op->predicate), op->alignment * lanes);
     }
 
     Stmt visit(const Store *op) override {
         return Store::make(op->name, mutate(op->value), mutate_index(op->name, op->index),
-                           op->param, mutate(op->predicate));
+                           op->param, mutate(op->predicate), op->alignment * lanes);
     }
 
 public:
@@ -294,7 +294,7 @@ class PredicateLoadStore : public IRMutator2 {
             return op;
         }
         vectorized = true;
-        return Load::make(op->type, op->name, index, op->image, op->param, predicate);
+        return Load::make(op->type, op->name, index, op->image, op->param, predicate, op->alignment);
     }
 
     Stmt visit(const Store *op) override {
@@ -325,7 +325,7 @@ class PredicateLoadStore : public IRMutator2 {
             return op;
         }
         vectorized = true;
-        return Store::make(op->name, value, index, op->param, predicate);
+        return Store::make(op->name, value, index, op->param, predicate, op->alignment);
     }
 
     Expr visit(const Call *op) override {
@@ -462,7 +462,7 @@ class VectorSubs : public IRMutator2 {
             int w = index.type().lanes();
             predicate = widen(predicate, w);
             return Load::make(op->type.with_lanes(w), op->name, index, op->image,
-                              op->param, predicate);
+                              op->param, predicate, op->alignment);
         }
     }
 
@@ -696,7 +696,7 @@ class VectorSubs : public IRMutator2 {
         } else {
             int lanes = std::max(predicate.type().lanes(), std::max(value.type().lanes(), index.type().lanes()));
             return Store::make(op->name, widen(value, lanes), widen(index, lanes),
-                               op->param, widen(predicate, lanes));
+                               op->param, widen(predicate, lanes), op->alignment);
         }
     }
 

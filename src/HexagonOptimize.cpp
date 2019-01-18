@@ -1277,10 +1277,6 @@ class EliminateInterleaves : public IRMutator2 {
 
     template <typename NodeType, typename LetType>
     NodeType visit_let(const LetType *op) {
-        // Push alignment info on the stack
-        if (op->value.type() == Int(32)) {
-            alignment_analyzer.push(op->name, op->value);
-        }
 
         Expr value = mutate(op->value);
         string deinterleaved_name;
@@ -1306,11 +1302,6 @@ class EliminateInterleaves : public IRMutator2 {
             vars.pop(deinterleaved_name);
         } else {
             body = mutate(op->body);
-        }
-
-        // Pop alignment info from the scope stack
-        if (op->value.type() == Int(32)) {
-            alignment_analyzer.pop(op->name);
         }
 
         if (value.same_as(op->value) && body.same_as(op->body)) {
@@ -1622,7 +1613,7 @@ class EliminateInterleaves : public IRMutator2 {
         if (predicate.same_as(op->predicate) && value.same_as(op->value) && index.same_as(op->index)) {
             return op;
         } else {
-            return Store::make(op->name, value, index, op->param, predicate);
+            return Store::make(op->name, value, index, op->param, predicate, op->alignment); // TODO(dsharlet): What happens to alignment here?
         }
     }
 
@@ -1662,8 +1653,8 @@ class EliminateInterleaves : public IRMutator2 {
     using IRMutator2::visit;
 
 public:
-    EliminateInterleaves(int native_vector_bytes, Scope<ModulusRemainder>& alignment_info) :
-        native_vector_bits(native_vector_bytes * 8), alignment_analyzer(native_vector_bytes, alignment_info) {}
+    EliminateInterleaves(int native_vector_bytes) :
+        native_vector_bits(native_vector_bytes * 8), alignment_analyzer(native_vector_bytes) {}
 };
 
 // After eliminating interleaves, there may be some that remain. This
@@ -1798,7 +1789,7 @@ class OptimizeShuffles : public IRMutator2 {
                     // returns a native vector size to account for this.
                     Expr lut = Load::make(op->type.with_lanes(const_extent), op->name,
                                           Ramp::make(base, 1, const_extent),
-                                          op->image, op->param, const_true(const_extent));
+                                          op->image, op->param, const_true(const_extent), ModulusRemainder()); // TODO(dsharlet): What is the correct alignment here?
 
                     // We know the size of the LUT is not more than 256, so we
                     // can safely cast the index to 8 bit, which
@@ -1810,7 +1801,7 @@ class OptimizeShuffles : public IRMutator2 {
             }
         }
         if (!index.same_as(op->index)) {
-            return Load::make(op->type, op->name, index, op->image, op->param, op->predicate);
+            return Load::make(op->type, op->name, index, op->image, op->param, op->predicate, op->alignment);
         } else {
             return op;
         }
@@ -1877,7 +1868,7 @@ private:
                 }
                 const Load *res = maybe_load.as<Load>();
                 Expr shifted_load = Load::make(res->type, res->name, res->index + maybe_shuffle->slice_begin(),
-                                                res->image, res->param, res->predicate);
+                                               res->image, res->param, res->predicate, ModulusRemainder());
                 return shifted_load;
             } else if (maybe_shuffle->is_concat()) {
                 return are_contiguous_vectors(maybe_shuffle->vectors);
@@ -2150,7 +2141,7 @@ class ScatterGatherGenerator : public IRMutator2 {
     // the input parameter value.
     Expr is_scatter_acc(const Store *op) {
         Expr lhs = Load::make(op->value.type(), op->name, op->index, Buffer<>(),
-                              Parameter(), const_true(op->value.type().lanes()));
+                              Parameter(), const_true(op->value.type().lanes()), op->alignment);
         Expr wild = Variable::make(op->value.type(), "*");
         vector<Expr> matches;
         if (expr_match(lhs + wild, op->value, matches) ||
@@ -2325,7 +2316,7 @@ Stmt scatter_gather_generator(Stmt s) {
     return s;
 }
 
-Stmt optimize_hexagon_instructions(Stmt s, Target t, Scope<ModulusRemainder> &alignment_info) {
+Stmt optimize_hexagon_instructions(Stmt s, Target t) {
     // Convert some expressions to an equivalent form which get better
     // optimized in later stages for hexagon
     s = RearrangeExpressions().mutate(s);
@@ -2335,7 +2326,7 @@ Stmt optimize_hexagon_instructions(Stmt s, Target t, Scope<ModulusRemainder> &al
     s = OptimizePatterns(t).mutate(s);
 
     // Try to eliminate any redundant interleave/deinterleave pairs.
-    s = EliminateInterleaves(t.natural_vector_size(Int(8)), alignment_info).mutate(s);
+    s = EliminateInterleaves(t.natural_vector_size(Int(8))).mutate(s);
 
     // There may be interleaves left over that we can fuse with other
     // operations.

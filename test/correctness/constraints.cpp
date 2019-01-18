@@ -111,6 +111,9 @@ int alignment_constraints() {
     aligned.vectorize(x, 4);
     unaligned.vectorize(x, 4);
 
+    aligned.output_buffer().dim(0).set_min(0);
+    unaligned.output_buffer().dim(0).set_min(0);
+
     Target target = get_jit_target_from_environment();
     target.set_feature(Target::NoRuntime);
 

@@ -150,7 +150,7 @@ class SloppyUnpredicateLoads : public IRMutator2 {
         }
         predicate = Broadcast::make(condition, predicate.type().lanes());
 
-        return Load::make(op->type, op->name, index, op->image, op->param, predicate);
+        return Load::make(op->type, op->name, index, op->image, op->param, predicate, op->alignment);
     }
 
     using IRMutator2::visit;
@@ -323,7 +323,7 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
     #endif
 
     debug(1) << "Aligning loads for HVX....\n";
-    body = align_loads(body, target.natural_vector_size(Int(8)), alignment_info);
+    body = align_loads(body, target.natural_vector_size(Int(8)));
     body = common_subexpression_elimination(body);
     // Don't simplify here, otherwise it will re-collapse the loads we
     // want to carry across loop iterations.
@@ -342,7 +342,7 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
 
     // Optimize the IR for Hexagon.
     debug(1) << "Optimizing Hexagon instructions...\n";
-    body = optimize_hexagon_instructions(body, target, alignment_info);
+    body = optimize_hexagon_instructions(body, target);
 
     debug(1) << "Adding calls to qurt_hvx_lock, if necessary...\n";
     body = inject_hvx_lock_unlock(body, target);

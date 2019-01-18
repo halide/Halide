@@ -18,7 +18,7 @@ class FuzzFloatStores : public IRMutator2 {
             value = reinterpret(mask.type(), value);
             value = value & ~mask;
             value = reinterpret(t, value);
-            return Store::make(op->name, value, op->index, op->param, op->predicate);
+            return Store::make(op->name, value, op->index, op->param, op->predicate, op->alignment);
         } else {
             return IRMutator2::visit(op);
         }

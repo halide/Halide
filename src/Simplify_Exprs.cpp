@@ -129,7 +129,18 @@ Expr Simplify::visit(const Load *op, ExprInfo *bounds) {
     found_buffer_reference(op->name);
 
     Expr predicate = mutate(op->predicate, nullptr);
-    Expr index = mutate(op->index, nullptr);
+
+    ExprInfo index_info;
+    Expr index = mutate(op->index, &index_info);
+
+    ExprInfo base_info;
+    if (const Ramp *r = index.as<Ramp>()) {
+        mutate(r->base, &base_info);
+    }
+
+    base_info.alignment = ModulusRemainder::intersect(base_info.alignment, index_info.alignment);
+
+    ModulusRemainder align = ModulusRemainder::intersect(op->alignment, base_info.alignment);
 
     const Broadcast *b_index = index.as<Broadcast>();
     const Broadcast *b_pred = predicate.as<Broadcast>();
@@ -138,12 +149,12 @@ Expr Simplify::visit(const Load *op, ExprInfo *bounds) {
         return undef(op->type);
     } else if (b_index && b_pred) {
         // Load of a broadcast should be broadcast of the load
-        Expr load = Load::make(op->type.element_of(), op->name, b_index->value, op->image, op->param, b_pred->value);
+        Expr load = Load::make(op->type.element_of(), op->name, b_index->value, op->image, op->param, b_pred->value, align);
         return Broadcast::make(load, b_index->lanes);
-    } else if (predicate.same_as(op->predicate) && index.same_as(op->index)) {
+    } else if (predicate.same_as(op->predicate) && index.same_as(op->index) && align == op->alignment) {
         return op;
     } else {
-        return Load::make(op->type, op->name, index, op->image, op->param, predicate);
+        return Load::make(op->type, op->name, index, op->image, op->param, predicate, align);
     }
 }
 

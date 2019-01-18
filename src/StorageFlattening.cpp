@@ -245,7 +245,7 @@ private:
             return Evaluate::make(store);
         } else {
             Expr idx = mutate(flatten_args(op->name, op->args, Buffer<>(), output_buf));
-            return Store::make(op->name, value, idx, output_buf, const_true(value.type().lanes()));
+            return Store::make(op->name, value, idx, output_buf, const_true(value.type().lanes()), ModulusRemainder());
         }
     }
 
@@ -290,7 +290,7 @@ private:
             } else {
                 Expr idx = mutate(flatten_args(op->name, op->args, op->image, op->param));
                 return Load::make(op->type, op->name, idx, op->image, op->param,
-                                  const_true(op->type.lanes()));
+                                  const_true(op->type.lanes()), ModulusRemainder());
             }
 
         } else {
@@ -383,8 +383,9 @@ class PromoteToMemoryType : public IRMutator2 {
     Expr visit(const Load *op) override {
         Type t = upgrade(op->type);
         if (t != op->type) {
-            return Cast::make(op->type, Load::make(t, op->name, mutate(op->index),
-                                                   op->image, op->param, mutate(op->predicate)));
+            return Cast::make(op->type,
+                              Load::make(t, op->name, mutate(op->index),
+                                         op->image, op->param, mutate(op->predicate), ModulusRemainder()));
         } else {
             return IRMutator2::visit(op);
         }
@@ -394,7 +395,7 @@ class PromoteToMemoryType : public IRMutator2 {
         Type t = upgrade(op->value.type());
         if (t != op->value.type()) {
             return Store::make(op->name, Cast::make(t, mutate(op->value)), mutate(op->index),
-                                                    op->param, mutate(op->predicate));
+                               op->param, mutate(op->predicate), ModulusRemainder());
         } else {
             return IRMutator2::visit(op);
         }

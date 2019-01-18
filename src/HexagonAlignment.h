@@ -13,13 +13,10 @@ namespace Halide {
 namespace Internal {
 
 class HexagonAlignmentAnalyzer {
-    Scope<ModulusRemainder> alignment_info;
     int required_alignment;
 public:
-    HexagonAlignmentAnalyzer(int required_alignment,
-                             const Scope<ModulusRemainder>& alignment_info) : required_alignment(required_alignment) {
-        this->alignment_info.set_containing_scope(&alignment_info);
-    }
+    HexagonAlignmentAnalyzer(int required_alignment) {}
+
     /** Analyze the index of a load/store instruction for alignment
      *  Returns true if it can determing that the address of the store or load is aligned, false otherwise.
      */
@@ -39,40 +36,25 @@ public:
         // If this is a parameter, the base_alignment should be
         // host_alignment. Otherwise, this is an internal buffer,
         // which we assume has been aligned to the required alignment.
-        int base_alignment =
-            op->param.defined() ? op->param.host_alignment() : required_alignment;
+        if (op->param.defined() && (op->param.host_alignment() % required_alignment != 0)) {
+            return false;
+        }
 
-        *aligned_offset = 0;
-        bool known_alignment = false;
-        if (base_alignment % required_alignment == 0) {
-            // We know the base is aligned. Try to find out the offset
-            // of the ramp base from an aligned offset.
-            known_alignment = reduce_expr_modulo(index, native_lanes, aligned_offset,
-                                                 alignment_info);
+        bool known_alignment = (op->alignment.modulus % required_alignment) == 0;
+        if (known_alignment) {
+            *aligned_offset = op->alignment.remainder % required_alignment;
         }
-        if (known_alignment && (*aligned_offset == 0)) {
-            debug(3) << "Is Aligned\n";
-            return true;
-        }
-        debug(3) << "Is Unaligned\n";
-        return false;
+        return known_alignment;
     }
+
     bool is_aligned(const Load *op, int64_t *aligned_offset) {
         int native_lanes = required_alignment / op->type.bytes();
         return is_aligned_impl<Load>(op, native_lanes, aligned_offset);
     }
+
     bool is_aligned(const Store *op, int64_t *aligned_offset) {
         int native_lanes = required_alignment / op->value.type().bytes();
         return is_aligned_impl<Store>(op, native_lanes, aligned_offset);
-    }
-
-    Scope<ModulusRemainder>& get() { return alignment_info; }
-
-    void push(const std::string &name, Expr v) {
-        alignment_info.push(name, modulus_remainder(v, alignment_info));
-    }
-    void pop(const std::string &name) {
-        alignment_info.pop(name);
     }
 };
 

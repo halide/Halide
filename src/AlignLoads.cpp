@@ -21,8 +21,8 @@ namespace {
 // intended vector out of the aligned vector.
 class AlignLoads : public IRMutator2 {
 public:
-    AlignLoads(int alignment, const Scope<ModulusRemainder>& alignment_info)
-        : alignment_analyzer(alignment, alignment_info), required_alignment(alignment) {}
+    AlignLoads(int alignment)
+        : alignment_analyzer(alignment), required_alignment(alignment) {}
 
 private:
     HexagonAlignmentAnalyzer alignment_analyzer;
@@ -36,7 +36,9 @@ private:
     Expr make_load(const Load *load, Expr index) {
         internal_assert(is_one(load->predicate)) << "Load should not be predicated.\n";
         return mutate(Load::make(load->type.with_lanes(index.type().lanes()), load->name,
-                                 index, load->image, load->param, const_true(index.type().lanes())));
+                                 index, load->image, load->param,
+                                 const_true(index.type().lanes()),
+                                 ModulusRemainder() /* TODO(dsharlet) */));
     }
 
     Expr visit(const Load *op) override {
@@ -69,7 +71,8 @@ private:
         }
 
         int64_t aligned_offset = 0;
-        bool is_aligned = alignment_analyzer.is_aligned(op, &aligned_offset);
+        bool is_aligned =
+            alignment_analyzer.is_aligned(op, &aligned_offset);
         // We know the alignement_analyzer has been able to reason about alignment
         // if the following is true.
         bool known_alignment = is_aligned || (!is_aligned && aligned_offset != 0);
@@ -134,16 +137,8 @@ private:
 
     template<typename NodeType, typename LetType>
     NodeType visit_let(const LetType *op) {
-        if (op->value.type() == Int(32)) {
-            alignment_analyzer.push(op->name, op->value);
-        }
-
         Expr value = mutate(op->value);
         NodeType body = mutate(op->body);
-
-        if (op->value.type() == Int(32)) {
-            alignment_analyzer.pop(op->name);
-        }
 
         if (!value.same_as(op->value) || !body.same_as(op->body)) {
             return LetType::make(op->name, value, body);
@@ -158,8 +153,8 @@ private:
 
 }  // namespace
 
-Stmt align_loads(Stmt s, int alignment, const Scope<ModulusRemainder> &alignment_info) {
-    return AlignLoads(alignment, alignment_info).mutate(s);
+Stmt align_loads(Stmt s, int alignment) {
+    return AlignLoads(alignment).mutate(s);
 }
 
 } // namespace Internal

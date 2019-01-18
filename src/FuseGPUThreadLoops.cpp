@@ -377,11 +377,11 @@ class ExtractSharedAllocations : public IRMutator2 {
             shared[op->name].max = barrier_stage;
             if (device_api == DeviceAPI::OpenGLCompute) {
                 return Load::make(op->type, shared_mem_name + "_" + op->name,
-                                  index, op->image, op->param, predicate);
+                                  index, op->image, op->param, predicate, op->alignment);
             } else {
                 Expr base = Variable::make(Int(32), op->name + ".shared_offset");
                 return Load::make(op->type, shared_mem_name, base + index,
-                                  op->image, op->param, predicate);
+                                  op->image, op->param, predicate, ModulusRemainder());
             }
 
         } else {
@@ -397,10 +397,10 @@ class ExtractSharedAllocations : public IRMutator2 {
             Expr value = mutate(op->value);
             if (device_api == DeviceAPI::OpenGLCompute) {
                 return Store::make(shared_mem_name + "_" + op->name, value, index,
-                                   op->param, predicate);
+                                   op->param, predicate, op->alignment);
             } else {
                 Expr base = Variable::make(Int(32), op->name + ".shared_offset");
-                return Store::make(shared_mem_name, value, base + index, op->param, predicate);
+                return Store::make(shared_mem_name, value, base + index, op->param, predicate, ModulusRemainder());
             }
         } else {
             return IRMutator2::visit(op);

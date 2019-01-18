@@ -644,7 +644,7 @@ class ReplaceParams : public IRMutator2 {
         auto i = replacements.find(op->name);
         if (i != replacements.end()) {
             return Load::make(op->type, op->name, mutate(op->index), op->image,
-                              i->second, mutate(op->predicate));
+                              i->second, mutate(op->predicate), op->alignment);
         } else {
             return IRMutator2::visit(op);
         }
@@ -654,7 +654,7 @@ class ReplaceParams : public IRMutator2 {
         auto i = replacements.find(op->name);
         if (i != replacements.end()) {
             return Store::make(op->name, mutate(op->value), mutate(op->index),
-                               i->second, mutate(op->predicate));
+                               i->second, mutate(op->predicate), op->alignment);
         } else {
             return IRMutator2::visit(op);
         }
@@ -674,14 +674,10 @@ class InjectHexagonRpc : public IRMutator2 {
 
     Module &device_code;
 
-    // Alignment info for Int(32) variables in scope, so we don't lose
-    // the information when creating Hexagon kernels.
-    Scope<ModulusRemainder> alignment_info;
-
     Expr state_var(const std::string& name, Type type) {
         return Let::make(name, state_var_ptr(name, type),
                          Load::make(type_of<void*>(), name, 0,
-                                    Buffer<>(), Parameter(), const_true()));
+                                    Buffer<>(), Parameter(), const_true(), ModulusRemainder()));
     }
 
     Expr state_var_ptr(const std::string& name, Type type) {
@@ -789,9 +785,6 @@ class InjectHexagonRpc : public IRMutator2 {
         args.insert(args.end(), output_buffers.begin(), output_buffers.end());
         for (const auto& i : c.vars) {
             LoweredArgument arg(i.first, Argument::InputScalar, i.second, 0, ArgumentEstimates{});
-            if (alignment_info.contains(i.first)) {
-                arg.alignment = alignment_info.get(i.first);
-            }
             args.push_back(arg);
         }
         device_code.append(LoweredFunc(hex_name, args, body, LinkageType::ExternalPlusMetadata));
@@ -842,32 +835,6 @@ class InjectHexagonRpc : public IRMutator2 {
         params.push_back(Call::make(type_of<int*>(), Call::make_struct, arg_flags, Call::Intrinsic));
 
         return call_extern_and_assert("halide_hexagon_run", params);
-    }
-
-    Expr visit(const Let *op) override {
-        if (op->value.type() == Int(32)) {
-            alignment_info.push(op->name, modulus_remainder(op->value, alignment_info));
-        }
-
-        Expr expr = IRMutator2::visit(op);
-
-        if (op->value.type() == Int(32)) {
-            alignment_info.pop(op->name);
-        }
-        return expr;
-    }
-
-    Stmt visit(const LetStmt *op) override {
-        if (op->value.type() == Int(32)) {
-            alignment_info.push(op->name, modulus_remainder(op->value, alignment_info));
-        }
-
-        Stmt stmt = IRMutator2::visit(op);
-
-        if (op->value.type() == Int(32)) {
-            alignment_info.pop(op->name);
-        }
-        return stmt;
     }
 
 public:

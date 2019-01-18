@@ -946,7 +946,7 @@ public:
                                      attribute_order[attribute_name];
 
             stmt = Store::make(vertex_buffer_name, op->args[1], offset_expression,
-                               Parameter(), const_true(op->args[1].type().lanes()));
+                               Parameter(), const_true(op->args[1].type().lanes()), ModulusRemainder());
         } else {
             IRFilter::visit(op);
         }
@@ -1047,13 +1047,15 @@ public:
                 mutated_body = make_block(Store::make(vertex_buffer_name,
                                                       coord1,
                                                       gpu_varying_offset + 1,
-                                                      Parameter(), const_true()),
+                                                      Parameter(), const_true(),
+                                                      ModulusRemainder()),
                                            mutated_body);
 
                 mutated_body = make_block(Store::make(vertex_buffer_name,
-                                                       coord0,
-                                                       gpu_varying_offset + 0,
-                                                       Parameter(), const_true()),
+                                                      coord0,
+                                                      gpu_varying_offset + 0,
+                                                      Parameter(), const_true(),
+                                                      ModulusRemainder()),
                                            mutated_body);
 
                 // TODO: The value 2 in this expression must be changed to reflect

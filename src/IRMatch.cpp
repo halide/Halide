@@ -189,7 +189,7 @@ public:
 
     void visit(const Load *op) override {
         const Load *e = expr.as<Load>();
-        if (result && e && types_match(op->type, e->type) && e->name == op->name) {
+        if (result && e && types_match(op->type, e->type) && e->name == op->name && e->alignment == op->alignment) {
             expr = e->predicate;
             op->predicate.accept(this);
             expr = e->index;
