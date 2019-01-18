@@ -28,10 +28,12 @@ struct ModulusRemainder {
 
     int64_t modulus, remainder;
 
-    // Take the conservative union of two sets.
+    // Take a conservatively-large union of two sets. Contains all
+    // elements from both sets, and maybe some more stuff.
     static ModulusRemainder unify(const ModulusRemainder &a, const ModulusRemainder &b);
 
-    // Take the conservative intersection of two sets
+    // Take a conservatively-large intersection. Everything in the
+    // result is in at least one of the two sets, but not always both.
     static ModulusRemainder intersect(const ModulusRemainder &a, const ModulusRemainder &b);
 
     bool operator==(const ModulusRemainder &other) const {
