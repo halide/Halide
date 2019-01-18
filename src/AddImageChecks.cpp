@@ -26,23 +26,16 @@ public:
                 HostAllignment,
                 HostNonNull,
     };
-
-    void add_buffer(const string &buffer_name) {
-        buffer_names_.insert(buffer_name);
-    }
-
     void insert(const BufferAsserts::Type &type, const string &buffer_name, const Stmt &stmt) {
         asserts_data_[buffer_name][type].push_back(stmt);
     }
 
     // Iterates over the asserts of a certain types and run apply functor to each Stmt.
     void process_types(std::function<void(const Stmt &)> apply, const std::vector<Type> &types) {
-        for (const std::string &buffer : buffer_names_) {
-            auto typed_asserts = asserts_data_.find(buffer);
-            if (typed_asserts == asserts_data_.end()) continue;
+        for (const auto &current_buffer_asserts : asserts_data_) {
             for (const Type type : types) {
-                auto asserts = typed_asserts->second.find(type);
-                if (asserts == typed_asserts->second.end()) continue;
+                const auto &asserts = current_buffer_asserts.second.find(type);
+                if (asserts == current_buffer_asserts.second.end()) continue;
                 for (const Stmt &stmt : asserts->second) {
                     apply(stmt);
                 }
@@ -52,7 +45,6 @@ public:
 
 private:
     std::map<string, std::map<Type, std::vector<Stmt>>> asserts_data_;
-    std::set<string> buffer_names_;
 };
 }  // namespace
 
@@ -241,8 +233,6 @@ Stmt add_image_checks(Stmt s,
                 }
             }
         }
-
-        buffer_asserts.add_buffer(name);
 
         Box touched = boxes[buffer_name];
         internal_assert(touched.empty() || (int) (touched.size()) == dimensions);
