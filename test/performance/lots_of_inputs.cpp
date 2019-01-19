@@ -5,8 +5,8 @@ using namespace Halide;
 using namespace Halide::Tools;
 
 int main(int argc, char **argv) {
-    // TODO(ataei): Increase the size once we have a reasnable compilation time. 
-    // This takes several inutes for bigger sizes now.
+    // TODO(ataei): Increase the size once we have a reasonable compilation time. 
+    // This takes several minutes for bigger sizes now.
     int size = 64;
     int buffer_size = 4096;
     Var x("x"), y("y");

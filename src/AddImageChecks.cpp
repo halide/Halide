@@ -15,7 +15,7 @@ using std::vector;
 
 namespace {
 
-// Sotres buffer asserts Stmt's ordered by buffer name and assert type.
+// Stores buffer asserts Stmt's ordered by buffer name and assert type.
 class BufferAsserts {
 public:
     enum Type { DimsNoOverflow,
@@ -23,7 +23,7 @@ public:
                 Proposed,
                 Required,
                 ElemSize,
-                HostAllignment,
+                HostAlignment,
                 HostNonNull,
     };
     void insert(const BufferAsserts::Type &type, const string &buffer_name, const Stmt &stmt) {
@@ -603,7 +603,7 @@ Stmt add_image_checks(Stmt s,
             Expr align_condition = (u64t_host_ptr % alignment_required) == 0;
             Expr error = Call::make(Int(32), "halide_error_unaligned_host_ptr",
                                     {name, alignment_required}, Call::Extern);
-            buffer_asserts.insert(BufferAsserts::HostAllignment, name, AssertStmt::make(align_condition, error));
+            buffer_asserts.insert(BufferAsserts::HostAlignment, name, AssertStmt::make(align_condition, error));
         }
     }
 
@@ -615,7 +615,7 @@ Stmt add_image_checks(Stmt s,
     if (!no_asserts) {
         buffer_asserts.process_types(
             make_block,
-            { BufferAsserts::DimsNoOverflow, BufferAsserts::HostNonNull, BufferAsserts::HostAllignment });
+            { BufferAsserts::HostNonNull, BufferAsserts::HostAlignment, BufferAsserts::DimsNoOverflow });
     }
 
     // Inject the code that checks that no dimension math overflows
