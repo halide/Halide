@@ -6,7 +6,7 @@ namespace Internal {
 using std::vector;
 using std::string;
 
-Expr Simplify::visit(const Call *op, ConstBounds *bounds) {
+Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
     // Calls implicitly depend on host, dev, mins, and strides of the buffer referenced
     if (op->call_type == Call::Image || op->call_type == Call::Halide) {
         found_buffer_reference(op->name, op->args.size());
@@ -139,7 +139,7 @@ Expr Simplify::visit(const Call *op, ConstBounds *bounds) {
         }
     } else if (op->is_intrinsic(Call::abs)) {
         // Constant evaluate abs(x).
-        ConstBounds a_bounds;
+        ExprInfo a_bounds;
         Expr a = mutate(op->args[0], &a_bounds);
 
         Type ta = a.type();
@@ -169,7 +169,7 @@ Expr Simplify::visit(const Call *op, ConstBounds *bounds) {
         }
     } else if (op->is_intrinsic(Call::absd)) {
         // Constant evaluate absd(a, b).
-        ConstBounds a_bounds, b_bounds;
+        ExprInfo a_bounds, b_bounds;
         Expr a = mutate(op->args[0], &a_bounds);
         Expr b = mutate(op->args[1], &b_bounds);
 
