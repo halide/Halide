@@ -46,6 +46,19 @@ int static_sign(Expr x) {
     }
     return 0;
 }
+
+class HasSIO : public Halide::Internal::IRVisitor {
+    using IRVisitor::visit;
+
+    void visit(const Halide::Internal::Call *call_expr) override {
+        if (call_expr->is_intrinsic(Halide::Internal::Call::signed_integer_overflow)) count++;
+        IRVisitor::visit(call_expr);
+    }
+public:
+    int count;
+    HasSIO() : count(0) {}
+};
+
 }  // anonymous namespace
 
 Expr find_constant_bound(const Expr &e, Direction d, const Scope<Interval> &scope) {
@@ -1185,6 +1198,19 @@ Interval bounds_of_expr_in_scope(Expr expr, const Scope<Interval> &scope, const 
             << " should have been a scalar of type " << expected
             << ": " << b.interval.max << "\n";
     }
+
+    // If there is signed integer overflow, replace it with unbounded.
+    {
+      HasSIO min_overflow;
+      b.interval.min.accept(&min_overflow);
+      if (min_overflow.count > 0) b.interval.min = Interval::neg_inf;
+    }
+    {
+      HasSIO max_overflow;
+      b.interval.max.accept(&max_overflow);
+      if (max_overflow.count > 0) b.interval.max = Interval::pos_inf;
+    }
+
     return b.interval;
 }
 
