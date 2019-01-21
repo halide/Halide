@@ -1167,10 +1167,10 @@ void CodeGen_LLVM::optimize_module() {
 
     if (get_target().has_feature(Target::TSAN)) {
         auto addThreadSanitizerPass = [](const PassManagerBuilder &builder, legacy::PassManagerBase &pm) {
-#if LLVM_VERSION >= 90
+#if LLVM_VERSION >= 80
             pm.add(createThreadSanitizerLegacyPassPass());
 #else
-            pm.add(createThreadSanitizerPass());
+            pm.add(createThreadSanitizerPass());            
 #endif
         };
         b.addExtension(PassManagerBuilder::EP_OptimizerLast, addThreadSanitizerPass);

@@ -44,7 +44,7 @@
 #include <llvm/Transforms/Utils/ModuleUtils.h>
 #include <llvm/Transforms/Utils/SymbolRewriter.h>
 #include <llvm/Transforms/Instrumentation.h>
-#if LLVM_VERSION >= 90
+#if LLVM_VERSION >= 80
 #include <llvm/Transforms/Instrumentation/ThreadSanitizer.h>
 #endif
 #if LLVM_VERSION >= 80
