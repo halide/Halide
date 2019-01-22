@@ -42,7 +42,7 @@ public:
         // If this is a parameter, the base_alignment should be
         // host_alignment. Otherwise, this is an internal buffer,
         // which we assume has been aligned to the required alignment.
-        if (op->param.defined() && ((op->param.host_alignment() % native_lanes) != 0)) {
+        if (op->param.defined() && ((op->param.host_alignment() % required_alignment) != 0)) {
             return false;
         }
 
