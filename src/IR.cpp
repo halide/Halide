@@ -612,6 +612,16 @@ Expr Call::make(Type type, const std::string &name, const std::vector<Expr> &arg
     return node;
 }
 
+Expr Call::make_indeterminate_expression(Type type) {
+    static std::atomic<int> counter;
+    return Call::make(type, Call::indeterminate_expression, {counter++}, Call::Intrinsic);
+}
+
+Expr Call::make_signed_integer_overflow(Type type) {
+    static std::atomic<int> counter;
+    return Call::make(type, Call::signed_integer_overflow, {counter++}, Call::Intrinsic);
+}
+
 Expr Variable::make(Type type, const std::string &name, Buffer<> image, Parameter param, ReductionDomain reduction_domain) {
     internal_assert(!name.empty());
     Variable *node = new Variable;
