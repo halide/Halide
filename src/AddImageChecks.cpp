@@ -1,3 +1,5 @@
+#include <functional>
+
 #include "AddImageChecks.h"
 #include "IRVisitor.h"
 #include "Simplify.h"
