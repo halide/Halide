@@ -188,7 +188,7 @@ class RewriteAccessToVectorAlloc : public IRMutator2 {
 
     using IRMutator2::visit;
 
-    Expr mutate_index(string a, Expr index) {
+    Expr mutate_index(const string &a, Expr index) {
         index = mutate(index);
         if (a == alloc) {
             return index * lanes + var;
@@ -197,14 +197,22 @@ class RewriteAccessToVectorAlloc : public IRMutator2 {
         }
     }
 
+    ModulusRemainder mutate_alignment(const string &a, const ModulusRemainder &align) {
+        if (a == alloc) {
+            return align * lanes;
+        } else {
+            return align;
+        }
+    }
+
     Expr visit(const Load *op) override {
         return Load::make(op->type, op->name, mutate_index(op->name, op->index),
-                          op->image, op->param, mutate(op->predicate), op->alignment * lanes);
+                          op->image, op->param, mutate(op->predicate), mutate_alignment(op->name, op->alignment));
     }
 
     Stmt visit(const Store *op) override {
         return Store::make(op->name, mutate(op->value), mutate_index(op->name, op->index),
-                           op->param, mutate(op->predicate), op->alignment * lanes);
+                           op->param, mutate(op->predicate), mutate_alignment(op->name, op->alignment));
     }
 
 public:
