@@ -1613,7 +1613,7 @@ class EliminateInterleaves : public IRMutator2 {
         if (predicate.same_as(op->predicate) && value.same_as(op->value) && index.same_as(op->index)) {
             return op;
         } else {
-            return Store::make(op->name, value, index, op->param, predicate, op->alignment); // TODO(dsharlet): What happens to alignment here?
+            return Store::make(op->name, value, index, op->param, predicate, op->alignment);
         }
     }
 
@@ -1771,6 +1771,7 @@ class OptimizeShuffles : public IRMutator2 {
                 (unaligned_index_bounds.min / align) * align,
                 ((unaligned_index_bounds.max + align) / align) * align - 1
             };
+            ModulusRemainder alignment(align, 0);
 
             for (Interval index_bounds : {aligned_index_bounds, unaligned_index_bounds}) {
                 Expr index_span = span_of_bounds(index_bounds);
@@ -1789,7 +1790,9 @@ class OptimizeShuffles : public IRMutator2 {
                     // returns a native vector size to account for this.
                     Expr lut = Load::make(op->type.with_lanes(const_extent), op->name,
                                           Ramp::make(base, 1, const_extent),
-                                          op->image, op->param, const_true(const_extent), ModulusRemainder()); // TODO(dsharlet): What is the correct alignment here?
+                                          op->image, op->param, const_true(const_extent), alignment);
+                    // Only the first iteration of this loop is aligned.
+                    alignment = ModulusRemainder();
 
                     // We know the size of the LUT is not more than 256, so we
                     // can safely cast the index to 8 bit, which

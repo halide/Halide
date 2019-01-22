@@ -394,6 +394,7 @@ class LoopCarryOverLoop : public IRMutator2 {
             for (size_t i = 0; i < c.size(); i++) {
                 const Load *orig_load = loads[c[i]][0];
                 Expr scratch_idx = scratch_index(i, orig_load->type);
+                // Don't worry about alignment - the load is at a constant address.
                 Expr load_from_scratch = Load::make(orig_load->type, scratch, scratch_idx,
                                                     Buffer<>(), Parameter(), const_true(orig_load->type.lanes()), ModulusRemainder());
                 for (const Load *l : loads[c[i]]) {

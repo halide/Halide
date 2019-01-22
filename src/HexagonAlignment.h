@@ -12,6 +12,7 @@
 namespace Halide {
 namespace Internal {
 
+// TODO: This class is barely stateful, and could probably be replaced with free functions.
 class HexagonAlignmentAnalyzer {
     int required_alignment;
 public:
@@ -33,6 +34,7 @@ public:
             debug(3) << "Is Unaligned\n";
             return false;
         }
+
         // If this is a parameter, the base_alignment should be
         // host_alignment. Otherwise, this is an internal buffer,
         // which we assume has been aligned to the required alignment.
