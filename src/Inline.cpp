@@ -91,8 +91,8 @@ void validate_schedule_inlined_function(Function f) {
     }
 }
 
-class Inliner : public IRMutator2 {
-    using IRMutator2::visit;
+class Inliner : public IRMutator {
+    using IRMutator::visit;
 
     Function func;
 
@@ -121,7 +121,7 @@ class Inliner : public IRMutator2 {
             return body;
 
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
@@ -154,7 +154,7 @@ class Inliner : public IRMutator2 {
         bool old_found = found;
 
         found = false;
-        Stmt stmt = IRMutator2::visit(op);
+        Stmt stmt = IRMutator::visit(op);
 
         if (found) {
             stmt = common_subexpression_elimination(stmt);

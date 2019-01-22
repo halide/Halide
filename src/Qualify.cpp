@@ -7,8 +7,8 @@ namespace Internal {
 using std::string;
 
 // Prefix all names in an expression with some string.
-class QualifyExpr : public IRMutator2 {
-    using IRMutator2::visit;
+class QualifyExpr : public IRMutator {
+    using IRMutator::visit;
 
     const string &prefix;
 

@@ -19,7 +19,7 @@ namespace {
 // sequences of aligned loads by loading aligned vectors that cover
 // the original unaligned load, and then slicing or shuffling the
 // intended vector out of the aligned vector.
-class AlignLoads : public IRMutator2 {
+class AlignLoads : public IRMutator {
 public:
     AlignLoads(int alignment, const Scope<ModulusRemainder>& alignment_info)
         : alignment_analyzer(alignment, alignment_info), required_alignment(alignment) {}
@@ -30,7 +30,7 @@ private:
     // Loads and stores should ideally be aligned to the vector width in bytes.
     int required_alignment;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     // Rewrite a load to have a new index, updating the type if necessary.
     Expr make_load(const Load *load, Expr index) {
@@ -42,17 +42,17 @@ private:
     Expr visit(const Load *op) override {
         if (!is_one(op->predicate)) {
             // TODO(psuriana): Do nothing to predicated loads for now.
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
 
         if (!op->type.is_vector()) {
             // Nothing to do for scalar loads.
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
 
         if (op->image.defined()) {
             // We can't reason about the alignment of external images.
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
 
         Expr index = mutate(op->index);
@@ -61,11 +61,11 @@ private:
         if (!ramp || !const_stride) {
             // We can't handle indirect loads, or loads with
             // non-constant strides.
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
         if (!(*const_stride == 1 || *const_stride == 2 || *const_stride == 3)) {
             // Handle ramps with stride 1, 2 or 3 only.
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
 
         int64_t aligned_offset = 0;
@@ -129,7 +129,7 @@ private:
             return Shuffle::make_slice(aligned_load, (int)aligned_offset, 1, lanes);
         }
 
-        return IRMutator2::visit(op);
+        return IRMutator::visit(op);
     }
 
     template<typename NodeType, typename LetType>

@@ -17,8 +17,8 @@ using std::vector;
 // let statements outside of each realize node, or at the top level if
 // they're not internal allocations.
 
-class AllocationInference : public IRMutator2 {
-    using IRMutator2::visit;
+class AllocationInference : public IRMutator {
+    using IRMutator::visit;
 
     const map<string, Function> &env;
     const FuncValueBounds &func_bounds;
