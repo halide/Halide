@@ -15,6 +15,7 @@
 #include "Simplify.h"
 #include "Solve.h"
 #include "Substitute.h"
+#include "Associativity.h"
 
 namespace Halide {
 
@@ -114,27 +115,31 @@ void ReverseAccumulationVisitor::propagate_adjoints(
     // throws an error to the users.
     // For example:
     //
+    // 1.
     // f(x) = g(x)
     // f(x) = f(x) * f(x)
     // f'(x) depends on first f(x)
     //
+    // 2.
     // f(x) = 0
     // f(x) = 2 * f(x) + g(r.x)
     // g'(r.x) depends on intermediate f'(x)
     //
-    // This is fine because the self reference adjoint is 1:
+    // The following is fine because the self reference adjoint is 1:
     // f(x) = f(x) + g(r.x)
     // (when it's 1 all instances of f(x) have the same adjoint)
     //
     // The issue is that the self reference to f makes propagation to g
     // using the wrong adjoints.
     //
-    // The user should rewrite the above updates to the following.
+    // The user should rewrite the above updates to the following:
     //
+    // 1.
     // f_(x, 0) = g(x)
     // f_(x, 1) = f_(x, 0) * f_(x, 0)
     // f(x) = f_(x, 1)
     //
+    // 2.
     // f_(x, 0) = 0
     // f_(x, r.x + 1) = 2 * f_(x, r.x) + g(r.x)
     // f(x) = f_(x, r.x.max() + 1)
@@ -973,7 +978,9 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
         FuncKey func_key;
         if (op->func.defined()) {
             Function func(op->func);
-            func_key = func.name() != current_func.name() ? FuncKey{ func.name(), func.updates().size() - 1 } : FuncKey{ func.name(), current_update_id - 1 };
+            func_key = func.name() != current_func.name() ?
+                FuncKey{ func.name(), func.updates().size() - 1 } :
+                FuncKey{ func.name(), current_update_id - 1 };
             if (is_current_non_overwriting_scan && is_self_referencing_phase) {
                 func_key = FuncKey{ func.name(), current_update_id };
             }
@@ -1196,10 +1203,10 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
             }
         }
 
-        // General scattering simplification rules
+        // General scattering simplification rules:
         // For each expression in lhs,
-        // check if it is an expression of a single rvar and
-        // spans the same interval of the function's bound
+        // check if it is an expression of a single (associative & commutative)
+        // rvar and spans the same interval of the function's bound
         // if so we can rewrite it back to pure variables
         // e.g.
         // f(r.x) = g(r.x)
@@ -1212,12 +1219,14 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
         // f(4 * r.x + r.y) = g(r.x) + h(4 * r.x + r.y)
         // => f(x) = g(x/4) + h(x)
         vector<Var> func_to_update_args = func_to_update.args();
+        AssociativeOp associative_op = prove_associativity(
+            func_to_update.name(), lhs, {adjoint});
         for (int i = 0; i < (int) lhs.size(); i++) {
             Expr lhs_arg = substitute_in_all_lets(lhs[i]);
             const Variable *var = lhs_arg.as<Variable>();
             const Add *add = lhs_arg.as<Add>();
-            // f(r.x) = g(r.x)
-            // => f(x) = g(x)
+            // f(r.x) = ... && r is associative
+            // => f(x) = ...
             if (var != nullptr && var->reduction_domain.defined() &&
                 var->reduction_domain.split_predicate().size() == 0) {
                 ReductionDomain rdom = var->reduction_domain;
@@ -1240,7 +1249,8 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
                                     simplify(rvar.min + rvar.extent - 1));
                 if (can_prove(r_interval.min <= t_interval.min &&
                               r_interval.max >= t_interval.max) &&
-                    false) {
+                        associative_op.associative() &&
+                        associative_op.commutative()) {
                     lhs[i] = func_to_update_args[i];
                     // Replace other occurence of rvar in lhs
                     for (int j = 0; j < (int) lhs.size(); j++) {
@@ -1327,7 +1337,7 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
                 gather_rvariables(lhs_arg);
             org_rvar_maps.insert(maps.begin(), maps.end());
         }
-        // If the update is a non-commutative or non-associative, we need to flip the
+        // If the update is non-commutative or non-associative, we need to flip the
         // original set of reduction variable
         if (is_current_non_overwriting_scan) {
             // For each lhs
@@ -1495,7 +1505,9 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
                 func_to_update(lhs)[op->value_index] += adjoint;
             }
         } else {
-            Definition &def = func_to_update.num_update_definitions() == 0 ? func_to_update.function().definition() : func_to_update.function().update(func_to_update.num_update_definitions() - 1);
+            Definition &def = func_to_update.num_update_definitions() == 0 ?
+                func_to_update.function().definition() :
+                func_to_update.function().update(func_to_update.num_update_definitions() - 1);
             vector<Expr> &values = def.values();
             ReductionDomain rdom;
             for (const auto &val : values) {
