@@ -4,6 +4,7 @@
 
 #include "Associativity.h"
 #include "BoundaryConditions.h"
+#include "CSE.h"
 #include "Derivative.h"
 #include "DerivativeUtils.h"
 #include "Error.h"
@@ -16,7 +17,6 @@
 #include "Simplify.h"
 #include "Solve.h"
 #include "Substitute.h"
-#include "CSE.h"
 
 namespace Halide {
 
@@ -1399,8 +1399,7 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
         // f(4 * r.x + r.y) = g(r.x) + h(4 * r.x + r.y)
         // => f(x) = g(x/4) + h(x)
         vector<Var> func_to_update_args = func_to_update.args();
-        Expr new_adjoint = func_to_update.values().size() == 1 ?
-            (func_to_update(lhs) + adjoint) : (func_to_update(lhs)[op->value_index] + adjoint);
+        Expr new_adjoint = func_to_update.values().size() == 1 ? (func_to_update(lhs) + adjoint) : (func_to_update(lhs)[op->value_index] + adjoint);
         std::vector<Expr> new_adjoint_tuple(func_to_update.values().size(), Expr(0.f));
         new_adjoint_tuple[op->value_index] = new_adjoint;
         AssociativeOp associative_op = prove_associativity(
@@ -1443,7 +1442,7 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
                                   r_interval.max >= t_interval.max)) {
                         lhs[i] = func_to_update_args[i];
                         Expr clamped_arg = clamp(func_to_update_args[i],
-                            r_interval.min, r_interval.max);
+                                                 r_interval.min, r_interval.max);
                         // Replace other occurence of rvar in lhs
                         for (int j = 0; j < (int) lhs.size(); j++) {
                             if (j != i) {
@@ -1452,11 +1451,11 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
                             }
                         }
                         // Take care of boundary condition
-                        Expr in_bound = func_to_update_args[i] >= r_interval.min && 
+                        Expr in_bound = func_to_update_args[i] >= r_interval.min &&
                                         func_to_update_args[i] <= r_interval.max;
                         adjoint = select(in_bound,
-                            simplify(substitute(rvar.var, clamped_arg, adjoint)),
-                            make_const(adjoint.type(), 0));
+                                         simplify(substitute(rvar.var, clamped_arg, adjoint)),
+                                         make_const(adjoint.type(), 0));
                     }
                     // f(4 * r.x + r.y) = g(r.x) + h(4 * r.x + r.y)
                     // => f(x) = g(x/4) + h(x)
