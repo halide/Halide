@@ -182,7 +182,7 @@ Expr step_forwards(Expr e, const Scope<Expr> &linear) {
 }
 
 /** Carry loads over a single For loop body. */
-class LoopCarryOverLoop : public IRMutator2 {
+class LoopCarryOverLoop : public IRMutator {
     // Track vars that step linearly with loop iterations
     Scope<Expr> linear;
     vector<pair<string, Expr>> containing_lets;
@@ -193,7 +193,7 @@ class LoopCarryOverLoop : public IRMutator2 {
 
     int max_carried_values;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Stmt visit(const LetStmt *op) override {
         // Track containing LetStmts and their linearity w.r.t. the
@@ -502,15 +502,15 @@ public:
     vector<ScratchAllocation> allocs;
 };
 
-class LoopCarry : public IRMutator2 {
-    using IRMutator2::visit;
+class LoopCarry : public IRMutator {
+    using IRMutator::visit;
 
     int max_carried_values;
     Scope<> in_consume;
 
     Stmt visit(const ProducerConsumer *op) override {
         if (op->is_producer) {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         } else {
             ScopedBinding<> bind(in_consume, op->name);
             Stmt body = mutate(op->body);
@@ -540,7 +540,7 @@ class LoopCarry : public IRMutator2 {
             }
             return stmt;
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 

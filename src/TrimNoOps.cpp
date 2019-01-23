@@ -23,8 +23,8 @@ using std::vector;
 namespace {
 
 /** Remove identity functions, even if they have side-effects. */
-class StripIdentities : public IRMutator2 {
-    using IRMutator2::visit;
+class StripIdentities : public IRMutator {
+    using IRMutator::visit;
 
     Expr visit(const Call *op) override {
         if (op->is_intrinsic(Call::return_second) ||
@@ -32,7 +32,7 @@ class StripIdentities : public IRMutator2 {
             op->is_intrinsic(Call::likely_if_innermost)) {
             return mutate(op->args.back());
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 };
@@ -174,14 +174,14 @@ public:
     Expr condition = const_true();
 };
 
-class SimplifyUsingBounds : public IRMutator2 {
+class SimplifyUsingBounds : public IRMutator {
     struct ContainingLoop {
         string var;
         Interval i;
     };
     vector<ContainingLoop> containing_loops;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     // Can we prove a condition over the non-rectangular domain of the for loops we're in?
     bool provably_true_over_domain(Expr test) {
@@ -233,7 +233,7 @@ class SimplifyUsingBounds : public IRMutator2 {
 
     Expr visit(const Min *op) override {
         if (!op->type.is_int() || op->type.bits() < 32) {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         } else {
             Expr a = mutate(op->a);
             Expr b = mutate(op->b);
@@ -250,7 +250,7 @@ class SimplifyUsingBounds : public IRMutator2 {
 
     Expr visit(const Max *op) override {
         if (!op->type.is_int() || op->type.bits() < 32) {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         } else {
             Expr a = mutate(op->a);
             Expr b = mutate(op->b);
@@ -266,7 +266,7 @@ class SimplifyUsingBounds : public IRMutator2 {
 
     template<typename Cmp>
     Expr visit_cmp(const Cmp *op) {
-        Expr expr = IRMutator2::visit(op);
+        Expr expr = IRMutator::visit(op);
         if (provably_true_over_domain(expr)) {
             expr = make_one(op->type);
         } else if (provably_true_over_domain(!expr)) {
@@ -333,14 +333,14 @@ public:
     SimplifyUsingBounds() {}
 };
 
-class TrimNoOps : public IRMutator2 {
-    using IRMutator2::visit;
+class TrimNoOps : public IRMutator {
+    using IRMutator::visit;
 
     Stmt visit(const For *op) override {
         // Bounds of GPU loops can't depend on outer gpu loop vars
         if (CodeGen_GPU_Dev::is_gpu_var(op->name)) {
             debug(3) << "TrimNoOps found gpu loop var: " << op->name << "\n";
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
 
         Stmt body = mutate(op->body);

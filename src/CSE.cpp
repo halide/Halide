@@ -80,7 +80,7 @@ bool should_extract(const Expr &e, bool lift_all) {
 
 // A global-value-numbering of expressions. Returns canonical form of
 // the Expr and writes out a global value numbering as a side-effect.
-class GVN : public IRMutator2 {
+class GVN : public IRMutator {
 public:
     struct Entry {
         Expr expr;
@@ -140,7 +140,7 @@ public:
 
         // Rebuild using things already in the numbering.
         Expr old_e = e;
-        Expr new_e = IRMutator2::mutate(e);
+        Expr new_e = IRMutator::mutate(e);
 
         // See if it's there in another form after being rebuilt
         // (e.g. because it was a let variable).
@@ -163,7 +163,7 @@ public:
     }
 
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Expr visit(const Let *let) override {
         // Visit the value and add it to the numbering.
@@ -243,12 +243,12 @@ public:
 };
 
 /** Rebuild an expression using a map of replacements. Works on graphs without exploding. */
-class Replacer : public IRMutator2 {
+class Replacer : public IRMutator {
 public:
     map<Expr, Expr, ExprCompare> replacements;
     Replacer(const map<Expr, Expr, ExprCompare> &r) : replacements(r) {}
 
-    using IRMutator2::mutate;
+    using IRMutator::mutate;
 
     Expr mutate(const Expr &e) override {
         map<Expr, Expr, ExprCompare>::iterator iter = replacements.find(e);
@@ -258,7 +258,7 @@ public:
         }
 
         // Rebuild it, replacing children.
-        Expr new_e = IRMutator2::mutate(e);
+        Expr new_e = IRMutator::mutate(e);
 
         // In case we encounter this expr again.
         replacements[e] = new_e;
@@ -267,11 +267,11 @@ public:
     }
 };
 
-class CSEEveryExprInStmt : public IRMutator2 {
+class CSEEveryExprInStmt : public IRMutator {
     bool lift_all;
 
 public:
-    using IRMutator2::mutate;
+    using IRMutator::mutate;
 
     Expr mutate(const Expr &e) override {
         return common_subexpression_elimination(e, lift_all);
@@ -346,12 +346,12 @@ namespace {
 
 // Normalize all names in an expr so that expr compares can be done
 // without worrying about mere name differences.
-class NormalizeVarNames : public IRMutator2 {
+class NormalizeVarNames : public IRMutator {
     int counter;
 
     map<string, string> new_names;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Expr visit(const Variable *var) override {
         map<string, string>::iterator iter = new_names.find(var->name);

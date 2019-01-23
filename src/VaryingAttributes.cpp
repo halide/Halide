@@ -29,9 +29,9 @@ Stmt make_block(Stmt first, Stmt rest) {
 // the member found to determine which; order value 2 means non-linear, it
 // could be disqualified due to being quadratic, bilinear or the result of an
 // unknown function.
-class FindLinearExpressions : public IRMutator2 {
+class FindLinearExpressions : public IRMutator {
 protected:
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     bool in_glsl_loops;
 
@@ -401,16 +401,16 @@ public:
 };
 
 // This visitor removes glsl_varying intrinsics.
-class RemoveVaryingAttributeTags : public IRMutator2 {
+class RemoveVaryingAttributeTags : public IRMutator {
 public:
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Expr visit(const Call *op) override {
         if (op->name == Call::glsl_varying) {
             // Replace the call expression with its wrapped argument expression
             return op->args[1];
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 };
@@ -424,9 +424,9 @@ Stmt remove_varying_attributes(Stmt s)
 // variables. After this visitor is called, the varying attribute expressions
 // will no longer appear in the IR tree, only variables with the .varying tag
 // will remain.
-class ReplaceVaryingAttributeTags : public IRMutator2 {
+class ReplaceVaryingAttributeTags : public IRMutator {
 public:
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Expr visit(const Call *op) override {
         if (op->name == Call::glsl_varying) {
@@ -438,7 +438,7 @@ public:
 
             return Variable::make(op->type, name);
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 };
@@ -494,9 +494,9 @@ void prune_varying_attributes(Stmt loop_stmt, std::map<std::string, Expr>& varyi
 // converted to floating point. In other cases, like an affine transformation of
 // image coordinates, the loop variables are cast to floating point within the
 // interpolated expression.
-class CastVaryingVariables : public IRMutator2 {
+class CastVaryingVariables : public IRMutator {
 protected:
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Expr visit(const Variable *op) override {
         if ((ends_with(op->name, ".varying")) && (op->type != Float(32))) {
@@ -517,9 +517,9 @@ protected:
 
 // This visitor casts the named variables to float, and then propagates the
 // float type through the expression. The variable is offset by 0.5f
-class CastVariablesToFloatAndOffset : public IRMutator2 {
+class CastVariablesToFloatAndOffset : public IRMutator {
 protected:
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Expr visit(const Variable *op) override {
 
@@ -670,7 +670,7 @@ public:
 // IRFilter allows these expressions to be filtered out while maintaining the
 // existing structure of Let variable scopes around them.
 //
-// TODO: could this be made to use the IRMutator2 pattern instead?
+// TODO: could this be made to use the IRMutator pattern instead?
 class IRFilter : public IRVisitor {
 public:
     virtual Stmt mutate(const Expr &e);
@@ -1133,9 +1133,9 @@ Stmt used_in_codegen(Type type_, const std::string &v_) {
 
 // This mutator inserts a set of serial for-loops to create the vertex buffer
 // on the host using CreateVertexBufferOnHost above.
-class CreateVertexBufferHostLoops : public IRMutator2 {
+class CreateVertexBufferHostLoops : public IRMutator {
 public:
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Stmt visit(const For *op) override {
         if (CodeGen_GPU_Dev::is_gpu_var(op->name) && op->device_api == DeviceAPI::GLSL) {
@@ -1247,7 +1247,7 @@ public:
                    Block::make(used_in_codegen(Int(32), "glsl.num_padded_attributes"),
                    Free::make(vs.vertex_buffer_name))))))))));
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 };

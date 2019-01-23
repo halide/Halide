@@ -629,7 +629,7 @@ public:
 
 namespace Internal {
 struct ErrorBuffer;
-class IRMutator2;
+class IRMutator;
 }  // namespace Internal
 
 /** A halide function. This class represents one stage in a Halide
@@ -1064,7 +1064,7 @@ public:
     /** Add a custom pass to be used during lowering, with the
      * function that will be called to delete it also passed in. Set
      * it to nullptr if you wish to retain ownership of the object. */
-    void add_custom_lowering_pass(Internal::IRMutator2 *pass, std::function<void()> deleter);
+    void add_custom_lowering_pass(Internal::IRMutator *pass, std::function<void()> deleter);
 
     /** Remove all previously-set custom lowering passes */
     void clear_custom_lowering_passes();

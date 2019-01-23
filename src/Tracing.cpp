@@ -46,7 +46,7 @@ struct TraceEventBuilder {
     }
 };
 
-class InjectTracing : public IRMutator2 {
+class InjectTracing : public IRMutator {
 public:
     const map<string, Function> &env;
     const bool trace_all_loads, trace_all_stores, trace_all_realizations;
@@ -94,10 +94,10 @@ private:
         }
     }
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Expr visit(const Call *op) override {
-        Expr expr = IRMutator2::visit(op);
+        Expr expr = IRMutator::visit(op);
         op = expr.as<Call>();
         internal_assert(op);
         bool trace_it = false;
@@ -159,7 +159,7 @@ private:
     }
 
     Stmt visit(const Provide *op) override {
-        Stmt stmt = IRMutator2::visit(op);
+        Stmt stmt = IRMutator::visit(op);
         op = stmt.as<Provide>();
         internal_assert(op);
 
@@ -217,7 +217,7 @@ private:
     }
 
     Stmt visit(const Realize *op) override {
-        Stmt stmt = IRMutator2::visit(op);
+        Stmt stmt = IRMutator::visit(op);
         op = stmt.as<Realize>();
         internal_assert(op);
 
@@ -262,7 +262,7 @@ private:
     }
 
     Stmt visit(const ProducerConsumer *op) override {
-        Stmt stmt = IRMutator2::visit(op);
+        Stmt stmt = IRMutator::visit(op);
         op = stmt.as<ProducerConsumer>();
         internal_assert(op);
         map<string, Function>::const_iterator iter = env.find(op->name);
@@ -304,8 +304,8 @@ private:
     }
 };
 
-class RemoveRealizeOverOutput : public IRMutator2 {
-    using IRMutator2::visit;
+class RemoveRealizeOverOutput : public IRMutator {
+    using IRMutator::visit;
     const vector<Function> &outputs;
 
     Stmt visit(const Realize *op) override {
@@ -314,7 +314,7 @@ class RemoveRealizeOverOutput : public IRMutator2 {
                 return mutate(op->body);
             }
         }
-        return IRMutator2::visit(op);
+        return IRMutator::visit(op);
     }
 
 public:

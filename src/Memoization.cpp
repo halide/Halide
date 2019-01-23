@@ -304,7 +304,7 @@ public:
 }
 
 // Inject caching structure around memoized realizations.
-class InjectMemoization : public IRMutator2 {
+class InjectMemoization : public IRMutator {
 public:
     const std::map<std::string, Function> &env;
     int memoize_instance;
@@ -318,7 +318,7 @@ public:
         env(e), memoize_instance(memoize_instance), top_level_name(name), outputs(outputs) {}
 private:
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Stmt visit(const Realize *op) override {
         std::map<std::string, Function>::const_iterator iter = env.find(op->name);
@@ -387,7 +387,7 @@ private:
 
             return Realize::make(op->name, op->types, op->memory_type, op->bounds, op->condition, cache_key_alloc);
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
@@ -421,7 +421,7 @@ private:
                 return ProducerConsumer::make(op->name, op->is_producer, mutated_body);
             }
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 };
@@ -440,7 +440,7 @@ Stmt inject_memoization(Stmt s, const std::map<std::string, Function> &env,
     return injector.mutate(s);
 }
 
-class RewriteMemoizedAllocations : public IRMutator2 {
+class RewriteMemoizedAllocations : public IRMutator {
 public:
     RewriteMemoizedAllocations(const std::map<std::string, Function> &e) : env(e) {}
 
@@ -464,7 +464,7 @@ private:
         return realization_name;
     }
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Stmt visit(const Allocate *allocation) override {
         std::string realization_name = get_realization_name(allocation->name);
@@ -475,7 +475,7 @@ private:
             pending_memoized_allocations[innermost_realization_name].push_back(allocation);
             return mutate(allocation->body);
         } else {
-            return IRMutator2::visit(allocation);
+            return IRMutator::visit(allocation);
         }
     }
 
@@ -497,7 +497,7 @@ private:
         }
 
         // If any part of the match failed, do default mutator action.
-        return IRMutator2::visit(call);
+        return IRMutator::visit(call);
     }
 
     Stmt visit(const LetStmt *let) override {
@@ -521,7 +521,7 @@ private:
 
             return LetStmt::make(let->name, value, body);
         } else {
-            return IRMutator2::visit(let);
+            return IRMutator::visit(let);
         }
     }
 };

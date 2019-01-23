@@ -25,10 +25,10 @@ namespace {
 
 // For a given var, replace expressions like shuffle_vector(var, 4)
 // with var.lane.4
-class ReplaceShuffleVectors : public IRMutator2 {
+class ReplaceShuffleVectors : public IRMutator {
     string var;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Expr visit(const Shuffle *op) override {
         const Variable *v;
@@ -37,7 +37,7 @@ class ReplaceShuffleVectors : public IRMutator2 {
             v->name == var) {
             return Variable::make(op->type, var + ".lane." + std::to_string(op->indices[0]));
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 public:
@@ -181,12 +181,12 @@ Interval bounds_of_lanes(Expr e) {
 // dimension to represent the separate copy of the allocation per
 // vector lane. This means loads and stores to them need to be
 // rewritten slightly.
-class RewriteAccessToVectorAlloc : public IRMutator2 {
+class RewriteAccessToVectorAlloc : public IRMutator {
     Expr var;
     string alloc;
     int lanes;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Expr mutate_index(const string &a, Expr index) {
         index = mutate(index);
@@ -240,7 +240,7 @@ bool uses_gpu_vars(Expr s) {
 }
 
 // Wrap a vectorized predicate around a Load/Store node.
-class PredicateLoadStore : public IRMutator2 {
+class PredicateLoadStore : public IRMutator {
     string var;
     Expr vector_predicate;
     bool in_hexagon;
@@ -249,7 +249,7 @@ class PredicateLoadStore : public IRMutator2 {
     bool valid;
     bool vectorized;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     bool should_predicate_store_load(int bit_size) {
         if (in_hexagon) {
@@ -294,7 +294,7 @@ class PredicateLoadStore : public IRMutator2 {
             predicate = mutate(Broadcast::make(op->predicate, lanes));
             index = mutate(Broadcast::make(op->index, lanes));
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
 
         predicate = merge_predicate(predicate, vector_predicate);
@@ -325,7 +325,7 @@ class PredicateLoadStore : public IRMutator2 {
             value = mutate(Broadcast::make(op->value, lanes));
             index = mutate(Broadcast::make(op->index, lanes));
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
 
         predicate = merge_predicate(predicate, vector_predicate);
@@ -339,7 +339,7 @@ class PredicateLoadStore : public IRMutator2 {
     Expr visit(const Call *op) override {
         // We should not vectorize calls with side-effects
         valid = valid && op->is_pure();
-        return IRMutator2::visit(op);
+        return IRMutator::visit(op);
     }
 
 public:
@@ -356,7 +356,7 @@ public:
 
 // Substitutes a vector for a scalar var in a Stmt. Used on the
 // body of every vectorized loop.
-class VectorSubs : public IRMutator2 {
+class VectorSubs : public IRMutator {
     // The var we're vectorizing
     string var;
 
@@ -390,7 +390,7 @@ class VectorSubs : public IRMutator2 {
         return Expr();
     }
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Expr visit(const Cast *op) override {
         Expr value = mutate(op->value);
@@ -953,11 +953,11 @@ public:
 };
 
 // Vectorize all loops marked as such in a Stmt
-class VectorizeLoops : public IRMutator2 {
+class VectorizeLoops : public IRMutator {
     const Target &target;
     bool in_hexagon;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Stmt visit(const For *for_loop) override {
         bool old_in_hexagon = in_hexagon;
@@ -980,7 +980,7 @@ class VectorizeLoops : public IRMutator2 {
             Expr replacement = Ramp::make(for_loop->min, 1, extent->value);
             stmt = VectorSubs(for_loop->name, replacement, in_hexagon, target).mutate(for_loop->body);
         } else {
-            stmt = IRMutator2::visit(for_loop);
+            stmt = IRMutator::visit(for_loop);
         }
 
         if (for_loop->device_api == DeviceAPI::Hexagon) {

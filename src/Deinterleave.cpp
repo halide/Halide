@@ -18,7 +18,7 @@ using std::pair;
 
 namespace {
 
-class StoreCollector : public IRMutator2 {
+class StoreCollector : public IRMutator {
 public:
     const std::string store_name;
     const int store_stride, max_stores;
@@ -32,7 +32,7 @@ public:
     }
 
 private:
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     // Don't enter any inner constructs for which it's not safe to pull out stores.
     Stmt visit(const For *op) override {
@@ -74,7 +74,7 @@ private:
             collecting = false;
             return op;
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
@@ -94,7 +94,7 @@ private:
 
         // Make sure this Store doesn't do anything that causes us to
         // stop collecting.
-        stmt = IRMutator2::visit(op);
+        stmt = IRMutator::visit(op);
         if (!collecting) {
             return stmt;
         }
@@ -130,7 +130,7 @@ private:
             collecting = false;
             return op;
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
@@ -138,7 +138,7 @@ private:
         if (!collecting) {
             return op;
         }
-        Stmt stmt = IRMutator2::visit(op);
+        Stmt stmt = IRMutator::visit(op);
 
         // If we're still collecting, we need to save the let as a potential let.
         if (collecting) {
@@ -186,7 +186,7 @@ private:
     // lets for which we have even and odd lane specializations
     const Scope<> &external_lets;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Expr visit(const Broadcast *op) override {
         if (new_lanes == 1) {
@@ -371,10 +371,10 @@ Expr extract_lane(Expr e, int lane) {
 
 namespace {
 
-class Interleaver : public IRMutator2 {
+class Interleaver : public IRMutator {
     Scope<> vector_lets;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     bool should_deinterleave;
     int num_lanes;
@@ -460,7 +460,7 @@ class Interleaver : public IRMutator2 {
                 break;
             }
         }
-        return IRMutator2::visit(op);
+        return IRMutator::visit(op);
     }
 
     Expr visit(const Div *op) override {
@@ -474,7 +474,7 @@ class Interleaver : public IRMutator2 {
                 break;
             }
         }
-        return IRMutator2::visit(op);
+        return IRMutator::visit(op);
     }
 
     Expr visit(const Call *op) override {
@@ -482,7 +482,7 @@ class Interleaver : public IRMutator2 {
             // deinterleaving potentially changes the order of execution.
             should_deinterleave = false;
         }
-        return IRMutator2::visit(op);
+        return IRMutator::visit(op);
     }
 
     Expr visit(const Load *op) override {

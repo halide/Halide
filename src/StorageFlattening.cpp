@@ -21,7 +21,7 @@ using std::set;
 
 namespace {
 
-class FlattenDimensions : public IRMutator2 {
+class FlattenDimensions : public IRMutator {
 public:
     FlattenDimensions(const map<string, pair<Function, int>> &e,
                       const vector<Function> &o,
@@ -100,7 +100,7 @@ private:
         return idx;
     }
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Stmt visit(const Realize *op) override {
         realizations.push(op->name);
@@ -294,7 +294,7 @@ private:
             }
 
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
@@ -364,7 +364,7 @@ private:
             op->device_api == DeviceAPI::GLSL) {
             in_shader = true;
         }
-        Stmt stmt = IRMutator2::visit(op);
+        Stmt stmt = IRMutator::visit(op);
         in_shader = old_in_shader;
         return stmt;
     }
@@ -373,8 +373,8 @@ private:
 
 // Realizations, stores, and loads must all be on types that are
 // multiples of 8-bits. This really only affects bools
-class PromoteToMemoryType : public IRMutator2 {
-    using IRMutator2::visit;
+class PromoteToMemoryType : public IRMutator {
+    using IRMutator::visit;
 
     Type upgrade(Type t) {
         return t.with_bits(((t.bits() + 7)/8)*8);
@@ -387,7 +387,7 @@ class PromoteToMemoryType : public IRMutator2 {
                               Load::make(t, op->name, mutate(op->index),
                                          op->image, op->param, mutate(op->predicate), ModulusRemainder()));
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
@@ -397,7 +397,7 @@ class PromoteToMemoryType : public IRMutator2 {
             return Store::make(op->name, Cast::make(t, mutate(op->value)), mutate(op->index),
                                op->param, mutate(op->predicate), ModulusRemainder());
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
@@ -412,7 +412,7 @@ class PromoteToMemoryType : public IRMutator2 {
                                   mutate(op->condition), mutate(op->body),
                                   mutate(op->new_expr), op->free_function);
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 };

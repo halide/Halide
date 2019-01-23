@@ -1389,13 +1389,13 @@ private:
 };
 
 // Place innermost vars in an IfThenElse's condition as far to the left as possible.
-class SolveIfThenElse : public IRMutator2 {
+class SolveIfThenElse : public IRMutator {
     // Scope of variable names and their depths. Higher depth indicates
     // variable defined more innermost.
     Scope<int> vars_depth;
     int depth = -1;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     void push_var(const string &var) {
         depth += 1;
@@ -1409,20 +1409,20 @@ class SolveIfThenElse : public IRMutator2 {
 
     Stmt visit(const LetStmt *op) override {
         push_var(op->name);
-        Stmt stmt = IRMutator2::visit(op);
+        Stmt stmt = IRMutator::visit(op);
         pop_var(op->name);
         return stmt;
     }
 
     Stmt visit(const For *op) override {
         push_var(op->name);
-        Stmt stmt = IRMutator2::visit(op);
+        Stmt stmt = IRMutator::visit(op);
         pop_var(op->name);
         return stmt;
     }
 
     Stmt visit(const IfThenElse *op) override {
-        Stmt stmt = IRMutator2::visit(op);
+        Stmt stmt = IRMutator::visit(op);
         op = stmt.as<IfThenElse>();
         internal_assert(op);
 
@@ -2107,9 +2107,9 @@ map<string, Box> boxes_touched(Expr e, Stmt s, bool consider_calls, bool conside
         // long time reasoning about lets and ifs that don't surround an
         // access to the buffer in question.
 
-        class Filter : public IRMutator2 {
-            using IRMutator2::visit;
-            using IRMutator2::mutate;
+        class Filter : public IRMutator {
+            using IRMutator::visit;
+            using IRMutator::mutate;
 
             bool relevant = false;
 
@@ -2118,7 +2118,7 @@ map<string, Box> boxes_touched(Expr e, Stmt s, bool consider_calls, bool conside
                     relevant = true;
                     return op;
                 } else {
-                    return IRMutator2::visit(op);
+                    return IRMutator::visit(op);
                 }
             }
 
@@ -2127,7 +2127,7 @@ map<string, Box> boxes_touched(Expr e, Stmt s, bool consider_calls, bool conside
                     relevant = true;
                     return op;
                 } else {
-                    return IRMutator2::visit(op);
+                    return IRMutator::visit(op);
                 }
             }
 
@@ -2143,7 +2143,7 @@ map<string, Box> boxes_touched(Expr e, Stmt s, bool consider_calls, bool conside
             Stmt mutate(const Stmt &s) override {
                 bool old = relevant;
                 relevant = false;
-                Stmt s_new = IRMutator2::mutate(s);
+                Stmt s_new = IRMutator::mutate(s);
                 if (!relevant) {
                     relevant = old;
                     return no_op;

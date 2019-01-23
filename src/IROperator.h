@@ -1271,7 +1271,9 @@ inline Expr fast_pow(Expr x, Expr y) {
 
 /** Fast approximate inverse for Float(32). Corresponds to the rcpps
  * instruction on x86, and the vrecpe instruction on ARM. Vectorizes
- * cleanly. */
+ * cleanly. Note that this can produce slightly different results
+ * across different implementations of the same architecture (e.g. AMD vs Intel),
+ * even when strict_float is enabled. */
 inline Expr fast_inverse(Expr x) {
     user_assert(x.type() == Float(32)) << "fast_inverse only takes float arguments\n";
     Type t = x.type();
@@ -1280,7 +1282,9 @@ inline Expr fast_inverse(Expr x) {
 
 /** Fast approximate inverse square root for Float(32). Corresponds to
  * the rsqrtps instruction on x86, and the vrsqrte instruction on
- * ARM. Vectorizes cleanly. */
+ * ARM. Vectorizes cleanly. Note that this can produce slightly different results
+ * across different implementations of the same architecture (e.g. AMD vs Intel),
+ * even when strict_float is enabled. */
 inline Expr fast_inverse_sqrt(Expr x) {
     user_assert(x.type() == Float(32)) << "fast_inverse_sqrt only takes float arguments\n";
     Type t = x.type();
