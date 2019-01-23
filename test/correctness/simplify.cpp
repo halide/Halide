@@ -1381,8 +1381,8 @@ void check_bitwise() {
           cast(UInt(32), x) & Expr((uint32_t)0xaaaaaaaa));
 
     // Check constant-folding of bitwise ops (and indirectly, reinterpret)
-    check(Let::make(x.as<Variable>()->name, 5, ((~x) & 3) | 16), (~5 & 3) | 16);
-    check(Let::make(x.as<Variable>()->name, 5, ((~cast<uint8_t>(x)) & 3) | 16), make_const(UInt(8), (~5 & 3) | 16));
+    check(Let::make(x.as<Variable>()->name, 5, (((~x) & 3) | 16) ^ 33), ((~5 & 3) | 16) ^ 33);
+    check(Let::make(x.as<Variable>()->name, 5, (((~cast<uint8_t>(x)) & 3) | 16) ^ 33), make_const(UInt(8), ((~5 & 3) | 16) ^ 33));
 }
 
 void check_lets() {
