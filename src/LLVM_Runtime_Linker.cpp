@@ -281,6 +281,9 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
         } else { // 64-bit
             if (target.os == Target::IOS) {
                 return llvm::DataLayout("e-m:o-i64:64-i128:128-n32:64-S128");
+            }
+            else if (target.os == Target::Windows) {
+                return llvm::DataLayout("e-m:w-p:64:64-i32:32-i64:64-i128:128-n32:64-S128");
             } else {
                 return llvm::DataLayout("e-m:e-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128");
             }
@@ -373,6 +376,19 @@ llvm::Triple get_triple_for_target(const Target &target) {
         } else if (target.os == Target::Linux) {
             triple.setOS(llvm::Triple::Linux);
             triple.setEnvironment(llvm::Triple::GNUEABIHF);
+        } else if (target.os == Target::Windows) {
+            triple.setVendor(llvm::Triple::PC);
+            triple.setOS(llvm::Triple::Win32);
+            if (target.has_feature(Target::MinGW)) {
+                triple.setEnvironment(llvm::Triple::GNU);
+            } else {
+              triple.setEnvironment(llvm::Triple::MSVC);
+            }
+            if (target.has_feature(Target::JIT)) {
+                //TODO(shoaibkamil): figure out a way to test this.
+                // Use ELF for jitting
+              triple.setObjectFormat(llvm::Triple::ELF);
+            }
         } else {
             user_error << "No arm support for this OS\n";
         }
