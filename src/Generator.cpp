@@ -2,6 +2,15 @@
 #include <fstream>
 #include <set>
 
+#if defined(_MSC_VER) && !defined(NOMINMAX)
+#define NOMINMAX
+#endif
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <dlfcn.h>
+#endif
+
 #include "Generator.h"
 #include "Outputs.h"
 #include "Simplify.h"
@@ -104,6 +113,9 @@ Outputs compute_outputs(const Target &target,
     if (options.emit_python_extension) {
         output_files.python_extension_name = base_path + get_extension(".py.c", options);
     }
+    if (options.emit_registration) {
+        output_files.registration_name = base_path + get_extension(".registration.cpp", options);
+    }
     if (options.emit_stmt) {
         output_files.stmt_name = base_path + get_extension(".stmt", options);
     }
@@ -124,15 +136,11 @@ Outputs compute_outputs(const Target &target,
 }
 
 Argument to_argument(const Internal::Parameter &param, const Expr &default_value) {
-    Expr def, min, max;
-    if (!param.is_buffer()) {
-        def = default_value; // *not* param.scalar_expr();
-        min = param.min_value();
-        max = param.max_value();
-    }
+    ArgumentEstimates argument_estimates = param.get_argument_estimates();
+    argument_estimates.scalar_def = default_value;
     return Argument(param.name(),
         param.is_buffer() ? Argument::InputBuffer : Argument::InputScalar,
-        param.type(), param.dimensions(), def, min, max);
+        param.type(), param.dimensions(), argument_estimates);
 }
 
 Func make_param_func(const Parameter &p, const std::string &name) {
@@ -380,27 +388,28 @@ void StubEmitter::emit_inputs_struct() {
 
     stream << indent() << name << "() {}\n";
     stream << "\n";
+    if (!in_info.empty()) {
+        stream << indent() << name << "(\n";
+        indent_level++;
+        std::string comma = "";
+        for (auto in : in_info) {
+            stream << indent() << comma << "const " << in.c_type << "& " << in.name << "\n";
+            comma = ", ";
+        }
+        indent_level--;
+        stream << indent() << ") : \n";
+        indent_level++;
+        comma = "";
+        for (auto in : in_info) {
+            stream << indent() << comma << in.name << "(" << in.name << ")\n";
+            comma = ", ";
+        }
+        indent_level--;
+        stream << indent() << "{\n";
+        stream << indent() << "}\n";
 
-    stream << indent() << name << "(\n";
-    indent_level++;
-    std::string comma = "";
-    for (auto in : in_info) {
-        stream << indent() << comma << "const " << in.c_type << "& " << in.name << "\n";
-        comma = ", ";
+        indent_level--;
     }
-    indent_level--;
-    stream << indent() << ") : \n";
-    indent_level++;
-    comma = "";
-    for (auto in : in_info) {
-        stream << indent() << comma << in.name << "(" << in.name << ")\n";
-        comma = ", ";
-    }
-    indent_level--;
-    stream << indent() << "{\n";
-    stream << indent() << "}\n";
-
-    indent_level--;
     stream << indent() << "};\n";
     stream << "\n";
 }
@@ -790,12 +799,24 @@ std::string halide_type_to_c_type(const Type &t) {
 }
 
 int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
-    const char kUsage[] = "gengen [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR] [-r RUNTIME_NAME] [-e EMIT_OPTIONS] [-x EXTENSION_OPTIONS] [-n FILE_BASE_NAME] "
-                          "target=target-string[,target-string...] [generator_arg=value [...]]\n\n"
-                          "  -e  A comma separated list of files to emit. Accepted values are "
-                          "[assembly, bitcode, cpp, h, html, o, static_library, stmt, cpp_stub, schedule]. If omitted, default value is [static_library, h].\n"
-                          "  -x  A comma separated list of file extension pairs to substitute during file naming, "
-                          "in the form [.old=.new[,.old2=.new2]]\n";
+    const char kUsage[] =
+        "gengen \n"
+        "  [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR] [-r RUNTIME_NAME]\n"
+        "  [-e EMIT_OPTIONS] [-x EXTENSION_OPTIONS] [-n FILE_BASE_NAME] [-p PLUGIN_NAME]\n"
+        "       target=target-string[,target-string...] [generator_arg=value [...]]\n"
+        "\n"
+        " -e  A comma separated list of files to emit. Accepted values are:\n"
+        "     [assembly, bitcode, cpp, h, html, o, static_library,\n"
+        "      stmt, cpp_stub, schedule, registration].\n"
+        "     If omitted, default value is [static_library, h, registration].\n"
+        "\n"
+        " -x  A comma separated list of file extension pairs to substitute during\n"
+        "     file naming, in the form [.old=.new[,.old2=.new2]]\n"
+        "\n"
+        " -p  A comma-separted list of shared libraries that will be loaded before the\n"
+        "     generator is run. Useful for custom auto-schedulers. The generator must\n"
+        "     either be linked against a shared libHalide or compiled with -rdynamic\n"
+        "     so that references in the shared library to libHalide can resolve.\n";
 
     std::map<std::string, std::string> flags_info = { { "-f", "" },
                                                       { "-g", "" },
@@ -803,7 +824,8 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
                                                       { "-e", "" },
                                                       { "-n", "" },
                                                       { "-x", "" },
-                                                      { "-r", "" }};
+                                                      { "-r", "" },
+                                                      { "-p", "" }};
     GeneratorParamsMap generator_args;
 
     for (int i = 1; i < argc; ++i) {
@@ -829,6 +851,23 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
         cerr << "Unknown flag: " << argv[i] << "\n";
         cerr << kUsage;
         return 1;
+    }
+
+    // It's possible that in the future loaded plugins might change
+    // how arguments are parsed, so we handle those first.
+    for (auto lib : split_string(flags_info["-p"], ",")) {
+        if (lib.empty()) continue;
+#ifdef _WIN32
+        if (LoadLibrary(lib.c_str()) != nullptr) {
+            cerr << "Failed to load: " << lib << "\n";
+            return 1;
+        }
+#else
+        if (dlopen(lib.c_str(), RTLD_LAZY) == nullptr) {
+            cerr << "Failed to load: " << lib << ": " << dlerror() << "\n";
+            return 1;
+        }
+#endif
     }
 
     std::string runtime_name = flags_info["-r"];
@@ -885,8 +924,8 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
     emit_options.emit_static_library = emit_options.emit_h = false;
 
     if (emit_flags.empty() || (emit_flags.size() == 1 && emit_flags[0].empty())) {
-        // If omitted or empty, assume .a and .h
-        emit_options.emit_static_library = emit_options.emit_h = true;
+        // If omitted or empty, assume .a and .h and registration.cpp
+        emit_options.emit_static_library = emit_options.emit_h = emit_options.emit_registration = true;
     } else {
         // If anything specified, only emit what is enumerated
         for (const std::string &opt : emit_flags) {
@@ -912,9 +951,11 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
                 emit_options.emit_cpp_stub = true;
             } else if (opt == "schedule") {
                 emit_options.emit_schedule = true;
+            } else if (opt == "registration") {
+                emit_options.emit_registration = true;
             } else if (!opt.empty()) {
                 cerr << "Unrecognized emit option: " << opt
-                     << " not one of [assembly, bitcode, cpp, h, html, o, static_library, stmt, cpp_stub], ignoring.\n";
+                     << " not one of [assembly, bitcode, cpp, h, html, o, static_library, stmt, cpp_stub, registration], ignoring.\n";
             }
         }
     }
@@ -964,6 +1005,10 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
             Outputs output_files = compute_outputs(targets[0], base_path, emit_options);
             auto module_producer = [&generator_name, &generator_args]
                 (const std::string &name, const Target &target) -> Module {
+                    // Reset the counters so the function/variable names look
+                    // consistent for different targets.
+                    reset_unique_name_counters();
+
                     auto sub_generator_args = generator_args;
                     sub_generator_args.erase("target");
                     // Must re-create each time since each instance will have a different Target.
@@ -1694,18 +1739,21 @@ void GeneratorInputBase::set_inputs(const std::vector<StubInput> &inputs) {
         user_assert(in.kind() == kind()) << "An input for " << name() << " is not of the expected kind.\n";
         if (kind() == IOKind::Function) {
             auto f = in.func();
+            user_assert(f.defined()) << "The input for " << name() << " is an undefined Func. Please define it.\n";
             check_matching_types(f.output_types());
             check_matching_dims(f.dimensions());
             funcs_.push_back(f);
             parameters_.emplace_back(f.output_types().at(0), true, f.dimensions(), array_name(i));
         } else if (kind() == IOKind::Buffer) {
             auto p = in.parameter();
+            user_assert(p.defined()) << "The input for " << name() << " is an undefined Buffer. Please define it.\n";
             check_matching_types({p.type()});
             check_matching_dims(p.dimensions());
             funcs_.push_back(make_param_func(p, name()));
             parameters_.push_back(p);
         } else {
             auto e = in.expr();
+            user_assert(e.defined()) << "The input for " << name() << " is an undefined Expr. Please define it.\n";
             check_matching_types({e.type()});
             check_matching_dims(0);
             exprs_.push_back(e);

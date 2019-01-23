@@ -1401,9 +1401,11 @@ struct NotOp {
     template<uint32_t bound>
     HALIDE_ALWAYS_INLINE
     bool match(SpecificExpr e, MatcherState &state) const noexcept {
+        if (e.expr.node_type != IRNodeType::Not) {
+            return false;
+        }
         const Not &op = (const Not &)e.expr;
-        return (e.expr.node_type == IRNodeType::Not &&
-                a.template match<bound>(SpecificExpr{*op.a.get()}, state));
+        return (a.template match<bound>(SpecificExpr{*op.a.get()}, state));
     }
 
     template<uint32_t bound, typename A2>
@@ -1457,9 +1459,11 @@ struct SelectOp {
     template<uint32_t bound>
     HALIDE_ALWAYS_INLINE
     bool match(SpecificExpr e, MatcherState &state) const noexcept {
+        if (e.expr.node_type != Select::_node_type) {
+            return false;
+        }
         const Select &op = (const Select &)e.expr;
-        return (e.expr.node_type == Select::_node_type &&
-                c.template match<bound>(SpecificExpr{*op.condition.get()}, state) &&
+        return (c.template match<bound>(SpecificExpr{*op.condition.get()}, state) &&
                 t.template match<bound | bindings<C>::mask>(SpecificExpr{*op.true_value.get()}, state) &&
                 f.template match<bound | bindings<C>::mask | bindings<T>::mask>(SpecificExpr{*op.false_value.get()}, state));
     }
@@ -1587,9 +1591,11 @@ struct RampOp {
     template<uint32_t bound>
     HALIDE_ALWAYS_INLINE
     bool match(SpecificExpr e, MatcherState &state) const noexcept {
+        if (e.expr.node_type != Ramp::_node_type) {
+            return false;
+        }
         const Ramp &op = (const Ramp &)e.expr;
-        if (op.node_type == Ramp::_node_type &&
-            (lanes == op.type.lanes() || !known_lanes) &&
+        if ((lanes == op.type.lanes() || !known_lanes) &&
             a.template match<bound>(SpecificExpr{*op.base.get()}, state) &&
             b.template match<bound | bindings<A>::mask>(SpecificExpr{*op.stride.get()}, state)) {
             return true;
@@ -1658,9 +1664,11 @@ struct NegateOp {
     template<uint32_t bound>
     HALIDE_ALWAYS_INLINE
     bool match(SpecificExpr e, MatcherState &state) const noexcept {
+        if (e.expr.node_type != Sub::_node_type) {
+            return false;
+        }
         const Sub &op = (const Sub &)e.expr;
-        return (op.node_type == Sub::_node_type &&
-                a.template match<bound>(SpecificExpr{*op.b.get()}, state) &&
+        return (a.template match<bound>(SpecificExpr{*op.b.get()}, state) &&
                 is_zero(op.a));
     }
 
@@ -1734,9 +1742,11 @@ struct CastOp {
     template<uint32_t bound>
     HALIDE_ALWAYS_INLINE
     bool match(SpecificExpr e, MatcherState &state) const noexcept {
+        if (e.expr.node_type != Cast::_node_type) {
+            return false;
+        }
         const Cast &op = (const Cast &)e.expr;
-        return (op.node_type == Cast::_node_type &&
-                e.expr.type == t &&
+        return (e.expr.type == t &&
                 a.template match<bound>(SpecificExpr{*op.value.get()}, state));
     }
     template<uint32_t bound, typename A2>
@@ -1841,9 +1851,11 @@ struct Indeterminate {
     template<uint32_t bound>
     HALIDE_ALWAYS_INLINE
     bool match(SpecificExpr e, MatcherState &state) const noexcept {
+        if (e.expr.node_type != Call::_node_type) {
+            return false;
+        }
         const Call &op = (const Call &)e.expr;
-        return (op.node_type == Call::_node_type &&
-                op.is_intrinsic(Call::indeterminate_expression));
+        return (op.is_intrinsic(Call::indeterminate_expression));
     }
 
     HALIDE_ALWAYS_INLINE
@@ -1874,9 +1886,11 @@ struct Overflow {
     template<uint32_t bound>
     HALIDE_ALWAYS_INLINE
     bool match(SpecificExpr e, MatcherState &state) const noexcept {
+        if (e.expr.node_type != Call::_node_type) {
+            return false;
+        }
         const Call &op = (const Call &)e.expr;
-        return (op.node_type == Call::_node_type &&
-                op.is_intrinsic(Call::signed_integer_overflow));
+        return (op.is_intrinsic(Call::signed_integer_overflow));
     }
 
     HALIDE_ALWAYS_INLINE

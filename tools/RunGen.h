@@ -288,6 +288,9 @@ inline Shape parse_extents(const std::string &extent_list) {
         fail() << "Invalid format for extents: " << extent_list;
     }
     Shape result;
+    if (extent_list == "[]") {
+        return result;
+    }
     std::vector<std::string> extents = split_string(extent_list.substr(1, extent_list.size()-2), ",");
     for (size_t i = 0; i < extents.size(); i++) {
       const std::string &s = extents[i];
@@ -300,6 +303,43 @@ inline Shape parse_extents(const std::string &extent_list) {
     }
     return result;
 }
+
+// Parse the buffer_estimate list from a given argument's metadata into a Shape.
+// If no valid buffer_estimate exists, return false.
+inline bool try_parse_metadata_buffer_estimates(const halide_filter_argument_t *md, Shape *shape) {
+    if (!md->buffer_estimates) {
+        // zero-dimensional buffers don't have (or need) estimates, so don't fail.
+        if (md->dimensions == 0) {
+            *shape = Shape();
+            return true;
+        }
+        return false;
+    }
+    Shape result(md->dimensions);
+    int32_t stride = 1;
+    for (int i = 0; i < md->dimensions; i++) {
+        const int64_t *min = md->buffer_estimates[i*2];
+        const int64_t *extent = md->buffer_estimates[i*2+1];
+        if (!min || !extent) {
+            return false;
+            fail() << "Argument " << md->name << " was specified as 'estimate', but no estimate was provided for dimension " << i << " of " << md->dimensions;
+        }
+        result[i] = halide_dimension_t{(int32_t) *min, (int32_t) *extent, stride};
+        stride *= result[i].extent;
+    }
+    *shape = result;
+    return true;
+};
+
+// Parse the buffer_estimate list from a given argument's metadata into a Shape.
+// If no valid buffer_estimate exists, fail.
+inline Shape parse_metadata_buffer_estimates(const halide_filter_argument_t *md) {
+    Shape shape;
+    if (!try_parse_metadata_buffer_estimates(md, &shape)) {
+        fail() << "Argument " << md->name << " was specified as 'estimate', but no valid estimates were provided.";
+    }
+    return shape;
+};
 
 // Given a Buffer<>, return its shape in the form of a vector<halide_dimension_t>.
 // (Oddly, Buffer<> has no API to do this directly.)
@@ -320,8 +360,10 @@ inline Buffer<> make_with_shape(const halide_type_t &type, const Shape &shape) {
 // (Oddly, Buffer<> has an API to do this with vector-of-extent, but not vector-of-halide_dimension_t.)
 inline Buffer<> allocate_buffer(const halide_type_t &type, const Shape &shape) {
     Buffer<> b = make_with_shape(type, shape);
-    b.check_overflow();
-    b.allocate();
+    if (b.number_of_elements() > 0) {
+        b.check_overflow();
+        b.allocate();
+    }
     return b;
 }
 
@@ -330,9 +372,10 @@ inline Shape choose_output_extents(int dimensions, const Shape &defaults) {
     for (int i = 0; i < dimensions; ++i) {
         if ((size_t) i < defaults.size()) {
             s[i] = defaults[i];
-            continue;
+        } else {
+            // If the defaults don't provide enough dimensions, make a guess.
+            s[i].extent = (i < 2 ? 1000 : 4);
         }
-        s[i].extent = (i < 2 ? 1000 : 4);
     }
     return s;
 }
@@ -346,7 +389,9 @@ inline void fix_chunky_strides(const Shape &constrained_shape, Shape *new_shape)
     // (Note that there are, theoretically, other stride combinations that might
     // need fixing; in practice, ~all generators that aren't planar tend
     // to be classically chunky.)
-    if (new_shape->size() >= 3) {
+    if (new_shape->size() >= 3 &&
+        (*new_shape)[0].extent > 1 &&
+        (*new_shape)[1].extent > 1) {
         if (constrained_shape[2].stride == 1) {
             if (constrained_shape[0].stride >= 1) {
                 // If we have stride[0] and stride[2] set to obviously-chunky,
@@ -575,26 +620,45 @@ struct ArgData {
     ArgData(size_t index, const std::string &name, const halide_filter_argument_t * metadata)
         : index(index), name(name), metadata(metadata) {}
 
-    Buffer<> load_buffer() const {
+    Buffer<> load_buffer(const Shape &auto_shape, const halide_filter_argument_t *argument_metadata) {
+        const auto parse_optional_extents = [&](const std::string &s) -> Shape {
+            if (s == "auto") {
+                return auto_shape;
+            }
+            if (s == "estimate") {
+                return parse_metadata_buffer_estimates(argument_metadata);
+            }
+            if (s == "estimate_then_auto") {
+                Shape shape;
+                if (!try_parse_metadata_buffer_estimates(argument_metadata, &shape)) {
+                    info() << "Input " << argument_metadata->name << " has no estimates; using bounds-query result instead.";
+                    shape = auto_shape;
+                }
+                return shape;
+            }
+            return parse_extents(s);
+        };
+
         std::vector<std::string> v = split_string(raw_string, ":");
-        if (v.size() == 1 || v[0].size() == 1) {
-            return load_input_from_file(raw_string, *metadata);
-        } else if (v[0] == "zero") {
-            auto shape = parse_extents(v[1]);
+        if (v[0] == "zero") {
+            if (v.size() != 2) fail() << "Invalid syntax: " << raw_string;
+            auto shape = parse_optional_extents(v[1]);
             Buffer<> b = allocate_buffer(metadata->type, shape);
             memset(b.data(), 0, b.size_in_bytes());
             return b;
         } else if (v[0] == "constant") {
+            if (v.size() != 3) fail() << "Invalid syntax: " << raw_string;
             halide_scalar_value_t value;
             if (!parse_scalar(metadata->type, v[1], &value)) {
               fail() << "Invalid value for constant value";
             }
-            auto shape = parse_extents(v[2]);
+            auto shape = parse_optional_extents(v[2]);
             Buffer<> b = allocate_buffer(metadata->type, shape);
             dynamic_type_dispatch<FillWithScalar>(metadata->type, b, value);
             return b;
         } else if (v[0] == "identity") {
-            auto shape = parse_extents(v[1]);
+            if (v.size() != 2) fail() << "Invalid syntax: " << raw_string;
+            auto shape = parse_optional_extents(v[1]);
             // Make a binary buffer with diagonal elements set to true. Diagonal
             // elements are those whose first two dimensions are equal.
             Buffer<bool> b = allocate_buffer(halide_type_of<bool>(), shape);
@@ -604,17 +668,17 @@ struct ArgData {
             // Convert the binary buffer to the required type, so true becomes 1.
             return Halide::Tools::ImageTypeConversion::convert_image(b, metadata->type);
         } else if (v[0] == "random") {
+            if (v.size() != 3) fail() << "Invalid syntax: " << raw_string;
             int seed;
             if (!parse_scalar(v[1], &seed)) {
                 fail() << "Invalid value for seed";
             }
-            auto shape = parse_extents(v[2]);
+            auto shape = parse_optional_extents(v[2]);
             Buffer<> b = allocate_buffer(metadata->type, shape);
             dynamic_type_dispatch<FillWithRandom>(metadata->type, b, seed);
             return b;
         } else {
-            fail() << "Unknown input: " << raw_string;
-            return Buffer<>();
+            return load_input_from_file(v[0], *metadata);
         }
     }
 
@@ -623,13 +687,13 @@ struct ArgData {
             return;
         }
 
-        info() << "Input " << name << ": Shape is " << get_shape(buffer_value);
         // Ensure that the input Buffer meets our constraints; if it doesn't, allcoate
         // and copy into a new Buffer.
         bool updated = false;
         Shape new_shape = get_shape(buffer_value);
+        info() << "Input " << name << ": Shape is " << new_shape;
         if (new_shape.size() != constrained_shape.size()) {
-            fail() << "Dimension mismatch";
+            fail() << "Dimension mismatch; expected " << constrained_shape.size() << "dimensions";
         }
         for (size_t i = 0; i < constrained_shape.size(); ++i) {
             // min of nonzero means "largest value for min"
@@ -720,9 +784,11 @@ struct ArgData {
 class RunGen {
 public:
     RunGen(int (*halide_argv_call)(void **args),
-               const struct halide_filter_metadata_t *(*halide_metadata_call)()) :
-        halide_argv_call(halide_argv_call), md(halide_metadata_call()) {
-        const struct halide_filter_metadata_t *md = halide_metadata_call();
+               const struct halide_filter_metadata_t *halide_metadata) :
+        halide_argv_call(halide_argv_call), md(halide_metadata) {
+        if (md->version != halide_filter_metadata_t::VERSION) {
+            fail() << "Unexpected metadata version " << md->version;
+        }
         for (size_t i = 0; i < (size_t) md->num_arguments; ++i) {
             std::string name = md->arguments[i].name;
             if (name.size() > 2 && name[name.size()-2] == '$' && isdigit(name[name.size()-1])) {
@@ -762,78 +828,32 @@ public:
         it->second.raw_string = value;
     }
 
-    void experimental_guess_missing_inputs() {
-        for (auto &arg_pair : args) {
-            auto &arg = arg_pair.second;
-            if (!arg.raw_string.empty()) {
-                continue;
-            }
-            auto *md = arg.metadata;
-            switch (arg.metadata->kind) {
-            case halide_argument_kind_input_scalar: {
-                if (md->def) {
-                    arg.raw_string = scalar_to_string(md->type, *md->def);
-                    info() << "Guess for Input \"" << arg.name << "\": use default value of " << arg.raw_string;
-                } else if (md->min) {
-                    arg.raw_string = scalar_to_string(md->type, *md->min);
-                    info() << "Guess for Input \"" << arg.name << "\": use min value of " << arg.raw_string;
-                } else if (md->max) {
-                    arg.raw_string = scalar_to_string(md->type, *md->max);
-                    info() << "Guess for Input \"" << arg.name << "\": use max value of " << arg.raw_string;
-                } else {
-                    if (md->type == halide_type_of<bool>()) {
-                        arg.raw_string = "false";
-                    } else if (md->type == halide_type_of<void*>()) {
-                        arg.raw_string = "nullptr";
-                    } else {
-                        arg.raw_string = "0";
-                    }
-                    info() << "Guess for Input \"" << arg.name << "\": use zero-ish value of " << arg.raw_string;
-                }
-                break;
-            }
-            case halide_argument_kind_input_buffer: {
-                const bool is_float = (md->type == halide_type_of<float>() || md->type == halide_type_of<double>());
-                if (md->dimensions == 2 && is_float) {
-                    // Assume it's a matrix-like input
-                    arg.raw_string = "identity:[3, 3]";
-                    info() << "Guess for Input \"" << arg.name << "\": use identity value of " << arg.raw_string;
-                } else {
-                    arg.raw_string = "random:0:[";
-                    for (int i = 0; i < md->dimensions; ++i) {
-                        int extent = 1000;
-                        if (i == 2 && md->dimensions == 3) {
-                            extent = 3;
-                        }
-                        if (i > 0) {
-                            arg.raw_string += ",";
-                        }
-                        arg.raw_string += std::to_string(extent);
-                    }
-                    arg.raw_string += "]";
-                }
-                info() << "Guess for Input \"" << arg.name << "\": use " << arg.raw_string;
-                break;
-            }
-            case halide_argument_kind_output_buffer:
-                // nothing
-                break;
-            }
-        }
-    }
-
     void validate(const std::set<std::string> &seen_args,
-                  bool ok_to_omit_outputs) const {
+                  const std::string &default_input_buffers,
+                  const std::string &default_input_scalars,
+                  bool ok_to_omit_outputs) {
         std::ostringstream o;
         for (auto &s : seen_args) {
             if (args.find(s) == args.end()) {
                 o << "Unknown argument name: " << s << "\n";
             }
         }
-        for (const auto &arg_pair : args) {
+        for (auto &arg_pair : args) {
             auto &arg = arg_pair.second;
             if (arg.raw_string.empty()) {
                 if (ok_to_omit_outputs && arg.metadata->kind == halide_argument_kind_output_buffer) {
+                    continue;
+                }
+                if (!default_input_buffers.empty() &&
+                    arg.metadata->kind == halide_argument_kind_input_buffer) {
+                    arg.raw_string = default_input_buffers;
+                    info() << "Using value of '" << arg.raw_string << "' for: " << arg.metadata->name;
+                    continue;
+                }
+                if (!default_input_scalars.empty() &&
+                    arg.metadata->kind == halide_argument_kind_input_scalar) {
+                    arg.raw_string = default_input_scalars;
+                    info() << "Using value of '" << arg.raw_string << "' for: " << arg.metadata->name;
                     continue;
                 }
                 o << "Argument value missing for: " << arg.metadata->name << "\n";
@@ -846,34 +866,103 @@ public:
 
     // Parse all the input arguments, loading images as necessary.
     // (Don't handle outputs yet.)
-    void load_inputs(const Shape &explicit_default_output_shape) {
-        default_output_shape = explicit_default_output_shape;
+    void load_inputs(const std::string &user_specified_output_shape_string) {
+        assert(output_shapes.empty());
+
+        Shape first_input_shape;
+        std::map<std::string, Shape> auto_input_shapes;
+
+        // First, set all the scalar inputs: we need those to be correct
+        // in order to get useful values from the bound-query for input buffers.
         for (auto &arg_pair : args) {
             auto &arg_name = arg_pair.first;
             auto &arg = arg_pair.second;
             switch (arg.metadata->kind) {
             case halide_argument_kind_input_scalar: {
-                if (!parse_scalar(arg.metadata->type, arg.raw_string, &arg.scalar_value)) {
-                    fail() << "Argument value for: " << arg_name << " could not be parsed as type "
-                         << arg.metadata->type << ": "
-                         << arg.raw_string;
+                if (arg.raw_string == "default") {
+                    if (!arg.metadata->scalar_def) {
+                        fail() << "Argument value for: " << arg.metadata->name << " was specified as using the default, but no default was found in the metadata.";
+                    }
+                    info() << "Argument value for: " << arg.metadata->name << " is parsed from metadata as: "
+                           << scalar_to_string(arg.metadata->type, *arg.metadata->scalar_def);
+                    arg.scalar_value = *arg.metadata->scalar_def;
+                } else if (arg.raw_string == "estimate") {
+                    if (!strcmp(arg.metadata->name, "__user_context")) {
+                      arg.scalar_value.u.handle = nullptr;
+                      info() << "Argument value for: __user_context is special-cased as: nullptr";
+                    } else {
+                      if (!arg.metadata->scalar_estimate) {
+                          fail() << "Argument value for: " << arg.metadata->name << " was specified as using the estimate, but no estimate was found in the metadata.";
+                      }
+                      info() << "Argument value for: " << arg.metadata->name << " is parsed from metadata as: "
+                             << scalar_to_string(arg.metadata->type, *arg.metadata->scalar_estimate);
+                      arg.scalar_value = *arg.metadata->scalar_estimate;
+                    }
+                } else {
+                    if (!parse_scalar(arg.metadata->type, arg.raw_string, &arg.scalar_value)) {
+                        fail() << "Argument value for: " << arg_name << " could not be parsed as type "
+                             << arg.metadata->type << ": "
+                             << arg.raw_string;
+                    }
                 }
                 break;
             }
-            case halide_argument_kind_input_buffer: {
-                arg.buffer_value = arg.load_buffer();
-                info() << "Input " << arg_name << ": Shape is " << get_shape(arg.buffer_value);
-                // If there was no default_output_shape specified, use the shape of
-                // the first input buffer (if any).
-                // TODO: this is often a better-than-nothing guess, but not always. Add a way to defeat it?
-                if (default_output_shape.empty()) {
-                    default_output_shape = get_shape(arg.buffer_value);
-                }
-                break;
-            }
+            case halide_argument_kind_input_buffer:
             case halide_argument_kind_output_buffer:
                 // Nothing yet
                 break;
+            }
+        }
+
+        if (!user_specified_output_shape_string.empty()) {
+            // For now, we set all output shapes to be identical -- there's no
+            // way on the command line to specify different shapes for each
+            // output. Would be nice to try?
+            for (auto &arg_pair : args) {
+                auto &arg = arg_pair.second;
+                if (arg.metadata->kind == halide_argument_kind_output_buffer) {
+                    auto &arg_name = arg_pair.first;
+                    if (user_specified_output_shape_string == "estimate") {
+                        output_shapes[arg_name] = parse_metadata_buffer_estimates(arg.metadata);
+                        info() << "Output " << arg_name << " is parsed from metadata as: " << output_shapes[arg_name];
+                    } else {
+                        output_shapes[arg_name] = parse_extents(user_specified_output_shape_string);
+                        info() << "Output " << arg_name << " has user-specified Shape: " << output_shapes[arg_name];
+                    }
+                }
+            }
+            auto_input_shapes = bounds_query_input_shapes();
+        }
+
+        for (auto &arg_pair : args) {
+            auto &arg_name = arg_pair.first;
+            auto &arg = arg_pair.second;
+            switch (arg.metadata->kind) {
+            case halide_argument_kind_input_buffer:
+                arg.buffer_value = arg.load_buffer(auto_input_shapes[arg_name], arg.metadata);
+                info() << "Input " << arg_name << ": Shape is " << get_shape(arg.buffer_value);
+                break;
+            case halide_argument_kind_input_scalar:
+                // Already handled.
+                break;
+            case halide_argument_kind_output_buffer:
+                // Nothing yet
+                break;
+            }
+        }
+
+        if (user_specified_output_shape_string.empty()) {
+            // If there was no output shape specified by the user, use the shape of
+            // the first input buffer (if any). (This is a better-than-nothing guess
+            // that is definitely not always correct, but is convenient and useful enough
+            // to be worth doing.)
+            for (auto &arg_pair : args) {
+                auto &arg = arg_pair.second;
+                if (arg.metadata->kind == halide_argument_kind_output_buffer) {
+                    auto &arg_name = arg_pair.first;
+                    output_shapes[arg_name] = first_input_shape;
+                    info() << "Output " << arg_name << " assumes the shape of first input: " << first_input_shape;
+                }
             }
         }
     }
@@ -1000,6 +1089,7 @@ public:
         std::vector<Buffer<>> bounds_query_buffers(args.size());
         std::vector<Shape> constrained_shapes(args.size());
         for (const auto &arg_pair : args) {
+            const auto &arg_name = arg_pair.first;
             auto &arg = arg_pair.second;
             switch (arg.metadata->kind) {
             case halide_argument_kind_input_scalar:
@@ -1009,7 +1099,7 @@ public:
             case halide_argument_kind_output_buffer:
                 Shape shape = (arg.metadata->kind == halide_argument_kind_input_buffer) ?
                                get_shape(arg.buffer_value) :
-                               choose_output_extents(arg.metadata->dimensions, default_output_shape);
+                               choose_output_extents(arg.metadata->dimensions, output_shapes.at(arg_name));
                 bounds_query_buffers[arg.index] = make_with_shape(arg.metadata->type, shape);
                 filter_argv[arg.index] = bounds_query_buffers[arg.index].raw_buffer();
                 break;
@@ -1101,7 +1191,12 @@ public:
     }
 
     Buffer<> get_expected_output(const std::string &output) {
-        return args.at(output).load_buffer();
+        auto it = args.find(output);
+        if (it == args.end()) {
+            fail() << "Unable to find output: " << output;
+        }
+        const auto &arg = it->second;
+        return args.at(output).load_buffer(output_shapes.at(output), arg.metadata);
     }
 
     void describe() const {
@@ -1145,6 +1240,44 @@ public:
     }
 
 private:
+    std::map<std::string, Shape> bounds_query_input_shapes() const {
+        assert(!output_shapes.empty());
+        std::vector<void*> filter_argv(args.size(), nullptr);
+        std::vector<Buffer<>> bounds_query_buffers(args.size());
+        for (const auto &arg_pair : args) {
+            auto &arg_name = arg_pair.first;
+            auto &arg = arg_pair.second;
+            switch (arg.metadata->kind) {
+            case halide_argument_kind_input_scalar:
+                filter_argv[arg.index] = const_cast<halide_scalar_value_t*>(&arg.scalar_value);
+                break;
+            case halide_argument_kind_input_buffer:
+                // Make a Buffer<> that has the right dimension count and extent=0 for all of them
+                bounds_query_buffers[arg.index] = Buffer<>(arg.metadata->type, std::vector<int>(arg.metadata->dimensions, 0));
+                filter_argv[arg.index] = bounds_query_buffers[arg.index].raw_buffer();
+                break;
+            case halide_argument_kind_output_buffer:
+                bounds_query_buffers[arg.index] = make_with_shape(arg.metadata->type, output_shapes.at(arg_name));
+                filter_argv[arg.index] = bounds_query_buffers[arg.index].raw_buffer();
+                break;
+            }
+        }
+
+        // Ignore result since our halide_error() should catch everything.
+        (void) halide_argv_call(&filter_argv[0]);
+
+        std::map<std::string, Shape> input_shapes;
+        for (const auto &arg_pair : args) {
+            auto &arg_name = arg_pair.first;
+            auto &arg = arg_pair.second;
+            if (arg.metadata->kind == halide_argument_kind_input_buffer) {
+                input_shapes[arg_name] = get_shape(bounds_query_buffers[arg.index]);
+                info() << "Input " << arg_name << " has a bounds-query shape of " << input_shapes[arg_name];
+            }
+        }
+        return input_shapes;
+    }
+
     // Replace the standard Halide runtime function to capture print output to stdout
     static void rungen_halide_print(void *user_context, const char *message) {
         out() << "halide_print: " << message;
@@ -1162,9 +1295,8 @@ private:
     int (*halide_argv_call)(void **args);
     const struct halide_filter_metadata_t * const md;
     std::map<std::string, ArgData> args;
-    Shape default_output_shape;
+    std::map<std::string, Shape> output_shapes;
 };
 
 }  // namespace RunGen
 }  // namespace Halide
-

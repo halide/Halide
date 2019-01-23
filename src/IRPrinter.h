@@ -21,25 +21,28 @@
 
 namespace Halide {
 
-/** Emit an expression on an output stream (such as std::cout) in a
+/** Emit an expression on an output stream (such as std::cout) in
  * human-readable form */
 std::ostream &operator<<(std::ostream &stream, const Expr &);
 
-/** Emit a halide type on an output stream (such as std::cout) in a
+/** Emit a halide type on an output stream (such as std::cout) in
  * human-readable form */
 std::ostream &operator<<(std::ostream &stream, const Type &);
 
-/** Emit a halide Module on an output stream (such as std::cout) in a
+/** Emit a halide Module on an output stream (such as std::cout) in
  * human-readable form */
 std::ostream &operator<<(std::ostream &stream, const Module &);
 
-/** Emit a halide device api type in a human readable form */
+/** Emit a halide device api type in human-readable form */
 std::ostream &operator<<(std::ostream &stream, const DeviceAPI &);
 
-/** Emit a halide memory type in a human readable form */
+/** Emit a halide memory type in human-readable form */
 std::ostream &operator<<(std::ostream &stream, const MemoryType &);
 
-/** Emit a halide LoopLevel in a human readable form */
+/** Emit a halide tail strategy in human-readable form */
+std::ostream &operator<<(std::ostream &stream, const TailStrategy &t);
+
+/** Emit a halide LoopLevel in human-readable form */
 std::ostream &operator<<(std::ostream &stream, const LoopLevel &);
 
 struct Target;

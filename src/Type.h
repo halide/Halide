@@ -297,6 +297,9 @@ struct Type {
     /** Trivial copy constructor. */
     Type(const Type &that) = default;
 
+    /** Trivial copy assignment operator. */
+    Type &operator=(const Type &that) = default;
+
     /** Type is a wrapper around halide_type_t with more methods for use
      * inside the compiler. This simply constructs the wrapper around
      * the runtime value. */

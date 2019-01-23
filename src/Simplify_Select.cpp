@@ -3,9 +3,9 @@
 namespace Halide {
 namespace Internal {
 
-Expr Simplify::visit(const Select *op, ConstBounds *bounds) {
+Expr Simplify::visit(const Select *op, ExprInfo *bounds) {
 
-    ConstBounds t_bounds, f_bounds;
+    ExprInfo t_bounds, f_bounds;
     Expr condition = mutate(op->condition, nullptr);
     Expr true_value = mutate(op->true_value, &t_bounds);
     Expr false_value = mutate(op->false_value, &f_bounds);
@@ -15,6 +15,8 @@ Expr Simplify::visit(const Select *op, ConstBounds *bounds) {
         bounds->max_defined = t_bounds.max_defined && f_bounds.max_defined;
         bounds->min = std::min(t_bounds.min, f_bounds.min);
         bounds->max = std::max(t_bounds.max, f_bounds.max);
+        bounds->alignment = ModulusRemainder::unify(t_bounds.alignment, f_bounds.alignment);
+        bounds->trim_bounds_using_alignment();
     }
 
     if (may_simplify(op->type)) {

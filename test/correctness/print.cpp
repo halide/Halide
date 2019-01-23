@@ -1,8 +1,8 @@
+#include "Halide.h"
 #include <stdio.h>
 #include <string>
 #include <vector>
 #include <limits>
-#include "Halide.h"
 
 using namespace Halide;
 

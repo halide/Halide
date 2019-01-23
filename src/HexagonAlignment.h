@@ -24,7 +24,7 @@ public:
      *  Returns true if it can determing that the address of the store or load is aligned, false otherwise.
      */
     template<typename T>
-    bool is_aligned_impl(const T *op, int native_lanes, int *aligned_offset) {
+    bool is_aligned_impl(const T *op, int native_lanes, int64_t *aligned_offset) {
         debug(3) << "HexagonAlignmentAnalyzer: Check if " << op->index << " is aligned to a "
                  << required_alignment << " byte boundary\n";
         debug(3) << "native_lanes: " << native_lanes << "\n";
@@ -57,11 +57,11 @@ public:
         debug(3) << "Is Unaligned\n";
         return false;
     }
-    bool is_aligned(const Load *op, int *aligned_offset) {
+    bool is_aligned(const Load *op, int64_t *aligned_offset) {
         int native_lanes = required_alignment / op->type.bytes();
         return is_aligned_impl<Load>(op, native_lanes, aligned_offset);
     }
-    bool is_aligned(const Store *op, int *aligned_offset) {
+    bool is_aligned(const Store *op, int64_t *aligned_offset) {
         int native_lanes = required_alignment / op->value.type().bytes();
         return is_aligned_impl<Store>(op, native_lanes, aligned_offset);
     }
