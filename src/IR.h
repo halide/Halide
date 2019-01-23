@@ -594,12 +594,6 @@ struct Call : public ExprNode<Call> {
         return make(param.type(), param.name(), args, Image, FunctionPtr(), 0, Buffer<>(), param);
     }
 
-    /** Convenience constructor for indeterminate_expression() */
-    static Expr make_indeterminate_expression(Type type);
-
-    /** Convenience constructor for signed_integer_overflow() */
-    static Expr make_signed_integer_overflow(Type type);
-
     /** Check if a call node is pure within a pipeline, meaning that
      * the same args always give the same result, and the calls can be
      * reordered, duplicated, unified, etc without changing the

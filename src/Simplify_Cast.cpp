@@ -15,11 +15,12 @@ Expr Simplify::visit(const Cast *op, ExprInfo *bounds) {
         double f = 0.0;
         int64_t i = 0;
         uint64_t u = 0;
-        if (call && (call->is_intrinsic(Call::indeterminate_expression) || call->is_intrinsic(Call::signed_integer_overflow))) {
+        if (call && (call->is_intrinsic(Call::indeterminate_expression) ||
+                     call->is_intrinsic(Call::signed_integer_overflow))) {
             if (call->is_intrinsic(Call::indeterminate_expression)) {
-                return Call::make_indeterminate_expression(op->type);
+                return make_indeterminate_expression(op->type);
             } else {
-                return Call::make_signed_integer_overflow(op->type);
+                return make_signed_integer_overflow(op->type);
             }
         } else if (value.type() == op->type) {
             return value;

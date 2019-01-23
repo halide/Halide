@@ -143,9 +143,9 @@ Expr make_const_special_expr(halide_type_t ty) {
     const uint16_t flags = ty.lanes & MatcherState::special_values_mask;
     ty.lanes &= ~MatcherState::special_values_mask;
     if (flags & MatcherState::indeterminate_expression) {
-        return Call::make_indeterminate_expression(ty);
+        return make_indeterminate_expression(ty);
     } else if (flags & MatcherState::signed_integer_overflow) {
-        return Call::make_signed_integer_overflow(ty);
+        return make_signed_integer_overflow(ty);
     }
     // unreachable
     return Expr();

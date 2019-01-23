@@ -100,6 +100,12 @@ inline Expr make_const(Type t, float val)     {return make_const(t, (double)val)
 inline Expr make_const(Type t, float16_t val) {return make_const(t, (double)val);}
 // @}
 
+/** Construct a unique indeterminate_expression Expr */
+Expr make_indeterminate_expression(Type type);
+
+/** Construct a unique signed_integer_overflow Expr */
+Expr make_signed_integer_overflow(Type type);
+
 /** Check if a constant value can be correctly represented as the given type. */
 void check_representable(Type t, int64_t val);
 
