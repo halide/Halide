@@ -358,6 +358,37 @@ void test_update() {
     check(__LINE__, d_clamped_buf(2), d_blur_buf(1) + d_blur_buf(2));
 }
 
+void test_nonlinear_update() {
+    Var x("x"), y("y");
+    Buffer<float> input(3);
+    input(0) = 1.f;
+    input(1) = 2.f;
+    input(2) = 3.f;
+    Func clamped("clamped");
+    Expr clamped_x = Halide::clamp(x, 0, input.width() - 1);
+    clamped(x) = input(clamped_x);
+    Func update("update");
+    update(x, y) = 0.f;
+    update(x, 0) = clamped(x);
+    update(x, 1) = update(x, 0) * update(x, 0) + clamped(x + 1);
+    // update(x) = clamp(x)^2 + clamp(x + 1)
+    RDom r(0, 3);
+    Func loss("loss");
+    loss() += update(r.x, 1);
+    Derivative d = propagate_adjoints(loss);
+    Buffer<float> loss_buf = loss.realize();
+    // loss = update(0) + update(1) + update(2)
+    //      = 1^2 + 2 + 2^2 + 3 + 3^2 + 3 = 1 + 2 + 4 + 3 + 9 + 3 = 22
+    check(__LINE__, loss_buf(0), 22.f);
+
+    Func d_clamped = d(clamped);
+    // d_clamp(x) = 2 * clamp(x) * d_update(x) + d_update(x - 1)
+    Buffer<float> d_clamped_buf = d_clamped.realize(3);
+    check(__LINE__, d_clamped_buf(0), 2.f * input(0));
+    check(__LINE__, d_clamped_buf(1), 2.f * input(1) + 1.f);
+    check(__LINE__, d_clamped_buf(2), 2.f * input(2) + 1.f);
+}
+
 void test_rdom_conv() {
     Var x("x");
     Buffer<float> input(4);
@@ -403,6 +434,93 @@ void test_rdom_conv() {
     Buffer<float> d_kernel = d(kernel).realize(2);
     check(__LINE__, d_kernel(0), 60.f * kernel(0) + 72.f * kernel(1));
     check(__LINE__, d_kernel(1), 72.f * kernel(0) + 90.f * kernel(1));
+}
+
+void test_horner_polynomial() {
+    Var x("x"), y("y");
+    Buffer<float> coeffs(8);
+    for (int i = 0; i < 8; i++) {
+        coeffs(i) = (i + 1.f);
+    }
+    RDom r(coeffs);
+    Func polynomial("polynomial");
+    Expr fx = x / cast<float>(1023);
+    // Horner's method
+    polynomial(x, y) = 0.f;
+    polynomial(x, coeffs.dim(0).max() - r) =
+        polynomial(x, coeffs.dim(0).max() - r + 1) * fx + coeffs(r);
+
+    RDom rd(0, 1024);
+    Func loss("loss");
+    loss() += polynomial(rd, 0) / 1024.f;
+    Derivative d = propagate_adjoints(loss);
+
+    // poly(7) = coeff(0)
+    // poly(6) = poly(7) * x + coeff(1)
+    // poly(5) = poly(6) * x + coeff(2)
+    // ...
+    // poly(0) = poly(1) * x + coeff(0)
+    // The adjoint is
+    // d_coeffs(0) = \sum_x d_poly(x, 0)
+    // d_coeffs(1) = \sum_x d_poly(x, 1)
+    // ..
+    // and
+    // d_poly(x, 7) = \sum_x 1
+    // d_poly(x, 6) = \sum_x x
+    // d_poly(x, 5) = \sum_x x^2
+    // ...
+    Buffer<float> d_coeffs = d(coeffs).realize(8);
+    for (int i = 0; i < 8; i++) {
+        float d = 0.f;
+        for (int j = 0; j < 1024; j++) {
+            d += std::pow(j / 1023.f, (float) (7 - i));
+        }
+        d /= 1024.f;
+        check(__LINE__, d_coeffs(i), d);
+    }
+}
+
+void test_nonlinear_order_dependent_rdom() {
+    Var x("x"), y("y");
+    Buffer<float> in(2);
+    for (int i = 0; i < 2; i++) {
+        in(i) = (i + 2.f);
+    }
+    RDom r(in);
+    Func f;
+    f(x, y) = 0.f;
+    f(x, 0) = in(x);
+    f(x, r.x + 1) = f(x, r.x) * f(x, r.x) + in(r.x);
+
+    Func loss("loss");
+    loss() += f(r, 2);
+    Derivative d = propagate_adjoints(loss);
+
+    // Manual backprop
+    float f0 = in(0);
+    float f1 = in(1);
+    float f0_a = f0 * f0 + in(0);
+    float f0_b = f0_a * f0_a + in(1);
+    float f1_a = f1 * f1 + in(0);
+    float f1_b = f1_a * f1_a + in(1);
+    float loss_ = f0_b + f1_b;
+    float df0_b = 1.f;
+    float df1_b = 1.f;
+    float df1_a = df1_b * 2.f * f1_a;
+    float din1 = df1_b;
+    float df1 = df1_a * 2.f * f1;
+    float din0 = df1_a;
+    float df0_a = df0_b * 2.f * f0_a;
+    din1 += df0_b;
+    float df0 = df0_a * 2.f * f0;
+    din0 += df0_a;
+    din1 += df1;
+    din0 += df0;
+    Buffer<float> loss_buf = loss.realize();
+    check(__LINE__, loss_, loss_buf());
+    Buffer<float> d_in = d(in).realize(2);
+    check(__LINE__, d_in(0), din0);
+    check(__LINE__, d_in(1), din1);
 }
 
 void test_1d_to_2d() {
@@ -557,6 +675,41 @@ void test_sparse_update() {
     check(__LINE__, d_input(0), 1.0f);
     check(__LINE__, d_input(1), 2.0f);
     check(__LINE__, d_input(2), 0.0f);
+}
+
+void test_histogram() {
+    Var x("x");
+    Buffer<int> input(4, "input");
+    input(0) = 2;
+    input(1) = 2;
+    input(2) = 1;
+    input(3) = 3;
+    Buffer<float> k(5, "k");
+    k(0) = 0.5f;
+    k(1) = 1.f;
+    k(2) = 1.5f;
+    k(3) = 2.f;
+    k(4) = 2.5f;
+    Func output("output");
+    output(x) = 0.f;
+    RDom r(input);
+    output(clamp(input(r), 0, 3)) += k(r);
+
+    Func loss("loss");
+    RDom rd(input);
+    loss() += output(rd.x) * cast<float>(rd.x + 1);
+    Derivative d = propagate_adjoints(loss);
+
+    // d_output(2) -> d_k(0)
+    // d_output(2) -> d_k(1)
+    // d_output(1) -> d_k(2)
+    // d_output(3) -> d_k(3)
+    Buffer<float> d_k = d(k).realize(5);
+    check(__LINE__, d_k(0), 3.0f);
+    check(__LINE__, d_k(1), 3.0f);
+    check(__LINE__, d_k(2), 2.0f);
+    check(__LINE__, d_k(3), 4.0f);
+    check(__LINE__, d_k(4), 0.0f);
 }
 
 void test_rdom_update() {
@@ -1014,11 +1167,15 @@ int main(int argc, char **argv) {
     test_1d_box();
     test_2d_box();
     test_update();
+    test_nonlinear_update();
     test_rdom_conv();
+    test_horner_polynomial();
+    test_nonlinear_order_dependent_rdom();
     test_1d_to_2d();
     test_linear_resampling_1d();
     test_linear_resampling_2d();
     test_sparse_update();
+    test_histogram();
     test_rdom_update();
     test_repeat_edge();
     test_constant_exterior();
