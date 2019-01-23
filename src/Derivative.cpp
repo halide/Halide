@@ -48,17 +48,88 @@ public:
     }
 
 protected:
+    void visit(const IntImm *) override;
+    void visit(const UIntImm *) override;
+    void visit(const FloatImm *) override;
+    void visit(const StringImm *) override;
     void visit(const Cast *op) override;
     void visit(const Variable *op) override;
     void visit(const Add *op) override;
     void visit(const Sub *op) override;
     void visit(const Mul *op) override;
     void visit(const Div *op) override;
+    void visit(const Mod *op) override;
     void visit(const Min *op) override;
     void visit(const Max *op) override;
-    void visit(const Let *op) override;
+    void visit(const EQ *op) override;
+    void visit(const NE *op) override;
+    void visit(const LT *op) override;
+    void visit(const LE *op) override;
+    void visit(const GT *op) override;
+    void visit(const GE *op) override;
+    void visit(const And *) override;
+    void visit(const Or *) override;
+    void visit(const Not *) override;
     void visit(const Select *op) override;
+    void visit(const Let *op) override;
     void visit(const Call *op) override;
+    void visit(const Load *op) override {
+        internal_assert(false) << "Encounter unexpected statement \"Load\" when differentiating.";
+    }
+    void visit(const Ramp *op) override {
+        internal_assert(false) << "Encounter unexpected statement \"Ramp\" when differentiating.";
+    }
+    void visit(const Broadcast *op) override {
+        internal_assert(false) << "Encounter unexpected statement \"Broadcast\" when differentiating.";
+    }
+    void visit(const LetStmt *op) override {
+        internal_assert(false) << "Encounter unexpected statement \"LetStmt\" when differentiating.";
+    }
+    void visit(const AssertStmt *op) override {
+        internal_assert(false) << "Encounter unexpected statement \"AssertStmt\" when differentiating.";
+    }
+    void visit(const ProducerConsumer *op) override {
+        internal_assert(false) << "Encounter unexpected statement \"ProducerConsumer\" when differentiating.";
+    }
+    void visit(const For *op) override {
+        internal_assert(false) << "Encounter unexpected statement \"For\" when differentiating.";
+    }
+    void visit(const Store *op) override {
+        internal_assert(false) << "Encounter unexpected statement \"Store\" when differentiating.";
+    }
+    void visit(const Provide *op) override {
+        internal_assert(false) << "Encounter unexpected statement \"Provide\" when differentiating.";
+    }
+    void visit(const Allocate *op) override {
+        internal_assert(false) << "Encounter unexpected statement \"Allocate\" when differentiating.";
+    }
+    void visit(const Free *op) override {
+        internal_assert(false) << "Encounter unexpected statement \"Free\" when differentiating.";
+    }
+    void visit(const Realize *op) override {
+        internal_assert(false) << "Encounter unexpected statement \"Realize\" when differentiating.";
+    }
+    void visit(const Block *op) override {
+        internal_assert(false) << "Encounter unexpected statement \"Block\" when differentiating.";
+    }
+    void visit(const IfThenElse *op) override {
+        internal_assert(false) << "Encounter unexpected statement \"IfThenElse\" when differentiating.";
+    }
+    void visit(const Evaluate *op) override {
+        internal_assert(false) << "Encounter unexpected statement \"Evaluate\" when differentiating.";
+    }
+    void visit(const Shuffle *op) override {
+        internal_assert(false) << "Encounter unexpected statement \"Shuffle\" when differentiating.";
+    }
+    void visit(const Prefetch *op) override {
+        internal_assert(false) << "Encounter unexpected statement \"Prefetch\" when differentiating.";
+    }
+    void visit(const Fork *op) override {
+        internal_assert(false) << "Encounter unexpected statement \"Fork\" when differentiating.";
+    }
+    void visit(const Acquire *op) override {
+        internal_assert(false) << "Encounter unexpected statement \"Acquire\" when differentiating.";
+    }
 
 private:
     void accumulate(const Expr &stub, const Expr &adjoint);
@@ -687,6 +758,22 @@ void ReverseAccumulationVisitor::accumulate(const Expr &stub, const Expr &adjoin
     }
 }
 
+void ReverseAccumulationVisitor::visit(const IntImm *op) {
+    // Nothing to propagate to
+}
+
+void ReverseAccumulationVisitor::visit(const UIntImm *op) {
+    // Nothing to propagate to
+}
+
+void ReverseAccumulationVisitor::visit(const FloatImm *op) {
+    // Nothing to propagate to
+}
+
+void ReverseAccumulationVisitor::visit(const StringImm *op) {
+    // Nothing to propagate to
+}
+
 void ReverseAccumulationVisitor::visit(const Cast *op) {
     internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
     Expr adjoint = expr_adjoints[op];
@@ -750,6 +837,17 @@ void ReverseAccumulationVisitor::visit(const Div *op) {
     accumulate(op->b, -adjoint * op->a / (op->b * op->b));
 }
 
+void ReverseAccumulationVisitor::visit(const Mod *op) {
+    internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
+    Expr adjoint = expr_adjoints[op];
+
+    // a % b = a - trunc(a/b) * b
+    // d/da = 1
+    accumulate(op->a, adjoint);
+    // d/db = -trunc(a/b)
+    accumulate(op->b, -adjoint * trunc(op->a/op->b));
+}
+
 void ReverseAccumulationVisitor::visit(const Min *op) {
     internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
     Expr adjoint = expr_adjoints[op];
@@ -772,6 +870,86 @@ void ReverseAccumulationVisitor::visit(const Max *op) {
     // d/db max(a, b) = b >= a ? 1 : 0
     accumulate(op->b,
                select(op->b >= op->a, adjoint, make_const(adjoint.type(), 0.0)));
+}
+
+void ReverseAccumulationVisitor::visit(const EQ *op) {
+    internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
+    Expr adjoint = expr_adjoints[op];
+
+    // output is a boolean, so we should propagate zero to the arguments
+    accumulate(op->a, make_const(op->a.type(), 0));
+    accumulate(op->b, make_const(op->b.type(), 0));
+}
+
+void ReverseAccumulationVisitor::visit(const NE *op) {
+    internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
+    Expr adjoint = expr_adjoints[op];
+
+    // output is a boolean, so we should propagate zero to the arguments
+    accumulate(op->a, make_const(op->a.type(), 0));
+    accumulate(op->b, make_const(op->b.type(), 0));
+}
+
+void ReverseAccumulationVisitor::visit(const LT *op) {
+    internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
+    Expr adjoint = expr_adjoints[op];
+
+    // output is a boolean, so we should propagate zero to the arguments
+    accumulate(op->a, make_const(op->a.type(), 0));
+    accumulate(op->b, make_const(op->b.type(), 0));
+}
+
+void ReverseAccumulationVisitor::visit(const LE *op) {
+    internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
+    Expr adjoint = expr_adjoints[op];
+
+    // output is a boolean, so we should propagate zero to the arguments
+    accumulate(op->a, make_const(op->a.type(), 0));
+    accumulate(op->b, make_const(op->b.type(), 0));
+}
+
+void ReverseAccumulationVisitor::visit(const GT *op) {
+    internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
+    Expr adjoint = expr_adjoints[op];
+
+    // output is a boolean, so we should propagate zero to the arguments
+    accumulate(op->a, make_const(op->a.type(), 0));
+    accumulate(op->b, make_const(op->b.type(), 0));
+}
+
+void ReverseAccumulationVisitor::visit(const GE *op) {
+    internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
+    Expr adjoint = expr_adjoints[op];
+
+    // output is a boolean, so we should propagate zero to the arguments
+    accumulate(op->a, make_const(op->a.type(), 0));
+    accumulate(op->b, make_const(op->b.type(), 0));
+}
+
+void ReverseAccumulationVisitor::visit(const And *op) {
+    internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
+    Expr adjoint = expr_adjoints[op];
+
+    // output is a boolean, so we should propagate zero to the arguments
+    accumulate(op->a, make_const(op->a.type(), 0));
+    accumulate(op->b, make_const(op->b.type(), 0));
+}
+
+void ReverseAccumulationVisitor::visit(const Or *op) {
+    internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
+    Expr adjoint = expr_adjoints[op];
+
+    // output is a boolean, so we should propagate zero to the arguments
+    accumulate(op->a, make_const(op->a.type(), 0));
+    accumulate(op->b, make_const(op->b.type(), 0));
+}
+
+void ReverseAccumulationVisitor::visit(const Not *op) {
+    internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
+    Expr adjoint = expr_adjoints[op];
+
+    // output is a boolean, so we should propagate zero to the argument
+    accumulate(op->a, make_const(op->a.type(), 0));
 }
 
 void ReverseAccumulationVisitor::visit(const Let *op) {
