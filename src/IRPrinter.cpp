@@ -206,7 +206,7 @@ void IRPrinter::test() {
         "}\n"
         "consume buf {\n"
         "  vectorized (x, 0, y) {\n"
-        "    out[x aligned(3, 5)] = (buf((x % 3)) + 1)\n"
+        "    out[x] = (buf((x % 3)) + 1)\n"
         "  }\n"
         "}\n";
 
