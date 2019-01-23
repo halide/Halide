@@ -10,11 +10,11 @@ namespace Internal {
 
 using std::vector;
 
-class RemoveUndef : public IRMutator2 {
+class RemoveUndef : public IRMutator {
 public:
     Expr predicate;
 private:
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Scope<> dead_vars;
 

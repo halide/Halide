@@ -75,10 +75,10 @@ public:
     int nlanes = 0;
 };
 
-class CanonicalizeGPUVars : public IRMutator2 {
+class CanonicalizeGPUVars : public IRMutator {
     map<string, string> gpu_vars;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     string gpu_name(vector<string> v, const string &new_var) {
         v.push_back(new_var);

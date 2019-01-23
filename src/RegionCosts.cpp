@@ -262,8 +262,8 @@ Expr get_func_value_size(const Function &f) {
 //
 // TODO: Comment this out for now until we modify the compute expr cost and
 // detailed byte loads functions to account for likely exprs.
-/*class LikelyExpression : public IRMutator2 {
-    using IRMutator2::visit;
+/*class LikelyExpression : public IRMutator {
+    using IRMutator::visit;
 
     Expr visit(const Min *op) override {
         IRVisitor::visit(op);

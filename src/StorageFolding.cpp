@@ -52,16 +52,16 @@ int count_producers(Stmt in, const std::string &name) {
 }
 
 // Fold the storage of a function in a particular dimension by a particular factor
-class FoldStorageOfFunction : public IRMutator2 {
+class FoldStorageOfFunction : public IRMutator {
     string func;
     int dim;
     Expr factor;
     string dynamic_footprint;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Expr visit(const Call *op) override {
-        Expr expr = IRMutator2::visit(op);
+        Expr expr = IRMutator::visit(op);
         op = expr.as<Call>();
         internal_assert(op);
         if (op->name == func && op->call_type == Call::Halide) {
@@ -136,7 +136,7 @@ class FoldStorageOfFunction : public IRMutator2 {
     }
 
     Stmt visit(const Provide *op) override {
-        Stmt stmt = IRMutator2::visit(op);
+        Stmt stmt = IRMutator::visit(op);
         op = stmt.as<Provide>();
         internal_assert(op);
         if (op->name == func) {
@@ -154,14 +154,14 @@ public:
 };
 
 // Inject dynamic folding checks against a tracked live range.
-class InjectFoldingCheck : public IRMutator2 {
+class InjectFoldingCheck : public IRMutator {
     Function func;
     string head, tail, loop_var;
     Expr sema_var;
     int dim;
     bool in_produce;
     const StorageDim &storage_dim;
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Stmt visit(const ProducerConsumer *op) override {
         if (op->name == func.name()) {
@@ -298,7 +298,7 @@ class InjectFoldingCheck : public IRMutator2 {
 
             return ProducerConsumer::make(op->name, op->is_producer, body);
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
@@ -379,7 +379,7 @@ class InjectFoldingCheck : public IRMutator2 {
 
             return LetStmt::make(op->name, op->value, body);
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
 
     }
@@ -402,18 +402,18 @@ struct Semaphore {
 };
 
 // Attempt to fold the storage of a particular function in a statement
-class AttemptStorageFoldingOfFunction : public IRMutator2 {
+class AttemptStorageFoldingOfFunction : public IRMutator {
     Function func;
     bool explicit_only;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Stmt visit(const ProducerConsumer *op) override {
         if (op->name == func.name()) {
             // Can't proceed into the pipeline for this func
             return op;
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
@@ -810,10 +810,10 @@ public:
 };
 
 // Look for opportunities for storage folding in a statement
-class StorageFolding : public IRMutator2 {
+class StorageFolding : public IRMutator {
     const map<string, Function> &env;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Stmt visit(const Realize *op) override {
         Stmt body = mutate(op->body);
@@ -887,8 +887,8 @@ public:
 
 // Because storage folding runs before simplification, it's useful to
 // at least substitute in constants before running it, and also simplify the RHS of Let Stmts.
-class SubstituteInConstants : public IRMutator2 {
-    using IRMutator2::visit;
+class SubstituteInConstants : public IRMutator {
+    using IRMutator::visit;
 
     Scope<Expr> scope;
     Stmt visit(const LetStmt *op) override {
