@@ -466,7 +466,6 @@ void ReverseAccumulationVisitor::propagate_adjoints(
 
     // Bounds inference
     Box output_box;
-    output_box.resize(output_bounds.size());
     for (const auto &p : output_bounds) {
         output_box.push_back(Interval(p.first, p.second));
     }
@@ -754,7 +753,7 @@ void ReverseAccumulationVisitor::accumulate(const Expr &stub, const Expr &adjoin
     if (expr_adjoints.find(stub_ptr) == expr_adjoints.end()) {
         expr_adjoints[stub_ptr] = adjoint;
     } else {
-        expr_adjoints[stub_ptr] += adjoint;
+        expr_adjoints[stub_ptr] = expr_adjoints[stub_ptr] + adjoint;
     }
 }
 

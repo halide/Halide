@@ -27,9 +27,9 @@ using std::set;
 using std::string;
 using std::vector;
 
-class StripLets : public IRMutator2 {
+class StripLets : public IRGraphMutator2 {
 public:
-    using IRMutator2::visit;
+    using IRGraphMutator2::visit;
     Expr visit(const Let *op) override {
         return mutate(op->body);
     }
@@ -120,8 +120,7 @@ Expr add_let_expression(const Expr &expr,
         changed = false;
         for (size_t i = 0; i < let_variables.size(); i++) {
             const auto &let_variable = let_variables[i];
-            if (!injected[i] &&
-                expr_uses_var(ret, let_variable)) {
+            if (!injected[i] && expr_uses_var(ret, let_variable)) {
                 auto value = let_var_mapping.find(let_variable)->second;
                 ret = Let::make(let_variable, value, ret);
                 injected[i] = true;
