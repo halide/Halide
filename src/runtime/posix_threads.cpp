@@ -30,6 +30,8 @@ extern int pthread_mutex_lock(pthread_mutex_t *mutex);
 extern int pthread_mutex_unlock(pthread_mutex_t *mutex);
 extern int pthread_mutex_destroy(pthread_mutex_t *mutex);
 
+extern int pthread_setaffinity_np(pthread_t thread, size_t cpusetsize, const uint64_t *cpuset);
+
 typedef unsigned int pthread_key_t;
 
 extern int pthread_key_create(pthread_key_t *key, void (*destructor)(void*));
@@ -56,13 +58,20 @@ WEAK void *spawn_thread_helper(void *arg) {
 extern "C" {
 
 using namespace Halide::Runtime::Internal;
-  
+
 WEAK struct halide_thread *halide_spawn_thread(void (*f)(void *), void *closure) {
     spawned_thread *t = (spawned_thread *)malloc(sizeof(spawned_thread));
     t->f = f;
     t->closure = closure;
     t->handle = 0;
     pthread_create(&t->handle, NULL, spawn_thread_helper, t);
+
+    uint64_t affinity_mask[4] = {0, 0, 0, 0};
+    static uint64_t id = 0;
+    affinity_mask[id >> 6] |= ((uint64_t)1) << (id & 63);
+    id++;
+    pthread_setaffinity_np(t->handle, sizeof(affinity_mask), affinity_mask);
+
     return (halide_thread *)t;
 }
 

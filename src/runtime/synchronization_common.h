@@ -218,7 +218,7 @@ public:
         if (spin_count > 0) {
             spin_count--;
         }
-        return spin_count > 0;
+        return true || (spin_count > 0);
     }
 
     __attribute__((always_inline)) void reset() {
@@ -320,7 +320,7 @@ WEAK void word_lock::lock_full() {
         }
 
         if (((expected & ~(uintptr_t)(queue_lock_bit | lock_bit)) != 0) && spinner.should_spin()) {
-            halide_thread_yield();
+            // halide_thread_yield();
             atomic_load_relaxed(&state, &expected);
             continue;
         }
@@ -856,7 +856,7 @@ class fast_mutex {
 
             // If no one is parked, spin with spin count.
             if ((expected & parked_bit) == 0 && spinner.should_spin()) {
-                halide_thread_yield();
+                // halide_thread_yield();
                 atomic_load_relaxed(&state, &expected);
                 continue;
             }

@@ -24,6 +24,14 @@ namespace Halide { namespace Runtime { namespace Internal {
 struct work {
     halide_parallel_task_t task;
 
+    // task.min is the index of the unclaimed job with the smallest index.
+
+    // live_edge tracks which jobs beyond that have already been
+    // claimed (threads may not want to claim the immediate next
+    // job). Bit n of live_edge indicates whether or not
+    // (task.min+n+1) has been claimed.
+    uint64_t live_edge;
+
     // If we come in to the task system via do_par_for we just have a
     // halide_task_t, not a halide_loop_task_t.
     halide_task_t task_fn;
@@ -33,7 +41,7 @@ struct work {
     int sibling_count;
     work *parent_job;
     int threads_reserved;
-  
+
     void *user_context;
     int active_workers;
     int exit_status;
@@ -99,6 +107,9 @@ struct work_queue_t {
     // All fields after this must be zero in the initial state. See assert_zeroed
     // Field serves both to mark the offset in struct and as layout padding.
     int zero_marker;
+
+    // Stats
+    int good, bad;
 
     // Singly linked list for job stack
     work *jobs;
@@ -193,6 +204,8 @@ WEAK void dump_job_state() {
 WEAK void worker_thread(void *);
 
 WEAK void worker_thread_already_locked(work *owned_job) {
+    int preferred_job_index = 0;
+
     while (owned_job ? owned_job->running() : !work_queue.shutdown) {
         work *job = work_queue.jobs;
         work **prev_ptr = &work_queue.jobs;
@@ -247,16 +260,16 @@ WEAK void worker_thread_already_locked(work *owned_job) {
             if (!enough_threads) {
 
                 log_message("Not enough threads for job " << job->task.name << " available: " << threads_available << " min_threads: " << job->task.min_threads);
-            }              
+            }
             bool can_use_this_thread_stack  = !owned_job || (job->siblings == owned_job->siblings) || job->task.min_threads == 0;
             if (!can_use_this_thread_stack) {
                 log_message("Cannot run job " << job->task.name << " on this thread.");
-            }              
+            }
             bool can_add_worker = (!job->task.serial || (job->active_workers == 0));
             if (!can_add_worker) {
                 log_message("Cannot add worker to job " << job->task.name);
-            }              
-              
+            }
+
             if (enough_threads && can_use_this_thread_stack && can_add_worker) {
                 if (job->make_runnable()) {
                     break;
@@ -346,8 +359,45 @@ WEAK void worker_thread_already_locked(work *owned_job) {
         } else {
             // Claim a task from it.
             work myjob = *job;
+
+
+            // First check if we can claim the same task as we did last time
+            int claimed_task;
+            int last_index_plus_one = job->task.min + job->task.extent;
+            int bit = preferred_job_index - job->task.min - 1;
+            uint64_t mask = (uint64_t)(1) << bit;
+            if (preferred_job_index > job->task.min &&
+                preferred_job_index <= job->task.min + 64 &&
+                preferred_job_index < last_index_plus_one &&
+                (job->live_edge & mask) == 0) {
+                job->live_edge |= mask;
+                claimed_task = preferred_job_index;
+            } else {
+                claimed_task = job->task.min;
+                uint64_t min_is_claimed = 1;
+                while (min_is_claimed) {
+                    job->task.min++;
+                    job->task.extent--;
+                    min_is_claimed = job->live_edge & 1;
+                    job->live_edge = job->live_edge >> 1;
+                }
+            }
+
+            if (preferred_job_index == claimed_task) {
+                work_queue.good++;
+            } else {
+                work_queue.bad++;
+            }
+
+            // Try for the same index next time
+            preferred_job_index = claimed_task;
+
+            /*
             job->task.min++;
             job->task.extent--;
+            int claimed_task = myjob.task.min;
+            (void)preferred_job_index;
+            */
 
             // If there were no more tasks pending for this job, remove it
             // from the stack.
@@ -359,10 +409,10 @@ WEAK void worker_thread_already_locked(work *owned_job) {
             halide_mutex_unlock(&work_queue.mutex);
             if (myjob.task_fn) {
                 result = halide_do_task(myjob.user_context, myjob.task_fn,
-                                        myjob.task.min, myjob.task.closure);
+                                        claimed_task, myjob.task.closure);
             } else {
                 result = halide_do_loop_task(myjob.user_context, myjob.task.fn,
-                                             myjob.task.min, 1,
+                                             claimed_task, 1,
                                              myjob.task.closure, job);
             }
             halide_mutex_lock(&work_queue.mutex);
@@ -373,7 +423,7 @@ WEAK void worker_thread_already_locked(work *owned_job) {
         }
 
         bool wake_owners = false;
- 
+
         // If this task failed, set the exit status on the job.
         if (result != 0) {
             job->exit_status = result;
@@ -455,7 +505,7 @@ WEAK void enqueue_work_already_locked(int num_jobs, work *jobs, work *task_paren
         if (jobs[i].task.num_semaphores != 0) {
             job_has_acquires = true;
         }
-  
+
         if (jobs[i].task.serial) {
             workers_to_wake++;
         } else {
@@ -477,7 +527,7 @@ WEAK void enqueue_work_already_locked(int num_jobs, work *jobs, work *task_paren
             log_message("enqueue_work_already_locked adding one to min_threads.");
             min_threads += 1;
         }
-    
+
         // Spawn more threads if necessary.
         while (work_queue.threads_created < MAX_THREADS &&
                ((work_queue.threads_created < work_queue.desired_threads_working - 1) ||
@@ -535,7 +585,7 @@ WEAK void enqueue_work_already_locked(int num_jobs, work *jobs, work *task_paren
 
 
     if (job_has_acquires || job_may_block) {
-        if (task_parent != NULL) { 
+        if (task_parent != NULL) {
             task_parent->threads_reserved--;
         } else {
             work_queue.threads_reserved--;
@@ -550,7 +600,7 @@ WEAK halide_do_parallel_tasks_t custom_do_parallel_tasks = halide_default_do_par
 WEAK halide_semaphore_init_t custom_semaphore_init = halide_default_semaphore_init;
 WEAK halide_semaphore_try_acquire_t custom_semaphore_try_acquire = halide_default_semaphore_try_acquire;
 WEAK halide_semaphore_release_t custom_semaphore_release = halide_default_semaphore_release;
- 
+
 }}}  // namespace Halide::Runtime::Internal
 
 using namespace Halide::Runtime::Internal;
@@ -592,6 +642,7 @@ WEAK int halide_default_do_par_for(void *user_context, halide_task_t f,
     job.task.min_threads = 0;
     job.task.name = NULL;
     job.task_fn = f;
+    job.live_edge = 0;
     job.user_context = user_context;
     job.exit_status = 0;
     job.active_workers = 0;
@@ -603,6 +654,10 @@ WEAK int halide_default_do_par_for(void *user_context, halide_task_t f,
     halide_mutex_lock(&work_queue.mutex);
     enqueue_work_already_locked(1, &job, NULL);
     worker_thread_already_locked(&job);
+
+    // print(NULL) << work_queue.good << " " << work_queue.bad << "\n";
+    work_queue.good = work_queue.bad = 0;
+
     halide_mutex_unlock(&work_queue.mutex);
     return job.exit_status;
 }
@@ -619,6 +674,7 @@ WEAK int halide_default_do_parallel_tasks(void *user_context, int num_tasks,
             continue;
         }
         jobs[i].task = *tasks++;
+        jobs[i].live_edge = 0;
         jobs[i].task_fn = NULL;
         jobs[i].user_context = user_context;
         jobs[i].exit_status = 0;
@@ -737,7 +793,7 @@ WEAK halide_do_loop_task_t halide_set_custom_do_loop_task(halide_do_loop_task_t 
     custom_do_loop_task = f;
     return result;
 }
-  
+
 WEAK halide_do_par_for_t halide_set_custom_do_par_for(halide_do_par_for_t f) {
     halide_do_par_for_t result = custom_do_par_for;
     custom_do_par_for = f;
