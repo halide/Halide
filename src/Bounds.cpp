@@ -31,6 +31,12 @@ using std::string;
 using std::vector;
 
 namespace {
+
+bool is_signed_integer_overflow(Expr e) {
+  const Call *call = e.as<Call>();
+  return call && call->is_intrinsic(Call::signed_integer_overflow);
+}
+
 int static_sign(Expr x) {
     if (is_positive_const(x)) {
         return 1;
@@ -46,18 +52,6 @@ int static_sign(Expr x) {
     }
     return 0;
 }
-
-class HasSIO : public Halide::Internal::IRVisitor {
-    using IRVisitor::visit;
-
-    void visit(const Halide::Internal::Call *call_expr) override {
-        if (call_expr->is_intrinsic(Halide::Internal::Call::signed_integer_overflow)) count++;
-        IRVisitor::visit(call_expr);
-    }
-public:
-    int count;
-    HasSIO() : count(0) {}
-};
 
 }  // anonymous namespace
 
@@ -1182,9 +1176,22 @@ private:
 
 Interval bounds_of_expr_in_scope(Expr expr, const Scope<Interval> &scope, const FuncValueBounds &fb, bool const_bound) {
     //debug(3) << "computing bounds_of_expr_in_scope " << expr << "\n";
+
     Bounds b(&scope, fb, const_bound);
     expr.accept(&b);
-    //debug(3) << "bounds_of_expr_in_scope " << expr << " = " << simplify(b.interval.min) << ", " << simplify(b.interval.max) << "\n";
+
+    // Not all Bounds::visit() methods guarantee that their output interval
+    // is simplified; call simplify() on the final results here, so that
+    // we easily check for overflow.
+    b.interval.min = simplify(b.interval.min);
+    b.interval.max = simplify(b.interval.max);
+
+    //debug(3) << "bounds_of_expr_in_scope " << expr << " = " << b.interval.min << ", " << b.interval.max << "\n";
+
+    // Quietly convert signed integer overflow to be unbounded.
+    if (is_signed_integer_overflow(b.interval.min)) b.interval.min = Interval::neg_inf;
+    if (is_signed_integer_overflow(b.interval.max)) b.interval.max = Interval::pos_inf;
+
     Type expected = expr.type().element_of();
     if (b.interval.has_lower_bound()) {
         internal_assert(b.interval.min.type() == expected)
@@ -1197,18 +1204,6 @@ Interval bounds_of_expr_in_scope(Expr expr, const Scope<Interval> &scope, const 
             << "Max of " << expr
             << " should have been a scalar of type " << expected
             << ": " << b.interval.max << "\n";
-    }
-
-    // If there is signed integer overflow, replace it with unbounded.
-    {
-      HasSIO min_overflow;
-      b.interval.min.accept(&min_overflow);
-      if (min_overflow.count > 0) b.interval.min = Interval::neg_inf;
-    }
-    {
-      HasSIO max_overflow;
-      b.interval.max.accept(&max_overflow);
-      if (max_overflow.count > 0) b.interval.max = Interval::pos_inf;
     }
 
     return b.interval;
