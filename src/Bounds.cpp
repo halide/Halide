@@ -1012,7 +1012,10 @@ private:
             op->args[1].accept(this);
         } else if (op->is_intrinsic(Call::shift_left) ||
                    op->is_intrinsic(Call::shift_right) ||
-                   op->is_intrinsic(Call::bitwise_and)) {
+                   op->is_intrinsic(Call::bitwise_and) ||
+                   op->is_intrinsic(Call::bitwise_not) ||
+                   op->is_intrinsic(Call::bitwise_xor) ||
+                   op->is_intrinsic(Call::bitwise_or)) {
             Expr simplified = simplify(op);
             if (!equal(simplified, op)) {
                 simplified.accept(this);
@@ -2575,6 +2578,15 @@ void bounds_test() {
     check(scope, (cast<uint8_t>(x)+10)*10, make_const(UInt(8), 100), make_const(UInt(8), 200));
     check(scope, (cast<uint8_t>(x)+10)*(cast<uint8_t>(x)), make_const(UInt(8), 0), make_const(UInt(8), 200));
     check(scope, (cast<uint8_t>(x)+20)-(cast<uint8_t>(x)+5), make_const(UInt(8), 5), make_const(UInt(8), 25));
+
+    // Check some bitwise ops
+    // bitwise_and can simplify to modulo as well as constant-folding
+    check(scope, (cast<uint8_t>(x) & 7), make_const(UInt(8), 0), make_const(UInt(8), 7));
+    check(scope, (cast<uint8_t>(3) & cast<uint8_t>(2)), make_const(UInt(8), 2), make_const(UInt(8), 2));
+    // bitwise_or, bitwise_xor, bitwise_not really only do constant-folding
+    check(scope, (cast<uint8_t>(1) | cast<uint8_t>(2)), make_const(UInt(8), 3), make_const(UInt(8), 3));
+    check(scope, (cast<uint8_t>(3) ^ cast<uint8_t>(2)), make_const(UInt(8), 1), make_const(UInt(8), 1));
+    check(scope, (~cast<uint8_t>(3)), make_const(UInt(8), 0xfc), make_const(UInt(8), 0xfc));
 
     check(scope,
           cast<uint16_t>(clamp(cast<float>(x/y), 0.0f, 4095.0f)),
