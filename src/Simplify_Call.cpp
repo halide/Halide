@@ -118,6 +118,23 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         } else {
             return ~a;
         }
+    } else if (op->is_intrinsic(Call::bitwise_xor)) {
+        Expr a = mutate(op->args[0], nullptr);
+        Expr b = mutate(op->args[1], nullptr);
+
+        int64_t ia, ib;
+        uint64_t ua, ub;
+        if (const_int(a, &ia) &&
+            const_int(b, &ib)) {
+            return make_const(op->type, ia ^ ib);
+        } else if (const_uint(a, &ua) &&
+                   const_uint(b, &ub)) {
+            return make_const(op->type, ua ^ ub);
+        } else if (a.same_as(op->args[0]) && b.same_as(op->args[1])) {
+            return op;
+        } else {
+            return a ^ b;
+        }
     } else if (op->is_intrinsic(Call::reinterpret)) {
         Expr a = mutate(op->args[0], nullptr);
 

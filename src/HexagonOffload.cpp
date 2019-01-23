@@ -635,10 +635,10 @@ const std::string pipeline_module_name = "halide_hexagon_code";
 
 // Replace the parameter objects of loads/stores with a new parameter
 // object.
-class ReplaceParams : public IRMutator2 {
+class ReplaceParams : public IRMutator {
     const std::map<std::string, Parameter> &replacements;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Expr visit(const Load *op) override {
         auto i = replacements.find(op->name);
@@ -646,7 +646,7 @@ class ReplaceParams : public IRMutator2 {
             return Load::make(op->type, op->name, mutate(op->index), op->image,
                               i->second, mutate(op->predicate));
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
@@ -656,7 +656,7 @@ class ReplaceParams : public IRMutator2 {
             return Store::make(op->name, mutate(op->value), mutate(op->index),
                                i->second, mutate(op->predicate));
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
@@ -669,7 +669,7 @@ Stmt replace_params(Stmt s, const std::map<std::string, Parameter> &replacements
     return ReplaceParams(replacements).mutate(s);
 }
 
-class InjectHexagonRpc : public IRMutator2 {
+class InjectHexagonRpc : public IRMutator {
     std::map<std::string, Expr> state_bufs;
 
     Module &device_code;
@@ -711,11 +711,11 @@ class InjectHexagonRpc : public IRMutator2 {
         return Call::make(Handle(), Call::buffer_get_host, {buf}, Call::Extern);
     }
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Stmt visit(const For *loop) override {
         if (loop->device_api != DeviceAPI::Hexagon) {
-            return IRMutator2::visit(loop);
+            return IRMutator::visit(loop);
         }
 
         // Unrolling or loop partitioning might generate multiple
@@ -849,7 +849,7 @@ class InjectHexagonRpc : public IRMutator2 {
             alignment_info.push(op->name, modulus_remainder(op->value, alignment_info));
         }
 
-        Expr expr = IRMutator2::visit(op);
+        Expr expr = IRMutator::visit(op);
 
         if (op->value.type() == Int(32)) {
             alignment_info.pop(op->name);
@@ -862,7 +862,7 @@ class InjectHexagonRpc : public IRMutator2 {
             alignment_info.push(op->name, modulus_remainder(op->value, alignment_info));
         }
 
-        Stmt stmt = IRMutator2::visit(op);
+        Stmt stmt = IRMutator::visit(op);
 
         if (op->value.type() == Int(32)) {
             alignment_info.pop(op->name);

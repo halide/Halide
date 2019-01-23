@@ -67,8 +67,8 @@ Expr bc(Expr x) { return Broadcast::make(x, 0); }
 
 // This mutator rewrites patterns with an unknown number of lanes to
 // have the specified number of lanes.
-class WithLanes : public IRMutator2 {
-    using IRMutator2::visit;
+class WithLanes : public IRMutator {
+    using IRMutator::visit;
 
     int lanes;
 
@@ -78,7 +78,7 @@ class WithLanes : public IRMutator2 {
         if (op->type.lanes() != lanes) {
             return Cast::make(with_lanes(op->type), mutate(op->value));
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
@@ -94,7 +94,7 @@ class WithLanes : public IRMutator2 {
         if (op->type.lanes() != lanes) {
             return Broadcast::make(op->value, lanes);
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
@@ -250,7 +250,7 @@ Expr replace_pattern(Expr x, const vector<Expr> &matches, const Pattern &p) {
 // successful, the expression is replaced with a call using the
 // matched operands. Prior to substitution, the matches are mutated
 // with op_mutator.
-Expr apply_patterns(Expr x, const vector<Pattern> &patterns, const Target &target, IRMutator2 *op_mutator) {
+Expr apply_patterns(Expr x, const vector<Pattern> &patterns, const Target &target, IRMutator *op_mutator) {
     debug(3) << "apply_patterns " << x << "\n";
     vector<Expr> matches;
     for (const Pattern &p : patterns) {
@@ -303,7 +303,7 @@ Expr lossless_negate(Expr x) {
 }
 
 template <typename T>
-Expr apply_commutative_patterns(const T *op, const vector<Pattern> &patterns, const Target &target, IRMutator2 *mutator) {
+Expr apply_commutative_patterns(const T *op, const vector<Pattern> &patterns, const Target &target, IRMutator *mutator) {
     Expr ret = apply_patterns(op, patterns, target, mutator);
     if (!ret.same_as(op)) return ret;
 
@@ -409,9 +409,9 @@ int find_mpy_ops(Expr op, Type a_ty, Type b_ty, int max_mpy_count,
 
 // Perform peephole optimizations on the IR, adding appropriate
 // interleave and deinterleave calls.
-class OptimizePatterns : public IRMutator2 {
+class OptimizePatterns : public IRMutator {
 private:
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Target target;
 
@@ -474,7 +474,7 @@ private:
                 return new_expr;
             }
         }
-        return IRMutator2::visit(op);
+        return IRMutator::visit(op);
     }
 
     // Helpers to generate horizontally reducing multiply operations.
@@ -768,7 +768,7 @@ private:
                 return new_expr;
             }
         }
-        return IRMutator2::visit(op);
+        return IRMutator::visit(op);
     }
 
     Expr visit(const Sub *op) override {
@@ -794,11 +794,11 @@ private:
                 }
             }
         }
-        return IRMutator2::visit(op);
+        return IRMutator::visit(op);
     }
 
     Expr visit(const Max *op) override {
-        Expr expr = IRMutator2::visit(op);
+        Expr expr = IRMutator::visit(op);
 
         if (op->type.is_vector()) {
             // This pattern is weird (two operands must match, result
@@ -1043,7 +1043,7 @@ private:
                 }
             }
         }
-        return IRMutator2::visit(op);
+        return IRMutator::visit(op);
     }
 
     Expr visit(const Call *op) override {
@@ -1071,7 +1071,7 @@ private:
                 return mutate(e);
             }
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
@@ -1086,7 +1086,7 @@ public:
 // program, using the fact that interleaves can pass through pointwise
 // IR operations. When an interleave collides with a deinterleave,
 // they cancel out.
-class EliminateInterleaves : public IRMutator2 {
+class EliminateInterleaves : public IRMutator {
     Scope<bool> vars;
 
 
@@ -1233,15 +1233,15 @@ class EliminateInterleaves : public IRMutator2 {
     // should have been replaced with bitwise operations.
     Expr visit(const And *op) override {
         internal_assert(op->type.is_scalar());
-        return IRMutator2::visit(op);
+        return IRMutator::visit(op);
     }
     Expr visit(const Or *op) override {
         internal_assert(op->type.is_scalar());
-        return IRMutator2::visit(op);
+        return IRMutator::visit(op);
     }
     Expr visit(const Not *op) override {
         internal_assert(op->type.is_scalar());
-        return IRMutator2::visit(op);
+        return IRMutator::visit(op);
     }
 
     Expr visit(const Select *op) override {
@@ -1381,7 +1381,7 @@ class EliminateInterleaves : public IRMutator2 {
                 return op;
             }
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
@@ -1652,14 +1652,14 @@ class EliminateInterleaves : public IRMutator2 {
                 state = BufferState::NotInterleaved;
             }
         }
-        Expr expr = IRMutator2::visit(op);
+        Expr expr = IRMutator::visit(op);
         if (deinterleave_buffers.contains(op->name)) {
             expr = native_interleave(expr);
         }
         return expr;
     }
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
 public:
     EliminateInterleaves(int native_vector_bytes, Scope<ModulusRemainder>& alignment_info) :
@@ -1672,7 +1672,7 @@ public:
 // this after all other efforts to eliminate the interleaves,
 // otherwise this might eat some interleaves that could have cancelled
 // with other operations.
-class FuseInterleaves : public IRMutator2 {
+class FuseInterleaves : public IRMutator {
     Expr visit(const Call *op) override {
         // This is a list of {f, g} pairs that if the first operation
         // is interleaved, interleave(f(x)) is equivalent to g(x).
@@ -1697,10 +1697,10 @@ class FuseInterleaves : public IRMutator2 {
             }
         }
 
-        return IRMutator2::visit(op);
+        return IRMutator::visit(op);
     }
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 };
 
 // Find an upper bound of bounds.max - bounds.min.
@@ -1731,12 +1731,12 @@ Expr span_of_bounds(Interval bounds) {
 
 // Replace indirect loads with dynamic_shuffle intrinsics where
 // possible.
-class OptimizeShuffles : public IRMutator2 {
+class OptimizeShuffles : public IRMutator {
     int lut_alignment;
     Scope<Interval> bounds;
     std::vector<std::pair<string, Expr>> lets;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     template <typename NodeType, typename T>
     NodeType visit_let(const T *op) {
@@ -1744,7 +1744,7 @@ class OptimizeShuffles : public IRMutator2 {
         if (op->value.type().is_vector()) {
             bounds.push(op->name, bounds_of_expr_in_scope(op->value, bounds));
         }
-        NodeType node = IRMutator2::visit(op);
+        NodeType node = IRMutator::visit(op);
         if (op->value.type().is_vector()) {
             bounds.pop(op->name);
         }
@@ -1762,11 +1762,11 @@ class OptimizeShuffles : public IRMutator2 {
     Expr visit(const Load *op) override {
         if (!is_one(op->predicate)) {
             // TODO(psuriana): We shouldn't mess with predicated load for now.
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
         if (!op->type.is_vector() || op->index.as<Ramp>()) {
             // Don't handle scalar or simple vector loads.
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
 
         Expr index = mutate(op->index);
@@ -1824,7 +1824,7 @@ public:
 // be substituted prior to running, and so must be an IRGraphMutator2.
 class VtmpyGenerator : public IRGraphMutator2 {
 private:
-    using IRMutator2::visit;
+    using IRMutator::visit;
     typedef pair<Expr, size_t> LoadIndex;
 
     // Check if vectors a and b point to the same buffer with the base of a
@@ -2012,20 +2012,20 @@ private:
                 }
             }
         }
-        return IRMutator2::visit(op);
+        return IRMutator::visit(op);
     }
 };
 
 // Convert some expressions to an equivalent form which could get better
 // optimized in later stages for hexagon
-class RearrangeExpressions : public IRMutator2 {
+class RearrangeExpressions : public IRMutator {
 private:
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Expr visit(const Mul *op) override {
         if (!op->type.is_vector()) {
             // Only do this for vectors (where we have vmpa).
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
 
         if (op->a.as<Broadcast>() && !op->b.as<Broadcast>()) {
@@ -2063,7 +2063,7 @@ private:
                 return mutate(simplify(sub->a * op->b) - simplify(sub->b * op->b));
             }
         }
-        return IRMutator2::visit(op);
+        return IRMutator::visit(op);
     }
 };
 
@@ -2073,11 +2073,11 @@ private:
 // Expressions which generate vgathers are of the form:
 //     out(x) = lut(foo(x))
 // For vgathers out and lut should be in VTCM in a single page.
-class ScatterGatherGenerator : public IRMutator2 {
+class ScatterGatherGenerator : public IRMutator {
     Scope<Interval> bounds;
     std::unordered_map<string, const Allocate *> allocations;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     template <typename NodeType, typename T>
     NodeType visit_let(const T *op) {
@@ -2085,7 +2085,7 @@ class ScatterGatherGenerator : public IRMutator2 {
         if (op->value.type().is_vector()) {
             bounds.push(op->name, bounds_of_expr_in_scope(op->value, bounds));
         }
-        NodeType node = IRMutator2::visit(op);
+        NodeType node = IRMutator::visit(op);
         if (op->value.type().is_vector()) {
             bounds.pop(op->name);
         }
@@ -2099,7 +2099,7 @@ class ScatterGatherGenerator : public IRMutator2 {
     Stmt visit(const Allocate *op) override {
         // Create a map of the allocation
         allocations[op->name] = op;
-        return IRMutator2::visit(op);
+        return IRMutator::visit(op);
     }
 
     // Try to match expressions of the form:
@@ -2166,12 +2166,12 @@ class ScatterGatherGenerator : public IRMutator2 {
         // supported yet.
         Type ty = op->value.type();
         if (!is_one(op->predicate) || !ty.is_vector() || ty.bits() == 8) {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
         // To use vgathers, the destination address must be VTCM memory.
         const Allocate *alloc = allocations[op->name];
         if (!alloc || alloc->memory_type != MemoryType::VTCM) {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
         // The source for a gather must also be a buffer in VTCM.
         if (op->index.as<Ramp>() && op->value.as<Load>()) {
@@ -2188,7 +2188,7 @@ class ScatterGatherGenerator : public IRMutator2 {
         }
         // Check for scatter/scatter-accumulate.
         if (op->index.as<Ramp>()) {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
         // Calculate the size of the buffer in bytes.
         Expr size = ty.bytes();
@@ -2216,7 +2216,7 @@ class ScatterGatherGenerator : public IRMutator2 {
 // stalls the pipeline untill all previous scatter-gather operations have
 // finished. The operations are not ordered with respect to load and store
 // operations as well.
-class SyncronizationBarriers : public IRMutator2 {
+class SyncronizationBarriers : public IRMutator {
     // Keep track of all scatter-gather operations in flight which could cause
     // a hazard in the future.
     std::map<string, vector<const Stmt *>> in_flight;
@@ -2227,7 +2227,7 @@ class SyncronizationBarriers : public IRMutator2 {
     // Track where the Stmt generated a scatter-release.
     std::map<const Stmt *, Expr> sync;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Expr visit(const Call *op) override {
         if (op->name == "scatter" || op->name == "scatter_acc" || op->name == "gather") {
@@ -2237,13 +2237,13 @@ class SyncronizationBarriers : public IRMutator2 {
             check_hazard(name);
             in_flight[name] = curr_path;
         }
-        return IRMutator2::visit(op);
+        return IRMutator::visit(op);
     }
 
     Stmt visit(const For *op) override {
         // Keep trail of the For blocks encoutered.
         curr_path.push_back(curr);
-        Stmt s = IRMutator2::visit(op);
+        Stmt s = IRMutator::visit(op);
         curr_path.pop_back();
         return s;
     }
@@ -2277,21 +2277,21 @@ class SyncronizationBarriers : public IRMutator2 {
     Expr visit(const Load *op) override {
         // Resolve scatter-load hazard.
         check_hazard(op->name);
-        return IRMutator2::visit(op);
+        return IRMutator::visit(op);
     }
 
     Stmt visit(const Store *op) override {
         // Resolve scatter-store and gather-store hazards.
         check_hazard(op->name);
-        return IRMutator2::visit(op);
+        return IRMutator::visit(op);
     }
 
 public:
-    using IRMutator2::mutate;
+    using IRMutator::mutate;
 
     Stmt mutate(const Stmt &s) override {
         curr = &s;
-        Stmt new_s = IRMutator2::mutate(s);
+        Stmt new_s = IRMutator::mutate(s);
         // Wrap the stmt with scatter-release if any hazard was detected.
         if (sync.find(&s) != sync.end()) {
             Stmt scatter_sync = Evaluate::make(Call::make(Int(32), "scatter_release",

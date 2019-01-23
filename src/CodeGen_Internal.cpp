@@ -281,10 +281,10 @@ namespace {
 
 // This mutator rewrites predicated loads and stores as unpredicated
 // loads/stores with explicit conditions, scalarizing if necessary.
-class UnpredicateLoadsStores : public IRMutator2 {
+class UnpredicateLoadsStores : public IRMutator {
     Expr visit(const Load *op) override {
         if (is_one(op->predicate)) {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
 
         Expr predicate = mutate(op->predicate);
@@ -321,7 +321,7 @@ class UnpredicateLoadsStores : public IRMutator2 {
 
     Stmt visit(const Store *op) override {
         if (is_one(op->predicate)) {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
 
         Expr predicate = mutate(op->predicate);
@@ -354,7 +354,7 @@ class UnpredicateLoadsStores : public IRMutator2 {
        }
     }
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 };
 
 }  // namespace

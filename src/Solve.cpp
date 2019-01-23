@@ -33,12 +33,12 @@ bool no_overflow_int(Type t) {
  * common-subexpression-elimination. Fortunately this isn't a
  * public class, so the only user is in this file.
  */
-class SolveExpression : public IRMutator2 {
+class SolveExpression : public IRMutator {
 public:
     SolveExpression(const string &v, const Scope<Expr> &es) :
         failed(false), var(v), uses_var(false), external_scope(es) {}
 
-    using IRMutator2::mutate;
+    using IRMutator::mutate;
 
     Expr mutate(const Expr &e) override {
         map<Expr, CacheEntry, ExprCompare>::iterator iter = cache.find(e);
@@ -47,7 +47,7 @@ public:
             debug(4) << "Mutating " << e << " (" << uses_var << ")\n";
             bool old_uses_var = uses_var;
             uses_var = false;
-            Expr new_e = IRMutator2::mutate(e);
+            Expr new_e = IRMutator::mutate(e);
             CacheEntry entry = {new_e, uses_var};
             uses_var = old_uses_var || uses_var;
             cache[e] = entry;
@@ -105,7 +105,7 @@ private:
     // so the right of the subexpression can be considered a
     // constant. The mutator must preserve this property or set the
     // flag "failed" to true.
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     // Admit defeat. Isolated in a method for ease of debugging.
     Expr fail(Expr e) {
@@ -411,7 +411,7 @@ private:
             op->is_intrinsic(Call::likely_if_innermost)) {
             return mutate(op->args[0]);
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
@@ -1128,9 +1128,9 @@ public:
 
 };
 
-class AndConditionOverDomain : public IRMutator2 {
+class AndConditionOverDomain : public IRMutator {
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Scope<Interval> scope;
     Scope<Expr> bound_vars;
@@ -1247,7 +1247,7 @@ class AndConditionOverDomain : public IRMutator2 {
 
     Expr visit(const Not *op) override {
         flipped = !flipped;
-        Expr expr = IRMutator2::visit(op);
+        Expr expr = IRMutator::visit(op);
         flipped = !flipped;
         return expr;
     }
