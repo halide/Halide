@@ -16,6 +16,7 @@
 #include "Simplify.h"
 #include "Solve.h"
 #include "Substitute.h"
+#include "CSE.h"
 
 namespace Halide {
 
@@ -738,10 +739,12 @@ void ReverseAccumulationVisitor::propagate_adjoints(
                                    update_args, i);
                 }
 
+                int count = 0;
                 // Traverse the expressions in reverse order
                 for (auto it = expr_list.rbegin(); it != expr_list.rend(); it++) {
                     // Propagate adjoints
                     it->accept(this);
+                    count++;
                 }
             }
         }
@@ -1376,6 +1379,12 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
             }
         }
 
+        // Simplify expressions
+        adjoint = simplify(common_subexpression_elimination(adjoint));
+        for (int i = 0; i < (int) lhs.size(); i++) {
+            lhs[i] = simplify(common_subexpression_elimination(lhs[i]));
+        }
+
         // General scattering simplification rules:
         // For each expression in lhs,
         // check if it is an expression of a single (associative & commutative)
@@ -1392,103 +1401,143 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
         // f(4 * r.x + r.y) = g(r.x) + h(4 * r.x + r.y)
         // => f(x) = g(x/4) + h(x)
         vector<Var> func_to_update_args = func_to_update.args();
+        Expr new_adjoint = func_to_update.values().size() == 1 ?
+            (func_to_update(lhs) + adjoint) : (func_to_update(lhs)[op->value_index] + adjoint);
+        std::vector<Expr> new_adjoint_tuple(func_to_update.values().size(), Expr(0.f));
+        new_adjoint_tuple[op->value_index] = new_adjoint;
         AssociativeOp associative_op = prove_associativity(
-            func_to_update.name(), lhs, { adjoint });
-        for (int i = 0; i < (int) lhs.size(); i++) {
-            Expr lhs_arg = substitute_in_all_lets(lhs[i]);
-            const Variable *var = lhs_arg.as<Variable>();
-            const Add *add = lhs_arg.as<Add>();
-            // f(r.x) = ... && r is associative
-            // => f(x) = ...
-            if (var != nullptr && var->reduction_domain.defined() &&
-                var->reduction_domain.split_predicate().size() == 0) {
-                ReductionDomain rdom = var->reduction_domain;
-                int rvar_id = -1;
-                for (int rid = 0; rid < (int) rdom.domain().size(); rid++) {
-                    if (rdom.domain()[rid].var == var->name) {
-                        rvar_id = rid;
-                        break;
-                    }
-                }
-                internal_assert(rvar_id != -1);
-                ReductionVariable rvar = rdom.domain()[rvar_id];
-                // Check if the min/max of the rvariable equal to
-                // the target function
-                const Box &target_bounds = func_bounds[op->name];
-                Interval t_interval = target_bounds[i];
-                t_interval.min = simplify(t_interval.min);
-                t_interval.max = simplify(t_interval.max);
-                Interval r_interval(simplify(rvar.min),
-                                    simplify(rvar.min + rvar.extent - 1));
-                if (can_prove(r_interval.min <= t_interval.min &&
-                              r_interval.max >= t_interval.max) &&
-                    associative_op.associative() &&
-                    associative_op.commutative()) {
-                    lhs[i] = func_to_update_args[i];
-                    // Replace other occurence of rvar in lhs
-                    for (int j = 0; j < (int) lhs.size(); j++) {
-                        if (j != i) {
-                            lhs[j] = simplify(substitute(
-                                rvar.var, func_to_update_args[i], lhs[j]));
+            func_to_update.name(), lhs, new_adjoint_tuple);
+        // for (int i = 0; i < (int)lhs.size(); i++) {
+        //     std::cerr << "lhs[" << i << "]:" << lhs[i] << std::endl;
+        // }
+        // std::cerr << "adjoint:" << new_adjoint << std::endl;
+        // std::cerr << "func_to_update.name():" << func_to_update.name() << std::endl;
+        // std::cerr << "associative_op.associative():" << associative_op.associative() << std::endl;
+        // std::cerr << "associative_op.commutative():" << associative_op.commutative() << std::endl;
+        if (associative_op.associative() && associative_op.commutative()) {
+            for (int i = 0; i < (int) lhs.size(); i++) {
+                Expr lhs_arg = substitute_in_all_lets(lhs[i]);
+                const Variable *var = lhs_arg.as<Variable>();
+                const Add *add = lhs_arg.as<Add>();
+                // f(r.x) = ... && r is associative
+                // => f(x) = ...
+                if (var != nullptr && var->reduction_domain.defined() &&
+                    var->reduction_domain.split_predicate().size() == 0) {
+                    ReductionDomain rdom = var->reduction_domain;
+                    int rvar_id = -1;
+                    for (int rid = 0; rid < (int) rdom.domain().size(); rid++) {
+                        if (rdom.domain()[rid].var == var->name) {
+                            rvar_id = rid;
+                            break;
                         }
                     }
-                    adjoint = simplify(substitute(
-                        rvar.var, func_to_update_args[i], adjoint));
-                }
-                // f(4 * r.x + r.y) = g(r.x) + h(4 * r.x + r.y)
-                // => f(x) = g(x/4) + h(x)
-            } else if (add != nullptr &&
-                       ((add->a.as<Mul>() != nullptr &&
-                         add->b.as<Variable>() != nullptr) ||
-                        (add->a.as<Variable>() != nullptr &&
-                         add->b.as<Mul>() != nullptr))) {
-                // Find pattern s * r.x + r.y where r.y.min == 0 && r.y.extent == s
-                Expr a = add->a, b = add->b;
-                if (add->b.as<Mul>() != nullptr) {
-                    // swap so that b is always the Variable
-                    internal_assert(add->a.as<Variable>() != nullptr);
-                    std::swap(a, b);
-                }
-                const Mul *mul = a.as<Mul>();
-                const Variable *b_var = b.as<Variable>();
-                internal_assert(mul != nullptr && b_var != nullptr);
-                Expr mul_a = mul->a, mul_b = mul->b;
-                if (mul_a.as<Variable>() != nullptr &&
-                    mul_a.as<Variable>()->reduction_domain.defined()) {
-                    std::swap(mul_a, mul_b);
-                }
-                const Variable *mul_b_var = mul_b.as<Variable>();
-                if (mul_b_var == nullptr || !mul_b_var->reduction_domain.defined()) {
-                    continue;
-                }
-                ReductionDomain b_rdom = b_var->reduction_domain;
-                if (!b_rdom.defined()) {
-                    continue;
-                }
+                    internal_assert(rvar_id != -1);
+                    ReductionVariable rvar = rdom.domain()[rvar_id];
+                    // Check if the min/max of the rvariable is equal to
+                    // the target function
+                    const Box &target_bounds = func_bounds[op->name];
+                    Interval t_interval = target_bounds[i];
+                    t_interval.min = simplify(t_interval.min);
+                    t_interval.max = simplify(t_interval.max);
+                    Interval r_interval(simplify(rvar.min),
+                                        simplify(rvar.min + rvar.extent - 1));
+                    if (can_prove(r_interval.min <= t_interval.min &&
+                                  r_interval.max >= t_interval.max)) {
+                        lhs[i] = func_to_update_args[i];
+                        Expr clamped_arg = clamp(func_to_update_args[i],
+                            r_interval.min, r_interval.max);
+                        // Replace other occurence of rvar in lhs
+                        for (int j = 0; j < (int) lhs.size(); j++) {
+                            if (j != i) {
+                                lhs[j] = simplify(substitute(
+                                    rvar.var, clamped_arg, lhs[j]));
+                            }
+                        }
+                        // Take care of boundary condition
+                        Expr in_bound = func_to_update_args[i] >= r_interval.min && 
+                                        func_to_update_args[i] <= r_interval.max;
+                        adjoint = select(in_bound,
+                            simplify(substitute(rvar.var, clamped_arg, adjoint)),
+                            make_const(adjoint.type(), 0));
+                    }
+                    // f(4 * r.x + r.y) = g(r.x) + h(4 * r.x + r.y)
+                    // => f(x) = g(x/4) + h(x)
+                } else if (add != nullptr &&
+                           ((add->a.as<Mul>() != nullptr &&
+                             add->b.as<Variable>() != nullptr) ||
+                            (add->a.as<Variable>() != nullptr &&
+                             add->b.as<Mul>() != nullptr))) {
+                    // Find pattern s * r.x + r.y where r.y.min == 0 && r.y.extent == s
+                    Expr a = add->a, b = add->b;
+                    if (add->b.as<Mul>() != nullptr) {
+                        // swap so that b is always the Variable
+                        internal_assert(add->a.as<Variable>() != nullptr);
+                        std::swap(a, b);
+                    }
+                    const Mul *mul = a.as<Mul>();
+                    const Variable *b_var = b.as<Variable>();
+                    internal_assert(mul != nullptr && b_var != nullptr);
+                    Expr mul_a = mul->a, mul_b = mul->b;
+                    if (mul_a.as<Variable>() != nullptr &&
+                        mul_a.as<Variable>()->reduction_domain.defined()) {
+                        std::swap(mul_a, mul_b);
+                    }
+                    const Variable *mul_b_var = mul_b.as<Variable>();
+                    if (mul_b_var == nullptr || !mul_b_var->reduction_domain.defined()) {
+                        continue;
+                    }
+                    ReductionDomain b_rdom = b_var->reduction_domain;
+                    if (!b_rdom.defined()) {
+                        continue;
+                    }
 
-                int rvar_id = -1;
-                for (int rid = 0; rid < (int) b_rdom.domain().size(); rid++) {
-                    if (b_rdom.domain()[rid].var == b_var->name) {
-                        rvar_id = rid;
-                        break;
+                    int rvar_id = -1;
+                    for (int rid = 0; rid < (int) b_rdom.domain().size(); rid++) {
+                        if (b_rdom.domain()[rid].var == b_var->name) {
+                            rvar_id = rid;
+                            break;
+                        }
+                    }
+                    internal_assert(rvar_id != -1);
+                    ReductionVariable rvar = b_rdom.domain()[rvar_id];
+                    if (!equal(rvar.min, Expr(0)) || !equal(rvar.extent, mul_a)) {
+                        continue;
+                    }
+
+                    ReductionDomain mul_b_rdom = mul_b_var->reduction_domain;
+                    int mulb_rvar_id = -1;
+                    for (int rid = 0; rid < (int) mul_b_rdom.domain().size(); rid++) {
+                        if (mul_b_rdom.domain()[rid].var == mul_b_var->name) {
+                            mulb_rvar_id = rid;
+                            break;
+                        }
+                    }
+                    internal_assert(mulb_rvar_id != -1);
+                    ReductionVariable mulb_rvar = b_rdom.domain()[mulb_rvar_id];
+
+                    // Check if the min/max of the s * r.x + r.y is equal to
+                    // the target function
+                    const Box &target_bounds = func_bounds[op->name];
+                    Interval t_interval = target_bounds[i];
+                    t_interval.min = simplify(t_interval.min);
+                    t_interval.max = simplify(t_interval.max);
+                    Interval r_interval(simplify(mul_a * mulb_rvar.min),
+                                        simplify(mul_a * mulb_rvar.extent - 1));
+
+                    if (can_prove(r_interval.min <= t_interval.min &&
+                                  r_interval.max >= t_interval.max)) {
+                        // We've finally made sure that the expression has the form we want
+                        // Now replace everything
+                        // replace s * r.x + r.y with x
+                        lhs[i] = func_to_update_args[i];
+                        adjoint = substitute(lhs_arg,
+                                             func_to_update_args[i],
+                                             substitute_in_all_lets(adjoint));
+                        // replace r.x with x / s
+                        adjoint = substitute(mul_b, func_to_update_args[i] / mul_a, adjoint);
+                        adjoint = simplify(adjoint);
                     }
                 }
-                internal_assert(rvar_id != -1);
-                ReductionVariable rvar = b_rdom.domain()[rvar_id];
-                if (!equal(rvar.min, Expr(0)) || !equal(rvar.extent, mul_a)) {
-                    continue;
-                }
-
-                // We've finally made sure that the expression has the form we want
-                // Now replace everything
-                // replace s * r.x + r.y with x
-                lhs[i] = func_to_update_args[i];
-                adjoint = substitute(lhs_arg,
-                                     func_to_update_args[i],
-                                     substitute_in_all_lets(adjoint));
-                // replace r.x with x / s
-                adjoint = substitute(mul_b, func_to_update_args[i] / mul_a, adjoint);
-                adjoint = simplify(adjoint);
             }
         }
 
@@ -1590,9 +1639,7 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
                     var_names[rid], merged_r[rid], rdom_predicate);
             }
             if (!is_const(rdom_predicate)) {
-                for (int arg_id = 0; arg_id <
-                                     (int) func_to_update_args.size();
-                     arg_id++) {
+                for (int arg_id = 0; arg_id < (int) func_to_update_args.size(); arg_id++) {
                     // Substitute new_args back to original variables
                     rdom_predicate = substitute(new_args[arg_id].name(),
                                                 func_to_update_args[arg_id], rdom_predicate);
@@ -1610,7 +1657,12 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
             adjoint = substitute_rdom_predicate(
                 new_args[arg_id].name(), func_to_update_args[arg_id], adjoint);
         }
-        adjoint = simplify(adjoint);
+
+        // Simplify expressions
+        adjoint = simplify(common_subexpression_elimination(adjoint));
+        for (int i = 0; i < (int) lhs.size(); i++) {
+            lhs[i] = simplify(common_subexpression_elimination(lhs[i]));
+        }
 
         if (debug_flag) {
             debug(0) << "func_to_update.name():" << func_to_update.name() << "\n";
