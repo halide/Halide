@@ -3,7 +3,7 @@
 namespace Halide {
 namespace Internal {
 
-Expr Simplify::visit(const Not *op, ConstBounds *bounds) {
+Expr Simplify::visit(const Not *op, ExprInfo *bounds) {
     Expr a = mutate(op->a, nullptr);
 
     auto rewrite = IRMatcher::rewriter(IRMatcher::not_op(a), op->type);

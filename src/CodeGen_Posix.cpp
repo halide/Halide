@@ -203,8 +203,14 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
                      << " for " << name << "\n";
             slot = it->pseudostack_slot;
             allocation.name = it->name;
-            // We've already registered a destructor for this slot
             allocation.destructor = it->destructor;
+            // We've already created a destructor stack entry for this
+            // pseudostack allocation, but we may not have actually
+            // registered the destructor if we're reusing an
+            // allocation that occurs conditionally. TODO: Why not
+            // just register the destructor at entry?
+
+            builder->CreateStore(builder->CreatePointerCast(slot, i8_t->getPointerTo()), allocation.destructor);
             free_stack_allocs.erase(it);
         } else {
             // Stack allocation with a dynamic size

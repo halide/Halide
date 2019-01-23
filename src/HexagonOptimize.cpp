@@ -1606,7 +1606,7 @@ class EliminateInterleaves : public IRMutator2 {
             }
             internal_assert(aligned_buffer_access.contains(op->name) && "Buffer not found in scope");
             bool &aligned_accesses = aligned_buffer_access.ref(op->name);
-            int aligned_offset = 0;
+            int64_t aligned_offset = 0;
 
             if (!alignment_analyzer.is_aligned(op, &aligned_offset)) {
                 aligned_accesses = false;
@@ -1640,7 +1640,7 @@ class EliminateInterleaves : public IRMutator2 {
                 // interleave).
                 internal_assert(aligned_buffer_access.contains(op->name) && "Buffer not found in scope");
                 bool &aligned_accesses = aligned_buffer_access.ref(op->name);
-                int aligned_offset = 0;
+                int64_t aligned_offset = 0;
 
                 if (!alignment_analyzer.is_aligned(op, &aligned_offset)) {
                     aligned_accesses = false;

@@ -12,7 +12,7 @@ public:
     Output<Buffer<>> output_y{"output_y", 2};
     Output<Buffer<>> output_uv{"output_uv", 3};
 
-    enum class Schedule { Basic, Fold, Async, Split, Split_Fold };
+    enum class Schedule { Basic, Fold, Async, Split, Split_Async };
     GeneratorParam<Schedule> schedule{"schedule",
             /* default value */
              Schedule::Basic,
@@ -21,7 +21,7 @@ public:
              { "fold", Schedule::Fold },
              { "async", Schedule::Async },
              { "split", Schedule::Split },
-             { "split_fold", Schedule::Split_Fold }}};
+             { "split_async", Schedule::Split_Async }}};
 
     GeneratorParam<bool> use_dma_for_output{"use_dma_for_output", true};
 
@@ -89,7 +89,6 @@ public:
                 input_uv_copy
                     .compute_at(output_uv, tx)
                     .copy_to_host()
-                    .bound(c, 0, 2)
                     .reorder_storage(c, x, y);
             break;
             case Schedule::Fold:
@@ -97,7 +96,6 @@ public:
                     .tile(x, y, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp);
 
                 output_uv
-                    .reorder(c, x, y)   // to handle UV interleave, with 'c' inner most loop, as DMA'd into buffer
                     .tile(x, y, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp);
 
                 input_y_copy
@@ -112,7 +110,6 @@ public:
                     .store_at(output_uv, ty)
                     .reorder_storage(c, x, y)
                     .fold_storage(x, tile_width * 2);
-
             break;
             case Schedule::Async:
                 output_y
@@ -158,11 +155,10 @@ public:
                 input_uv_copy
                     .copy_to_host()
                     .compute_at(output_uv, tx)
-                    .bound(c, 0, 2)
                     .reorder_storage(c, x, y);
             }
             break;
-            case Schedule::Split_Fold: {
+            case Schedule::Split_Async: {
                 Var yo, yi;
 
                 Expr fac_y = output_y.dim(1).extent()/2;
@@ -189,11 +185,23 @@ public:
                     .compute_at(output_uv, tx)
                     .store_at(output_uv, ty)
                     .async()
-                    .bound(c, 0, 2)
                     .reorder_storage(c, x, y)
                     .fold_storage(x, tile_width * 2);
             }
             break;
+        }
+
+        // async tiled output
+        if (use_dma_for_output && ((Schedule)schedule == Schedule::Async || (Schedule)schedule == Schedule::Split_Async)) {
+            work_y
+                .async()
+                .store_at(output_y, ty)
+                .fold_storage(x, tile_width * 2);
+
+            work_uv
+                .async()
+                .store_at(output_uv, ty)
+                .fold_storage(x, tile_width * 2);
         }
 
         // Schedule the work in tiles (same for all DMA schedules).

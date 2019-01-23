@@ -8,7 +8,7 @@ using std::string;
 using std::vector;
 
 template<typename LetOrLetStmt, typename Body>
-Body Simplify::simplify_let(const LetOrLetStmt *op, ConstBounds *bounds) {
+Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *bounds) {
 
     // Lets are often deeply nested. Get the intermediate state off
     // the call stack where it could overflow onto an explicit stack.
@@ -33,7 +33,7 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ConstBounds *bounds) {
 
         // If the value is trivial, make a note of it in the scope so
         // we can subs it in later
-        ConstBounds value_bounds;
+        ExprInfo value_bounds;
         f.value = mutate(op->value, &value_bounds);
 
         // Iteratively peel off certain operations from the let value and push them inside.
@@ -161,27 +161,19 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ConstBounds *bounds) {
         // Before we enter the body, track the alignment info
 
         if (f.new_value.defined() && no_overflow_scalar_int(f.new_value.type())) {
-            ModulusRemainder mod_rem = modulus_remainder(f.new_value, alignment_info);
-            if (mod_rem.modulus > 1) {
-                alignment_info.push(f.new_name, mod_rem);
-                f.new_value_alignment_tracked = true;
-            }
-            ConstBounds new_value_bounds;
+            // Remutate new_value to get updated bounds
+            ExprInfo new_value_bounds;
             f.new_value = mutate(f.new_value, &new_value_bounds);
-            if (new_value_bounds.min_defined || new_value_bounds.max_defined) {
-                bounds_info.push(f.new_name, new_value_bounds);
+            if (new_value_bounds.min_defined || new_value_bounds.max_defined || new_value_bounds.alignment.modulus != 1) {
+                // There is some useful information
+                bounds_and_alignment_info.push(f.new_name, new_value_bounds);
                 f.new_value_bounds_tracked = true;
             }
         }
 
         if (no_overflow_scalar_int(f.value.type())) {
-            ModulusRemainder mod_rem = modulus_remainder(f.value, alignment_info);
-            if (mod_rem.modulus > 1) {
-                alignment_info.push(op->name, mod_rem);
-                f.value_alignment_tracked = true;
-            }
-            if (value_bounds.min_defined || value_bounds.max_defined) {
-                bounds_info.push(op->name, value_bounds);
+            if (value_bounds.min_defined || value_bounds.max_defined || value_bounds.alignment.modulus != 1) {
+                bounds_and_alignment_info.push(op->name, value_bounds);
                 f.value_bounds_tracked = true;
             }
         }
@@ -193,17 +185,11 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ConstBounds *bounds) {
     result = mutate_let_body(result, bounds);
 
     for (auto it = frames.rbegin(); it != frames.rend(); it++) {
-        if (it->value_alignment_tracked) {
-            alignment_info.pop(it->op->name);
-        }
         if (it->value_bounds_tracked) {
-            bounds_info.pop(it->op->name);
-        }
-        if (it->new_value_alignment_tracked) {
-            alignment_info.pop(it->new_name);
+            bounds_and_alignment_info.pop(it->op->name);
         }
         if (it->new_value_bounds_tracked) {
-            bounds_info.pop(it->new_name);
+            bounds_and_alignment_info.pop(it->new_name);
         }
 
         VarInfo info = var_info.get(it->op->name);
@@ -231,7 +217,7 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ConstBounds *bounds) {
     return result;
 }
 
-Expr Simplify::visit(const Let *op, ConstBounds *bounds) {
+Expr Simplify::visit(const Let *op, ExprInfo *bounds) {
     return simplify_let<Let, Expr>(op, bounds);
 }
 

@@ -123,6 +123,11 @@ def test_float16():
     hl_img = hl.Buffer(array_in)
     array_out = np.array(hl_img, copy = False)
 
+def test_int64():
+    array_in = np.zeros((256, 256, 3), dtype=np.int64, order='F')
+    hl_img = hl.Buffer(array_in)
+    array_out = np.array(hl_img, copy = False)
+
 def test_make_interleaved():
     w = 7
     h = 13
@@ -227,5 +232,6 @@ if __name__ == "__main__":
     test_fill_all_equal()
     test_bufferinfo_sharing()
     test_float16()
+    test_int64()
     test_reorder()
 

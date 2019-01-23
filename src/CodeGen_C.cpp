@@ -1611,30 +1611,6 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         }
         stream << "\n";
     }
-
-    if (is_header() && f.linkage == LinkageType::ExternalPlusMetadata) {
-        // C syntax for function-that-returns-function-pointer is fun.
-        const string getter = R"INLINE_CODE(
-
-// This allows the includer of this file to get the argv/metadata entry points
-// for this file without needing to know the specific function names;
-// if HALIDE_GET_STANDARD_ARGV_FUNCTION is defined before this file is
-// included, an inline function with that name is provided that return
-// a function pointer to the _argv() entry point (similarly,
-// HALIDE_GET_STANDARD_METADATA_FUNCTION -> _metadata() entry point).
-#ifdef HALIDE_GET_STANDARD_ARGV_FUNCTION
-inline int (*HALIDE_GET_STANDARD_ARGV_FUNCTION())(void**) {
-    return $NAME$_argv;
-}
-#endif
-#ifdef HALIDE_GET_STANDARD_METADATA_FUNCTION
-inline const struct halide_filter_metadata_t* (*HALIDE_GET_STANDARD_METADATA_FUNCTION())() {
-    return $NAME$_metadata;
-}
-#endif
-)INLINE_CODE";
-        stream << replace_all(getter, "$NAME$", f.name) << "\n\n";
-    }
 }
 
 void CodeGen_C::compile(const Buffer<> &buffer) {

@@ -1,9 +1,9 @@
+#include "Halide.h"
+
 #include <algorithm>
 #include <ios>
 #include <iostream>
 #include <iomanip>
-
-#include "Halide.h"
 
 using namespace Halide;
 

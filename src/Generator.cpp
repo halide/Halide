@@ -113,6 +113,9 @@ Outputs compute_outputs(const Target &target,
     if (options.emit_python_extension) {
         output_files.python_extension_name = base_path + get_extension(".py.c", options);
     }
+    if (options.emit_registration) {
+        output_files.registration_name = base_path + get_extension(".registration.cpp", options);
+    }
     if (options.emit_stmt) {
         output_files.stmt_name = base_path + get_extension(".stmt", options);
     }
@@ -385,27 +388,28 @@ void StubEmitter::emit_inputs_struct() {
 
     stream << indent() << name << "() {}\n";
     stream << "\n";
+    if (!in_info.empty()) {
+        stream << indent() << name << "(\n";
+        indent_level++;
+        std::string comma = "";
+        for (auto in : in_info) {
+            stream << indent() << comma << "const " << in.c_type << "& " << in.name << "\n";
+            comma = ", ";
+        }
+        indent_level--;
+        stream << indent() << ") : \n";
+        indent_level++;
+        comma = "";
+        for (auto in : in_info) {
+            stream << indent() << comma << in.name << "(" << in.name << ")\n";
+            comma = ", ";
+        }
+        indent_level--;
+        stream << indent() << "{\n";
+        stream << indent() << "}\n";
 
-    stream << indent() << name << "(\n";
-    indent_level++;
-    std::string comma = "";
-    for (auto in : in_info) {
-        stream << indent() << comma << "const " << in.c_type << "& " << in.name << "\n";
-        comma = ", ";
+        indent_level--;
     }
-    indent_level--;
-    stream << indent() << ") : \n";
-    indent_level++;
-    comma = "";
-    for (auto in : in_info) {
-        stream << indent() << comma << in.name << "(" << in.name << ")\n";
-        comma = ", ";
-    }
-    indent_level--;
-    stream << indent() << "{\n";
-    stream << indent() << "}\n";
-
-    indent_level--;
     stream << indent() << "};\n";
     stream << "\n";
 }
@@ -804,8 +808,8 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
         "\n"
         " -e  A comma separated list of files to emit. Accepted values are:\n"
         "     [assembly, bitcode, cpp, h, html, o, static_library,\n"
-        "      stmt, cpp_stub, schedule].\n"
-        "     If omitted, default value is [static_library, h].\n"
+        "      stmt, cpp_stub, schedule, registration].\n"
+        "     If omitted, default value is [static_library, h, registration].\n"
         "\n"
         " -x  A comma separated list of file extension pairs to substitute during\n"
         "     file naming, in the form [.old=.new[,.old2=.new2]]\n"
@@ -921,8 +925,8 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
     emit_options.emit_static_library = emit_options.emit_h = false;
 
     if (emit_flags.empty() || (emit_flags.size() == 1 && emit_flags[0].empty())) {
-        // If omitted or empty, assume .a and .h
-        emit_options.emit_static_library = emit_options.emit_h = true;
+        // If omitted or empty, assume .a and .h and registration.cpp
+        emit_options.emit_static_library = emit_options.emit_h = emit_options.emit_registration = true;
     } else {
         // If anything specified, only emit what is enumerated
         for (const std::string &opt : emit_flags) {
@@ -948,9 +952,11 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
                 emit_options.emit_cpp_stub = true;
             } else if (opt == "schedule") {
                 emit_options.emit_schedule = true;
+            } else if (opt == "registration") {
+                emit_options.emit_registration = true;
             } else if (!opt.empty()) {
                 cerr << "Unrecognized emit option: " << opt
-                     << " not one of [assembly, bitcode, cpp, h, html, o, static_library, stmt, cpp_stub], ignoring.\n";
+                     << " not one of [assembly, bitcode, cpp, h, html, o, static_library, stmt, cpp_stub, registration], ignoring.\n";
             }
         }
     }
@@ -1000,6 +1006,10 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
             Outputs output_files = compute_outputs(targets[0], base_path, emit_options);
             auto module_producer = [&generator_name, &generator_args]
                 (const std::string &name, const Target &target) -> Module {
+                    // Reset the counters so the function/variable names look
+                    // consistent for different targets.
+                    reset_unique_name_counters();
+
                     auto sub_generator_args = generator_args;
                     sub_generator_args.erase("target");
                     // Must re-create each time since each instance will have a different Target.

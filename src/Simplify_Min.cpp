@@ -3,8 +3,8 @@
 namespace Halide {
 namespace Internal {
 
-Expr Simplify::visit(const Min *op, ConstBounds *bounds) {
-    ConstBounds a_bounds, b_bounds;
+Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
+    ExprInfo a_bounds, b_bounds;
     Expr a = mutate(op->a, &a_bounds);
     Expr b = mutate(op->b, &b_bounds);
 
@@ -19,6 +19,8 @@ Expr Simplify::visit(const Min *op, ConstBounds *bounds) {
         } else {
             bounds->max = b_bounds.max;
         }
+        bounds->alignment = ModulusRemainder::unify(a_bounds.alignment, b_bounds.alignment);
+        bounds->trim_bounds_using_alignment();
     }
 
     // Early out when the bounds tells us one side or the other is smaller

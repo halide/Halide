@@ -395,6 +395,33 @@ void check_algebra() {
     // Test case with most negative 32-bit number, as constant to check that it is not negated.
     check(((x * (int32_t)0x80000000) + (z * (int32_t)0x80000000 + y)),
           ((x * (int32_t)0x80000000) + (z * (int32_t)0x80000000 + y)));
+
+    // Use a require with no error message to test chains of reasoning
+    auto require = [](Expr cond, Expr val) {
+        return Internal::Call::make(val.type(),
+                                    Internal::Call::require,
+                                    {cond, val, 0},
+                                    Internal::Call::PureIntrinsic);
+    };
+
+    check(require(2 < x && x < 4, x),
+          require(2 < x && x < 4, 3));
+
+    check(require(2 < x && x < 5 && x % 4 == 0, x),
+          require(2 < x && x < 5 && x % 4 == 0, 4));
+
+    check(require(x % 4 == 3, x % 2),
+          require(x % 4 == 3, 1));
+
+    // Check modulo of expressions that are not-obviously a multiple of something
+    check(max(min(x*8, 32), y*16) % 4 == 0, const_true());
+    check(select(x > 4, x*9 + 1, y*6 - 2) % 3 == 1, const_true());
+    check(max(32, x*4) % 16 < 13, const_true()); // After the %16 the max value is 12, not 15, due to alignment
+
+    Expr complex_cond = ((10 < y) && (y % 17 == 4) && (y < 30) && (x == y*16 + 3));
+    // The condition is enough to imply that y == 21, x == 339
+    check(require(complex_cond, select(x % 2 == 0, 1237, y)),
+          require(complex_cond, 21));
 }
 
 void check_vectors() {
@@ -935,7 +962,7 @@ void check_boolean() {
 
     check(x == x, t);
     check(x == (x+1), f);
-    check(x-2 == y+3, (x-y) == 5);
+    check(x-2 == y+3, x == y + 5);
     check(x+y == y+z, x == z);
     check(y+x == y+z, x == z);
     check(x+y == z+y, x == z);
@@ -944,7 +971,7 @@ void check_boolean() {
     check(x*0 == y*0, t);
     check(x == x+y, y == 0);
     check(x+y == x, y == 0);
-    check(100 - x == 99 - y, (y-x) == -1);
+    check(100 - x == 99 - y, y == x + (-1));
 
     check(x < x, f);
     check(x < (x+1), t);
@@ -1354,8 +1381,8 @@ void check_bitwise() {
           cast(UInt(32), x) & Expr((uint32_t)0xaaaaaaaa));
 
     // Check constant-folding of bitwise ops (and indirectly, reinterpret)
-    check(Let::make(x.as<Variable>()->name, 5, ((~x) & 3) | 16), (~5 & 3) | 16);
-    check(Let::make(x.as<Variable>()->name, 5, ((~cast<uint8_t>(x)) & 3) | 16), make_const(UInt(8), (~5 & 3) | 16));
+    check(Let::make(x.as<Variable>()->name, 5, (((~x) & 3) | 16) ^ 33), ((~5 & 3) | 16) ^ 33);
+    check(Let::make(x.as<Variable>()->name, 5, (((~cast<uint8_t>(x)) & 3) | 16) ^ 33), make_const(UInt(8), ((~5 & 3) | 16) ^ 33));
 }
 
 void check_lets() {

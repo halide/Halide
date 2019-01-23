@@ -58,13 +58,13 @@ extern int halide_hexagon_dma_deallocate_engine(void *user_context, void *dma_en
 
 /** This API Prepares a buffer for DMA Read Operation. This will setup the DMA format, direction (read).
  * Will also make necessary adjustments to the DMA frame parameters based on Image format provided.
-*/
+ */
 extern int halide_hexagon_dma_prepare_for_copy_to_host(void *user_context, struct halide_buffer_t *buf,
                                                        void *dma_engine, bool is_ubwc, halide_hexagon_image_fmt_t fmt);
 
 /** This API Prepares a buffer for DMA Write Operation. This will setup the DMA format, direction (write).
  * Will also make necessary adjustments to the DMA frame parameters based on Image format provided.
-*/
+ */
 extern int halide_hexagon_dma_prepare_for_copy_to_device(void *user_context, struct halide_buffer_t *buf,
                                                        void *dma_engine, bool is_ubwc, halide_hexagon_image_fmt_t fmt);
 
