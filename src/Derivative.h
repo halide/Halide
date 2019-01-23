@@ -37,7 +37,7 @@ struct Derivative {
 
     Func operator()(const Buffer<> &buffer) const {
         auto it = adjoints.find(FuncKey{ buffer.name(), -1 });
-        assert(it != adjoints.end());
+        internal_assert(it != adjoints.end()) << "Could not find Buffer " << buffer.name() << "\n";
         return it->second;
     }
 
@@ -58,7 +58,7 @@ struct Derivative {
             if (it != adjoints.end()) {
                 result.push_back(it->second);
             }
-    }
+        }
         return result;
     }
 };
