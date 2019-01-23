@@ -349,6 +349,16 @@ Expr make_two(Type t) {
     return make_const(t, 2);
 }
 
+Expr make_indeterminate_expression(Type type) {
+    static std::atomic<int> counter;
+    return Call::make(type, Call::indeterminate_expression, {counter++}, Call::Intrinsic);
+}
+
+Expr make_signed_integer_overflow(Type type) {
+    static std::atomic<int> counter;
+    return Call::make(type, Call::signed_integer_overflow, {counter++}, Call::Intrinsic);
+}
+
 Expr const_true(int w) {
     return make_one(UInt(1, w));
 }
