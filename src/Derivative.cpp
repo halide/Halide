@@ -39,8 +39,6 @@ bool is_float_extern(const string &op_name,
  */
 class ReverseAccumulationVisitor : public IRVisitor {
 public:
-    using IRVisitor::visit;
-
     void propagate_adjoints(const Func &output,
                             const Func &adjoint,
                             const vector<pair<Expr, Expr>> &output_bounds);
@@ -252,7 +250,7 @@ void ReverseAccumulationVisitor::propagate_adjoints(
                 if (expr.get()->node_type == IRNodeType::Let) {
                     const Let *op = expr.as<Let>();
                     // Assume Let variables are unique
-                    assert(let_var_mapping.find(op->name) == let_var_mapping.end());
+                    internal_assert(let_var_mapping.find(op->name) == let_var_mapping.end());
                     let_var_mapping[op->name] = op->value;
                     let_variables.push_back(op->name);
                 }
@@ -432,7 +430,7 @@ void ReverseAccumulationVisitor::propagate_adjoints(
                 }
             }
             FuncKey func_key{ func.name(), update_id };
-            assert(adjoint_funcs.find(func_key) == adjoint_funcs.end());
+            internal_assert(adjoint_funcs.find(func_key) == adjoint_funcs.end());
             adjoint_funcs[func_key] = adjoint_func;
         }
     }
@@ -589,7 +587,7 @@ void ReverseAccumulationVisitor::propagate_adjoints(
                 if (expr.get()->node_type == IRNodeType::Let) {
                     const Let *op = expr.as<Let>();
                     // Assume Let variables are unique
-                    assert(let_var_mapping.find(op->name) == let_var_mapping.end());
+                    internal_assert(let_var_mapping.find(op->name) == let_var_mapping.end());
                     let_var_mapping[op->name] = op->value;
                     let_variables.push_back(op->name);
                 }
@@ -690,7 +688,7 @@ void ReverseAccumulationVisitor::accumulate(const Expr &stub, const Expr &adjoin
 }
 
 void ReverseAccumulationVisitor::visit(const Cast *op) {
-    assert(expr_adjoints.find(op) != expr_adjoints.end());
+    internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
     Expr adjoint = expr_adjoints[op];
 
     // d/dx cast(x) = 1.f if op->type is float otherwise 0
@@ -702,7 +700,7 @@ void ReverseAccumulationVisitor::visit(const Cast *op) {
 }
 
 void ReverseAccumulationVisitor::visit(const Variable *op) {
-    assert(expr_adjoints.find(op) != expr_adjoints.end());
+    internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
     Expr adjoint = expr_adjoints[op];
 
     // If the variable is a let variable, accumulates adjoints into the content
@@ -713,7 +711,7 @@ void ReverseAccumulationVisitor::visit(const Variable *op) {
 }
 
 void ReverseAccumulationVisitor::visit(const Add *op) {
-    assert(expr_adjoints.find(op) != expr_adjoints.end());
+    internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
     Expr adjoint = expr_adjoints[op];
 
     // d/da a + b = 1
@@ -723,7 +721,7 @@ void ReverseAccumulationVisitor::visit(const Add *op) {
 }
 
 void ReverseAccumulationVisitor::visit(const Sub *op) {
-    assert(expr_adjoints.find(op) != expr_adjoints.end());
+    internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
     Expr adjoint = expr_adjoints[op];
 
     // d/da a - b = 1
@@ -733,7 +731,7 @@ void ReverseAccumulationVisitor::visit(const Sub *op) {
 }
 
 void ReverseAccumulationVisitor::visit(const Mul *op) {
-    assert(expr_adjoints.find(op) != expr_adjoints.end());
+    internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
     Expr adjoint = expr_adjoints[op];
 
     // d/da a * b = b
@@ -743,7 +741,7 @@ void ReverseAccumulationVisitor::visit(const Mul *op) {
 }
 
 void ReverseAccumulationVisitor::visit(const Div *op) {
-    assert(expr_adjoints.find(op) != expr_adjoints.end());
+    internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
     Expr adjoint = expr_adjoints[op];
 
     // d/da a / b = 1 / b
@@ -753,7 +751,7 @@ void ReverseAccumulationVisitor::visit(const Div *op) {
 }
 
 void ReverseAccumulationVisitor::visit(const Min *op) {
-    assert(expr_adjoints.find(op) != expr_adjoints.end());
+    internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
     Expr adjoint = expr_adjoints[op];
 
     // d/da min(a, b) = a <= b ? 1 : 0
@@ -765,7 +763,7 @@ void ReverseAccumulationVisitor::visit(const Min *op) {
 }
 
 void ReverseAccumulationVisitor::visit(const Max *op) {
-    assert(expr_adjoints.find(op) != expr_adjoints.end());
+    internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
     Expr adjoint = expr_adjoints[op];
 
     // d/da max(a, b) = a >= b ? 1 : 0
@@ -777,14 +775,14 @@ void ReverseAccumulationVisitor::visit(const Max *op) {
 }
 
 void ReverseAccumulationVisitor::visit(const Let *op) {
-    assert(expr_adjoints.find(op) != expr_adjoints.end());
+    internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
     Expr adjoint = expr_adjoints[op];
 
     accumulate(op->body, adjoint);
 }
 
 void ReverseAccumulationVisitor::visit(const Select *op) {
-    assert(expr_adjoints.find(op) != expr_adjoints.end());
+    internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
     Expr adjoint = expr_adjoints[op];
 
     // d/db select(a, b, c) = select(a, 1, 0)
@@ -796,7 +794,7 @@ void ReverseAccumulationVisitor::visit(const Select *op) {
 }
 
 void ReverseAccumulationVisitor::visit(const Call *op) {
-    assert(expr_adjoints.find(op) != expr_adjoints.end());
+    internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
     Expr adjoint = expr_adjoints[op];
     if (op->is_extern()) {
         // Math functions
@@ -987,9 +985,9 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
         } else {
             func_key = FuncKey{ op->name, -1 };
         }
-        assert(adjoint_funcs.find(func_key) != adjoint_funcs.end());
+        internal_assert(adjoint_funcs.find(func_key) != adjoint_funcs.end());
         Func &func_to_update = adjoint_funcs[func_key];
-        assert(func_to_update.dimensions() == (int) lhs.size());
+        internal_assert(func_to_update.dimensions() == (int) lhs.size());
 
         bool debug_flag = false;
 
@@ -1237,7 +1235,7 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
                         break;
                     }
                 }
-                assert(rvar_id != -1);
+                internal_assert(rvar_id != -1);
                 ReductionVariable rvar = rdom.domain()[rvar_id];
                 // Check if the min/max of the rvariable equal to
                 // the target function
@@ -1273,12 +1271,12 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
                 Expr a = add->a, b = add->b;
                 if (add->b.as<Mul>() != nullptr) {
                     // swap so that b is always the Variable
-                    assert(add->a.as<Variable>() != nullptr);
+                    internal_assert(add->a.as<Variable>() != nullptr);
                     std::swap(a, b);
                 }
                 const Mul *mul = a.as<Mul>();
                 const Variable *b_var = b.as<Variable>();
-                assert(mul != nullptr && b_var != nullptr);
+                internal_assert(mul != nullptr && b_var != nullptr);
                 Expr mul_a = mul->a, mul_b = mul->b;
                 if (mul_a.as<Variable>() != nullptr &&
                     mul_a.as<Variable>()->reduction_domain.defined()) {
@@ -1300,7 +1298,7 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
                         break;
                     }
                 }
-                assert(rvar_id != -1);
+                internal_assert(rvar_id != -1);
                 ReductionVariable rvar = b_rdom.domain()[rvar_id];
                 if (!equal(rvar.min, Expr(0)) || !equal(rvar.extent, mul_a)) {
                     continue;
@@ -1467,7 +1465,7 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
             int update_id = func_to_update.num_update_definitions() - 1;
             vector<Expr> prev_lhs =
                 func_to_update.update_args(update_id);
-            assert(prev_lhs.size() == lhs.size());
+            internal_assert(prev_lhs.size() == lhs.size());
             // If previous update has different left hand side, don't merge
             for (int i = 0; i < (int) prev_lhs.size(); i++) {
                 if (!equal(lhs[i], prev_lhs[i])) {
@@ -1517,7 +1515,7 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
                 }
             }
             if (rdom.defined()) {
-                assert(func_to_update.num_update_definitions() > 0);
+                internal_assert(func_to_update.num_update_definitions() > 0);
                 // Make sure we're using the same set of reduction variables
                 for (int i = 0; i < merged_r.dimensions(); i++) {
                     adjoint = substitute(merged_r[i].name(), RVar(rdom, i), adjoint);
