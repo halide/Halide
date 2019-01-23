@@ -1404,13 +1404,6 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
         new_adjoint_tuple[op->value_index] = new_adjoint;
         AssociativeOp associative_op = prove_associativity(
             func_to_update.name(), lhs, new_adjoint_tuple);
-        // for (int i = 0; i < (int)lhs.size(); i++) {
-        //     std::cerr << "lhs[" << i << "]:" << lhs[i] << std::endl;
-        // }
-        // std::cerr << "adjoint:" << new_adjoint << std::endl;
-        // std::cerr << "func_to_update.name():" << func_to_update.name() << std::endl;
-        // std::cerr << "associative_op.associative():" << associative_op.associative() << std::endl;
-        // std::cerr << "associative_op.commutative():" << associative_op.commutative() << std::endl;
         if (associative_op.associative() && associative_op.commutative()) {
             for (int i = 0; i < (int) lhs.size(); i++) {
                 Expr lhs_arg = substitute_in_all_lets(lhs[i]);
