@@ -173,7 +173,7 @@ void ExpressionSorter::visit(const Call *op) {
 }
 
 void ExpressionSorter::visit(const Let *op) {
-    assert(let_var_mapping.find(op->name) == let_var_mapping.end());
+    internal_assert(let_var_mapping.find(op->name) == let_var_mapping.end());
     let_var_mapping[op->name] = op->value;
 
     include(op->body);
@@ -207,7 +207,7 @@ vector<Expr> sort_expressions(const Expr &expr) {
 
 map<string, Box> inference_bounds(const vector<Func> &funcs,
                                   const vector<Box> &output_bounds) {
-    assert(funcs.size() == output_bounds.size());
+    internal_assert(funcs.size() == output_bounds.size());
     // Obtain all dependencies
     vector<Function> functions;
     functions.reserve(funcs.size());
@@ -245,9 +245,9 @@ map<string, Box> inference_bounds(const vector<Func> &funcs,
     for (auto it = order.rbegin(); it != order.rend(); it++) {
         Func func = Func(env[*it]);
         // We should already have the bounds of this function
-        assert(bounds.find(*it) != bounds.end());
+        internal_assert(bounds.find(*it) != bounds.end());
         const Box &current_bounds = bounds[*it];
-        assert(func.args().size() == current_bounds.size());
+        internal_assert(func.args().size() == current_bounds.size());
         // We know the range for each argument of this function
         for (int i = 0; i < (int) current_bounds.size(); i++) {
             string arg = func.args()[i].name();
@@ -406,7 +406,7 @@ public:
                     op->type
                 };
             } else {
-                assert(op->param.defined());
+                internal_assert(op->param.defined());
                 buffer_calls[op->name] = BufferInfo{
                     op->param.dimensions(),
                     op->type
