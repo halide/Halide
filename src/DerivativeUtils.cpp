@@ -4,8 +4,8 @@
 #include <string>
 #include <vector>
 
-#include "DerivativeUtils.h"
 #include "CSE.h"
+#include "DerivativeUtils.h"
 #include "ExprUsesVar.h"
 #include "FindCalls.h"
 #include "IREquality.h"
@@ -21,8 +21,8 @@
 namespace Halide {
 namespace Internal {
 
-using std::pair;
 using std::map;
+using std::pair;
 using std::set;
 using std::string;
 using std::vector;
@@ -50,7 +50,9 @@ vector<string> gather_variables(const Expr &expr,
             }
         }
 
-        GatherVariables(const vector<string> &f) : filter(f) {}
+        GatherVariables(const vector<string> &f)
+            : filter(f) {
+        }
 
         vector<string> variables;
         const vector<string> &filter;
@@ -353,7 +355,7 @@ pair<bool, Expr> solve_inverse(Expr expr,
     expr = substitute_in_all_lets(simplify(expr));
     Interval interval = solve_for_outer_interval(expr, var);
     if (!interval.is_bounded()) {
-        return {false, Expr()};
+        return { false, Expr() };
     }
     Expr rmin = simplify(interval.min);
     Expr rmax = simplify(interval.max);
@@ -361,12 +363,12 @@ pair<bool, Expr> solve_inverse(Expr expr,
 
     const int64_t *extent_int = as_const_int(rextent);
     if (extent_int == nullptr) {
-        return {false, Expr()};
+        return { false, Expr() };
     }
 
     // For some reason interval.is_single_point() doesn't work
     if (extent_int != nullptr && *extent_int == 1) {
-        return {true, rmin};
+        return { true, rmin };
     }
 
     // Create a RDom to loop over the interval
@@ -374,7 +376,7 @@ pair<bool, Expr> solve_inverse(Expr expr,
     Expr cond = substitute(var, rmin + r.x, expr.as<EQ>()->b);
     cond = substitute(new_var, Var(var), cond) == Var(var);
     r.where(cond);
-    return {true, rmin + r.x};
+    return { true, rmin + r.x };
 }
 
 struct BufferDimensionsFinder : public IRGraphVisitor {

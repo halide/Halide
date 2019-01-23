@@ -46,7 +46,7 @@ struct Derivative {
      * scheduling. */
     std::vector<Func> funcs(const Func &func) const {
         std::vector<Func> result;
-        FuncKey k {func.name(), -1};
+        FuncKey k{ func.name(), -1 };
         FuncKey k_unbounded = k;
         k_unbounded.first += "_unbounded";
         for (int i = func.num_update_definitions() - 1; i >= -1; i--) {
