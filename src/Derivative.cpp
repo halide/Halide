@@ -2,8 +2,8 @@
 #include <iostream>
 #include <set>
 
-#include "Derivative.h"
 #include "BoundaryConditions.h"
+#include "Derivative.h"
 #include "DerivativeUtils.h"
 #include "Error.h"
 #include "ExprUsesVar.h"
@@ -18,8 +18,8 @@
 
 namespace Halide {
 
-using std::pair;
 using std::map;
+using std::pair;
 using std::set;
 using std::string;
 using std::vector;
@@ -105,7 +105,7 @@ void ReverseAccumulationVisitor::propagate_adjoints(
     //     Internal::debug(0) << "  . " << func_name << "\n";
     // }
     for (const auto &func_name : order) {
-        funcs.emplace_back(env[func_name]);
+        funcs.push_back(Func(env[func_name]));
     }
     internal_assert(funcs.size() > 0);
 
@@ -404,7 +404,7 @@ void ReverseAccumulationVisitor::propagate_adjoints(
         for (int update_id = -1; update_id < func.num_update_definitions(); update_id++) {
             Func adjoint_func(func.name() + "_" + std::to_string(update_id + 1) + "_d_def__");
             bool is_final_output = func_id == (int) funcs.size() - 1 &&
-                update_id == func.num_update_definitions() - 1;
+                                   update_id == func.num_update_definitions() - 1;
             vector<Var> args = func.args();
             for (auto &arg : args) {
                 if (arg.is_implicit()) {
@@ -469,8 +469,12 @@ void ReverseAccumulationVisitor::propagate_adjoints(
             adjoint_funcs[unbounded_func_key] = adjoint_func;
             if (adjoint_func.values().size() == 1) {
                 Type type = adjoint_func.values()[0].type();
-                adjoint_func = BoundaryConditions::constant_exterior(
+                internal_assert(adjoint_func.function().output_types()[0] ==
+                                adjoint_func.values()[0].type());
+                Func f = BoundaryConditions::constant_exterior(
                     adjoint_func, make_const(type, 0.0), box_to_vector(bounds));
+                adjoint_func = f;
+
             } else {
                 vector<Expr> values(adjoint_func.values().size());
                 for (int i = 0; i < (int) values.size(); i++) {
@@ -606,10 +610,14 @@ void ReverseAccumulationVisitor::propagate_adjoints(
             {  // First phase
                 is_self_referencing_phase = true;
                 expr_adjoints.clear();
-                for (int i = 0; i < (int) output_exprs.size(); i++) {
-                    expr_adjoints[output_exprs[i]] =
-                        Call::make(adjoint_funcs[func_key].function(),
-                                   update_args, i);
+                if (output_exprs.size() == 1) {
+                    expr_adjoints[output_exprs[0]] =
+                        (adjoint_funcs[func_key])(update_args);
+                } else {
+                    for (int i = 0; i < (int) output_exprs.size(); i++) {
+                        expr_adjoints[output_exprs[i]] =
+                            (adjoint_funcs[func_key])(update_args)[i];
+                    }
                 }
 
                 // Traverse the expressions in reverse order
@@ -682,9 +690,9 @@ void ReverseAccumulationVisitor::visit(const Cast *op) {
 
     // d/dx cast(x) = 1.f if op->type is float otherwise 0
     if (op->type.is_float()) {
-        accumulate(op->value, make_const(op->type, 1.0));
+        accumulate(op->value, cast(op->value.type(), adjoint));
     } else {
-        accumulate(op->value, make_const(op->type, 0));
+        accumulate(op->value, make_const(op->value.type(), 0));
     }
 }
 
@@ -894,7 +902,7 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
         } else if (op->is_intrinsic(Call::likely)) {
             accumulate(op->args[0], adjoint);
         } else if (op->is_intrinsic(Call::return_second)) {
-            accumulate(op->args[0], make_const(op->type, 0.0));
+            // accumulate(op->args[0], make_const(op->type, 0.0));
             accumulate(op->args[1], adjoint);
         } else if (op->is_intrinsic(Call::undef)) {
             // do nothing
