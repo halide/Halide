@@ -2,6 +2,7 @@
 #include <iostream>
 #include <set>
 
+#include "Associativity.h"
 #include "BoundaryConditions.h"
 #include "Derivative.h"
 #include "DerivativeUtils.h"
@@ -15,7 +16,6 @@
 #include "Simplify.h"
 #include "Solve.h"
 #include "Substitute.h"
-#include "Associativity.h"
 
 namespace Halide {
 
@@ -845,7 +845,7 @@ void ReverseAccumulationVisitor::visit(const Mod *op) {
     // d/da = 1
     accumulate(op->a, adjoint);
     // d/db = -trunc(a/b)
-    accumulate(op->b, -adjoint * trunc(op->a/op->b));
+    accumulate(op->b, -adjoint * trunc(op->a / op->b));
 }
 
 void ReverseAccumulationVisitor::visit(const Min *op) {
@@ -1154,9 +1154,7 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
         FuncKey func_key;
         if (op->func.defined()) {
             Function func(op->func);
-            func_key = func.name() != current_func.name() ?
-                FuncKey{ func.name(), func.updates().size() - 1 } :
-                FuncKey{ func.name(), current_update_id - 1 };
+            func_key = func.name() != current_func.name() ? FuncKey{ func.name(), func.updates().size() - 1 } : FuncKey{ func.name(), current_update_id - 1 };
             if (is_current_non_overwriting_scan && is_self_referencing_phase) {
                 func_key = FuncKey{ func.name(), current_update_id };
             }
@@ -1396,7 +1394,7 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
         // => f(x) = g(x/4) + h(x)
         vector<Var> func_to_update_args = func_to_update.args();
         AssociativeOp associative_op = prove_associativity(
-            func_to_update.name(), lhs, {adjoint});
+            func_to_update.name(), lhs, { adjoint });
         for (int i = 0; i < (int) lhs.size(); i++) {
             Expr lhs_arg = substitute_in_all_lets(lhs[i]);
             const Variable *var = lhs_arg.as<Variable>();
@@ -1425,8 +1423,8 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
                                     simplify(rvar.min + rvar.extent - 1));
                 if (can_prove(r_interval.min <= t_interval.min &&
                               r_interval.max >= t_interval.max) &&
-                        associative_op.associative() &&
-                        associative_op.commutative()) {
+                    associative_op.associative() &&
+                    associative_op.commutative()) {
                     lhs[i] = func_to_update_args[i];
                     // Replace other occurence of rvar in lhs
                     for (int j = 0; j < (int) lhs.size(); j++) {
@@ -1681,9 +1679,7 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
                 func_to_update(lhs)[op->value_index] += adjoint;
             }
         } else {
-            Definition &def = func_to_update.num_update_definitions() == 0 ?
-                func_to_update.function().definition() :
-                func_to_update.function().update(func_to_update.num_update_definitions() - 1);
+            Definition &def = func_to_update.num_update_definitions() == 0 ? func_to_update.function().definition() : func_to_update.function().update(func_to_update.num_update_definitions() - 1);
             vector<Expr> &values = def.values();
             ReductionDomain rdom;
             for (const auto &val : values) {
