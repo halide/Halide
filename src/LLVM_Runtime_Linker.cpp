@@ -113,6 +113,7 @@ DECLARE_CPP_INITMOD(osx_get_symbol)
 DECLARE_CPP_INITMOD(osx_host_cpu_count)
 DECLARE_CPP_INITMOD(osx_opengl_context)
 DECLARE_CPP_INITMOD(osx_yield)
+DECLARE_CPP_INITMOD(posix_abort)
 DECLARE_CPP_INITMOD(posix_allocator)
 DECLARE_CPP_INITMOD(posix_clock)
 DECLARE_CPP_INITMOD(posix_error_handler)
@@ -125,6 +126,7 @@ DECLARE_CPP_INITMOD(posix_threads_tsan)
 DECLARE_CPP_INITMOD(prefetch)
 DECLARE_CPP_INITMOD(profiler)
 DECLARE_CPP_INITMOD(profiler_inlined)
+DECLARE_CPP_INITMOD(pseudostack)
 DECLARE_CPP_INITMOD(qurt_allocator)
 DECLARE_CPP_INITMOD(hexagon_cache_allocator)
 DECLARE_CPP_INITMOD(hexagon_dma_pool)
@@ -141,6 +143,7 @@ DECLARE_CPP_INITMOD(tracing)
 DECLARE_CPP_INITMOD(windows_clock)
 DECLARE_CPP_INITMOD(windows_cuda)
 DECLARE_CPP_INITMOD(windows_get_symbol)
+DECLARE_CPP_INITMOD(windows_abort)
 DECLARE_CPP_INITMOD(windows_io)
 DECLARE_CPP_INITMOD(windows_opencl)
 DECLARE_CPP_INITMOD(windows_profiler)
@@ -752,7 +755,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             // datalayout is not properly setup.
             modules.push_back(get_initmod_buffer_t(c, bits_64, debug));
             modules.push_back(get_initmod_destructors(c, bits_64, debug));
-
+            modules.push_back(get_initmod_pseudostack(c, bits_64, debug));
             // Math intrinsics vary slightly across platforms
             if (t.os == Target::Windows) {
                 if (t.bits == 32) {
@@ -911,6 +914,12 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
         modules.push_back(get_initmod_module_aot_ref_count(c, bits_64, debug));
     }
 
+    if (t.os == Target::Windows) {
+        modules.push_back(get_initmod_windows_abort(c, bits_64, debug));
+    } else {
+        modules.push_back(get_initmod_posix_abort(c, bits_64, debug));
+    }
+
     if (module_type == ModuleAOT || module_type == ModuleGPU) {
         if (t.has_feature(Target::CUDA)) {
             if (t.os == Target::Windows) {
@@ -1046,11 +1055,6 @@ std::unique_ptr<llvm::Module> get_initial_module_for_ptx_device(Target target, l
 
         if (!f.isDeclaration() && !f.hasFnAttribute(llvm::Attribute::NoInline)) {
             f.setLinkage(llvm::GlobalValue::AvailableExternallyLinkage);
-        }
-
-        // Also mark the halide_gpu_thread_barrier as noduplicate.
-        if (f.getName() == "halide_gpu_thread_barrier") {
-            f.addFnAttr(llvm::Attribute::NoDuplicate);
         }
     }
 

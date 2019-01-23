@@ -17,7 +17,7 @@
 
 namespace Halide {
 
-/** Type of linkage a function in a lowered Halide module can have. 
+/** Type of linkage a function in a lowered Halide module can have.
     Also controls whether auxiliary functions and metadata are generated. */
 enum class LinkageType {
     External, ///< Visible externally.
@@ -35,12 +35,10 @@ struct LoweredArgument : public Argument {
      * argument. */
     ModulusRemainder alignment;
 
-    LoweredArgument() {}
-    LoweredArgument(const Argument &arg) : Argument(arg) {}
-    LoweredArgument(const std::string &_name, Kind _kind, const Type &_type, uint8_t _dimensions,
-                    Expr _def = Expr(),
-                    Expr _min = Expr(),
-                    Expr _max = Expr()) : Argument(_name, _kind, _type, _dimensions, _def, _min, _max) {}
+    LoweredArgument() = default;
+    explicit LoweredArgument(const Argument &arg) : Argument(arg) {}
+    LoweredArgument(const std::string &_name, Kind _kind, const Type &_type, uint8_t _dimensions, const ArgumentEstimates &argument_estimates)
+        : Argument(_name, _kind, _type, _dimensions, argument_estimates) {}
 };
 
 /** Definition of a lowered function. This object provides a concrete

@@ -134,6 +134,24 @@ std::ostream &operator<<(std::ostream &out, const MemoryType &t) {
     return out;
 }
 
+std::ostream &operator<<(std::ostream &out, const TailStrategy &t) {
+    switch (t) {
+    case TailStrategy::Auto:
+        out << "Auto";
+        break;
+    case TailStrategy::GuardWithIf:
+        out << "GuardWithIf";
+        break;
+    case TailStrategy::ShiftInwards:
+        out << "ShiftInwards";
+        break;
+    case TailStrategy::RoundUp:
+        out << "RoundUp";
+        break;
+    }
+    return out;
+}
+
 ostream &operator<<(ostream &stream, const LoopLevel &loop_level) {
     return stream << "loop_level("
         << (loop_level.defined() ? loop_level.to_string() : "undefined")

@@ -76,7 +76,7 @@ void realization_order_dfs(string current,
         } else {
             internal_assert(result_set.find(fn) != result_set.end())
                 << "Stuck in a loop computing a realization order. "
-                << "Perhaps this pipeline has a loop?\n";
+                << "Perhaps this pipeline has a loop involving " << current << "?\n";
         }
     }
 

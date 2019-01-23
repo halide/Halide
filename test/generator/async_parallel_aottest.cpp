@@ -20,7 +20,7 @@ struct last_call {
     last_call *next;
     bool inited;
 
-    bool operator<(const last_call &rhs) {
+    bool operator<(const last_call &rhs) const {
         if (loc < rhs.loc) {
             return true;
         } else if (loc >= rhs.loc) {
@@ -146,7 +146,7 @@ int main(int argc, char **argv) {
         std::lock_guard<std::mutex> lock(watchdog_state_mutex);
         watchdog_done = true;
     }
-    
+
     watcher.join();
 
     std::cout << "Success!\n";

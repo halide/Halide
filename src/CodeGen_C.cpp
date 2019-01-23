@@ -1157,7 +1157,9 @@ private:
 )INLINE_CODE";
 
         const char *vector_selection_decl = R"INLINE_CODE(
-#if __has_attribute(ext_vector_type) || __has_attribute(vector_size)
+// Dec. 1, 2018: Apparently emscripten compilation runs with the __has_attribute true,
+// then fails to handle the vector intrinsics later.
+#if !defined(__EMSCRIPTEN__) && (__has_attribute(ext_vector_type) || __has_attribute(vector_size))
     #if __GNUC__ && !__clang__
         // GCC only allows powers-of-two; fall back to CppVector for other widths
         #define halide_cpp_use_native_vector(type, lanes) ((lanes & (lanes - 1)) == 0)
@@ -1169,7 +1171,7 @@ private:
     #define halide_cpp_use_native_vector(type, lanes) (false)
 #endif  // __has_attribute(ext_vector_type) || __has_attribute(vector_size)
 
- // Failsafe to allow forcing non-native vectors in case of unruly compilers
+// Failsafe to allow forcing non-native vectors in case of unruly compilers
 #if HALIDE_CPP_ALWAYS_USE_CPP_VECTORS
     #undef halide_cpp_use_native_vector
     #define halide_cpp_use_native_vector(type, lanes) (false)
@@ -1608,30 +1610,6 @@ void CodeGen_C::compile(const LoweredFunc &f) {
             stream << "}  // namespace " << namespaces[i-1] << "\n";
         }
         stream << "\n";
-    }
-
-    if (is_header() && f.linkage == LinkageType::ExternalPlusMetadata) {
-        // C syntax for function-that-returns-function-pointer is fun.
-        const string getter = R"INLINE_CODE(
-
-// This allows the includer of this file to get the argv/metadata entry points
-// for this file without needing to know the specific function names;
-// if HALIDE_GET_STANDARD_ARGV_FUNCTION is defined before this file is
-// included, an inline function with that name is provided that return
-// a function pointer to the _argv() entry point (similarly,
-// HALIDE_GET_STANDARD_METADATA_FUNCTION -> _metadata() entry point).
-#ifdef HALIDE_GET_STANDARD_ARGV_FUNCTION
-inline int (*HALIDE_GET_STANDARD_ARGV_FUNCTION())(void**) {
-    return $NAME$_argv;
-}
-#endif
-#ifdef HALIDE_GET_STANDARD_METADATA_FUNCTION
-inline const struct halide_filter_metadata_t* (*HALIDE_GET_STANDARD_METADATA_FUNCTION())() {
-    return $NAME$_metadata;
-}
-#endif
-)INLINE_CODE";
-        stream << replace_all(getter, "$NAME$", f.name) << "\n\n";
     }
 }
 
@@ -2712,10 +2690,10 @@ void CodeGen_C::visit(const Shuffle *op) {
 }
 
 void CodeGen_C::test() {
-    LoweredArgument buffer_arg("buf", Argument::OutputBuffer, Int(32), 3);
-    LoweredArgument float_arg("alpha", Argument::InputScalar, Float(32), 0);
-    LoweredArgument int_arg("beta", Argument::InputScalar, Int(32), 0);
-    LoweredArgument user_context_arg("__user_context", Argument::InputScalar, type_of<const void*>(), 0);
+    LoweredArgument buffer_arg("buf", Argument::OutputBuffer, Int(32), 3, ArgumentEstimates{});
+    LoweredArgument float_arg("alpha", Argument::InputScalar, Float(32), 0, ArgumentEstimates{});
+    LoweredArgument int_arg("beta", Argument::InputScalar, Int(32), 0, ArgumentEstimates{});
+    LoweredArgument user_context_arg("__user_context", Argument::InputScalar, type_of<const void*>(), 0, ArgumentEstimates{});
     vector<LoweredArgument> args = { buffer_arg, float_arg, int_arg, user_context_arg };
     Var x("x");
     Param<float> alpha("alpha");
