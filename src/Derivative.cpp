@@ -175,7 +175,7 @@ void ReverseAccumulationVisitor::propagate_adjoints(
     //     Internal::debug(0) << "  . " << func_name << "\n";
     // }
     for (const auto &func_name : order) {
-        funcs.push_back(Func(env[func_name]));
+        funcs.emplace_back(env[func_name]);
     }
     internal_assert(funcs.size() > 0);
 
