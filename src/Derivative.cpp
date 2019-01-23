@@ -874,7 +874,7 @@ void ReverseAccumulationVisitor::visit(const Max *op) {
 
 void ReverseAccumulationVisitor::visit(const EQ *op) {
     internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
-    Expr adjoint = expr_adjoints[op];
+    // Expr adjoint = expr_adjoints[op];
 
     // output is a boolean, so we should propagate zero to the arguments
     accumulate(op->a, make_const(op->a.type(), 0));
@@ -883,7 +883,7 @@ void ReverseAccumulationVisitor::visit(const EQ *op) {
 
 void ReverseAccumulationVisitor::visit(const NE *op) {
     internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
-    Expr adjoint = expr_adjoints[op];
+    // Expr adjoint = expr_adjoints[op];
 
     // output is a boolean, so we should propagate zero to the arguments
     accumulate(op->a, make_const(op->a.type(), 0));
@@ -892,7 +892,7 @@ void ReverseAccumulationVisitor::visit(const NE *op) {
 
 void ReverseAccumulationVisitor::visit(const LT *op) {
     internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
-    Expr adjoint = expr_adjoints[op];
+    // Expr adjoint = expr_adjoints[op];
 
     // output is a boolean, so we should propagate zero to the arguments
     accumulate(op->a, make_const(op->a.type(), 0));
@@ -901,7 +901,7 @@ void ReverseAccumulationVisitor::visit(const LT *op) {
 
 void ReverseAccumulationVisitor::visit(const LE *op) {
     internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
-    Expr adjoint = expr_adjoints[op];
+    // Expr adjoint = expr_adjoints[op];
 
     // output is a boolean, so we should propagate zero to the arguments
     accumulate(op->a, make_const(op->a.type(), 0));
@@ -910,7 +910,7 @@ void ReverseAccumulationVisitor::visit(const LE *op) {
 
 void ReverseAccumulationVisitor::visit(const GT *op) {
     internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
-    Expr adjoint = expr_adjoints[op];
+    // Expr adjoint = expr_adjoints[op];
 
     // output is a boolean, so we should propagate zero to the arguments
     accumulate(op->a, make_const(op->a.type(), 0));
@@ -919,7 +919,7 @@ void ReverseAccumulationVisitor::visit(const GT *op) {
 
 void ReverseAccumulationVisitor::visit(const GE *op) {
     internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
-    Expr adjoint = expr_adjoints[op];
+    // Expr adjoint = expr_adjoints[op];
 
     // output is a boolean, so we should propagate zero to the arguments
     accumulate(op->a, make_const(op->a.type(), 0));
@@ -928,7 +928,7 @@ void ReverseAccumulationVisitor::visit(const GE *op) {
 
 void ReverseAccumulationVisitor::visit(const And *op) {
     internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
-    Expr adjoint = expr_adjoints[op];
+    // Expr adjoint = expr_adjoints[op];
 
     // output is a boolean, so we should propagate zero to the arguments
     accumulate(op->a, make_const(op->a.type(), 0));
@@ -937,7 +937,7 @@ void ReverseAccumulationVisitor::visit(const And *op) {
 
 void ReverseAccumulationVisitor::visit(const Or *op) {
     internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
-    Expr adjoint = expr_adjoints[op];
+    // Expr adjoint = expr_adjoints[op];
 
     // output is a boolean, so we should propagate zero to the arguments
     accumulate(op->a, make_const(op->a.type(), 0));
@@ -946,7 +946,7 @@ void ReverseAccumulationVisitor::visit(const Or *op) {
 
 void ReverseAccumulationVisitor::visit(const Not *op) {
     internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
-    Expr adjoint = expr_adjoints[op];
+    // Expr adjoint = expr_adjoints[op];
 
     // output is a boolean, so we should propagate zero to the argument
     accumulate(op->a, make_const(op->a.type(), 0));
