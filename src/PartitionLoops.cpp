@@ -250,7 +250,7 @@ bool expr_uses_invalid_buffers(Expr e, const Scope<> &invalid_buffers) {
 class FindSimplifications : public IRVisitor {
     using IRVisitor::visit;
 
-    Scope<> depends_on_loop_var;
+    Scope<> depends_on_loop_var, depends_on_invalid_buffers;
     Scope<> buffers;
 
     void visit(const Allocate *op) override {
@@ -262,7 +262,9 @@ class FindSimplifications : public IRVisitor {
         if (!expr_uses_vars(condition, depends_on_loop_var)) {
             return;
         }
-        if (expr_uses_invalid_buffers(condition, buffers)) {
+
+        if (expr_uses_vars(condition, depends_on_invalid_buffers) ||
+            expr_uses_invalid_buffers(condition, buffers)) {
             // The condition refers to buffer allocated in the inner loop.
             // We should throw away the condition
             return;
@@ -398,10 +400,11 @@ class FindSimplifications : public IRVisitor {
 
     template<typename LetOrLetStmt>
     void visit_let(const LetOrLetStmt *op) {
-        bool varying = expr_uses_vars(op->value, depends_on_loop_var);
-        if (varying) {
-            depends_on_loop_var.push(op->name);
-        }
+        ScopedBinding<> bind_varying(expr_uses_vars(op->value, depends_on_loop_var),
+                                     depends_on_loop_var, op->name);
+        ScopedBinding<> bind_invalid(expr_uses_invalid_buffers(op->value, buffers) ||
+                                     expr_uses_vars(op->value, depends_on_invalid_buffers),
+                                     depends_on_invalid_buffers, op->name);
         vector<Simplification> old;
         old.swap(simplifications);
         IRVisitor::visit(op);
@@ -411,9 +414,6 @@ class FindSimplifications : public IRVisitor {
             }
         }
         simplifications.insert(simplifications.end(), old.begin(), old.end());
-        if (varying) {
-            depends_on_loop_var.pop(op->name);
-        }
     }
 
     void visit(const LetStmt *op) override {
