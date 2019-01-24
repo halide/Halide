@@ -116,7 +116,7 @@ class Inliner : public IRMutator {
                 body = Let::make(func.name() + "." + func_args[i], args[i], body);
             }
 
-            found = true;
+            found++;
 
             return body;
 
@@ -151,23 +151,20 @@ class Inliner : public IRMutator {
     }
 
     Stmt visit(const Provide *op) override {
-        bool old_found = found;
-
-        found = false;
+        ScopedValue<int> old_found(found, 0);
         Stmt stmt = IRMutator::visit(op);
 
-        if (found) {
+        if (found > 1) {
             stmt = common_subexpression_elimination(stmt);
         }
 
-        found = old_found;
         return stmt;
     }
 
 public:
-    bool found;
+    int found = 0;
 
-    Inliner(Function f) : func(f), found(false) {
+    Inliner(Function f) : func(f) {
         internal_assert(f.can_be_inlined()) << "Illegal to inline " << f.name() << "\n";
         validate_schedule_inlined_function(f);
     }
@@ -183,7 +180,7 @@ Stmt inline_function(Stmt s, Function f) {
 Expr inline_function(Expr e, Function f) {
     Inliner i(f);
     e = i.mutate(e);
-    if (i.found) {
+    if (i.found > 1) {
         e = common_subexpression_elimination(e);
     }
     return e;
