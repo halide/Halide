@@ -77,13 +77,6 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
         }
     }
 
-    // Get the alignment of the integer arguments
-    for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].alignment.modulus) {
-            alignment_info.push(args[i].name, args[i].alignment);
-        }
-    }
-
     // Make the initial basic block
     entry_block = BasicBlock::Create(*context, "entry", function);
     builder->SetInsertPoint(entry_block);
@@ -249,11 +242,11 @@ void CodeGen_PTX_Dev::visit(const Load *op) {
     const Ramp *r = op->index.as<Ramp>();
     // TODO: lanes >= 4, not lanes == 4
     if (is_one(op->predicate) && r && is_one(r->stride) && r->lanes == 4 && op->type.bits() == 32) {
-        ModulusRemainder align = modulus_remainder(r->base, alignment_info);
+        ModulusRemainder align = op->alignment;
         if (align.modulus % 4 == 0 && align.remainder % 4 == 0) {
             Expr index = simplify(r->base / 4);
             Expr equiv = Load::make(UInt(128), op->name, index,
-                                    op->image, op->param, const_true());
+                                    op->image, op->param, const_true(), align / 4);
             equiv = reinterpret(op->type, equiv);
             codegen(equiv);
             return;
@@ -269,11 +262,11 @@ void CodeGen_PTX_Dev::visit(const Store *op) {
     const Ramp *r = op->index.as<Ramp>();
     // TODO: lanes >= 4, not lanes == 4
     if (is_one(op->predicate) && r && is_one(r->stride) && r->lanes == 4 && op->value.type().bits() == 32) {
-        ModulusRemainder align = modulus_remainder(r->base, alignment_info);
+        ModulusRemainder align = op->alignment;
         if (align.modulus % 4 == 0 && align.remainder % 4 == 0) {
             Expr index = simplify(r->base / 4);
             Expr value = reinterpret(UInt(128), op->value);
-            Stmt equiv = Store::make(op->name, value, index, op->param, const_true());
+            Stmt equiv = Store::make(op->name, value, index, op->param, const_true(), align / 4);
             codegen(equiv);
             return;
         }

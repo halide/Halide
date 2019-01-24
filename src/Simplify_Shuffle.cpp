@@ -63,7 +63,8 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
         if (load_indices.size() == new_vectors.size()) {
             Type t = load_indices[0].type().with_lanes(op->indices.size());
             Expr shuffled_index = Shuffle::make(load_indices, op->indices);
-            shuffled_index = mutate(shuffled_index, nullptr);
+            ExprInfo shuffled_index_info;
+            shuffled_index = mutate(shuffled_index, &shuffled_index_info);
             if (shuffled_index.as<Ramp>()) {
                 Expr shuffled_predicate;
                 if (unpredicated) {
@@ -75,7 +76,7 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
                 t = first_load->type;
                 t = t.with_lanes(op->indices.size());
                 return Load::make(t, first_load->name, shuffled_index, first_load->image,
-                                  first_load->param, shuffled_predicate);
+                                  first_load->param, shuffled_predicate, shuffled_index_info.alignment);
             }
         }
     }

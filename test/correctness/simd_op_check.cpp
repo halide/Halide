@@ -114,7 +114,7 @@ struct Test {
             p.dim(0).set_min(-PAD).set_extent(W + 2 * PAD);
             if (can_run) {
                 // Make a buffer filled with noise to use as a sample input.
-                Buffer<> b(p.type(), {W*4+H, H});
+                Buffer<> b(p.type(), W + 2 * PAD);
                 b.set_min(-PAD);
                 Expr r;
                 if (p.type().is_float()) {
@@ -125,7 +125,7 @@ struct Test {
                     // bit numbers.
                     r = cast(p.type(), random_int() / 4);
                 }
-                lambda(x, y, r).realize(b);
+                lambda(x, r).realize(b);
                 p.set(b);
             }
         }

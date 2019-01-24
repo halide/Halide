@@ -181,24 +181,34 @@ Stmt Simplify::visit(const Store *op) {
 
     Expr predicate = mutate(op->predicate, nullptr);
     Expr value = mutate(op->value, nullptr);
-    Expr index = mutate(op->index, nullptr);
+
+    ExprInfo index_info;
+    Expr index = mutate(op->index, &index_info);
+
+    ExprInfo base_info;
+    if (const Ramp *r = index.as<Ramp>()) {
+        mutate(r->base, &base_info);
+    }
+    base_info.alignment = ModulusRemainder::intersect(base_info.alignment, index_info.alignment);
 
     const Load *load = value.as<Load>();
     const Broadcast *scalar_pred = predicate.as<Broadcast>();
+
+    ModulusRemainder align = ModulusRemainder::intersect(op->alignment, base_info.alignment);
 
     if (is_zero(predicate)) {
         // Predicate is always false
         return Evaluate::make(0);
     } else if (scalar_pred && !is_one(scalar_pred->value)) {
         return IfThenElse::make(scalar_pred->value,
-                                Store::make(op->name, value, index, op->param, const_true(value.type().lanes())));
+                                Store::make(op->name, value, index, op->param, const_true(value.type().lanes()), align));
     } else if (is_undef(value) || (load && load->name == op->name && equal(load->index, index))) {
         // foo[x] = foo[x] or foo[x] = undef is a no-op
         return Evaluate::make(0);
-    } else if (predicate.same_as(op->predicate) && value.same_as(op->value) && index.same_as(op->index)) {
+    } else if (predicate.same_as(op->predicate) && value.same_as(op->value) && index.same_as(op->index) && align == op->alignment) {
         return op;
     } else {
-        return Store::make(op->name, value, index, op->param, predicate);
+        return Store::make(op->name, value, index, op->param, predicate, align);
     }
 }
 

@@ -15,6 +15,7 @@
 #include "IntrusivePtr.h"
 #include "Parameter.h"
 #include "Type.h"
+#include "ModulusRemainder.h"
 #include "Util.h"
 #include "runtime/HalideBuffer.h"
 
@@ -207,9 +208,15 @@ struct Load : public ExprNode<Load> {
     // If it's a load from an image parameter, this points to that
     Parameter param;
 
+    // The alignment of the index. If the index is a vector, this is
+    // the alignment of the first lane.
+    ModulusRemainder alignment;
+
     static Expr make(Type type, const std::string &name,
                      Expr index, Buffer<> image,
-                     Parameter param, Expr predicate);
+                     Parameter param,
+                     Expr predicate,
+                     ModulusRemainder alignment);
 
     static const IRNodeType _node_type = IRNodeType::Load;
 };
@@ -311,8 +318,12 @@ struct Store : public StmtNode<Store> {
     // If it's a store to an output buffer, then this parameter points to it.
     Parameter param;
 
+    // The alignment of the index. If the index is a vector, this is
+    // the alignment of the first lane.
+    ModulusRemainder alignment;
+
     static Stmt make(const std::string &name, Expr value, Expr index,
-                     Parameter param, Expr predicate);
+                     Parameter param, Expr predicate, ModulusRemainder alignment);
 
     static const IRNodeType _node_type = IRNodeType::Store;
 };
