@@ -70,7 +70,7 @@ class MarkClampedRampsAsLikely : public IRMutator {
         if (predicate.same_as(op->predicate) && index.same_as(op->index) && value.same_as(op->value)) {
             return op;
         } else {
-            return Store::make(op->name, value, index, op->param, predicate);
+            return Store::make(op->name, value, index, op->param, predicate, op->alignment);
         }
     }
 

@@ -35,6 +35,10 @@ struct ModulusRemainder {
     // Take a conservatively-large intersection. Everything in the
     // result is in at least one of the two sets, but not always both.
     static ModulusRemainder intersect(const ModulusRemainder &a, const ModulusRemainder &b);
+
+    bool operator==(const ModulusRemainder &other) const {
+        return (modulus == other.modulus) && (remainder == other.remainder);
+    }
 };
 
 ModulusRemainder operator+(const ModulusRemainder &a, const ModulusRemainder &b);
@@ -42,6 +46,12 @@ ModulusRemainder operator-(const ModulusRemainder &a, const ModulusRemainder &b)
 ModulusRemainder operator*(const ModulusRemainder &a, const ModulusRemainder &b);
 ModulusRemainder operator/(const ModulusRemainder &a, const ModulusRemainder &b);
 ModulusRemainder operator%(const ModulusRemainder &a, const ModulusRemainder &b);
+
+ModulusRemainder operator+(const ModulusRemainder &a, int64_t b);
+ModulusRemainder operator-(const ModulusRemainder &a, int64_t b);
+ModulusRemainder operator*(const ModulusRemainder &a, int64_t b);
+ModulusRemainder operator/(const ModulusRemainder &a, int64_t b);
+ModulusRemainder operator%(const ModulusRemainder &a, int64_t b);
 
 /** For things like alignment analysis, often it's helpful to know
  * if an integer expression is some multiple of a constant plus

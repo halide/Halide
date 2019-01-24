@@ -188,7 +188,7 @@ class RewriteAccessToVectorAlloc : public IRMutator {
 
     using IRMutator::visit;
 
-    Expr mutate_index(string a, Expr index) {
+    Expr mutate_index(const string &a, Expr index) {
         index = mutate(index);
         if (a == alloc) {
             return index * lanes + var;
@@ -197,14 +197,22 @@ class RewriteAccessToVectorAlloc : public IRMutator {
         }
     }
 
+    ModulusRemainder mutate_alignment(const string &a, const ModulusRemainder &align) {
+        if (a == alloc) {
+            return align * lanes;
+        } else {
+            return align;
+        }
+    }
+
     Expr visit(const Load *op) override {
         return Load::make(op->type, op->name, mutate_index(op->name, op->index),
-                          op->image, op->param, mutate(op->predicate));
+                          op->image, op->param, mutate(op->predicate), mutate_alignment(op->name, op->alignment));
     }
 
     Stmt visit(const Store *op) override {
         return Store::make(op->name, mutate(op->value), mutate_index(op->name, op->index),
-                           op->param, mutate(op->predicate));
+                           op->param, mutate(op->predicate), mutate_alignment(op->name, op->alignment));
     }
 
 public:
@@ -294,7 +302,7 @@ class PredicateLoadStore : public IRMutator {
             return op;
         }
         vectorized = true;
-        return Load::make(op->type, op->name, index, op->image, op->param, predicate);
+        return Load::make(op->type, op->name, index, op->image, op->param, predicate, op->alignment);
     }
 
     Stmt visit(const Store *op) override {
@@ -325,7 +333,7 @@ class PredicateLoadStore : public IRMutator {
             return op;
         }
         vectorized = true;
-        return Store::make(op->name, value, index, op->param, predicate);
+        return Store::make(op->name, value, index, op->param, predicate, op->alignment);
     }
 
     Expr visit(const Call *op) override {
@@ -462,7 +470,7 @@ class VectorSubs : public IRMutator {
             int w = index.type().lanes();
             predicate = widen(predicate, w);
             return Load::make(op->type.with_lanes(w), op->name, index, op->image,
-                              op->param, predicate);
+                              op->param, predicate, op->alignment);
         }
     }
 
@@ -696,7 +704,7 @@ class VectorSubs : public IRMutator {
         } else {
             int lanes = std::max(predicate.type().lanes(), std::max(value.type().lanes(), index.type().lanes()));
             return Store::make(op->name, widen(value, lanes), widen(index, lanes),
-                               op->param, widen(predicate, lanes));
+                               op->param, widen(predicate, lanes), op->alignment);
         }
     }
 

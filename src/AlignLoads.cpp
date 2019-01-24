@@ -21,8 +21,8 @@ namespace {
 // intended vector out of the aligned vector.
 class AlignLoads : public IRMutator {
 public:
-    AlignLoads(int alignment, const Scope<ModulusRemainder>& alignment_info)
-        : alignment_analyzer(alignment, alignment_info), required_alignment(alignment) {}
+    AlignLoads(int alignment)
+        : alignment_analyzer(alignment), required_alignment(alignment) {}
 
 private:
     HexagonAlignmentAnalyzer alignment_analyzer;
@@ -33,10 +33,12 @@ private:
     using IRMutator::visit;
 
     // Rewrite a load to have a new index, updating the type if necessary.
-    Expr make_load(const Load *load, Expr index) {
+    Expr make_load(const Load *load, Expr index, ModulusRemainder alignment) {
         internal_assert(is_one(load->predicate)) << "Load should not be predicated.\n";
         return mutate(Load::make(load->type.with_lanes(index.type().lanes()), load->name,
-                                 index, load->image, load->param, const_true(index.type().lanes())));
+                                 index, load->image, load->param,
+                                 const_true(index.type().lanes()),
+                                 alignment));
     }
 
     Expr visit(const Load *op) override {
@@ -69,8 +71,9 @@ private:
         }
 
         int64_t aligned_offset = 0;
-        bool is_aligned = alignment_analyzer.is_aligned(op, &aligned_offset);
-        // We know the alignement_analyzer has been able to reason about alignment
+        bool is_aligned =
+            alignment_analyzer.is_aligned(op, &aligned_offset);
+        // We know the alignment_analyzer has been able to reason about alignment
         // if the following is true.
         bool known_alignment = is_aligned || (!is_aligned && aligned_offset != 0);
         int lanes = ramp->lanes;
@@ -89,8 +92,9 @@ private:
 
             // Load a dense vector covering all of the addresses in the load.
             Expr dense_base = simplify(ramp->base - shift);
+            ModulusRemainder alignment = op->alignment - shift;
             Expr dense_index = Ramp::make(dense_base, 1, lanes*stride);
-            Expr dense = make_load(op, dense_index);
+            Expr dense = make_load(op, dense_index, alignment);
 
             // Shuffle the dense load.
             return Shuffle::make_slice(dense, shift, stride, lanes);
@@ -101,7 +105,7 @@ private:
         if (lanes < native_lanes) {
             // This load is smaller than a native vector. Load a
             // native vector.
-            Expr native_load = make_load(op, Ramp::make(ramp->base, 1, native_lanes));
+            Expr native_load = make_load(op, Ramp::make(ramp->base, 1, native_lanes), op->alignment);
 
             // Slice the native load.
             return Shuffle::make_slice(native_load, 0, 1, lanes);
@@ -114,7 +118,8 @@ private:
             for (int i = 0; i < lanes; i += native_lanes) {
                 int slice_lanes = std::min(native_lanes, lanes - i);
                 Expr slice_base = simplify(ramp->base + i);
-                slices.push_back(make_load(op, Ramp::make(slice_base, 1, slice_lanes)));
+                ModulusRemainder alignment = op->alignment + i;
+                slices.push_back(make_load(op, Ramp::make(slice_base, 1, slice_lanes), alignment));
             }
             return Shuffle::make_concat(slices);
         }
@@ -124,42 +129,20 @@ private:
             // address. Rewrite this is an aligned load of two
             // native vectors, followed by a shuffle.
             Expr aligned_base = simplify(ramp->base - (int)aligned_offset);
-            Expr aligned_load = make_load(op, Ramp::make(aligned_base, 1, lanes*2));
+            ModulusRemainder alignment = op->alignment - (int)aligned_offset;
+            Expr aligned_load = make_load(op, Ramp::make(aligned_base, 1, lanes*2), alignment);
 
             return Shuffle::make_slice(aligned_load, (int)aligned_offset, 1, lanes);
         }
 
         return IRMutator::visit(op);
     }
-
-    template<typename NodeType, typename LetType>
-    NodeType visit_let(const LetType *op) {
-        if (op->value.type() == Int(32)) {
-            alignment_analyzer.push(op->name, op->value);
-        }
-
-        Expr value = mutate(op->value);
-        NodeType body = mutate(op->body);
-
-        if (op->value.type() == Int(32)) {
-            alignment_analyzer.pop(op->name);
-        }
-
-        if (!value.same_as(op->value) || !body.same_as(op->body)) {
-            return LetType::make(op->name, value, body);
-        } else {
-            return op;
-        }
-    }
-
-    Expr visit(const Let *op) override { return visit_let<Expr>(op); }
-    Stmt visit(const LetStmt *op) override { return visit_let<Stmt>(op); }
 };
 
 }  // namespace
 
-Stmt align_loads(Stmt s, int alignment, const Scope<ModulusRemainder> &alignment_info) {
-    return AlignLoads(alignment, alignment_info).mutate(s);
+Stmt align_loads(Stmt s, int alignment) {
+    return AlignLoads(alignment).mutate(s);
 }
 
 } // namespace Internal
