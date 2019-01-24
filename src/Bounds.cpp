@@ -1011,14 +1011,92 @@ private:
             assert(op->args.size() == 3);
             op->args[1].accept(this);
         } else if (op->is_intrinsic(Call::shift_left) ||
-                   op->is_intrinsic(Call::shift_right) ||
-                   op->is_intrinsic(Call::bitwise_and)) {
-            Expr simplified = simplify(op);
-            if (!equal(simplified, op)) {
-                simplified.accept(this);
+                   op->is_intrinsic(Call::bitwise_xor)) {
+            Expr a = op->args[0], b = op->args[1];
+            a.accept(this);
+            Interval a_interval = interval;
+            b.accept(this);
+            Interval b_interval = interval;
+            if (a_interval.is_single_point(a) && b_interval.is_single_point(b)) {
+                interval = Interval::single_point(op);
+            } else if (a_interval.is_single_point() && b_interval.is_single_point()) {
+                interval = Interval::single_point(a << b);
             } else {
-                // Just use the bounds of the type
                 bounds_of_type(t);
+                if (op->is_intrinsic(Call::shift_right) && (t.is_int() || t.is_uint())) {
+                    // shift_right can't overflow, so we can go a little further
+                    if (a_interval.has_lower_bound() && b_interval.has_upper_bound()) {
+                        interval.min = a_interval.min >> b_interval.max;
+                    }
+                    if (a_interval.has_upper_bound() && b_interval.has_lower_bound()) {
+                        interval.max = a_interval.max >> b_interval.min;
+                    }
+                }
+            }
+        } else if (op->is_intrinsic(Call::bitwise_and)) {
+            Expr a = op->args[0], b = op->args[1];
+            a.accept(this);
+            Interval a_interval = interval;
+            b.accept(this);
+            Interval b_interval = interval;
+            if (a_interval.is_single_point(a) && b_interval.is_single_point(b)) {
+                interval = Interval::single_point(op);
+            } else if (a_interval.is_single_point() && b_interval.is_single_point()) {
+                interval = Interval::single_point(a & b);
+            } else {
+                bounds_of_type(t);
+                if (a_interval.has_upper_bound() && b_interval.has_upper_bound()) {
+                    if (t.is_int()) {
+                        // Smaller than the larger of the two args
+                        interval.max = max(a_interval.max, b_interval.max);
+                    } else if (t.is_uint()) {
+                        // Smaller than both args
+                        interval.max = min(a_interval.max, b_interval.max);
+                    }
+                }
+            }
+        } else if (op->is_intrinsic(Call::bitwise_or)) {
+            Expr a = op->args[0], b = op->args[1];
+            a.accept(this);
+            Interval a_interval = interval;
+            b.accept(this);
+            Interval b_interval = interval;
+            if (a_interval.is_single_point(a) && b_interval.is_single_point(b)) {
+                interval = Interval::single_point(op);
+            } else if (a_interval.is_single_point() && b_interval.is_single_point()) {
+                interval = Interval::single_point(a | b);
+            } else {
+                bounds_of_type(t);
+                if (a_interval.has_lower_bound() && b_interval.has_lower_bound()) {
+                    if (t.is_int()) {
+                        // Larger than the smaller arg
+                        interval.min = min(a_interval.min, b_interval.min);
+                    } else if (t.is_uint()) {
+                        // Larger than both args
+                        interval.min = max(a_interval.min, b_interval.min);
+                    }
+                }
+            }
+        } else if (op->is_intrinsic(Call::bitwise_not)) {
+            // In 2's complement bitwise not inverts the ordering of
+            // the space, without causing overflow (unlike negation),
+            // so bitwise not is monotonic decreasing.
+            op->args[0].accept(this);
+            Interval a_interval = interval;
+            if (a_interval.is_single_point(op->args[0])) {
+                interval = Interval::single_point(op);
+            } else if (a_interval.is_single_point()) {
+                interval = Interval::single_point(~a_interval.min);
+            } else {
+                bounds_of_type(t);
+                if (t.is_int() || t.is_uint()) {
+                    if (a_interval.has_upper_bound()) {
+                        interval.min = ~a_interval.max;
+                    }
+                    if (a_interval.has_lower_bound()) {
+                        interval.max = ~a_interval.min;
+                    }
+                }
             }
         } else if (op->args.size() == 1 && interval.is_bounded() &&
                    (op->name == "ceil_f32" || op->name == "ceil_f64" ||
@@ -2443,8 +2521,7 @@ void constant_bound_test() {
         Expr cr1 = i16(x);
         Expr cr2 = i16(y);
         Expr fraction = (d & (int16_t)((1 << 7) - 1));
-        Expr cr = i16((((cr2 - cr1) * fraction) >> 7) + cr1);
-
+        Expr cr = simplify(i16((((cr2 - cr1) * fraction) >> 7) + cr1));
         check_constant_bound(absd(cr, cl), Expr((uint16_t)0), Expr((uint16_t)510));
         check_constant_bound(i16(absd(cr, cl)), Expr((int16_t)0), Expr((int16_t)510));
     }
@@ -2575,6 +2652,18 @@ void bounds_test() {
     check(scope, (cast<uint8_t>(x)+10)*10, make_const(UInt(8), 100), make_const(UInt(8), 200));
     check(scope, (cast<uint8_t>(x)+10)*(cast<uint8_t>(x)), make_const(UInt(8), 0), make_const(UInt(8), 200));
     check(scope, (cast<uint8_t>(x)+20)-(cast<uint8_t>(x)+5), make_const(UInt(8), 5), make_const(UInt(8), 25));
+
+    // Check some bitwise ops.
+    check(scope, (cast<uint8_t>(x) & cast<uint8_t>(7)), make_const(UInt(8), 0), make_const(UInt(8), 7));
+    check(scope, (cast<uint8_t>(3) & cast<uint8_t>(2)), make_const(UInt(8), 2), make_const(UInt(8), 2));
+    check(scope, (cast<uint8_t>(1) | cast<uint8_t>(2)), make_const(UInt(8), 3), make_const(UInt(8), 3));
+    check(scope, (cast<uint8_t>(3) ^ cast<uint8_t>(2)), make_const(UInt(8), 1), make_const(UInt(8), 1));
+    check(scope, (~cast<uint8_t>(3)), make_const(UInt(8), 0xfc), make_const(UInt(8), 0xfc));
+    check(scope, cast<uint8_t>(x + 5) & cast<uint8_t>(x + 3), make_const(UInt(8), 0), make_const(UInt(8), 13));
+    check(scope, cast<int8_t>(x + 5) & cast<int8_t>(x + 3), make_const(Int(8), -128), make_const(Int(8), 15));
+    check(scope, cast<uint8_t>(x + 5) | cast<uint8_t>(x + 3), make_const(UInt(8), 5), make_const(UInt(8), 255));
+    check(scope, cast<int8_t>(x + 5) | cast<int8_t>(x + 3), make_const(Int(8), 3), make_const(Int(8), 127));
+    check(scope, ~cast<uint8_t>(x), make_const(UInt(8), -11), make_const(UInt(8), -1));
 
     check(scope,
           cast<uint16_t>(clamp(cast<float>(x/y), 0.0f, 4095.0f)),
