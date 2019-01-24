@@ -151,16 +151,13 @@ class Inliner : public IRMutator {
     }
 
     Stmt visit(const Provide *op) override {
-        int old_found = found;
-
-        found = 0;
+        ScopedValue<int> old_found(found, 0);
         Stmt stmt = IRMutator::visit(op);
 
         if (found > 1) {
             stmt = common_subexpression_elimination(stmt);
         }
 
-        found = old_found;
         return stmt;
     }
 
