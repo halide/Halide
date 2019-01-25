@@ -344,13 +344,11 @@ ModulusRemainder ModulusRemainder::intersect(const ModulusRemainder &a, const Mo
     // For coprime ma and mb you want to use the Chinese remainder
     // theorem. In our case, the moduli will almost always be
     // powers of two, so we should just return the smaller of the two
-    // sets (the one with the larger modulus).
-
-    // This is enough for all the cases we care about currently, and
-    // technically satisfies the requirements of the function, but
-    // clearly something more clever could go here.
-
-    return (a.modulus > b.modulus) ? a : b;
+    // sets (usually the one with the larger modulus).
+    if (a.modulus == 0) return a;
+    if (b.modulus == 0) return b;
+    if (a.modulus > b.modulus) return a;
+    return b;
 }
 
 void ComputeModulusRemainder::visit(const Mod *op) {
@@ -373,6 +371,26 @@ ModulusRemainder operator%(const ModulusRemainder &a, const ModulusRemainder &b)
     modulus = gcd(modulus, b.remainder);
     int64_t remainder = mod(a.remainder, modulus);
     return {modulus, remainder};
+}
+
+ModulusRemainder operator+(const ModulusRemainder &a, int64_t b) {
+    return a + ModulusRemainder(0, b);
+}
+
+ModulusRemainder operator-(const ModulusRemainder &a, int64_t b) {
+    return a - ModulusRemainder(0, b);
+}
+
+ModulusRemainder operator*(const ModulusRemainder &a, int64_t b) {
+    return a * ModulusRemainder(0, b);
+}
+
+ModulusRemainder operator/(const ModulusRemainder &a, int64_t b) {
+    return a / ModulusRemainder(0, b);
+}
+
+ModulusRemainder operator%(const ModulusRemainder &a, int64_t b) {
+    return a % ModulusRemainder(0, b);
 }
 
 void ComputeModulusRemainder::visit(const Min *op) {

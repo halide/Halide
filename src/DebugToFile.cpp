@@ -14,10 +14,10 @@ using std::ostringstream;
 using std::string;
 using std::vector;
 
-class DebugToFile : public IRMutator2 {
+class DebugToFile : public IRMutator {
     const map<string, Function> &env;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Stmt visit(const Realize *op) override {
         map<string, Function>::const_iterator iter = env.find(op->name);
@@ -82,7 +82,7 @@ class DebugToFile : public IRMutator2 {
 
             return Realize::make(op->name, op->types, op->memory_type, op->bounds, op->condition, body);
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
@@ -90,10 +90,10 @@ public:
     DebugToFile(const map<string, Function> &e) : env(e) {}
 };
 
-class RemoveDummyRealizations : public IRMutator2 {
+class RemoveDummyRealizations : public IRMutator {
     const vector<Function> &outputs;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Stmt visit(const Realize *op) override {
         for (Function f : outputs) {
@@ -101,7 +101,7 @@ class RemoveDummyRealizations : public IRMutator2 {
                 return mutate(op->body);
             }
         }
-        return IRMutator2::visit(op);
+        return IRMutator::visit(op);
     }
 
 public:

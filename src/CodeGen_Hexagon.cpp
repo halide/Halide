@@ -133,11 +133,11 @@ bool is_dense_ramp(Expr x) {
 // In Hexagon, we assume that we can read one vector past the end of
 // buffers. Using this assumption, this mutator replaces vector
 // predicated dense loads with scalar predicated dense loads.
-class SloppyUnpredicateLoads : public IRMutator2 {
+class SloppyUnpredicateLoads : public IRMutator {
     Expr visit(const Load *op) override {
         // Don't handle loads with without predicates, scalar predicates, or non-dense ramps.
         if (is_one(op->predicate) || op->predicate.as<Broadcast>() || !is_dense_ramp(op->index)) {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
 
         Expr predicate = mutate(op->predicate);
@@ -150,17 +150,17 @@ class SloppyUnpredicateLoads : public IRMutator2 {
         }
         predicate = Broadcast::make(condition, predicate.type().lanes());
 
-        return Load::make(op->type, op->name, index, op->image, op->param, predicate);
+        return Load::make(op->type, op->name, index, op->image, op->param, predicate, op->alignment);
     }
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 };
 
 Stmt sloppy_unpredicate_loads(Stmt s) {
     return SloppyUnpredicateLoads().mutate(s);
 }
 
-class InjectHVXLocks : public IRMutator2 {
+class InjectHVXLocks : public IRMutator {
 public:
     InjectHVXLocks(const Target &t) : target(t) {
         uses_hvx_var = Variable::make(Bool(), "uses_hvx");
@@ -168,7 +168,7 @@ public:
     bool uses_hvx = false;
 private:
     Expr uses_hvx_var;
-    using IRMutator2::visit;
+    using IRMutator::visit;
     // Primarily, we do two things when we encounter a parallel for loop.
     // First, we check if the paralell for loop uses_hvx and accordingly
     // acqure_hvx_context i.e. acquire and release HVX locks.
@@ -253,7 +253,7 @@ private:
             return s;
 
         }
-        return IRMutator2::visit(op);
+        return IRMutator::visit(op);
     }
     Expr visit(const Variable *op) override {
         uses_hvx = uses_hvx || op->type.is_vector();
@@ -323,7 +323,7 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
     #endif
 
     debug(1) << "Aligning loads for HVX....\n";
-    body = align_loads(body, target.natural_vector_size(Int(8)), alignment_info);
+    body = align_loads(body, target.natural_vector_size(Int(8)));
     body = common_subexpression_elimination(body);
     // Don't simplify here, otherwise it will re-collapse the loads we
     // want to carry across loop iterations.
@@ -342,7 +342,7 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
 
     // Optimize the IR for Hexagon.
     debug(1) << "Optimizing Hexagon instructions...\n";
-    body = optimize_hexagon_instructions(body, target, alignment_info);
+    body = optimize_hexagon_instructions(body, target);
 
     debug(1) << "Adding calls to qurt_hvx_lock, if necessary...\n";
     body = inject_hvx_lock_unlock(body, target);
