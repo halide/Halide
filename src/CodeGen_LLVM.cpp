@@ -3729,27 +3729,9 @@ void CodeGen_LLVM::codegen_asserts(const vector<const AssertStmt *> &asserts) {
         return;
     }
 
-    // Mix all the conditions together into a bitmask
-
-    /*
-    Expr combined_condition = const_true();
-    Stmt body = Evaluate::make(0);
-    for (const auto *a : asserts) {
-        combined_condition = combined_condition && a->condition;
-        // Jam no-ops in between to stop this from happening recursively
-        body = Block::make(a, body);
-        body = Block::make(Evaluate::make(0), body);
-    }
-    combined_condition = simplify(common_subexpression_elimination(combined_condition));
-
-    // For now just use a parallel loop to get the body off into a separate function.
-    Stmt equiv = IfThenElse::make(!combined_condition, For::make(unique_name('t'), 0, 1, ForType::Parallel, DeviceAPI::Host, body));
-
-    debug(0) << equiv << "\n";
-    codegen(equiv);
-    */
-
     internal_assert(asserts.size() <= 63);
+
+    // Mix all the conditions together into a bitmask
 
     Expr bitmask = cast<uint64_t>(1) << 63;
     for (size_t i = 0; i < asserts.size(); i++) {
@@ -3763,7 +3745,7 @@ void CodeGen_LLVM::codegen_asserts(const vector<const AssertStmt *> &asserts) {
     // Now switch on the bitmask to the correct failure
     Expr case_idx = cast<int32_t>(count_trailing_zeros(bitmask));
     auto *switch_inst = builder->CreateSwitch(codegen(case_idx), no_errors_bb, asserts.size(), very_likely_branch);
-    for (int i = 0; i < (int)asserts.size(); i++) {
+    for (int i = 0; i < (int) asserts.size(); i++) {
         BasicBlock *fail_bb = BasicBlock::Create(*context, "assert_failed", function);
         switch_inst->addCase(ConstantInt::get(IntegerType::get(*context, 32), i), fail_bb);
         builder->SetInsertPoint(fail_bb);
