@@ -8,8 +8,8 @@
 namespace Halide {
 namespace Internal {
 
-class RemoveTrivialForLoops : public IRMutator2 {
-    using IRMutator2::visit;
+class RemoveTrivialForLoops : public IRMutator {
+    using IRMutator::visit;
 
     Stmt visit(const For *for_loop) override {
 

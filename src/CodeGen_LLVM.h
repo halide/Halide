@@ -464,12 +464,6 @@ protected:
      */
     std::pair<llvm::Function *, int> find_vector_runtime_function(const std::string &name, int lanes);
 
-    /** Get the result of modulus-remainder analysis for a given expr. */
-    ModulusRemainder get_alignment_info(Expr e);
-
-    /** Alignment info for Int(32) variables in scope. */
-    Scope<ModulusRemainder> alignment_info;
-
 private:
 
     /** All the values in scope at the current code location during

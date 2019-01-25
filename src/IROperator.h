@@ -100,6 +100,12 @@ inline Expr make_const(Type t, float val)     {return make_const(t, (double)val)
 inline Expr make_const(Type t, float16_t val) {return make_const(t, (double)val);}
 // @}
 
+/** Construct a unique indeterminate_expression Expr */
+Expr make_indeterminate_expression(Type type);
+
+/** Construct a unique signed_integer_overflow Expr */
+Expr make_signed_integer_overflow(Type type);
+
 /** Check if a constant value can be correctly represented as the given type. */
 void check_representable(Type t, int64_t val);
 
@@ -1271,7 +1277,9 @@ inline Expr fast_pow(Expr x, Expr y) {
 
 /** Fast approximate inverse for Float(32). Corresponds to the rcpps
  * instruction on x86, and the vrecpe instruction on ARM. Vectorizes
- * cleanly. */
+ * cleanly. Note that this can produce slightly different results
+ * across different implementations of the same architecture (e.g. AMD vs Intel),
+ * even when strict_float is enabled. */
 inline Expr fast_inverse(Expr x) {
     user_assert(x.type() == Float(32)) << "fast_inverse only takes float arguments\n";
     Type t = x.type();
@@ -1280,7 +1288,9 @@ inline Expr fast_inverse(Expr x) {
 
 /** Fast approximate inverse square root for Float(32). Corresponds to
  * the rsqrtps instruction on x86, and the vrsqrte instruction on
- * ARM. Vectorizes cleanly. */
+ * ARM. Vectorizes cleanly. Note that this can produce slightly different results
+ * across different implementations of the same architecture (e.g. AMD vs Intel),
+ * even when strict_float is enabled. */
 inline Expr fast_inverse_sqrt(Expr x) {
     user_assert(x.type() == Float(32)) << "fast_inverse_sqrt only takes float arguments\n";
     Type t = x.type();

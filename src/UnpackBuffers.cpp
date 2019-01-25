@@ -89,17 +89,9 @@ Stmt unpack_buffers(Stmt s) {
                                             Call::buffer_get_device_interface, args, Call::Extern);
         lets.push_back({dev_interface_var, dev_interface_val});
 
-        string type_code_var = name + ".type.code";
-        Expr type_code_val = Call::make(UInt(8), Call::buffer_get_type_code, args, Call::Extern);
+        string type_code_var = name + ".type";
+        Expr type_code_val = Call::make(UInt(32), Call::buffer_get_type, args, Call::Extern);
         lets.push_back({type_code_var, type_code_val});
-
-        string type_bits_var = name + ".type.bits";
-        Expr type_bits_val = Call::make(UInt(8), Call::buffer_get_type_bits, args, Call::Extern);
-        lets.push_back({type_bits_var, type_bits_val});
-
-        string type_lanes_var = name + ".type.lanes";
-        Expr type_lanes_val = Call::make(UInt(16), Call::buffer_get_type_lanes, args, Call::Extern);
-        lets.push_back({type_lanes_var, type_lanes_val});
 
         string host_dirty_var = name + ".host_dirty";
         Expr host_dirty_val = Call::make(Bool(), Call::buffer_get_host_dirty, args, Call::Extern);

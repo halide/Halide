@@ -34,8 +34,8 @@ private:
     }
 };
 
-class Validator : public IRMutator2 {
-    using IRMutator2::mutate;
+class Validator : public IRMutator {
+    using IRMutator::mutate;
 
     Stmt mutate(const Stmt &s) override {
         CheckLoops c;
