@@ -25,7 +25,7 @@ public:
         Constrained,
         Proposed,
         Required,
-				TypeCheck,
+        TypeCheck,
         HostAlignment,
         HostNonNull,
     };
