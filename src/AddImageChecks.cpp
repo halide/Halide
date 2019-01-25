@@ -25,7 +25,7 @@ public:
         Constrained,
         Proposed,
         Required,
-        ElemSize,
+				TypeCheck,
         HostAlignment,
         HostNonNull,
     };
@@ -302,11 +302,7 @@ Stmt add_image_checks(Stmt s,
             Expr error = Call::make(Int(32), "halide_error_bad_type",
                                     {error_name, type_var, correct_type_expr},
                                     Call::Extern);
-            buffer_asserts.insert(BufferAsserts::AssertType::ElemSize, name,
-                                  AssertStmt::make((type_code == type.code()) &&
-                                                       (type_bits == type.bits()) &&
-                                                       (type_lanes == type.lanes()),
-                                                   error));
+            buffer_asserts.insert(BufferAsserts::AssertType::TypeCheck, name, AssertStmt::make(type_var == correct_type_expr, error));
         }
 
         // Check the dimensions matches the internally-understood dimensions
@@ -317,7 +313,7 @@ Stmt add_image_checks(Stmt s,
                                     {error_name,
                                      dimensions_given, make_const(Int(32), dimensions)},
                                     Call::Extern);
-            buffer_asserts.insert(BufferAsserts::AssertType::ElemSize, name,
+            buffer_asserts.insert(BufferAsserts::AssertType::TypeCheck, name,
                                   AssertStmt::make(dimensions_given == dimensions, error));
         }
 
@@ -614,7 +610,7 @@ Stmt add_image_checks(Stmt s,
     if (!no_asserts) {
         buffer_asserts.process_types(
             make_block,
-            { BufferAsserts::AssertType::HostNonNull, BufferAsserts::AssertType::HostAlignment, BufferAsserts::AssertType::DimsNoOverflow });
+            { BufferAsserts::AssertType::HostNonNull, BufferAsserts::AssertType::HostAlignment, BufferAsserts::AssertType::TypeCheck });
     }
 
     // Inject the code that checks that no dimension math overflows
@@ -645,7 +641,7 @@ Stmt add_image_checks(Stmt s,
         // Inject the code that checks for out-of-bounds access to the buffers.
         buffer_asserts.process_types(
             make_block,
-            { BufferAsserts::AssertType::Required, BufferAsserts::AssertType::ElemSize });
+            { BufferAsserts::AssertType::Required, BufferAsserts::AssertType::TypeCheck});
     }
 
     // Inject the code that returns early for inference mode.
