@@ -1079,7 +1079,8 @@ void test_downsampling() {
     // output(1) = \sum input(5~8)
     Func d_input = d(input);
     // Every dependency of d_tuple should only use pure variables in lhs
-    _halide_user_assert(!has_non_pure_update(d_input)) << "Function has non pure update\n";
+
+    // _halide_user_assert(!has_non_pure_update(d_input)) << "Function has non pure update\n";
     Buffer<float> d_input_buf = d_input.realize(10);
 
     for (int i = 0; i < 8; i++) {
@@ -1103,7 +1104,7 @@ void test_upsampling() {
     Derivative d = propagate_adjoints(loss);
     Func d_input = d(input);
     // Every dependency of d_tuple should only use pure variables in lhs
-    // _halide_user_assert(!has_non_pure_update(d_input)) << "Function has non pure update\n";
+    _halide_user_assert(!has_non_pure_update(d_input)) << "Function has non pure update\n";
     Buffer<float> d_input_buf = d_input.realize(4);
 
     for (int i = 0; i < 4; i++) {
