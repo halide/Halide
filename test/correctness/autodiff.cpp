@@ -697,7 +697,7 @@ void test_histogram() {
 
     Func loss("loss");
     RDom rd(input);
-    loss() += output(rd.x) * cast<float>(rd.x + 1);
+    loss() += output(rd) * cast<float>(rd + 1);
     Derivative d = propagate_adjoints(loss);
 
     // d_output(2) -> d_k(0)
@@ -709,6 +709,50 @@ void test_histogram() {
     check(__LINE__, d_k(1), 3.0f);
     check(__LINE__, d_k(2), 2.0f);
     check(__LINE__, d_k(3), 4.0f);
+    check(__LINE__, d_k(4), 0.0f);
+}
+
+void test_multiple_updates_histogram() {
+    Var x("x");
+    Buffer<int> input(4, "input");
+    input(0) = 2;
+    input(1) = 2;
+    input(2) = 1;
+    input(3) = 3;
+    Buffer<float> k(4, "k");
+    k(0) = 0.5f;
+    k(1) = 1.f;
+    k(2) = 1.5f;
+    k(3) = 2.f;
+    k(4) = 2.5f;
+    Func output("output");
+    output(x) = 0.f;
+    RDom r(input);
+    for (int i = 0; i < 10; i++) {
+        output(clamp(input(r), 0, 3)) += k(r);
+    }
+
+    Func loss("loss");
+    RDom rd(input);
+    loss() += output(rd) * cast<float>(rd + 1);
+    Derivative d = propagate_adjoints(loss);
+
+    // Schedule this so it doesn't run forever
+    output.compute_root();
+    auto funcs = d.adjoints;
+    for (auto it : funcs) {
+        it.second.compute_root();
+    }
+
+    // d_output(2) -> d_k(0) * 2
+    // d_output(2) -> d_k(1) * 2
+    // d_output(1) -> d_k(2) * 2
+    // d_output(3) -> d_k(3) * 2
+    Buffer<float> d_k = d(k).realize(5);
+    check(__LINE__, d_k(0), 30.0f);
+    check(__LINE__, d_k(1), 30.0f);
+    check(__LINE__, d_k(2), 20.0f);
+    check(__LINE__, d_k(3), 40.0f);
     check(__LINE__, d_k(4), 0.0f);
 }
 
@@ -1059,7 +1103,7 @@ void test_upsampling() {
     Derivative d = propagate_adjoints(loss);
     Func d_input = d(input);
     // Every dependency of d_tuple should only use pure variables in lhs
-    _halide_user_assert(!has_non_pure_update(d_input)) << "Function has non pure update\n";
+    // _halide_user_assert(!has_non_pure_update(d_input)) << "Function has non pure update\n";
     Buffer<float> d_input_buf = d_input.realize(4);
 
     for (int i = 0; i < 4; i++) {
@@ -1160,6 +1204,26 @@ void test_rdom_predicate() {
     }
 }
 
+void test_reverse_scan() {
+    Var x("x");
+    Buffer<float> input(5);
+    for (int i = 0; i < 5; i++) {
+        input(i) = float(i);
+    }
+    RDom r(input);
+    Func reverse("reverse");
+    reverse(x) = input(x);
+    reverse(r.x) = reverse(4 - r.x);
+    Func loss("loss");
+    loss() += reverse(r.x) * (r.x + 1.f);
+    Derivative d = propagate_adjoints(loss);
+    Func d_input = d(input);
+    Buffer<float> d_input_buf = d_input.realize(5);
+    for (int i = 0; i < 5; i++) {
+        check(__LINE__, d_input_buf(i), (5.f - (float)i));
+    }
+}
+
 int main(int argc, char **argv) {
     test_scalar<float>();
     test_scalar<double>();
@@ -1176,6 +1240,7 @@ int main(int argc, char **argv) {
     test_linear_resampling_2d();
     test_sparse_update();
     test_histogram();
+    test_multiple_updates_histogram();
     test_rdom_update();
     test_repeat_edge();
     test_constant_exterior();
@@ -1192,5 +1257,6 @@ int main(int argc, char **argv) {
     test_transpose();
     test_change_var();
     test_rdom_predicate();
+    test_reverse_scan();
     printf("Success!\n");
 }
