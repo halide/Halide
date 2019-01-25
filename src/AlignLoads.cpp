@@ -68,7 +68,7 @@ private:
             return IRMutator2::visit(op);
         }
 
-        int aligned_offset = 0;
+        int64_t aligned_offset = 0;
         bool is_aligned = alignment_analyzer.is_aligned(op, &aligned_offset);
         // We know the alignement_analyzer has been able to reason about alignment
         // if the following is true.
@@ -119,14 +119,14 @@ private:
             return Shuffle::make_concat(slices);
         }
 
-        if (!is_aligned && aligned_offset != 0) {
+        if (!is_aligned && aligned_offset != 0 && Int(32).can_represent(aligned_offset)) {
             // We know the offset of this load from an aligned
             // address. Rewrite this is an aligned load of two
             // native vectors, followed by a shuffle.
-            Expr aligned_base = simplify(ramp->base - aligned_offset);
+            Expr aligned_base = simplify(ramp->base - (int)aligned_offset);
             Expr aligned_load = make_load(op, Ramp::make(aligned_base, 1, lanes*2));
 
-            return Shuffle::make_slice(aligned_load, aligned_offset, 1, lanes);
+            return Shuffle::make_slice(aligned_load, (int)aligned_offset, 1, lanes);
         }
 
         return IRMutator2::visit(op);

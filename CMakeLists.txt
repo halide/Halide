@@ -307,7 +307,6 @@ define_test_group(run_tests)
 # TODO(srj): add test_aotcpp_generators support
 # TODO(srj): add test_valgrind variant
 # TODO(srj): add test_avx512 variant
-# TODO(srj): add test_bazel variant
 # TODO(srj): add test_python variant
 # TODO(srj): add test_apps variant
 function(add_test TARGET)
@@ -451,11 +450,6 @@ endforeach()
 
 # ---- README
 file(GLOB FILES "${HALIDE_BASE_DIR}/*.md")
-install(FILES ${FILES}
-        DESTINATION .)
-
-# ---- Bazel
-file(GLOB FILES "${HALIDE_BASE_DIR}/bazel/*")
 install(FILES ${FILES}
         DESTINATION .)
 

@@ -5,7 +5,7 @@ namespace Internal {
 
 using std::vector;
 
-Expr Simplify::visit(const Shuffle *op, ConstBounds *bounds) {
+Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
     if (op->is_extract_element() &&
         (op->vectors[0].as<Ramp>() ||
          op->vectors[0].as<Broadcast>())) {
@@ -24,7 +24,7 @@ Expr Simplify::visit(const Shuffle *op, ConstBounds *bounds) {
     vector<Expr> new_vectors;
     bool changed = false;
     for (Expr vector : op->vectors) {
-        ConstBounds v_bounds;
+        ExprInfo v_bounds;
         Expr new_vector = mutate(vector, &v_bounds);
         if (!vector.same_as(new_vector)) {
             changed = true;
@@ -37,6 +37,7 @@ Expr Simplify::visit(const Shuffle *op, ConstBounds *bounds) {
                 bounds->max_defined &= v_bounds.max_defined;
                 bounds->min = std::min(bounds->min, v_bounds.min);
                 bounds->max = std::max(bounds->max, v_bounds.max);
+                bounds->alignment = ModulusRemainder::unify(bounds->alignment, v_bounds.alignment);
             }
         }
         new_vectors.push_back(new_vector);

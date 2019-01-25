@@ -377,6 +377,10 @@ void emit_file(const llvm::Module &module_in, Internal::LLVMOStream& out, llvm::
 #endif
 
     pass_manager.run(*module);
+    // If -time-passes is in HL_LLVM_ARGS, this will print llvm passes time statstics otherwise its no-op.
+#if LLVM_VERSION >= 80
+    llvm::reportAndResetTimings();
+#endif
 }
 
 std::unique_ptr<llvm::Module> compile_module_to_llvm_module(const Module &module, llvm::LLVMContext &context) {

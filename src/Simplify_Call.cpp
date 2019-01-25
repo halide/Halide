@@ -6,7 +6,7 @@ namespace Internal {
 using std::vector;
 using std::string;
 
-Expr Simplify::visit(const Call *op, ConstBounds *bounds) {
+Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
     // Calls implicitly depend on host, dev, mins, and strides of the buffer referenced
     if (op->call_type == Call::Image || op->call_type == Call::Halide) {
         found_buffer_reference(op->name, op->args.size());
@@ -118,6 +118,23 @@ Expr Simplify::visit(const Call *op, ConstBounds *bounds) {
         } else {
             return ~a;
         }
+    } else if (op->is_intrinsic(Call::bitwise_xor)) {
+        Expr a = mutate(op->args[0], nullptr);
+        Expr b = mutate(op->args[1], nullptr);
+
+        int64_t ia, ib;
+        uint64_t ua, ub;
+        if (const_int(a, &ia) &&
+            const_int(b, &ib)) {
+            return make_const(op->type, ia ^ ib);
+        } else if (const_uint(a, &ua) &&
+                   const_uint(b, &ub)) {
+            return make_const(op->type, ua ^ ub);
+        } else if (a.same_as(op->args[0]) && b.same_as(op->args[1])) {
+            return op;
+        } else {
+            return a ^ b;
+        }
     } else if (op->is_intrinsic(Call::reinterpret)) {
         Expr a = mutate(op->args[0], nullptr);
 
@@ -139,7 +156,7 @@ Expr Simplify::visit(const Call *op, ConstBounds *bounds) {
         }
     } else if (op->is_intrinsic(Call::abs)) {
         // Constant evaluate abs(x).
-        ConstBounds a_bounds;
+        ExprInfo a_bounds;
         Expr a = mutate(op->args[0], &a_bounds);
 
         Type ta = a.type();
@@ -166,6 +183,35 @@ Expr Simplify::visit(const Call *op, ConstBounds *bounds) {
             return op;
         } else {
             return abs(a);
+        }
+    } else if (op->is_intrinsic(Call::absd)) {
+        // Constant evaluate absd(a, b).
+        ExprInfo a_bounds, b_bounds;
+        Expr a = mutate(op->args[0], &a_bounds);
+        Expr b = mutate(op->args[1], &b_bounds);
+
+        Type ta = a.type();
+        // absd() should enforce identical types for a and b when the node is created
+        internal_assert(ta == b.type());
+
+        int64_t ia = 0, ib = 0;
+        uint64_t ua = 0, ub = 0;
+        double fa = 0, fb = 0;
+        if (ta.is_int() && const_int(a, &ia) && const_int(b, &ib)) {
+            // Note that absd(int, int) always produces a uint result
+            internal_assert(op->type.is_uint());
+            const uint64_t d = ia > ib ? (uint64_t)(ia - ib) : (uint64_t)(ib - ia);
+            return make_const(op->type, d);
+        } else if (ta.is_uint() && const_uint(a, &ua) && const_uint(b, &ub)) {
+            const uint64_t d = ua > ub ? ua - ub : ub - ua;
+            return make_const(op->type, d);
+        } else if (const_float(a, &fa) && const_float(b, &fb)) {
+            const double d = fa > fb ? fa - fb : fb - fa;
+            return make_const(op->type, d);
+        } else if (a.same_as(op->args[0]) && b.same_as(op->args[1])) {
+            return op;
+        } else {
+            return absd(a, b);
         }
     } else if (op->call_type == Call::PureExtern &&
                op->name == "is_nan_f32") {
