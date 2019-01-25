@@ -610,7 +610,7 @@ Stmt add_image_checks(Stmt s,
     if (!no_asserts) {
         buffer_asserts.process_types(
             make_block,
-            { BufferAsserts::AssertType::HostNonNull, BufferAsserts::AssertType::HostAlignment, BufferAsserts::AssertType::TypeCheck });
+            { BufferAsserts::AssertType::HostNonNull, BufferAsserts::AssertType::HostAlignment, BufferAsserts::AssertType::DimsNoOverflow});
     }
 
     // Inject the code that checks that no dimension math overflows
