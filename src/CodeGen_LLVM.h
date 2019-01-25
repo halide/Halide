@@ -261,6 +261,9 @@ protected:
     void create_assertion(llvm::Value *condition, Expr message, llvm::Value *error_code = nullptr);
     // @}
 
+    /** Codegen a block of asserts with pure conditions */
+    void codegen_asserts(const std::vector<const AssertStmt *> &asserts);
+
     /** Codegen a call to do_parallel_tasks */
     struct ParallelTask {
         Stmt body;
