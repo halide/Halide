@@ -290,7 +290,15 @@ void CodeGen_X86::visit(const Cast *op) {
         {Target::FeatureEnd, true, UInt(16, 8), 0, "llvm.x86.sse2.psubus.w",
          u16(max(wild_i32x_ - wild_i32x_, 0))},
 #else
-        // LLVM 8.0+ require using helpers from x86.ll
+        // LLVM 8.0+ require using helpers from x86_avx.ll
+
+        // Some of the instructions referred to below only appear with
+        // AVX2, but LLVM generates better AVX code if you give it
+        // full 256-bit vectors and let it do the slicing up into
+        // individual instructions itself. This is why we use
+        // Target::AVX instead of Target::AVX2 as the feature flag
+        // requirement.
+
         {Target::AVX, true, UInt(8, 32), 17, "paddusbx32",
          u8_sat(wild_u16x_ + wild_u16x_)},
         {Target::FeatureEnd, true, UInt(8, 16), 0, "paddusbx16",
@@ -318,7 +326,7 @@ void CodeGen_X86::visit(const Cast *op) {
          i16((wild_i32x_ * wild_i32x_) / 65536)},
         {Target::FeatureEnd, true, UInt(16, 8), 0, "llvm.x86.sse2.pmulhu.w",
          u16((wild_u32x_ * wild_u32x_) / 65536)},
-        // LLVM 6.0+ require using helpers from x86.ll
+        // LLVM 6.0+ require using helpers from x86.ll, x86_avx.ll
         {Target::AVX2, true, UInt(8, 32), 17, "pavgbx32",
          u8(((wild_u16x_ + wild_u16x_) + 1) / 2)},
         {Target::FeatureEnd, true, UInt(8, 16), 0, "pavgbx16",

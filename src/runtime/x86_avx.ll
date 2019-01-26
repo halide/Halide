@@ -1,3 +1,10 @@
+; 256-bit native instructions for the following 6 instructions only
+; come in with AVX2, but LLVM gets deeply confused if you slice up a
+; 256-bit vector into 128-bit vectors, apply the narrower
+; instructions, then reassemble. It prefers that you generate code at
+; the AVX register width, and would rather handle the instruction
+; legalization itself.
+
 ; Note that this is only used for LLVM 8.0+
 define weak_odr <32 x i8> @paddusbx32(<32 x i8> %a0, <32 x i8> %a1) nounwind alwaysinline {
   %1 = add <32 x i8> %a0, %a1
