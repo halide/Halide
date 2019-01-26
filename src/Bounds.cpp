@@ -2503,7 +2503,8 @@ void constant_bound_test() {
         Expr cr1 = i16(x);
         Expr cr2 = i16(y);
         Expr fraction = (d & (int16_t)((1 << 7) - 1));
-        Expr cr = simplify(i16((((cr2 - cr1) * fraction) >> 7) + cr1));
+        Expr cr = i16((((cr2 - cr1) * fraction) >> 7) + cr1);
+
         check_constant_bound(absd(cr, cl), Expr((uint16_t)0), Expr((uint16_t)510));
         check_constant_bound(i16(absd(cr, cl)), Expr((int16_t)0), Expr((int16_t)510));
     }
