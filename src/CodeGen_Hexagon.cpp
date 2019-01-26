@@ -959,7 +959,6 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
 
     bool is_128B = target.has_feature(Halide::Target::HVX_128);
     int a_elements = static_cast<int>(a_ty->getVectorNumElements());
-    int b_elements = static_cast<int>(b_ty->getVectorNumElements());
 
     llvm::Type *element_ty = a->getType()->getVectorElementType();
     internal_assert(element_ty);
