@@ -113,8 +113,8 @@ struct ReductionDomainContents {
         }
     }
 
-    // Pass an IRMutator2 through to all Exprs referenced in the ReductionDomainContents
-    void mutate(IRMutator2 *mutator) {
+    // Pass an IRMutator through to all Exprs referenced in the ReductionDomainContents
+    void mutate(IRMutator *mutator) {
         for (ReductionVariable &rvar : domain) {
             if (rvar.min.defined()) {
                 rvar.min = mutator->mutate(rvar.min);
@@ -155,8 +155,8 @@ const std::vector<ReductionVariable> &ReductionDomain::domain() const {
 }
 
 namespace {
-class DropSelfReferences : public IRMutator2 {
-    using IRMutator2::visit;
+class DropSelfReferences : public IRMutator {
+    using IRMutator::visit;
 
     Expr visit(const Variable *op) override {
         if (op->reduction_domain.defined()) {
@@ -211,7 +211,7 @@ void ReductionDomain::accept(IRVisitor *visitor) const {
     }
 }
 
-void ReductionDomain::mutate(IRMutator2 *mutator) {
+void ReductionDomain::mutate(IRMutator *mutator) {
     if (contents.defined()) {
         contents->mutate(mutator);
     }

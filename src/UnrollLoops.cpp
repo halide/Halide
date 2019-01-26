@@ -9,8 +9,8 @@ using std::vector;
 namespace Halide {
 namespace Internal {
 
-class UnrollLoops : public IRMutator2 {
-    using IRMutator2::visit;
+class UnrollLoops : public IRMutator {
+    using IRMutator::visit;
 
     Stmt visit(const For *for_loop) override {
         if (for_loop->for_type == ForType::Unrolled) {
@@ -42,7 +42,7 @@ class UnrollLoops : public IRMutator2 {
             return Block::make(iters);
 
         } else {
-            return IRMutator2::visit(for_loop);
+            return IRMutator::visit(for_loop);
         }
     }
     bool permit_failed_unroll = false;

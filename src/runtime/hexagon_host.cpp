@@ -214,7 +214,7 @@ WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
         result = remote_load_library(soname, sizeof(soname), runtime, runtime_size, &shared_runtime);
         poll_log(user_context);
         if (result == 0) {
-            debug(user_context) << "        " << shared_runtime << "\n";
+            debug(user_context) << "        " << (void *)(size_t)shared_runtime << "\n";
             halide_assert(user_context, shared_runtime != 0);
         } else {
             debug(user_context) << "        " << result << "\n";
@@ -222,7 +222,7 @@ WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
             shared_runtime = 0;
         }
     } else {
-        debug(user_context) << "    re-using existing shared runtime " << shared_runtime << "\n";
+        debug(user_context) << "    re-using existing shared runtime " << (void *)(size_t)shared_runtime << "\n";
     }
 
     if (result != 0) {
@@ -249,14 +249,14 @@ WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
         result = remote_load_library(soname.str(), soname.size() + 1, code, code_size, &module);
         poll_log(user_context);
         if (result == 0) {
-            debug(user_context) << "        " << module << "\n";
+            debug(user_context) << "        " << (void *)(size_t)module << "\n";
             (*state)->module = module;
         } else {
             debug(user_context) << "        " << result << "\n";
             error(user_context) << "Initialization of Hexagon kernels failed\n";
         }
     } else {
-        debug(user_context) << "    re-using existing module " << (*state)->module << "\n";
+        debug(user_context) << "    re-using existing module " << (void *)(size_t)(*state)->module << "\n";
     }
 
     #ifdef DEBUG_RUNTIME

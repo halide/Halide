@@ -18,7 +18,7 @@ using std::pair;
 
 namespace {
 
-class StoreCollector : public IRMutator2 {
+class StoreCollector : public IRMutator {
 public:
     const std::string store_name;
     const int store_stride, max_stores;
@@ -32,7 +32,7 @@ public:
     }
 
 private:
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     // Don't enter any inner constructs for which it's not safe to pull out stores.
     Stmt visit(const For *op) override {
@@ -74,7 +74,7 @@ private:
             collecting = false;
             return op;
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
@@ -94,7 +94,7 @@ private:
 
         // Make sure this Store doesn't do anything that causes us to
         // stop collecting.
-        stmt = IRMutator2::visit(op);
+        stmt = IRMutator::visit(op);
         if (!collecting) {
             return stmt;
         }
@@ -130,7 +130,7 @@ private:
             collecting = false;
             return op;
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
@@ -138,7 +138,7 @@ private:
         if (!collecting) {
             return op;
         }
-        Stmt stmt = IRMutator2::visit(op);
+        Stmt stmt = IRMutator::visit(op);
 
         // If we're still collecting, we need to save the let as a potential let.
         if (collecting) {
@@ -186,7 +186,7 @@ private:
     // lets for which we have even and odd lane specializations
     const Scope<> &external_lets;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Expr visit(const Broadcast *op) override {
         if (new_lanes == 1) {
@@ -200,7 +200,12 @@ private:
             return op;
         } else {
             Type t = op->type.with_lanes(new_lanes);
-            return Load::make(t, op->name, mutate(op->index), op->image, op->param, mutate(op->predicate));
+            ModulusRemainder align = op->alignment;
+            // TODO: Figure out the alignment of every nth lane
+            if (starting_lane != 0) {
+                align = ModulusRemainder();
+            }
+            return Load::make(t, op->name, mutate(op->index), op->image, op->param, mutate(op->predicate), align);
         }
     }
 
@@ -366,12 +371,10 @@ Expr extract_lane(Expr e, int lane) {
 
 namespace {
 
-class Interleaver : public IRMutator2 {
-    Scope<ModulusRemainder> alignment_info;
-
+class Interleaver : public IRMutator {
     Scope<> vector_lets;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     bool should_deinterleave;
     int num_lanes;
@@ -406,9 +409,6 @@ class Interleaver : public IRMutator2 {
     template<typename T, typename Body>
     Body visit_let(const T *op) {
         Expr value = mutate(op->value);
-        if (value.type() == Int(32)) {
-            alignment_info.push(op->name, modulus_remainder(value, alignment_info));
-        }
 
         if (value.type().is_vector()) {
             vector_lets.push(op->name);
@@ -416,9 +416,6 @@ class Interleaver : public IRMutator2 {
         Body body = mutate(op->body);
         if (value.type().is_vector()) {
             vector_lets.pop(op->name);
-        }
-        if (value.type() == Int(32)) {
-            alignment_info.pop(op->name);
         }
 
         Body result;
@@ -463,7 +460,7 @@ class Interleaver : public IRMutator2 {
                 break;
             }
         }
-        return IRMutator2::visit(op);
+        return IRMutator::visit(op);
     }
 
     Expr visit(const Div *op) override {
@@ -477,7 +474,7 @@ class Interleaver : public IRMutator2 {
                 break;
             }
         }
-        return IRMutator2::visit(op);
+        return IRMutator::visit(op);
     }
 
     Expr visit(const Call *op) override {
@@ -485,7 +482,7 @@ class Interleaver : public IRMutator2 {
             // deinterleaving potentially changes the order of execution.
             should_deinterleave = false;
         }
-        return IRMutator2::visit(op);
+        return IRMutator::visit(op);
     }
 
     Expr visit(const Load *op) override {
@@ -505,20 +502,20 @@ class Interleaver : public IRMutator2 {
             // If we want to deinterleave both the index and predicate
             // (or the predicate is one), then deinterleave the
             // resulting load.
-            expr = Load::make(op->type, op->name, idx, op->image, op->param, predicate);
+            expr = Load::make(op->type, op->name, idx, op->image, op->param, predicate, op->alignment);
             expr = deinterleave_expr(expr);
         } else if (should_deinterleave_idx) {
             // If we only want to deinterleave the index and not the
             // predicate, deinterleave the index prior to the load.
             idx = deinterleave_expr(idx);
-            expr = Load::make(op->type, op->name, idx, op->image, op->param, predicate);
+            expr = Load::make(op->type, op->name, idx, op->image, op->param, predicate, op->alignment);
         } else if (should_deinterleave_predicate) {
             // Similarly, deinterleave the predicate prior to the load
             // if we don't want to deinterleave the index.
             predicate = deinterleave_expr(predicate);
-            expr = Load::make(op->type, op->name, idx, op->image, op->param, predicate);
+            expr = Load::make(op->type, op->name, idx, op->image, op->param, predicate, op->alignment);
         } else if (!idx.same_as(op->index) || !predicate.same_as(op->index)) {
-            expr = Load::make(op->type, op->name, idx, op->image, op->param, predicate);
+            expr = Load::make(op->type, op->name, idx, op->image, op->param, predicate, op->alignment);
         } else {
             expr = op;
         }
@@ -550,7 +547,7 @@ class Interleaver : public IRMutator2 {
             predicate = deinterleave_expr(predicate);
         }
 
-        Stmt stmt = Store::make(op->name, value, idx, op->param, predicate);
+        Stmt stmt = Store::make(op->name, value, idx, op->param, predicate, op->alignment);
 
         should_deinterleave = old_should_deinterleave;
         num_lanes = old_num_lanes;
@@ -683,7 +680,7 @@ class Interleaver : public IRMutator2 {
                     // Convert multiple dense vector stores of strided vector loads
                     // into one dense vector store of interleaving dense vector loads.
                     args[j] = Load::make(t, load_name, stores[i].as<Store>()->index,
-                                         load_image, load_param, const_true(t.lanes()));
+                                         load_image, load_param, const_true(t.lanes()), ModulusRemainder());
                 } else {
                     args[j] = stores[i].as<Store>()->value;
                 }
@@ -698,7 +695,7 @@ class Interleaver : public IRMutator2 {
             Expr index = Ramp::make(base, make_one(base.type()), t.lanes());
             Expr value = Shuffle::make_interleave(args);
             Expr predicate = Shuffle::make_interleave(predicates);
-            Stmt new_store = Store::make(store->name, value, index, store->param, predicate);
+            Stmt new_store = Store::make(store->name, value, index, store->param, predicate, ModulusRemainder());
 
             // Continue recursively into the stuff that
             // collect_strided_stores didn't collect.
@@ -758,9 +755,9 @@ void deinterleave_vector_test() {
     check(ramp, ramp_a, ramp_b);
     check(broadcast, broadcast_a, broadcast_b);
 
-    check(Load::make(ramp.type(), "buf", ramp, Buffer<>(), Parameter(), const_true(ramp.type().lanes())),
-          Load::make(ramp_a.type(), "buf", ramp_a, Buffer<>(), Parameter(), const_true(ramp_a.type().lanes())),
-          Load::make(ramp_b.type(), "buf", ramp_b, Buffer<>(), Parameter(), const_true(ramp_b.type().lanes())));
+    check(Load::make(ramp.type(), "buf", ramp, Buffer<>(), Parameter(), const_true(ramp.type().lanes()), ModulusRemainder()),
+          Load::make(ramp_a.type(), "buf", ramp_a, Buffer<>(), Parameter(), const_true(ramp_a.type().lanes()), ModulusRemainder()),
+          Load::make(ramp_b.type(), "buf", ramp_b, Buffer<>(), Parameter(), const_true(ramp_b.type().lanes()), ModulusRemainder()));
 
     std::cout << "deinterleave_vector test passed" << std::endl;
 }

@@ -1,5 +1,6 @@
 #include "Halide.h"
 #include <stdio.h>
+#include <fstream>
 
 #include "test/common/halide_test_dirs.h"
 
@@ -11,7 +12,7 @@ void my_error_handler(void *user_context, const char *msg) {
     error_occurred = true;
 }
 
-int main(int argc, char **argv) {
+int basic_constraints() {
     Func f, g;
     Var x, y;
     ImageParam param(Int(32), 2);
@@ -77,6 +78,75 @@ int main(int argc, char **argv) {
     }
 
     Internal::assert_file_exists(assembly_file);
+
+    return 0;
+}
+
+std::string load_file_to_string(const std::string& filename) {
+    std::stringstream contents;
+    std::ifstream file(filename);
+    std::string line;
+    while (std::getline(file, line)) {
+        contents << line << "\n";
+    }
+
+    return contents.str();
+}
+
+int alignment_constraints() {
+    Var x, y;
+    ImageParam p_aligned(Float(32), 2);
+    ImageParam p_unaligned(Float(32), 2);
+
+    const int alignment = 4;
+    p_aligned.set_host_alignment(alignment * sizeof(float));
+    p_aligned.dim(0).set_min((p_aligned.dim(0).min() / alignment) * alignment);
+    p_aligned.dim(0).set_extent((p_aligned.dim(0).extent() / alignment) * alignment);
+    p_aligned.dim(1).set_stride((p_aligned.dim(1).stride() / alignment) * alignment);
+
+    Func aligned, unaligned;
+    aligned(x, y) = p_aligned(x, y);
+    unaligned(x, y) = p_unaligned(x, y);
+
+    aligned.vectorize(x, 4);
+    unaligned.vectorize(x, 4);
+
+    aligned.output_buffer().dim(0).set_min(0);
+    unaligned.output_buffer().dim(0).set_min(0);
+
+    Target target = get_jit_target_from_environment();
+    target.set_feature(Target::NoRuntime);
+
+    std::string unaligned_ll_file = Internal::get_test_tmp_dir() + "unaligned.ll";
+    Internal::ensure_no_file_exists(unaligned_ll_file);
+    unaligned.compile_to_llvm_assembly(unaligned_ll_file, {p_unaligned}, "unaligned", target);
+    std::string unaligned_code = load_file_to_string(unaligned_ll_file);
+    if (unaligned_code.find("align 16") != std::string::npos) {
+        printf("Found aligned load from unaligned buffer!\n");
+        return -1;
+    }
+
+    std::string aligned_ll_file = Internal::get_test_tmp_dir() + "aligned.ll";
+    Internal::ensure_no_file_exists(aligned_ll_file);
+    aligned.compile_to_llvm_assembly(aligned_ll_file, {p_aligned}, "aligned", target);
+    std::string aligned_code = load_file_to_string(aligned_ll_file);
+    if (aligned_code.find("align 16") == std::string::npos) {
+        printf("Did not find aligned load from aligned buffer!\n");
+        return -1;
+    }
+
+
+    return 0;
+}
+
+int main(int argc, char **argv) {
+    int result;
+
+    result = basic_constraints();
+    if (result != 0) return result;
+
+    result = alignment_constraints();
+    if (result != 0) return result;
 
     printf("Success!\n");
     return 0;

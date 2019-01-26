@@ -877,7 +877,7 @@ private:
             // we can return the load of that index
             Expr load_min =
                 Load::make(op->type.element_of(), op->name, interval.min,
-                           op->image, op->param, const_true());
+                           op->image, op->param, const_true(), ModulusRemainder());
             interval = Interval::single_point(load_min);
         } else {
             // Otherwise use the bounds of the type
@@ -1449,13 +1449,13 @@ private:
 };
 
 // Place innermost vars in an IfThenElse's condition as far to the left as possible.
-class SolveIfThenElse : public IRMutator2 {
+class SolveIfThenElse : public IRMutator {
     // Scope of variable names and their depths. Higher depth indicates
     // variable defined more innermost.
     Scope<int> vars_depth;
     int depth = -1;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     void push_var(const string &var) {
         depth += 1;
@@ -1469,20 +1469,20 @@ class SolveIfThenElse : public IRMutator2 {
 
     Stmt visit(const LetStmt *op) override {
         push_var(op->name);
-        Stmt stmt = IRMutator2::visit(op);
+        Stmt stmt = IRMutator::visit(op);
         pop_var(op->name);
         return stmt;
     }
 
     Stmt visit(const For *op) override {
         push_var(op->name);
-        Stmt stmt = IRMutator2::visit(op);
+        Stmt stmt = IRMutator::visit(op);
         pop_var(op->name);
         return stmt;
     }
 
     Stmt visit(const IfThenElse *op) override {
-        Stmt stmt = IRMutator2::visit(op);
+        Stmt stmt = IRMutator::visit(op);
         op = stmt.as<IfThenElse>();
         internal_assert(op);
 
@@ -2167,9 +2167,9 @@ map<string, Box> boxes_touched(Expr e, Stmt s, bool consider_calls, bool conside
         // long time reasoning about lets and ifs that don't surround an
         // access to the buffer in question.
 
-        class Filter : public IRMutator2 {
-            using IRMutator2::visit;
-            using IRMutator2::mutate;
+        class Filter : public IRMutator {
+            using IRMutator::visit;
+            using IRMutator::mutate;
 
             bool relevant = false;
 
@@ -2178,7 +2178,7 @@ map<string, Box> boxes_touched(Expr e, Stmt s, bool consider_calls, bool conside
                     relevant = true;
                     return op;
                 } else {
-                    return IRMutator2::visit(op);
+                    return IRMutator::visit(op);
                 }
             }
 
@@ -2187,7 +2187,7 @@ map<string, Box> boxes_touched(Expr e, Stmt s, bool consider_calls, bool conside
                     relevant = true;
                     return op;
                 } else {
-                    return IRMutator2::visit(op);
+                    return IRMutator::visit(op);
                 }
             }
 
@@ -2203,7 +2203,7 @@ map<string, Box> boxes_touched(Expr e, Stmt s, bool consider_calls, bool conside
             Stmt mutate(const Stmt &s) override {
                 bool old = relevant;
                 relevant = false;
-                Stmt s_new = IRMutator2::mutate(s);
+                Stmt s_new = IRMutator::mutate(s);
                 if (!relevant) {
                     relevant = old;
                     return no_op;
@@ -2509,7 +2509,7 @@ void constant_bound_test() {
     }
 
 
-    check_constant_bound(Load::make(Int(32), "buf", 0, Buffer<>(), Parameter(), const_true()) * 20,
+    check_constant_bound(Load::make(Int(32), "buf", 0, Buffer<>(), Parameter(), const_true(), ModulusRemainder()) * 20,
                          Interval::neg_inf, Interval::pos_inf);
 
     {
@@ -2595,7 +2595,7 @@ void bounds_test() {
     check(scope, x*y, min(y, 0)*10, max(y, 0)*10);
     check(scope, x/(x+y), Interval::neg_inf, Interval::pos_inf);
     check(scope, 11/(x+1), 1, 11);
-    check(scope, Load::make(Int(8), "buf", x, Buffer<>(), Parameter(), const_true()),
+    check(scope, Load::make(Int(8), "buf", x, Buffer<>(), Parameter(), const_true(), ModulusRemainder()),
                  make_const(Int(8), -128), make_const(Int(8), 127));
     check(scope, y + (Let::make("y", x+3, y - x + 10)), y + 3, y + 23); // Once again, we don't know that y is correlated with x
     check(scope, clamp(1/(x-2), x-10, x+10), -10, 20);
@@ -2659,8 +2659,8 @@ void bounds_test() {
           cast<uint8_t>(clamp(cast<uint16_t>(x/y), cast<uint16_t>(0), cast<uint16_t>(128))),
           make_const(UInt(8), 0), make_const(UInt(8), 128));
 
-    Expr u8_1 = cast<uint8_t>(Load::make(Int(8), "buf", x, Buffer<>(), Parameter(), const_true()));
-    Expr u8_2 = cast<uint8_t>(Load::make(Int(8), "buf", x + 17, Buffer<>(), Parameter(), const_true()));
+    Expr u8_1 = cast<uint8_t>(Load::make(Int(8), "buf", x, Buffer<>(), Parameter(), const_true(), ModulusRemainder()));
+    Expr u8_2 = cast<uint8_t>(Load::make(Int(8), "buf", x + 17, Buffer<>(), Parameter(), const_true(), ModulusRemainder()));
     check(scope, cast<uint16_t>(u8_1) + cast<uint16_t>(u8_2),
           make_const(UInt(16), 0), make_const(UInt(16), 255*2));
 
