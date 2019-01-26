@@ -1065,7 +1065,7 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
             return call_intrin_cast(native_ty, intrin_id, {b, a, codegen(bytes_off)});
         }
         return CodeGen_Posix::shuffle_vectors(a, b, indices);
-    } else if (stride == 2 && result_elements*2 == a_elements + b_elements) {
+    } else if (stride == 2) {
         internal_assert(start == 0 || start == 1);
         // For stride 2 shuffles, we can use vpack or vdeal.
         // It's hard to use call_intrin here. We'll just slice and
