@@ -834,6 +834,30 @@ void ReverseAccumulationVisitor::visit(const Mul *op) {
     internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
     Expr adjoint = expr_adjoints[op];
 
+    // Trick to avoid NaN in select() clauses: if adjoint is a select with an 0,
+    // multiply into it
+    if (adjoint.as<Select>() != nullptr) {
+        const Select *sel_op = adjoint.as<Select>();
+        if (is_zero(sel_op->true_value)) {
+            // d/da a * b = b
+            accumulate(op->a, select(sel_op->condition,
+                sel_op->true_value, sel_op->false_value * op->b));
+            // d/db a * b = a
+            accumulate(op->b, select(sel_op->condition,
+                sel_op->true_value, sel_op->false_value * op->a));
+            return;
+        }
+        if (is_zero(sel_op->false_value)) {
+            // d/da a * b = b
+            accumulate(op->a, select(sel_op->condition,
+                sel_op->true_value * op->b, sel_op->false_value));
+            // d/db a * b = a
+            accumulate(op->b, select(sel_op->condition,
+                sel_op->true_value * op->a, sel_op->false_value));
+            return;
+        }
+    }
+
     // d/da a * b = b
     accumulate(op->a, adjoint * op->b);
     // d/db a * b = a
@@ -843,6 +867,30 @@ void ReverseAccumulationVisitor::visit(const Mul *op) {
 void ReverseAccumulationVisitor::visit(const Div *op) {
     internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
     Expr adjoint = expr_adjoints[op];
+
+    // Trick to avoid NaN in select() clauses: if adjoint is a select with an 0,
+    // multiply into it
+    if (adjoint.as<Select>() != nullptr) {
+        const Select *sel_op = adjoint.as<Select>();
+        if (is_zero(sel_op->true_value)) {
+            // d/da a / b = 1 / b
+            accumulate(op->a, select(sel_op->condition,
+                sel_op->true_value, sel_op->false_value / op->b));
+            // d/db a * b = - a / b^2
+            accumulate(op->b, select(sel_op->condition,
+                sel_op->true_value, -sel_op->false_value * op->a / (op->b * op->b)));
+            return;
+        }
+        if (is_zero(sel_op->false_value)) {
+            // d/da a / b = 1 / b
+            accumulate(op->a, select(sel_op->condition,
+                sel_op->true_value / op->b, sel_op->false_value));
+            // d/db a * b = - a / b^2
+            accumulate(op->b, select(sel_op->condition,
+                -sel_op->true_value * op->a / (op->b * op->b), sel_op->false_value));
+            return;
+        }
+    }
 
     // d/da a / b = 1 / b
     accumulate(op->a, adjoint / op->b);
@@ -1669,7 +1717,6 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
         for (int i = 0; i < (int) lhs.size(); i++) {
             lhs[i] = simplify(common_subexpression_elimination(lhs[i]));
         }
-
 
         if (debug_flag) {
             debug(0) << "func_to_update.name():" << func_to_update.name() << "\n";
