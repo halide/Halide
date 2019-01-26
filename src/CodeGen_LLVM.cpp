@@ -3719,12 +3719,59 @@ void CodeGen_LLVM::visit(const Store *op) {
             }
         }
     }
+}
 
+void CodeGen_LLVM::codegen_asserts(const vector<const AssertStmt *> &asserts) {
+    if (asserts.size() < 4) {
+        for (const auto *a : asserts) {
+            codegen(Stmt(a));
+        }
+        return;
+    }
+
+    internal_assert(asserts.size() <= 63);
+
+    // Mix all the conditions together into a bitmask
+
+    Expr bitmask = cast<uint64_t>(1) << 63;
+    for (size_t i = 0; i < asserts.size(); i++) {
+        bitmask = bitmask | (cast<uint64_t>(!asserts[i]->condition) << i);
+    }
+
+    Expr switch_case = count_trailing_zeros(bitmask);
+
+    BasicBlock *no_errors_bb = BasicBlock::Create(*context, "no_errors_bb", function);
+
+    // Now switch on the bitmask to the correct failure
+    Expr case_idx = cast<int32_t>(count_trailing_zeros(bitmask));
+    auto *switch_inst = builder->CreateSwitch(codegen(case_idx), no_errors_bb, asserts.size(), very_likely_branch);
+    for (int i = 0; i < (int) asserts.size(); i++) {
+        BasicBlock *fail_bb = BasicBlock::Create(*context, "assert_failed", function);
+        switch_inst->addCase(ConstantInt::get(IntegerType::get(*context, 32), i), fail_bb);
+        builder->SetInsertPoint(fail_bb);
+        Value *v = codegen(asserts[i]->message);
+        builder->CreateRet(v);
+    }
+    builder->SetInsertPoint(no_errors_bb);
 }
 
 void CodeGen_LLVM::visit(const Block *op) {
-    codegen(op->first);
-    codegen(op->rest);
+    // Peel blocks of assertions with pure conditions
+    const AssertStmt *a = op->first.as<AssertStmt>();
+    if (a && is_pure(a->condition)) {
+        vector<const AssertStmt *> asserts;
+        asserts.push_back(a);
+        Stmt s = op->rest;
+        while ((op = s.as<Block>()) && (a = op->first.as<AssertStmt>()) && is_pure(a->condition) && asserts.size() < 63) {
+            asserts.push_back(a);
+            s = op->rest;
+        }
+        codegen_asserts(asserts);
+        codegen(s);
+    } else {
+        codegen(op->first);
+        codegen(op->rest);
+    }
 }
 
 void CodeGen_LLVM::visit(const Realize *op) {
