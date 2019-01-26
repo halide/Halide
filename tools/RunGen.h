@@ -11,7 +11,7 @@
 #include <mutex>
 #include <random>
 #include <set>
-#include  <sstream>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -941,6 +941,9 @@ public:
             case halide_argument_kind_input_buffer:
                 arg.buffer_value = arg.load_buffer(auto_input_shapes[arg_name], arg.metadata);
                 info() << "Input " << arg_name << ": Shape is " << get_shape(arg.buffer_value);
+                if (first_input_shape.empty()) {
+                    first_input_shape = get_shape(arg.buffer_value);
+                }
                 break;
             case halide_argument_kind_input_scalar:
                 // Already handled.
@@ -951,7 +954,7 @@ public:
             }
         }
 
-        if (user_specified_output_shape_string.empty()) {
+        if (user_specified_output_shape_string.empty() && !first_input_shape.empty()) {
             // If there was no output shape specified by the user, use the shape of
             // the first input buffer (if any). (This is a better-than-nothing guess
             // that is definitely not always correct, but is convenient and useful enough
