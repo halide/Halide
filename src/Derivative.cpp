@@ -133,7 +133,7 @@ protected:
     }
 
 private:
-    void accumulate(const Expr &stub, const Expr &adjoint);
+    void accumulate(const Expr &stub, Expr adjoint);
 
     // For each expression, we store the accumulated adjoints expression
     map<const BaseExprNode *, Expr> expr_adjoints;
@@ -762,8 +762,52 @@ void ReverseAccumulationVisitor::propagate_adjoints(
     }
 }
 
-void ReverseAccumulationVisitor::accumulate(const Expr &stub, const Expr &adjoint) {
+void ReverseAccumulationVisitor::accumulate(const Expr &stub, Expr adjoint) {
     const BaseExprNode *stub_ptr = (const BaseExprNode *) stub.get();
+
+    // Trick to avoid NaN in select() clauses: 
+    // select(c, x, 0) * y -> select(c, x * y, 0)
+    // x * select(c, y, 0) -> select(c, x * y, 0)
+    // select(c, x, 0) / y -> select(c, x / y, 0)
+    if (adjoint.as<Mul>() != nullptr) {
+        const Mul *mul_op = adjoint.as<Mul>();
+        auto mul_select_with_zero = [&] (Expr sel, Expr other) {
+            const Select *sel_op = sel.as<Select>();
+            if (is_zero(sel_op->true_value)) {
+                return select(sel_op->condition,
+                    sel_op->true_value, sel_op->false_value * other);
+            }
+            if (is_zero(sel_op->false_value)) {
+                return select(sel_op->condition,
+                    sel_op->true_value * other, sel_op->false_value);
+            }
+            return sel * other;
+        };
+        if (mul_op->a.as<Select>() != nullptr) {
+            adjoint = mul_select_with_zero(mul_op->a, mul_op->b);
+        } else if (mul_op->b.as<Select>() != nullptr) {
+            adjoint = mul_select_with_zero(mul_op->b, mul_op->a);
+        }
+    }
+    if (adjoint.as<Div>() != nullptr) {
+        const Div *div_op = adjoint.as<Div>();
+        auto div_select_with_zero = [&] (Expr sel, Expr other) {
+            const Select *sel_op = sel.as<Select>();
+            if (is_zero(sel_op->true_value)) {
+                return select(sel_op->condition,
+                    sel_op->true_value, sel_op->false_value / other);
+            }
+            if (is_zero(sel_op->false_value)) {
+                return select(sel_op->condition,
+                    sel_op->true_value / other, sel_op->false_value);
+            }
+            return sel * other;
+        };
+        if (div_op->a.as<Select>() != nullptr) {
+            adjoint = div_select_with_zero(div_op->a, div_op->b);
+        }
+    }
+
     if (expr_adjoints.find(stub_ptr) == expr_adjoints.end()) {
         expr_adjoints[stub_ptr] = adjoint;
     } else {
@@ -833,30 +877,6 @@ void ReverseAccumulationVisitor::visit(const Sub *op) {
 void ReverseAccumulationVisitor::visit(const Mul *op) {
     internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
     Expr adjoint = expr_adjoints[op];
-
-    // Trick to avoid NaN in select() clauses: if adjoint is a select with an 0,
-    // multiply into it
-    if (adjoint.as<Select>() != nullptr) {
-        const Select *sel_op = adjoint.as<Select>();
-        if (is_zero(sel_op->true_value)) {
-            // d/da a * b = b
-            accumulate(op->a, select(sel_op->condition,
-                sel_op->true_value, sel_op->false_value * op->b));
-            // d/db a * b = a
-            accumulate(op->b, select(sel_op->condition,
-                sel_op->true_value, sel_op->false_value * op->a));
-            return;
-        }
-        if (is_zero(sel_op->false_value)) {
-            // d/da a * b = b
-            accumulate(op->a, select(sel_op->condition,
-                sel_op->true_value * op->b, sel_op->false_value));
-            // d/db a * b = a
-            accumulate(op->b, select(sel_op->condition,
-                sel_op->true_value * op->a, sel_op->false_value));
-            return;
-        }
-    }
 
     // d/da a * b = b
     accumulate(op->a, adjoint * op->b);
