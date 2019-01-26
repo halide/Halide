@@ -1231,15 +1231,18 @@ void test_select_guard() {
     input(0) = 0.f;
     input(1) = 1.f;
     Func f("f");
-    f(x) = select(input(x) > 0.f, (x+1) / input(x), input(x));
+    f(x) = select(input(x) > 0.f, (x+1) / input(x), input(x)) +
+           select(input(x) > 0.f, sqrt(input(x)), 1.f) +
+           select(input(x) > 0.f, atan2(1.f, input(x)), 2.f * input(x)) +
+           select(input(x) > 0.f, log(input(x)), 3.f * input(x));
     Func loss("loss");
     RDom r(input);
     loss() += f(r);
     Derivative d = propagate_adjoints(loss);
     Func d_input = d(input);
     Buffer<float> d_input_buf = d_input.realize(2);
-    check(__LINE__, d_input_buf(0), 1.f);
-    check(__LINE__, d_input_buf(1), -2.f);
+    check(__LINE__, d_input_buf(0), 1.f + 0.f + 2.f + 3.f);
+    check(__LINE__, d_input_buf(1), -2.f + 0.5f - 0.5f + 1.f);
 }
 
 int main(int argc, char **argv) {

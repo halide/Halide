@@ -1088,9 +1088,9 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
         } else if (is_float_extern(op->name, "atan2")) {
             Expr x2y2 = op->args[0] * op->args[0] + op->args[1] * op->args[1];
             // d/dy atan2(y, x) = x / (x^2 + y^2)
-            accumulate(op->args[0], adjoint * op->args[1] / x2y2);
+            accumulate(op->args[0], adjoint * (op->args[1] / x2y2));
             // d/dx atan2(y, x) = -y / (x^2 + y^2)
-            accumulate(op->args[1], -adjoint * op->args[0] / x2y2);
+            accumulate(op->args[1], adjoint * (-op->args[0] / x2y2));
         } else if (is_float_extern(op->name, "sinh")) {
             // d/dx sinh(x) = cosh(x)
             accumulate(op->args[0], adjoint * cosh(op->args[0]));
@@ -1126,7 +1126,7 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
             accumulate(op->args[0], make_const(op->type, 0.0));
         } else if (is_float_extern(op->name, "sqrt")) {
             Expr half = make_const(op->type, 0.5);
-            accumulate(op->args[0], adjoint * half / sqrt(op->args[0]));
+            accumulate(op->args[0], adjoint * (half / sqrt(op->args[0])));
         } else if (is_float_extern(op->name, "pow")) {
             Expr one = make_const(op->type, 1.0);
             accumulate(op->args[0],
