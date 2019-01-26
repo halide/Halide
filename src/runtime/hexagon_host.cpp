@@ -182,7 +182,6 @@ WEAK void write_shared_object(void *user_context, const char* path,
     size_t written = fwrite(code, 1, code_size, f);
     if (written != code_size) {
         debug(user_context) << "    bad write of shared object to '" << path << "'\n";
-        return;
     }
     fclose(f);
 }
