@@ -217,6 +217,12 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *bounds) {
 
     result = mutate_let_body(result, bounds);
 
+    // TODO: var_info and vars_used are pretty redundant; however, at the time
+    // of writing, both cover cases that the other does not:
+    // - var_info prevents duplicate lets from being generated, even
+    //   from different Frame objects.
+    // - vars_used avoids dead lets being generated in cases where vars are
+    //   seen as used by var_info, and then later removed.
     std::map<std::string, int> vars_used;
     count_var_uses(result, vars_used);
 
