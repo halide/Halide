@@ -1038,7 +1038,6 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
             a_ty = a->getType();
             b_ty = b->getType();
             a_elements = a_ty->getVectorNumElements();
-            b_elements = b_ty->getVectorNumElements();
         }
         if (start == 0 && result_ty == a_ty) {
             return a;
