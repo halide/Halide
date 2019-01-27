@@ -16,6 +16,16 @@ class CountVarUses : public IRVisitor {
         var_uses[var->name]++;
     }
 
+    void visit(const Load* op) override {
+        var_uses[op->name]++;
+        IRVisitor::visit(op);
+    }
+
+    void visit(const Store* op) override {
+        var_uses[op->name]++;
+        IRVisitor::visit(op);
+    }
+
     using IRVisitor::visit;
 
 public:
@@ -220,18 +230,6 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *bounds) {
 
         VarInfo info = var_info.get(it->op->name);
         var_info.pop(it->op->name);
-
-        // These lets can be dead, but can't be removed because the codegen classes need them.
-        if (const Call* call = it->new_value.template as<Call>()) {
-            if (call->name == Call::buffer_get_host) {
-                vars_used[it->new_name]++;
-            }
-        }
-        if (const Call* call = it->value.template as<Call>()) {
-            if (call->name == Call::buffer_get_host) {
-                vars_used[it->op->name]++;
-            }
-        }
 
         if (it->new_value.defined() && (info.new_uses > 0 && vars_used.count(it->new_name) > 0)) {
             // The new name/value may be used
