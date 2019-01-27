@@ -7,6 +7,29 @@ namespace Internal {
 using std::string;
 using std::vector;
 
+namespace {
+
+class CountVarUses : public IRVisitor {
+    std::map<std::string, int>& var_uses;
+
+    void visit(const Variable* var) override {
+        var_uses[var->name]++;
+    }
+
+    using IRVisitor::visit;
+
+public:
+    CountVarUses(std::map<std::string, int>& var_uses) : var_uses(var_uses) {}
+};
+
+template<typename StmtOrExpr>
+void count_var_uses(StmtOrExpr x, std::map<std::string, int>& var_uses) {
+    CountVarUses counter(var_uses);
+    x.accept(&counter);
+}
+
+}  // namespace
+
 template<typename LetOrLetStmt, typename Body>
 Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *bounds) {
 
@@ -144,7 +167,7 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *bounds) {
         }
 
         if (f.new_value.same_as(f.value)) {
-                // Nothing to substitute
+            // Nothing to substitute
             f.new_value = Expr();
             replacement = Expr();
         } else {
@@ -184,6 +207,9 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *bounds) {
 
     result = mutate_let_body(result, bounds);
 
+    std::map<std::string, int> vars_used;
+    count_var_uses(result, vars_used);
+
     for (auto it = frames.rbegin(); it != frames.rend(); it++) {
         if (it->value_bounds_tracked) {
             bounds_and_alignment_info.pop(it->op->name);
@@ -195,14 +221,28 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *bounds) {
         VarInfo info = var_info.get(it->op->name);
         var_info.pop(it->op->name);
 
-        if (it->new_value.defined() && info.new_uses > 0) {
-            // The new name/value may be used
-            result = LetOrLetStmt::make(it->new_name, it->new_value, result);
+        // These lets can be dead, but can't be removed because the codegen classes need them.
+        if (const Call* call = it->new_value.template as<Call>()) {
+            if (call->name == Call::buffer_get_host) {
+                vars_used[it->new_name]++;
+            }
+        }
+        if (const Call* call = it->value.template as<Call>()) {
+            if (call->name == Call::buffer_get_host) {
+                vars_used[it->op->name]++;
+            }
         }
 
-        if (info.old_uses > 0 || !remove_dead_lets) {
+        if (it->new_value.defined() && (info.new_uses > 0 && vars_used.count(it->new_name) > 0)) {
+            // The new name/value may be used
+            result = LetOrLetStmt::make(it->new_name, it->new_value, result);
+            count_var_uses(it->new_value, vars_used);
+        }
+
+        if (!remove_dead_lets || (info.old_uses > 0 && vars_used.count(it->op->name) > 0)) {
             // The old name is still in use. We'd better keep it as well.
             result = LetOrLetStmt::make(it->op->name, it->value, result);
+            count_var_uses(it->value, vars_used);
         }
 
         const LetOrLetStmt *new_op = result.template as<LetOrLetStmt>();
