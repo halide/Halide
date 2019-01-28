@@ -2,8 +2,6 @@ import argparse
 import numpy as np
 import torch
 import torch.nn
-import scipy.io
-import scipy.io.matlab as ml
 import torch.utils.model_zoo as model_zoo
 import struct 
 import os
