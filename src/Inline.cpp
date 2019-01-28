@@ -6,6 +6,8 @@
 #include "IRPrinter.h"
 #include "Inline.h"
 #include "Qualify.h"
+#include "IROperator.h"
+#include "Substitute.h"
 
 namespace Halide {
 namespace Internal {
@@ -113,7 +115,11 @@ class Inliner : public IRMutator {
             internal_assert(args.size() == func_args.size());
 
             for (size_t i = 0; i < args.size(); i++) {
-                body = Let::make(func.name() + "." + func_args[i], args[i], body);
+                if (is_const(args[i]) || args[i].as<Variable>()) {
+                    body = substitute(func.name() + "." + func_args[i], args[i], body);
+                } else {
+                    body = Let::make(func.name() + "." + func_args[i], args[i], body);
+                }
             }
 
             found++;
