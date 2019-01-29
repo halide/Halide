@@ -1771,7 +1771,10 @@ class OptimizeShuffles : public IRMutator {
                 (unaligned_index_bounds.min / align) * align,
                 ((unaligned_index_bounds.max + align) / align) * align - 1
             };
-            ModulusRemainder alignment(align, 0);
+            // TODO: This assumes the host pointer of this buffer is aligned,
+            // which we can't do.
+            //ModulusRemainder alignment(align, 0);
+            ModulusRemainder alignment(1, 0);
 
             for (Interval index_bounds : {aligned_index_bounds, unaligned_index_bounds}) {
                 Expr index_span = span_of_bounds(index_bounds);
