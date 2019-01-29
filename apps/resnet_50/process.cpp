@@ -98,8 +98,16 @@ Buffer<float> load_fc_bias(std::string shapefile, std::string datafile) {
 }
 
 int main(int argc, char **argv) {
-    float *image = new float[150528];
-    Buffer<float> input(image, 3, 224, 224);
+    Buffer<float> input(3, 224, 224);
+
+    for (int y = 0; y < input.height(); ++y) {
+        for (int x = 0; x < input.width(); ++x) {
+            for (int c = 0; c < input.channels(); ++c) {
+                input(c, x, y) = 0.25f;
+            }
+        }
+    }
+
     Buffer<float> output(1000);
     std::string weight_dir = "./weights/";
 
@@ -269,6 +277,14 @@ int main(int argc, char **argv) {
                  fc1000_bias,
                  output);
     });
+
+    for (int y = 0; y < output.height(); ++y) {
+        for (int x = 0; x < output.width(); ++x) {
+            for (int c = 0; c < output.channels(); ++c) {
+              std::cout << output(c, x, y) << std::endl;
+            }
+        }
+    }
 
     printf("Manually tuned time: %gms\n", best * 1e3);
 }

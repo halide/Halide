@@ -10,6 +10,7 @@ namespace {
 struct Tensor {
     Func f;
     std::vector<int> shape;
+    std::string name;
 };
 
 struct WeightShape {
@@ -124,11 +125,6 @@ public:
         input_t.f = input;
         input_t.shape = input_shape;
 
-        Tensor conv1 = conv2D(input_t, conv1_ws, conv1_weights);
-        Tensor scaled1 = scale_layer(conv1, conv1_gamma, conv1_beta);
-        Tensor relu1 = relu_layer(scaled1);
-        Tensor pool1 = max_pool_layer(relu1, pool1_ws);
-
         /** Declare arrays of other functions **/
         Tensor br1_conv[4];
         Tensor br1_norm[4];
@@ -157,59 +153,69 @@ public:
 
         std::vector<int> branch1_indices{ 0, 3, 7, 13 };
 
-        for (int i = 0; i < 16; i++) {
-            // these values are different depending on the portion of the network
-            // and must be conditionally assigned.
-            Tensor br2a_input;
-            Tensor resunit_sum_input;
+        Tensor br2a_input;
+        Tensor resunit_sum_input;
 
+        // used only for block_id == 0
+        Tensor conv1, norm1, scaled1, relu1, pool1;
+
+        for (int i = 0; i < 16; i++) {
             if (i == 0) {
+                input_t.f = input;
+                input_t.shape = input_shape;
+
+                conv1 = conv2D(input_t, conv1_ws, conv1_weights, "conv1");
+                norm1 = norm_layer(conv1, conv1_mu, conv1_sig, "norm1");
+                scaled1 = scale_layer(norm1, conv1_gamma, conv1_beta, "scale1");
+                relu1 = relu_layer(scaled1, "relu1");
+                pool1 = max_pool_layer(relu1, pool1_ws, "pool1");
                 br2a_input = pool1;
             } else {
                 br2a_input = resunit_relu[i - 1];
+								input_t = resunit_relu[i-1];
             }
 
             // build branch1 if this section has branch1
             int br1_i = find_index(i, branch1_indices);
             if (br1_i >= 0) {
-                br1_conv[br1_i] = conv2D(br2a_input, br1_ws[br1_i], br1_conv_weights[br1_i]);
-                br1_norm[br1_i] = norm_layer(br1_conv[br1_i], br1_mu[br1_i], br1_sig[br1_i]);
-                br1_scale[br1_i] = scale_layer(br1_norm[br1_i], br1_gamma[br1_i], br1_beta[br1_i]);
-
+                br1_conv[br1_i] = conv2D(br2a_input, br1_ws[br1_i], br1_conv_weights[br1_i], "br1_conv");
+                br1_norm[br1_i] = norm_layer(br1_conv[br1_i], br1_mu[br1_i], br1_sig[br1_i], "br1_norm");
+                br1_scale[br1_i] = scale_layer(br1_norm[br1_i], br1_gamma[br1_i], br1_beta[br1_i], "br1_scale");
                 resunit_sum_input = br1_scale[br1_i];
             } else {
-                resunit_sum_input = resunit_relu[i - 1];
+                resunit_sum_input = input_t;
             }
 
             // branch2a
             auto weights = br2a_conv_weights[i];
-            br2a_conv[i] = conv2D(br2a_input, br2a_ws[i], weights);
-            br2a_norm[i] = norm_layer(br2a_conv[i], br2a_mu[i], br2a_sig[i]);
-            br2a_scaled[i] = scale_layer(br2a_norm[i], br2a_gamma[i], br2a_beta[i]);
-            br2a_relu[i] = relu_layer(br2a_scaled[i]);
+
+            br2a_conv[i] = conv2D(br2a_input, br2a_ws[i], weights, "block" + std::to_string(i) + "_2a_conv");
+            br2a_norm[i] = norm_layer(br2a_conv[i], br2a_mu[i], br2a_sig[i], "block" + std::to_string(i) + "_2a_norm");
+            br2a_scaled[i] = scale_layer(br2a_norm[i], br2a_gamma[i], br2a_beta[i], "block" + std::to_string(i) + "_2a_scale");
+            br2a_relu[i] = relu_layer(br2a_scaled[i], "2a_relu");
 
             // branch 2b
             weights = br2b_conv_weights[i];
-            br2b_conv[i] = conv2D(br2a_relu[i], br2b_ws[i], weights);
-            br2b_norm[i] = norm_layer(br2b_conv[i], br2b_mu[i], br2b_sig[i]);
-            br2b_scaled[i] = scale_layer(br2b_norm[i], br2b_gamma[i], br2b_beta[i]);
-            br2b_relu[i] = relu_layer(br2b_scaled[i]);
+            br2b_conv[i] = conv2D(br2a_relu[i], br2b_ws[i], weights, "block" + std::to_string(i) + "_2b_conv");
+            br2b_norm[i] = norm_layer(br2b_conv[i], br2b_mu[i], br2b_sig[i], "block" + std::to_string(i) + "_2b_norm");
+            br2b_scaled[i] = scale_layer(br2b_norm[i], br2b_gamma[i], br2b_beta[i], "block" + std::to_string(i) + "_2b_scale");
+            br2b_relu[i] = relu_layer(br2b_scaled[i], "2b_relu");
 
-            // branc 2c
+            // branch 2c
             weights = br2c_conv_weights[i];
-            br2c_conv[i] = conv2D(br2b_relu[i], br2c_ws[i], weights);
-            br2c_norm[i] = norm_layer(br2c_conv[i], br2c_mu[i], br2c_sig[i]);
-            br2c_scaled[i] = scale_layer(br2c_norm[i], br2c_gamma[i], br2c_beta[i]);
+            br2c_conv[i] = conv2D(br2b_relu[i], br2c_ws[i], weights, "block" + std::to_string(i) + "_2c_conv");
+            br2c_norm[i] = norm_layer(br2c_conv[i], br2c_mu[i], br2c_sig[i], "block" + std::to_string(i) + "_2c_norm");
+            br2c_scaled[i] = scale_layer(br2c_norm[i], br2c_gamma[i], br2c_beta[i], "block" + std::to_string(i) + "_2c_scale");
 
             // create residual unit
-            resunit_sum[i] = sum_layer(resunit_sum_input, br2c_scaled[i]);
-            resunit_relu[i] = relu_layer(resunit_sum[i]);
+            resunit_sum[i] = sum_layer(resunit_sum_input, br2c_scaled[i], "block" + std::to_string(i) + "_res_sum");
+            resunit_relu[i] = relu_layer(resunit_sum[i], "block" + std::to_string(i) + "_res_relu");
 
             // create final 3 layers
             if (i == 15) {
-                pool5 = avg_pool_layer(resunit_relu[i - 1], pool5_ws);
-                fc1000 = fc_layer(pool5, fc1000_ws, fc1000_weights, fc1000_bias);
-                softmax_layer(fc1000, output, 1000);
+                pool5 = avg_pool_layer(resunit_relu[i], pool5_ws, "pool5");
+                fc1000 = fc_layer(pool5, fc1000_ws, fc1000_weights, fc1000_bias, "fc");
+                output = softmax_layer(fc1000, 1000, "softmax");
             }
         }
 
@@ -217,29 +223,9 @@ public:
         scaled1.f.compute_root();
         relu1.f.compute_root();
         pool1.f.compute_root();
-
-        for (int i = 0; i < 4; i++) {
-            // br1_conv[i].f.compute_root();
-            // br1_norm[i].f.compute_root();
-            // br1_scale[i].f.compute_root();
-        }
-
         for (int i = 0; i < 16; i++) {
-            // br2a_conv[i].f.compute_root();
-            // br2a_norm[i].f.compute_root();
-            // br2a_scaled[i].f.compute_root();
             br2a_relu[i].f.compute_root().vectorize(c, 8).parallel(j);
-
-            // br2b_conv[i].f.compute_root();
-            // br2b_norm[i].f.compute_root();
-            // br2b_scaled[i].f.compute_root();
             br2b_relu[i].f.compute_root().vectorize(c, 8).parallel(j);
-
-            // br2c_conv[i].f.compute_root();
-            // br2c_norm[i].f.compute_root();
-            // br2c_scaled[i].f.compute_root();
-
-            // resunit_sum[i].f.compute_root();
             resunit_relu[i].f.compute_root().vectorize(c, 8).parallel(j);
         }
 
@@ -257,20 +243,18 @@ private:
         bounds[1].second = width;
         bounds[2].first = 0;
         bounds[2].second = height;
-        return BoundaryConditions::constant_exterior(f, 0.0f, bounds);
+        return Halide::BoundaryConditions::constant_exterior(f, 0.0f, bounds);
     }
 
-    void compute_shape(Tensor &in, Tensor &out, WeightShape &params) {
-        assert(out.shape.empty());
+    std::vector<int> compute_shape(const Tensor &in, const WeightShape &params) {
         int w = (1.0 / params.stride) * (params.pad * 2 + in.shape[1] - params.w + 1 + params.stride - 1);
         int h = (1.0 / params.stride) * (params.pad * 2 + in.shape[2] - params.h + 1 + params.stride - 1);
         int c = params.c;
 
-        int new_shape[3] = { c, w, h };
-        out.shape.insert(out.shape.end(), new_shape, new_shape + 3);
+        return { c, w, h };
     }
 
-    Tensor conv2D(Tensor &input, WeightShape &weight_shape, Func weights) {
+    Tensor conv2D(const Tensor &input, const WeightShape &weight_shape, const Func &weights, const std::string &name) {
         int p = weight_shape.pad;
         Func padded;
         // pad input
@@ -282,14 +266,16 @@ private:
         RDom r(0, input.shape[0], 0, weight_shape.w, 0, weight_shape.h);
         Func conv;
         conv(c, i, j) += weights(c, r.y, r.z, r.x) * padded(r.x, weight_shape.stride * i + r.y - p, weight_shape.stride * j + r.z - p);
+
         Tensor output;
         output.f = conv;
-        compute_shape(input, output, weight_shape);
+        output.name = name;
+        output.shape = compute_shape(input, weight_shape);
         return output;
     }
 
     // assumes input is 3D (c, w, h) where w and h = 1
-    Tensor fc_layer(Tensor &input, WeightShape &weight_shape, Func weights, Func bias) {
+    Tensor fc_layer(const Tensor &input, const WeightShape &weight_shape, const Func &weights, const Func &bias, const std::string &name) {
         RDom r(0, input.shape[0]);
         Func fc;
         fc(c) = bias(c);
@@ -297,21 +283,23 @@ private:
 
         Tensor output;
         output.f = fc;
+        output.name = name;
+        output.shape = compute_shape(input, weight_shape);
 
-        compute_shape(input, output, weight_shape);
         return output;
     }
 
-    Tensor relu_layer(Tensor &input) {
+    Tensor relu_layer(const Tensor &input, const std::string &name) {
         Func relu;
-        relu(c, i, j) = max(0, input.f(c, i, j));
+        relu(c, i, j) = max(0.0f, input.f(c, i, j));
         Tensor output;
         output.f = relu;
         output.shape = input.shape;
+        output.name = name;
         return output;
     }
 
-    Tensor max_pool_layer(Tensor &input, WeightShape &weight_shape) {
+    Tensor max_pool_layer(const Tensor &input, const WeightShape &weight_shape, const std::string &name) {
         int p = weight_shape.pad;
         Func padded;
         if (p) {
@@ -319,16 +307,18 @@ private:
         } else {
             padded = input.f;
         }
-        RDom r(-p, -p + weight_shape.w, -p, -p + weight_shape.h);
+        RDom r(0, weight_shape.w, 0, weight_shape.h);
         Func pool;
-        pool(c, i, j) = maximum(padded(c, i + r.x, j + r.y));
+        pool(c, i, j) = maximum(padded(c, weight_shape.stride * i + r.x - p, weight_shape.stride * j + r.y - p));
         Tensor output;
         output.f = pool;
-        compute_shape(input, output, weight_shape);
+        output.name = name;
+        output.shape = compute_shape(input, weight_shape);
+
         return output;
     }
 
-    Tensor avg_pool_layer(Tensor &input, WeightShape &weight_shape) {
+    Tensor avg_pool_layer(const Tensor &input, const WeightShape &weight_shape, const std::string &name) {
         int p = weight_shape.pad;
         Func padded;
         if (p) {
@@ -336,49 +326,60 @@ private:
         } else {
             padded = input.f;
         }
-        RDom r(-p, -p + weight_shape.w, -p, -p + weight_shape.h);
+        RDom r(0, weight_shape.w, 0, weight_shape.h);
         float scale = weight_shape.w * weight_shape.h;
         Func pool;
         float n = 1.0f / scale;
-        pool(c, i, j) += n * padded(c, weight_shape.stride * i + r.x, weight_shape.stride * j + r.y);
+        pool(c, i, j) += n * padded(c, weight_shape.stride * i + r.x - p, weight_shape.stride * j + r.y - p);
+
         Tensor output;
         output.f = pool;
-        compute_shape(input, output, weight_shape);
+        output.name = name;
+        output.shape = compute_shape(input, weight_shape);
+
         return output;
     }
 
-    Tensor norm_layer(Tensor &input, Func mu, Func sigma) {
+    Tensor norm_layer(const Tensor &input, const Func &mu, const Func &sigma, const std::string &name) {
         Func normed;
-        normed(c, i, j) = (input.f(c, i, j) - mu(c)) / (1e-12f + sigma(c));
+        Expr e = input.f(c, i, j);
+        normed(c, i, j) = (input.f(c, i, j) - mu(c)) / (sqrt(sigma(c) + 1e-5f));
         Tensor output;
         output.f = normed;
         output.shape = input.shape;
+        output.name = name;
         return output;
     }
 
-    Tensor scale_layer(Tensor &input, Func gamma, Func beta) {
+    Tensor scale_layer(const Tensor &input, const Func &gamma, const Func &beta, const std::string &name) {
         Func scaled;
         scaled(c, i, j) = input.f(c, i, j) * gamma(c) + beta(c);
         Tensor output;
         output.f = scaled;
         output.shape = input.shape;
+        output.name = name;
         return output;
     }
 
-    Tensor sum_layer(Tensor &t1, Tensor &t2) {
+    Tensor sum_layer(const Tensor &t1, const Tensor &t2, const std::string &name) {
         assert(t1.shape == t2.shape);
         Func summed;
         summed(c, i, j) = t1.f(c, i, j) + t2.f(c, i, j);
         Tensor output;
         output.f = summed;
         output.shape = t1.shape;
+        output.name = name;
         return output;
     }
 
-    void softmax_layer(Tensor &input, Func output, int classes) {
+    Func softmax_layer(const Tensor &input, const int classes, const std::string &name) {
         assert(input.shape[0] == classes);
         RDom r(0, classes);
-        output(c) = exp(input.f(c)) / sum(exp(input.f(r.x)));
+        Func exp_vals;
+        exp_vals(c) = exp(input.f(c));
+        Func output("output");
+        output(c) = exp_vals(c) / sum(exp_vals(r.x));
+        return output;
     }
 
 };  // end of class definition
