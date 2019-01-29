@@ -1029,13 +1029,19 @@ private:
                 // For some of these intrinsics applied to integer
                 // types we can go a little further.
                 if (t.is_int() || t.is_uint()) {
-                    if (op->is_intrinsic(Call::shift_left) && t.is_int() && t.bits() >= 32) {
-                        // Overflow is UB
-                        if (a_interval.has_lower_bound() && b_interval.has_lower_bound()) {
-                            interval.min = a_interval.min << b_interval.min;
-                        }
-                        if (a_interval.has_upper_bound() && b_interval.has_upper_bound()) {
-                            interval.max = a_interval.max << b_interval.max;
+                    if (op->is_intrinsic(Call::shift_left)) {
+                        if (t.is_int() && t.bits() >= 32) {
+                            // Overflow is UB
+                            if (a_interval.has_lower_bound() && b_interval.has_lower_bound()) {
+                                interval.min = a_interval.min << b_interval.min;
+                            }
+                            if (a_interval.has_upper_bound() && b_interval.has_upper_bound()) {
+                                interval.max = a_interval.max << b_interval.max;
+                            }
+                        } else if (is_const(b)) {
+                            // We can normalize to multiplication
+                            Expr equiv = a * (1 << b);
+                            equiv.accept(this);
                         }
                     } else if (op->is_intrinsic(Call::shift_right)) {
                         if (a_interval.has_lower_bound() && b_interval.has_upper_bound()) {
@@ -2657,7 +2663,8 @@ void bounds_test() {
     check(scope, ~cast<uint8_t>(x), make_const(UInt(8), -11), make_const(UInt(8), -1));
     check(scope, (cast<uint8_t>(x) >> cast<uint8_t>(1)), make_const(UInt(8), 0), make_const(UInt(8), 5));
     check(scope, (cast<uint8_t>(10) >> cast<uint8_t>(1)), make_const(UInt(8), 5), make_const(UInt(8), 5));
-    check(scope, (cast<uint8_t>(x + 3) << cast<uint8_t>(1)), make_const(UInt(8), 0), make_const(UInt(8), 255)); // We don't try to prove no overflow
+    check(scope, (cast<uint8_t>(x + 3) << cast<uint8_t>(1)), make_const(UInt(8), 6), make_const(UInt(8), 26));
+    check(scope, (cast<uint8_t>(x + 3) << cast<uint8_t>(7)), make_const(UInt(8), 0), make_const(UInt(8), 255));  // Overflows
     check(scope, (cast<uint8_t>(5) << cast<uint8_t>(1)), make_const(UInt(8), 10), make_const(UInt(8), 10));
     check(scope, (x << 12), 0, 10 << 12);
 
