@@ -214,11 +214,11 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
             return absd(a, b);
         }
     } else if (op->call_type == Call::PureExtern &&
-               op->name == "is_nan_f32") {
+               (op->name == "is_nan_f16" || op->name == "is_nan_f32" || op->name == "is_nan_f64")) {
         Expr arg = mutate(op->args[0], nullptr);
         double f = 0.0;
         if (const_float(arg, &f)) {
-            return std::isnan(f);
+            return make_bool(std::isnan(f));
         } else if (arg.same_as(op->args[0])) {
             return op;
         } else {
