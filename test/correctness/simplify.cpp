@@ -1388,6 +1388,8 @@ void check_bitwise() {
 void check_lets() {
     Expr x = Var("x"), y = Var("y");
     Expr v = Variable::make(Int(32, 4), "v");
+    Expr a = Variable::make(Int(32), "a");
+    Expr b = Variable::make(Int(32), "b");
     // Check constants get pushed inwards
     check(Let::make("x", 3, x+4), 7);
 
@@ -1401,6 +1403,10 @@ void check_lets() {
 
     // Check that dead lets get stripped
     check(Let::make("x", 3*y*y*y, 4), 4);
+    check(Let::make("a", 3*y*y*y, Let::make("b", 4*a*a*a, b - b)), 0);
+    check(Let::make("a", b/2, a - a), 0);
+    check(Let::make("a", b/2 + (x + y)*64, a - a), 0);
+    check(Let::make("x", 3*y*y*y, x - x), 0);
     check(Let::make("x", 0, 0), 0);
 
     // Check that lets inside an evaluate node get lifted
@@ -1459,6 +1465,7 @@ int main(int argc, char **argv) {
     check_boolean();
     check_overflow();
     check_bitwise();
+    check_lets();
 
     // Miscellaneous cases that don't fit into one of the categories above.
     Expr x = Var("x"), y = Var("y");
@@ -1533,6 +1540,17 @@ int main(int argc, char **argv) {
 
         check(require(Expr(1) > Expr(0), result, "error"), result);
         check(require(x == x, result, "error"), result);
+    }
+
+    // Check that is_nan() returns a boolean result for constant inputs
+    {
+        check(Halide::is_nan(cast<float16_t>(Expr(0.f))), const_false());
+        check(Halide::is_nan(Expr(0.f)), const_false());
+        check(Halide::is_nan(Expr(0.0)), const_false());
+
+        check(Halide::is_nan(Expr(cast<float16_t>(std::nanf("1")))), const_true());
+        check(Halide::is_nan(Expr(std::nanf("1"))), const_true());
+        check(Halide::is_nan(Expr(std::nan("1"))), const_true());
     }
 
     printf("Success!\n");

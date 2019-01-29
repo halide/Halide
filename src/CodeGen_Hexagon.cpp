@@ -959,7 +959,6 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
 
     bool is_128B = target.has_feature(Halide::Target::HVX_128);
     int a_elements = static_cast<int>(a_ty->getVectorNumElements());
-    int b_elements = static_cast<int>(b_ty->getVectorNumElements());
 
     llvm::Type *element_ty = a->getType()->getVectorElementType();
     internal_assert(element_ty);
@@ -1039,7 +1038,6 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
             a_ty = a->getType();
             b_ty = b->getType();
             a_elements = a_ty->getVectorNumElements();
-            b_elements = b_ty->getVectorNumElements();
         }
         if (start == 0 && result_ty == a_ty) {
             return a;
@@ -1065,7 +1063,7 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
             return call_intrin_cast(native_ty, intrin_id, {b, a, codegen(bytes_off)});
         }
         return CodeGen_Posix::shuffle_vectors(a, b, indices);
-    } else if (stride == 2 && result_elements*2 == a_elements + b_elements) {
+    } else if (stride == 2) {
         internal_assert(start == 0 || start == 1);
         // For stride 2 shuffles, we can use vpack or vdeal.
         // It's hard to use call_intrin here. We'll just slice and

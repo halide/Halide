@@ -160,7 +160,9 @@ class Inliner : public IRMutator {
         ScopedValue<int> old_found(found, 0);
         Stmt stmt = IRMutator::visit(op);
 
-        if (found > 1) {
+        // TODO: making this > 1 should be desirable,
+        // but explodes compiletimes in some situations.
+        if (found > 0) {
             stmt = common_subexpression_elimination(stmt);
         }
 
@@ -186,7 +188,9 @@ Stmt inline_function(Stmt s, Function f) {
 Expr inline_function(Expr e, Function f) {
     Inliner i(f);
     e = i.mutate(e);
-    if (i.found > 1) {
+    // TODO: making this > 1 should be desirable,
+    // but explodes compiletimes in some situations.
+    if (i.found > 0) {
         e = common_subexpression_elimination(e);
     }
     return e;
