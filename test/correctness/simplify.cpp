@@ -1542,6 +1542,17 @@ int main(int argc, char **argv) {
         check(require(x == x, result, "error"), result);
     }
 
+    // Check that is_nan() returns a boolean result for constant inputs
+    {
+        check(Halide::is_nan(cast<float16_t>(Expr(0.f))), const_false());
+        check(Halide::is_nan(Expr(0.f)), const_false());
+        check(Halide::is_nan(Expr(0.0)), const_false());
+
+        check(Halide::is_nan(Expr(cast<float16_t>(std::nanf("1")))), const_true());
+        check(Halide::is_nan(Expr(std::nanf("1"))), const_true());
+        check(Halide::is_nan(Expr(std::nan("1"))), const_true());
+    }
+
     printf("Success!\n");
 
     return 0;

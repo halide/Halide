@@ -197,7 +197,9 @@ public:
         return result;
     }
 
-#if LLVM_VERSION < 70
+#if LLVM_VERSION >= 80
+    // nothing
+#else
     void work_around_llvm_bugs() {
 
         for (auto p : code_pages) {
@@ -339,7 +341,9 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
 
     debug(2) << "Finalizing object\n";
     ee->finalizeObject();
-#if LLVM_VERSION < 70
+#if LLVM_VERSION >= 80
+    // nothing
+#else
     memory_manager->work_around_llvm_bugs();
 #endif
     // Do any target-specific post-compilation module meddling

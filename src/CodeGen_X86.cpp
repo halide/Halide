@@ -230,25 +230,7 @@ void CodeGen_X86::visit(const Cast *op) {
     };
 
     static Pattern patterns[] = {
-#if LLVM_VERSION < 80
-        // Names for these intrinsics vary between LLVM versions
-        {Target::AVX2, true, Int(8, 32), 0, "llvm.x86.avx2.padds.b",
-         i8_sat(wild_i16x_ + wild_i16x_)},
-        {Target::FeatureEnd, true, Int(8, 16), 0, "llvm.x86.sse2.padds.b",
-         i8_sat(wild_i16x_ + wild_i16x_)},
-        {Target::AVX2, true, Int(8, 32), 0, "llvm.x86.avx2.psubs.b",
-         i8_sat(wild_i16x_ - wild_i16x_)},
-        {Target::FeatureEnd, true, Int(8, 16), 0, "llvm.x86.sse2.psubs.b",
-         i8_sat(wild_i16x_ - wild_i16x_)},
-        {Target::AVX2, true, Int(16, 16), 0, "llvm.x86.avx2.padds.w",
-         i16_sat(wild_i32x_ + wild_i32x_)},
-        {Target::FeatureEnd, true, Int(16, 8), 0, "llvm.x86.sse2.padds.w",
-         i16_sat(wild_i32x_ + wild_i32x_)},
-        {Target::AVX2, true, Int(16, 16), 0, "llvm.x86.avx2.psubs.w",
-         i16_sat(wild_i32x_ - wild_i32x_)},
-        {Target::FeatureEnd, true, Int(16, 8), 0, "llvm.x86.sse2.psubs.w",
-         i16_sat(wild_i32x_ - wild_i32x_)},
-#else
+#if LLVM_VERSION >= 80
         // Names for these intrinsics vary between LLVM versions
         {Target::AVX2, true, Int(8, 32), 17, "llvm.sadd.sat.v32i8",
          i8_sat(wild_i16x_ + wild_i16x_)},
@@ -270,8 +252,52 @@ void CodeGen_X86::visit(const Cast *op) {
          i16_sat(wild_i32x_ - wild_i32x_)},
         {Target::FeatureEnd, true, Int(16, 8), 0, "llvm.ssub.sat.v8i16",
          i16_sat(wild_i32x_ - wild_i32x_)},
+#else
+        // Names for these intrinsics vary between LLVM versions
+        {Target::AVX2, true, Int(8, 32), 0, "llvm.x86.avx2.padds.b",
+         i8_sat(wild_i16x_ + wild_i16x_)},
+        {Target::FeatureEnd, true, Int(8, 16), 0, "llvm.x86.sse2.padds.b",
+         i8_sat(wild_i16x_ + wild_i16x_)},
+        {Target::AVX2, true, Int(8, 32), 0, "llvm.x86.avx2.psubs.b",
+         i8_sat(wild_i16x_ - wild_i16x_)},
+        {Target::FeatureEnd, true, Int(8, 16), 0, "llvm.x86.sse2.psubs.b",
+         i8_sat(wild_i16x_ - wild_i16x_)},
+        {Target::AVX2, true, Int(16, 16), 0, "llvm.x86.avx2.padds.w",
+         i16_sat(wild_i32x_ + wild_i32x_)},
+        {Target::FeatureEnd, true, Int(16, 8), 0, "llvm.x86.sse2.padds.w",
+         i16_sat(wild_i32x_ + wild_i32x_)},
+        {Target::AVX2, true, Int(16, 16), 0, "llvm.x86.avx2.psubs.w",
+         i16_sat(wild_i32x_ - wild_i32x_)},
+        {Target::FeatureEnd, true, Int(16, 8), 0, "llvm.x86.sse2.psubs.w",
+         i16_sat(wild_i32x_ - wild_i32x_)},
 #endif
-#if LLVM_VERSION < 80
+#if LLVM_VERSION >= 80
+        // LLVM 8.0+ require using helpers from x86_avx.ll
+
+        // Some of the instructions referred to below only appear with
+        // AVX2, but LLVM generates better AVX code if you give it
+        // full 256-bit vectors and let it do the slicing up into
+        // individual instructions itself. This is why we use
+        // Target::AVX instead of Target::AVX2 as the feature flag
+        // requirement.
+
+        {Target::AVX, true, UInt(8, 32), 17, "paddusbx32",
+         u8_sat(wild_u16x_ + wild_u16x_)},
+        {Target::FeatureEnd, true, UInt(8, 16), 0, "paddusbx16",
+         u8_sat(wild_u16x_ + wild_u16x_)},
+        {Target::AVX, true, UInt(8, 32), 17, "psubusbx32",
+         u8(max(wild_i16x_ - wild_i16x_, 0))},
+        {Target::FeatureEnd, true, UInt(8, 16), 0, "psubusbx16",
+         u8(max(wild_i16x_ - wild_i16x_, 0))},
+        {Target::AVX, true, UInt(16, 16), 9, "padduswx16",
+         u16_sat(wild_u32x_ + wild_u32x_)},
+        {Target::FeatureEnd, true, UInt(16, 8), 0, "padduswx8",
+         u16_sat(wild_u32x_ + wild_u32x_)},
+        {Target::AVX, true, UInt(16, 16), 9, "psubuswx16",
+         u16(max(wild_i32x_ - wild_i32x_, 0))},
+        {Target::FeatureEnd, true, UInt(16, 8), 0, "psubuswx8",
+         u16(max(wild_i32x_ - wild_i32x_, 0))},
+#else
         // Older LLVM versions support these as intrinsics
         {Target::AVX2, true, UInt(8, 32), 0, "llvm.x86.avx2.paddus.b",
          u8_sat(wild_u16x_ + wild_u16x_)},
@@ -289,24 +315,6 @@ void CodeGen_X86::visit(const Cast *op) {
          u16(max(wild_i32x_ - wild_i32x_, 0))},
         {Target::FeatureEnd, true, UInt(16, 8), 0, "llvm.x86.sse2.psubus.w",
          u16(max(wild_i32x_ - wild_i32x_, 0))},
-#else
-        // LLVM 8.0+ require using helpers from x86.ll
-        {Target::AVX2, true, UInt(8, 32), 17, "paddusbx32",
-         u8_sat(wild_u16x_ + wild_u16x_)},
-        {Target::FeatureEnd, true, UInt(8, 16), 0, "paddusbx16",
-         u8_sat(wild_u16x_ + wild_u16x_)},
-        {Target::AVX2, true, UInt(8, 32), 17, "psubusbx32",
-         u8(max(wild_i16x_ - wild_i16x_, 0))},
-        {Target::FeatureEnd, true, UInt(8, 16), 0, "psubusbx16",
-         u8(max(wild_i16x_ - wild_i16x_, 0))},
-        {Target::AVX2, true, UInt(16, 16), 9, "padduswx16",
-         u16_sat(wild_u32x_ + wild_u32x_)},
-        {Target::FeatureEnd, true, UInt(16, 8), 0, "padduswx8",
-         u16_sat(wild_u32x_ + wild_u32x_)},
-        {Target::AVX2, true, UInt(16, 16), 9, "psubuswx16",
-         u16(max(wild_i32x_ - wild_i32x_, 0))},
-        {Target::FeatureEnd, true, UInt(16, 8), 0, "psubuswx8",
-         u16(max(wild_i32x_ - wild_i32x_, 0))},
 #endif
         // Only use the avx2 version if we have > 8 lanes
         {Target::AVX2, true, Int(16, 16), 9, "llvm.x86.avx2.pmulh.w",
@@ -318,7 +326,7 @@ void CodeGen_X86::visit(const Cast *op) {
          i16((wild_i32x_ * wild_i32x_) / 65536)},
         {Target::FeatureEnd, true, UInt(16, 8), 0, "llvm.x86.sse2.pmulhu.w",
          u16((wild_u32x_ * wild_u32x_) / 65536)},
-        // LLVM 6.0+ require using helpers from x86.ll
+        // LLVM 6.0+ require using helpers from x86.ll, x86_avx.ll
         {Target::AVX2, true, UInt(8, 32), 17, "pavgbx32",
          u8(((wild_u16x_ + wild_u16x_) + 1) / 2)},
         {Target::FeatureEnd, true, UInt(8, 16), 0, "pavgbx16",
