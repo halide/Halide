@@ -1029,7 +1029,14 @@ private:
                 // For some of these intrinsics applied to integer
                 // types we can go a little further.
                 if (t.is_int() || t.is_uint()) {
-                    if (op->is_intrinsic(Call::shift_right)) {
+                    if (op->is_intrinsic(Call::shift_left) && b_interval.is_single_point()) {
+                        // Simplify into a multiply, and let the Mul node visitor
+                        // decide if it can prove it to be something smaller than bounds-of-type.
+                        Expr simplified = simplify(op);
+                        if (!equal(simplified, op)) {
+                            simplified.accept(this);
+                        }
+                    } else if (op->is_intrinsic(Call::shift_right)) {
                         if (a_interval.has_lower_bound() && b_interval.has_upper_bound()) {
                             interval.min = a_interval.min >> b_interval.max;
                         }
@@ -2649,8 +2656,10 @@ void bounds_test() {
     check(scope, ~cast<uint8_t>(x), make_const(UInt(8), -11), make_const(UInt(8), -1));
     check(scope, (cast<uint8_t>(x) >> cast<uint8_t>(1)), make_const(UInt(8), 0), make_const(UInt(8), 5));
     check(scope, (cast<uint8_t>(10) >> cast<uint8_t>(1)), make_const(UInt(8), 5), make_const(UInt(8), 5));
-    check(scope, (cast<uint8_t>(x + 3) << cast<uint8_t>(1)), make_const(UInt(8), 0), make_const(UInt(8), 255)); // We don't try to prove no overflow
+    check(scope, (cast<uint8_t>(x + 3) << cast<uint8_t>(1)), make_const(UInt(8), 6), make_const(UInt(8), 26)); // We don't try to prove no overflow
     check(scope, (cast<uint8_t>(5) << cast<uint8_t>(1)), make_const(UInt(8), 10), make_const(UInt(8), 10));
+    check(scope, (cast<int32_t>(x) << cast<int32_t>(12)), make_const(Int(32), 0), make_const(Int(32), 40960));
+    check(scope, (cast<int32_t>(y) << cast<int32_t>(12)), y * 4096, y * 4096);
 
     check(scope,
           cast<uint16_t>(clamp(cast<float>(x/y), 0.0f, 4095.0f)),
