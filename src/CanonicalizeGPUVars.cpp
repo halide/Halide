@@ -168,23 +168,26 @@ class CanonicalizeGPUVars : public IRMutator {
 
 
     Stmt visit(const LetStmt *op) override {
-        Expr value = mutate(op->value);
-        Stmt body = mutate(op->body);
+        vector<std::pair<string, Expr>> lets;
+        Stmt result;
 
-        string name = canonicalize_let(op->name);
-        if (name != op->name) {
-            Expr new_var = Variable::make(Int(32), name);
-            value = substitute(op->name, new_var, value);
-            body = substitute(op->name, new_var, body);
+        do {
+            lets.emplace_back(op->name, mutate(op->value));
+            result = op->body;
+        } while((op = op->body.as<LetStmt>()));
+
+        result = mutate(result);
+
+        for (auto it = lets.rbegin(); it != lets.rend(); it++) {
+            string name = canonicalize_let(it->first);
+            if (name != it->first) {
+                Expr new_var = Variable::make(Int(32), name);
+                result = substitute(it->first, name, result);
+            }
+            result = LetStmt::make(name, it->second, result);
         }
 
-        if ((name == op->name) &&
-            value.same_as(op->value) &&
-            body.same_as(op->body)) {
-            return op;
-        } else {
-            return LetStmt::make(name, value, body);
-        }
+        return result;
     }
 
     Stmt visit(const IfThenElse *op) override {

@@ -14,16 +14,38 @@ class BoundSmallAllocations : public IRMutator {
     // Track constant bounds
     Scope<Interval> scope;
 
+    template<typename T, typename Body>
+    Body visit_let(const T *op) {
+        struct Frame {
+            const T *op;
+            ScopedBinding<Interval> binding;
+            Frame(const T *op, Scope<Interval> &scope) :
+                op(op),
+                binding(scope, op->name, find_constant_bounds(op->value, scope)) {}
+        };
+        std::vector<Frame> frames;
+        Body result;
+
+        do {
+            result = op->body;
+            frames.emplace_back(op, scope);
+        } while ((op = result.template as<T>()));
+
+        result = mutate(result);
+
+        for (auto it = frames.rbegin(); it != frames.rend(); it++) {
+            result = T::make(it->op->name, it->op->value, result);
+        }
+
+        return result;
+    }
+
     Stmt visit(const LetStmt *op) override {
-        Interval b = find_constant_bounds(op->value, scope);
-        ScopedBinding<Interval> bind(scope, op->name, b);
-        return IRMutator::visit(op);
+        return visit_let<LetStmt, Stmt>(op);
     }
 
     Expr visit(const Let *op) override {
-        Interval b = find_constant_bounds(op->value, scope);
-        ScopedBinding<Interval> bind(scope, op->name, b);
-        return IRMutator::visit(op);
+        return visit_let<Let, Expr>(op);
     }
 
     bool in_thread_loop = false;

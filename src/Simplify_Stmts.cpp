@@ -284,13 +284,39 @@ Stmt Simplify::visit(const ProducerConsumer *op) {
 
 Stmt Simplify::visit(const Block *op) {
     Stmt first = mutate(op->first);
-    Stmt rest;
+    Stmt rest = op->rest;
 
-    if (const AssertStmt *a = first.as<AssertStmt>()) {
-        // We can assume the asserted condition is true in the
-        // rest. This should propagate constraints.
-        auto f = scoped_truth(a->condition);
-        rest = mutate(op->rest);
+    if (const AssertStmt *first_assert = first.as<AssertStmt>()) {
+        // We won't be popping any knowledge until after the end of
+        // this chain of asserts, so we can use a single ScopedFact
+        // and progressively add knowledge to it.
+        ScopedFact knowledge(this);
+        vector<Stmt> result;
+        result.push_back(first);
+        knowledge.learn_true(first_assert->condition);
+
+        // Loop invariants: 'first' has already been mutated and is in
+        // the result list. 'first' was an AssertStmt before it was
+        // mutated, and its condition has been captured in
+        // 'knowledge'. 'rest' has not been mutated and is not in the
+        // result list.
+        const Block *rest_block;
+        while ((rest_block = rest.as<Block>()) &&
+               (first_assert = rest_block->first.as<AssertStmt>())) {
+            first = mutate(first_assert);
+            rest = rest_block->rest;
+            result.push_back(first);
+            if ((first_assert = first.as<AssertStmt>())) {
+                // If it didn't fold away to trivially true or false,
+                // learn the condition.
+                knowledge.learn_true(first_assert->condition);
+            }
+        }
+
+        result.push_back(mutate(rest));
+
+        return Block::make(result);
+
     } else {
         rest = mutate(op->rest);
     }
