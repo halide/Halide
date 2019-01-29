@@ -17,24 +17,41 @@ using namespace Halide::Runtime;
 using namespace Halide::Tools;
 
 // to preserve my sanity
-#define unroll_array_of_16_buffers(buff_name) buff_name[0], buff_name[1], buff_name[2], buff_name[3], buff_name[4],                                              \
-                                              buff_name[5], buff_name[6], buff_name[7], buff_name[8], buff_name[9], buff_name[10], buff_name[11], buff_name[12], \
-                                              buff_name[13], buff_name[14], buff_name[15]
+#define unroll_array_of_16_buffers(buff_name) \
+    buff_name[0],                             \
+        buff_name[1],                         \
+        buff_name[2],                         \
+        buff_name[3],                         \
+        buff_name[4],                         \
+        buff_name[5],                         \
+        buff_name[6],                         \
+        buff_name[7],                         \
+        buff_name[8],                         \
+        buff_name[9],                         \
+        buff_name[10],                        \
+        buff_name[11],                        \
+        buff_name[12],                        \
+        buff_name[13],                        \
+        buff_name[14],                        \
+        buff_name[15]
 
-#define unroll_array_of_4_buffers(buff_name) buff_name[0], buff_name[1], buff_name[2], buff_name[3]
+#define unroll_array_of_4_buffers(buff_name) buff_name[0], \
+                                             buff_name[1], \
+                                             buff_name[2], \
+                                             buff_name[3]
 
 /*** loading from file helpers ***/
-void load_shape(std::string shapefile, int *dims, int &n, int &num_dims) {
-    int d;
+std::vector<int> load_shape(const std::string &shapefile) {
     std::ifstream shape_input(shapefile, std::ios::binary);
-    shape_input.read(reinterpret_cast<char *>(&d), sizeof(int));
-    num_dims = d;
-
-    n = 1;
+    int num_dims = 0;
+    shape_input.read(reinterpret_cast<char *>(&num_dims), sizeof(int));
+    std::vector<int> dims;
     for (int i = 0; i < num_dims; i++) {
-        shape_input.read(reinterpret_cast<char *>(&dims[i]), sizeof(int));
-        n *= dims[i];
+        int di;
+        shape_input.read(reinterpret_cast<char *>(&di), sizeof(int));
+        dims.push_back(di);
     }
+    return dims;
 }
 
 void load_params(std::string datafile, float *array, int n) {
@@ -49,47 +66,35 @@ void load_params(std::string datafile, float *array, int n) {
 }
 
 Buffer<float> load_conv_params(std::string shapefile, std::string datafile) {
-    int dims[4];
-    int n;
-    int num_dims;
-    load_shape(shapefile, &dims[0], n, num_dims);
-    assert(num_dims == 4);
-    float *buff = new float[n];
-    load_params(datafile, buff, n);
-    return Buffer<float>(buff, dims[0], dims[1], dims[2], dims[3]);
+    std::vector<int> shape = load_shape(shapefile);
+    assert(shape.size() == 4);
+    Buffer<float> conv_weights(shape);
+    load_params(datafile, conv_weights.data(), shape[0] * shape[1] * shape[2] * shape[3]);
+    return conv_weights;
 }
 
 Buffer<float> load_batch_norm_params(std::string shapefile, std::string datafile) {
-    int dims;
-    int n;
-    int num_dims;
-    load_shape(shapefile, &dims, n, num_dims);
-    assert(num_dims == 1);
-    float *buff = new float[n];
-    load_params(datafile, buff, n);
-    return Buffer<float>(buff, dims);
+    std::vector<int> shape = load_shape(shapefile);
+    assert(shape.size());
+    Buffer<float> batch_norm_weights(shape);
+    load_params(datafile, batch_norm_weights.data(), shape[0]);
+    return batch_norm_weights;
 }
 
 Buffer<float> load_fc_weight(std::string shapefile, std::string datafile) {
-    int dims[2];
-    int n;
-    int num_dims;
-    load_shape(shapefile, &dims[0], n, num_dims);
-    assert(num_dims == 2);
-    float *buff = new float[n];
-    load_params(datafile, buff, n);
-    return Buffer<float>(buff, dims[0], dims[1]);
+    std::vector<int> shape = load_shape(shapefile);
+    assert(shape.size() == 2);
+    Buffer<float> fc_weights(shape);
+    load_params(datafile, fc_weights.data(), shape[0] * shape[1]);
+    return fc_weights;
 }
 
 Buffer<float> load_fc_bias(std::string shapefile, std::string datafile) {
-    int dims[1];
-    int n;
-    int num_dims;
-    load_shape(shapefile, &dims[0], n, num_dims);
-    assert(num_dims == 1);
-    float *buff = new float[n];
-    load_params(datafile, buff, n);
-    return Buffer<float>(buff, dims[0]);
+    std::vector<int> shape = load_shape(shapefile);
+    assert(shape.size() == 1);
+    Buffer<float> fc_bias(shape);
+    load_params(datafile, fc_bias.data(), shape[0]);
+    return fc_bias;
 }
 
 int main(int argc, char **argv) {
@@ -113,7 +118,6 @@ int main(int argc, char **argv) {
     Buffer<float> br2b_gamma[16];
     Buffer<float> br2c_gamma[16];
     Buffer<float> br1_gamma[4];
-
 
     Buffer<float> br2a_beta[16];
     Buffer<float> br2b_beta[16];
@@ -151,7 +155,7 @@ int main(int argc, char **argv) {
     std::string conv1_beta_datafile = weight_dir + "bn1_bias.data";
     conv1_beta = load_batch_norm_params(conv1_beta_shapefile, conv1_beta_datafile);
 
-    std::string layer_names[16] = { "layer1_0", "layer1_1", "layer_1_2",
+    std::string layer_names[16] = { "layer1_0", "layer1_1", "layer1_2",
                                     "layer2_0", "layer2_1", "layer2_2", "layer2_3",
                                     "layer3_0", "layer3_1", "layer3_2", "layer3_3", "layer3_4", "layer3_5",
                                     "layer4_0", "layer4_1", "layer4_2" };
@@ -190,8 +194,8 @@ int main(int argc, char **argv) {
             std::string conv_shapefile = weight_dir + layer_names[i] + "_conv" + section + "_weight_shape.data";
             std::string conv_datafile = weight_dir + layer_names[i] + "_conv" + section + "_weight.data";
 
-            std::string mu_shapefile = weight_dir + layer_names[i] + "_conv" + section + "_running_mean_shape.data";
-            std::string mu_datafile = weight_dir + layer_names[i] + "_conv" + section + "_running_mean.data";
+            std::string mu_shapefile = weight_dir + layer_names[i] + "_bn" + section + "_running_mean_shape.data";
+            std::string mu_datafile = weight_dir + layer_names[i] + "_bn" + section + "_running_mean.data";
 
             std::string sig_shapefile = weight_dir + layer_names[i] + "_bn" + section + "_running_var_shape.data";
             std::string sig_datafile = weight_dir + layer_names[i] + "_bn" + section + "_running_var.data";
@@ -223,48 +227,47 @@ int main(int argc, char **argv) {
             }
         }
     }
-
     // load fc weights
     std::string weight_shapefile = weight_dir + "fc_weight_shape.data";
     std::string weight_datafile = weight_dir + "fc_weight.data";
     std::string bias_shapefile = weight_dir + "fc_bias_shape.data";
     std::string bias_datafile = weight_dir + "fc_bias.data";
-                                                                                                                                                                     
+
     Buffer<float> fc1000_weights = load_fc_weight(weight_shapefile, weight_datafile);
     Buffer<float> fc1000_bias = load_fc_bias(bias_shapefile, bias_datafile);
 
-    int timing_iterations = atoi(argv[0]);
+    int timing_iterations = atoi(argv[1]);
+
     double best = benchmark(timing_iterations, 1, [&]() {
-        resnet50(
-            input,
-            output,
-            conv1_gamma,
-            unroll_array_of_4_buffers(br1_gamma),
-            unroll_array_of_16_buffers(br2a_gamma),
-            unroll_array_of_16_buffers(br2b_gamma),
-            unroll_array_of_16_buffers(br2c_gamma),
-            conv1_beta,
-            unroll_array_of_4_buffers(br1_beta),
-            unroll_array_of_16_buffers(br2a_beta),
-            unroll_array_of_16_buffers(br2b_beta),
-            unroll_array_of_16_buffers(br2c_beta),
-            conv1_mu,
-            unroll_array_of_4_buffers(br1_mu),
-            unroll_array_of_16_buffers(br2a_mu),
-            unroll_array_of_16_buffers(br2b_mu),
-            unroll_array_of_16_buffers(br2c_mu),
-            conv1_sig,
-            unroll_array_of_4_buffers(br1_sig),
-            unroll_array_of_16_buffers(br2a_sig),
-            unroll_array_of_16_buffers(br2b_sig),
-            unroll_array_of_16_buffers(br2c_sig),
-            conv1_weights,
-            unroll_array_of_4_buffers(br1_conv_weights),
-            unroll_array_of_16_buffers(br2a_conv_weights),
-            unroll_array_of_16_buffers(br2b_conv_weights),
-            unroll_array_of_16_buffers(br2c_conv_weights),
-            fc1000_weights,
-            fc1000_bias);
+        resnet50(input,
+                 conv1_gamma,
+                 unroll_array_of_4_buffers(br1_gamma),
+                 unroll_array_of_16_buffers(br2a_gamma),
+                 unroll_array_of_16_buffers(br2b_gamma),
+                 unroll_array_of_16_buffers(br2c_gamma),
+                 conv1_beta,
+                 unroll_array_of_4_buffers(br1_beta),
+                 unroll_array_of_16_buffers(br2a_beta),
+                 unroll_array_of_16_buffers(br2b_beta),
+                 unroll_array_of_16_buffers(br2c_beta),
+                 conv1_mu,
+                 unroll_array_of_4_buffers(br1_mu),
+                 unroll_array_of_16_buffers(br2a_mu),
+                 unroll_array_of_16_buffers(br2b_mu),
+                 unroll_array_of_16_buffers(br2c_mu),
+                 conv1_sig,
+                 unroll_array_of_4_buffers(br1_sig),
+                 unroll_array_of_16_buffers(br2a_sig),
+                 unroll_array_of_16_buffers(br2b_sig),
+                 unroll_array_of_16_buffers(br2c_sig),
+                 conv1_weights,
+                 unroll_array_of_4_buffers(br1_conv_weights),
+                 unroll_array_of_16_buffers(br2a_conv_weights),
+                 unroll_array_of_16_buffers(br2b_conv_weights),
+                 unroll_array_of_16_buffers(br2c_conv_weights),
+                 fc1000_weights,
+                 fc1000_bias,
+                 output);
     });
 
     printf("Manually tuned time: %gms\n", best * 1e3);

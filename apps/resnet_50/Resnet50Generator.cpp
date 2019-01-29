@@ -32,8 +32,6 @@ int find_index(int value, std::vector<int> vec) {
 class Resnet50 : public Halide::Generator<Resnet50> {
 public:
   Input<Buffer<float>> input{"input", 3};
-  Output<Buffer<float>> output{"output", 1};
-
   /** parameter values for scaling layers **/
   Input<Buffer<float>> conv1_gamma{"conv1_gamma", 1};
   Input<Buffer<float>[4]> br1_gamma{"br1_gamma", 1};
@@ -60,7 +58,7 @@ public:
   Input<Buffer<float>[16]> br2c_sig{"br2c_sig", 1};
 
   /** weights and biases for convolutions **/
-  Input<Buffer<float>> conv1_weights{"conv1_weights", 4};
+  Input<Buffer<float>> conv1_weights{"conv1_weights_zz", 4};
   Input<Buffer<float>[4]> br1_conv_weights{"br1_conv_weights", 4};
   Input<Buffer<float>[16]> br2a_conv_weights{"br2a_conv_weights", 4};
   Input<Buffer<float>[16]> br2b_conv_weights{"br2b_conv_weights", 4};
@@ -69,6 +67,8 @@ public:
   Input<Buffer<float>> fc1000_weights{"fc1000_weights", 2};
   Input<Buffer<float>> fc1000_bias{"fc1_bias", 1};
 
+  Output<Buffer<float>> output{"output", 1};
+  
   std::vector<int> input_shape = {3, 224, 224};
 
   /** list out shapes of each layers weights **/
