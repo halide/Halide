@@ -282,25 +282,25 @@ private:
       } else {
           padded = input.f;
       }
-      RDom r(0, input.shape[0], -p, -p + weight_shape.w, -p, -p + weight_shape.h);
+      RDom r(0, input.shape[0], 0, weight_shape.w, 0, weight_shape.h);
       Func conv;
-      conv(c, i, j) += weights(r.x, r.y, r.z, c) * padded(r.x, weight_shape.stride * i + r.y, weight_shape.stride * j + r.z);
-
+      conv(c, i, j) += weights(c, r.y, r.z, r.x) * padded(r.x, weight_shape.stride * i + r.y - p, weight_shape.stride * j + r.z - p);
       Tensor output;
       output.f = conv;
       compute_shape(input, output, weight_shape);
       return output;
-  }
+	}
 
   // assumes input is 3D (c, w, h) where w and h = 1
   Tensor fc_layer(Tensor& input, WeightShape& weight_shape, Func weights, Func bias) {
       RDom r(0, input.shape[0]);
       Func fc;
       fc(c) = bias(c);
-      fc(c) += weights(r.x, c) * input.f(r.x, 0, 0);
+      fc(c) += weights(c, r.x) * input.f(r.x, 0, 0);
 
       Tensor output;
       output.f = fc;
+
       compute_shape(input, output, weight_shape);
       return output;
   }
