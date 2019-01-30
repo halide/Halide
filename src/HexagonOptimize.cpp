@@ -1182,7 +1182,7 @@ class EliminateInterleaves : public IRMutator {
         if (const Let *let = x.as<Let>()) {
             Expr body = remove_interleave(let->body);
             if (!body.same_as(let->body)) {
-                return Let::make(let->name, let->value, remove_interleave(let->body));
+                return Let::make(let->name, let->value, body);
             } else {
                 return x;
             }
