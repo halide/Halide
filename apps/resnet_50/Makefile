@@ -41,6 +41,9 @@ $(BIN)/process: process.cpp $(RESNET_BLOCK_LIBS_MANUAL) $(RESNET_BLOCK_LIBS_CLAS
 test_%: $(BIN)/process $(BIN)/pytorch_weights/ok
 	$< 10 $* $(BIN)/pytorch_weights cropped_panda.jpg $(BIN)/res50gen_output.bin
 
+check_correctness: $(BIN)/res50gen_output.bin 
+	python3 check_resnet50_output.py $(BIN)/res50gen_output.bin
+
 test: test_manual test_classic_auto_schedule test_auto_schedule
 
 clean:
