@@ -1792,6 +1792,10 @@ ifneq (,$(findstring clang version 8.0,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
 
+ifneq (,$(findstring clang version 9.0,$(CLANG_VERSION)))
+CLANG_OK=yes
+endif
+
 ifneq (,$(findstring Apple LLVM version 5.0,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
@@ -1812,7 +1816,7 @@ $(BUILD_DIR)/clang_ok:
 	@exit 1
 endif
 
-ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 60 70 80))
+ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 60 70 80 90))
 LLVM_OK=yes
 endif
 
