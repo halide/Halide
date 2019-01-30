@@ -1053,8 +1053,8 @@ private:
                     } else if (op->is_intrinsic(Call::bitwise_and) &&
                                a_interval.has_upper_bound() &&
                                b_interval.has_upper_bound()) {
-                        bool a_positive = can_prove(a_interval.min >= 0);
-                        bool b_positive = can_prove(b_interval.min >= 0);
+                        bool a_positive = a.has_lower_bound() && can_prove(a_interval.min >= 0);
+                        bool b_positive = b.has_lower_bound() && can_prove(b_interval.min >= 0);
                         if (t.is_uint() || (a_positive && b_positive)) {
                             // Positive and smaller than both args
                             interval.max = min(a_interval.max, b_interval.max);
