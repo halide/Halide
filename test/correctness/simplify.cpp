@@ -5,6 +5,19 @@ using namespace Halide::Internal;
 
 #define internal_assert _halide_user_assert
 
+void check_is_sio(const Expr &e) {
+    Expr simpler = simplify(e);
+    const Call *call = simpler.as<Call>();
+    if (!(call && call->is_intrinsic(Call::signed_integer_overflow))) {
+        std::cerr
+            << "\nSimplification failure:\n"
+            << "Input: " << e << '\n'
+            << "Output: " << simpler << '\n'
+            << "Expected output: signed_integer_overflow(n)\n";
+        abort();
+    }
+}
+
 void check(const Expr &a, const Expr &b) {
     Expr simpler = simplify(a);
     if (!equal(simpler, b)) {
@@ -1551,6 +1564,15 @@ int main(int argc, char **argv) {
         check(Halide::is_nan(Expr(cast<float16_t>(std::nanf("1")))), const_true());
         check(Halide::is_nan(Expr(std::nanf("1"))), const_true());
         check(Halide::is_nan(Expr(std::nan("1"))), const_true());
+    }
+
+    {
+        using ConciseCasts::i32;
+
+        // Wrap all in i32() to ensure C++ won't optimize our multiplies away at compiletime
+        Expr e = max(max(max(i32(-1074233344) * i32(-32767), i32(-32783) * i32(32783)), i32(32767) * i32(-32767)), i32(1074200561) * i32(32783)) / i32(64);
+        Expr e2 = e / i32(2);
+        check_is_sio(e2);
     }
 
     printf("Success!\n");
