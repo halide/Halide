@@ -6,10 +6,21 @@ import torch.nn as nn
 import numpy as np
 import sys
 
+
+def normalize(x):
+    imagenet_mean = [0.485, 0.456, 0.406]
+    imagenet_std = [0.229, 0.224, 0.225]
+
+    for c in range(0,3):
+        x[c,:,:] = (x[c,:,:] - imagenet_mean[c]) / imagenet_std[c]
+
+    return x
+
 def image_loader(image_name, size):
     loader = transforms.Compose([transforms.Scale(size), transforms.ToTensor()])
     image = Image.open(image_name)
     image = loader(image).float()
+    image = normalize(image)
     return image
 
 
