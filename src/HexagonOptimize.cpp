@@ -1799,9 +1799,9 @@ class OptimizeShuffles : public IRMutator {
 
                     return Call::make(op->type, "dynamic_shuffle", {lut, index, 0, const_extent - 1}, Call::PureIntrinsic);
                 }
+                // Only the first iteration of this loop is aligned.
+                alignment = ModulusRemainder();
             }
-            // Only the first iteration of this loop is aligned.
-            alignment = ModulusRemainder();
         }
         if (!index.same_as(op->index)) {
             return Load::make(op->type, op->name, index, op->image, op->param, op->predicate, op->alignment);
