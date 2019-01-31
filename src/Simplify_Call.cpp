@@ -39,14 +39,27 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
                 ib = -ib;
             }
 
-            if (ib >= 0 && ib < std::min(t.bits(), 64) - 1) {
-                ib = 1LL << ib;
-                b = make_const(t, ib);
+            if (ib >= 0) {
+                if (ib < std::min(t.bits(), 64) - 1) {
+                    ib = 1LL << ib;
+                    b = make_const(t, ib);
 
-                if (shift_left) {
-                    return mutate(Mul::make(a, b), bounds);
+                    if (shift_left) {
+                        return mutate(Mul::make(a, b), bounds);
+                    } else {
+                        return mutate(Div::make(a, b), bounds);
+                    }
                 } else {
-                    return mutate(Div::make(a, b), bounds);
+                    if (shift_left) {
+                        return make_zero(t);
+                    } else {
+                        // shift-right-out-of-bounds -> zero for uint.
+                        if (t.is_uint()) {
+                            return make_zero(t);
+                        }
+                        // shift-right-out-of-bounds -> zero or -1 for int.
+                        return mutate(select(a < 0, make_const(t, -1), make_zero(t)), bounds);
+                    }
                 }
             }
         }
