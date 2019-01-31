@@ -40,7 +40,9 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
             }
 
             if (ib >= 0) {
-                if (ib < std::min(t.bits(), 64) - 1) {
+                int max_shift = std::min(t.bits(), 64);
+                if (t.is_int()) max_shift -= 1;
+                if (ib < max_shift) {
                     ib = 1LL << ib;
                     b = make_const(t, ib);
 
