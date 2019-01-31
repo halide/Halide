@@ -34,18 +34,27 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
             Type t = op->type;
 
             bool shift_left = op->is_intrinsic(Call::shift_left);
-            if (t.is_int() && ib < 0) {
-                shift_left = !shift_left;
-                ib = -ib;
+            if (ib < 0) {
+                constexpr int64_t i64_max = std::numeric_limits<int64_t>::max();
+                if (t.is_int()) {
+                    shift_left = !shift_left;
+                    // Ensure that corner case of ib = lowest() doesn't negate into itself
+                    ib = -std::max(ib, -i64_max);
+                } else {
+                    // It's a uint > 2^63-1, so we're definitely shifting out-of-range;
+                    // just clip to a large-enough value value and fall thru.
+                    ib = i64_max;
+                }
             }
 
             if (ib >= 0) {
-                int shift_too_large_bits = std::min(t.bits(), 64);
+                assert(t.bits() <= 64);
+                int max_shift = t.bits() - 1;
                 if (t.is_int()) {
                     // One less if there is a sign bit
-                    shift_too_large_bits -= 1;
+                    max_shift -= 1;
                 }
-                if (ib < shift_too_large_bits) {
+                if (ib <= max_shift) {
                     ib = 1LL << ib;
                     b = make_const(t, ib);
 
@@ -55,15 +64,18 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
                         return mutate(Div::make(a, b), bounds);
                     }
                 } else {
+                    // We know that all the meaningful bits will be shifted away;
+                    // just replace with a constant 0 or -1 if possible.
                     if (shift_left) {
                         return make_zero(t);
                     } else {
                         // shift-right-out-of-bounds -> zero for uint.
                         if (t.is_uint()) {
                             return make_zero(t);
+                        } else {
+                            // shift-right-out-of-bounds -> zero or -1 for int.
+                            return mutate(select(a < 0, make_const(t, -1), make_zero(t)), bounds);
                         }
-                        // shift-right-out-of-bounds -> zero or -1 for int.
-                        return mutate(select(a < 0, make_const(t, -1), make_zero(t)), bounds);
                     }
                 }
             }
