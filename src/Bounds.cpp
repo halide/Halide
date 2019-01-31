@@ -191,10 +191,12 @@ private:
         op->value.accept(this);
         Interval a = interval;
 
-        if (a.is_single_point(op->value)) {
-            interval = Interval::single_point(op);
-            return;
-        }
+        // Unsafe: if op->value contains a value substituted from scope,
+        // we could have an undefined Let.
+        // if (a.is_single_point(op->value)) {
+        //     interval = Interval::single_point(op);
+        //     return;
+        // }
 
         Type to = op->type.element_of();
         Type from = op->value.type().element_of();
@@ -333,9 +335,12 @@ private:
         op->b.accept(this);
         Interval b = interval;
 
-        if (a.is_single_point(op->a) && b.is_single_point(op->b)) {
-            interval = Interval::single_point(op);
-        } else if (a.is_single_point() && b.is_single_point()) {
+        // Unsafe: if op contains a value substituted from scope,
+        // we could have an undefined Let.
+        // if (a.is_single_point(op->a) && b.is_single_point(op->b)) {
+        //     interval = Interval::single_point(op);
+        // } else
+        if (a.is_single_point() && b.is_single_point()) {
             interval = Interval::single_point(a.min + b.min);
         } else {
             interval = Interval::everything();
@@ -373,9 +378,12 @@ private:
         op->b.accept(this);
         Interval b = interval;
 
-        if (a.is_single_point(op->a) && b.is_single_point(op->b)) {
-            interval = Interval::single_point(op);
-        } else if (a.is_single_point() && b.is_single_point()) {
+        // Unsafe: if op contains a value substituted from scope,
+        // we could have an undefined Let.
+        // if (a.is_single_point(op->a) && b.is_single_point(op->b)) {
+        //     interval = Interval::single_point(op);
+        // } else
+        if (a.is_single_point() && b.is_single_point()) {
             interval = Interval::single_point(a.min - b.min);
         } else {
             interval = Interval::everything();
@@ -426,10 +434,13 @@ private:
             std::swap(a, b);
         }
 
-        if (a.is_single_point(op->a) && b.is_single_point(op->b)) {
-            interval = Interval::single_point(op);
-            return;
-        } else if (a.is_single_point() && b.is_single_point()) {
+        // Unsafe: if op contains a value substituted from scope,
+        // we could have an undefined Let.
+        // if (a.is_single_point(op->a) && b.is_single_point(op->b)) {
+        //     interval = Interval::single_point(op);
+        //     return;
+        // } else
+        if (a.is_single_point() && b.is_single_point()) {
             interval = Interval::single_point(a.min * b.min);
             return;
         } else if (b.is_single_point()) {
@@ -493,8 +504,10 @@ private:
 
         if (!b.is_bounded()) {
             interval = Interval::everything();
-        } else if (a.is_single_point(op->a) && b.is_single_point(op->b)) {
-            interval = Interval::single_point(op);
+        // Unsafe: if op contains a value substituted from scope,
+        // we could have an undefined Let.
+        // } else if (a.is_single_point(op->a) && b.is_single_point(op->b)) {
+        //     interval = Interval::single_point(op);
         } else if (can_prove(b.min == b.max)) {
             Expr e1 = a.has_lower_bound() ? a.min / b.min : a.min;
             Expr e2 = a.has_upper_bound() ? a.max / b.max : a.max;
@@ -549,10 +562,12 @@ private:
         }
         Interval b = interval;
 
-        if (a.is_single_point(op->a) && b.is_single_point(op->b)) {
-            interval = Interval::single_point(op);
-            return;
-        }
+        // Unsafe: if op contains a value substituted from scope,
+        // we could have an undefined Let.
+        // if (a.is_single_point(op->a) && b.is_single_point(op->b)) {
+        //     interval = Interval::single_point(op);
+        //     return;
+        // }
 
         Type t = op->type.element_of();
 
@@ -586,9 +601,12 @@ private:
         op->b.accept(this);
         Interval b = interval;
 
-        if (a.is_single_point(op->a) && b.is_single_point(op->b)) {
-            interval = Interval::single_point(op);
-        } else {
+        // Unsafe: if op contains a value substituted from scope,
+        // we could have an undefined Let.
+        // if (a.is_single_point(op->a) && b.is_single_point(op->b)) {
+        //     interval = Interval::single_point(op);
+        // } else
+        {
             interval = Interval(Interval::make_min(a.min, b.min),
                                 Interval::make_min(a.max, b.max));
         }
@@ -603,9 +621,12 @@ private:
         op->b.accept(this);
         Interval b = interval;
 
-        if (a.is_single_point(op->a) && b.is_single_point(op->b)) {
-            interval = Interval::single_point(op);
-        } else {
+        // Unsafe: if op contains a value substituted from scope,
+        // we could have an undefined Let.
+        // if (a.is_single_point(op->a) && b.is_single_point(op->b)) {
+        //     interval = Interval::single_point(op);
+        // } else
+        {
             interval = Interval(Interval::make_max(a.min, b.min),
                                 Interval::make_max(a.max, b.max));
         }
@@ -666,9 +687,12 @@ private:
         op->b.accept(this);
         Interval b = interval;
 
-        if (a.is_single_point(op->a) && b.is_single_point(op->b)) {
-            interval = Interval::single_point(op);
-        } else if (a.is_single_point() && b.is_single_point()) {
+        // Unsafe: if op contains a value substituted from scope,
+        // we could have an undefined Let.
+        // if (a.is_single_point(op->a) && b.is_single_point(op->b)) {
+        //     interval = Interval::single_point(op);
+        // } else
+        if (a.is_single_point() && b.is_single_point()) {
             interval = Interval::single_point(a.min == b.min);
         } else {
             // If either vary, it could always be false, so we have no
@@ -690,9 +714,12 @@ private:
         op->b.accept(this);
         Interval b = interval;
 
-        if (a.is_single_point(op->a) && b.is_single_point(op->b)) {
-            interval = Interval::single_point(op);
-        } else if (a.is_single_point() && b.is_single_point()) {
+        // Unsafe: if op contains a value substituted from scope,
+        // we could have an undefined Let.
+        // if (a.is_single_point(op->a) && b.is_single_point(op->b)) {
+        //     interval = Interval::single_point(op);
+        // } else
+        if (a.is_single_point() && b.is_single_point()) {
             interval = Interval::single_point(a.min != b.min);
         } else {
             // If either vary, it could always be true that they're
@@ -722,9 +749,12 @@ private:
         op->b.accept(this);
         Interval b = interval;
 
-        if (a.is_single_point(op->a) && b.is_single_point(op->b)) {
-            interval = Interval::single_point(op);
-        } else if (a.is_single_point() && b.is_single_point()) {
+        // Unsafe: if op contains a value substituted from scope,
+        // we could have an undefined Let.
+        // if (a.is_single_point(op->a) && b.is_single_point(op->b)) {
+        //     interval = Interval::single_point(op);
+        // } else
+        if (a.is_single_point() && b.is_single_point()) {
             interval = Interval::single_point(a.min && b.min);
         } else {
             // And is monotonic increasing in both args
@@ -749,9 +779,12 @@ private:
         op->b.accept(this);
         Interval b = interval;
 
-        if (a.is_single_point(op->a) && b.is_single_point(op->b)) {
-            interval = Interval::single_point(op);
-        } else if (a.is_single_point() && b.is_single_point()) {
+        // Unsafe: if op contains a value substituted from scope,
+        // we could have an undefined Let.
+        // if (a.is_single_point(op->a) && b.is_single_point(op->b)) {
+        //     interval = Interval::single_point(op);
+        // } else
+        if (a.is_single_point() && b.is_single_point()) {
             interval = Interval::single_point(a.min || b.min);
         } else {
             // Or is monotonic increasing in both args
@@ -771,9 +804,12 @@ private:
         op->a.accept(this);
         Interval a = interval;
 
-        if (a.is_single_point(op->a)) {
-            interval = Interval::single_point(op);
-        } else if (a.is_single_point()) {
+        // Unsafe: if op contains a value substituted from scope,
+        // we could have an undefined Let.
+        // if (a.is_single_point(op->a)) {
+        //     interval = Interval::single_point(op);
+        // } else
+        if (a.is_single_point()) {
             interval = Interval::single_point(!a.min);
         } else {
             interval.min = make_not(a.max);
@@ -1020,10 +1056,13 @@ private:
             Interval a_interval = interval;
             b.accept(this);
             Interval b_interval = interval;
-            if (a_interval.is_single_point(a) && b_interval.is_single_point(b)) {
-                interval = Interval::single_point(op);
-            } else if (a_interval.is_single_point() && b_interval.is_single_point()) {
-                interval = Interval::single_point(Call::make(op->type, op->name, {a, b}, op->call_type));
+            // Unsafe: if op contains a value substituted from scope,
+            // we could have an undefined Let.
+            // if (a_interval.is_single_point(a) && b_interval.is_single_point(b)) {
+            //     interval = Interval::single_point(op);
+            // } else
+            if (a_interval.is_single_point() && b_interval.is_single_point()) {
+                interval = Interval::single_point(Call::make(op->type, op->name, {a_interval.min, b_interval.min}, op->call_type));
             } else {
                 bounds_of_type(t);
                 // For some of these intrinsics applied to integer
@@ -1091,9 +1130,12 @@ private:
             // so bitwise not is monotonic decreasing.
             op->args[0].accept(this);
             Interval a_interval = interval;
-            if (a_interval.is_single_point(op->args[0])) {
-                interval = Interval::single_point(op);
-            } else if (a_interval.is_single_point()) {
+            // Unsafe: if op contains a value substituted from scope,
+            // we could have an undefined Let.
+            // if (a_interval.is_single_point(op->args[0])) {
+            //     interval = Interval::single_point(op);
+            // } else
+            if (a_interval.is_single_point()) {
                 interval = Interval::single_point(~a_interval.min);
             } else {
                 bounds_of_type(t);
