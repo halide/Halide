@@ -2677,7 +2677,7 @@ void bounds_test() {
     check(scope, (cast<uint8_t>(x) >> cast<uint8_t>(1)), make_const(UInt(8), 0), make_const(UInt(8), 5));
     check(scope, (cast<uint8_t>(10) >> cast<uint8_t>(1)), make_const(UInt(8), 5), make_const(UInt(8), 5));
     check(scope, (cast<uint8_t>(x + 3) << cast<uint8_t>(1)), make_const(UInt(8), 6), make_const(UInt(8), 26));
-    check(scope, (cast<uint8_t>(x + 3) << cast<uint8_t>(7)), make_const(UInt(8), 0), make_const(UInt(8), 255));  // Overflows
+    check(scope, (cast<uint8_t>(x + 3) << cast<uint8_t>(7)), make_const(UInt(8), 0), make_const(UInt(8), 0));  // Overflows -> 0
     check(scope, (cast<uint8_t>(5) << cast<uint8_t>(1)), make_const(UInt(8), 10), make_const(UInt(8), 10));
     check(scope, (x << 12), 0, 10 << 12);
     check(scope, x & 4095, 0, 10); // LHS known to be positive
