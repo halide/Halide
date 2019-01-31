@@ -1023,7 +1023,7 @@ private:
             if (a_interval.is_single_point(a) && b_interval.is_single_point(b)) {
                 interval = Interval::single_point(op);
             } else if (a_interval.is_single_point() && b_interval.is_single_point()) {
-                interval = Interval::single_point(Call::make(op->type, op->name, {a, b}, op->call_type));
+                interval = Interval::single_point(Call::make(op->type, op->name, {a_interval.min, b_interval.min}, op->call_type));
             } else {
                 bounds_of_type(t);
                 // For some of these intrinsics applied to integer
