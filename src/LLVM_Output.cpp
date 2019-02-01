@@ -370,10 +370,10 @@ void emit_file(const llvm::Module &module_in, Internal::LLVMOStream& out, llvm::
     target_machine->Options.MCOptions.AsmVerbose = true;
 
     // Ask the target to add backend passes as necessary.
-#if LLVM_VERSION < 70
-    target_machine->addPassesToEmitFile(pass_manager, out, file_type);
-#else
+#if LLVM_VERSION >= 70
     target_machine->addPassesToEmitFile(pass_manager, out, nullptr, file_type);
+#else
+    target_machine->addPassesToEmitFile(pass_manager, out, file_type);
 #endif
 
     pass_manager.run(*module);

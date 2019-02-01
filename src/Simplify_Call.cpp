@@ -34,19 +34,49 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
             Type t = op->type;
 
             bool shift_left = op->is_intrinsic(Call::shift_left);
-            if (t.is_int() && ib < 0) {
-                shift_left = !shift_left;
-                ib = -ib;
+            if (ib < 0) {
+                constexpr int64_t i64_max = std::numeric_limits<int64_t>::max();
+                if (t.is_int()) {
+                    shift_left = !shift_left;
+                    // Ensure that corner case of ib = lowest() doesn't negate into itself
+                    ib = -std::max(ib, -i64_max);
+                } else {
+                    // It's a uint > 2^63-1, so we're definitely shifting out-of-range;
+                    // just clip to a large-enough value value and fall thru.
+                    ib = i64_max;
+                }
             }
 
-            if (ib >= 0 && ib < std::min(t.bits(), 64) - 1) {
-                ib = 1LL << ib;
-                b = make_const(t, ib);
+            if (ib >= 0) {
+                assert(t.bits() <= 64);
+                int max_shift = t.bits() - 1;
+                if (t.is_int()) {
+                    // One less if there is a sign bit
+                    max_shift -= 1;
+                }
+                if (ib <= max_shift) {
+                    ib = 1LL << ib;
+                    b = make_const(t, ib);
 
-                if (shift_left) {
-                    return mutate(Mul::make(a, b), bounds);
+                    if (shift_left) {
+                        return mutate(Mul::make(a, b), bounds);
+                    } else {
+                        return mutate(Div::make(a, b), bounds);
+                    }
                 } else {
-                    return mutate(Div::make(a, b), bounds);
+                    // We know that all the meaningful bits will be shifted away;
+                    // just replace with a constant 0 or -1 if possible.
+                    if (shift_left) {
+                        return make_zero(t);
+                    } else {
+                        // shift-right-out-of-bounds -> zero for uint.
+                        if (t.is_uint()) {
+                            return make_zero(t);
+                        } else {
+                            // shift-right-out-of-bounds -> zero or -1 for int.
+                            return mutate(select(a < 0, make_const(t, -1), make_zero(t)), bounds);
+                        }
+                    }
                 }
             }
         }
@@ -214,11 +244,11 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
             return absd(a, b);
         }
     } else if (op->call_type == Call::PureExtern &&
-               op->name == "is_nan_f32") {
+               (op->name == "is_nan_f16" || op->name == "is_nan_f32" || op->name == "is_nan_f64")) {
         Expr arg = mutate(op->args[0], nullptr);
         double f = 0.0;
         if (const_float(arg, &f)) {
-            return std::isnan(f);
+            return make_bool(std::isnan(f));
         } else if (arg.same_as(op->args[0])) {
             return op;
         } else {

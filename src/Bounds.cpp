@@ -1012,13 +1012,99 @@ private:
             op->args[1].accept(this);
         } else if (op->is_intrinsic(Call::shift_left) ||
                    op->is_intrinsic(Call::shift_right) ||
-                   op->is_intrinsic(Call::bitwise_and)) {
-            Expr simplified = simplify(op);
-            if (!equal(simplified, op)) {
-                simplified.accept(this);
+                   op->is_intrinsic(Call::bitwise_xor) ||
+                   op->is_intrinsic(Call::bitwise_and) ||
+                   op->is_intrinsic(Call::bitwise_or)) {
+            Expr a = op->args[0], b = op->args[1];
+            a.accept(this);
+            Interval a_interval = interval;
+            b.accept(this);
+            Interval b_interval = interval;
+            if (a_interval.is_single_point(a) && b_interval.is_single_point(b)) {
+                interval = Interval::single_point(op);
+            } else if (a_interval.is_single_point() && b_interval.is_single_point()) {
+                interval = Interval::single_point(Call::make(op->type, op->name, {a_interval.min, b_interval.min}, op->call_type));
             } else {
-                // Just use the bounds of the type
                 bounds_of_type(t);
+                // For some of these intrinsics applied to integer
+                // types we can go a little further.
+                if (t.is_int() || t.is_uint()) {
+                    if (op->is_intrinsic(Call::shift_left)) {
+                        if (t.is_int() && t.bits() >= 32) {
+                            // Overflow is UB
+                            if (a_interval.has_lower_bound() && b_interval.has_lower_bound()) {
+                                interval.min = a_interval.min << b_interval.min;
+                            }
+                            if (a_interval.has_upper_bound() && b_interval.has_upper_bound()) {
+                                interval.max = a_interval.max << b_interval.max;
+                            }
+                        } else if (is_const(b)) {
+                            // We can normalize to multiplication
+                            Expr equiv = a * (1 << b);
+                            equiv.accept(this);
+                        }
+                    } else if (op->is_intrinsic(Call::shift_right)) {
+                        if (a_interval.has_lower_bound() && b_interval.has_upper_bound()) {
+                            interval.min = a_interval.min >> b_interval.max;
+                        }
+                        if (a_interval.has_upper_bound() && b_interval.has_lower_bound()) {
+                            interval.max = a_interval.max >> b_interval.min;
+                        }
+                    } else if (op->is_intrinsic(Call::bitwise_and) &&
+                               a_interval.has_upper_bound() &&
+                               b_interval.has_upper_bound()) {
+                        bool a_positive = a_interval.has_lower_bound() && can_prove(a_interval.min >= 0);
+                        bool b_positive = b_interval.has_lower_bound() && can_prove(b_interval.min >= 0);
+                        if (t.is_uint() || (a_positive && b_positive)) {
+                            // Positive and smaller than both args
+                            interval.max = min(a_interval.max, b_interval.max);
+                            interval.min = make_zero(t);
+                        } else if (t.is_int()) {
+                            if (b_positive) {
+                                interval.min = make_zero(t);
+                                interval.max = b_interval.max;
+                            } else if (a_positive) {
+                                interval.min = make_zero(t);
+                                interval.max = a_interval.max;
+                            } else {
+                                // Smaller than the larger of the two args
+                                interval.max = max(a_interval.max, b_interval.max);
+                            }
+                        }
+
+                    } else if (op->is_intrinsic(Call::bitwise_or) &&
+                               a_interval.has_lower_bound() &&
+                               b_interval.has_lower_bound()) {
+                        if (t.is_int()) {
+                            // Larger than the smaller arg
+                            interval.min = min(a_interval.min, b_interval.min);
+                        } else if (t.is_uint()) {
+                            // Larger than both args
+                            interval.min = max(a_interval.min, b_interval.min);
+                        }
+                    }
+                }
+            }
+        } else if (op->is_intrinsic(Call::bitwise_not)) {
+            // In 2's complement bitwise not inverts the ordering of
+            // the space, without causing overflow (unlike negation),
+            // so bitwise not is monotonic decreasing.
+            op->args[0].accept(this);
+            Interval a_interval = interval;
+            if (a_interval.is_single_point(op->args[0])) {
+                interval = Interval::single_point(op);
+            } else if (a_interval.is_single_point()) {
+                interval = Interval::single_point(~a_interval.min);
+            } else {
+                bounds_of_type(t);
+                if (t.is_int() || t.is_uint()) {
+                    if (a_interval.has_upper_bound()) {
+                        interval.min = ~a_interval.max;
+                    }
+                    if (a_interval.has_lower_bound()) {
+                        interval.max = ~a_interval.min;
+                    }
+                }
             }
         } else if (op->args.size() == 1 && interval.is_bounded() &&
                    (op->name == "ceil_f32" || op->name == "ceil_f64" ||
@@ -2445,8 +2531,8 @@ void constant_bound_test() {
         Expr fraction = (d & (int16_t)((1 << 7) - 1));
         Expr cr = i16((((cr2 - cr1) * fraction) >> 7) + cr1);
 
-        check_constant_bound(absd(cr, cl), Expr((uint16_t)0), Expr((uint16_t)510));
-        check_constant_bound(i16(absd(cr, cl)), Expr((int16_t)0), Expr((int16_t)510));
+        check_constant_bound(absd(cr, cl), Expr((uint16_t)0), Expr((uint16_t)509));
+        check_constant_bound(i16(absd(cr, cl)), Expr((int16_t)0), Expr((int16_t)509));
     }
 
 
@@ -2575,6 +2661,28 @@ void bounds_test() {
     check(scope, (cast<uint8_t>(x)+10)*10, make_const(UInt(8), 100), make_const(UInt(8), 200));
     check(scope, (cast<uint8_t>(x)+10)*(cast<uint8_t>(x)), make_const(UInt(8), 0), make_const(UInt(8), 200));
     check(scope, (cast<uint8_t>(x)+20)-(cast<uint8_t>(x)+5), make_const(UInt(8), 5), make_const(UInt(8), 25));
+
+    // Check some bitwise ops.
+    check(scope, (cast<uint8_t>(x) & cast<uint8_t>(7)), make_const(UInt(8), 0), make_const(UInt(8), 7));
+    check(scope, (cast<uint8_t>(3) & cast<uint8_t>(2)), make_const(UInt(8), 2), make_const(UInt(8), 2));
+    check(scope, (cast<uint8_t>(1) | cast<uint8_t>(2)), make_const(UInt(8), 3), make_const(UInt(8), 3));
+    check(scope, (cast<uint8_t>(3) ^ cast<uint8_t>(2)), make_const(UInt(8), 1), make_const(UInt(8), 1));
+    check(scope, (~cast<uint8_t>(3)), make_const(UInt(8), 0xfc), make_const(UInt(8), 0xfc));
+    check(scope, cast<uint8_t>(x + 5) & cast<uint8_t>(x + 3), make_const(UInt(8), 0), make_const(UInt(8), 13));
+    check(scope, cast<int8_t>(x - 5) & cast<int8_t>(x + 3), make_const(Int(8), 0), make_const(Int(8), 13));
+    check(scope, cast<int8_t>(2*x - 5) & cast<int8_t>(x - 3), make_const(Int(8), -128), make_const(Int(8), 15));
+    check(scope, cast<uint8_t>(x + 5) | cast<uint8_t>(x + 3), make_const(UInt(8), 5), make_const(UInt(8), 255));
+    check(scope, cast<int8_t>(x + 5) | cast<int8_t>(x + 3), make_const(Int(8), 3), make_const(Int(8), 127));
+    check(scope, ~cast<uint8_t>(x), make_const(UInt(8), -11), make_const(UInt(8), -1));
+    check(scope, (cast<uint8_t>(x) >> cast<uint8_t>(1)), make_const(UInt(8), 0), make_const(UInt(8), 5));
+    check(scope, (cast<uint8_t>(10) >> cast<uint8_t>(1)), make_const(UInt(8), 5), make_const(UInt(8), 5));
+    check(scope, (cast<uint8_t>(x + 3) << cast<uint8_t>(1)), make_const(UInt(8), 6), make_const(UInt(8), 26));
+    check(scope, (cast<uint8_t>(x + 3) << cast<uint8_t>(7)), make_const(UInt(8), 0), make_const(UInt(8), 255));  // Overflows
+    check(scope, (cast<uint8_t>(5) << cast<uint8_t>(1)), make_const(UInt(8), 10), make_const(UInt(8), 10));
+    check(scope, (x << 12), 0, 10 << 12);
+    check(scope, x & 4095, 0, 10); // LHS known to be positive
+    check(scope, x & 123, 0, 10); // Doesn't have to be a precise bitmask
+    check(scope, (x - 1) & 4095, 0, 4095); // LHS could be -1
 
     check(scope,
           cast<uint16_t>(clamp(cast<float>(x/y), 0.0f, 4095.0f)),
