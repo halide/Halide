@@ -926,31 +926,34 @@ private:
             return;
         }
 
-        std::vector<Expr> new_args;  // Lazily computed only if needed
-        const auto has_const_args = [this, op](std::vector<Expr> *new_args) -> bool {
+
+        if (!const_bound &&
+            (op->call_type == Call::PureExtern || op->call_type == Call::Image)) {
             // If the args are const we can return the call of those args
             // for pure functions. For other types of functions, the same
             // call in two different places might produce different
             // results (e.g. during the update step of a reduction), so we
             // can't move around call nodes.
-            new_args->resize(op->args.size());
-            for (size_t i = 0; i < op->args.size(); i++) {
+            std::vector<Expr> new_args(op->args.size());
+            bool const_args = true;
+            for (size_t i = 0; i < op->args.size() && const_args; i++) {
                 op->args[i].accept(this);
-                if (!interval.is_single_point()) {
-                    return false;
+                if (interval.is_single_point()) {
+                    new_args[i] = interval.min;
+                } else {
+                    const_args = false;
                 }
-                (*new_args)[i] = interval.min;
             }
-            return true;
-        };
+            if (const_args) {
+                Expr call = Call::make(t, op->name, new_args, op->call_type,
+                                       op->func, op->value_index, op->image, op->param);
+                interval = Interval::single_point(call);
+                return;
+            }
+            // else fall thru and continue
+        }
 
-        if (!const_bound &&
-            (op->call_type == Call::PureExtern || op->call_type == Call::Image) &&
-            has_const_args(&new_args)) {
-            Expr call = Call::make(t, op->name, new_args, op->call_type,
-                                   op->func, op->value_index, op->image, op->param);
-            interval = Interval::single_point(call);
-        } else if (op->is_intrinsic(Call::abs)) {
+        if (op->is_intrinsic(Call::abs)) {
             op->args[0].accept(this);
             Interval a = interval;
             interval.min = make_zero(t);
