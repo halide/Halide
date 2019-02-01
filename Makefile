@@ -109,7 +109,6 @@ WITH_PTX ?= $(findstring nvptx, $(LLVM_COMPONENTS))
 # AMDGPU target is WIP
 WITH_AMDGPU ?= $(findstring amdgpu, $(LLVM_COMPONENTS))
 WITH_WEBASSEMBLY ?= $(findstring webassembly, $(LLVM_COMPONENTS))
-
 WITH_OPENCL ?= not-empty
 WITH_METAL ?= not-empty
 WITH_OPENGL ?= not-empty

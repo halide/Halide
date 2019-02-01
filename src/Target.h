@@ -34,7 +34,11 @@ struct Target {
         MIPS,
         Hexagon,
         POWERPC,
+<<<<<<< HEAD
 	WebAssembly,
+=======
+        WebAssembly,
+>>>>>>> dfa72053a04d136c392d72f8a7ecce93af5a9c8d
     } arch;
 
     /** The bit-width of the target machine. Must be 0 for unknown, or 32 or 64. */
