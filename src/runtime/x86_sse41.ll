@@ -52,22 +52,22 @@ define weak_odr <2 x double> @trunc_f64x2(<2 x double> %x) nounwind uwtable read
 }
 
 define weak_odr <16 x i8> @abs_i8x16(<16 x i8> %x) nounwind uwtable readnone alwaysinline {
-  %1 = tail call <16 x i8> @llvm.x86.ssse3.pabs.b.128(<16 x i8> %x)
-  ret <16 x i8> %1
+  %1 = sub <16 x i8> zeroinitializer, %x
+  %2 = icmp sgt <16 x i8> %x, zeroinitializer
+  %3 = select <16 x i1> %2, <16 x i8> %x, <16 x i8> %1
+  ret <16 x i8> %3
 }
-
-declare <16 x i8> @llvm.x86.ssse3.pabs.b.128(<16 x i8>) nounwind readnone
 
 define weak_odr <8 x i16> @abs_i16x8(<8 x i16> %x) nounwind uwtable readnone alwaysinline {
-  %1 = tail call <8 x i16> @llvm.x86.ssse3.pabs.w.128(<8 x i16> %x)
-  ret <8 x i16> %1
+  %1 = sub <8 x i16> zeroinitializer, %x
+  %2 = icmp sgt <8 x i16> %x, zeroinitializer
+  %3 = select <8 x i1> %2, <8 x i16> %x, <8 x i16> %1
+  ret <8 x i16> %3
 }
-
-declare <8 x i16> @llvm.x86.ssse3.pabs.w.128(<8 x i16>) nounwind readnone
 
 define weak_odr <4 x i32> @abs_i32x4(<4 x i32> %x) nounwind uwtable readnone alwaysinline {
-  %1 = tail call <4 x i32> @llvm.x86.ssse3.pabs.d.128(<4 x i32> %x)
-  ret <4 x i32> %1
+  %1 = sub <4 x i32> zeroinitializer, %x
+  %2 = icmp sgt <4 x i32> %x, zeroinitializer
+  %3 = select <4 x i1> %2, <4 x i32> %x, <4 x i32> %1
+  ret <4 x i32> %3
 }
-
-declare <4 x i32> @llvm.x86.ssse3.pabs.d.128(<4 x i32>) nounwind readnone

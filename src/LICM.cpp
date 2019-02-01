@@ -11,17 +11,17 @@
 namespace Halide {
 namespace Internal {
 
-using std::string;
 using std::map;
-using std::vector;
 using std::pair;
 using std::set;
+using std::string;
+using std::vector;
 
 // Is it safe to lift an Expr out of a loop (and potentially across a device boundary)
 class CanLift : public IRVisitor {
     using IRVisitor::visit;
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         if (!op->is_pure()) {
             result = false;
         } else {
@@ -29,11 +29,11 @@ class CanLift : public IRVisitor {
         }
     }
 
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         result = false;
     }
 
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         if (varying.contains(op->name)) {
             result = false;
         }
@@ -49,8 +49,8 @@ public:
 
 // Lift pure loop invariants to the top level. Applied independently
 // to each loop.
-class LiftLoopInvariants : public IRMutator2 {
-    using IRMutator2::visit;
+class LiftLoopInvariants : public IRMutator {
+    using IRMutator::visit;
 
     Scope<int> varying;
 
@@ -80,22 +80,22 @@ class LiftLoopInvariants : public IRMutator2 {
 
     Expr visit(const Let *op) override {
         ScopedBinding<int> p(varying, op->name, 0);
-        return IRMutator2::visit(op);
+        return IRMutator::visit(op);
     }
 
     Stmt visit(const LetStmt *op) override {
         ScopedBinding<int> p(varying, op->name, 0);
-        return IRMutator2::visit(op);
+        return IRMutator::visit(op);
     }
 
     Stmt visit(const For *op) override {
         ScopedBinding<int> p(varying, op->name, 0);
-        return IRMutator2::visit(op);
+        return IRMutator::visit(op);
     }
 
 public:
 
-    using IRMutator2::mutate;
+    using IRMutator::mutate;
 
     Expr mutate(const Expr &e) override {
         if (should_lift(e)) {
@@ -110,15 +110,38 @@ public:
                 return Variable::make(e.type(), it->second);
             }
         } else {
-            return IRMutator2::mutate(e);
+            return IRMutator::mutate(e);
         }
     }
 
     map<Expr, string, IRDeepCompare> lifted;
 };
 
-class LICM : public IRMutator2 {
-    using IRMutator2::visit;
+// The pass above can lift out the value of lets entirely, leaving
+// them as just renamings of other variables. Easier to substitute
+// them in as a post-pass rather than make the pass above more clever.
+class SubstituteTrivialLets : public IRMutator {
+    using IRMutator::visit;
+
+    Expr visit(const Let *op) override {
+        if (op->value.as<Variable>()) {
+            return mutate(substitute(op->name, op->value, op->body));
+        } else {
+            return IRMutator::visit(op);
+        }
+    }
+
+    Stmt visit(const LetStmt *op) override {
+        if (op->value.as<Variable>()) {
+            return mutate(substitute(op->name, op->value, op->body));
+        } else {
+            return IRMutator::visit(op);
+        }
+    }
+};
+
+class LICM : public IRMutator {
+    using IRMutator::visit;
 
     bool in_gpu_loop{false};
 
@@ -141,6 +164,13 @@ class LICM : public IRMutator2 {
             return cost(sub->a, vars) + cost(sub->b, vars) + 1;
         } else if (const Mul *mul = e.as<Mul>()) {
             return cost(mul->a, vars) + cost(mul->b, vars) + 1;
+        } else if (const Call *call = e.as<Call>()) {
+            if (call->is_intrinsic(Call::reinterpret)) {
+                internal_assert(call->args.size() == 1);
+                return cost(call->args[0], vars);
+            } else {
+                return 100;
+            }
         } else {
             return 100;
         }
@@ -154,16 +184,17 @@ class LICM : public IRMutator2 {
 
         if (old_in_gpu_loop && in_gpu_loop) {
             // Don't lift lets to in-between gpu blocks/threads
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         } else if (op->device_api == DeviceAPI::GLSL ||
                    op->device_api == DeviceAPI::OpenGLCompute) {
             // Don't lift anything out of OpenGL loops
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         } else {
 
             // Lift invariants
             LiftLoopInvariants lifter;
             Stmt new_stmt = lifter.mutate(op);
+            new_stmt = SubstituteTrivialLets().mutate(new_stmt);
 
             // As an optimization to reduce register pressure, take
             // the set of expressions to lift and check if any can
@@ -196,7 +227,7 @@ class LICM : public IRMutator2 {
             // Track the set of variables used by the inner loop
             class CollectVars : public IRVisitor {
                 using IRVisitor::visit;
-                void visit(const Variable *op) {
+                void visit(const Variable *op) override {
                     vars.insert(op->name);
                 }
             public:
@@ -252,10 +283,9 @@ class LICM : public IRMutator2 {
     }
 };
 
-
 // Reassociate summations to group together the loop invariants. Useful to run before LICM.
-class GroupLoopInvariants : public IRMutator2 {
-    using IRMutator2::visit;
+class GroupLoopInvariants : public IRMutator {
+    using IRMutator::visit;
 
     Scope<int> var_depth;
 
@@ -263,7 +293,7 @@ class GroupLoopInvariants : public IRMutator2 {
         using IRVisitor::visit;
         const Scope<int> &depth;
 
-        void visit(const Variable *op) {
+        void visit(const Variable *op) override {
             if (depth.contains(op->name)) {
                 result = std::max(result, depth.get(op->name));
             }
@@ -357,7 +387,7 @@ class GroupLoopInvariants : public IRMutator2 {
             // (If strict_float is off, we're allowed to reassociate,
             // and we do reassociate elsewhere, but there's no benefit to it
             // here and it's friendlier not to.)
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
 
         return reassociate_summation(op);
@@ -369,7 +399,7 @@ class GroupLoopInvariants : public IRMutator2 {
             // (If strict_float is off, we're allowed to reassociate,
             // and we do reassociate elsewhere, but there's no benefit to it
             // here and it's friendlier not to.)
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
 
         return reassociate_summation(op);
@@ -380,21 +410,20 @@ class GroupLoopInvariants : public IRMutator2 {
     Stmt visit(const For *op) override {
         depth++;
         ScopedBinding<int> bind(var_depth, op->name, depth);
-        Stmt stmt = IRMutator2::visit(op);
+        Stmt stmt = IRMutator::visit(op);
         depth--;
         return stmt;
     }
 
     Expr visit(const Let *op) override {
         ScopedBinding<int> bind(var_depth, op->name, expr_depth(op->value));
-        return IRMutator2::visit(op);
+        return IRMutator::visit(op);
     }
 
     Stmt visit(const LetStmt *op) override {
         ScopedBinding<int> bind(var_depth, op->name, expr_depth(op->value));
-        return IRMutator2::visit(op);
+        return IRMutator::visit(op);
     }
-
 };
 
 // Turn for loops of size one into let statements
@@ -406,5 +435,5 @@ Stmt loop_invariant_code_motion(Stmt s) {
     return s;
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

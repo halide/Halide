@@ -3,12 +3,7 @@ Fast image interpolation using a pyramid.
 """
 
 from __future__ import print_function
-
-# TODO: This allows you to use "true" div (vs floordiv) in Python2 for the / operator;
-# unfortunately it appears to also replace the overloads we've carefully added for Halide.
-# Figure out if it's possible to allow this to leave our Halide stuff unaffected.
-#
-# from __future__ import division
+from __future__ import division
 
 import time, sys
 import halide as hl
@@ -60,7 +55,7 @@ def get_interpolate(input, levels):
             # pixels off each edge.
             w = input.width()/(1 << l)
             h = input.height()/(1 << l)
-            prev = hl.lambda3D(x, y, c, prev[hl.clamp(x, 0, w), hl.clamp(y, 0, h), c])
+            prev = hl.lambda_func(x, y, c, prev[hl.clamp(x, 0, w), hl.clamp(y, 0, h), c])
 
         downx[l][x,y,c] = (prev[x*2-1,y,c] + 2.0 * prev[x*2,y,c] + prev[x*2+1,y,c]) * 0.25
         downsampled[l][x,y,c] = (downx[l][x,y*2-1,c] + 2.0 * downx[l][x,y*2,c] + downx[l][x,y*2+1,c]) * 0.25
@@ -194,7 +189,7 @@ def main():
     t1 = datetime.now()
     print('Interpolated in %.5f secs' % (t1-t0).total_seconds())
 
-    output_data = hl.buffer_to_ndarray(output_image)
+    output_data = np.array(output_image, copy = False)
 
     # save results
     input_path = "interpolate_input.png"

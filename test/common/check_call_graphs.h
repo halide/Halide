@@ -21,7 +21,7 @@ public:
 private:
     using Halide::Internal::IRVisitor::visit;
 
-    void visit(const Halide::Internal::ProducerConsumer *op) {
+    void visit(const Halide::Internal::ProducerConsumer *op) override {
         if (op->is_producer) {
             std::string old_producer = producer;
             producer = op->name;
@@ -34,7 +34,7 @@ private:
         }
     }
 
-    void visit(const Halide::Internal::Load *op) {
+    void visit(const Halide::Internal::Load *op) override {
         Halide::Internal::IRVisitor::visit(op);
         if (!producer.empty()) {
             assert(calls.count(producer) > 0);

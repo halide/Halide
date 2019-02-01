@@ -1,8 +1,8 @@
 #include "RemoveUndef.h"
-#include "IRMutator.h"
-#include "Scope.h"
-#include "IROperator.h"
 #include "IREquality.h"
+#include "IRMutator.h"
+#include "IROperator.h"
+#include "Scope.h"
 #include "Substitute.h"
 
 namespace Halide {
@@ -10,11 +10,11 @@ namespace Internal {
 
 using std::vector;
 
-class RemoveUndef : public IRMutator2 {
+class RemoveUndef : public IRMutator {
 public:
     Expr predicate;
 private:
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Scope<> dead_vars;
 
@@ -122,7 +122,7 @@ private:
         if (pred.same_as(op->predicate) && index.same_as(op->index)) {
             return op;
         } else {
-            return Load::make(op->type, op->name, index, op->image, op->param, pred);
+            return Load::make(op->type, op->name, index, op->image, op->param, pred, op->alignment);
         }
     }
 
@@ -280,7 +280,7 @@ private:
 
         if (predicate.defined()) {
             // This becomes a conditional store
-            Stmt stmt = IfThenElse::make(predicate, Store::make(op->name, value, index, op->param, pred));
+            Stmt stmt = IfThenElse::make(predicate, Store::make(op->name, value, index, op->param, pred, op->alignment));
             predicate = Expr();
             return stmt;
         } else if (pred.same_as(op->predicate) &&
@@ -288,7 +288,7 @@ private:
                    index.same_as(op->index)) {
             return op;
         } else {
-            return Store::make(op->name, value, index, op->param, pred);
+            return Store::make(op->name, value, index, op->param, pred, op->alignment);
         }
     }
 
@@ -385,7 +385,8 @@ private:
             new_expr.same_as(op->new_expr)) {
             return op;
         } else {
-            return Allocate::make(op->name, op->type, new_extents, condition, body, new_expr, op->free_function);
+            return Allocate::make(op->name, op->type, op->memory_type,
+                                  new_extents, condition, body, new_expr, op->free_function);
         }
     }
 
@@ -425,7 +426,7 @@ private:
             condition.same_as(op->condition)) {
             return op;
         } else {
-            return Realize::make(op->name, op->types, new_bounds, condition, body);
+            return Realize::make(op->name, op->types, op->memory_type, new_bounds, condition, body);
         }
     }
 
@@ -492,5 +493,5 @@ Stmt remove_undef(Stmt s) {
     return s;
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

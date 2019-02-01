@@ -32,11 +32,14 @@
 
 std::string infile, outfile, input_type, interpolation_type;
 float scale_factor = 1.0f;
+int benchmark_iters = 10;
+bool packed = true;
 
 void show_usage_and_exit() {
     fprintf(stderr,
             "Usage:\n"
             "\t./resample [-f scalefactor] "
+            "[-b benchmark_iterations] "
             "[-i box|linear|cubic|lanczos] "
             "[-t float32|uint8|uint16] in.png out.png\n");
     exit(1);
@@ -51,6 +54,10 @@ for (int i = 1; i < argc; i++) {
             interpolation_type = argv[++i];
         } else if (arg == "-t" && i+1 < argc) {
             input_type = argv[++i];
+        } else if (arg == "-b" && i+1 < argc) {
+            benchmark_iters = atoi(argv[++i]);
+        } else if (arg == "-p" && i+1 < argc) {
+            packed = atoi(argv[++i]) != 0;
         } else if (infile.empty()) {
             infile = arg;
         } else if (outfile.empty()) {
@@ -139,22 +146,24 @@ int main(int argc, char **argv) {
 
     auto resize_fn = variants[type_idx][upsample_idx][interpolation_idx];
 
-    double time = Halide::Tools::benchmark(10, 10, [&]() { resize_fn(in, scale_factor, out); });
+    double time = Halide::Tools::benchmark(benchmark_iters, benchmark_iters, [&]() { resize_fn(in, scale_factor, out); });
     printf("planar  %8s  %8s  %1.2f  time: %f ms\n",
            interpolation_type.c_str(), input_type.c_str(), scale_factor, time * 1000);
 
     Halide::Tools::convert_and_save_image(out, outfile);
 
-    // Also benchmark a packed memory layout. Don't bother to copy the
-    // actual data over, because we won't save the result. We just
-    // want to measure the runtime.
-    auto in_packed =
-        Halide::Runtime::Buffer<>::make_interleaved(in.type(), in.width(), in.height(), in.channels());
-    auto out_packed =
-        Halide::Runtime::Buffer<>::make_interleaved(out.type(), out.width(), out.height(), out.channels());
-    time = Halide::Tools::benchmark(10, 10, [&]() { resize_fn(in_packed, scale_factor, out_packed); });
-    printf("packed  %8s  %8s  %1.2f  time: %f ms\n",
-           interpolation_type.c_str(), input_type.c_str(), scale_factor, time * 1000);
+    if (packed) {
+        // Also benchmark a packed memory layout. Don't bother to copy the
+        // actual data over, because we won't save the result. We just
+        // want to measure the runtime.
+        auto in_packed =
+            Halide::Runtime::Buffer<>::make_interleaved(in.type(), in.width(), in.height(), in.channels());
+        auto out_packed =
+            Halide::Runtime::Buffer<>::make_interleaved(out.type(), out.width(), out.height(), out.channels());
+        time = Halide::Tools::benchmark(benchmark_iters, benchmark_iters, [&]() { resize_fn(in_packed, scale_factor, out_packed); });
+        printf("packed  %8s  %8s  %1.2f  time: %f ms\n",
+               interpolation_type.c_str(), input_type.c_str(), scale_factor, time * 1000);
+      }
 
     return 0;
 }

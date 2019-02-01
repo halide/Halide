@@ -11,29 +11,31 @@
 #include "Debug.h"
 #include "Error.h"
 #include "Float16.h"
-#include "Type.h"
 #include "IntrusivePtr.h"
+#include "Type.h"
 #include "Util.h"
 
 namespace Halide {
 namespace Internal {
 
-class IRMutator2;
+class IRMutator;
 class IRVisitor;
 
 /** All our IR node types get unique IDs for the purposes of RTTI */
 enum class IRNodeType {
+    // Exprs, in order of strength
     IntImm,
     UIntImm,
     FloatImm,
     StringImm,
+    Broadcast,
     Cast,
     Variable,
     Add,
     Sub,
+    Mod,
     Mul,
     Div,
-    Mod,
     Min,
     Max,
     EQ,
@@ -48,22 +50,24 @@ enum class IRNodeType {
     Select,
     Load,
     Ramp,
-    Broadcast,
     Call,
     Let,
+    Shuffle,
+    // Stmts
     LetStmt,
     AssertStmt,
     ProducerConsumer,
     For,
+    Acquire,
     Store,
     Provide,
     Allocate,
     Free,
     Realize,
     Block,
+    Fork,
     IfThenElse,
     Evaluate,
-    Shuffle,
     Prefetch,
 };
 
@@ -99,10 +103,10 @@ struct IRNode {
 };
 
 template<>
-EXPORT inline RefCount &ref_count<IRNode>(const IRNode *n) {return n->ref_count;}
+inline RefCount &ref_count<IRNode>(const IRNode *t) {return t->ref_count;}
 
 template<>
-EXPORT inline void destroy<IRNode>(const IRNode *n) {delete n;}
+inline void destroy<IRNode>(const IRNode *t) {delete t;}
 
 /** IR nodes are split into expressions and statements. These are
    similar to expressions and statements in C - expressions
@@ -114,14 +118,14 @@ EXPORT inline void destroy<IRNode>(const IRNode *n) {delete n;}
    methods beyond base IR nodes for now. */
 struct BaseStmtNode : public IRNode {
     BaseStmtNode(IRNodeType t) : IRNode(t) {}
-    virtual Stmt mutate_stmt(IRMutator2 *v) const = 0;
+    virtual Stmt mutate_stmt(IRMutator *v) const = 0;
 };
 
 /** A base class for expression nodes. They all contain their types
  * (e.g. Int(32), Float(32)) */
 struct BaseExprNode : public IRNode {
     BaseExprNode(IRNodeType t) : IRNode(t) {}
-    virtual Expr mutate_expr(IRMutator2 *v) const = 0;
+    virtual Expr mutate_expr(IRMutator *v) const = 0;
     Type type;
 };
 
@@ -133,16 +137,16 @@ struct BaseExprNode : public IRNode {
    a concrete instantiation of a unique IRNodeType per class. */
 template<typename T>
 struct ExprNode : public BaseExprNode {
-    EXPORT void accept(IRVisitor *v) const;
-    EXPORT Expr mutate_expr(IRMutator2 *v) const;
+    void accept(IRVisitor *v) const override;
+    Expr mutate_expr(IRMutator *v) const override;
     ExprNode() : BaseExprNode(T::_node_type) {}
     virtual ~ExprNode() {}
 };
 
 template<typename T>
 struct StmtNode : public BaseStmtNode {
-    EXPORT void accept(IRVisitor *v) const;
-    EXPORT Stmt mutate_stmt(IRMutator2 *v) const;
+    void accept(IRVisitor *v) const override;
+    Stmt mutate_stmt(IRMutator *v) const override;
     StmtNode() : BaseStmtNode(T::_node_type) {}
     virtual ~StmtNode() {}
 };
@@ -151,7 +155,10 @@ struct StmtNode : public BaseStmtNode {
    base class for those handles. It manages the reference count,
    and dispatches visitors. */
 struct IRHandle : public IntrusivePtr<const IRNode> {
+    HALIDE_ALWAYS_INLINE
     IRHandle() : IntrusivePtr<const IRNode>() {}
+
+    HALIDE_ALWAYS_INLINE
     IRHandle(const IRNode *p) : IntrusivePtr<const IRNode>(p) {}
 
     /** Dispatch to the correct visitor method for this node. E.g. if
@@ -174,6 +181,10 @@ struct IRHandle : public IntrusivePtr<const IRNode> {
             return (const T *)ptr;
         }
         return nullptr;
+    }
+
+    IRNodeType node_type() const {
+        return ptr->node_type;
     }
 };
 
@@ -278,32 +289,41 @@ struct StringImm : public ExprNode<StringImm> {
  * can treat it as a value type. */
 struct Expr : public Internal::IRHandle {
     /** Make an undefined expression */
+    HALIDE_ALWAYS_INLINE
     Expr() : Internal::IRHandle() {}
 
     /** Make an expression from a concrete expression node pointer (e.g. Add) */
+    HALIDE_ALWAYS_INLINE
     Expr(const Internal::BaseExprNode *n) : IRHandle(n) {}
 
     /** Make an expression representing numeric constants of various types. */
     // @{
-    EXPORT explicit Expr(int8_t x)    : IRHandle(Internal::IntImm::make(Int(8), x)) {}
-    EXPORT explicit Expr(int16_t x)   : IRHandle(Internal::IntImm::make(Int(16), x)) {}
-    EXPORT          Expr(int32_t x)   : IRHandle(Internal::IntImm::make(Int(32), x)) {}
-    EXPORT explicit Expr(int64_t x)   : IRHandle(Internal::IntImm::make(Int(64), x)) {}
-    EXPORT explicit Expr(uint8_t x)   : IRHandle(Internal::UIntImm::make(UInt(8), x)) {}
-    EXPORT explicit Expr(uint16_t x)  : IRHandle(Internal::UIntImm::make(UInt(16), x)) {}
-    EXPORT explicit Expr(uint32_t x)  : IRHandle(Internal::UIntImm::make(UInt(32), x)) {}
-    EXPORT explicit Expr(uint64_t x)  : IRHandle(Internal::UIntImm::make(UInt(64), x)) {}
-    EXPORT          Expr(float16_t x) : IRHandle(Internal::FloatImm::make(Float(16), (double)x)) {}
-    EXPORT          Expr(float x)     : IRHandle(Internal::FloatImm::make(Float(32), x)) {}
-    EXPORT explicit Expr(double x)    : IRHandle(Internal::FloatImm::make(Float(64), x)) {}
+    explicit Expr(int8_t x)    : IRHandle(Internal::IntImm::make(Int(8), x)) {}
+    explicit Expr(int16_t x)   : IRHandle(Internal::IntImm::make(Int(16), x)) {}
+             Expr(int32_t x)   : IRHandle(Internal::IntImm::make(Int(32), x)) {}
+    explicit Expr(int64_t x)   : IRHandle(Internal::IntImm::make(Int(64), x)) {}
+    explicit Expr(uint8_t x)   : IRHandle(Internal::UIntImm::make(UInt(8), x)) {}
+    explicit Expr(uint16_t x)  : IRHandle(Internal::UIntImm::make(UInt(16), x)) {}
+    explicit Expr(uint32_t x)  : IRHandle(Internal::UIntImm::make(UInt(32), x)) {}
+    explicit Expr(uint64_t x)  : IRHandle(Internal::UIntImm::make(UInt(64), x)) {}
+             Expr(float16_t x) : IRHandle(Internal::FloatImm::make(Float(16), (double)x)) {}
+             Expr(float x)     : IRHandle(Internal::FloatImm::make(Float(32), x)) {}
+    explicit Expr(double x)    : IRHandle(Internal::FloatImm::make(Float(64), x)) {}
     // @}
 
     /** Make an expression representing a const string (i.e. a StringImm) */
-    EXPORT          Expr(const std::string &s) : IRHandle(Internal::StringImm::make(s)) {}
+    Expr(const std::string &s) : IRHandle(Internal::StringImm::make(s)) {}
+
+    /** Override get() to return a BaseExprNode * instead of an IRNode * */
+    HALIDE_ALWAYS_INLINE
+    const Internal::BaseExprNode *get() const {
+        return (const Internal::BaseExprNode *)ptr;
+    }
 
     /** Get the type of this expression node */
+    HALIDE_ALWAYS_INLINE
     Type type() const {
-        return ((const Internal::BaseExprNode *)ptr)->type;
+        return get()->type;
     }
 };
 
@@ -326,7 +346,9 @@ enum class DeviceAPI {
     GLSL,
     OpenGLCompute,
     Metal,
-    Hexagon
+    Hexagon,
+    HexagonDma,
+    D3D12Compute,
 };
 
 /** An array containing all the device apis. Useful for iterating
@@ -339,19 +361,65 @@ const DeviceAPI all_device_apis[] = {DeviceAPI::None,
                                      DeviceAPI::GLSL,
                                      DeviceAPI::OpenGLCompute,
                                      DeviceAPI::Metal,
-                                     DeviceAPI::Hexagon};
+                                     DeviceAPI::Hexagon,
+                                     DeviceAPI::HexagonDma,
+                                     DeviceAPI::D3D12Compute};
+
+/** An enum describing different address spaces to be used with Func::store_in. */
+enum class MemoryType {
+    /** Let Halide select a storage type automatically */
+    Auto,
+
+    /** Heap/global memory. Allocated using halide_malloc, or
+     * halide_device_malloc */
+    Heap,
+
+    /** Stack memory. Allocated using alloca. Requires a constant
+     * size. Corresponds to per-thread local memory on the GPU. If all
+     * accesses are at constant coordinates, may be promoted into the
+     * register file at the discretion of the register allocator. */
+    Stack,
+
+    /** Register memory. The allocation should be promoted into the
+     * register file. All stores must be at constant coordinates. May
+     * be spilled to the stack at the discretion of the register
+     * allocator. */
+    Register,
+
+    /** Allocation is stored in GPU shared memory. Also known as
+     * "local" in OpenCL, and "threadgroup" in metal. Can be shared
+     * across GPU threads within the same block. */
+    GPUShared,
+
+    /** Allocate Locked Cache Memory to act as local memory */
+    LockedCache,
+    /** Vector Tightly Coupled Memory. HVX (Hexagon) local memory available on
+     * v65+. This memory has higher performance and lower power. Ideal for
+     * intermediate buffers. Necessary for vgather-vscatter instructions
+     * on Hexagon */
+    VTCM,
+};
 
 namespace Internal {
 
-/** An enum describing a type of loop traversal. Used in schedules, and in
- * the For loop IR node. GPUBlock and GPUThread are implicitly parallel */
+/** An enum describing a type of loop traversal. Used in schedules,
+ * and in the For loop IR node. Serial is a conventional ordered for
+ * loop. Iterations occur in increasing order, and each iteration must
+ * appear to have finished before the next begins. Parallel, GPUBlock,
+ * and GPUThread are parallel and unordered: iterations may occur in
+ * any order, and multiple iterations may occur
+ * simultaneously. Vectorized and GPULane are parallel and
+ * synchronous: they act as if all iterations occur at the same time
+ * in lockstep. */
 enum class ForType {
     Serial,
     Parallel,
     Vectorized,
     Unrolled,
+    Extern,
     GPUBlock,
-    GPUThread
+    GPUThread,
+    GPULane,
 };
 
 
@@ -359,6 +427,12 @@ enum class ForType {
 struct Stmt : public IRHandle {
     Stmt() : IRHandle() {}
     Stmt(const BaseStmtNode *n) : IRHandle(n) {}
+
+    /** Override get() to return a BaseStmtNode * instead of an IRNode * */
+    HALIDE_ALWAYS_INLINE
+    const BaseStmtNode *get() const {
+        return (const Internal::BaseStmtNode *)ptr;
+    }
 
     /** This lets you use a Stmt as a key in a map of the form
      * map<Stmt, Foo, Stmt::Compare> */

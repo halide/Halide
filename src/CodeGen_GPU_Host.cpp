@@ -1,27 +1,29 @@
 #include <sstream>
 
 #include "CodeGen_GPU_Host.h"
-#include "CodeGen_PTX_Dev.h"
-#include "CodeGen_OpenCL_Dev.h"
+#include "CodeGen_Internal.h"
 #include "CodeGen_Metal_Dev.h"
-#include "CodeGen_OpenGL_Dev.h"
+#include "CodeGen_OpenCL_Dev.h"
 #include "CodeGen_OpenGLCompute_Dev.h"
+#include "CodeGen_OpenGL_Dev.h"
+#include "CodeGen_PTX_Dev.h"
+#include "CodeGen_D3D12Compute_Dev.h"
+#include "Debug.h"
+#include "ExprUsesVar.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
-#include "Debug.h"
-#include "CodeGen_Internal.h"
-#include "Util.h"
-#include "ExprUsesVar.h"
+#include "LLVM_Headers.h"
 #include "Simplify.h"
+#include "Util.h"
 #include "VaryingAttributes.h"
 
 namespace Halide {
 namespace Internal {
 
-using std::vector;
-using std::string;
 using std::map;
 using std::pair;
+using std::string;
+using std::vector;
 
 using namespace llvm;
 
@@ -47,7 +49,7 @@ private:
 
     using IRVisitor::visit;
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         if (CodeGen_GPU_Dev::is_gpu_var(op->name)) {
             internal_assert(is_zero(op->min));
         }
@@ -73,14 +75,14 @@ private:
         op->body.accept(this);
     }
 
-    void visit(const LetStmt *op) {
+    void visit(const LetStmt *op) override {
         if (expr_uses_var(shared_mem_size, op->name)) {
             shared_mem_size = Let::make(op->name, op->value, shared_mem_size);
         }
         op->body.accept(this);
     }
 
-    void visit(const Allocate *allocate) {
+    void visit(const Allocate *allocate) override {
         user_assert(!allocate->new_expr.defined()) << "Allocate node inside GPU kernel has custom new expression.\n" <<
             "(Memoization is not supported inside GPU kernels at present.)\n";
 
@@ -118,6 +120,10 @@ CodeGen_GPU_Host<CodeGen_CPU>::CodeGen_GPU_Host(Target target) : CodeGen_CPU(tar
     if (target.has_feature(Target::Metal)) {
         debug(1) << "Constructing Metal device codegen\n";
         cgdev[DeviceAPI::Metal] = new CodeGen_Metal_Dev(target);
+    }
+    if (target.has_feature(Target::D3D12Compute)) {
+        debug(1) << "Constructing Direct3D 12 Compute device codegen\n";
+        cgdev[DeviceAPI::D3D12Compute] = new CodeGen_D3D12Compute_Dev(target);
     }
 
     if (cgdev.empty()) {
@@ -291,13 +297,6 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                       }
                   });
 
-        // Propagate anything known about alignment into the kernel via the closure
-        for (size_t i = 0; i < closure_args.size(); i++) {
-            if (alignment_info.contains(closure_args[i].name)) {
-                closure_args[i].alignment = alignment_info.get(closure_args[i].name);
-            }
-        }
-
         // Halide allows passing of scalar float and integer arguments. For
         // OpenGL, pack these into vec4 uniforms and varying attributes
         if (loop->device_api == DeviceAPI::GLSL) {
@@ -355,13 +354,22 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                 kernel_name + "_args");
 
         // nullptr-terminated list of size_t's
-        llvm::Type *gpu_arg_sizes_arr_type = ArrayType::get(target_size_t_type,
-                                                            num_args+1);
-        Value *gpu_arg_sizes_arr =
-            create_alloca_at_entry(
-                gpu_arg_sizes_arr_type,
-                num_args+1, false,
-                kernel_name + "_arg_sizes");
+        llvm::Type *gpu_arg_sizes_arr_type = ArrayType::get(target_size_t_type, num_args+1);
+        llvm::ArrayType *gpu_arg_types_arr_type = ArrayType::get(type_t_type, num_args+1);
+        vector<Constant *> arg_types_array_entries;
+
+        std::string api_unique_name = gpu_codegen->api_unique_name();
+
+        Value *gpu_arg_sizes_arr = nullptr;
+        bool runtime_run_takes_types = gpu_codegen->kernel_run_takes_types();
+
+        if (!runtime_run_takes_types) {
+            gpu_arg_sizes_arr =
+                create_alloca_at_entry(
+                    gpu_arg_sizes_arr_type,
+                    num_args+1, false,
+                    kernel_name + "_arg_sizes");
+        }
 
         llvm::Type *gpu_arg_is_buffer_arr_type = ArrayType::get(i8_t, num_args+1);
         Value *gpu_arg_is_buffer_arr =
@@ -408,14 +416,23 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                                     0,
                                     i));
 
-            // store the size of the argument.
-            int size_bytes = (closure_args[i].is_buffer) ? 8 : closure_args[i].type.bytes();
-            builder->CreateStore(ConstantInt::get(target_size_t_type, size_bytes),
-                                 builder->CreateConstGEP2_32(
-                                    gpu_arg_sizes_arr_type,
+            if (runtime_run_takes_types) {
+                Constant *arg_type_fields[] = {
+                    ConstantInt::get(i8_t, closure_args[i].type.code()),
+                    ConstantInt::get(i8_t, closure_args[i].type.bits()),
+                    ConstantInt::get(i16_t, 1)
+                };
+                arg_types_array_entries.push_back(ConstantStruct::get(type_t_type, arg_type_fields));
+            } else {
+                // store the size of the argument.
+                int size_bytes = (closure_args[i].is_buffer) ? 8 : closure_args[i].type.bytes();
+                builder->CreateStore(ConstantInt::get(target_size_t_type, size_bytes),
+                                     builder->CreateConstGEP2_32(
+                                                                 gpu_arg_sizes_arr_type,
                                     gpu_arg_sizes_arr,
                                     0,
                                     i));
+            }
 
             builder->CreateStore(ConstantInt::get(i8_t, closure_args[i].is_buffer),
                                  builder->CreateConstGEP2_32(
@@ -431,12 +448,21 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                                 gpu_args_arr,
                                 0,
                                 num_args));
-        builder->CreateStore(ConstantInt::get(target_size_t_type, 0),
-                             builder->CreateConstGEP2_32(
-                                gpu_arg_sizes_arr_type,
-                                gpu_arg_sizes_arr,
-                                0,
-                                num_args));
+        if (runtime_run_takes_types) {
+            Constant *arg_type_fields[] = {
+                                       ConstantInt::get(i8_t, 0),
+                                       ConstantInt::get(i8_t, 0),
+                                       ConstantInt::get(i16_t, 0)
+            };
+            arg_types_array_entries.push_back(ConstantStruct::get(type_t_type, arg_type_fields));
+        } else {
+            builder->CreateStore(ConstantInt::get(target_size_t_type, 0),
+                                 builder->CreateConstGEP2_32(
+                                    gpu_arg_sizes_arr_type,
+                                    gpu_arg_sizes_arr,
+                                    0,
+                                    num_args));
+        }
         builder->CreateStore(ConstantInt::get(i8_t, 0),
                              builder->CreateConstGEP2_32(
                                 gpu_arg_is_buffer_arr_type,
@@ -444,7 +470,15 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                                 0,
                                 num_args));
 
-        std::string api_unique_name = gpu_codegen->api_unique_name();
+        GlobalVariable *arg_types_array_storage = nullptr;
+        if (runtime_run_takes_types) {
+            arg_types_array_storage = new GlobalVariable(
+                              *module,
+                               gpu_arg_types_arr_type,
+                               /*isConstant*/ true,
+                               GlobalValue::PrivateLinkage,
+                               ConstantArray::get(gpu_arg_types_arr_type, arg_types_array_entries));
+        }
 
         // TODO: only three dimensions can be passed to
         // cuLaunchKernel. How should we handle blkid[3]?
@@ -457,6 +491,12 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         debug(3) << "bounds.num_threads[0] = " << bounds.num_threads[0] << "\n";
         debug(3) << "bounds.num_threads[1] = " << bounds.num_threads[1] << "\n";
         debug(3) << "bounds.num_threads[2] = " << bounds.num_threads[2] << "\n";
+
+        Constant *zero = ConstantInt::get(i32_t, 0);
+        Value *zeros[] = {zero, zero};
+
+        // Order-of-evaluation is guaranteed to be in order in brace-init-lists,
+        // so the multiple calls to codegen here are fine
         Value *launch_args[] = {
             get_user_context(),
             builder->CreateLoad(get_module_state(api_unique_name)),
@@ -464,12 +504,14 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             codegen(bounds.num_blocks[0]), codegen(bounds.num_blocks[1]), codegen(bounds.num_blocks[2]),
             codegen(bounds.num_threads[0]), codegen(bounds.num_threads[1]), codegen(bounds.num_threads[2]),
             codegen(bounds.shared_mem_size),
-            builder->CreateConstGEP2_32(
-                gpu_arg_sizes_arr_type,
-                gpu_arg_sizes_arr,
-                0,
-                0,
-                "gpu_arg_sizes_ar_ref" + api_unique_name),
+            runtime_run_takes_types ?
+                ConstantExpr::getInBoundsGetElementPtr(gpu_arg_types_arr_type, arg_types_array_storage, zeros) :
+                builder->CreateConstGEP2_32(
+                    gpu_arg_sizes_arr_type,
+                    gpu_arg_sizes_arr,
+                    0,
+                    0,
+                    "gpu_arg_sizes_ar_ref" + api_unique_name),
             builder->CreateConstGEP2_32(
                 gpu_args_arr_type,
                 gpu_args_arr,
@@ -542,4 +584,5 @@ template class CodeGen_GPU_Host<CodeGen_PowerPC>;
 template class CodeGen_GPU_Host<CodeGen_WebAssembly>;
 #endif
 
-}}
+}  // namespace Internal
+}  // namespace Halide

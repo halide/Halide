@@ -11,26 +11,33 @@
 
 namespace {
 
-bool has_cdsp() {
-    const char *cdsp_location = "/dev/subsys_cdsp";
-    struct stat a;
-    if (::stat(cdsp_location, &a) != 0) {
-        return false;
-    }
-    return true;
+// There are at least two possible DSPs we might want to run on, the
+// 'cdsp' and the 'adsp'. Only newer devices have a cdsp, and when it
+// is present, we prefer to run on the cdsp.
+void *load_libadsprpc() {
+    // Try libcdsprpc.so first...
+    void *lib = dlopen("libcdsprpc.so", RTLD_LAZY | RTLD_LOCAL);
+    if (lib) return lib;
+
+    // Then try libadsprpc.so...
+    lib = dlopen("libadsprpc.so", RTLD_LAZY | RTLD_LOCAL);
+    if (lib) return lib;
+
+    return NULL;
 }
 
-void *libadsprpc = dlopen(has_cdsp() ? "libcdsprpc.so" : "libadsprpc.so", RTLD_LAZY | RTLD_LOCAL);
+
+void *libadsprpc = load_libadsprpc();
 
 template <typename T>
 T get_libadsprpc_symbol(const char *sym) {
     if (!libadsprpc) {
-        __android_log_print(ANDROID_LOG_ERROR, "halide", "Failed to load libadsprpc.so");
+        __android_log_print(ANDROID_LOG_ERROR, "halide", "Failed to load libcdsprpc.so or libadsprpc.so");
         return NULL;
     }
     T ret = (T)dlsym(libadsprpc, sym);
     if (!ret) {
-        __android_log_print(ANDROID_LOG_ERROR, "halide", "Failed to get libadsprpc.so symbol %s", sym);
+        __android_log_print(ANDROID_LOG_ERROR, "halide", "Failed to get libcdsprpc.so or libadsprpc.so symbol %s", sym);
     }
     return ret;
 }

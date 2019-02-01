@@ -1,30 +1,30 @@
 #include <algorithm>
 
-#include "TrimNoOps.h"
+#include "CSE.h"
+#include "CodeGen_GPU_Dev.h"
+#include "ExprUsesVar.h"
+#include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Simplify.h"
 #include "Solve.h"
-#include "IREquality.h"
-#include "ExprUsesVar.h"
 #include "Substitute.h"
-#include "CodeGen_GPU_Dev.h"
+#include "TrimNoOps.h"
 #include "Var.h"
-#include "CSE.h"
 
 namespace Halide {
 namespace Internal {
 
+using std::map;
+using std::pair;
 using std::string;
 using std::vector;
-using std::pair;
-using std::map;
 
 namespace {
 
 /** Remove identity functions, even if they have side-effects. */
-class StripIdentities : public IRMutator2 {
-    using IRMutator2::visit;
+class StripIdentities : public IRMutator {
+    using IRMutator::visit;
 
     Expr visit(const Call *op) override {
         if (op->is_intrinsic(Call::return_second) ||
@@ -32,7 +32,7 @@ class StripIdentities : public IRMutator2 {
             op->is_intrinsic(Call::likely_if_innermost)) {
             return mutate(op->args.back());
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 };
@@ -41,7 +41,7 @@ class StripIdentities : public IRMutator2 {
 class LoadsFromBuffer : public IRVisitor {
     using IRVisitor::visit;
 
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         if (op->name == buffer) {
             result = true;
         } else {
@@ -77,7 +77,7 @@ class IsNoOp : public IRVisitor {
         return a || b;
     }
 
-    void visit(const Store *op) {
+    void visit(const Store *op) override {
         if (op->value.type().is_handle() || is_zero(op->predicate)) {
             condition = const_false();
         } else {
@@ -96,7 +96,7 @@ class IsNoOp : public IRVisitor {
             }
 
             Expr equivalent_load = Load::make(op->value.type(), op->name, op->index,
-                                              Buffer<>(), Parameter(), op->predicate);
+                                              Buffer<>(), Parameter(), op->predicate, op->alignment);
             Expr is_no_op = equivalent_load == op->value;
             is_no_op = StripIdentities().mutate(is_no_op);
             // We need to call CSE since sometimes we have "let" stmt on the RHS
@@ -110,7 +110,7 @@ class IsNoOp : public IRVisitor {
         }
     }
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         if (is_zero(condition)) {
             return;
         }
@@ -126,7 +126,7 @@ class IsNoOp : public IRVisitor {
         condition = make_and(old_condition, make_or(condition, simplify(op->extent <= 0)));
     }
 
-    void visit(const IfThenElse *op) {
+    void visit(const IfThenElse *op) override {
         if (is_zero(condition)) {
             return;
         }
@@ -144,7 +144,7 @@ class IsNoOp : public IRVisitor {
         condition = total_condition;
     }
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         // If the loop calls an impure function, we can't remove the
         // call to it. Most notably: image_store.
         if (!op->is_pure()) {
@@ -162,11 +162,11 @@ class IsNoOp : public IRVisitor {
         }
     }
 
-    void visit(const LetStmt *op) {
+    void visit(const LetStmt *op) override {
         visit_let(op);
     }
 
-    void visit(const Let *op) {
+    void visit(const Let *op) override {
         visit_let(op);
     }
 
@@ -174,14 +174,14 @@ public:
     Expr condition = const_true();
 };
 
-class SimplifyUsingBounds : public IRMutator2 {
+class SimplifyUsingBounds : public IRMutator {
     struct ContainingLoop {
         string var;
         Interval i;
     };
     vector<ContainingLoop> containing_loops;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     // Can we prove a condition over the non-rectangular domain of the for loops we're in?
     bool provably_true_over_domain(Expr test) {
@@ -233,7 +233,7 @@ class SimplifyUsingBounds : public IRMutator2 {
 
     Expr visit(const Min *op) override {
         if (!op->type.is_int() || op->type.bits() < 32) {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         } else {
             Expr a = mutate(op->a);
             Expr b = mutate(op->b);
@@ -250,7 +250,7 @@ class SimplifyUsingBounds : public IRMutator2 {
 
     Expr visit(const Max *op) override {
         if (!op->type.is_int() || op->type.bits() < 32) {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         } else {
             Expr a = mutate(op->a);
             Expr b = mutate(op->b);
@@ -266,7 +266,7 @@ class SimplifyUsingBounds : public IRMutator2 {
 
     template<typename Cmp>
     Expr visit_cmp(const Cmp *op) {
-        Expr expr = IRMutator2::visit(op);
+        Expr expr = IRMutator::visit(op);
         if (provably_true_over_domain(expr)) {
             expr = make_one(op->type);
         } else if (provably_true_over_domain(!expr)) {
@@ -333,14 +333,14 @@ public:
     SimplifyUsingBounds() {}
 };
 
-class TrimNoOps : public IRMutator2 {
-    using IRMutator2::visit;
+class TrimNoOps : public IRMutator {
+    using IRMutator::visit;
 
     Stmt visit(const For *op) override {
         // Bounds of GPU loops can't depend on outer gpu loop vars
         if (CodeGen_GPU_Dev::is_gpu_var(op->name)) {
             debug(3) << "TrimNoOps found gpu loop var: " << op->name << "\n";
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
 
         Stmt body = mutate(op->body);
@@ -426,12 +426,12 @@ class TrimNoOps : public IRMutator2 {
     }
 };
 
-}
+}  // namespace
 
 Stmt trim_no_ops(Stmt s) {
     s = TrimNoOps().mutate(s);
     return s;
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

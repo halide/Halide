@@ -19,8 +19,7 @@ namespace Internal {
  * their constraints. */
 Stmt add_parameter_checks(Stmt s, const Target &t);
 
-
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

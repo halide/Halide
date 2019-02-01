@@ -18,22 +18,22 @@ public:
 
 protected:
 
-    Expr sorted_avg(Expr a, Expr b);
+    Expr sorted_avg(Expr a, Expr b) override;
 
     using CodeGen_Posix::visit;
 
     /** Nodes for which we want to emit specific neon intrinsics */
     // @{
-    void visit(const Cast *);
-    void visit(const Add *);
-    void visit(const Sub *);
-    void visit(const Div *);
-    void visit(const Mul *);
-    void visit(const Min *);
-    void visit(const Max *);
-    void visit(const Store *);
-    void visit(const Load *);
-    void visit(const Call *);
+    void visit(const Cast *) override;
+    void visit(const Add *) override;
+    void visit(const Sub *) override;
+    void visit(const Div *) override;
+    void visit(const Mul *) override;
+    void visit(const Min *) override;
+    void visit(const Max *) override;
+    void visit(const Store *) override;
+    void visit(const Load *) override;
+    void visit(const Call *) override;
     // @}
 
     /** Various patterns to peephole match against */
@@ -63,10 +63,10 @@ protected:
     llvm::Value *call_pattern(const Pattern &p, llvm::Type *t, const std::vector<llvm::Value *> &args);
     // @}
 
-    std::string mcpu() const;
-    std::string mattrs() const;
-    bool use_soft_float_abi() const;
-    int native_vector_bits() const;
+    std::string mcpu() const override;
+    std::string mattrs() const override;
+    bool use_soft_float_abi() const override;
+    int native_vector_bits() const override;
 
     // NEON can be disabled for older processors.
     bool neon_intrinsics_disabled() {
@@ -74,6 +74,7 @@ protected:
     }
 };
 
-}}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

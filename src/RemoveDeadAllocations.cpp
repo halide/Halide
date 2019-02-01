@@ -6,8 +6,8 @@
 namespace Halide {
 namespace Internal {
 
-class RemoveDeadAllocations : public IRMutator2 {
-    using IRMutator2::visit;
+class RemoveDeadAllocations : public IRMutator {
+    using IRMutator::visit;
 
     Scope<int> allocs;
 
@@ -24,7 +24,7 @@ class RemoveDeadAllocations : public IRMutator2 {
             }
         }
 
-        return IRMutator2::visit(op);
+        return IRMutator::visit(op);
     }
 
     Expr visit(const Load *op) override {
@@ -32,7 +32,7 @@ class RemoveDeadAllocations : public IRMutator2 {
             allocs.pop(op->name);
         }
 
-        return IRMutator2::visit(op);
+        return IRMutator::visit(op);
     }
 
     Stmt visit(const Store *op) override {
@@ -40,7 +40,14 @@ class RemoveDeadAllocations : public IRMutator2 {
             allocs.pop(op->name);
         }
 
-        return IRMutator2::visit(op);
+        return IRMutator::visit(op);
+    }
+
+    Expr visit(const Variable *op) override {
+        if (allocs.contains(op->name)) {
+            allocs.pop(op->name);
+        }
+        return op;
     }
 
     Stmt visit(const Allocate *op) override {
@@ -53,7 +60,8 @@ class RemoveDeadAllocations : public IRMutator2 {
         } else if (body.same_as(op->body)) {
             return op;
         } else {
-            return Allocate::make(op->name, op->type, op->extents, op->condition, body, op->new_expr, op->free_function);
+            return Allocate::make(op->name, op->type, op->memory_type, op->extents,
+                                  op->condition, body, op->new_expr, op->free_function);
         }
     }
 
@@ -71,6 +79,5 @@ Stmt remove_dead_allocations(Stmt s) {
     return RemoveDeadAllocations().mutate(s);
 }
 
-
-}
-}
+}  // namespace Internal
+}  // namespace Halide

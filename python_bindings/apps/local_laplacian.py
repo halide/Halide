@@ -3,12 +3,7 @@ Local Laplacian, see e.g. Aubry et al 2011, "Fast and Robust Pyramid-based Image
 """
 
 from __future__ import print_function
-
-# TODO: This allows you to use "true" div (vs floordiv) in Python2 for the / operator;
-# unfortunately it appears to also replace the overloads we've carefully added for Halide.
-# Figure out if it's possible to allow this to leave our Halide stuff unaffected.
-#
-# from __future__ import division
+from __future__ import division
 
 import halide as hl
 

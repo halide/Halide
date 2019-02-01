@@ -1,9 +1,9 @@
 #include "PrintLoopNest.h"
 #include "FindCalls.h"
-#include "Function.h"
 #include "Func.h"
-#include "RealizationOrder.h"
+#include "Function.h"
 #include "IRPrinter.h"
+#include "RealizationOrder.h"
 #include "ScheduleFunctions.h"
 #include "Simplify.h"
 #include "SimplifySpecializations.h"
@@ -15,9 +15,9 @@
 namespace Halide {
 namespace Internal {
 
+using std::map;
 using std::string;
 using std::vector;
-using std::map;
 
 class PrintLoopNest : public IRVisitor {
 public:
@@ -74,7 +74,7 @@ private:
         return trimmed_name.str();
     }
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         do_indent();
 
         out << op->for_type << ' ' << simplify_var_name(op->name);
@@ -106,7 +106,7 @@ private:
         indent -= 2;
     }
 
-    void visit(const Realize *op) {
+    void visit(const Realize *op) override {
         // If the storage and compute levels for this function are
         // distinct, print the store level too.
         auto it = env.find(op->name);
@@ -123,7 +123,7 @@ private:
         }
     }
 
-    void visit(const ProducerConsumer *op) {
+    void visit(const ProducerConsumer *op) override {
         do_indent();
         if (op->is_producer) {
             out << "produce " << simplify_func_name(op->name) << ":\n";
@@ -135,12 +135,12 @@ private:
         indent -= 2;
     }
 
-    void visit(const Provide *op) {
+    void visit(const Provide *op) override {
         do_indent();
         out << simplify_func_name(op->name) << "(...) = ...\n";
     }
 
-    void visit(const LetStmt *op) {
+    void visit(const LetStmt *op) override {
         if (is_const(op->value)) {
             constants.push(op->name, op->value);
             op->body.accept(this);
@@ -205,5 +205,5 @@ string print_loop_nest(const vector<Function> &output_funcs) {
     return sstr.str();
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

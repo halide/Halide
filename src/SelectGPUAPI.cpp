@@ -1,12 +1,12 @@
 #include "SelectGPUAPI.h"
-#include "IRMutator.h"
 #include "DeviceInterface.h"
+#include "IRMutator.h"
 
 namespace Halide {
 namespace Internal {
 
-class SelectGPUAPI : public IRMutator2 {
-    using IRMutator2::visit;
+class SelectGPUAPI : public IRMutator {
+    using IRMutator::visit;
 
     Target target;
 
@@ -16,7 +16,7 @@ class SelectGPUAPI : public IRMutator2 {
         if (op->name == "halide_default_device_interface") {
             return make_device_interface_call(default_api);
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
@@ -28,7 +28,7 @@ class SelectGPUAPI : public IRMutator2 {
 
         DeviceAPI old_parent_api = parent_api;
         parent_api = selected_api;
-        Stmt stmt = IRMutator2::visit(op);
+        Stmt stmt = IRMutator::visit(op);
         parent_api = old_parent_api;
 
         op = stmt.as<For>();
@@ -50,5 +50,5 @@ Stmt select_gpu_api(Stmt s, Target t) {
     return SelectGPUAPI(t).mutate(s);
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

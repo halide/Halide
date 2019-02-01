@@ -1,7 +1,7 @@
 #include "RegionCosts.h"
-#include "IRVisitor.h"
-#include "IRMutator.h"
 #include "FindCalls.h"
+#include "IRMutator.h"
+#include "IRVisitor.h"
 #include "PartitionLoops.h"
 #include "RealizationOrder.h"
 #include "Simplify.h"
@@ -9,9 +9,9 @@
 namespace Halide {
 namespace Internal {
 
-using std::string;
 using std::map;
 using std::set;
+using std::string;
 using std::vector;
 
 namespace {
@@ -21,7 +21,7 @@ class FindImageInputs : public IRVisitor {
     using IRVisitor::visit;
     set<string> seen_image_param;
 
-    void visit(const Call *call) {
+    void visit(const Call *call) override {
         if (call->call_type == Call::Image) {
             input_type[call->name] = call->type;
 
@@ -61,22 +61,22 @@ class ExprCost : public IRVisitor {
     using IRVisitor::visit;
 
     // Immediate values and variables do not incur any cost.
-    void visit(const IntImm *) {}
-    void visit(const UIntImm *) {}
-    void visit(const FloatImm *) {}
-    void visit(const StringImm *) {}
-    void visit(const Variable *) {}
+    void visit(const IntImm *) override {}
+    void visit(const UIntImm *) override {}
+    void visit(const FloatImm *) override {}
+    void visit(const StringImm *) override {}
+    void visit(const Variable *) override {}
 
-    void visit(const Cast *op) {
+    void visit(const Cast *op) override {
         op->value.accept(this);
-        cost.arith += 1;
+        arith += 1;
     }
 
     template<typename T>
     void visit_binary_operator(const T *op, int op_cost) {
         op->a.accept(this);
         op->b.accept(this);
-        cost.arith += op_cost;
+        arith += op_cost;
     }
 
     // The costs of all the simple binary operations is set to one.
@@ -84,38 +84,40 @@ class ExprCost : public IRVisitor {
     // beneficial. Write a test case to validate this and update the costs
     // accordingly.
 
-    void visit(const Add *op) { visit_binary_operator(op, 1); }
-    void visit(const Sub *op) { visit_binary_operator(op, 1); }
-    void visit(const Mul *op) { visit_binary_operator(op, 1); }
-    void visit(const Div *op) { visit_binary_operator(op, 1); }
-    void visit(const Mod *op) { visit_binary_operator(op, 1); }
-    void visit(const Min *op) { visit_binary_operator(op, 1); }
-    void visit(const Max *op) { visit_binary_operator(op, 1); }
-    void visit(const EQ *op) { visit_binary_operator(op, 1); }
-    void visit(const NE *op) { visit_binary_operator(op, 1); }
-    void visit(const LT *op) { visit_binary_operator(op, 1); }
-    void visit(const LE *op) { visit_binary_operator(op, 1); }
-    void visit(const GT *op) { visit_binary_operator(op, 1); }
-    void visit(const GE *op) { visit_binary_operator(op, 1); }
-    void visit(const And *op) { visit_binary_operator(op, 1); }
-    void visit(const Or *op) { visit_binary_operator(op, 1); }
+    void visit(const Add *op) override { visit_binary_operator(op, 1); }
+    void visit(const Sub *op) override { visit_binary_operator(op, 1); }
+    void visit(const Mul *op) override { visit_binary_operator(op, 1); }
+    void visit(const Div *op) override { visit_binary_operator(op, 1); }
+    void visit(const Mod *op) override { visit_binary_operator(op, 1); }
+    void visit(const Min *op) override { visit_binary_operator(op, 1); }
+    void visit(const Max *op) override { visit_binary_operator(op, 1); }
+    void visit(const EQ *op) override { visit_binary_operator(op, 1); }
+    void visit(const NE *op) override { visit_binary_operator(op, 1); }
+    void visit(const LT *op) override { visit_binary_operator(op, 1); }
+    void visit(const LE *op) override { visit_binary_operator(op, 1); }
+    void visit(const GT *op) override { visit_binary_operator(op, 1); }
+    void visit(const GE *op) override { visit_binary_operator(op, 1); }
+    void visit(const And *op) override { visit_binary_operator(op, 1); }
+    void visit(const Or *op) override { visit_binary_operator(op, 1); }
 
-    void visit(const Not *op) {
+    void visit(const Not *op) override {
         op->a.accept(this);
-        cost.arith += 1;
+        arith += 1;
     }
 
-    void visit(const Select *op) {
+    void visit(const Select *op) override {
         op->condition.accept(this);
         op->true_value.accept(this);
         op->false_value.accept(this);
-        cost.arith += 1;
+        arith += 1;
     }
 
-    void visit(const Call *call) {
+    void visit(const Call *call) override {
         if (call->is_intrinsic(Call::if_then_else)) {
             internal_assert(call->args.size() == 3);
-            cost = Cost(0, 0);
+
+            int64_t current_arith = arith, current_memory = memory;
+            arith = 0, memory = 0;
             call->args[2].accept(this);
 
             // Check if this if_then_else is because of tracing or print_when.
@@ -123,24 +125,26 @@ class ExprCost : public IRVisitor {
             // the false expr since the true expr is debugging/tracing code.
             const Call *true_value_call = call->args[1].as<Call>();
             if (!true_value_call || !true_value_call->is_intrinsic(Call::return_second)) {
-                Cost false_cost = cost;
+                int64_t false_cost_arith = arith;
+                int64_t false_cost_memory = memory;
 
                 // For if_then_else intrinsic, the cost is the max of true and
                 // false branch costs plus the predicate cost.
-                Expr arith = cost.arith;
-                Expr memory = cost.memory;
-
-                cost = Cost(0, 0);
+                arith = 0, memory = 0;
                 call->args[0].accept(this);
-                Cost pred_cost = cost;
+                int64_t pred_cost_arith = arith;
+                int64_t pred_cost_memory = memory;
 
-                cost = Cost(0, 0);
+                arith = 0, memory = 0;
                 call->args[1].accept(this);
-                Cost true_cost = cost;
+                int64_t true_cost_arith = arith;
+                int64_t true_cost_memory = memory;
 
-                cost = Cost(pred_cost.arith + max(true_cost.arith, false_cost.arith),
-                            pred_cost.memory + max(true_cost.memory, false_cost.memory));
+                arith = pred_cost_arith + std::max(true_cost_arith, false_cost_arith);
+                memory = pred_cost_memory + std::max(true_cost_memory, false_cost_memory);
             }
+            arith += current_arith;
+            memory += current_memory;
             return;
         } else if (call->is_intrinsic(Call::return_second)) {
             // For return_second, since the first expr would usually either be a
@@ -153,25 +157,18 @@ class ExprCost : public IRVisitor {
 
         if (call->call_type == Call::Halide || call->call_type == Call::Image) {
             // Each call also counts as an op since it results in a load instruction.
-            cost.arith += 1;
-            cost.memory += call->type.bytes();
-
-            auto iter = detailed_byte_loads.find(call->name);
-            if (iter != detailed_byte_loads.end()) {
-                internal_assert(iter->second.defined());
-                iter->second = simplify(iter->second + make_const(Int(64), call->type.bytes()));
-            } else {
-                detailed_byte_loads.emplace(call->name, make_const(Int(64), call->type.bytes()));
-            }
+            arith += 1;
+            memory += call->type.bytes();
+            detailed_byte_loads[call->name] += (int64_t)call->type.bytes();
         } else if (call->is_extern()) {
             // TODO: Suffix based matching is kind of sketchy; but going ahead with
             // it for now. Also not all the PureExtern's are accounted for yet.
             if (ends_with(call->name, "_f64")) {
-                cost.arith += 20;
+                arith += 20;
             } else if (ends_with(call->name, "_f32")) {
-                cost.arith += 10;
+                arith += 10;
             } else if (ends_with(call->name, "_f16")) {
-                cost.arith += 5;
+                arith += 5;
             } else {
                 // There is no visibility into an extern stage so there is no
                 // way to know the cost of the call statically. Modeling the
@@ -187,18 +184,18 @@ class ExprCost : public IRVisitor {
                     call->is_intrinsic(Call::bitwise_or) || call->is_intrinsic(Call::shift_left) ||
                     call->is_intrinsic(Call::shift_right) || call->is_intrinsic(Call::div_round_to_zero) ||
                     call->is_intrinsic(Call::mod_round_to_zero) || call->is_intrinsic(Call::undef)) {
-                cost.arith += 1;
+                arith += 1;
             } else if (call->is_intrinsic(Call::abs) || call->is_intrinsic(Call::absd) ||
                        call->is_intrinsic(Call::lerp) || call->is_intrinsic(Call::random) ||
                        call->is_intrinsic(Call::count_leading_zeros) ||
                        call->is_intrinsic(Call::count_trailing_zeros)) {
-                cost.arith += 5;
+                arith += 5;
             } else if (call->is_intrinsic(Call::likely) ||
                        call->is_intrinsic(Call::likely_if_innermost)) {
                 // Likely does not result in actual operations.
             } else {
                 // For other intrinsics, use 1 for the arithmetic cost.
-                cost.arith += 1;
+                arith += 1;
                 user_warning << "Unhandled intrinsic call " << call->name << '\n';
             }
         }
@@ -208,40 +205,41 @@ class ExprCost : public IRVisitor {
         }
     }
 
-    void visit(const Shuffle *op) {
-        cost.arith += 1;
+    void visit(const Shuffle *op) override {
+        arith += 1;
     }
 
-    void visit(const Let *let) {
+    void visit(const Let *let) override {
         let->value.accept(this);
         let->body.accept(this);
     }
 
     // None of the following IR nodes should be encountered when traversing the
     // IR at the level at which the auto scheduler operates.
-    void visit(const Load *) { internal_assert(false); }
-    void visit(const Ramp *) { internal_assert(false); }
-    void visit(const Broadcast *) { internal_assert(false); }
-    void visit(const LetStmt *) { internal_assert(false); }
-    void visit(const AssertStmt *) { internal_assert(false); }
-    void visit(const ProducerConsumer *) { internal_assert(false); }
-    void visit(const For *) { internal_assert(false); }
-    void visit(const Store *) { internal_assert(false); }
-    void visit(const Provide *) { internal_assert(false); }
-    void visit(const Allocate *) { internal_assert(false); }
-    void visit(const Free *) { internal_assert(false); }
-    void visit(const Realize *) { internal_assert(false); }
-    void visit(const Block *) { internal_assert(false); }
-    void visit(const IfThenElse *) { internal_assert(false); }
-    void visit(const Evaluate *) { internal_assert(false); }
+    void visit(const Load *) override { internal_assert(false); }
+    void visit(const Ramp *) override { internal_assert(false); }
+    void visit(const Broadcast *) override { internal_assert(false); }
+    void visit(const LetStmt *) override { internal_assert(false); }
+    void visit(const AssertStmt *) override { internal_assert(false); }
+    void visit(const ProducerConsumer *) override { internal_assert(false); }
+    void visit(const For *) override { internal_assert(false); }
+    void visit(const Store *) override { internal_assert(false); }
+    void visit(const Provide *) override { internal_assert(false); }
+    void visit(const Allocate *) override { internal_assert(false); }
+    void visit(const Free *) override { internal_assert(false); }
+    void visit(const Realize *) override { internal_assert(false); }
+    void visit(const Block *) override { internal_assert(false); }
+    void visit(const IfThenElse *) override { internal_assert(false); }
+    void visit(const Evaluate *) override { internal_assert(false); }
 
 public:
-    Cost cost;
+    int64_t arith;
+    int64_t memory;
     // Detailed breakdown of bytes loaded by the allocation or function
     // they are loaded from.
-    map<string, Expr> detailed_byte_loads;
+    map<string, int64_t> detailed_byte_loads;
 
-    ExprCost() : cost(Cost(0, 0)) {}
+    ExprCost() : arith(0), memory(0) {}
 };
 
 // Return the number of bytes required to store a single value of the
@@ -264,8 +262,8 @@ Expr get_func_value_size(const Function &f) {
 //
 // TODO: Comment this out for now until we modify the compute expr cost and
 // detailed byte loads functions to account for likely exprs.
-/*class LikelyExpression : public IRMutator2 {
-    using IRMutator2::visit;
+/*class LikelyExpression : public IRMutator {
+    using IRMutator::visit;
 
     Expr visit(const Min *op) override {
         IRVisitor::visit(op);
@@ -307,8 +305,7 @@ Cost compute_expr_cost(Expr expr) {
     expr = simplify(expr);
     ExprCost cost_visitor;
     expr.accept(&cost_visitor);
-    cost_visitor.cost.simplify();
-    return cost_visitor.cost;
+    return Cost(cost_visitor.arith, cost_visitor.memory);
 }
 
 map<string, Expr> compute_expr_detailed_byte_loads(Expr expr) {
@@ -317,12 +314,19 @@ map<string, Expr> compute_expr_detailed_byte_loads(Expr expr) {
     expr = simplify(expr);
     ExprCost cost_visitor;
     expr.accept(&cost_visitor);
-    return cost_visitor.detailed_byte_loads;
+
+    map<string, Expr> loads;
+    for (const auto &iter : cost_visitor.detailed_byte_loads) {
+        loads.emplace(iter.first, Expr(iter.second));
+    }
+    return loads;
 }
 
 } // anonymous namespace
 
-RegionCosts::RegionCosts(const map<string, Function> &_env) : env(_env) {
+RegionCosts::RegionCosts(const map<string, Function> &_env,
+                         const vector<string> &_order)
+        : env(_env), order(_order) {
     for (const auto &kv : env) {
         // Pre-compute the function costs without any inlining.
         func_cost[kv.first] = get_func_cost(kv.second);
@@ -440,7 +444,7 @@ RegionCosts::stage_detailed_load_costs(string func, int stage,
     } else {
         Definition def = get_stage_definition(curr_f, stage);
         for (const auto &e : def.values()) {
-            Expr inlined_expr = perform_inline(e, env, inlines);
+            Expr inlined_expr = perform_inline(e, env, inlines, order);
             inlined_expr = simplify(inlined_expr);
 
             map<string, Expr> expr_load_costs = compute_expr_detailed_byte_loads(inlined_expr);
@@ -551,7 +555,8 @@ RegionCosts::detailed_load_costs(const map<string, Box> &regions,
     return load_costs;
 }
 
-Cost RegionCosts::get_func_stage_cost(const Function &f, int stage, const set<string> &inlines) {
+Cost RegionCosts::get_func_stage_cost(const Function &f, int stage,
+                                      const set<string> &inlines) {
     if (f.has_extern_definition()) {
         return Cost();
     }
@@ -561,7 +566,7 @@ Cost RegionCosts::get_func_stage_cost(const Function &f, int stage, const set<st
     Cost cost(0, 0);
 
     for (const auto &e : def.values()) {
-        Expr inlined_expr = perform_inline(e, env, inlines);
+        Expr inlined_expr = perform_inline(e, env, inlines, order);
         inlined_expr = simplify(inlined_expr);
 
         Cost expr_cost = compute_expr_cost(inlined_expr);
@@ -576,7 +581,7 @@ Cost RegionCosts::get_func_stage_cost(const Function &f, int stage, const set<st
 
     if (!f.is_pure()) {
         for (const auto &arg : def.args()) {
-            Expr inlined_arg = perform_inline(arg, env, inlines);
+            Expr inlined_arg = perform_inline(arg, env, inlines, order);
             inlined_arg = simplify(inlined_arg);
 
             Cost expr_cost = compute_expr_cost(inlined_arg);
@@ -637,8 +642,7 @@ Expr RegionCosts::region_footprint(const map<string, Box> &regions,
         }
     }
 
-    // Realization order
-    vector<string> order = realization_order(outs, env).first;
+    vector<string> top_order = topological_order(outs, env);
 
     Expr working_set_size = make_zero(Int(64));
     Expr curr_size = make_zero(Int(64));
@@ -656,7 +660,7 @@ Expr RegionCosts::region_footprint(const map<string, Box> &regions,
         }
     }
 
-    for (const auto &f : order) {
+    for (const auto &f : top_order) {
         if (regions.find(f) != regions.end()) {
             curr_size += get_element(func_sizes, f);
         }
@@ -758,5 +762,5 @@ void Cost::simplify() {
     }
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

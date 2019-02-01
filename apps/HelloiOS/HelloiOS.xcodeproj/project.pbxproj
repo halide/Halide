@@ -55,7 +55,7 @@
 		3D6C4DCC198051DB002AD41E /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Images.xcassets; sourceTree = "<group>"; };
 		3D6C4DE919805225002AD41E /* HalideView.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = HalideView.h; sourceTree = "<group>"; };
 		3D6C4DEA19805225002AD41E /* HalideView.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = HalideView.mm; sourceTree = "<group>"; };
-		3D6C4DEC1980522C002AD41E /* reaction_diffusion_2_generator.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = reaction_diffusion_2_generator.cpp; sourceTree = "<group>"; };
+		3D6C4DEC1980522C002AD41E /* reaction_diffusion_2_generator.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = reaction_diffusion_2_generator.cpp; sourceTree = "<group>"; usesTabs = 0; };
 		3D6C4DF519805438002AD41E /* QuartzCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = System/Library/Frameworks/QuartzCore.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
@@ -184,7 +184,7 @@
 		3D6C4DAF198051DB002AD41E /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
-				LastUpgradeCheck = 0820;
+				LastUpgradeCheck = 1000;
 				ORGANIZATIONNAME = "Andrew Adams";
 			};
 			buildConfigurationList = 3D6C4DB2198051DB002AD41E /* Build configuration list for PBXProject "HelloiOS" */;
@@ -244,7 +244,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/bash;
-			shellScript = "echo \"${SRCROOT}\"\ncd \"${SRCROOT}/HelloiOS\"\n\n# Echoing commands to output makes it easier to debug XCode failures.\n# Failure on undefined vars is always a good idea.\nset -ex\n\n# xcode puts all sorts of junk in the environment which\n# prevents building a binary for osx (instead of ios).\n# sudo'ing to yourself gives a fresh environment.\nsudo -u ${USER} \\\nc++ reaction_diffusion_2_generator.cpp ${SRCROOT}/../../tools/GenGen.cpp \\\n-std=c++11 \\\n-fno-rtti \\\n-I ${SRCROOT}/../../include \\\n-I ${SRCROOT}/../../build/include \\\n-I ${SRCROOT}/../../tools \\\n-arch x86_64 \\\n-L ${SRCROOT}/../../bin \\\n-lHalide \\\n-o ${DERIVED_FILE_DIR}/reaction_diffusion_2_generator\n\n\nif [ \"${arch}\" == \"x86_64\" ]\nthen\n# assume simulator, which requires osx rather than ios\nTARGET=x86-64-osx\nelse\n# TODO: sniff arm-32 builds here; for now, just assume arm-64 only\nTARGET=arm-64-ios\nfi\n\nfor GEN in init update render; do\n(cd ${DERIVED_FILE_DIR}; \\\nDYLD_LIBRARY_PATH=${SRCROOT}/../../bin:${SRCROOT}/../../build/lib \\\n./reaction_diffusion_2_generator -g reaction_diffusion_2_${GEN} -f reaction_diffusion_2_${GEN} -n reaction_diffusion_2_${GEN} -o ${DERIVED_FILE_DIR} target=${TARGET}-user_context)\ndone\n\nfor GEN in init update render; do\n(cd ${DERIVED_FILE_DIR}; \\\nDYLD_LIBRARY_PATH=${SRCROOT}/../../bin:${SRCROOT}/../../build/lib \\\n./reaction_diffusion_2_generator -g reaction_diffusion_2_${GEN} -f reaction_diffusion_2_metal_${GEN} -n reaction_diffusion_2_metal_${GEN} -o ${DERIVED_FILE_DIR} target=${TARGET}-metal-user_context)\ndone\n";
+			shellScript = "echo \"${SRCROOT}\"\ncd \"${SRCROOT}/HelloiOS\"\n\nenv\n# Echoing commands to output makes it easier to debug XCode failures.\n# Failure on undefined vars is always a good idea.\nset -ex\n\n# xcode puts all sorts of junk in the environment which\n# prevents building a binary for osx (instead of ios).\n# sudo'ing to yourself gives a fresh environment.\nsudo -u ${USER} \\\nc++ reaction_diffusion_2_generator.cpp ${SRCROOT}/../../tools/GenGen.cpp \\\n-std=c++11 \\\n-fno-rtti \\\n-I ${SRCROOT}/../../include \\\n-I ${SRCROOT}/../../build/include \\\n-I ${SRCROOT}/../../tools \\\n-arch x86_64 \\\n-L ${SRCROOT}/../../bin \\\n-lHalide \\\n-o ${DERIVED_FILE_DIR}/reaction_diffusion_2_generator\n\necho \"${ARCHS}\"\n\nif [ \"${ARCHS}\" == \"x86_64\" ]\nthen\n# assume simulator, which requires osx rather than ios\nTARGET=x86-64-osx\nelse\n# TODO: sniff arm-32 builds here; for now, just assume arm-64 only\nTARGET=arm-64-ios\nfi\n\nfor GEN in init update render; do\n(cd ${DERIVED_FILE_DIR}; \\\nDYLD_LIBRARY_PATH=${SRCROOT}/../../bin:${SRCROOT}/../../build/lib \\\n./reaction_diffusion_2_generator -g reaction_diffusion_2_${GEN} -f reaction_diffusion_2_${GEN} -n reaction_diffusion_2_${GEN} -o ${DERIVED_FILE_DIR} target=${TARGET}-user_context)\ndone\n\nfor GEN in init update render; do\n(cd ${DERIVED_FILE_DIR}; \\\nDYLD_LIBRARY_PATH=${SRCROOT}/../../bin:${SRCROOT}/../../build/lib \\\n./reaction_diffusion_2_generator -g reaction_diffusion_2_${GEN} -f reaction_diffusion_2_metal_${GEN} -n reaction_diffusion_2_metal_${GEN} -o ${DERIVED_FILE_DIR} target=${TARGET}-metal-user_context)\ndone\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -282,14 +282,22 @@
 				CLANG_CXX_LIBRARY = "libc++";
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
 				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
 				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
 				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
 				CLANG_WARN_EMPTY_BODY = YES;
 				CLANG_WARN_ENUM_CONVERSION = YES;
 				CLANG_WARN_INFINITE_RECURSION = YES;
 				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
 				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
 				CLANG_WARN_SUSPICIOUS_MOVE = YES;
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
@@ -327,14 +335,22 @@
 				CLANG_CXX_LIBRARY = "libc++";
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
 				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
 				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
 				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
 				CLANG_WARN_EMPTY_BODY = YES;
 				CLANG_WARN_ENUM_CONVERSION = YES;
 				CLANG_WARN_INFINITE_RECURSION = YES;
 				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
 				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
 				CLANG_WARN_SUSPICIOUS_MOVE = YES;
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
@@ -364,7 +380,7 @@
 				ASSETCATALOG_COMPILER_LAUNCHIMAGE_NAME = LaunchImage;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				DEBUG_INFORMATION_FORMAT = dwarf;
-				ENABLE_BITCODE = NO;
+				ENABLE_BITCODE = YES;
 				GCC_INPUT_FILETYPE = sourcecode.cpp.objcpp;
 				GCC_PRECOMPILE_PREFIX_HEADER = YES;
 				GCC_PREFIX_HEADER = "HelloiOS/HelloiOS-Prefix.pch";
@@ -384,7 +400,7 @@
 				ASSETCATALOG_COMPILER_LAUNCHIMAGE_NAME = LaunchImage;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				DEBUG_INFORMATION_FORMAT = dwarf;
-				ENABLE_BITCODE = NO;
+				ENABLE_BITCODE = YES;
 				GCC_INPUT_FILETYPE = sourcecode.cpp.objcpp;
 				GCC_PRECOMPILE_PREFIX_HEADER = YES;
 				GCC_PREFIX_HEADER = "HelloiOS/HelloiOS-Prefix.pch";

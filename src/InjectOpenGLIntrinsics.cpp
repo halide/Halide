@@ -1,10 +1,10 @@
 #include "InjectOpenGLIntrinsics.h"
+#include "CodeGen_GPU_Dev.h"
+#include "FuseGPUThreadLoops.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "CodeGen_GPU_Dev.h"
-#include "Substitute.h"
-#include "FuseGPUThreadLoops.h"
 #include "Scope.h"
+#include "Substitute.h"
 
 namespace Halide {
 namespace Internal {
@@ -13,7 +13,7 @@ using std::string;
 using std::vector;
 
 /** Normalizes image loads/stores and produces glsl_texture_load/stores. */
-class InjectOpenGLIntrinsics : public IRMutator2 {
+class InjectOpenGLIntrinsics : public IRMutator {
 public:
     InjectOpenGLIntrinsics()
         : inside_kernel_loop(false) {
@@ -21,7 +21,7 @@ public:
     Scope<int> scope;
     bool inside_kernel_loop;
 private:
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Expr visit(const Call *call) override {
         if (call->is_intrinsic(Call::image_load)) {
@@ -86,7 +86,7 @@ private:
             return Call::make(call->type, Call::glsl_texture_store,
                               args, Call::Intrinsic);
         } else {
-            return IRMutator2::visit(call);
+            return IRMutator::visit(call);
         }
     }
 };
@@ -96,5 +96,5 @@ Stmt inject_opengl_intrinsics(Stmt s) {
     return gl.mutate(s);
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

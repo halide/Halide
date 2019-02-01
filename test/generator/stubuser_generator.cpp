@@ -27,6 +27,9 @@ public:
     Output<Buffer<uint8_t>> calculated_output{"calculated_output" };
     Output<Buffer<float>> float32_buffer_output{"float32_buffer_output" };
     Output<Buffer<int32_t>> int32_buffer_output{"int32_buffer_output" };
+    Output<Buffer<uint8_t>> array_test_output{"array_test_output" };
+    // We can infer the tupled-output-type from the Stub
+    Output<Buffer<>> tupled_output{ "tupled_output", 3 };
 
     void generate() {
         Var x{"x"}, y{"y"}, c{"c"};
@@ -39,6 +42,7 @@ public:
         StubTest::Inputs inputs;
         inputs.typed_buffer_input = constant_image;
         inputs.untyped_buffer_input = input;
+        inputs.array_buffer_input = { input, input };
         inputs.simple_input = input;
         inputs.array_input = { input };
         inputs.float_arg = 1.234f;
@@ -57,6 +61,8 @@ public:
 
         float32_buffer_output = out.typed_buffer_output;
         int32_buffer_output = out.untyped_buffer_output;
+        array_test_output = out.array_buffer_output[1];
+        tupled_output = out.tupled_output;
 
         const float kOffset = 2.f;
         calculated_output(x, y, c) = cast<uint8_t>(out.tuple_output(x, y, c)[1] + kOffset);

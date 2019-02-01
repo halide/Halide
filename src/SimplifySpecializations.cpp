@@ -1,14 +1,14 @@
 #include "SimplifySpecializations.h"
-#include "IROperator.h"
-#include "IRMutator.h"
-#include "Simplify.h"
-#include "Substitute.h"
 #include "Definition.h"
 #include "IREquality.h"
+#include "IRMutator.h"
+#include "IROperator.h"
+#include "Simplify.h"
+#include "Substitute.h"
 
 #include <set>
 
-namespace Halide{
+namespace Halide {
 namespace Internal {
 
 using std::map;
@@ -29,9 +29,9 @@ void substitute_value_in_var(const string &var, Expr value, vector<Definition> &
     }
 }
 
-class SimplifyUsingFact : public IRMutator2 {
+class SimplifyUsingFact : public IRMutator {
 public:
-    using IRMutator2::mutate;
+    using IRMutator::mutate;
 
     Expr mutate(const Expr &e) override {
         if (e.type().is_bool()) {
@@ -47,7 +47,7 @@ public:
                 return const_false();
             }
         }
-        return IRMutator2::mutate(e);
+        return IRMutator::mutate(e);
     }
 
     Expr fact;
@@ -151,9 +151,7 @@ vector<Definition> propagate_specialization_in_definition(Definition &def, const
     return result;
 }
 
-}
-
-
+}  // namespace
 
 void simplify_specializations(map<string, Function> &env) {
     for (auto &iter : env) {
@@ -164,5 +162,5 @@ void simplify_specializations(map<string, Function> &env) {
     }
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

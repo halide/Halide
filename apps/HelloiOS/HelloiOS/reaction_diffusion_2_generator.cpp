@@ -135,7 +135,7 @@ public:
             new_state.update(4)
                 .reorder(c, clobber.x)
                 .unroll(c)
-                .gpu_tile(clobber.x, clobber.y, 1, 1);
+                .gpu_tile(clobber.x, clobber.y, rxi, ryi, 1, 1);
 
             state
                 .dim(0).set_stride(3)
@@ -163,6 +163,7 @@ public:
 private:
     Func blur_x, blur_y, blur, clamped;
     Var x, y, xi, yi, c;
+    Halide::RVar rxi, ryi;
     RDom clobber;
 };
 

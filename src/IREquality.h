@@ -13,8 +13,8 @@ namespace Internal {
 /** A compare struct suitable for use in std::map and std::set that
  * computes a lexical ordering on IR nodes. */
 struct IRDeepCompare {
-    EXPORT bool operator()(const Expr &a, const Expr &b) const;
-    EXPORT bool operator()(const Stmt &a, const Stmt &b) const;
+    bool operator()(const Expr &a, const Expr &b) const;
+    bool operator()(const Stmt &a, const Stmt &b) const;
 };
 
 /** Lossily track known equal exprs with a cache. On collision, the
@@ -98,7 +98,7 @@ struct ExprWithCompareCache {
     ExprWithCompareCache(const Expr &e, IRCompareCache *c) : expr(e), cache(c) {}
 
     /** The comparison uses (and updates) the cache */
-    EXPORT bool operator<(const ExprWithCompareCache &other) const;
+    bool operator<(const ExprWithCompareCache &other) const;
 };
 
 /** Compare IR nodes for equality of value. Traverses entire IR
@@ -106,17 +106,15 @@ struct ExprWithCompareCache {
  * comparing non-CSE'd Exprs, use graph_equal, which is safe for nasty
  * graphs of IR nodes. */
 // @{
-EXPORT bool equal(const Expr &a, const Expr &b);
-EXPORT bool equal(const Stmt &a, const Stmt &b);
-EXPORT bool graph_equal(const Expr &a, const Expr &b);
-EXPORT bool graph_equal(const Stmt &a, const Stmt &b);
+bool equal(const Expr &a, const Expr &b);
+bool equal(const Stmt &a, const Stmt &b);
+bool graph_equal(const Expr &a, const Expr &b);
+bool graph_equal(const Stmt &a, const Stmt &b);
 // @}
 
+void ir_equality_test();
 
-
-EXPORT void ir_equality_test();
-
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

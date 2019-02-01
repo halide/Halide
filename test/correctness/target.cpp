@@ -1,5 +1,5 @@
-#include <stdio.h>
 #include "Halide.h"
+#include <stdio.h>
 
 using namespace Halide;
 
@@ -186,6 +186,17 @@ int main(int argc, char **argv) {
     }
     if (t1.natural_vector_size<float>() != 4) {
        printf("natural_vector_size failure\n");
+       return -1;
+    }
+
+    t1 = Target("x86-64-linux-trace_all");
+    ts = t1.to_string();
+    if (!t1.features_all_of({Target::TraceLoads, Target::TraceStores, Target::TraceRealizations})) {
+       printf("trace_all failure: %s\n", ts.c_str());
+       return -1;
+    }
+    if (ts != "x86-64-linux-trace_all") {
+       printf("trace_all to_string failure: %s\n", ts.c_str());
        return -1;
     }
 

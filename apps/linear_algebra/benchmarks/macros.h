@@ -28,7 +28,7 @@ inline void set_math_flags() {
 
 #define L1GFLOPS(N) 2.0 * N * 1e-3 / elapsed
 #define L1Benchmark(benchmark, type, code)                              \
-    virtual void bench_##benchmark(int N) {                             \
+    virtual void bench_##benchmark(int N) override {                    \
         Scalar alpha = random_scalar();                                 \
         (void) alpha;                                                   \
         Vector x(random_vector(N));                                     \
@@ -46,7 +46,7 @@ inline void set_math_flags() {
 
 #define L2GFLOPS(N) (2.0 + N) * N * 1e-3 / elapsed
 #define L2Benchmark(benchmark, type, code)                              \
-    virtual void bench_##benchmark(int N) {                             \
+    virtual void bench_##benchmark(int N) override {                    \
         Scalar alpha = random_scalar();                                 \
         Scalar beta = random_scalar();                                  \
         (void) alpha;                                                   \
@@ -67,7 +67,7 @@ inline void set_math_flags() {
 
 #define L3GFLOPS(N) (3.0 + N) * N * N * 1e-3 / elapsed
 #define L3Benchmark(benchmark, type, code)                              \
-    virtual void bench_##benchmark(int N) {                             \
+    virtual void bench_##benchmark(int N) override {                    \
         Scalar alpha = random_scalar();                                 \
         Scalar beta = random_scalar();                                  \
         Matrix A(random_matrix(N));                                     \

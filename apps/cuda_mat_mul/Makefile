@@ -3,11 +3,16 @@ include ../support/Makefile.inc
 BIN ?= bin
 MATRIX_SIZE ?= 1024
 
+CUDA_SDK ?= /usr/local/cuda-8.0
+
+CXXFLAGS += -I $(CUDA_SDK)/include
+LDFLAGS += -L $(CUDA_SDK)/lib64
+
 all: $(BIN)/runner
 
 $(BIN)/mat_mul.generator: mat_mul_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
+	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 $(BIN)/mat_mul.a: $(BIN)/mat_mul.generator
 	@mkdir -p $(@D)

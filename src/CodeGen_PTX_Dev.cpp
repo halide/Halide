@@ -1,11 +1,19 @@
 #include "CodeGen_PTX_Dev.h"
 #include "CodeGen_Internal.h"
+#include "Debug.h"
+#include "ExprUsesVar.h"
+#include "IREquality.h"
+#include "IRMatch.h"
+#include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
-#include "Debug.h"
-#include "Target.h"
 #include "LLVM_Headers.h"
 #include "LLVM_Runtime_Linker.h"
+#include "Simplify.h"
+#include "Solve.h"
+#include "Target.h"
+
+#include <fstream>
 
 // This is declared in NVPTX.h, which is not exported. Ugly, but seems better than
 // hardcoding a path to the .h file.
@@ -16,8 +24,8 @@ namespace llvm { FunctionPass *createNVVMReflectPass(const StringMap<int>& Mappi
 namespace Halide {
 namespace Internal {
 
-using std::vector;
 using std::string;
+using std::vector;
 
 using namespace llvm;
 
@@ -32,7 +40,7 @@ CodeGen_PTX_Dev::CodeGen_PTX_Dev(Target host) : CodeGen_LLVM(host) {
 
 CodeGen_PTX_Dev::~CodeGen_PTX_Dev() {
     // This is required as destroying the context before the module
-    // results in a crash. Really, reponsbility for destruction
+    // results in a crash. Really, responsibility for destruction
     // should be entirely in the parent class.
     // TODO: Figure out how to better manage the context -- e.g. allow using
     // same one as the host.
@@ -65,18 +73,7 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
     // Mark the buffer args as no alias
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer) {
-            #if LLVM_VERSION < 50
-            function->setDoesNotAlias(i+1);
-            #else
             function->addParamAttr(i, Attribute::NoAlias);
-            #endif
-        }
-    }
-
-    // Get the alignment of the integer arguments
-    for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].alignment.modulus) {
-            alignment_info.push(args[i].name, args[i].alignment);
         }
     }
 
@@ -151,6 +148,17 @@ void CodeGen_PTX_Dev::init_module() {
     #endif
 }
 
+void CodeGen_PTX_Dev::visit(const Call *op) {
+    if (op->is_intrinsic(Call::gpu_thread_barrier)) {
+        llvm::Function *barrier0 = module->getFunction("llvm.nvvm.barrier0");
+        internal_assert(barrier0) << "Could not find PTX barrier intrinsic (llvm.nvvm.barrier0)\n";
+        builder->CreateCall(barrier0);
+        value = ConstantInt::get(i32_t, 0);
+    } else {
+        CodeGen_LLVM::visit(op);
+    }
+}
+
 string CodeGen_PTX_Dev::simt_intrinsic(const string &name) {
     if (ends_with(name, ".__thread_id_x")) {
         return "llvm.nvvm.read.ptx.sreg.tid.x";
@@ -188,13 +196,11 @@ void CodeGen_PTX_Dev::visit(const For *loop) {
 void CodeGen_PTX_Dev::visit(const Allocate *alloc) {
     user_assert(!alloc->new_expr.defined()) << "Allocate node inside PTX kernel has custom new expression.\n" <<
         "(Memoization is not supported inside GPU kernels at present.)\n";
-
     if (alloc->name == "__shared") {
         // PTX uses zero in address space 3 as the base address for shared memory
         Value *shared_base = Constant::getNullValue(PointerType::get(i8_t, 3));
         sym_push(alloc->name, shared_base);
     } else {
-
         debug(2) << "Allocate " << alloc->name << " on device\n";
 
         string allocation_name = alloc->name;
@@ -228,6 +234,45 @@ void CodeGen_PTX_Dev::visit(const AssertStmt *op) {
     // Discard the error message for now.
     Expr trap = Call::make(Int(32), "halide_ptx_trap", {}, Call::Extern);
     codegen(IfThenElse::make(!op->condition, Evaluate::make(trap)));
+}
+
+void CodeGen_PTX_Dev::visit(const Load *op) {
+
+    // Do aligned 4-wide 32-bit loads as a single i128 load.
+    const Ramp *r = op->index.as<Ramp>();
+    // TODO: lanes >= 4, not lanes == 4
+    if (is_one(op->predicate) && r && is_one(r->stride) && r->lanes == 4 && op->type.bits() == 32) {
+        ModulusRemainder align = op->alignment;
+        if (align.modulus % 4 == 0 && align.remainder % 4 == 0) {
+            Expr index = simplify(r->base / 4);
+            Expr equiv = Load::make(UInt(128), op->name, index,
+                                    op->image, op->param, const_true(), align / 4);
+            equiv = reinterpret(op->type, equiv);
+            codegen(equiv);
+            return;
+        }
+    }
+
+    CodeGen_LLVM::visit(op);
+}
+
+void CodeGen_PTX_Dev::visit(const Store *op) {
+
+    // Do aligned 4-wide 32-bit stores as a single i128 store.
+    const Ramp *r = op->index.as<Ramp>();
+    // TODO: lanes >= 4, not lanes == 4
+    if (is_one(op->predicate) && r && is_one(r->stride) && r->lanes == 4 && op->value.type().bits() == 32) {
+        ModulusRemainder align = op->alignment;
+        if (align.modulus % 4 == 0 && align.remainder % 4 == 0) {
+            Expr index = simplify(r->base / 4);
+            Expr value = reinterpret(UInt(128), op->value);
+            Stmt equiv = Store::make(op->name, value, index, op->param, const_true(), align / 4);
+            codegen(equiv);
+            return;
+        }
+    }
+
+    CodeGen_LLVM::visit(op);
 }
 
 string CodeGen_PTX_Dev::march() const {
@@ -288,9 +333,6 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     internal_assert(target) << err_str << "\n";
 
     TargetOptions options;
-    #if LLVM_VERSION < 50
-    options.LessPreciseFPMADOption = true;
-    #endif
     options.PrintMachineCode = false;
     options.AllowFPOpFusion = FPOpFusion::Fast;
     options.UnsafeFPMath = true;
@@ -305,18 +347,12 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
         target_machine(target->createTargetMachine(triple.str(),
                                                    mcpu(), mattrs(), options,
                                                    llvm::Reloc::PIC_,
-#if LLVM_VERSION < 60
-                                                   llvm::CodeModel::Default,
-#else
                                                    llvm::CodeModel::Small,
-#endif
                                                    CodeGenOpt::Aggressive));
 
     internal_assert(target_machine.get()) << "Could not allocate target machine!";
 
-    #if LLVM_VERSION >= 60
     module->setDataLayout(target_machine->createDataLayout());
-    #endif
 
     // Set up passes
     llvm::SmallString<8> outstr;
@@ -346,11 +382,6 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     #define kDefaultDenorms 0
     #define kFTZDenorms     1
 
-    #if LLVM_VERSION <= 40
-    StringMap<int> reflect_mapping;
-    reflect_mapping[StringRef("__CUDA_FTZ")] = kFTZDenorms;
-    module_pass_manager.add(createNVVMReflectPass(reflect_mapping));
-    #else
     // Insert a module flag for the FTZ handling.
     module->addModuleFlag(llvm::Module::Override, "nvvm-reflect-ftz",
                           kFTZDenorms);
@@ -360,21 +391,14 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
             fn.addFnAttr("nvptx-f32ftz", "true");
         }
     }
-    #endif
 
     PassManagerBuilder b;
     b.OptLevel = 3;
-#if LLVM_VERSION >= 50
     b.Inliner = createFunctionInliningPass(b.OptLevel, 0, false);
-#else
-    b.Inliner = createFunctionInliningPass(b.OptLevel, 0);
-#endif
     b.LoopVectorize = true;
     b.SLPVectorize = true;
 
-    #if LLVM_VERSION > 40
     target_machine->adjustPassManager(b);
-    #endif
 
     b.populateFunctionPassManager(function_pass_manager);
     b.populateModulePassManager(module_pass_manager);
@@ -385,9 +409,15 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     // Output string stream
 
     // Ask the target to add backend passes as necessary.
+#if LLVM_VERSION >= 70
+    bool fail = target_machine->addPassesToEmitFile(module_pass_manager, ostream, nullptr,
+                                                    TargetMachine::CGFT_AssemblyFile,
+                                                    true);
+#else
     bool fail = target_machine->addPassesToEmitFile(module_pass_manager, ostream,
                                                     TargetMachine::CGFT_AssemblyFile,
                                                     true);
+#endif
     if (fail) {
         internal_error << "Failed to set up passes to emit PTX source\n";
     }
@@ -406,7 +436,44 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     debug(2) << "Done with CodeGen_PTX_Dev::compile_to_src";
 
     debug(1) << "PTX kernel:\n" << outstr.c_str() << "\n";
+
     vector<char> buffer(outstr.begin(), outstr.end());
+
+    // Dump the SASS too if the cuda SDK is in the path
+    if (debug::debug_level() >= 2) {
+        debug(2) << "Compiling PTX to SASS. Will fail if CUDA SDK is not installed (and in the path).\n";
+
+        TemporaryFile ptx(get_current_kernel_name(), ".ptx");
+        TemporaryFile sass(get_current_kernel_name(), ".sass");
+
+        std::ofstream f(ptx.pathname());
+        f.write(buffer.data(), buffer.size());
+        f.close();
+
+        string cmd = "ptxas --gpu-name " + mcpu() + " " + ptx.pathname() + " -o " + sass.pathname();
+        if (system(cmd.c_str()) == 0) {
+            cmd = "nvdisasm " + sass.pathname();
+            int ret = system(cmd.c_str());
+            (void)ret; // Don't care if it fails
+        }
+
+        // Note: It works to embed the contents of the .sass file in
+        // the buffer instead of the ptx source, and this could help
+        // with app startup times. Expose via the target?
+        /*
+        {
+            std::ifstream f(sass.pathname());
+            buffer.clear();
+            f.seekg(0, std::ios_base::end);
+            std::streampos sz = f.tellg();
+            buffer.resize(sz);
+            f.seekg(0, std::ios_base::beg);
+            f.read(buffer.data(), sz);
+        }
+        */
+    }
+
+    // Null-terminate the ptx source
     buffer.push_back(0);
     return buffer;
 #else // WITH_PTX
@@ -424,15 +491,12 @@ string CodeGen_PTX_Dev::get_current_kernel_name() {
 }
 
 void CodeGen_PTX_Dev::dump() {
-    #if LLVM_VERSION >= 50
     module->print(dbgs(), nullptr, false, true);
-    #else
-    module->dump();
-    #endif
 }
 
 std::string CodeGen_PTX_Dev::print_gpu_name(const std::string &name) {
     return name;
 }
 
-}}
+}  // namespace Internal
+}  // namespace Halide

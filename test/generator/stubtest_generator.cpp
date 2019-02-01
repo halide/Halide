@@ -30,6 +30,7 @@ public:
 
     Input<Buffer<uint8_t>> typed_buffer_input{ "typed_buffer_input", 3 };
     Input<Buffer<>> untyped_buffer_input{ "untyped_buffer_input" };
+    Input<Buffer<uint8_t>[2]> array_buffer_input{ "array_buffer_input", 3 };
     Input<Func> simple_input{ "simple_input", 3 };  // require a 3-dimensional Func but leave Type unspecified
     Input<Func[]> array_input{ "array_input", 3 };  // require a 3-dimensional Func but leave Type and ArraySize unspecified
     // Note that Input<Func> does not (yet) support Tuples
@@ -41,16 +42,25 @@ public:
     Output<Func[]> array_output{ "array_output", Int(16), 2};   // leave ArraySize unspecified
     Output<Buffer<float>> typed_buffer_output{ "typed_buffer_output" };
     Output<Buffer<>> untyped_buffer_output{ "untyped_buffer_output" };
+    Output<Buffer<>> tupled_output{ "tupled_output", { Float(32), Int(32) }, 3 };
     Output<Buffer<uint8_t>> static_compiled_buffer_output{ "static_compiled_buffer_output", 3 };
+    Output<Buffer<uint8_t>[2]> array_buffer_output{ "array_buffer_output", 3 };
 
     void generate() {
         simple_output(x, y, c) = cast<float>(simple_input(x, y, c));
+
         typed_buffer_output(x, y, c) = cast<float>(typed_buffer_input(x, y, c));
         // Note that if we are being invoked via a Stub, "untyped_buffer_output.type()" will
         // assert-fail, because there is no type constraint set: the type
         // will end up as whatever we infer from the values put into it. We'll use an
         // explicit GeneratorParam to allow us to set it.
         untyped_buffer_output(x, y, c) = cast(untyped_buffer_output_type, untyped_buffer_input(x, y, c));
+
+        tupled_output(x, y, c) = Tuple(simple_output(x, y, c), cast<int32_t>(simple_output(x, y, c)) + 1);
+
+        for (int i = 0; i < 2; ++i) {
+            array_buffer_output[i](x, y, c) = array_buffer_input[i](x, y,c) + 1 + i;
+        }
 
         // Gratuitous intermediate for the purpose of exercising
         // GeneratorParam<LoopLevel>
@@ -59,6 +69,10 @@ public:
         tuple_output(x, y, c) = Tuple(
                 intermediate(x, y, c),
                 intermediate(x, y, c) + int_arg[0]);
+        // Verify that Output::type() and ::dims() are well-defined after we define the Func
+        assert(tuple_output.types()[0] == Float(32));
+        assert(tuple_output.types()[1] == Float(32));
+        assert(tuple_output.dims() == 3);
 
         array_output.resize(array_input.size());
         for (size_t i = 0; i < array_input.size(); ++i) {

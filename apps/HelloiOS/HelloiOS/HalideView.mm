@@ -92,7 +92,7 @@ static const HalideFuncs kHalideMetal = {
     }
     if ((iteration % 30) == 0) {
         dispatch_async(dispatch_get_main_queue(), ^(void) {
-            [self updateLogWith: frameElapsedEstimate using_metal: using_metal];
+            [self updateLogWith: self->frameElapsedEstimate using_metal: using_metal];
         });
     }
     iteration += 1;
@@ -303,21 +303,21 @@ static const HalideFuncs kHalideMetal = {
     int image_width = (int) (self.bounds.size.width * f);
     int image_height = (int) (self.bounds.size.height * f);
     const HalideFuncs &halide_funcs = kHalideCPU;
-
+#if 0
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         [self initBufsWithWidth:image_width height:image_height using_metal: false];
 
         CGDataProviderRef provider =
-            CGDataProviderCreateWithData(NULL, pixel_buf.data(), pixel_buf.size_in_bytes(), NULL);
+        CGDataProviderCreateWithData(NULL, self->pixel_buf.data(), self->pixel_buf.size_in_bytes(), NULL);
         CGColorSpaceRef color_space = CGColorSpaceCreateDeviceRGB();
 
-        halide_funcs.init((__bridge void *)self, buf1);
+        halide_funcs.init((__bridge void *)self, self->buf1);
         [self resetFrameTime];
    
         for (;;) {
             [self renderOneFrame: halide_funcs using_metal: false];
 
-            const int bytesPerRow = pixel_buf.dim(1).stride() * pixel_buf.type().bits / 8;
+            const int bytesPerRow = self->pixel_buf.dim(1).stride() * self->pixel_buf.type().bits / 8;
             CGImageRef image_ref =
                 CGImageCreate(image_width, image_height, 
                               8,   // bitsPerComponent
@@ -335,6 +335,7 @@ static const HalideFuncs kHalideMetal = {
             });
         }
     });
+#endif
 #endif  // HAS_METAL_SDK
 }
 

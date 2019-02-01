@@ -1,41 +1,51 @@
-import os.path
-
+import os, shutil, tempfile
 import halide as hl
 
 def main():
     x = hl.Var("x")
 
     f = hl.Func("f")
-
     f[x] = 100 * x
 
     args = []
 
-    f.compile_to_bitcode("f.bc", args, "f")
-    assert os.path.isfile("f.bc")
+    tmpdir = tempfile.mkdtemp()
+    try:
+        p = os.path.join(tmpdir, "f.bc")
+        f.compile_to_bitcode(p, args, "f")
+        assert os.path.isfile(p)
 
-    f.compile_to_c("f.cpp", args, "f")
-    assert os.path.isfile("f.cpp")
+        p = os.path.join(tmpdir, "f.cpp")
+        f.compile_to_c(p, args, "f")
+        assert os.path.isfile(p)
 
-    f.compile_to_object("f.o", args, "f")
-    assert os.path.isfile("f.o")
+        p = os.path.join(tmpdir, "f.o")
+        f.compile_to_object(p, args, "f")
+        assert os.path.isfile(p)
 
-    f.compile_to_header("f.h", args, "f")
-    assert os.path.isfile("f.h")
+        p = os.path.join(tmpdir, "f.h")
+        f.compile_to_header(p, args, "f")
+        assert os.path.isfile(p)
 
-    f.compile_to_assembly("f.s", args, "f")
-    assert os.path.isfile("f.s")
+        p = os.path.join(tmpdir, "f.s")
+        f.compile_to_assembly(p, args, "f")
+        assert os.path.isfile(p)
 
-    f.compile_to_lowered_stmt("f.txt", args)
-    assert os.path.isfile("f.txt")
+        p = os.path.join(tmpdir, "f.txt")
+        f.compile_to_lowered_stmt(p, args)
+        assert os.path.isfile(p)
 
-    f.compile_to_file("f_all", args)
-    assert os.path.isfile("f_all.h")
-    assert os.path.isfile("f_all.o")
+        f.compile_to_file(os.path.join(tmpdir, "f_all"), args)
+        assert os.path.isfile(os.path.join(tmpdir, "f_all.h"))
+        assert os.path.isfile(os.path.join(tmpdir, "f_all.o"))
 
-    print("Success!")
+        p = os.path.join(tmpdir, "f.html")
+        f.compile_to(hl.Outputs(stmt_html_name=p), args, "f")
+        assert os.path.isfile(p)
 
-    return 0
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
 
 if __name__ == "__main__":
     main()

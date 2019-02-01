@@ -16,7 +16,7 @@ namespace Internal {
  * kernels. */
 Stmt loop_invariant_code_motion(Stmt);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

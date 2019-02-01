@@ -5,12 +5,13 @@
 namespace Halide {
 namespace Internal {
 
-using std::string;
 using std::map;
+using std::string;
+using std::vector;
 
-class UniquifyVariableNames : public IRMutator2 {
+class UniquifyVariableNames : public IRMutator {
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     map<string, int> vars;
 
@@ -38,38 +39,46 @@ class UniquifyVariableNames : public IRMutator2 {
         vars[s]--;
     }
 
-    Stmt visit(const LetStmt *op) override {
-        Expr value = mutate(op->value);
-        push_name(op->name);
-        string new_name = get_name(op->name);
-        Stmt body = mutate(op->body);
-        pop_name(op->name);
+    template<typename LetOrLetStmt>
+    auto visit_let(const LetOrLetStmt *op) -> decltype(op->body) {
+        struct Frame {
+            const LetOrLetStmt *op;
+            Expr value;
+            string new_name;
+        };
 
-        if (new_name == op->name &&
-            body.same_as(op->body) &&
-            value.same_as(op->value)) {
-            return op;
-        } else {
-            return LetStmt::make(new_name, value, body);
+        vector<Frame> frames;
+        decltype(op->body) result;
+        while (op) {
+            Expr val = mutate(op->value);
+            push_name(op->name);
+            frames.push_back({op, val, get_name(op->name)});
+            result = op->body;
+            op = result.template as<LetOrLetStmt>();
         }
 
+        result = mutate(result);
+
+        for (auto it = frames.rbegin(); it != frames.rend(); it++) {
+            pop_name(it->op->name);
+            if (it->new_name == it->op->name &&
+                result.same_as(it->op->body) &&
+                it->op->value.same_as(it->value)) {
+                result = it->op;
+            } else {
+                result = LetOrLetStmt::make(it->new_name, it->value, result);
+            }
+        }
+
+        return result;
+    }
+
+    Stmt visit(const LetStmt *op) override {
+        return visit_let(op);
     }
 
     Expr visit(const Let *op) override {
-        Expr value = mutate(op->value);
-        push_name(op->name);
-        string new_name = get_name(op->name);
-        Expr body = mutate(op->body);
-        pop_name(op->name);
-
-        if (new_name == op->name &&
-            body.same_as(op->body) &&
-            value.same_as(op->value)) {
-            return op;
-        } else {
-            return Let::make(new_name, value, body);
-        }
-
+        return visit_let(op);
     }
 
     Stmt visit(const For *op) override {
@@ -105,5 +114,5 @@ Stmt uniquify_variable_names(Stmt s) {
     return u.mutate(s);
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

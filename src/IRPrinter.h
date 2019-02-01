@@ -16,28 +16,38 @@
 
 #include <ostream>
 
-#include "Module.h"
 #include "IRVisitor.h"
+#include "Module.h"
 
 namespace Halide {
 
-/** Emit an expression on an output stream (such as std::cout) in a
+/** Emit an expression on an output stream (such as std::cout) in
  * human-readable form */
-EXPORT std::ostream &operator<<(std::ostream &stream, const Expr &);
+std::ostream &operator<<(std::ostream &stream, const Expr &);
 
-/** Emit a halide type on an output stream (such as std::cout) in a
+/** Emit a halide type on an output stream (such as std::cout) in
  * human-readable form */
-EXPORT std::ostream &operator<<(std::ostream &stream, const Type &);
+std::ostream &operator<<(std::ostream &stream, const Type &);
 
-/** Emit a halide Module on an output stream (such as std::cout) in a
+/** Emit a halide Module on an output stream (such as std::cout) in
  * human-readable form */
-EXPORT std::ostream &operator<<(std::ostream &stream, const Module &);
+std::ostream &operator<<(std::ostream &stream, const Module &);
 
-/** Emit a halide device api type in a human readable form */
-EXPORT std::ostream &operator<<(std::ostream &stream, const DeviceAPI &);
+/** Emit a halide device api type in human-readable form */
+std::ostream &operator<<(std::ostream &stream, const DeviceAPI &);
 
-/** Emit a halide LoopLevel in a human readable form */
-EXPORT std::ostream &operator<<(std::ostream &stream, const LoopLevel &);
+/** Emit a halide memory type in human-readable form */
+std::ostream &operator<<(std::ostream &stream, const MemoryType &);
+
+/** Emit a halide tail strategy in human-readable form */
+std::ostream &operator<<(std::ostream &stream, const TailStrategy &t);
+
+/** Emit a halide LoopLevel in human-readable form */
+std::ostream &operator<<(std::ostream &stream, const LoopLevel &);
+
+struct Target;
+/** Emit a halide Target in a human readable form */
+std::ostream &operator<<(std::ostream &stream, const Target &);
 
 namespace Internal {
 
@@ -46,28 +56,28 @@ struct AssociativeOp;
 
 /** Emit a halide associative pattern on an output stream (such as std::cout)
  * in a human-readable form */
-EXPORT std::ostream &operator<<(std::ostream &stream, const AssociativePattern &);
+std::ostream &operator<<(std::ostream &stream, const AssociativePattern &);
 
 /** Emit a halide associative op on an output stream (such as std::cout) in a
  * human-readable form */
-EXPORT std::ostream &operator<<(std::ostream &stream, const AssociativeOp &);
+std::ostream &operator<<(std::ostream &stream, const AssociativeOp &);
 
 /** Emit a halide statement on an output stream (such as std::cout) in
  * a human-readable form */
-EXPORT std::ostream &operator<<(std::ostream &stream, const Stmt &);
+std::ostream &operator<<(std::ostream &stream, const Stmt &);
 
 /** Emit a halide for loop type (vectorized, serial, etc) in a human
  * readable form */
-EXPORT std::ostream &operator<<(std::ostream &stream, const ForType &);
+std::ostream &operator<<(std::ostream &stream, const ForType &);
 
 /** Emit a halide name mangling value in a human readable format */
-EXPORT std::ostream &operator<<(std::ostream &stream, const NameMangling &);
+std::ostream &operator<<(std::ostream &stream, const NameMangling &);
 
 /** Emit a halide LoweredFunc in a human readable format */
-EXPORT std::ostream &operator<<(std::ostream &stream, const LoweredFunc &);
+std::ostream &operator<<(std::ostream &stream, const LoweredFunc &);
 
 /** Emit a halide linkage value in a human readable format */
-EXPORT std::ostream &operator<<(std::ostream &stream, const LoweredFunc::LinkageType &);
+std::ostream &operator<<(std::ostream &stream, const LinkageType &);
 
 /** An IRVisitor that emits IR to the given output stream in a human
  * readable form. Can be subclassed if you want to modify the way in
@@ -75,23 +85,23 @@ EXPORT std::ostream &operator<<(std::ostream &stream, const LoweredFunc::Linkage
  */
 class IRPrinter : public IRVisitor {
 public:
-    EXPORT virtual ~IRPrinter();
+    virtual ~IRPrinter();
 
     /** Construct an IRPrinter pointed at a given output stream
      * (e.g. std::cout, or a std::ofstream) */
-    EXPORT IRPrinter(std::ostream &);
+    IRPrinter(std::ostream &);
 
     /** emit an expression on the output stream */
-    EXPORT void print(Expr);
+    void print(Expr);
 
     /** emit a statement on the output stream */
-    EXPORT void print(Stmt);
+    void print(Stmt);
 
     /** emit a comma delimited list of exprs, without any leading or
      * trailing punctuation. */
-    EXPORT void print_list(const std::vector<Expr> &exprs);
+    void print_list(const std::vector<Expr> &exprs);
 
-    EXPORT static void test();
+    static void test();
 
 protected:
     /** The stream we're outputting on */
@@ -104,50 +114,52 @@ protected:
     /** Emit spaces according to the current indentation level */
     void do_indent();
 
-    void visit(const IntImm *);
-    void visit(const UIntImm *);
-    void visit(const FloatImm *);
-    void visit(const StringImm *);
-    void visit(const Cast *);
-    void visit(const Variable *);
-    void visit(const Add *);
-    void visit(const Sub *);
-    void visit(const Mul *);
-    void visit(const Div *);
-    void visit(const Mod *);
-    void visit(const Min *);
-    void visit(const Max *);
-    void visit(const EQ *);
-    void visit(const NE *);
-    void visit(const LT *);
-    void visit(const LE *);
-    void visit(const GT *);
-    void visit(const GE *);
-    void visit(const And *);
-    void visit(const Or *);
-    void visit(const Not *);
-    void visit(const Select *);
-    void visit(const Load *);
-    void visit(const Ramp *);
-    void visit(const Broadcast *);
-    void visit(const Call *);
-    void visit(const Let *);
-    void visit(const LetStmt *);
-    void visit(const AssertStmt *);
-    void visit(const ProducerConsumer *);
-    void visit(const For *);
-    void visit(const Store *);
-    void visit(const Provide *);
-    void visit(const Allocate *);
-    void visit(const Free *);
-    void visit(const Realize *);
-    void visit(const Block *);
-    void visit(const IfThenElse *);
-    void visit(const Evaluate *);
-    void visit(const Shuffle *);
-    void visit(const Prefetch *);
+    void visit(const IntImm *) override;
+    void visit(const UIntImm *) override;
+    void visit(const FloatImm *) override;
+    void visit(const StringImm *) override;
+    void visit(const Cast *) override;
+    void visit(const Variable *) override;
+    void visit(const Add *) override;
+    void visit(const Sub *) override;
+    void visit(const Mul *) override;
+    void visit(const Div *) override;
+    void visit(const Mod *) override;
+    void visit(const Min *) override;
+    void visit(const Max *) override;
+    void visit(const EQ *) override;
+    void visit(const NE *) override;
+    void visit(const LT *) override;
+    void visit(const LE *) override;
+    void visit(const GT *) override;
+    void visit(const GE *) override;
+    void visit(const And *) override;
+    void visit(const Or *) override;
+    void visit(const Not *) override;
+    void visit(const Select *) override;
+    void visit(const Load *) override;
+    void visit(const Ramp *) override;
+    void visit(const Broadcast *) override;
+    void visit(const Call *) override;
+    void visit(const Let *) override;
+    void visit(const LetStmt *) override;
+    void visit(const AssertStmt *) override;
+    void visit(const ProducerConsumer *) override;
+    void visit(const For *) override;
+    void visit(const Acquire *) override;
+    void visit(const Store *) override;
+    void visit(const Provide *) override;
+    void visit(const Allocate *) override;
+    void visit(const Free *) override;
+    void visit(const Realize *) override;
+    void visit(const Block *) override;
+    void visit(const Fork *) override;
+    void visit(const IfThenElse *) override;
+    void visit(const Evaluate *) override;
+    void visit(const Shuffle *) override;
+    void visit(const Prefetch *) override;
 };
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

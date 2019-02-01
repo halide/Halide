@@ -1,6 +1,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <assert.h>
+#include <atomic>
 
 #include "HalideRuntime.h"
 #include "HalideBuffer.h"
@@ -8,12 +9,12 @@
 
 using namespace Halide::Runtime;
 
-static void *context_pointer = (void *)(intptr_t)0xf00dd00d;
+static void * const context_pointer = (void *)(intptr_t)0xf00dd00d;
 
-static bool called_error = false;
-static bool called_trace = false;
-static bool called_malloc = false;
-static bool called_free = false;
+static std::atomic<bool> called_error{false};
+static std::atomic<bool> called_trace{false};
+static std::atomic<bool> called_malloc{false};
+static std::atomic<bool> called_free{false};
 
 void my_halide_error(void *context, const char *msg) {
     called_error = true;

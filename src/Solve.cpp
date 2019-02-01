@@ -1,20 +1,27 @@
 #include "Solve.h"
-#include "Simplify.h"
-#include "IRMutator.h"
-#include "IREquality.h"
-#include "Substitute.h"
 #include "CSE.h"
 #include "ExprUsesVar.h"
+#include "IREquality.h"
+#include "IRMutator.h"
+#include "Simplify.h"
+#include "Substitute.h"
+#include "ConciseCasts.h"
 
 namespace Halide {
 namespace Internal {
 
-using std::string;
 using std::map;
 using std::pair;
+using std::string;
 using std::vector;
+using ConciseCasts::i16;
 
 namespace {
+
+// Returns true iff t is an integral type where overflow is undefined
+bool no_overflow_int(Type t) {
+    return t.is_int() && t.bits() >= 32;
+}
 
 /** A mutator that moves all instances of a free variable as far left
  * and as far outermost as possible. See the test cases at the bottom
@@ -26,12 +33,12 @@ namespace {
  * common-subexpression-elimination. Fortunately this isn't a
  * public class, so the only user is in this file.
  */
-class SolveExpression : public IRMutator2 {
+class SolveExpression : public IRMutator {
 public:
     SolveExpression(const string &v, const Scope<Expr> &es) :
         failed(false), var(v), uses_var(false), external_scope(es) {}
 
-    using IRMutator2::mutate;
+    using IRMutator::mutate;
 
     Expr mutate(const Expr &e) override {
         map<Expr, CacheEntry, ExprCompare>::iterator iter = cache.find(e);
@@ -40,7 +47,7 @@ public:
             debug(4) << "Mutating " << e << " (" << uses_var << ")\n";
             bool old_uses_var = uses_var;
             uses_var = false;
-            Expr new_e = IRMutator2::mutate(e);
+            Expr new_e = IRMutator::mutate(e);
             CacheEntry entry = {new_e, uses_var};
             uses_var = old_uses_var || uses_var;
             cache[e] = entry;
@@ -98,7 +105,7 @@ private:
     // so the right of the subexpression can be considered a
     // constant. The mutator must preserve this property or set the
     // flag "failed" to true.
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     // Admit defeat. Isolated in a method for ease of debugging.
     Expr fail(Expr e) {
@@ -348,13 +355,63 @@ private:
         return expr;
     }
 
+    Expr visit(const Div *op) override {
+        bool old_uses_var = uses_var;
+        uses_var = false;
+        bool old_failed = failed;
+        failed = false;
+        Expr a = mutate(op->a);
+        bool a_uses_var = uses_var;
+        bool a_failed = failed;
+        internal_assert(!is_const(op->a) || !a_uses_var)
+                << op->a << ", " << uses_var << "\n";
+        uses_var = false;
+        failed = false;
+        Expr b = mutate(op->b);
+        bool b_uses_var = uses_var;
+        bool b_failed = failed;
+        uses_var = old_uses_var || a_uses_var || b_uses_var;
+        failed = old_failed || a_failed || b_failed;
+        const Add *add_a = a.as<Add>();
+        const Sub *sub_a = a.as<Sub>();
+        const Mul *mul_a = a.as<Mul>();
+        Expr expr;
+        if (a_uses_var && !b_uses_var) {
+            if (add_a && !a_failed &&
+                can_prove(add_a->a / b * b == add_a->a)) {
+                // (f(x) + a) / b -> f(x) / b + a / b
+                expr = mutate(simplify(add_a->a / b) + add_a->b / b);
+            } else if (sub_a && !a_failed &&
+                       can_prove(sub_a->a / b * b == sub_a->a)) {
+                // (f(x) - a) / b -> f(x) / b - a / b
+                expr = mutate(simplify(sub_a->a / b) - sub_a->b / b);
+            } else if (mul_a && !a_failed && no_overflow_int(op->type) &&
+                       can_prove(mul_a->b / b * b == mul_a->b)) {
+                // (f(x) * a) / b -> f(x) * (a / b)
+                expr = mutate(mul_a->a * (mul_a->b / b));
+            }
+        } else if (is_const(a) && is_const(b)) {
+            // Do some constant-folding
+            expr = simplify(a / b);
+            internal_assert(!uses_var && !a_uses_var && !b_uses_var);
+        }
+        if (!expr.defined()) {
+            if (a.same_as(op->a) && b.same_as(op->b)) {
+                expr = op;
+            } else {
+                expr = a / b;
+            }
+        }
+        return expr;
+    }
+
     Expr visit(const Call *op) override {
         // Ignore likely intrinsics
         if (op->is_intrinsic(Call::likely) ||
             op->is_intrinsic(Call::likely_if_innermost)) {
             return mutate(op->args[0]);
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
@@ -1071,9 +1128,9 @@ public:
 
 };
 
-class AndConditionOverDomain : public IRMutator2 {
+class AndConditionOverDomain : public IRMutator {
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Scope<Interval> scope;
     Scope<Expr> bound_vars;
@@ -1190,7 +1247,7 @@ class AndConditionOverDomain : public IRMutator2 {
 
     Expr visit(const Not *op) override {
         flipped = !flipped;
-        Expr expr = IRMutator2::visit(op);
+        Expr expr = IRMutator::visit(op);
         flipped = !flipped;
         return expr;
     }
@@ -1421,6 +1478,19 @@ void solve_test() {
     check_solve(min(min(z, x), min(x, y)), min(x, min(y, z)));
     check_solve(min(x + y, x + 5), x + min(y, 5));
 
+    // Check solver with expressions containing division
+    check_solve(x + (x*2) / 2, x*2);
+    check_solve(x + (x*2 + y) / 2, x*2 + (y / 2));
+    check_solve(x + (x*2 - y) / 2, x*2 - (y / 2)) ;
+    check_solve(x + (-(x*2) / 2), x*0 + 0);
+    check_solve(x + (-(x*2 + -3)) / 2, x*0 + 1);
+    check_solve(x + (z - (x*2 + -3)) / 2, x*0 + (z - (-3)) / 2);
+    check_solve(x + (y*16 + (z - (x * 2 + -1))) / 2,
+                (x * 0) + (((z - -1) + (y*16)) / 2));
+
+    // Check the solver doesn't perform transformations that change integer overflow behavior.
+    check_solve(i16(x + y) * i16(2) / i16(2), i16(x + y) * i16(2) / i16(2));
+
     // A let statement
     check_solve(Let::make("z", 3 + 5*x, y + z < 8),
           x <= (((8 - (3 + y)) - 1)/5));
@@ -1541,8 +1611,8 @@ void solve_test() {
     {
         // This case used to break due to signed integer overflow in
         // the simplifier.
-        Expr a16 = Load::make(Int(16), "a", {x}, Buffer<>(), Parameter(), const_true());
-        Expr b16 = Load::make(Int(16), "b", {x}, Buffer<>(), Parameter(), const_true());
+        Expr a16 = Load::make(Int(16), "a", {x}, Buffer<>(), Parameter(), const_true(), ModulusRemainder());
+        Expr b16 = Load::make(Int(16), "b", {x}, Buffer<>(), Parameter(), const_true(), ModulusRemainder());
         Expr lhs = pow(cast<int32_t>(a16), 2) + pow(cast<int32_t>(b16), 2);
 
         Scope<Interval> s;
@@ -1592,5 +1662,5 @@ void solve_test() {
     debug(0) << "Solve test passed\n";
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

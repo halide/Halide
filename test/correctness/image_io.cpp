@@ -12,6 +12,9 @@ void test_round_trip(Buffer<T> buf, std::string format) {
     std::string filename = o.str();
     Tools::save_image(buf, filename);
 
+    // TIFF is write-only for now.
+    if (format == "tiff") return;
+
     // Reload it
     Buffer<T> reloaded = Tools::load_image(filename);
 
@@ -25,10 +28,8 @@ void test_round_trip(Buffer<T> buf, std::string format) {
     // Check they're not too different.
     RDom r(reloaded);
     std::vector<Expr> args;
-    if (buf.dimensions() == 2) {
-        args = {r.x, r.y};
-    } else {
-        args = {r.x, r.y, r.z};
+    for (int i = 0; i < r.dimensions(); ++i) {
+        args.push_back(r[i]);
     }
     uint32_t diff = evaluate<uint32_t>(maximum(abs(cast<int>(buf(args)) - cast<int>(reloaded(args)))));
 
@@ -161,7 +162,7 @@ void do_test() {
 
     // Make some colored noise
     Func f;
-    Var x, y, c;
+    Var x, y, c, w;
     const float one = std::numeric_limits<T>::max();
     f(x, y, c) = cast<T>(clamp(make_noise(10)(x, y, c), 0.0f, 1.0f) * one);
 
@@ -179,9 +180,9 @@ void do_test() {
 
     Buffer<T> luma_buf(width, height, 1);
     luma_buf.copy_from(color_buf);
-    luma_buf.slice(2, 0);
+    luma_buf.slice(2);
 
-    std::vector<std::string> formats = {"ppm","pgm","tmp","mat"};
+    std::vector<std::string> formats = {"ppm","pgm","tmp","mat","tiff"};
 #ifndef HALIDE_NO_JPEG
     formats.push_back("jpg");
 #endif
@@ -195,9 +196,19 @@ void do_test() {
         if (format == "tmp") {
             // .tmp only supports exactly-4-dimensions, so handle it separately.
             // (Add a dimension to make it 4-dimensional)
-            Buffer<T> cb4 = color_buf.embedded(color_buf.dimensions(), 0);
+            Buffer<T> cb4 = color_buf.embedded(color_buf.dimensions());
             std::cout << "Testing format: " << format << " for " << halide_type_of<T>() << "x4\n";
             test_round_trip(cb4, format);
+
+            // Here we test matching strides
+            Func f2;
+            f2(x, y, c, w) = f(x, y, c);
+            Buffer<T> funky_buf = f2.realize(10, 10, 1, 3);
+            funky_buf.fill(42);
+
+            std::cout << "Testing format: " << format << " for " << halide_type_of<T>() << "x4\n";
+            test_round_trip(funky_buf, format);
+
             continue;
         }
         if (format != "pgm") {
