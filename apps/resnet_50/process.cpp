@@ -12,6 +12,8 @@
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
+#include <random>
+#include <float.h>
 
 using namespace Halide::Runtime;
 using namespace Halide::Tools;
@@ -40,76 +42,69 @@ using namespace Halide::Tools;
                                              buff_name[2], \
                                              buff_name[3]
 
-/*** loading from file helpers ***/
 std::vector<int> load_shape(const std::string &shapefile) {
-    std::ifstream shape_input(shapefile, std::ios::binary);
+    std::ifstream infile(shapefile, std::ios::binary);
     int num_dims = 0;
-    shape_input.read(reinterpret_cast<char *>(&num_dims), sizeof(int));
-    std::vector<int> dims;
-    for (int i = 0; i < num_dims; i++) {
-        int di;
-        shape_input.read(reinterpret_cast<char *>(&di), sizeof(int));
-        dims.push_back(di);
-    }
+    infile.read(reinterpret_cast<char *>(&num_dims), sizeof(int));
+    std::vector<int> dims(num_dims);
+    infile.read((char*)dims.data(), num_dims * sizeof(int));
+		infile.close();
+		assert(!infile.fail());
     return dims;
 }
 
-void load_params(std::string datafile, float *array, int n) {
-    std::ifstream data_input(datafile, std::ios::binary);
-    int count = 0;
-    float f;
-    while (data_input.read(reinterpret_cast<char *>(&f), sizeof(float))) {
-        array[count] = f;
-        count++;
-    }
-    assert(count == n);
+void write_buffer_to_file(const Buffer<float> &buf, const std::string &filename) {
+    std::ofstream o(filename, std::ios_base::trunc | std::ios_base::binary);
+    o.write((const char *) (buf.data()), buf.size_in_bytes());
+    o.close();
+    assert(!o.fail());
+}
+
+Buffer<float> load_buffer_from_file(const std::string &filename, std::vector<int> &shape) {
+		Buffer<float> buffer(shape);
+    std::ifstream infile(filename, std::ios::binary);
+    infile.read((char*)buffer.data(), buffer.size_in_bytes());
+		infile.close();
+		assert(!infile.fail());
+		return buffer;
 }
 
 Buffer<float> load_conv_params(std::string shapefile, std::string datafile) {
     std::vector<int> shape = load_shape(shapefile);
     assert(shape.size() == 4);
-    Buffer<float> conv_weights(shape);
-    load_params(datafile, conv_weights.data(), shape[0] * shape[1] * shape[2] * shape[3]);
-    return conv_weights;
+    return load_buffer_from_file(datafile, shape);
 }
 
 Buffer<float> load_batch_norm_params(std::string shapefile, std::string datafile) {
     std::vector<int> shape = load_shape(shapefile);
     assert(shape.size());
-    Buffer<float> batch_norm_weights(shape);
-    load_params(datafile, batch_norm_weights.data(), shape[0]);
-    return batch_norm_weights;
+    return load_buffer_from_file(datafile, shape);
 }
 
 Buffer<float> load_fc_weight(std::string shapefile, std::string datafile) {
     std::vector<int> shape = load_shape(shapefile);
     assert(shape.size() == 2);
-    Buffer<float> fc_weights(shape);
-    load_params(datafile, fc_weights.data(), shape[0] * shape[1]);
-    return fc_weights;
+    return load_buffer_from_file(datafile, shape);
 }
 
 Buffer<float> load_fc_bias(std::string shapefile, std::string datafile) {
     std::vector<int> shape = load_shape(shapefile);
     assert(shape.size() == 1);
-    Buffer<float> fc_bias(shape);
-    load_params(datafile, fc_bias.data(), shape[0]);
-    return fc_bias;
+    return load_buffer_from_file(datafile, shape);
 }
 
 int main(int argc, char **argv) {
-    Buffer<float> input(3, 224, 224);
-
-    for (int y = 0; y < input.height(); ++y) {
-        for (int x = 0; x < input.width(); ++x) {
-            for (int c = 0; c < input.channels(); ++c) {
-                input(c, x, y) = 0.25f;
-            }
-        }
+    if (argc < 3) {
+        printf("Usage: iterations weight_dir seed output_file");
+        return -1;
     }
+    int iterations = atoi(argv[1]);
+    std::string weight_dir = argv[2];
+		int seed = atoi(argv[3]);
+		std::string output_file = argv[4];
 
+    Buffer<float> input(3, 224, 224);
     Buffer<float> output(1000);
-    std::string weight_dir = "./weights/";
 
     Buffer<float> conv1_weights;
     Buffer<float> conv1_mu;
@@ -155,7 +150,7 @@ int main(int argc, char **argv) {
     std::string conv1_sig_datafile = weight_dir + "bn1_running_var.data";
     conv1_sig = load_batch_norm_params(conv1_sig_shapefile, conv1_sig_datafile);
 
-    std::string conv1_gamma_shapefile = weight_dir + "bn1_weight_shape.data";
+    std::string conv1_gamma_shapefile = weight_dir + "bn1_weight_shape.data"; 
     std::string conv1_gamma_datafile = weight_dir + "bn1_weight.data";
     conv1_gamma = load_batch_norm_params(conv1_gamma_shapefile, conv1_gamma_datafile);
 
@@ -244,9 +239,12 @@ int main(int argc, char **argv) {
     Buffer<float> fc1000_weights = load_fc_weight(weight_shapefile, weight_datafile);
     Buffer<float> fc1000_bias = load_fc_bias(bias_shapefile, bias_datafile);
 
-    int timing_iterations = atoi(argv[1]);
-
-    double best = benchmark(timing_iterations, 1, [&]() {
+    std::mt19937 e2(seed);
+    input.for_each_value([&e2](float &v) {
+        v = e2() / (float) e2.max();
+    });
+    printf("Running Resnet50 for %d iterations....\n", iterations);
+    double best = benchmark(iterations, 1, [&]() {
         resnet50(input,
                  conv1_gamma,
                  unroll_array_of_4_buffers(br1_gamma),
@@ -277,14 +275,18 @@ int main(int argc, char **argv) {
                  fc1000_bias,
                  output);
     });
+    printf("Execution time : %gms \n", best * 1e3);
 
-    for (int y = 0; y < output.height(); ++y) {
-        for (int x = 0; x < output.width(); ++x) {
-            for (int c = 0; c < output.channels(); ++c) {
-              std::cout << output(c, x, y) << std::endl;
-            }
-        }
-    }
+		float max_class_val = -FLT_MIN;
+		int max_class = 0;
+		for (int i = 0; i < 1000; ++i) {
+			if (output(i) > max_class_val) {
+				max_class_val = output(i);
+				max_class = i;
+			}
+		}
+		printf("Class for random data of seed %d is %d\n", seed, max_class);
 
-    printf("Manually tuned time: %gms\n", best * 1e3);
+		printf("Writing output layer to %s\n", output_file.c_str());
+    write_buffer_to_file(output, output_file);
 }
