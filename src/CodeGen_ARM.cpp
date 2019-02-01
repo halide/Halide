@@ -758,7 +758,11 @@ void CodeGen_ARM::visit(const Store *op) {
             arg_types.back() = llvm_type_of(intrin_type.element_of())->getPointerTo();
         }
         llvm::FunctionType *fn_type = FunctionType::get(llvm::Type::getVoidTy(*context), arg_types, false);
+#if LLVM_VERSION >= 80
+        llvm::FunctionCallee fn = module->getOrInsertFunction(instr.str(), fn_type);
+#else
         llvm::Function *fn = dyn_cast_or_null<llvm::Function>(module->getOrInsertFunction(instr.str(), fn_type));
+#endif
         internal_assert(fn);
 
         // How many vst instructions do we need to generate?
