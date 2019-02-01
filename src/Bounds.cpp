@@ -919,22 +919,6 @@ private:
             return;
         }
 
-        // If the args are const we can return the call of those args
-        // for pure functions. For other types of functions, the same
-        // call in two different places might produce different
-        // results (e.g. during the update step of a reduction), so we
-        // can't move around call nodes.
-        std::vector<Expr> new_args(op->args.size());
-        bool const_args = true;
-        for (size_t i = 0; i < op->args.size() && const_args; i++) {
-            op->args[i].accept(this);
-            if (interval.is_single_point()) {
-                new_args[i] = interval.min;
-            } else {
-                const_args = false;
-            }
-        }
-
         Type t = op->type.element_of();
 
         if (t.is_handle()) {
@@ -942,14 +926,41 @@ private:
             return;
         }
 
-        if (const_args &&
-            !const_bound &&
-            (op->call_type == Call::PureExtern ||
-             op->call_type == Call::Image)) {
-            Expr call = Call::make(t, op->name, new_args, op->call_type,
-                                   op->func, op->value_index, op->image, op->param);
-            interval = Interval::single_point(call);
-        } else if (op->is_intrinsic(Call::abs)) {
+
+        if (!const_bound &&
+            (op->call_type == Call::PureExtern || op->call_type == Call::Image)) {
+
+            // If the args are const we can return the call of those args
+            // for pure functions. For other types of functions, the same
+            // call in two different places might produce different
+            // results (e.g. during the update step of a reduction), so we
+            // can't move around call nodes.
+            //
+            // Note: Only evaluate new_args if we know the call is a candidate;
+            // otherwise we can get n^2 evaluation time for deeply-nested
+            // Expr trees.
+
+            std::vector<Expr> new_args(op->args.size());
+            bool const_args = true;
+            for (size_t i = 0; i < op->args.size() && const_args; i++) {
+                op->args[i].accept(this);
+                if (interval.is_single_point()) {
+                    new_args[i] = interval.min;
+                } else {
+                    const_args = false;
+                }
+            }
+            if (const_args) {
+                Expr call = Call::make(t, op->name, new_args, op->call_type,
+                                       op->func, op->value_index, op->image, op->param);
+                interval = Interval::single_point(call);
+                return;
+            }
+            // else fall thru and continue
+        }
+
+        if (op->is_intrinsic(Call::abs)) {
+            op->args[0].accept(this);
             Interval a = interval;
             interval.min = make_zero(t);
             if (a.is_bounded()) {
@@ -2749,6 +2760,32 @@ void bounds_test() {
     internal_assert(equal(simplify(r2[0].max), 19));
 
     boxes_touched_test();
+
+    // Check a deeply-nested bitwise expr to ensure it doesn't take n^2 time
+    // (this clause took ~30s on a typical laptop before the fix, ~10ms after)
+    {
+        using ConciseCasts::u8;
+        using ConciseCasts::u16;
+
+        Expr a = Variable::make(UInt(16), "t42");
+        Expr b = Variable::make(UInt(16), "t43");
+        Expr c = Variable::make(UInt(16), "t44");
+        Expr d = Variable::make(Int(32), "d");
+        Expr x = Variable::make(Int(32), "x");
+        Expr y = Variable::make(Int(32), "y");
+        Expr one_u8 = Expr((uint8_t) 1);
+        Expr one_u16 = Expr((uint16_t) 1);
+        Expr zero_u16 = Expr((uint16_t) 0);
+        Expr e1 = select(c >= Expr((uint16_t) 128), c - Expr((uint16_t) 128), c);
+        Expr e2 = Let::make("t44", (((((((((((((((((zero_u16 << one_u16) | u16((u8(d) & one_u8))) << one_u16)
+            | u16(((u8(d) >> one_u8) & one_u8))) << one_u16) | (u16(x) & one_u16)) << one_u16)
+            | (u16(y) & one_u16)) << one_u16) | (a & one_u16)) << one_u16) | (b & one_u16)) << one_u16)
+            | ((a >> one_u16) & one_u16)) << one_u16) | ((b >> one_u16) & one_u16)) >> one_u16), e1);
+        Expr e3 = Let::make("t43", u16(y) >> one_u16, e2);
+        Expr e4 = Let::make("t42", u16(x) >> one_u16, e3);
+
+        check_constant_bound(e4, make_const(UInt(16), 0), make_const(UInt(16), 65535));
+    }
 
     std::cout << "Bounds test passed" << std::endl;
 }
