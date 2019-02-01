@@ -1577,31 +1577,90 @@ int main(int argc, char **argv) {
 
     {
         using ConciseCasts::i16;
+
+        const Expr a = Expr(std::numeric_limits<int16_t>::lowest());
+        const Expr b = Expr(std::numeric_limits<int16_t>::max());
+
+        check(a >> 14,  i16(-2));
+        check(b >> -14, i16(-16384));
+        check(a << 14,  i16(0));
+        check(b << -14, i16(1));
+
+        check(a >> 15,  i16(-1));
+        check(b >> -15, i16(0));
+        check(a << 15,  i16(0));
+        check(b << -15, i16(0));
+
+        check(a >> b, i16(-1));
+        check(b >> a, i16(0));
+        check(a << b, i16(0));
+        check(b << a, i16(0));
+    }
+
+    {
         using ConciseCasts::u16;
 
-        check(i16(-32768) >> i16(15),  i16(-1));
-        check(i16(32767)  >> i16(-15), i16(0));
+        const Expr a = Expr(std::numeric_limits<uint16_t>::lowest());
+        const Expr b = Expr(std::numeric_limits<uint16_t>::max());
 
-        check(u16(0)     >> u16(15), u16(0));
-        check(u16(65535) >> u16(15), u16(0));
+        check(a >> 15, u16(0));
+        check(b >> 15, u16(1));
+        check(a << 15, u16(0));
+        check(b << 15, Expr((uint16_t) 0x8000));
 
-        check(i16(-32768) << i16(15),  i16(0));
-        check(i16(32767)  << i16(-15), i16(0));
+        check(a >> 16, u16(0));
+        check(b >> 16, u16(0));
+        check(a << 16, u16(0));
+        check(b << 16, u16(0));
 
-        check(u16(0)     << u16(15), u16(0));
-        check(u16(65535) << u16(15), u16(0));
+        check(a >> b, u16(0));
+        check(b >> b, u16(0));
+        check(a << b, u16(0));
+        check(b << b, u16(0));
+    }
 
-        check(i16(-32768) >> i16(32767),  i16(-1));
-        check(i16(32767)  >> i16(-32768), i16(0));
+    {
+        using ConciseCasts::i64;
 
-        check(u16(0)     >> u16(65535), u16(0));
-        check(u16(65535) >> u16(65535), u16(0));
+        const Expr a = Expr(std::numeric_limits<int64_t>::lowest());
+        const Expr b = Expr(std::numeric_limits<int64_t>::max());
 
-        check(i16(-32768) << i16(32767),  i16(0));
-        check(i16(32767)  << i16(-32768), i16(0));
+        check(a >> 62,  i64(-2));
+        check_is_sio(b >> -62);
+        check_is_sio(a << 62);
+        check(b << -62, i64(1));
 
-        check(u16(0)     << u16(65535), u16(0));
-        check(u16(65535) << u16(65535), u16(0));
+        check(a >> 63,  i64(-1));
+        check(b >> -63, i64(0));
+        check(a << 63,  i64(0));
+        check(b << -63, i64(0));
+
+        check(a >> b, i64(-1));
+        check(b >> a, i64(0));
+        check(a << b, i64(0));
+        check(b << a, i64(0));
+    }
+
+    {
+        using ConciseCasts::u64;
+
+        const Expr a = Expr(std::numeric_limits<uint64_t>::lowest());
+        const Expr b = Expr(std::numeric_limits<uint64_t>::max());
+
+        check(a >> 63, u64(0));
+        check(b >> 63, u64(1));
+        check(a << 63, u64(0));
+        check(b << 63, Expr((uint64_t) 0x8000000000000000ULL));
+
+        check(a >> 64, u64(0));
+        check(b >> 64, u64(0));
+        check(a << 64, u64(0));
+        check(b << 64, u64(0));
+
+        check(a >> b, u64(0));
+        check(b >> b, u64(0));
+        check(a << b, u64(0));
+        check(b << b, u64(0));
     }
 
     printf("Success!\n");
