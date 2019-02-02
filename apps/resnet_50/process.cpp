@@ -10,10 +10,10 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <float.h>
 #include <fstream>
 #include <iostream>
 #include <random>
-#include <float.h>
 
 using namespace Halide::Runtime;
 using namespace Halide::Tools;
@@ -47,9 +47,9 @@ std::vector<int> load_shape(const std::string &shapefile) {
     int num_dims = 0;
     infile.read(reinterpret_cast<char *>(&num_dims), sizeof(int));
     std::vector<int> dims(num_dims);
-    infile.read((char*)dims.data(), num_dims * sizeof(int));
-		infile.close();
-		assert(!infile.fail());
+    infile.read((char *) dims.data(), num_dims * sizeof(int));
+    infile.close();
+    assert(!infile.fail());
     return dims;
 }
 
@@ -61,12 +61,12 @@ void write_buffer_to_file(const Buffer<float> &buf, const std::string &filename)
 }
 
 Buffer<float> load_buffer_from_file(const std::string &filename, std::vector<int> &shape) {
-		Buffer<float> buffer(shape);
+    Buffer<float> buffer(shape);
     std::ifstream infile(filename, std::ios::binary);
-    infile.read((char*)buffer.data(), buffer.size_in_bytes());
-		infile.close();
-		assert(!infile.fail());
-		return buffer;
+    infile.read((char *) buffer.data(), buffer.size_in_bytes());
+    infile.close();
+    assert(!infile.fail());
+    return buffer;
 }
 
 Buffer<float> load_conv_params(std::string shapefile, std::string datafile) {
@@ -100,8 +100,8 @@ int main(int argc, char **argv) {
     }
     int iterations = atoi(argv[1]);
     std::string weight_dir = argv[2];
-		int seed = atoi(argv[3]);
-		std::string output_file = argv[4];
+    int seed = atoi(argv[3]);
+    std::string output_file = argv[4];
 
     Buffer<float> input(3, 224, 224);
     Buffer<float> output(1000);
@@ -150,7 +150,7 @@ int main(int argc, char **argv) {
     std::string conv1_sig_datafile = weight_dir + "bn1_running_var.data";
     conv1_sig = load_batch_norm_params(conv1_sig_shapefile, conv1_sig_datafile);
 
-    std::string conv1_gamma_shapefile = weight_dir + "bn1_weight_shape.data"; 
+    std::string conv1_gamma_shapefile = weight_dir + "bn1_weight_shape.data";
     std::string conv1_gamma_datafile = weight_dir + "bn1_weight.data";
     conv1_gamma = load_batch_norm_params(conv1_gamma_shapefile, conv1_gamma_datafile);
 
@@ -275,18 +275,23 @@ int main(int argc, char **argv) {
                  fc1000_bias,
                  output);
     });
+    printf("*************************** Please note ******************************\n"
+           "This code hasn't been scheduled properly yet so this runtime \n"
+           "isn't representative of anything and should not be used as a basis\n"
+           "for any comparisons.\n");
     printf("Execution time : %gms \n", best * 1e3);
+    printf("**********************************************************************\n");
 
-		float max_class_val = -FLT_MIN;
-		int max_class = 0;
-		for (int i = 0; i < 1000; ++i) {
-			if (output(i) > max_class_val) {
-				max_class_val = output(i);
-				max_class = i;
-			}
-		}
-		printf("Class for random data of seed %d is %d\n", seed, max_class);
+    float max_class_val = -FLT_MIN;
+    int max_class = 0;
+    for (int i = 0; i < 1000; ++i) {
+        if (output(i) > max_class_val) {
+            max_class_val = output(i);
+            max_class = i;
+        }
+    }
+    printf("Class for random data of seed %d is %d\n", seed, max_class);
 
-		printf("Writing output layer to %s\n", output_file.c_str());
+    printf("Writing output layer to %s\n", output_file.c_str());
     write_buffer_to_file(output, output_file);
 }

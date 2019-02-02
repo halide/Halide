@@ -218,6 +218,8 @@ public:
                 final_output = softmax_layer(fc1000, 1000, "softmax");
             }
         }
+
+        // TODO: Actually schedule this.
         conv1.f.compute_root();
         scaled1.f.compute_root();
         relu1.f.compute_root();
