@@ -17,7 +17,7 @@
 namespace Halide {
 namespace Internal {
 
-class IRMutator2;
+class IRMutator;
 
 /** Given a vector of scheduled halide functions, create a Module that
  * evaluates it. Automatically pulls in all the functions f depends
@@ -28,7 +28,7 @@ class IRMutator2;
  * calling convention. */
 Module lower(const std::vector<Function> &output_funcs, const std::string &pipeline_name, const Target &t,
                     const std::vector<Argument> &args, const LinkageType linkage_type,
-                    const std::vector<IRMutator2 *> &custom_passes = std::vector<IRMutator2 *>());
+                    const std::vector<IRMutator *> &custom_passes = std::vector<IRMutator *>());
 
 /** Given a halide function with a schedule, create a statement that
  * evaluates it. Automatically pulls in all the functions f depends
@@ -36,7 +36,7 @@ Module lower(const std::vector<Function> &output_funcs, const std::string &pipel
  * a convenience function in tests that wish to assert some property
  * of the lowered IR. */
 Stmt lower_main_stmt(const std::vector<Function> &output_funcs, const std::string &pipeline_name, const Target &t,
-                            const std::vector<IRMutator2 *> &custom_passes = std::vector<IRMutator2 *>());
+                            const std::vector<IRMutator *> &custom_passes = std::vector<IRMutator *>());
 
 void lower_test();
 

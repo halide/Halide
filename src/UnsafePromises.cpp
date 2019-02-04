@@ -5,8 +5,8 @@
 namespace Halide {
 namespace Internal {
 
-class LowerUnsafePromises : public IRMutator2 {
-    using IRMutator2::visit;
+class LowerUnsafePromises : public IRMutator {
+    using IRMutator::visit;
 
     Expr visit(const Call *op) override {
         if (op->is_intrinsic(Call::unsafe_promise_clamped)) {
@@ -28,7 +28,7 @@ class LowerUnsafePromises : public IRMutator2 {
                 return mutate(op->args[0]);
             }
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 

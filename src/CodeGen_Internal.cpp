@@ -281,10 +281,10 @@ namespace {
 
 // This mutator rewrites predicated loads and stores as unpredicated
 // loads/stores with explicit conditions, scalarizing if necessary.
-class UnpredicateLoadsStores : public IRMutator2 {
+class UnpredicateLoadsStores : public IRMutator {
     Expr visit(const Load *op) override {
         if (is_one(op->predicate)) {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
 
         Expr predicate = mutate(op->predicate);
@@ -293,7 +293,7 @@ class UnpredicateLoadsStores : public IRMutator2 {
 
         if (const Broadcast *scalar_pred = predicate.as<Broadcast>()) {
             Expr unpredicated_load = Load::make(op->type, op->name, index, op->image, op->param,
-                                                const_true(op->type.lanes()));
+                                                const_true(op->type.lanes()), op->alignment);
             return Call::make(op->type, Call::if_then_else, {scalar_pred->value, unpredicated_load, make_zero(op->type)},
                               Call::PureIntrinsic);
         } else {
@@ -308,7 +308,7 @@ class UnpredicateLoadsStores : public IRMutator2 {
                 Expr idx_i = Shuffle::make({index_var}, {i});
                 Expr pred_i = Shuffle::make({predicate_var}, {i});
                 Expr unpredicated_load = Load::make(op->type.element_of(), op->name, idx_i, op->image, op->param,
-                                                    const_true());
+                                                    const_true(), ModulusRemainder());
                 lanes.push_back(Call::make(op->type.element_of(), Call::if_then_else, {pred_i, unpredicated_load,
                                 make_zero(unpredicated_load.type())}, Call::PureIntrinsic));
                 ramp.push_back(i);
@@ -321,7 +321,7 @@ class UnpredicateLoadsStores : public IRMutator2 {
 
     Stmt visit(const Store *op) override {
         if (is_one(op->predicate)) {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
 
         Expr predicate = mutate(op->predicate);
@@ -329,7 +329,7 @@ class UnpredicateLoadsStores : public IRMutator2 {
         Expr index = mutate(op->index);
 
         if (const Broadcast *scalar_pred = predicate.as<Broadcast>()) {
-            Stmt unpredicated_store = Store::make(op->name, value, index, op->param, const_true(value.type().lanes()));
+            Stmt unpredicated_store = Store::make(op->name, value, index, op->param, const_true(value.type().lanes()), op->alignment);
             return IfThenElse::make(scalar_pred->value, unpredicated_store);
         } else {
             string value_name = "scalarized_store_value";
@@ -344,7 +344,7 @@ class UnpredicateLoadsStores : public IRMutator2 {
                 Expr pred_i = Shuffle::make({predicate_var}, {i});
                 Expr value_i = Shuffle::make({value_var}, {i});
                 Expr index_i = Shuffle::make({index_var}, {i});
-                Stmt lane = IfThenElse::make(pred_i, Store::make(op->name, value_i, index_i, op->param, const_true()));
+                Stmt lane = IfThenElse::make(pred_i, Store::make(op->name, value_i, index_i, op->param, const_true(), ModulusRemainder()));
                 lanes.push_back(lane);
             }
             Stmt stmt = Block::make(lanes);
@@ -354,7 +354,7 @@ class UnpredicateLoadsStores : public IRMutator2 {
        }
     }
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 };
 
 }  // namespace
@@ -459,7 +459,11 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
                                                 mcpu, mattrs,
                                                 options,
                                                 llvm::Reloc::PIC_,
+#ifdef HALIDE_USE_CODEMODEL_LARGE
+                                                llvm::CodeModel::Large,
+#else
                                                 llvm::CodeModel::Small,
+#endif
                                                 llvm::CodeGenOpt::Aggressive));
 }
 

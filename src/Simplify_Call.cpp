@@ -6,7 +6,7 @@ namespace Internal {
 using std::vector;
 using std::string;
 
-Expr Simplify::visit(const Call *op, ConstBounds *bounds) {
+Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
     // Calls implicitly depend on host, dev, mins, and strides of the buffer referenced
     if (op->call_type == Call::Image || op->call_type == Call::Halide) {
         found_buffer_reference(op->name, op->args.size());
@@ -34,19 +34,49 @@ Expr Simplify::visit(const Call *op, ConstBounds *bounds) {
             Type t = op->type;
 
             bool shift_left = op->is_intrinsic(Call::shift_left);
-            if (t.is_int() && ib < 0) {
-                shift_left = !shift_left;
-                ib = -ib;
+            if (ib < 0) {
+                constexpr int64_t i64_max = std::numeric_limits<int64_t>::max();
+                if (t.is_int()) {
+                    shift_left = !shift_left;
+                    // Ensure that corner case of ib = lowest() doesn't negate into itself
+                    ib = -std::max(ib, -i64_max);
+                } else {
+                    // It's a uint > 2^63-1, so we're definitely shifting out-of-range;
+                    // just clip to a large-enough value value and fall thru.
+                    ib = i64_max;
+                }
             }
 
-            if (ib >= 0 && ib < std::min(t.bits(), 64) - 1) {
-                ib = 1LL << ib;
-                b = make_const(t, ib);
+            if (ib >= 0) {
+                assert(t.bits() <= 64);
+                int max_shift = t.bits() - 1;
+                if (t.is_int()) {
+                    // One less if there is a sign bit
+                    max_shift -= 1;
+                }
+                if (ib <= max_shift) {
+                    ib = 1LL << ib;
+                    b = make_const(t, ib);
 
-                if (shift_left) {
-                    return mutate(Mul::make(a, b), bounds);
+                    if (shift_left) {
+                        return mutate(Mul::make(a, b), bounds);
+                    } else {
+                        return mutate(Div::make(a, b), bounds);
+                    }
                 } else {
-                    return mutate(Div::make(a, b), bounds);
+                    // We know that all the meaningful bits will be shifted away;
+                    // just replace with a constant 0 or -1 if possible.
+                    if (shift_left) {
+                        return make_zero(t);
+                    } else {
+                        // shift-right-out-of-bounds -> zero for uint.
+                        if (t.is_uint()) {
+                            return make_zero(t);
+                        } else {
+                            // shift-right-out-of-bounds -> zero or -1 for int.
+                            return mutate(select(a < 0, make_const(t, -1), make_zero(t)), bounds);
+                        }
+                    }
                 }
             }
         }
@@ -118,6 +148,23 @@ Expr Simplify::visit(const Call *op, ConstBounds *bounds) {
         } else {
             return ~a;
         }
+    } else if (op->is_intrinsic(Call::bitwise_xor)) {
+        Expr a = mutate(op->args[0], nullptr);
+        Expr b = mutate(op->args[1], nullptr);
+
+        int64_t ia, ib;
+        uint64_t ua, ub;
+        if (const_int(a, &ia) &&
+            const_int(b, &ib)) {
+            return make_const(op->type, ia ^ ib);
+        } else if (const_uint(a, &ua) &&
+                   const_uint(b, &ub)) {
+            return make_const(op->type, ua ^ ub);
+        } else if (a.same_as(op->args[0]) && b.same_as(op->args[1])) {
+            return op;
+        } else {
+            return a ^ b;
+        }
     } else if (op->is_intrinsic(Call::reinterpret)) {
         Expr a = mutate(op->args[0], nullptr);
 
@@ -139,7 +186,7 @@ Expr Simplify::visit(const Call *op, ConstBounds *bounds) {
         }
     } else if (op->is_intrinsic(Call::abs)) {
         // Constant evaluate abs(x).
-        ConstBounds a_bounds;
+        ExprInfo a_bounds;
         Expr a = mutate(op->args[0], &a_bounds);
 
         Type ta = a.type();
@@ -167,12 +214,41 @@ Expr Simplify::visit(const Call *op, ConstBounds *bounds) {
         } else {
             return abs(a);
         }
+    } else if (op->is_intrinsic(Call::absd)) {
+        // Constant evaluate absd(a, b).
+        ExprInfo a_bounds, b_bounds;
+        Expr a = mutate(op->args[0], &a_bounds);
+        Expr b = mutate(op->args[1], &b_bounds);
+
+        Type ta = a.type();
+        // absd() should enforce identical types for a and b when the node is created
+        internal_assert(ta == b.type());
+
+        int64_t ia = 0, ib = 0;
+        uint64_t ua = 0, ub = 0;
+        double fa = 0, fb = 0;
+        if (ta.is_int() && const_int(a, &ia) && const_int(b, &ib)) {
+            // Note that absd(int, int) always produces a uint result
+            internal_assert(op->type.is_uint());
+            const uint64_t d = ia > ib ? (uint64_t)(ia - ib) : (uint64_t)(ib - ia);
+            return make_const(op->type, d);
+        } else if (ta.is_uint() && const_uint(a, &ua) && const_uint(b, &ub)) {
+            const uint64_t d = ua > ub ? ua - ub : ub - ua;
+            return make_const(op->type, d);
+        } else if (const_float(a, &fa) && const_float(b, &fb)) {
+            const double d = fa > fb ? fa - fb : fb - fa;
+            return make_const(op->type, d);
+        } else if (a.same_as(op->args[0]) && b.same_as(op->args[1])) {
+            return op;
+        } else {
+            return absd(a, b);
+        }
     } else if (op->call_type == Call::PureExtern &&
-               op->name == "is_nan_f32") {
+               (op->name == "is_nan_f16" || op->name == "is_nan_f32" || op->name == "is_nan_f64")) {
         Expr arg = mutate(op->args[0], nullptr);
         double f = 0.0;
         if (const_float(arg, &f)) {
-            return std::isnan(f);
+            return make_bool(std::isnan(f));
         } else if (arg.same_as(op->args[0])) {
             return op;
         } else {

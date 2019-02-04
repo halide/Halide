@@ -2,7 +2,7 @@
 # 'make run_tests' builds and runs all the end-to-end tests in the test subdirectory
 # 'make {error,performance}_foo' builds and runs test/{...}/foo.cpp for any
 #     cpp file in the corresponding subdirectory of the test folder
-# 'make test_foo' builds and runs test/correctness/foo.cpp for any
+# 'make correctness_foo' builds and runs test/correctness/foo.cpp for any
 #     cpp file in the correctness/ subdirectoy of the test folder
 # 'make test_apps' checks some of the apps build and run (but does not check their output)
 # 'make time_compilation_tests' records the compile time for each test module into a csv file.
@@ -35,7 +35,15 @@ else
   INSTALL_NAME_TOOL_LD_FLAGS=
 endif
 
-BAZEL ?= $(shell which bazel)
+ifeq ($(UNAME), Darwin)
+define alwayslink
+	-Wl,-force_load,$(1)
+endef
+else
+define alwayslink
+	-Wl,--whole-archive $(1) -Wl,-no-whole-archive
+endef
+endif
 
 SHELL = bash
 CXX ?= g++
@@ -852,7 +860,9 @@ $(INCLUDE_DIR)/Halide.h: $(SRC_DIR)/../LICENSE.txt $(HEADERS) $(BIN_DIR)/build_h
 	@mkdir -p $(@D)
 	$(BIN_DIR)/build_halide_h $(SRC_DIR)/../LICENSE.txt $(HEADERS) > $(INCLUDE_DIR)/Halide.h
 	# Also generate a precompiled version in the same folder so that anything compiled with a compatible set of flags can use it
-	$(CXX) -std=c++11 $(TEST_CXX_FLAGS) -I$(ROOT_DIR) $(OPTIMIZE) -x c++-header $(INCLUDE_DIR)/Halide.h -o $(INCLUDE_DIR)/Halide.h.gch
+	@mkdir -p $(INCLUDE_DIR)/Halide.h.gch
+	$(CXX) -std=c++11 $(TEST_CXX_FLAGS) -I$(ROOT_DIR) $(OPTIMIZE) -x c++-header $(INCLUDE_DIR)/Halide.h -o $(INCLUDE_DIR)/Halide.h.gch/Halide.default.gch
+	$(CXX) -std=c++11 $(TEST_CXX_FLAGS) -I$(ROOT_DIR) $(OPTIMIZE_FOR_BUILD_TIME) -x c++-header $(INCLUDE_DIR)/Halide.h -o $(INCLUDE_DIR)/Halide.h.gch/Halide.test.gch
 
 $(INCLUDE_DIR)/HalideRuntime%: $(SRC_DIR)/runtime/HalideRuntime%
 	echo Copying $<
@@ -1056,7 +1066,7 @@ GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/nested_externs.runge
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/old_buffer_t.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/tiled_blur.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/extern_output.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
-test_rungen: $(GENERATOR_BUILD_RUNGEN_TESTS)
+test_rungen: $(GENERATOR_BUILD_RUNGEN_TESTS) $(FILTERS_DIR)/multi_rungen $(FILTERS_DIR)/multi_rungen2
 
 test_generator: $(GENERATOR_AOT_TESTS) $(GENERATOR_AOTCPP_TESTS) $(GENERATOR_JIT_TESTS) $(GENERATOR_BUILD_RUNGEN_TESTS)
 
@@ -1191,7 +1201,7 @@ $(BIN_DIR)/external_code.generator: $(BUILD_DIR)/GenGen.o $(BIN_DIR)/libHalide.$
 
 NAME_MANGLING_TARGET=$(NON_EMPTY_TARGET)-c_plus_plus_name_mangling
 
-GEN_AOT_OUTPUTS=-e static_library,h,cpp
+GEN_AOT_OUTPUTS=-e static_library,h,cpp,registration
 
 # By default, %.a/.h are produced by executing %.generator. Runtimes are not included in these.
 # (We explicitly also generate .cpp output here as well, as additional test surface for the C++ backend.)
@@ -1203,6 +1213,9 @@ $(FILTERS_DIR)/%.h: $(FILTERS_DIR)/%.a
 	@echo $@ produced implicitly by $^
 
 $(FILTERS_DIR)/%.cpp: $(FILTERS_DIR)/%.a
+	@echo $@ produced implicitly by $^
+
+$(FILTERS_DIR)/%.registration.cpp: $(FILTERS_DIR)/%.a
 	@echo $@ produced implicitly by $^
 
 $(FILTERS_DIR)/%.stub.h: $(BIN_DIR)/%.generator
@@ -1363,7 +1376,7 @@ $(FILTERS_DIR)/stubtest.a: $(BIN_DIR)/stubtest.generator
 
 $(FILTERS_DIR)/external_code.a: $(BIN_DIR)/external_code.generator
 	@mkdir -p $(@D)
-	$(CURDIR)/$< -g external_code -e static_library,h -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime external_code_is_bitcode=true
+	$(CURDIR)/$< -g external_code -e static_library,h,registration -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime external_code_is_bitcode=true
 
 $(FILTERS_DIR)/external_code.cpp: $(BIN_DIR)/external_code.generator
 	@mkdir -p $(@D)
@@ -1471,17 +1484,55 @@ test_generator_nested_externs:
 
 $(BUILD_DIR)/RunGenMain.o: $(ROOT_DIR)/tools/RunGenMain.cpp $(RUNTIME_EXPORTED_INCLUDES) $(ROOT_DIR)/tools/RunGen.h
 	@mkdir -p $(@D)
-	$(CXX) -c $< $(TEST_CXX_FLAGS) $(IMAGE_IO_CXX_FLAGS) -I$(INCLUDE_DIR) -I $(SRC_DIR)/runtime -I$(ROOT_DIR)/tools -o $@
+	$(CXX) -c $< $(TEST_CXX_FLAGS) $(OPTIMIZE) $(IMAGE_IO_CXX_FLAGS) -I$(INCLUDE_DIR) -I $(SRC_DIR)/runtime -I$(ROOT_DIR)/tools -o $@
 
-$(FILTERS_DIR)/%.rungen: $(BUILD_DIR)/RunGenMain.o $(BIN_DIR)/$(TARGET)/runtime.a $(ROOT_DIR)/tools/RunGenStubs.cpp $(FILTERS_DIR)/%.a
+$(FILTERS_DIR)/%.registration.o: $(FILTERS_DIR)/%.registration.cpp
 	@mkdir -p $(@D)
-	$(CXX) -std=c++11 -DHL_RUNGEN_FILTER_HEADER=\"$*.h\" -I$(FILTERS_DIR) $^ $(GEN_AOT_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@
+	$(CXX) -c $< $(TEST_CXX_FLAGS) -o $@
+
+$(FILTERS_DIR)/%.rungen: $(BUILD_DIR)/RunGenMain.o $(BIN_DIR)/$(TARGET)/runtime.a $(FILTERS_DIR)/%.registration.o $(FILTERS_DIR)/%.a
+	@mkdir -p $(@D)
+	$(CXX) -std=c++11 -I$(FILTERS_DIR) \
+		$(BUILD_DIR)/RunGenMain.o \
+		$(BIN_DIR)/$(TARGET)/runtime.a \
+		$(call alwayslink,$(FILTERS_DIR)/$*.registration.o) \
+		$(FILTERS_DIR)/$*.a \
+		$(GEN_AOT_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@
 
 RUNARGS ?=
 
 $(FILTERS_DIR)/%.run: $(FILTERS_DIR)/%.rungen
 	$(CURDIR)/$< $(RUNARGS)
 	@-echo
+
+# Test linking multiple filters into a single RunGen instance
+$(FILTERS_DIR)/multi_rungen: $(BUILD_DIR)/RunGenMain.o $(BIN_DIR)/$(TARGET)/runtime.a \
+														 $(FILTERS_DIR)/blur2x2.registration.o $(FILTERS_DIR)/blur2x2.a \
+														 $(FILTERS_DIR)/cxx_mangling.registration.o $(FILTERS_DIR)/cxx_mangling.a \
+														 $(FILTERS_DIR)/pyramid.registration.o $(FILTERS_DIR)/pyramid.a
+	@mkdir -p $(@D)
+	$(CXX) -std=c++11 -I$(FILTERS_DIR) \
+			$(BUILD_DIR)/RunGenMain.o \
+			$(BIN_DIR)/$(TARGET)/runtime.a \
+			$(call alwayslink,$(FILTERS_DIR)/blur2x2.registration.o) \
+			$(call alwayslink,$(FILTERS_DIR)/cxx_mangling.registration.o) \
+			$(call alwayslink,$(FILTERS_DIR)/pyramid.registration.o) \
+			$(FILTERS_DIR)/blur2x2.a \
+			$(FILTERS_DIR)/cxx_mangling.a \
+			$(FILTERS_DIR)/pyramid.a \
+			$(GEN_AOT_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@
+
+# Test concatenating multiple registration files as well, which should also work
+$(FILTERS_DIR)/multi_rungen2.registration.cpp: $(FILTERS_DIR)/blur2x2.registration.cpp $(FILTERS_DIR)/cxx_mangling.registration.cpp $(FILTERS_DIR)/pyramid.registration.cpp
+	cat $^ > $@
+
+$(FILTERS_DIR)/multi_rungen2: $(BUILD_DIR)/RunGenMain.o $(BIN_DIR)/$(TARGET)/runtime.a \
+														 $(FILTERS_DIR)/multi_rungen2.registration.cpp \
+														 $(FILTERS_DIR)/blur2x2.a \
+														 $(FILTERS_DIR)/cxx_mangling.a \
+														 $(FILTERS_DIR)/pyramid.a
+	@mkdir -p $(@D)
+	$(CXX) -std=c++11 -I$(FILTERS_DIR) $^ $(GEN_AOT_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@
 
 $(BIN_DIR)/tutorial_%: $(ROOT_DIR)/tutorial/%.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h
 	@ if [[ $@ == *_run ]]; then \
@@ -1666,24 +1717,6 @@ test_apps: distrib
 			|| exit 1 ; \
 	done
 
-# Bazel depends on the distrib archive being built
-.PHONY: test_bazel
-test_bazel: $(DISTRIB_DIR)/halide.tgz
-	# Only test bazeldemo if Bazel is installed
-	if [ -z "$(BAZEL)" ]; then echo "Bazel is not installed"; exit 1; fi
-	mkdir -p apps
-	# Make a local copy of the apps if we're building out-of-tree,
-	# because the app Makefiles are written to build in-tree
-	if [ "$(ROOT_DIR)" != "$(CURDIR)" ]; then \
-	  echo "Building out-of-tree, so making local copy of apps"; \
-	  cp -r $(ROOT_DIR)/apps/bazeldemo apps; \
-	  cp -r $(ROOT_DIR)/tools .; \
-	fi
-	cd apps/bazeldemo; \
-	CXX=`echo ${CXX} | sed 's/ccache //'` \
-	CC=`echo ${CC} | sed 's/ccache //'` \
-	bazel build --verbose_failures :all
-
 .PHONY: test_python2
 test_python2: distrib $(BIN_DIR)/host/runtime.a
 	make -C $(ROOT_DIR)/python_bindings \
@@ -1734,6 +1767,10 @@ ifneq (,$(findstring clang version 8.0,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
 
+ifneq (,$(findstring clang version 9.0,$(CLANG_VERSION)))
+CLANG_OK=yes
+endif
+
 ifneq (,$(findstring Apple LLVM version 5.0,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
@@ -1754,7 +1791,7 @@ $(BUILD_DIR)/clang_ok:
 	@exit 1
 endif
 
-ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 60 70 80))
+ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 60 70 80 90))
 LLVM_OK=yes
 endif
 
@@ -1819,7 +1856,6 @@ install: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR
 	cp $(ROOT_DIR)/tools/GenGen.cpp $(PREFIX)/share/halide/tools
 	cp $(ROOT_DIR)/tools/RunGen.h $(PREFIX)/share/halide/tools
 	cp $(ROOT_DIR)/tools/RunGenMain.cpp $(PREFIX)/share/halide/tools
-	cp $(ROOT_DIR)/tools/RunGenStubs.cpp $(PREFIX)/share/halide/tools
 	cp $(ROOT_DIR)/tools/halide_image.h $(PREFIX)/share/halide/tools
 	cp $(ROOT_DIR)/tools/halide_image_io.h $(PREFIX)/share/halide/tools
 	cp $(ROOT_DIR)/tools/halide_image_info.h $(PREFIX)/share/halide/tools
@@ -1857,8 +1893,6 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
 						   $(INCLUDE_DIR)/Halide.h \
 						   $(RUNTIME_EXPORTED_INCLUDES) \
 						   $(ROOT_DIR)/README*.md \
-						   $(ROOT_DIR)/bazel/* \
-						   $(BUILD_DIR)/halide_config.bzl \
                $(BUILD_DIR)/halide_config.cmake \
                $(BUILD_DIR)/halide_config.make \
 						   $(ROOT_DIR)/halide.cmake
@@ -1885,7 +1919,6 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
 	cp $(ROOT_DIR)/tools/GenGen.cpp $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/RunGen.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/RunGenMain.cpp $(DISTRIB_DIR)/tools
-	cp $(ROOT_DIR)/tools/RunGenStubs.cpp $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_benchmark.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_image.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_image_io.h $(DISTRIB_DIR)/tools
@@ -1893,10 +1926,6 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
 	cp $(ROOT_DIR)/tools/halide_malloc_trace.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_trace_config.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/README*.md $(DISTRIB_DIR)
-	cp $(ROOT_DIR)/bazel/BUILD $(DISTRIB_DIR)
-	cp $(ROOT_DIR)/bazel/halide.bzl $(DISTRIB_DIR)
-	cp $(ROOT_DIR)/bazel/README_bazel.md $(DISTRIB_DIR)
-	cp $(ROOT_DIR)/bazel/WORKSPACE $(DISTRIB_DIR)
 	cp $(BUILD_DIR)/halide_config.* $(DISTRIB_DIR)
 	cp $(ROOT_DIR)/halide.cmake $(DISTRIB_DIR)
 	ln -sf $(DISTRIB_DIR) halide
@@ -1905,12 +1934,7 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
 		halide/lib \
 		halide/include \
 		halide/tutorial \
-		halide/BUILD \
 		halide/README*.md \
-		halide/README_bazel.md \
-		halide/WORKSPACE \
-		halide/*.bzl \
-		halide/*.cmake \
 		halide/tools/mex_halide.m \
 		halide/tools/*.cpp \
 		halide/tools/halide_benchmark.h \

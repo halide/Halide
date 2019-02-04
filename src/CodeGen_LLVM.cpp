@@ -668,10 +668,6 @@ void CodeGen_LLVM::begin_func(LinkageType linkage, const std::string& name,
                 sym_push(args[i].name, &arg);
             }
 
-            if (args[i].alignment.modulus != 0) {
-                alignment_info.push(args[i].name, args[i].alignment);
-            }
-
             i++;
         }
     }
@@ -686,9 +682,6 @@ void CodeGen_LLVM::end_func(const std::vector<LoweredArgument>& args) {
             sym_pop(args[i].name + ".buffer");
         } else {
             sym_pop(args[i].name);
-        }
-        if (args[i].alignment.modulus != 0) {
-            alignment_info.pop(args[i].name);
         }
     }
 
@@ -936,7 +929,10 @@ Constant* CodeGen_LLVM::embed_constant_expr(Expr e, llvm::Type *t) {
     }
 
     internal_assert(!e.type().is_handle()) << "Should never see Handle types here.";
-    internal_assert(is_const(e)) << "Should never see Handle types here.";
+    if (!is_const(e)) {
+        e = simplify(e);
+        internal_assert(is_const(e)) << "Should only see constant values for estimates.";
+    }
 
     llvm::Value *val = codegen(e);
     llvm::Constant *constant = dyn_cast<llvm::Constant>(val);
@@ -1164,7 +1160,11 @@ void CodeGen_LLVM::optimize_module() {
 
     if (get_target().has_feature(Target::TSAN)) {
         auto addThreadSanitizerPass = [](const PassManagerBuilder &builder, legacy::PassManagerBase &pm) {
-            pm.add(createThreadSanitizerPass());
+#if LLVM_VERSION >= 80
+            pm.add(createThreadSanitizerLegacyPassPass());
+#else
+            pm.add(createThreadSanitizerPass());            
+#endif
         };
         b.addExtension(PassManagerBuilder::EP_OptimizerLast, addThreadSanitizerPass);
         b.addExtension(PassManagerBuilder::EP_EnabledOnOptLevel0, addThreadSanitizerPass);
@@ -1773,7 +1773,8 @@ void CodeGen_LLVM::visit(const Load *op) {
     // If it's a Handle, load it as a uint64_t and then cast
     if (op->type.is_handle()) {
         codegen(reinterpret(op->type, Load::make(UInt(64, op->type.lanes()), op->name,
-                                                 op->index, op->image, op->param, op->predicate)));
+                                                 op->index, op->image,
+                                                 op->param, op->predicate, op->alignment)));
         return;
     }
 
@@ -1802,6 +1803,9 @@ void CodeGen_LLVM::visit(const Load *op) {
             Expr stride_a = make_one(base_a.type());
             Expr stride_b = make_one(base_b.type());
 
+            ModulusRemainder align_a = op->alignment;
+            ModulusRemainder align_b = align_a + ramp->lanes;
+
             // False indicates we should take the even-numbered lanes
             // from the load, true indicates we should take the
             // odd-numbered-lanes.
@@ -1814,6 +1818,7 @@ void CodeGen_LLVM::visit(const Load *op) {
             // as ASAN will complain even about harmless stack overreads.)
             if (external || target.has_feature(Target::ASAN)) {
                 base_b -= 1;
+                align_b = align_b - 1;
                 shifted_b = true;
             } else {
                 // If the base ends in an odd constant, then subtract one
@@ -1823,8 +1828,10 @@ void CodeGen_LLVM::visit(const Load *op) {
                 const IntImm *offset = add ? add->b.as<IntImm>() : nullptr;
                 if (offset && offset->value & 1) {
                     base_a -= 1;
+                    align_a = align_a - 1;
                     shifted_a = true;
                     base_b -= 1;
+                    align_b = align_b - 1;
                     shifted_b = true;
                 }
             }
@@ -1832,8 +1839,8 @@ void CodeGen_LLVM::visit(const Load *op) {
             // Do each load.
             Expr ramp_a = Ramp::make(base_a, stride_a, ramp->lanes);
             Expr ramp_b = Ramp::make(base_b, stride_b, ramp->lanes);
-            Expr load_a = Load::make(op->type, op->name, ramp_a, op->image, op->param, op->predicate);
-            Expr load_b = Load::make(op->type, op->name, ramp_b, op->image, op->param, op->predicate);
+            Expr load_a = Load::make(op->type, op->name, ramp_a, op->image, op->param, op->predicate, align_a);
+            Expr load_b = Load::make(op->type, op->name, ramp_b, op->image, op->param, op->predicate, align_b);
             Value *vec_a = codegen(load_a);
             Value *vec_b = codegen(load_b);
 
@@ -1852,7 +1859,10 @@ void CodeGen_LLVM::visit(const Load *op) {
             Expr flipped_base = ramp->base - ramp->lanes + 1;
             Expr flipped_stride = make_one(flipped_base.type());
             Expr flipped_index = Ramp::make(flipped_base, flipped_stride, ramp->lanes);
-            Expr flipped_load = Load::make(op->type, op->name, flipped_index, op->image, op->param, op->predicate);
+            ModulusRemainder align = op->alignment;
+            // Switch to the alignment of the last lane
+            align = align - (ramp->lanes - 1);
+            Expr flipped_load = Load::make(op->type, op->name, flipped_index, op->image, op->param, op->predicate, align);
 
             Value *flipped = codegen(flipped_load);
 
@@ -2046,7 +2056,7 @@ void CodeGen_LLVM::codegen_predicated_vector_store(const Store *op) {
         int native_bytes = native_bits / 8;
 
         // Boost the alignment if possible, up to the native vector width.
-        ModulusRemainder mod_rem = modulus_remainder(ramp->base, alignment_info);
+        ModulusRemainder mod_rem = op->alignment;
         while ((mod_rem.remainder & 1) == 0 &&
                (mod_rem.modulus & 1) == 0 &&
                alignment < native_bytes) {
@@ -2131,7 +2141,7 @@ Value *CodeGen_LLVM::codegen_dense_vector_load(const Load *load, Value *vpred) {
     // maximum alignment we can infer based on the index alone.
 
     // Boost the alignment if possible, up to the native vector width.
-    ModulusRemainder mod_rem = modulus_remainder(ramp->base, alignment_info);
+    ModulusRemainder mod_rem = load->alignment;
     while ((mod_rem.remainder & 1) == 0 &&
            (mod_rem.modulus & 1) == 0 &&
            alignment < native_bytes) {
@@ -2203,14 +2213,17 @@ void CodeGen_LLVM::codegen_predicated_vector_load(const Load *op) {
         Expr flipped_base = ramp->base - ramp->lanes + 1;
         Expr flipped_stride = make_one(flipped_base.type());
         Expr flipped_index = Ramp::make(flipped_base, flipped_stride, ramp->lanes);
+        ModulusRemainder align = op->alignment;
+        align = align - (ramp->lanes - 1);
+
         Expr flipped_load = Load::make(op->type, op->name, flipped_index, op->image,
-                                       op->param, const_true(op->type.lanes()));
+                                       op->param, const_true(op->type.lanes()), align);
 
         Value *flipped = codegen_dense_vector_load(flipped_load.as<Load>(), vpred);
         value = shuffle_vectors(flipped, indices);
     } else { // It's not dense vector load, we need to scalarize it
         Expr load_expr = Load::make(op->type, op->name, op->index, op->image,
-                                    op->param, const_true(op->type.lanes()));
+                                    op->param, const_true(op->type.lanes()), op->alignment);
         debug(4) << "Scalarize predicated vector load\n\t" << load_expr << "\n";
         Expr pred_load = Call::make(load_expr.type(),
                                     Call::if_then_else,
@@ -3028,29 +3041,13 @@ void CodeGen_LLVM::visit(const Prefetch *op) {
 
 void CodeGen_LLVM::visit(const Let *op) {
     sym_push(op->name, codegen(op->value));
-    if (op->value.type() == Int(32)) {
-        alignment_info.push(op->name, modulus_remainder(op->value, alignment_info));
-    }
     value = codegen(op->body);
-    if (op->value.type() == Int(32)) {
-        alignment_info.pop(op->name);
-    }
     sym_pop(op->name);
 }
 
 void CodeGen_LLVM::visit(const LetStmt *op) {
     sym_push(op->name, codegen(op->value));
-
-    if (op->value.type() == Int(32)) {
-        alignment_info.push(op->name, modulus_remainder(op->value, alignment_info));
-    }
-
     codegen(op->body);
-
-    if (op->value.type() == Int(32)) {
-        alignment_info.pop(op->name);
-    }
-
     sym_pop(op->name);
 }
 
@@ -3621,7 +3618,7 @@ void CodeGen_LLVM::visit(const Store *op) {
     // memory, so convert stores of handles to stores of uint64_ts.
     if (op->value.type().is_handle()) {
         Expr v = reinterpret(UInt(64, op->value.type().lanes()), op->value);
-        codegen(Store::make(op->name, v, op->index, op->param, op->predicate));
+        codegen(Store::make(op->name, v, op->index, op->param, op->predicate, op->alignment));
         return;
     }
 
@@ -3640,7 +3637,7 @@ void CodeGen_LLVM::visit(const Store *op) {
         StoreInst *store = builder->CreateAlignedStore(val, ptr, value_type.bytes());
         add_tbaa_metadata(store, op->name, op->index);
     } else if (const Let *let = op->index.as<Let>()) {
-        Stmt s = Store::make(op->name, op->value, let->body, op->param, op->predicate);
+        Stmt s = Store::make(op->name, op->value, let->body, op->param, op->predicate, op->alignment);
         codegen(LetStmt::make(let->name, let->value, s));
     } else {
         int alignment = value_type.bytes();
@@ -3651,7 +3648,7 @@ void CodeGen_LLVM::visit(const Store *op) {
             int native_bytes = native_bits / 8;
 
             // Boost the alignment if possible, up to the native vector width.
-            ModulusRemainder mod_rem = modulus_remainder(ramp->base, alignment_info);
+            ModulusRemainder mod_rem = op->alignment;
             while ((mod_rem.remainder & 1) == 0 &&
                    (mod_rem.modulus & 1) == 0 &&
                    alignment < native_bytes) {
@@ -3722,12 +3719,59 @@ void CodeGen_LLVM::visit(const Store *op) {
             }
         }
     }
+}
 
+void CodeGen_LLVM::codegen_asserts(const vector<const AssertStmt *> &asserts) {
+    if (asserts.size() < 4) {
+        for (const auto *a : asserts) {
+            codegen(Stmt(a));
+        }
+        return;
+    }
+
+    internal_assert(asserts.size() <= 63);
+
+    // Mix all the conditions together into a bitmask
+
+    Expr bitmask = cast<uint64_t>(1) << 63;
+    for (size_t i = 0; i < asserts.size(); i++) {
+        bitmask = bitmask | (cast<uint64_t>(!asserts[i]->condition) << i);
+    }
+
+    Expr switch_case = count_trailing_zeros(bitmask);
+
+    BasicBlock *no_errors_bb = BasicBlock::Create(*context, "no_errors_bb", function);
+
+    // Now switch on the bitmask to the correct failure
+    Expr case_idx = cast<int32_t>(count_trailing_zeros(bitmask));
+    auto *switch_inst = builder->CreateSwitch(codegen(case_idx), no_errors_bb, asserts.size(), very_likely_branch);
+    for (int i = 0; i < (int) asserts.size(); i++) {
+        BasicBlock *fail_bb = BasicBlock::Create(*context, "assert_failed", function);
+        switch_inst->addCase(ConstantInt::get(IntegerType::get(*context, 32), i), fail_bb);
+        builder->SetInsertPoint(fail_bb);
+        Value *v = codegen(asserts[i]->message);
+        builder->CreateRet(v);
+    }
+    builder->SetInsertPoint(no_errors_bb);
 }
 
 void CodeGen_LLVM::visit(const Block *op) {
-    codegen(op->first);
-    codegen(op->rest);
+    // Peel blocks of assertions with pure conditions
+    const AssertStmt *a = op->first.as<AssertStmt>();
+    if (a && is_pure(a->condition)) {
+        vector<const AssertStmt *> asserts;
+        asserts.push_back(a);
+        Stmt s = op->rest;
+        while ((op = s.as<Block>()) && (a = op->first.as<AssertStmt>()) && is_pure(a->condition) && asserts.size() < 63) {
+            asserts.push_back(a);
+            s = op->rest;
+        }
+        codegen_asserts(asserts);
+        codegen(s);
+    } else {
+        codegen(op->first);
+        codegen(op->rest);
+    }
 }
 
 void CodeGen_LLVM::visit(const Realize *op) {
@@ -4027,10 +4071,6 @@ std::pair<llvm::Function *, int> CodeGen_LLVM::find_vector_runtime_function(cons
     }
 
     return { nullptr, 0 };
-}
-
-ModulusRemainder CodeGen_LLVM::get_alignment_info(Expr e) {
-    return modulus_remainder(e, alignment_info);
 }
 
 }  // namespace Internal

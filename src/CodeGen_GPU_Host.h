@@ -38,7 +38,6 @@ protected:
      * compiler do name lookup. Annoying but necessary, because the
      * compiler doesn't know that CodeGen_CPU will in fact inherit
      * from CodeGen for every instantiation of this template. */
-    using CodeGen_CPU::alignment_info;
     using CodeGen_CPU::allocations;
     using CodeGen_CPU::buffer_t_type;
     using CodeGen_CPU::builder;

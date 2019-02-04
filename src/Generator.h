@@ -317,7 +317,8 @@ std::string halide_type_to_c_type(const Type &t);
 
 /** generate_filter_main() is a convenient wrapper for GeneratorRegistry::create() +
  * compile_to_files(); it can be trivially wrapped by a "real" main() to produce a
- * command-line utility for ahead-of-time filter compilation. */
+ * command-line utility for ahead-of-time filter compilation.
+ * Note that this function is not thread-safe because it resets global states.*/
 int generate_filter_main(int argc, char **argv, std::ostream &cerr);
 
 // select_type<> is to std::conditional as switch is to if:
@@ -1749,10 +1750,24 @@ public:
         return ExternFuncArgument(this->exprs().at(0));
     }
 
-    void set_estimate(const T &value) {
-        for (Parameter &p : this->parameters_) {
-            p.set_estimate(Expr(value));
+    template <typename T2 = T, typename std::enable_if<!std::is_array<T2>::value>::type * = nullptr>
+    void set_estimate(const TBase &value) {
+        Expr e = Expr(value);
+        if (std::is_same<T2, bool>::value) {
+          e = cast<bool>(e);
         }
+        for (Parameter &p : this->parameters_) {
+            p.set_estimate(e);
+        }
+    }
+
+    template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
+    void set_estimate(size_t index, const TBase &value) {
+        Expr e = Expr(value);
+        if (std::is_same<T2, bool>::value) {
+          e = cast<bool>(e);
+        }
+        this->parameters_.at(index).set_estimate(e);
     }
 };
 
@@ -2670,6 +2685,7 @@ public:
         bool emit_static_library{true};
         bool emit_cpp_stub{false};
         bool emit_schedule{false};
+        bool emit_registration{false};
 
         // This is an optional map used to replace the default extensions generated for
         // a file: if an key matches an output extension, emit those files with the

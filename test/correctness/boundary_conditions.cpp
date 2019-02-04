@@ -1,8 +1,8 @@
+#include "Halide.h"
 #include <algorithm>
 #include <future>
-#include <stdio.h>
 
-#include "Halide.h"
+#include <cstdio>
 
 using namespace Halide;
 using namespace Halide::BoundaryConditions;
