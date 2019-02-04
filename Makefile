@@ -1512,7 +1512,7 @@ $(FILTERS_DIR)/rungen_test: $(ROOT_DIR)/test/generator/rungen_test.cpp \
 							$(FILTERS_DIR)/example.registration.o \
 							$(FILTERS_DIR)/example.a
 	@mkdir -p $(@D)
-	$(CXX) $(GEN_AOT_CXX_FLAGS) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) \
+	$(CXX) $(GEN_AOT_CXX_FLAGS) $(IMAGE_IO_CXX_FLAGS) $(GEN_AOT_INCLUDES) \
 			$(ROOT_DIR)/test/generator/rungen_test.cpp \
 			$(BIN_DIR)/$(TARGET)/runtime.a \
 			$(call alwayslink,$(FILTERS_DIR)/example.registration.o) \
