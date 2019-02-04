@@ -1526,10 +1526,10 @@ $(FILTERS_DIR)/registration_test: $(ROOT_DIR)/test/generator/registration_test.c
 			$(FILTERS_DIR)/blur2x2.registration_extra.o \
 			$(FILTERS_DIR)/cxx_mangling.registration_extra.o \
 			$(FILTERS_DIR)/pyramid.registration_extra.o \
-			$(BIN_DIR)/$(TARGET)/runtime.a \
 			$(FILTERS_DIR)/blur2x2.a \
 			$(FILTERS_DIR)/cxx_mangling.a \
 			$(FILTERS_DIR)/pyramid.a \
+      $(BIN_DIR)/$(TARGET)/runtime.a \
 			$(GEN_AOT_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@
 
 # Test RunGen itself
