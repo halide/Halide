@@ -111,6 +111,7 @@ Outputs add_suffixes(const Outputs &in, const std::string &suffix) {
     if (!in.stmt_html_name.empty()) out.stmt_html_name = add_suffix(in.stmt_html_name, suffix);
     if (!in.schedule_name.empty()) out.schedule_name = add_suffix(in.schedule_name, suffix);
     if (!in.registration_name.empty()) out.registration_name = add_suffix(in.registration_name, suffix);
+
     return out;
 }
 
@@ -141,7 +142,8 @@ extern "C" {
 struct halide_filter_metadata_t;
 void halide_register_argv_and_metadata(
     int (*filter_argv_call)(void **),
-    const struct halide_filter_metadata_t *filter_metadata
+    const struct halide_filter_metadata_t *filter_metadata,
+    const char * const *extra_key_value_pairs
 );
 }
 
@@ -150,11 +152,19 @@ extern int $SHORTNAME$_argv(void **args);
 extern const struct halide_filter_metadata_t *$SHORTNAME$_metadata();
 $NSCLOSE$
 
+#ifdef HL_REGISTER_EXTRA_KEY_VALUE_PAIRS_FUNC
+extern "C" const char * const *HL_REGISTER_EXTRA_KEY_VALUE_PAIRS_FUNC();
+#endif  // HL_REGISTER_EXTRA_KEY_VALUE_PAIRS
+
 namespace $NREGS$ {
 namespace {
 struct Registerer {
     Registerer() {
-        halide_register_argv_and_metadata(::$FULLNAME$_argv, ::$FULLNAME$_metadata());
+#ifdef HL_REGISTER_EXTRA_KEY_VALUE_PAIRS_FUNC
+        halide_register_argv_and_metadata(::$FULLNAME$_argv, ::$FULLNAME$_metadata(), HL_REGISTER_EXTRA_KEY_VALUE_PAIRS_FUNC());
+#else
+        halide_register_argv_and_metadata(::$FULLNAME$_argv, ::$FULLNAME$_metadata(), nullptr);
+#endif  // HL_REGISTER_EXTRA_KEY_VALUE_PAIRS_FUNC
     }
 };
 static Registerer registerer;

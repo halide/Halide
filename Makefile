@@ -1064,12 +1064,14 @@ GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/nested_externs.runge
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/old_buffer_t.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/tiled_blur.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/extern_output.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
-GENERATOR_BUILD_RUNGEN_TESTS := $(GENERATOR_BUILD_RUNGEN_TESTS) $(FILTERS_DIR)/multi_rungen $(FILTERS_DIR)/multi_rungen2 $(FILTERS_DIR)/rungen_test
+GENERATOR_BUILD_RUNGEN_TESTS := $(GENERATOR_BUILD_RUNGEN_TESTS) $(FILTERS_DIR)/multi_rungen $(FILTERS_DIR)/multi_rungen2 $(FILTERS_DIR)/rungen_test $(FILTERS_DIR)/registration_test
 test_rungen: $(GENERATOR_BUILD_RUNGEN_TESTS)
 	$(FILTERS_DIR)/rungen_test
+	$(FILTERS_DIR)/registration_test
 
 test_generator: $(GENERATOR_AOT_TESTS) $(GENERATOR_AOTCPP_TESTS) $(GENERATOR_JIT_TESTS) $(GENERATOR_BUILD_RUNGEN_TESTS)
 	$(FILTERS_DIR)/rungen_test
+	$(FILTERS_DIR)/registration_test
 
 ALL_TESTS = test_internal test_correctness test_error test_tutorial test_warning test_generator
 
@@ -1505,6 +1507,30 @@ RUNARGS ?=
 $(FILTERS_DIR)/%.run: $(FILTERS_DIR)/%.rungen
 	$(CURDIR)/$< $(RUNARGS)
 	@-echo
+
+$(FILTERS_DIR)/%.registration_extra.o: $(FILTERS_DIR)/%.registration.cpp
+	@mkdir -p $(@D)
+	$(CXX) -c $< $(TEST_CXX_FLAGS) -DHL_REGISTER_EXTRA_KEY_VALUE_PAIRS_FUNC=halide_register_extra_key_value_pairs_$* -o $@
+
+# Test the registration mechanism, independent of RunGen.
+# Note that this depends on the registration_extra.o (rather than registration.o)
+# because it compiles with HL_REGISTER_EXTRA_KEY_VALUE_PAIRS_FUNC defined.
+$(FILTERS_DIR)/registration_test: $(ROOT_DIR)/test/generator/registration_test.cpp \
+														 $(BIN_DIR)/$(TARGET)/runtime.a \
+														 $(FILTERS_DIR)/blur2x2.registration_extra.o $(FILTERS_DIR)/blur2x2.a \
+														 $(FILTERS_DIR)/cxx_mangling.registration_extra.o $(FILTERS_DIR)/cxx_mangling.a \
+														 $(FILTERS_DIR)/pyramid.registration_extra.o $(FILTERS_DIR)/pyramid.a
+	@mkdir -p $(@D)
+	$(CXX) $(GEN_AOT_CXX_FLAGS) $(GEN_AOT_INCLUDES) \
+			$(ROOT_DIR)/test/generator/registration_test.cpp \
+			$(FILTERS_DIR)/blur2x2.registration_extra.o \
+			$(FILTERS_DIR)/cxx_mangling.registration_extra.o \
+			$(FILTERS_DIR)/pyramid.registration_extra.o \
+			$(BIN_DIR)/$(TARGET)/runtime.a \
+			$(FILTERS_DIR)/blur2x2.a \
+			$(FILTERS_DIR)/cxx_mangling.a \
+			$(FILTERS_DIR)/pyramid.a \
+			$(GEN_AOT_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@
 
 # Test RunGen itself
 $(FILTERS_DIR)/rungen_test: $(ROOT_DIR)/test/generator/rungen_test.cpp \
