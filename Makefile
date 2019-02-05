@@ -1066,7 +1066,7 @@ GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/tiled_blur.rungen,$(
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/extern_output.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
 GENERATOR_BUILD_RUNGEN_TESTS := $(GENERATOR_BUILD_RUNGEN_TESTS) \
 	$(FILTERS_DIR)/multi_rungen \
-	$(FILTERS_DIR)/multi_rungen2
+	$(FILTERS_DIR)/multi_rungen2 \
 	$(FILTERS_DIR)/rungen_test \
 	$(FILTERS_DIR)/registration_test
 
