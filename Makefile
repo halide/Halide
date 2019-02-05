@@ -1064,7 +1064,12 @@ GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/nested_externs.runge
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/old_buffer_t.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/tiled_blur.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/extern_output.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
-GENERATOR_BUILD_RUNGEN_TESTS := $(GENERATOR_BUILD_RUNGEN_TESTS) $(FILTERS_DIR)/multi_rungen $(FILTERS_DIR)/multi_rungen2 $(FILTERS_DIR)/rungen_test $(FILTERS_DIR)/registration_test
+GENERATOR_BUILD_RUNGEN_TESTS := $(GENERATOR_BUILD_RUNGEN_TESTS) \
+	$(FILTERS_DIR)/multi_rungen \
+	$(FILTERS_DIR)/multi_rungen2
+	$(FILTERS_DIR)/rungen_test \
+	$(FILTERS_DIR)/registration_test
+
 test_rungen: $(GENERATOR_BUILD_RUNGEN_TESTS)
 	$(FILTERS_DIR)/rungen_test
 	$(FILTERS_DIR)/registration_test
