@@ -1515,11 +1515,11 @@ $(FILTERS_DIR)/%.run: $(FILTERS_DIR)/%.rungen
 
 $(FILTERS_DIR)/%.registration_extra.o: $(FILTERS_DIR)/%.registration.cpp
 	@mkdir -p $(@D)
-	$(CXX) -c $< $(TEST_CXX_FLAGS) -DHL_REGISTER_EXTRA_KEY_VALUE_PAIRS_FUNC=halide_register_extra_key_value_pairs_$* -o $@
+	$(CXX) -c $< $(TEST_CXX_FLAGS) -DHALIDE_REGISTER_EXTRA_KEY_VALUE_PAIRS_FUNC=halide_register_extra_key_value_pairs_$* -o $@
 
 # Test the registration mechanism, independent of RunGen.
 # Note that this depends on the registration_extra.o (rather than registration.o)
-# because it compiles with HL_REGISTER_EXTRA_KEY_VALUE_PAIRS_FUNC defined.
+# because it compiles with HALIDE_REGISTER_EXTRA_KEY_VALUE_PAIRS_FUNC defined.
 $(FILTERS_DIR)/registration_test: $(ROOT_DIR)/test/generator/registration_test.cpp \
 														 $(BIN_DIR)/$(TARGET)/runtime.a \
 														 $(FILTERS_DIR)/blur2x2.registration_extra.o $(FILTERS_DIR)/blur2x2.a \

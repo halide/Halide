@@ -153,7 +153,7 @@ extern const struct halide_filter_metadata_t *$SHORTNAME$_metadata();
 $NSCLOSE$
 
 #ifdef HALIDE_REGISTER_EXTRA_KEY_VALUE_PAIRS_FUNC
-extern "C" const char * const *HL_REGISTER_EXTRA_KEY_VALUE_PAIRS_FUNC();
+extern "C" const char * const *HALIDE_REGISTER_EXTRA_KEY_VALUE_PAIRS_FUNC();
 #endif  // HALIDE_REGISTER_EXTRA_KEY_VALUE_PAIRS_FUNC
 
 namespace $NREGS$ {
@@ -161,7 +161,7 @@ namespace {
 struct Registerer {
     Registerer() {
 #ifdef HALIDE_REGISTER_EXTRA_KEY_VALUE_PAIRS_FUNC
-        halide_register_argv_and_metadata(::$FULLNAME$_argv, ::$FULLNAME$_metadata(), HL_REGISTER_EXTRA_KEY_VALUE_PAIRS_FUNC());
+        halide_register_argv_and_metadata(::$FULLNAME$_argv, ::$FULLNAME$_metadata(), HALIDE_REGISTER_EXTRA_KEY_VALUE_PAIRS_FUNC());
 #else
         halide_register_argv_and_metadata(::$FULLNAME$_argv, ::$FULLNAME$_metadata(), nullptr);
 #endif  // HALIDE_REGISTER_EXTRA_KEY_VALUE_PAIRS_FUNC
