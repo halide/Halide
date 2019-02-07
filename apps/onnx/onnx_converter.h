@@ -22,7 +22,8 @@ struct Node {
 
 Node convert_node(
     const onnx::NodeProto &node,
-    const std::vector<Tensor> &inputs);
+    const std::vector<Tensor> &inputs,
+    const std::string &device);
 
 struct Model {
     std::unordered_map<std::string, Halide::ImageParam> inputs;
@@ -33,8 +34,6 @@ struct Model {
     std::vector<Halide::Expr> requirements;
 };
 
-Model convert_model(const onnx::ModelProto &model);
-
-Halide::Type get_halide_type(const Tensor &tensor);
+Model convert_model(const onnx::ModelProto &model, const std::string &device);
 
 #endif
