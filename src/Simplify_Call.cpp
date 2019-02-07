@@ -1,5 +1,9 @@
 #include "Simplify_Internal.h"
 
+#ifdef _MSC_VER
+#include <intrin.h>
+#endif
+
 namespace Halide {
 namespace Internal {
 
@@ -7,17 +11,6 @@ using std::vector;
 using std::string;
 
 namespace {
-
-#ifdef _MSC_VER
-    unsigned char _BitScanForward64(unsigned long *index, unsigned __int64 mask);
-    #pragma intrinsic(_BitScanForward64)
-
-    unsigned char _BitScanReverse64(unsigned long *index, unsigned __int64 mask);
-    #pragma intrinsic(_BitScanReverse64)
-
-    unsigned __int64 __popcnt64(unsigned __int64 value);
-    #pragma intrinsic(__popcnt64)
-#endif
 
 // Consider moving these to (say) Util.h if we need them elsewhere.
 int popcount64(uint64_t x) {
