@@ -1073,7 +1073,7 @@ private:
                                 } else {
                                     // if a < 0, the largest value will be a >> b.max
                                     // if a > 0, the largest value will be a >> b.min
-                                    interval.min = min(a_interval.max >> b_interval.max, a_interval.max >> b_interval.min);
+                                    interval.max = min(a_interval.max >> b_interval.max, a_interval.max >> b_interval.min);
                                 }
                             }
                         }
