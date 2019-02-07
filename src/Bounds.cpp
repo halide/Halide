@@ -1043,10 +1043,10 @@ private:
                     if (op->is_intrinsic(Call::shift_left)) {
                         if (t.is_int() && t.bits() >= 32) {
                             // Overflow is UB
-                            if (a_interval.has_lower_bound() && b_interval.has_lower_bound()) {
+                            if (a_interval.has_lower_bound() && b_interval.has_lower_bound() && can_prove(b_interval.min < t.bits())) {
                                 interval.min = a_interval.min << b_interval.min;
                             }
-                            if (a_interval.has_upper_bound() && b_interval.has_upper_bound()) {
+                            if (a_interval.has_upper_bound() && b_interval.has_upper_bound() && can_prove(b_interval.max < t.bits())) {
                                 interval.max = a_interval.max << b_interval.max;
                             }
                         } else if (is_const(b)) {
@@ -1055,10 +1055,10 @@ private:
                             equiv.accept(this);
                         }
                     } else if (op->is_intrinsic(Call::shift_right)) {
-                        if (a_interval.has_lower_bound() && b_interval.has_upper_bound()) {
+                        if (a_interval.has_lower_bound() && b_interval.has_upper_bound() && can_prove(b_interval.max < t.bits())) {
                             interval.min = a_interval.min >> b_interval.max;
                         }
-                        if (a_interval.has_upper_bound() && b_interval.has_lower_bound()) {
+                        if (a_interval.has_upper_bound() && b_interval.has_lower_bound() && can_prove(b_interval.min < t.bits())) {
                             interval.max = a_interval.max >> b_interval.min;
                         }
                     } else if (op->is_intrinsic(Call::bitwise_and) &&
