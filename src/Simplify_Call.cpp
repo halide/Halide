@@ -20,6 +20,40 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         } else {
             return strict_float(arg);
         }
+    } else if (op->is_intrinsic(Call::popcount) ||
+               op->is_intrinsic(Call::count_leading_zeros) ||
+               op->is_intrinsic(Call::count_trailing_zeros)) {
+        Expr a = mutate(op->args[0], nullptr);
+
+        uint64_t ua = 0;
+        if (const_int(a, (int64_t *)(&ua)) || const_uint(a, &ua)) {
+            const int bits = op->type.bits();
+            // __builtin_clz and friends only operate on uint;
+            // we need results that are correct for uint64 as well.
+            // Just do it the slow way since this is a compiletime optimization.
+            uint64_t r = 0;
+            if (op->is_intrinsic(Call::popcount)) {
+                for (int i = 0; i < bits; ++i) {
+                    if (ua & (1ULL << i)) r++;
+                }
+            } else if (op->is_intrinsic(Call::count_leading_zeros)) {
+                for (int i = bits - 1; i >= 0; --i, ++r) {
+                    if (ua & (1ULL << i)) break;
+                }
+            } else /* if (op->is_intrinsic(Call::count_trailing_zeros)) */ {
+                for (int i = 0; i < bits; ++i, ++r) {
+                    if (ua & (1ULL << i)) break;
+                }
+            }
+            return make_const(op->type, r);
+        }
+
+        if (a.same_as(op->args[0])) {
+            return op;
+        } else {
+            return Call::make(op->type, op->name, {std::move(a)}, Internal::Call::PureIntrinsic);
+        }
+
     } else if (op->is_intrinsic(Call::shift_left) ||
                op->is_intrinsic(Call::shift_right)) {
         Expr a = mutate(op->args[0], nullptr);
