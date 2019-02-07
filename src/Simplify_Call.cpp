@@ -6,6 +6,56 @@ namespace Internal {
 using std::vector;
 using std::string;
 
+namespace {
+
+#ifdef _MSC_VER
+    unsigned char _BitScanForward64(unsigned long *index, unsigned __int64 mask);
+    #pragma intrinsic(_BitScanForward64)
+
+    unsigned char _BitScanReverse64(unsigned long *index, unsigned __int64 mask);
+    #pragma intrinsic(_BitScanReverse64)
+
+    unsigned __int64 __popcnt64(unsigned __int64 value);
+    #pragma intrinsic(__popcnt64)
+#endif
+
+// Consider moving these to (say) Util.h if we need them elsewhere.
+int popcount64(uint64_t x) {
+#ifdef _MSC_VER
+    return __popcnt64(x);
+#else
+    static_assert(sizeof(unsigned long long) >= sizeof(uint64_t), "");
+    return __builtin_popcountll(x);
+#endif
+}
+
+int clz64(uint64_t x) {
+    internal_assert(x != 0);
+#ifdef _MSC_VER
+    unsigned long r = 0;
+    (void) _BitScanReverse64(&r, x);
+    return r;
+#else
+    static_assert(sizeof(unsigned long long) >= sizeof(uint64_t), "");
+    constexpr int offset = (sizeof(unsigned long long) - sizeof(uint64_t)) * 8;
+    return __builtin_clzll(x) + offset;
+#endif
+}
+
+int ctz64(uint64_t x) {
+    internal_assert(x != 0);
+#ifdef _MSC_VER
+    unsigned long r = 0;
+    (void) _BitScanForward64(&r, x);
+    return r;
+#else
+    static_assert(sizeof(unsigned long long) >= sizeof(uint64_t), "");
+    return __builtin_ctzll(x);
+#endif
+}
+
+}  // namespace
+
 Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
     // Calls implicitly depend on host, dev, mins, and strides of the buffer referenced
     if (op->call_type == Call::Image || op->call_type == Call::Halide) {
@@ -34,14 +84,13 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
             int r = 0;
             if (op->is_intrinsic(Call::popcount)) {
                 // popcount *is* well-defined for ua = 0
-                r = __builtin_popcountll(ua);
+                r = popcount64(ua);
             } else if (op->is_intrinsic(Call::count_leading_zeros)) {
                 user_assert(ua != 0) << "The result of count_leading_zeros(x) is undefined for x = 0.";
-                constexpr int ull_bits = sizeof(unsigned long long) * 8;
-                r = __builtin_clzll(ua) - (ull_bits - bits);
+                r = clz64(ua) - (64 - bits);
             } else /* if (op->is_intrinsic(Call::count_trailing_zeros)) */ {
                 user_assert(ua != 0) << "The result of count_trailing_zeros(x) is undefined for x = 0.";
-                r = __builtin_ctzll(ua);
+                r = ctz64(ua);
             }
             return make_const(op->type, r);
         }
