@@ -1064,9 +1064,7 @@ private:
                                 } else {
                                     // if a < 0, the smallest value will be a >> b.min
                                     // if a > 0, the smallest value will be a >> b.max
-                                    interval.min = a_interval.min >> select(a_interval.min < 0,
-                                                                            b_interval.min,
-                                                                            b_interval.max);
+                                    interval.min = min(a_interval.min >> b_interval.min, a_interval.min >> b_interval.max);
                                 }
                             }
                             if (a_interval.has_upper_bound()) {
@@ -1075,9 +1073,7 @@ private:
                                 } else {
                                     // if a < 0, the largest value will be a >> b.max
                                     // if a > 0, the largest value will be a >> b.min
-                                    interval.max = a_interval.max >> select(a_interval.max < 0,
-                                                                            b_interval.max,
-                                                                            b_interval.min);
+                                    interval.min = min(a_interval.max >> b_interval.max, a_interval.max >> b_interval.min);
                                 }
                             }
                         }
