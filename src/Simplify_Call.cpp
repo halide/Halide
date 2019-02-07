@@ -28,22 +28,20 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         uint64_t ua = 0;
         if (const_int(a, (int64_t *)(&ua)) || const_uint(a, &ua)) {
             const int bits = op->type.bits();
-            // __builtin_clz and friends only operate on uint;
-            // we need results that are correct for uint64 as well.
-            // Just do it the slow way since this is a compiletime optimization.
-            uint64_t r = 0;
+            const uint64_t mask = std::numeric_limits<uint64_t>::max() >> (64 - bits);
+            ua &= mask;
+            static_assert(sizeof(unsigned long long) >= sizeof(uint64_t), "");
+            int r = 0;
             if (op->is_intrinsic(Call::popcount)) {
-                for (int i = 0; i < bits; ++i) {
-                    if (ua & (1ULL << i)) r++;
-                }
+                // popcount *is* well-defined for ua = 0
+                r = __builtin_popcountll(ua);
             } else if (op->is_intrinsic(Call::count_leading_zeros)) {
-                for (int i = bits - 1; i >= 0; --i, ++r) {
-                    if (ua & (1ULL << i)) break;
-                }
+                user_assert(ua != 0) << "The result of count_leading_zeros(x) is undefined for x = 0.";
+                constexpr int ull_bits = sizeof(unsigned long long) * 8;
+                r = __builtin_clzll(ua) - (ull_bits - bits);
             } else /* if (op->is_intrinsic(Call::count_trailing_zeros)) */ {
-                for (int i = 0; i < bits; ++i, ++r) {
-                    if (ua & (1ULL << i)) break;
-                }
+                user_assert(ua != 0) << "The result of count_trailing_zeros(x) is undefined for x = 0.";
+                r = __builtin_ctzll(ua);
             }
             return make_const(op->type, r);
         }
