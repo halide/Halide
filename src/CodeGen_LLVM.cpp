@@ -1163,7 +1163,7 @@ void CodeGen_LLVM::optimize_module() {
 #if LLVM_VERSION >= 80
             pm.add(createThreadSanitizerLegacyPassPass());
 #else
-            pm.add(createThreadSanitizerPass());            
+            pm.add(createThreadSanitizerPass());
 #endif
         };
         b.addExtension(PassManagerBuilder::EP_OptimizerLast, addThreadSanitizerPass);
@@ -2475,7 +2475,23 @@ void CodeGen_LLVM::visit(const Call *op) {
         internal_assert(op->args.size() == 3);
         Expr cond = op->args[0];
         if (cond.type().is_vector()) {
-            scalarize(op);
+            // This will dramatically slow down the code, so it's worthy
+            // of a warning to user, in case it was inserted in a non-obvious way.
+            user_warning << "The condition for a require() expr is vectorized; it will be split and scalarized.";
+            if (!cond.type().is_bool()) {
+                // If we're building for a backend that uses bool_to_mask(),
+                // the vector might no longer be booleans, and scalarizing
+                // can fail at codegen time (since the conditions are expected)
+                // to be boolean.
+                cond = (cond != make_zero(cond.type()));
+                Expr equiv = Internal::Call::make(op->type,
+                                op->name,
+                                {cond, op->args[1], op->args[2]},
+                                op->call_type);
+                scalarize(equiv);
+            } else {
+                scalarize(op);
+            }
         } else {
             Value *c = codegen(cond);
             create_assertion(c, op->args[2]);

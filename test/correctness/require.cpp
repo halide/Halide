@@ -1,6 +1,7 @@
 #include "Halide.h"
 #include <stdio.h>
 #include <memory>
+#include "test/common/halide_test_dirs.h"
 
 int error_occurred = false;
 void halide_error(void *ctx, const char *msg) {
@@ -64,6 +65,28 @@ static void test(int vector_width) {
 int main(int argc, char **argv) {
     test(0);
     test(4);
+
+    {
+        // Verify that the HVX backend can compile vectorized require() correctly
+        Target target("hexagon-32-noos-hvx_64");
+
+        Var x;
+        Func f;
+        f(x) = require(x > 0, x);
+        f.vectorize(x, 8).hexagon();
+
+        std::string object_name = Internal::get_test_tmp_dir() + "test_object_" + target.to_string();
+        if (target.os == Target::Windows && !target.has_feature(Target::MinGW)) {
+            object_name += ".obj";
+        } else {
+            object_name += ".o";
+        }
+
+        Internal::ensure_no_file_exists(object_name);
+        f.compile_to_file(Internal::get_test_tmp_dir() + "test_object_" + target.to_string(), std::vector<Argument>(), "", target);
+        Internal::assert_file_exists(object_name);
+    }
+
     printf("Success!\n");
     return 0;
 
