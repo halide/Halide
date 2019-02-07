@@ -40,7 +40,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
             user_assert(ib >= 0) << "bitshift by a constant negative amount is not legal in Halide.";
             user_assert(ib < t.bits()) << "bitshift by a constant amount >= the type size is not legal in Halide.";
             if (ib < t.bits() - 1) {
-                b = make_const(t, 1LL << ib);
+                b = make_const(t, ((int64_t) 1LL) << ib);
                 if (shift_left) {
                     return mutate(Mul::make(a, b), bounds);
                 } else {
@@ -50,14 +50,14 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
                 // (1 << ib) will overflow into the sign bit, making decomposition into mul or div
                 // probelmatic, so just special-case them here.
                 if (shift_left) {
-                    return mutate(select((a & 1) != 0, make_const(t, 1LL << ib), make_zero(t)), bounds);
+                    return mutate(select((a & 1) != 0, make_const(t, ((int64_t) 1LL) << ib), make_zero(t)), bounds);
                 } else {
                     return mutate(select(a < 0, make_const(t, -1), make_zero(t)), bounds);
                 }
             }
         } else if (const_uint(b, &ub)) {
             user_assert(ub < (uint64_t) t.bits()) << "bitshift by a constant amount >= the type size is not legal in Halide.";
-            b = make_const(t, 1LL << ub);
+            b = make_const(t, ((uint64_t) 1ULL) << ub);
             if (shift_left) {
                 return mutate(Mul::make(a, b), bounds);
             } else {
