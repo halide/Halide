@@ -1154,7 +1154,7 @@ private:
             if (op->is_intrinsic(Call::count_leading_zeros)) {
                 // clz treats signed and unsigned ints the same way;
                 // cast all ints to uint to simplify this.
-                cast(t.with_code(halide_type_uint), op->args[0]).accept(this);
+                cast(op->type.with_code(halide_type_uint), op->args[0]).accept(this);
                 Interval a = interval;
                 if (a.has_lower_bound()) {
                     max = cast(t, count_leading_zeros(a.min));
