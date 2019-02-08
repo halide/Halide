@@ -1758,7 +1758,7 @@ void CodeGen_Hexagon::visit(const Call *op) {
 
     if (op->type.is_vector()) {
         if (op->is_intrinsic(Call::shift_left) ||
-                   op->is_intrinsic(Call::shift_right)) {
+            op->is_intrinsic(Call::shift_right)) {
 
             internal_assert(op->args.size() == 2);
             string instr = op->is_intrinsic(Call::shift_left) ? "halide.hexagon.shl" : "halide.hexagon.shr";
