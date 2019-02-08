@@ -17,10 +17,12 @@ void check(bool b, const char *msg = "Failure!") {
 
 extern "C" void halide_register_argv_and_metadata(
     int (*filter_argv_call)(void **),
-    const struct halide_filter_metadata_t *filter_metadata) {
+    const struct halide_filter_metadata_t *filter_metadata,
+    const char * const *extra_key_value_pairs) {
 
     check(filter_argv_call == example_argv);
     check(filter_metadata == example_metadata());
+    check(extra_key_value_pairs == nullptr);
 }
 
 namespace {
