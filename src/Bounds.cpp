@@ -1064,7 +1064,8 @@ private:
                                 } else {
                                     // if a < 0, the smallest value will be a >> b.min
                                     // if a > 0, the smallest value will be a >> b.max
-                                    interval.min = min(a_interval.min >> b_interval.min, a_interval.min >> b_interval.max);
+                                    interval.min = min(a_interval.min >> b_interval.min,
+                                                       a_interval.min >> b_interval.max);
                                 }
                             }
                             if (a_interval.has_upper_bound()) {
@@ -1073,7 +1074,8 @@ private:
                                 } else {
                                     // if a < 0, the largest value will be a >> b.max
                                     // if a > 0, the largest value will be a >> b.min
-                                    interval.max = min(a_interval.max >> b_interval.max, a_interval.max >> b_interval.min);
+                                    interval.max = min(a_interval.max >> b_interval.max,
+                                                       a_interval.max >> b_interval.min);
                                 }
                             }
                         }
@@ -2739,6 +2741,14 @@ void bounds_test() {
         Expr e = clamp(x/y, make_const(UInt(16), 0), make_const(UInt(16), 128));
         check(scope, e, make_const(UInt(16), 0), make_const(UInt(16), 5));
         check_constant_bound(scope, e, make_const(UInt(16), 0), make_const(UInt(16), 5));
+    }
+
+    {
+        Param<uint16_t> x("x"), y("y");
+        x.set_range(make_const(UInt(16), 16), make_const(UInt(16), 32));
+        y.set_range(make_const(UInt(16), 0), make_const(UInt(16), 4));
+
+        check_constant_bound((x >> y), make_const(UInt(16), 1), make_const(UInt(16), 32));
     }
 
     {
