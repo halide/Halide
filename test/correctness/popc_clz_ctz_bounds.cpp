@@ -62,11 +62,7 @@ int main(int argc, char **argv) {
         std::mt19937 rng(0);
         Buffer<uint8_t> data(16);
         for (int32_t i = 0; i < 16; i++) {
-            // clz and ctz are undefined for zero values,
-            // so be sure to skip them in the test data.
-            do {
-                data(i) = rng();
-            } while (data(i) == 0);
+            data(i) = rng();
         }
         in.set(data);
 

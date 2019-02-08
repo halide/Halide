@@ -79,11 +79,11 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
                 // popcount *is* well-defined for ua = 0
                 r = popcount64(ua);
             } else if (op->is_intrinsic(Call::count_leading_zeros)) {
-                user_assert(ua != 0) << "The result of count_leading_zeros(x) is undefined for x = 0.";
-                r = clz64(ua) - (64 - bits);
+                // clz64() is undefined for 0, but Halide's count_leading_zeros defines clz(0) = bits
+                r = ua == 0 ? bits : (clz64(ua) - (64 - bits));
             } else /* if (op->is_intrinsic(Call::count_trailing_zeros)) */ {
-                user_assert(ua != 0) << "The result of count_trailing_zeros(x) is undefined for x = 0.";
-                r = ctz64(ua);
+                // ctz64() is undefined for 0, but Halide's count_trailing_zeros defines clz(0) = bits
+                r = ua == 0 ? bits : (ctz64(ua));
             }
             return make_const(op->type, r);
         }

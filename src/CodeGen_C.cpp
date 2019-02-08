@@ -119,13 +119,36 @@ inline float float_from_bits(uint32_t bits) {
 }
 
 template<typename T>
-inline uint8_t halide_count_leading_zeros(T v) {
-    int bits = sizeof(v) * 8;
-    while (v) {
-        v >>= 1;
-        bits--;
+inline int halide_popcount(T a) {
+    int bits_set = 0;
+    while (a != 0) {
+        bits_set += a & 1;
+        a >>= 1;
     }
-    return bits;
+    return bits_set;
+}
+
+template<typename T>
+inline int halide_count_leading_zeros(T a) {
+    int leading_zeros = 0;
+    int bit = sizeof(a) * 8 - 1;
+    while (bit >= 0 && (a & (1 << bit)) == 0) {
+        leading_zeros++;
+        bit--;
+    }
+    return leading_zeros;
+}
+
+template<typename T>
+inline int halide_count_trailing_zeros(T a) {
+    int trailing_zeros = 0;
+    constexpr int bits = sizeof(a) * 8;
+    int bit = 0;
+    while (bit < bits && (a & (1 << bit)) == 0) {
+        trailing_zeros++;
+        bit++;
+    }
+    return trailing_zeros;
 }
 
 template<typename T>
@@ -1956,10 +1979,16 @@ void CodeGen_C::visit(const Call *op) {
         string a0 = print_expr(op->args[0]);
         string a1 = print_expr(op->args[1]);
         rhs << a0 << " >> " << a1;
-    } else if (op->is_intrinsic(Call::count_leading_zeros)) {
+    } else if (op->is_intrinsic(Call::count_leading_zeros) ||
+               op->is_intrinsic(Call::count_trailing_zeros) ||
+               op->is_intrinsic(Call::popcount)) {
         internal_assert(op->args.size() == 1);
-        string a0 = print_expr(op->args[0]);
-        rhs << "halide_count_leading_zeros(" << a0 << ")";
+        if (op->args[0].type().is_vector()) {
+            rhs << print_scalarized_expr(op);
+        } else {
+            string a0 = print_expr(op->args[0]);
+            rhs << "halide_" << op->name << "(" << a0 << ")";
+        }
     } else if (op->is_intrinsic(Call::lerp)) {
         internal_assert(op->args.size() == 3);
         Expr e = lower_lerp(op->args[0], op->args[1], op->args[2]);

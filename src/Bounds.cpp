@@ -1156,10 +1156,10 @@ private:
                 // cast all ints to uint to simplify this.
                 cast(op->type.with_code(halide_type_uint), op->args[0]).accept(this);
                 Interval a = interval;
-                if (a.has_lower_bound() && can_prove(a.min != 0)) {
+                if (a.has_lower_bound()) {
                     max = cast(t, count_leading_zeros(a.min));
                 }
-                if (a.has_upper_bound() && can_prove(a.max != 0)) {
+                if (a.has_upper_bound()) {
                     min = cast(t, count_leading_zeros(a.max));
                 }
             }

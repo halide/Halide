@@ -1163,7 +1163,7 @@ void CodeGen_LLVM::optimize_module() {
 #if LLVM_VERSION >= 80
             pm.add(createThreadSanitizerLegacyPassPass());
 #else
-            pm.add(createThreadSanitizerPass());            
+            pm.add(createThreadSanitizerPass());
 #endif
         };
         b.addExtension(PassManagerBuilder::EP_OptimizerLast, addThreadSanitizerPass);
@@ -2427,8 +2427,8 @@ void CodeGen_LLVM::visit(const Call *op) {
                                                        (op->is_intrinsic(Call::count_leading_zeros)) ? Intrinsic::ctlz :
                                                        Intrinsic::cttz,
                                                        arg_type);
-        llvm::Value *zero_is_not_undef = llvm::ConstantInt::getFalse(*context);
-        llvm::Value *args[2] = { codegen(op->args[0]), zero_is_not_undef };
+        llvm::Value *is_zero_undef = llvm::ConstantInt::getFalse(*context);
+        llvm::Value *args[2] = { codegen(op->args[0]), is_zero_undef };
         CallInst *call = builder->CreateCall(fn, args);
         value = call;
     } else if (op->is_intrinsic(Call::return_second)) {
