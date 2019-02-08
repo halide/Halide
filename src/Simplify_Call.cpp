@@ -15,7 +15,11 @@ namespace {
 // Consider moving these to (say) Util.h if we need them elsewhere.
 int popcount64(uint64_t x) {
 #ifdef _MSC_VER
-    return __popcnt64(x);
+    #if defined(_WIN64)
+        return __popcnt64(x);
+    #else
+        return __popcnt((uint32_t) (x >> 32)) + __popcnt((uint32_t) (x & 0xffffffff));
+    #endif
 #else
     static_assert(sizeof(unsigned long long) >= sizeof(uint64_t), "");
     return __builtin_popcountll(x);
@@ -26,8 +30,17 @@ int clz64(uint64_t x) {
     internal_assert(x != 0);
 #ifdef _MSC_VER
     unsigned long r = 0;
-    (void) _BitScanReverse64(&r, x);
-    return r;
+    #if defined(_WIN64)
+        return _BitScanReverse64(&r, x) ? (63 - r) : 64;
+    #else
+        if (_BitScanReverse(&r, (uint32_t) (x >> 32))) {
+            return (63 - (r + 32));
+        } else if (_BitScanReverse(&r, (uint32_t) (x & 0xffffffff))) {
+            return 63 - r;
+        } else {
+            return 64;
+        }
+    #endif
 #else
     static_assert(sizeof(unsigned long long) >= sizeof(uint64_t), "");
     constexpr int offset = (sizeof(unsigned long long) - sizeof(uint64_t)) * 8;
@@ -39,8 +52,17 @@ int ctz64(uint64_t x) {
     internal_assert(x != 0);
 #ifdef _MSC_VER
     unsigned long r = 0;
-    (void) _BitScanForward64(&r, x);
-    return r;
+    #if defined(_WIN64)
+        return _BitScanForward64(&r, x) ? r : 64;
+    #else
+        if (_BitScanForward(&r, (uint32_t) (x & 0xffffffff))) {
+            return r;
+        } else if (_BitScanForward(&r, (uint32_t) (x >> 32))) {
+            return r + 32;
+        } else {
+            return 64;
+        }
+    #endif
 #else
     static_assert(sizeof(unsigned long long) >= sizeof(uint64_t), "");
     return __builtin_ctzll(x);

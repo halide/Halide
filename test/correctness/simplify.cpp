@@ -1423,6 +1423,7 @@ void check_bitwise() {
     check_clz<uint16_t>(10, 12);
     check_clz<uint32_t>(10, 28);
     check_clz<uint64_t>(10, 60);
+    check_clz<uint64_t>(10ULL << 32, 28);
 
     check_ctz<int8_t>(64, 6);
     check_ctz<int16_t>(64, 6);
@@ -1432,6 +1433,7 @@ void check_bitwise() {
     check_ctz<uint16_t>(64, 6);
     check_ctz<uint32_t>(64, 6);
     check_ctz<uint64_t>(64, 6);
+    check_ctz<uint64_t>(64ULL << 32, 38);
 
     check_popcount<int8_t>(0xa5, 4);
     check_popcount<int16_t>(0xa5a5, 8);
