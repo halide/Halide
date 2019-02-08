@@ -1742,18 +1742,6 @@ void CodeGen_Hexagon::visit(const Call *op) {
     internal_assert(op->is_extern() || op->is_intrinsic())
         << "Can only codegen extern calls and intrinsics\n";
 
-    // Map Halide functions to Hexagon intrinsics, plus a boolean
-    // indicating if the intrinsic has signed variants or not.
-    static std::map<string, std::pair<string, bool>> functions = {
-        { Call::absd, { "halide.hexagon.absd", true } },
-        { Call::bitwise_and, { "halide.hexagon.and", false } },
-        { Call::bitwise_or, { "halide.hexagon.or", false } },
-        { Call::bitwise_xor, { "halide.hexagon.xor", false } },
-        { Call::bitwise_not, { "halide.hexagon.not", false } },
-        { Call::count_leading_zeros, { "halide.hexagon.clz", false } },
-        { Call::popcount, { "halide.hexagon.popcount", false } },
-    };
-
     if (is_native_interleave(op) || is_native_deinterleave(op)) {
         user_assert(op->type.lanes() % (native_vector_bits() * 2 / op->type.bits()) == 0)
             << "Interleave or deinterleave will result in miscompilation, "
@@ -1769,13 +1757,7 @@ void CodeGen_Hexagon::visit(const Call *op) {
     }
 
     if (op->type.is_vector()) {
-        auto i = functions.find(op->name);
-        if (i != functions.end()) {
-            string intrin =
-                i->second.first + type_suffix(op->args, i->second.second);
-            value = call_intrin(op->type, intrin, op->args, true /*maybe*/);
-            if (value) return;
-        } else if (op->is_intrinsic(Call::shift_left) ||
+        if (op->is_intrinsic(Call::shift_left) ||
                    op->is_intrinsic(Call::shift_right)) {
 
             internal_assert(op->args.size() == 2);
