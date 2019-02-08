@@ -1,7 +1,6 @@
 #include <gtest/gtest.h>
 #include <cmath>
 #include <random>
-#include "folly/Random.h"
 #include "onnx_converter.h"
 
 TEST(ConverterTest, testAbs) {
@@ -19,8 +18,10 @@ TEST(ConverterTest, testAbs) {
       ->mutable_shape()
       ->add_dim();
   Halide::Buffer<float> input(200);
+  std::uniform_real_distribution<float> dis(-1.0, 1.0);
+  std::mt19937 rnd;
   input.for_each_value(
-      [&](float& f) { f = folly::Random::randDouble(-1.0, 1.0); });
+      [&](float& f) { f = dis(rnd); });
   Halide::Var index;
   node_inputs[0].rep(index) = input(index);
 
@@ -48,8 +49,10 @@ TEST(ConverterTest, testActivationFunction) {
       ->mutable_shape()
       ->add_dim();
   Halide::Buffer<float> input(200);
+  std::mt19937 rnd;
+  std::uniform_real_distribution<float> dis(-1.0, 1.0);
   input.for_each_value(
-      [&](float& f) { f = folly::Random::randDouble(-1.0, 1.0); });
+      [&](float& f) { f = dis(rnd); });
   Halide::Var index;
   node_inputs[0].rep(index) = input(index);
 
@@ -80,7 +83,9 @@ TEST(ConverterTest, testCast) {
       ->mutable_shape()
       ->add_dim();
   Halide::Buffer<int> input(200);
-  input.for_each_value([&](int& f) { f = folly::Random::rand32(); });
+  std::mt19937 rnd;
+  std::uniform_int_distribution<int> dis(-100, 100);
+  input.for_each_value([&](int& f) { f = dis(rnd); });
   Halide::Var index;
   node_inputs[0].rep(index) = input(index);
 
@@ -110,11 +115,14 @@ TEST(ConverterTest, testAdd) {
       ->add_dim();
   node_inputs[1].shape = node_inputs[0].shape;
   Halide::Buffer<float> in1(200);
+  std::mt19937 rnd;
+  std::uniform_real_distribution<float> dis(-1.0, 1.0);
+  std::uniform_real_distribution<float> dis10(-10.0, 10.0);
   in1.for_each_value(
-      [&](float& f) { f = folly::Random::randDouble(-1.0, 1.0); });
+      [&](float& f) { f = dis(rnd); });
   Halide::Buffer<float> in2(200);
   in2.for_each_value(
-      [&](float& f) { f = folly::Random::randDouble(-10.0, 10.0); });
+      [&](float& f) { f = dis10(rnd); });
   Halide::Var index;
   node_inputs[0].rep(index) = in1(index);
   node_inputs[1].rep(index) = in2(index);
@@ -140,8 +148,10 @@ TEST(ConverterTest, testConstant) {
   value.set_data_type(onnx::TensorProto_DataType_FLOAT);
   value.add_dims(3);
   value.add_dims(7);
+  std::mt19937 rnd;
+  std::uniform_real_distribution<float> dis(-10.0, 10.0);
   for (int i = 0; i < 3 * 7; ++i) {
-    value.add_float_data(folly::Random::randDouble(-10.0, 10.0));
+    value.add_float_data(dis(rnd));
   }
 
   Node converted = ConvertNode(add_node, {}, "");
@@ -202,15 +212,19 @@ TEST(ConverterTest, testGemm) {
       ->mutable_shape()
       ->add_dim()
       ->set_dim_value(64);
+  std::uniform_real_distribution<float> dis(-1.0, 1.0);
+  std::uniform_real_distribution<float> dis10(-10.0, 10.0);
+
+  std::mt19937 rnd;
   Halide::Buffer<float> in1(32, 100);
   in1.for_each_value(
-      [&](float& f) { f = folly::Random::randDouble(-1.0, 1.0); });
+      [&](float& f) { f = dis(rnd); });
   Halide::Buffer<float> in2(100, 64);
   in2.for_each_value(
-      [&](float& f) { f = folly::Random::randDouble(-10.0, 10.0); });
+      [&](float& f) { f = dis10(rnd); });
   Halide::Buffer<float> in3(32, 64);
   in3.for_each_value(
-      [&](float& f) { f = folly::Random::randDouble(-1.0, 1.0); });
+      [&](float& f) { f = dis(rnd); });
   Halide::Var i1, j1;
   node_inputs[0].rep(i1, j1) = in1(i1, j1);
   Halide::Var i2, j2;
@@ -272,8 +286,10 @@ TEST(ConverterTest, testSum) {
       ->add_dim()
       ->set_dim_value(11);
   Halide::Buffer<float> in1(7, 3, 5, 11);
+  std::uniform_real_distribution<float> dis(-1.0, 1.0);
+  std::mt19937 rnd;
   in1.for_each_value(
-      [&](float& f) { f = folly::Random::randDouble(-1.0, 1.0); });
+      [&](float& f) { f = dis(rnd); });
   Halide::Var i, j, k, l;
   node_inputs[0].rep(i, j, k, l) = in1(i, j, k, l);
 
@@ -321,8 +337,10 @@ TEST(ConverterTest, testConcat) {
       ->add_dim()
       ->set_dim_value(3);
   Halide::Buffer<float> in1(7, 3);
+  std::uniform_real_distribution<float> dis(-1.0, 1.0);
+  std::mt19937 rnd;
   in1.for_each_value(
-      [&](float& f) { f = folly::Random::randDouble(-1.0, 1.0); });
+      [&](float& f) { f = dis(rnd); });
   Halide::Var i, j;
   node_inputs[0].rep(i, j) = in1(i, j);
 
@@ -340,7 +358,7 @@ TEST(ConverterTest, testConcat) {
       ->set_dim_value(3);
   Halide::Buffer<float> in2(5, 3);
   in2.for_each_value(
-      [&](float& f) { f = folly::Random::randDouble(-1.0, 1.0); });
+      [&](float& f) { f = dis(rnd); });
   node_inputs[1].rep(i, j) = in2(i, j);
 
   Node converted = ConvertNode(concat_node, node_inputs, "");
@@ -412,8 +430,10 @@ TEST(ConverterTest, testModel) {
   Model converted = ConvertModel(model, "");
 
   Halide::Buffer<float> input_values({3, 7});
+  std::uniform_real_distribution<float> dis(-1.0, 1.0);
+  std::mt19937 rnd;
   input_values.for_each_value(
-      [&](float& f) { f = folly::Random::randDouble(-1.0, 1.0); });
+      [&](float& f) { f = dis(rnd); });
 
   Halide::ImageParam& input = converted.inputs.at("model_input");
   input.set(input_values);
