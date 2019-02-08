@@ -132,7 +132,7 @@ template<typename T>
 inline int halide_count_leading_zeros(T a) {
     int leading_zeros = 0;
     int bit = sizeof(a) * 8 - 1;
-    while (bit >= 0 && (a & (1 << bit)) == 0) {
+    while (bit >= 0 && (a & (((T)1) << bit)) == 0) {
         leading_zeros++;
         bit--;
     }
@@ -144,7 +144,7 @@ inline int halide_count_trailing_zeros(T a) {
     int trailing_zeros = 0;
     constexpr int bits = sizeof(a) * 8;
     int bit = 0;
-    while (bit < bits && (a & (1 << bit)) == 0) {
+    while (bit < bits && (a & (((T)1) << bit)) == 0) {
         trailing_zeros++;
         bit++;
     }
