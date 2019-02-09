@@ -1166,8 +1166,22 @@ private:
                    op->is_intrinsic(Call::count_leading_zeros) ||
                    op->is_intrinsic(Call::count_trailing_zeros)) {
             internal_assert(op->args.size() == 1);
-            interval = Interval(make_zero(op->type.element_of()),
-                                make_const(op->type.element_of(), op->args[0].type().bits()));
+            const Type &t = op->type.element_of();
+            Expr min = make_zero(t);
+            Expr max = make_const(t, op->args[0].type().bits());
+            if (op->is_intrinsic(Call::count_leading_zeros)) {
+                // clz treats signed and unsigned ints the same way;
+                // cast all ints to uint to simplify this.
+                cast(op->type.with_code(halide_type_uint), op->args[0]).accept(this);
+                Interval a = interval;
+                if (a.has_lower_bound()) {
+                    max = cast(t, count_leading_zeros(a.min));
+                }
+                if (a.has_upper_bound()) {
+                    min = cast(t, count_leading_zeros(a.max));
+                }
+            }
+            interval = Interval(min, max);
         } else if (op->is_intrinsic(Call::memoize_expr)) {
             internal_assert(op->args.size() >= 1);
             op->args[0].accept(this);
@@ -2594,6 +2608,19 @@ void constant_bound_test() {
         check_constant_bound(e16, Int(16).min(), Int(16).max());
     }
 
+    {
+        using ConciseCasts::i16;
+        using ConciseCasts::i32;
+
+        Param<int32_t> x("x"), y("y");
+        x.set_range(2, 10);
+
+        check_constant_bound(count_leading_zeros(x), i32(28), i32(30));
+        check_constant_bound(count_leading_zeros(cast<int16_t>(x)), i16(12), i16(14));
+
+        check_constant_bound(count_leading_zeros(y), i32(0), i32(32));
+        check_constant_bound(count_leading_zeros(cast<int16_t>(y)), i16(0), i16(16));
+    }
 }
 
 void boxes_touched_test() {
