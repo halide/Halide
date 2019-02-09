@@ -1378,6 +1378,24 @@ void check_overflow() {
     }
 }
 
+template<typename T>
+void check_clz(uint64_t value, uint64_t result) {
+    Expr x = Variable::make(halide_type_of<T>(), "x");
+    check(Let::make("x", cast<T>(Expr(value)), count_leading_zeros(x)), cast<T>(Expr(result)));
+}
+
+template<typename T>
+void check_ctz(uint64_t value, uint64_t result) {
+    Expr x = Variable::make(halide_type_of<T>(), "x");
+    check(Let::make("x", cast<T>(Expr(value)), count_trailing_zeros(x)), cast<T>(Expr(result)));
+}
+
+template<typename T>
+void check_popcount(uint64_t value, uint64_t result) {
+    Expr x = Variable::make(halide_type_of<T>(), "x");
+    check(Let::make("x", cast<T>(Expr(value)), popcount(x)), cast<T>(Expr(result)));
+}
+
 void check_bitwise() {
     Expr x = Var("x");
 
@@ -1401,6 +1419,35 @@ void check_bitwise() {
     // Check constant-folding of bitwise ops (and indirectly, reinterpret)
     check(Let::make(x.as<Variable>()->name, 5, (((~x) & 3) | 16) ^ 33), ((~5 & 3) | 16) ^ 33);
     check(Let::make(x.as<Variable>()->name, 5, (((~cast<uint8_t>(x)) & 3) | 16) ^ 33), make_const(UInt(8), ((~5 & 3) | 16) ^ 33));
+
+    check_clz<int8_t>(10, 4);
+    check_clz<int16_t>(10, 12);
+    check_clz<int32_t>(10, 28);
+    check_clz<int64_t>(10, 60);
+    check_clz<uint8_t>(10, 4);
+    check_clz<uint16_t>(10, 12);
+    check_clz<uint32_t>(10, 28);
+    check_clz<uint64_t>(10, 60);
+    check_clz<uint64_t>(10ULL << 32, 28);
+
+    check_ctz<int8_t>(64, 6);
+    check_ctz<int16_t>(64, 6);
+    check_ctz<int32_t>(64, 6);
+    check_ctz<int64_t>(64, 6);
+    check_ctz<uint8_t>(64, 6);
+    check_ctz<uint16_t>(64, 6);
+    check_ctz<uint32_t>(64, 6);
+    check_ctz<uint64_t>(64, 6);
+    check_ctz<uint64_t>(64ULL << 32, 38);
+
+    check_popcount<int8_t>(0xa5, 4);
+    check_popcount<int16_t>(0xa5a5, 8);
+    check_popcount<int32_t>(0xa5a5a5a5, 16);
+    check_popcount<int64_t>(0xa5a5a5a5a5a5a5a5, 32);
+    check_popcount<uint8_t>(0xa5, 4);
+    check_popcount<uint16_t>(0xa5a5, 8);
+    check_popcount<uint32_t>(0xa5a5a5a5, 16);
+    check_popcount<uint64_t>(0xa5a5a5a5a5a5a5a5, 32);
 }
 
 void check_lets() {

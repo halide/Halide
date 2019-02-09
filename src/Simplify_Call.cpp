@@ -1,10 +1,75 @@
 #include "Simplify_Internal.h"
 
+#ifdef _MSC_VER
+#include <intrin.h>
+#endif
+
 namespace Halide {
 namespace Internal {
 
 using std::vector;
 using std::string;
+
+namespace {
+
+// Consider moving these to (say) Util.h if we need them elsewhere.
+int popcount64(uint64_t x) {
+#ifdef _MSC_VER
+    #if defined(_WIN64)
+        return __popcnt64(x);
+    #else
+        return __popcnt((uint32_t) (x >> 32)) + __popcnt((uint32_t) (x & 0xffffffff));
+    #endif
+#else
+    static_assert(sizeof(unsigned long long) >= sizeof(uint64_t), "");
+    return __builtin_popcountll(x);
+#endif
+}
+
+int clz64(uint64_t x) {
+    internal_assert(x != 0);
+#ifdef _MSC_VER
+    unsigned long r = 0;
+    #if defined(_WIN64)
+        return _BitScanReverse64(&r, x) ? (63 - r) : 64;
+    #else
+        if (_BitScanReverse(&r, (uint32_t) (x >> 32))) {
+            return (63 - (r + 32));
+        } else if (_BitScanReverse(&r, (uint32_t) (x & 0xffffffff))) {
+            return 63 - r;
+        } else {
+            return 64;
+        }
+    #endif
+#else
+    static_assert(sizeof(unsigned long long) >= sizeof(uint64_t), "");
+    constexpr int offset = (sizeof(unsigned long long) - sizeof(uint64_t)) * 8;
+    return __builtin_clzll(x) + offset;
+#endif
+}
+
+int ctz64(uint64_t x) {
+    internal_assert(x != 0);
+#ifdef _MSC_VER
+    unsigned long r = 0;
+    #if defined(_WIN64)
+        return _BitScanForward64(&r, x) ? r : 64;
+    #else
+        if (_BitScanForward(&r, (uint32_t) (x & 0xffffffff))) {
+            return r;
+        } else if (_BitScanForward(&r, (uint32_t) (x >> 32))) {
+            return r + 32;
+        } else {
+            return 64;
+        }
+    #endif
+#else
+    static_assert(sizeof(unsigned long long) >= sizeof(uint64_t), "");
+    return __builtin_ctzll(x);
+#endif
+}
+
+}  // namespace
 
 Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
     // Calls implicitly depend on host, dev, mins, and strides of the buffer referenced
@@ -20,6 +85,37 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         } else {
             return strict_float(arg);
         }
+    } else if (op->is_intrinsic(Call::popcount) ||
+               op->is_intrinsic(Call::count_leading_zeros) ||
+               op->is_intrinsic(Call::count_trailing_zeros)) {
+        Expr a = mutate(op->args[0], nullptr);
+
+        uint64_t ua = 0;
+        if (const_int(a, (int64_t *)(&ua)) || const_uint(a, &ua)) {
+            const int bits = op->type.bits();
+            const uint64_t mask = std::numeric_limits<uint64_t>::max() >> (64 - bits);
+            ua &= mask;
+            static_assert(sizeof(unsigned long long) >= sizeof(uint64_t), "");
+            int r = 0;
+            if (op->is_intrinsic(Call::popcount)) {
+                // popcount *is* well-defined for ua = 0
+                r = popcount64(ua);
+            } else if (op->is_intrinsic(Call::count_leading_zeros)) {
+                // clz64() is undefined for 0, but Halide's count_leading_zeros defines clz(0) = bits
+                r = ua == 0 ? bits : (clz64(ua) - (64 - bits));
+            } else /* if (op->is_intrinsic(Call::count_trailing_zeros)) */ {
+                // ctz64() is undefined for 0, but Halide's count_trailing_zeros defines clz(0) = bits
+                r = ua == 0 ? bits : (ctz64(ua));
+            }
+            return make_const(op->type, r);
+        }
+
+        if (a.same_as(op->args[0])) {
+            return op;
+        } else {
+            return Call::make(op->type, op->name, {std::move(a)}, Internal::Call::PureIntrinsic);
+        }
+
     } else if (op->is_intrinsic(Call::shift_left) ||
                op->is_intrinsic(Call::shift_right)) {
         Expr a = mutate(op->args[0], nullptr);
