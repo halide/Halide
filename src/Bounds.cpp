@@ -1055,11 +1055,29 @@ private:
                             equiv.accept(this);
                         }
                     } else if (op->is_intrinsic(Call::shift_right)) {
-                        if (a_interval.has_lower_bound() && b_interval.has_upper_bound()) {
-                            interval.min = a_interval.min >> b_interval.max;
-                        }
-                        if (a_interval.has_upper_bound() && b_interval.has_lower_bound()) {
-                            interval.max = a_interval.max >> b_interval.min;
+                        // shift_right(a, b) is UB for b < 0, so only try to improve on bounds-of-type
+                        // if we can prove b >= 0.
+                        if (b_interval.is_bounded() && (t.is_uint() || can_prove(b_interval.min >= 0))) {
+                            if (a_interval.has_lower_bound()) {
+                                if (t.is_uint() || can_prove(a_interval.min >= 0)) {
+                                    interval.min = a_interval.min >> b_interval.max;
+                                } else {
+                                    // if a < 0, the smallest value will be a >> b.min
+                                    // if a > 0, the smallest value will be a >> b.max
+                                    interval.min = min(a_interval.min >> b_interval.min,
+                                                       a_interval.min >> b_interval.max);
+                                }
+                            }
+                            if (a_interval.has_upper_bound()) {
+                                if (t.is_uint() || can_prove(a_interval.max >= 0)) {
+                                    interval.max = a_interval.max >> b_interval.min;
+                                } else {
+                                    // if a < 0, the largest value will be a >> b.max
+                                    // if a > 0, the largest value will be a >> b.min
+                                    interval.max = max(a_interval.max >> b_interval.max,
+                                                       a_interval.max >> b_interval.min);
+                                }
+                            }
                         }
                     } else if (op->is_intrinsic(Call::bitwise_and) &&
                                a_interval.has_upper_bound() &&
@@ -2478,6 +2496,11 @@ void check_constant_bound(Expr e, Expr correct_min, Expr correct_max) {
 
 void constant_bound_test() {
     {
+        Param<int16_t> a, b;
+        check_constant_bound(a >> b, make_const(Int(16), -32768), make_const(Int(16), 32767));
+    }
+
+    {
         Param<int> x("x"), y("y");
         x.set_range(10, 20);
         y.set_range(5, 30);
@@ -2718,6 +2741,13 @@ void bounds_test() {
         Expr e = clamp(x/y, make_const(UInt(16), 0), make_const(UInt(16), 128));
         check(scope, e, make_const(UInt(16), 0), make_const(UInt(16), 5));
         check_constant_bound(scope, e, make_const(UInt(16), 0), make_const(UInt(16), 5));
+    }
+
+    {
+        Param<int16_t> x("x"), y("y");
+        x.set_range(make_const(Int(16), -32), make_const(Int(16), -16));
+        y.set_range(make_const(Int(16), 0), make_const(Int(16), 4));
+        check_constant_bound((x >> y), make_const(Int(16), -32), make_const(Int(16), -1));
     }
 
     {
