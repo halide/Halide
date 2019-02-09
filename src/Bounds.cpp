@@ -1074,7 +1074,7 @@ private:
                                 } else {
                                     // if a < 0, the largest value will be a >> b.max
                                     // if a > 0, the largest value will be a >> b.min
-                                    interval.max = min(a_interval.max >> b_interval.max,
+                                    interval.max = max(a_interval.max >> b_interval.max,
                                                        a_interval.max >> b_interval.min);
                                 }
                             }
@@ -2744,11 +2744,10 @@ void bounds_test() {
     }
 
     {
-        Param<uint16_t> x("x"), y("y");
-        x.set_range(make_const(UInt(16), 16), make_const(UInt(16), 32));
-        y.set_range(make_const(UInt(16), 0), make_const(UInt(16), 4));
-
-        check_constant_bound((x >> y), make_const(UInt(16), 1), make_const(UInt(16), 32));
+        Param<int16_t> x("x"), y("y");
+        x.set_range(make_const(Int(16), -32), make_const(Int(16), -16));
+        y.set_range(make_const(Int(16), 0), make_const(Int(16), 4));
+        check_constant_bound((x >> y), make_const(Int(16), -32), make_const(Int(16), -1));
     }
 
     {
