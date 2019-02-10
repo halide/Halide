@@ -1192,7 +1192,7 @@ bool save_mat(ImageType &im, const std::string &filename) {
             check(false, "unreachable");
         };
         break;
-    case halide_type_handle:
+    default:
         check(false, "unreachable");
     }
 
