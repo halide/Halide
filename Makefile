@@ -440,6 +440,7 @@ SOURCE_FILES = \
   LoopCarry.cpp \
   Lower.cpp \
   LowerWarpShuffles.cpp \
+  LowerBFloatMath.cpp \
   MatlabWrapper.cpp \
   Memoization.cpp \
   Module.cpp \
@@ -609,6 +610,7 @@ HEADER_FILES = \
   LLVM_Runtime_Linker.h \
   LoopCarry.h \
   Lower.h \
+  LowerBFloatMath.h \
   LowerWarpShuffles.h \
   MainPage.h \
   MatlabWrapper.h \

@@ -34,6 +34,7 @@
 #include "Inline.h"
 #include "LICM.h"
 #include "LoopCarry.h"
+#include "LowerBFloatMath.h"
 #include "LowerWarpShuffles.h"
 #include "Memoization.h"
 #include "PartitionLoops.h"
@@ -341,6 +342,10 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     debug(1) << "Lowering unsafe promises...\n";
     s = lower_unsafe_promises(s, t);
     debug(2) << "Lowering after lowering unsafe promises:\n" << s << "\n\n";
+
+    debug(1) << "Emulating bfloat math...\n";
+    s = lower_bfloat_math(s);
+    debug(2) << "Lowering after emulating bfloat math:\n" << s << "\n\n";
 
     s = remove_dead_allocations(s);
     s = remove_trivial_for_loops(s);

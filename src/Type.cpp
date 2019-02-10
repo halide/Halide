@@ -100,16 +100,23 @@ bool Type::is_min(uint64_t x) const {
 }
 
 bool Type::can_represent(Type other) const {
+    if (*this == other) return true;
     if (lanes() != other.lanes()) return false;
     if (is_int()) {
         return ((other.is_int() && other.bits() <= bits()) ||
                 (other.is_uint() && other.bits() < bits()));
     } else if (is_uint()) {
         return other.is_uint() && other.bits() <= bits();
+    } else if (is_bfloat()) {
+        return (other.is_bfloat() && other.bits() <= bits());
     } else if (is_float()) {
-        return ((other.is_float() && other.bits() <= bits()) ||
-                (bits() == 64 && other.bits() <= 32) ||
-                (bits() == 32 && other.bits() <= 16));
+        if (other.is_bfloat()) {
+            return bits() > other.bits();
+        } else {
+            return ((other.is_float() && other.bits() <= bits()) ||
+                    (bits() == 64 && other.bits() <= 32) ||
+                    (bits() == 32 && other.bits() <= 16));
+        }
     } else {
         return false;
     }
@@ -120,6 +127,13 @@ bool Type::can_represent(int64_t x) const {
         return x >= min_int(bits()) && x <= max_int(bits());
     } else if (is_uint()) {
         return x >= 0 && (uint64_t)x <= max_uint(bits());
+    } else if (is_bfloat()) {
+        switch (bits()) {
+        case 16:
+            return (int64_t)(float)(bfloat16_t)(float)x == x;
+        default:
+            return false;
+        }
     } else if (is_float()) {
         switch (bits()) {
         case 16:
@@ -141,6 +155,13 @@ bool Type::can_represent(uint64_t x) const {
         return x <= (uint64_t)(max_int(bits()));
     } else if (is_uint()) {
         return x <= max_uint(bits());
+    } else if (is_bfloat()) {
+        switch (bits()) {
+        case 16:
+            return (uint64_t)(float)(bfloat16_t)(float)x == x;
+        default:
+            return false;
+        }
     } else if (is_float()) {
         switch (bits()) {
         case 16:
@@ -164,6 +185,13 @@ bool Type::can_represent(double x) const {
     } else if (is_uint()) {
         uint64_t u = Internal::safe_numeric_cast<uint64_t>(x);
         return (x >= 0) && (x <= max_uint(bits())) && (x == (double)u);
+    } else if (is_bfloat()) {
+        switch (bits()) {
+        case 16:
+            return (double)(bfloat16_t)x == x;
+        default:
+            return false;
+        }
     } else if (is_float()) {
         switch (bits()) {
         case 16:

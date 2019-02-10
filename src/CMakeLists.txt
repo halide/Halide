@@ -352,6 +352,7 @@ set(HEADER_FILES
   LLVM_Runtime_Linker.h
   LoopCarry.h
   Lower.h
+  LowerBFloatMath.h
   LowerWarpShuffles.h
   MainPage.h
   MatlabWrapper.h
@@ -514,6 +515,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   LICM.cpp
   LoopCarry.cpp
   Lower.cpp
+  LowerBFloatMath.cpp
   LowerWarpShuffles.cpp
   MatlabWrapper.cpp
   Memoization.cpp
