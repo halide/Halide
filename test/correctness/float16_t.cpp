@@ -30,7 +30,7 @@ int main(int argc, char **argv) {
     RDom r(0, 128);
     Func g;
     g() = maximum(cast<double>(f(r)));
-    g.compile_to_assembly("/dev/stdout", {in1, in2}, Target("host-no_asserts-no_bounds_query-no_runtime-disable_llvm_loop_unroll-disable_llvm_loop_vectorize"));
+
     double d = evaluate<double>(g());
     if (d != 0) {
         printf("Should be zero: %f\n", d);
