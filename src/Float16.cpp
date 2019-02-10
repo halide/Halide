@@ -373,6 +373,10 @@ float16_t::operator double() const {
     return float16_to_float(data);
 }
 
+float16_t::operator int() const {
+    return float16_to_float(data);
+}
+
 float16_t float16_t::make_from_bits(uint16_t bits) {
     float16_t f;
     f.data = bits;
@@ -460,6 +464,10 @@ bfloat16_t::operator float() const {
 }
 
 bfloat16_t::operator double() const {
+    return bfloat16_to_float(data);
+}
+
+bfloat16_t::operator int() const {
     return bfloat16_to_float(data);
 }
 

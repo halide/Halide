@@ -67,7 +67,7 @@ Expr lower_lerp(Expr zero_val, Expr one_val, Expr weight) {
                 }
                 inverse_typed_weight = computation_type.max() - typed_weight;
             } else {
-                inverse_typed_weight = 1.0f - typed_weight;
+                inverse_typed_weight = make_one(computation_type) - typed_weight;
             }
 
         } else {
@@ -84,7 +84,7 @@ Expr lower_lerp(Expr zero_val, Expr one_val, Expr weight) {
                         Cast::make(computation_type,
                                    weight / ((float)ldexp(1.0f, weight_bits) - 1));
                 }
-                inverse_typed_weight = 1.0f - typed_weight;
+                inverse_typed_weight = make_one(computation_type) - typed_weight;
             } else {
                 // This code rescales integer weights to the right number of bits.
                 // It takes advantage of (2^n - 1) == (2^(n/2) - 1)(2^(n/2) + 1)

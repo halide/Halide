@@ -41,12 +41,16 @@ protected:
     Expr visit_bin_op(const Op *op) {
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
-        if (op->type.is_bfloat()) {
+        if (op->a.type().is_bfloat()) {
             a = bfloat_to_float(a);
             b = bfloat_to_float(b);
-            return float_to_bfloat(Op::make(a, b));
+            Expr result = Op::make(std::move(a), std::move(b));
+            if (op->type.is_bfloat()) {
+                result = float_to_bfloat(result);
+            }
+            return result;
         } else {
-            return Op::make(a, b);
+            return Op::make(std::move(a), std::move(b));
         }
     }
 
@@ -67,6 +71,36 @@ protected:
             return Expr(bfloat16_t(op->value).to_bits());
         } else {
             return op;
+        }
+    }
+
+    Expr visit(const Call *op) override {
+        if (op->call_type == Call::PureIntrinsic) {
+            std::vector<Expr> new_args(op->args.size());
+
+            // Mutate the args
+            for (size_t i = 0; i < op->args.size(); i++) {
+                const Expr &old_arg = op->args[i];
+                Expr new_arg = mutate(old_arg);
+                if (old_arg.type().is_bfloat()) {
+                    new_arg = bfloat_to_float(new_arg);
+                }
+                new_args[i] = std::move(new_arg);
+            }
+
+            Type t = op->type;
+            if (t.is_bfloat()) {
+                t = Float(32, op->type.lanes());
+            }
+            Expr ret = Call::make(t, op->name, new_args, op->call_type,
+                                  op->func, op->value_index, op->image, op->param);
+            if (op->type.is_bfloat()) {
+                return float_to_bfloat(ret);
+            } else {
+                return ret;
+            }
+        } else {
+            return IRMutator::visit(op);
         }
     }
 

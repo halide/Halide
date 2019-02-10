@@ -29,9 +29,9 @@ struct float16_t {
      * infinity.
      */
     // @{
-    explicit float16_t(float value);
-    explicit float16_t(double value);
-    explicit float16_t(int value);
+    float16_t(float value);
+    float16_t(double value);
+    float16_t(int value);
     // @}
 
     /** Construct a float16_t with the bits initialised to 0. This represents
@@ -45,6 +45,8 @@ struct float16_t {
     explicit operator float() const;
     /** Cast to double */
     explicit operator double() const;
+    /** Cast to int */
+    explicit operator int() const;
 
     /** \name Convenience "constructors"
      */
@@ -82,6 +84,10 @@ struct float16_t {
     float16_t operator-(float16_t rhs) const;
     float16_t operator*(float16_t rhs) const;
     float16_t operator/(float16_t rhs) const;
+    float16_t operator+=(float16_t rhs) { return (*this = *this + rhs); }
+    float16_t operator-=(float16_t rhs) { return (*this = *this - rhs); }
+    float16_t operator*=(float16_t rhs) { return (*this = *this * rhs); }
+    float16_t operator/=(float16_t rhs) { return (*this = *this / rhs); }
     // @}
 
     /** Comparison operators */
@@ -146,9 +152,9 @@ struct bfloat16_t {
      * infinity.
      */
     // @{
-    explicit bfloat16_t(float value);
-    explicit bfloat16_t(double value);
-    explicit bfloat16_t(int value);
+    bfloat16_t(float value);
+    bfloat16_t(double value);
+    bfloat16_t(int value);
     // @}
 
     /** Construct a bfloat16_t with the bits initialised to 0. This represents
@@ -162,6 +168,8 @@ struct bfloat16_t {
     explicit operator float() const;
     /** Cast to double */
     explicit operator double() const;
+    /** Cast to int */
+    explicit operator int() const;
 
     /** \name Convenience "constructors"
      */
@@ -199,6 +207,10 @@ struct bfloat16_t {
     bfloat16_t operator-(bfloat16_t rhs) const;
     bfloat16_t operator*(bfloat16_t rhs) const;
     bfloat16_t operator/(bfloat16_t rhs) const;
+    bfloat16_t operator+=(bfloat16_t rhs) { return (*this = *this + rhs); }
+    bfloat16_t operator-=(bfloat16_t rhs) { return (*this = *this - rhs); }
+    bfloat16_t operator*=(bfloat16_t rhs) { return (*this = *this * rhs); }
+    bfloat16_t operator/=(bfloat16_t rhs) { return (*this = *this / rhs); }
     // @}
 
     /** Comparison operators */
