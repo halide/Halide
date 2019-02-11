@@ -29,14 +29,14 @@ struct float16_t {
      * infinity.
      */
     // @{
-    float16_t(float value);
-    float16_t(double value);
-    float16_t(int value);
+    explicit float16_t(float value);
+    explicit float16_t(double value);
+    explicit float16_t(int value);
     // @}
 
     /** Construct a float16_t with the bits initialised to 0. This represents
      * positive zero.*/
-    float16_t();
+    float16_t() = default;
 
     /// @}
 
@@ -117,7 +117,7 @@ struct float16_t {
 
 private:
     // The raw bits.
-    uint16_t data;
+    uint16_t data = 0;
 };
 
 static_assert(sizeof(float16_t) == 2, "float16_t should occupy two bytes");
@@ -152,14 +152,14 @@ struct bfloat16_t {
      * infinity.
      */
     // @{
-    bfloat16_t(float value);
-    bfloat16_t(double value);
-    bfloat16_t(int value);
+    explicit bfloat16_t(float value);
+    explicit bfloat16_t(double value);
+    explicit bfloat16_t(int value);
     // @}
 
     /** Construct a bfloat16_t with the bits initialised to 0. This represents
      * positive zero.*/
-    bfloat16_t();
+    bfloat16_t() = default;
 
     /// @}
 
@@ -240,7 +240,7 @@ struct bfloat16_t {
 
 private:
     // The raw bits.
-    uint16_t data;
+    uint16_t data = 0;
 };
 
 static_assert(sizeof(bfloat16_t) == 2, "bfloat16_t should occupy two bytes");

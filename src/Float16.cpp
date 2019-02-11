@@ -363,8 +363,6 @@ float16_t::float16_t(double value) : data(float_to_float16(value)) {}
 
 float16_t::float16_t(int value) : data(float_to_float16(value)) {}
 
-float16_t::float16_t() : data(0) {}
-
 float16_t::operator float() const {
     return float16_to_float(data);
 }
@@ -456,8 +454,6 @@ bfloat16_t::bfloat16_t(float value) : data(float_to_bfloat16(value)) {}
 bfloat16_t::bfloat16_t(double value) : data(float_to_bfloat16(value)) {}
 
 bfloat16_t::bfloat16_t(int value) : data(float_to_bfloat16(value)) {}
-
-bfloat16_t::bfloat16_t() : data(0) {}
 
 bfloat16_t::operator float() const {
     return bfloat16_to_float(data);

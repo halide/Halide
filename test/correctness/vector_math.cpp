@@ -43,12 +43,12 @@ double mod(double x, double y) {
 
 template<>
 float16_t mod(float16_t x, float16_t y) {
-    return fmod(float(x), float(y));
+    return float16_t(fmod(float(x), float(y)));
 }
 
 template<>
 bfloat16_t mod(bfloat16_t x, bfloat16_t y) {
-    return fmod(float(x), float(y));
+    return bfloat16_t(fmod(float(x), float(y)));
 }
 
 template<typename A>
@@ -171,7 +171,7 @@ bool test(int lanes, int seed) {
             // float->int casts are UB if the result doesn't fit.
             input(x, y) = (A)(dis(rng)*0.0625 + 1.0);
             if ((A)(-1) < (A)(0)) {
-                input(x, y) -= 10;
+                input(x, y) -= (A)(10);
             }
         }
     }
@@ -653,7 +653,7 @@ bool test(int lanes, int seed) {
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
-            typename with_unsigned<A>::type correct = absd((double)input(x, y), (double)input(x+1, y));
+            typename with_unsigned<A>::type correct = (A)(absd((double)input(x, y), (double)input(x+1, y)));
             if (im22(x, y) != correct) {
                 printf("im22(%d, %d) = %f instead of %f\n", x, y, (double)(im3(x, y)), (double)(correct));
                 return false;
