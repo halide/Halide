@@ -130,6 +130,10 @@ bool Type::can_represent(int64_t x) const {
     } else if (is_bfloat()) {
         switch (bits()) {
         case 16:
+            // Round-trip from int64_t to bfloat16_t and back to see
+            // if the value was preserved. This round-tripping must be
+            // done via float in both directions, which gives us the
+            // following ridiculous chain of casts:
             return (int64_t)(float)(bfloat16_t)(float)x == x;
         default:
             return false;
