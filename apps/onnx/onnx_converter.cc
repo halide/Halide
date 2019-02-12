@@ -2250,6 +2250,9 @@ Halide::ImageParam EncodeAsImageParam(const onnx::ValueInfoProto& input) {
   for (int i = 0; i < num_dims; ++i) {
     if (dims.dim(i).has_dim_value()) {
       int dim = dims.dim(i).dim_value();
+      if (dim <= 0) {
+        throw std::invalid_argument("Invalid shape for input " + input.name());
+      }
       result.dim(i).set_bounds_estimate(0, dim);
     } else {
       // Dimension is unknown, just make a guess.
