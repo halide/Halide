@@ -10,7 +10,7 @@
 namespace Halide {
 namespace Internal {
 
-/** A code generator that emits mips code from a given Halide stmt. */
+/** A code generator that emits WebAssembly code from a given Halide stmt. */
 class CodeGen_WebAssembly : public CodeGen_Posix {
 public:
     /** Create a mips code generator. Processor features can be
