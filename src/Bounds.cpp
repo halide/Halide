@@ -919,22 +919,6 @@ private:
             return;
         }
 
-        // If the args are const we can return the call of those args
-        // for pure functions. For other types of functions, the same
-        // call in two different places might produce different
-        // results (e.g. during the update step of a reduction), so we
-        // can't move around call nodes.
-        std::vector<Expr> new_args(op->args.size());
-        bool const_args = true;
-        for (size_t i = 0; i < op->args.size() && const_args; i++) {
-            op->args[i].accept(this);
-            if (interval.is_single_point()) {
-                new_args[i] = interval.min;
-            } else {
-                const_args = false;
-            }
-        }
-
         Type t = op->type.element_of();
 
         if (t.is_handle()) {
@@ -942,14 +926,41 @@ private:
             return;
         }
 
-        if (const_args &&
-            !const_bound &&
-            (op->call_type == Call::PureExtern ||
-             op->call_type == Call::Image)) {
-            Expr call = Call::make(t, op->name, new_args, op->call_type,
-                                   op->func, op->value_index, op->image, op->param);
-            interval = Interval::single_point(call);
-        } else if (op->is_intrinsic(Call::abs)) {
+
+        if (!const_bound &&
+            (op->call_type == Call::PureExtern || op->call_type == Call::Image)) {
+
+            // If the args are const we can return the call of those args
+            // for pure functions. For other types of functions, the same
+            // call in two different places might produce different
+            // results (e.g. during the update step of a reduction), so we
+            // can't move around call nodes.
+            //
+            // Note: Only evaluate new_args if we know the call is a candidate;
+            // otherwise we can get n^2 evaluation time for deeply-nested
+            // Expr trees.
+
+            std::vector<Expr> new_args(op->args.size());
+            bool const_args = true;
+            for (size_t i = 0; i < op->args.size() && const_args; i++) {
+                op->args[i].accept(this);
+                if (interval.is_single_point()) {
+                    new_args[i] = interval.min;
+                } else {
+                    const_args = false;
+                }
+            }
+            if (const_args) {
+                Expr call = Call::make(t, op->name, new_args, op->call_type,
+                                       op->func, op->value_index, op->image, op->param);
+                interval = Interval::single_point(call);
+                return;
+            }
+            // else fall thru and continue
+        }
+
+        if (op->is_intrinsic(Call::abs)) {
+            op->args[0].accept(this);
             Interval a = interval;
             interval.min = make_zero(t);
             if (a.is_bounded()) {
@@ -1044,11 +1055,29 @@ private:
                             equiv.accept(this);
                         }
                     } else if (op->is_intrinsic(Call::shift_right)) {
-                        if (a_interval.has_lower_bound() && b_interval.has_upper_bound()) {
-                            interval.min = a_interval.min >> b_interval.max;
-                        }
-                        if (a_interval.has_upper_bound() && b_interval.has_lower_bound()) {
-                            interval.max = a_interval.max >> b_interval.min;
+                        // shift_right(a, b) is UB for b < 0, so only try to improve on bounds-of-type
+                        // if we can prove b >= 0.
+                        if (b_interval.is_bounded() && (t.is_uint() || can_prove(b_interval.min >= 0))) {
+                            if (a_interval.has_lower_bound()) {
+                                if (t.is_uint() || can_prove(a_interval.min >= 0)) {
+                                    interval.min = a_interval.min >> b_interval.max;
+                                } else {
+                                    // if a < 0, the smallest value will be a >> b.min
+                                    // if a > 0, the smallest value will be a >> b.max
+                                    interval.min = min(a_interval.min >> b_interval.min,
+                                                       a_interval.min >> b_interval.max);
+                                }
+                            }
+                            if (a_interval.has_upper_bound()) {
+                                if (t.is_uint() || can_prove(a_interval.max >= 0)) {
+                                    interval.max = a_interval.max >> b_interval.min;
+                                } else {
+                                    // if a < 0, the largest value will be a >> b.max
+                                    // if a > 0, the largest value will be a >> b.min
+                                    interval.max = max(a_interval.max >> b_interval.max,
+                                                       a_interval.max >> b_interval.min);
+                                }
+                            }
                         }
                     } else if (op->is_intrinsic(Call::bitwise_and) &&
                                a_interval.has_upper_bound() &&
@@ -1137,8 +1166,22 @@ private:
                    op->is_intrinsic(Call::count_leading_zeros) ||
                    op->is_intrinsic(Call::count_trailing_zeros)) {
             internal_assert(op->args.size() == 1);
-            interval = Interval(make_zero(op->type.element_of()),
-                                make_const(op->type.element_of(), op->args[0].type().bits()));
+            const Type &t = op->type.element_of();
+            Expr min = make_zero(t);
+            Expr max = make_const(t, op->args[0].type().bits());
+            if (op->is_intrinsic(Call::count_leading_zeros)) {
+                // clz treats signed and unsigned ints the same way;
+                // cast all ints to uint to simplify this.
+                cast(op->type.with_code(halide_type_uint), op->args[0]).accept(this);
+                Interval a = interval;
+                if (a.has_lower_bound()) {
+                    max = cast(t, count_leading_zeros(a.min));
+                }
+                if (a.has_upper_bound()) {
+                    min = cast(t, count_leading_zeros(a.max));
+                }
+            }
+            interval = Interval(min, max);
         } else if (op->is_intrinsic(Call::memoize_expr)) {
             internal_assert(op->args.size() >= 1);
             op->args[0].accept(this);
@@ -2467,6 +2510,11 @@ void check_constant_bound(Expr e, Expr correct_min, Expr correct_max) {
 
 void constant_bound_test() {
     {
+        Param<int16_t> a, b;
+        check_constant_bound(a >> b, make_const(Int(16), -32768), make_const(Int(16), 32767));
+    }
+
+    {
         Param<int> x("x"), y("y");
         x.set_range(10, 20);
         y.set_range(5, 30);
@@ -2560,6 +2608,19 @@ void constant_bound_test() {
         check_constant_bound(e16, Int(16).min(), Int(16).max());
     }
 
+    {
+        using ConciseCasts::i16;
+        using ConciseCasts::i32;
+
+        Param<int32_t> x("x"), y("y");
+        x.set_range(2, 10);
+
+        check_constant_bound(count_leading_zeros(x), i32(28), i32(30));
+        check_constant_bound(count_leading_zeros(cast<int16_t>(x)), i16(12), i16(14));
+
+        check_constant_bound(count_leading_zeros(y), i32(0), i32(32));
+        check_constant_bound(count_leading_zeros(cast<int16_t>(y)), i16(0), i16(16));
+    }
 }
 
 void boxes_touched_test() {
@@ -2677,7 +2738,7 @@ void bounds_test() {
     check(scope, (cast<uint8_t>(x) >> cast<uint8_t>(1)), make_const(UInt(8), 0), make_const(UInt(8), 5));
     check(scope, (cast<uint8_t>(10) >> cast<uint8_t>(1)), make_const(UInt(8), 5), make_const(UInt(8), 5));
     check(scope, (cast<uint8_t>(x + 3) << cast<uint8_t>(1)), make_const(UInt(8), 6), make_const(UInt(8), 26));
-    check(scope, (cast<uint8_t>(x + 3) << cast<uint8_t>(7)), make_const(UInt(8), 0), make_const(UInt(8), 0));  // Overflows -> 0
+    check(scope, (cast<uint8_t>(x + 3) << cast<uint8_t>(7)), make_const(UInt(8), 0), make_const(UInt(8), 255));  // Overflows
     check(scope, (cast<uint8_t>(5) << cast<uint8_t>(1)), make_const(UInt(8), 10), make_const(UInt(8), 10));
     check(scope, (x << 12), 0, 10 << 12);
     check(scope, x & 4095, 0, 10); // LHS known to be positive
@@ -2707,6 +2768,13 @@ void bounds_test() {
         Expr e = clamp(x/y, make_const(UInt(16), 0), make_const(UInt(16), 128));
         check(scope, e, make_const(UInt(16), 0), make_const(UInt(16), 5));
         check_constant_bound(scope, e, make_const(UInt(16), 0), make_const(UInt(16), 5));
+    }
+
+    {
+        Param<int16_t> x("x"), y("y");
+        x.set_range(make_const(Int(16), -32), make_const(Int(16), -16));
+        y.set_range(make_const(Int(16), 0), make_const(Int(16), 4));
+        check_constant_bound((x >> y), make_const(Int(16), -32), make_const(Int(16), -1));
     }
 
     {
@@ -2749,6 +2817,32 @@ void bounds_test() {
     internal_assert(equal(simplify(r2[0].max), 19));
 
     boxes_touched_test();
+
+    // Check a deeply-nested bitwise expr to ensure it doesn't take n^2 time
+    // (this clause took ~30s on a typical laptop before the fix, ~10ms after)
+    {
+        using ConciseCasts::u8;
+        using ConciseCasts::u16;
+
+        Expr a = Variable::make(UInt(16), "t42");
+        Expr b = Variable::make(UInt(16), "t43");
+        Expr c = Variable::make(UInt(16), "t44");
+        Expr d = Variable::make(Int(32), "d");
+        Expr x = Variable::make(Int(32), "x");
+        Expr y = Variable::make(Int(32), "y");
+        Expr one_u8 = Expr((uint8_t) 1);
+        Expr one_u16 = Expr((uint16_t) 1);
+        Expr zero_u16 = Expr((uint16_t) 0);
+        Expr e1 = select(c >= Expr((uint16_t) 128), c - Expr((uint16_t) 128), c);
+        Expr e2 = Let::make("t44", (((((((((((((((((zero_u16 << one_u16) | u16((u8(d) & one_u8))) << one_u16)
+            | u16(((u8(d) >> one_u8) & one_u8))) << one_u16) | (u16(x) & one_u16)) << one_u16)
+            | (u16(y) & one_u16)) << one_u16) | (a & one_u16)) << one_u16) | (b & one_u16)) << one_u16)
+            | ((a >> one_u16) & one_u16)) << one_u16) | ((b >> one_u16) & one_u16)) >> one_u16), e1);
+        Expr e3 = Let::make("t43", u16(y) >> one_u16, e2);
+        Expr e4 = Let::make("t42", u16(x) >> one_u16, e3);
+
+        check_constant_bound(e4, make_const(UInt(16), 0), make_const(UInt(16), 65535));
+    }
 
     std::cout << "Bounds test passed" << std::endl;
 }

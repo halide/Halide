@@ -1378,6 +1378,24 @@ void check_overflow() {
     }
 }
 
+template<typename T>
+void check_clz(uint64_t value, uint64_t result) {
+    Expr x = Variable::make(halide_type_of<T>(), "x");
+    check(Let::make("x", cast<T>(Expr(value)), count_leading_zeros(x)), cast<T>(Expr(result)));
+}
+
+template<typename T>
+void check_ctz(uint64_t value, uint64_t result) {
+    Expr x = Variable::make(halide_type_of<T>(), "x");
+    check(Let::make("x", cast<T>(Expr(value)), count_trailing_zeros(x)), cast<T>(Expr(result)));
+}
+
+template<typename T>
+void check_popcount(uint64_t value, uint64_t result) {
+    Expr x = Variable::make(halide_type_of<T>(), "x");
+    check(Let::make("x", cast<T>(Expr(value)), popcount(x)), cast<T>(Expr(result)));
+}
+
 void check_bitwise() {
     Expr x = Var("x");
 
@@ -1396,6 +1414,35 @@ void check_bitwise() {
     // Check constant-folding of bitwise ops (and indirectly, reinterpret)
     check(Let::make(x.as<Variable>()->name, 5, (((~x) & 3) | 16) ^ 33), ((~5 & 3) | 16) ^ 33);
     check(Let::make(x.as<Variable>()->name, 5, (((~cast<uint8_t>(x)) & 3) | 16) ^ 33), make_const(UInt(8), ((~5 & 3) | 16) ^ 33));
+
+    check_clz<int8_t>(10, 4);
+    check_clz<int16_t>(10, 12);
+    check_clz<int32_t>(10, 28);
+    check_clz<int64_t>(10, 60);
+    check_clz<uint8_t>(10, 4);
+    check_clz<uint16_t>(10, 12);
+    check_clz<uint32_t>(10, 28);
+    check_clz<uint64_t>(10, 60);
+    check_clz<uint64_t>(10ULL << 32, 28);
+
+    check_ctz<int8_t>(64, 6);
+    check_ctz<int16_t>(64, 6);
+    check_ctz<int32_t>(64, 6);
+    check_ctz<int64_t>(64, 6);
+    check_ctz<uint8_t>(64, 6);
+    check_ctz<uint16_t>(64, 6);
+    check_ctz<uint32_t>(64, 6);
+    check_ctz<uint64_t>(64, 6);
+    check_ctz<uint64_t>(64ULL << 32, 38);
+
+    check_popcount<int8_t>(0xa5, 4);
+    check_popcount<int16_t>(0xa5a5, 8);
+    check_popcount<int32_t>(0xa5a5a5a5, 16);
+    check_popcount<int64_t>(0xa5a5a5a5a5a5a5a5, 32);
+    check_popcount<uint8_t>(0xa5, 4);
+    check_popcount<uint16_t>(0xa5a5, 8);
+    check_popcount<uint32_t>(0xa5a5a5a5, 16);
+    check_popcount<uint64_t>(0xa5a5a5a5a5a5a5a5, 32);
 }
 
 void check_lets() {
@@ -1577,31 +1624,90 @@ int main(int argc, char **argv) {
 
     {
         using ConciseCasts::i16;
+
+        const Expr a = Expr(std::numeric_limits<int16_t>::lowest());
+        const Expr b = Expr(std::numeric_limits<int16_t>::max());
+
+        check(a >> 14,  i16(-2));
+        check(b >> -14, i16(-16384));
+        check(a << 14,  i16(0));
+        check(b << -14, i16(1));
+
+        check(a >> 15,  i16(-1));
+        check(b >> -15, i16(0));
+        check(a << 15,  i16(0));
+        check(b << -15, i16(0));
+
+        check(a >> b, i16(-1));
+        check(b >> a, i16(0));
+        check(a << b, i16(0));
+        check(b << a, i16(0));
+    }
+
+    {
         using ConciseCasts::u16;
 
-        check(i16(-32768) >> i16(15),  i16(-1));
-        check(i16(32767)  >> i16(-15), i16(0));
+        const Expr a = Expr(std::numeric_limits<uint16_t>::lowest());
+        const Expr b = Expr(std::numeric_limits<uint16_t>::max());
 
-        check(u16(0)     >> u16(15), u16(0));
-        check(u16(65535) >> u16(15), u16(0));
+        check(a >> 15, u16(0));
+        check(b >> 15, u16(1));
+        check(a << 15, u16(0));
+        check(b << 15, Expr((uint16_t) 0x8000));
 
-        check(i16(-32768) << i16(15),  i16(0));
-        check(i16(32767)  << i16(-15), i16(0));
+        check(a >> 16, u16(0));
+        check(b >> 16, u16(0));
+        check(a << 16, u16(0));
+        check(b << 16, u16(0));
 
-        check(u16(0)     << u16(15), u16(0));
-        check(u16(65535) << u16(15), u16(0));
+        check(a >> b, u16(0));
+        check(b >> b, u16(0));
+        check(a << b, u16(0));
+        check(b << b, u16(0));
+    }
 
-        check(i16(-32768) >> i16(32767),  i16(-1));
-        check(i16(32767)  >> i16(-32768), i16(0));
+    {
+        using ConciseCasts::i64;
 
-        check(u16(0)     >> u16(65535), u16(0));
-        check(u16(65535) >> u16(65535), u16(0));
+        const Expr a = Expr(std::numeric_limits<int64_t>::lowest());
+        const Expr b = Expr(std::numeric_limits<int64_t>::max());
 
-        check(i16(-32768) << i16(32767),  i16(0));
-        check(i16(32767)  << i16(-32768), i16(0));
+        check(a >> 62,  i64(-2));
+        check_is_sio(b >> -62);
+        check_is_sio(a << 62);
+        check(b << -62, i64(1));
 
-        check(u16(0)     << u16(65535), u16(0));
-        check(u16(65535) << u16(65535), u16(0));
+        check(a >> 63,  i64(-1));
+        check(b >> -63, i64(0));
+        check(a << 63,  i64(0));
+        check(b << -63, i64(0));
+
+        check(a >> b, i64(-1));
+        check(b >> a, i64(0));
+        check(a << b, i64(0));
+        check(b << a, i64(0));
+    }
+
+    {
+        using ConciseCasts::u64;
+
+        const Expr a = Expr(std::numeric_limits<uint64_t>::lowest());
+        const Expr b = Expr(std::numeric_limits<uint64_t>::max());
+
+        check(a >> 63, u64(0));
+        check(b >> 63, u64(1));
+        check(a << 63, u64(0));
+        check(b << 63, Expr((uint64_t) 0x8000000000000000ULL));
+
+        check(a >> 64, u64(0));
+        check(b >> 64, u64(0));
+        check(a << 64, u64(0));
+        check(b << 64, u64(0));
+
+        check(a >> b, u64(0));
+        check(b >> b, u64(0));
+        check(a << b, u64(0));
+        check(b << b, u64(0));
     }
 
     printf("Success!\n");
