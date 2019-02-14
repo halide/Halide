@@ -1281,4 +1281,5 @@ int main(int argc, char **argv) {
     test_reverse_scan();
     test_select_guard();
     printf("Success!\n");
+    return 0;
 }
