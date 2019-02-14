@@ -138,7 +138,7 @@ int main(int argc, char **argv) {
 
     double final_error = e();
     if (final_error <= 1e-10 && final_error < initial_error) {
-        printf("Success!\n");
+        printf("[fit_function] Success!\n");
         return 0;
     } else {
         printf("Did not converge\n");

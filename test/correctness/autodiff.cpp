@@ -1280,6 +1280,6 @@ int main(int argc, char **argv) {
     test_rdom_predicate();
     test_reverse_scan();
     test_select_guard();
-    printf("Success!\n");
+    printf("[autodiff] Success!\n");
     return 0;
 }
