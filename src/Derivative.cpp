@@ -765,21 +765,21 @@ void ReverseAccumulationVisitor::propagate_adjoints(
 void ReverseAccumulationVisitor::accumulate(const Expr &stub, Expr adjoint) {
     const BaseExprNode *stub_ptr = (const BaseExprNode *) stub.get();
 
-    // Trick to avoid NaN in select() clauses: 
+    // Trick to avoid NaN in select() clauses:
     // select(c, x, 0) * y -> select(c, x * y, 0)
     // x * select(c, y, 0) -> select(c, x * y, 0)
     // select(c, x, 0) / y -> select(c, x / y, 0)
     if (adjoint.as<Mul>() != nullptr) {
         const Mul *mul_op = adjoint.as<Mul>();
-        auto mul_select_with_zero = [&] (Expr sel, Expr other) {
+        auto mul_select_with_zero = [&](Expr sel, Expr other) {
             const Select *sel_op = sel.as<Select>();
             if (is_zero(sel_op->true_value)) {
                 return select(sel_op->condition,
-                    sel_op->true_value, sel_op->false_value * other);
+                              sel_op->true_value, sel_op->false_value * other);
             }
             if (is_zero(sel_op->false_value)) {
                 return select(sel_op->condition,
-                    sel_op->true_value * other, sel_op->false_value);
+                              sel_op->true_value * other, sel_op->false_value);
             }
             return sel * other;
         };
@@ -791,15 +791,15 @@ void ReverseAccumulationVisitor::accumulate(const Expr &stub, Expr adjoint) {
     }
     if (adjoint.as<Div>() != nullptr) {
         const Div *div_op = adjoint.as<Div>();
-        auto div_select_with_zero = [&] (Expr sel, Expr other) {
+        auto div_select_with_zero = [&](Expr sel, Expr other) {
             const Select *sel_op = sel.as<Select>();
             if (is_zero(sel_op->true_value)) {
                 return select(sel_op->condition,
-                    sel_op->true_value, sel_op->false_value / other);
+                              sel_op->true_value, sel_op->false_value / other);
             }
             if (is_zero(sel_op->false_value)) {
                 return select(sel_op->condition,
-                    sel_op->true_value / other, sel_op->false_value);
+                              sel_op->true_value / other, sel_op->false_value);
             }
             return sel * other;
         };
@@ -895,19 +895,19 @@ void ReverseAccumulationVisitor::visit(const Div *op) {
         if (is_zero(sel_op->true_value)) {
             // d/da a / b = 1 / b
             accumulate(op->a, select(sel_op->condition,
-                sel_op->true_value, sel_op->false_value / op->b));
+                                     sel_op->true_value, sel_op->false_value / op->b));
             // d/db a * b = - a / b^2
             accumulate(op->b, select(sel_op->condition,
-                sel_op->true_value, -sel_op->false_value * op->a / (op->b * op->b)));
+                                     sel_op->true_value, -sel_op->false_value * op->a / (op->b * op->b)));
             return;
         }
         if (is_zero(sel_op->false_value)) {
             // d/da a / b = 1 / b
             accumulate(op->a, select(sel_op->condition,
-                sel_op->true_value / op->b, sel_op->false_value));
+                                     sel_op->true_value / op->b, sel_op->false_value));
             // d/db a * b = - a / b^2
             accumulate(op->b, select(sel_op->condition,
-                -sel_op->true_value * op->a / (op->b * op->b), sel_op->false_value));
+                                     -sel_op->true_value * op->a / (op->b * op->b), sel_op->false_value));
             return;
         }
     }
@@ -1731,7 +1731,6 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
                 new_args[arg_id].name(), func_to_update_args[arg_id], adjoint);
         }
 
-
         // Simplify expressions
         adjoint = simplify(common_subexpression_elimination(adjoint));
         for (int i = 0; i < (int) lhs.size(); i++) {
@@ -1798,7 +1797,7 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
             // For example, consider this:
             // f(x) = g(x)
             // f(k(r.x)) += h(r.x)
-            // Multiple k(r.x) may correspond to the same index, 
+            // Multiple k(r.x) may correspond to the same index,
             // but they are overwritten in the reduction loop.
             // Therefore we should also overwrite their derivatives
             // by using = instead of +=
@@ -1809,9 +1808,7 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
                     func_to_update(lhs)[op->value_index] = adjoint;
                 }
             } else {
-                Definition &def = func_to_update.num_update_definitions() == 0 ?
-                    func_to_update.function().definition() :
-                    func_to_update.function().update(func_to_update.num_update_definitions() - 1);
+                Definition &def = func_to_update.num_update_definitions() == 0 ? func_to_update.function().definition() : func_to_update.function().update(func_to_update.num_update_definitions() - 1);
                 vector<Expr> &values = def.values();
                 ReductionDomain rdom;
                 for (const auto &val : values) {
@@ -1846,9 +1843,7 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
                 func_to_update(lhs)[op->value_index] += adjoint;
             }
         } else {
-            Definition &def = func_to_update.num_update_definitions() == 0 ?
-                func_to_update.function().definition() :
-                func_to_update.function().update(func_to_update.num_update_definitions() - 1);
+            Definition &def = func_to_update.num_update_definitions() == 0 ? func_to_update.function().definition() : func_to_update.function().update(func_to_update.num_update_definitions() - 1);
             vector<Expr> &values = def.values();
             ReductionDomain rdom;
             for (const auto &val : values) {
