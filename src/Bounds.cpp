@@ -1058,20 +1058,22 @@ private:
                         // shift_right(a, b) is UB for b < 0, so only try to improve on bounds-of-type
                         // if we can prove b >= 0.
                         if (b_interval.is_bounded() && (t.is_uint() || can_prove(b_interval.min >= 0))) {
-                            if (a_interval.has_lower_bound()) {
+                            bool b_min_ok = (t.is_uint() || can_prove(b_interval.min >= 0)) && can_prove(b_interval.min < t.bits());
+                            bool b_max_ok = (t.is_uint() || can_prove(b_interval.max >= 0)) && can_prove(b_interval.max < t.bits());
+                            if (a_interval.has_lower_bound() && b_max_ok) {
                                 if (t.is_uint() || can_prove(a_interval.min >= 0)) {
                                     interval.min = a_interval.min >> b_interval.max;
-                                } else {
+                                } else if (b_min_ok) {
                                     // if a < 0, the smallest value will be a >> b.min
                                     // if a > 0, the smallest value will be a >> b.max
                                     interval.min = min(a_interval.min >> b_interval.min,
                                                        a_interval.min >> b_interval.max);
                                 }
                             }
-                            if (a_interval.has_upper_bound()) {
+                            if (a_interval.has_upper_bound() && b_min_ok) {
                                 if (t.is_uint() || can_prove(a_interval.max >= 0)) {
                                     interval.max = a_interval.max >> b_interval.min;
-                                } else {
+                                } else if (b_max_ok) {
                                     // if a < 0, the largest value will be a >> b.max
                                     // if a > 0, the largest value will be a >> b.min
                                     interval.max = max(a_interval.max >> b_interval.max,
