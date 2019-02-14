@@ -279,7 +279,7 @@ void test_2d_box() {
     Buffer<float> blur_y_buf = blur_y.realize(5, 5);
     // d loss / d blur_y = 2 * blur_y(x, y)
     Buffer<float> d_blur_y_buf = d(blur_y).realize(5, 5);
-    const float eps = 1e-6;
+    const float eps = 1e-6f;
     for (int y = 0; y < 5; y++) {
         for (int x = 0; x < 5; x++) {
             float target = 2 * blur_y_buf(x, y);
