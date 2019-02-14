@@ -168,6 +168,26 @@ struct module_state {
 WEAK module_state *state_list = NULL;
 WEAK halide_hexagon_handle_t shared_runtime = 0;
 
+#ifdef DEBUG_RUNTIME
+
+// In debug builds, we write shared objects to the current directory (without
+// failing on errors).
+WEAK void write_shared_object(void *user_context, const char* path,
+                              const uint8_t* code, uint64_t code_size) {
+    void *f = fopen(path, "wb");
+    if (!f) {
+        debug(user_context) << "    failed to write shared object to '" << path << "'\n";
+        return;
+    }
+    size_t written = fwrite(code, 1, code_size, f);
+    if (written != code_size) {
+        debug(user_context) << "    bad write of shared object to '" << path << "'\n";
+    }
+    fclose(f);
+}
+
+#endif
+
 }}}}  // namespace Halide::Runtime::Internal::Hexagon
 
 using namespace Halide::Runtime::Internal;
@@ -210,6 +230,10 @@ WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
     if (!shared_runtime) {
         debug(user_context) << "    Initializing shared runtime\n";
         const char soname[] = "libhalide_shared_runtime.so";
+        #ifdef DEBUG_RUNTIME
+        debug(user_context) << "    Writing shared object '" << soname << "'\n";
+        write_shared_object(user_context, soname, runtime, runtime_size);
+        #endif
         debug(user_context) << "    halide_remote_load_library(" << soname << ") -> ";
         result = remote_load_library(soname, sizeof(soname), runtime, runtime_size, &shared_runtime);
         poll_log(user_context);
@@ -244,6 +268,10 @@ WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
         static int unique_id = 0;
         stringstream soname(user_context);
         soname << "libhalide_kernels" << unique_id++ << ".so";
+        #ifdef DEBUG_RUNTIME
+        debug(user_context) << "    Writing shared object '" << soname.str() << "'\n";
+        write_shared_object(user_context, soname.str(), code, code_size);
+        #endif
         debug(user_context) << "    halide_remote_load_library(" << soname.str() << ") -> ";
         halide_hexagon_handle_t module = 0;
         result = remote_load_library(soname.str(), soname.size() + 1, code, code_size, &module);
@@ -266,6 +294,7 @@ WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
 
     return result != 0 ? -1 : 0;
 }
+
 namespace {
 
 // Prepare an array of remote_buffer arguments, mapping buffers if

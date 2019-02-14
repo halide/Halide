@@ -7,6 +7,39 @@ namespace Internal {
 using std::string;
 using std::vector;
 
+namespace {
+
+class CountVarUses : public IRVisitor {
+    std::map<std::string, int>& var_uses;
+
+    void visit(const Variable* var) override {
+        var_uses[var->name]++;
+    }
+
+    void visit(const Load* op) override {
+        var_uses[op->name]++;
+        IRVisitor::visit(op);
+    }
+
+    void visit(const Store* op) override {
+        var_uses[op->name]++;
+        IRVisitor::visit(op);
+    }
+
+    using IRVisitor::visit;
+
+public:
+    CountVarUses(std::map<std::string, int>& var_uses) : var_uses(var_uses) {}
+};
+
+template<typename StmtOrExpr>
+void count_var_uses(StmtOrExpr x, std::map<std::string, int>& var_uses) {
+    CountVarUses counter(var_uses);
+    x.accept(&counter);
+}
+
+}  // namespace
+
 template<typename LetOrLetStmt, typename Body>
 Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *bounds) {
 
@@ -144,7 +177,7 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *bounds) {
         }
 
         if (f.new_value.same_as(f.value)) {
-                // Nothing to substitute
+            // Nothing to substitute
             f.new_value = Expr();
             replacement = Expr();
         } else {
@@ -184,6 +217,15 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *bounds) {
 
     result = mutate_let_body(result, bounds);
 
+    // TODO: var_info and vars_used are pretty redundant; however, at the time
+    // of writing, both cover cases that the other does not:
+    // - var_info prevents duplicate lets from being generated, even
+    //   from different Frame objects.
+    // - vars_used avoids dead lets being generated in cases where vars are
+    //   seen as used by var_info, and then later removed.
+    std::map<std::string, int> vars_used;
+    count_var_uses(result, vars_used);
+
     for (auto it = frames.rbegin(); it != frames.rend(); it++) {
         if (it->value_bounds_tracked) {
             bounds_and_alignment_info.pop(it->op->name);
@@ -195,14 +237,16 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *bounds) {
         VarInfo info = var_info.get(it->op->name);
         var_info.pop(it->op->name);
 
-        if (it->new_value.defined() && info.new_uses > 0) {
+        if (it->new_value.defined() && (info.new_uses > 0 && vars_used.count(it->new_name) > 0)) {
             // The new name/value may be used
             result = LetOrLetStmt::make(it->new_name, it->new_value, result);
+            count_var_uses(it->new_value, vars_used);
         }
 
-        if (info.old_uses > 0 || !remove_dead_lets) {
+        if (!remove_dead_lets || (info.old_uses > 0 && vars_used.count(it->op->name) > 0)) {
             // The old name is still in use. We'd better keep it as well.
             result = LetOrLetStmt::make(it->op->name, it->value, result);
+            count_var_uses(it->value, vars_used);
         }
 
         const LetOrLetStmt *new_op = result.template as<LetOrLetStmt>();
