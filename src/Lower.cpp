@@ -343,9 +343,9 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     s = lower_unsafe_promises(s, t);
     debug(2) << "Lowering after lowering unsafe promises:\n" << s << "\n\n";
 
-    debug(1) << "Emulating bfloat math...\n";
-    s = lower_bfloat_math(s);
-    debug(2) << "Lowering after emulating bfloat math:\n" << s << "\n\n";
+    debug(1) << "Emulating float16 math...\n";
+    s = lower_float16_math(s, t);
+    debug(2) << "Lowering after emulating float16 math:\n" << s << "\n\n";
 
     s = remove_dead_allocations(s);
     s = remove_trivial_for_loops(s);

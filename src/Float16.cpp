@@ -9,11 +9,6 @@
 namespace Halide {
 namespace Internal {
 
-static const int mantissa_bits = 10;
-static const uint16_t sign_mask = 0x8000;
-static const uint16_t exponent_mask = 0x7c00;
-static const uint16_t mantissa_mask = 0x03ff;
-
 // Conversion routines to and from float cribbed from Christian Rau's
 // half library (half.sourceforge.net)
 uint16_t float_to_float16(float value) {
@@ -24,9 +19,9 @@ uint16_t float_to_float16(float value) {
     if (value == 0) {
         return bits;
     } else if (std::isnan(value)) {
-        return bits | exponent_mask | mantissa_mask;
+        return bits | float16_t::exponent_mask | float16_t::mantissa_mask;
     } else if (std::isinf(value)) {
-        return bits | exponent_mask;
+        return bits | float16_t::exponent_mask;
     }
 
     int exp;
@@ -40,7 +35,7 @@ uint16_t float_to_float16(float value) {
     } else {
         // Move the exponent from the float into the half.
         value = std::ldexp(value, 11 - exp);
-        bits |= ((exp + 13) << mantissa_bits);
+        bits |= ((exp + 13) << float16_t::mantissa_bits);
     }
 
     // We've normalized value as much as possible. Put the integer
@@ -331,8 +326,8 @@ float float16_to_float(const uint16_t& value) {
            0, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024,
         1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024 };
 
-    int sign_and_exponent = value >> mantissa_bits;
-    int offset = offset_table[sign_and_exponent] + (value & mantissa_mask);
+    int sign_and_exponent = value >> float16_t::mantissa_bits;
+    int offset = offset_table[sign_and_exponent] + (value & float16_t::mantissa_mask);
     uint32_t bits = (mantissa_table[offset] + exponent_table[sign_and_exponent]);
     return reinterpret_bits<float>(bits);
 }
