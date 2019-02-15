@@ -1055,25 +1055,25 @@ private:
                             equiv.accept(this);
                         }
                     } else if (op->is_intrinsic(Call::shift_right)) {
-                        // shift_right(a, b) is UB for b < 0, so only try to improve on bounds-of-type
-                        // if we can prove b >= 0.
-                        if (b_interval.is_bounded() && (t.is_uint() || can_prove(b_interval.min >= 0))) {
-                            bool b_min_ok = (t.is_uint() || can_prove(b_interval.min >= 0)) && can_prove(b_interval.min < t.bits());
-                            bool b_max_ok = (t.is_uint() || can_prove(b_interval.max >= 0)) && can_prove(b_interval.max < t.bits());
-                            if (a_interval.has_lower_bound() && b_max_ok) {
-                                if (t.is_uint() || can_prove(a_interval.min >= 0)) {
+                        // Only try to improve on bounds-of-type if we can prove 0 <= b < t.bits,
+                        // as shift_right(a, b) is UB for b outside that range.
+                        if (b_interval.is_bounded()) {
+                            bool b_min_ok = can_prove(b_interval.min >= 0 && b_interval.min < t.bits());
+                            bool b_max_ok = can_prove(b_interval.max >= 0 && b_interval.max < t.bits());
+                            if (a_interval.has_lower_bound()) {
+                                if (can_prove(a_interval.min >= 0) && b_max_ok) {
                                     interval.min = a_interval.min >> b_interval.max;
-                                } else if (b_min_ok) {
+                                } else if (b_min_ok && b_max_ok) {
                                     // if a < 0, the smallest value will be a >> b.min
                                     // if a > 0, the smallest value will be a >> b.max
                                     interval.min = min(a_interval.min >> b_interval.min,
                                                        a_interval.min >> b_interval.max);
                                 }
                             }
-                            if (a_interval.has_upper_bound() && b_min_ok) {
-                                if (t.is_uint() || can_prove(a_interval.max >= 0)) {
+                            if (a_interval.has_upper_bound()) {
+                                if (can_prove(a_interval.max >= 0) && b_min_ok) {
                                     interval.max = a_interval.max >> b_interval.min;
-                                } else if (b_max_ok) {
+                                } else if (b_min_ok && b_max_ok) {
                                     // if a < 0, the largest value will be a >> b.max
                                     // if a > 0, the largest value will be a >> b.min
                                     interval.max = max(a_interval.max >> b_interval.max,
@@ -1086,7 +1086,7 @@ private:
                                b_interval.has_upper_bound()) {
                         bool a_positive = a_interval.has_lower_bound() && can_prove(a_interval.min >= 0);
                         bool b_positive = b_interval.has_lower_bound() && can_prove(b_interval.min >= 0);
-                        if (t.is_uint() || (a_positive && b_positive)) {
+                        if (a_positive && b_positive) {
                             // Positive and smaller than both args
                             interval.max = min(a_interval.max, b_interval.max);
                             interval.min = make_zero(t);
