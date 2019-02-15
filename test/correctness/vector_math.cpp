@@ -449,6 +449,7 @@ bool test(int lanes, int seed) {
             A correct = input(x+3, y);
             if (im13(x, y) != correct) {
                 printf("im13(%d, %d) = %f instead of %f\n", x, y, (double)(im13(x, y)), (double)(correct));
+                return false;
             }
         }
     }
@@ -458,6 +459,7 @@ bool test(int lanes, int seed) {
         if (verbose) printf("Absolute value\n");
         Func f14;
         f14(x, y) = cast<A>(abs(input(x, y)));
+        f14.vectorize(x, lanes);
         Buffer<A> im14 = f14.realize(W, H);
 
         for (int y = 0; y < H; y++) {
@@ -466,6 +468,7 @@ bool test(int lanes, int seed) {
                 if (correct <= A(0)) correct = -correct;
                 if (im14(x, y) != correct) {
                     printf("im14(%d, %d) = %f instead of %f\n", x, y, (double)(im14(x, y)), (double)(correct));
+                    return false;
                 }
             }
         }
@@ -487,9 +490,11 @@ bool test(int lanes, int seed) {
                 int correct16 = input(x, y)*input(x, y+2) - input(x, y+1)*input(x, y+3);
                 if (im15(x, y) != correct15) {
                     printf("im15(%d, %d) = %d instead of %d\n", x, y, im15(x, y), correct15);
+                    return false;
                 }
                 if (im16(x, y) != correct16) {
                     printf("im16(%d, %d) = %d instead of %d\n", x, y, im16(x, y), correct16);
+                    return false;
                 }
             }
         }
@@ -655,7 +660,7 @@ bool test(int lanes, int seed) {
         for (int x = 0; x < W; x++) {
             typename with_unsigned<A>::type correct = (A)(absd((double)input(x, y), (double)input(x+1, y)));
             if (im22(x, y) != correct) {
-                printf("im22(%d, %d) = %f instead of %f\n", x, y, (double)(im3(x, y)), (double)(correct));
+                printf("im22(%d, %d) = %f instead of %f\n", x, y, (double)(im22(x, y)), (double)(correct));
                 return false;
             }
         }
