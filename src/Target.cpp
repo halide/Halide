@@ -165,9 +165,7 @@ Target calculate_host_target() {
 #endif
 #endif
 
-    Target t(os, arch, bits, initial_features);
-
-    return Target(os, arch, bits, initial_features);
+    return {os, arch, bits, initial_features};
 }
 
 }  // namespace
@@ -450,7 +448,7 @@ void bad_target_string(const std::string &target) {
     }
     separator = "";
     std::string oses;
-    for (auto os_entry : os_name_map) {
+    for (const auto &os_entry : os_name_map) {
         oses += separator + os_entry.first;
         separator = ", ";
     }
@@ -459,7 +457,7 @@ void bad_target_string(const std::string &target) {
     // assume the first line starts with "Features are ".
     int line_char_start = -(int)sizeof("Features are");
     std::string features;
-    for (auto feature_entry : feature_name_map) {
+    for (const auto &feature_entry : feature_name_map) {
         features += separator + feature_entry.first;
         if (features.length() - line_char_start > 70) {
             separator = "\n";
@@ -508,9 +506,7 @@ Target::Target(const std::string &target) {
     }
 }
 
-Target::Target(const char *s) {
-    *this = Target(std::string(s));
-}
+Target::Target(const char *s) : Target(std::string(s)) {}
 
 bool Target::validate_target_string(const std::string &s) {
     Target t;

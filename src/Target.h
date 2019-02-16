@@ -106,7 +106,7 @@ struct Target {
         FeatureEnd = halide_target_feature_end
     };
     Target() : os(OSUnknown), arch(ArchUnknown), bits(0) {}
-    Target(OS o, Arch a, int b, std::vector<Feature> initial_features = std::vector<Feature>())
+    Target(OS o, Arch a, int b, const std::vector<Feature> &initial_features = std::vector<Feature>())
         : os(o), arch(a), bits(b) {
         for (const auto &f :initial_features) {
             set_feature(f);
