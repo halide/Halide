@@ -189,6 +189,8 @@ struct Target {
       return !(*this == other);
     }
 
+    bool get_runtime_compatible_target(const Target& other, Target &result);
+
     /** Convert the Target into a string form that can be reconstituted
      * by merge_string(), which will always be of the form
      *
@@ -235,6 +237,8 @@ struct Target {
 private:
     /** A bitmask that stores the active features. */
     std::bitset<FeatureEnd> features;
+
+    static bool fixup_gcd_target(Target& target);
 };
 
 /** Return the target corresponding to the host machine. */

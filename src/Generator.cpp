@@ -986,8 +986,19 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
             return 1;
         }
         std::string base_path = compute_base_path(output_dir, runtime_name, "");
-        Outputs output_files = compute_outputs(targets[0], base_path, emit_options);
-        compile_standalone_runtime(output_files, targets[0]);
+
+        Target gcd_target = targets[0];
+        for (int i = 1; i < targets.size(); i++) {
+            if (!gcd_target.get_runtime_compatible_target(targets[i], gcd_target)) {
+                user_error << "Failed to find compatible runtime target for "
+                           << gcd_target.to_string()
+                           << " and "
+                           << targets[i].to_string() << '\n';
+            }
+        }
+
+        Outputs output_files = compute_outputs(gcd_target, base_path, emit_options);
+        compile_standalone_runtime(output_files, gcd_target);
     }
 
     if (!generator_name.empty()) {

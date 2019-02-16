@@ -168,6 +168,31 @@ Target calculate_host_target() {
     return {os, arch, bits, initial_features};
 }
 
+int get_highest_cuda_capability(const Target& t) {
+    if (!t.has_feature(Target::CUDA)) {
+        return 0;
+    }
+    if (t.has_feature(Target::CUDACapability61)) {
+        return 61;
+    }
+    if (t.has_feature(Target::CUDACapability50)) {
+        return 50;
+    }
+    if (t.has_feature(Target::CUDACapability35)) {
+        return 35;
+    }
+    if (t.has_feature(Target::CUDACapability32)) {
+        return 32;
+    }
+    if (t.has_feature(Target::CUDACapability30)) {
+        return 30;
+    }
+
+    // invalid target
+    user_warning << "called get_highest_cuda_capability on invalid target (CUDA set with no capability)\n";
+    return -1;
+}
+
 }  // namespace
 
 Target get_host_target() {
@@ -747,6 +772,103 @@ int Target::natural_vector_size(const Halide::Type &t) const {
         // Assume 128-bit vectors on other targets.
         return 16 / data_size;
     }
+}
+
+bool Target::get_runtime_compatible_target(const Target& other, Target &result) {
+    // A compatible runtime must support these features if _either_ of the base runtimes
+    static const std::vector<Feature> unionFeatures = {
+            // These features assist in debugging.
+            Debug, TSAN, ASAN, MSAN,
+
+            // These features enable access to other devices.
+            CUDA, CUDACapability30, CUDACapability32, CUDACapability35, CUDACapability50, CUDACapability61, OpenCL,
+            OpenGL, OpenGLCompute, MinGW, Metal, HexagonDma, HVX_64, HVX_128, HVX_v62, HVX_v65, HVX_v66,
+            HVX_shared_object, D3D12Compute
+    };
+
+    static const std::vector<Feature> intersectionFeatures = {
+            // These features specify additional instruction sets available on the target architecture.
+            SSE41, AVX, AVX2, FMA, FMA4, F16C, ARMv7s, VSX, AVX512,AVX512_KNL, AVX512_Skylake, AVX512_Cannonlake
+    };
+
+    // I don't know how to merge these features because I don't know what they do. Reviewers, please advise :)
+    static const std::vector<Feature> iDontKnowWhatToDoWithTheseFeaturesPleaseHelp = {
+            CLDoubles, CLHalf, UserContext, Matlab, Profile, CPlusPlusMangling, LargeBuffers, FuzzFloatStores,
+            SoftFloatABI, StrictFloat, LegacyBufferWrappers, CheckUnsafePromises, EmbedBitcode,
+            DisableLLVMLoopVectorize, DisableLLVMLoopUnroll, NoNEON, POWER_ARCH_2_07
+    };
+
+    if (arch != other.arch || bits != other.bits || os != other.os) {
+        user_warning << "runtime targets must agree on platform (arch-bits-os)\n";
+        return false;
+    }
+
+    std::vector<Feature> merged_features{};
+
+    for (const auto &feature : unionFeatures) {
+        if (has_feature(feature) || other.has_feature(feature)) {
+            merged_features.push_back(feature);
+        }
+    }
+
+    for (const auto &feature : intersectionFeatures) {
+        if (has_feature(feature) && other.has_feature(feature)) {
+            merged_features.push_back(feature);
+        }
+    }
+
+    Target output = Target(os, arch, bits, merged_features);
+    if (!fixup_gcd_target(output)) {
+        return false;
+    }
+
+    result = output;
+    return true;
+}
+
+
+bool Target::fixup_gcd_target(Target& target) {
+    // These features do not affect runtime code generation.
+    static const std::vector<Feature> irrelevantFeatures = {
+            JIT, NoAsserts, NoBoundsQuery, NoRuntime, TraceLoads, TraceStores, TraceRealizations
+    };
+
+    // Ensure that irrelevant features are not set
+    for (const auto &feature : irrelevantFeatures) {
+        target.features.reset(feature);
+    }
+
+    // Pick highest CUDA capability. Use fall-through to clear redundant features
+    switch (get_highest_cuda_capability(target)) {
+        case -1:
+            user_warning << "cannot merge cuda-enabled targets without knowing capability levels\n";
+            return false;
+        case 61:
+            target.features.reset(CUDACapability50);
+        case 50:
+            target.features.reset(CUDACapability35);
+        case 35:
+            target.features.reset(CUDACapability32);
+        case 32:
+            target.features.reset(CUDACapability30);
+        default:
+            break;
+    }
+
+    // Check to see that there weren't two or more different HVX flags specified.
+    int number_of_hvx_flags_set = 0;
+    number_of_hvx_flags_set += (int)target.features.test(HVX_64);
+    number_of_hvx_flags_set += (int)target.features.test(HVX_128);
+    number_of_hvx_flags_set += (int)target.features.test(HVX_v62);
+    number_of_hvx_flags_set += (int)target.features.test(HVX_v65);
+    number_of_hvx_flags_set += (int)target.features.test(HVX_v66);
+
+    if (target.features.test(HexagonDma) && number_of_hvx_flags_set != 1) {
+        user_warning << "runtime targets must agree on hexagon version\n";
+        return false;
+    }
+
+    return true;
 }
 
 namespace Internal {
