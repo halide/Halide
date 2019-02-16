@@ -988,7 +988,7 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
         std::string base_path = compute_base_path(output_dir, runtime_name, "");
 
         Target gcd_target = targets[0];
-        for (int i = 1; i < targets.size(); i++) {
+        for (size_t i = 1; i < targets.size(); i++) {
             if (!gcd_target.get_runtime_compatible_target(targets[i], gcd_target)) {
                 user_error << "Failed to find compatible runtime target for "
                            << gcd_target.to_string()
