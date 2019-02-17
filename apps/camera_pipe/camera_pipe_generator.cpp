@@ -490,7 +490,6 @@ void CameraPipe::generate() {
 
     } else {
 
-        // We can generate slightly better code if we know the splits divide the extent.
         Expr out_width = processed.width();
         Expr out_height = processed.height();
 
