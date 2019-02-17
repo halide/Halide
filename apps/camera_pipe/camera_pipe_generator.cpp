@@ -433,11 +433,15 @@ void CameraPipe::generate() {
     processed(x, y, c) = sharpen(curved)(x, y, c);
 
     // We can generate slightly better code if we know the output is even-sized
-    Expr out_width = processed.width();
-    Expr out_height = processed.height();
-    processed.bound(c, 0, 3)
-        .bound(x, 0, (out_width / 2) * 2)
-        .bound(y, 0, (out_height / 2) * 2);
+    if (!auto_schedule) {
+        // TODO: The autoscheduler really ought to be able to
+        // accomodate bounds on the output Func.
+        Expr out_width = processed.width();
+        Expr out_height = processed.height();
+        processed.bound(c, 0, 3)
+            .bound(x, 0, (out_width / 2) * 2)
+            .bound(y, 0, (out_height / 2) * 2);
+    }
 
     // Schedule
     if (auto_schedule) {
@@ -450,6 +454,7 @@ void CameraPipe::generate() {
         matrix_7000.dim(1).set_bounds_estimate(0, 3);
 
         processed
+            .estimate(c, 0, 3)
             .estimate(x, 0, 2592)
             .estimate(y, 0, 1968);
 
@@ -461,7 +466,7 @@ void CameraPipe::generate() {
         processed.compute_root()
             .reorder(c, x, y)
             .unroll(x, 2)
-            .gpu_tile(x, y, xi, yi, 28, 12); // N.B. Using 32 instead of 28 is only 5% slower
+            .gpu_tile(x, y, xi, yi, 28, 12);
 
         curved.compute_at(processed, x)
             .unroll(x, 2)
