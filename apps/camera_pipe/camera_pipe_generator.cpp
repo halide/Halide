@@ -153,7 +153,18 @@ public:
     void schedule() {
         Pipeline p(output);
 
-        if (!auto_schedule) {
+        if (auto_schedule) {
+            // blank
+        } else if (get_target().has_gpu_feature()) {
+            Var xi, yi;
+            for (Func f : intermediates) {
+                f.compute_at(intermed_compute_at).gpu_threads(x, y);
+            }
+            output.compute_at(output_compute_at)
+                .unroll(x, 2)
+                .gpu_threads(x, y)
+                .reorder(c, x, y).unroll(c);
+        } else {
             int vec = get_target().natural_vector_size(UInt(16));
             bool use_hexagon = get_target().features_any_of({Target::HVX_64, Target::HVX_128});
             if (get_target().has_feature(Target::HVX_64)) {
@@ -266,6 +277,9 @@ Func CameraPipe::color_correct(Func input) {
 
     if (!auto_schedule) {
         matrix.compute_root();
+        if (get_target().has_gpu_feature()) {
+            matrix.gpu_single_thread();
+        }
     }
 
     Func corrected;
@@ -327,6 +341,10 @@ Func CameraPipe::apply_curve(Func input) {
     if (!auto_schedule) {
         // It's a LUT, compute it once ahead of time.
         curve.compute_root();
+        if (get_target().has_gpu_feature()) {
+            Var xi;
+            curve.gpu_tile(x, xi, 32);
+        }
     }
 
     /* Optional tags to specify layout for HalideTraceViz */
@@ -361,6 +379,9 @@ Func CameraPipe::sharpen(Func input) {
     sharpen_strength_x32() = u8_sat(sharpen_strength * 32);
     if (!auto_schedule) {
         sharpen_strength_x32.compute_root();
+        if (get_target().has_gpu_feature()) {
+            sharpen_strength_x32.gpu_single_thread();
+        }
     }
 
     /* Optional tags to specify layout for HalideTraceViz */
@@ -411,6 +432,13 @@ void CameraPipe::generate() {
 
     processed(x, y, c) = sharpen(curved)(x, y, c);
 
+    // We can generate slightly better code if we know the output is even-sized
+    Expr out_width = processed.width();
+    Expr out_height = processed.height();
+    processed.bound(c, 0, 3)
+        .bound(x, 0, (out_width / 2) * 2)
+        .bound(y, 0, (out_height / 2) * 2);
+
     // Schedule
     if (auto_schedule) {
         input.dim(0).set_bounds_estimate(0, 2592);
@@ -422,14 +450,45 @@ void CameraPipe::generate() {
         matrix_7000.dim(1).set_bounds_estimate(0, 3);
 
         processed
-            .estimate(c, 0, 3)
             .estimate(x, 0, 2592)
             .estimate(y, 0, 1968);
 
+    } else if (get_target().has_gpu_feature()) {
+
+        Var xi, yi, xii, xio;
+
+        /* 1391us on a gtx 980. */
+        processed.compute_root()
+            .reorder(c, x, y)
+            .unroll(x, 2)
+            .gpu_tile(x, y, xi, yi, 28, 12); // N.B. Using 32 instead of 28 is only 5% slower
+
+        curved.compute_at(processed, x)
+            .unroll(x, 2)
+            .gpu_threads(x, y);
+
+        corrected.compute_at(processed, x)
+            .unroll(x, 2)
+            .gpu_threads(x, y);
+
+        demosaiced->output_compute_at.set({processed, x});
+        demosaiced->intermed_compute_at.set({processed, x});
+
+        denoised.compute_at(processed, x)
+            .tile(x, y, xi, yi, 2, 2).unroll(xi).unroll(yi)
+            .gpu_threads(x, y);
+
+        deinterleaved.compute_at(processed, x)
+            .unroll(x, 2)
+            .gpu_threads(x, y)
+            .reorder(c, x, y).unroll(c);
+
     } else {
 
+        // We can generate slightly better code if we know the splits divide the extent.
         Expr out_width = processed.width();
         Expr out_height = processed.height();
+
         // In HVX 128, we need 2 threads to saturate HVX with work,
         //and in HVX 64 we need 4 threads, and on other devices,
         // we might need many threads.
@@ -449,6 +508,12 @@ void CameraPipe::generate() {
         } else if (get_target().has_feature(Target::HVX_128)) {
             vec = 64;
         }
+
+        processed
+            .bound(c, 0, 3)
+            .bound(x, 0, ((out_width)/(2*vec))*(2*vec))
+            .bound(y, 0, (out_height/strip_size)*strip_size);
+
         processed.compute_root()
             .reorder(c, x, y)
             .split(y, yi, yii, 2, TailStrategy::RoundUp)
@@ -491,12 +556,6 @@ void CameraPipe::generate() {
             deinterleaved.align_storage(x, vec);
             corrected.align_storage(x, vec);
         }
-
-        // We can generate slightly better code if we know the splits divide the extent.
-        processed
-            .bound(c, 0, 3)
-            .bound(x, 0, ((out_width)/(2*vec))*(2*vec))
-            .bound(y, 0, (out_height/strip_size)*strip_size);
 
         /* Optional tags to specify layout for HalideTraceViz */
         {
