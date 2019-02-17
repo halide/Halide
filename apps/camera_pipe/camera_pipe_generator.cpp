@@ -432,17 +432,6 @@ void CameraPipe::generate() {
 
     processed(x, y, c) = sharpen(curved)(x, y, c);
 
-    // We can generate slightly better code if we know the output is even-sized
-    if (!auto_schedule) {
-        // TODO: The autoscheduler really ought to be able to
-        // accomodate bounds on the output Func.
-        Expr out_width = processed.width();
-        Expr out_height = processed.height();
-        processed.bound(c, 0, 3)
-            .bound(x, 0, (out_width / 2) * 2)
-            .bound(y, 0, (out_height / 2) * 2);
-    }
-
     // Schedule
     if (auto_schedule) {
         input.dim(0).set_bounds_estimate(0, 2592);
@@ -459,6 +448,17 @@ void CameraPipe::generate() {
             .estimate(y, 0, 1968);
 
     } else if (get_target().has_gpu_feature()) {
+
+        // We can generate slightly better code if we know the output is even-sized
+        if (!auto_schedule) {
+            // TODO: The autoscheduler really ought to be able to
+            // accomodate bounds on the output Func.
+            Expr out_width = processed.width();
+            Expr out_height = processed.height();
+            processed.bound(c, 0, 3)
+                .bound(x, 0, (out_width / 2) * 2)
+                .bound(y, 0, (out_height / 2) * 2);
+        }
 
         Var xi, yi, xii, xio;
 
@@ -514,11 +514,6 @@ void CameraPipe::generate() {
             vec = 64;
         }
 
-        processed
-            .bound(c, 0, 3)
-            .bound(x, 0, ((out_width)/(2*vec))*(2*vec))
-            .bound(y, 0, (out_height/strip_size)*strip_size);
-
         processed.compute_root()
             .reorder(c, x, y)
             .split(y, yi, yii, 2, TailStrategy::RoundUp)
@@ -561,6 +556,12 @@ void CameraPipe::generate() {
             deinterleaved.align_storage(x, vec);
             corrected.align_storage(x, vec);
         }
+
+        // We can generate slightly better code if we know the splits divide the extent.
+        processed
+            .bound(c, 0, 3)
+            .bound(x, 0, ((out_width)/(2*vec))*(2*vec))
+            .bound(y, 0, (out_height/strip_size)*strip_size);
 
         /* Optional tags to specify layout for HalideTraceViz */
         {
