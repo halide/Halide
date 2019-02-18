@@ -59,6 +59,25 @@ public:
                                     {{0, 1536},
                                      {0, 2560}},
                                     options);
+            } else if (get_target().has_gpu_feature()) {
+                Var xi, yi;
+                const int group_size = 4;
+                int last_stage = (int)stages.size() - 1;
+                stages[last_stage] = output;
+                for (int i = 0; i <= last_stage; i++) {
+                    Func s = stages[i];
+                    x = s.args()[0];
+                    y = s.args()[1];
+                    int next_root = ((i + group_size - 1) / group_size) * group_size;
+                    next_root = std::min(next_root, last_stage);
+                    if (i == next_root) {
+                        s.compute_root()
+                            .gpu_tile(x, y, xi, yi, 64 - 4 * (group_size - 1), 8)
+                            .unroll(xi, 2);
+                    } else {
+                        s.compute_at(stages[next_root], x).unroll(x, 2).gpu_threads(x, y);
+                    }
+                }
             } else {
                 // CPU schedule. No fusion.
                 Var yi, yo, xo, xi, t;
