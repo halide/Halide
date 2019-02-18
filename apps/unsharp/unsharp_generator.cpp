@@ -52,6 +52,8 @@ public:
 
         output_(x, y, c) = ratio(x, y) * input_(x, y, c);
 
+        output_.bound(c, 0, 3);
+
         // Estimates (for autoscheduler; ignored otherwise)
         {
             input_.dim(0).set_bounds_estimate(0, 1536)
@@ -62,26 +64,12 @@ public:
                   .dim(2).set_bounds_estimate(0, 3);
         }
 
+        std::string use_simple_autoscheduler =
+            Halide::Internal::get_env_variable("HL_USE_SIMPLE_AUTOSCHEDULER");
+
         // Schedule
         if (!auto_schedule) {
-            /*if (get_target().has_gpu_feature()) {
-                Var xi, yi;
-                output_.compute_root()
-                    .reorder(c, x, y)
-                    .gpu_tile(x, y, xi, yi, 16, 16);
-                ratio.compute_at(output_, y);
-                gray.compute_at(output_, x)
-                    .tile(x, y, xi, yi, 2, 2)
-                    .unroll(xi)
-                    .unroll(yi)
-                    .gpu_threads(x, y);
-                blur_y.compute_at(output_, x)
-                    .unroll(x, 2)
-                    .gpu_threads(x, y);
-            } else*/ {
-                std::string use_simple_autoscheduler =
-                    Halide::Internal::get_env_variable("HL_USE_SIMPLE_AUTOSCHEDULER");
-                if (use_simple_autoscheduler == "1") {
+            if (use_simple_autoscheduler == "1") {
                     Halide::SimpleAutoscheduleOptions options;
                     options.gpu = get_target().has_gpu_feature();
                     options.gpu_tile_channel = 3;
@@ -97,11 +85,21 @@ public:
                              {0, 2560},
                              {0, 3}},
                             options);
-                } else {
-                    blur_y.compute_at(output_, y).vectorize(x, 8);
-                    ratio.compute_at(output_, y).vectorize(x, 8);
-                    output_.vectorize(x, 8).parallel(y).reorder(x, c, y);
-                }
+            } else if (get_target().has_gpu_feature()) {
+                Var xi, yi;
+                output_.compute_root()
+                    .reorder(c, x, y)
+                    .gpu_tile(x, y, xi, yi, 26, 10)
+                    .unroll(c);
+                ratio.compute_at(output_, xi);
+                blur_y.compute_at(output_, x)
+                    .gpu_threads(x, y);
+                gray.compute_at(output_, x)
+                    .gpu_threads(x, y);
+            } else {
+                blur_y.compute_at(output_, y).vectorize(x, 8);
+                ratio.compute_at(output_, y).vectorize(x, 8);
+                output_.vectorize(x, 8).parallel(y).reorder(x, c, y);
             }
         }
     }
