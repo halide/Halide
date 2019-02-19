@@ -973,7 +973,7 @@ struct FunctionDAG {
                 }
 
                 if (target.has_gpu_feature()) {
-                    stage.vector_size = 32; // warp size
+                    stage.vector_size = 4 / checker.narrowest_type.bytes();
                 } else {
                     stage.vector_size = target.natural_vector_size(checker.narrowest_type);
                     stage.output_vector_size = target.natural_vector_size(widest_output_type);

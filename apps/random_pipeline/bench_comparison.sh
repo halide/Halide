@@ -55,7 +55,7 @@ for ((b=2;b<3;b++)); do
         for prof in ""; do
             for ((m=0;m<1;m++)); do
                 for ((s=0;s<$SCHEDULES;s++)); do
-                    echo "NEW_AUTOSCHEDULER=1 HL_TARGET=${HL_TARGET}${prof} HL_SEED=$s PIPELINE_SEED=$P PIPELINE_STAGES=$STAGES HL_RANDOM_DROPOUT=${RANDOM_DROPOUT} HL_BEAM_SIZE=${BEAM_SIZE} HL_USE_MANUAL_COST_MODEL=${m} HL_NUM_THREADS=32 HL_MACHINE_PARAMS=32,1,1 make build 2>&1 | grep -v Nothing.to.be.done"
+                    echo "NEW_AUTOSCHEDULER=1 HL_TARGET=${HL_TARGET}${prof} HL_SEED=$s PIPELINE_SEED=$P PIPELINE_STAGES=$STAGES HL_RANDOM_DROPOUT=${RANDOM_DROPOUT} HL_BEAM_SIZE=${BEAM_SIZE} HL_USE_MANUAL_COST_MODEL=${m} HL_NUM_THREADS=32 HL_MACHINE_PARAMS=80,1,1 make build 2>&1 | grep -v Nothing.to.be.done"
                 done
             done
         done
@@ -85,10 +85,10 @@ for ((b=2;b<3;b++)); do
             for ((m=0;m<1;m++)); do
                 for ((s=0;s<$SCHEDULES;s++)); do
                     F=bin/${HL_TARGET}${prof}-new_autoscheduler/pipeline_${P}_${STAGES}/schedule_${s}_${RANDOM_DROPOUT}_${BEAM_SIZE}_${m}/times.txt
-                    if [ ! -f $F ]; then NEW_AUTOSCHEDULER=1 HL_TARGET=${HL_TARGET}${prof} HL_SEED=$s PIPELINE_SEED=$P PIPELINE_STAGES=$STAGES HL_RANDOM_DROPOUT=${RANDOM_DROPOUT} HL_BEAM_SIZE=${BEAM_SIZE} HL_USE_MANUAL_COST_MODEL=${m} HL_NUM_THREADS=32 HL_MACHINE_PARAMS=32,1,1 make bench 2>&1 | grep -v "Nothing to be done"; fi
+                    if [ ! -f $F ]; then NEW_AUTOSCHEDULER=1 HL_TARGET=${HL_TARGET}${prof} HL_SEED=$s PIPELINE_SEED=$P PIPELINE_STAGES=$STAGES HL_RANDOM_DROPOUT=${RANDOM_DROPOUT} HL_BEAM_SIZE=${BEAM_SIZE} HL_USE_MANUAL_COST_MODEL=${m} HL_NUM_THREADS=32 HL_MACHINE_PARAMS=80,1,1 make bench 2>&1 | grep -v "Nothing to be done"; fi
 
                     F_SIMPLE=bin/${HL_TARGET}${prof}-new_autoscheduler/pipeline_${P}_${STAGES}/schedule_${s}_${RANDOM_DROPOUT}_${BEAM_SIZE}_${m}/times_simple_autoschedule.txt
-                    if [ ! -f $F_SIMPLE ]; then NEW_AUTOSCHEDULER=1 HL_TARGET=${HL_TARGET}${prof} HL_SEED=$s PIPELINE_SEED=$P PIPELINE_STAGES=$STAGES HL_RANDOM_DROPOUT=${RANDOM_DROPOUT} HL_BEAM_SIZE=${BEAM_SIZE} HL_USE_MANUAL_COST_MODEL=${m} HL_NUM_THREADS=32 HL_MACHINE_PARAMS=32,1,1 make bench_simple_autoschedule 2>&1 | grep -v "Nothing to be done"; fi
+                    if [ ! -f $F_SIMPLE ]; then NEW_AUTOSCHEDULER=1 HL_TARGET=${HL_TARGET}${prof} HL_SEED=$s PIPELINE_SEED=$P PIPELINE_STAGES=$STAGES HL_RANDOM_DROPOUT=${RANDOM_DROPOUT} HL_BEAM_SIZE=${BEAM_SIZE} HL_USE_MANUAL_COST_MODEL=${m} HL_NUM_THREADS=32 HL_MACHINE_PARAMS=80,1,1 make bench_simple_autoschedule 2>&1 | grep -v "Nothing to be done"; fi
 
                     grep '^Time' $F > /dev/null && grep '^Time' $F_SIMPLE > /dev/null && echo $F >> results/files_${b}_${m}${prof}.txt
                 done
