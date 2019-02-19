@@ -191,6 +191,24 @@ int get_highest_cuda_capability(const Target& t) {
     return 20;
 }
 
+int get_highest_hvx_version(const Target& t) {
+    if (!t.has_feature(Target::HexagonDma) && t.arch != Target::Hexagon) {
+        // TODO: is this right? how do these options differ
+        return 0;
+    }
+    if (t.has_feature(Target::HVX_v66)) {
+        return 66;
+    }
+    if (t.has_feature(Target::HVX_v65)) {
+        return 65;
+    }
+    if (t.has_feature(Target::HVX_v62)) {
+        return 62;
+    }
+    // TODO: Is there a lower HVX version, like 20 for CUDA?
+    return -1;
+}
+
 }  // namespace
 
 Target get_host_target() {
@@ -844,17 +862,17 @@ bool Target::fixup_gcd_target(Target& target) {
         default: break;
     }
 
-    // Check to see that there weren't two or more different HVX flags specified.
-    int number_of_hvx_flags_set = 0;
-    number_of_hvx_flags_set += (int)target.features.test(HVX_64);
-    number_of_hvx_flags_set += (int)target.features.test(HVX_128);
-    number_of_hvx_flags_set += (int)target.features.test(HVX_v62);
-    number_of_hvx_flags_set += (int)target.features.test(HVX_v65);
-    number_of_hvx_flags_set += (int)target.features.test(HVX_v66);
-
-    if (target.features.test(HexagonDma) && number_of_hvx_flags_set != 1) {
-        user_warning << "runtime targets must agree on hexagon version\n";
+    // Check that at most one of HVX_64 and HVX_128 was specified
+    if (target.has_feature(HVX_64) && target.has_feature(HVX_128)) {
+        user_warning << "runtime targets must agree on hexagon version (hvx_64 vs hvx_128)\n";
         return false;
+    }
+
+    // Pick highest HVX version. Use fall-through to clear redundant features
+    switch (get_highest_hvx_version(target)) {
+        case 66: target.features.reset(HVX_v65);
+        case 65: target.features.reset(HVX_v62);
+        default: break;
     }
 
     return true;
