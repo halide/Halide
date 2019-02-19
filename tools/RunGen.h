@@ -783,8 +783,10 @@ struct ArgData {
 
 class RunGen {
 public:
-    RunGen(int (*halide_argv_call)(void **args),
-               const struct halide_filter_metadata_t *halide_metadata) :
+    using ArgvCall = int (*)(void **);
+
+    RunGen(ArgvCall halide_argv_call,
+           const struct halide_filter_metadata_t *halide_metadata) :
         halide_argv_call(halide_argv_call), md(halide_metadata) {
         if (md->version != halide_filter_metadata_t::VERSION) {
             fail() << "Unexpected metadata version " << md->version;
@@ -801,6 +803,9 @@ public:
         halide_set_error_handler(rungen_halide_error);
         halide_set_custom_print(rungen_halide_print);
     }
+
+    ArgvCall get_halide_argv_call() const { return halide_argv_call; }
+    const struct halide_filter_metadata_t *get_halide_metadata() const { return md; }
 
     int argument_kind(const std::string &name) const {
         auto it = args.find(name);
@@ -1295,7 +1300,7 @@ private:
         fail() << "halide_error: " << message;
     }
 
-    int (*halide_argv_call)(void **args);
+    ArgvCall halide_argv_call;
     const struct halide_filter_metadata_t * const md;
     std::map<std::string, ArgData> args;
     std::map<std::string, Shape> output_shapes;

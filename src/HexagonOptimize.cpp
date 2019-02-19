@@ -1182,7 +1182,7 @@ class EliminateInterleaves : public IRMutator {
         if (const Let *let = x.as<Let>()) {
             Expr body = remove_interleave(let->body);
             if (!body.same_as(let->body)) {
-                return Let::make(let->name, let->value, remove_interleave(let->body));
+                return Let::make(let->name, let->value, body);
             } else {
                 return x;
             }
@@ -1791,8 +1791,6 @@ class OptimizeShuffles : public IRMutator {
                     Expr lut = Load::make(op->type.with_lanes(const_extent), op->name,
                                           Ramp::make(base, 1, const_extent),
                                           op->image, op->param, const_true(const_extent), alignment);
-                    // Only the first iteration of this loop is aligned.
-                    alignment = ModulusRemainder();
 
                     // We know the size of the LUT is not more than 256, so we
                     // can safely cast the index to 8 bit, which
@@ -1801,6 +1799,8 @@ class OptimizeShuffles : public IRMutator {
 
                     return Call::make(op->type, "dynamic_shuffle", {lut, index, 0, const_extent - 1}, Call::PureIntrinsic);
                 }
+                // Only the first iteration of this loop is aligned.
+                alignment = ModulusRemainder();
             }
         }
         if (!index.same_as(op->index)) {

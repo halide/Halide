@@ -15,12 +15,14 @@ RegisteredFilter *registered_filters = nullptr;
 
 extern "C" void halide_register_argv_and_metadata(
     int (*filter_argv_call)(void **),
-    const struct halide_filter_metadata_t *filter_metadata) {
+    const struct halide_filter_metadata_t *filter_metadata,
+    const char * const *extra_key_value_pairs) {
 
     auto *rf = new RegisteredFilter();
     rf->next = registered_filters;
     rf->filter_argv_call = filter_argv_call;
     rf->filter_metadata = filter_metadata;
+    // RunGen ignores extra_key_value_pairs
     registered_filters = rf;
 }
 
