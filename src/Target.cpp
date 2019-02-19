@@ -773,6 +773,10 @@ int Target::natural_vector_size(const Halide::Type &t) const {
 }
 
 bool Target::get_runtime_compatible_target(const Target& other, Target &result) {
+    // Create mask to select features that:
+    // (a) must be included if either target has the feature (union)
+    // (b) must be included if both targets have the feature (intersection)
+    // (c) must match across both targets; it is an error if one target has the feature and the other doesn't
     const std::array<Feature, 25> union_features = {
             Debug, TSAN, ASAN, MSAN, CUDA, CUDACapability30, CUDACapability32, CUDACapability35, CUDACapability50,
             CUDACapability61, OpenCL, OpenGL, OpenGLCompute, MinGW, Metal, HexagonDma, HVX_64, HVX_128, HVX_v62,
@@ -783,9 +787,14 @@ bool Target::get_runtime_compatible_target(const Target& other, Target &result) 
             SSE41, AVX, AVX2, FMA, FMA4, F16C, ARMv7s,VSX, AVX512, AVX512_KNL, AVX512_Skylake, AVX512_Cannonlake
     };
 
+    const std::array<Feature, 5> matching_features = {
+            SoftFloatABI, Debug, TSAN, ASAN, MSAN
+    };
+
     // bitsets need to be the same width.
     decltype(result.features) union_mask;
     decltype(result.features) intersection_mask;
+    decltype(result.features) matching_mask;
 
     for (auto& feature : union_features) {
         union_mask.set(feature);
@@ -795,16 +804,23 @@ bool Target::get_runtime_compatible_target(const Target& other, Target &result) 
         intersection_mask.set(feature);
     }
 
+    for (auto& feature : matching_features) {
+        matching_mask.set(feature);
+    }
+
     if (arch != other.arch || bits != other.bits || os != other.os) {
         user_warning << "runtime targets must agree on platform (arch-bits-os)\n";
         return false;
     }
 
-    if (has_feature(SoftFloatABI) != other.has_feature(SoftFloatABI)) {
-        user_warning << "runtime targets must agree on SoftFloatABI\n";
+    if ((features & matching_mask) != (other.features & matching_mask)) {
+        user_warning << "runtime targets must agree on SoftFloatABI, Debug, TSAN, ASAN, and MSAN\n";
         return false;
     }
 
+    // Union of features is computed through bitwise-or, and masked away by the features we care about
+    // Intersection of features is computed through bitwise-and and masked away, too.
+    // We merge the bits via bitwise or.
     Target output{os, arch, bits};
     output.features = ((features | other.features) & union_mask)
             | ((features & other.features) & intersection_mask);
