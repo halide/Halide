@@ -169,41 +169,41 @@ Target calculate_host_target() {
     return {os, arch, bits, initial_features};
 }
 
-int get_highest_cuda_capability(const Target& t) {
+int get_cuda_capability_lower_bound(const Target &t) {
     if (!t.has_feature(Target::CUDA)) {
         return 0;
-    }
-    if (t.has_feature(Target::CUDACapability61)) {
-        return 61;
-    }
-    if (t.has_feature(Target::CUDACapability50)) {
-        return 50;
-    }
-    if (t.has_feature(Target::CUDACapability35)) {
-        return 35;
-    }
-    if (t.has_feature(Target::CUDACapability32)) {
-        return 32;
     }
     if (t.has_feature(Target::CUDACapability30)) {
         return 30;
     }
+    if (t.has_feature(Target::CUDACapability32)) {
+        return 32;
+    }
+    if (t.has_feature(Target::CUDACapability35)) {
+        return 35;
+    }
+    if (t.has_feature(Target::CUDACapability50)) {
+        return 50;
+    }
+    if (t.has_feature(Target::CUDACapability61)) {
+        return 61;
+    }
     return 20;
 }
 
-int get_highest_hvx_version(const Target& t) {
+int get_hvx_lower_bound(const Target &t) {
     if (!t.has_feature(Target::HexagonDma) && t.arch != Target::Hexagon) {
         // TODO: is this right? how do these options differ
         return 0;
     }
-    if (t.has_feature(Target::HVX_v66)) {
-        return 66;
+    if (t.has_feature(Target::HVX_v62)) {
+        return 62;
     }
     if (t.has_feature(Target::HVX_v65)) {
         return 65;
     }
-    if (t.has_feature(Target::HVX_v62)) {
-        return 62;
+    if (t.has_feature(Target::HVX_v66)) {
+        return 66;
     }
     // TODO: Is there a lower HVX version, like 20 for CUDA?
     return -1;
@@ -795,18 +795,22 @@ bool Target::get_runtime_compatible_target(const Target& other, Target &result) 
     // (a) must be included if either target has the feature (union)
     // (b) must be included if both targets have the feature (intersection)
     // (c) must match across both targets; it is an error if one target has the feature and the other doesn't
-    const std::array<Feature, 25> union_features = {
-            CUDA, CUDACapability30, CUDACapability32, CUDACapability35, CUDACapability50, CUDACapability61, OpenCL,
-            OpenGL, OpenGLCompute, MinGW, Metal, HexagonDma, HVX_64, HVX_128, HVX_v62, HVX_v65, HVX_v66,
-            HVX_shared_object, D3D12Compute, NoNEON
+    const std::array<Feature, 15> union_features = {
+            // These are true union features.
+            CUDA, OpenCL, OpenGL, OpenGLCompute, Metal, D3D12Compute, NoNEON,
+
+            // These features are actually intersection-y, but because targets only record the _highest_,
+            // we have to put their union in the result and then take a lower bound.
+            CUDACapability30, CUDACapability32, CUDACapability35, CUDACapability50, CUDACapability61,
+            HVX_v62, HVX_v65, HVX_v66
     };
 
     const std::array<Feature, 12> intersection_features = {
             SSE41, AVX, AVX2, FMA, FMA4, F16C, ARMv7s,VSX, AVX512, AVX512_KNL, AVX512_Skylake, AVX512_Cannonlake
     };
 
-    const std::array<Feature, 5> matching_features = {
-            SoftFloatABI, Debug, TSAN, ASAN, MSAN
+    const std::array<Feature, 10> matching_features = {
+            SoftFloatABI, Debug, TSAN, ASAN, MSAN, HVX_64, HVX_128, MinGW, HexagonDma, HVX_shared_object
     };
 
     // bitsets need to be the same width.
@@ -832,54 +836,42 @@ bool Target::get_runtime_compatible_target(const Target& other, Target &result) 
     }
 
     if ((features & matching_mask) != (other.features & matching_mask)) {
-        user_warning << "runtime targets must agree on SoftFloatABI, Debug, TSAN, ASAN, and MSAN\n";
+        user_warning << "runtime targets must agree on SoftFloatABI, Debug, TSAN, ASAN, MSAN, HVX_64, HVX_128, MinGW, HexagonDma, and HVX_shared_object\n";
         return false;
     }
 
     // Union of features is computed through bitwise-or, and masked away by the features we care about
     // Intersection of features is computed through bitwise-and and masked away, too.
     // We merge the bits via bitwise or.
-    Target output{os, arch, bits};
-    output.features = ((features | other.features) & union_mask)
+    result = Target{os, arch, bits};
+    result.features = ((features | other.features) & union_mask)
             | ((features | other.features) & matching_mask)
             | ((features & other.features) & intersection_mask);
 
-    if (!fixup_gcd_target(output)) {
-        return false;
+    // Pick tight lower bound for CUDA capability. Use fall-through to clear redundant features
+    switch (get_cuda_capability_lower_bound(result)) {
+        default: // no CUDA feature; clear all capability flags
+        case 20: result.features.reset(CUDACapability30);
+        case 30: result.features.reset(CUDACapability32);
+        case 32: result.features.reset(CUDACapability35);
+        case 35: result.features.reset(CUDACapability50);
+        case 50: result.features.reset(CUDACapability61);
+        case 61: break;
     }
 
-    result = output;
-    return true;
-}
-
-
-bool Target::fixup_gcd_target(Target& target) {
-    // Pick highest CUDA capability. Use fall-through to clear redundant features
-    switch (get_highest_cuda_capability(target)) {
-        case 61: target.features.reset(CUDACapability50);
-        case 50: target.features.reset(CUDACapability35);
-        case 35: target.features.reset(CUDACapability32);
-        case 32: target.features.reset(CUDACapability30);
-        default: break;
-    }
-
-    // Check that at most one of HVX_64 and HVX_128 was specified
-    if (target.has_feature(HVX_64) && target.has_feature(HVX_128)) {
-        user_warning << "runtime targets must agree on hexagon version (hvx_64 vs hvx_128)\n";
-        return false;
-    }
-
-    // Pick highest HVX version. Use fall-through to clear redundant features
-    switch (get_highest_hvx_version(target)) {
-        case 66: target.features.reset(HVX_v65);
-        case 65: target.features.reset(HVX_v62);
-        default: break;
+    // Pick tight lower bound for HVX version. Use fall-through to clear redundant features
+    switch (get_hvx_lower_bound(result)) {
+        default: // no HexagonDMA feature; clear all capability flags
+        case 62: result.features.reset(HVX_v65);
+        case 65: result.features.reset(HVX_v66);
+        case 66: break;
     }
 
     return true;
 }
 
-namespace Internal {
+
+    namespace Internal {
 
 void target_test() {
     Target t;

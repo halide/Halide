@@ -246,8 +246,6 @@ struct Target {
 private:
     /** A bitmask that stores the active features. */
     std::bitset<FeatureEnd> features;
-
-    static bool fixup_gcd_target(Target& target);
 };
 
 /** Return the target corresponding to the host machine. */
