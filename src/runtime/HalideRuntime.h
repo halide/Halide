@@ -1238,8 +1238,6 @@ typedef enum halide_target_feature_t {
     halide_target_feature_opengl,  ///< Enable the OpenGL runtime.
     halide_target_feature_openglcompute, ///< Enable OpenGL Compute runtime.
 
-    halide_target_feature_unused_23, ///< Unused. (Formerly: Enable the RenderScript runtime.)
-
     halide_target_feature_user_context,  ///< Generated code takes a user_context pointer as first argument
 
     halide_target_feature_matlab,  ///< Generate a mexFunction compatible with Matlab mex libraries. See tools/mex_halide.m.
