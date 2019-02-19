@@ -18,8 +18,9 @@ using Halide::Internal::Call;
 // To ensure that the extremes of the data values are included in testing, the upper
 // left corner of each matrix contains the extremes.
 
-// The code uses 64 bit arithmetic to ensure that results are correct in 32 bits and fewer,
-// even if overflow occurs.
+// The code uses 64 bit arithmetic in C++ to ensure that results are
+// correct in 32 bits and fewer, even if overflow occurs. (64-bit
+// results in Halide are not used or tested.)
 
 // Dimensions of the test data, and rate of salting with extreme values (1 in SALTRATE)
 #define WIDTH 1024
@@ -543,6 +544,11 @@ bool test_div_mod(int vector_width, ScheduleVariant scheduling, Target target) {
 
 int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
+
+    if (!(target.supports_type(Int(64)) && target.supports_type(Int(64)))) {
+        printf("Target doesn't support signed and unsigned 64-bit types, skipping.\n");
+	return 0;
+    }
 
     ScheduleVariant scheduling = CPU;
     if (target.has_gpu_feature()) {

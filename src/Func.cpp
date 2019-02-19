@@ -3014,6 +3014,11 @@ void Func::compile_to_c(const string &filename, const vector<Argument> &args,
     pipeline().compile_to_c(filename, args, fn_name, target);
 }
 
+void Func::compile_to_javascript(const string &filename, vector<Argument> args,
+                                 const string &fn_name, const Target &target) {
+    pipeline().compile_to_javascript(filename, args, fn_name, target);
+}
+
 void Func::compile_to_lowered_stmt(const string &filename,
                                    const vector<Argument> &args,
                                    StmtOutputFormat fmt,
@@ -3114,8 +3119,8 @@ void Func::infer_input_bounds(Pipeline::RealizationArg outputs,
     pipeline().infer_input_bounds(std::move(outputs), param_map);
 }
 
-void *Func::compile_jit(const Target &target) {
-    return pipeline().compile_jit(target);
+void Func::compile_jit(const Target &target) {
+    pipeline().compile_jit(target);
 }
 
 Var _("_");

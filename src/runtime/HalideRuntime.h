@@ -1282,7 +1282,11 @@ typedef enum halide_target_feature_t {
     halide_target_feature_embed_bitcode = 57,  ///< Emulate clang -fembed-bitcode flag.
     halide_target_feature_disable_llvm_loop_vectorize = 58,  ///< Disable loop vectorization in LLVM. (Ignored for non-LLVM targets.)
     halide_target_feature_disable_llvm_loop_unroll = 59,  ///< Disable loop unrolling in LLVM. (Ignored for non-LLVM targets.)
-    halide_target_feature_end = 60 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
+    halide_target_feature_javascript = 60, ///< Compile to JavaScript and execute immediately. Requires JIT and only works with realize. (For testing mainly.)
+    halide_target_feature_javascript_simd = 61, ///< Enable SIMD.js use for vectorization.
+    halide_target_feature_javascript_v8 = 62, ///< Use the V8 JavaScript engine.
+    halide_target_feature_javascript_spidermonkey = 63, ///< Use the SpiderMonkey JavaScript engine.
+    halide_target_feature_end = 64 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 
 /** This function is called internally by Halide in some situations to determine

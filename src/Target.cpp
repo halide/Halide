@@ -308,6 +308,10 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"embed_bitcode", Target::EmbedBitcode},
     {"disable_llvm_loop_vectorize", Target::DisableLLVMLoopVectorize},
     {"disable_llvm_loop_unroll", Target::DisableLLVMLoopUnroll},
+    {"javascript", Target::JavaScript},
+    {"javascript_simd", Target::JavaScript_SIMD},
+    {"v8", Target::JavaScript_V8},
+    {"spidermonkey", Target::JavaScript_SpiderMonkey},
     // NOTE: When adding features to this map, be sure to update
     // PyEnums.cpp and halide.cmake as well.
 };
@@ -645,7 +649,7 @@ bool Target::supports_type(const Type &t) const {
                    !has_feature(D3D12Compute) &&
                    (!has_feature(Target::OpenCL) || has_feature(Target::CLDoubles));
         } else {
-            return !has_feature(Metal) && !has_feature(D3D12Compute);
+            return !has_feature(Metal) && !has_feature(D3D12Compute) && !has_feature(JavaScript);
         }
     }
     return true;

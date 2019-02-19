@@ -5,6 +5,7 @@
 #include <future>
 
 #include "CodeGen_C.h"
+#include "CodeGen_JavaScript.h"
 #include "CodeGen_Internal.h"
 #include "Debug.h"
 #include "HexagonOffload.h"
@@ -443,6 +444,11 @@ void Module::compile(const Outputs &output_files_arg) const {
         debug(1) << "Module.compile(): stmt_html_name " << output_files.stmt_html_name << "\n";
         Internal::print_to_html(output_files.stmt_html_name, *this);
         output_files.stmt_html_name.clear();
+    }
+    if (!output_files.javascript_name.empty()) {
+        std::ofstream file(output_files.javascript_name.c_str());
+        Internal::CodeGen_JavaScript cg(file);
+        cg.compile(*this);
     }
 
 

@@ -20,6 +20,13 @@ int my_trace(void *user_context, const halide_trace_event_t *ev) {
 
 
 int main(int argc, char **argv) {
+    // TODO: See if this can be tested somehow with JavaScript.
+    Target target = get_jit_target_from_environment();
+    if (target.has_feature(Target::JavaScript)) {
+        printf("Skipping reschedule test for JavaScript as it depends on detecting vector stores.\n");
+        return 0;
+    }
+
     Func f;
     Var x;
 

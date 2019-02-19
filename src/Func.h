@@ -876,6 +876,13 @@ public:
                       const std::string &fn_name = "",
                       const Target &target = get_target_from_environment());
 
+    /** Statically compile this function to JavaScript source code. At
+     * present parallelization will produce serial code. */
+    void compile_to_javascript(const std::string &filename,
+                                      std::vector<Argument>,
+                                      const std::string &fn_name = "",
+                                      const Target &target = get_target_from_environment());
+
     /** Write out an internal representation of lowered code. Useful
      * for analyzing and debugging scheduling. Can emit html or plain
      * text. */
@@ -940,11 +947,10 @@ public:
      * normally happens on the first call to realize. If you're
      * running your halide pipeline inside time-sensitive code and
      * wish to avoid including the time taken to compile a pipeline,
-     * then you can call this ahead of time. Returns the raw function
-     * pointer to the compiled pipeline. Default is to use the Target
+     * then you can call this ahead of time. Default is to use the Target
      * returned from Halide::get_jit_target_from_environment()
      */
-    void *compile_jit(const Target &target = get_jit_target_from_environment());
+    void compile_jit(const Target &target = get_jit_target_from_environment());
 
     /** Set the error handler function that be called in the case of
      * runtime errors during halide pipelines. If you are compiling

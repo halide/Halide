@@ -20,6 +20,13 @@ HalideExtern_1(int, expensive, int);
 
 int main(int argc, char **argv) {
 
+    // TODO: See if this can be tested somehow.
+    Target target = get_jit_target_from_environment();
+    if (target.has_feature(Target::JavaScript)) {
+        printf("Skipping async test for JavaScript as it does not support async().\n");
+        return 0;
+    }
+
     // Basic compute-root async producer
     {
         Func producer, consumer;

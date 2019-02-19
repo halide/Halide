@@ -62,6 +62,10 @@ struct Outputs {
      * output is desired. */
     std::string registration_name;
 
+    /** The name of the emitted javascript file. Empty if no javascript
+     * output is desired. */
+    std::string javascript_name;
+
     /** Make a new Outputs struct that emits everything this one does
      * and also an object file with the given name. */
     Outputs object(const std::string &object_name) const {
@@ -158,6 +162,13 @@ struct Outputs {
         return updated;
     }
 
+    /** Make a new Outputs struct that emits everything this one does
+     * and also a javascript file with the given name. */
+    Outputs javascript(const std::string &javascript_name) {
+        Outputs updated = *this;
+        updated.javascript_name = javascript_name;
+        return updated;
+    }
 };
 
 }  // namespace Halide

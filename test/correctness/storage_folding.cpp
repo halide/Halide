@@ -82,6 +82,13 @@ void realize_and_expect_error(Func f, int w, int h) {
 }
 
 int main(int argc, char **argv) {
+    // TODO: See if this can be tested somehow with JavaScript.
+    Target target = get_jit_target_from_environment();
+    if (target.has_feature(Target::JavaScript)) {
+        printf("Skipping storage_folding test for JavaScript as allocations don't go through allocator in the same way.\n");
+        return 0;
+    }
+
     Var x, y, c;
 
     {

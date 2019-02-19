@@ -24,6 +24,12 @@ int my_strlen(const char *c) {
 HalideExtern_1(int, my_strlen, const char *);
 
 int main(int argc, char **argv) {
+    Target target = get_jit_target_from_environment();
+    if (target.has_feature(Target::JavaScript)) {
+        printf("Skipping handle test for JavaScript.\n");
+        return 0;
+    }
+
     // Check we can pass a Handle through to an extern function.
     {
         const char *c_message = "Hello, world!";

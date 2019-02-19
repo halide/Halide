@@ -285,6 +285,7 @@ set(HEADER_FILES
   CodeGen_GPU_Dev.h
   CodeGen_GPU_Host.h
   CodeGen_Internal.h
+  CodeGen_JavaScript.h
   CodeGen_LLVM.h
   CodeGen_MIPS.h
   CodeGen_OpenCL_Dev.h
@@ -456,6 +457,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   CodeGen_GPU_Host.cpp
   CodeGen_Hexagon.cpp
   CodeGen_Internal.cpp
+  CodeGen_JavaScript.cpp
   CodeGen_LLVM.cpp
   CodeGen_MIPS.cpp
   CodeGen_OpenCL_Dev.cpp

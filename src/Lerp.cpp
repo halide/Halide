@@ -73,12 +73,12 @@ Expr lower_lerp(Expr zero_val, Expr one_val, Expr weight) {
         } else {
             if (computation_type.is_float()) {
                 int weight_bits = weight.type().bits();
-                if (weight_bits == 32) {
+                if (weight_bits == 32 || computation_type.bits() == 64) {
                     // Should use ldexp, but can't make Expr from result
                     // that is double
                     typed_weight =
                         Cast::make(computation_type,
-                                   cast<double>(weight) / (pow(cast<double>(2), 32) - 1));
+                                   cast<double>(weight) / (pow(cast<double>(2), weight_bits) - 1));
                 } else {
                     typed_weight =
                         Cast::make(computation_type,

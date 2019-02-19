@@ -120,6 +120,9 @@ endif
 WITH_EXCEPTIONS ?=
 WITH_LLVM_INSIDE_SHARED_LIBHALIDE ?= not-empty
 
+WITH_JAVASCRIPT_V8 ?=
+WITH_JAVASCRIPT_SPIDERMONKEY ?=
+
 # If HL_TARGET or HL_JIT_TARGET aren't set, use host
 HL_TARGET ?= host
 HL_JIT_TARGET ?= host
@@ -164,6 +167,19 @@ EXCEPTIONS_CXX_FLAGS=$(if $(WITH_EXCEPTIONS), -DWITH_EXCEPTIONS, )
 HEXAGON_CXX_FLAGS=$(if $(WITH_HEXAGON), -DWITH_HEXAGON=1, )
 HEXAGON_LLVM_CONFIG_LIB=$(if $(WITH_HEXAGON), hexagon, )
 
+V8_PATH=/usr/local/Cellar/v8/7.2.502.25
+JAVASCRIPT_V8_CXX_FLAGS=$(if $(WITH_JAVASCRIPT_V8), -DWITH_JAVASCRIPT_V8 -I$(V8_PATH)/include)
+JAVASCRIPT_V8_LDFLAGS=$(if $(WITH_JAVASCRIPT_V8), $(V8_PATH)/lib/lib*.$(SHARED_EXT))
+
+SPIDERMONKEY_PATH=../gecko-dev/js/src/build_OPT.OBJ/dist/
+JAVASCRIPT_SPIDERMONKEY_CXX_FLAGS=$(if $(WITH_JAVASCRIPT_SPIDERMONKEY), -DWITH_JAVASCRIPT_SPIDERMONKEY -I$(SPIDERMONKEY_PATH)/include)
+#JAVASCRIPT_SPIDERMONKEY_LIB_PATHS=$(wildcard $(SPIDERMONKEY_PATH)/sdk/lib/lib*.dylib $(SPIDERMONKEY_PATH)/sdk/lib/lib*.so)
+JAVASCRIPT_SPIDERMONKEY_LIB_PATHS=$(wildcard $(SPIDERMONKEY_PATH)/libmozglue.dylib $(SPIDERMONKEY_PATH)/sdk/lib/libmozjs-48a1.dylib)
+JAVASCRIPT_SPIDERMONKEY_LDFLAGS=$(if $(WITH_JAVASCRIPT_SPIDERMONKEY), $(JAVASCRIPT_SPIDERMONKEY_LIB_PATHS))
+
+JAVASCRIPT_CXX_FLAGS=$(JAVASCRIPT_V8_CXX_FLAGS) $(JAVASCRIPT_SPIDERMONKEY_CXX_FLAGS)
+JAVASCRIPT_LDFLAGS=$(JAVASCRIPT_V8_LDFLAGS) $(JAVASCRIPT_SPIDERMONKEY_LDFLAGS)
+
 LLVM_HAS_NO_RTTI = $(findstring -fno-rtti, $(LLVM_CXX_FLAGS))
 WITH_RTTI ?= $(if $(LLVM_HAS_NO_RTTI),, not-empty)
 RTTI_CXX_FLAGS=$(if $(WITH_RTTI), , -fno-rtti )
@@ -194,6 +210,7 @@ CXX_FLAGS += $(POWERPC_CXX_FLAGS)
 CXX_FLAGS += $(INTROSPECTION_CXX_FLAGS)
 CXX_FLAGS += $(EXCEPTIONS_CXX_FLAGS)
 CXX_FLAGS += $(AMDGPU_CXX_FLAGS)
+CXX_FLAGS += $(JAVASCRIPT_CXX_FLAGS)
 
 # This is required on some hosts like powerpc64le-linux-gnu because we may build
 # everything with -fno-exceptions.  Without -funwind-tables, libHalide.so fails
@@ -380,6 +397,7 @@ SOURCE_FILES = \
   CodeGen_GPU_Host.cpp \
   CodeGen_Hexagon.cpp \
   CodeGen_Internal.cpp \
+  CodeGen_JavaScript.cpp \
   CodeGen_LLVM.cpp \
   CodeGen_MIPS.cpp \
   CodeGen_D3D12Compute_Dev.cpp \
@@ -432,6 +450,7 @@ SOURCE_FILES = \
   IROperator.cpp \
   IRPrinter.cpp \
   IRVisitor.cpp \
+  JavaScriptExecutor.cpp \
   JITModule.cpp \
   Lerp.cpp \
   LICM.cpp \
@@ -601,6 +620,7 @@ HEADER_FILES = \
   IROperator.h \
   IRPrinter.h \
   IRVisitor.h \
+  JavaScriptExecutor.h \
   JITModule.h \
   Lambda.h \
   Lerp.h \
@@ -849,7 +869,7 @@ $(LIB_DIR)/libHalide.a: $(OBJECTS) $(INITIAL_MODULES) $(BUILD_DIR)/llvm_objects/
 
 $(BIN_DIR)/libHalide.$(SHARED_EXT): $(OBJECTS) $(INITIAL_MODULES)
 	@mkdir -p $(@D)
-	$(CXX) -shared $(OBJECTS) $(INITIAL_MODULES) $(LLVM_LIBS_FOR_SHARED_LIBHALIDE) $(LLVM_SYSTEM_LIBS) $(COMMON_LD_FLAGS) $(INSTALL_NAME_TOOL_LD_FLAGS) -o $(BIN_DIR)/libHalide.$(SHARED_EXT)
+	$(CXX) -shared $(OBJECTS) $(INITIAL_MODULES) $(LLVM_LIBS_FOR_SHARED_LIBHALIDE) $(LLVM_SYSTEM_LIBS) $(COMMON_LD_FLAGS) $(JAVASCRIPT_LDFLAGS) $(INSTALL_NAME_TOOL_LD_FLAGS) -o $(BIN_DIR)/libHalide.$(SHARED_EXT)
 ifeq ($(UNAME), Darwin)
 	install_name_tool -id $(CURDIR)/$(BIN_DIR)/libHalide.$(SHARED_EXT) $(BIN_DIR)/libHalide.$(SHARED_EXT)
 endif

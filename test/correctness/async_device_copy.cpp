@@ -16,6 +16,12 @@ Expr expensive_zero(Expr x, Expr y, Expr t, int n) {
 }
 
 int main(int argc, char **argv) {
+    // TODO: See if this can be tested somehow.
+    Target target = get_jit_target_from_environment();
+    if (target.has_feature(Target::JavaScript)) {
+        printf("Skipping async_device_copy test for JavaScript as it does not support async().\n");
+        return 0;
+    }
 
     if (!get_jit_target_from_environment().has_gpu_feature()) {
         printf("No GPU target enabled. Skipping test.\n");

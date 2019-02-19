@@ -131,14 +131,15 @@ Stmt unpack_buffers(Stmt s) {
     }
 
     // Create buffer is not null assertions
-    for (auto &p : finder.buffers) {
-        Expr buf = p.second.handle;
-        Expr cond = reinterpret<uint64_t>(buf) != 0;
-        Expr error = Call::make(Int(32), "halide_error_buffer_argument_is_null",
-                                {p.first}, Call::Extern);
-        Stmt check = AssertStmt::make(cond, error);
-        s = Block::make(check, s);
-    }
+// TODO: this construct is hard for JS
+    // for (auto &p : finder.buffers) {
+    //     Expr buf = p.second.handle;
+    //     Expr cond = reinterpret<uint64_t>(buf) != 0;
+    //     Expr error = Call::make(Int(32), "halide_error_buffer_argument_is_null",
+    //                             {p.first}, Call::Extern);
+    //     Stmt check = AssertStmt::make(cond, error);
+    //     s = Block::make(check, s);
+    // }
 
     return s;
 }

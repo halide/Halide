@@ -51,6 +51,8 @@ src/test_*.s
 tools/objc/BUILD
 tools/objc/*.mobileprovision
 *.xcworkspacedata
+*.orig
+*.rej
 
 
 *.txt.user*

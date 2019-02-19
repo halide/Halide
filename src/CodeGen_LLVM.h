@@ -11,6 +11,7 @@ namespace llvm {
 class Value;
 class Module;
 class Function;
+class FunctionType;
 class IRBuilderDefaultInserter;
 class ConstantFolder;
 template<typename, typename> class IRBuilder;
@@ -70,6 +71,35 @@ public:
     /** Initialize internal llvm state for the enabled targets. */
     static void initialize_llvm();
 
+    /** Setup state for ad-hoc codegen. Used in JIT outside of compiling an entire Halide module.
+     * TODO: This probably shouldn't exist. */
+    void init_for_codegen(const std::string &name, bool any_strict_float = false);
+
+    /** Compile all functions included in codegen and return llvm
+     * module. Cannot add more code after calling this routine.
+     * TODO: This probably shouldn't exist. */
+    std::unique_ptr<llvm::Module> finalize_module();
+
+    enum ARGVWrapperReturnResultKind {
+        IntFunctionResult,
+        LastArgPointsToResult,
+    };
+
+    /** Make a wrapper to call the function with an array of pointer
+     * args. This is easier for the JIT to call than a function with an
+     * unknown (at compile time) argument list.  Result is either a 32-bit
+     * int returned from the function or stored to the last void * in the
+     * args array. The choice of how to return the result is controlled by
+     * the result_kind argument.
+     * TODO: This probably shouldn't exist. */
+    // @{
+    llvm::Function *add_argv_wrapper(llvm::Function *fn, const std::string &name,
+                                     ARGVWrapperReturnResultKind result_kind);
+    /** As above, but create the callee as an extern linkage function based on the passed name. */
+    llvm::Function *add_argv_wrapper(llvm::FunctionType *fn_type,
+                                     const std::string &wrapper_name, const std::string &callee_name,
+                                     ARGVWrapperReturnResultKind result_kind);
+    // @}
 protected:
     CodeGen_LLVM(Target t);
 
@@ -121,7 +151,6 @@ protected:
     static bool llvm_PowerPC_enabled;
     static bool llvm_AMDGPU_enabled;
 
-    const Module *input_module;
     std::unique_ptr<llvm::Module> module;
     llvm::Function *function;
     llvm::LLVMContext *context;

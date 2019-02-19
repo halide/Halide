@@ -97,7 +97,10 @@ int main(int argc, char **argv) {
 
     messages.clear();
 
-    {
+    if (!target.supports_type(UInt(64))) {
+        // TODO: Add JavaScript support for 64-bit integers
+        printf("Skipping uint64_t based print test for target which does not have 64-bit integer support.\n");
+    } else {
         Func f;
 
         // Test a single message longer than 8K.
@@ -133,7 +136,11 @@ int main(int argc, char **argv) {
 
     #ifndef _WIN32
     // msvc's library has different ideas about how %f and %e should come out.
-    {
+    // And so does JavaScript, plus rounding, etc. Basically these tests are too tight
+    // in their behavior.
+    if (target.has_feature(Target::JavaScript)) {
+        printf("Skipping floating-point print tests for JavaScript as they depend on exact formatting and rounding.\n");
+    } else {
         Func f, g;
 
         const int N = 1000000;

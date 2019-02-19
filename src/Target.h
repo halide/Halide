@@ -103,6 +103,10 @@ struct Target {
         EmbedBitcode = halide_target_feature_embed_bitcode,
         DisableLLVMLoopVectorize = halide_target_feature_disable_llvm_loop_vectorize,
         DisableLLVMLoopUnroll = halide_target_feature_disable_llvm_loop_unroll,
+        JavaScript = halide_target_feature_javascript,
+        JavaScript_SIMD = halide_target_feature_javascript_simd,
+        JavaScript_V8 = halide_target_feature_javascript_v8,
+        JavaScript_SpiderMonkey = halide_target_feature_javascript_spidermonkey,
         FeatureEnd = halide_target_feature_end
     };
     Target() : os(OSUnknown), arch(ArchUnknown), bits(0) {}

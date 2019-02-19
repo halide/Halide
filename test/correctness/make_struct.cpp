@@ -31,6 +31,12 @@ extern "C" DLLEXPORT int check_struct(struct_t *s) {
 HalideExtern_1(int, check_struct, struct_t *);
 
 int main(int argc, char **argv) {
+    Target target = get_jit_target_from_environment();
+    if (target.has_feature(Target::JavaScript)) {
+        printf("Skipping make_struct test for JavaScript as it uses a C extern function.\n");
+        return 0;
+    }
+
     // Check make_struct is working. make_struct is not intended to be
     // called from the front-end because the structs live on the stack
     // of the generated function. The generated structs should also

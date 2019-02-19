@@ -1,10 +1,14 @@
 #include <algorithm>
+#include <fstream>
+#include <iostream>
 
 #include "Argument.h"
+#include "CodeGen_JavaScript.h"
 #include "FindCalls.h"
 #include "Func.h"
 #include "IRVisitor.h"
 #include "InferArguments.h"
+#include "JavaScriptExecutor.h"
 #include "LLVM_Headers.h"
 #include "LLVM_Output.h"
 #include "Lower.h"
@@ -57,12 +61,16 @@ struct PipelineContents {
     JITModule jit_module;
     Target jit_target;
 
+    // Cache compiled JavaScript is JITting with Target::JavaScript. */
+    JavaScriptModule javascript_module;
+
     /** Clear all cached state */
     void invalidate_cache() {
         module = Module("", Target());
         jit_module = JITModule();
         jit_target = Target();
         inferred_args.clear();
+        javascript_module = JavaScriptModule();
     }
 
     // The outputs
@@ -249,6 +257,14 @@ void Pipeline::compile_to_python_extension(const string &filename,
     m.compile(Outputs().python_extension(output_name(filename, m, ".py.c")));
 }
 
+void Pipeline::compile_to_javascript(const string &filename,
+                                     const vector<Argument> &args,
+                                     const string &fn_name,
+                                     const Target &target) {
+    Module m = compile_to_module(args, fn_name, target);
+    m.compile(Outputs().javascript(output_name(filename, m, ".js")));
+}
+
 void Pipeline::print_loop_nest() {
     user_assert(defined()) << "Can't print loop nest of undefined Pipeline.\n";
     std::cerr << Halide::Internal::print_loop_nest(contents->outputs);
@@ -331,6 +347,50 @@ vector<Argument> Pipeline::infer_arguments(Stmt body) {
 
     return result;
 }
+
+class FindExterns : public IRGraphVisitor {
+    using IRGraphVisitor::visit;
+
+    bool buffer_like_name(const std::string &name) {
+        bool is_bounds_query = name.find(".bounds_query") != std::string::npos;
+        return is_bounds_query ||
+            (ends_with(name, ".buffer") || ends_with(name, ".tmp_buffer"));
+    }
+
+    void visit(const Call *op) {
+        IRGraphVisitor::visit(op);
+
+        if ((op->call_type == Call::Extern || op->call_type == Call::PureExtern) &&
+            externs.count(op->name) == 0) {
+            void *address = get_symbol_address(op->name.c_str());
+            if (address == NULL && !starts_with(op->name, "_")) {
+                std::string underscored_name = "_" + op->name;
+                address = get_symbol_address(underscored_name.c_str());
+            }
+            if (address != NULL) {
+                // TODO: here and below for arguments, we force types to scalar,
+                // which means this code cannot support functions which actually do
+                // take vectors. But generally the function is actually scalar and
+                // call sites which use vectors will have to be scalarized into a
+                // separate call per lane. Not sure there is anywhere to get
+                // information to make a distinction in the current design.
+                std::vector<Type> arg_types;
+                for (Expr e : op->args) {
+                    arg_types.push_back(e.type().element_of());
+                }
+                ExternCFunction f(address, ExternSignature(op->type.element_of(), op->type.bits() == 0, arg_types));
+                JITExtern jit_extern(f);
+                externs.emplace(op->name, jit_extern);
+            }
+        }
+    }
+
+public:
+    FindExterns(std::map<std::string, JITExtern> &externs) : externs(externs) {
+    }
+
+    std::map<std::string, JITExtern> &externs;
+};
 
 vector<Argument> Pipeline::infer_arguments() {
     return infer_arguments(Stmt());
@@ -418,7 +478,7 @@ std::string Pipeline::generate_function_name() const {
     return name;
 }
 
-void *Pipeline::compile_jit(const Target &target_arg) {
+void Pipeline::compile_jit(const Target &target_arg) {
     user_assert(defined()) << "Pipeline is undefined\n";
 
     Target target(target_arg);
@@ -427,12 +487,23 @@ void *Pipeline::compile_jit(const Target &target_arg) {
 
     debug(2) << "jit-compiling for: " << target_arg << "\n";
 
-    // If we're re-jitting for the same target, we can just keep the
-    // old jit module.
-    if (contents->jit_target == target &&
-        contents->jit_module.compiled()) {
-        debug(2) << "Reusing old jit module compiled for :\n" << contents->jit_target << "\n";
-        return contents->jit_module.main_function();
+    // TODO: see if JS and non-JS can share more code.
+    if (target.has_feature(Target::JavaScript)) {
+    #if defined(WITH_JAVASCRIPT_V8) || defined(WITH_JAVASCRIPT_SPIDERMONKEY)
+        if (contents->javascript_module.contents.defined()) {
+            return;
+        }
+    #else
+        user_error << "Cannot JIT JavaScript without a JavaScript execution engine (e.g. V8) configured at compile time.\n";
+    #endif
+    } else {
+        // If we're re-jitting for the same target, we can just keep the
+        // old jit module.
+        if (contents->jit_target == target &&
+            contents->jit_module.compiled()) {
+            debug(2) << "Reusing old jit module compiled for :\n" << contents->jit_target << "\n";
+            return;
+        }
     }
 
     // Clear all cached info in case there is an error.
@@ -457,28 +528,62 @@ void *Pipeline::compile_jit(const Target &target_arg) {
 
     // Compile to a module and also compile any submodules.
     Module module = compile_to_module(args, name, target).resolve_submodules();
-    auto f = module.get_function_by_name(name);
+    if (target.has_feature(Target::JavaScript)) {
+        user_assert(!atoi(get_env_variable("HL_GENBITCODE").c_str())) << "Cannot dump to bitcode when generating JavaScript.";
 
-    std::map<std::string, JITExtern> lowered_externs = contents->jit_externs;
-
-    // Compile to jit module
-    JITModule jit_module(module, f, make_externs_jit_module(target_arg, lowered_externs));
-
-    // Dump bitcode to a file if the environment variable
-    // HL_GENBITCODE is defined to a nonzero value.
-    if (atoi(get_env_variable("HL_GENBITCODE").c_str())) {
-        string program_name = running_program_name();
-        if (program_name.empty()) {
-            program_name = "unknown" + unique_name('_').substr(1);
+        std::stringstream out(std::ios_base::out);
+        CodeGen_JavaScript cg(out);
+        cg.compile(module);
+// TODO(srj):
+        if (debug::debug_level() >= 1) {
+            debug(0) << "Dumping to /tmp/" << name << ".jit.js\n";
+            std::ofstream js_debug(("/tmp/" + name + ".jit.js").c_str());
+            js_debug << out.str();
         }
-        string file_name = program_name + "_" + name + "_" + unique_name('g').substr(1) + ".bc";
-        debug(4) << "Saving bitcode to: " << file_name << "\n";
-        module.compile(Outputs().bitcode(file_name));
+
+        std::map<std::string, JITExtern> lowered_externs = contents->jit_externs;
+
+        FindExterns find_externs(lowered_externs);
+        for (const LoweredFunc &f : contents->module.functions()) {
+            f.body.accept(&find_externs);
+        }
+        for (const auto &p : lowered_externs) {
+          debug(0) << "Found extern: " << p.first << "\n";
+        }
+        lowered_externs = filter_externs(lowered_externs);
+
+        // Sanitise the name of the generated function
+        string js_fn_name = contents->module.name();
+        for (size_t i = 0; i < js_fn_name.size(); i++) {
+            if (!isalnum(js_fn_name[i])) {
+                js_fn_name[i] = '_';
+            }
+        }
+
+        contents->javascript_module = compile_javascript(target, out.str(), js_fn_name,
+            lowered_externs, make_externs_jit_module(target, lowered_externs));
+    } else {
+        auto f = module.get_function_by_name(name);
+
+        std::map<std::string, JITExtern> lowered_externs = contents->jit_externs;
+
+        // Compile to jit module
+        JITModule jit_module(module, f, make_externs_jit_module(target_arg, lowered_externs));
+
+        // Dump bitcode to a file if the environment variable
+        // HL_GENBITCODE is defined to a nonzero value.
+        if (atoi(get_env_variable("HL_GENBITCODE").c_str())) {
+            string program_name = running_program_name();
+            if (program_name.empty()) {
+                program_name = "unknown" + unique_name('_').substr(1);
+            }
+            string file_name = program_name + "_" + name + "_" + unique_name('g').substr(1) + ".bc";
+            debug(4) << "Saving bitcode to: " << file_name << "\n";
+            module.compile(Outputs().bitcode(file_name));
+        }
+
+        contents->jit_module = jit_module;
     }
-
-    contents->jit_module = jit_module;
-
-    return jit_module.main_function();
 }
 
 
@@ -696,24 +801,33 @@ struct JITFuncCallContext {
 struct Pipeline::JITCallArgs {
     size_t size{0};
     const void **store;
+    Argument *store_args;
 
     JITCallArgs(size_t size) : size(size) {
-        if (size > (sizeof(fixed_store) / sizeof(fixed_store[0]))) {
-            // TODO(zalman): Call new[]?
-            store = (const void **)malloc(sizeof(void *) * size);
+        if (size > kStoreSize) {
+            store = new ConstVoidPtr[size];
+            store_args = new Argument[size];
         } else {
             store = fixed_store;
+            store_args = fixed_store_args;
         }
     }
 
     ~JITCallArgs() {
         if (store != fixed_store) {
-            free(store);
+            delete [] store;
+        }
+        if (store_args != fixed_store_args) {
+            delete [] store_args;
         }
     }
 
 private:
-    const void *fixed_store[64];
+    static constexpr int kStoreSize = 64;
+    using ConstVoidPtr = const void *;
+    ConstVoidPtr fixed_store[kStoreSize];
+    Argument fixed_store_args[kStoreSize];
+
     JITCallArgs(const JITCallArgs &) = delete;
     JITCallArgs(JITCallArgs &&) = delete;
     void operator=(const JITCallArgs &) = delete;
@@ -728,7 +842,8 @@ void Pipeline::prepare_jit_call_arguments(RealizationArg &outputs, const Target 
     user_assert(defined()) << "Can't realize an undefined Pipeline\n";
 
     JITModule &compiled_module = contents->jit_module;
-    internal_assert(compiled_module.argv_function());
+    internal_assert(compiled_module.argv_function() ||
+                    contents->javascript_module.contents.defined());
 
     const bool no_param_map = &param_map == &ParamMap::empty_map();
 
@@ -737,7 +852,7 @@ void Pipeline::prepare_jit_call_arguments(RealizationArg &outputs, const Target 
     for (const InferredArgument &arg : contents->inferred_args) {
         if (arg.param.defined()) {
             if (arg.param.same_as(contents->user_context_arg.param)) {
-                args_result.store[arg_index++] = user_context;
+                args_result.store[arg_index] = user_context;
             } else {
                 Buffer<> *buf_out_param = nullptr;
                 const Parameter &p = no_param_map ? arg.param : param_map.map(arg.param, buf_out_param);
@@ -748,22 +863,24 @@ void Pipeline::prepare_jit_call_arguments(RealizationArg &outputs, const Target 
                     // ImageParam arg
                     Buffer<> buf = p.buffer();
                     if (buf.defined()) {
-                        args_result.store[arg_index++] = p.raw_buffer();
+                        args_result.store[arg_index] = p.raw_buffer();
                     } else {
                         // Unbound
-                        args_result.store[arg_index++] = nullptr;
+                        args_result.store[arg_index] = nullptr;
                     }
                     debug(2) << "JIT input ImageParam argument ";
                 } else {
-                    args_result.store[arg_index++] = p.scalar_address();
+                    args_result.store[arg_index] = p.scalar_address();
                     debug(2) << "JIT input scalar argument ";
                 }
             }
         } else {
             debug(2) << "JIT input Image argument ";
             internal_assert(arg.buffer.defined());
-            args_result.store[arg_index++] = arg.buffer.raw_buffer();
+            args_result.store[arg_index] = arg.buffer.raw_buffer();
         }
+        args_result.store_args[arg_index] = arg.arg;
+        arg_index++;
         const void *ptr = args_result.store[arg_index - 1];
         debug(2) << arg.arg.name << " @ " << ptr << "\n";
     }
@@ -772,26 +889,37 @@ void Pipeline::prepare_jit_call_arguments(RealizationArg &outputs, const Target 
     if (outputs.r) {
         for (size_t i = 0; i < outputs.r->size(); i++) {
             const halide_buffer_t *buf = (*outputs.r)[i].raw_buffer();
-            args_result.store[arg_index++] = buf;
+            args_result.store[arg_index] = buf;
+            args_result.store_args[arg_index] = Argument(Buffer<>(*buf));
+            arg_index++;
             debug(2) << "JIT output buffer @ " << (const void *)buf << ", " << (const void *)buf->host << "\n";
         }
     } else if (outputs.buf) {
-        args_result.store[arg_index++] = outputs.buf;
+        args_result.store[arg_index] = outputs.buf;
+        args_result.store_args[arg_index] = Argument(Buffer<>(*outputs.buf));
+        arg_index++;
         debug(2) << "JIT output buffer @ " << (const void *)outputs.buf << ", " << (const void *)outputs.buf->host << "\n";
     } else {
         for (const Buffer<> &buffer : *outputs.buffer_list) {
             const halide_buffer_t *buf = buffer.raw_buffer();
-            args_result.store[arg_index++] = buf;
+            args_result.store[arg_index] = buf;
+            args_result.store_args[arg_index] = Argument(Buffer<>(*buf));
+            arg_index++;
             debug(2) << "JIT output buffer @ " << (const void *)buf << ", " << (const void *)buf->host << "\n";
         }
     }
-
 }
 
 std::vector<JITModule>
 Pipeline::make_externs_jit_module(const Target &target,
                                   std::map<std::string, JITExtern> &externs_in_out) {
     std::vector<JITModule> result;
+
+    // Turn off JavaScript when compiling dependent Funcs so they are compiled to native.
+    Target no_js_target = target
+        .without_feature(Target::JavaScript)
+        .without_feature(Target::JavaScript_V8)
+        .without_feature(Target::JavaScript_SpiderMonkey);
 
     // Externs that are Funcs get their own JITModule. All standalone functions are
     // held in a single JITModule at the end of the list (if there are any).
@@ -804,7 +932,7 @@ Pipeline::make_externs_jit_module(const Target &target,
             PipelineContents &pipeline_contents(*pipeline.contents);
 
             // Ensure that the pipeline is compiled.
-            pipeline.compile_jit(target);
+            pipeline.compile_jit(no_js_target);
 
             free_standing_jit_externs.add_dependency(pipeline_contents.jit_module);
             free_standing_jit_externs.add_symbol_for_export(iter->first, pipeline_contents.jit_module.entrypoint_symbol());
@@ -835,6 +963,31 @@ Pipeline::make_externs_jit_module(const Target &target,
         result.push_back(free_standing_jit_externs);
     }
     return result;
+}
+
+int Pipeline::call_jit_code(const Target &target, const JITCallArgs &args) {
+    int exit_status = 0;
+    #if defined(WITH_JAVASCRIPT_V8) || defined(WITH_JAVASCRIPT_SPIDERMONKEY)
+    if (target.has_feature(Target::JavaScript)) {
+        internal_assert(contents->javascript_module.contents.defined());
+
+        std::vector<std::pair<Argument, const void *>> js_args;
+        for (size_t i = 0; i < args.size; i++) {
+            js_args.push_back(std::make_pair(args.store_args[i], args.store[i]));
+        }
+
+        Internal::debug(2) << "Calling jitted JavaScript function\n";
+        exit_status = run_javascript(contents->javascript_module, js_args);
+        Internal::debug(2) << "Back from jitted JavaScript function. Exit status was " << exit_status << "\n";
+    } else
+    #endif
+    {
+        debug(2) << "Calling jitted function\n";
+        int exit_status = contents->jit_module.argv_function()(args.store);
+        debug(2) << "Back from jitted function. Exit status was " << exit_status << "\n";
+    }
+
+    return exit_status;
 }
 
 void Pipeline::realize(RealizationArg outputs, const Target &t,
@@ -945,7 +1098,7 @@ void Pipeline::realize(RealizationArg outputs, const Target &t,
     // exception.
 
     debug(2) << "Calling jitted function\n";
-    int exit_status = contents->jit_module.argv_function()(args.store);
+    int exit_status = call_jit_code(target, args);
     debug(2) << "Back from jitted function. Exit status was " << exit_status << "\n";
 
     // If we're profiling, report runtimes and reset profiler stats.
@@ -1020,7 +1173,7 @@ void Pipeline::infer_input_bounds(RealizationArg outputs, const ParamMap &param_
         }
 
         Internal::debug(2) << "Calling jitted function\n";
-        int exit_status = contents->jit_module.argv_function()(args.store);
+        int exit_status = call_jit_code(target, args);
         jit_context.report_if_error(exit_status);
         Internal::debug(2) << "Back from jitted function\n";
         bool changed = false;

@@ -10,6 +10,11 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
+    Target target = get_jit_target_from_environment();
+    if (target.has_feature(Target::JavaScript)) {
+        printf("Skipping debug_to_file test for JavaScript as it depends on this functionality being implemented and writing files to the filesystem.\n");
+        return 0;
+    }
 
     std::string f_mat = Internal::get_test_tmp_dir() + "f.mat";
     std::string g_mat = Internal::get_test_tmp_dir() + "g.mat";

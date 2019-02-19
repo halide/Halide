@@ -74,6 +74,13 @@ public:
 };
 
 int main(int argc, char **argv) {
+    // TODO: See if this can be tested somehow with JavaScript.
+    Target target = get_jit_target_from_environment();
+    if (target.has_feature(Target::JavaScript)) {
+        printf("Skipping specialize test for JavaScript as it depends on detecting vector stores.\n");
+        return 0;
+    }
+
     {
         Param<bool> param;
 
