@@ -1,5 +1,6 @@
 #include <iostream>
 #include <string>
+#include <array>
 
 #include "Target.h"
 
@@ -187,10 +188,7 @@ int get_highest_cuda_capability(const Target& t) {
     if (t.has_feature(Target::CUDACapability30)) {
         return 30;
     }
-
-    // invalid target
-    user_warning << "called get_highest_cuda_capability on invalid target (CUDA set with no capability)\n";
-    return -1;
+    return 20;
 }
 
 }  // namespace
@@ -775,49 +773,42 @@ int Target::natural_vector_size(const Halide::Type &t) const {
 }
 
 bool Target::get_runtime_compatible_target(const Target& other, Target &result) {
-    // A compatible runtime must support these features if _either_ of the base runtimes
-    static const std::vector<Feature> unionFeatures = {
-            // These features assist in debugging.
-            Debug, TSAN, ASAN, MSAN,
-
-            // These features enable access to other devices.
-            CUDA, CUDACapability30, CUDACapability32, CUDACapability35, CUDACapability50, CUDACapability61, OpenCL,
-            OpenGL, OpenGLCompute, MinGW, Metal, HexagonDma, HVX_64, HVX_128, HVX_v62, HVX_v65, HVX_v66,
-            HVX_shared_object, D3D12Compute
+    const std::array<Feature, 25> union_features = {
+            Debug, TSAN, ASAN, MSAN, CUDA, CUDACapability30, CUDACapability32, CUDACapability35, CUDACapability50,
+            CUDACapability61, OpenCL, OpenGL, OpenGLCompute, MinGW, Metal, HexagonDma, HVX_64, HVX_128, HVX_v62,
+            HVX_v65, HVX_v66, HVX_shared_object, D3D12Compute, NoNEON, SoftFloatABI
     };
 
-    static const std::vector<Feature> intersectionFeatures = {
-            // These features specify additional instruction sets available on the target architecture.
-            SSE41, AVX, AVX2, FMA, FMA4, F16C, ARMv7s, VSX, AVX512,AVX512_KNL, AVX512_Skylake, AVX512_Cannonlake
+    const std::array<Feature, 12> intersection_features = {
+            SSE41, AVX, AVX2, FMA, FMA4, F16C, ARMv7s,VSX, AVX512, AVX512_KNL, AVX512_Skylake, AVX512_Cannonlake
     };
 
-    // I don't know how to merge these features because I don't know what they do. Reviewers, please advise :)
-    static const std::vector<Feature> iDontKnowWhatToDoWithTheseFeaturesPleaseHelp = {
-            CLDoubles, CLHalf, UserContext, Matlab, Profile, CPlusPlusMangling, LargeBuffers, FuzzFloatStores,
-            SoftFloatABI, StrictFloat, LegacyBufferWrappers, CheckUnsafePromises, EmbedBitcode,
-            DisableLLVMLoopVectorize, DisableLLVMLoopUnroll, NoNEON, POWER_ARCH_2_07
-    };
+    // bitsets need to be the same width.
+    decltype(result.features) union_mask;
+    decltype(result.features) intersection_mask;
+
+    for (auto& feature : union_features) {
+        union_mask.set(feature);
+    }
+
+    for (auto& feature : intersection_features) {
+        intersection_mask.set(feature);
+    }
 
     if (arch != other.arch || bits != other.bits || os != other.os) {
         user_warning << "runtime targets must agree on platform (arch-bits-os)\n";
         return false;
     }
 
-    std::vector<Feature> merged_features{};
-
-    for (const auto &feature : unionFeatures) {
-        if (has_feature(feature) || other.has_feature(feature)) {
-            merged_features.push_back(feature);
-        }
+    if (has_feature(SoftFloatABI) != other.has_feature(SoftFloatABI)) {
+        user_warning << "runtime targets must agree on SoftFloatABI\n";
+        return false;
     }
 
-    for (const auto &feature : intersectionFeatures) {
-        if (has_feature(feature) && other.has_feature(feature)) {
-            merged_features.push_back(feature);
-        }
-    }
+    Target output{os, arch, bits};
+    output.features = ((features | other.features) & union_mask)
+            | ((features & other.features) & intersection_mask);
 
-    Target output = Target(os, arch, bits, merged_features);
     if (!fixup_gcd_target(output)) {
         return false;
     }
@@ -828,31 +819,13 @@ bool Target::get_runtime_compatible_target(const Target& other, Target &result) 
 
 
 bool Target::fixup_gcd_target(Target& target) {
-    // These features do not affect runtime code generation.
-    static const std::vector<Feature> irrelevantFeatures = {
-            JIT, NoAsserts, NoBoundsQuery, NoRuntime, TraceLoads, TraceStores, TraceRealizations
-    };
-
-    // Ensure that irrelevant features are not set
-    for (const auto &feature : irrelevantFeatures) {
-        target.features.reset(feature);
-    }
-
     // Pick highest CUDA capability. Use fall-through to clear redundant features
     switch (get_highest_cuda_capability(target)) {
-        case -1:
-            user_warning << "cannot merge cuda-enabled targets without knowing capability levels\n";
-            return false;
-        case 61:
-            target.features.reset(CUDACapability50);
-        case 50:
-            target.features.reset(CUDACapability35);
-        case 35:
-            target.features.reset(CUDACapability32);
-        case 32:
-            target.features.reset(CUDACapability30);
-        default:
-            break;
+        case 61: target.features.reset(CUDACapability50);
+        case 50: target.features.reset(CUDACapability35);
+        case 35: target.features.reset(CUDACapability32);
+        case 32: target.features.reset(CUDACapability30);
+        default: break;
     }
 
     // Check to see that there weren't two or more different HVX flags specified.
