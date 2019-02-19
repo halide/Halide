@@ -1,12 +1,12 @@
-#include "LLVM_Headers.h"
 #include "LLVM_Output.h"
-#include "LLVM_Runtime_Linker.h"
-#include "CodeGen_LLVM.h"
 #include "CodeGen_C.h"
 #include "CodeGen_Internal.h"
+#include "CodeGen_LLVM.h"
+#include "LLVM_Headers.h"
+#include "LLVM_Runtime_Linker.h"
 
-#include <iostream>
 #include <fstream>
+#include <iostream>
 
 #ifdef _WIN32
 #ifndef NOMINMAX
@@ -85,11 +85,7 @@ size_t finish_member_header(std::ostream &out, size_t size) {
 }
 
 std::string member_name(const llvm::NewArchiveMember &m) {
-#if LLVM_VERSION < 50
-    return llvm::sys::path::filename(m.Buf->getBufferIdentifier()).str();
-#else
     return m.MemberName.str();
-#endif
 }
 
 std::map<std::string, size_t> write_string_table(std::ostream &out,
@@ -145,11 +141,7 @@ void write_symbol_table(std::ostream &out,
 
     std::map<std::string, size_t> name_to_member_index;
 
-#if LLVM_VERSION < 50
-    const auto kFileMagicUnknown = llvm::sys::fs::file_magic::unknown;
-#else
     const auto kFileMagicUnknown = llvm::file_magic::unknown;
-#endif
 
     llvm::LLVMContext context;
     for (size_t i = 0, n = members.size(); i < n; ++i) {
@@ -313,32 +305,60 @@ std::unique_ptr<llvm::raw_fd_ostream> make_raw_fd_ostream(const std::string &fil
     return raw_out;
 }
 
-void emit_file(llvm::Module &module, Internal::LLVMOStream& out, llvm::TargetMachine::CodeGenFileType file_type) {
+namespace {
+
+// llvm::CloneModule has issues with debug info. As a workaround,
+// serialize it to bitcode in memory, and then parse the bitcode back in.
+std::unique_ptr<llvm::Module> clone_module(const llvm::Module &module_in) {
+    Internal::debug(2) << "Cloning module " << module_in.getName().str() << "\n";
+
+    // Write the module to a buffer.
+    llvm::SmallVector<char, 16> clone_buffer;
+    llvm::raw_svector_ostream clone_ostream(clone_buffer);
+#if LLVM_VERSION >= 70
+    WriteBitcodeToFile(module_in, clone_ostream);
+#else
+    WriteBitcodeToFile(&module_in, clone_ostream);
+#endif
+
+    // Read it back in.
+    llvm::MemoryBufferRef buffer_ref(llvm::StringRef(clone_buffer.data(), clone_buffer.size()), "clone_buffer");
+    auto cloned_module = llvm::parseBitcodeFile(buffer_ref, module_in.getContext());
+    internal_assert(cloned_module);
+
+    return std::move(cloned_module.get());
+}
+
+}  // namespace
+
+void emit_file(const llvm::Module &module_in, Internal::LLVMOStream& out, llvm::TargetMachine::CodeGenFileType file_type) {
     Internal::debug(1) << "emit_file.Compiling to native code...\n";
-    Internal::debug(2) << "Target triple: " << module.getTargetTriple() << "\n";
+    Internal::debug(2) << "Target triple: " << module_in.getTargetTriple() << "\n";
+
+    // Work on a copy of the module to avoid modifying the original.
+    std::unique_ptr<llvm::Module> module = clone_module(module_in);
 
     // Get the target specific parser.
-    auto target_machine = Internal::make_target_machine(module);
+    auto target_machine = Internal::make_target_machine(*module);
     internal_assert(target_machine.get()) << "Could not allocate target machine!\n";
 
     llvm::DataLayout target_data_layout(target_machine->createDataLayout());
-    if (!(target_data_layout == module.getDataLayout())) {
+    if (!(target_data_layout == module->getDataLayout())) {
         internal_error << "Warning: module's data layout does not match target machine's\n"
                        << target_data_layout.getStringRepresentation() << "\n"
-                       << module.getDataLayout().getStringRepresentation() << "\n";
+                       << module->getDataLayout().getStringRepresentation() << "\n";
     }
 
     // Build up all of the passes that we want to do to the module.
     llvm::legacy::PassManager pass_manager;
 
-    pass_manager.add(new llvm::TargetLibraryInfoWrapperPass(llvm::Triple(module.getTargetTriple())));
+    pass_manager.add(new llvm::TargetLibraryInfoWrapperPass(llvm::Triple(module->getTargetTriple())));
 
     // Make sure things marked as always-inline get inlined
-    #if LLVM_VERSION < 40
-    pass_manager.add(llvm::createAlwaysInlinerPass());
-    #else
     pass_manager.add(llvm::createAlwaysInlinerLegacyPass());
-    #endif
+
+    // Remove any stale debug info
+    pass_manager.add(llvm::createStripDeadDebugInfoPass());
 
     // Enable symbol rewriting. This allows code outside libHalide to
     // use symbol rewriting when compiling Halide code (for example, by
@@ -350,9 +370,17 @@ void emit_file(llvm::Module &module, Internal::LLVMOStream& out, llvm::TargetMac
     target_machine->Options.MCOptions.AsmVerbose = true;
 
     // Ask the target to add backend passes as necessary.
+#if LLVM_VERSION < 70
     target_machine->addPassesToEmitFile(pass_manager, out, file_type);
+#else
+    target_machine->addPassesToEmitFile(pass_manager, out, nullptr, file_type);
+#endif
 
-    pass_manager.run(module);
+    pass_manager.run(*module);
+    // If -time-passes is in HL_LLVM_ARGS, this will print llvm passes time statstics otherwise its no-op.
+#if LLVM_VERSION >= 80
+    llvm::reportAndResetTimings();
+#endif
 }
 
 std::unique_ptr<llvm::Module> compile_module_to_llvm_module(const Module &module, llvm::LLVMContext &context) {
@@ -368,7 +396,11 @@ void compile_llvm_module_to_assembly(llvm::Module &module, Internal::LLVMOStream
 }
 
 void compile_llvm_module_to_llvm_bitcode(llvm::Module &module, Internal::LLVMOStream& out) {
+#if LLVM_VERSION >= 70
+    WriteBitcodeToFile(module, out);
+#else
     WriteBitcodeToFile(&module, out);
+#endif
 }
 
 void compile_llvm_module_to_llvm_assembly(llvm::Module &module, Internal::LLVMOStream& out) {
@@ -459,7 +491,7 @@ struct SetCwd {
     }
 };
 
-}
+}  // namespace
 
 void create_static_library(const std::vector<std::string> &src_files_in, const Target &target,
                            const std::string &dst_file_in, bool deterministic) {

@@ -6,31 +6,39 @@
  */
 
 #include "IR.h"
-
+#include "ModulusRemainder.h"
+#include "Scope.h"
 namespace Halide {
 namespace Internal {
 
 /** Replace indirect and other loads with simple loads + vlut
  * calls. */
-EXPORT Stmt optimize_hexagon_shuffles(Stmt s, int lut_alignment);
+Stmt optimize_hexagon_shuffles(Stmt s, int lut_alignment);
 
 /** Generate vtmpy instruction if possible */
-EXPORT Stmt vtmpy_generator(Stmt s);
+Stmt vtmpy_generator(Stmt s);
+
+/* Generate vscatter-vgather instructions on Hexagon using VTCM memory.
+ * The pass should be run before generating shuffles.
+ * Some expressions which generate vscatter-vgathers are:
+ *     1. out(x) = lut(foo(x)) -> vgather
+ *     2. out(idx(x)) = foo(x) -> vscatter */
+Stmt scatter_gather_generator(Stmt s);
 
 /** Hexagon deinterleaves when performing widening operations, and
  * interleaves when performing narrowing operations. This pass
  * rewrites widenings/narrowings to be explicit in the IR, and
  * attempts to simplify away most of the
  * interleaving/deinterleaving. */
-EXPORT Stmt optimize_hexagon_instructions(Stmt s, Target t);
+Stmt optimize_hexagon_instructions(Stmt s, Target t);
 
 /** Generate deinterleave or interleave operations, operating on
  * groups of vectors at a time. */
 //@{
-EXPORT Expr native_deinterleave(Expr x);
-EXPORT Expr native_interleave(Expr x);
-EXPORT bool is_native_deinterleave(Expr x);
-EXPORT bool is_native_interleave(Expr x);
+Expr native_deinterleave(Expr x);
+Expr native_interleave(Expr x);
+bool is_native_deinterleave(Expr x);
+bool is_native_interleave(Expr x);
 //@}
 
 }  // namespace Internal

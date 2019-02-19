@@ -43,11 +43,12 @@ HalideExtern_1(const Variable *, record_varying, const Variable *);
 class CountVarying : public IRMutator {
     using IRMutator::visit;
 
-    void visit(const Variable *op) {
-        IRMutator::visit(op);
+    Expr visit(const Variable *op) override {
+        Expr expr = IRMutator::visit(op);
         if (ends_with(op->name, ".varying")) {
             expr = record_varying(op);
         }
+        return expr;
     }
 };
 

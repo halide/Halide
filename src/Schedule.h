@@ -6,22 +6,20 @@
  */
 
 #include "Expr.h"
-#include "Parameter.h"
 #include "FunctionPtr.h"
+#include "Parameter.h"
 
 #include <map>
 
 namespace Halide {
 
 class Func;
-template <typename T> class ScheduleParam;
 struct VarOrRVar;
 
 namespace Internal {
 class Function;
 struct FunctionContents;
 struct LoopLevelContents;
-class ScheduleParamBase;
 }  // namespace Internal
 
 /** Different ways to handle a tail case in a split when the
@@ -69,6 +67,23 @@ enum class TailStrategy {
     Auto
 };
 
+/** Different ways to handle the case when the start/end of the loops of stages
+ * computed with (fused) are not aligned. */
+enum class LoopAlignStrategy {
+    /** Shift the start of the fused loops to align. */
+    AlignStart,
+
+    /** Shift the end of the fused loops to align. */
+    AlignEnd,
+
+    /** compute_with will make no attempt to align the start/end of the
+     * fused loops. */
+    NoAlign,
+
+    /** By default, LoopAlignStrategy is set to NoAlign. */
+    Auto
+};
+
 /** Different ways to handle accesses outside the original extents in a prefetch. */
 enum class PrefetchBoundStrategy {
     /** Clamp the prefetched exprs by intersecting the prefetched region with
@@ -94,71 +109,143 @@ enum class PrefetchBoundStrategy {
  * function is done by generating a loop nest that spans its
  * dimensions. We schedule the inputs to that function by
  * recursively injecting realizations for them at particular sites
- * in this loop nest. A LoopLevel identifies such a site. */
-class LoopLevel {
-    template <typename T> friend class ScheduleParam;
-    friend class ::Halide::Internal::ScheduleParamBase;
+ * in this loop nest. A LoopLevel identifies such a site. The site
+ * can either be a loop nest within all stages of a function
+ * or it can refer to a loop nest within a particular function's
+ * stage (initial definition or updates).
+ *
+ * Note that a LoopLevel is essentially a pointer to an underlying value;
+ * all copies of a LoopLevel refer to the same site, so mutating one copy
+ * (via the set() method) will effectively mutate all copies:
+ \code
+ Func f;
+ Var x;
+ LoopLevel a(f, x);
+ // Both a and b refer to LoopLevel(f, x)
+ LoopLevel b = a;
+ // Now both a and b refer to LoopLevel::root()
+ a.set(LoopLevel::root());
+ \endcode
+ * This is quite useful when splitting Halide code into utility libraries, as it allows
+ * a library to schedule code according to a caller's specifications, even if the caller
+ * hasn't fully defined its pipeline yet:
+ \code
+ Func demosaic(Func input,
+              LoopLevel intermed_compute_at,
+              LoopLevel intermed_store_at,
+              LoopLevel output_compute_at) {
+    Func intermed = ...;
+    Func output = ...;
+    intermed.compute_at(intermed_compute_at).store_at(intermed_store_at);
+    output.compute_at(output_compute_at);
+    return output;
+ }
 
+ void process() {
+     // Note that these LoopLevels are all undefined when we pass them to demosaic()
+     LoopLevel intermed_compute_at, intermed_store_at, output_compute_at;
+     Func input = ...;
+     Func demosaiced = demosaic(input, intermed_compute_at, intermed_store_at, output_compute_at);
+     Func output = ...;
+
+     // We need to ensure all LoopLevels have a well-defined value prior to lowering:
+     intermed_compute_at.set(LoopLevel(output, y));
+     intermed_store_at.set(LoopLevel(output, y));
+     output_compute_at.set(LoopLevel(output, x));
+ }
+ \endcode
+ */
+class LoopLevel {
     Internal::IntrusivePtr<Internal::LoopLevelContents> contents;
 
     explicit LoopLevel(Internal::IntrusivePtr<Internal::LoopLevelContents> c) : contents(c) {}
-    EXPORT LoopLevel(const std::string &func_name, const std::string &var_name, bool is_rvar);
-
-    /** Mutate our contents to match the contents of 'other'. This is a potentially
-     * dangerous operation to do if you aren't careful, and exists solely to make
-     * ScheduleParam<LoopLevel> easy to implement; hence its private status. */
-    EXPORT void copy_from(const LoopLevel &other);
+    LoopLevel(const std::string &func_name, const std::string &var_name,
+              bool is_rvar, int stage_index, bool locked = false);
 
 public:
+    /** Return the index of the function stage associated with this loop level.
+     * Asserts if undefined */
+    int stage_index() const;
+
     /** Identify the loop nest corresponding to some dimension of some function */
     // @{
-    EXPORT LoopLevel(Internal::Function f, VarOrRVar v);
-    EXPORT LoopLevel(Func f, VarOrRVar v);
+    LoopLevel(const Internal::Function &f, VarOrRVar v, int stage_index = -1);
+    LoopLevel(const Func &f, VarOrRVar v, int stage_index = -1);
     // @}
 
     /** Construct an undefined LoopLevel. Calling any method on an undefined
-     * LoopLevel (other than defined() or operator==) will assert. */
-    LoopLevel() = default;
+     * LoopLevel (other than set()) will assert. */
+    LoopLevel();
 
-    /** Return true iff the LoopLevel is defined. */
-    EXPORT bool defined() const;
-
-    /** Return the Func name. Asserts if the LoopLevel is_root() or is_inline(). */
-    EXPORT std::string func() const;
-
-    /** Return the VarOrRVar. Asserts if the LoopLevel is_root() or is_inline(). */
-    EXPORT VarOrRVar var() const;
-
-    /** inlined is a special LoopLevel value that implies
+    /** Construct a special LoopLevel value that implies
      * that a function should be inlined away. */
-    EXPORT static LoopLevel inlined();
+    static LoopLevel inlined();
 
-    /** Test if a loop level corresponds to inlining the function */
-    EXPORT bool is_inline() const;
+    /** Construct a special LoopLevel value which represents the
+     * location outside of all for loops. */
+    static LoopLevel root();
 
-    /** root is a special LoopLevel value which represents the
-     * location outside of all for loops */
-    EXPORT static LoopLevel root();
+    /** Mutate our contents to match the contents of 'other'. */
+    void set(const LoopLevel &other);
 
-    /** Test if a loop level is 'root', which describes the site
-     * outside of all for loops */
-    EXPORT bool is_root() const;
+    // All the public methods below this point are meant only for internal
+    // use by Halide, rather than user code; hence, they are deliberately
+    // documented with plain comments (rather than Doxygen) to avoid being
+    // present in user documentation.
 
-    /** Return a string of the form func.var -- note that this is safe
-     * to call for root or inline LoopLevels. */
-    EXPORT std::string to_string() const;
+    // Lock this LoopLevel.
+    LoopLevel &lock();
 
-    /** Compare this loop level against the variable name of a for
-     * loop, to see if this loop level refers to the site
-     * immediately inside this loop. */
-    EXPORT bool match(const std::string &loop) const;
+    // Return the Func name. Asserts if the LoopLevel is_root() or is_inlined() or !defined().
+    std::string func() const;
 
-    EXPORT bool match(const LoopLevel &other) const;
+    // Return the VarOrRVar. Asserts if the LoopLevel is_root() or is_inlined() or !defined().
+    VarOrRVar var() const;
 
-    /** Check if two loop levels are exactly the same. */
-    EXPORT bool operator==(const LoopLevel &other) const;
+    // Return true iff the LoopLevel is defined. (Only LoopLevels created
+    // with the default ctor are undefined.)
+    bool defined() const;
+
+    // Test if a loop level corresponds to inlining the function.
+    bool is_inlined() const;
+
+    // Test if a loop level is 'root', which describes the site
+    // outside of all for loops.
+    bool is_root() const;
+
+    // Return a string of the form func.var -- note that this is safe
+    // to call for root or inline LoopLevels, but asserts if !defined().
+    std::string to_string() const;
+
+    // Compare this loop level against the variable name of a for
+    // loop, to see if this loop level refers to the site
+    // immediately inside this loop. Asserts if !defined().
+    bool match(const std::string &loop) const;
+
+    bool match(const LoopLevel &other) const;
+
+    // Check if two loop levels are exactly the same.
+    bool operator==(const LoopLevel &other) const;
 
     bool operator!=(const LoopLevel &other) const { return !(*this == other); }
+
+private:
+    void check_defined() const;
+    void check_locked() const;
+    void check_defined_and_locked() const;
+};
+
+struct FuseLoopLevel {
+    LoopLevel level;
+    /** Contains alignment strategies for the fused dimensions (indexed by the
+     * dimension name). If not in the map, use the default alignment strategy
+     * to align the fused dimension (see \ref LoopAlignStrategy::Auto).
+     */
+    std::map<std::string, LoopAlignStrategy> align;
+
+    FuseLoopLevel() : level(LoopLevel::inlined().lock()) {}
+    FuseLoopLevel(const LoopLevel &level, const std::map<std::string, LoopAlignStrategy> &align)
+        : level(level), align(align) {}
 };
 
 namespace Internal {
@@ -225,6 +312,45 @@ struct StorageDim {
     bool fold_forward;
 };
 
+/** This represents two stages with fused loop nests from outermost to a specific
+ * loop level. The loops to compute func_1(stage_1) are fused with the loops to
+ * compute func_2(stage_2) from outermost to loop level var_name and the
+ * computation from stage_1 of func_1 occurs first.
+ */
+struct FusedPair {
+    std::string func_1;
+    std::string func_2;
+    size_t stage_1;
+    size_t stage_2;
+    std::string var_name;
+
+    FusedPair() {}
+    FusedPair(const std::string &f1, size_t s1, const std::string &f2,
+              size_t s2, const std::string &var)
+        : func_1(f1), func_2(f2), stage_1(s1), stage_2(s2), var_name(var) {}
+
+    bool operator==(const FusedPair &other) const {
+        return (func_1 == other.func_1) && (func_2 == other.func_2) &&
+               (stage_1 == other.stage_1) && (stage_2 == other.stage_2) &&
+               (var_name == other.var_name);
+    }
+    bool operator<(const FusedPair &other) const {
+        if (func_1 != other.func_1) {
+            return func_1 < other.func_1;
+        }
+        if (func_2 != other.func_2) {
+            return func_2 < other.func_2;
+        }
+        if (var_name != other.var_name) {
+            return var_name < other.var_name;
+        }
+        if (stage_1 != other.stage_1) {
+            return stage_1 < other.stage_1;
+        }
+        return stage_2 < other.stage_2;
+    }
+};
+
 struct PrefetchDirective {
     std::string name;
     std::string var;
@@ -249,7 +375,7 @@ public:
 
     FuncSchedule(IntrusivePtr<FuncScheduleContents> c) : contents(c) {}
     FuncSchedule(const FuncSchedule &other) : contents(other.contents) {}
-    EXPORT FuncSchedule();
+    FuncSchedule();
 
     /** Return a deep copy of this FuncSchedule. It recursively deep copies all
      * called functions, schedules, specializations, and reduction domains. This
@@ -258,7 +384,7 @@ public:
      * instead of creating a new deep-copy to avoid creating deep-copies of the
      * same FunctionContents multiple times.
      */
-    EXPORT FuncSchedule deep_copy(
+    FuncSchedule deep_copy(
         std::map<FunctionPtr, FunctionPtr> &copied_map) const;
 
     /** This flag is set to true if the schedule is memoized. */
@@ -267,6 +393,10 @@ public:
     bool memoized() const;
     // @}
 
+    /** Is the production of this Function done asynchronously */
+    bool &async();
+    bool async() const;
+
     /** The list and order of dimensions used to store this
      * function. The first dimension in the vector corresponds to the
      * innermost dimension for storage (i.e. which dimension is
@@ -274,6 +404,12 @@ public:
     // @{
     const std::vector<StorageDim> &storage_dims() const;
     std::vector<StorageDim> &storage_dims();
+    // @}
+
+    /** The memory type (heap/stack/shared/etc) used to back this Func. */
+    // @{
+    MemoryType memory_type() const;
+    MemoryType &memory_type();
     // @}
 
     /** You may explicitly bound some of the dimensions of a function,
@@ -295,12 +431,12 @@ public:
      * wrapper or clone during the lowering stage. If the string 'f' is empty,
      * it means replace all calls to the function by all other functions
      * (excluding itself) in the pipeline with the global identity wrapper.
-     * See \ref Func::in and \ref Func::clone for more details. */
+     * See \ref Func::in and \ref Func::clone_in for more details. */
     // @{
     const std::map<std::string, Internal::FunctionPtr> &wrappers() const;
     std::map<std::string, Internal::FunctionPtr> &wrappers();
-    EXPORT void add_wrapper(const std::string &f,
-                            const Internal::FunctionPtr &wrapper);
+    void add_wrapper(const std::string &f,
+                     const Internal::FunctionPtr &wrapper);
     // @}
 
     /** At what sites should we inject the allocation and the
@@ -335,10 +471,10 @@ public:
 
     StageSchedule(IntrusivePtr<StageScheduleContents> c) : contents(c) {}
     StageSchedule(const StageSchedule &other) : contents(other.contents) {}
-    EXPORT StageSchedule();
+    StageSchedule();
 
     /** Return a copy of this StageSchedule. */
-    EXPORT StageSchedule get_copy() const;
+    StageSchedule get_copy() const;
 
     /** This flag is set to true if the dims list has been manipulated
      * by the user (or if a ScheduleHandle was created that could have
@@ -352,7 +488,7 @@ public:
 
     /** RVars of reduction domain associated with this schedule if there is any. */
     // @{
-    EXPORT const std::vector<ReductionVariable> &rvars() const;
+    const std::vector<ReductionVariable> &rvars() const;
     std::vector<ReductionVariable> &rvars();
     // @}
 
@@ -382,6 +518,24 @@ public:
     std::vector<PrefetchDirective> &prefetches();
     // @}
 
+    /** Innermost loop level of fused loop nest for this function stage.
+     * Fusion runs from outermost to this loop level. The stages being fused
+     * should not have producer/consumer relationship. See \ref Func::compute_with
+     * and \ref Stage::compute_with */
+    // @{
+    const FuseLoopLevel &fuse_level() const;
+    FuseLoopLevel &fuse_level();
+    // @}
+
+    /** List of function stages that are to be fused with this function stage
+     * from the outermost loop to a certain loop level. Those function stages
+     * are to be computed AFTER this function stage at the last fused loop level.
+     * This list is populated when realization_order() is called. See
+     * \ref Func::compute_with and \ref Stage::compute_with */
+    // @{
+    const std::vector<FusedPair> &fused_pairs() const;
+    std::vector<FusedPair> &fused_pairs();
+
     /** Are race conditions permitted? */
     // @{
     bool allow_race_conditions() const;
@@ -397,7 +551,7 @@ public:
     void mutate(IRMutator *);
 };
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

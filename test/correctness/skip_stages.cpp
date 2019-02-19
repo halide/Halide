@@ -106,6 +106,7 @@ int main(int argc, char **argv) {
 
     }
 
+
     {
         // Make a tuple-valued func where one value is used but the
         // other isn't. Currently we need to evaluate both, because we
@@ -192,6 +193,22 @@ int main(int argc, char **argv) {
         toggle2.set(false);
         f4.realize(10);
         check_counts(0, 0, 0);
+    }
+
+    {
+        // Test the interaction with sliding window. We don't need value of
+        // g(5), but we need all values of f which is computed inside the g's
+        // loop. Make sure we don't skip the computation of f.
+        reset_counts();
+        Func f("f"), g("g"), h("h");
+        f(x) = call_counter(x, 0);
+        g(x) = f(x) + f(x-1);
+        h(x) = select(x == 5, 0, g(x));
+
+        f.store_root().compute_at(g, x);
+        g.compute_at(h, x);
+        h.realize(10);
+        check_counts(11);
     }
 
     printf("Success!\n");

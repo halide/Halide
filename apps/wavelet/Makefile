@@ -10,19 +10,19 @@ all: test
 clean:
 	@rm -rf $(BIN)
 
-# By default, %_exec is produced by building %_generator.cpp
-$(BIN)/%_exec: %_generator.cpp $(GENERATOR_DEPS)
+# By default, %.generator is produced by building %_generator.cpp
+$(BIN)/%.generator: %_generator.cpp $(GENERATOR_DEPS)
 	@echo Building Generator $(filter %_generator.cpp,$^)
 	@mkdir -p $(@D)
-	@$(CXX) $(CXXFLAGS) -fno-rtti $(filter-out %.h,$^) $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS) -o $@
+	@$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) $(LDFLAGS) $(HALIDE_SYSTEM_LIBS) -o $@
 
-# By default, %.a/.h are produced by executing %_exec
-$(BIN)/%.a $(BIN)/%.h: $(BIN)/%_exec
+# By default, %.a/.h are produced by executing %.generator
+$(BIN)/%.a $(BIN)/%.h: $(BIN)/%.generator
 	@echo Running Generator $<
 	@mkdir -p $(@D)
 	@$< -g $(notdir $*) -o $(BIN) target=$(HL_TARGET)-no_runtime
 
-$(BIN)/runtime_$(HL_TARGET).a: $(BIN)/haar_x_exec
+$(BIN)/runtime_$(HL_TARGET).a: $(BIN)/haar_x.generator
 	@echo Compiling Halide runtime for target $(HL_TARGET)
 	@mkdir -p $(@D)
 	@$< -r runtime_$(HL_TARGET) -o $(BIN) target=$(HL_TARGET)

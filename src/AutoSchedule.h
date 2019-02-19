@@ -15,15 +15,24 @@ namespace Halide {
  * code for. */
 struct MachineParams {
     /** Maximum level of parallelism avalaible. */
-    Expr parallelism;
-    /** Size of the last-level cache (in KB). */
-    Expr last_level_cache_size;
+    int parallelism;
+    /** Size of the last-level cache (in bytes). */
+    uint64_t last_level_cache_size;
     /** Indicates how much more expensive is the cost of a load compared to
      * the cost of an arithmetic operation at last level cache. */
-    Expr balance;
+    float balance;
 
-    explicit MachineParams(int32_t parallelism, int32_t llc, int32_t balance)
+    explicit MachineParams(int parallelism, uint64_t llc, float balance)
         : parallelism(parallelism), last_level_cache_size(llc), balance(balance) {}
+
+    /** Default machine parameters for generic CPU architecture. */
+    static MachineParams generic();
+
+    /** Convert the MachineParams into canonical string form. */
+    std::string to_string() const;
+
+    /** Reconstruct a MachineParams from canonical string form. */
+    explicit MachineParams(const std::string &s);
 };
 
 namespace Internal {
@@ -33,11 +42,11 @@ namespace Internal {
  * into account user-defined schedules or specializations. This applies the
  * schedules and returns a string representation of the schedules. The target
  * architecture is specified by 'target'. */
-EXPORT std::string generate_schedules(const std::vector<Function> &outputs,
-                                      const Target &target,
-                                      const MachineParams &arch_params);
+std::string generate_schedules(const std::vector<Function> &outputs,
+                               const Target &target,
+                               const MachineParams &arch_params);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

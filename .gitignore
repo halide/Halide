@@ -3,8 +3,8 @@
 /apps/*/cmake_build
 /apps/HelloMatlab/blurred.png
 /apps/HelloMatlab/iir_blur.mex
-bazel-*
 bin/*
+python_bindings/bin/*
 build-64/*
 build-ios/*
 build-osx/*
@@ -48,7 +48,6 @@ src/test_*.s
 *.guru
 *.dSYM
 .*.swp
-Doxyfile
 tools/objc/BUILD
 tools/objc/*.mobileprovision
 *.xcworkspacedata

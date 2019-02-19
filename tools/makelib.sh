@@ -14,6 +14,16 @@
 # It is OK to have the same file as an input and output
 # (it will of course be overwritten).
 
+if [[ $# -lt 2 ]]; then
+    echo At least two arguments are required > /dev/stderr
+    exit 1
+fi
+
+if [[ $# -eq 2 && ${1} == ${2} ]]; then
+    # Output equals input; just return
+    exit 0
+fi
+
 set -euo pipefail
 ORIG_WD=${PWD}
 

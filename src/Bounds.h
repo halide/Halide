@@ -7,8 +7,8 @@
  */
 
 #include "IROperator.h"
-#include "Scope.h"
 #include "Interval.h"
+#include "Scope.h"
 
 namespace Halide {
 namespace Internal {
@@ -32,13 +32,17 @@ Interval bounds_of_expr_in_scope(Expr expr,
                                  const FuncValueBounds &func_bounds = FuncValueBounds(),
                                  bool const_bound = false);
 
-/* Given a varying expression, try to find a constant that is either:
+/** Given a varying expression, try to find a constant that is either:
  * An upper bound (always greater than or equal to the expression), or
  * A lower bound (always less than or equal to the expression)
  * If it fails, returns an undefined Expr. */
 enum class Direction {Upper, Lower};
-Expr find_constant_bound(Expr e, Direction d,
+Expr find_constant_bound(const Expr &e, Direction d,
                          const Scope<Interval> &scope = Scope<Interval>());
+
+/** Find bounds for a varying expression that are either constants or
+ * +/-inf. */
+Interval find_constant_bounds(const Expr &e, const Scope<Interval> &scope);
 
 /** Represents the bounds of a region of arbitrary dimension. Zero
  * dimensions corresponds to a scalar region. */
@@ -55,8 +59,8 @@ struct Box {
 
     size_t size() const {return bounds.size();}
     bool empty() const {return bounds.empty();}
-    Interval &operator[](int i) {return bounds[i];}
-    const Interval &operator[](int i) const {return bounds[i];}
+    Interval &operator[](size_t i) {return bounds[i];}
+    const Interval &operator[](size_t i) const {return bounds[i];}
     void resize(size_t sz) {bounds.resize(sz);}
     void push_back(const Interval &i) {bounds.push_back(i);}
 
@@ -158,9 +162,9 @@ Box box_touched(Stmt s, std::string fn,
 FuncValueBounds compute_function_value_bounds(const std::vector<std::string> &order,
                                               const std::map<std::string, Function> &env);
 
-EXPORT void bounds_test();
+void bounds_test();
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

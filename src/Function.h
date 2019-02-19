@@ -5,14 +5,14 @@
  * Defines the internal representation of a halide function and related classes
  */
 
-#include "Expr.h"
-#include "IntrusivePtr.h"
-#include "FunctionPtr.h"
-#include "Parameter.h"
-#include "Schedule.h"
-#include "Reduction.h"
-#include "Definition.h"
 #include "Buffer.h"
+#include "Definition.h"
+#include "Expr.h"
+#include "FunctionPtr.h"
+#include "IntrusivePtr.h"
+#include "Parameter.h"
+#include "Reduction.h"
+#include "Schedule.h"
 #include "Util.h"
 
 #include <map>
@@ -82,13 +82,13 @@ public:
      * constructor only exists so that you can make vectors of
      * functions, etc.
      */
-    EXPORT Function();
+    Function();
 
     /** Construct a new function with the given name */
-    EXPORT explicit Function(const std::string &n);
+    explicit Function(const std::string &n);
 
     /** Construct a Function from an existing FunctionContents pointer. Must be non-null */
-    EXPORT explicit Function(const FunctionPtr &);
+    explicit Function(const FunctionPtr &);
 
     /** Get a handle on the halide function contents that this Function
      * represents. */
@@ -105,8 +105,8 @@ public:
      * multiple times. If 'name' is specified, copy's name will be set to that.
      */
     // @{
-    EXPORT void deep_copy(FunctionPtr copy, std::map<FunctionPtr, FunctionPtr> &copied_map) const;
-    EXPORT void deep_copy(std::string name, FunctionPtr copy,
+    void deep_copy(FunctionPtr copy, std::map<FunctionPtr, FunctionPtr> &copied_map) const;
+    void deep_copy(std::string name, FunctionPtr copy,
                           std::map<FunctionPtr, FunctionPtr> &copied_map) const;
     // @}
 
@@ -114,7 +114,7 @@ public:
      * have a definition. All the free variables in 'value' must
      * appear in the args list. 'value' must not depend on any
      * reduction domain */
-    EXPORT void define(const std::vector<std::string> &args, std::vector<Expr> values);
+    void define(const std::vector<std::string> &args, std::vector<Expr> values);
 
     /** Add an update definition to this function. It must already
      * have a pure definition but not an update definition, and the
@@ -124,30 +124,35 @@ public:
      * variables. Any pure variables must also appear as Variables in
      * the args array, and they must have the same name as the pure
      * definition's argument in the same index. */
-    EXPORT void define_update(const std::vector<Expr> &args, std::vector<Expr> values);
+    void define_update(const std::vector<Expr> &args, std::vector<Expr> values);
 
     /** Accept a visitor to visit all of the definitions and arguments
      * of this function. */
-    EXPORT void accept(IRVisitor *visitor) const;
+    void accept(IRVisitor *visitor) const;
 
     /** Accept a mutator to mutator all of the definitions and
      * arguments of this function. */
-    EXPORT void mutate(IRMutator *mutator);
+    void mutate(IRMutator *mutator);
 
     /** Get the name of the function. */
-    EXPORT const std::string &name() const;
+    const std::string &name() const;
+
+    /** If this is a wrapper of another func, created by a chain of in
+     * or clone_in calls, returns the name of the original
+     * Func. Otherwise returns the name. */
+    const std::string &origin_name() const;
 
     /** Get a mutable handle to the init definition. */
-    EXPORT Definition &definition();
+    Definition &definition();
 
     /** Get the init definition. */
-    EXPORT const Definition &definition() const;
+    const Definition &definition() const;
 
     /** Get the pure arguments. */
-    EXPORT const std::vector<std::string> args() const;
+    const std::vector<std::string> &args() const;
 
     /** Get the dimensionality. */
-    EXPORT int dimensions() const;
+    int dimensions() const;
 
     /** Get the number of outputs. */
     int outputs() const {
@@ -155,13 +160,14 @@ public:
     }
 
     /** Get the types of the outputs. */
-    EXPORT const std::vector<Type> &output_types() const;
+    const std::vector<Type> &output_types() const;
 
-    /** Get the right-hand-side of the pure definition. */
-    EXPORT const std::vector<Expr> &values() const;
+    /** Get the right-hand-side of the pure definition. Returns an
+     * empty vector if there is no pure definition. */
+    const std::vector<Expr> &values() const;
 
     /** Does this function have a pure definition? */
-    EXPORT bool has_pure_definition() const;
+    bool has_pure_definition() const;
 
     /** Does this function *only* have a pure definition? */
     bool is_pure() const {
@@ -171,51 +177,47 @@ public:
     }
 
     /** Is it legal to inline this function? */
-    EXPORT bool can_be_inlined() const;
+    bool can_be_inlined() const;
 
     /** Get a handle to the function-specific schedule for the purpose
      * of modifying it. */
-    EXPORT FuncSchedule &schedule();
+    FuncSchedule &schedule();
 
     /** Get a const handle to the function-specific schedule for inspecting it. */
-    EXPORT const FuncSchedule &schedule() const;
+    const FuncSchedule &schedule() const;
 
     /** Get a handle on the output buffer used for setting constraints
      * on it. */
-    EXPORT const std::vector<Parameter> &output_buffers() const;
+    const std::vector<Parameter> &output_buffers() const;
 
     /** Get a mutable handle to the stage-specfic schedule for the update
      * stage. */
-    EXPORT StageSchedule &update_schedule(int idx = 0);
+    StageSchedule &update_schedule(int idx = 0);
 
     /** Get a mutable handle to this function's update definition at
      * index 'idx'. */
-    EXPORT Definition &update(int idx = 0);
+    Definition &update(int idx = 0);
 
     /** Get a const reference to this function's update definition at
      * index 'idx'. */
-    EXPORT const Definition &update(int idx = 0) const;
+    const Definition &update(int idx = 0) const;
 
     /** Get a const reference to this function's update definitions. */
-    EXPORT const std::vector<Definition> &updates() const;
+    const std::vector<Definition> &updates() const;
 
     /** Does this function have an update definition? */
-    EXPORT bool has_update_definition() const;
+    bool has_update_definition() const;
 
     /** Check if the function has an extern definition. */
-    EXPORT bool has_extern_definition() const;
+    bool has_extern_definition() const;
 
     /** Get the name mangling specified for the extern definition. */
-    EXPORT NameMangling extern_definition_name_mangling() const;
+    NameMangling extern_definition_name_mangling() const;
 
     /** Make a call node to the extern definition. An error if the
      * function has no extern definition. */
-    EXPORT Expr make_call_to_extern_definition(const std::vector<Expr> &args,
-                                               const Target &t) const;
-
-    /** Check if the extern function being called expects the legacy
-     * buffer_t type. */
-    EXPORT bool extern_definition_uses_old_buffer_t() const;
+    Expr make_call_to_extern_definition(const std::vector<Expr> &args,
+                                        const Target &t) const;
 
     /** Get the proxy Expr for the extern stage. This is an expression
      * known to have the same data access pattern as the extern
@@ -224,31 +226,29 @@ public:
      * and touch a superset. For most Functions, including those with
      * extern definitions, this will be an undefined Expr. */
     // @{
-    EXPORT Expr extern_definition_proxy_expr() const;
-    EXPORT Expr &extern_definition_proxy_expr();
+    Expr extern_definition_proxy_expr() const;
+    Expr &extern_definition_proxy_expr();
     // @}
 
     /** Add an external definition of this Func. */
-    EXPORT void define_extern(const std::string &function_name,
-                              const std::vector<ExternFuncArgument> &args,
-                              const std::vector<Type> &types,
-                              int dimensionality,
-                              NameMangling mangling,
-                              DeviceAPI device_api,
-                              bool uses_old_buffer_t);
+    void define_extern(const std::string &function_name,
+                       const std::vector<ExternFuncArgument> &args,
+                       const std::vector<Type> &types,
+                       const std::vector<std::string> &dims,
+                       NameMangling mangling, DeviceAPI device_api);
 
     /** Retrive the arguments of the extern definition. */
     // @{
-    EXPORT const std::vector<ExternFuncArgument> &extern_arguments() const;
-    EXPORT std::vector<ExternFuncArgument> &extern_arguments();
+    const std::vector<ExternFuncArgument> &extern_arguments() const;
+    std::vector<ExternFuncArgument> &extern_arguments();
     // @}
 
     /** Get the name of the extern function called for an extern
      * definition. */
-    EXPORT const std::string &extern_function_name() const;
+    const std::string &extern_function_name() const;
 
     /** Get the DeviceAPI declared for an extern function. */
-    EXPORT DeviceAPI extern_function_device_api() const;
+    DeviceAPI extern_function_device_api() const;
 
     /** Test for equality of identity. */
     bool same_as(const Function &other) const {
@@ -256,10 +256,10 @@ public:
     }
 
     /** Get a const handle to the debug filename. */
-    EXPORT const std::string &debug_file() const;
+    const std::string &debug_file() const;
 
     /** Get a handle to the debug filename. */
-    EXPORT std::string &debug_file();
+    std::string &debug_file();
 
     /** Use an an extern argument to another function. */
     operator ExternFuncArgument() const {
@@ -269,21 +269,27 @@ public:
     /** Tracing calls and accessors, passed down from the Func
      * equivalents. */
     // @{
-    EXPORT void trace_loads();
-    EXPORT void trace_stores();
-    EXPORT void trace_realizations();
-    EXPORT bool is_tracing_loads() const;
-    EXPORT bool is_tracing_stores() const;
-    EXPORT bool is_tracing_realizations() const;
+    void trace_loads();
+    void trace_stores();
+    void trace_realizations();
+    void add_trace_tag(const std::string &trace_tag);
+    bool is_tracing_loads() const;
+    bool is_tracing_stores() const;
+    bool is_tracing_realizations() const;
+    const std::vector<std::string> &get_trace_tags() const;
     // @}
+
+    /** Replace this Function's LoopLevels with locked copies that
+     * cannot be mutated further. */
+    void lock_loop_levels();
 
     /** Mark function as frozen, which means it cannot accept new
      * definitions. */
-    EXPORT void freeze();
+    void freeze();
 
     /** Check if a function has been frozen. If so, it is an error to
      * add new definitions. */
-    EXPORT bool frozen() const;
+    bool frozen() const;
 
     /** Make a new Function with the same lifetime as this one, and
      * return a strong reference to it. Useful to create Functions which
@@ -298,30 +304,26 @@ public:
      * user from updating the values of the Function it wraps via the wrapper.
      * See \ref Func::in for more details. */
     // @{
-    EXPORT void add_wrapper(const std::string &f, Function &wrapper);
-    EXPORT const std::map<std::string, FunctionPtr> &wrappers() const;
+    void add_wrapper(const std::string &f, Function &wrapper);
+    const std::map<std::string, FunctionPtr> &wrappers() const;
     // @}
 
     /** Check if a Function is a trivial wrapper around another
      * Function, Buffer, or Parameter. Returns the Call node if it
      * is. Otherwise returns null.
      */
-    EXPORT const Call *is_wrapper() const;
+    const Call *is_wrapper() const;
 
     /** Replace every call to Functions in 'substitutions' keys by all Exprs
      * referenced in this Function to call to their substitute Functions (i.e.
      * the corresponding values in 'substitutions' map). */
     // @{
-    EXPORT Function &substitute_calls(const std::map<FunctionPtr, FunctionPtr> &substitutions);
-    EXPORT Function &substitute_calls(const Function &orig, const Function &substitute);
+    Function &substitute_calls(const std::map<FunctionPtr, FunctionPtr> &substitutions);
+    Function &substitute_calls(const Function &orig, const Function &substitute);
     // @}
 
-    /** Find all Vars that are placeholders for ScheduleParams and substitute in
-     * the corresponding constant value. */
-    EXPORT Function &substitute_schedule_param_exprs();
-
     /** Return true iff the name matches one of the Function's pure args. */
-    EXPORT bool is_pure_arg(const std::string &name) const;
+    bool is_pure_arg(const std::string &name) const;
 };
 
 /** Deep copy an entire Function DAG. */
@@ -329,6 +331,7 @@ std::pair<std::vector<Function>, std::map<std::string, Function>> deep_copy(
     const std::vector<Function> &outputs,
     const std::map<std::string, Function> &env);
 
-}}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

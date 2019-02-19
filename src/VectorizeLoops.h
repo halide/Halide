@@ -17,7 +17,7 @@ namespace Internal {
  */
 Stmt vectorize_loops(Stmt s, const Target &t);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

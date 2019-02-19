@@ -10,7 +10,7 @@ namespace Halide {
 
 namespace {
 
-template <typename fn_type>
+template<typename fn_type>
 bool lookup_runtime_routine(const std::string &name,
                             const Target &target,
                             fn_type &result) {
@@ -28,15 +28,20 @@ bool lookup_runtime_routine(const std::string &name,
     return false;
 }
 
-}
+}  // namespace
 
-const halide_device_interface_t *get_default_device_interface_for_target(const Target &t) {
-    return get_device_interface_for_device_api(DeviceAPI::Default_GPU, t);
-}
+const halide_device_interface_t *get_device_interface_for_device_api(DeviceAPI d, const Target &t,
+                                                                     const char *error_site) {
 
-const halide_device_interface_t *get_device_interface_for_device_api(const DeviceAPI &d, const Target &t) {
-    if (d == DeviceAPI::Default_GPU) {
-        return get_device_interface_for_device_api(get_default_device_api_for_target(t), t);
+  if (d == DeviceAPI::Default_GPU) {
+        d = get_default_device_api_for_target(t);
+        if (d == DeviceAPI::Host) {
+            if (error_site) {
+                user_error << "get_device_interface_for_device_api called from " << error_site <<
+                  " requested a default GPU but no GPU feature is specified in target (" << t.to_string() << ").\n";
+            }
+            return nullptr;
+        }
     }
 
     const struct halide_device_interface_t *(*fn)();
@@ -51,13 +56,33 @@ const halide_device_interface_t *get_device_interface_for_device_api(const Devic
         name = "openglcompute";
     } else if (d == DeviceAPI::GLSL) {
         name = "opengl";
+    } else if (d == DeviceAPI::HexagonDma) {
+        name = "hexagon_dma";
+    } else if (d == DeviceAPI::D3D12Compute) {
+        name = "d3d12compute";
     } else {
+        if (error_site) {
+            user_error << "get_device_interface_for_device_api called from " << error_site <<
+                " requested unknown DeviceAPI (" << (int)d << ").\n";
+        }
+        return nullptr;
+    }
+
+    if (!t.supports_device_api(d)) {
+        if (error_site) {
+            user_error << "get_device_interface_for_device_api called from " << error_site <<
+                " DeviceAPI (" << name << ") is not supported by target (" << t.to_string() << ").\n";
+        }
         return nullptr;
     }
 
     if (lookup_runtime_routine("halide_" + name + "_device_interface", t, fn)) {
         return (*fn)();
     } else {
+        if (error_site) {
+              user_error << "get_device_interface_for_device_api called from " << error_site <<
+                  " cannot find runtime or device interface symbol for " << name << ".\n";
+        }
         return nullptr;
     }
 }
@@ -73,6 +98,10 @@ DeviceAPI get_default_device_api_for_target(const Target &target) {
         return DeviceAPI::OpenGLCompute;
     } else if (target.has_feature(Target::OpenGL)) {
         return DeviceAPI::GLSL;
+    } else if (target.has_feature(Target::HexagonDma)) {
+        return DeviceAPI::HexagonDma;
+    } else if (target.has_feature(Target::D3D12Compute)) {
+        return DeviceAPI::D3D12Compute;
     } else {
         return DeviceAPI::Host;
     }
@@ -104,6 +133,12 @@ Expr make_device_interface_call(DeviceAPI device_api) {
     case DeviceAPI::Hexagon:
         interface_name = "halide_hexagon_device_interface";
         break;
+    case DeviceAPI::HexagonDma:
+        interface_name = "halide_hexagon_dma_device_interface";
+        break;
+    case DeviceAPI::D3D12Compute:
+        interface_name = "halide_d3d12compute_device_interface";
+        break;
     case DeviceAPI::Default_GPU:
         // Will be resolved later
         interface_name = "halide_default_device_interface";
@@ -114,6 +149,6 @@ Expr make_device_interface_call(DeviceAPI device_api) {
     }
     return Call::make(type_of<const halide_device_interface_t *>(), interface_name, {}, Call::Extern);
 }
-}
+}  // namespace Internal
 
-}
+}  // namespace Halide

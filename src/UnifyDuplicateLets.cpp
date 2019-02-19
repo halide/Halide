@@ -1,6 +1,6 @@
 #include "UnifyDuplicateLets.h"
-#include "IRMutator.h"
 #include "IREquality.h"
+#include "IRMutator.h"
 #include <map>
 
 namespace Halide {
@@ -19,60 +19,58 @@ class UnifyDuplicateLets : public IRMutator {
 public:
     using IRMutator::mutate;
 
-    Expr mutate(const Expr &e) {
-
+    Expr mutate(const Expr &e) override {
         if (e.defined()) {
             map<Expr, string, IRDeepCompare>::iterator iter = scope.find(e);
             if (iter != scope.end()) {
-                expr = Variable::make(e.type(), iter->second);
+                return Variable::make(e.type(), iter->second);
             } else {
-                e.accept(this);
+                return IRMutator::mutate(e);
             }
         } else {
-            expr = Expr();
+            return Expr();
         }
-        stmt = Stmt();
-        return std::move(expr);
     }
 
 protected:
-    void visit(const Variable *op) {
+    Expr visit(const Variable *op) override {
         map<string, string>::iterator iter = rewrites.find(op->name);
         if (iter != rewrites.end()) {
-            expr = Variable::make(op->type, iter->second);
+            return Variable::make(op->type, iter->second);
         } else {
-            expr = op;
+            return op;
         }
     }
 
     // Can't unify lets where the RHS might be not be pure
     bool is_impure;
-    void visit(const Call *op) {
+    Expr visit(const Call *op) override {
         is_impure |= !op->is_pure();
-        IRMutator::visit(op);
+        return IRMutator::visit(op);
     }
 
-    void visit(const Load *op) {
-        is_impure |= ((op->name == producing) ||
-                      starts_with(op->name + ".", producing));
-        IRMutator::visit(op);
+    Expr visit(const Load *op) override {
+        is_impure = true;
+        return IRMutator::visit(op);
     }
 
-    void visit(const ProducerConsumer *op) {
+    Stmt visit(const ProducerConsumer *op) override {
         if (op->is_producer) {
             string old_producing = producing;
             producing = op->name;
-            IRMutator::visit(op);
+            Stmt stmt = IRMutator::visit(op);
             producing = old_producing;
+            return stmt;
         } else {
-            IRMutator::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
-    void visit(const LetStmt *op) {
+    template<typename LetStmtOrLet>
+    auto visit_let(const LetStmtOrLet *op) -> decltype(op->body) {
         is_impure = false;
         Expr value = mutate(op->value);
-        Stmt body = op->body;
+        auto body = op->body;
 
         bool should_pop = false;
         bool should_erase = false;
@@ -99,10 +97,18 @@ protected:
         }
 
         if (value.same_as(op->value) && body.same_as(op->body)) {
-            stmt = op;
+            return op;
         } else {
-            stmt = LetStmt::make(op->name, value, body);
+            return LetStmtOrLet::make(op->name, value, body);
         }
+    }
+
+    Expr visit(const Let *op) override {
+        return visit_let(op);
+    }
+
+    Stmt visit(const LetStmt *op) override {
+        return visit_let(op);
     }
 };
 
@@ -110,5 +116,5 @@ Stmt unify_duplicate_lets(Stmt s) {
     return UnifyDuplicateLets().mutate(s);
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

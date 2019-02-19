@@ -1,20 +1,27 @@
 #include "Solve.h"
-#include "Simplify.h"
-#include "IRMutator.h"
-#include "IREquality.h"
-#include "Substitute.h"
 #include "CSE.h"
 #include "ExprUsesVar.h"
+#include "IREquality.h"
+#include "IRMutator.h"
+#include "Simplify.h"
+#include "Substitute.h"
+#include "ConciseCasts.h"
 
 namespace Halide {
 namespace Internal {
 
-using std::string;
 using std::map;
 using std::pair;
+using std::string;
 using std::vector;
+using ConciseCasts::i16;
 
 namespace {
+
+// Returns true iff t is an integral type where overflow is undefined
+bool no_overflow_int(Type t) {
+    return t.is_int() && t.bits() >= 32;
+}
 
 /** A mutator that moves all instances of a free variable as far left
  * and as far outermost as possible. See the test cases at the bottom
@@ -33,7 +40,7 @@ public:
 
     using IRMutator::mutate;
 
-    Expr mutate(const Expr &e) {
+    Expr mutate(const Expr &e) override {
         map<Expr, CacheEntry, ExprCompare>::iterator iter = cache.find(e);
         if (iter == cache.end()) {
             // Not in the cache, call the base class version.
@@ -101,12 +108,13 @@ private:
     using IRMutator::visit;
 
     // Admit defeat. Isolated in a method for ease of debugging.
-    void fail(Expr e) {
+    Expr fail(Expr e) {
         debug(3) << "Failed to solve: " << e << "\n";
         failed = true;
+        return Expr();
     }
 
-    void visit(const Add *op) {
+    Expr visit(const Add *op) override {
         bool old_uses_var = uses_var;
         uses_var = false;
         bool old_failed = failed;
@@ -136,7 +144,7 @@ private:
         const Mul *mul_a = a.as<Mul>();
         const Mul *mul_b = b.as<Mul>();
 
-        expr = Expr();
+        Expr expr;
 
         if (a_uses_var && !b_uses_var) {
             if (sub_a && !a_failed) {
@@ -174,7 +182,7 @@ private:
                 // f(x) + f(x)*a -> f(x) * (a + 1)
                 expr = mutate(a * (mul_b->b + 1));
             } else {
-                fail(a + b);
+                expr = fail(a + b);
             }
         } else {
             // Do some constant-folding
@@ -190,9 +198,10 @@ private:
                 expr = a + b;
             }
         }
+        return expr;
     }
 
-    void visit(const Sub *op) {
+    Expr visit(const Sub *op) override {
         bool old_uses_var = uses_var;
         uses_var = false;
         bool old_failed = failed;
@@ -216,7 +225,7 @@ private:
         const Mul *mul_a = a.as<Mul>();
         const Mul *mul_b = b.as<Mul>();
 
-        expr = Expr();
+        Expr expr;
 
         if (a_uses_var && !b_uses_var) {
             if (sub_a && !a_failed) {
@@ -234,7 +243,7 @@ private:
                     expr = mutate(sub_b->b + (a - sub_b->a));
                 } else {
                     // Negating unsigned is not legal
-                    fail(a - b);
+                    expr = fail(a - b);
                 }
             } else if (sub_b && !b_failed) {
                 // a - (f(x) - b) -> -f(x) + (a + b)
@@ -265,7 +274,7 @@ private:
                 // f(x)*a - g(x)*a -> (f(x) - g(x))*a;
                 expr = mutate((mul_a->a - mul_b->a) * mul_a->b);
             } else {
-                fail(a - b);
+                expr = fail(a - b);
             }
         } else {
             // Do some constant-folding
@@ -281,9 +290,10 @@ private:
                 expr = a - b;
             }
         }
+        return expr;
     }
 
-    void visit(const Mul *op) {
+    Expr visit(const Mul *op) override {
         bool old_uses_var = uses_var;
         uses_var = false;
         bool old_failed = failed;
@@ -312,7 +322,7 @@ private:
             std::swap(a_failed, b_failed);
         }
 
-        expr = Expr();
+        Expr expr;
         if (a_uses_var && !b_uses_var) {
             if (add_a && !a_failed) {
                 // (f(x) + a) * b -> f(x) * b + a * b
@@ -328,7 +338,7 @@ private:
             // It's a quadratic. We could continue but this is
             // unlikely to ever occur. Code will be added here as
             // these cases actually pop up.
-            fail(a * b);
+            expr = fail(a * b);
         } else if (is_const(a) && is_const(b)) {
             // Do some constant-folding
             expr = simplify(a * b);
@@ -342,20 +352,71 @@ private:
                 expr = a * b;
             }
         }
+        return expr;
     }
 
-    void visit(const Call *op) {
+    Expr visit(const Div *op) override {
+        bool old_uses_var = uses_var;
+        uses_var = false;
+        bool old_failed = failed;
+        failed = false;
+        Expr a = mutate(op->a);
+        bool a_uses_var = uses_var;
+        bool a_failed = failed;
+        internal_assert(!is_const(op->a) || !a_uses_var)
+                << op->a << ", " << uses_var << "\n";
+        uses_var = false;
+        failed = false;
+        Expr b = mutate(op->b);
+        bool b_uses_var = uses_var;
+        bool b_failed = failed;
+        uses_var = old_uses_var || a_uses_var || b_uses_var;
+        failed = old_failed || a_failed || b_failed;
+        const Add *add_a = a.as<Add>();
+        const Sub *sub_a = a.as<Sub>();
+        const Mul *mul_a = a.as<Mul>();
+        Expr expr;
+        if (a_uses_var && !b_uses_var) {
+            if (add_a && !a_failed &&
+                can_prove(add_a->a / b * b == add_a->a)) {
+                // (f(x) + a) / b -> f(x) / b + a / b
+                expr = mutate(simplify(add_a->a / b) + add_a->b / b);
+            } else if (sub_a && !a_failed &&
+                       can_prove(sub_a->a / b * b == sub_a->a)) {
+                // (f(x) - a) / b -> f(x) / b - a / b
+                expr = mutate(simplify(sub_a->a / b) - sub_a->b / b);
+            } else if (mul_a && !a_failed && no_overflow_int(op->type) &&
+                       can_prove(mul_a->b / b * b == mul_a->b)) {
+                // (f(x) * a) / b -> f(x) * (a / b)
+                expr = mutate(mul_a->a * (mul_a->b / b));
+            }
+        } else if (is_const(a) && is_const(b)) {
+            // Do some constant-folding
+            expr = simplify(a / b);
+            internal_assert(!uses_var && !a_uses_var && !b_uses_var);
+        }
+        if (!expr.defined()) {
+            if (a.same_as(op->a) && b.same_as(op->b)) {
+                expr = op;
+            } else {
+                expr = a / b;
+            }
+        }
+        return expr;
+    }
+
+    Expr visit(const Call *op) override {
         // Ignore likely intrinsics
         if (op->is_intrinsic(Call::likely) ||
             op->is_intrinsic(Call::likely_if_innermost)) {
-            expr = mutate(op->args[0]);
+            return mutate(op->args[0]);
         } else {
-            IRMutator::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
     template<typename T>
-    void visit_min_max_op(const T *op, bool is_min) {
+    Expr visit_min_max_op(const T *op, bool is_min) {
         bool old_uses_var = uses_var;
         uses_var = false;
         bool old_failed = failed;
@@ -387,7 +448,7 @@ private:
         const T *t_a = a.as<T>();
         const T *t_b = b.as<T>();
 
-        expr = Expr();
+        Expr expr;
 
         if (a_uses_var && !b_uses_var) {
             if (t_a && !a_failed) {
@@ -441,7 +502,7 @@ private:
                     expr = mutate(Min::make(mul_a->a, mul_b->a)) * mul_a->b;
                 }
             } else {
-                fail(T::make(a, b));
+                expr = fail(T::make(a, b));
             }
         } else {
             // Do some constant-folding
@@ -457,18 +518,19 @@ private:
                 expr = T::make(a, b);
             }
         }
+        return expr;
     }
 
-    void visit(const Min *op) {
-        visit_min_max_op(op, true);
+    Expr visit(const Min *op) override {
+        return visit_min_max_op(op, true);
     }
 
-    void visit(const Max *op) {
-        visit_min_max_op(op, false);
+    Expr visit(const Max *op) override {
+        return visit_min_max_op(op, false);
     }
 
     template<typename T>
-    void visit_and_or_op(const T *op) {
+    Expr visit_and_or_op(const T *op) {
         bool old_uses_var = uses_var;
         uses_var = false;
         bool old_failed = failed;
@@ -494,7 +556,7 @@ private:
         const T *t_a = a.as<T>();
         const T *t_b = b.as<T>();
 
-        expr = Expr();
+        Expr expr;
 
         if (a_uses_var && !b_uses_var) {
             if (t_a && !a_failed) {
@@ -512,7 +574,7 @@ private:
                 // op(f(x), op(g(x), a)) -> op(op(f(x), g(x)), a)
                 expr = mutate(T::make(T::make(a, t_b->a), t_b->b));
             } else {
-                fail(T::make(a, b));
+                expr = fail(T::make(a, b));
             }
         } else {
             // Do some constant-folding
@@ -528,18 +590,19 @@ private:
                 expr = T::make(a, b);
             }
         }
+        return expr;
     }
 
-    void visit(const Or *op) {
-        visit_and_or_op(op);
+    Expr visit(const Or *op) override {
+        return visit_and_or_op(op);
     }
 
-    void visit(const And *op) {
-        visit_and_or_op(op);
+    Expr visit(const And *op) override {
+        return visit_and_or_op(op);
     }
 
     template<typename Cmp, typename Opp>
-    void visit_cmp(const Cmp *op) {
+    Expr visit_cmp(const Cmp *op) {
         bool old_uses_var = uses_var;
         uses_var = false;
         bool old_failed = failed;
@@ -557,8 +620,7 @@ private:
         failed = old_failed || a_failed || b_failed;
 
         if (b_uses_var && !a_uses_var) {
-            expr = mutate(Opp::make(b, a));
-            return;
+            return mutate(Opp::make(b, a));
         }
 
         const Add *add_a = a.as<Add>();
@@ -573,7 +635,7 @@ private:
         bool is_ge = Expr(op).as<GE>() != nullptr;
         bool is_gt = Expr(op).as<GT>() != nullptr;
 
-        expr = Expr();
+        Expr expr;
 
         if (a_uses_var && !b_uses_var) {
             // We have f(x) < y. Try to unwrap f(x)
@@ -669,67 +731,65 @@ private:
                 expr = Cmp::make(a, b);
             }
         }
+        return expr;
     }
 
-    void visit(const LT *op) {
-        visit_cmp<LT, GT>(op);
+    Expr visit(const LT *op) override {
+        return visit_cmp<LT, GT>(op);
     }
 
-    void visit(const LE *op) {
-        visit_cmp<LE, GE>(op);
+    Expr visit(const LE *op) override {
+        return visit_cmp<LE, GE>(op);
     }
 
-    void visit(const GE *op) {
-        visit_cmp<GE, LE>(op);
+    Expr visit(const GE *op) override {
+        return visit_cmp<GE, LE>(op);
     }
 
-    void visit(const GT *op) {
-        visit_cmp<GT, LT>(op);
+    Expr visit(const GT *op) override {
+        return visit_cmp<GT, LT>(op);
     }
 
-    void visit(const EQ *op) {
-        visit_cmp<EQ, EQ>(op);
+    Expr visit(const EQ *op) override {
+        return visit_cmp<EQ, EQ>(op);
     }
 
-    void visit(const NE *op) {
-        visit_cmp<NE, NE>(op);
+    Expr visit(const NE *op) override {
+        return visit_cmp<NE, NE>(op);
     }
 
-    void visit(const Variable *op) {
+    Expr visit(const Variable *op) override {
         if (op->name == var) {
             uses_var = true;
-            expr = op;
+            return op;
         } else if (scope.contains(op->name)) {
             CacheEntry e = scope.get(op->name);
-            expr = e.expr;
             uses_var = uses_var || e.uses_var;
+            return e.expr;
         } else if (external_scope.contains(op->name)) {
             Expr e = external_scope.get(op->name);
             // Expressions in the external scope haven't been solved
             // yet. This will either pull its solution from the cache,
             // or solve it and then put it into the cache.
-            expr = mutate(e);
+            return mutate(e);
         } else {
-            expr = op;
+            return op;
         }
     }
 
-    void visit(const Let *op) {
+    Expr visit(const Let *op) override {
         bool old_uses_var = uses_var;
         uses_var = false;
         Expr value = mutate(op->value);
         CacheEntry e = {value, uses_var};
 
         uses_var = old_uses_var;
-        scope.push(op->name, e);
-        expr = mutate(op->body);
-        scope.pop(op->name);
+        ScopedBinding<CacheEntry> bind(scope, op->name, e);
+        return mutate(op->body);
     }
-
 };
 
 class SolveForInterval : public IRVisitor {
-
     // The var we're solving for
     const string &var;
 
@@ -760,7 +820,7 @@ class SolveForInterval : public IRVisitor {
         }
     }
 
-    void visit(const UIntImm *op) {
+    void visit(const UIntImm *op) override {
         internal_assert(op->type.is_bool());
         if ((op->value && target) ||
             (!op->value && !target)) {
@@ -795,7 +855,7 @@ class SolveForInterval : public IRVisitor {
         }
     }
 
-    void visit(const And *op) {
+    void visit(const And *op) override {
         op->a.accept(this);
         Interval ia = result;
         op->b.accept(this);
@@ -813,7 +873,7 @@ class SolveForInterval : public IRVisitor {
         }
     }
 
-    void visit(const Or *op) {
+    void visit(const Or *op) override {
         op->a.accept(this);
         Interval ia = result;
         op->b.accept(this);
@@ -831,13 +891,13 @@ class SolveForInterval : public IRVisitor {
         }
     }
 
-    void visit(const Not *op) {
+    void visit(const Not *op) override {
         target = !target;
         op->a.accept(this);
         target = !target;
     }
 
-    void visit(const Let *op) {
+    void visit(const Let *op) override {
         internal_assert(op->type.is_bool());
         // If it's a bool, we might need to know the intervals over
         // which it's definitely or definitely false. We'll do this
@@ -858,7 +918,7 @@ class SolveForInterval : public IRVisitor {
         }
     }
 
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         internal_assert(op->type.is_bool());
         if (scope.contains(op->name)) {
             pair<string, bool> key = { op->name, target };
@@ -874,13 +934,13 @@ class SolveForInterval : public IRVisitor {
         }
     }
 
-    void visit(const LT *lt) {
+    void visit(const LT *lt) override {
         // Normalize to le
         Expr cond = lt->a <= (lt->b - 1);
         cond.accept(this);
     }
 
-    void visit(const GT *gt) {
+    void visit(const GT *gt) override {
         // Normalize to ge
         Expr cond = gt->a >= (gt->b + 1);
         cond.accept(this);
@@ -911,7 +971,7 @@ class SolveForInterval : public IRVisitor {
         }
     }
 
-    void visit(const LE *le) {
+    void visit(const LE *le) override {
         static string b_name = unique_name('b');
         static string c_name = unique_name('c');
 
@@ -968,7 +1028,7 @@ class SolveForInterval : public IRVisitor {
         }
     }
 
-    void visit(const GE *ge) {
+    void visit(const GE *ge) override {
         static string b_name = unique_name('b');
         static string c_name = unique_name('c');
 
@@ -1022,7 +1082,7 @@ class SolveForInterval : public IRVisitor {
         }
     }
 
-    void visit(const EQ *op) {
+    void visit(const EQ *op) override {
         Expr cond;
         if (op->a.type().is_bool()) {
             internal_assert(op->a.type().is_bool() == op->b.type().is_bool());
@@ -1035,7 +1095,7 @@ class SolveForInterval : public IRVisitor {
         cond.accept(this);
     }
 
-    void visit(const NE *op) {
+    void visit(const NE *op) override {
         Expr cond;
         if (op->a.type().is_bool()) {
             internal_assert(op->a.type().is_bool() == op->b.type().is_bool());
@@ -1049,15 +1109,15 @@ class SolveForInterval : public IRVisitor {
     }
 
     // Other unhandled sources of bools
-    void visit(const Cast *op) {
+    void visit(const Cast *op) override {
         fail();
     }
 
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         fail();
     }
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         fail();
     }
 
@@ -1102,24 +1162,24 @@ class AndConditionOverDomain : public IRMutator {
         return get_bounds(a).min;
     }
 
-    void visit(const Broadcast *op) {
-        expr = mutate(op->value);
+    Expr visit(const Broadcast *op) override {
+        return mutate(op->value);
     }
 
-    void fail() {
+    Expr fail() {
         if (flipped) {
             // True is a necessary condition for anything. Any
             // predicate implies true.
-            expr = const_true();
+            return const_true();
         } else {
             // False is a sufficient condition for anything. False
             // implies any predicate.
-            expr = const_false();
+            return const_false();
         }
     }
 
     template<typename Cmp, bool is_lt_or_le>
-    void visit_cmp(const Cmp *op) {
+    Expr visit_cmp(const Cmp *op) {
         Expr a, b;
         if (is_lt_or_le ^ flipped) {
             a = make_bigger(op->a);
@@ -1132,95 +1192,95 @@ class AndConditionOverDomain : public IRMutator {
             b.same_as(Interval::pos_inf) ||
             a.same_as(Interval::neg_inf) ||
             b.same_as(Interval::neg_inf)) {
-            fail();
+            return fail();
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
-            expr = op;
+            return op;
         } else {
-            expr = Cmp::make(a, b);
+            return Cmp::make(a, b);
         }
     }
 
-    void visit(const LT *op) {
-        visit_cmp<LT, true>(op);
+    Expr visit(const LT *op) override {
+        return visit_cmp<LT, true>(op);
     }
 
-    void visit(const LE *op) {
-        visit_cmp<LE, true>(op);
+    Expr visit(const LE *op) override {
+        return visit_cmp<LE, true>(op);
     }
 
-    void visit(const GT *op) {
-        visit_cmp<GT, false>(op);
+    Expr visit(const GT *op) override {
+        return visit_cmp<GT, false>(op);
     }
 
-    void visit(const GE *op) {
-        visit_cmp<GE, false>(op);
+    Expr visit(const GE *op) override {
+        return visit_cmp<GE, false>(op);
     }
 
-    void visit(const EQ *op) {
+    Expr visit(const EQ *op) override {
         if (op->type.is_vector()) {
-            fail();
+            return fail();
         } else {
             // Rewrite to the difference is zero.
             Expr delta = simplify(op->a - op->b);
             Interval i = get_bounds(delta);
             if (!i.has_lower_bound() || !i.has_upper_bound()) {
-                fail();
-                return;
+                return fail();
             }
             if (can_prove(i.min == i.max)) {
                 // The expression does not vary, so an equivalent condition is:
-                expr = (i.min == 0);
+                return (i.min == 0);
             } else {
                 if (flipped) {
                     // Necessary condition: zero is in the range of i.min and i.max
-                    expr = (i.min <= 0) && (i.max >= 0);
+                    return (i.min <= 0) && (i.max >= 0);
                 } else {
                     // Sufficient condition: the entire range is zero
-                    expr = (i.min == 0) && (i.max == 0);
+                    return (i.min == 0) && (i.max == 0);
                 }
             }
         }
     }
 
-    void visit(const NE *op) {
-        expr = mutate(!(op->a == op->b));
+    Expr visit(const NE *op) override {
+        return mutate(!(op->a == op->b));
     }
 
-    void visit(const Not *op) {
+    Expr visit(const Not *op) override {
         flipped = !flipped;
-        IRMutator::visit(op);
+        Expr expr = IRMutator::visit(op);
         flipped = !flipped;
+        return expr;
     }
 
-    void visit(const Variable *op) {
+    Expr visit(const Variable *op) override {
         if (scope.contains(op->name) && op->type.is_bool()) {
             Interval i = scope.get(op->name);
             if (!flipped) {
                 if (i.has_lower_bound()) {
                     // Sufficient condition: if this boolean var
                     // could ever be false, then return false.
-                    expr = i.min;
+                    return i.min;
                 } else {
-                    expr = const_false();
+                    return const_false();
                 }
             } else {
                 if (i.has_upper_bound()) {
                     // Necessary condition: if this boolean var could
                     // ever be true, return true.
-                    expr = i.max;
+                    return i.max;
                 } else {
-                    expr = const_true();
+                    return const_true();
                 }
             }
         } else if (op->type.is_vector()) {
-            fail();
+            return fail();
         } else {
-            expr = op;
+            return op;
         }
 
     }
 
-    void visit(const Let *op) {
+    Expr visit(const Let *op) override {
         // If it's a numeric value, we can just get the bounds of
         // it. If it's a boolean value yet, we don't know whether it
         // would be more conservative to make it true or to make it
@@ -1262,7 +1322,7 @@ class AndConditionOverDomain : public IRMutator {
             }
 
             scope.push(op->name, Interval(min_var, max_var));
-            expr = mutate(op->body);
+            Expr expr = mutate(op->body);
             scope.pop(op->name);
 
             if (expr_uses_var(expr, op->name)) {
@@ -1274,29 +1334,30 @@ class AndConditionOverDomain : public IRMutator {
             if (value_bounds.has_upper_bound() && expr_uses_var(expr, max_name)) {
                 expr = Let::make(max_name, value_bounds.max, expr);
             }
+            return expr;
         } else {
             bound_vars.push(op->name, op->value);
             body = mutate(op->body);
             bound_vars.pop(op->name);
             if (body.same_as(op->body)) {
-                expr = op;
+                return op;
             } else {
-                expr = Let::make(op->name, op->value, body);
+                return Let::make(op->name, op->value, body);
             }
         }
     }
 
     // Other unhandled sources of bools
-    void visit(const Cast *op) {
-        fail();
+    Expr visit(const Cast *op) override {
+        return fail();
     }
 
-    void visit(const Load *op) {
-        fail();
+    Expr visit(const Load *op) override {
+        return fail();
     }
 
-    void visit(const Call *op) {
-        fail();
+    Expr visit(const Call *op) override {
+        return fail();
     }
 
 public:
@@ -1416,6 +1477,19 @@ void solve_test() {
     check_solve(5*y + 3*x == 2, ((x == ((2 - (5*y))/3)) && (((2 - (5*y)) % 3) == 0)));
     check_solve(min(min(z, x), min(x, y)), min(x, min(y, z)));
     check_solve(min(x + y, x + 5), x + min(y, 5));
+
+    // Check solver with expressions containing division
+    check_solve(x + (x*2) / 2, x*2);
+    check_solve(x + (x*2 + y) / 2, x*2 + (y / 2));
+    check_solve(x + (x*2 - y) / 2, x*2 - (y / 2)) ;
+    check_solve(x + (-(x*2) / 2), x*0 + 0);
+    check_solve(x + (-(x*2 + -3)) / 2, x*0 + 1);
+    check_solve(x + (z - (x*2 + -3)) / 2, x*0 + (z - (-3)) / 2);
+    check_solve(x + (y*16 + (z - (x * 2 + -1))) / 2,
+                (x * 0) + (((z - -1) + (y*16)) / 2));
+
+    // Check the solver doesn't perform transformations that change integer overflow behavior.
+    check_solve(i16(x + y) * i16(2) / i16(2), i16(x + y) * i16(2) / i16(2));
 
     // A let statement
     check_solve(Let::make("z", 3 + 5*x, y + z < 8),
@@ -1537,8 +1611,8 @@ void solve_test() {
     {
         // This case used to break due to signed integer overflow in
         // the simplifier.
-        Expr a16 = Load::make(Int(16), "a", {x}, Buffer<>(), Parameter(), const_true());
-        Expr b16 = Load::make(Int(16), "b", {x}, Buffer<>(), Parameter(), const_true());
+        Expr a16 = Load::make(Int(16), "a", {x}, Buffer<>(), Parameter(), const_true(), ModulusRemainder());
+        Expr b16 = Load::make(Int(16), "b", {x}, Buffer<>(), Parameter(), const_true(), ModulusRemainder());
         Expr lhs = pow(cast<int32_t>(a16), 2) + pow(cast<int32_t>(b16), 2);
 
         Scope<Interval> s;
@@ -1588,5 +1662,5 @@ void solve_test() {
     debug(0) << "Solve test passed\n";
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

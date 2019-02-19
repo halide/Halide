@@ -17,16 +17,15 @@ enum SomeEnum { Foo, Bar };
 // Note the inheritance using the Curiously Recurring Template Pattern
 class Example : public Halide::Generator<Example> {
 public:
-    // GeneratorParams, ScheduleParams, Inputs, and Outputs are (by convention)
+    // GeneratorParamss, Inputs, and Outputs are (by convention)
     // always public and always declared at the top of the Generator,
     // in the order
     //    GeneratorParam(s)
-    //    ScheduleParam(s)
     //    Input(s)
     //    Output(s)
     //
     // Note that the Inputs will appear in the C function
-    // call in the order they are declared. (GeneratorParams and ScheduleParams
+    // call in the order they are declared. (GeneratorParams
     // are always referenced by name, not position, so their order is irrelevant.)
     //
     // All Input variants declared as Generator members must have explicit
@@ -44,8 +43,8 @@ public:
                                      { { "foo", Foo },
                                        { "bar", Bar } } };
     // ...or bools: {default}
-    ScheduleParam<bool> vectorize{ "vectorize", true };
-    ScheduleParam<bool> parallelize{ "parallelize", true };
+    GeneratorParam<bool> vectorize{ "vectorize", true };
+    GeneratorParam<bool> parallelize{ "parallelize", true };
 
     // These are bad names that will produce errors at build time:
     // GeneratorParam<bool> badname{ " flag", true };
@@ -86,16 +85,13 @@ public:
         // here; this produces the width of the SIMD vector being targeted
         // divided by the width of the data type.
         const int v = natural_vector_size(output.type());
-        output
-            .specialize(parallelize && vectorize)
-            .parallel(y)
-            .vectorize(x, v);
-        output
-            .specialize(parallelize)
-            .parallel(y);
-        output
-            .specialize(vectorize)
-            .vectorize(x, v);
+        if (parallelize && vectorize) {
+            output.parallel(y).vectorize(x, v);
+        } else if (parallelize) {
+            output.parallel(y);
+        } else if (vectorize) {
+            output.vectorize(x, v);
+        }
     }
 
 private:

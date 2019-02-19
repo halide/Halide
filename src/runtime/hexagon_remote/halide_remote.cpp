@@ -188,6 +188,22 @@ int halide_hexagon_remote_set_performance_mode(int mode) {
     HAP_power_response_t power_info;
     unsigned int max_mips = 0;
     uint64 max_bus_bw = 0;
+    HAP_power_request_t request;
+
+    const HAP_dcvs_voltage_corner_t voltage_corner[] = {
+        HAP_DCVS_VCORNER_SVS,
+        HAP_DCVS_VCORNER_NOM,
+        HAP_DCVS_VCORNER_TURBO,
+        HAP_DCVS_VCORNER_DISABLE,
+        HAP_DCVS_VCORNER_SVSPLUS,
+        HAP_DCVS_VCORNER_SVS2,
+        HAP_DCVS_VCORNER_NOMPLUS
+    };
+
+    if (mode > 6) {
+        log_printf("Unknown power mode (%d)\n");
+        return -1;
+    }
 
     power_info.type = HAP_power_get_max_mips;
     int retval = HAP_power_get(NULL, &power_info);
@@ -260,14 +276,39 @@ int halide_hexagon_remote_set_performance_mode(int mode) {
     mipsTotal = mipsPerThread * 2;
 
     bwMegabytesPerSec = bwBytePerSec >> 20;
-    return halide_hexagon_remote_set_performance(set_mips,
-                                                 mipsPerThread,
-                                                 mipsTotal,
-                                                 set_bus_bw,
-                                                 bwMegabytesPerSec,
-                                                 busbwUsagePercentage,
-                                                 set_latency,
-                                                 latency);
+
+    memset(&request, 0, sizeof(HAP_power_request_t));
+    request.type = HAP_power_set_apptype;
+    request.apptype = HAP_POWER_COMPUTE_CLIENT_CLASS;
+    retval = HAP_power_set(NULL, &request);
+    if (0 != retval) {
+        log_printf("HAP_power_set(HAP_power_set_apptype) failed (%d)\n", retval);
+        return -1;
+    }
+
+    memset(&request, 0, sizeof(HAP_power_request_t));
+    request.type = HAP_power_set_DCVS_v2;
+    request.dcvs_v2.dcvs_enable = TRUE;
+    request.dcvs_v2.dcvs_option = HAP_DCVS_V2_POWER_SAVER_MODE;
+    request.dcvs_v2.set_dcvs_params = TRUE;
+    request.dcvs_v2.dcvs_params.min_corner = HAP_DCVS_VCORNER_DISABLE;
+    request.dcvs_v2.dcvs_params.max_corner = HAP_DCVS_VCORNER_DISABLE;
+    request.dcvs_v2.dcvs_params.target_corner = voltage_corner[mode];
+    request.dcvs_v2.set_latency = set_latency;
+    request.dcvs_v2.latency = latency;
+    retval = HAP_power_set(NULL, &request);
+    if (0 == retval) {
+        return 0;
+    } else {
+        return halide_hexagon_remote_set_performance(set_mips,
+                                                     mipsPerThread,
+                                                     mipsTotal,
+                                                     set_bus_bw,
+                                                     bwMegabytesPerSec,
+                                                     busbwUsagePercentage,
+                                                     set_latency,
+                                                     latency);
+    }
 }
 
 int halide_hexagon_remote_get_symbol_v4(handle_t module_ptr, const char* name, int nameLen, handle_t *sym_ptr) {
@@ -295,8 +336,25 @@ int halide_hexagon_remote_run_v2(handle_t module_ptr, handle_t function,
         uint64_t dev;
         uint8_t* host;
     };
-    void **args = (void **)__builtin_alloca((input_buffersLen + scalarsLen + output_buffersLen) * sizeof(void *));
-    buffer_t *buffers = (buffer_t *)__builtin_alloca((input_buffersLen + output_buffersLen) * sizeof(buffer_t));
+
+
+    void **args = NULL;
+    buffer_t *buffers = NULL;
+
+    size_t args_size = (input_buffersLen + scalarsLen + output_buffersLen) * sizeof(void *);
+    size_t buffers_size = (input_buffersLen + output_buffersLen) * sizeof(buffer_t);
+
+    // Threshold to allocate on heap vs stack.
+    const size_t heap_allocation_threshold = 1024;
+    bool allocated_on_heap = (args_size + buffers_size) > heap_allocation_threshold;
+
+    if (allocated_on_heap) {
+        args = (void **)malloc(args_size);
+        buffers = (buffer_t *)malloc(buffers_size);
+    } else {
+        args = (void **)__builtin_alloca(args_size);
+        buffers = (buffer_t *)__builtin_alloca(buffers_size);
+    }
 
     void **next_arg = &args[0];
     buffer_t *next_buffer_t = &buffers[0];
@@ -318,6 +376,10 @@ int halide_hexagon_remote_run_v2(handle_t module_ptr, handle_t function,
     // Prior to running the pipeline, power HVX on (if it was not already on).
     int result = halide_hexagon_remote_power_hvx_on();
     if (result != 0) {
+        if (allocated_on_heap) {
+            free(buffers);
+            free(args);
+        }
         return result;
     }
 
@@ -326,6 +388,11 @@ int halide_hexagon_remote_run_v2(handle_t module_ptr, handle_t function,
 
     // Power HVX off.
     halide_hexagon_remote_power_hvx_off();
+
+    if (allocated_on_heap) {
+        free(buffers);
+        free(args);
+    }
 
     return result;
 }
@@ -344,7 +411,10 @@ int halide_hexagon_remote_poll_profiler_state(int *func, int *threads) {
     *threads = halide_profiler_get_state()->active_threads;
     return 0;
 }
-
+int halide_hexagon_remote_profiler_set_current_func(int current_func) {
+    halide_profiler_get_state()->current_func = current_func;
+    return 0;
+}
 halide_profiler_state *halide_profiler_get_state() {
     static halide_profiler_state hvx_profiler_state;
     return &hvx_profiler_state;

@@ -1,11 +1,12 @@
+
 #include "RDom.h"
-#include "Util.h"
-#include "ImageParam.h"
+#include "Generator.h"
 #include "IREquality.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
+#include "ImageParam.h"
 #include "Simplify.h"
-#include "Generator.h"
+#include "Util.h"
 
 namespace Halide {
 
@@ -100,18 +101,26 @@ class CheckRDomBounds : public IRGraphVisitor {
 
     using IRGraphVisitor::visit;
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         IRGraphVisitor::visit(op);
         if (op->call_type == Call::Halide) {
             offending_func = op->name;
         }
     }
 
-    void visit(const Variable *op) {
-        if (!op->param.defined() && !op->image.defined()) {
+    void visit(const Variable *op) override {
+        if (!op->param.defined() &&
+            !op->image.defined() &&
+            !internal_vars.contains(op->name)) {
             offending_free_var = op->name;
         }
     }
+
+    void visit(const Let *op) override {
+        ScopedBinding<int> bind(internal_vars, op->name, 0);
+        IRGraphVisitor::visit(op);
+    }
+    Scope<int> internal_vars;
 public:
     string offending_func;
     string offending_free_var;
@@ -120,12 +129,14 @@ public:
 
 void RDom::initialize_from_ranges(const std::vector<std::pair<Expr, Expr>> &ranges, string name) {
     if (name.empty()) {
-        name = make_entity_name(this, "Halide::RDom", 'r');
+        name = make_entity_name(this, "Halide:.*:RDom", 'r');
     }
 
     std::vector<ReductionVariable> vars;
     for (size_t i = 0; i < ranges.size(); i++) {
         CheckRDomBounds checker;
+        user_assert(ranges[i].first.defined() && ranges[i].second.defined())
+            << "The RDom " << name << " may not be constructed with undefined Exprs.\n";
         ranges[i].first.accept(&checker);
         ranges[i].second.accept(&checker);
         user_assert(checker.offending_func.empty())
@@ -236,4 +247,4 @@ std::ostream &operator<<(std::ostream &stream, RDom dom) {
     return stream;
 }
 
-}
+}  // namespace Halide

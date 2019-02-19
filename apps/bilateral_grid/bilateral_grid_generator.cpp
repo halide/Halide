@@ -1,10 +1,10 @@
 #include "Halide.h"
+#include "halide_trace_config.h"
 
 namespace {
 
 class BilateralGrid : public Halide::Generator<BilateralGrid> {
 public:
-    GeneratorParam<bool>  auto_schedule{"auto_schedule", false};
     GeneratorParam<int>   s_sigma{"s_sigma", 8};
 
     Input<Buffer<float>>  input{"input", 2};
@@ -78,9 +78,6 @@ public:
             blurx.estimate(z, 0, 12);
             blury.estimate(z, 0, 12);
             bilateral_grid.estimate(x, 0, 1536).estimate(y, 0, 2560);
-            // Auto schedule the pipeline: this calls auto_schedule() for
-            // all of the Outputs in this Generator
-            auto_schedule_outputs();
         } else if (get_target().has_gpu_feature()) {
             Var xi("xi"), yi("yi"), zi("zi");
 
@@ -98,14 +95,17 @@ public:
             histogram.reorder(c, z, x, y).compute_at(blurz, x).gpu_threads(x, y);
             histogram.update().reorder(c, r.x, r.y, x, y).gpu_threads(x, y).unroll(c);
 
-            // An alternative schedule for histogram that doesn't use shared memory:
-            // histogram.compute_root().reorder(c, z, x, y).gpu_tile(x, y, xi, yi, 8, 8);
-            // histogram.update().reorder(c, r.x, r.y, x, y).gpu_tile(x, y, xi, yi, 8, 8).unroll(c);
-
             // Schedule the remaining blurs and the sampling at the end similarly.
-            blurx.compute_root().gpu_tile(x, y, z, xi, yi, zi, 8, 8, 1);
-            blury.compute_root().gpu_tile(x, y, z, xi, yi, zi, 8, 8, 1);
-            bilateral_grid.compute_root().gpu_tile(x, y, xi, yi, s_sigma, s_sigma);
+            blurx.compute_root().reorder(c, x, y, z)
+                .reorder_storage(c, x, y, z).vectorize(c)
+                .unroll(y, 2, TailStrategy::RoundUp)
+                .gpu_tile(x, y, z, xi, yi, zi, 32, 8, 1, TailStrategy::RoundUp);
+            blury.compute_root().reorder(c, x, y, z)
+                .reorder_storage(c, x, y, z).vectorize(c)
+                .unroll(y, 2, TailStrategy::RoundUp)
+                .gpu_tile(x, y, z, xi, yi, zi, 32, 8, 1, TailStrategy::RoundUp);
+            bilateral_grid.compute_root().gpu_tile(x, y, xi, yi, 32, 8);
+            interpolated.compute_at(bilateral_grid, xi).vectorize(c);
         } else {
             // The CPU schedule.
             blurz.compute_root().reorder(c, z, x, y).parallel(y).vectorize(x, 8).unroll(c);
@@ -114,6 +114,53 @@ public:
             blurx.compute_root().reorder(c, x, y, z).parallel(z).vectorize(x, 8).unroll(c);
             blury.compute_root().reorder(c, x, y, z).parallel(z).vectorize(x, 8).unroll(c);
             bilateral_grid.compute_root().parallel(y).vectorize(x, 8);
+        }
+
+        /* Optional tags to specify layout for HalideTraceViz */
+        {
+            Halide::Trace::FuncConfig cfg;
+            cfg.pos.x = 100;
+            cfg.pos.y = 300;
+            input.add_trace_tag(cfg.to_trace_tag());
+
+            cfg.pos.x = 1564;
+            bilateral_grid.add_trace_tag(cfg.to_trace_tag());
+        }
+        {
+            Halide::Trace::FuncConfig cfg;
+            cfg.strides = {{1, 0}, {0, 1}, {40, 0}};
+            cfg.zoom = 3;
+
+            cfg.max = 32;
+            cfg.pos.x = 550;
+            cfg.pos.y = 100;
+            histogram.add_trace_tag(cfg.to_trace_tag());
+
+            cfg.max = 512;
+            cfg.pos.y = 300;
+            blurz.add_trace_tag(cfg.to_trace_tag());
+
+            cfg.max = 8192;
+            cfg.pos.y = 500;
+            blurx.add_trace_tag(cfg.to_trace_tag());
+
+            cfg.max = 131072;
+            cfg.pos.y = 700;
+            blury.add_trace_tag(cfg.to_trace_tag());
+        }
+        {
+            // GlobalConfig applies to the entire visualization pipeline;
+            // you can set this tag on any Func that is realized, but only
+            // the last one seen will be used. (Since the tags are emitted in
+            // an arbitrary order, emitting only one such tag is the best practice).
+            // Note also that since the global settings are often context-dependent
+            // (eg the output size and timestep may vary depending on the
+            // input data), it's often more useful to specify these on the
+            // command line.
+            Halide::Trace::GlobalConfig global_cfg;
+            global_cfg.timestep = 1000;
+
+            bilateral_grid.add_trace_tag(global_cfg.to_trace_tag());
         }
     }
 };

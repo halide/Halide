@@ -6,8 +6,6 @@ using namespace Halide;
 
 class NonLocalMeans : public Halide::Generator<NonLocalMeans> {
 public:
-    GeneratorParam<bool>  auto_schedule{"auto_schedule", false};
-
     Input<Buffer<float>>  input{"input", 3};
     Input<int>            patch_size{"patch_size"};
     Input<int>            search_area{"search_area"};
@@ -39,7 +37,7 @@ public:
         d(x, y, dx, dy) = sum(dc(x, y, dx, dy, channels));
 
         // Find the patch differences by blurring the difference images
-        RDom patch_dom(-patch_size/2, patch_size);
+        RDom patch_dom(-(patch_size/2), patch_size);
         Func blur_d_y("blur_d_y");
         blur_d_y(x, y, dx, dy) = sum(d(x, y + patch_dom, dx, dy));
 
@@ -58,7 +56,7 @@ public:
                                              1.0f);
 
         // Define a reduction domain for the search area
-        RDom s_dom(-search_area/2, search_area, -search_area/2, search_area);
+        RDom s_dom(-(search_area/2), search_area, -(search_area/2), search_area);
 
         // Compute the sum of the pixels in the search area
         Func non_local_means_sum("non_local_means_sum");
@@ -87,9 +85,6 @@ public:
             non_local_means.estimate(x, 0, 614)
                 .estimate(y, 0, 1024)
                 .estimate(c, 0, 3);
-            // Auto schedule the pipeline: this calls auto_schedule() for
-            // all of the Outputs in this Generator
-            auto_schedule_outputs();
         } /*else if (get_target().has_gpu_feature()) {
             // TODO: the GPU schedule is currently using to much shared memory
             // because the simplifier can't simplify the expr (it can't cancel

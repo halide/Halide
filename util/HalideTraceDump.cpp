@@ -370,7 +370,7 @@ int main(int argc, char * const *argv) {
         Packet p;
         if (!p.read_from_filedesc(file_desc)) {
             printf("[INFO] Finished pass 2 after %d packets.\n", packet_count);
-            if (file_desc > 0) {
+            if (file_desc != nullptr) {
                 fclose(file_desc);
             }
             finish_dump(func_info, outputopts);

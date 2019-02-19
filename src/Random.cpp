@@ -1,12 +1,12 @@
 #include "Random.h"
-#include "IROperator.h"
 #include "IRMutator.h"
+#include "IROperator.h"
 
 namespace Halide {
 namespace Internal {
 
-using std::vector;
 using std::string;
+using std::vector;
 
 namespace {
 
@@ -60,7 +60,6 @@ Expr rng32(Expr x) {
 
     return (((C2 * x) + C1) * x) + C0;
 }
-
 }
 
 Expr random_int(const vector<Expr> &e) {
@@ -96,25 +95,27 @@ Expr random_float(const vector<Expr> &e) {
 class LowerRandom : public IRMutator {
     using IRMutator::visit;
 
-    void visit(const Call *op) {
+    Expr visit(const Call *op) override {
         if (op->is_intrinsic(Call::random)) {
             vector<Expr> args = op->args;
             args.insert(args.end(), extra_args.begin(), extra_args.end());
             if (op->type == Float(32)) {
-                expr = random_float(args);
+                return random_float(args);
             } else if (op->type == Int(32)) {
-                expr = cast<int32_t>(random_int(args));
+                return cast<int32_t>(random_int(args));
             } else if (op->type == UInt(32)) {
-                expr = random_int(args);
+                return random_int(args);
             } else {
                 internal_error << "The intrinsic random() returns an Int(32), UInt(32) or a Float(32).\n";
+                return Expr();
             }
         } else {
-            IRMutator::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
     vector<Expr> extra_args;
+
 public:
     LowerRandom(const vector<string> &free_vars, int tag) {
         extra_args.push_back(tag);
@@ -130,5 +131,5 @@ Expr lower_random(Expr e, const vector<string> &free_vars, int tag) {
     return r.mutate(e);
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

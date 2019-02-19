@@ -1,11 +1,13 @@
-#include <stdio.h>
 #include "Halide.h"
+#include <stdio.h>
 #include <time.h>
 #include <random>
 
 // Test the simplifier in Halide by testing for equivalence of randomly generated expressions.
+namespace {
 
-using namespace std;
+using std::map;
+using std::string;
 using namespace Halide;
 using namespace Halide::Internal;
 
@@ -89,6 +91,12 @@ Expr random_condition(Type T, int depth, bool maybe_scalar) {
     return make_bin_op[op](a, b);
 }
 
+Expr make_absd(Expr a, Expr b) {
+    // random_expr() assumes that the result type is the same as the input type,
+    // which isn't true for all absd variants, so force the issue.
+    return cast(a.type(), absd(a, b));
+}
+
 Expr random_expr(Type T, int depth, bool overflow_undef) {
     typedef Expr (*make_bin_op_fn)(Expr, Expr);
     static make_bin_op_fn make_bin_op[] = {
@@ -99,6 +107,7 @@ Expr random_expr(Type T, int depth, bool overflow_undef) {
         Max::make,
         Div::make,
         Mod::make,
+        make_absd
      };
 
     static make_bin_op_fn make_bool_bin_op[] = {
@@ -257,6 +266,8 @@ Expr b(Variable::make(Int(0), fuzz_var(1)));
 Expr c(Variable::make(Int(0), fuzz_var(2)));
 Expr d(Variable::make(Int(0), fuzz_var(3)));
 Expr e(Variable::make(Int(0), fuzz_var(4)));
+
+}  // namespace
 
 int main(int argc, char **argv) {
     // Number of random expressions to test.

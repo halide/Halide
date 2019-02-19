@@ -6,7 +6,10 @@
  * sequences of aligned loads.
  */
 #include "IR.h"
+#include "ModulusRemainder.h"
+#include "Scope.h"
 #include "Target.h"
+
 namespace Halide {
 namespace Internal {
 
@@ -16,7 +19,7 @@ namespace Internal {
  * vectors. */
 Stmt align_loads(Stmt s, int alignment);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

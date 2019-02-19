@@ -11,6 +11,8 @@ extern "C" {
  *  Routines specific to the Halide Metal runtime.
  */
 
+#define HALIDE_RUNTIME_METAL
+
 extern const struct halide_device_interface_t *halide_metal_device_interface();
 
 /** These are forward declared here to allow clients to override the
@@ -59,13 +61,16 @@ extern int halide_metal_detach_buffer(void *user_context, struct halide_buffer_t
  */
 extern uintptr_t halide_metal_get_buffer(void *user_context, struct halide_buffer_t *buf);
 
+/** Returns the offset associated with the Metal Buffer allocation via device_crop or device_slice. */
+extern uint64_t halide_metal_get_crop_offset(void *user_context, struct halide_buffer_t *buf);
+
 struct halide_metal_device;
 struct halide_metal_command_queue;
 
 /** This prototype is exported as applications will typically need to
  * replace it to get Halide filters to execute on the same device and
  * command queue used for other purposes. The halide_metal_device is an
- * id <MTLDevice> and halide_metal_command_queue is an id <MTLCommandQueue>.
+ * id \<MTLDevice\> and halide_metal_command_queue is an id \<MTLCommandQueue\>.
  * No reference counting is done by Halide on these objects. They must remain
  * valid until all off the following are true:
  * - A balancing halide_metal_release_context has occurred for each

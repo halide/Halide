@@ -4,14 +4,14 @@ option(WITH_TEST_ERROR "Build error tests" ON)
 option(WITH_TEST_WARNING "Build warning tests" ON)
 option(WITH_TEST_PERFORMANCE "Build performance tests" ON)
 option(WITH_TEST_OPENGL "Build OpenGL tests" ON)
-option(WITH_TEST_GENERATORS "Build Generator tests" ON)
+option(WITH_TEST_GENERATOR "Build Generator tests" ON)
 option(WITH_TEST_AUTO_SCHEDULE "Build auto_schedule tests" ON)
 
 if (WITH_TEST_INTERNAL)
   message(STATUS "Internal tests enabled")
-  halide_project(_test_internal internal internal.cpp)
-  add_to_group(build_internal _test_internal BUILD)
-  add_to_group(test_internal _test_internal EXECUTE)
+  halide_project(test_internal internal internal.cpp)
+  add_test(test_internal
+           GROUPS run_tests)
 else()
   message(WARNING "Internal tests disabled")
 endif()
@@ -31,23 +31,28 @@ function(tests folder)
   foreach(file ${TESTS})
     string(REPLACE ".cpp" "" name "${file}")
 
-    set(TARGET "build_${folder}_${name}")
-    halide_project("${TARGET}" "${folder}" "${folder}/${file}")
+    set(TARGET "${folder}_${name}")
     list(APPEND TEST_NAMES "${TARGET}")
+
+    halide_project("${TARGET}" "${folder}" "${folder}/${file}")
     target_include_directories("${TARGET}" PRIVATE "${CMAKE_SOURCE_DIR}")
     target_compile_definitions("${TARGET}"  PRIVATE "-DLLVM_VERSION=${LLVM_VERSION}")
 
-    add_to_group(build_tests "${TARGET}" BUILD)
-    if("${folder}" STREQUAL "error")
-      set(EXPECT_FAILURE "${CMAKE_CURRENT_SOURCE_DIR}/common/expect_failure.sh")
-      add_custom_target("${folder}_${name}"
-                        COMMAND "${EXPECT_FAILURE}" "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${TARGET}"
-                        DEPENDS "${TARGET}")
-      add_dependencies("${folder}_${name}" "${TARGET}")
+    set(GROUPS "test_${folder}")
+    if("${folder}" STREQUAL "performance" OR "${folder}" STREQUAL "auto_schedule")
+      # These shouldn't be part of run_tests, since they must be run with -j for timing purposes
     else()
-      add_to_group(${folder}_${name} "${TARGET}" EXECUTE)
+      list(APPEND GROUPS run_tests)
     endif()
-    add_to_group(test_${folder} "${folder}_${name}" EXECUTE)
+    if("${folder}" STREQUAL "error")
+      add_test("${TARGET}"
+               GROUPS ${GROUPS}
+               EXPECT_FAILURE)
+    else()
+      add_test("${TARGET}"
+               GROUPS ${GROUPS})
+    endif()
+
   endforeach()
   set(TEST_NAMES "${TEST_NAMES}" PARENT_SCOPE)
 endfunction(tests)
@@ -57,7 +62,7 @@ if (WITH_TEST_AUTO_SCHEDULE)
 endif()
 if (WITH_TEST_CORRECTNESS)
   tests(correctness)
-  halide_use_image_io(build_correctness_image_io)
+  halide_use_image_io(correctness_image_io)
   test_plain_c_includes()
 endif()
 if (WITH_TEST_ERROR)
@@ -70,6 +75,9 @@ if (WITH_TEST_PERFORMANCE)
   tests(performance)
 endif()
 if (WITH_TEST_OPENGL)
+  # Use vendor libraries even when legacy libs are also available
+  # see: https://cmake.org/cmake/help/git-stage/policy/CMP0072.html
+  set(OpenGL_GL_PREFERENCE GLVND)
   find_package(OpenGL)
   if (OpenGL_FOUND)
     tests(opengl)
@@ -79,7 +87,7 @@ if (WITH_TEST_OPENGL)
   endif()
 endif()
 
-if (WITH_TEST_GENERATORS)
+if (WITH_TEST_GENERATOR)
 
   set(GEN_TEST_DIR "${CMAKE_CURRENT_SOURCE_DIR}/generator")
 
@@ -90,13 +98,10 @@ if (WITH_TEST_GENERATORS)
     cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
     set(TARGET "generator_aot_${NAME}")
-
     add_executable("${TARGET}" "${GEN_TEST_DIR}/${NAME}_aottest.cpp")
-    add_to_group(build_tests "${TARGET}" BUILD)
-    add_to_group(test_generators "${TARGET}" EXECUTE)
-    target_include_directories("${TARGET}" PRIVATE 
-                               "${CMAKE_SOURCE_DIR}/tools" 
-                               "${CMAKE_SOURCE_DIR}" 
+    target_include_directories("${TARGET}" PRIVATE
+                               "${CMAKE_SOURCE_DIR}/tools"
+                               "${CMAKE_SOURCE_DIR}"
                                "${CMAKE_SOURCE_DIR}/src/runtime")
 
     if (NOT ${args_OMIT_DEFAULT_GENERATOR})
@@ -109,6 +114,9 @@ if (WITH_TEST_GENERATORS)
                              FILTER_DEPS "${args_FILTER_DEPS}")
       target_link_libraries("${TARGET}" PUBLIC "${NAME}")
     endif()
+
+    add_test("${TARGET}"
+             GROUPS test_generator run_tests)
   endfunction(halide_define_aot_test)
 
   # Find all the files of form "foo_generator.cpp" in test/generator
@@ -171,12 +179,11 @@ if (WITH_TEST_GENERATORS)
   file(GLOB JITTEST_SRCS RELATIVE "${GEN_TEST_DIR}" "${GEN_TEST_DIR}/*_jittest.cpp")
   foreach(FILE ${JITTEST_SRCS})
     string(REPLACE "_jittest.cpp" "" NAME "${FILE}")
-    halide_project("generator_jit_${NAME}"
-                   "generator"
-                   "${GEN_TEST_DIR}/${FILE}")
-    target_link_libraries("generator_jit_${NAME}" PRIVATE "${NAME}.generator")
-    add_to_group(build_tests "generator_jit_${NAME}" BUILD)
-    add_to_group(test_generators "generator_jit_${NAME}" EXECUTE)
+    set(TARGET "generator_jit_${NAME}")
+    halide_project("${TARGET}" "generator" "${GEN_TEST_DIR}/${FILE}")
+    target_link_libraries("${TARGET}" PRIVATE "${NAME}.generator")
+    add_test("${TARGET}"
+             GROUPS test_generator run_tests)
   endforeach()
 
   # ------ Generator tests for ahead-of-time mode: ------
@@ -190,9 +197,9 @@ if (WITH_TEST_GENERATORS)
   #   set(TARGET )
 
   #   add_executable("generator_aot_${NAME}" "${GEN_TEST_DIR}/${FILE}")
-  #   target_include_directories("generator_aot_${NAME}" PRIVATE 
-  #                              "${CMAKE_SOURCE_DIR}" 
-  #                              "${CMAKE_SOURCE_DIR}/tools" 
+  #   target_include_directories("generator_aot_${NAME}" PRIVATE
+  #                              "${CMAKE_SOURCE_DIR}"
+  #                              "${CMAKE_SOURCE_DIR}/tools"
   #                              "${CMAKE_SOURCE_DIR}/src/runtime")
 
   #   if (NOT ${args_OMIT_DEFAULT_GENERATOR})
@@ -226,7 +233,6 @@ if (WITH_TEST_GENERATORS)
   halide_define_aot_test(mandelbrot)
   halide_define_aot_test(stubuser)
   halide_define_aot_test(variable_num_threads)
-  halide_define_aot_test(old_buffer_t)
   halide_define_aot_test(output_assign)
   halide_define_aot_test(external_code)
 
@@ -248,7 +254,7 @@ if (WITH_TEST_GENERATORS)
   halide_define_aot_test(user_context_insanity
                          HALIDE_TARGET_FEATURES user_context)
 
-  add_library(cxx_mangling_externs 
+  add_library(cxx_mangling_externs
               "${GEN_TEST_DIR}/cxx_mangling_externs.cpp")
 
   halide_define_aot_test(cxx_mangling
@@ -281,6 +287,9 @@ if (WITH_TEST_GENERATORS)
                            HALIDE_TARGET_FEATURES debug)
   # endif()
 
+  halide_define_aot_test(old_buffer_t
+                         HALIDE_TARGET_FEATURES legacy_buffer_wrappers)
+
   halide_define_aot_test(pyramid
                          GENERATOR_ARGS levels=10)
 
@@ -290,9 +299,6 @@ if (WITH_TEST_GENERATORS)
   # stubtest has input and output funcs with undefined types; this is fine for stub
   # usage (the types can be inferred), but for AOT compilation, we must make the types
   # concrete via generator args.
-  #
-  # Also note that setting 'vectorize=true' is redundant (that's the default), but verifies
-  # that setting ScheduleParam via generator_args works properly.
   set(STUBTEST_GENERATOR_ARGS
       untyped_buffer_input.type=uint8 untyped_buffer_input.dim=3
       simple_input.type=float32
@@ -307,7 +313,6 @@ if (WITH_TEST_GENERATORS)
   # Tests that require additional dependencies, args, etc
   set(MDTEST_GEN_ARGS
       input.type=uint8 input.dim=3
-      type_only_input_buffer.dim=3
       dim_only_input_buffer.type=uint8
       untyped_input_buffer.type=uint8 untyped_input_buffer.dim=3
       output.type=float32,float32 output.dim=3
@@ -319,7 +324,22 @@ if (WITH_TEST_GENERATORS)
       array_i16.size=2
       array_i32.size=2
       array_h.size=2
+      buffer_array_input2.dim=3
+      buffer_array_input3.type=float32
+      buffer_array_input4.dim=3
+      buffer_array_input4.type=float32
+      buffer_array_input5.size=2
+      buffer_array_input6.size=2
+      buffer_array_input6.dim=3
+      buffer_array_input7.size=2
+      buffer_array_input7.type=float32
+      buffer_array_input8.size=2
+      buffer_array_input8.dim=3
+      buffer_array_input8.type=float32
       array_outputs.size=2
+      array_outputs7.size=2
+      array_outputs8.size=2
+      array_outputs9.size=2
   )
   halide_define_aot_test(metadata_tester
                          GENERATOR_ARGS "${MDTEST_GEN_ARGS}")
@@ -330,11 +350,18 @@ if (WITH_TEST_GENERATORS)
                                 EXTRA_OUTPUTS stmt assembly)
   target_link_libraries(generator_aot_metadata_tester PUBLIC metadata_tester_ucon)
 
+  # Needs an extra library from this Generator
+  halide_define_aot_test(alias)
+  halide_library(alias_with_offset_42
+                 SRCS ${GEN_TEST_DIR}/alias_generator.cpp
+                 GENERATOR_NAME alias_with_offset_42)
+  target_link_libraries(generator_aot_alias PUBLIC alias_with_offset_42)
+
   halide_define_aot_test(tiled_blur)
   halide_library_from_generator(blur2x2)
   target_link_libraries(generator_aot_tiled_blur PUBLIC blur2x2)
 
-  add_library(cxx_mangling_define_extern_externs 
+  add_library(cxx_mangling_define_extern_externs
               "${GEN_TEST_DIR}/cxx_mangling_define_extern_externs.cpp")
   target_link_libraries(cxx_mangling_define_extern_externs PUBLIC cxx_mangling_externs cxx_mangling)
 

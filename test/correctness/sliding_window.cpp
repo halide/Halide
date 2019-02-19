@@ -1,5 +1,5 @@
-#include <stdio.h>
 #include "Halide.h"
+#include <stdio.h>
 
 using namespace Halide;
 
@@ -173,6 +173,25 @@ int main(int argc, char **argv) {
         // f should be able to tell that it only needs to compute each value once
         if (count != 6) {
             printf("f was called %d times instead of %d times\n", count, 6);
+            return -1;
+        }
+    }
+
+    {
+        // Sliding where we only need a new value every third iteration of the consumer.
+        Func f, g;
+
+        f(x) = call_counter(x, 0);
+        g(x) = f(x/3);
+
+        f.store_root().compute_at(g, x);
+
+        count = 0;
+        Buffer<int> im = g.realize(100);
+
+        // f should be able to tell that it only needs to compute each value once
+        if (count != 34) {
+            printf("f was called %d times instead of %d times\n", count, 34);
             return -1;
         }
     }

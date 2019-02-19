@@ -31,25 +31,21 @@ public:
             outputs.insert(f.name());
         }
     }
-    Scope<int> scope;
 private:
     const map<string, pair<Function, int>> &env;
     set<string> outputs;
     const Target &target;
-    Scope<int> realizations, shader_scope_realizations;
+    Scope<> realizations, shader_scope_realizations;
     bool in_shader = false;
 
     Expr make_shape_var(string name, string field, size_t dim,
                         const Buffer<> &buf, const Parameter &param) {
         ReductionDomain rdom;
         name = name + "." + field + "." + std::to_string(dim);
-        if (scope.contains(name + ".constrained")) {
-            name = name + ".constrained";
-        }
         return Variable::make(Int(32), name, buf, param, rdom);
     }
 
-    Expr flatten_args(const string &name, const vector<Expr> &args,
+    Expr flatten_args(const string &name, vector<Expr> args,
                       const Buffer<> &buf, const Parameter &param) {
         bool internal = realizations.contains(name);
         Expr idx = target.has_large_buffers() ? make_zero(Int(64)) : 0;
@@ -58,18 +54,30 @@ private:
         for (size_t i = 0; i < args.size(); i++) {
             strides[i] = make_shape_var(name, "stride", i, buf, param);
             mins[i] = make_shape_var(name, "min", i, buf, param);
+            if (target.has_large_buffers()) {
+                strides[i] = cast<int64_t>(strides[i]);
+            }
+        }
+
+        Expr zero = target.has_large_buffers() ? make_zero(Int(64)) : 0;
+
+        // We peel off constant offsets so that multiple stencil
+        // taps can share the same base address.
+        Expr constant_term = zero;
+        for (size_t i = 0; i < args.size(); i++) {
+            const Add *add = args[i].as<Add>();
+            if (add && is_const(add->b)) {
+                constant_term += strides[i] * add->b;
+                args[i] = add->a;
+            }
         }
 
         if (internal) {
             // f(x, y) -> f[(x-xmin)*xstride + (y-ymin)*ystride] This
             // strategy makes sense when we expect x to cancel with
-            // something in xmin.  We use this for internal allocations
+            // something in xmin.  We use this for internal allocations.
             for (size_t i = 0; i < args.size(); i++) {
-                if (target.has_large_buffers()) {
-                    idx += cast<int64_t>(args[i] - mins[i]) * cast<int64_t>(strides[i]);
-                } else {
-                    idx += (args[i] - mins[i]) * strides[i];
-                }
+                idx += (args[i] - mins[i]) * strides[i];
             }
         } else {
             // f(x, y) -> f[x*stride + y*ystride - (xstride*xmin +
@@ -77,17 +85,16 @@ private:
             // will be pulled outside the inner loop. We use this for
             // external buffers, where the mins and strides are likely
             // to be symbolic
-            Expr base = target.has_large_buffers() ? make_zero(Int(64)) : 0;
+            Expr base = zero;
             for (size_t i = 0; i < args.size(); i++) {
-                if (target.has_large_buffers()) {
-                    idx += cast<int64_t>(args[i]) * cast<int64_t>(strides[i]);
-                    base += cast<int64_t>(mins[i]) * cast<int64_t>(strides[i]);
-                } else {
-                    idx += args[i] * strides[i];
-                    base += mins[i] * strides[i];
-                }
+                idx += args[i] * strides[i];
+                base += mins[i] * strides[i];
             }
             idx -= base;
+        }
+
+        if (!is_zero(constant_term)) {
+            idx += constant_term;
         }
 
         return idx;
@@ -95,11 +102,11 @@ private:
 
     using IRMutator::visit;
 
-    void visit(const Realize *op) {
-        realizations.push(op->name, 0);
+    Stmt visit(const Realize *op) override {
+        realizations.push(op->name);
 
         if (in_shader) {
-            shader_scope_realizations.push(op->name, 0);
+            shader_scope_realizations.push(op->name);
         }
 
         Stmt body = mutate(op->body);
@@ -148,7 +155,7 @@ private:
 
         internal_assert(storage_permutation.size() == op->bounds.size());
 
-        stmt = body;
+        Stmt stmt = body;
         internal_assert(op->types.size() == 1);
 
         // Make the names for the mins, extents, and strides
@@ -180,7 +187,7 @@ private:
         stmt = LetStmt::make(op->name + ".buffer", builder.build(), stmt);
 
         // Make the allocation node
-        stmt = Allocate::make(op->name, op->types[0], allocation_extents, condition, stmt);
+        stmt = Allocate::make(op->name, op->types[0], op->memory_type, allocation_extents, condition, stmt);
 
         // Compute the strides
         for (int i = (int)op->bounds.size()-1; i > 0; i--) {
@@ -201,9 +208,10 @@ private:
             stmt = LetStmt::make(min_name[i-1], op->bounds[i-1].min, stmt);
             stmt = LetStmt::make(extent_name[i-1], extents[i-1], stmt);
         }
+        return stmt;
     }
 
-    void visit(const Provide *op) {
+    Stmt visit(const Provide *op) override {
         internal_assert(op->values.size() == 1);
 
         Parameter output_buf;
@@ -234,14 +242,14 @@ private:
                 value};
             Expr store = Call::make(value.type(), Call::image_store,
                                     args, Call::Intrinsic);
-            stmt = Evaluate::make(store);
+            return Evaluate::make(store);
         } else {
             Expr idx = mutate(flatten_args(op->name, op->args, Buffer<>(), output_buf));
-            stmt = Store::make(op->name, value, idx, output_buf, const_true(value.type().lanes()));
+            return Store::make(op->name, value, idx, output_buf, const_true(value.type().lanes()), ModulusRemainder());
         }
     }
 
-    void visit(const Call *op) {
+    Expr visit(const Call *op) override {
         if (op->call_type == Call::Halide ||
             op->call_type == Call::Image) {
 
@@ -271,7 +279,7 @@ private:
                     args.push_back(1);
                 }
 
-                expr = Call::make(op->type,
+                return Call::make(op->type,
                                   Call::image_load,
                                   args,
                                   Call::PureIntrinsic,
@@ -281,18 +289,20 @@ private:
                                   op->param);
             } else {
                 Expr idx = mutate(flatten_args(op->name, op->args, op->image, op->param));
-                expr = Load::make(op->type, op->name, idx, op->image, op->param,
-                                  const_true(op->type.lanes()));
+                return Load::make(op->type, op->name, idx, op->image, op->param,
+                                  const_true(op->type.lanes()), ModulusRemainder());
             }
 
         } else {
-            IRMutator::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
-    void visit(const Prefetch *op) {
+    Stmt visit(const Prefetch *op) override {
         internal_assert(op->types.size() == 1)
             << "Prefetch from multi-dimensional halide tuple should have been split\n";
+
+        Expr condition = mutate(op->condition);
 
         vector<Expr> prefetch_min(op->bounds.size());
         vector<Expr> prefetch_extent(op->bounds.size());
@@ -300,10 +310,10 @@ private:
         for (size_t i = 0; i < op->bounds.size(); i++) {
             prefetch_min[i] = mutate(op->bounds[i].min);
             prefetch_extent[i] = mutate(op->bounds[i].extent);
-            prefetch_stride[i] = Variable::make(Int(32), op->name + ".stride." + std::to_string(i), op->param);
+            prefetch_stride[i] = Variable::make(Int(32), op->name + ".stride." + std::to_string(i), op->prefetch.param);
         }
 
-        Expr base_offset = mutate(flatten_args(op->name, prefetch_min, Buffer<>(), op->param));
+        Expr base_offset = mutate(flatten_args(op->name, prefetch_min, Buffer<>(), op->prefetch.param));
         Expr base_address = Variable::make(Handle(), op->name);
         vector<Expr> args = {base_address, base_offset};
 
@@ -339,32 +349,24 @@ private:
             }
         }
 
-        stmt = Evaluate::make(Call::make(op->types[0], Call::prefetch, args, Call::Intrinsic));
+        Stmt prefetch_call = Evaluate::make(Call::make(op->types[0], Call::prefetch, args, Call::Intrinsic));
+        if (!is_one(condition)) {
+            prefetch_call = IfThenElse::make(condition, prefetch_call);
+        }
+        Stmt body = mutate(op->body);
+        return Block::make(prefetch_call, body);
     }
 
-    void visit(const LetStmt *let) {
-        // Discover constrained versions of things.
-        bool constrained_version_exists = ends_with(let->name, ".constrained");
-        if (constrained_version_exists) {
-            scope.push(let->name, 0);
-        }
-
-        IRMutator::visit(let);
-
-        if (constrained_version_exists) {
-            scope.pop(let->name);
-        }
-    }
-
-    void visit(const For *loop) {
+    Stmt visit(const For *op) override {
         bool old_in_shader = in_shader;
-        if ((loop->for_type == ForType::GPUBlock ||
-             loop->for_type == ForType::GPUThread) &&
-            loop->device_api == DeviceAPI::GLSL) {
+        if ((op->for_type == ForType::GPUBlock ||
+             op->for_type == ForType::GPUThread) &&
+            op->device_api == DeviceAPI::GLSL) {
             in_shader = true;
         }
-        IRMutator::visit(loop);
+        Stmt stmt = IRMutator::visit(op);
         in_shader = old_in_shader;
+        return stmt;
     }
 
 };
@@ -378,38 +380,39 @@ class PromoteToMemoryType : public IRMutator {
         return t.with_bits(((t.bits() + 7)/8)*8);
     }
 
-    void visit(const Load *op) {
+    Expr visit(const Load *op) override {
         Type t = upgrade(op->type);
         if (t != op->type) {
-            expr = Cast::make(op->type, Load::make(t, op->name, mutate(op->index),
-                                                   op->image, op->param, mutate(op->predicate)));
+            return Cast::make(op->type,
+                              Load::make(t, op->name, mutate(op->index),
+                                         op->image, op->param, mutate(op->predicate), ModulusRemainder()));
         } else {
-            IRMutator::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
-    void visit(const Store *op) {
+    Stmt visit(const Store *op) override {
         Type t = upgrade(op->value.type());
         if (t != op->value.type()) {
-            stmt = Store::make(op->name, Cast::make(t, mutate(op->value)), mutate(op->index),
-                                                    op->param, mutate(op->predicate));
+            return Store::make(op->name, Cast::make(t, mutate(op->value)), mutate(op->index),
+                               op->param, mutate(op->predicate), ModulusRemainder());
         } else {
-            IRMutator::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
-    void visit(const Allocate *op) {
+    Stmt visit(const Allocate *op) override {
         Type t = upgrade(op->type);
         if (t != op->type) {
             vector<Expr> extents;
             for (Expr e : op->extents) {
                 extents.push_back(mutate(e));
             }
-            stmt = Allocate::make(op->name, t, extents,
+            return Allocate::make(op->name, t, op->memory_type, extents,
                                   mutate(op->condition), mutate(op->body),
                                   mutate(op->new_expr), op->free_function);
         } else {
-            IRMutator::visit(op);
+            return IRMutator::visit(op);
         }
     }
 };

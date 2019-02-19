@@ -1,8 +1,8 @@
+#include "Halide.h"
 #include <algorithm>
 #include <future>
-#include <stdio.h>
 
-#include "Halide.h"
+#include <cstdio>
 
 using namespace Halide;
 using namespace Halide::BoundaryConditions;
@@ -377,7 +377,8 @@ int main(int argc, char **argv) {
     Halide::Internal::ThreadPool<bool> pool;
     std::vector<std::future<bool>> futures;
     int vector_width_max = 32;
-    if (target.has_feature(Target::Metal)) {
+    if (target.has_feature(Target::Metal) ||
+        target.has_feature(Target::D3D12Compute)) {
         // https://github.com/halide/Halide/issues/2148
         vector_width_max = 4;
     }

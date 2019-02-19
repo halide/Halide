@@ -12,6 +12,29 @@
 #include "gpu_only.h"
 using namespace Halide::Runtime;
 
+#if defined(TEST_OPENCL)
+
+#if !defined(HALIDE_RUNTIME_OPENCL)
+#error "TEST_OPENCL defined but HALIDE_RUNTIME_OPENCL not defined"
+#endif
+
+#elif defined(TEST_CUDA)
+
+#if !defined(HALIDE_RUNTIME_CUDA)
+#error "TEST_CUDA defined but HALIDE_RUNTIME_CUDA not defined"
+#endif
+
+#else
+
+#if defined(HALIDE_RUNTIME_OPENCL)
+#error "TEST_OPENCL not defined but HALIDE_RUNTIME_OPENCL defined"
+#endif
+#if defined(HALIDE_RUNTIME_CUDA)
+#error "TEST_CUDA not defined but HALIDE_RUNTIME_CUDA defined"
+#endif
+
+#endif
+
 int main(int argc, char **argv) {
 #if defined(TEST_OPENCL) || defined(TEST_CUDA)
     const int W = 32, H = 32;

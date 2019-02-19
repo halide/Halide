@@ -8,34 +8,43 @@
 #include "old_buffer_t.h"
 #include <assert.h>
 
+int &get_pixel(halide_buffer_t *buf, int x, int y) {
+    return *((int *)(buf->host) +
+             (x - buf->dim[0].min) * buf->dim[0].stride +
+             (y - buf->dim[1].min) * buf->dim[1].stride);
+}
+
 int &get_pixel(buffer_t *buf, int x, int y) {
     return *((int *)(buf->host) +
              (x - buf->min[0]) * buf->stride[0] +
              (y - buf->min[1]) * buf->stride[1]);
 }
 
-extern "C" int extern_stage(buffer_t *in2, buffer_t *f, buffer_t *out) {
+extern "C" int extern_stage(halide_buffer_t *in2, halide_buffer_t *f, halide_buffer_t *out) {
+    if (in2->dimensions != 2 || f->dimensions != 2 || out->dimensions != 2) {
+        return halide_error_code_bad_dimensions;
+    }
     bool bounds_query = false;
-    if (in2->host == nullptr && in2->dev == 0) {
-        in2->extent[0] = out->extent[0];
-        in2->min[0] = out->min[0];
-        in2->extent[1] = out->extent[1];
-        in2->min[1] = out->min[1] + 7;
+    if (in2->is_bounds_query()) {
+        in2->dim[0].extent = out->dim[0].extent;
+        in2->dim[0].min = out->dim[0].min;
+        in2->dim[1].extent = out->dim[1].extent;
+        in2->dim[1].min = out->dim[1].min + 7;
         bounds_query = true;
     }
-    if (f->host == nullptr && f->dev == 0) {
-        f->extent[0] = out->extent[0];
-        f->min[0] = out->min[0];
-        f->extent[1] = out->extent[1];
-        f->min[1] = out->min[1];
+    if (f->is_bounds_query()) {
+        f->dim[0].extent = out->dim[0].extent;
+        f->dim[0].min = out->dim[0].min;
+        f->dim[1].extent = out->dim[1].extent;
+        f->dim[1].min = out->dim[1].min;
         bounds_query = true;
     }
     if (bounds_query) {
         return 0;
     }
-    halide_copy_to_host_legacy(nullptr, f);
-    for (int y = out->min[1]; y < out->min[1] + out->extent[1]; y++) {
-        for (int x = out->min[0]; x < out->min[0] + out->extent[0]; x++) {
+    halide_copy_to_host(nullptr, f);
+    for (int y = out->dim[1].min; y < out->dim[1].min + out->dim[1].extent; y++) {
+        for (int x = out->dim[0].min; x < out->dim[0].min + out->dim[0].extent; x++) {
             get_pixel(out, x, y) = get_pixel(in2, x, y + 7) + get_pixel(f, x, y);
         }
     }

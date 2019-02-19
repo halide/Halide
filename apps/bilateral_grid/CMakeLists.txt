@@ -11,6 +11,6 @@ foreach(AUTO_SCHEDULE false true)
     halide_library_from_generator(${LIB}
                                   GENERATOR bilateral_grid.generator
                                   GENERATOR_ARGS auto_schedule=${AUTO_SCHEDULE}
-                                  EXTRA_OUTPUTS stmt assembly)
+                                  EXTRA_OUTPUTS stmt schedule)
     target_link_libraries(bilateral_grid_process PRIVATE ${LIB})
 endforeach()

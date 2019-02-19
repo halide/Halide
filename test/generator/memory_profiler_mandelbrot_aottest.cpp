@@ -10,6 +10,9 @@
 #include "memory_profiler_mandelbrot.h"
 
 using namespace Halide::Runtime;
+
+namespace {
+
 using std::map;
 using std::string;
 
@@ -31,8 +34,6 @@ const int x_niters = (width + tile_x - 1)/tile_x;
 const int mandelbrot_n_mallocs = 2 * y_niters * x_niters * num_launcher_tasks;
 const uint64_t mandelbrot_heap_per_iter = 2*tile_x*tile_y*4*(iters+1); // Heap per iter for one task
 const uint64_t mandelbrot_heap_total = mandelbrot_heap_per_iter * y_niters * x_niters * num_launcher_tasks;
-
-int stack_size = vectorize*sizeof(uint8_t) + vectorize*sizeof(int32_t);
 
 void validate(halide_profiler_state *s) {
     for (halide_profiler_pipeline_stats *p = s->pipelines; p;
@@ -67,6 +68,8 @@ int launcher_task(void *user_context, int index, uint8_t *closure) {
 
     return 0;
 }
+
+}  // namespace
 
 int main(int argc, char **argv) {
     // Hijack halide's runtime to run a bunch of instances of this function

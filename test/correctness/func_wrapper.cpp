@@ -4,6 +4,8 @@
 #include <stdio.h>
 #include <map>
 
+namespace {
+
 using std::map;
 using std::string;
 
@@ -569,6 +571,8 @@ int multi_folds_wrapper_test() {
     }
     return 0;
 }
+
+}  // namespace
 
 int main(int argc, char **argv) {
     printf("Running calling wrap no op test\n");

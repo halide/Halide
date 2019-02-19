@@ -1,4 +1,3 @@
-#!/usr/bin/python3
 """
 Fast image interpolation using a pyramid.
 """
@@ -7,46 +6,46 @@ from __future__ import print_function
 from __future__ import division
 
 import time, sys
-from halide import *
+import halide as hl
 
 from datetime import datetime
 from scipy.misc import imread, imsave
 import numpy as np
 import os.path
 
-int_t = Int(32)
-float_t = Float(32)
+int_t = hl.Int(32)
+float_t = hl.Float(32)
 
 def get_interpolate(input, levels):
     """
     Build function, schedules it, and invokes jit compiler
-    :return: halide.Func
+    :return: halide.hl.Func
     """
 
     # THE ALGORITHM
 
-    downsampled = [Func('downsampled%d'%i) for i in range(levels)]
-    downx = [Func('downx%d'%l) for l in range(levels)]
-    interpolated = [Func('interpolated%d'%i) for i in range(levels)]
-#     level_widths = [Param(int_t,'level_widths%d'%i) for i in range(levels)]
-#     level_heights = [Param(int_t,'level_heights%d'%i) for i in range(levels)]
-    upsampled = [Func('upsampled%d'%l) for l in range(levels)]
-    upsampledx = [Func('upsampledx%d'%l) for l in range(levels)]
-    x = Var('x')
-    y = Var('y')
-    c = Var('c')
+    downsampled = [hl.Func('downsampled%d'%i) for i in range(levels)]
+    downx = [hl.Func('downx%d'%l) for l in range(levels)]
+    interpolated = [hl.Func('interpolated%d'%i) for i in range(levels)]
+#     level_widths = [hl.Param(int_t,'level_widths%d'%i) for i in range(levels)]
+#     level_heights = [hl.Param(int_t,'level_heights%d'%i) for i in range(levels)]
+    upsampled = [hl.Func('upsampled%d'%l) for l in range(levels)]
+    upsampledx = [hl.Func('upsampledx%d'%l) for l in range(levels)]
+    x = hl.Var('x')
+    y = hl.Var('y')
+    c = hl.Var('c')
 
-    clamped = Func('clamped')
-    clamped[x, y, c] = input[clamp(x, 0, input.width()-1), clamp(y, 0, input.height()-1), c]
+    clamped = hl.Func('clamped')
+    clamped[x, y, c] = input[hl.clamp(x, 0, input.width()-1), hl.clamp(y, 0, input.height()-1), c]
 
     # This triggers a bug in llvm 3.3 (3.2 and trunk are fine), so we
     # rewrite it in a way that doesn't trigger the bug. The rewritten
     # form assumes the input alpha is zero or one.
-    # downsampled[0][x, y, c] = select(c < 3, clamped[x, y, c] * clamped[x, y, 3], clamped[x, y, 3])
+    # downsampled[0][x, y, c] = hl.select(c < 3, clamped[x, y, c] * clamped[x, y, 3], clamped[x, y, 3])
     downsampled[0][x,y,c] = clamped[x, y, c] * clamped[x, y, 3]
 
     for l in range(1, levels):
-        prev = Func()
+        prev = hl.Func()
         prev = downsampled[l-1]
 
         if l == 4:
@@ -56,7 +55,7 @@ def get_interpolate(input, levels):
             # pixels off each edge.
             w = input.width()/(1 << l)
             h = input.height()/(1 << l)
-            prev = lambda3D(x, y, c, prev[clamp(x, 0, w), clamp(y, 0, h), c])
+            prev = hl.lambda_func(x, y, c, prev[hl.clamp(x, 0, w), hl.clamp(y, 0, h), c])
 
         downx[l][x,y,c] = (prev[x*2-1,y,c] + 2.0 * prev[x*2,y,c] + prev[x*2+1,y,c]) * 0.25
         downsampled[l][x,y,c] = (downx[l][x,y*2-1,c] + 2.0 * downx[l][x,y*2,c] + downx[l][x,y*2+1,c]) * 0.25
@@ -68,10 +67,10 @@ def get_interpolate(input, levels):
         upsampled[l][x,y,c] = (upsampledx[l][x, y/2, c] + upsampledx[l][x, (y+1)/2, c]) / 2.0
         interpolated[l][x,y,c] = downsampled[l][x,y,c] + (1.0 - downsampled[l][x,y,3]) * upsampled[l][x,y,c]
 
-    normalize = Func('normalize')
+    normalize = hl.Func('normalize')
     normalize[x,y,c] = interpolated[0][x, y, c] / interpolated[0][x, y, 3]
 
-    final = Func('final')
+    final = hl.Func('final')
     final[x,y,c] = normalize[x,y,c]
 
     print("Finished function setup.")
@@ -79,7 +78,7 @@ def get_interpolate(input, levels):
     # THE SCHEDULE
 
     sched = 2
-    target = get_target_from_environment()
+    target = hl.get_target_from_environment()
     if target.has_gpu_feature():
         sched = 4
     else:
@@ -103,7 +102,7 @@ def get_interpolate(input, levels):
 
     elif sched == 2:
         print("Flat schedule with parallelization + vectorization")
-        xi, yi = Var('xi'), Var('yi')
+        xi, yi = hl.Var('xi'), hl.Var('yi')
         clamped.compute_root().parallel(y).bound(c, 0, 4).reorder(c, x, y).reorder_storage(c, x, y).vectorize(c, 4)
         for l in range(1, levels - 1):
             if l > 0:
@@ -120,7 +119,7 @@ def get_interpolate(input, levels):
         print("Flat schedule with vectorization sometimes.")
         for l in range(levels):
             if l + 4 < levels:
-                yo, yi = Var('yo'), Var('yi')
+                yo, yi = hl.Var('yo'), hl.Var('yi')
                 downsampled[l].compute_root().vectorize(x, 4)
                 interpolated[l].compute_root().vectorize(x, 4)
             else:
@@ -134,7 +133,7 @@ def get_interpolate(input, levels):
 
         # Some gpus don't have enough memory to process the entire
         # image, so we process the image in tiles.
-        yo, yi, xo, xi, ci = Var('yo'), Var('yi'), Var('xo'), Var("ci")
+        yo, yi, xo, xi, ci = hl.Var('yo'), hl.Var('yi'), hl.Var('xo'), hl.Var("ci")
         final.reorder(c, x, y).bound(c, 0, 3).vectorize(x, 4)
         final.tile(x, y, xo, yo, xi, yi, input.width()/4, input.height()/4)
         normalize.compute_at(final, xo).reorder(c, x, y).gpu_tile(x, y, xi, yi, 16, 16, GPU_Default).unroll(c)
@@ -172,7 +171,7 @@ def get_input_data():
 
 def main():
 
-    input = ImageParam(float_t, 3, "input")
+    input = hl.ImageParam(float_t, 3, "input")
     levels = 10
 
     interpolate = get_interpolate(input, levels)
@@ -180,7 +179,7 @@ def main():
     # preparing input and output memory buffers (numpy ndarrays)
     input_data = get_input_data()
     assert input_data.shape[2] == 4
-    input_image = Buffer(input_data)
+    input_image = hl.Buffer(input_data)
     input.set(input_image)
 
     input_width, input_height = input_data.shape[:2]
@@ -190,7 +189,7 @@ def main():
     t1 = datetime.now()
     print('Interpolated in %.5f secs' % (t1-t0).total_seconds())
 
-    output_data = buffer_to_ndarray(output_image)
+    output_data = np.array(output_image, copy = False)
 
     # save results
     input_path = "interpolate_input.png"

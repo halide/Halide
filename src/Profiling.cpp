@@ -1,12 +1,12 @@
 #include <algorithm>
+#include <limits>
 #include <map>
 #include <string>
-#include <limits>
 
-#include "Profiling.h"
 #include "CodeGen_Internal.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "Profiling.h"
 #include "Scope.h"
 #include "Simplify.h"
 #include "Substitute.h"
@@ -100,7 +100,7 @@ private:
         return size;
     }
 
-    void visit(const Allocate *op) {
+    Stmt visit(const Allocate *op) override {
         int idx = get_func_id(op->name);
 
         vector<Expr> new_extents;
@@ -130,6 +130,7 @@ private:
 
         Stmt body = mutate(op->body);
         Expr new_expr;
+        Stmt stmt;
         if (op->new_expr.defined()) {
             new_expr = mutate(op->new_expr);
         }
@@ -139,7 +140,8 @@ private:
             new_expr.same_as(op->new_expr)) {
             stmt = op;
         } else {
-            stmt = Allocate::make(op->name, op->type, new_extents, condition, body, new_expr, op->free_function);
+            stmt = Allocate::make(op->name, op->type, op->memory_type,
+                                  new_extents, condition, body, new_expr, op->free_function);
         }
 
         if (!is_zero(size) && !on_stack && profiling_memory) {
@@ -149,16 +151,17 @@ private:
                                        {profiler_pipeline_state, idx, size}, Call::Extern);
             stmt = Block::make(Evaluate::make(set_task), stmt);
         }
+        return stmt;
     }
 
-    void visit(const Free *op) {
+    Stmt visit(const Free *op) override {
         int idx = get_func_id(op->name);
 
         AllocSize alloc = func_alloc_sizes.get(op->name);
         internal_assert(alloc.size.type() == UInt(64));
         func_alloc_sizes.pop(op->name);
 
-        IRMutator::visit(op);
+        Stmt stmt = IRMutator::visit(op);
 
         if (!is_zero(alloc.size)) {
             Expr profiler_pipeline_state = Variable::make(Handle(), "profiler_pipeline_state");
@@ -179,9 +182,10 @@ private:
                          << "; current: " << func_stack_current[idx] << "; peak: " << func_stack_peak[idx] << "\n";
             }
         }
+        return stmt;
     }
 
-    void visit(const ProducerConsumer *op) {
+    Stmt visit(const ProducerConsumer *op) override {
         int idx;
         Stmt body;
         if (op->is_producer) {
@@ -205,10 +209,42 @@ private:
 
         body = Block::make(Evaluate::make(set_task), body);
 
-        stmt = ProducerConsumer::make(op->name, op->is_producer, body);
+        return ProducerConsumer::make(op->name, op->is_producer, body);
     }
 
-    void visit(const For *op) {
+    Stmt incr_active_threads() {
+        Expr state = Variable::make(Handle(), "profiler_state");
+        return Evaluate::make(Call::make(Int(32), "halide_profiler_incr_active_threads",
+                                  {state}, Call::Extern));
+    }
+
+    Stmt decr_active_threads() {
+        Expr state = Variable::make(Handle(), "profiler_state");
+        return Evaluate::make(Call::make(Int(32), "halide_profiler_decr_active_threads",
+                                         {state}, Call::Extern));
+    }
+
+    Stmt visit_parallel_task(Stmt s) {
+        if (const Fork *f = s.as<Fork>()) {
+            return Fork::make(visit_parallel_task(f->first), visit_parallel_task(f->rest));
+        } else if (const Acquire *a = s.as<Acquire>()) {
+            return Acquire::make(a->semaphore, a->count, visit_parallel_task(a->body));
+        } else {
+            return Block::make({incr_active_threads(), mutate(s), decr_active_threads()});
+        }
+    }
+
+    Stmt visit(const Acquire *op) override {
+        Stmt s = visit_parallel_task(op);
+        return Block::make({decr_active_threads(), s, incr_active_threads()});
+    }
+
+    Stmt visit(const Fork *op) override {
+        Stmt s = visit_parallel_task(op);
+        return Block::make({decr_active_threads(), s, incr_active_threads()});
+    }
+
+    Stmt visit(const For *op) override {
         Stmt body = op->body;
 
         // The for loop indicates a device transition or a
@@ -218,16 +254,8 @@ private:
         bool update_active_threads = (op->device_api == DeviceAPI::Hexagon ||
                                       op->is_parallel());
 
-        Expr state = Variable::make(Handle(), "profiler_state");
-        Stmt incr_active_threads =
-            Evaluate::make(Call::make(Int(32), "halide_profiler_incr_active_threads",
-                                      {state}, Call::Extern));
-        Stmt decr_active_threads =
-            Evaluate::make(Call::make(Int(32), "halide_profiler_decr_active_threads",
-                                      {state}, Call::Extern));
-
         if (update_active_threads) {
-            body = Block::make({incr_active_threads, body, decr_active_threads});
+            body = Block::make({incr_active_threads(), body, decr_active_threads()});
         }
 
         // We profile by storing a token to global memory, so don't enter GPU loops
@@ -254,11 +282,12 @@ private:
             body = op->body;
         }
 
-        stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
+        Stmt stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
 
         if (update_active_threads) {
-            stmt = Block::make({decr_active_threads, stmt, incr_active_threads});
+            stmt = Block::make({decr_active_threads(), stmt, incr_active_threads()});
         }
+        return stmt;
     }
 };
 
@@ -313,22 +342,24 @@ Stmt inject_profiling(Stmt s, string pipeline_name) {
         for (int i = num_funcs-1; i >= 0; --i) {
             s = Block::make(Store::make("profiling_func_stack_peak_buf",
                                         make_const(UInt(64), profiling.func_stack_peak[i]),
-                                        i, Parameter(), const_true()), s);
+                                        i, Parameter(), const_true(), ModulusRemainder()), s);
         }
         s = Block::make(s, Free::make("profiling_func_stack_peak_buf"));
-        s = Allocate::make("profiling_func_stack_peak_buf", UInt(64), {num_funcs}, const_true(), s);
+        s = Allocate::make("profiling_func_stack_peak_buf", UInt(64),
+                           MemoryType::Auto, {num_funcs}, const_true(), s);
     }
 
     for (std::pair<string, int> p : profiling.indices) {
-        s = Block::make(Store::make("profiling_func_names", p.first, p.second, Parameter(), const_true()), s);
+        s = Block::make(Store::make("profiling_func_names", p.first, p.second, Parameter(), const_true(), ModulusRemainder()), s);
     }
 
     s = Block::make(s, Free::make("profiling_func_names"));
-    s = Allocate::make("profiling_func_names", Handle(), {num_funcs}, const_true(), s);
+    s = Allocate::make("profiling_func_names", Handle(),
+                       MemoryType::Auto, {num_funcs}, const_true(), s);
     s = Block::make(Evaluate::make(stop_profiler), s);
 
     return s;
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

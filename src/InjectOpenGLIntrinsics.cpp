@@ -1,10 +1,10 @@
 #include "InjectOpenGLIntrinsics.h"
+#include "CodeGen_GPU_Dev.h"
+#include "FuseGPUThreadLoops.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "CodeGen_GPU_Dev.h"
-#include "Substitute.h"
-#include "FuseGPUThreadLoops.h"
 #include "Scope.h"
+#include "Substitute.h"
 
 namespace Halide {
 namespace Internal {
@@ -23,7 +23,7 @@ public:
 private:
     using IRMutator::visit;
 
-    void visit(const Call *call) {
+    Expr visit(const Call *call) override {
         if (call->is_intrinsic(Call::image_load)) {
             vector<Expr> call_args = call->args;
             //
@@ -69,7 +69,7 @@ private:
             Expr c_coordinate = mutate(call_args[2 + 2 * 2]);
             args[4] = c_coordinate;
 
-            expr = Call::make(call->type, Call::glsl_texture_load,
+            return Call::make(call->type, Call::glsl_texture_load,
                               vector<Expr>(&args[0], &args[5]),
                               Call::Intrinsic, FunctionPtr(), 0,
                               call->image, call->param);
@@ -83,10 +83,10 @@ private:
             //    image_store(name, name.buffer, x, y, c, value)
             vector<Expr> args(call->args);
             args[5] = mutate(call->args[5]); // mutate value
-            expr = Call::make(call->type, Call::glsl_texture_store,
+            return Call::make(call->type, Call::glsl_texture_store,
                               args, Call::Intrinsic);
         } else {
-            IRMutator::visit(call);
+            return IRMutator::visit(call);
         }
     }
 };
@@ -96,5 +96,5 @@ Stmt inject_opengl_intrinsics(Stmt s) {
     return gl.mutate(s);
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

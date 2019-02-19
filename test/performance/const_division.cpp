@@ -1,10 +1,15 @@
 #include "Halide.h"
 #include <cstdio>
 #include <cstdint>
+#include <random>
 #include "halide_benchmark.h"
 
 using namespace Halide;
 using namespace Halide::Tools;
+
+// Use std::mt19937 instead of rand() to ensure consistent behavior on all systems.
+// Note that this returns an unsigned result of at-least-32 bits.
+std::mt19937 rng(0);
 
 template<typename T>
 bool test(int w, bool div) {
@@ -33,7 +38,7 @@ bool test(int w, bool div) {
 
     for (int y = 0; y < num_vals; y++) {
         for (int x = 0; x < input.width(); x++) {
-            uint32_t bits = rand() ^ (rand() << 16);
+            uint32_t bits = (uint32_t) rng();
             input(x, y) = (T)bits;
         }
     }
@@ -100,8 +105,9 @@ bool test(int w, bool div) {
 }
 
 int main(int argc, char **argv) {
-
-    srand(time(nullptr));
+    int seed = argc > 1 ? atoi(argv[1]) : time(nullptr);
+    rng.seed(seed);
+    std::cout << "const_division test seed: " << seed << std::endl;
 
     bool success = true;
     for (int i = 0; i < 2; i++) {

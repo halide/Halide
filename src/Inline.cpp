@@ -1,11 +1,11 @@
 #include <set>
 
-#include "Inline.h"
 #include "CSE.h"
-#include "IRPrinter.h"
-#include "IRMutator.h"
-#include "Qualify.h"
 #include "Debug.h"
+#include "IRMutator.h"
+#include "IRPrinter.h"
+#include "Inline.h"
+#include "Qualify.h"
 
 namespace Halide {
 namespace Internal {
@@ -19,7 +19,7 @@ void validate_schedule_inlined_function(Function f) {
     const FuncSchedule &func_s = f.schedule();
     const StageSchedule &stage_s = f.definition().schedule();
 
-    if (!func_s.store_level().is_inline()) {
+    if (!func_s.store_level().is_inlined()) {
         user_error << "Function " << f.name() << " is scheduled to be computed inline, "
                    << "but is not scheduled to be stored inline. A storage schedule "
                    << "is meaningless for functions computed inline.\n";
@@ -96,7 +96,7 @@ class Inliner : public IRMutator {
 
     Function func;
 
-    void visit(const Call *op) {
+    Expr visit(const Call *op) override {
         if (op->name == func.name()) {
 
             // Mutate the args
@@ -116,16 +116,16 @@ class Inliner : public IRMutator {
                 body = Let::make(func.name() + "." + func_args[i], args[i], body);
             }
 
-            expr = body;
+            found++;
 
-            found = true;
+            return body;
 
         } else {
-            IRMutator::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
-    void visit(const Variable *op) {
+    Expr visit(const Variable *op) override {
         if (op->name == func.name() + ".buffer") {
             const Call *call = func.is_wrapper();
             internal_assert(call);
@@ -138,35 +138,33 @@ class Inliner : public IRMutator {
                     buf_name += "." + std::to_string(call->value_index);
                 }
                 buf_name += ".buffer";
-                expr = Variable::make(type_of<halide_buffer_t *>(), buf_name);
+                return Variable::make(type_of<halide_buffer_t *>(), buf_name);
             } else if (call->param.defined()) {
-                expr = Variable::make(type_of<halide_buffer_t *>(), call->name + ".buffer", call->param);
+                return Variable::make(type_of<halide_buffer_t *>(), call->name + ".buffer", call->param);
             } else {
                 internal_assert(call->image.defined());
-                expr = Variable::make(type_of<halide_buffer_t *>(), call->name + ".buffer", call->image);
+                return Variable::make(type_of<halide_buffer_t *>(), call->name + ".buffer", call->image);
             }
         } else {
-            expr = op;
+            return op;
         }
     }
 
-    void visit(const Provide *op) {
-        bool old_found = found;
+    Stmt visit(const Provide *op) override {
+        ScopedValue<int> old_found(found, 0);
+        Stmt stmt = IRMutator::visit(op);
 
-        found = false;
-        IRMutator::visit(op);
-
-        if (found) {
+        if (found > 1) {
             stmt = common_subexpression_elimination(stmt);
         }
 
-        found = old_found;
+        return stmt;
     }
 
 public:
-    bool found;
+    int found = 0;
 
-    Inliner(Function f) : func(f), found(false) {
+    Inliner(Function f) : func(f) {
         internal_assert(f.can_be_inlined()) << "Illegal to inline " << f.name() << "\n";
         validate_schedule_inlined_function(f);
     }
@@ -182,7 +180,7 @@ Stmt inline_function(Stmt s, Function f) {
 Expr inline_function(Expr e, Function f) {
     Inliner i(f);
     e = i.mutate(e);
-    if (i.found) {
+    if (i.found > 1) {
         e = common_subexpression_elimination(e);
     }
     return e;
@@ -203,5 +201,5 @@ void inline_function(Function caller, Function f) {
     }
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

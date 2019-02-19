@@ -11,7 +11,7 @@ class RemoveDeadAllocations : public IRMutator {
 
     Scope<int> allocs;
 
-    void visit(const Call *op) {
+    Expr visit(const Call *op) override {
         if (op->is_extern()) {
             for (size_t i = 0; i < op->args.size(); i++) {
                 const Variable *var = op->args[i].as<Variable>();
@@ -24,45 +24,53 @@ class RemoveDeadAllocations : public IRMutator {
             }
         }
 
-        IRMutator::visit(op);
+        return IRMutator::visit(op);
     }
 
-    void visit(const Load *op) {
+    Expr visit(const Load *op) override {
         if (allocs.contains(op->name)) {
             allocs.pop(op->name);
         }
 
-        IRMutator::visit(op);
+        return IRMutator::visit(op);
     }
 
-    void visit(const Store *op) {
+    Stmt visit(const Store *op) override {
         if (allocs.contains(op->name)) {
             allocs.pop(op->name);
         }
 
-        IRMutator::visit(op);
+        return IRMutator::visit(op);
     }
 
-    void visit(const Allocate *op) {
+    Expr visit(const Variable *op) override {
+        if (allocs.contains(op->name)) {
+            allocs.pop(op->name);
+        }
+        return op;
+    }
+
+    Stmt visit(const Allocate *op) override {
         allocs.push(op->name, 1);
         Stmt body = mutate(op->body);
 
         if (allocs.contains(op->name) && op->free_function.empty()) {
-            stmt = body;
             allocs.pop(op->name);
+            return body;
         } else if (body.same_as(op->body)) {
-            stmt = op;
+            return op;
         } else {
-            stmt = Allocate::make(op->name, op->type, op->extents, op->condition, body, op->new_expr, op->free_function);
+            return Allocate::make(op->name, op->type, op->memory_type, op->extents,
+                                  op->condition, body, op->new_expr, op->free_function);
         }
     }
 
-    void visit(const Free *op) {
+    Stmt visit(const Free *op) override {
         if (allocs.contains(op->name)) {
             // We have reached a Free Stmt without ever using this buffer, do nothing.
-            stmt = Evaluate::make(0);
+            return Evaluate::make(0);
         } else {
-            stmt = op;
+            return op;
         }
     }
 };
@@ -71,6 +79,5 @@ Stmt remove_dead_allocations(Stmt s) {
     return RemoveDeadAllocations().mutate(s);
 }
 
-
-}
-}
+}  // namespace Internal
+}  // namespace Halide

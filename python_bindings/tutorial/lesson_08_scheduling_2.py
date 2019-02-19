@@ -20,24 +20,24 @@
 #include <stdio.h>
 
 #using namespace Halide
-from halide import *
+import halide as hl
 import numpy as np
 import math
 
 def main():
     # First we'll declare some Vars to use below.
-    x, y = Var("x"), Var("y")
+    x, y = hl.Var("x"), hl.Var("y")
 
     # Let's examine various scheduling options for a simple two stage
     # pipeline. We'll start with the default schedule:
     if True:
         print("="*50)
-        producer, consumer = Func("producer_default"), Func("consumer_default")
+        producer, consumer = hl.Func("producer_default"), hl.Func("consumer_default")
 
         # The first stage will be some simple pointwise math similar
         # to our familiar gradient function. The value at position x,
         # y is the sqrt of product of x and y.
-        producer[x, y] = sqrt(x * y)
+        producer[x, y] = hl.sqrt(x * y)
 
         # Now we'll add a second stage which adds together multiple
         # points in the first stage.
@@ -93,8 +93,8 @@ def main():
     if True:
         print("="*50)
         # Start with the same function definitions:
-        producer, consumer = Func("producer_root"), Func("consumer_root")
-        producer[x, y] = sqrt(x * y)
+        producer, consumer = hl.Func("producer_root"), hl.Func("consumer_root")
+        producer[x, y] = hl.sqrt(x * y)
         consumer[x, y] = (producer[x, y] +
                           producer[x, y+1] +
                           producer[x+1, y] +
@@ -192,8 +192,8 @@ def main():
     if True:
         print("="*50)
         # Start with the same function definitions:
-        producer, consumer = Func("producer_y"), Func("consumer_y")
-        producer[x, y] = sqrt(x * y)
+        producer, consumer = hl.Func("producer_y"), hl.Func("consumer_y")
+        producer[x, y] = hl.sqrt(x * y)
         consumer[x, y] = (producer[x, y] +
                           producer[x, y+1] +
                           producer[x+1, y] +
@@ -269,8 +269,8 @@ def main():
     # which we actually compute it. This unlocks a few optimizations.
     if True:
         print("="*50)
-        producer, consumer = Func("producer_store_root_compute_y"), Func("consumer_store_root_compute_y")
-        producer[x, y] = sqrt(x * y)
+        producer, consumer = hl.Func("producer_store_root_compute_y"), hl.Func("consumer_store_root_compute_y")
+        producer[x, y] = hl.sqrt(x * y)
         consumer[x, y] = (producer[x, y] +
                           producer[x, y+1] +
                           producer[x+1, y] +
@@ -316,7 +316,7 @@ def main():
 
                 # Skip over rows of producer that we've already
                 # computed in a previous iteration.
-                if y > 0 and py == yy:
+                if yy > 0 and py == yy:
                     continue
 
                 for px in range(5):
@@ -362,7 +362,7 @@ def main():
             for yy in range(4):
                 for py in range(yy, yy + 2):
 
-                    if y > 0 and py == yy:
+                    if yy > 0 and py == yy:
                         continue
 
                     for px in range(5):
@@ -387,8 +387,8 @@ def main():
     # moving the computation into the innermost loop:
     if True:
         print("="*50)
-        producer, consumer = Func("producer_store_root_compute_x"), Func("consumer_store_root_compute_x")
-        producer[x, y] = sqrt(x * y)
+        producer, consumer = hl.Func("producer_store_root_compute_x"), hl.Func("consumer_store_root_compute_x")
+        producer[x, y] = hl.sqrt(x * y)
         consumer[x, y] = (producer[x, y] +
                           producer[x, y+1] +
                           producer[x+1, y] +
@@ -474,8 +474,8 @@ def main():
     # respect to those. We'll use this to express fusion in tiles:
     if True:
         print("="*50)
-        producer, consumer = Func("producer_tile"), Func("consumer_tile")
-        producer[x, y] = sqrt(x * y)
+        producer, consumer = hl.Func("producer_tile"), hl.Func("consumer_tile")
+        producer[x, y] = hl.sqrt(x * y)
         consumer[x, y] = (producer[x, y] +
                           producer[x, y+1] +
                           producer[x+1, y] +
@@ -483,8 +483,8 @@ def main():
 
 
         # Tile the consumer using 2x2 tiles.
-        x_outer, y_outer = Var("x_outer"), Var("y_outer")
-        x_inner, y_inner = Var("x_inner"), Var("y_inner")
+        x_outer, y_outer = hl.Var("x_outer"), hl.Var("y_outer")
+        x_inner, y_inner = hl.Var("x_inner"), hl.Var("y_inner")
         consumer.tile(x, y, x_outer, y_outer, x_inner, y_inner, 2, 2)
 
         # Compute the producer per tile of the consumer
@@ -558,15 +558,15 @@ def main():
     # in Halide.
     if True:
         print("="*50)
-        producer, consumer = Func("producer_mixed"), Func("consumer_mixed")
-        producer[x, y] = sqrt(x * y)
+        producer, consumer = hl.Func("producer_mixed"), hl.Func("consumer_mixed")
+        producer[x, y] = hl.sqrt(x * y)
         consumer[x, y] = (producer[x, y] +
                           producer[x, y+1] +
                           producer[x+1, y] +
                           producer[x+1, y+1])
 
         # Split the y coordinate of the consumer into strips of 16 scanlines:
-        yo, yi = Var("yo"), Var("yi")
+        yo, yi = hl.Var("yo"), hl.Var("yi")
         consumer.split(y, yo, yi, 16)
         # Compute the strips using a thread pool and a task queue.
         consumer.parallel(yo)
@@ -674,11 +674,11 @@ def main():
         # should tell you something.
         for yy in range(600):
             for xx in range(800):
-                error = halide_result(xx, yy) - c_result[yy][xx]
+                error = halide_result[xx, yy] - c_result[yy][xx]
                 # It's floating-point math, so we'll allow some slop:
                 if (error < -0.001) or (error > 0.001):
                     raise Exception("halide_result(%d, %d) = %f instead of %f" % (
-                           xx, yy, halide_result(xx, yy), c_result[yy][xx]))
+                           xx, yy, halide_result[xx, yy], c_result[yy][xx]))
                     return -1
 
 

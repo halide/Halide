@@ -1,16 +1,17 @@
 #include "CodeGen_Internal.h"
-#include "IROperator.h"
-#include "IRMutator.h"
 #include "CSE.h"
 #include "Debug.h"
+#include "IRMutator.h"
+#include "IROperator.h"
+#include "LLVM_Headers.h"
 
 namespace Halide {
 namespace Internal {
 
-using std::string;
 using std::map;
-using std::vector;
 using std::pair;
+using std::string;
+using std::vector;
 
 using namespace llvm;
 
@@ -152,7 +153,9 @@ bool function_takes_user_context(const std::string &name) {
         "halide_device_and_host_malloc",
         "halide_device_sync",
         "halide_do_par_for",
+        "halide_do_loop_task",
         "halide_do_task",
+        "halide_do_async_consumer",
         "halide_error",
         "halide_free",
         "halide_malloc",
@@ -175,6 +178,7 @@ bool function_takes_user_context(const std::string &name) {
         "halide_opengl_run",
         "halide_openglcompute_run",
         "halide_metal_run",
+        "halide_d3d12compute_run",
         "halide_msan_annotate_buffer_is_initialized_as_destructor",
         "halide_msan_annotate_buffer_is_initialized",
         "halide_msan_annotate_memory_is_initialized",
@@ -189,11 +193,14 @@ bool function_takes_user_context(const std::string &name) {
         "halide_qurt_hvx_lock",
         "halide_qurt_hvx_unlock",
         "halide_qurt_hvx_unlock_as_destructor",
+        "halide_vtcm_malloc",
+        "halide_vtcm_free",
         "halide_cuda_initialize_kernels",
         "halide_opencl_initialize_kernels",
         "halide_opengl_initialize_kernels",
         "halide_openglcompute_initialize_kernels",
         "halide_metal_initialize_kernels",
+        "halide_d3d12compute_initialize_kernels",
         "halide_get_gpu_device",
         "halide_upgrade_buffer_t",
         "halide_downgrade_buffer_t",
@@ -275,10 +282,9 @@ namespace {
 // This mutator rewrites predicated loads and stores as unpredicated
 // loads/stores with explicit conditions, scalarizing if necessary.
 class UnpredicateLoadsStores : public IRMutator {
-    void visit(const Load *op) {
+    Expr visit(const Load *op) override {
         if (is_one(op->predicate)) {
-            IRMutator::visit(op);
-            return;
+            return IRMutator::visit(op);
         }
 
         Expr predicate = mutate(op->predicate);
@@ -287,8 +293,8 @@ class UnpredicateLoadsStores : public IRMutator {
 
         if (const Broadcast *scalar_pred = predicate.as<Broadcast>()) {
             Expr unpredicated_load = Load::make(op->type, op->name, index, op->image, op->param,
-                                                const_true(op->type.lanes()));
-            expr = Call::make(op->type, Call::if_then_else, {scalar_pred->value, unpredicated_load, make_zero(op->type)},
+                                                const_true(op->type.lanes()), op->alignment);
+            return Call::make(op->type, Call::if_then_else, {scalar_pred->value, unpredicated_load, make_zero(op->type)},
                               Call::PureIntrinsic);
         } else {
             string index_name = "scalarized_load_index";
@@ -302,21 +308,20 @@ class UnpredicateLoadsStores : public IRMutator {
                 Expr idx_i = Shuffle::make({index_var}, {i});
                 Expr pred_i = Shuffle::make({predicate_var}, {i});
                 Expr unpredicated_load = Load::make(op->type.element_of(), op->name, idx_i, op->image, op->param,
-                                                    const_true());
+                                                    const_true(), ModulusRemainder());
                 lanes.push_back(Call::make(op->type.element_of(), Call::if_then_else, {pred_i, unpredicated_load,
                                 make_zero(unpredicated_load.type())}, Call::PureIntrinsic));
                 ramp.push_back(i);
             }
-            expr = Shuffle::make(lanes, ramp);
+            Expr expr = Shuffle::make(lanes, ramp);
             expr = Let::make(predicate_name, predicate, expr);
-            expr = Let::make(index_name, index, expr);
+            return Let::make(index_name, index, expr);
         }
     }
 
-    void visit(const Store *op) {
+    Stmt visit(const Store *op) override {
         if (is_one(op->predicate)) {
-            IRMutator::visit(op);
-            return;
+            return IRMutator::visit(op);
         }
 
         Expr predicate = mutate(op->predicate);
@@ -324,8 +329,8 @@ class UnpredicateLoadsStores : public IRMutator {
         Expr index = mutate(op->index);
 
         if (const Broadcast *scalar_pred = predicate.as<Broadcast>()) {
-            Stmt unpredicated_store = Store::make(op->name, value, index, op->param, const_true(value.type().lanes()));
-            stmt = IfThenElse::make(scalar_pred->value, unpredicated_store);
+            Stmt unpredicated_store = Store::make(op->name, value, index, op->param, const_true(value.type().lanes()), op->alignment);
+            return IfThenElse::make(scalar_pred->value, unpredicated_store);
         } else {
             string value_name = "scalarized_store_value";
             Expr value_var = Variable::make(value.type(), value_name);
@@ -339,13 +344,13 @@ class UnpredicateLoadsStores : public IRMutator {
                 Expr pred_i = Shuffle::make({predicate_var}, {i});
                 Expr value_i = Shuffle::make({value_var}, {i});
                 Expr index_i = Shuffle::make({index_var}, {i});
-                Stmt lane = IfThenElse::make(pred_i, Store::make(op->name, value_i, index_i, op->param, const_true()));
+                Stmt lane = IfThenElse::make(pred_i, Store::make(op->name, value_i, index_i, op->param, const_true(), ModulusRemainder()));
                 lanes.push_back(lane);
             }
-            stmt = Block::make(lanes);
+            Stmt stmt = Block::make(lanes);
             stmt = LetStmt::make(predicate_name, predicate, stmt);
             stmt = LetStmt::make(value_name, value, stmt);
-            stmt = LetStmt::make(index_name, index, stmt);
+            return LetStmt::make(index_name, index, stmt);
        }
     }
 
@@ -393,23 +398,15 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
     get_md_string(module.getModuleFlag("halide_mcpu"), mcpu);
     get_md_string(module.getModuleFlag("halide_mattrs"), mattrs);
 
+    bool per_instruction_fast_math_flags = false;
+    get_md_bool(module.getModuleFlag("halide_per_instruction_fast_math_flags"), per_instruction_fast_math_flags);
+
     options = llvm::TargetOptions();
-    #if LLVM_VERSION < 50
-    options.LessPreciseFPMADOption = true;
-    #endif
-    options.AllowFPOpFusion = llvm::FPOpFusion::Fast;
-    options.UnsafeFPMath = true;
-
-    #if LLVM_VERSION < 40
-    // Turn off approximate reciprocals for division. It's too
-    // inaccurate even for us. In LLVM 4.0+ this moved to be a
-    // function attribute.
-    options.Reciprocals.setDefaults("all", false, 0);
-    #endif
-
-    options.NoInfsFPMath = true;
-    options.NoNaNsFPMath = true;
-    options.HonorSignDependentRoundingFPMathOption = false;
+    options.AllowFPOpFusion = per_instruction_fast_math_flags ? llvm::FPOpFusion::Strict : llvm::FPOpFusion::Fast;
+    options.UnsafeFPMath = !per_instruction_fast_math_flags;
+    options.NoInfsFPMath = !per_instruction_fast_math_flags;
+    options.NoNaNsFPMath = !per_instruction_fast_math_flags;
+    options.HonorSignDependentRoundingFPMathOption = !per_instruction_fast_math_flags;
     options.NoZerosInBSS = false;
     options.GuaranteedTailCallOpt = false;
     options.StackAlignmentOverride = 0;
@@ -445,28 +442,25 @@ void clone_target_options(const llvm::Module &from, llvm::Module &to) {
 std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &module) {
     std::string error_string;
 
-    const llvm::Target *target = llvm::TargetRegistry::lookupTarget(module.getTargetTriple(), error_string);
-    if (!target) {
+    const llvm::Target *llvm_target = llvm::TargetRegistry::lookupTarget(module.getTargetTriple(), error_string);
+    if (!llvm_target) {
         std::cout << error_string << std::endl;
-#if LLVM_VERSION < 60
-        llvm::TargetRegistry::printRegisteredTargetsForVersion();
-#else
         llvm::TargetRegistry::printRegisteredTargetsForVersion(llvm::outs());
-#endif
     }
-    internal_assert(target) << "Could not create target for " << module.getTargetTriple() << "\n";
+    auto triple = llvm::Triple(module.getTargetTriple());
+    internal_assert(llvm_target) << "Could not create LLVM target for " << triple.str() << "\n";
 
     llvm::TargetOptions options;
     std::string mcpu = "";
     std::string mattrs = "";
     get_target_options(module, options, mcpu, mattrs);
 
-    return std::unique_ptr<llvm::TargetMachine>(target->createTargetMachine(module.getTargetTriple(),
+    return std::unique_ptr<llvm::TargetMachine>(llvm_target->createTargetMachine(module.getTargetTriple(),
                                                 mcpu, mattrs,
                                                 options,
                                                 llvm::Reloc::PIC_,
-#if LLVM_VERSION < 60
-                                                llvm::CodeModel::Default,
+#ifdef HALIDE_USE_CODEMODEL_LARGE
+                                                llvm::CodeModel::Large,
 #else
                                                 llvm::CodeModel::Small,
 #endif
@@ -474,12 +468,87 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
 }
 
 void set_function_attributes_for_target(llvm::Function *fn, Target t) {
-    #if LLVM_VERSION >= 40
     // Turn off approximate reciprocals for division. It's too
     // inaccurate even for us.
     fn->addFnAttr("reciprocal-estimates", "none");
-    #endif
 }
 
+void embed_bitcode(llvm::Module *M, const string &halide_command) {
+    // Save llvm.compiler.used and remote it.
+    SmallVector<Constant*, 2> used_array;
+    SmallPtrSet<GlobalValue*, 4> used_globals;
+    llvm::Type *used_element_type = llvm::Type::getInt8Ty(M->getContext())->getPointerTo(0);
+    GlobalVariable *used = collectUsedGlobalVariables(*M, used_globals, true);
+    for (auto *GV : used_globals) {
+        if (GV->getName() != "llvm.embedded.module" &&
+            GV->getName() != "llvm.cmdline")
+          used_array.push_back(
+              ConstantExpr::getPointerBitCastOrAddrSpaceCast(GV, used_element_type));
+    }
+    if (used) {
+        used->eraseFromParent();
+    }
+
+    // Embed the bitcode for the llvm module.
+    std::string data;
+    Triple triple(M->getTargetTriple());
+    // Create a constant that contains the bitcode.
+    llvm::raw_string_ostream OS(data);
+#if LLVM_VERSION >= 70
+    llvm::WriteBitcodeToFile(*M, OS, /* ShouldPreserveUseListOrder */ true);
+#else
+    llvm::WriteBitcodeToFile(M, OS, /* ShouldPreserveUseListOrder */ true);
+#endif
+    ArrayRef<uint8_t> module_data =
+        ArrayRef<uint8_t>((const uint8_t *)OS.str().data(), OS.str().size());
+
+    llvm::Constant *module_constant =
+        llvm::ConstantDataArray::get(M->getContext(), module_data);
+    llvm::GlobalVariable *GV = new llvm::GlobalVariable(
+        *M, module_constant->getType(), true, llvm::GlobalValue::PrivateLinkage,
+        module_constant);
+    GV->setSection((triple.getObjectFormat() == Triple::MachO) ? "__LLVM,__bitcode" : ".llvmbc");
+    used_array.push_back(
+        ConstantExpr::getPointerBitCastOrAddrSpaceCast(GV, used_element_type));
+    if (llvm::GlobalVariable *old =
+            M->getGlobalVariable("llvm.embedded.module", true)) {
+        internal_assert(old->hasOneUse()) << "llvm.embedded.module can only be used once in llvm.compiler.used";
+        GV->takeName(old);
+        old->eraseFromParent();
+    } else {
+        GV->setName("llvm.embedded.module");
+    }
+
+    // Embed command-line options.
+    ArrayRef<uint8_t> command_line_data(const_cast<uint8_t *>(reinterpret_cast<const uint8_t *>(halide_command.data())),
+                                        halide_command.size());
+    llvm::Constant *command_line_constant =
+        llvm::ConstantDataArray::get(M->getContext(), command_line_data);
+    GV = new llvm::GlobalVariable(*M, command_line_constant->getType(), true,
+                                  llvm::GlobalValue::PrivateLinkage,
+                                  command_line_constant);
+
+    GV->setSection((triple.getObjectFormat() == Triple::MachO) ? "__LLVM,__cmdline" : ".llvmcmd");
+    used_array.push_back(
+        ConstantExpr::getPointerBitCastOrAddrSpaceCast(GV, used_element_type));
+    if (llvm::GlobalVariable *old =
+            M->getGlobalVariable("llvm.cmdline", true)) {
+        internal_assert(old->hasOneUse()) << "llvm.cmdline can only be used once in llvm.compiler.used";
+        GV->takeName(old);
+        old->eraseFromParent();
+    } else {
+        GV->setName("llvm.cmdline");
+    }
+
+    if (!used_array.empty()) {
+        // Recreate llvm.compiler.used.
+        ArrayType *ATy = ArrayType::get(used_element_type, used_array.size());
+        auto *new_used = new GlobalVariable(
+            *M, ATy, false, llvm::GlobalValue::AppendingLinkage,
+            llvm::ConstantArray::get(ATy, used_array), "llvm.compiler.used");
+        new_used->setSection("llvm.metadata");
+    }
 }
-}
+
+}  // namespace Internal
+}  // namespace Halide

@@ -16,9 +16,9 @@ namespace Internal {
 
 /** Try to simplify the RHS/LHS of a function's definition based on its
  * specializations. */
-EXPORT void simplify_specializations(std::map<std::string, Function> &env);
+void simplify_specializations(std::map<std::string, Function> &env);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

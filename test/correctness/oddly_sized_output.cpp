@@ -5,6 +5,8 @@ using namespace Halide;
 
 int main(int argc, char **argv) {
     Buffer<int> input(87, 93);
+    input.fill(0);
+
     Func f;
     Var x, y;
     f(x, y) = input(x, y)*2;

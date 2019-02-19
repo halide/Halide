@@ -1,6 +1,6 @@
 #include "CodeGen_GPU_Dev.h"
-#include "IRVisitor.h"
 #include "Bounds.h"
+#include "IRVisitor.h"
 
 namespace Halide {
 namespace Internal {
@@ -33,7 +33,7 @@ namespace {
 class IsBlockUniform : public IRVisitor {
     using IRVisitor::visit;
 
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         if (CodeGen_GPU_Dev::is_gpu_thread_var(op->name)) {
             result = false;
         }
@@ -45,7 +45,7 @@ public:
     IsBlockUniform() : result(true) {
     }
 };
-}
+}  // namespace
 
 bool CodeGen_GPU_Dev::is_block_uniform(Expr expr) {
     IsBlockUniform v;
@@ -60,7 +60,7 @@ namespace {
 class IsBufferConstant : public IRVisitor {
     using IRVisitor::visit;
 
-    void visit(const Store *op) {
+    void visit(const Store *op) override {
         if (op->name == buffer) {
             result = false;
         }
@@ -69,7 +69,7 @@ class IsBufferConstant : public IRVisitor {
         }
     }
 
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         if (op->name == buffer &&
             !CodeGen_GPU_Dev::is_block_uniform(op->index)) {
             result = false;
@@ -86,7 +86,7 @@ public:
     IsBufferConstant(const std::string &b) : result(true), buffer(b) {
     }
 };
-}
+}  // namespace
 
 bool CodeGen_GPU_Dev::is_buffer_constant(Stmt kernel,
                                          const std::string &buffer) {
@@ -95,12 +95,5 @@ bool CodeGen_GPU_Dev::is_buffer_constant(Stmt kernel,
     return v.result;
 }
 
-int32_t CodeGen_GPU_Dev::get_constant_bound_allocation_size(const Allocate *alloc) {
-    std::vector<Expr> extents(alloc->extents.size());
-    for (size_t i = 0; i < alloc->extents.size(); ++i) {
-        extents[i] = find_constant_bound(alloc->extents[i], Direction::Upper);
-    }
-    return Allocate::constant_allocation_size(extents, alloc->name);
-}
-
-}}
+}  // namespace Internal
+}  // namespace Halide

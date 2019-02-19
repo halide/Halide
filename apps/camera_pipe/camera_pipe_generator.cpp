@@ -1,11 +1,13 @@
 #include "Halide.h"
 #include <stdint.h>
+#include "halide_trace_config.h"
 
 namespace {
 
 using std::vector;
 
 using namespace Halide;
+using namespace Halide::ConciseCasts;
 
 // Shared variables
 Var x, y, c, yi, yo, yii, xi;
@@ -14,6 +16,10 @@ Var x, y, c, yi, yo, yii, xi;
 Expr avg(Expr a, Expr b) {
     Type wider = a.type().with_bits(a.type().bits() * 2);
     return cast(a.type(), (cast(wider, a) + b + 1)/2);
+}
+
+Expr blur121(Expr a, Expr b, Expr c) {
+    return avg(avg(a, c), b);
 }
 
 Func interleave_x(Func a, Func b) {
@@ -30,11 +36,9 @@ Func interleave_y(Func a, Func b) {
 
 class Demosaic : public Halide::Generator<Demosaic> {
 public:
-    GeneratorParam<bool> auto_schedule{"auto_schedule", false};
-
-    ScheduleParam<LoopLevel> intermed_compute_at{"intermed_compute_at"};
-    ScheduleParam<LoopLevel> intermed_store_at{"intermed_store_at"};
-    ScheduleParam<LoopLevel> output_compute_at{"output_compute_at"};
+    GeneratorParam<LoopLevel> intermed_compute_at{"intermed_compute_at", LoopLevel::inlined()};
+    GeneratorParam<LoopLevel> intermed_store_at{"intermed_store_at", LoopLevel::inlined()};
+    GeneratorParam<LoopLevel> output_compute_at{"output_compute_at", LoopLevel::inlined()};
 
     // Inputs and outputs
     Input<Func> deinterleaved{ "deinterleaved", Int(16), 3 };
@@ -161,8 +165,11 @@ public:
                 f.compute_at(intermed_compute_at)
                     .store_at(intermed_store_at)
                     .vectorize(x, 2*vec, TailStrategy::RoundUp)
-                    .fold_storage(y, 2);
+                    .fold_storage(y, 4);
             }
+            intermediates[1].compute_with(
+                intermediates[0], x,
+                {{x, LoopAlignStrategy::AlignStart}, {y, LoopAlignStrategy::AlignStart}});
             output.compute_at(output_compute_at)
                 .vectorize(x)
                 .unroll(y)
@@ -175,6 +182,18 @@ public:
                 }
             }
         }
+
+        /* Optional tags to specify layout for HalideTraceViz */
+        Halide::Trace::FuncConfig cfg;
+        cfg.pos = { 860, 340 - 220 };
+        cfg.max = 1024;
+        for (Func f : intermediates) {
+            std::string label = f.name();
+            std::replace(label.begin(), label.end(), '_', '@');
+            cfg.pos.y += 220;
+            cfg.labels = {{label}};
+            f.add_trace_tag(cfg.to_trace_tag());
+        }
     }
 
 private:
@@ -186,7 +205,6 @@ class CameraPipe : public Halide::Generator<CameraPipe> {
 public:
     // Parameterized output type, because LLVM PTX (GPU) backend does not
     // currently allow 8-bit computations
-    GeneratorParam<bool>  auto_schedule{"auto_schedule", false};
     GeneratorParam<Type> result_type{"result_type", UInt(8)};
 
     Input<Buffer<uint16_t>> input{"input", 2};
@@ -195,6 +213,7 @@ public:
     Input<float> color_temp{"color_temp"};
     Input<float> gamma{"gamma"};
     Input<float> contrast{"contrast"};
+    Input<float> sharpen_strength{"sharpen_strength"};
     Input<int> blackLevel{"blackLevel"};
     Input<int> whiteLevel{"whiteLevel"};
 
@@ -208,6 +227,7 @@ private:
     Func deinterleave(Func raw);
     Func apply_curve(Func input);
     Func color_correct(Func input);
+    Func sharpen(Func input);
 };
 
 Func CameraPipe::hot_pixel_suppression(Func input) {
@@ -223,7 +243,7 @@ Func CameraPipe::hot_pixel_suppression(Func input) {
 
 Func CameraPipe::deinterleave(Func raw) {
     // Deinterleave the color channels
-    Func deinterleaved;
+    Func deinterleaved("deinterleaved");
 
     deinterleaved(x, y, c) = select(c == 0, raw(2*x, 2*y),
                                     c == 1, raw(2*x+1, 2*y),
@@ -309,6 +329,14 @@ Func CameraPipe::apply_curve(Func input) {
         curve.compute_root();
     }
 
+    /* Optional tags to specify layout for HalideTraceViz */
+    {
+        Halide::Trace::FuncConfig cfg;
+        cfg.labels = {{"tone curve"}};
+        cfg.pos = { 580, 1000 };
+        curve.add_trace_tag(cfg.to_trace_tag());
+    }
+
     Func curved;
 
     if (lutResample == 1) {
@@ -327,6 +355,40 @@ Func CameraPipe::apply_curve(Func input) {
     return curved;
 }
 
+Func CameraPipe::sharpen(Func input) {
+    // Convert the sharpening strength to 2.5 fixed point. This allows sharpening in the range [0, 4].
+    Func sharpen_strength_x32("sharpen_strength_x32");
+    sharpen_strength_x32() = u8_sat(sharpen_strength * 32);
+    if (!auto_schedule) {
+        sharpen_strength_x32.compute_root();
+    }
+
+    /* Optional tags to specify layout for HalideTraceViz */
+    {
+        Halide::Trace::FuncConfig cfg;
+        cfg.labels = {{"sharpen strength"}};
+        cfg.pos = { 10, 1000 };
+        sharpen_strength_x32.add_trace_tag(cfg.to_trace_tag());
+    }
+
+    // Make an unsharp mask by blurring in y, then in x.
+    Func unsharp_y("unsharp_y");
+    unsharp_y(x, y, c) = blur121(input(x, y - 1, c), input(x, y, c), input(x, y + 1, c));
+
+    Func unsharp("unsharp");
+    unsharp(x, y, c) = blur121(unsharp_y(x - 1, y, c), unsharp_y(x, y, c), unsharp_y(x + 1, y, c));
+
+    Func mask("mask");
+    mask(x, y, c) = cast<int16_t>(input(x, y, c)) - cast<int16_t>(unsharp(x, y, c));
+
+    // Weight the mask with the sharpening strength, and add it to the
+    // input to get the sharpened result.
+    Func sharpened("sharpened");
+    sharpened(x, y, c) = u8_sat(input(x, y, c) + (mask(x, y, c) * sharpen_strength_x32()) / 32);
+
+    return sharpened;
+}
+
 void CameraPipe::generate() {
     // shift things inwards to give us enough padding on the
     // boundaries so that we don't need to check bounds. We're going
@@ -341,19 +403,16 @@ void CameraPipe::generate() {
     Func deinterleaved = deinterleave(denoised);
 
     auto demosaiced = create<Demosaic>();
-    demosaiced->auto_schedule.set(auto_schedule);
     demosaiced->apply(deinterleaved);
 
     Func corrected = color_correct(demosaiced->output);
 
-    processed(x, y, c) = apply_curve(corrected)(x, y, c);
+    Func curved = apply_curve(corrected);
 
-    Pipeline p(processed);
+    processed(x, y, c) = sharpen(curved)(x, y, c);
 
     // Schedule
     if (auto_schedule) {
-        Pipeline p(processed);
-
         input.dim(0).set_bounds_estimate(0, 2592);
         input.dim(1).set_bounds_estimate(0, 1968);
 
@@ -366,10 +425,6 @@ void CameraPipe::generate() {
             .estimate(c, 0, 3)
             .estimate(x, 0, 2592)
             .estimate(y, 0, 1968);
-
-        // Auto schedule the pipeline: this calls auto_schedule() for
-        // all of the Outputs in this Generator
-        auto_schedule_outputs();
 
     } else {
 
@@ -394,34 +449,41 @@ void CameraPipe::generate() {
         } else if (get_target().has_feature(Target::HVX_128)) {
             vec = 64;
         }
-        denoised.compute_at(processed, yi).store_at(processed, yo)
-            .prefetch(input, y, 2)
-            .fold_storage(y, 8)
-            .tile(x, y, x, y, xi, yi, 2*vec, 2)
-            .vectorize(xi)
-            .unroll(yi);
-        deinterleaved.compute_at(processed, yi).store_at(processed, yo)
-            .fold_storage(y, 4)
-            .reorder(c, x, y)
-            .vectorize(x, 2*vec, TailStrategy::RoundUp)
-            .unroll(c);
-        corrected.compute_at(processed, x)
-            .reorder(c, x, y)
-            .vectorize(x)
-            .unroll(y)
-            .unroll(c);
         processed.compute_root()
             .reorder(c, x, y)
-            .split(y, yo, yi, strip_size)
-            .tile(x, yi, x, yi, xi, yii, 2*vec, 2, TailStrategy::RoundUp)
-            .vectorize(xi)
-            .unroll(yii)
+            .split(y, yi, yii, 2, TailStrategy::RoundUp)
+            .split(yi, yo, yi, strip_size / 2)
+            .vectorize(x, 2*vec, TailStrategy::RoundUp)
             .unroll(c)
             .parallel(yo);
 
+        denoised.compute_at(processed, yi).store_at(processed, yo)
+            .prefetch(input, y, 2)
+            .fold_storage(y, 16)
+            .tile(x, y, x, y, xi, yi, 2*vec, 2)
+            .vectorize(xi)
+            .unroll(yi);
+
+        deinterleaved.compute_at(processed, yi).store_at(processed, yo)
+            .fold_storage(y, 8)
+            .reorder(c, x, y)
+            .vectorize(x, 2*vec, TailStrategy::RoundUp)
+            .unroll(c);
+
+        curved.compute_at(processed, yi).store_at(processed, yo)
+            .reorder(c, x, y)
+            .tile(x, y, x, y, xi, yi, 2*vec, 2, TailStrategy::RoundUp)
+            .vectorize(xi)
+            .unroll(yi)
+            .unroll(c);
+        corrected.compute_at(curved, x)
+            .reorder(c, x, y)
+            .vectorize(x)
+            .unroll(c);
+
         demosaiced->intermed_compute_at.set({processed, yi});
         demosaiced->intermed_store_at.set({processed, yo});
-        demosaiced->output_compute_at.set({processed, x});
+        demosaiced->output_compute_at.set({curved, x});
 
         if (get_target().features_any_of({Target::HVX_64, Target::HVX_128})) {
             processed.hexagon();
@@ -435,6 +497,46 @@ void CameraPipe::generate() {
             .bound(c, 0, 3)
             .bound(x, 0, ((out_width)/(2*vec))*(2*vec))
             .bound(y, 0, (out_height/strip_size)*strip_size);
+
+        /* Optional tags to specify layout for HalideTraceViz */
+        {
+            Halide::Trace::FuncConfig cfg;
+            cfg.max = 1024;
+            cfg.pos = { 10, 348 };
+            cfg.labels = {{"input"}};
+            input.add_trace_tag(cfg.to_trace_tag());
+
+            cfg.pos = { 305, 360 };
+            cfg.labels = {{"denoised"}};
+            denoised.add_trace_tag(cfg.to_trace_tag());
+
+            cfg.pos = { 580, 120 };
+            const int y_offset = 220;
+            cfg.strides = {{1, 0}, {0, 1}, {0, y_offset}};
+            cfg.labels = {
+                { "gr", { 0, 0 * y_offset } },
+                { "r",  { 0, 1 * y_offset }},
+                { "b",  { 0, 2 * y_offset }},
+                { "gb", { 0, 3 * y_offset }},
+            };
+            deinterleaved.add_trace_tag(cfg.to_trace_tag());
+
+            cfg.color_dim = 2;
+            cfg.strides = {{1, 0}, {0, 1}, {0, 0}};
+            cfg.pos = { 1140, 360 };
+            cfg.labels = {{"demosaiced"}};
+            processed.add_trace_tag(cfg.to_trace_tag());
+
+            cfg.pos = { 1400, 360 };
+            cfg.labels = {{"color-corrected"}};
+            corrected.add_trace_tag(cfg.to_trace_tag());
+
+            cfg.max = 256;
+            cfg.pos = { 1660, 360 };
+            cfg.labels = {{"gamma-corrected"}};
+            curved.add_trace_tag(cfg.to_trace_tag());
+
+        }
     }
 };
 

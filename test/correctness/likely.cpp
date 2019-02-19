@@ -1,6 +1,8 @@
 #include "Halide.h"
 #include <stdio.h>
 
+namespace {
+
 using namespace Halide;
 using namespace Halide::Internal;
 using std::string;
@@ -11,14 +13,14 @@ class Counter : public IRVisitor {
 
     using IRVisitor::visit;
 
-    void visit(const Store *op) {
+    void visit(const Store *op) override {
         IRVisitor::visit(op);
         if (op->name == func) {
             store_count++;
         }
     }
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         IRVisitor::visit(op);
         if (op->name == "sin_f32") {
             sin_count++;
@@ -36,7 +38,7 @@ class CheckSinCount : public IRMutator {
 public:
     using IRMutator::mutate;
 
-    Stmt mutate(Stmt s) {
+    Stmt mutate(const Stmt &s) override {
         Counter c("");
         s.accept(&c);
         if (c.sin_count != correct) {
@@ -56,7 +58,7 @@ class CheckStoreCount : public IRMutator {
 public:
     using IRMutator::mutate;
 
-    Stmt mutate(Stmt s) {
+    Stmt mutate(const Stmt &s) override {
         Counter c(func);
         s.accept(&c);
         if (c.store_count != correct) {
@@ -78,6 +80,8 @@ void count_sin_calls(Func g, int correct) {
     g.add_custom_lowering_pass(new CheckSinCount(correct));
     g.compile_to_module(g.infer_arguments());
 }
+
+}  // namespace
 
 int main(int argc, char **argv) {
     Func f;

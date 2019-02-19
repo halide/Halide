@@ -16,10 +16,10 @@ int main(int argc, char **argv) {
     Buffer<float> im1 = f1.realize(256);
 
     for (int x = 0; x < 256; x++) {
-        float y = im1(x);
-        uint32_t output = Halide::Internal::reinterpret_bits<uint32_t>(y);
-        if (input(x) != output) {
-            printf("Reinterpret cast turned %x into %x!", input(x), output);
+        float halide = im1(x);
+        float c = Halide::Internal::reinterpret_bits<float>(input(x));
+        if (halide != c && std::isnan(halide) ^ std::isnan(c)) {
+            printf("reinterpret<float>(%x) -> %f instead of %f\n", input(x), halide, c);
             return -1;
         }
     }

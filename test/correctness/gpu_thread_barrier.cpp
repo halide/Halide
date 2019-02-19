@@ -13,8 +13,8 @@ public:
 protected:
     using IRVisitor::visit;
 
-    void visit(const Call *op) {
-        if (op->name == "halide_gpu_thread_barrier") {
+    void visit(const Call *op) override {
+        if (op->is_intrinsic(Call::gpu_thread_barrier)) {
             count++;
         }
         IRVisitor::visit(op);
@@ -27,7 +27,7 @@ public:
     CheckBarrierCount(int correct) : correct(correct) {}
     using IRMutator::mutate;
 
-    Stmt mutate(Stmt s) {
+    Stmt mutate(const Stmt &s) override {
         CountBarriers c;
         s.accept(&c);
 

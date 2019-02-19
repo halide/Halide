@@ -3,29 +3,37 @@
 namespace Halide {
 
 ImageParam::ImageParam(Type t, int d)
-        : OutputImageParam(Internal::Parameter(t, true, d, Internal::make_entity_name(this, "Halide::ImageParam", 'p')), Argument::InputBuffer)
-        , func(name() + "_im") {
-    // Create the Func representation of this ImageParam
-    init_func();
+        : OutputImageParam(
+            Internal::Parameter(t, true, d, Internal::make_entity_name(this, "Halide:.*:ImageParam", 'p')),
+            Argument::InputBuffer,
+            Func()) {
+    // We must call create_func() after the super-ctor has completed.
+    func = create_func();
 }
 
 ImageParam::ImageParam(Type t, int d, const std::string &n)
-        : OutputImageParam(Internal::Parameter(t, true, d, n, /* is_explicit_name */ true), Argument::InputBuffer)
-        , func(name() + "_im") {
-    // Discourage future Funcs from having the same name
-    Internal::unique_name(n);
-    // Create the Func representation of this ImageParam
-    init_func();
+        : OutputImageParam(
+            Internal::Parameter(t, true, d, n),
+            Argument::InputBuffer,
+            Func()) {
+    // We must call create_func() after the super-ctor has completed.
+    func = create_func();
 }
 
-void ImageParam::init_func() {
+Func ImageParam::create_func() const {
     std::vector<Var> args;
     std::vector<Expr> args_expr;
     for (int i = 0; i < dimensions(); ++i) {
         args.push_back(Var::implicit(i));
         args_expr.push_back(Var::implicit(i));
     }
-    func(args) = Internal::Call::make(param, args_expr);
+    if (!name().empty()) {
+        // Discourage future Funcs from having the same name
+        Internal::unique_name(name());
+    }
+    Func f(name() + "_im");
+    f(args) = Internal::Call::make(param, args_expr);
+    return f;
 }
 
 void ImageParam::set(Buffer<> b) {
@@ -40,7 +48,7 @@ void ImageParam::set(Buffer<> b) {
 }
 
 Buffer<> ImageParam::get() const {
-    return param.get_buffer();
+    return param.buffer();
 }
 
 void ImageParam::reset() {
@@ -74,4 +82,15 @@ Func ImageParam::in() {
     return func.in();
 }
 
+void ImageParam::trace_loads() {
+    internal_assert(func.defined());
+    func.trace_loads();
 }
+
+ImageParam &ImageParam::add_trace_tag(const std::string &trace_tag) {
+    internal_assert(func.defined());
+    func.add_trace_tag(trace_tag);
+    return *this;
+}
+
+}  // namespace Halide

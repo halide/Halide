@@ -10,6 +10,7 @@ enum { QURT_EOK = 0 };
 
 extern "C" {
 typedef unsigned int qurt_thread_t;
+
 /*
    Macros for QuRT thread attributes.
  */
@@ -56,7 +57,7 @@ typedef struct _qurt_thread_attr {
 /*=============================================================================
                                                                                                 FUNCTIONS
 =============================================================================*/
-/**@ingroup func_qurt_thread_attr_init
+/**
   Initializes the structure used to set the thread attributes when a thread is created.
   After an attribute structure is initialized, the individual attributes in the structure can be
   explicitly set using the thread attribute operations.
@@ -78,9 +79,6 @@ typedef struct _qurt_thread_attr {
 
   @return
   None.
-
-  @dependencies
-  None.
 */
 // extern void qurt_thread_attr_init(qurt_thread_attr_t *attr); //pdb remove
 static inline void qurt_thread_attr_init (qurt_thread_attr_t *attr)
@@ -97,12 +95,11 @@ static inline void qurt_thread_attr_init (qurt_thread_attr_t *attr)
     attr->stack_addr = 0;
 }
 
-/**@ingroup func_qurt_thread_attr_set_stack_size
-  @xreflabel{sec:set_stack_size}
+/**
   Sets the thread stack size attribute.\n
   Specifies the size of the memory area to be used for a thread's call stack.
 
-  The thread stack address (Section @xref{sec:set_stack_addr}) and stack size specify the memory area used as a
+  The thread stack address (Section \ref qurt_thread_attr_set_stack_addr ) and stack size specify the memory area used as a
   call stack for the thread. The user is responsible for allocating the memory area used for
   the stack.
 
@@ -114,9 +111,6 @@ static inline void qurt_thread_attr_init (qurt_thread_attr_t *attr)
 
   @return
   None.
-
-  @dependencies
-  None.
 */
 // extern void qurt_thread_attr_set_stack_size(qurt_thread_attr_t *attr, unsigned int stack_size); // pdb remove
 static inline void qurt_thread_attr_set_stack_size (qurt_thread_attr_t *attr, unsigned int stack_size)
@@ -124,16 +118,15 @@ static inline void qurt_thread_attr_set_stack_size (qurt_thread_attr_t *attr, un
     attr->stack_size = stack_size;
 }
 
-/**@ingroup func_qurt_thread_attr_set_stack_addr
-  @xreflabel{sec:set_stack_addr}
+/**
   Sets the thread stack address attribute. \n
   Specifies the base address of the memory area to be used for a thread's call stack.
 
   stack_addr must contain an address value that is 8-byte aligned.
 
-  The thread stack address and stack size (Section @xref{sec:set_stack_size}) specify the memory area used as a
+  The thread stack address and stack size (Section \ref qurt_thread_attr_set_stack_size ) specify the memory area used as a
   call stack for the thread. \n
-  @note1hang The user is responsible for allocating the memory area used for the thread
+  @note The user is responsible for allocating the memory area used for the thread
              stack. The memory area must be large enough to contain the stack that is
              created by the thread.
 
@@ -145,16 +138,13 @@ static inline void qurt_thread_attr_set_stack_size (qurt_thread_attr_t *attr, un
 
   @return
   None.
-
-  @dependencies
-  None.
 */
 static inline void qurt_thread_attr_set_stack_addr (qurt_thread_attr_t *attr, void *stack_addr)
 {
     attr->stack_addr = stack_addr;
 }
 
-/**@ingroup func_qurt_thread_attr_set_priority
+/**
   Sets the thread priority to be assigned to a thread.
   Thread priorities are specified as numeric values in the range 1-255, with 1 representing
   the highest priority.
@@ -167,9 +157,6 @@ static inline void qurt_thread_attr_set_stack_addr (qurt_thread_attr_t *attr, vo
 
   @return
   None.
-
-  @dependencies
-  None.
 */
 static inline void qurt_thread_attr_set_priority (qurt_thread_attr_t *attr, unsigned short priority)
 {
@@ -178,16 +165,15 @@ static inline void qurt_thread_attr_set_priority (qurt_thread_attr_t *attr, unsi
 
 extern int qurt_thread_set_priority (qurt_thread_t threadid, unsigned short newprio);
 extern int qurt_thread_create (qurt_thread_t *thread_id, qurt_thread_attr_t *attr, void (*entrypoint) (void *), void *arg);
-/**@ingroup func_qurt_thread_join
-   @xreflabel{sec:thread_join}
+/**
    Waits for a specified thread to finish.
    The specified thread should be another thread within the same process.
    The caller thread is suspended until the specified thread exits. When this happens the
    caller thread is awakened. \n
-   @note1hang If the specified thread has already exited, this function returns immediately
-              with the result value QURT_ENOTHREAD. \n
-   @note1cont Two threads cannot call qurt_thread_join to wait for the same thread to finish.
-              If this happens QuRT generates an exception (see Section @xref{sec:exceptionHandling}).
+   @note If the specified thread has already exited, this function returns immediately
+              with the result value QURT_ENOTHREAD. \par
+   @note Two threads cannot call qurt_thread_join to wait for the same thread to finish.
+              If this happens QuRT generates an exception.
 
    @param[in]   tid     Thread identifier.
    @param[out]  status  Destination variable for thread exit status. Returns an application-defined
@@ -196,9 +182,6 @@ extern int qurt_thread_create (qurt_thread_t *thread_id, qurt_thread_attr_t *att
    @return
    QURT_ENOTHREAD -- Thread has already exited. \n
    QURT_EOK -- Thread successfully joined with valid status value.
-
-   @dependencies
-   None.
  */
 extern int qurt_thread_join(unsigned int tid, int *status);
 
@@ -240,7 +223,7 @@ extern void qurt_mutex_unlock(qurt_mutex_t *lock); /* unlock */
 
 extern void qurt_cond_init(qurt_cond_t *cond);
 extern void qurt_cond_destroy(qurt_cond_t *cond);
-extern void qurt_cond_broadcast(qurt_cond_t *cond);
+extern void qurt_cond_signal(qurt_cond_t *cond);
 extern void qurt_cond_wait(qurt_cond_t *cond, qurt_mutex_t *mutex);
 
 typedef enum {
@@ -251,5 +234,8 @@ typedef enum {
 extern int qurt_hvx_lock(qurt_hvx_mode_t lock_mode);
 extern int qurt_hvx_unlock(void);
 extern int qurt_hvx_get_mode(void);
+
+typedef unsigned int qurt_size_t;
+typedef unsigned int qurt_mem_pool_t;
 
 }

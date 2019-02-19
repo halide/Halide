@@ -59,12 +59,12 @@ ValType convert_halide_type_to_val_type(const Type &halide_t) {
         if (halide_t.bits() == 8) {
             val_t = ValType::Int8;
         } else if (halide_t.bits() == 16) {
-            val_t = ValType::UInt16;
+            val_t = ValType::Int16;
         } else if (halide_t.bits() == 32) {
-            val_t = ValType::UInt32;
+            val_t = ValType::Int32;
         } else {
             internal_assert(halide_t.bits() == 64);
-            val_t = ValType::UInt64;
+            val_t = ValType::Int64;
         }
     } else {
         internal_assert(halide_t.is_float());
@@ -185,6 +185,7 @@ void populate_ops_table_double_general_sub(const vector<Type> &types, vector<Ass
     declare_vars_double(types);
     if (types[0] == types[1]) {
         table.push_back({{x0 * y0 - x1 * y1, x1 * y0 + x0 * y1}, {one_0, zero_1}, true});
+        table.push_back({{x0 * y0 - y1 * x1, x1 * y0 + y1 * x0}, {one_0, zero_1}, true});
     }
 }
 
@@ -309,7 +310,7 @@ std::string print_types(const vector<Type> &types) {
     return stream.str();
 }
 
-} // anonymous namespace
+}  // anonymous namespace
 
 const vector<AssociativePattern> &get_ops_table(const vector<Expr> &exprs) {
     internal_assert(!exprs.empty());
@@ -368,5 +369,5 @@ const vector<AssociativePattern> &get_ops_table(const vector<Expr> &exprs) {
     return empty;
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

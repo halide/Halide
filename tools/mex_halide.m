@@ -19,8 +19,8 @@ function mex_halide( generator_filename, varargin )
 %
 % This script uses two environment variables that can optionally be
 % set or changed:
-%  - HALIDE_PATH: The path to the root directory of Halide. If
-%    unspecified, this defaults to '..' relative to mex_halide.m.
+%  - HALIDE_DISTRIB_PATH: The path to the distrib directory of Halide. If
+%    unspecified, this defaults to '../../distrib' relative to mex_halide.m.
 %  - HALIDE_CXX: The C++ compiler to use to build generators. The
 %    default is 'c++'.
 
@@ -50,18 +50,22 @@ function mex_halide( generator_filename, varargin )
     generator_args = strjoin(varargin);
     target = 'host-matlab';
 
-    if isempty(getenv('HALIDE_PATH'))
+    if isempty(getenv('HALIDE_DISTRIB_PATH'))
         % If the user has not set the halide path, get the path of
-        % this file (presumably in $HALIDE_PATH/tools/) and use
+        % this file (presumably in $HALIDE_DISTRIB_PATH/tools/) and use
         % that.
         [path, ~] = fileparts(mfilename('fullpath'));
-        halide_path = fullfile(path, '..');
-        setenv('HALIDE_PATH', halide_path);
+        halide_distrib_path = fullfile(path, '..');
+        setenv('HALIDE_DISTRIB_PATH', halide_distrib_path);
     end
-    halide_path = getenv('HALIDE_PATH');
-
-    libhalide = fullfile(halide_path, 'bin', 'libHalide.so');
-    halide_include = fullfile(halide_path, 'include');
+    halide_distrib_path = getenv('HALIDE_DISTRIB_PATH');
+    
+    if ismac
+        libhalide = fullfile(halide_distrib_path, 'bin', 'libHalide.dylib');
+    else
+        libhalide = fullfile(halide_distrib_path, 'bin', 'libHalide.so');
+    end
+    halide_include = fullfile(halide_distrib_path, 'include');
 
     if isempty(getenv('HALIDE_CXX'))
         % If the user has not set a compiler for Halide, use c++.
@@ -69,7 +73,7 @@ function mex_halide( generator_filename, varargin )
     end
     halide_cxx = getenv('HALIDE_CXX');
 
-    ld_library_path = fullfile(halide_path, 'bin');
+    ld_library_path = fullfile(halide_distrib_path, 'bin');
 
     % Build the command to build the generator.
     gen_bin = fullfile(temp, [function_name, '.generator']);

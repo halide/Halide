@@ -2,13 +2,13 @@
 #include "CSE.h"
 #include "ExprUsesVar.h"
 #include "IREquality.h"
-#include "IROperator.h"
 #include "IRMatch.h"
 #include "IRMutator.h"
+#include "IROperator.h"
 #include "IRPrinter.h"
+#include "Simplify.h"
 #include "Solve.h"
 #include "Substitute.h"
-#include "Simplify.h"
 #include "Util.h"
 
 #include <algorithm>
@@ -25,7 +25,7 @@ using std::vector;
 
 namespace {
 
-template <typename T>
+template<typename T>
 vector<T> get_subvector(const vector<T> &v, const set<int> &indices) {
     vector<T> sub;
     for (const auto &index : indices) {
@@ -47,11 +47,11 @@ class ConvertSelfRef : public IRMutator {
     const int value_index;
     const vector<string> &op_x_names;
 
-    void visit(const Call *op) {
+    Expr visit(const Call *op) override {
         if (!is_solvable) {
-            return;
+            return op;
         }
-        IRMutator::visit(op);
+        Expr expr = IRMutator::visit(op);
         op = expr.as<Call>();
         internal_assert(op);
 
@@ -63,7 +63,7 @@ class ConvertSelfRef : public IRMutator {
                     debug(5) << "Self-reference of " << op->name
                              << " with different args from the LHS. Operation is not associative\n";
                     is_solvable = false;
-                    return;
+                    return expr;
                 }
             }
             // Substitute the call
@@ -78,6 +78,7 @@ class ConvertSelfRef : public IRMutator {
                 x_dependencies.insert(op->value_index);
             }
         }
+        return expr;
     }
 
 public:
@@ -94,7 +95,7 @@ bool associative_op_pattern_match(Expr e,
                                   const Expr &op,
                                   const vector<string> &x_names,
                                   const vector<string> &y_names,
-                                  const Scope<int> &x_scope,
+                                  const Scope<> &x_scope,
                                   map<string, Expr> &match) {
 
     internal_assert(e.type() == op.type())
@@ -163,9 +164,9 @@ bool find_match(const vector<AssociativePattern> &table, const vector<string> &o
     internal_assert(op_x_names.size() == exprs.size());
     internal_assert(op_x_names.size() == assoc_op.size());
 
-    Scope<int> x_scope;
+    Scope<> x_scope;
     for (const auto &x : op_x_names) {
-        x_scope.push(x, 0);
+        x_scope.push(x);
     }
 
     for (const AssociativePattern &pattern : table) {
@@ -756,7 +757,7 @@ void associativity_test() {
         check_associativity("f", {x}, {f_call_0*g_call_0 - f_call_1*g_call_1, f_call_0*g_call_1 + f_call_1*g_call_0},
                             AssociativeOp(
                               AssociativePattern(
-                                {xs[0]*ys[0] - xs[1]*ys[1], xs[1]*ys[0] + xs[0]*ys[1]},
+                                {xs[0]*ys[0] - ys[1]*xs[1], xs[1]*ys[0] + ys[1]*xs[0]},
                                 {make_const(ts[0], 1), make_const(ts[1], 0)},
                                 true),
                               {Replacement("x0", f_call_0), Replacement("x1", f_call_1)},
@@ -824,6 +825,5 @@ void associativity_test() {
     std::cout << "Associativity test passed" << std::endl;
 }
 
-
-}
-}
+}  // namespace Internal
+}  // namespace Halide

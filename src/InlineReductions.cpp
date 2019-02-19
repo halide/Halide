@@ -1,16 +1,16 @@
 #include "InlineReductions.h"
-#include "Func.h"
-#include "Scope.h"
-#include "IROperator.h"
-#include "IRMutator.h"
-#include "Debug.h"
 #include "CSE.h"
+#include "Debug.h"
+#include "Func.h"
+#include "IRMutator.h"
+#include "IROperator.h"
+#include "Scope.h"
 
 namespace Halide {
 
+using std::ostringstream;
 using std::string;
 using std::vector;
-using std::ostringstream;
 
 namespace Internal {
 
@@ -28,31 +28,30 @@ private:
     bool explicit_rdom;
     const string &name;
 
-    Scope<int> internal;
+    Scope<> internal;
 
     using IRMutator::visit;
 
-    void visit(const Let *op) {
+    Expr visit(const Let *op) override {
         Expr value = mutate(op->value);
-        internal.push(op->name, 0);
+        internal.push(op->name);
         Expr body = mutate(op->body);
         internal.pop(op->name);
         if (value.same_as(op->value) &&
             body.same_as(op->body)) {
-            expr = op;
+            return op;
         } else {
-            expr = Let::make(op->name, value, body);
+            return Let::make(op->name, value, body);
         }
     }
 
-    void visit(const Variable *v) {
-
+    Expr visit(const Variable *v) override {
         string var_name = v->name;
-        expr = v;
+        Expr expr = v;
 
         if (internal.contains(var_name)) {
             // Don't capture internally defined vars
-            return;
+            return expr;
         }
 
         if (v->reduction_domain.defined()) {
@@ -60,7 +59,7 @@ private:
                 if (v->reduction_domain.same_as(rdom.domain())) {
                     // This variable belongs to the explicit reduction domain, so
                     // skip it.
-                    return;
+                    return expr;
                 } else {
                     // This should be converted to a pure variable and
                     // added to the free vars list.
@@ -72,7 +71,7 @@ private:
                     // We're looking for a reduction domain, and this variable
                     // has one. Capture it.
                     rdom = RDom(v->reduction_domain);
-                    return;
+                    return expr;
                 } else if (!rdom.domain().same_as(v->reduction_domain)) {
                     // We were looking for a reduction domain, and already
                     // found one. This one is different!
@@ -81,25 +80,28 @@ private:
                                << v->name << ", " << rdom.x.name() << "\n";
                 } else {
                     // Recapturing an already-known reduction domain
-                    return;
+                    return expr;
                 }
             }
         }
 
         if (v->param.defined()) {
             // Skip parameters
-            return;
+            return expr;
         }
 
         for (size_t i = 0; i < free_vars.size(); i++) {
-            if (var_name == free_vars[i].name()) return;
+            if (var_name == free_vars[i].name()) {
+                return expr;
+            }
         }
 
         free_vars.push_back(Var(var_name));
         call_args.push_back(v);
+        return expr;
     }
 };
-}
+}  // namespace Internal
 
 Expr sum(Expr e, const std::string &name) {
     return sum(RDom(), e, name);
@@ -220,4 +222,4 @@ Tuple argmin(RDom r, Expr e, const std::string &name) {
     return f(v.call_args);
 }
 
-}
+}  // namespace Halide

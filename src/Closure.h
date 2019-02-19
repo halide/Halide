@@ -6,10 +6,10 @@
  * Provides Closure class.
  */
 
+#include "Buffer.h"
 #include "IR.h"
 #include "IRVisitor.h"
 #include "Scope.h"
-#include "Buffer.h"
 
 namespace Halide {
 namespace Internal {
@@ -22,17 +22,17 @@ namespace Internal {
  * own function (e.g. because it's the body of a parallel for loop. */
 class Closure : public IRVisitor {
 protected:
-    Scope<int> ignore;
+    Scope<> ignore;
 
     using IRVisitor::visit;
 
-    void visit(const Let *op);
-    void visit(const LetStmt *op);
-    void visit(const For *op);
-    void visit(const Load *op);
-    void visit(const Store *op);
-    void visit(const Allocate *op);
-    void visit(const Variable *op);
+    void visit(const Let *op) override;
+    void visit(const LetStmt *op) override;
+    void visit(const For *op) override;
+    void visit(const Load *op) override;
+    void visit(const Store *op) override;
+    void visit(const Allocate *op) override;
+    void visit(const Variable *op) override;
 
 public:
     /** Information about a buffer reference from a closure. */
@@ -79,6 +79,7 @@ public:
     std::map<std::string, Buffer> buffers;
 };
 
-}}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

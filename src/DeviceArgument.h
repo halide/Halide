@@ -5,8 +5,9 @@
  * Defines helpers for passing arguments to separate devices, such as GPUs.
  */
 
-#include "IR.h"
 #include "Closure.h"
+#include "IR.h"
+#include "ModulusRemainder.h"
 
 namespace Halide {
 namespace Internal {
@@ -59,6 +60,9 @@ struct DeviceArgument {
     bool read;
     bool write;
 
+    /** Alignment information for integer parameters. */
+    ModulusRemainder alignment;
+
     DeviceArgument() :
         is_buffer(false),
         dimensions(0),
@@ -93,10 +97,11 @@ public:
 
 protected:
     using Internal::Closure::visit;
-    void visit(const For *loop);
-    void visit(const Call *op);
+    void visit(const For *loop) override;
+    void visit(const Call *op) override;
 };
 
-}}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

@@ -2,6 +2,7 @@
 #include "halide_benchmark.h"
 #include <cstdio>
 #include <chrono>
+#include "test/common/halide_test_dirs.h"
 
 using namespace Halide;
 using namespace Halide::Tools;
@@ -14,7 +15,7 @@ int main(int argc, char **argv) {
 
     dst.vectorize(x, 32, TailStrategy::GuardWithIf);
 
-    dst.compile_to_assembly("halide_memcpy.s", {src}, "halide_memcpy");
+    dst.compile_to_assembly(Internal::get_test_tmp_dir() + "halide_memcpy.s", {src}, "halide_memcpy");
     dst.compile_jit();
 
     const int32_t buffer_size = 12345678;

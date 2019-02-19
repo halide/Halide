@@ -13,7 +13,7 @@ public:
 protected:
     using IRVisitor::visit;
 
-    void visit(const Store *op) {
+    void visit(const Store *op) override {
         count++;
     }
 };
@@ -24,7 +24,7 @@ public:
     CheckStoreCount(int correct) : correct(correct) {}
     using IRMutator::mutate;
 
-    Stmt mutate(Stmt s) {
+    Stmt mutate(const Stmt &s) override {
         CountStores c;
         s.accept(&c);
 

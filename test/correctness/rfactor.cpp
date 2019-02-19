@@ -4,6 +4,8 @@
 #include <stdio.h>
 #include <map>
 
+namespace {
+
 using std::map;
 using std::string;
 
@@ -1030,6 +1032,8 @@ int self_assignment_rfactor_test() {
     }
     return 0;
 }
+
+}  // namespace
 
 int main(int argc, char **argv) {
     printf("Running self assignment rfactor test\n");

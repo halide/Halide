@@ -10,8 +10,9 @@
 // g++ lesson_21_auto_scheduler_generate.cpp ../tools/GenGen.cpp -g -std=c++11 -fno-rtti -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_21_generate
 // export LD_LIBRARY_PATH=../bin   # For linux
 // export DYLD_LIBRARY_PATH=../bin # For OS X
-// ./lesson_21_generate -o . -f conv_layer target=host
-// g++ lesson_21_auto_scheduler_run.cpp brighten_*.o -ldl -lpthread -o lesson_21_run
+// ./lesson_21_generate -o . -g auto_schedule_gen -f auto_schedule_false -e static_library,h,schedule target=host auto_schedule=false
+// ./lesson_21_generate -o . -g auto_schedule_gen -f auto_schedule_true -e static_library,h,schedule target=host auto_schedule=true machine_params=32,16777216,40
+// g++ lesson_21_auto_scheduler_run.cpp -std=c++11 -I ../include -I ../tools auto_schedule_false.a auto_schedule_true.a -ldl -lpthread -o lesson_21_run
 // ./lesson_21_run
 
 // If you have the entire Halide source tree, you can also build it by
@@ -28,8 +29,6 @@ using namespace Halide;
 // We will define a generator to auto-schedule.
 class AutoScheduled : public Halide::Generator<AutoScheduled> {
 public:
-    GeneratorParam<bool>  auto_schedule{"auto_schedule", false};
-
     Input<Buffer<float>>  input{"input", 3};
     Input<float>          factor{"factor"};
 
@@ -100,16 +99,24 @@ public:
             // they are to the actual use-case values, the better the generated
             // schedule will be.
 
-            // Now, let's auto-schedule the pipeline by calling auto_schedule_outputs(),
-            // which takes in a MachineParams object as an argument. The machine_params
-            // argument is optional. If none is specified, the default machine parameters
-            // for a generic CPU architecture are going to be used by the auto-scheduler.
+            // To auto-schedule the the pipeline, we don't have to do anything else:
+            // every Generator implicitly has a GeneratorParam named "auto_schedule";
+            // if this is set to true, Halide will call auto_schedule() on all of
+            // our pipeline's outputs automatically.
 
-            // Let's use some arbitrary but plausible values for the machine parameters.
-            const int kParallelism = 32;
-            const int kLastLevelCacheSize = 16 * 1024 * 1024;
-            const int kBalance = 40;
-            MachineParams machine_params(kParallelism, kLastLevelCacheSize, kBalance);
+            // Every Generator also implicitly has a GeneratorParams named "machine_params",
+            // which allows you to specify characteristics of the machine architecture
+            // for the auto-scheduler; it's generally specified in your Makefile.
+            // If none is specified, the default machine parameters for a generic CPU
+            // architecture will be used by the auto-scheduler.
+
+            // Let's see some arbitrary but plausible values for the machine parameters.
+            //
+            //      const int kParallelism = 32;
+            //      const int kLastLevelCacheSize = 16 * 1024 * 1024;
+            //      const int kBalance = 40;
+            //      MachineParams machine_params(kParallelism, kLastLevelCacheSize, kBalance);
+            //
             // The arguments to MachineParams are the maximum level of parallelism
             // available, the size of the last-level cache (in KB), and the ratio
             // between the cost of a miss at the last level cache and the cost
@@ -118,15 +125,14 @@ public:
             // Note that when using the auto-scheduler, no schedule should have
             // been applied to the pipeline; otherwise, the auto-scheduler will
             // throw an error. The current auto-scheduler cannot handle a
-            // partially-schedule pipeline.
-            //
-            // Calling auto_schedule_outputs() will apply the generated schedule
-            // automatically to members of the pipeline in addition to returning
-            // a string representation of the schedule.
-            std::string schedule = auto_schedule_outputs(machine_params);
-            std::cout << "\nSchedule:\n\n" << schedule << "\n";
+            // partially-scheduled pipeline.
 
-            // The generated schedule that is dumped to std::cout is an actual
+            // If HL_DEBUG_CODEGEN is set to 3 or greater, the schedule will be dumped
+            // to stdout (along with much other information); a more useful way is
+            // to add "schedule" to the -e flag to the Generator. (In CMake and Bazel,
+            // this is done using the "extra_outputs" flag.)
+
+            // The generated schedule that is dumped to file is an actual
             // Halide C++ source, which is readily copy-pasteable back into
             // this very same source file with few modifications. Programmers
             // can use this as a starting schedule and iteratively improve the
@@ -135,7 +141,7 @@ public:
             // and parallelization. It doesn't deal with line buffering, storage
             // reordering, or factoring reductions.
 
-            // At the time of writing, the auto-scheduler will return the
+            // At the time of writing, the auto-scheduler will produce the
             // following schedule for the estimates and machine parameters
             // declared above when run on this pipeline:
             //
@@ -148,31 +154,38 @@ public:
             // Var y_i("y_i");
             // Var y_o("y_o");
             //
-            // Func f0 = pipeline.get_func(3);
-            // Func f1 = pipeline.get_func(7);
-            // Func f11 = pipeline.get_func(14);
-            // Func f2 = pipeline.get_func(4);
+            // Func Ix = pipeline.get_func(4);
+            // Func Iy = pipeline.get_func(7);
+            // Func gray = pipeline.get_func(3);
+            // Func harris = pipeline.get_func(14);
             // Func output1 = pipeline.get_func(15);
             // Func output2 = pipeline.get_func(16);
             //
             // {
-            //     Var x = f0.args()[0];
-            //     f0
-            //         .compute_at(f11, x_o)
+            //     Var x = Ix.args()[0];
+            //     Ix
+            //         .compute_at(harris, x_o)
             //         .split(x, x_vo, x_vi, 8)
             //         .vectorize(x_vi);
             // }
             // {
-            //     Var x = f1.args()[0];
-            //     f1
-            //         .compute_at(f11, x_o)
+            //     Var x = Iy.args()[0];
+            //     Iy
+            //         .compute_at(harris, x_o)
             //         .split(x, x_vo, x_vi, 8)
             //         .vectorize(x_vi);
             // }
             // {
-            //     Var x = f11.args()[0];
-            //     Var y = f11.args()[1];
-            //     f11
+            //     Var x = gray.args()[0];
+            //     gray
+            //         .compute_at(harris, x_o)
+            //         .split(x, x_vo, x_vi, 8)
+            //         .vectorize(x_vi);
+            // }
+            // {
+            //     Var x = harris.args()[0];
+            //     Var y = harris.args()[1];
+            //     harris
             //         .compute_root()
             //         .split(x, x_o, x_i, 256)
             //         .split(y, y_o, y_i, 128)
@@ -181,13 +194,6 @@ public:
             //         .vectorize(x_i_vi)
             //         .parallel(y_o)
             //         .parallel(x_o);
-            // }
-            // {
-            //     Var x = f2.args()[0];
-            //     f2
-            //         .compute_at(f11, x_o)
-            //         .split(x, x_vo, x_vi, 8)
-            //         .vectorize(x_vi);
             // }
             // {
             //     Var x = output1.args()[0];
@@ -207,6 +213,7 @@ public:
             //         .vectorize(x_vi)
             //         .parallel(y);
             // }
+
         } else {
             // This is where you would declare the schedule you have written by
             // hand or paste the schedule generated by the auto-scheduler.

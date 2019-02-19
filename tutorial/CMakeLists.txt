@@ -21,8 +21,9 @@ function(add_tutorial source_file)
 
   string(REPLACE ".cpp" "" name ${source_file})
   halide_project(${name} "tutorials" ${source_file})
-  add_to_group(test_tutorials "${name}" EXECUTE
-               WORKING_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
+  add_test("${name}"
+           GROUPS test_tutorial
+           WORKING_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
   target_include_directories(${name} PRIVATE "${CMAKE_SOURCE_DIR}/tools")
   if (SUPPORT_NO_UNUSED_BUT_SET_VARIABLE)
     target_compile_options(${name} PRIVATE "-Wno-unused-but-set-variable")
@@ -31,16 +32,16 @@ function(add_tutorial source_file)
     halide_use_image_io(${name})
   endif()
   if (${args_WITH_OPENMP})
-    if (NOT MSVC)
-      if (OPENMP_FOUND)
-        target_compile_options(${name} PRIVATE ${OpenMP_CXX_FLAGS})
-        target_link_libraries(${name} PRIVATE ${OpenMP_CXX_FLAGS})
-      else()
-        # Compile anyway but supress warnings about unrecognised pragmas
-        target_compile_options(${name} PRIVATE -Wno-unknown-pragmas)
-      endif()
+    if (OPENMP_FOUND)
+      target_compile_options(${name} PRIVATE ${OpenMP_CXX_FLAGS})
+      target_link_libraries(${name} PRIVATE ${OpenMP_CXX_FLAGS})
     else()
-      message(STATUS "TODO: Implement OpenMP support for MSVC")
+      # Compile anyway but supress warnings about unrecognised pragmas
+      if (NOT MSVC)
+        target_compile_options(${name} PRIVATE -Wno-unknown-pragmas)
+      else()
+        target_compile_options(${name} PRIVATE /Wd4068)
+      endif()
     endif()
   endif()
 endfunction()
@@ -66,12 +67,17 @@ if (BUILD_AOT_TUTORIAL)
   # so we can build the final executable.
   add_tutorial(lesson_10_aot_compilation_generate.cpp)
 
+  # LLVM may leak memory during Halide compilation. If projects are built with address sanitizer enabled,
+  # this may cause generators to fail, making it hard to use Halide and address sanitizer at the same time.
+  # To work around this, we execute generators with an environment setting to disable leak checking.
+  set(RUN_WITHOUT_LEAKCHECK ${CMAKE_COMMAND} -E env "ASAN_OPTIONS=detect_leaks=0")
+
   set(FILTER_H "lesson_10_halide.h")
   set(FILTER_LIB "lesson_10_halide${CMAKE_STATIC_LIBRARY_SUFFIX}")
   set(FILTER_DIR "${CMAKE_CURRENT_BINARY_DIR}")
   add_custom_command(OUTPUT "${FILTER_H}" "${FILTER_LIB}"
                      DEPENDS lesson_10_aot_compilation_generate
-                     COMMAND lesson_10_aot_compilation_generate
+                     COMMAND ${RUN_WITHOUT_LEAKCHECK} $<TARGET_FILE:lesson_10_aot_compilation_generate>
                      WORKING_DIRECTORY "${FILTER_DIR}"
                      COMMENT "generating stuff in ${FILTER_DIR}" )
   add_custom_target(exec_lesson_10_aot_compilation_generate

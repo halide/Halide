@@ -43,7 +43,10 @@ extern "C" int msan_extern_stage(halide_buffer_t *in, halide_buffer_t *out) {
 }
 
 extern "C" void halide_error(void *user_context, const char *msg) {
-    fprintf(stderr, "Saw error: %s\n", msg);
+    // Emitting "error.*:" to stdout or stderr will cause CMake to report the
+    // test as a failure on Windows, regardless of error code returned,
+    // hence the abbreviation to "err".
+    fprintf(stderr, "Saw err: %s\n", msg);
     // Do not exit.
 }
 

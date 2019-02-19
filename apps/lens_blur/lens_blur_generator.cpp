@@ -8,8 +8,6 @@ using namespace Halide;
 
 class LensBlur : public Halide::Generator<LensBlur> {
 public:
-    GeneratorParam<bool>    auto_schedule{"auto_schedule", false};
-
     Input<Buffer<uint8_t>>  left_im{"left_im", 3};
     Input<Buffer<uint8_t>>  right_im{"right_im", 3};
     // The number of displacements to consider
@@ -171,9 +169,6 @@ public:
             final.estimate(x, 0, 1536)
                 .estimate(y, 0, 2560)
                 .estimate(c, 0, 3);
-            // Auto schedule the pipeline: this calls auto_schedule() for
-            // all of the Outputs in this Generator
-            auto_schedule_outputs();
         } else if (get_target().has_gpu_feature()) {
             // Manual GPU schedule
             Var xi("xi"), yi("yi"), zi("zi");

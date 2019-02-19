@@ -11,7 +11,7 @@ public:
 private:
     using Internal::IRVisitor::visit;
 
-    void visit(const Internal::Select *op) {
+    void visit(const Internal::Select *op) override {
         if (in_produce) {
             count++;
             count_select++;
@@ -19,7 +19,7 @@ private:
         Internal::IRVisitor::visit(op);
     }
 
-    void visit(const Internal::IfThenElse *op) {
+    void visit(const Internal::IfThenElse *op) override {
         if (in_produce) {
             count++;
             count_if++;
@@ -27,7 +27,7 @@ private:
         Internal::IRVisitor::visit(op);
     }
 
-    void visit(const Internal::ProducerConsumer *op) {
+    void visit(const Internal::ProducerConsumer *op) override {
         if (op->is_producer) {
             bool old_in_produce = in_produce;
             in_produce = true;
