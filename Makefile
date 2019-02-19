@@ -1978,16 +1978,11 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
 		halide/bin \
 		halide/lib \
 		halide/include \
+		halide/tools \
 		halide/tutorial \
 		halide/README*.md \
-		halide/tools/mex_halide.m \
-		halide/tools/*.cpp \
-		halide/tools/halide_benchmark.h \
-		halide/tools/halide_image.h \
-		halide/tools/halide_image_io.h \
-		halide/tools/halide_image_info.h \
-		halide/tools/halide_malloc_trace.h \
-		halide/tools/halide_trace_config.h
+		halide/halide_config.* \
+		halide/halide.*
 	rm -rf halide
 
 .PHONY: distrib
