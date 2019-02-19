@@ -796,9 +796,9 @@ bool Target::get_runtime_compatible_target(const Target& other, Target &result) 
     // (b) must be included if both targets have the feature (intersection)
     // (c) must match across both targets; it is an error if one target has the feature and the other doesn't
     const std::array<Feature, 25> union_features = {
-            Debug, TSAN, ASAN, MSAN, CUDA, CUDACapability30, CUDACapability32, CUDACapability35, CUDACapability50,
-            CUDACapability61, OpenCL, OpenGL, OpenGLCompute, MinGW, Metal, HexagonDma, HVX_64, HVX_128, HVX_v62,
-            HVX_v65, HVX_v66, HVX_shared_object, D3D12Compute, NoNEON, SoftFloatABI
+            CUDA, CUDACapability30, CUDACapability32, CUDACapability35, CUDACapability50, CUDACapability61, OpenCL,
+            OpenGL, OpenGLCompute, MinGW, Metal, HexagonDma, HVX_64, HVX_128, HVX_v62, HVX_v65, HVX_v66,
+            HVX_shared_object, D3D12Compute, NoNEON
     };
 
     const std::array<Feature, 12> intersection_features = {
@@ -841,6 +841,7 @@ bool Target::get_runtime_compatible_target(const Target& other, Target &result) 
     // We merge the bits via bitwise or.
     Target output{os, arch, bits};
     output.features = ((features | other.features) & union_mask)
+            | ((features | other.features) & matching_mask)
             | ((features & other.features) & intersection_mask);
 
     if (!fixup_gcd_target(output)) {
