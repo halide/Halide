@@ -1206,6 +1206,8 @@ extern int halide_error_integer_division_by_zero(void *user_context);
 // @}
 
 /** Optional features a compilation Target can have.
+ * Be sure to keep this in sync with the Feature enum in Target.h and the implementation of
+ * get_runtime_compatible_target in Target.cpp if you add a new feature.
  */
 typedef enum halide_target_feature_t {
     halide_target_feature_jit = 0,  ///< Generate code that will run immediately inside the calling process.

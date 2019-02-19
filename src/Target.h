@@ -189,6 +189,15 @@ struct Target {
       return !(*this == other);
     }
 
+    /**
+     * Create a "greatest common denominator" runtime target that is compatible with
+     * both this target and \p other. Used by generators to conveniently select a suitable
+     * runtime when linking together multiple functions.
+     * 
+     * @param other The other target from which we compute the gcd target.
+     * @param[out] result The gcd target if we return true, otherwise unmodified.
+     * @return Whether it was possible to find a compatible target (true) or not.
+     */
     bool get_runtime_compatible_target(const Target& other, Target &result);
 
     /** Convert the Target into a string form that can be reconstituted
