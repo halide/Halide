@@ -1161,12 +1161,15 @@ void CodeGen_LLVM::optimize_module() {
         auto addAddressSanitizerPasses = [](const PassManagerBuilder &builder, legacy::PassManagerBase &pm) {
             constexpr bool compile_kernel = false;   // always false for user code
             constexpr bool recover = false;          // -fsanitize-recover, always false here
-
             constexpr bool use_after_scope = false;  // enable -fsanitize-address-use-after-scope?
-            pm.add(createAddressSanitizerFunctionPass(compile_kernel, recover, use_after_scope));
-
             constexpr bool use_globals_gc = false;  // Should ASan use GC-friendly instrumentation for globals?
+
+            pm.add(createAddressSanitizerFunctionPass(compile_kernel, recover, use_after_scope));
+#if LLVM_VERSION >= 90
+            pm.add(createModuleAddressSanitizerLegacyPassPass(compile_kernel, recover, use_globals_gc));
+#else
             pm.add(createAddressSanitizerModulePass(compile_kernel, recover, use_globals_gc));
+#endif
         };
         b.addExtension(PassManagerBuilder::EP_OptimizerLast, addAddressSanitizerPasses);
         b.addExtension(PassManagerBuilder::EP_EnabledOnOptLevel0, addAddressSanitizerPasses);
