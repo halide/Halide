@@ -1267,7 +1267,7 @@ typedef enum halide_target_feature_t {
     halide_target_feature_trace_stores, ///< Trace all stores done by the pipeline. Equivalent to calling Func::trace_stores on every non-inlined Func.
     halide_target_feature_trace_realizations, ///< Trace all realizations done by the pipeline. Equivalent to calling Func::trace_realizations on every non-inlined Func.
     halide_target_feature_cuda_capability61,  ///< Enable CUDA compute capability 6.1 (Pascal)
-
+    halide_target_feature_hvx_v65, ///< Enable Hexagon v65 architecture.
     halide_target_feature_hvx_v66, ///< Enable Hexagon v66 architecture.
     halide_target_feature_cl_half,  ///< Enable half support on OpenCL targets
     halide_target_feature_strict_float, ///< Turn off all non-IEEE floating-point optimization. Currently applies only to LLVM targets.
