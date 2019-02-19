@@ -86,29 +86,26 @@ public:
             non_local_means.estimate(x, 0, 1536)
                 .estimate(y, 0, 2560)
                 .estimate(c, 0, 3);
-        } /*else if (get_target().has_gpu_feature()) {
-            // TODO: the GPU schedule is currently using to much shared memory
-            // because the simplifier can't simplify the expr (it can't cancel
-            // the 'x' term in min(((a + (x + b)) + c) - min(x + d + e))) so
-            // it ends up using the entire image size as the shared memory size.
+        } else if (get_target().has_gpu_feature()) {
             non_local_means.compute_root()
+                .gpu_tile(x, y, xi, yi, 32, 8);
+            non_local_means_sum.compute_root()
                 .reorder(c, x, y).unroll(c)
-                .gpu_tile(x, y, xi, yi, 16, 8);
-            d.compute_at(non_local_means_sum, s_dom.x)
-                .tile(x, y, xi, yi, 2, 2)
-                .unroll(xi)
-                .unroll(yi)
-                .gpu_threads(x, y);
-            blur_d_y.compute_at(non_local_means_sum, s_dom.x)
-                .unroll(x, 2).gpu_threads(x, y);
-            blur_d.compute_at(non_local_means_sum, s_dom.x)
-                .gpu_threads(x, y);
-            non_local_means_sum.compute_at(non_local_means, x)
-                .gpu_threads(x, y)
+                .gpu_tile(x, y, xi, yi, 32, 8)
                 .update()
-                .reorder(x, y, c, s_dom.x, s_dom.y)
-                .gpu_threads(x, y);
-        }*/ else {
+                .reorder(c, s_dom.x, x, y, s_dom.y)
+                .unroll(c)
+                .gpu_tile(x, y, xi, yi, 32, 8);
+            w.compute_at(non_local_means_sum, s_dom.y).store_root()
+                .reorder(dx, dy, x, y)
+                .gpu_tile(x, y, xi, yi, 32, 8);
+            blur_d_y.compute_at(non_local_means_sum, s_dom.y).store_root()
+                .reorder(dx, dy, x, y)
+                .gpu_tile(x, y, xi, yi, 32, 8);
+            d.compute_at(non_local_means_sum, s_dom.y).store_root()
+                .reorder(dx, dy, x, y)
+                .gpu_tile(x, y, xi, yi, 32, 8);
+        } else {
             std::string use_simple_autoscheduler =
                 Halide::Internal::get_env_variable("HL_USE_SIMPLE_AUTOSCHEDULER");
             if (use_simple_autoscheduler == "1") {
