@@ -1,4 +1,4 @@
- #include <cstdio>
+#include <cstdio>
 #include <chrono>
 
 #include "nl_means.h"

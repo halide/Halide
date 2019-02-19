@@ -161,7 +161,18 @@ public:
     void schedule() {
         Pipeline p(output);
 
-        if (!auto_schedule && !use_simple_autoscheduler) {
+        if (auto_schedule || use_simple_autoscheduler) {
+            // Nothing
+        } else if (get_target().has_gpu_feature()) {
+            Var xi, yi;
+            for (Func f : intermediates) {
+                f.compute_at(intermed_compute_at).gpu_threads(x, y);
+            }
+            output.compute_at(output_compute_at)
+                .unroll(x, 2)
+                .gpu_threads(x, y)
+                .reorder(c, x, y).unroll(c);
+        } else {
             int vec = get_target().natural_vector_size(UInt(16));
             bool use_hexagon = get_target().features_any_of({Target::HVX_64, Target::HVX_128});
             if (get_target().has_feature(Target::HVX_64)) {
@@ -341,6 +352,10 @@ Func CameraPipe::apply_curve(Func input) {
     if (!auto_schedule && !use_simple_autoscheduler) {
         // It's a LUT, compute it once ahead of time.
         curve.compute_root();
+        if (get_target().has_gpu_feature()) {
+            Var xi;
+            curve.gpu_tile(x, xi, 32);
+        }
     }
 
     /* Optional tags to specify layout for HalideTraceViz */
@@ -425,6 +440,12 @@ void CameraPipe::generate() {
 
     processed(x, y, c) = sharpen(curved)(x, y, c);
 
+    Expr out_width = processed.width();
+    Expr out_height = processed.height();
+    processed.bound(c, 0, 3)
+        .bound(x, 0, (out_width / 2) * 2)
+        .bound(y, 0, (out_height / 2) * 2);
+
     // Schedule
     if (auto_schedule) {
 
@@ -436,11 +457,6 @@ void CameraPipe::generate() {
         matrix_7000.dim(0).set_bounds_estimate(0, 4);
         matrix_7000.dim(1).set_bounds_estimate(0, 3);
 
-        processed
-            .bound(c, 0, 3)
-            .bound(x, 0, 2592 - 32)
-            .bound(y, 0, 1968 - 48);
-
         sharpen_strength.set_estimate(1.0f);
         blackLevel.set_estimate(25);
         whiteLevel.set_estimate(1023);
@@ -448,13 +464,16 @@ void CameraPipe::generate() {
         contrast.set_estimate(50);
         color_temp.set_estimate(3200);
 
-    } else {
-        if (use_simple_autoscheduler) {
-            Halide::SimpleAutoscheduleOptions options;
-            options.gpu = get_target().has_gpu_feature();
-            options.gpu_tile_channel = 1;
-            Func output_func = processed;
-            Halide::simple_autoschedule(output_func,
+        processed
+            .estimate(x, 0, 2592)
+            .estimate(y, 0, 1968);
+
+    } else if (use_simple_autoscheduler) {
+        Halide::SimpleAutoscheduleOptions options;
+        options.gpu = get_target().has_gpu_feature();
+        options.gpu_tile_channel = 1;
+        Func output_func = processed;
+        Halide::simple_autoschedule(output_func,
                     {{"sharpen_strength", 1.0f},
                      {"blackLevel", 25},
                      {"whiteLevel", 1023},
@@ -477,119 +496,143 @@ void CameraPipe::generate() {
                      {0, 1968-48},
                      {0, 3}},
                     options);
+
+    } else if (get_target().has_gpu_feature()) {
+
+        Var xi, yi, xii, xio;
+
+        /* 1391us on a gtx 980. */
+        processed.compute_root()
+            .reorder(c, x, y)
+            .unroll(x, 2)
+            .gpu_tile(x, y, xi, yi, 28, 12); // N.B. Using 32 instead of 28 is only 5% slower
+
+        curved.compute_at(processed, x)
+            .unroll(x, 2)
+            .gpu_threads(x, y);
+
+        corrected.compute_at(processed, x)
+            .unroll(x, 2)
+            .gpu_threads(x, y);
+
+        demosaiced->output_compute_at.set({processed, x});
+        demosaiced->intermed_compute_at.set({processed, x});
+
+        denoised.compute_at(processed, x)
+            .tile(x, y, xi, yi, 2, 2).unroll(xi).unroll(yi)
+            .gpu_threads(x, y);
+
+        deinterleaved.compute_at(processed, x)
+            .unroll(x, 2)
+            .gpu_threads(x, y)
+            .reorder(c, x, y).unroll(c);
+
+    } else {
+        Expr out_width = processed.width();
+        Expr out_height = processed.height();
+        // In HVX 128, we need 2 threads to saturate HVX with work,
+        //and in HVX 64 we need 4 threads, and on other devices,
+        // we might need many threads.
+        Expr strip_size;
+        if (get_target().has_feature(Target::HVX_128)) {
+            strip_size = processed.dim(1).extent() / 2;
+        } else if (get_target().has_feature(Target::HVX_64)) {
+            strip_size = processed.dim(1).extent() / 4;
         } else {
-            Expr out_width = processed.width();
-            Expr out_height = processed.height();
-            // In HVX 128, we need 2 threads to saturate HVX with work,
-            //and in HVX 64 we need 4 threads, and on other devices,
-            // we might need many threads.
-            Expr strip_size;
-            if (get_target().has_feature(Target::HVX_128)) {
-                strip_size = processed.dim(1).extent() / 2;
-            } else if (get_target().has_feature(Target::HVX_64)) {
-                strip_size = processed.dim(1).extent() / 4;
-            } else {
-                strip_size = 32;
-            }
-            strip_size = (strip_size / 2) * 2;
-
-            int vec = get_target().natural_vector_size(UInt(16));
-            if (get_target().has_feature(Target::HVX_64)) {
-                vec = 32;
-            } else if (get_target().has_feature(Target::HVX_128)) {
-                vec = 64;
-            }
-            processed.compute_root()
-                .reorder(c, x, y)
-                .split(y, yi, yii, 2, TailStrategy::RoundUp)
-                .split(yi, yo, yi, strip_size / 2)
-                .vectorize(x, 2*vec, TailStrategy::RoundUp)
-                .unroll(c)
-                .parallel(yo);
-
-            denoised.compute_at(processed, yi).store_at(processed, yo)
-                .prefetch(input, y, 2)
-                .fold_storage(y, 16)
-                .tile(x, y, x, y, xi, yi, 2*vec, 2)
-                .vectorize(xi)
-                .unroll(yi);
-
-            deinterleaved.compute_at(processed, yi).store_at(processed, yo)
-                .fold_storage(y, 8)
-                .reorder(c, x, y)
-                .vectorize(x, 2*vec, TailStrategy::RoundUp)
-                .unroll(c);
-
-            curved.compute_at(processed, yi).store_at(processed, yo)
-                .reorder(c, x, y)
-                .tile(x, y, x, y, xi, yi, 2*vec, 2, TailStrategy::RoundUp)
-                .vectorize(xi)
-                .unroll(yi)
-                .unroll(c);
-            corrected.compute_at(curved, x)
-                .reorder(c, x, y)
-                .vectorize(x)
-                .unroll(c);
-
-            demosaiced->intermed_compute_at.set({processed, yi});
-            demosaiced->intermed_store_at.set({processed, yo});
-            demosaiced->output_compute_at.set({curved, x});
-
-            if (get_target().features_any_of({Target::HVX_64, Target::HVX_128})) {
-                processed.hexagon();
-                denoised.align_storage(x, vec);
-                deinterleaved.align_storage(x, vec);
-                corrected.align_storage(x, vec);
-            }
-
-            // We can generate slightly better code if we know the splits divide the extent.
-            processed
-                .bound(c, 0, 3)
-                .bound(x, 0, ((out_width)/(2*vec))*(2*vec))
-                .bound(y, 0, (out_height/strip_size)*strip_size);
+            strip_size = 32;
         }
+        strip_size = (strip_size / 2) * 2;
 
-        /* Optional tags to specify layout for HalideTraceViz */
-        {
-            Halide::Trace::FuncConfig cfg;
-            cfg.max = 1024;
-            cfg.pos = { 10, 348 };
-            cfg.labels = {{"input"}};
-            input.add_trace_tag(cfg.to_trace_tag());
+        int vec = get_target().natural_vector_size(UInt(16));
+        if (get_target().has_feature(Target::HVX_64)) {
+            vec = 32;
+        } else if (get_target().has_feature(Target::HVX_128)) {
+            vec = 64;
+        }
+        processed.compute_root()
+            .reorder(c, x, y)
+            .split(y, yi, yii, 2, TailStrategy::RoundUp)
+            .split(yi, yo, yi, strip_size / 2)
+            .vectorize(x, 2*vec, TailStrategy::RoundUp)
+            .unroll(c)
+            .parallel(yo);
 
-            cfg.pos = { 305, 360 };
-            cfg.labels = {{"denoised"}};
-            denoised.add_trace_tag(cfg.to_trace_tag());
+        denoised.compute_at(processed, yi).store_at(processed, yo)
+            .prefetch(input, y, 2)
+            .fold_storage(y, 16)
+            .tile(x, y, x, y, xi, yi, 2*vec, 2)
+            .vectorize(xi)
+            .unroll(yi);
 
-            cfg.pos = { 580, 120 };
-            const int y_offset = 220;
-            cfg.strides = {{1, 0}, {0, 1}, {0, y_offset}};
-            cfg.labels = {
-                { "gr", { 0, 0 * y_offset } },
-                { "r",  { 0, 1 * y_offset }},
-                { "b",  { 0, 2 * y_offset }},
-                { "gb", { 0, 3 * y_offset }},
-            };
-            deinterleaved.add_trace_tag(cfg.to_trace_tag());
+        deinterleaved.compute_at(processed, yi).store_at(processed, yo)
+            .fold_storage(y, 8)
+            .reorder(c, x, y)
+            .vectorize(x, 2*vec, TailStrategy::RoundUp)
+            .unroll(c);
 
-            cfg.color_dim = 2;
-            cfg.strides = {{1, 0}, {0, 1}, {0, 0}};
-            cfg.pos = { 1140, 360 };
-            cfg.labels = {{"demosaiced"}};
-            processed.add_trace_tag(cfg.to_trace_tag());
+        curved.compute_at(processed, yi).store_at(processed, yo)
+            .reorder(c, x, y)
+            .tile(x, y, x, y, xi, yi, 2*vec, 2, TailStrategy::RoundUp)
+            .vectorize(xi)
+            .unroll(yi)
+            .unroll(c);
+        corrected.compute_at(curved, x)
+            .reorder(c, x, y)
+            .vectorize(x)
+            .unroll(c);
 
-            cfg.pos = { 1400, 360 };
-            cfg.labels = {{"color-corrected"}};
-            corrected.add_trace_tag(cfg.to_trace_tag());
+        demosaiced->intermed_compute_at.set({processed, yi});
+        demosaiced->intermed_store_at.set({processed, yo});
+        demosaiced->output_compute_at.set({curved, x});
 
-            cfg.max = 256;
-            cfg.pos = { 1660, 360 };
-            cfg.labels = {{"gamma-corrected"}};
-            curved.add_trace_tag(cfg.to_trace_tag());
-
+        if (get_target().features_any_of({Target::HVX_64, Target::HVX_128})) {
+            processed.hexagon();
+            denoised.align_storage(x, vec);
+            deinterleaved.align_storage(x, vec);
+            corrected.align_storage(x, vec);
         }
     }
-};
+
+    /* Optional tags to specify layout for HalideTraceViz */
+    {
+        Halide::Trace::FuncConfig cfg;
+        cfg.max = 1024;
+        cfg.pos = { 10, 348 };
+        cfg.labels = {{"input"}};
+        input.add_trace_tag(cfg.to_trace_tag());
+
+        cfg.pos = { 305, 360 };
+        cfg.labels = {{"denoised"}};
+        denoised.add_trace_tag(cfg.to_trace_tag());
+
+        cfg.pos = { 580, 120 };
+        const int y_offset = 220;
+        cfg.strides = {{1, 0}, {0, 1}, {0, y_offset}};
+        cfg.labels = {
+            { "gr", { 0, 0 * y_offset } },
+            { "r",  { 0, 1 * y_offset }},
+            { "b",  { 0, 2 * y_offset }},
+            { "gb", { 0, 3 * y_offset }},
+        };
+        deinterleaved.add_trace_tag(cfg.to_trace_tag());
+
+        cfg.color_dim = 2;
+        cfg.strides = {{1, 0}, {0, 1}, {0, 0}};
+        cfg.pos = { 1140, 360 };
+        cfg.labels = {{"demosaiced"}};
+        processed.add_trace_tag(cfg.to_trace_tag());
+
+        cfg.pos = { 1400, 360 };
+        cfg.labels = {{"color-corrected"}};
+        corrected.add_trace_tag(cfg.to_trace_tag());
+
+        cfg.max = 256;
+        cfg.pos = { 1660, 360 };
+        cfg.labels = {{"gamma-corrected"}};
+        curved.add_trace_tag(cfg.to_trace_tag());
+
+    }
+}
 
 }  // namespace
 
