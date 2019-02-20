@@ -1,6 +1,6 @@
 #include "HalideRuntime.h"
 #include "runtime_internal.h"
-#include "scoped_spin_lock.h"
+#include "scoped_mutex_lock.h"
 
 namespace Halide {
 namespace Runtime {
@@ -8,7 +8,7 @@ namespace Internal {
 
 WEAK bool halide_reuse_device_allocations_flag = false;
 
-volatile int WEAK allocation_pools_lock = 0;
+WEAK halide_mutex allocation_pools_lock;
 WEAK halide_device_allocation_pool *device_allocation_pools = NULL;
 
 }}}
@@ -16,10 +16,11 @@ WEAK halide_device_allocation_pool *device_allocation_pools = NULL;
 extern "C" {
 
 WEAK int halide_reuse_device_allocations(void *user_context, bool flag) {
-    halide_reuse_device_allocations_flag = flag;
+    __atomic_store_n(&halide_reuse_device_allocations_flag, flag, __ATOMIC_RELEASE);
+
     int err = 0;
     if (!flag) {
-        ScopedSpinLock lock(&allocation_pools_lock);
+        ScopedMutexLock lock(&allocation_pools_lock);
         for (halide_device_allocation_pool *p = device_allocation_pools; p != NULL; p = p->next) {
             int ret = p->release_unused(user_context);
             if (ret) {
@@ -36,11 +37,11 @@ WEAK int halide_reuse_device_allocations(void *user_context, bool flag) {
  * finer-grained control. By default just returns the value most
  * recently set by the method above. */
 WEAK bool halide_can_reuse_device_allocations(void *user_context) {
-    return halide_reuse_device_allocations_flag;
+    return __atomic_load_n(&halide_reuse_device_allocations_flag, __ATOMIC_ACQUIRE);
 }
 
 WEAK void halide_register_device_allocation_pool(struct halide_device_allocation_pool *pool) {
-    ScopedSpinLock lock(&allocation_pools_lock);
+    ScopedMutexLock lock(&allocation_pools_lock);
     pool->next = device_allocation_pools;
     device_allocation_pools = pool;
 }

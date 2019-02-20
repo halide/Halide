@@ -56,6 +56,7 @@ CUDA_FN_4000(CUresult, cuCtxPopCurrent, cuCtxPopCurrent_v2, (CUcontext *pctx));
 CUDA_FN(CUresult, cuPointerGetAttribute, (void *result, int query, CUdeviceptr ptr));
 
 CUDA_FN_OPTIONAL(CUresult, cuStreamSynchronize, (CUstream hStream));
+CUDA_FN_OPTIONAL(CUresult, cuLaunchHostFunc, (CUstream hStream, void (*fn)(void *), void *));
 
 #undef CUDA_FN
 #undef CUDA_FN_OPTIONAL
