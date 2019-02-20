@@ -2912,6 +2912,16 @@ struct State {
         return n_loops_tagged_gpu_thread > 0;
     }
 
+    bool can_fuse_gpu(const vector<int64_t>& parallel_extents) {
+        int64_t total = 1;
+        for (auto extent : parallel_extents) {
+            total *= extent;
+        }
+
+        // Max grid size
+        return total < 65535;
+    }
+
     void apply_schedule(const FunctionDAG &dag, const MachineParams &params, const Target &target) {
         StageMap<std::unique_ptr<LoopNest::StageScheduleState>> state_map;
         std::vector<LoopNest::StageScheduleState*> ancestors;
@@ -3010,8 +3020,8 @@ struct State {
 
             // Halide doesn't let you fuse an RVar with a Var, even if
             // they are both pure.
-            bool can_fuse = !(any_parallel_vars && any_parallel_rvars);
-            if (can_fuse) {
+            bool can_fuse = !(any_parallel_vars && any_parallel_rvars) && (!target.has_gpu_feature() || can_fuse_gpu(parallel_extents));
+            if (can_fuse && (!target.has_gpu_feature() || can_fuse_gpu(parallel_extents))) {
                 for (size_t i = 1; i < parallel_vars.size(); i++) {
                     // Outermost, and next outermost. Preserve the inner
                     // name to not invalidate any compute_ats.
