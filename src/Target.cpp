@@ -191,8 +191,17 @@ int get_cuda_capability_lower_bound(const Target &t) {
     return 20;
 }
 
+bool is_using_hexagon(const Target &t) {
+    return t.has_feature(Target::HVX_64)
+           || t.has_feature(Target::HVX_128)
+           || t.has_feature(Target::HVX_v62)
+           || t.has_feature(Target::HVX_v65)
+           || t.has_feature(Target::HVX_v66)
+           || t.arch == Target::Hexagon;
+}
+
 int get_hvx_lower_bound(const Target &t) {
-    if (!t.has_feature(Target::HVX_64) && !t.has_feature(Target::HVX_128)) {
+    if (!is_using_hexagon(t)) {
         return 0;
     }
     if (t.has_feature(Target::HVX_v62)) {
