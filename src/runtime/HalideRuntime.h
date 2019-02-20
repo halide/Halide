@@ -1827,26 +1827,44 @@ extern double halide_float16_bits_to_double(uint16_t);
 
 //@}
 
-// Tell Halide how much unused memory it is permitted to hold onto to
-// service future allocations. If zero, Halide returns all memory to
-// the OS as soon as it is no longer needed. If large, Halide will not
-// eagerly free allocations when the memory is no longer needed, but
-// instead keep them in a pool to service future requests.
-extern void halide_allocation_cache_set_size(uint64_t size);
+// Allocating and freeing device memory is often very slow. The
+// methods below give Halide's runtime permission to hold onto device
+// memory to service future requests instead of returning it to the
+// underlying device API. The API does not manage an allocation pool,
+// all it does is provide access to a shared counter that acts as a
+// limit on the unused memory not yet returned to the underlying
+// device API. It makes callbacks to participants when memory needs to
+// be released because the limit is about to be exceeded (either
+// because the limit has been reduced, or because the memory owned by
+// some participant becomes unused).
 
-// Halide calls this to determine the maximum amount of unused memory
-// it can hold onto in order to satisfy future allocations. By default
-// it just returns the value set by the function above.
-extern uint64_t halide_allocation_cache_get_size(void *user_context);
+/** Tell Halide whether or not it is permitted to hold onto device
+ * allocations to service future requests instead of returning them
+ * eagerly to the underlying device API. Many device allocators are
+ * quite slow, so it can be beneficial to set this to true.
+ *
+ * If set to false, releases all unused device allocations back to the
+ * underlying device APIs. For finer-grained control, see specific
+ * methods in each device api runtime. */
+extern int halide_reuse_device_allocations(void *user_context, bool);
 
-// Halide calls this to notify the cache that it is adding some unused
-// memory into an allocation cache. Returns the total amount of unused
-// memory in the cache.
-extern uint64_t halide_allocation_cache_increase_used(void *user_context, uint64_t amount);
+/** Determines whether on device_free the memory is returned
+ * immediately to the device API, or placed on a free list for future
+ * use. Override and switch based on the user_context for
+ * finer-grained control. By default just returns the value most
+ * recently set by the method above. */
+extern bool halide_can_reuse_device_allocations(void *user_context);
 
-// Halide calls this when it decides to release an unused allocation
-// back to the OS.
-extern uint64_t halide_allocation_cache_decrease_used(void *user_context, uint64_t amount);
+struct halide_device_allocation_pool {
+    int (*release_unused)(void *user_context);
+    struct halide_device_allocation_pool *next;
+};
+
+/** Register a callback to be informed when
+ * halide_reuse_device_allocations(false) is called, and all unused
+ * device allocations must be released. The object passed should have
+ * global lifetime, and its next field will be clobbered. */
+extern void halide_register_device_allocation_pool(struct halide_device_allocation_pool *);
 
 #ifdef __cplusplus
 } // End extern "C"

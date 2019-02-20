@@ -81,12 +81,13 @@ CUcontext WEAK context = 0;
 volatile int WEAK context_lock = 0;
 
 // A free list, used when allocations are being cached.
-static struct FreeListItem {
+WEAK struct FreeListItem {
     CUdeviceptr ptr;
     CUcontext ctx;
     size_t size;
     FreeListItem *next;
 } *free_list = 0;
+volatile int WEAK free_list_lock = 0;
 
 }}}} // namespace Halide::Runtime::Internal::Cuda
 
@@ -529,6 +530,45 @@ WEAK int halide_cuda_initialize_kernels(void *user_context, void **state_ptr, co
     return 0;
 }
 
+WEAK int halide_cuda_release_unused_device_allocations(void *user_context) {
+    // Atomically yoink the entire list and then free it at our leisure
+    FreeListItem *to_free = __sync_swap(&free_list, NULL);
+    while (to_free) {
+        debug(user_context) <<  "    cuMemFree " << (void *)(to_free->ptr) << "\n";
+        cuMemFree(to_free->ptr);
+        FreeListItem *next = to_free->next;
+        free(to_free);
+        to_free = next;
+    }
+    return 0;
+}
+
+namespace Halide {
+namespace Runtime {
+namespace Internal {
+
+WEAK halide_device_allocation_pool cuda_allocation_pool;
+
+__attribute__((constructor))
+WEAK void register_cuda_allocation_pool() {
+    cuda_allocation_pool.release_unused = &halide_cuda_release_unused_device_allocations;
+    halide_register_device_allocation_pool(&cuda_allocation_pool);
+}
+
+__attribute__((always_inline))
+uint64_t quantize_allocation_size(uint64_t sz) {
+    int z = __builtin_clzll(sz);
+    if (z < 60) {
+        sz--;
+        sz = sz >> (60 - z);
+        sz++;
+        sz = sz << (60 - z);
+    }
+    return sz;
+}
+
+}}}
+
 WEAK int halide_cuda_device_free(void *user_context, halide_buffer_t* buf) {
     // halide_device_free, at present, can be exposed to clients and they
     // should be allowed to call halide_device_free on any halide_buffer_t
@@ -554,36 +594,20 @@ WEAK int halide_cuda_device_free(void *user_context, halide_buffer_t* buf) {
     halide_assert(user_context, validate_device_pointer(user_context, buf));
 
     CUresult err = CUDA_SUCCESS;
-    uint64_t size = buf->size_in_bytes();
-    uint64_t max_size = halide_allocation_cache_get_size(user_context);
-    if (size < max_size) {
+    if (halide_can_reuse_device_allocations(user_context)) {
         debug(user_context) <<  "    caching allocation for later use: " << (void *)(dev_ptr) << "\n";
+        // Full sync in case a malloc on another stream grabs this
+        // immediately (TODO: figure out the minimal synchronization)
+        cuCtxSynchronize();
+
         FreeListItem *item = (FreeListItem *)malloc(sizeof(FreeListItem));
-        item->next = free_list;
         item->ctx = ctx.context;
-        item->size = buf->size_in_bytes();
+        item->size = quantize_allocation_size(buf->size_in_bytes());
         item->ptr = dev_ptr;
-        free_list = item;
-        uint64_t new_size = halide_allocation_cache_increase_used(user_context, size);
-        if (new_size > max_size) {
-            // Free the tail of the list to get us back under the size limit.
-            uint64_t cumulative_size = size;
-            FreeListItem *to_free = free_list->next;
-            FreeListItem **prev_ptr = &(free_list->next);
-            while (to_free) {
-                cumulative_size += to_free->size;
-                if (cumulative_size > max_size) {
-                    *prev_ptr = NULL;
-                    halide_allocation_cache_decrease_used(user_context, to_free->size);
-                    debug(user_context) <<  "    cuMemFree " << (void *)(to_free->ptr) << "\n";
-                    cuMemFree(to_free->ptr);
-                    to_free = to_free->next;
-                    free(to_free);
-                } else {
-                    prev_ptr = &(to_free->next);
-                    to_free = to_free->next;
-                }
-            }
+        {
+            ScopedSpinLock lock(&free_list_lock);
+            item->next = free_list;
+            free_list = item;
         }
     } else {
         debug(user_context) <<  "    cuMemFree " << (void *)(dev_ptr) << "\n";
@@ -623,15 +647,6 @@ WEAK int halide_cuda_device_release(void *user_context) {
         return err;
     }
 
-    // Dump the contents of the free list, ignoring errors.
-    while (free_list) {
-        FreeListItem *next = free_list;
-        halide_allocation_cache_decrease_used(user_context, next->size);
-        cuMemFree(next->ptr);
-        free(next);
-        free_list = free_list->next;
-    }
-
     if (ctx) {
         // It's possible that this is being called from the destructor of
         // a static variable, in which case the driver may already be
@@ -641,6 +656,9 @@ WEAK int halide_cuda_device_release(void *user_context) {
             err = cuCtxSynchronize();
         }
         halide_assert(user_context, err == CUDA_SUCCESS || err == CUDA_ERROR_DEINITIALIZED);
+
+        // Dump the contents of the free list, ignoring errors.
+        halide_cuda_release_unused_device_allocations(user_context);
 
         {
             ScopedSpinLock spinlock(&filters_list_lock);
@@ -704,7 +722,7 @@ WEAK int halide_cuda_device_malloc(void *user_context, halide_buffer_t *buf) {
         return ctx.error;
     }
 
-    size_t size = buf->size_in_bytes();
+    size_t size = quantize_allocation_size(buf->size_in_bytes());
     halide_assert(user_context, size != 0);
     if (buf->device) {
         // This buffer already has a device allocation
@@ -724,24 +742,67 @@ WEAK int halide_cuda_device_malloc(void *user_context, halide_buffer_t *buf) {
     #endif
 
     CUdeviceptr p = 0;
-    {
-        // Check the free list for an allocation of the right size
-        FreeListItem **prev_ptr = &free_list;
-        FreeListItem *item = free_list;
-        while (item && !p) {
-            if (size == item->size && ctx.context == item->ctx) {
-                *prev_ptr = item->next;
-                p = item->ptr;
-                halide_allocation_cache_decrease_used(user_context, item->size);
-                free(item);
+    FreeListItem *to_free = NULL, *first_free = free_list;
+    if (first_free) {
+        cuCtxSynchronize();
+        ScopedSpinLock lock(&free_list_lock);
+        // Best-fit allocation. There are three tunable constants
+        // here. A bucket is claimed if the size requested is at least
+        // 7/8 of the size of the bucket. We keep at most 32 unused
+        // allocations. We round up each allocation size to its top 4
+        // most significant bits (see quantize_allocation_size).
+        FreeListItem *best = NULL, *item = first_free;
+        FreeListItem **best_prev = NULL, **prev_ptr = &free_list;
+        int depth = 0;
+        while (item) {
+            if ((size <= item->size) && // Fits
+                (size >= (item->size / 8) * 7) && // Not too much slop
+                (ctx.context == item->ctx) && // Same cuda context
+                ((best == NULL) || (best->size > item->size))) { // Better than previous best fit
+                best = item;
+                best_prev = prev_ptr;
+                prev_ptr = &item->next;
+                item = item->next;
+            } else if (depth > 32) {
+                // Allocations after here have not been used for a
+                // long time. Just detach the rest of the free list
+                // and defer the actual cuMemFree calls until after we
+                // release the free_list_lock.
+                to_free = item;
+                *prev_ptr = NULL;
+                item = NULL;
+            } else {
+                prev_ptr = &item->next;
+                item = item->next;
             }
-            prev_ptr = &item->next;
-            item = item->next;
+            depth++;
+        }
+
+        if (best) {
+            p = best->ptr;
+            *best_prev = best->next;
+            free(best);
         }
     }
+
+    while (to_free) {
+        FreeListItem *next = to_free->next;
+        cuMemFree(to_free->ptr);
+        free(to_free);
+        to_free = next;
+    }
+
     if (!p) {
         debug(user_context) << "    cuMemAlloc " << (uint64_t)size << " -> ";
+
+        // Quantize all allocation sizes to the top 4 bits, to make
+        // reuse likelier. Wastes on average 4% memory per allocation.
+
         CUresult err = cuMemAlloc(&p, size);
+        if (err == CUDA_ERROR_OUT_OF_MEMORY && free_list) {
+            halide_cuda_release_unused_device_allocations(user_context);
+            err = cuMemAlloc(&p, size);
+        }
         if (err != CUDA_SUCCESS) {
             debug(user_context) << get_error_name(err) << "\n";
             error(user_context) << "CUDA: cuMemAlloc failed: "
@@ -942,7 +1003,7 @@ WEAK int halide_cuda_device_sync(void *user_context, struct halide_buffer_t *) {
         }
         err = cuStreamSynchronize(stream);
     } else {
-       err = cuCtxSynchronize();
+        err = cuCtxSynchronize();
     }
     if (err != CUDA_SUCCESS) {
         error(user_context) << "CUDA: cuCtxSynchronize failed: "

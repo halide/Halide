@@ -1,30 +1,48 @@
+#include "HalideRuntime.h"
 #include "runtime_internal.h"
+#include "scoped_spin_lock.h"
 
 namespace Halide {
 namespace Runtime {
 namespace Internal {
 
-WEAK uint64_t halide_allocation_cache_size = 0;
-WEAK uint64_t halide_allocation_cache_used = 0;
+WEAK bool halide_reuse_device_allocations_flag = false;
+
+volatile int WEAK allocation_pools_lock = 0;
+WEAK halide_device_allocation_pool *device_allocation_pools = NULL;
 
 }}}
 
 extern "C" {
 
-WEAK uint64_t halide_allocation_cache_increase_used(void *user_context, uint64_t amount) {
-    return __sync_fetch_and_add(&halide_allocation_cache_used, amount);
+WEAK int halide_reuse_device_allocations(void *user_context, bool flag) {
+    halide_reuse_device_allocations_flag = flag;
+    int err = 0;
+    if (!flag) {
+        ScopedSpinLock lock(&allocation_pools_lock);
+        for (halide_device_allocation_pool *p = device_allocation_pools; p != NULL; p = p->next) {
+            int ret = p->release_unused(user_context);
+            if (ret) {
+                err = ret;
+            }
+        }
+    }
+    return err;
 }
 
-WEAK uint64_t halide_allocation_cache_decrease_used(void *user_context, uint64_t amount) {
-    return __sync_fetch_and_sub(&halide_allocation_cache_used, amount);
+/** Determines whether on device_free the memory is returned
+ * immediately to the device API, or placed on a free list for future
+ * use. Override and switch based on the user_context for
+ * finer-grained control. By default just returns the value most
+ * recently set by the method above. */
+WEAK bool halide_can_reuse_device_allocations(void *user_context) {
+    return halide_reuse_device_allocations_flag;
 }
 
-WEAK void halide_allocation_cache_set_size(uint64_t size) {
-    halide_allocation_cache_size = size;
-}
-
-WEAK uint64_t halide_allocation_cache_get_size(void *user_context) {
-    return halide_allocation_cache_size;
+WEAK void halide_register_device_allocation_pool(struct halide_device_allocation_pool *pool) {
+    ScopedSpinLock lock(&allocation_pools_lock);
+    pool->next = device_allocation_pools;
+    device_allocation_pools = pool;
 }
 
 }
