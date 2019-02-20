@@ -871,7 +871,7 @@ bool Target::get_runtime_compatible_target(const Target& other, Target &result) 
 }
 
 
-    namespace Internal {
+namespace Internal {
 
 void target_test() {
     Target t;
