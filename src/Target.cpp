@@ -859,7 +859,7 @@ bool Target::get_runtime_compatible_target(const Target& other, Target &result) 
 
     // Pick tight lower bound for HVX version. Use fall-through to clear redundant features
     switch (get_hvx_lower_bound(result)) {
-        default: // not hexagon arch; clear all capability flags
+        default: // doesn't use hexagon; clear all capability flags
         case 60: result.features.reset(HVX_v62);
         case 62: result.features.reset(HVX_v65);
         case 65: result.features.reset(HVX_v66);
