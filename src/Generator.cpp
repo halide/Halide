@@ -981,10 +981,6 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
     }
 
     if (!runtime_name.empty()) {
-        if (targets.size() != 1) {
-            cerr << "Only one target allowed here";
-            return 1;
-        }
         std::string base_path = compute_base_path(output_dir, runtime_name, "");
 
         Target gcd_target = targets[0];
@@ -995,6 +991,10 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
                            << " and "
                            << targets[i].to_string() << '\n';
             }
+        }
+
+        if (targets.size() > 1) {
+            debug(1) << "Building runtime for computed target: " << gcd_target.to_string() << "\n";
         }
 
         Outputs output_files = compute_outputs(gcd_target, base_path, emit_options);
