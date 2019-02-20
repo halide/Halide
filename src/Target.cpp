@@ -192,8 +192,7 @@ int get_cuda_capability_lower_bound(const Target &t) {
 }
 
 int get_hvx_lower_bound(const Target &t) {
-    if (!t.has_feature(Target::HexagonDma) && t.arch != Target::Hexagon) {
-        // TODO: is this right? how do these options differ
+    if (!t.has_feature(Target::HVX_64) && !t.has_feature(Target::HVX_128)) {
         return 0;
     }
     if (t.has_feature(Target::HVX_v62)) {
@@ -205,8 +204,7 @@ int get_hvx_lower_bound(const Target &t) {
     if (t.has_feature(Target::HVX_v66)) {
         return 66;
     }
-    // TODO: Is there a lower HVX version, like 20 for CUDA?
-    return -1;
+    return 60;
 }
 
 }  // namespace
@@ -861,7 +859,8 @@ bool Target::get_runtime_compatible_target(const Target& other, Target &result) 
 
     // Pick tight lower bound for HVX version. Use fall-through to clear redundant features
     switch (get_hvx_lower_bound(result)) {
-        default: // no HexagonDMA feature; clear all capability flags
+        default: // not hexagon arch; clear all capability flags
+        case 60: result.features.reset(HVX_v62);
         case 62: result.features.reset(HVX_v65);
         case 65: result.features.reset(HVX_v66);
         case 66: break;
