@@ -15,12 +15,14 @@ RegisteredFilter *registered_filters = nullptr;
 
 extern "C" void halide_register_argv_and_metadata(
     int (*filter_argv_call)(void **),
-    const struct halide_filter_metadata_t *filter_metadata) {
+    const struct halide_filter_metadata_t *filter_metadata,
+    const char * const *extra_key_value_pairs) {
 
     auto *rf = new RegisteredFilter();
     rf->next = registered_filters;
     rf->filter_argv_call = filter_argv_call;
     rf->filter_metadata = filter_metadata;
+    // RunGen ignores extra_key_value_pairs
     registered_filters = rf;
 }
 
@@ -485,6 +487,10 @@ int main(int argc, char **argv) {
     if (track_memory) {
         tracker.install();
     }
+
+    // This is a single-purpose binary to benchmark this filter, so we
+    // shouldn't be eagerly returning device memory.
+    halide_reuse_device_allocations(nullptr, true);
 
     if (benchmark) {
         r.run_for_benchmark(benchmark_min_time, benchmark_min_iters, benchmark_max_iters);

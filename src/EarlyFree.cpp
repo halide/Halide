@@ -101,7 +101,7 @@ private:
     }
 };
 
-class InjectMarker : public IRMutator2 {
+class InjectMarker : public IRMutator {
 public:
     string func;
     Stmt last_use;
@@ -110,7 +110,7 @@ private:
 
     bool injected = false;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Stmt inject_marker(Stmt s) {
         if (injected) return s;
@@ -135,11 +135,11 @@ private:
     }
 };
 
-class InjectEarlyFrees : public IRMutator2 {
-    using IRMutator2::visit;
+class InjectEarlyFrees : public IRMutator {
+    using IRMutator::visit;
 
     Stmt visit(const Allocate *alloc) override {
-        Stmt stmt = IRMutator2::visit(alloc);
+        Stmt stmt = IRMutator::visit(alloc);
         alloc = stmt.as<Allocate>();
         internal_assert(alloc);
 

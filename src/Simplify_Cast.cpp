@@ -3,18 +3,26 @@
 namespace Halide {
 namespace Internal {
 
-Expr Simplify::visit(const Cast *op, ConstBounds *bounds) {
+Expr Simplify::visit(const Cast *op, ExprInfo *bounds) {
     // We don't try to reason about bounds through casts for now
     Expr value = mutate(op->value, nullptr);
 
     if (may_simplify(op->type) && may_simplify(op->value.type())) {
+        const Call *call = value.as<Call>();
         const Cast *cast = value.as<Cast>();
         const Broadcast *broadcast_value = value.as<Broadcast>();
         const Ramp *ramp_value = value.as<Ramp>();
         double f = 0.0;
         int64_t i = 0;
         uint64_t u = 0;
-        if (value.type() == op->type) {
+        if (call && (call->is_intrinsic(Call::indeterminate_expression) ||
+                     call->is_intrinsic(Call::signed_integer_overflow))) {
+            if (call->is_intrinsic(Call::indeterminate_expression)) {
+                return make_indeterminate_expression(op->type);
+            } else {
+                return make_signed_integer_overflow(op->type);
+            }
+        } else if (value.type() == op->type) {
             return value;
         } else if (op->type.is_int() &&
                    const_float(value, &f) &&

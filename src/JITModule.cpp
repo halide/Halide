@@ -197,7 +197,9 @@ public:
         return result;
     }
 
-#if LLVM_VERSION < 70
+#if LLVM_VERSION >= 80
+    // nothing
+#else
     void work_around_llvm_bugs() {
 
         for (auto p : code_pages) {
@@ -250,6 +252,10 @@ JITModule::JITModule(const Module &m, const LoweredFunc &fn,
     std::vector<JITModule> shared_runtime = JITSharedRuntime::get(llvm_module.get(), m.target());
     deps_with_runtime.insert(deps_with_runtime.end(), shared_runtime.begin(), shared_runtime.end());
     compile_module(std::move(llvm_module), fn.name, m.target(), deps_with_runtime);
+    // If -time-passes is in HL_LLVM_ARGS, this will print llvm passes time statstics otherwise its no-op.
+#if LLVM_VERSION >= 80
+    llvm::reportAndResetTimings();
+#endif
 }
 
 void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &function_name, const Target &target,
@@ -335,10 +341,11 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
 
     debug(2) << "Finalizing object\n";
     ee->finalizeObject();
-#if LLVM_VERSION < 70
+#if LLVM_VERSION >= 80
+    // nothing
+#else
     memory_manager->work_around_llvm_bugs();
 #endif
-
     // Do any target-specific post-compilation module meddling
     for (size_t i = 0; i < listeners.size(); i++) {
         ee->UnregisterJITEventListener(listeners[i]);
@@ -455,7 +462,15 @@ void JITModule::memoization_cache_set_size(int64_t size) const {
     std::map<std::string, Symbol>::const_iterator f =
         exports().find("halide_memoization_cache_set_size");
     if (f != exports().end()) {
-        return (reinterpret_bits<void (*)(int64_t)>(f->second.address))(size);
+        (reinterpret_bits<void (*)(int64_t)>(f->second.address))(size);
+    }
+}
+
+void JITModule::reuse_device_allocations(bool b) const {
+    std::map<std::string, Symbol>::const_iterator f =
+        exports().find("halide_reuse_device_allocations");
+    if (f != exports().end()) {
+        (reinterpret_bits<int (*)(void *, bool)>(f->second.address))(nullptr, b);
     }
 }
 
@@ -933,6 +948,11 @@ void JITSharedRuntime::memoization_cache_set_size(int64_t size) {
         default_cache_size = size;
         shared_runtimes(MainShared).memoization_cache_set_size(size);
     }
+}
+
+void JITSharedRuntime::reuse_device_allocations(bool b) {
+    std::lock_guard<std::mutex> lock(shared_runtimes_mutex);
+    shared_runtimes(MainShared).reuse_device_allocations(b);
 }
 
 }  // namespace Internal

@@ -2,7 +2,7 @@
 # 'make run_tests' builds and runs all the end-to-end tests in the test subdirectory
 # 'make {error,performance}_foo' builds and runs test/{...}/foo.cpp for any
 #     cpp file in the corresponding subdirectory of the test folder
-# 'make test_foo' builds and runs test/correctness/foo.cpp for any
+# 'make correctness_foo' builds and runs test/correctness/foo.cpp for any
 #     cpp file in the correctness/ subdirectoy of the test folder
 # 'make test_apps' checks some of the apps build and run (but does not check their output)
 # 'make time_compilation_tests' records the compile time for each test module into a csv file.
@@ -44,8 +44,6 @@ define alwayslink
 	-Wl,--whole-archive $(1) -Wl,-no-whole-archive
 endef
 endif
-
-BAZEL ?= $(shell which bazel)
 
 SHELL = bash
 CXX ?= g++
@@ -681,6 +679,7 @@ RUNTIME_CPP_COMPONENTS = \
   aarch64_cpu_features \
   alignment_128 \
   alignment_32 \
+  allocation_cache \
   alignment_64 \
   android_clock \
   android_host_cpu_count \
@@ -1066,9 +1065,19 @@ GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/nested_externs.runge
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/old_buffer_t.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/tiled_blur.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/extern_output.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
-test_rungen: $(GENERATOR_BUILD_RUNGEN_TESTS) $(FILTERS_DIR)/multi_rungen $(FILTERS_DIR)/multi_rungen2
+GENERATOR_BUILD_RUNGEN_TESTS := $(GENERATOR_BUILD_RUNGEN_TESTS) \
+	$(FILTERS_DIR)/multi_rungen \
+	$(FILTERS_DIR)/multi_rungen2 \
+	$(FILTERS_DIR)/rungen_test \
+	$(FILTERS_DIR)/registration_test
+
+test_rungen: $(GENERATOR_BUILD_RUNGEN_TESTS)
+	$(FILTERS_DIR)/rungen_test
+	$(FILTERS_DIR)/registration_test
 
 test_generator: $(GENERATOR_AOT_TESTS) $(GENERATOR_AOTCPP_TESTS) $(GENERATOR_JIT_TESTS) $(GENERATOR_BUILD_RUNGEN_TESTS)
+	$(FILTERS_DIR)/rungen_test
+	$(FILTERS_DIR)/registration_test
 
 ALL_TESTS = test_internal test_correctness test_error test_tutorial test_warning test_generator
 
@@ -1484,7 +1493,7 @@ test_generator_nested_externs:
 
 $(BUILD_DIR)/RunGenMain.o: $(ROOT_DIR)/tools/RunGenMain.cpp $(RUNTIME_EXPORTED_INCLUDES) $(ROOT_DIR)/tools/RunGen.h
 	@mkdir -p $(@D)
-	$(CXX) -c $< $(TEST_CXX_FLAGS) $(IMAGE_IO_CXX_FLAGS) -I$(INCLUDE_DIR) -I $(SRC_DIR)/runtime -I$(ROOT_DIR)/tools -o $@
+	$(CXX) -c $< $(TEST_CXX_FLAGS) $(OPTIMIZE) $(IMAGE_IO_CXX_FLAGS) -I$(INCLUDE_DIR) -I $(SRC_DIR)/runtime -I$(ROOT_DIR)/tools -o $@
 
 $(FILTERS_DIR)/%.registration.o: $(FILTERS_DIR)/%.registration.cpp
 	@mkdir -p $(@D)
@@ -1504,6 +1513,43 @@ RUNARGS ?=
 $(FILTERS_DIR)/%.run: $(FILTERS_DIR)/%.rungen
 	$(CURDIR)/$< $(RUNARGS)
 	@-echo
+
+$(FILTERS_DIR)/%.registration_extra.o: $(FILTERS_DIR)/%.registration.cpp
+	@mkdir -p $(@D)
+	$(CXX) -c $< $(TEST_CXX_FLAGS) -DHALIDE_REGISTER_EXTRA_KEY_VALUE_PAIRS_FUNC=halide_register_extra_key_value_pairs_$* -o $@
+
+# Test the registration mechanism, independent of RunGen.
+# Note that this depends on the registration_extra.o (rather than registration.o)
+# because it compiles with HALIDE_REGISTER_EXTRA_KEY_VALUE_PAIRS_FUNC defined.
+$(FILTERS_DIR)/registration_test: $(ROOT_DIR)/test/generator/registration_test.cpp \
+														 $(BIN_DIR)/$(TARGET)/runtime.a \
+														 $(FILTERS_DIR)/blur2x2.registration_extra.o $(FILTERS_DIR)/blur2x2.a \
+														 $(FILTERS_DIR)/cxx_mangling.registration_extra.o $(FILTERS_DIR)/cxx_mangling.a \
+														 $(FILTERS_DIR)/pyramid.registration_extra.o $(FILTERS_DIR)/pyramid.a
+	@mkdir -p $(@D)
+	$(CXX) $(GEN_AOT_CXX_FLAGS) $(GEN_AOT_INCLUDES) \
+			$(ROOT_DIR)/test/generator/registration_test.cpp \
+			$(FILTERS_DIR)/blur2x2.registration_extra.o \
+			$(FILTERS_DIR)/cxx_mangling.registration_extra.o \
+			$(FILTERS_DIR)/pyramid.registration_extra.o \
+			$(FILTERS_DIR)/blur2x2.a \
+			$(FILTERS_DIR)/cxx_mangling.a \
+			$(FILTERS_DIR)/pyramid.a \
+      $(BIN_DIR)/$(TARGET)/runtime.a \
+			$(GEN_AOT_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@
+
+# Test RunGen itself
+$(FILTERS_DIR)/rungen_test: $(ROOT_DIR)/test/generator/rungen_test.cpp \
+							$(BIN_DIR)/$(TARGET)/runtime.a \
+							$(FILTERS_DIR)/example.registration.o \
+							$(FILTERS_DIR)/example.a
+	@mkdir -p $(@D)
+	$(CXX) $(GEN_AOT_CXX_FLAGS) $(IMAGE_IO_CXX_FLAGS) $(GEN_AOT_INCLUDES) \
+			$(ROOT_DIR)/test/generator/rungen_test.cpp \
+			$(BIN_DIR)/$(TARGET)/runtime.a \
+			$(call alwayslink,$(FILTERS_DIR)/example.registration.o) \
+			$(FILTERS_DIR)/example.a \
+			$(GEN_AOT_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@
 
 # Test linking multiple filters into a single RunGen instance
 $(FILTERS_DIR)/multi_rungen: $(BUILD_DIR)/RunGenMain.o $(BIN_DIR)/$(TARGET)/runtime.a \
@@ -1724,24 +1770,6 @@ test_apps: distrib
 			|| exit 1 ; \
 	done
 
-# Bazel depends on the distrib archive being built
-.PHONY: test_bazel
-test_bazel: $(DISTRIB_DIR)/halide.tgz
-	# Only test bazeldemo if Bazel is installed
-	if [ -z "$(BAZEL)" ]; then echo "Bazel is not installed"; exit 1; fi
-	mkdir -p apps
-	# Make a local copy of the apps if we're building out-of-tree,
-	# because the app Makefiles are written to build in-tree
-	if [ "$(ROOT_DIR)" != "$(CURDIR)" ]; then \
-	  echo "Building out-of-tree, so making local copy of apps"; \
-	  cp -r $(ROOT_DIR)/apps/bazeldemo apps; \
-	  cp -r $(ROOT_DIR)/tools .; \
-	fi
-	cd apps/bazeldemo; \
-	CXX=`echo ${CXX} | sed 's/ccache //'` \
-	CC=`echo ${CC} | sed 's/ccache //'` \
-	bazel build --verbose_failures :all
-
 .PHONY: test_python2
 test_python2: distrib $(BIN_DIR)/host/runtime.a
 	make -C $(ROOT_DIR)/python_bindings \
@@ -1792,6 +1820,10 @@ ifneq (,$(findstring clang version 8.0,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
 
+ifneq (,$(findstring clang version 9.0,$(CLANG_VERSION)))
+CLANG_OK=yes
+endif
+
 ifneq (,$(findstring Apple LLVM version 5.0,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
@@ -1812,7 +1844,7 @@ $(BUILD_DIR)/clang_ok:
 	@exit 1
 endif
 
-ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 60 70 80))
+ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 60 70 80 90))
 LLVM_OK=yes
 endif
 
@@ -1914,8 +1946,6 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
 						   $(INCLUDE_DIR)/Halide.h \
 						   $(RUNTIME_EXPORTED_INCLUDES) \
 						   $(ROOT_DIR)/README*.md \
-						   $(ROOT_DIR)/bazel/* \
-						   $(BUILD_DIR)/halide_config.bzl \
                $(BUILD_DIR)/halide_config.cmake \
                $(BUILD_DIR)/halide_config.make \
 						   $(ROOT_DIR)/halide.cmake
@@ -1949,10 +1979,6 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
 	cp $(ROOT_DIR)/tools/halide_malloc_trace.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_trace_config.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/README*.md $(DISTRIB_DIR)
-	cp $(ROOT_DIR)/bazel/BUILD $(DISTRIB_DIR)
-	cp $(ROOT_DIR)/bazel/halide.bzl $(DISTRIB_DIR)
-	cp $(ROOT_DIR)/bazel/README_bazel.md $(DISTRIB_DIR)
-	cp $(ROOT_DIR)/bazel/WORKSPACE $(DISTRIB_DIR)
 	cp $(BUILD_DIR)/halide_config.* $(DISTRIB_DIR)
 	cp $(ROOT_DIR)/halide.cmake $(DISTRIB_DIR)
 	ln -sf $(DISTRIB_DIR) halide
@@ -1961,12 +1987,7 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
 		halide/lib \
 		halide/include \
 		halide/tutorial \
-		halide/BUILD \
 		halide/README*.md \
-		halide/README_bazel.md \
-		halide/WORKSPACE \
-		halide/*.bzl \
-		halide/*.cmake \
 		halide/tools/mex_halide.m \
 		halide/tools/*.cpp \
 		halide/tools/halide_benchmark.h \

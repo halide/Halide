@@ -67,6 +67,7 @@ std::unique_ptr<llvm::Module> parse_bitcode_file(llvm::StringRef buf, llvm::LLVM
 // Universal CPP Initmods. Please keep sorted alphabetically.
 DECLARE_CPP_INITMOD(alignment_128)
 DECLARE_CPP_INITMOD(alignment_32)
+DECLARE_CPP_INITMOD(allocation_cache)
 DECLARE_CPP_INITMOD(alignment_64)
 DECLARE_CPP_INITMOD(android_clock)
 DECLARE_CPP_INITMOD(android_host_cpu_count)
@@ -802,6 +803,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_alignment_32(c, bits_64, debug));
             }
 
+            modules.push_back(get_initmod_allocation_cache(c, bits_64, debug));
             modules.push_back(get_initmod_device_interface(c, bits_64, debug));
             modules.push_back(get_initmod_metadata(c, bits_64, debug));
             modules.push_back(get_initmod_float16_t(c, bits_64, debug));

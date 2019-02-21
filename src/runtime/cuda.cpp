@@ -4,6 +4,7 @@
 #include "printer.h"
 #include "mini_cuda.h"
 #include "scoped_spin_lock.h"
+#include "scoped_mutex_lock.h"
 
 #define INLINE inline __attribute__((always_inline))
 
@@ -77,8 +78,18 @@ WEAK CUresult create_cuda_context(void *user_context, CUcontext *ctx);
 
 // A cuda context defined in this module with weak linkage
 CUcontext WEAK context = 0;
-// This spinlock protexts the above context variable.
-volatile int WEAK context_lock = 0;
+// This lock protexts the above context variable.
+WEAK halide_mutex context_lock;
+
+// A free list, used when allocations are being cached.
+WEAK struct FreeListItem {
+    CUdeviceptr ptr;
+    CUcontext ctx;
+    CUstream stream;
+    size_t size;
+    FreeListItem *next;
+} *free_list = 0;
+WEAK halide_mutex free_list_lock;
 
 }}}} // namespace Halide::Runtime::Internal::Cuda
 
@@ -117,7 +128,7 @@ WEAK int halide_cuda_acquire_context(void *user_context, CUcontext *ctx, bool cr
         }
 
         {
-            ScopedSpinLock spinlock(&context_lock);
+            ScopedMutexLock spinlock(&context_lock);
             local_val = context;
             if (local_val == NULL) {
                 CUresult error = create_cuda_context(user_context, &local_val);
@@ -194,11 +205,10 @@ public:
     }
 
     INLINE ~Context() {
-        if (error == 0) {
-            CUcontext old;
-            cuCtxPopCurrent(&old);
-            halide_cuda_release_context(user_context);
-        }
+        CUcontext old;
+        cuCtxPopCurrent(&old);
+
+        halide_cuda_release_context(user_context);
     }
 };
 
@@ -227,7 +237,7 @@ struct registered_filters {
 };
 WEAK registered_filters *filters_list = NULL;
 // This spinlock protects the above filters_list.
-volatile int WEAK filters_list_lock = 0;
+WEAK halide_mutex filters_list_lock;
 
 WEAK module_state *find_module_for_context(const registered_filters *filters, CUcontext ctx) {
     module_state *modules = filters->modules;
@@ -467,7 +477,7 @@ WEAK int halide_cuda_initialize_kernels(void *user_context, void **state_ptr, co
 
     halide_assert(user_context, &filters_list_lock != NULL);
     {
-        ScopedSpinLock spinlock(&filters_list_lock);
+        ScopedMutexLock spinlock(&filters_list_lock);
 
         // Create the state object if necessary. This only happens once, regardless
         // of how many times halide_initialize_kernels/halide_release is called.
@@ -522,6 +532,49 @@ WEAK int halide_cuda_initialize_kernels(void *user_context, void **state_ptr, co
     return 0;
 }
 
+WEAK int halide_cuda_release_unused_device_allocations(void *user_context) {
+    FreeListItem *to_free;
+    {
+        ScopedMutexLock lock(&free_list_lock);
+        to_free = free_list;
+        free_list = NULL;
+    }
+    while (to_free) {
+        debug(user_context) <<  "    cuMemFree " << (void *)(to_free->ptr) << "\n";
+        cuMemFree(to_free->ptr);
+        FreeListItem *next = to_free->next;
+        free(to_free);
+        to_free = next;
+    }
+    return 0;
+}
+
+namespace Halide {
+namespace Runtime {
+namespace Internal {
+
+WEAK halide_device_allocation_pool cuda_allocation_pool;
+
+__attribute__((constructor))
+WEAK void register_cuda_allocation_pool() {
+    cuda_allocation_pool.release_unused = &halide_cuda_release_unused_device_allocations;
+    halide_register_device_allocation_pool(&cuda_allocation_pool);
+}
+
+__attribute__((always_inline))
+uint64_t quantize_allocation_size(uint64_t sz) {
+    int z = __builtin_clzll(sz);
+    if (z < 60) {
+        sz--;
+        sz = sz >> (60 - z);
+        sz++;
+        sz = sz << (60 - z);
+    }
+    return sz;
+}
+
+}}}
+
 WEAK int halide_cuda_device_free(void *user_context, halide_buffer_t* buf) {
     // halide_device_free, at present, can be exposed to clients and they
     // should be allowed to call halide_device_free on any halide_buffer_t
@@ -537,8 +590,9 @@ WEAK int halide_cuda_device_free(void *user_context, halide_buffer_t* buf) {
         << ", buf: " << buf << ")\n";
 
     Context ctx(user_context);
-    if (ctx.error != CUDA_SUCCESS)
+    if (ctx.error != CUDA_SUCCESS) {
         return ctx.error;
+    }
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_before = halide_current_time_ns(user_context);
@@ -546,10 +600,38 @@ WEAK int halide_cuda_device_free(void *user_context, halide_buffer_t* buf) {
 
     halide_assert(user_context, validate_device_pointer(user_context, buf));
 
-    debug(user_context) <<  "    cuMemFree " << (void *)(dev_ptr) << "\n";
-    CUresult err = cuMemFree(dev_ptr);
-    // If cuMemFree fails, it isn't likely to succeed later, so just drop
-    // the reference.
+    CUresult err = CUDA_SUCCESS;
+    if (halide_can_reuse_device_allocations(user_context)) {
+        debug(user_context) <<  "    caching allocation for later use: " << (void *)(dev_ptr) << "\n";
+
+        FreeListItem *item = (FreeListItem *)malloc(sizeof(FreeListItem));
+        item->ctx = ctx.context;
+        item->size = quantize_allocation_size(buf->size_in_bytes());
+        item->ptr = dev_ptr;
+
+        if (cuStreamSynchronize) {
+            // We don't want to use a buffer freed one stream on
+            // another, as there are no synchronization guarantees and
+            // everything is async.
+            int result = halide_cuda_get_stream(user_context, ctx.context, &item->stream);
+            if (result != 0) {
+                error(user_context) << "CUDA: In halide_cuda_device_free, halide_cuda_get_stream returned " << result << "\n";
+            }
+        } else {
+            item->stream = NULL;
+        }
+
+        {
+            ScopedMutexLock lock(&free_list_lock);
+            item->next = free_list;
+            free_list = item;
+        }
+    } else {
+        debug(user_context) <<  "    cuMemFree " << (void *)(dev_ptr) << "\n";
+        err = cuMemFree(dev_ptr);
+        // If cuMemFree fails, it isn't likely to succeed later, so just drop
+        // the reference.
+    }
     buf->device_interface->impl->release_module();
     buf->device_interface = NULL;
     buf->device = 0;
@@ -592,8 +674,11 @@ WEAK int halide_cuda_device_release(void *user_context) {
         }
         halide_assert(user_context, err == CUDA_SUCCESS || err == CUDA_ERROR_DEINITIALIZED);
 
+        // Dump the contents of the free list, ignoring errors.
+        halide_cuda_release_unused_device_allocations(user_context);
+
         {
-            ScopedSpinLock spinlock(&filters_list_lock);
+            ScopedMutexLock spinlock(&filters_list_lock);
 
             // Unload the modules attached to this context. Note that the list
             // nodes themselves are not freed, only the module objects are
@@ -627,7 +712,7 @@ WEAK int halide_cuda_device_release(void *user_context) {
         // Only destroy the context if we own it
 
         {
-            ScopedSpinLock spinlock(&context_lock);
+            ScopedMutexLock spinlock(&context_lock);
 
             if (ctx == context) {
                 debug(user_context) << "    cuCtxDestroy " << context << "\n";
@@ -654,7 +739,7 @@ WEAK int halide_cuda_device_malloc(void *user_context, halide_buffer_t *buf) {
         return ctx.error;
     }
 
-    size_t size = buf->size_in_bytes();
+    size_t size = quantize_allocation_size(buf->size_in_bytes());
     halide_assert(user_context, size != 0);
     if (buf->device) {
         // This buffer already has a device allocation
@@ -673,16 +758,85 @@ WEAK int halide_cuda_device_malloc(void *user_context, halide_buffer_t *buf) {
     uint64_t t_before = halide_current_time_ns(user_context);
     #endif
 
-    CUdeviceptr p;
-    debug(user_context) << "    cuMemAlloc " << (uint64_t)size << " -> ";
-    CUresult err = cuMemAlloc(&p, size);
-    if (err != CUDA_SUCCESS) {
-        debug(user_context) << get_error_name(err) << "\n";
-        error(user_context) << "CUDA: cuMemAlloc failed: "
-                            << get_error_name(err);
-        return err;
-    } else {
-        debug(user_context) << (void *)p << "\n";
+    CUdeviceptr p = 0;
+    FreeListItem *to_free = NULL;
+    if (halide_can_reuse_device_allocations(user_context)) {
+        CUstream stream = NULL;
+        if (cuStreamSynchronize != NULL) {
+            int result = halide_cuda_get_stream(user_context, ctx.context, &stream);
+            if (result != 0) {
+                error(user_context) << "CUDA: In halide_cuda_device_malloc, halide_cuda_get_stream returned " << result << "\n";
+            }
+        }
+
+        ScopedMutexLock lock(&free_list_lock);
+        // Best-fit allocation. There are three tunable constants
+        // here. A bucket is claimed if the size requested is at least
+        // 7/8 of the size of the bucket. We keep at most 32 unused
+        // allocations. We round up each allocation size to its top 4
+        // most significant bits (see quantize_allocation_size).
+        FreeListItem *best = NULL, *item = free_list;
+        FreeListItem **best_prev = NULL, **prev_ptr = &free_list;
+        int depth = 0;
+        while (item) {
+            if ((size <= item->size) && // Fits
+                (size >= (item->size / 8) * 7) && // Not too much slop
+                (ctx.context == item->ctx) && // Same cuda context
+                (stream == item->stream) && // Can only safely re-use on the same stream on which it was freed
+                ((best == NULL) || (best->size > item->size))) { // Better than previous best fit
+                best = item;
+                best_prev = prev_ptr;
+                prev_ptr = &item->next;
+                item = item->next;
+            } else if (depth > 32) {
+                // Allocations after here have not been used for a
+                // long time. Just detach the rest of the free list
+                // and defer the actual cuMemFree calls until after we
+                // release the free_list_lock.
+                to_free = item;
+                *prev_ptr = NULL;
+                item = NULL;
+                break;
+            } else {
+                prev_ptr = &item->next;
+                item = item->next;
+            }
+            depth++;
+        }
+
+        if (best) {
+            p = best->ptr;
+            *best_prev = best->next;
+            free(best);
+        }
+    }
+
+    while (to_free) {
+        FreeListItem *next = to_free->next;
+        cuMemFree(to_free->ptr);
+        free(to_free);
+        to_free = next;
+    }
+
+    if (!p) {
+        debug(user_context) << "    cuMemAlloc " << (uint64_t)size << " -> ";
+
+        // Quantize all allocation sizes to the top 4 bits, to make
+        // reuse likelier. Wastes on average 4% memory per allocation.
+
+        CUresult err = cuMemAlloc(&p, size);
+        if (err == CUDA_ERROR_OUT_OF_MEMORY) {
+            halide_cuda_release_unused_device_allocations(user_context);
+            err = cuMemAlloc(&p, size);
+        }
+        if (err != CUDA_SUCCESS) {
+            debug(user_context) << get_error_name(err) << "\n";
+            error(user_context) << "CUDA: cuMemAlloc failed: "
+                                << get_error_name(err);
+            return err;
+        } else {
+            debug(user_context) << (void *)p << "\n";
+        }
     }
     halide_assert(user_context, p);
     buf->device = p;
@@ -875,7 +1029,7 @@ WEAK int halide_cuda_device_sync(void *user_context, struct halide_buffer_t *) {
         }
         err = cuStreamSynchronize(stream);
     } else {
-       err = cuCtxSynchronize();
+        err = cuCtxSynchronize();
     }
     if (err != CUDA_SUCCESS) {
         error(user_context) << "CUDA: cuCtxSynchronize failed: "

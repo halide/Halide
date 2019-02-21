@@ -3,8 +3,8 @@
 namespace Halide {
 namespace Internal {
 
-Expr Simplify::visit(const LT *op, ConstBounds *bounds) {
-    ConstBounds a_bounds, b_bounds;
+Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
+    ExprInfo a_bounds, b_bounds;
     Expr a = mutate(op->a, &a_bounds);
     Expr b = mutate(op->b, &b_bounds);
 
@@ -368,7 +368,7 @@ Expr Simplify::visit(const LT *op, ConstBounds *bounds) {
 
 
 // The other comparison operators redirect to the less-than operator
-Expr Simplify::visit(const LE *op, ConstBounds *bounds) {
+Expr Simplify::visit(const LE *op, ExprInfo *bounds) {
     if (!may_simplify(op->a.type())) {
         Expr a = mutate(op->a, nullptr);
         Expr b = mutate(op->b, nullptr);
@@ -388,7 +388,7 @@ Expr Simplify::visit(const LE *op, ConstBounds *bounds) {
     return mutated;
 }
 
-Expr Simplify::visit(const GT *op, ConstBounds *bounds) {
+Expr Simplify::visit(const GT *op, ExprInfo *bounds) {
     if (!may_simplify(op->a.type())) {
         Expr a = mutate(op->a, nullptr);
         Expr b = mutate(op->b, nullptr);
@@ -402,7 +402,7 @@ Expr Simplify::visit(const GT *op, ConstBounds *bounds) {
     return mutate(op->b < op->a, bounds);
 }
 
-Expr Simplify::visit(const GE *op, ConstBounds *bounds) {
+Expr Simplify::visit(const GE *op, ExprInfo *bounds) {
     if (!may_simplify(op->a.type())) {
         Expr a = mutate(op->a, nullptr);
         Expr b = mutate(op->b, nullptr);

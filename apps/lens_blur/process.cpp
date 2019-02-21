@@ -37,7 +37,6 @@ int main(int argc, char **argv) {
         }
     );
 
-
     convert_and_save_image(output, argv[7]);
 
     return 0;

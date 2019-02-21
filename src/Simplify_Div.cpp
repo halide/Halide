@@ -3,8 +3,8 @@
 namespace Halide {
 namespace Internal {
 
-Expr Simplify::visit(const Div *op, ConstBounds *bounds) {
-    ConstBounds a_bounds, b_bounds;
+Expr Simplify::visit(const Div *op, ExprInfo *bounds) {
+    ExprInfo a_bounds, b_bounds;
     Expr a = mutate(op->a, &a_bounds);
     Expr b = mutate(op->b, &b_bounds);
 
@@ -25,9 +25,21 @@ Expr Simplify::visit(const Div *op, ConstBounds *bounds) {
             // denominator can sometimes collapse things to a
             // constant at this point.
             if (bounds->min == bounds->max) {
-                return make_const(op->type, bounds->min);
+                if (op->type.can_represent(bounds->min)) {
+                    return make_const(op->type, bounds->min);
+                } else {
+                    // Even though this is 'no-overflow-int', if the result
+                    // we calculate can't fit into the destination type,
+                    // we're better off returning an overflow condition than
+                    // a known-wrong value. (Note that no_overflow_int() should
+                    // only be true for signed integers.)
+                    internal_assert(op->type.is_int());
+                    return make_signed_integer_overflow(op->type);
+                }
             }
         }
+        bounds->alignment = a_bounds.alignment / b_bounds.alignment;
+        bounds->trim_bounds_using_alignment();
     }
 
     if (may_simplify(op->type)) {

@@ -21,10 +21,10 @@ namespace Internal {
  * the appropriate visit() method and then return the value of expr or
  * stmt after the call to visit.
  */
-class IRMutator2 {
+class IRMutator {
 public:
-    IRMutator2();
-    virtual ~IRMutator2();
+    IRMutator();
+    virtual ~IRMutator();
 
     /** This is the main interface for using a mutator. Also call
      * these in your subclass to mutate sub-expressions and
@@ -88,7 +88,7 @@ protected:
 /** A mutator that caches and reapplies previously-done mutations, so
  * that it can handle graphs of IR that have not had CSE done to
  * them. */
-class IRGraphMutator2 : public IRMutator2 {
+class IRGraphMutator2 : public IRMutator {
 protected:
     std::map<Expr, Expr, ExprCompare> expr_replacements;
     std::map<Stmt, Stmt, Stmt::Compare> stmt_replacements;

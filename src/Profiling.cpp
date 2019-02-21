@@ -19,7 +19,7 @@ using std::map;
 using std::string;
 using std::vector;
 
-class InjectProfiling : public IRMutator2 {
+class InjectProfiling : public IRMutator {
 public:
     map<string, int> indices;   // maps from func name -> index in buffer.
 
@@ -36,7 +36,7 @@ public:
     map<int, uint64_t> func_stack_peak; // map from func id -> peak stack allocation
 
 private:
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     struct AllocSize {
         bool on_stack;
@@ -161,7 +161,7 @@ private:
         internal_assert(alloc.size.type() == UInt(64));
         func_alloc_sizes.pop(op->name);
 
-        Stmt stmt = IRMutator2::visit(op);
+        Stmt stmt = IRMutator::visit(op);
 
         if (!is_zero(alloc.size)) {
             Expr profiler_pipeline_state = Variable::make(Handle(), "profiler_pipeline_state");
@@ -342,7 +342,7 @@ Stmt inject_profiling(Stmt s, string pipeline_name) {
         for (int i = num_funcs-1; i >= 0; --i) {
             s = Block::make(Store::make("profiling_func_stack_peak_buf",
                                         make_const(UInt(64), profiling.func_stack_peak[i]),
-                                        i, Parameter(), const_true()), s);
+                                        i, Parameter(), const_true(), ModulusRemainder()), s);
         }
         s = Block::make(s, Free::make("profiling_func_stack_peak_buf"));
         s = Allocate::make("profiling_func_stack_peak_buf", UInt(64),
@@ -350,7 +350,7 @@ Stmt inject_profiling(Stmt s, string pipeline_name) {
     }
 
     for (std::pair<string, int> p : profiling.indices) {
-        s = Block::make(Store::make("profiling_func_names", p.first, p.second, Parameter(), const_true()), s);
+        s = Block::make(Store::make("profiling_func_names", p.first, p.second, Parameter(), const_true(), ModulusRemainder()), s);
     }
 
     s = Block::make(s, Free::make("profiling_func_names"));
