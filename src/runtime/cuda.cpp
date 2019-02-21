@@ -562,7 +562,7 @@ WEAK void register_cuda_allocation_pool() {
 }
 
 __attribute__((always_inline))
-uint64_t quantize_allocation_size(uint64_t sz) {
+WEAK uint64_t quantize_allocation_size(uint64_t sz) {
     int z = __builtin_clzll(sz);
     if (z < 60) {
         sz--;
