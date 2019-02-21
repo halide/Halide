@@ -703,8 +703,8 @@ struct FunctionDAG {
 
         // A mutator to apply parameter estimates to the expressions
         // we encounter while constructing the graph.
-        class ApplyParamEstimates : public IRMutator2 {
-            using IRMutator2::visit;
+        class ApplyParamEstimates : public IRMutator {
+            using IRMutator::visit;
 
             Expr visit(const Variable *op) override {
                 Expr expr;
