@@ -197,6 +197,8 @@ bool is_using_hexagon(const Target &t) {
            || t.has_feature(Target::HVX_v62)
            || t.has_feature(Target::HVX_v65)
            || t.has_feature(Target::HVX_v66)
+           || t.has_feature(Target::HexagonDma)
+           || t.has_feature(Target::HVX_shared_object)
            || t.arch == Target::Hexagon;
 }
 
