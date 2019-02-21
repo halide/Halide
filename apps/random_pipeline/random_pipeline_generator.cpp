@@ -198,13 +198,13 @@ Expr random_expr(vector<Expr> inputs, int depth, int func_size) {
         Expr result =
             Internal::simplify(Internal::common_subexpression_elimination(random_expr_inner(inputs, depth, func_size)));
 
-        class Checker : public Internal::IRMutator2 {
+        class Checker : public Internal::IRMutator {
         public:
             Expr mutate(const Expr &e) override {
                 exprs_to_find.erase(e);
-                return IRMutator2::mutate(e);
+                return IRMutator::mutate(e);
             }
-            using Internal::IRMutator2::mutate;
+            using Internal::IRMutator::mutate;
             std::set<Expr, Internal::IRDeepCompare> exprs_to_find;
             Checker(const vector<Expr> &inputs) {
                 for (const auto &e : inputs) {
