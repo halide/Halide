@@ -860,20 +860,20 @@ bool Target::get_runtime_compatible_target(const Target& other, Target &result) 
     // Pick tight lower bound for CUDA capability. Use fall-through to clear redundant features
     switch (get_cuda_capability_lower_bound(output)) {
         default: // no CUDA feature; clear all capability flags
-        case 20: output.features.reset(CUDACapability30);
-        case 30: output.features.reset(CUDACapability32);
-        case 32: output.features.reset(CUDACapability35);
-        case 35: output.features.reset(CUDACapability50);
-        case 50: output.features.reset(CUDACapability61);
+        case 20: output.features.reset(CUDACapability30); // fall-thru
+        case 30: output.features.reset(CUDACapability32); // fall-thru
+        case 32: output.features.reset(CUDACapability35); // fall-thru
+        case 35: output.features.reset(CUDACapability50); // fall-thru
+        case 50: output.features.reset(CUDACapability61); // fall-thru
         case 61: break;
     }
 
     // Pick tight lower bound for HVX version. Use fall-through to clear redundant features
     switch (get_hvx_lower_bound(output)) {
         default: // doesn't use hexagon; clear all capability flags
-        case 60: output.features.reset(HVX_v62);
-        case 62: output.features.reset(HVX_v65);
-        case 65: output.features.reset(HVX_v66);
+        case 60: output.features.reset(HVX_v62); // fall-thru
+        case 62: output.features.reset(HVX_v65); // fall-thru
+        case 65: output.features.reset(HVX_v66); // fall-thru
         case 66: break;
     }
 
