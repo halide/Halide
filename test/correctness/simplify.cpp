@@ -1402,9 +1402,14 @@ void check_bitwise() {
     // Check bitshift operations
     check(cast(Int(16), x) << 10, cast(Int(16), x) * 1024);
     check(cast(Int(16), x) >> 10, cast(Int(16), x) / 1024);
-    check(cast(Int(16), x) << -10, cast(Int(16), x) / 1024);
-    // Correctly triggers a warning:
-    //check(cast(Int(16), x) << 20, cast(Int(16), x) << 20);
+
+    // Correctly triggers an error (shift by negative amount).
+    // check(cast(Int(16), x) << -10, 0);
+    // check(cast(Int(16), x) >> -10, 0);
+
+    // Correctly triggers an error (shift by >= type size).
+    // check(cast(Int(16), x) << 20, 0);
+    // check(cast(Int(16), x) >> 20, 0);
 
     // Check bitwise_and. (Added as result of a bug.)
     // TODO: more coverage of bitwise_and and bitwise_or.
@@ -1629,19 +1634,14 @@ int main(int argc, char **argv) {
         const Expr b = Expr(std::numeric_limits<int16_t>::max());
 
         check(a >> 14,  i16(-2));
-        check(b >> -14, i16(-16384));
         check(a << 14,  i16(0));
-        check(b << -14, i16(1));
-
         check(a >> 15,  i16(-1));
-        check(b >> -15, i16(0));
         check(a << 15,  i16(0));
-        check(b << -15, i16(0));
 
-        check(a >> b, i16(-1));
-        check(b >> a, i16(0));
-        check(a << b, i16(0));
-        check(b << a, i16(0));
+        check(b >> 14,  i16(1));
+        check(b << 14,  i16(-16384));
+        check(b >> 15,  i16(0));
+        check(b << 15,  i16(-32768));
     }
 
     {
@@ -1654,16 +1654,6 @@ int main(int argc, char **argv) {
         check(b >> 15, u16(1));
         check(a << 15, u16(0));
         check(b << 15, Expr((uint16_t) 0x8000));
-
-        check(a >> 16, u16(0));
-        check(b >> 16, u16(0));
-        check(a << 16, u16(0));
-        check(b << 16, u16(0));
-
-        check(a >> b, u16(0));
-        check(b >> b, u16(0));
-        check(a << b, u16(0));
-        check(b << b, u16(0));
     }
 
     {
@@ -1673,19 +1663,14 @@ int main(int argc, char **argv) {
         const Expr b = Expr(std::numeric_limits<int64_t>::max());
 
         check(a >> 62,  i64(-2));
-        check_is_sio(b >> -62);
         check_is_sio(a << 62);
-        check(b << -62, i64(1));
-
         check(a >> 63,  i64(-1));
-        check(b >> -63, i64(0));
         check(a << 63,  i64(0));
-        check(b << -63, i64(0));
 
-        check(a >> b, i64(-1));
-        check(b >> a, i64(0));
-        check(a << b, i64(0));
-        check(b << a, i64(0));
+        check(b >> 62,  i64(1));
+        check_is_sio(b << 62);
+        check(b >> 63,  i64(0));
+        check(b << 63,  Expr(std::numeric_limits<int64_t>::lowest()));
     }
 
     {
@@ -1698,16 +1683,6 @@ int main(int argc, char **argv) {
         check(b >> 63, u64(1));
         check(a << 63, u64(0));
         check(b << 63, Expr((uint64_t) 0x8000000000000000ULL));
-
-        check(a >> 64, u64(0));
-        check(b >> 64, u64(0));
-        check(a << 64, u64(0));
-        check(b << 64, u64(0));
-
-        check(a >> b, u64(0));
-        check(b >> b, u64(0));
-        check(a << b, u64(0));
-        check(b << b, u64(0));
     }
 
     printf("Success!\n");
