@@ -260,9 +260,10 @@ Stmt lower_float16_math(const Stmt &stmt, const Target &t) {
     Stmt s = stmt;
     s = WidenMath().mutate(s);
     s = LowerBFloatConversions().mutate(s);
-    if (!t.has_feature(Target::F16C)) {
-        s = LowerFloat16Conversions().mutate(s);
-    }
+    // LLVM trunk as of 2/22/2019 has bugs in the lowering of float16 conversions math on avx512
+    //if (!t.has_feature(Target::F16C)) {
+    s = LowerFloat16Conversions().mutate(s);
+    //}
     return s;
 }
 
