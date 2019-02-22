@@ -8,11 +8,7 @@ int main(int argc, char **argv) {
     Buffer<float16_t> in1 = lambda(x, cast<float16_t>(-0.5f) + cast<float16_t>(x) / (128)).realize(128);
     Buffer<bfloat16_t> in2 = lambda(x, cast<bfloat16_t>(-0.5f) + cast<bfloat16_t>(x) / (128)).realize(128);
 
-    for (int i = 0; i < 128; i++) {
-        float16_t correct = Halide::float16_t(-0.5f) + Halide::float16_t(i) / Halide::float16_t(128.0f);
-        printf("%f %f\n", (float)in1(i), (float)correct);
-    }
-
+    // Check the Halide-side math matches the C++-side math.
     in1.for_each_element([&](int i) {
             float16_t correct = Halide::float16_t(-0.5f) + Halide::float16_t(i) / Halide::float16_t(128.0f);
             if (in1(i) != correct) {
@@ -34,7 +30,7 @@ int main(int argc, char **argv) {
     wrap2(x) = in2(x);
 
     Func f;
-    f(x) = abs(sqrt(abs(wrap1(x) * 4.0f)) - sqrt(abs(wrap2(x)) * 2.0f));
+    f(x) = abs(sqrt(abs(wrap1(x) * 4.0f)) - sqrt(abs(wrap2(x))) * 2.0f);
 
     f.compute_root().vectorize(x, 16);
     wrap1.compute_at(f, x).vectorize(x);
