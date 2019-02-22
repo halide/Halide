@@ -813,10 +813,17 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
         " -x  A comma separated list of file extension pairs to substitute during\n"
         "     file naming, in the form [.old=.new[,.old2=.new2]]\n"
         "\n"
-        " -p  A comma-separted list of shared libraries that will be loaded before the\n"
+        " -p  A comma-separated list of shared libraries that will be loaded before the\n"
         "     generator is run. Useful for custom auto-schedulers. The generator must\n"
         "     either be linked against a shared libHalide or compiled with -rdynamic\n"
-        "     so that references in the shared library to libHalide can resolve.\n";
+        "     so that references in the shared library to libHalide can resolve.\n"
+        "\n"
+        "-r   The name of a standalone runtime to generate. Only honors EMIT_OPTIONS 'o'\n"
+        "     and 'static_library'. When multiple targets are specified, it picks a\n"
+        "     runtime that is compatible with all of the targets, or fails if it cannot\n"
+        "     find one. Flags across all of the targets that do not affect runtime code\n"
+        "     generation, such as `no_asserts` and `no_runtime`, are ignored.\n"
+        ;
 
     std::map<std::string, std::string> flags_info = { { "-f", "" },
                                                       { "-g", "" },
@@ -855,7 +862,7 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
 
     // It's possible that in the future loaded plugins might change
     // how arguments are parsed, so we handle those first.
-    for (auto lib : split_string(flags_info["-p"], ",")) {
+    for (const auto &lib : split_string(flags_info["-p"], ",")) {
         if (lib.empty()) continue;
 #ifdef _WIN32
         if (LoadLibrary(lib.c_str()) != nullptr) {
@@ -885,7 +892,7 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
         // no longer infer the name when only one Generator is registered
         cerr << "Either -g <name> or -r must be specified; available Generators are:\n";
         if (!generator_names.empty()) {
-            for (auto name : generator_names) {
+            for (const auto &name : generator_names) {
                 cerr << "    " << name << "\n";
             }
         } else {
