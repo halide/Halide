@@ -195,7 +195,7 @@ struct Target {
      * runtime when linking together multiple functions.
      * 
      * @param other The other target from which we compute the gcd target.
-     * @param[out] result The gcd target if we return true, otherwise unmodified.
+     * @param[out] result The gcd target if we return true, otherwise unmodified. Can be the same as *this.
      * @return Whether it was possible to find a compatible target (true) or not.
      */
     bool get_runtime_compatible_target(const Target& other, Target &result);

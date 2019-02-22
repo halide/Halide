@@ -852,31 +852,32 @@ bool Target::get_runtime_compatible_target(const Target& other, Target &result) 
     // Union of features is computed through bitwise-or, and masked away by the features we care about
     // Intersection of features is computed through bitwise-and and masked away, too.
     // We merge the bits via bitwise or.
-    result = Target{os, arch, bits};
-    result.features = ((features | other.features) & union_mask)
+    Target output = Target{os, arch, bits};
+    output.features = ((features | other.features) & union_mask)
             | ((features | other.features) & matching_mask)
             | ((features & other.features) & intersection_mask);
 
     // Pick tight lower bound for CUDA capability. Use fall-through to clear redundant features
-    switch (get_cuda_capability_lower_bound(result)) {
+    switch (get_cuda_capability_lower_bound(output)) {
         default: // no CUDA feature; clear all capability flags
-        case 20: result.features.reset(CUDACapability30);
-        case 30: result.features.reset(CUDACapability32);
-        case 32: result.features.reset(CUDACapability35);
-        case 35: result.features.reset(CUDACapability50);
-        case 50: result.features.reset(CUDACapability61);
+        case 20: output.features.reset(CUDACapability30);
+        case 30: output.features.reset(CUDACapability32);
+        case 32: output.features.reset(CUDACapability35);
+        case 35: output.features.reset(CUDACapability50);
+        case 50: output.features.reset(CUDACapability61);
         case 61: break;
     }
 
     // Pick tight lower bound for HVX version. Use fall-through to clear redundant features
-    switch (get_hvx_lower_bound(result)) {
+    switch (get_hvx_lower_bound(output)) {
         default: // doesn't use hexagon; clear all capability flags
-        case 60: result.features.reset(HVX_v62);
-        case 62: result.features.reset(HVX_v65);
-        case 65: result.features.reset(HVX_v66);
+        case 60: output.features.reset(HVX_v62);
+        case 62: output.features.reset(HVX_v65);
+        case 65: output.features.reset(HVX_v66);
         case 66: break;
     }
 
+    result = output;
     return true;
 }
 
