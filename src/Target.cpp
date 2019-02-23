@@ -171,7 +171,7 @@ Target calculate_host_target() {
 
 int get_cuda_capability_lower_bound(const Target &t) {
     if (!t.has_feature(Target::CUDA)) {
-        return 0;
+        return -1;
     }
     if (t.has_feature(Target::CUDACapability30)) {
         return 30;
@@ -204,7 +204,7 @@ bool is_using_hexagon(const Target &t) {
 
 int get_hvx_lower_bound(const Target &t) {
     if (!is_using_hexagon(t)) {
-        return 0;
+        return -1;
     }
     if (t.has_feature(Target::HVX_v62)) {
         return 62;
@@ -858,7 +858,14 @@ bool Target::get_runtime_compatible_target(const Target& other, Target &result) 
             | ((features & other.features) & intersection_mask);
 
     // Pick tight lower bound for CUDA capability. Use fall-through to clear redundant features
-    switch (get_cuda_capability_lower_bound(output)) {
+    int cuda_a = get_cuda_capability_lower_bound(*this);
+    int cuda_b = get_cuda_capability_lower_bound(other);
+
+    // get_cuda_capability_lower_bound returns -1 when unused. Casting to unsigned makes this
+    // large, so min selects the true lower bound when one target doesn't specify a capability,
+    // and the other doesn't use CUDA at all.
+    int cuda_capability = std::min((unsigned)cuda_a, (unsigned)cuda_b);
+    switch (cuda_capability) {
         default: // no CUDA feature; clear all capability flags
         case 20: output.features.reset(CUDACapability30); // fall-thru
         case 30: output.features.reset(CUDACapability32); // fall-thru
@@ -869,7 +876,12 @@ bool Target::get_runtime_compatible_target(const Target& other, Target &result) 
     }
 
     // Pick tight lower bound for HVX version. Use fall-through to clear redundant features
-    switch (get_hvx_lower_bound(output)) {
+    int hvx_a = get_hvx_lower_bound(*this);
+    int hvx_b = get_hvx_lower_bound(other);
+
+    // Same trick as above for CUDA
+    int hvx_version = std::min((unsigned)hvx_a, (unsigned)hvx_b);
+    switch (hvx_version) {
         default: // doesn't use hexagon; clear all capability flags
         case 60: output.features.reset(HVX_v62); // fall-thru
         case 62: output.features.reset(HVX_v65); // fall-thru
@@ -905,7 +917,9 @@ void target_test() {
             {"x86-64-linux-cuda-cuda_capability_50", "x86-64-linux-cuda-cuda_capability_30", "x86-64-linux-cuda-cuda_capability_30"},
             {"x86-64-linux-cuda", "x86-64-linux-opengl", "x86-64-linux-cuda-opengl"},
             {"hexagon-32-qurt-hvx_v65", "hexagon-32-qurt-hvx_v62", "hexagon-32-qurt-hvx_v62"},
-            {"hexagon-32-qurt-hvx_v62", "hexagon-32-qurt", "hexagon-32-qurt"}
+            {"hexagon-32-qurt-hvx_v62", "hexagon-32-qurt", "hexagon-32-qurt"},
+            {"hexagon-32-qurt-hvx_v62-hvx_64", "hexagon-32-qurt", ""},
+            {"hexagon-32-qurt-hvx_v62-hvx_64", "hexagon-32-qurt-hvx_64", "hexagon-32-qurt-hvx_64"},
     };
 
     for (const auto &test : gcd_tests) {
