@@ -893,6 +893,36 @@ void target_test() {
         if (i == halide_target_feature_unused_23) continue;
         internal_assert(t.has_feature((Target::Feature)i)) << "Feature " << i << " not in feature_names_map.\n";
     }
+
+    // 3 targets: {A,B,C}. Want gcd(A,B)=C
+    std::vector<std::array<std::string, 3>> gcd_tests = {
+            {"x86-64-linux-sse41-fma", "x86-64-linux-sse41-fma", "x86-64-linux-sse41-fma"},
+            {"x86-64-linux-sse41-fma-no_asserts-no_runtime", "x86-64-linux-sse41-fma", "x86-64-linux-sse41-fma"},
+            {"x86-64-linux-avx2-sse41", "x86-64-linux-sse41-fma", "x86-64-linux-sse41"},
+            {"x86-64-linux-avx2-sse41", "x86-32-linux-sse41-fma", ""},
+            {"x86-64-linux-cuda", "x86-64-linux", "x86-64-linux-cuda"},
+            {"x86-64-linux-cuda-cuda_capability_50", "x86-64-linux-cuda", "x86-64-linux-cuda"},
+            {"x86-64-linux-cuda-cuda_capability_50", "x86-64-linux-cuda-cuda_capability_30", "x86-64-linux-cuda-cuda_capability_30"},
+            {"x86-64-linux-cuda", "x86-64-linux-opengl", "x86-64-linux-cuda-opengl"},
+            {"hexagon-32-qurt-hvx_v65", "hexagon-32-qurt-hvx_v62", "hexagon-32-qurt-hvx_v62"},
+            {"hexagon-32-qurt-hvx_v62", "hexagon-32-qurt", "hexagon-32-qurt"}
+    };
+
+    for (const auto &test : gcd_tests) {
+        Target result{};
+        Target a{test[0]};
+        Target b{test[1]};
+        if (a.get_runtime_compatible_target(b, result)) {
+            internal_assert(!test[2].empty() && result == Target{test[2]})
+                << "Targets " << a.to_string() << " and " << b.to_string() << " were computed to have gcd "
+                << result.to_string() << " but expected '" << test[2] << "'\n";
+        } else {
+            internal_assert(test[2].empty())
+                << "Targets " << a.to_string() << " and " << b.to_string() << " were computed to have no gcd "
+                << "but " << test[2] << " was expected.";
+        }
+    }
+
     std::cout << "Target test passed" << std::endl;
 }
 
