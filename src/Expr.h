@@ -422,6 +422,19 @@ enum class ForType {
     GPULane,
 };
 
+/** Check if for_type executes for loop iterations in parallel and unordered. */
+inline bool is_unordered_parallel(ForType for_type) {
+    return (for_type == ForType::Parallel ||
+            for_type == ForType::GPUBlock ||
+            for_type == ForType::GPUThread);
+}
+
+/** Returns true if for_type executes for loop iterations is parallel. */
+inline bool is_parallel(ForType for_type) {
+    return (is_unordered_parallel(for_type) ||
+            for_type == ForType::Vectorized ||
+            for_type == ForType::GPULane);
+}
 
 /** A reference-counted handle to a statement node. */
 struct Stmt : public IRHandle {

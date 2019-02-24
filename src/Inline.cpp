@@ -40,7 +40,7 @@ void validate_schedule_inlined_function(Function f) {
 
     for (size_t i = 0; i < stage_s.dims().size(); i++) {
         Dim d = stage_s.dims()[i];
-        if (d.is_parallel()) {
+        if (d.is_unordered_parallel()) {
             user_error << "Cannot parallelize dimension "
                        << d.var << " of function "
                        << f.name() << " because the function is scheduled inline.\n";
