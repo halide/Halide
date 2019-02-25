@@ -83,6 +83,20 @@ using std::pair;
 #define MAX_THREADS_PER_BLOCK 1024
 #define TAG_MORE_LOOPS_WITH_GPU_THREADS_BLOCKS 0
 
+struct RNG {
+    std::mt19937 gen;
+    std::uniform_real_distribution<double> dis;
+
+    RNG(uint32_t seed)
+        : gen{seed}
+        , dis{0.0, 100.0}
+    {}
+
+    double operator()() {
+        return dis(gen);
+    }
+};
+
 int64_t get_shared_memory_limit() {
     // HL_SHARED_MEMORY_LIMIT is in KB
     std::string limit = get_env_variable("HL_SHARED_MEMORY_LIMIT");
@@ -103,7 +117,7 @@ uint32_t get_dropout_threshold() {
     }
 }
 
-bool random_dropout(std::mt19937 &rng, size_t num_decisions) {
+bool random_dropout(RNG &rng, size_t num_decisions) {
     static double random_dropout_threshold = get_dropout_threshold();
     if (random_dropout_threshold >= 100) return false;
 
@@ -114,8 +128,8 @@ bool random_dropout(std::mt19937 &rng, size_t num_decisions) {
     t = std::pow(t, 1.0f / num_decisions);
     t *= 100;
 
-    uint32_t r = rng();
-    bool drop_it = (r % 100) >= t;
+    double r = rng();
+    bool drop_it = r >= t;
     return drop_it;
 }
 
@@ -3261,7 +3275,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
                                           const MachineParams &params,
                                           const Target &target,
                                           CostModel *cost_model,
-                                          std::mt19937 &rng,
+                                          RNG &rng,
                                           int beam_size,
                                           int pass_idx,
                                           std::unordered_set<uint64_t> &permitted_hashes) {
@@ -3466,7 +3480,7 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
                                      const MachineParams &params,
                                      const Target &target,
                                      CostModel *cost_model,
-                                     std::mt19937 &rng,
+                                     RNG &rng,
                                      int beam_size) {
 
     IntrusivePtr<State> best;
@@ -3558,7 +3572,7 @@ std::string generate_schedules_new(const std::vector<Function> &outputs,
         seed = atoi(seed_str.c_str());
     }
     debug(0) << "Dropout seed = " << seed << '\n';
-    std::mt19937 rng((uint32_t) seed);
+    RNG rng{(uint32_t)seed};
 
     string beam_size_str = get_env_variable("HL_BEAM_SIZE");
     size_t beam_size = 32;
