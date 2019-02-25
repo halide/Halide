@@ -429,7 +429,7 @@ inline bool is_unordered_parallel(ForType for_type) {
             for_type == ForType::GPUThread);
 }
 
-/** Returns true if for_type executes for loop iterations is parallel. */
+/** Returns true if for_type executes for loop iterations in parallel. */
 inline bool is_parallel(ForType for_type) {
     return (is_unordered_parallel(for_type) ||
             for_type == ForType::Vectorized ||
