@@ -625,11 +625,14 @@ Node ConvertGemmNode(
   return result;
 }
 
+enum class PaddingMode { CONSTANT, EDGE, REFLECT };
+
 Halide::Func GeneratePaddingExpr(
     Halide::Func input,
     const onnx::TensorShapeProto& input_shape,
     float padding_val,
-    const std::vector<int>& pads) {
+    const std::vector<int>& pads,
+    const PaddingMode mode = PaddingMode::CONSTANT) {
   // Number of leading dimensions that are not to be padded.
   const int rank = input_shape.dim_size();
   const int skip_dims = rank - pads.size() / 2;
@@ -665,91 +668,40 @@ Halide::Func GeneratePaddingExpr(
     pad = pad || pad_before;
     pad = pad || pad_after;
     assert(pad.type().is_bool());
-    input_vars[i] = Halide::clamp(
-        vars[i] - pads.first,
-        0,
-        static_cast<int>(input_shape.dim(i).dim_value() - 1));
+    if (mode == PaddingMode::CONSTANT || mode == PaddingMode::EDGE) {
+      input_vars[i] = Halide::clamp(
+          vars[i] - pads.first,
+          0,
+          static_cast<int>(input_shape.dim(i).dim_value() - 1));
+    } else if (mode == PaddingMode::REFLECT) {
+      Halide::Expr pad_size = pads.second - pads.first + 1;
+      Halide::Expr mirror_before = (pads.first - vars[i]) % pad_size;
+      Halide::Expr mirror_after =
+          pad_size - ((vars[i] - pads.second) % pad_size) - 1;
+      input_vars[i] = Halide::clamp(
+          Halide::select(
+              pad_before,
+              mirror_before,
+              Halide::select(pad_after, mirror_after, vars[i] - pads.first)),
+          0,
+          static_cast<int>(input_shape.dim(i).dim_value() - 1));
+    }
   }
 
   Halide::Func padded_input;
-  padded_input(vars) = Halide::select(pad, padding_val, input(input_vars));
+  if (mode == PaddingMode::CONSTANT) {
+    padded_input(vars) = Halide::select(pad, padding_val, input(input_vars));
+  } else if (mode == PaddingMode::EDGE || mode == PaddingMode::REFLECT) {
+    padded_input(vars) = input(input_vars);
+  }
   return padded_input;
 }
 
-Node ConvertConvNode(
-    const onnx::NodeProto& node,
-    const std::vector<Tensor>& inputs,
-    const std::string& device) {
-  if (inputs.size() < 2) {
-    throw std::invalid_argument(
-        "Conv requires 2 or 3 inputs, but node " + node.name() + " has " +
-        std::to_string(inputs.size()));
-  }
-  const Tensor& X = inputs[0];
-  const Tensor& W = inputs[1];
-
-  const int rank = X.shape.type().tensor_type().shape().dim_size();
-  if (rank != W.shape.type().tensor_type().shape().dim_size()) {
-    throw std::invalid_argument(
-        "Inconsistent ranks for input tensors of Conv node " + node.name());
-  }
-  if (rank < 3) {
-    throw std::invalid_argument(
-        "Rank of input tensors for Conv node " + node.name() +
-        " should be at least 3");
-  }
-
-  std::string padding = "NOTSET";
-  int groups = 1;
-  std::vector<int> dilations;
-  std::vector<int> kernel_shape;
-  std::vector<int> pads;
-  std::vector<int> strides;
-  for (const auto& attr : node.attribute()) {
-    if (attr.name() == "auto_pad") {
-      padding = attr.s();
-    } else if (attr.name() == "group") {
-      groups = attr.i();
-    } else if (attr.name() == "dilations") {
-      for (int axis : attr.ints()) {
-        dilations.push_back(axis);
-      }
-    } else if (attr.name() == "kernel_shape") {
-      for (int axis : attr.ints()) {
-        kernel_shape.push_back(axis);
-      }
-    } else if (attr.name() == "pads") {
-      for (int axis : attr.ints()) {
-        pads.push_back(axis);
-      }
-    } else if (attr.name() == "strides") {
-      for (int axis : attr.ints()) {
-        strides.push_back(axis);
-      }
-    }
-  }
-
-  pads.resize(2 * rank - 4, 0);
-  dilations.resize(rank - 2, 1);
-  strides.resize(rank - 2, 1);
-
-  for (int i : dilations) {
-    if (i != 1) {
-      throw std::domain_error(
-          "Dilated convolution not supported for node " + node.name());
-    }
-  }
-
-  if (padding != "NOTSET") {
-    throw std::domain_error(
-        "Unsupported type of convolution for node " + node.name());
-  }
-
-  // Pad the input with zeros as needed.
-  Halide::Func padded_input =
-      GeneratePaddingExpr(X.rep, X.shape.type().tensor_type().shape(), 0, pads);
-
-  // Convolve the input with the kernel
+Halide::Func DirectConv(
+    const Tensor& W,
+    const Halide::Func& padded_input,
+    int rank,
+    int groups) {
   std::vector<std::pair<Halide::Expr, Halide::Expr>> extents;
   for (int i = 1; i < rank; ++i) {
     extents.emplace_back(
@@ -784,60 +736,134 @@ Node ConvertConvNode(
     w_vars[i] = rdom[i - 1];
   }
 
-  Halide::Func basic_conv;
-  basic_conv(out_vars) = Halide::sum(padded_input(x_vars) * W.rep(w_vars));
+  Halide::Func direct_conv;
+  direct_conv(out_vars) = Halide::sum(padded_input(x_vars) * W.rep(w_vars));
+  return direct_conv;
+}
 
-  // Apply the strides if needed
-  std::vector<Halide::Expr> stride_vars(rank);
-  stride_vars[0] = out_vars[0];
-  stride_vars[1] = out_vars[1];
+Halide::Func WinogradConv(const Tensor& W, const Halide::Func& padded_input) {
+  // We only support the case of a 3x3 convolution at the moment. The notation
+  // is derived from the one used in the Winograd paper.
+  static float BFilter[4][4] = {
+      {1, 0, -1, 0}, {0, 1, 1, 0}, {0, -1, 1, 0}, {0, 1, 0, -1}};
+  const Halide::Buffer<float> B(&BFilter[0][0], 4, 4);
 
-  bool has_strides = false;
-  for (int i = 0; i < rank - 2; ++i) {
-    if (strides[i] != 1) {
-      stride_vars[i + 2] = strides[i] * out_vars[i + 2];
-      has_strides = true;
-    } else {
-      stride_vars[i + 2] = out_vars[i + 2];
+  static float GFilter[3][4] = {
+      {1, 0.5, 0.5, 0}, {0, 0.5, -0.5, 0}, {0, 0.5, 0.5, 1}};
+  const Halide::Buffer<float> G{&GFilter[0][0], 4, 3};
+
+  static float AFilter[2][4] = {{1, 1, 1, 0}, {0, 1, -1, -1}};
+  const Halide::Buffer<float> A{&AFilter[0][0], 4, 2};
+
+  int num_channels = W.shape.type().tensor_type().shape().dim(1).dim_value();
+  Halide::RDom dom1(0, num_channels);
+  Halide::RVar c_r = dom1;
+  const Halide::RDom dom2({{0, 3}, {0, 3}});
+  Halide::RVar r1 = dom2[0];
+  Halide::RVar r2 = dom2[1];
+  const Halide::RDom dom3({{0, 4}, {0, 4}});
+  Halide::RVar r3 = dom3[0];
+  Halide::RVar r4 = dom3[1];
+  const Halide::RDom dom4({{0, 4}, {0, 4}});
+  Halide::RVar alpha_r = dom4[0];
+  Halide::RVar beta_r = dom4[1];
+
+  Halide::Var k, c, alpha, beta;
+  Halide::Func U;
+  U(k, c, alpha, beta) =
+      Halide::sum(G(alpha, r1) * W.rep(k, c, r1, r2) * G(beta, r2));
+
+  Halide::Var b, x, y;
+  Halide::Func V;
+  V(b, c, x, y, alpha, beta) = Halide::sum(
+      B(r3, alpha) * padded_input(b, c, x + r3, y + r4) * B(r4, beta));
+
+  Halide::Func M;
+  M(b, k, x, y, alpha, beta) =
+      Halide::sum(U(k, c_r, alpha, beta) * V(b, c_r, x, y, alpha, beta));
+
+  Halide::Func winograd_conv;
+  winograd_conv(b, k, x, y) = Halide::sum(
+      A(alpha_r, x % 2) * M(b, k, (x / 2) * 2, (y / 2) * 2, alpha_r, beta_r) *
+      A(beta_r, y % 2));
+  return winograd_conv;
+}
+
+Node ConvertConvNode(
+    const onnx::NodeProto& node,
+    const std::vector<Tensor>& inputs,
+    const std::string& device) {
+  if (inputs.size() < 2) {
+    throw std::invalid_argument(
+        "Conv requires 2 or 3 inputs, but node " + node.name() + " has " +
+        std::to_string(inputs.size()));
+  }
+  const Tensor& X = inputs[0];
+  const Tensor& W = inputs[1];
+
+  const int rank = X.shape.type().tensor_type().shape().dim_size();
+  if (rank != W.shape.type().tensor_type().shape().dim_size()) {
+    throw std::invalid_argument(
+        "Inconsistent ranks for input tensors of Conv node " + node.name());
+  }
+  if (rank < 3) {
+    throw std::invalid_argument(
+        "Rank of input tensors for Conv node " + node.name() +
+        " should be at least 3");
+  }
+
+  std::string padding = "NOTSET";
+  int groups = 1;
+  std::vector<int> dilations;
+  // std::vector<int> kernel_shape;
+  std::vector<int> pads;
+  std::vector<int> strides;
+  for (const auto& attr : node.attribute()) {
+    if (attr.name() == "auto_pad") {
+      padding = attr.s();
+    } else if (attr.name() == "group") {
+      groups = attr.i();
+    } else if (attr.name() == "dilations") {
+      for (int axis : attr.ints()) {
+        dilations.push_back(axis);
+      }
+      // TODO: check that the kernel shape is compatible with the shape of W
+      /*} else if (attr.name() == "kernel_shape") {
+        for (int axis : attr.ints()) {
+          kernel_shape.push_back(axis);
+        }*/
+    } else if (attr.name() == "pads") {
+      for (int axis : attr.ints()) {
+        pads.push_back(axis);
+      }
+    } else if (attr.name() == "strides") {
+      for (int axis : attr.ints()) {
+        strides.push_back(axis);
+      }
     }
   }
-  Halide::Func conv_no_bias;
-  if (has_strides) {
-    conv_no_bias(out_vars) = basic_conv(stride_vars);
-  } else {
-    conv_no_bias = basic_conv;
+
+  pads.resize(2 * rank - 4, 0);
+  dilations.resize(rank - 2, 1);
+  strides.resize(rank - 2, 1);
+
+  for (int i : dilations) {
+    if (i != 1) {
+      throw std::domain_error(
+          "Dilated convolution not supported for node " + node.name());
+    }
   }
 
+  if (padding != "NOTSET") {
+    throw std::domain_error(
+        "Unsupported type of convolution for node " + node.name());
+  }
+
+  // Determine the shape of the output
   Node result;
   result.inputs = inputs;
   result.outputs.resize(1);
-  result.outputs[0].rep = FuncForNodeOutput(node, 0);
 
-  // Return the result after applying the bias if any.
-  if (inputs.size() == 3) {
-    result.outputs[0].rep(out_vars) =
-        inputs[2].rep(out_vars[1]) + conv_no_bias(out_vars);
-  } else {
-    result.outputs[0].rep(out_vars) = conv_no_bias(out_vars);
-  }
-
-  /* TBD: find good schedule
-    if (device.find("CPU") != std::string::npos) {
-      Halide::Var n = out_vars[0];
-      Halide::Var c = out_vars[1];
-      Halide::Var x = out_vars[2];
-      Halide::Var y = out_vars[3];
-      Halide::RDom r = rdom;
-
-      // FIXME: support for 1 and 3d
-      result.outputs[0].rep
-                  .vectorize(c, 8).unroll(c).unroll(x).unroll(y)
-                  .update().reorder(c, x, y, r.x, r.y, r.z, n)
-                  .vectorize(c, 8).unroll(c).unroll(x).unroll(y).unroll(r.x, 2);
-    }
-  */
-
-  // Determine the shape of the output
   result.outputs[0].shape = inputs[0].shape;
   *result.outputs[0]
        .shape.mutable_type()
@@ -863,6 +889,99 @@ Node ConvertConvNode(
         ->mutable_dim(i)
         ->set_dim_value(dim);
   }
+
+  // Check if winograd can be used
+  bool can_use_winograd = false;
+  bool needs_extra_padding = false;
+  if (groups == 1 && rank == 4) {
+    bool supported_shape = true;
+    for (int i = 2; i < rank; ++i) {
+      if (W.shape.type().tensor_type().shape().dim(i).dim_value() != 3) {
+        supported_shape = false;
+        break;
+      }
+      if (result.outputs[0]
+                  .shape.type()
+                  .tensor_type()
+                  .shape()
+                  .dim(i)
+                  .dim_value() %
+              2 !=
+          0) {
+        needs_extra_padding = true;
+      }
+      if (strides[i - 2] != 1) {
+        supported_shape = false;
+        break;
+      }
+    }
+    can_use_winograd = supported_shape;
+  }
+
+  if (can_use_winograd && needs_extra_padding) {
+    pads[2] += 1;
+    pads[3] += 1;
+  }
+
+  // Pad the input with zeros as needed.
+  Halide::Func padded_input =
+      GeneratePaddingExpr(X.rep, X.shape.type().tensor_type().shape(), 0, pads);
+
+  // Convolve the input with the kernel
+  Halide::Func basic_conv;
+  if (can_use_winograd) {
+    basic_conv = WinogradConv(W, padded_input);
+  } else {
+    basic_conv = DirectConv(W, padded_input, rank, groups);
+  }
+
+  // Apply the strides if needed
+  std::vector<Halide::Var> out_vars(rank);
+  std::vector<Halide::Expr> stride_vars(rank);
+  stride_vars[0] = out_vars[0];
+  stride_vars[1] = out_vars[1];
+
+  bool has_strides = false;
+  for (int i = 0; i < rank - 2; ++i) {
+    if (strides[i] != 1) {
+      stride_vars[i + 2] = strides[i] * out_vars[i + 2];
+      has_strides = true;
+    } else {
+      stride_vars[i + 2] = out_vars[i + 2];
+    }
+  }
+  Halide::Func conv_no_bias;
+  if (has_strides) {
+    conv_no_bias(out_vars) = basic_conv(stride_vars);
+  } else {
+    conv_no_bias = basic_conv;
+  }
+
+  result.outputs[0].rep = FuncForNodeOutput(node, 0);
+
+  // Return the result after applying the bias if any.
+  if (inputs.size() == 3) {
+    result.outputs[0].rep(out_vars) =
+        inputs[2].rep(out_vars[1]) + conv_no_bias(out_vars);
+  } else {
+    result.outputs[0].rep(out_vars) = conv_no_bias(out_vars);
+  }
+
+  /* TBD: find good schedule
+    if (device.find("CPU") != std::string::npos) {
+      Halide::Var n = out_vars[0];
+      Halide::Var c = out_vars[1];
+      Halide::Var x = out_vars[2];
+      Halide::Var y = out_vars[3];
+      Halide::RDom r = rdom;
+
+      // FIXME: support for 1 and 3d
+      result.outputs[0].rep
+                  .vectorize(c, 8).unroll(c).unroll(x).unroll(y)
+                  .update().reorder(c, x, y, r.x, r.y, r.z, n)
+                  .vectorize(c, 8).unroll(c).unroll(x).unroll(y).unroll(r.x, 2);
+    }
+  */
 
   return result;
 }
@@ -1548,6 +1667,89 @@ Node ConvertConcatNode(
   return result;
 }
 
+Node ConvertSplitNode(
+    const onnx::NodeProto& node,
+    const std::vector<Tensor>& inputs) {
+  if (inputs.size() != 1) {
+    throw std::invalid_argument(
+        "Unexpected number of inputs for split node " + node.name());
+  }
+
+  const int in_rank = inputs[0].shape.type().tensor_type().shape().dim_size();
+  std::vector<int> splits;
+  int axis = 0;
+  for (const auto& attr : node.attribute()) {
+    if (attr.name() == "split") {
+      for (int split_size : attr.ints()) {
+        splits.push_back(split_size);
+      }
+    }
+    if (attr.name() == "axis") {
+      axis = attr.i();
+    }
+  }
+
+  const int axis_dim =
+      inputs[0].shape.type().tensor_type().shape().dim(axis).dim_value();
+  const int num_outputs = node.output_size();
+
+  Node result;
+  result.inputs = inputs;
+
+  if(num_outputs == 0) {
+    return result;
+  }
+  result.outputs.resize(num_outputs);
+
+  // Split into equal parts.
+  if (splits.size() == 0) {
+    if (axis_dim % num_outputs != 0) {
+      throw std::invalid_argument(
+          "Can't equaly split outputs for node " + node.name());
+    }
+    const int size = axis_dim / num_outputs;
+    for (int i = 0; i < num_outputs; ++i) {
+      splits.push_back(size);
+    }
+  } else {
+    const int total_splits_size =
+        std::accumulate(splits.begin(), splits.end(), 0);
+    if (total_splits_size > axis_dim) {
+      throw std::invalid_argument(
+          "Inconsistent splits for node " + node.name());
+    }
+  }
+
+  // Compute offsets.
+  std::vector<int> split_offsets(splits.size(), 0);
+  for (int i = 1; i < splits.size(); ++i) {
+    split_offsets[i] = split_offsets[i - 1] + splits[i - 1];
+  }
+
+  const int out_rank = in_rank;
+  for (int i = 0; i < num_outputs; ++i) {
+    result.outputs[i].shape = inputs[0].shape;
+    std::vector<Halide::Var> out_vars(out_rank);
+    std::vector<Halide::Expr> in_vars(in_rank);
+    result.outputs[i].rep = FuncForNodeOutput(node, i);
+    for (int dim = 0; dim < in_rank; ++dim) {
+      if (dim == axis) {
+        result.outputs[i]
+            .shape.mutable_type()
+            ->mutable_tensor_type()
+            ->mutable_shape()
+            ->mutable_dim(dim)
+            ->set_dim_value(splits[i]);
+        in_vars[dim] = out_vars[dim] + split_offsets[i];
+      } else {
+        in_vars[dim] = out_vars[dim];
+      }
+    }
+    result.outputs[i].rep(out_vars) = result.inputs[0].rep(in_vars);
+  }
+  return result;
+}
+
 Node ConvertSliceNode(
     const onnx::NodeProto& node,
     const std::vector<Tensor>& inputs) {
@@ -1689,9 +1891,17 @@ Node ConvertPadNode(
       }
     }
   }
-  if (mode != "constant") {
-    throw std::domain_error("Unsupported padding type of node " + node.name());
+
+  PaddingMode padding_mode = PaddingMode::CONSTANT;
+  if (mode == "edge") {
+    padding_mode = PaddingMode::EDGE;
+  } else if (mode == "reflect") {
+    padding_mode = PaddingMode::REFLECT;
+  } else if (mode != "constant") {
+    throw std::domain_error(
+        "Unsupported " + mode + " padding type of node " + node.name());
   }
+
   const int num_dims = inputs[0].shape.type().tensor_type().shape().dim_size();
   if (pads.size() != 2 * num_dims) {
     throw std::invalid_argument(
@@ -1702,7 +1912,11 @@ Node ConvertPadNode(
   result.outputs.resize(1);
   result.outputs[0].rep = FuncForNodeOutput(node, 0);
   result.outputs[0].rep = GeneratePaddingExpr(
-      inputs[0].rep, inputs[0].shape.type().tensor_type().shape(), value, pads);
+      inputs[0].rep,
+      inputs[0].shape.type().tensor_type().shape(),
+      value,
+      pads,
+      padding_mode);
 
   result.outputs[0].shape = inputs[0].shape;
   const int rank = inputs[0].shape.type().tensor_type().shape().dim_size();
@@ -2157,6 +2371,9 @@ Node ConvertNode(
   if (node.op_type() == "Slice") {
     return ConvertSliceNode(node, inputs);
   }
+  if(node.op_type() == "Split") {
+    return ConvertSplitNode(node, inputs);
+  }
   if (node.op_type() == "Pad") {
     return ConvertPadNode(node, inputs);
   }
@@ -2326,7 +2543,11 @@ Model ConvertModel(const onnx::ModelProto& model, const std::string& device) {
   for (const onnx::NodeProto& node : model.graph().node()) {
     std::vector<Tensor> inputs;
     for (const std::string& input_name : node.input()) {
-      inputs.push_back(reps.at(input_name));
+      if (input_name.empty()) {
+        inputs.push_back(Tensor());
+      } else {
+        inputs.push_back(reps.at(input_name));
+      }
     }
     Node n = ConvertNode(node, inputs, device);
 

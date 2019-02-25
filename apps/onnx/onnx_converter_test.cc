@@ -20,8 +20,7 @@ TEST(ConverterTest, testAbs) {
   Halide::Buffer<float> input(200);
   std::uniform_real_distribution<float> dis(-1.0, 1.0);
   std::mt19937 rnd;
-  input.for_each_value(
-      [&](float& f) { f = dis(rnd); });
+  input.for_each_value([&](float& f) { f = dis(rnd); });
   Halide::Var index;
   node_inputs[0].rep(index) = input(index);
 
@@ -51,8 +50,7 @@ TEST(ConverterTest, testActivationFunction) {
   Halide::Buffer<float> input(200);
   std::mt19937 rnd;
   std::uniform_real_distribution<float> dis(-1.0, 1.0);
-  input.for_each_value(
-      [&](float& f) { f = dis(rnd); });
+  input.for_each_value([&](float& f) { f = dis(rnd); });
   Halide::Var index;
   node_inputs[0].rep(index) = input(index);
 
@@ -118,11 +116,9 @@ TEST(ConverterTest, testAdd) {
   std::mt19937 rnd;
   std::uniform_real_distribution<float> dis(-1.0, 1.0);
   std::uniform_real_distribution<float> dis10(-10.0, 10.0);
-  in1.for_each_value(
-      [&](float& f) { f = dis(rnd); });
+  in1.for_each_value([&](float& f) { f = dis(rnd); });
   Halide::Buffer<float> in2(200);
-  in2.for_each_value(
-      [&](float& f) { f = dis10(rnd); });
+  in2.for_each_value([&](float& f) { f = dis10(rnd); });
   Halide::Var index;
   node_inputs[0].rep(index) = in1(index);
   node_inputs[1].rep(index) = in2(index);
@@ -217,14 +213,11 @@ TEST(ConverterTest, testGemm) {
 
   std::mt19937 rnd;
   Halide::Buffer<float> in1(32, 100);
-  in1.for_each_value(
-      [&](float& f) { f = dis(rnd); });
+  in1.for_each_value([&](float& f) { f = dis(rnd); });
   Halide::Buffer<float> in2(100, 64);
-  in2.for_each_value(
-      [&](float& f) { f = dis10(rnd); });
+  in2.for_each_value([&](float& f) { f = dis10(rnd); });
   Halide::Buffer<float> in3(32, 64);
-  in3.for_each_value(
-      [&](float& f) { f = dis(rnd); });
+  in3.for_each_value([&](float& f) { f = dis(rnd); });
   Halide::Var i1, j1;
   node_inputs[0].rep(i1, j1) = in1(i1, j1);
   Halide::Var i2, j2;
@@ -243,6 +236,101 @@ TEST(ConverterTest, testGemm) {
         expected += in1(i, k) * in2(k, j);
       }
       EXPECT_NEAR(output(i, j), expected, 5e-5f);
+    }
+  }
+}
+
+TEST(ConverterTest, testConv) {
+  onnx::NodeProto add_node;
+  add_node.set_name("conv_node");
+  add_node.set_op_type("Conv");
+  add_node.add_input("x");
+  add_node.add_input("w");
+  add_node.add_output("y");
+
+  std::vector<Tensor> node_inputs;
+  node_inputs.resize(2);
+  node_inputs[0]
+      .shape.mutable_type()
+      ->mutable_tensor_type()
+      ->mutable_shape()
+      ->add_dim()
+      ->set_dim_value(3);
+  node_inputs[0]
+      .shape.mutable_type()
+      ->mutable_tensor_type()
+      ->mutable_shape()
+      ->add_dim()
+      ->set_dim_value(5);
+  node_inputs[0]
+      .shape.mutable_type()
+      ->mutable_tensor_type()
+      ->mutable_shape()
+      ->add_dim()
+      ->set_dim_value(6);
+  node_inputs[0]
+      .shape.mutable_type()
+      ->mutable_tensor_type()
+      ->mutable_shape()
+      ->add_dim()
+      ->set_dim_value(11);
+  node_inputs[1]
+      .shape.mutable_type()
+      ->mutable_tensor_type()
+      ->mutable_shape()
+      ->add_dim()
+      ->set_dim_value(7);
+  node_inputs[1]
+      .shape.mutable_type()
+      ->mutable_tensor_type()
+      ->mutable_shape()
+      ->add_dim()
+      ->set_dim_value(5);
+  node_inputs[1]
+      .shape.mutable_type()
+      ->mutable_tensor_type()
+      ->mutable_shape()
+      ->add_dim()
+      ->set_dim_value(3);
+  node_inputs[1]
+      .shape.mutable_type()
+      ->mutable_tensor_type()
+      ->mutable_shape()
+      ->add_dim()
+      ->set_dim_value(3);
+
+  std::uniform_real_distribution<float> dis(-1.0, 1.0);
+  std::uniform_real_distribution<float> dis10(-10.0, 10.0);
+
+  std::mt19937 rnd;
+  Halide::Buffer<float> in1(3, 5, 6, 11);
+  in1.for_each_value([&](float& f) { f = dis(rnd); });
+  Halide::Buffer<float> in2(7, 5, 3, 3);
+  in2.for_each_value([&](float& f) { f = dis10(rnd); });
+  Halide::Var i1, j1, k1, l1;
+  node_inputs[0].rep(i1, j1, k1, l1) = in1(i1, j1, k1, l1);
+  Halide::Var i2, j2, k2, l2;
+  node_inputs[1].rep(i2, j2, k2, l2) = in2(i2, j2, k2, l2);
+  Node converted = ConvertNode(add_node, node_inputs, "");
+
+  GOOGLE_CHECK_EQ(1, converted.outputs.size());
+  Halide::Buffer<float> output = converted.outputs[0].rep.realize(3, 7, 4, 9);
+
+  for (int i = 0; i < 3; ++i) {
+    for (int j = 0; j < 7; ++j) {
+      for (int k = 0; k < 4; ++k) {
+        for (int l = 0; l < 9; ++l) {
+          float expected = 0;
+          for (int c = 0; c < 5; ++c) {
+            for (int w = 0; w < 3; ++w) {
+              for (int h = 0; h < 3; ++h) {
+                expected += in1(i, c, k + w, l + h) * in2(j, c, w, h);
+              }
+            }
+          }
+          EXPECT_NEAR(output(i, j, k, l), expected, 5e-5f);
+        }
+      }
     }
   }
 }
@@ -288,8 +376,7 @@ TEST(ConverterTest, testSum) {
   Halide::Buffer<float> in1(7, 3, 5, 11);
   std::uniform_real_distribution<float> dis(-1.0, 1.0);
   std::mt19937 rnd;
-  in1.for_each_value(
-      [&](float& f) { f = dis(rnd); });
+  in1.for_each_value([&](float& f) { f = dis(rnd); });
   Halide::Var i, j, k, l;
   node_inputs[0].rep(i, j, k, l) = in1(i, j, k, l);
 
@@ -339,8 +426,7 @@ TEST(ConverterTest, testConcat) {
   Halide::Buffer<float> in1(7, 3);
   std::uniform_real_distribution<float> dis(-1.0, 1.0);
   std::mt19937 rnd;
-  in1.for_each_value(
-      [&](float& f) { f = dis(rnd); });
+  in1.for_each_value([&](float& f) { f = dis(rnd); });
   Halide::Var i, j;
   node_inputs[0].rep(i, j) = in1(i, j);
 
@@ -357,8 +443,7 @@ TEST(ConverterTest, testConcat) {
       ->add_dim()
       ->set_dim_value(3);
   Halide::Buffer<float> in2(5, 3);
-  in2.for_each_value(
-      [&](float& f) { f = dis(rnd); });
+  in2.for_each_value([&](float& f) { f = dis(rnd); });
   node_inputs[1].rep(i, j) = in2(i, j);
 
   Node converted = ConvertNode(concat_node, node_inputs, "");
@@ -432,8 +517,7 @@ TEST(ConverterTest, testModel) {
   Halide::Buffer<float> input_values({3, 7});
   std::uniform_real_distribution<float> dis(-1.0, 1.0);
   std::mt19937 rnd;
-  input_values.for_each_value(
-      [&](float& f) { f = dis(rnd); });
+  input_values.for_each_value([&](float& f) { f = dis(rnd); });
 
   Halide::ImageParam& input = converted.inputs.at("model_input");
   input.set(input_values);
