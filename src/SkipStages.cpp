@@ -249,7 +249,7 @@ private:
     }
 };
 
-class ProductionGuarder : public IRMutator2 {
+class ProductionGuarder : public IRMutator {
 public:
     ProductionGuarder(const string &b, Expr compute_p, Expr alloc_p):
         buffer(b), compute_predicate(compute_p), alloc_predicate(alloc_p) {}
@@ -258,7 +258,7 @@ private:
     Expr compute_predicate;
     Expr alloc_predicate;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     bool memoize_call_uses_buffer(const Call *op) {
         internal_assert(op->call_type == Call::Extern);
@@ -296,14 +296,14 @@ private:
             return Call::make(op->type, Call::if_then_else,
                               {compute_predicate, op, 0}, Call::PureIntrinsic);
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
     Stmt visit(const ProducerConsumer *op) override {
         // If the compute_predicate at this stage depends on something
         // vectorized we should bail out.
-        Stmt stmt = IRMutator2::visit(op);
+        Stmt stmt = IRMutator::visit(op);
 
         if (op->is_producer) {
             op = stmt.as<ProducerConsumer>();
@@ -317,12 +317,12 @@ private:
     }
 };
 
-class StageSkipper : public IRMutator2 {
+class StageSkipper : public IRMutator {
 public:
     StageSkipper(const string &f) : func(f), in_vector_loop(false) {}
 private:
     string func;
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Scope<> vector_vars;
     bool in_vector_loop;
@@ -336,7 +336,7 @@ private:
             in_vector_loop = true;
         }
 
-        Stmt stmt = IRMutator2::visit(op);
+        Stmt stmt = IRMutator::visit(op);
 
         if (op->for_type == ForType::Vectorized) {
             vector_vars.pop(op->name);
@@ -413,10 +413,10 @@ private:
                 return Realize::make(op->name, op->types, op->memory_type, op->bounds,
                                      alloc_predicate, body);
             } else {
-                return IRMutator2::visit(op);
+                return IRMutator::visit(op);
             }
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 };

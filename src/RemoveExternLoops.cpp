@@ -4,13 +4,13 @@
 namespace Halide {
 namespace Internal {
 
-class RemoveExternLoops : public IRMutator2 {
+class RemoveExternLoops : public IRMutator {
 private:
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Stmt visit(const For *op) override {
         if (op->for_type != ForType::Extern) {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
         // Replace the for with its first iteration (implemented with a let).
         return LetStmt::make(op->name, op->min, mutate(op->body));

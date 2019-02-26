@@ -441,7 +441,6 @@ struct halide_type_t {
     /** Size in bytes for a single element, even if width is not 1, of this type. */
     HALIDE_ALWAYS_INLINE int bytes() const { return (bits + 7) / 8; }
 
-private:
     HALIDE_ALWAYS_INLINE uint32_t as_u32() const {
         uint32_t u;
         memcpy(&u, this, sizeof(u));
@@ -1149,9 +1148,7 @@ extern int halide_error_extern_stage_failed(void *user_context, const char *exte
 extern int halide_error_explicit_bounds_too_small(void *user_context, const char *func_name, const char *var_name,
                                                       int min_bound, int max_bound, int min_required, int max_required);
 extern int halide_error_bad_type(void *user_context, const char *func_name,
-                                 uint8_t code_given, uint8_t correct_code,
-                                 uint8_t bits_given, uint8_t correct_bits,
-                                 uint16_t lanes_given, uint16_t correct_lanes);
+                                 uint32_t type_given, uint32_t correct_type); // N.B. The last two args are the bit representation of a halide_type_t
 extern int halide_error_bad_dimensions(void *user_context, const char *func_name,
                                        int32_t dimensions_given, int32_t correct_dimensions);
 extern int halide_error_access_out_of_bounds(void *user_context, const char *func_name,
@@ -1209,6 +1206,8 @@ extern int halide_error_integer_division_by_zero(void *user_context);
 // @}
 
 /** Optional features a compilation Target can have.
+ * Be sure to keep this in sync with the Feature enum in Target.h and the implementation of
+ * get_runtime_compatible_target in Target.cpp if you add a new feature.
  */
 typedef enum halide_target_feature_t {
     halide_target_feature_jit = 0,  ///< Generate code that will run immediately inside the calling process.
@@ -1649,6 +1648,22 @@ struct halide_filter_metadata_t {
     /** The function name of the filter. */
     const char* name;
 };
+
+/** halide_register_argv_and_metadata() is a **user-defined** function that
+ * must be provided in order to use the registration.cc files produced
+ * by Generators when the 'registration' output is requested. Each registration.cc
+ * file provides a static initializer that calls this function with the given
+ * filter's argv-call variant, its metadata, and (optionally) and additional
+ * textual data that the build system chooses to tack on for its own purposes.
+ * Note that this will be called at static-initializer time (i.e., before
+ * main() is called), and in an unpredictable order. Note that extra_key_value_pairs
+ * may be nullptr; if it's not null, it's expected to be a null-terminated list
+ * of strings, with an even number of entries. */
+void halide_register_argv_and_metadata(
+    int (*filter_argv_call)(void **),
+    const struct halide_filter_metadata_t *filter_metadata,
+    const char * const *extra_key_value_pairs
+);
 
 /** The functions below here are relevant for pipelines compiled with
  * the -profile target flag, which runs a sampling profiler thread

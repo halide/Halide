@@ -6,9 +6,9 @@
 namespace Halide {
 namespace Internal {
 
-class EliminateBoolVectors : public IRMutator2 {
+class EliminateBoolVectors : public IRMutator {
 private:
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Scope<Type> lets;
 
@@ -118,7 +118,7 @@ private:
             // Cast to bool
             return mutate(op->value != make_zero(op->value.type()));
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
@@ -137,7 +137,7 @@ private:
         if (predicate.same_as(op->predicate) && value.same_as(op->value) && index.same_as(op->index)) {
             return op;
         } else {
-            return Store::make(op->name, value, index, op->param, predicate);
+            return Store::make(op->name, value, index, op->param, predicate, op->alignment);
         }
     }
 
@@ -199,7 +199,7 @@ private:
     }
 
     Expr visit(const Shuffle *op) override {
-        Expr expr = IRMutator2::visit(op);
+        Expr expr = IRMutator::visit(op);
         if (op->is_extract_element() && op->type.is_bool()) {
             op = expr.as<Shuffle>();
             internal_assert(op);

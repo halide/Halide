@@ -288,10 +288,7 @@ void Stage::set_dim_type(VarOrRVar var, ForType t) {
 
             // If it's an rvar and the for type is parallel, we need to
             // validate that this doesn't introduce a race condition.
-            if (!dims[i].is_pure() && var.is_rvar &&
-                (t == ForType::Vectorized || t == ForType::Parallel ||
-                 t == ForType::GPUBlock || t == ForType::GPUThread ||
-                 t == ForType::GPULane)) {
+            if (!dims[i].is_pure() && var.is_rvar && is_parallel(t)) {
                 user_assert(definition.schedule().allow_race_conditions())
                     << "In schedule for " << name()
                     << ", marking var " << var.name()
@@ -356,15 +353,15 @@ std::string Stage::dump_argument_list() const {
 
 namespace {
 
-class SubstituteSelfReference : public IRMutator2 {
-    using IRMutator2::visit;
+class SubstituteSelfReference : public IRMutator {
+    using IRMutator::visit;
 
     const string func;
     const Function substitute;
     const vector<Var> new_args;
 
     Expr visit(const Call *c) override {
-        Expr expr = IRMutator2::visit(c);
+        Expr expr = IRMutator::visit(c);
         c = expr.as<Call>();
         internal_assert(c);
 
@@ -3088,7 +3085,7 @@ void Func::set_custom_print(void (*cust_print)(void *, const char *)) {
     pipeline().set_custom_print(cust_print);
 }
 
-void Func::add_custom_lowering_pass(IRMutator2 *pass, std::function<void()> deleter) {
+void Func::add_custom_lowering_pass(IRMutator *pass, std::function<void()> deleter) {
     pipeline().add_custom_lowering_pass(pass, deleter);
 }
 

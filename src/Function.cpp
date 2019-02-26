@@ -32,11 +32,11 @@ struct FunctionContents;
 namespace {
 // Weaken all the references to a particular Function to break
 // reference cycles. Also count the number of references found.
-class WeakenFunctionPtrs : public IRMutator2 {
-    using IRMutator2::visit;
+class WeakenFunctionPtrs : public IRMutator {
+    using IRMutator::visit;
 
     Expr visit(const Call *c) override {
-        Expr expr = IRMutator2::visit(c);
+        Expr expr = IRMutator::visit(c);
         c = expr.as<Call>();
         internal_assert(c);
         if (c->func.defined() &&
@@ -131,8 +131,8 @@ struct FunctionContents {
         }
     }
 
-    // Pass an IRMutator2 through to all Exprs referenced in the FunctionContents
-    void mutate(IRMutator2 *mutator) {
+    // Pass an IRMutator through to all Exprs referenced in the FunctionContents
+    void mutate(IRMutator *mutator) {
         func_schedule.mutate(mutator);
 
         if (init_def.defined()) {
@@ -737,7 +737,7 @@ void Function::accept(IRVisitor *visitor) const {
     contents->accept(visitor);
 }
 
-void Function::mutate(IRMutator2 *mutator) {
+void Function::mutate(IRMutator *mutator) {
     contents->mutate(mutator);
 }
 
@@ -994,13 +994,13 @@ const Call *Function::is_wrapper() const {
 namespace {
 
 // Replace all calls to functions listed in 'substitutions' with their wrappers.
-class SubstituteCalls : public IRMutator2 {
-    using IRMutator2::visit;
+class SubstituteCalls : public IRMutator {
+    using IRMutator::visit;
 
     map<FunctionPtr, FunctionPtr> substitutions;
 
     Expr visit(const Call *c) override {
-        Expr expr = IRMutator2::visit(c);
+        Expr expr = IRMutator::visit(c);
         c = expr.as<Call>();
         internal_assert(c);
 

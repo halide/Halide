@@ -142,11 +142,10 @@ inline HALIDE_NEVER_INLINE
 Expr make_const_special_expr(halide_type_t ty) {
     const uint16_t flags = ty.lanes & MatcherState::special_values_mask;
     ty.lanes &= ~MatcherState::special_values_mask;
-    static std::atomic<int> counter;
     if (flags & MatcherState::indeterminate_expression) {
-        return Call::make(ty, Call::indeterminate_expression, {counter++}, Call::Intrinsic);
+        return make_indeterminate_expression(ty);
     } else if (flags & MatcherState::signed_integer_overflow) {
-        return Call::make(ty, Call::signed_integer_overflow, {counter++}, Call::Intrinsic);
+        return make_signed_integer_overflow(ty);
     }
     // unreachable
     return Expr();

@@ -14,10 +14,10 @@ using std::string;
 using std::map;
 
 /** A mutator which eagerly folds no-op stmts */
-class NoOpCollapsingMutator : public IRMutator2 {
+class NoOpCollapsingMutator : public IRMutator {
 protected:
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Stmt visit(const LetStmt *op) override {
         Stmt body = mutate(op->body);
@@ -202,7 +202,7 @@ class GenerateConsumerBody : public NoOpCollapsingMutator {
                 return Acquire::make(acquire_sema, 1, op);
             }
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
@@ -211,7 +211,7 @@ class GenerateConsumerBody : public NoOpCollapsingMutator {
         if (starts_with(op->name, func + ".folding_semaphore.") && ends_with(op->name, ".head")) {
             return mutate(op->body);
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
@@ -219,7 +219,7 @@ class GenerateConsumerBody : public NoOpCollapsingMutator {
         if (starts_with(op->name, func + ".folding_semaphore.") && ends_with(op->name, ".head")) {
             return Evaluate::make(0);
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
@@ -231,7 +231,7 @@ class GenerateConsumerBody : public NoOpCollapsingMutator {
         if (starts_with(var->name, func + ".folding_semaphore.")) {
             return mutate(op->body);
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
@@ -240,8 +240,8 @@ public:
         func(f), sema(s) {}
 };
 
-class CloneAcquire : public IRMutator2 {
-    using IRMutator2::visit;
+class CloneAcquire : public IRMutator {
+    using IRMutator::visit;
 
     const string &old_name;
     Expr new_var;
@@ -286,8 +286,8 @@ public:
     int count = 0;
 };
 
-class ForkAsyncProducers : public IRMutator2 {
-    using IRMutator2::visit;
+class ForkAsyncProducers : public IRMutator {
+    using IRMutator::visit;
 
     const map<string, Function> &env;
 
@@ -346,7 +346,7 @@ class ForkAsyncProducers : public IRMutator2 {
             return Realize::make(op->name, op->types, op->memory_type,
                                  op->bounds, op->condition, body);
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
@@ -366,8 +366,8 @@ public:
 // the failure, which remains to be proven. (There is a test for the
 // simple failure case, error_async_require_fail. One has not been
 // written for the complex nested case yet.)
-class InitializeSemaphores : public IRMutator2 {
-    using IRMutator2::visit;
+class InitializeSemaphores : public IRMutator {
+    using IRMutator::visit;
 
     const Type sema_type = type_of<halide_semaphore_t *>();
 
@@ -430,8 +430,8 @@ class InitializeSemaphores : public IRMutator2 {
 };
 
 // Tighten the scope of consume nodes as much as possible to avoid needless synchronization.
-class TightenProducerConsumerNodes : public IRMutator2 {
-    using IRMutator2::visit;
+class TightenProducerConsumerNodes : public IRMutator {
+    using IRMutator::visit;
 
     Stmt make_producer_consumer(string name, bool is_producer, Stmt body, const Scope<int> &scope) {
         if (const LetStmt *let = body.as<LetStmt>()) {
@@ -490,8 +490,8 @@ public:
 
 // Broaden the scope of acquire nodes to pack trailing work into the
 // same task and to potentially reduce the nesting depth of tasks.
-class ExpandAcquireNodes : public IRMutator2 {
-    using IRMutator2::visit;
+class ExpandAcquireNodes : public IRMutator {
+    using IRMutator::visit;
 
     Stmt visit(const Block *op) override {
         Stmt first = mutate(op->first), rest = mutate(op->rest);
@@ -543,8 +543,8 @@ class ExpandAcquireNodes : public IRMutator2 {
     }
 };
 
-class TightenForkNodes : public IRMutator2 {
-    using IRMutator2::visit;
+class TightenForkNodes : public IRMutator {
+    using IRMutator::visit;
 
     Stmt make_fork(Stmt first, Stmt rest) {
         const LetStmt *lf = first.as<LetStmt>();

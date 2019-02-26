@@ -40,8 +40,6 @@ Simplify::Simplify(bool r, const Scope<Interval> *bi, const Scope<ModulusRemaind
         if (bounds.min_defined || bounds.max_defined || bounds.alignment.modulus != 1) {
             bounds_and_alignment_info.push(iter.name(), bounds);
         }
-
-
     }
 
     for (auto iter = ai->cbegin(); iter != ai->cend(); ++iter) {
@@ -287,9 +285,9 @@ Stmt simplify(Stmt s, bool remove_dead_lets,
     return Simplify(remove_dead_lets, &bounds, &alignment).mutate(s);
 }
 
-class SimplifyExprs : public IRMutator2 {
+class SimplifyExprs : public IRMutator {
 public:
-    using IRMutator2::mutate;
+    using IRMutator::mutate;
     Expr mutate(const Expr &e) override {
         return simplify(e);
     }
@@ -304,14 +302,14 @@ bool can_prove(Expr e, const Scope<Interval> &bounds) {
         << "Argument to can_prove is not a boolean Expr: " << e << "\n";
 
     // Remove likelies
-    struct RemoveLikelies : public IRMutator2 {
-        using IRMutator2::visit;
+    struct RemoveLikelies : public IRMutator {
+        using IRMutator::visit;
         Expr visit(const Call *op) override {
             if (op->is_intrinsic(Call::likely) ||
                 op->is_intrinsic(Call::likely_if_innermost)) {
                 return mutate(op->args[0]);
             } else {
-                return IRMutator2::visit(op);
+                return IRMutator::visit(op);
             }
         }
     };
@@ -323,17 +321,11 @@ bool can_prove(Expr e, const Scope<Interval> &bounds) {
 
     e = simplify(e, true, bounds);
 
-    // When terms cancel, the simplifier doesn't always successfully
-    // kill the dead lets.
-    while (const Let *l = e.as<Let>()) {
-        e = l->body;
-    }
-
     // Take a closer look at all failed proof attempts to hunt for
     // simplifier weaknesses
     if (debug::debug_level() > 0 && !is_const(e)) {
-        struct RenameVariables : public IRMutator2 {
-            using IRMutator2::visit;
+        struct RenameVariables : public IRMutator {
+            using IRMutator::visit;
 
             Expr visit(const Variable *op) override {
                 auto it = vars.find(op->name);
