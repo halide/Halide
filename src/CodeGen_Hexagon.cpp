@@ -1832,12 +1832,6 @@ void CodeGen_Hexagon::visit(const Call *op) {
             equiv.accept(this);
         }
         return;
-    } else if (op->is_intrinsic(Call::extract_mask_element)) {
-        internal_assert(op->args.size() == 2);
-        const int64_t *index = as_const_int(op->args[1]);
-        internal_assert(index);
-        value = codegen(Cast::make(Bool(), Shuffle::make_extract_element(op->args[0], *index)));
-        return;
     }
 
     if (op->is_intrinsic(Call::prefetch)) {

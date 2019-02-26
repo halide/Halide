@@ -2478,9 +2478,6 @@ void CodeGen_LLVM::visit(const Call *op) {
         internal_assert(op->args.size() == 3);
         Expr cond = op->args[0];
         if (cond.type().is_vector()) {
-            // This will dramatically slow down the code, so it's worthy
-            // of a warning to user, in case it was inserted in a non-obvious way.
-            user_warning << "The condition for a require() expr is vectorized; it will be split and scalarized.";
             if (!cond.type().is_bool()) {
                 // If we're building for a backend that uses bool_to_mask(),
                 // the vector might no longer be booleans, and scalarizing
@@ -2500,6 +2497,11 @@ void CodeGen_LLVM::visit(const Call *op) {
             create_assertion(c, op->args[2]);
             value = codegen(op->args[1]);
         }
+    } else if (op->is_intrinsic(Call::extract_mask_element)) {
+        internal_assert(op->args.size() == 2);
+        const int64_t *index = as_const_int(op->args[1]);
+        internal_assert(index);
+        value = codegen(Cast::make(Bool(), Shuffle::make_extract_element(op->args[0], *index)));
     } else if (op->is_intrinsic(Call::make_struct)) {
         if (op->type.is_vector()) {
             // Make a vector of pointers to distinct structs

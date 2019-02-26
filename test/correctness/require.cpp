@@ -73,7 +73,7 @@ int main(int argc, char **argv) {
         Var x;
         Func f;
         f(x) = require(x > 0, x);
-        f.vectorize(x, 8).hexagon();
+        f.vectorize(x, 32).hexagon();
 
         std::string object_name = Internal::get_test_tmp_dir() + "test_object_" + target.to_string();
         if (target.os == Target::Windows && !target.has_feature(Target::MinGW)) {
