@@ -8,7 +8,7 @@ extern "C" {
 #define WIN32API __stdcall
 #endif
 
-WIN32API void *LoadLibraryW(const char *);
+WIN32API void *LoadLibraryA(const char *);
 WIN32API void *GetProcAddress(void *, const char *);
 WIN32API unsigned SetErrorMode(unsigned);
 #define SEM_FAILCRITICALERRORS 0x0001
@@ -21,20 +21,7 @@ WEAK void *halide_default_get_symbol(const char *name) {
 WEAK void *halide_default_load_library(const char *name) {
     // Suppress dialog windows during library open.
     unsigned old_mode = SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX);
-    int wide_len = MultiByteToWideChar(CP_UTF8, 0, name.c_str(), -1, nullptr, 0);
-    if (wide_len < 1) {
-        SetErrorMode(old_mode);
-        return nullptr;
-    }
-
-    std::vector<wchar_t> wide_lib(wide_len);
-    wide_len = MultiByteToWideChar(CP_UTF8, 0, lib.c_str(), -1, wide_lib.data(), wide_len);
-    if (wide_len < 1) {
-        SetErrorMode(old_mode);
-        return nullptr;
-    }
-
-    void *lib = LoadLibraryW(wide_lib.data());
+    void *lib = LoadLibraryA(name);
     SetErrorMode(old_mode);
     return lib;
 }
