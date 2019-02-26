@@ -333,6 +333,12 @@ int main(int argc, char **argv) {
         }
     }
 
+    std::ifstream file(weights_out_dir + "/best/rate");
+    std::string line;
+    std::getline(file, line);
+    float best_rate_overall = stof(line);
+    std::cout << "Initial best validation rate: " << best_rate_overall << std::endl;
+    file.close();
     for (float learning_rate : rates) {
         float loss_sum[models] = {0}, loss_sum_counter[models] = {0};
         float correct_ordering_rate_sum[models] = {0};
@@ -474,7 +480,7 @@ int main(int argc, char **argv) {
                 correct_ordering_rate_count[model] *= 0.9f;
 
                 rate = v_correct_ordering_rate_sum[model] / v_correct_ordering_rate_count[model];
-                if (rate < best_rate) {
+                if (rate > best_rate) {
                     best_model = model;
                     best_rate = rate;
                 }
@@ -503,6 +509,12 @@ int main(int argc, char **argv) {
                     // pipelines.
                     samples.erase(worst_inversion.pipeline_id);
                 }
+            }
+
+            if (best_rate > best_rate_overall) {
+                best_rate_overall = best_rate;
+                std::cout << "Saving best weights " << best_rate_overall << "\n";
+                tpp[best_model]->save_best_weights(best_rate_overall);
             }
 
             tpp[best_model]->save_weights();

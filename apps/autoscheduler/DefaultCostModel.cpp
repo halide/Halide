@@ -362,6 +362,21 @@ class DefaultCostModel : public CostModel {
         buffer_to_file(weights.conv1_bias, weights_out_dir + "/trunk_conv1_bias.data");
     }
 
+    void save_best_weights(float rate) {
+        if (weights_out_dir.empty()) return;
+
+        auto dir = weights_out_dir + "/best";
+        buffer_to_file(weights.head1_filter, dir + "/head1_conv1_weight.data");
+        buffer_to_file(weights.head1_bias, dir + "/head1_conv1_bias.data");
+        buffer_to_file(weights.head2_filter, dir + "/head2_conv1_weight.data");
+        buffer_to_file(weights.head2_bias, dir + "/head2_conv1_bias.data");
+        buffer_to_file(weights.conv1_filter, dir + "/trunk_conv1_weight.data");
+        buffer_to_file(weights.conv1_bias, dir + "/trunk_conv1_bias.data");
+        std::ofstream file(dir + "/rate", std::ios_base::trunc);
+        file << rate << "\n";
+        file.close();
+    }
+
 
     struct TCPConnection {
         int fd = 0;
