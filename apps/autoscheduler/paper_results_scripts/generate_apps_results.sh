@@ -5,7 +5,7 @@ export CXX="ccache ${CXX}"
 
 # Best single set of params for master on the benchmarking machine, found with grid search on the runtime pipelines
 # There are already baked into src/AutoSchedule.cpp as the default
-# export HL_MACHINE_PARAMS=32,24000000,160
+export HL_MACHINE_PARAMS=80,24000000,160
 
 export HL_PERMIT_FAILED_UNROLL=1
 export HL_WEIGHTS_DIR=${HALIDE}/apps/autoscheduler/gpu_weights
