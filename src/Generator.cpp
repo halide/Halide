@@ -865,7 +865,17 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
     for (const auto &lib : split_string(flags_info["-p"], ",")) {
         if (lib.empty()) continue;
 #ifdef _WIN32
-        if (LoadLibrary(lib.c_str()) != nullptr) {
+        HMODULE loaded_lib;
+
+        {
+            int wide_len = MultiByteToWideChar(CP_UTF8, 0, lib.c_str(), -1, nullptr, 0);
+            auto *wide_lib = new wchar_t[wide_len];
+            MultiByteToWideChar(CP_UTF8, 0, lib.c_str(), -1, wide_lib, wide_len);
+            loaded_lib = LoadLibraryW(wide_lib);
+            delete[] wide_lib;
+        }
+
+        if (loaded_lib != nullptr) {
             cerr << "Failed to load: " << lib << "\n";
             return 1;
         }
