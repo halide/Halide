@@ -1671,8 +1671,8 @@ inline Expr popcount(Expr x) {
                                 {std::move(x)}, Internal::Call::PureIntrinsic);
 }
 
-/** Count the number of leading zero bits in an expression. The result is
- *  undefined if the value of the expression is zero. */
+/** Count the number of leading zero bits in an expression. If the expression is
+ * zero, the result is the number of bits in the type. */
 inline Expr count_leading_zeros(Expr x) {
     user_assert(x.defined()) << "count leading zeros of undefined Expr\n";
     Type t = x.type();
@@ -1682,8 +1682,8 @@ inline Expr count_leading_zeros(Expr x) {
                                 {std::move(x)}, Internal::Call::PureIntrinsic);
 }
 
-/** Count the number of trailing zero bits in an expression. The result is
- *  undefined if the value of the expression is zero. */
+/** Count the number of trailing zero bits in an expression. If the expression is
+ * zero, the result is the number of bits in the type. */
 inline Expr count_trailing_zeros(Expr x) {
     user_assert(x.defined()) << "count trailing zeros of undefined Expr\n";
     Type t = x.type();

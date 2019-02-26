@@ -175,6 +175,13 @@ if (HALIDE_ENABLE_RTTI AND NOT LLVM_ENABLE_RTTI)
   message(FATAL_ERROR "Can't enable RTTI. LLVM was compiled without it")
 endif()
 
+# Needed for 'make distrib' to properly fill in the .tpl files
+if (HALIDE_ENABLE_RTTI)
+  set(HALIDE_RTTI_RAW 1)
+else()
+  set(HALIDE_RTTI_RAW 0)
+endif()
+
 function(halide_project name folder)
   add_executable("${name}" ${ARGN})
   if (MSVC)
@@ -424,10 +431,11 @@ install(FILES
         )
 
 install(DIRECTORY tutorial
-        DESTINATION tutorial
+        DESTINATION .
         FILES_MATCHING
+        PATTERN "*.cpp"
         PATTERN "*.h"
-        PATTERN "*.sh"
+        PATTERN "lesson_*.sh"
         PATTERN "*.gif"
         PATTERN "*.jpg"
         PATTERN "*.mp4"
