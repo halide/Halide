@@ -58,8 +58,9 @@ for app in ${APPS}; do
         C=$(grep "schedule_type=classic_auto_schedule" results_resnet_50.txt | cut -d" " -f 4)
         A=$(grep "schedule_type=_auto_schedule" results_resnet_50.txt | cut -d" " -f 4)
     else
+        M=$(grep "Manual" results_${app}.txt -m 1 | cut -d" " -f3)
         C=$(grep "Simple" results_${app}.txt -m 1 | cut -d" " -f4)
         A=$(grep "Auto" results_${app}.txt -m 1 | cut -d" " -f3)
     fi
-    echo $app $C $A
+    echo $app $M $C $A
 done
