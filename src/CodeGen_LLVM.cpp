@@ -1147,12 +1147,15 @@ void CodeGen_LLVM::optimize_module() {
         auto addAddressSanitizerPasses = [](const PassManagerBuilder &builder, legacy::PassManagerBase &pm) {
             constexpr bool compile_kernel = false;   // always false for user code
             constexpr bool recover = false;          // -fsanitize-recover, always false here
-
             constexpr bool use_after_scope = false;  // enable -fsanitize-address-use-after-scope?
-            pm.add(createAddressSanitizerFunctionPass(compile_kernel, recover, use_after_scope));
-
             constexpr bool use_globals_gc = false;  // Should ASan use GC-friendly instrumentation for globals?
+
+            pm.add(createAddressSanitizerFunctionPass(compile_kernel, recover, use_after_scope));
+#if LLVM_VERSION >= 90
+            pm.add(createModuleAddressSanitizerLegacyPassPass(compile_kernel, recover, use_globals_gc));
+#else
             pm.add(createAddressSanitizerModulePass(compile_kernel, recover, use_globals_gc));
+#endif
         };
         b.addExtension(PassManagerBuilder::EP_OptimizerLast, addAddressSanitizerPasses);
         b.addExtension(PassManagerBuilder::EP_EnabledOnOptLevel0, addAddressSanitizerPasses);
@@ -1163,7 +1166,7 @@ void CodeGen_LLVM::optimize_module() {
 #if LLVM_VERSION >= 80
             pm.add(createThreadSanitizerLegacyPassPass());
 #else
-            pm.add(createThreadSanitizerPass());            
+            pm.add(createThreadSanitizerPass());
 #endif
         };
         b.addExtension(PassManagerBuilder::EP_OptimizerLast, addThreadSanitizerPass);
@@ -2427,8 +2430,8 @@ void CodeGen_LLVM::visit(const Call *op) {
                                                        (op->is_intrinsic(Call::count_leading_zeros)) ? Intrinsic::ctlz :
                                                        Intrinsic::cttz,
                                                        arg_type);
-        llvm::Value *zero_is_not_undef = llvm::ConstantInt::getFalse(*context);
-        llvm::Value *args[2] = { codegen(op->args[0]), zero_is_not_undef };
+        llvm::Value *is_zero_undef = llvm::ConstantInt::getFalse(*context);
+        llvm::Value *args[2] = { codegen(op->args[0]), is_zero_undef };
         CallInst *call = builder->CreateCall(fn, args);
         value = call;
     } else if (op->is_intrinsic(Call::return_second)) {
