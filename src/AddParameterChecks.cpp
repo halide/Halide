@@ -28,7 +28,8 @@ public:
 
 // Insert checks to make sure that parameters are within their
 // declared range.
-Stmt add_parameter_checks(Stmt s, const Target &t) {
+Stmt add_parameter_checks(const vector<Stmt> &preconditions, Stmt s, const Target &t) {
+
     // First, find all the parameters
     FindParameters finder;
     s.accept(&finder);
@@ -90,10 +91,6 @@ Stmt add_parameter_checks(Stmt s, const Target &t) {
         s = LetStmt::make(lets[i].first, lets[i].second, s);
     }
 
-    if (t.has_feature(Target::NoAsserts)) {
-        asserts.clear();
-    }
-
     // Inject the assert statements
     for (size_t i = 0; i < asserts.size(); i++) {
         ParamAssert p = asserts[i];
@@ -125,6 +122,13 @@ Stmt add_parameter_checks(Stmt s, const Target &t) {
                                 Call::Extern);
 
         s = Block::make(AssertStmt::make(p.condition, error), s);
+    }
+
+    // The unstructured assertions get checked first (because they
+    // have a custom error message associated with them), so prepend
+    // them last.
+    for (const auto &p : preconditions) {
+        s = Block::make(p, s);
     }
 
     return s;

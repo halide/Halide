@@ -78,8 +78,12 @@ using std::set;
 using std::string;
 using std::vector;
 
-Module lower(const vector<Function> &output_funcs, const string &pipeline_name, const Target &t,
-             const vector<Argument> &args, const LinkageType linkage_type,
+Module lower(const vector<Function> &output_funcs,
+             const string &pipeline_name,
+             const Target &t,
+             const vector<Argument> &args,
+             const LinkageType linkage_type,
+             const vector<Stmt> &requirements,
              const vector<IRMutator *> &custom_passes) {
     std::vector<std::string> namespaces;
     std::string simple_pipeline_name = extract_namespaces(pipeline_name, namespaces);
@@ -140,7 +144,7 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     debug(2) << "Lowering after injecting tracing:\n" << s << '\n';
 
     debug(1) << "Adding checks for parameters\n";
-    s = add_parameter_checks(s, t);
+    s = add_parameter_checks(requirements, s, t);
     debug(2) << "Lowering after injecting parameter checks:\n" << s << '\n';
 
     // Compute the maximum and minimum possible value of each
@@ -462,8 +466,11 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     return result_module;
 }
 
-Stmt lower_main_stmt(const std::vector<Function> &output_funcs, const std::string &pipeline_name,
-                     const Target &t, const std::vector<IRMutator *> &custom_passes) {
+Stmt lower_main_stmt(const std::vector<Function> &output_funcs,
+                     const std::string &pipeline_name,
+                     const Target &t,
+                     const std::vector<Stmt> &requirements,
+                     const std::vector<IRMutator *> &custom_passes) {
     // We really ought to start applying for appellation d'origine contrôlée
     // status on types representing arguments in the Halide compiler.
     vector<InferredArgument> inferred_args = infer_arguments(Stmt(), output_funcs);
@@ -474,7 +481,7 @@ Stmt lower_main_stmt(const std::vector<Function> &output_funcs, const std::strin
         }
     }
 
-    Module module = lower(output_funcs, pipeline_name, t, args, LinkageType::External, custom_passes);
+    Module module = lower(output_funcs, pipeline_name, t, args, LinkageType::External, requirements, custom_passes);
 
     return module.functions().front().body;
 }

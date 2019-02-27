@@ -455,6 +455,21 @@ public:
      * been rescheduled. */
     void invalidate_cache();
 
+    /** Add a top-level precondition to the generated pipeline,
+     * expressed as a boolean Expr. The Expr may depend on parameters
+     * only, and may not call any Func or use a Var. If the condition
+     * is not true at runtime, the pipeline will call halide_error
+     * with the remaining arguments, and return
+     * halide_error_code_requirement_failed.  */
+    void add_requirement(Expr condition, std::vector<Expr> &error);
+
+    template<typename ...Args>
+    inline HALIDE_NO_USER_CODE_INLINE void add_requirement(Expr condition, Args&&... args) {
+        std::vector<Expr> collected_args;
+        Internal::collect_print_args(collected_args, std::forward<Args>(args)...);
+        add_requirement(std::move(condition), collected_args);
+    }
+
 private:
 
     std::string generate_function_name() const;

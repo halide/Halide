@@ -886,19 +886,25 @@ Expr print_when(Expr condition, const std::vector<Expr> &args) {
                                 Internal::Call::PureIntrinsic);
 }
 
+namespace Internal {
+Expr requirement_failed_error(Expr condition, const std::vector<Expr> &args) {
+    return Internal::Call::make(Int(32),
+                                "halide_error_requirement_failed",
+                                {stringify({condition}), combine_strings(args)},
+                                Internal::Call::Extern);
+}
+}
+
 Expr require(Expr condition, const std::vector<Expr> &args) {
     user_assert(condition.defined()) << "Require of undefined condition.\n";
     user_assert(condition.type().is_bool()) << "Require condition must be a boolean type.\n";
     user_assert(args.at(0).defined()) << "Require of undefined value.\n";
 
-    Expr requirement_failed_error =
-        Internal::Call::make(Int(32),
-                             "halide_error_requirement_failed",
-                             {stringify({condition}), combine_strings(args)},
-                             Internal::Call::Extern);
+    Expr err = requirement_failed_error(condition, args);
+
     return Internal::Call::make(args[0].type(),
                                 Internal::Call::require,
-                                {likely(std::move(condition)), args[0], requirement_failed_error},
+                                {likely(std::move(condition)), args[0], std::move(err)},
                                 Internal::Call::PureIntrinsic);
 }
 

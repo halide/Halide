@@ -90,6 +90,8 @@ struct PipelineContents {
      * define_extern calls. */
     std::map<std::string, JITExtern> jit_externs;
 
+    std::vector<Stmt> requirements;
+
     PipelineContents() :
         module("", Target()) {
         user_context_arg.arg = Argument("__user_context", Argument::InputScalar, type_of<const void*>(), 0, ArgumentEstimates{});
@@ -400,7 +402,8 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
             custom_passes.push_back(p.pass);
         }
 
-        contents->module = lower(contents->outputs, new_fn_name, target, lowering_args, linkage_type, custom_passes);
+        contents->module = lower(contents->outputs, new_fn_name, target, lowering_args,
+                                 linkage_type, contents->requirements, custom_passes);
     }
 
     return contents->module;
@@ -592,6 +595,11 @@ Realization Pipeline::realize(int x_size, const Target &target,
 Realization Pipeline::realize(const Target &target,
                               const ParamMap &param_map) {
   return realize(vector<int32_t>(), target, param_map);
+}
+
+void Pipeline::add_requirement(Expr condition, std::vector<Expr> &error_args) {
+    Expr error = Internal::requirement_failed_error(condition, error_args);
+    contents->requirements.emplace_back(Internal::AssertStmt::make(condition, error));
 }
 
 namespace {
