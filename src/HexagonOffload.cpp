@@ -997,7 +997,7 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
 
         debug(1) << "Signing Hexagon code: " << input.pathname() << " -> " << output.pathname() << "\n";
 
-        write_entire(input.pathname(), shared_object);
+        write_entire_file(input.pathname(), shared_object);
 
         debug(1) << "Signing tool: (" << signer << ")\n";
         std::string cmd = signer + " " + input.pathname() + " " + output.pathname();
@@ -1006,7 +1006,7 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
             << "HL_HEXAGON_CODE_SIGNER failed: result = " << result
             << " for cmd (" << cmd << ")";
 
-        shared_object = read_entire(output.pathname());
+        shared_object = read_entire_file(output.pathname());
     }
 
     Halide::Buffer<uint8_t> result_buf(shared_object.size(), device_code.name());

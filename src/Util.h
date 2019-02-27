@@ -267,15 +267,15 @@ FileStat file_stat(const std::string &name);
 
 /** Read the entire contents of a file into a vector<char>. The file
  * is read in binary mode. Errors trigger an assertion failure. */
-std::vector<char> read_entire(const std::string &pathname);
+std::vector<char> read_entire_file(const std::string &pathname);
 
 /** Create or replace the contents of a file with a given pointer-and-length
  * of memory. If the file doesn't exist, it is created; if it does exist, it
  * is completely overwritten. Any error triggers an assertion failure. */
-void write_entire(const std::string &pathname, const void *source, size_t source_len);
+void write_entire_file(const std::string &pathname, const void *source, size_t source_len);
 
-inline void write_entire(const std::string &pathname, const std::vector<char> &source) {
-    write_entire(pathname, source.data(), source.size());
+inline void write_entire_file(const std::string &pathname, const std::vector<char> &source) {
+    write_entire_file(pathname, source.data(), source.size());
 }
 
 /** A simple utility class that creates a temporary file in its ctor and

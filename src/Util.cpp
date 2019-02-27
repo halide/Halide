@@ -412,7 +412,7 @@ std::string dir_make_temp() {
     #endif
 }
 
-std::vector<char> read_entire(const std::string &pathname) {
+std::vector<char> read_entire_file(const std::string &pathname) {
     std::ifstream f(pathname, std::ios::in|std::ios::binary);
     std::vector<char> result;
 
@@ -426,7 +426,7 @@ std::vector<char> read_entire(const std::string &pathname) {
     return result;
 }
 
-void write_entire(const std::string &pathname, const void *source, size_t source_len) {
+void write_entire_file(const std::string &pathname, const void *source, size_t source_len) {
     std::ofstream f(pathname, std::ios::out|std::ios::binary);
 
     f.write(reinterpret_cast<const char*>(source), source_len);
