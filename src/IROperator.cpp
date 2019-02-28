@@ -844,6 +844,10 @@ Expr fast_exp(Expr x_full) {
 }
 
 Expr stringify(const std::vector<Expr> &args) {
+    if (args.empty()) {
+        return Expr("");
+    }
+
     return Internal::Call::make(type_of<const char *>(), Internal::Call::stringify,
                                 args, Internal::Call::Intrinsic);
 }
