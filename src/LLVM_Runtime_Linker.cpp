@@ -89,6 +89,9 @@ DECLARE_CPP_INITMOD(device_interface)
 DECLARE_CPP_INITMOD(errors)
 DECLARE_CPP_INITMOD(fake_thread_pool)
 DECLARE_CPP_INITMOD(float16_t)
+DECLARE_CPP_INITMOD(fuchsia_clock)
+DECLARE_CPP_INITMOD(fuchsia_host_cpu_count)
+DECLARE_CPP_INITMOD(fuchsia_yield)
 DECLARE_CPP_INITMOD(gpu_device_selection)
 DECLARE_CPP_INITMOD(hexagon_dma)
 DECLARE_CPP_INITMOD(hexagon_host)
@@ -347,6 +350,8 @@ llvm::Triple get_triple_for_target(const Target &target) {
             // X86 on iOS for the simulator
             triple.setVendor(llvm::Triple::Apple);
             triple.setOS(llvm::Triple::IOS);
+        } else if (target.os == Target::Fuchsia) {
+            triple.setOS(llvm::Triple::Fuchsia);
         }
     } else if (target.arch == Target::ARM) {
         if (target.bits == 32) {
@@ -373,6 +378,8 @@ llvm::Triple get_triple_for_target(const Target &target) {
         } else if (target.os == Target::Linux) {
             triple.setOS(llvm::Triple::Linux);
             triple.setEnvironment(llvm::Triple::GNUEABIHF);
+        } else if (target.os == Target::Fuchsia) {
+            triple.setOS(llvm::Triple::Fuchsia);
         } else {
             user_error << "No arm support for this OS\n";
         }
@@ -747,6 +754,21 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                     modules.push_back(get_initmod_qurt_allocator(c, bits_64, debug));
                 }
                 modules.push_back(get_initmod_fake_thread_pool(c, bits_64, debug));
+            } else if (t.os == Target::Fuchsia) {
+                modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
+                modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
+                modules.push_back(get_initmod_posix_print(c, bits_64, debug));
+                modules.push_back(get_initmod_fuchsia_clock(c, bits_64, debug));
+                modules.push_back(get_initmod_posix_io(c, bits_64, debug));
+                modules.push_back(get_initmod_posix_tempfile(c, bits_64, debug));
+                modules.push_back(get_initmod_fuchsia_host_cpu_count(c, bits_64, debug));
+                modules.push_back(get_initmod_fuchsia_yield(c, bits_64, debug));
+                if (tsan) {
+                    modules.push_back(get_initmod_posix_threads_tsan(c, bits_64, debug));
+                } else {
+                    modules.push_back(get_initmod_posix_threads(c, bits_64, debug));
+                }
+                modules.push_back(get_initmod_posix_get_symbol(c, bits_64, debug));
             }
         }
 
