@@ -83,7 +83,7 @@ namespace Autoscheduler {
 // How small should an innermost loop cluster be before you just
 // entirely unroll the thing. Sized for an architecture with 16 vector
 // registers.
-const int kUnrollLimit = 16;
+const int kUnrollLimit = 12;
 
 using std::string;
 using std::vector;
@@ -881,29 +881,45 @@ struct LoopNest {
                                  !producer_has_been_scheduled ? -1 :
                                  site.produce->vector_dim);
                             if (vectorized_loop_index >= 0) {
-                                for (int i = 0; i < e->producer->dimensions; i++) {
-                                    auto stride = jac.first(i, vectorized_loop_index);
-                                    vector_broadcast &= stride == 0;
-                                    if (i == producer_innermost_dim || !producer_has_been_scheduled) {
-                                        // If the producer has not
-                                        // been scheduled yet, be
-                                        // optimistic and assume that
-                                        // all loads from it are dense
-                                        // vector loads.
-                                        dense_vector_load &= stride == 1;
-                                        stride_2_vector_load &= stride == 2;
-                                        stride_3_vector_load &= stride == 3;
-                                        stride_4_vector_load &= stride == 4;
-                                    } else {
-                                        dense_vector_load &= stride == 0;
-                                        stride_2_vector_load &= stride == 0;
-                                        stride_3_vector_load &= stride == 0;
-                                        stride_4_vector_load &= stride == 0;
-                                        // TODO: Check for strided
-                                        // loads across non-innermost
-                                        // dims, and use to count the
-                                        // number of pages, cache
-                                        // lines, cache conflict misses, etc.
+                                if (!producer_has_been_scheduled) {
+                                    // Operate optimistically and just
+                                    // see if *any* dimension of the
+                                    // producer would make for a good
+                                    // load.
+                                    int count[5] = {0, 0, 0, 0, 0};
+                                    for (int i = 0; i < e->producer->dimensions; i++) {
+                                        auto stride = jac.first(i, vectorized_loop_index);
+                                        if (stride == 0) count[0]++;
+                                        else if (stride == 1) count[1]++;
+                                        else if (stride == 2) count[2]++;
+                                        else if (stride == 3) count[3]++;
+                                        else if (stride == 4) count[4]++;
+                                    }
+                                    vector_broadcast = (count[0] == e->producer->dimensions);
+                                    dense_vector_load = (count[0] == e->producer->dimensions - 1 && count[1] == 1);
+                                    stride_2_vector_load = (count[0] == e->producer->dimensions - 1 && count[2] == 1);
+                                    stride_3_vector_load = (count[0] == e->producer->dimensions - 1 && count[3] == 1);
+                                    stride_4_vector_load = (count[0] == e->producer->dimensions - 1 && count[4] == 1);
+                                } else {
+                                    for (int i = 0; i < e->producer->dimensions; i++) {
+                                        auto stride = jac.first(i, vectorized_loop_index);
+                                        vector_broadcast &= stride == 0;
+                                        if (i == producer_innermost_dim) {
+                                            dense_vector_load &= stride == 1;
+                                            stride_2_vector_load &= stride == 2;
+                                            stride_3_vector_load &= stride == 3;
+                                            stride_4_vector_load &= stride == 4;
+                                        } else {
+                                            dense_vector_load &= stride == 0;
+                                            stride_2_vector_load &= stride == 0;
+                                            stride_3_vector_load &= stride == 0;
+                                            stride_4_vector_load &= stride == 0;
+                                            // TODO: Check for strided
+                                            // loads across non-innermost
+                                            // dims, and use to count the
+                                            // number of pages, cache
+                                            // lines, cache conflict misses, etc.
+                                        }
                                     }
                                 }
                             }
@@ -1121,7 +1137,7 @@ struct LoopNest {
     const Bound &get_bounds(const FunctionDAG::Node *f) const {
         if (bounds.contains(f)) {
             const Bound &b = bounds.get(f);
-            b->validate();
+            // b->validate();
             return b;
         }
         auto bound = f->make_bound();
@@ -1175,7 +1191,7 @@ struct LoopNest {
         }
 
         const Bound &b = set_bounds(f, bound);
-        b->validate();
+        // b->validate();
         return b;
     }
 
@@ -1524,8 +1540,8 @@ struct LoopNest {
                 total_here *= range_here.extent();
                 total_at_parent *= range_at_parent.extent();
             }
-
             if (total_here >= total_at_parent) return result;
+
         }
 
         // Figure out which child we can fuse this into
@@ -1572,7 +1588,7 @@ struct LoopNest {
             }
 
             for (auto t : tilings) {
-                if (parent->is_root()) {
+                if (parallel) {
                     const auto &l = stage->loop;
                     // More pruning. Skip root-level tilings that
                     // would leave too many cores idle, and root-level
@@ -2249,10 +2265,7 @@ struct State {
                 auto &feat = it.value();
                 if (feat.points_computed_total + feat.inlined_calls > 8 * feat.points_computed_minimum) {
                     cost = 1e50;
-                    // Keep it in the beam but at the back, just so we
-                    // have the invariant that every state produces at
-                    // least one child.
-                    return true;
+                    return false;
                 }
             }
         }
@@ -2421,26 +2434,24 @@ struct State {
             // of sane dimensions to vectorize a Func over to reduce
             // branching factor.
             vector<int> vector_dims;
-            for (int v = 0; v < node->dimensions; v++) {
-                const auto &p = root->get_bounds(node)->region_computed(v);
-                if (p.extent() >= node->vector_size) {
-                    vector_dims.push_back(v);
+            if (!node->is_input && !node->is_output) {
+                for (int v = 0; v < node->dimensions; v++) {
+                    const auto &p = root->get_bounds(node)->region_computed(v);
+                    if (p.extent() >= node->vector_size) {
+                        vector_dims.push_back(v);
+                    }
                 }
             }
+            // Outputs must be vectorized over their innermost
+            // dimension, because we don't have control of the
+            // storage. TODO: Go inspect to see which dimension has a
+            // stride==1 constraint instead of assuming 0.
             if (vector_dims.empty()) {
                 vector_dims.push_back(0);
             }
 
             // 2) Realize it somewhere
             for (int vector_dim : vector_dims) {
-                // Outputs must be vectorized over their innermost
-                // dimension, because we don't have control of the
-                // storage layout. TODO: Inspect the output to see
-                // which dimension has a stride==1 constraint instead
-                // of assuming 0. The user may have changed the
-                // default.
-                if (vector_dim > 0 && (node->is_output || node->is_input)) break;
-
                 auto tile_options = root->compute_in_tiles(node, nullptr, params, vector_dim, false);
                 for (IntrusivePtr<const LoopNest> &n : tile_options) {
                     auto child = make_child();
@@ -2947,7 +2958,24 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
         std::unordered_map<uint64_t, int> hashes;
         q.swap(pending);
 
-        internal_assert(!pending.empty());
+        if (pending.empty()) {
+            if (false && beam_size < 1000) {
+                // Total mortality. Double the beam size and
+                // restart. Disabled for now because total mortality
+                // may indicate a bug.
+                return optimal_schedule_pass(dag,
+                                             outputs,
+                                             params,
+                                             cost_model,
+                                             rng,
+                                             beam_size * 2,
+                                             pass_idx,
+                                             num_passes,
+                                             permitted_hashes);
+            } else {
+                internal_error << "Ran out of legal states with beam size " << beam_size << "\n";
+            }
+        }
 
         if ((int)pending.size() > beam_size * 10000) {
             debug(0) << "Warning: Huge number of states generated (" << pending.size() << ").\n";

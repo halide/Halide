@@ -41,8 +41,8 @@ struct PipelineFeatures {
         EQ, NE, LT, LE,
         And, Or, Not,
         Select,
-        ImageCall,
-        FuncCall,
+        ImageCall,  // Loads to an input buffer
+        FuncCall,   // Calls to another pipeline stage
         SelfCall,   // Recursive calls from a Func to itself
         ExternCall, // Math intrinsics, typically
         Let,
@@ -119,10 +119,26 @@ struct PipelineFeatures {
                       << "      ExternCall: " << op_histogram[(int)OpType::ExternCall][i] << '\n'
                       << "      Let:        " << op_histogram[(int)OpType::Let][i] << '\n'
                       << "     Memory access patterns. Columns are calls to other Funcs, self-calls, input image access, and stores\n"
-                      << "      Pointwise:      " << pointwise_accesses[0][i] << ' ' << pointwise_accesses[1][i] << ' ' << pointwise_accesses[2][i] << ' ' << pointwise_accesses[3][i] << '\n'
-                      << "      Transpose:      " << transpose_accesses[0][i] << ' ' << transpose_accesses[1][i] << ' ' << transpose_accesses[2][i] << ' ' << transpose_accesses[3][i] << '\n'
-                      << "      Broadcast:      " << broadcast_accesses[0][i] << ' ' << broadcast_accesses[1][i] << ' ' << broadcast_accesses[2][i] << ' ' << broadcast_accesses[3][i] << '\n'
-                      << "      Slice:          " << slice_accesses[0][i] << ' ' << slice_accesses[1][i] << ' ' << slice_accesses[2][i] << ' ' << slice_accesses[3][i] << '\n';
+                      << "      Pointwise:      "
+                      << pointwise_accesses[0][i] << ' '
+                      << pointwise_accesses[1][i] << ' '
+                      << pointwise_accesses[2][i] << ' '
+                      << pointwise_accesses[3][i] << '\n'
+                      << "      Transpose:      "
+                      << transpose_accesses[0][i] << ' '
+                      << transpose_accesses[1][i] << ' '
+                      << transpose_accesses[2][i] << ' '
+                      << transpose_accesses[3][i] << '\n'
+                      << "      Broadcast:      "
+                      << broadcast_accesses[0][i] << ' '
+                      << broadcast_accesses[1][i] << ' '
+                      << broadcast_accesses[2][i] << ' '
+                      << broadcast_accesses[3][i] << '\n'
+                      << "      Slice:          "
+                      << slice_accesses[0][i] << ' '
+                      << slice_accesses[1][i] << ' '
+                      << slice_accesses[2][i] << ' '
+                      << slice_accesses[3][i] << '\n';
         }
     }
 

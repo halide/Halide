@@ -96,7 +96,7 @@ make_sample() {
         beam=32
     else
         # The other samples are random probes biased by the cost model
-        dropout=5  # 5% chance of operating entirely greedily
+        dropout=1  # 1% chance of operating entirely greedily
         beam=1
     fi
     HL_PERMIT_FAILED_UNROLL=1 \
@@ -106,7 +106,7 @@ make_sample() {
         HL_WEIGHTS_DIR=${WEIGHTS} \
         HL_RANDOM_DROPOUT=${dropout} \
         HL_BEAM_SIZE=${beam} \
-        HL_MACHINE_PARAMS=32,1,1 \
+        HL_MACHINE_PARAMS=1,1,1 \
         ${TIMEOUT_CMD} -k ${COMPILATION_TIMEOUT} ${COMPILATION_TIMEOUT} \
         ${GENERATOR} \
         -g ${PIPELINE} \
@@ -117,7 +117,8 @@ make_sample() {
         auto_schedule=true \
         ${EXTRA_GENERATOR_ARGS} \
         -p ${AUTOSCHED_BIN}/libauto_schedule.so \
-            2> ${D}/compile_log.txt || echo "Compilation failed or timed out for ${D}"
+          2> ${D}/compile_log.txt || echo "Compilation failed or timed out for ${D}"
+    
 
     c++ \
         -std=c++11 \
@@ -133,7 +134,7 @@ make_sample() {
 benchmark_sample() {
     sleep 1 # Give CPU clocks a chance to spin back up if we're thermally throttling
     D=${1}
-    HL_NUM_THREADS=32 \
+    HL_NUM_THREADS=1 \
         ${TIMEOUT_CMD} -k ${BENCHMARKING_TIMEOUT} ${BENCHMARKING_TIMEOUT} \
         ${D}/bench \
         --output_extents=estimate \
@@ -144,7 +145,7 @@ benchmark_sample() {
 
     # Add the runtime, pipeline id, and schedule id to the feature file
     R=$(cut -d' ' -f8 < ${D}/bench.txt)
-    P=0
+    P=$3
     S=$2
     ${AUTOSCHED_BIN}/augment_sample ${D}/sample.sample $R $P $S || echo "Augment sample failed for ${D} (probably because benchmarking failed)"
 }
@@ -164,7 +165,7 @@ NUM_BATCHES=1
 for ((BATCH_ID=$((FIRST+1));BATCH_ID<$((FIRST+1+NUM_BATCHES));BATCH_ID++)); do
 
     SECONDS=0
-    
+
     for ((EXTRA_ARGS_IDX=0;EXTRA_ARGS_IDX<${#GENERATOR_ARGS_SETS_ARRAY[@]};EXTRA_ARGS_IDX++)); do
 
         # Compile a batch of samples using the generator in parallel
@@ -203,14 +204,15 @@ for ((BATCH_ID=$((FIRST+1));BATCH_ID<$((FIRST+1+NUM_BATCHES));BATCH_ID++)); do
         # benchmark them serially using rungen
         for ((SAMPLE_ID=0;SAMPLE_ID<${BATCH_SIZE};SAMPLE_ID++)); do
             S=$(printf "%d%02d" $BATCH_ID $SAMPLE_ID)
-            benchmark_sample "${DIR}/${SAMPLE_ID}" $S
+            benchmark_sample "${DIR}/${SAMPLE_ID}" $S $EXTRA_ARGS_IDX
         done
-    done
 
-    # retrain model weights on all samples seen so far
-    echo Retraining model...
-    find ${SAMPLES} | grep sample$ | \
-        HL_NUM_THREADS=32 HL_WEIGHTS_DIR=${WEIGHTS} HL_BEST_SCHEDULE_FILE=${PWD}/samples/best.txt ${AUTOSCHED_BIN}/train_cost_model ${BATCH_SIZE} 0.0001
+        # retrain model weights on all samples seen so far
+        echo Retraining model...
+        
+        find samples | grep sample$ | \
+            HL_NUM_THREADS=1 HL_WEIGHTS_DIR=${WEIGHTS} HL_BEST_SCHEDULE_FILE=${PWD}/samples/best.txt ${AUTOSCHED_BIN}/train_cost_model ${BATCH_SIZE} 0.0001
+    done
 
     echo Batch ${BATCH_ID} took ${SECONDS} seconds to compile, benchmark, and retrain
 done
