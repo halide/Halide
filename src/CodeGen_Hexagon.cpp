@@ -1805,6 +1805,20 @@ void CodeGen_Hexagon::visit(const Call *op) {
                                 type_suffix(op->args[1], op->args[2], false),
                                 op->args);
             return;
+        } else if (op->is_intrinsic(Call::if_then_else_mask)) {
+            internal_assert(op->args.size() == 3);
+            // Because this is going to be scalarized by CodeGen_LLVM, we can
+            // convert back to a bool vector, because this bool vector will
+            // never be realized.
+            value = codegen(Call::make(op->type, Call::if_then_else, {op->args[0] != 0, op->args[1], op->args[2]}, Call::PureIntrinsic));
+            return;
+        } else if (op->is_intrinsic(Call::require_mask)) {
+            internal_assert(op->args.size() == 3);
+            // Because this is going to be scalarized by CodeGen_LLVM, we can
+            // convert back to a bool vector, because this bool vector will
+            // never be realized.
+            value = codegen(Call::make(op->type, Call::require, {op->args[0] != 0, op->args[1], op->args[2]}, Call::PureIntrinsic));
+            return;
         } else if (op->is_intrinsic(Call::abs)) {
             internal_assert(op->args.size() == 1);
             Type ty = op->args[0].type();
