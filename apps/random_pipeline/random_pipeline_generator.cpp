@@ -89,7 +89,9 @@ Expr make_leaf(vector<Expr> inputs) {
 
 Expr random_expr_inner(vector<Expr> inputs, int depth, int func_size) {
     const int op_count = bin_op_count + bool_bin_op_count + 9;
+#if 0
     const int func_size_thresh = 1e4; // if input is too large do not use trig functions
+#endif
 
     if (depth <= 0) {
         return make_leaf(inputs);
@@ -466,6 +468,7 @@ public:
     }
 
     Stage tanh_layer(Stage f) {
+      assert(false);
         std::cout << "Tanh\n";
         Func activation("tanh");
         // if input type is int, downcast with 50% chance
@@ -575,8 +578,11 @@ public:
         vector<Expr> coords = make_arguments(f.func.args());
         coords[0] = (coords[0] * stride + r.x);
         coords[1] = (coords[1] * stride + r.y);
+#if 0
         pooled2D_w(args) = sum(cast<float>(f.func(coords))) / scale;
-
+#else
+        pooled2D_w(args) = sum(cast<int32_t>(f.func(coords))) / scale;
+#endif
         return {pooled2D_w, (f.w + stride - 1) / stride, (f.h + stride - 1) / stride, f.c};
     }
 
@@ -909,7 +915,7 @@ public:
 
         Func sliced("sliced");
         vector<Expr> coords = make_arguments(f.func.args());
-        coords.back() = clamp(cast<int>(f.func(f.func.args())), 0, g.c - 1);
+        coords.back() = clamp(cast<int32_t>(f.func(f.func.args())), 0, g.c - 1);
         sliced(f.func.args()) = g.func(coords);
 
         return {sliced, f.w, f.h, f.c};
@@ -930,11 +936,15 @@ public:
         vector<Expr> to_coords = from_coords;
 
         Func hist("hist");
+#if 0
         hist(f.func.args()) = 0.0f;
+#else
+        hist(f.func.args()) = cast<int32_t>(0);
+#endif
         from_coords[0] = to_coords[0] * box_size + r.x;
         from_coords[1] = to_coords[1] * box_size + r.y;
         from_coords[2] = 0;
-        to_coords[2] = clamp(cast<int>(f.func(from_coords) * histogram_buckets), 0, histogram_buckets - 1);
+        to_coords[2] = clamp(cast<int32_t>(f.func(from_coords) * histogram_buckets), 0, histogram_buckets - 1);
         hist(to_coords) += 1;
 
         return {hist, f.w / box_size, f.h / box_size, histogram_buckets};
@@ -993,7 +1003,7 @@ public:
             num_states = n;
             size = n*n;
             for (int i = 0; i < size; i++) {
-                cdf.push_back(0.0f);
+              cdf.push_back(0.0f);
             }
         }
 
@@ -1148,8 +1158,10 @@ public:
         } else if (stage_type == 13 && false) {
             // TODO: transpose disabled for now because f(x, y) + f(y, x) totally breaks the bounds inference done by the autoscheduler.
             return transpose(f);
+#if 0
         } else if (stage_type == 14 && f.size() < 10000) {
             return unary_op(f);
+#endif
         } else if (stage_type == 15 && f.w > 32 && f.h > 32) {
             return tiled_histogram(f);
         } else if (stage_type == 16) {
