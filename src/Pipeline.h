@@ -460,7 +460,8 @@ public:
      * only, and may not call any Func or use a Var. If the condition
      * is not true at runtime, the pipeline will call halide_error
      * with the remaining arguments, and return
-     * halide_error_code_requirement_failed.  */
+     * halide_error_code_requirement_failed. Requirements are checked
+     * in the order added. */
     void add_requirement(Expr condition, std::vector<Expr> &error);
 
     template<typename ...Args>

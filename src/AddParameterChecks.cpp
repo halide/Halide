@@ -127,11 +127,9 @@ Stmt add_parameter_checks(const vector<Stmt> &preconditions, Stmt s, const Targe
     // The unstructured assertions get checked first (because they
     // have a custom error message associated with them), so prepend
     // them last.
-    for (const auto &p : preconditions) {
-        s = Block::make(p, s);
-    }
-
-    return s;
+    vector<Stmt> stmts = preconditions;
+    stmts.push_back(s);
+    return Block::make(stmts);
 }
 
 }  // namespace Internal
