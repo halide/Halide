@@ -42,9 +42,9 @@ struct PipelineSample {
     uint64_t pipeline_hash;
 };
 
-uint64_t hash_floats(uint64_t h, float *begin, float *end) {
+uint64_t hash_floats(uint64_t h, const float *begin, const float *end) {
     while (begin != end) {
-        uint32_t bits = *((uint32_t *)begin);
+        uint32_t bits = *((const uint32_t *)begin);
         // From boost
         h ^= (bits + 0x9e3779b9 + (h<<6) + (h>>2));
         begin++;
@@ -110,7 +110,7 @@ map<int, PipelineSample> load_samples() {
         }
         // std::cout << "Runtime: " << runtime << "\n";
 
-        const int pipeline_id = *((int32_t *)(&scratch[num_features + 1]));
+        int pipeline_id = *((int32_t *)(&scratch[num_features + 1]));
         const int schedule_id = *((int32_t *)(&scratch[num_features + 2]));
 
         if (runtime < best_runtime) {
@@ -303,7 +303,7 @@ int main(int argc, char **argv) {
     std::cout << "Iterating over " << samples.size() << " samples using seed = " << seed << "\n";
     decltype(samples) validation_set;
     uint64_t unique_schedules = 0;
-    if (samples.size() > 1) {
+    if (samples.size() > 16) {
         for (auto p : samples) {
             unique_schedules += p.second.schedules.size();
             // Whether or not a pipeline is part of the validation set
@@ -495,7 +495,7 @@ int main(int argc, char **argv) {
                 std::cout << "Worst inversion:\n"
                           << worst_inversion.f1 << " predicted: " << worst_inversion.p1 << " actual: " << worst_inversion.r1 << "\n"
                           << worst_inversion.f2 << " predicted: " << worst_inversion.p2 << " actual: " << worst_inversion.r2 << "\n";
-                if (samples.size() > 5000) {
+                if (samples.size() > 50000) {
                     // For robustness during training on large numbers
                     // of random pipelines, we discard poorly
                     // performing samples from the training set

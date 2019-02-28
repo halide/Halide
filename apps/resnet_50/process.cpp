@@ -66,7 +66,7 @@
 
 namespace {
 
-constexpr bool verbose = false;
+constexpr bool verbose = true;
 
 using namespace Halide::Runtime;
 using namespace Halide::Tools;
@@ -207,6 +207,16 @@ Buffer<float> load_conv_params(const std::string &shapefile, const std::string &
     std::cout << "weight shape for " << datafile << std::endl;
     std::cout << buff.dim(0).extent() << " " << buff.dim(1).extent() << " " <<buff.dim(2).extent() << " " << buff.dim(3).extent() << std::endl;
   }
+  if ((buff.dim(0).extent() & 255) == 0) {
+      // Conflict misses ahoy
+      Buffer<float> padded(buff.dim(0).extent() + 8, buff.dim(3).extent(), buff.dim(1).extent(), buff.dim(2).extent());
+      padded.transpose(1, 2);
+      padded.transpose(2, 3);
+      padded.crop(0, 0, buff.dim(0).extent());
+      padded.copy_from(buff);
+      buff = padded;
+  }
+
   return buff;
 }
 
@@ -257,8 +267,8 @@ bool has_branch1(int micro_block) {
 }
 
 void normalize(Buffer<float> &buf, const std::vector<float> &mean, const std::vector<float> &std) {
-  buf.for_each_element([&](int c, int x, int y) {
-    buf(c, x, y) = (buf(c, x, y) - mean[c]) / std[c];
+  buf.for_each_element([&](int c, int x, int y, int n) {
+      buf(c, x, y, n) = (buf(c, x, y, n) - mean[c]) / std[c];
   });
 }
 
@@ -381,18 +391,20 @@ int main(int argc, char **argv) {
 
   if (weight_dir.back() != '/') weight_dir += '/';
 
+  constexpr int kBatchSize = 1;
+
   std::vector<std::vector<int>> block_dims{
-    {256, 56, 56},
-    {512, 28, 28},
-    {1024, 14, 14},
-    {2048, 7, 7}
+      {256, 56, 56, kBatchSize},
+      {512, 28, 28, kBatchSize},
+      {1024, 14, 14, kBatchSize},
+      {2048, 7, 7, kBatchSize}
   };
 
   /** setup inputs and outputs for each block **/
   constexpr int kImageWidth = 224;
   constexpr int kImageHeight = 224;
   constexpr int kImageChannels = 3;
-  std::vector<int> image_shape = {kImageChannels, kImageHeight, kImageWidth};
+  std::vector<int> image_shape = {kImageChannels, kImageHeight, kImageWidth, kBatchSize};
   std::vector<std::vector<int>> input_shapes;
   std::vector<std::vector<int>> output_shapes;
   int macro_block = 0;
@@ -426,9 +438,11 @@ int main(int argc, char **argv) {
       std::cerr << "ResNet requires an image of exactly " << kImageWidth << "x" << kImageHeight << "x" << kImageChannels;
       exit(1);
     }
-    // Reorder dimensions
-    image = Buffer<float>(kImageChannels, kImageHeight, kImageWidth);
-    image.copy_from(im_in.transposed({2, 1, 0}));
+    // Reorder dimensions and duplicate across the batch
+    image = Buffer<float>(kImageChannels, kImageHeight, kImageWidth, kBatchSize);
+    for (int i = 0; i < kBatchSize; i++) {
+        image.sliced(3, i).copy_from(im_in.transposed({2, 1, 0}));
+    }
     normalize(image, ImageNet_mean, ImageNet_std);
   }
 
@@ -436,7 +450,7 @@ int main(int argc, char **argv) {
   for (int i = 0; i < NUMBLOCKS; i++) {
     block_outputs[i] = Buffer<float>(output_shapes[i]);
   }
-  Buffer<float> final_output(1000);
+  Buffer<float> final_output(1000, kBatchSize);
 
   Buffer<float> conv1_weights;
   Buffer<float> conv1_mu;
@@ -590,6 +604,8 @@ int main(int argc, char **argv) {
       }
 
       FnPtr blockfn = blockFns[schedule_type][block_id];
+
+      //printf("Block %d %d\n", block_id, block_outputs[block_id].dim(1).extent());
 
       blockfn(input,
             conv1_gamma,
