@@ -2597,9 +2597,9 @@ vector<Expr> FuncRef::args_with_implicit_vars(const vector<Expr> &e) const {
         }
     } else {
         user_assert(implicit_placeholder_pos == -1)
-          << "Left-hand-side of update definition of " << func.name()
-          << " use implicit variables, but the right-hand-side does not"
-          << " contain the placeholder symbol '_'.\n";
+            << "Left-hand-side definition of " << func.name()
+            << " use implicit variables, but the right-hand-side does not"
+            << " contain the placeholder symbol '_'.\n";
     }
 
     // Check the implicit vars in the RHS also exist in the LHS
