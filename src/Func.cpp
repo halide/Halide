@@ -2521,11 +2521,13 @@ Func::operator Stage() const {
 }
 
 namespace {
-class CountImplicitVars : public Internal::IRGraphVisitor {
+class CountVars : public Internal::IRGraphVisitor {
 public:
-    int count;
+    int implicit_var_count;
+    int var_count;
 
-    CountImplicitVars(const vector<Expr> &e) : count(0) {
+    CountVars(const vector<Expr> &e)
+        : implicit_var_count(0), var_count(0) {
         for (size_t i = 0; i < e.size(); i++) {
             e[i].accept(this);
         }
@@ -2536,8 +2538,9 @@ public:
     void visit(const Variable *v) override {
         int index = Var::implicit_index(v->name);
         if (index != -1) {
-            if (index >= count) count = index + 1;
+            if (index >= implicit_var_count) implicit_var_count = index + 1;
         }
+        var_count++;
     }
 };
 }
@@ -2569,41 +2572,42 @@ vector<Expr> FuncRef::args_with_implicit_vars(const vector<Expr> &e) const {
             << "Value " << (i+1) << " in definition of \"" << func.name() << "\" is undefined.\n";
     }
 
-    CountImplicitVars count(e);
+    CountVars count(e);
     for (size_t i = 0; i < a.size(); i++) {
         a[i].accept(&count);
     }
 
-    if (count.count > 0) {
+    CountVars rhs_count(e);
+    if (!func.has_pure_definition() && implicit_placeholder_pos != -1) {
+        user_assert(rhs_count.var_count > 0)
+            << "Pure definition with implicit variables not allowed with scaler rhs.\n";
+    }
+
+    if (count.implicit_var_count > 0) {
         if (func.has_pure_definition()) {
             // If the func already has pure definition, the number of implicit
             // vars in the RHS can only be at most the number of implicit vars
             // in the LHS.
-            user_assert(implicit_count >= count.count)
-                << "The update definition of " << func.name() << " uses " << count.count
+            user_assert(implicit_count >= count.implicit_var_count)
+                << "The update definition of " << func.name() << " uses " << count.implicit_var_count
                 << " implicit variables, but the initial definition uses only "
                 << implicit_count << " implicit variables.\n";
         } else if (implicit_placeholder_pos != -1) {
             internal_assert(implicit_count == 0)
                 << "Pure definition can't possibly already have implicit variables defined\n";
 
-            Internal::debug(2) << "Adding " << count.count << " implicit vars to LHS of " << func.name() << "\n";
+            Internal::debug(2) << "Adding " << count.implicit_var_count << " implicit vars to LHS of " << func.name() << "\n";
 
             vector<Expr>::iterator iter = a.begin() + implicit_placeholder_pos;
-            for (int i = 0; i < count.count; i++) {
+            for (int i = 0; i < count.implicit_var_count; i++) {
                 iter = a.insert(iter, Var::implicit(i));
                 iter++;
             }
         }
-    } else {
-        user_assert(implicit_placeholder_pos == -1)
-            << "Left-hand-side definition of " << func.name()
-            << " use implicit variables, but the right-hand-side does not"
-            << " contain the placeholder symbol '_'.\n";
     }
 
     // Check the implicit vars in the RHS also exist in the LHS
-    for (int i = 0; i < count.count; i++) {
+    for (int i = 0; i < count.implicit_var_count; i++) {
         Var v = Var::implicit(i);
         bool found = false;
         for (size_t j = 0; j < a.size(); j++) {
