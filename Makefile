@@ -697,6 +697,7 @@ RUNTIME_CPP_COMPONENTS = \
   destructors \
   device_interface \
   errors \
+  fake_get_symbol \
   fake_thread_pool \
   float16_t \
   gpu_device_selection \

@@ -28,6 +28,7 @@ extern WIN32API void DeleteCriticalSection(CriticalSection *);
 extern WIN32API void EnterCriticalSection(CriticalSection *);
 extern WIN32API void LeaveCriticalSection(CriticalSection *);
 extern WIN32API int32_t WaitForSingleObject(Thread, int32_t timeout);
+extern WIN32API void Sleep(int);
 
 } // extern "C"
 
@@ -72,6 +73,10 @@ WEAK void halide_join_thread(halide_thread *thread_arg) {
     free(thread);
 }
 
+WEAK void halide_sleep_ms(void *user_context, int ms) {
+    Sleep(ms);
+}
+
 } // extern "C"
 
 namespace Halide { namespace Runtime { namespace Internal {
@@ -106,7 +111,7 @@ struct thread_parker {
         EnterCriticalSection(&critical_section);
         while (should_park) {
             SleepConditionVariableCS(&condvar, &critical_section, -1);
-        } 
+        }
         LeaveCriticalSection(&critical_section);
     }
 
@@ -129,3 +134,4 @@ struct thread_parker {
 #include "synchronization_common.h"
 
 #include "thread_pool_common.h"
+

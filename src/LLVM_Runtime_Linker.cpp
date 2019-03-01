@@ -87,6 +87,7 @@ DECLARE_NO_INITMOD(d3d12compute)
 DECLARE_CPP_INITMOD(destructors)
 DECLARE_CPP_INITMOD(device_interface)
 DECLARE_CPP_INITMOD(errors)
+DECLARE_CPP_INITMOD(fake_get_symbol)
 DECLARE_CPP_INITMOD(fake_thread_pool)
 DECLARE_CPP_INITMOD(float16_t)
 DECLARE_CPP_INITMOD(gpu_device_selection)
@@ -814,9 +815,8 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             // built without.
             modules.push_back(get_initmod_old_buffer_t(c, bits_64, debug));
 
-            // MIPS doesn't support the atomics the profiler requires.
-            if (t.arch != Target::MIPS && t.os != Target::NoOS &&
-                t.os != Target::QuRT) {
+            // Some environments don't support the atomics the profiler requires.
+            if (t.arch != Target::MIPS && t.os != Target::NoOS && t.os != Target::QuRT) {
                 if (t.os == Target::Windows) {
                     modules.push_back(get_initmod_windows_profiler(c, bits_64, debug));
                 } else {
