@@ -28,7 +28,6 @@ extern WIN32API void DeleteCriticalSection(CriticalSection *);
 extern WIN32API void EnterCriticalSection(CriticalSection *);
 extern WIN32API void LeaveCriticalSection(CriticalSection *);
 extern WIN32API int32_t WaitForSingleObject(Thread, int32_t timeout);
-extern WIN32API void Sleep(int);
 
 } // extern "C"
 
@@ -71,10 +70,6 @@ WEAK void halide_join_thread(halide_thread *thread_arg) {
     spawned_thread *thread = (spawned_thread *)thread_arg;
     WaitForSingleObject(thread->handle, -1);
     free(thread);
-}
-
-WEAK void halide_sleep_ms(void *user_context, int ms) {
-    Sleep(ms);
 }
 
 } // extern "C"

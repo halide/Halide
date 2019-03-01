@@ -6,8 +6,6 @@
 
 extern "C" {
 
-extern int usleep(int);
-
 // This code cannot depend on system headers, hence we choose a data size which will
 // be large enough for all systems we care about.
 // 64 bytes covers this for both mutex and condvar. Using int64_t ensures alignment.
@@ -73,10 +71,6 @@ WEAK void halide_join_thread(struct halide_thread *thread_arg) {
     void *ret = NULL;
     pthread_join(t->handle, &ret);
     free(t);
-}
-
-WEAK void halide_sleep_ms(void *user_context, int ms) {
-    usleep(ms * 1000);
 }
 
 }

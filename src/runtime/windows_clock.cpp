@@ -34,4 +34,8 @@ WEAK int64_t halide_current_time_ns(void *user_context) {
     return (int64_t)(ns_per_tick * clock);
 }
 
+WEAK void halide_sleep_ms(void *user_context, int ms) {
+    Sleep(ms);
+}
+
 }

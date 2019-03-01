@@ -26,7 +26,6 @@ void spawn_thread_helper(void *arg) {
 extern "C" {
 
 extern void *memalign(size_t, size_t);
-extern int usleep(int);
 
 int halide_host_cpu_count() {
     // Assume a Snapdragon 820
@@ -56,10 +55,6 @@ WEAK void halide_join_thread(struct halide_thread *thread_arg) {
     qurt_thread_join(t->handle.val, &ret);
     free(t->stack);
     free(t);
-}
-
-WEAK void halide_sleep_ms(void *user_context, int ms) {
-    usleep(ms * 1000);
 }
 
 } // extern "C"

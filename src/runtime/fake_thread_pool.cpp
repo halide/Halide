@@ -62,10 +62,6 @@ WEAK halide_semaphore_release_t custom_semaphore_release = halide_default_semaph
 
 extern "C" {
 
-WEAK void halide_sleep_ms(void *user_context, int ms) {
-    // nothing
-}
-
 WEAK halide_thread *halide_spawn_thread(void (*f)(void *), void *closure) {
     // We can't fake spawning a thread. Emit an error.
     halide_error(NULL, "halide_spawn_thread not implemented on this platform.");
