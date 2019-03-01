@@ -1758,6 +1758,7 @@ TEST_APPS=\
 	resize \
 	stencil_chain \
 	wavelet \
+	resnet_50
 
 .PHONY: test_apps
 test_apps: distrib

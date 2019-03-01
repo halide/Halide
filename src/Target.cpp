@@ -865,15 +865,11 @@ bool Target::get_runtime_compatible_target(const Target& other, Target &result) 
     // large, so min selects the true lower bound when one target doesn't specify a capability,
     // and the other doesn't use CUDA at all.
     int cuda_capability = std::min((unsigned)cuda_a, (unsigned)cuda_b);
-    switch (cuda_capability) {
-        default: // no CUDA feature; clear all capability flags
-        case 20: output.features.reset(CUDACapability30); // fall-thru
-        case 30: output.features.reset(CUDACapability32); // fall-thru
-        case 32: output.features.reset(CUDACapability35); // fall-thru
-        case 35: output.features.reset(CUDACapability50); // fall-thru
-        case 50: output.features.reset(CUDACapability61); // fall-thru
-        case 61: break;
-    }
+    if (cuda_capability < 30) output.features.reset(CUDACapability30);
+    if (cuda_capability < 32) output.features.reset(CUDACapability32);
+    if (cuda_capability < 35) output.features.reset(CUDACapability35);
+    if (cuda_capability < 50) output.features.reset(CUDACapability50);
+    if (cuda_capability < 61) output.features.reset(CUDACapability61);
 
     // Pick tight lower bound for HVX version. Use fall-through to clear redundant features
     int hvx_a = get_hvx_lower_bound(*this);
@@ -881,13 +877,9 @@ bool Target::get_runtime_compatible_target(const Target& other, Target &result) 
 
     // Same trick as above for CUDA
     int hvx_version = std::min((unsigned)hvx_a, (unsigned)hvx_b);
-    switch (hvx_version) {
-        default: // doesn't use hexagon; clear all capability flags
-        case 60: output.features.reset(HVX_v62); // fall-thru
-        case 62: output.features.reset(HVX_v65); // fall-thru
-        case 65: output.features.reset(HVX_v66); // fall-thru
-        case 66: break;
-    }
+    if (hvx_version < 62) output.features.reset(HVX_v62);
+    if (hvx_version < 65) output.features.reset(HVX_v65);
+    if (hvx_version < 66) output.features.reset(HVX_v66);
 
     result = output;
     return true;
@@ -902,7 +894,6 @@ void target_test() {
         t.set_feature(feature.second);
     }
     for (int i = 0; i < (int)(Target::FeatureEnd); i++) {
-        if (i == halide_target_feature_unused_23) continue;
         internal_assert(t.has_feature((Target::Feature)i)) << "Feature " << i << " not in feature_names_map.\n";
     }
 
