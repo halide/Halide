@@ -12,6 +12,7 @@
 #include "AutoSchedule.h"
 #include "ExternalCode.h"
 #include "IntrusivePtr.h"
+#include "IROperator.h"
 #include "JITModule.h"
 #include "Module.h"
 #include "ParamMap.h"
