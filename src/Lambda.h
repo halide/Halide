@@ -14,11 +14,7 @@ namespace Halide {
 /** Create a zero-dimensional halide function that returns the given
  * expression. The function may have more dimensions if the expression
  * contains implicit arguments. */
-inline Func lambda(Expr e) {
-    Func f("lambda" + Internal::unique_name('_'));
-    f(_) = e;
-    return f;
-}
+Func lambda(Expr e);
 
 /** Create a 1-D halide function in the first argument that returns
  * the second argument. The function may have more dimensions if the

@@ -511,6 +511,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   IRPrinter.cpp
   IRVisitor.cpp
   JITModule.cpp
+  Lambda.cpp
   Lerp.cpp
   LICM.cpp
   LLVM_Output.cpp

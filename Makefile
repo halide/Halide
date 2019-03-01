@@ -435,6 +435,7 @@ SOURCE_FILES = \
   IRVisitor.cpp \
   JITModule.cpp \
   Lerp.cpp \
+  Lambda.cpp \
   LICM.cpp \
   LLVM_Output.cpp \
   LLVM_Runtime_Linker.cpp \
