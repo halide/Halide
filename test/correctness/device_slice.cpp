@@ -25,7 +25,7 @@ int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
 
     bool hexagon_rpc = (target.arch != Target::Hexagon) &&
-                       target.features_any_of({ Target::HVX_64, Target::HVX_128 });
+                       target.features_any_of({ Target::HVX_64, Target::HVX });
 
     if (!hexagon_rpc && !target.has_gpu_feature()) {
         printf("This is a gpu-specific test. Skipping it.\n");
