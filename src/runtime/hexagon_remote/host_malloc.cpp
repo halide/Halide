@@ -5,9 +5,6 @@
 #include <sys/mman.h>
 #include <fcntl.h>
 #include <android/log.h>
-#include <dlfcn.h>
-
-bool use_newer_ioctl = false;
 
 namespace {
 
@@ -54,6 +51,8 @@ struct ion_handle_data {
 #define ION_IOC_ALLOC_NEWER _IOWR('I', 0, ion_allocation_data_newer)
 #define ION_IOC_FREE _IOWR('I', 1, ion_handle_data)
 #define ION_IOC_MAP _IOWR('I', 2, ion_fd_data)
+
+bool use_newer_ioctl = false;
 
 // ION IOCTL approach
 // This function will first try older IOCTL approach provided we have not determined
