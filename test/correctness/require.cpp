@@ -14,6 +14,8 @@ void halide_error(void *ctx, const char *msg) {
 using namespace Halide;
 
 static void test(int vector_width) {
+    Target target = get_jit_target_from_environment();
+
     const int32_t kPrime1 = 7829;
     const int32_t kPrime2 = 7919;
 
@@ -30,6 +32,9 @@ static void test(int vector_width) {
     if (vector_width) {
         s.vectorize(x, vector_width).compute_root();
         f.vectorize(x, vector_width);
+    }
+    if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        f.hexagon();
     }
     f.set_error_handler(&halide_error);
 
@@ -64,6 +69,8 @@ static void test(int vector_width) {
 int main(int argc, char **argv) {
     test(0);
     test(4);
+    test(32);
+
     printf("Success!\n");
     return 0;
 

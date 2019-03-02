@@ -262,6 +262,9 @@ protected:
     void create_assertion(llvm::Value *condition, Expr message, llvm::Value *error_code = nullptr);
     // @}
 
+    /** Codegen a block of asserts with pure conditions */
+    void codegen_asserts(const std::vector<const AssertStmt *> &asserts);
+
     /** Codegen a call to do_parallel_tasks */
     struct ParallelTask {
         Stmt body;
@@ -465,12 +468,6 @@ protected:
      */
     std::pair<llvm::Function *, int> find_vector_runtime_function(const std::string &name, int lanes);
 
-    /** Get the result of modulus-remainder analysis for a given expr. */
-    ModulusRemainder get_alignment_info(Expr e);
-
-    /** Alignment info for Int(32) variables in scope. */
-    Scope<ModulusRemainder> alignment_info;
-
 private:
 
     /** All the values in scope at the current code location during
@@ -500,6 +497,7 @@ private:
 
     /** Embed a constant expression as a global variable. */
     llvm::Constant *embed_constant_expr(Expr e, llvm::Type *t);
+    llvm::Constant *embed_constant_scalar_value_t(Expr e);
 
     llvm::Function *add_argv_wrapper(const std::string &name);
 

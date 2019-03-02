@@ -150,11 +150,21 @@ vector<Func> Pipeline::outputs() const {
     return funcs;
 }
 
+std::function<string(Pipeline, const Target &, const MachineParams &)> Pipeline::custom_auto_scheduler;
+
 string Pipeline::auto_schedule(const Target &target, const MachineParams &arch_params) {
+    if (custom_auto_scheduler) {
+        return custom_auto_scheduler(*this, target, arch_params);
+    }
+
     user_assert(target.arch == Target::X86 || target.arch == Target::ARM ||
                 target.arch == Target::POWERPC || target.arch == Target::MIPS)
         << "Automatic scheduling is currently supported only on these architectures.";
     return generate_schedules(contents->outputs, target, arch_params);
+}
+
+void Pipeline::set_custom_auto_scheduler(std::function<string(Pipeline, const Target &, const MachineParams &)> auto_scheduler) {
+    Pipeline::custom_auto_scheduler = auto_scheduler;
 }
 
 Func Pipeline::get_func(size_t index) {
@@ -385,7 +395,7 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
         // We can avoid relowering and just reuse the existing module.
         debug(2) << "Reusing old module\n";
     } else {
-        vector<IRMutator2 *> custom_passes;
+        vector<IRMutator *> custom_passes;
         for (CustomLoweringPass p : contents->custom_lowering_passes) {
             custom_passes.push_back(p.pass);
         }
@@ -515,7 +525,7 @@ const std::map<std::string, JITExtern> &Pipeline::get_jit_externs() {
     return contents->jit_externs;
 }
 
-void Pipeline::add_custom_lowering_pass(IRMutator2 *pass, std::function<void()> deleter) {
+void Pipeline::add_custom_lowering_pass(IRMutator *pass, std::function<void()> deleter) {
     user_assert(defined()) << "Pipeline is undefined\n";
     contents->invalidate_cache();
     CustomLoweringPass p = {pass, deleter};

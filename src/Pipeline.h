@@ -26,7 +26,7 @@ struct Outputs;
 struct PipelineContents;
 
 namespace Internal {
-class IRMutator2;
+class IRMutator;
 }  // namespace Internal
 
 /**
@@ -48,7 +48,7 @@ void delete_lowering_pass(T *pass) {
 
 /** A custom lowering pass. See Pipeline::add_custom_lowering_pass. */
 struct CustomLoweringPass {
-    Internal::IRMutator2 *pass;
+    Internal::IRMutator *pass;
     std::function<void()> deleter;
 };
 
@@ -101,7 +101,9 @@ public:
     static std::vector<Internal::JITModule> make_externs_jit_module(const Target &target,
                                                                     std::map<std::string, JITExtern> &externs_in_out);
 
-public:
+    static std::function<std::string(Pipeline, const Target &, const MachineParams &)> custom_auto_scheduler;
+
+ public:
     /** Make an undefined Pipeline object. */
     Pipeline();
 
@@ -121,6 +123,11 @@ public:
     std::string auto_schedule(const Target &target,
                               const MachineParams &arch_params = MachineParams::generic());
     //@}
+
+    /** Globally set the autoscheduler method to use whenever
+     * autoscheduling any Pipeline. Uses the built-in autoscheduler if
+     * passed nullptr. */
+    static void set_custom_auto_scheduler(std::function<std::string(Pipeline, const Target &, const MachineParams &)> auto_scheduler);
 
     /** Return handle to the index-th Func within the pipeline based on the
      * topological order. */
@@ -382,7 +389,7 @@ public:
     /** Add a custom pass to be used during lowering, with the
      * function that will be called to delete it also passed in. Set
      * it to nullptr if you wish to retain ownership of the object. */
-    void add_custom_lowering_pass(Internal::IRMutator2 *pass, std::function<void()> deleter);
+    void add_custom_lowering_pass(Internal::IRMutator *pass, std::function<void()> deleter);
 
     /** Remove all previously-set custom lowering passes */
     void clear_custom_lowering_passes();

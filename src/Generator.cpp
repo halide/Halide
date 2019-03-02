@@ -2,6 +2,15 @@
 #include <fstream>
 #include <set>
 
+#if defined(_MSC_VER) && !defined(NOMINMAX)
+#define NOMINMAX
+#endif
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <dlfcn.h>
+#endif
+
 #include "Generator.h"
 #include "Outputs.h"
 #include "Simplify.h"
@@ -103,6 +112,9 @@ Outputs compute_outputs(const Target &target,
     }
     if (options.emit_python_extension) {
         output_files.python_extension_name = base_path + get_extension(".py.c", options);
+    }
+    if (options.emit_registration) {
+        output_files.registration_name = base_path + get_extension(".registration.cpp", options);
     }
     if (options.emit_stmt) {
         output_files.stmt_name = base_path + get_extension(".stmt", options);
@@ -376,27 +388,28 @@ void StubEmitter::emit_inputs_struct() {
 
     stream << indent() << name << "() {}\n";
     stream << "\n";
+    if (!in_info.empty()) {
+        stream << indent() << name << "(\n";
+        indent_level++;
+        std::string comma = "";
+        for (auto in : in_info) {
+            stream << indent() << comma << "const " << in.c_type << "& " << in.name << "\n";
+            comma = ", ";
+        }
+        indent_level--;
+        stream << indent() << ") : \n";
+        indent_level++;
+        comma = "";
+        for (auto in : in_info) {
+            stream << indent() << comma << in.name << "(" << in.name << ")\n";
+            comma = ", ";
+        }
+        indent_level--;
+        stream << indent() << "{\n";
+        stream << indent() << "}\n";
 
-    stream << indent() << name << "(\n";
-    indent_level++;
-    std::string comma = "";
-    for (auto in : in_info) {
-        stream << indent() << comma << "const " << in.c_type << "& " << in.name << "\n";
-        comma = ", ";
+        indent_level--;
     }
-    indent_level--;
-    stream << indent() << ") : \n";
-    indent_level++;
-    comma = "";
-    for (auto in : in_info) {
-        stream << indent() << comma << in.name << "(" << in.name << ")\n";
-        comma = ", ";
-    }
-    indent_level--;
-    stream << indent() << "{\n";
-    stream << indent() << "}\n";
-
-    indent_level--;
     stream << indent() << "};\n";
     stream << "\n";
 }
@@ -786,12 +799,31 @@ std::string halide_type_to_c_type(const Type &t) {
 }
 
 int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
-    const char kUsage[] = "gengen [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR] [-r RUNTIME_NAME] [-e EMIT_OPTIONS] [-x EXTENSION_OPTIONS] [-n FILE_BASE_NAME] "
-                          "target=target-string[,target-string...] [generator_arg=value [...]]\n\n"
-                          "  -e  A comma separated list of files to emit. Accepted values are "
-                          "[assembly, bitcode, cpp, h, html, o, static_library, stmt, cpp_stub, schedule]. If omitted, default value is [static_library, h].\n"
-                          "  -x  A comma separated list of file extension pairs to substitute during file naming, "
-                          "in the form [.old=.new[,.old2=.new2]]\n";
+    const char kUsage[] =
+        "gengen \n"
+        "  [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR] [-r RUNTIME_NAME]\n"
+        "  [-e EMIT_OPTIONS] [-x EXTENSION_OPTIONS] [-n FILE_BASE_NAME] [-p PLUGIN_NAME]\n"
+        "       target=target-string[,target-string...] [generator_arg=value [...]]\n"
+        "\n"
+        " -e  A comma separated list of files to emit. Accepted values are:\n"
+        "     [assembly, bitcode, cpp, h, html, o, static_library,\n"
+        "      stmt, cpp_stub, schedule, registration].\n"
+        "     If omitted, default value is [static_library, h, registration].\n"
+        "\n"
+        " -x  A comma separated list of file extension pairs to substitute during\n"
+        "     file naming, in the form [.old=.new[,.old2=.new2]]\n"
+        "\n"
+        " -p  A comma-separated list of shared libraries that will be loaded before the\n"
+        "     generator is run. Useful for custom auto-schedulers. The generator must\n"
+        "     either be linked against a shared libHalide or compiled with -rdynamic\n"
+        "     so that references in the shared library to libHalide can resolve.\n"
+        "\n"
+        "-r   The name of a standalone runtime to generate. Only honors EMIT_OPTIONS 'o'\n"
+        "     and 'static_library'. When multiple targets are specified, it picks a\n"
+        "     runtime that is compatible with all of the targets, or fails if it cannot\n"
+        "     find one. Flags across all of the targets that do not affect runtime code\n"
+        "     generation, such as `no_asserts` and `no_runtime`, are ignored.\n"
+        ;
 
     std::map<std::string, std::string> flags_info = { { "-f", "" },
                                                       { "-g", "" },
@@ -799,7 +831,8 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
                                                       { "-e", "" },
                                                       { "-n", "" },
                                                       { "-x", "" },
-                                                      { "-r", "" }};
+                                                      { "-r", "" },
+                                                      { "-p", "" }};
     GeneratorParamsMap generator_args;
 
     for (int i = 1; i < argc; ++i) {
@@ -827,6 +860,36 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
         return 1;
     }
 
+    // It's possible that in the future loaded plugins might change
+    // how arguments are parsed, so we handle those first.
+    for (const auto &lib : split_string(flags_info["-p"], ",")) {
+        if (lib.empty()) continue;
+#ifdef _WIN32
+        int wide_len = MultiByteToWideChar(CP_UTF8, 0, lib.c_str(), -1, nullptr, 0);
+        if (wide_len < 1) {
+            cerr << "Failed to load: " << lib << " (unconvertible character)\n";
+            return 1;
+        }
+
+        std::vector<wchar_t> wide_lib(wide_len);
+        wide_len = MultiByteToWideChar(CP_UTF8, 0, lib.c_str(), -1, wide_lib.data(), wide_len);
+        if (wide_len < 1) {
+            cerr << "Failed to load: " << lib << " (unconvertible character)\n";
+            return 1;
+        }
+
+        if (LoadLibraryW(wide_lib.data()) != nullptr) {
+            cerr << "Failed to load: " << lib << "\n";
+            return 1;
+        }
+#else
+        if (dlopen(lib.c_str(), RTLD_LAZY) == nullptr) {
+            cerr << "Failed to load: " << lib << ": " << dlerror() << "\n";
+            return 1;
+        }
+#endif
+    }
+
     std::string runtime_name = flags_info["-r"];
 
     std::vector<std::string> generator_names = GeneratorRegistry::enumerate();
@@ -842,7 +905,7 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
         // no longer infer the name when only one Generator is registered
         cerr << "Either -g <name> or -r must be specified; available Generators are:\n";
         if (!generator_names.empty()) {
-            for (auto name : generator_names) {
+            for (const auto &name : generator_names) {
                 cerr << "    " << name << "\n";
             }
         } else {
@@ -881,8 +944,8 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
     emit_options.emit_static_library = emit_options.emit_h = false;
 
     if (emit_flags.empty() || (emit_flags.size() == 1 && emit_flags[0].empty())) {
-        // If omitted or empty, assume .a and .h
-        emit_options.emit_static_library = emit_options.emit_h = true;
+        // If omitted or empty, assume .a and .h and registration.cpp
+        emit_options.emit_static_library = emit_options.emit_h = emit_options.emit_registration = true;
     } else {
         // If anything specified, only emit what is enumerated
         for (const std::string &opt : emit_flags) {
@@ -908,9 +971,11 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
                 emit_options.emit_cpp_stub = true;
             } else if (opt == "schedule") {
                 emit_options.emit_schedule = true;
+            } else if (opt == "registration") {
+                emit_options.emit_registration = true;
             } else if (!opt.empty()) {
                 cerr << "Unrecognized emit option: " << opt
-                     << " not one of [assembly, bitcode, cpp, h, html, o, static_library, stmt, cpp_stub], ignoring.\n";
+                     << " not one of [assembly, bitcode, cpp, h, html, o, static_library, stmt, cpp_stub, registration], ignoring.\n";
             }
         }
     }
@@ -932,17 +997,28 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
     auto target_strings = split_string(generator_args["target"].string_value, ",");
     std::vector<Target> targets;
     for (const auto &s : target_strings) {
-        targets.push_back(Target(s));
+        targets.emplace_back(s);
     }
 
     if (!runtime_name.empty()) {
-        if (targets.size() != 1) {
-            cerr << "Only one target allowed here";
-            return 1;
-        }
         std::string base_path = compute_base_path(output_dir, runtime_name, "");
-        Outputs output_files = compute_outputs(targets[0], base_path, emit_options);
-        compile_standalone_runtime(output_files, targets[0]);
+
+        Target gcd_target = targets[0];
+        for (size_t i = 1; i < targets.size(); i++) {
+            if (!gcd_target.get_runtime_compatible_target(targets[i], gcd_target)) {
+                user_error << "Failed to find compatible runtime target for "
+                           << gcd_target.to_string()
+                           << " and "
+                           << targets[i].to_string() << '\n';
+            }
+        }
+
+        if (targets.size() > 1) {
+            debug(1) << "Building runtime for computed target: " << gcd_target.to_string() << "\n";
+        }
+
+        Outputs output_files = compute_outputs(gcd_target, base_path, emit_options);
+        compile_standalone_runtime(output_files, gcd_target);
     }
 
     if (!generator_name.empty()) {
@@ -960,6 +1036,10 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
             Outputs output_files = compute_outputs(targets[0], base_path, emit_options);
             auto module_producer = [&generator_name, &generator_args]
                 (const std::string &name, const Target &target) -> Module {
+                    // Reset the counters so the function/variable names look
+                    // consistent for different targets.
+                    reset_unique_name_counters();
+
                     auto sub_generator_args = generator_args;
                     sub_generator_args.erase("target");
                     // Must re-create each time since each instance will have a different Target.

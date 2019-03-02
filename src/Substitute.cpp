@@ -9,7 +9,7 @@ namespace Internal {
 using std::map;
 using std::string;
 
-class Substitute : public IRMutator2 {
+class Substitute : public IRMutator {
     const map<string, Expr> &replace;
     Scope<> hidden;
 
@@ -25,7 +25,7 @@ class Substitute : public IRMutator2 {
 public:
     Substitute(const map<string, Expr> &m) : replace(m) {}
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Expr visit(const Variable *v) override {
         Expr r = find_replacement(v->name);
@@ -107,17 +107,17 @@ Stmt substitute(const map<string, Expr> &m, const Stmt &stmt) {
 }
 
 
-class SubstituteExpr : public IRMutator2 {
+class SubstituteExpr : public IRMutator {
 public:
     Expr find, replacement;
 
-    using IRMutator2::mutate;
+    using IRMutator::mutate;
 
     Expr mutate(const Expr &e) override {
         if (equal(e, find)) {
             return replacement;
         } else {
-            return IRMutator2::mutate(e);
+            return IRMutator::mutate(e);
         }
     }
 };

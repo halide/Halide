@@ -133,11 +133,11 @@ bool is_dense_ramp(Expr x) {
 // In Hexagon, we assume that we can read one vector past the end of
 // buffers. Using this assumption, this mutator replaces vector
 // predicated dense loads with scalar predicated dense loads.
-class SloppyUnpredicateLoads : public IRMutator2 {
+class SloppyUnpredicateLoads : public IRMutator {
     Expr visit(const Load *op) override {
         // Don't handle loads with without predicates, scalar predicates, or non-dense ramps.
         if (is_one(op->predicate) || op->predicate.as<Broadcast>() || !is_dense_ramp(op->index)) {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
 
         Expr predicate = mutate(op->predicate);
@@ -150,17 +150,17 @@ class SloppyUnpredicateLoads : public IRMutator2 {
         }
         predicate = Broadcast::make(condition, predicate.type().lanes());
 
-        return Load::make(op->type, op->name, index, op->image, op->param, predicate);
+        return Load::make(op->type, op->name, index, op->image, op->param, predicate, op->alignment);
     }
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 };
 
 Stmt sloppy_unpredicate_loads(Stmt s) {
     return SloppyUnpredicateLoads().mutate(s);
 }
 
-class InjectHVXLocks : public IRMutator2 {
+class InjectHVXLocks : public IRMutator {
 public:
     InjectHVXLocks(const Target &t) : target(t) {
         uses_hvx_var = Variable::make(Bool(), "uses_hvx");
@@ -168,7 +168,7 @@ public:
     bool uses_hvx = false;
 private:
     Expr uses_hvx_var;
-    using IRMutator2::visit;
+    using IRMutator::visit;
     // Primarily, we do two things when we encounter a parallel for loop.
     // First, we check if the paralell for loop uses_hvx and accordingly
     // acqure_hvx_context i.e. acquire and release HVX locks.
@@ -253,7 +253,7 @@ private:
             return s;
 
         }
-        return IRMutator2::visit(op);
+        return IRMutator::visit(op);
     }
     Expr visit(const Variable *op) override {
         uses_hvx = uses_hvx || op->type.is_vector();
@@ -323,7 +323,7 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
     #endif
 
     debug(1) << "Aligning loads for HVX....\n";
-    body = align_loads(body, target.natural_vector_size(Int(8)), alignment_info);
+    body = align_loads(body, target.natural_vector_size(Int(8)));
     body = common_subexpression_elimination(body);
     // Don't simplify here, otherwise it will re-collapse the loads we
     // want to carry across loop iterations.
@@ -342,7 +342,7 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
 
     // Optimize the IR for Hexagon.
     debug(1) << "Optimizing Hexagon instructions...\n";
-    body = optimize_hexagon_instructions(body, target, alignment_info);
+    body = optimize_hexagon_instructions(body, target);
 
     debug(1) << "Adding calls to qurt_hvx_lock, if necessary...\n";
     body = inject_hvx_lock_unlock(body, target);
@@ -959,7 +959,6 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
 
     bool is_128B = target.has_feature(Halide::Target::HVX_128);
     int a_elements = static_cast<int>(a_ty->getVectorNumElements());
-    int b_elements = static_cast<int>(b_ty->getVectorNumElements());
 
     llvm::Type *element_ty = a->getType()->getVectorElementType();
     internal_assert(element_ty);
@@ -1039,7 +1038,6 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
             a_ty = a->getType();
             b_ty = b->getType();
             a_elements = a_ty->getVectorNumElements();
-            b_elements = b_ty->getVectorNumElements();
         }
         if (start == 0 && result_ty == a_ty) {
             return a;
@@ -1065,7 +1063,7 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
             return call_intrin_cast(native_ty, intrin_id, {b, a, codegen(bytes_off)});
         }
         return CodeGen_Posix::shuffle_vectors(a, b, indices);
-    } else if (stride == 2 && result_elements*2 == a_elements + b_elements) {
+    } else if (stride == 2) {
         internal_assert(start == 0 || start == 1);
         // For stride 2 shuffles, we can use vpack or vdeal.
         // It's hard to use call_intrin here. We'll just slice and
@@ -1806,6 +1804,20 @@ void CodeGen_Hexagon::visit(const Call *op) {
                                 "halide.hexagon.mux" +
                                 type_suffix(op->args[1], op->args[2], false),
                                 op->args);
+            return;
+        } else if (op->is_intrinsic(Call::if_then_else_mask)) {
+            internal_assert(op->args.size() == 3);
+            // Because this is going to be scalarized by CodeGen_LLVM, we can
+            // convert back to a bool vector, because this bool vector will
+            // never be realized.
+            value = codegen(Call::make(op->type, Call::if_then_else, {op->args[0] != 0, op->args[1], op->args[2]}, Call::PureIntrinsic));
+            return;
+        } else if (op->is_intrinsic(Call::require_mask)) {
+            internal_assert(op->args.size() == 3);
+            // Because this is going to be scalarized by CodeGen_LLVM, we can
+            // convert back to a bool vector, because this bool vector will
+            // never be realized.
+            value = codegen(Call::make(op->type, Call::require, {op->args[0] != 0, op->args[1], op->args[2]}, Call::PureIntrinsic));
             return;
         } else if (op->is_intrinsic(Call::abs)) {
             internal_assert(op->args.size() == 1);

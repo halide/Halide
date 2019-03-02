@@ -113,6 +113,7 @@ DECLARE_CPP_INITMOD(osx_get_symbol)
 DECLARE_CPP_INITMOD(osx_host_cpu_count)
 DECLARE_CPP_INITMOD(osx_opengl_context)
 DECLARE_CPP_INITMOD(osx_yield)
+DECLARE_CPP_INITMOD(posix_abort)
 DECLARE_CPP_INITMOD(posix_allocator)
 DECLARE_CPP_INITMOD(posix_clock)
 DECLARE_CPP_INITMOD(posix_error_handler)
@@ -142,6 +143,7 @@ DECLARE_CPP_INITMOD(tracing)
 DECLARE_CPP_INITMOD(windows_clock)
 DECLARE_CPP_INITMOD(windows_cuda)
 DECLARE_CPP_INITMOD(windows_get_symbol)
+DECLARE_CPP_INITMOD(windows_abort)
 DECLARE_CPP_INITMOD(windows_io)
 DECLARE_CPP_INITMOD(windows_opencl)
 DECLARE_CPP_INITMOD(windows_profiler)
@@ -240,10 +242,10 @@ DECLARE_NO_INITMOD(hexagon_cpu_features)
 #endif  // WITH_HEXAGON
 
 #ifdef WITH_RISCV
-DECLARE_LL_INITMOD(riscv)
+//DECLARE_LL_INITMOD(riscv)
 DECLARE_CPP_INITMOD(riscv_cpu_features)
 #else
-DECLARE_NO_INITMOD(riscv)
+//DECLARE_NO_INITMOD(riscv)
 DECLARE_NO_INITMOD(riscv_cpu_features)
 #endif  // WITH_RISCV
 
@@ -310,9 +312,9 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
     } else if (target.arch == Target::RISCV) {
         // TODO: Valdidate this data layout is correct for RISCV. Assumption is it is like MIPS.
         if (target.bits == 32) {
-            return llvm::DataLayout("e-m:m-p:32:32-i8:8:32-i16:16:32-i64:64-n32-S64");
+            return llvm::DataLayout("e-m:e-p:32:32-i64:64-n32-S128");
         } else {
-            return llvm::DataLayout("e-m:m-i8:8:32-i16:16:32-i64:64-n32:64-S128");
+            return llvm::DataLayout("e-m:e-p:64:64-i64:64-i128:128-n64-S128");
         }
     } else {
         internal_error << "Bad target arch: " << target.arch << "\n";
@@ -882,7 +884,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_powerpc_ll(c));
             }
             if (t.arch == Target::RISCV) {
-                modules.push_back(get_initmod_riscv_ll(c));
+              //                modules.push_back(get_initmod_riscv_ll(c));
             }
             if (t.arch == Target::Hexagon) {
                 modules.push_back(get_initmod_qurt_hvx(c, bits_64, debug));
@@ -946,6 +948,12 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
         modules.push_back(get_initmod_module_jit_ref_count(c, bits_64, debug));
     } else if (module_type == ModuleAOT) {
         modules.push_back(get_initmod_module_aot_ref_count(c, bits_64, debug));
+    }
+
+    if (t.os == Target::Windows) {
+        modules.push_back(get_initmod_windows_abort(c, bits_64, debug));
+    } else {
+        modules.push_back(get_initmod_posix_abort(c, bits_64, debug));
     }
 
     if (module_type == ModuleAOT || module_type == ModuleGPU) {

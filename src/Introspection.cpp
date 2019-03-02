@@ -39,6 +39,17 @@ void get_program_name(char *name, int32_t size) {
 }
 #endif
 
+namespace {
+
+template<typename T>
+inline T load_misaligned(const T *p) {
+    T result;
+    memcpy(&result, p, sizeof(T));
+    return result;
+}
+
+}
+
 class DebugSections {
 
     bool calibrated;
@@ -1458,7 +1469,7 @@ private:
                             } else if (payload && payload[0] == 0x03 && val == (sizeof(void *) + 1)) {
                                 // It's a global
                                 // payload + 1 is an address
-                                const void *addr = *((const void * const *)(payload + 1));
+                                const void *addr = load_misaligned((const void * const *)(payload + 1));
                                 gvar.addr = (uint64_t)(addr);
                             } else {
                                 // Some other format that we don't understand
@@ -1525,8 +1536,10 @@ private:
                                 // It's an array of addresses
                                 const void * const * ptr = (const void * const *)(debug_ranges.data() + val);
                                 const void * const * end = (const void * const *)(debug_ranges.data() + debug_ranges.size());
-                                while (ptr[0] && ptr < end-1) {
-                                    LiveRange r = {(uint64_t)ptr[0], (uint64_t)ptr[1]};
+                                // Note: might not be properly aligned; use memcpy to avoid
+                                // sanitizer warnings
+                                while (load_misaligned(ptr) && ptr < end-1) {
+                                    LiveRange r = {(uint64_t)load_misaligned(ptr), (uint64_t)load_misaligned(ptr+1)};
                                     r.pc_begin += compile_unit_base_pc;
                                     r.pc_end += compile_unit_base_pc;
                                     live_ranges.push_back(r);

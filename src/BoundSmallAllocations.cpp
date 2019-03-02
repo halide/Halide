@@ -8,8 +8,8 @@ namespace Halide {
 namespace Internal {
 
 // Find a constant upper bound on the size of each thread-local allocation
-class BoundSmallAllocations : public IRMutator2 {
-    using IRMutator2::visit;
+class BoundSmallAllocations : public IRMutator {
+    using IRMutator::visit;
 
     // Track constant bounds
     Scope<Interval> scope;
@@ -17,13 +17,13 @@ class BoundSmallAllocations : public IRMutator2 {
     Stmt visit(const LetStmt *op) override {
         Interval b = find_constant_bounds(op->value, scope);
         ScopedBinding<Interval> bind(scope, op->name, b);
-        return IRMutator2::visit(op);
+        return IRMutator::visit(op);
     }
 
     Expr visit(const Let *op) override {
         Interval b = find_constant_bounds(op->value, scope);
         ScopedBinding<Interval> bind(scope, op->name, b);
-        return IRMutator2::visit(op);
+        return IRMutator::visit(op);
     }
 
     bool in_thread_loop = false;
@@ -37,7 +37,7 @@ class BoundSmallAllocations : public IRMutator2 {
         ScopedBinding<Interval> bind(scope, op->name, b);
         ScopedValue<bool> old_in_thread_loop(in_thread_loop, in_thread_loop ||
                                              op->for_type == ForType::GPUThread);
-        return IRMutator2::visit(op);
+        return IRMutator::visit(op);
     }
 
     Stmt visit(const Allocate *op) override {
@@ -79,7 +79,7 @@ class BoundSmallAllocations : public IRMutator2 {
             return Allocate::make(op->name, op->type, op->memory_type, {(int32_t)size}, op->condition,
                                   mutate(op->body), op->new_expr, op->free_function);
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 };

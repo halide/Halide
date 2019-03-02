@@ -163,6 +163,7 @@ option(TARGET_D3D12COMPUTE "Include Direct3D 12 Compute target" ON)
 option(HALIDE_SHARED_LIBRARY "Build as a shared library" ON)
 option(HALIDE_ENABLE_RTTI "Enable RTTI" ${LLVM_ENABLE_RTTI})
 option(HALIDE_ENABLE_EXCEPTIONS "Enable exceptions" ${LLVM_ENABLE_EH})
+option(HALIDE_USE_CODEMODEL_LARGE "Use the Large LLVM codemodel" OFF)
 
 if (HALIDE_SHARED_LIBRARY)
   set(HALIDE_LIBRARY_TYPE SHARED)
@@ -172,6 +173,13 @@ endif()
 
 if (HALIDE_ENABLE_RTTI AND NOT LLVM_ENABLE_RTTI)
   message(FATAL_ERROR "Can't enable RTTI. LLVM was compiled without it")
+endif()
+
+# Needed for 'make distrib' to properly fill in the .tpl files
+if (HALIDE_ENABLE_RTTI)
+  set(HALIDE_RTTI_RAW 1)
+else()
+  set(HALIDE_RTTI_RAW 0)
 endif()
 
 function(halide_project name folder)
@@ -217,6 +225,9 @@ if (NOT MSVC)
   if (HALIDE_ENABLE_EXCEPTIONS)
     add_compile_options(-DWITH_EXCEPTIONS)
   endif()
+  if (HALIDE_USE_CODEMODEL_LARGE)
+    add_compile_options(-DHALIDE_USE_CODEMODEL_LARGE)
+  endif()
 else()
   add_compile_options(/W3)
   add_compile_options(/wd4018)  # disable "signed/unsigned mismatch"
@@ -228,6 +239,9 @@ else()
   endif()
   if (HALIDE_ENABLE_EXCEPTIONS)
     add_compile_options(/DWITH_EXCEPTIONS)
+  endif()
+  if (HALIDE_USE_CODEMODEL_LARGE)
+    add_compile_options(/DHALIDE_USE_CODEMODEL_LARGE)
   endif()
 endif()
 
@@ -300,7 +314,6 @@ define_test_group(run_tests)
 # TODO(srj): add test_aotcpp_generators support
 # TODO(srj): add test_valgrind variant
 # TODO(srj): add test_avx512 variant
-# TODO(srj): add test_bazel variant
 # TODO(srj): add test_python variant
 # TODO(srj): add test_apps variant
 function(add_test TARGET)
@@ -418,10 +431,11 @@ install(FILES
         )
 
 install(DIRECTORY tutorial
-        DESTINATION tutorial
+        DESTINATION .
         FILES_MATCHING
+        PATTERN "*.cpp"
         PATTERN "*.h"
-        PATTERN "*.sh"
+        PATTERN "lesson_*.sh"
         PATTERN "*.gif"
         PATTERN "*.jpg"
         PATTERN "*.mp4"
@@ -432,7 +446,6 @@ foreach(F mex_halide.m
           GenGen.cpp
           RunGen.h
           RunGenMain.cpp
-          RunGenStubs.cpp
           halide_benchmark.h
           halide_image.h
           halide_image_io.h
@@ -445,11 +458,6 @@ endforeach()
 
 # ---- README
 file(GLOB FILES "${HALIDE_BASE_DIR}/*.md")
-install(FILES ${FILES}
-        DESTINATION .)
-
-# ---- Bazel
-file(GLOB FILES "${HALIDE_BASE_DIR}/bazel/*")
 install(FILES ${FILES}
         DESTINATION .)
 

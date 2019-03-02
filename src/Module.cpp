@@ -74,11 +74,16 @@ private:
 
 // Given a pathname of the form /path/to/name.ext, append suffix before ext to produce /path/to/namesuffix.ext
 std::string add_suffix(const std::string &path, const std::string &suffix) {
-    const auto found = path.rfind(".");
-    if (found == std::string::npos) {
-        return path + suffix;
+    size_t last_path = std::min(path.rfind('/'), path.rfind('\\'));
+    if (last_path == std::string::npos) {
+        last_path = 0;
     }
-    return path.substr(0, found) + suffix + path.substr(found);
+    size_t dot = path.find('.', last_path);
+    if (dot == std::string::npos) {
+        return path + suffix;
+    } else {
+        return path.substr(0, dot) + suffix + path.substr(dot);
+    }
 }
 
 // Given a pathname of the form /path/to/name.old, replace extension to produce /path/to/name.new.
@@ -105,7 +110,92 @@ Outputs add_suffixes(const Outputs &in, const std::string &suffix) {
     if (!in.stmt_name.empty()) out.stmt_name = add_suffix(in.stmt_name, suffix);
     if (!in.stmt_html_name.empty()) out.stmt_html_name = add_suffix(in.stmt_html_name, suffix);
     if (!in.schedule_name.empty()) out.schedule_name = add_suffix(in.schedule_name, suffix);
+    if (!in.registration_name.empty()) out.registration_name = add_suffix(in.registration_name, suffix);
+
     return out;
+}
+
+void emit_registration(const Module &m, std::ostream &stream) {
+    /*
+        This relies on the filter library being linked in a way that doesn't
+        dead-strip "unused" initialization code; this may mean that you need to
+        explicitly link with with --whole-archive (or the equivalent) to ensure
+        that the registration code isn't omitted. Sadly, there's no portable way
+        to do this, so you may need to take care in your make/build/etc files:
+
+        Linux:      -Wl,--whole-archive "/path/to/library" -Wl,-no-whole-archive
+        Darwin/OSX: -Wl,-force_load,/path/to/library
+        VS2015 R2+: /WHOLEARCHIVE:/path/to/library.lib
+        Bazel:      alwayslink=1
+
+        Note also that registration files deliberately have no #includes, and
+        are specifically designed to be legal to concatenate into a single
+        source file; it should be equivalent to compile-and-link multiple
+        registration files separately, or to concatenate multiple registration
+        files into a single one which is then compiled.
+    */
+
+    const std::string registration_template = R"INLINE_CODE(
+// MACHINE GENERATED -- DO NOT EDIT
+
+extern "C" {
+struct halide_filter_metadata_t;
+void halide_register_argv_and_metadata(
+    int (*filter_argv_call)(void **),
+    const struct halide_filter_metadata_t *filter_metadata,
+    const char * const *extra_key_value_pairs
+);
+}
+
+$NSOPEN$
+extern int $SHORTNAME$_argv(void **args);
+extern const struct halide_filter_metadata_t *$SHORTNAME$_metadata();
+$NSCLOSE$
+
+#ifdef HALIDE_REGISTER_EXTRA_KEY_VALUE_PAIRS_FUNC
+extern "C" const char * const *HALIDE_REGISTER_EXTRA_KEY_VALUE_PAIRS_FUNC();
+#endif  // HALIDE_REGISTER_EXTRA_KEY_VALUE_PAIRS_FUNC
+
+namespace $NREGS$ {
+namespace {
+struct Registerer {
+    Registerer() {
+#ifdef HALIDE_REGISTER_EXTRA_KEY_VALUE_PAIRS_FUNC
+        halide_register_argv_and_metadata(::$FULLNAME$_argv, ::$FULLNAME$_metadata(), HALIDE_REGISTER_EXTRA_KEY_VALUE_PAIRS_FUNC());
+#else
+        halide_register_argv_and_metadata(::$FULLNAME$_argv, ::$FULLNAME$_metadata(), nullptr);
+#endif  // HALIDE_REGISTER_EXTRA_KEY_VALUE_PAIRS_FUNC
+    }
+};
+static Registerer registerer;
+}  // namespace
+}  // $NREGS$
+
+)INLINE_CODE";
+
+    for (const auto &f : m.functions()) {
+        if (f.linkage == LinkageType::ExternalPlusMetadata) {
+            std::vector<std::string> namespaces;
+            std::string simple_name = extract_namespaces(f.name, namespaces);
+            std::string nsopen, nsclose;
+            for (const auto &ns : namespaces) {
+                nsopen += "namespace " + ns + " { ";
+                nsclose += "}";
+            }
+            if (!m.target().has_feature(Target::CPlusPlusMangling)) {
+                internal_assert(namespaces.empty());
+                nsopen = "extern \"C\" {";
+                nsclose = "}";
+            }
+            std::string nsreg = "halide_nsreg_" + replace_all(f.name, "::", "_");
+            std::string s = replace_all(registration_template, "$NSOPEN$", nsopen);
+            s = replace_all(s, "$SHORTNAME$", simple_name);
+            s = replace_all(s, "$NSCLOSE$", nsclose);
+            s = replace_all(s, "$FULLNAME$", f.name);
+            s = replace_all(s, "$NREGS$", nsreg);
+            stream << s;
+        }
+    }
 }
 
 }  // namespace
@@ -256,6 +346,7 @@ Module link_modules(const std::string &name, const std::vector<Module> &modules)
 
     return output;
 }
+
 
 Buffer<uint8_t> Module::compile_to_buffer() const {
     // TODO: This Hexagon specific code should be removed as soon as possible.
@@ -449,6 +540,13 @@ void Module::compile(const Outputs &output_files_arg) const {
            file << contents->auto_schedule;
         }
     }
+    if (!output_files.registration_name.empty()) {
+        debug(1) << "Module.compile(): registration_name " << output_files.registration_name << "\n";
+        std::ofstream file(output_files.registration_name);
+        emit_registration(*this, file);
+        file.close();
+        internal_assert(!file.fail());
+    }
 }
 
 Outputs compile_standalone_runtime(const Outputs &output_files, Target t) {
@@ -563,6 +661,7 @@ void compile_multitarget(const std::string &fn_name,
         Outputs sub_out = add_suffixes(output_files, suffix);
         internal_assert(sub_out.object_name.empty());
         sub_out.object_name = temp_dir.add_temp_object_file(output_files.static_library_name, suffix, target);
+        sub_out.registration_name.clear();
         debug(1) << "compile_multitarget: compile_sub_target " << sub_out.object_name << "\n";
         sub_module.compile(sub_out);
 
@@ -663,6 +762,14 @@ void compile_multitarget(const std::string &fn_name,
         Outputs header_out = Outputs().c_header(output_files.c_header_name);
         debug(1) << "compile_multitarget: c_header_name " << header_out.c_header_name << "\n";
         header_module.compile(header_out);
+    }
+
+    if (!output_files.registration_name.empty()) {
+        debug(1) << "compile_multitarget: registration_name " << output_files.registration_name << "\n";
+        Module registration_module(fn_name, base_target);
+        registration_module.append(LoweredFunc(fn_name, base_target_args, {}, LinkageType::ExternalPlusMetadata));
+        Outputs registration_out = Outputs().registration(output_files.registration_name);
+        registration_module.compile(registration_out);
     }
 
     if (!output_files.static_library_name.empty()) {

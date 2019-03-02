@@ -28,11 +28,10 @@ WEAK int halide_error_explicit_bounds_too_small(void *user_context, const char *
 }
 
 WEAK int halide_error_bad_type(void *user_context, const char *func_name,
-                               uint8_t code_given, uint8_t correct_code,
-                               uint8_t bits_given, uint8_t correct_bits,
-                               uint16_t lanes_given, uint16_t correct_lanes) {
-    halide_type_t correct_type(halide_type_code_t(correct_code), correct_bits, correct_lanes);
-    halide_type_t type_given(halide_type_code_t(code_given), bits_given, lanes_given);
+                               uint32_t type_given_bits, uint32_t correct_type_bits) {
+    halide_type_t correct_type, type_given;
+    memcpy(&correct_type, &correct_type_bits, sizeof(uint32_t));
+    memcpy(&type_given, &type_given_bits, sizeof(uint32_t));
     error(user_context)
         << func_name << " has type " << correct_type
         << " but type of the buffer passed in is " << type_given;
@@ -93,10 +92,10 @@ WEAK int halide_error_constraints_make_required_region_smaller(void *user_contex
                                                                int constrained_min, int constrained_extent,
                                                                int required_min, int required_extent) {
     int required_max = required_min + required_extent - 1;
-    int constrained_max = constrained_min + required_extent - 1;
+    int constrained_max = constrained_min + constrained_extent - 1;
     error(user_context)
         << "Applying the constraints on " << buffer_name
-        << " to the required region made it smaller. "
+        << " to the required region made it smaller in dimension " << dimension << ". "
         << "Required size: " << required_min << " to " << required_max << ". "
         << "Constrained size: " << constrained_min << " to " << constrained_max << ".";
     return halide_error_code_constraints_make_required_region_smaller;

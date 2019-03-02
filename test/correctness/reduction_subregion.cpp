@@ -1,5 +1,5 @@
-#include <stdio.h>
 #include "Halide.h"
+#include <stdio.h>
 
 // This test defines a reduction that writes to a large area, reads
 // from an even larger area, and then just realizes it over a smaller

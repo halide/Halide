@@ -629,7 +629,7 @@ public:
 
 namespace Internal {
 struct ErrorBuffer;
-class IRMutator2;
+class IRMutator;
 }  // namespace Internal
 
 /** A halide function. This class represents one stage in a Halide
@@ -1064,7 +1064,7 @@ public:
     /** Add a custom pass to be used during lowering, with the
      * function that will be called to delete it also passed in. Set
      * it to nullptr if you wish to retain ownership of the object. */
-    void add_custom_lowering_pass(Internal::IRMutator2 *pass, std::function<void()> deleter);
+    void add_custom_lowering_pass(Internal::IRMutator *pass, std::function<void()> deleter);
 
     /** Remove all previously-set custom lowering passes */
     void clear_custom_lowering_passes();
@@ -1150,80 +1150,40 @@ public:
      * fftw. */
     // @{
     void define_extern(const std::string &function_name,
-                       const std::vector<ExternFuncArgument> &params,
-                       Type t,
-                       int dimensionality,
-                       NameMangling mangling,
-                       bool uses_old_buffer_t) {
-        define_extern(function_name, params, t,
-                      Internal::make_argument_list(dimensionality),
-                      mangling, uses_old_buffer_t);
-    }
-
-    void define_extern(const std::string &function_name,
-                       const std::vector<ExternFuncArgument> &params,
-                       Type t,
+                       const std::vector<ExternFuncArgument> &params, Type t,
                        int dimensionality,
                        NameMangling mangling = NameMangling::Default,
-                       DeviceAPI device_api = DeviceAPI::Host,
-                       bool uses_old_buffer_t = false) {
-        define_extern(function_name, params, t,
-                      Internal::make_argument_list(dimensionality),
-                      mangling, device_api, uses_old_buffer_t);
+                       DeviceAPI device_api = DeviceAPI::Host) {
+      define_extern(function_name, params, t,
+                    Internal::make_argument_list(dimensionality), mangling,
+                    device_api);
     }
 
     void define_extern(const std::string &function_name,
                        const std::vector<ExternFuncArgument> &params,
-                       const std::vector<Type> &types,
-                       int dimensionality,
-                       NameMangling mangling,
-                       bool uses_old_buffer_t) {
-        define_extern(function_name, params, types,
-                      Internal::make_argument_list(dimensionality),
-                      mangling, uses_old_buffer_t);
+                       const std::vector<Type> &types, int dimensionality,
+                       NameMangling mangling) {
+      define_extern(function_name, params, types,
+                    Internal::make_argument_list(dimensionality), mangling);
     }
 
     void define_extern(const std::string &function_name,
                        const std::vector<ExternFuncArgument> &params,
-                       const std::vector<Type> &types,
-                       int dimensionality,
+                       const std::vector<Type> &types, int dimensionality,
                        NameMangling mangling = NameMangling::Default,
-                       DeviceAPI device_api = DeviceAPI::Host,
-                       bool uses_old_buffer_t = false) {
-        define_extern(function_name, params, types,
-                      Internal::make_argument_list(dimensionality),
-                      mangling, device_api, uses_old_buffer_t);
+                       DeviceAPI device_api = DeviceAPI::Host) {
+      define_extern(function_name, params, types,
+                    Internal::make_argument_list(dimensionality), mangling,
+                    device_api);
     }
 
     void define_extern(const std::string &function_name,
-                       const std::vector<ExternFuncArgument> &params,
-                       Type t,
-                       const std::vector<Var> &arguments,
-                       NameMangling mangling,
-                       bool uses_old_buffer_t) {
-        define_extern(function_name, params, std::vector<Type>{t},
-                      arguments, mangling, uses_old_buffer_t);
-    }
-
-    void define_extern(const std::string &function_name,
-                       const std::vector<ExternFuncArgument> &params,
-                       Type t,
+                       const std::vector<ExternFuncArgument> &params, Type t,
                        const std::vector<Var> &arguments,
                        NameMangling mangling = NameMangling::Default,
-                       DeviceAPI device_api = DeviceAPI::Host,
-                       bool uses_old_buffer_t = false) {
-        define_extern(function_name, params, std::vector<Type>{t},
-                      arguments, mangling, device_api, uses_old_buffer_t);
-    }
-
-    void define_extern(const std::string &function_name,
-                       const std::vector<ExternFuncArgument> &params,
-                       const std::vector<Type> &types,
-                       const std::vector<Var> &arguments,
-                       NameMangling mangling,
-                       bool uses_old_buffer_t) {
-        define_extern(function_name, params, types,
-                      arguments, mangling, DeviceAPI::Host, uses_old_buffer_t);
+                       DeviceAPI device_api = DeviceAPI::Host) {
+      define_extern(function_name, params, std::vector<Type>{t}, arguments,
+                    mangling, device_api);
     }
 
     void define_extern(const std::string &function_name,
@@ -1231,8 +1191,7 @@ public:
                        const std::vector<Type> &types,
                        const std::vector<Var> &arguments,
                        NameMangling mangling = NameMangling::Default,
-                       DeviceAPI device_api = DeviceAPI::Host,
-                       bool uses_old_buffer_t = false);
+                       DeviceAPI device_api = DeviceAPI::Host);
     // @}
 
     /** Get the types of the outputs of this Func. */
@@ -2338,6 +2297,11 @@ public:
     /** Get the source location of the pure definition of this
      * Func. See Stage::source_location() */
     std::string source_location() const;
+
+    /** Return the current StageSchedule associated with this initial
+     * Stage of this Func. For introspection only: to modify schedule,
+     * use the Func interface. */
+    const Internal::StageSchedule &get_schedule() const { return Stage(*this).get_schedule(); }
 };
 
 namespace Internal {
