@@ -80,7 +80,7 @@ bool should_extract(const Expr &e, bool lift_all) {
 
 // A global-value-numbering of expressions. Returns canonical form of
 // the Expr and writes out a global value numbering as a side-effect.
-class GVN : public IRMutator2 {
+class GVN : public IRMutator {
 public:
     struct Entry {
         Expr expr;
@@ -140,7 +140,7 @@ public:
 
         // Rebuild using things already in the numbering.
         Expr old_e = e;
-        Expr new_e = IRMutator2::mutate(e);
+        Expr new_e = IRMutator::mutate(e);
 
         // See if it's there in another form after being rebuilt
         // (e.g. because it was a let variable).
@@ -163,7 +163,7 @@ public:
     }
 
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Expr visit(const Let *let) override {
         // Visit the value and add it to the numbering.
@@ -191,7 +191,7 @@ public:
         if (predicate.same_as(op->predicate) && index.same_as(op->index)) {
             return op;
         }
-        return Load::make(op->type, op->name, index, op->image, op->param, predicate);
+        return Load::make(op->type, op->name, index, op->image, op->param, predicate, op->alignment);
     }
 
     Stmt visit(const Store *op) override {
@@ -205,7 +205,7 @@ public:
         if (predicate.same_as(op->predicate) && value.same_as(op->value) && index.same_as(op->index)) {
             return op;
         } else {
-            return Store::make(op->name, value, index, op->param, predicate);
+            return Store::make(op->name, value, index, op->param, predicate, op->alignment);
         }
     }
 };
@@ -220,7 +220,7 @@ public:
     using IRGraphVisitor::include;
     using IRGraphVisitor::visit;
 
-    void include(const Expr &e) {
+    void include(const Expr &e) override {
         // If it's not the sort of thing we want to extract as a let,
         // just use the generic visitor to increment use counts for
         // the children.
@@ -243,14 +243,14 @@ public:
 };
 
 /** Rebuild an expression using a map of replacements. Works on graphs without exploding. */
-class Replacer : public IRMutator2 {
+class Replacer : public IRMutator {
 public:
     map<Expr, Expr, ExprCompare> replacements;
     Replacer(const map<Expr, Expr, ExprCompare> &r) : replacements(r) {}
 
-    using IRMutator2::mutate;
+    using IRMutator::mutate;
 
-    Expr mutate(const Expr &e) {
+    Expr mutate(const Expr &e) override {
         map<Expr, Expr, ExprCompare>::iterator iter = replacements.find(e);
 
         if (iter != replacements.end()) {
@@ -258,7 +258,7 @@ public:
         }
 
         // Rebuild it, replacing children.
-        Expr new_e = IRMutator2::mutate(e);
+        Expr new_e = IRMutator::mutate(e);
 
         // In case we encounter this expr again.
         replacements[e] = new_e;
@@ -267,11 +267,11 @@ public:
     }
 };
 
-class CSEEveryExprInStmt : public IRMutator2 {
+class CSEEveryExprInStmt : public IRMutator {
     bool lift_all;
 
 public:
-    using IRMutator2::mutate;
+    using IRMutator::mutate;
 
     Expr mutate(const Expr &e) override {
         return common_subexpression_elimination(e, lift_all);
@@ -346,12 +346,12 @@ namespace {
 
 // Normalize all names in an expr so that expr compares can be done
 // without worrying about mere name differences.
-class NormalizeVarNames : public IRMutator2 {
+class NormalizeVarNames : public IRMutator {
     int counter;
 
     map<string, string> new_names;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Expr visit(const Variable *var) override {
         map<string, string>::iterator iter = new_names.find(var->name);
@@ -467,13 +467,13 @@ void cse_test() {
     {
         Expr pred = x*x + y*y > 0;
         Expr index = select(x*x + y*y > 0, x*x + y*y + 2, x*x + y*y + 10);
-        Expr load = Load::make(Int(32), "buf", index, Buffer<>(), Parameter(), const_true());
-        Expr pred_load = Load::make(Int(32), "buf", index, Buffer<>(), Parameter(), pred);
+        Expr load = Load::make(Int(32), "buf", index, Buffer<>(), Parameter(), const_true(), ModulusRemainder());
+        Expr pred_load = Load::make(Int(32), "buf", index, Buffer<>(), Parameter(), pred, ModulusRemainder());
         e = select(x*y > 10, x*y + 2, x*y + 3 + load) + pred_load;
 
         Expr t2 = Variable::make(Bool(), "t2");
-        Expr cse_load = Load::make(Int(32), "buf", t[3], Buffer<>(), Parameter(), const_true());
-        Expr cse_pred_load = Load::make(Int(32), "buf", t[3], Buffer<>(), Parameter(), t2);
+        Expr cse_load = Load::make(Int(32), "buf", t[3], Buffer<>(), Parameter(), const_true(), ModulusRemainder());
+        Expr cse_pred_load = Load::make(Int(32), "buf", t[3], Buffer<>(), Parameter(), t2, ModulusRemainder());
         correct = ssa_block({x*y,
                              x*x + y*y,
                              t[1] > 0,
@@ -486,13 +486,13 @@ void cse_test() {
     {
         Expr pred = x*x + y*y > 0;
         Expr index = select(x*x + y*y > 0, x*x + y*y + 2, x*x + y*y + 10);
-        Expr load = Load::make(Int(32), "buf", index, Buffer<>(), Parameter(), const_true());
-        Expr pred_load = Load::make(Int(32), "buf", index, Buffer<>(), Parameter(), pred);
+        Expr load = Load::make(Int(32), "buf", index, Buffer<>(), Parameter(), const_true(), ModulusRemainder());
+        Expr pred_load = Load::make(Int(32), "buf", index, Buffer<>(), Parameter(), pred, ModulusRemainder());
         e = select(x*y > 10, x*y + 2, x*y + 3 + pred_load) + pred_load;
 
         Expr t2 = Variable::make(Bool(), "t2");
-        Expr cse_load = Load::make(Int(32), "buf", select(t2, t[1] + 2, t[1] + 10), Buffer<>(), Parameter(), const_true());
-        Expr cse_pred_load = Load::make(Int(32), "buf", select(t2, t[1] + 2, t[1] + 10), Buffer<>(), Parameter(), t2);
+        Expr cse_load = Load::make(Int(32), "buf", select(t2, t[1] + 2, t[1] + 10), Buffer<>(), Parameter(), const_true(), ModulusRemainder());
+        Expr cse_pred_load = Load::make(Int(32), "buf", select(t2, t[1] + 2, t[1] + 10), Buffer<>(), Parameter(), t2, ModulusRemainder());
         correct = ssa_block({x*y,
                              x*x + y*y,
                              t[1] > 0,

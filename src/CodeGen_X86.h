@@ -23,27 +23,29 @@ public:
     CodeGen_X86(Target);
 
 protected:
-    std::string mcpu() const;
-    std::string mattrs() const;
-    bool use_soft_float_abi() const;
-    int native_vector_bits() const;
+    std::string mcpu() const override;
+    std::string mattrs() const override;
+    bool use_soft_float_abi() const override;
+    int native_vector_bits() const override;
 
-    Expr mulhi_shr(Expr a, Expr b, int shr);
+    int vector_lanes_for_slice(Type t) const;
+
+    Expr mulhi_shr(Expr a, Expr b, int shr) override;
 
     using CodeGen_Posix::visit;
 
     /** Nodes for which we want to emit specific sse/avx intrinsics */
     // @{
-    void visit(const Add *);
-    void visit(const Sub *);
-    void visit(const Cast *);
-    void visit(const GT *);
-    void visit(const LT *);
-    void visit(const LE *);
-    void visit(const GE *);
-    void visit(const EQ *);
-    void visit(const NE *);
-    void visit(const Select *);
+    void visit(const Add *) override;
+    void visit(const Sub *) override;
+    void visit(const Cast *) override;
+    void visit(const GT *) override;
+    void visit(const LT *) override;
+    void visit(const LE *) override;
+    void visit(const GE *) override;
+    void visit(const EQ *) override;
+    void visit(const NE *) override;
+    void visit(const Select *) override;
     // @}
 };
 

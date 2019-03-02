@@ -74,11 +74,16 @@ private:
 
 // Given a pathname of the form /path/to/name.ext, append suffix before ext to produce /path/to/namesuffix.ext
 std::string add_suffix(const std::string &path, const std::string &suffix) {
-    const auto found = path.rfind(".");
-    if (found == std::string::npos) {
-        return path + suffix;
+    size_t last_path = std::min(path.rfind('/'), path.rfind('\\'));
+    if (last_path == std::string::npos) {
+        last_path = 0;
     }
-    return path.substr(0, found) + suffix + path.substr(found);
+    size_t dot = path.find('.', last_path);
+    if (dot == std::string::npos) {
+        return path + suffix;
+    } else {
+        return path.substr(0, dot) + suffix + path.substr(dot);
+    }
 }
 
 // Given a pathname of the form /path/to/name.old, replace extension to produce /path/to/name.new.
@@ -105,18 +110,92 @@ Outputs add_suffixes(const Outputs &in, const std::string &suffix) {
     if (!in.stmt_name.empty()) out.stmt_name = add_suffix(in.stmt_name, suffix);
     if (!in.stmt_html_name.empty()) out.stmt_html_name = add_suffix(in.stmt_html_name, suffix);
     if (!in.schedule_name.empty()) out.schedule_name = add_suffix(in.schedule_name, suffix);
+    if (!in.registration_name.empty()) out.registration_name = add_suffix(in.registration_name, suffix);
+
     return out;
 }
 
-uint64_t target_feature_mask(const Target &target) {
-    static_assert(sizeof(uint64_t)*8 >= Target::FeatureEnd, "Features will not fit in uint64_t");
-    uint64_t feature_mask = 0;
-    for (int i = 0; i < Target::FeatureEnd; ++i) {
-        if (target.has_feature((Target::Feature) i)) {
-            feature_mask |= ((uint64_t) 1) << i;
+void emit_registration(const Module &m, std::ostream &stream) {
+    /*
+        This relies on the filter library being linked in a way that doesn't
+        dead-strip "unused" initialization code; this may mean that you need to
+        explicitly link with with --whole-archive (or the equivalent) to ensure
+        that the registration code isn't omitted. Sadly, there's no portable way
+        to do this, so you may need to take care in your make/build/etc files:
+
+        Linux:      -Wl,--whole-archive "/path/to/library" -Wl,-no-whole-archive
+        Darwin/OSX: -Wl,-force_load,/path/to/library
+        VS2015 R2+: /WHOLEARCHIVE:/path/to/library.lib
+        Bazel:      alwayslink=1
+
+        Note also that registration files deliberately have no #includes, and
+        are specifically designed to be legal to concatenate into a single
+        source file; it should be equivalent to compile-and-link multiple
+        registration files separately, or to concatenate multiple registration
+        files into a single one which is then compiled.
+    */
+
+    const std::string registration_template = R"INLINE_CODE(
+// MACHINE GENERATED -- DO NOT EDIT
+
+extern "C" {
+struct halide_filter_metadata_t;
+void halide_register_argv_and_metadata(
+    int (*filter_argv_call)(void **),
+    const struct halide_filter_metadata_t *filter_metadata,
+    const char * const *extra_key_value_pairs
+);
+}
+
+$NSOPEN$
+extern int $SHORTNAME$_argv(void **args);
+extern const struct halide_filter_metadata_t *$SHORTNAME$_metadata();
+$NSCLOSE$
+
+#ifdef HALIDE_REGISTER_EXTRA_KEY_VALUE_PAIRS_FUNC
+extern "C" const char * const *HALIDE_REGISTER_EXTRA_KEY_VALUE_PAIRS_FUNC();
+#endif  // HALIDE_REGISTER_EXTRA_KEY_VALUE_PAIRS_FUNC
+
+namespace $NREGS$ {
+namespace {
+struct Registerer {
+    Registerer() {
+#ifdef HALIDE_REGISTER_EXTRA_KEY_VALUE_PAIRS_FUNC
+        halide_register_argv_and_metadata(::$FULLNAME$_argv, ::$FULLNAME$_metadata(), HALIDE_REGISTER_EXTRA_KEY_VALUE_PAIRS_FUNC());
+#else
+        halide_register_argv_and_metadata(::$FULLNAME$_argv, ::$FULLNAME$_metadata(), nullptr);
+#endif  // HALIDE_REGISTER_EXTRA_KEY_VALUE_PAIRS_FUNC
+    }
+};
+static Registerer registerer;
+}  // namespace
+}  // $NREGS$
+
+)INLINE_CODE";
+
+    for (const auto &f : m.functions()) {
+        if (f.linkage == LinkageType::ExternalPlusMetadata) {
+            std::vector<std::string> namespaces;
+            std::string simple_name = extract_namespaces(f.name, namespaces);
+            std::string nsopen, nsclose;
+            for (const auto &ns : namespaces) {
+                nsopen += "namespace " + ns + " { ";
+                nsclose += "}";
+            }
+            if (!m.target().has_feature(Target::CPlusPlusMangling)) {
+                internal_assert(namespaces.empty());
+                nsopen = "extern \"C\" {";
+                nsclose = "}";
+            }
+            std::string nsreg = "halide_nsreg_" + replace_all(f.name, "::", "_");
+            std::string s = replace_all(registration_template, "$NSOPEN$", nsopen);
+            s = replace_all(s, "$SHORTNAME$", simple_name);
+            s = replace_all(s, "$NSCLOSE$", nsclose);
+            s = replace_all(s, "$FULLNAME$", f.name);
+            s = replace_all(s, "$NREGS$", nsreg);
+            stream << s;
         }
     }
-    return feature_mask;
 }
 
 }  // namespace
@@ -157,7 +236,7 @@ LoweredFunc::LoweredFunc(const std::string &name,
                          NameMangling name_mangling)
     : name(name), body(body), linkage(linkage), name_mangling(name_mangling) {
     for (const Argument &i : args) {
-        this->args.push_back(i);
+        this->args.push_back(LoweredArgument(i));
     }
 }
 
@@ -267,6 +346,7 @@ Module link_modules(const std::string &name, const std::vector<Module> &modules)
 
     return output;
 }
+
 
 Buffer<uint8_t> Module::compile_to_buffer() const {
     // TODO: This Hexagon specific code should be removed as soon as possible.
@@ -460,6 +540,13 @@ void Module::compile(const Outputs &output_files_arg) const {
            file << contents->auto_schedule;
         }
     }
+    if (!output_files.registration_name.empty()) {
+        debug(1) << "Module.compile(): registration_name " << output_files.registration_name << "\n";
+        std::ofstream file(output_files.registration_name);
+        emit_registration(*this, file);
+        file.close();
+        internal_assert(!file.fail());
+    }
 }
 
 Outputs compile_standalone_runtime(const Outputs &output_files, Target t) {
@@ -514,7 +601,12 @@ void compile_multitarget(const std::string &fn_name,
     // (since x86-64-linux would be selected first due to ordering), but could
     // crash on non-sse41 machines (if we generated a runtime with sse41 instructions
     // included). So we'll keep track of the common features as we walk thru the targets.
-    uint64_t runtime_features_mask = (uint64_t)-1LL;
+
+    // Using something like std::bitset would be arguably cleaner here, but we need an
+    // array-of-uint64 for calls to halide_can_use_target_features() anyway,
+    // so we'll just build and maintain in that form to avoid extra conversion.
+    constexpr int kFeaturesWordCount = (Target::FeatureEnd + 63) / (sizeof(uint64_t) * 8);
+    uint64_t runtime_features[kFeaturesWordCount] = {(uint64_t)-1LL};
 
     TemporaryObjectFileDir temp_dir;
     std::vector<Expr> wrapper_args;
@@ -569,17 +661,33 @@ void compile_multitarget(const std::string &fn_name,
         Outputs sub_out = add_suffixes(output_files, suffix);
         internal_assert(sub_out.object_name.empty());
         sub_out.object_name = temp_dir.add_temp_object_file(output_files.static_library_name, suffix, target);
+        sub_out.registration_name.clear();
         debug(1) << "compile_multitarget: compile_sub_target " << sub_out.object_name << "\n";
         sub_module.compile(sub_out);
 
-        const uint64_t cur_target_mask = target_feature_mask(target);
-        Expr can_use = (target == base_target) ?
-                        IntImm::make(Int(32), 1) :
-                        Call::make(Int(32), "halide_can_use_target_features",
-                                   {UIntImm::make(UInt(64), cur_target_mask)},
-                                   Call::Extern);
+        uint64_t cur_target_features[kFeaturesWordCount] = {0};
+        for (int i = 0; i < Target::FeatureEnd; ++i) {
+            if (target.has_feature((Target::Feature) i)) {
+                cur_target_features[i >> 6] |= ((uint64_t) 1) << (i & 63);
+            }
+        }
 
-        runtime_features_mask &= cur_target_mask;
+        Expr can_use;
+        if (target != base_target) {
+            std::vector<Expr> features_struct_args;
+            for (int i = 0; i < kFeaturesWordCount; ++i) {
+                features_struct_args.push_back(UIntImm::make(UInt(64), cur_target_features[i]));
+            }
+            can_use = Call::make(Int(32), "halide_can_use_target_features",
+                                   {kFeaturesWordCount, Call::make(type_of<uint64_t *>(), Call::make_struct, features_struct_args, Call::Intrinsic)},
+                                   Call::Extern);
+        } else {
+            can_use = IntImm::make(Int(32), 1);
+        }
+
+        for (int i = 0; i < kFeaturesWordCount; ++i) {
+            runtime_features[i] &= cur_target_features[i];
+        }
 
         wrapper_args.push_back(can_use != 0);
         wrapper_args.push_back(sub_fn_name);
@@ -590,13 +698,15 @@ void compile_multitarget(const std::string &fn_name,
     if (!base_target.has_feature(Target::NoRuntime)) {
         // Start with a bare Target, set only the features we know are common to all.
         Target runtime_target(base_target.os, base_target.arch, base_target.bits);
-        // We never want NoRuntime set here.
-        runtime_features_mask &= ~(((uint64_t)(1)) << Target::NoRuntime);
-        if (runtime_features_mask) {
-            for (int i = 0; i < Target::FeatureEnd; ++i) {
-                if (runtime_features_mask & (((uint64_t) 1) << i)) {
-                    runtime_target.set_feature((Target::Feature) i);
-                }
+        for (int i = 0; i < Target::FeatureEnd; ++i) {
+            // We never want NoRuntime set here.
+            if (i == Target::NoRuntime) {
+                continue;
+            }
+            const int word = i >> 6;
+            const int bit = i & 63;
+            if (runtime_features[word] & (((uint64_t) 1) << bit)) {
+                runtime_target.set_feature((Target::Feature) i);
             }
         }
         Outputs runtime_out = Outputs().object(
@@ -652,6 +762,14 @@ void compile_multitarget(const std::string &fn_name,
         Outputs header_out = Outputs().c_header(output_files.c_header_name);
         debug(1) << "compile_multitarget: c_header_name " << header_out.c_header_name << "\n";
         header_module.compile(header_out);
+    }
+
+    if (!output_files.registration_name.empty()) {
+        debug(1) << "compile_multitarget: registration_name " << output_files.registration_name << "\n";
+        Module registration_module(fn_name, base_target);
+        registration_module.append(LoweredFunc(fn_name, base_target_args, {}, LinkageType::ExternalPlusMetadata));
+        Outputs registration_out = Outputs().registration(output_files.registration_name);
+        registration_module.compile(registration_out);
     }
 
     if (!output_files.static_library_name.empty()) {

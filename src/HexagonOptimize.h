@@ -6,7 +6,8 @@
  */
 
 #include "IR.h"
-
+#include "ModulusRemainder.h"
+#include "Scope.h"
 namespace Halide {
 namespace Internal {
 
@@ -16,6 +17,13 @@ Stmt optimize_hexagon_shuffles(Stmt s, int lut_alignment);
 
 /** Generate vtmpy instruction if possible */
 Stmt vtmpy_generator(Stmt s);
+
+/* Generate vscatter-vgather instructions on Hexagon using VTCM memory.
+ * The pass should be run before generating shuffles.
+ * Some expressions which generate vscatter-vgathers are:
+ *     1. out(x) = lut(foo(x)) -> vgather
+ *     2. out(idx(x)) = foo(x) -> vscatter */
+Stmt scatter_gather_generator(Stmt s);
 
 /** Hexagon deinterleaves when performing widening operations, and
  * interleaves when performing narrowing operations. This pass

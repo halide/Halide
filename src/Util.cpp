@@ -4,6 +4,7 @@
 #include "Introspection.h"
 #include <atomic>
 #include <chrono>
+#include <fstream>
 #include <iomanip>
 #include <map>
 #include <mutex>
@@ -22,6 +23,9 @@
 #ifdef __linux__
 #define CAN_GET_RUNNING_PROGRAM_NAME
 #include <linux/limits.h>  // For PATH_MAX
+#endif
+#if defined(_MSC_VER) && !defined(NOMINMAX)
+#define NOMINMAX
 #endif
 #ifdef _WIN32
 #include <windows.h>
@@ -112,6 +116,11 @@ int unique_count(size_t h) {
     return unique_name_counters[h]++;
 }
 }  // namespace
+
+void reset_unique_name_counters() {
+    for (int i = 0; i < num_unique_name_counters; ++i)
+        unique_name_counters[i].store(0);
+}
 
 // There are three possible families of names returned by the methods below:
 // 1) char pattern: (char that isn't '$') + number (e.g. v234)
@@ -401,6 +410,29 @@ std::string dir_make_temp() {
     internal_assert(result != nullptr) << "Unable to create temp directory.\n";
     return std::string(result);
     #endif
+}
+
+std::vector<char> read_entire_file(const std::string &pathname) {
+    std::ifstream f(pathname, std::ios::in|std::ios::binary);
+    std::vector<char> result;
+
+    f.seekg(0, std::ifstream::end);
+    size_t size = f.tellg();
+    result.resize(size);
+    f.seekg(0, std::ifstream::beg);
+    f.read(result.data(), result.size());
+    internal_assert(f.good()) << "Unable to read file: " << pathname;
+    f.close();
+    return result;
+}
+
+void write_entire_file(const std::string &pathname, const void *source, size_t source_len) {
+    std::ofstream f(pathname, std::ios::out|std::ios::binary);
+
+    f.write(reinterpret_cast<const char*>(source), source_len);
+    f.flush();
+    internal_assert(f.good()) << "Unable to write file: " << pathname;
+    f.close();
 }
 
 bool add_would_overflow(int bits, int64_t a, int64_t b) {

@@ -125,7 +125,7 @@ public:
             if (containing_scope) {
                 return containing_scope->get(name);
             } else {
-                internal_error << "Name not in Scope: " << name << "\n";
+                internal_error << "Name not in Scope: " << name << "\n" << *this << "\n";
             }
         }
         return iter->second.top();
@@ -137,7 +137,7 @@ public:
     T2 &ref(const std::string &name) {
         typename std::map<std::string, SmallStack<T>>::iterator iter = table.find(name);
         if (iter == table.end() || iter->second.empty()) {
-            internal_error << "Name not in Scope: " << name << "\n";
+            internal_error << "Name not in Scope: " << name << "\n" << *this << "\n";
         }
         return iter->second.top_ref();
     }
@@ -175,7 +175,7 @@ public:
      * same name in an outer scope) */
     void pop(const std::string &name) {
         typename std::map<std::string, SmallStack<T>>::iterator iter = table.find(name);
-        internal_assert(iter != table.end()) << "Name not in Scope: " << name << "\n";
+        internal_assert(iter != table.end()) << "Name not in Scope: " << name << "\n" << *this << "\n";
         iter->second.pop();
         if (iter->second.empty()) {
             table.erase(iter);
@@ -208,7 +208,9 @@ public:
             return iter->second;
         }
 
-        const T &value() {
+        template<typename T2 = T,
+                 typename = typename std::enable_if<!std::is_same<T2, void>::value>::type>
+        const T2 &value() {
             return iter->second.top_ref();
         }
     };
@@ -219,44 +221,6 @@ public:
 
     const_iterator cend() const {
         return const_iterator(table.end());
-    }
-
-    class iterator {
-        typename std::map<std::string, SmallStack<T>>::iterator iter;
-    public:
-        explicit iterator(typename std::map<std::string, SmallStack<T>>::iterator i) :
-            iter(i) {
-        }
-
-        iterator() {}
-
-        bool operator!=(const iterator &other) {
-            return iter != other.iter;
-        }
-
-        void operator++() {
-            ++iter;
-        }
-
-        const std::string &name() {
-            return iter->first;
-        }
-
-        SmallStack<T> &stack() {
-            return iter->second;
-        }
-
-        T &value() {
-            return iter->second.top_ref();
-        }
-    };
-
-    iterator begin() {
-        return iterator(table.begin());
-    }
-
-    iterator end() {
-        return iterator(table.end());
     }
 
     void swap(Scope<T> &other) {
@@ -303,18 +267,34 @@ struct ScopedBinding {
             scope->pop(name);
         }
     }
+
+    // allow move but not copy
+    ScopedBinding(const ScopedBinding& that) = delete;
+    ScopedBinding(ScopedBinding&& that) = default;
 };
 
 template<>
 struct ScopedBinding<void> {
-    Scope<> &scope;
+    Scope<> *scope;
     std::string name;
-    ScopedBinding(Scope<> &scope, const std::string &name) : scope(scope), name(name) {
-        scope.push(name);
+    ScopedBinding(Scope<> &s, const std::string &n) : scope(&s), name(n) {
+        scope->push(name);
+    }
+    ScopedBinding(bool condition, Scope<> &s, const std::string &n) :
+        scope(condition ? &s : nullptr), name(n) {
+        if (condition) {
+            scope->push(name);
+        }
     }
     ~ScopedBinding() {
-        scope.pop(name);
+        if (scope) {
+            scope->pop(name);
+        }
     }
+
+    // allow move but not copy
+    ScopedBinding(const ScopedBinding& that) = delete;
+    ScopedBinding(ScopedBinding&& that) = default;
 };
 
 }  // namespace Internal

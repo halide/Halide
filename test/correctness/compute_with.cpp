@@ -638,6 +638,7 @@ int vectorize_test() {
     return 0;
 }
 
+/*
 int some_are_skipped_test() {
     Buffer<int> im_ref, im;
     {
@@ -698,6 +699,7 @@ int some_are_skipped_test() {
     }
     return 0;
 }
+*/
 
 int multiple_outputs_on_gpu_test() {
     Target target = get_jit_target_from_environment();
@@ -1204,10 +1206,15 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    printf("Running some are skipped test\n");
-    if (some_are_skipped_test() != 0) {
-        return -1;
-    }
+    /*
+     * Note: we are deprecating skipping parts of a fused group in favor of
+     *       cloning funcs in particular stages via a new (clone_)in overload.
+     * TODO: remove this code when the new clone_in is implemented.
+     */
+//    printf("Running some are skipped test\n");
+//    if (some_are_skipped_test() != 0) {
+//        return -1;
+//    }
 
     printf("Running rgb to yuv420 test\n");
     if (rgb_yuv420_test() != 0) {

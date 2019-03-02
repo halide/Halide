@@ -84,33 +84,41 @@ Expr reduce_expr(Expr e, Expr modulus, const Scope<Interval> &bounds) {
 
 
 // Substitute the gpu loop variables inwards to make future passes simpler
-class SubstituteInGPUVars : public IRMutator2 {
-    using IRMutator2::visit;
+class SubstituteInLaneVar : public IRMutator {
+    using IRMutator::visit;
 
     Scope<int> gpu_vars;
+    string lane_var;
+
+    template<typename LetStmtOrLet>
+    auto visit_let(const LetStmtOrLet *op) -> decltype(op->body) {
+        if (!lane_var.empty() && expr_uses_var(op->value, lane_var) && is_pure(op->value)) {
+            auto solved = solve_expression(simplify(op->value), lane_var);
+            if (solved.fully_solved) {
+                return mutate(substitute(op->name, solved.result, op->body));
+            } else {
+                return IRMutator::visit(op);
+            }
+        } else {
+            return IRMutator::visit(op);
+        }
+    }
 
     Expr visit(const Let *op) override {
-        if (expr_uses_vars(op->value, gpu_vars) && is_pure(op->value)) {
-            return mutate(substitute(op->name, op->value, op->body));
-        } else {
-            return IRMutator2::visit(op);
-        }
+        return visit_let(op);
     }
 
     Stmt visit(const LetStmt *op) override {
-        if (expr_uses_vars(op->value, gpu_vars) && is_pure(op->value)) {
-            return mutate(substitute(op->name, op->value, op->body));
-        } else {
-            return IRMutator2::visit(op);
-        }
+        return visit_let(op);
     }
 
     Stmt visit(const For *op) override {
-        ScopedBinding<int> bind_if(op->for_type == ForType::GPUBlock ||
-                                   op->for_type == ForType::GPUThread ||
-                                   op->for_type == ForType::GPULane,
-                                   gpu_vars, op->name, 0);
-        return IRMutator2::visit(op);
+
+        if (op->for_type == ForType::GPULane) {
+            lane_var = op->name;
+        }
+
+        return IRMutator::visit(op);
     }
 };
 
@@ -176,17 +184,17 @@ class DetermineAllocStride : public IRVisitor {
         return Expr();
     }
 
-    void visit(const Let *op) {
+    void visit(const Let *op) override {
         ScopedBinding<Expr> bind(dependent_vars, op->name, warp_stride(op->value));
         IRVisitor::visit(op);
     }
 
-    void visit(const LetStmt *op) {
+    void visit(const LetStmt *op) override {
         ScopedBinding<Expr> bind(dependent_vars, op->name, warp_stride(op->value));
         IRVisitor::visit(op);
     }
 
-    void visit(const Store *op) {
+    void visit(const Store *op) override {
         if (op->name == alloc) {
             if (single_thread) {
                 single_stores.push_back(op->index);
@@ -197,14 +205,14 @@ class DetermineAllocStride : public IRVisitor {
         IRVisitor::visit(op);
     }
 
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         if (op->name == alloc) {
             loads.push_back(op->index);
         }
         IRVisitor::visit(op);
     }
 
-    void visit(const IfThenElse *op) {
+    void visit(const IfThenElse *op) override {
         // When things drop down to a single thread, we have different constraints, so notice that.
         if (equal(op->condition, Variable::make(Int(32), lane_var) < 1)) {
             bool old_single_thread = single_thread;
@@ -219,7 +227,7 @@ class DetermineAllocStride : public IRVisitor {
         }
     }
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         ScopedBinding<Interval>
             bind_bounds_if(is_const(op->min) && is_const(op->extent),
                            bounds, op->name, Interval(op->min, simplify(op->min + op->extent - 1)));
@@ -286,13 +294,14 @@ public:
                 stride = s;
             }
 
-            internal_assert(stride.defined());
-
             // Check the striping pattern of this store corresponds to
             // any already discovered on previous stores.
             bool this_ok = (s.defined() &&
                             (can_prove(stride == s) &&
                              can_prove(reduce_expr(e / stride - var, warp_size, bounds) == 0)));
+
+            internal_assert(stride.defined());
+
             if (!this_ok) {
                 bad.push_back(e);
             }
@@ -335,8 +344,8 @@ public:
 // Move allocations outside the loop over lanes into the loop over
 // lanes (using the striping described above), and rewrites
 // stores/loads to them as cuda register shuffle intrinsics.
-class LowerWarpShuffles : public IRMutator2 {
-    using IRMutator2::visit;
+class LowerWarpShuffles : public IRMutator {
+    using IRMutator::visit;
 
     Expr warp_size, this_lane;
     string this_lane_name;
@@ -437,7 +446,7 @@ class LowerWarpShuffles : public IRMutator2 {
             return For::make(op->name, op->min, warp_size,
                              op->for_type, op->device_api, body);
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
@@ -459,7 +468,7 @@ class LowerWarpShuffles : public IRMutator2 {
             Stmt else_case = mutate(op->else_case);
             return IfThenElse::make(condition, then_case, else_case);
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
@@ -485,9 +494,9 @@ class LowerWarpShuffles : public IRMutator2 {
             // them. Reassembling the result into a flat address gives
             // the expression below.
             Expr in_warp_idx = simplify((idx / (warp_size * stride)) * stride + reduce_expr(idx, stride, bounds), true, bounds);
-            return Store::make(op->name, value, in_warp_idx, op->param, op->predicate);
+            return Store::make(op->name, value, in_warp_idx, op->param, op->predicate, ModulusRemainder());
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
@@ -514,7 +523,7 @@ class LowerWarpShuffles : public IRMutator2 {
 
         // Load the value to be shuffled
         Expr base_val = Load::make(type, name, idx, Buffer<>(),
-                                   Parameter(), const_true(idx.type().lanes()));
+                                   Parameter(), const_true(idx.type().lanes()), ModulusRemainder());
 
         // Make 32-bit with a combination of reinterprets and zero extension
         Type shuffle_type = type;
@@ -612,14 +621,14 @@ class LowerWarpShuffles : public IRMutator2 {
             idx = simplify(solve_expression(idx, this_lane_name).result, true, bounds);
             return make_warp_load(op->type, op->name, idx, lane);
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
     Stmt visit(const Allocate *op) override {
         if (this_lane.defined() || op->name == "__shared") {
             // Not a warp-level allocation
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         } else {
             // Pick up this allocation and deposit it inside the loop over lanes at reduced size.
             allocations.push_back(Stmt(op));
@@ -631,8 +640,8 @@ public:
     LowerWarpShuffles() {}
 };
 
-class HoistWarpShufflesFromSingleIfStmt : public IRMutator2 {
-    using IRMutator2::visit;
+class HoistWarpShufflesFromSingleIfStmt : public IRMutator {
+    using IRMutator::visit;
 
     Scope<int> stored_to;
     vector<pair<string, Expr>> lifted_lets;
@@ -646,7 +655,7 @@ class HoistWarpShufflesFromSingleIfStmt : public IRMutator2 {
             lifted_lets.push_back({name, op});
             return Variable::make(op->type, name);
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
@@ -696,7 +705,7 @@ class HoistWarpShufflesFromSingleIfStmt : public IRMutator2 {
 
     Stmt visit(const Store *op) override {
         stored_to.push(op->name, 0);
-        return IRMutator2::visit(op);
+        return IRMutator::visit(op);
     }
 public:
     bool success = true;
@@ -712,8 +721,8 @@ public:
 };
 
 // Push an if statement inwards until it doesn't contain any warp shuffles
-class MoveIfStatementInwards : public IRMutator2 {
-    using IRMutator2::visit;
+class MoveIfStatementInwards : public IRMutator {
+    using IRMutator::visit;
 
     Stmt visit(const Store *op) override {
         // We've already hoisted warp shuffles out of stores
@@ -729,8 +738,8 @@ public:
 // The destination *and source* for warp shuffles must be active
 // threads, or the value is undefined, so we want to lift them out of
 // if statements.
-class HoistWarpShuffles : public IRMutator2 {
-    using IRMutator2::visit;
+class HoistWarpShuffles : public IRMutator {
+    using IRMutator::visit;
 
     Stmt visit(const IfThenElse *op) override {
         // Move all Exprs that contain a shuffle out of the body of
@@ -757,12 +766,12 @@ class HoistWarpShuffles : public IRMutator2 {
 class HasLaneLoop : public IRVisitor {
     using IRVisitor::visit;
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         result = result || op->for_type == ForType::GPULane;
         IRVisitor::visit(op);
     }
 
-    void visit(const Allocate *op) {
+    void visit(const Allocate *op) override {
         result = result || op->memory_type == MemoryType::Register;
         IRVisitor::visit(op);
     }
@@ -776,8 +785,8 @@ bool has_lane_loop(Stmt s) {
     return l.result;
 }
 
-class LowerWarpShufflesInEachKernel : public IRMutator2 {
-    using IRMutator2::visit;
+class LowerWarpShufflesInEachKernel : public IRMutator {
+    using IRMutator::visit;
 
     Stmt visit(const For *op) override {
         if (op->device_api == DeviceAPI::CUDA && has_lane_loop(op)) {
@@ -786,7 +795,7 @@ class LowerWarpShufflesInEachKernel : public IRMutator2 {
             s = HoistWarpShuffles().mutate(s);
             return simplify(s);
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 };
@@ -795,8 +804,8 @@ class LowerWarpShufflesInEachKernel : public IRMutator2 {
 
 Stmt lower_warp_shuffles(Stmt s) {
     s = loop_invariant_code_motion(s);
-    s = SubstituteInGPUVars().mutate(s);
-    s = simplify_exprs(s);
+    s = SubstituteInLaneVar().mutate(s);
+    s = simplify(s);
     s = LowerWarpShufflesInEachKernel().mutate(s);
     return s;
 };

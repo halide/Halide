@@ -317,7 +317,8 @@ std::string halide_type_to_c_type(const Type &t);
 
 /** generate_filter_main() is a convenient wrapper for GeneratorRegistry::create() +
  * compile_to_files(); it can be trivially wrapped by a "real" main() to produce a
- * command-line utility for ahead-of-time filter compilation. */
+ * command-line utility for ahead-of-time filter compilation.
+ * Note that this function is not thread-safe because it resets global states.*/
 int generate_filter_main(int argc, char **argv, std::ostream &cerr);
 
 // select_type<> is to std::conditional as switch is to if:
@@ -1337,6 +1338,7 @@ protected:
     void set_inputs(const std::vector<StubInput> &inputs);
 
     virtual void set_def_min_max();
+    virtual Expr get_def_expr() const;
 
     void verify_internals() override;
 
@@ -1687,8 +1689,13 @@ protected:
     using TBase = typename Super::TBase;
 
     const TBase def_{TBase()};
+    const Expr def_expr_;
 
 protected:
+    Expr get_def_expr() const override {
+        return def_expr_;
+    }
+
     void set_def_min_max() override {
         for (Parameter &p : this->parameters_) {
             p.set_scalar<TBase>(def_);
@@ -1699,16 +1706,36 @@ protected:
         return "Expr";
     }
 
+    // Expr() doesn't accept a pointer type in its ctor; add a SFINAE adapter
+    // so that pointer (aka handle) Inputs will get cast to uint64.
+    template <typename TBase2 = TBase, typename std::enable_if<!std::is_pointer<TBase2>::value>::type * = nullptr>
+    static Expr TBaseToExpr(const TBase2 &value) {
+        return Expr(value);
+    }
+
+    template <typename TBase2 = TBase, typename std::enable_if<std::is_pointer<TBase2>::value>::type * = nullptr>
+    static Expr TBaseToExpr(const TBase2 &value) {
+        return Expr((uint64_t) value);
+    }
+
 public:
-    explicit GeneratorInput_Scalar(const std::string &name,
-                                   const TBase &def = static_cast<TBase>(0))
-        : Super(name, IOKind::Scalar, {type_of<TBase>()}, 0), def_(def) {
+    explicit GeneratorInput_Scalar(const std::string &name)
+        : Super(name, IOKind::Scalar, {type_of<TBase>()}, 0), def_(static_cast<TBase>(0)), def_expr_(Expr()) {
+    }
+
+    GeneratorInput_Scalar(const std::string &name, const TBase &def)
+        : Super(name, IOKind::Scalar, {type_of<TBase>()}, 0), def_(def), def_expr_(TBaseToExpr(def)) {
+    }
+
+    GeneratorInput_Scalar(size_t array_size,
+                          const std::string &name)
+        : Super(array_size, name, IOKind::Scalar, {type_of<TBase>()}, 0), def_(static_cast<TBase>(0)), def_expr_(Expr()) {
     }
 
     GeneratorInput_Scalar(size_t array_size,
                           const std::string &name,
-                          const TBase &def = static_cast<TBase>(0))
-        : Super(array_size, name, IOKind::Scalar, {type_of<TBase>()}, 0), def_(def) {
+                          const TBase &def)
+        : Super(array_size, name, IOKind::Scalar, {type_of<TBase>()}, 0), def_(def), def_expr_(TBaseToExpr(def)) {
     }
 
     /** You can use this Input as an expression in a halide
@@ -1723,10 +1750,24 @@ public:
         return ExternFuncArgument(this->exprs().at(0));
     }
 
-    void set_estimate(const T &value) {
-        for (Parameter &p : this->parameters_) {
-            p.set_estimate(Expr(value));
+    template <typename T2 = T, typename std::enable_if<!std::is_array<T2>::value>::type * = nullptr>
+    void set_estimate(const TBase &value) {
+        Expr e = Expr(value);
+        if (std::is_same<T2, bool>::value) {
+          e = cast<bool>(e);
         }
+        for (Parameter &p : this->parameters_) {
+            p.set_estimate(e);
+        }
+    }
+
+    template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
+    void set_estimate(size_t index, const TBase &value) {
+        Expr e = Expr(value);
+        if (std::is_same<T2, bool>::value) {
+          e = cast<bool>(e);
+        }
+        this->parameters_.at(index).set_estimate(e);
     }
 };
 
@@ -1741,7 +1782,7 @@ protected:
 
 protected:
     void set_def_min_max() override {
-        GeneratorInput_Scalar<T>::set_def_min_max();
+        Super::set_def_min_max();
         // Don't set min/max for bool
         if (!std::is_same<TBase, bool>::value) {
             for (Parameter &p : this->parameters_) {
@@ -1752,14 +1793,23 @@ protected:
     }
 
 public:
-    explicit GeneratorInput_Arithmetic(const std::string &name,
-                                       const TBase &def = static_cast<TBase>(0))
+    explicit GeneratorInput_Arithmetic(const std::string &name)
+        : Super(name), min_(Expr()), max_(Expr()) {
+    }
+
+    GeneratorInput_Arithmetic(const std::string &name,
+                              const TBase &def)
         : Super(name, def), min_(Expr()), max_(Expr()) {
     }
 
     GeneratorInput_Arithmetic(size_t array_size,
+                              const std::string &name)
+        : Super(array_size, name), min_(Expr()), max_(Expr()) {
+    }
+
+    GeneratorInput_Arithmetic(size_t array_size,
                               const std::string &name,
-                              const TBase &def = static_cast<TBase>(0))
+                              const TBase &def)
         : Super(array_size, name, def), min_(Expr()), max_(Expr()) {
     }
 
@@ -1899,6 +1949,8 @@ public:
     HALIDE_FORWARD_METHOD(Func, compute_inline)
     HALIDE_FORWARD_METHOD(Func, compute_root)
     HALIDE_FORWARD_METHOD(Func, compute_with)
+    HALIDE_FORWARD_METHOD(Func, copy_to_device)
+    HALIDE_FORWARD_METHOD(Func, copy_to_host)
     HALIDE_FORWARD_METHOD(Func, define_extern)
     HALIDE_FORWARD_METHOD_CONST(Func, defined)
     HALIDE_FORWARD_METHOD(Func, estimate)
@@ -2633,6 +2685,7 @@ public:
         bool emit_static_library{true};
         bool emit_cpp_stub{false};
         bool emit_schedule{false};
+        bool emit_registration{false};
 
         // This is an optional map used to replace the default extensions generated for
         // a file: if an key matches an output extension, emit those files with the
@@ -2777,13 +2830,7 @@ private:
         std::vector<Internal::GeneratorParamBase *> generator_params;
 
         // Ordered-list of non-null ptrs to Input<> fields.
-        // Only one of filter_inputs and filter_params may be nonempty.
         std::vector<Internal::GeneratorInputBase *> filter_inputs;
-
-        // Ordered-list of non-null ptrs to Param<> or ImageParam<> fields.
-        // Must be empty if the Generator has a build() method rather than generate()/schedule().
-        // Only one of filter_inputs and filter_params may be nonempty.
-        std::vector<Internal::RegisteredParameter *> filter_params;
 
         // Ordered-list of non-null ptrs to Output<> fields; empty if old-style Generator.
         std::vector<Internal::GeneratorOutputBase *> filter_outputs;
@@ -3255,7 +3302,7 @@ public:
     }
 
     struct Names {
-        std::vector<std::string> generator_params, filter_params, inputs, outputs;
+        std::vector<std::string> generator_params, inputs, outputs;
     };
     Names get_names() const;
 

@@ -33,7 +33,7 @@ class CountGPUBlocksThreads : public IRVisitor {
 
     using IRVisitor::visit;
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         if (starts_with(op->name, prefix)) {
             if (op->for_type == ForType::GPUBlock) {
                 nblocks++;
@@ -46,7 +46,7 @@ class CountGPUBlocksThreads : public IRVisitor {
         IRVisitor::visit(op);
     }
 
-    void visit(const IfThenElse *op) {
+    void visit(const IfThenElse *op) override {
         op->condition.accept(this);
 
         int old_nblocks = nblocks;
@@ -75,10 +75,10 @@ public:
     int nlanes = 0;
 };
 
-class CanonicalizeGPUVars : public IRMutator2 {
+class CanonicalizeGPUVars : public IRMutator {
     map<string, string> gpu_vars;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     string gpu_name(vector<string> v, const string &new_var) {
         v.push_back(new_var);

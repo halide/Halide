@@ -1,8 +1,8 @@
+#include "Halide.h"
 #include <stdio.h>
 #include <string>
 #include <vector>
 #include <limits>
-#include "Halide.h"
 
 using namespace Halide;
 
@@ -23,6 +23,13 @@ int main(int argc, char **argv) {
         // The profiler adds lots of extra prints, so counting the
         // number of prints is not useful.
         printf("Skipping test because profiler is active\n");
+        return 0;
+    }
+
+    if (target.has_feature(Target::Debug)) {
+        // Same thing here: the runtime debug adds lots of extra prints,
+        // so counting the number of prints is not useful.
+        printf("Skipping test because runtime debug is active\n");
         return 0;
     }
 

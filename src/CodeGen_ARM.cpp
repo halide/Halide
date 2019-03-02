@@ -308,7 +308,6 @@ void CodeGen_ARM::visit(const Cast *op) {
         }
     }
 
-
     // Catch extract-high-half-of-signed integer pattern and convert
     // it to extract-high-half-of-unsigned-integer. llvm peephole
     // optimization recognizes logical shift right but not arithemtic
@@ -403,10 +402,10 @@ void CodeGen_ARM::visit(const Mul *op) {
     }
 
     //
-    // Detect the cases where any of the operands has the pattern: 
-    //      broadcast(widen(scalar)) 
+    // Detect the cases where any of the operands has the pattern:
+    //      broadcast(widen(scalar))
     // and convert it to
-    //      widen(broadcast(scalar)) 
+    //      widen(broadcast(scalar))
     // to be able to generate vmlal.x instructions correctly from llvm.
     //
     if (op->type.is_int() || op->type.is_uint()) {
@@ -419,7 +418,7 @@ void CodeGen_ARM::visit(const Mul *op) {
         // If the pattern is there, and the cast is a widening cast
         if (cast_a && cast_a->value.type().bits() < op->type.bits()) {
             // generate a new Mul with flipped widen(broadcast(scalar))
-            Expr new_a = Cast::make(op->type, 
+            Expr new_a = Cast::make(op->type,
                                     Broadcast::make(cast_a->value, lanes));
             debug(4) << "Replaced: " << op->a << "\n  with: " << new_a << "\n";
             value = codegen(new_a * op->b);
@@ -431,7 +430,7 @@ void CodeGen_ARM::visit(const Mul *op) {
         const Broadcast *bcast_b = op->b.as<Broadcast>();
         const Cast *cast_b = bcast_b ? bcast_b->value.as<Cast>() : nullptr;
         if (cast_b && cast_b->value.type().bits() < op->type.bits()) {
-            Expr new_b = Cast::make(op->type, 
+            Expr new_b = Cast::make(op->type,
                                    Broadcast::make(cast_b->value, lanes));
             debug(4) << "Replaced: " << op->b << "\n  with: " << new_b << "\n";
             value = codegen(op->a * new_b);
@@ -517,8 +516,10 @@ void CodeGen_ARM::visit(const Min *op) {
         // Use a 2-wide vector instead
         Value *undef = UndefValue::get(f32x2);
         Constant *zero = ConstantInt::get(i32_t, 0);
-        Value *a_wide = builder->CreateInsertElement(undef, codegen(op->a), zero);
-        Value *b_wide = builder->CreateInsertElement(undef, codegen(op->b), zero);
+        Value *a = codegen(op->a);
+        Value *a_wide = builder->CreateInsertElement(undef, a, zero);
+        Value *b = codegen(op->b);
+        Value *b_wide = builder->CreateInsertElement(undef, b, zero);
         Value *wide_result;
         if (target.bits == 32) {
             wide_result = call_intrin(f32x2, 2, "llvm.arm.neon.vmins.v2f32", {a_wide, b_wide});
@@ -590,8 +591,10 @@ void CodeGen_ARM::visit(const Max *op) {
         // Use a 2-wide vector instead
         Value *undef = UndefValue::get(f32x2);
         Constant *zero = ConstantInt::get(i32_t, 0);
-        Value *a_wide = builder->CreateInsertElement(undef, codegen(op->a), zero);
-        Value *b_wide = builder->CreateInsertElement(undef, codegen(op->b), zero);
+        Value *a = codegen(op->a);
+        Value *a_wide = builder->CreateInsertElement(undef, a, zero);
+        Value *b = codegen(op->b);
+        Value *b_wide = builder->CreateInsertElement(undef, b, zero);
         Value *wide_result;
         if (target.bits == 32) {
             wide_result = call_intrin(f32x2, 2, "llvm.arm.neon.vmaxs.v2f32", {a_wide, b_wide});
@@ -755,7 +758,11 @@ void CodeGen_ARM::visit(const Store *op) {
             arg_types.back() = llvm_type_of(intrin_type.element_of())->getPointerTo();
         }
         llvm::FunctionType *fn_type = FunctionType::get(llvm::Type::getVoidTy(*context), arg_types, false);
+#if LLVM_VERSION >= 90
+        llvm::FunctionCallee fn = module->getOrInsertFunction(instr.str(), fn_type);
+#else
         llvm::Function *fn = dyn_cast_or_null<llvm::Function>(module->getOrInsertFunction(instr.str(), fn_type));
+#endif
         internal_assert(fn);
 
         // How many vst instructions do we need to generate?

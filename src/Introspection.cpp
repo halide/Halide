@@ -39,6 +39,17 @@ void get_program_name(char *name, int32_t size) {
 }
 #endif
 
+namespace {
+
+template<typename T>
+inline T load_misaligned(const T *p) {
+    T result;
+    memcpy(&result, p, sizeof(T));
+    return result;
+}
+
+}
+
 class DebugSections {
 
     bool calibrated;
@@ -862,6 +873,27 @@ public:
 
     }
 
+    bool dump_stack_frame(void *ptr) {
+        FunctionInfo *fi = find_containing_function(ptr);
+        if (fi == nullptr) {
+            debug(0) << "Failed to find function containing " << ptr << " in debug info\n";
+            return false;
+        }
+
+        debug(0) << fi->name << ":\n";
+        for (const LocalVariable &v : fi->variables) {
+            TypeInfo *t = v.type;
+            debug(0) << " ";
+            if (t) {
+                debug(0) << t->name << " ";
+            } else {
+                debug(0) << "(unknown type) ";
+            }
+            debug(0) << v.name << " @ " << v.stack_offset << "\n";
+        }
+        return true;
+    }
+
 private:
 
     void load_and_parse_object_file(const std::string &binary) {
@@ -1437,7 +1469,7 @@ private:
                             } else if (payload && payload[0] == 0x03 && val == (sizeof(void *) + 1)) {
                                 // It's a global
                                 // payload + 1 is an address
-                                const void *addr = *((const void * const *)(payload + 1));
+                                const void *addr = load_misaligned((const void * const *)(payload + 1));
                                 gvar.addr = (uint64_t)(addr);
                             } else {
                                 // Some other format that we don't understand
@@ -1504,8 +1536,10 @@ private:
                                 // It's an array of addresses
                                 const void * const * ptr = (const void * const *)(debug_ranges.data() + val);
                                 const void * const * end = (const void * const *)(debug_ranges.data() + debug_ranges.size());
-                                while (ptr[0] && ptr < end-1) {
-                                    LiveRange r = {(uint64_t)ptr[0], (uint64_t)ptr[1]};
+                                // Note: might not be properly aligned; use memcpy to avoid
+                                // sanitizer warnings
+                                while (load_misaligned(ptr) && ptr < end-1) {
+                                    LiveRange r = {(uint64_t)load_misaligned(ptr), (uint64_t)load_misaligned(ptr+1)};
                                     r.pc_begin += compile_unit_base_pc;
                                     r.pc_end += compile_unit_base_pc;
                                     live_ranges.push_back(r);
@@ -2100,8 +2134,6 @@ private:
 
     }
 
-
-
     FunctionInfo *find_containing_function(void *addr) {
         uint64_t address = (uint64_t)addr;
         debug(5) << "Searching for function containing address " << addr << "\n";
@@ -2169,6 +2201,14 @@ private:
 
 namespace {
 DebugSections *debug_sections = nullptr;
+}
+
+bool dump_stack_frame() {
+    if (!debug_sections || !debug_sections->working) {
+        return false;
+    }
+    void *ptr = __builtin_return_address(0);
+    return debug_sections->dump_stack_frame(ptr);
 }
 
 std::string get_variable_name(const void *var, const std::string &expected_type) {
@@ -2253,8 +2293,6 @@ void test_compilation_unit(bool (*test)(bool (*)(const void *, const std::string
 
         debug(5) << "Test passed\n";
     }
-
-    //debug_sections->dump();
 
     #endif
 }

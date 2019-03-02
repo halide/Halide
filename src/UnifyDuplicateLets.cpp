@@ -9,15 +9,15 @@ namespace Internal {
 using std::map;
 using std::string;
 
-class UnifyDuplicateLets : public IRMutator2 {
-    using IRMutator2::visit;
+class UnifyDuplicateLets : public IRMutator {
+    using IRMutator::visit;
 
     map<Expr, string, IRDeepCompare> scope;
     map<string, string> rewrites;
     string producing;
 
 public:
-    using IRMutator2::mutate;
+    using IRMutator::mutate;
 
     Expr mutate(const Expr &e) override {
         if (e.defined()) {
@@ -25,7 +25,7 @@ public:
             if (iter != scope.end()) {
                 return Variable::make(e.type(), iter->second);
             } else {
-                return IRMutator2::mutate(e);
+                return IRMutator::mutate(e);
             }
         } else {
             return Expr();
@@ -46,31 +46,31 @@ protected:
     bool is_impure;
     Expr visit(const Call *op) override {
         is_impure |= !op->is_pure();
-        return IRMutator2::visit(op);
+        return IRMutator::visit(op);
     }
 
     Expr visit(const Load *op) override {
-        is_impure |= ((op->name == producing) ||
-                      starts_with(op->name + ".", producing));
-        return IRMutator2::visit(op);
+        is_impure = true;
+        return IRMutator::visit(op);
     }
 
     Stmt visit(const ProducerConsumer *op) override {
         if (op->is_producer) {
             string old_producing = producing;
             producing = op->name;
-            Stmt stmt = IRMutator2::visit(op);
+            Stmt stmt = IRMutator::visit(op);
             producing = old_producing;
             return stmt;
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
-    Stmt visit(const LetStmt *op) override {
+    template<typename LetStmtOrLet>
+    auto visit_let(const LetStmtOrLet *op) -> decltype(op->body) {
         is_impure = false;
         Expr value = mutate(op->value);
-        Stmt body = op->body;
+        auto body = op->body;
 
         bool should_pop = false;
         bool should_erase = false;
@@ -99,8 +99,16 @@ protected:
         if (value.same_as(op->value) && body.same_as(op->body)) {
             return op;
         } else {
-            return LetStmt::make(op->name, value, body);
+            return LetStmtOrLet::make(op->name, value, body);
         }
+    }
+
+    Expr visit(const Let *op) override {
+        return visit_let(op);
+    }
+
+    Stmt visit(const LetStmt *op) override {
+        return visit_let(op);
     }
 };
 

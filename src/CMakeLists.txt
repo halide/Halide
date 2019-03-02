@@ -12,6 +12,7 @@ set(RUNTIME_CPP
   aarch64_cpu_features
   alignment_128
   alignment_32
+  alignment_64
   android_clock
   android_host_cpu_count
   android_io
@@ -22,13 +23,17 @@ set(RUNTIME_CPP
   cache
   can_use_target
   cuda
+  d3d12compute
   destructors
   device_interface
   errors
   fake_thread_pool
   float16_t
   gpu_device_selection
+  hexagon_cache_allocator
   hexagon_cpu_features
+  hexagon_dma
+  hexagon_dma_pool
   hexagon_host
   ios_io
   linux_clock
@@ -55,6 +60,7 @@ set(RUNTIME_CPP
   osx_host_cpu_count
   osx_opengl_context
   osx_yield
+  posix_abort
   posix_allocator
   posix_clock
   posix_error_handler
@@ -68,8 +74,10 @@ set(RUNTIME_CPP
   prefetch
   profiler
   profiler_inlined
+  pseudostack
   qurt_allocator
   qurt_hvx
+  qurt_hvx_vtcm
   qurt_init_fini
   qurt_threads
   qurt_threads_tsan
@@ -78,6 +86,7 @@ set(RUNTIME_CPP
   ssp
   to_string
   tracing
+  windows_abort
   windows_clock
   windows_cuda
   windows_get_symbol
@@ -107,6 +116,7 @@ set (RUNTIME_LL
   x86_avx
   x86_avx2
   x86_sse41
+  d3d12_abi_patch_64
 )
 
 set (RUNTIME_BC
@@ -154,9 +164,11 @@ function(add_runtime_modules TARGET_RUNTIME_FILES TARGET_RUNTIME_DIR)
       set(INITMOD_D "${INITMOD_PREFIX}${i}_${j}_debug.cpp")
       set(INITMOD "${INITMOD_PREFIX}${i}_${j}.cpp")
 
+      # -std=gnu++98 is deliberate; we do NOT want c++11 here,
+      # as we don't want static locals to get thread synchronization stuff.
       add_custom_command(OUTPUT "${LL_D}"
                          DEPENDS "${SOURCE}"
-                         COMMAND ${CLANG} ${CXX_WARNING_FLAGS} ${RUNTIME_DEBUG_FLAG} -DDEBUG_RUNTIME -O3 -fno-ms-compatibility -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -m${j} -target "${TARGET}" "-I${TARGET_RUNTIME_DIR}" -DCOMPILING_HALIDE_RUNTIME "-DLLVM_VERSION=${LLVM_VERSION}" -DBITS_${j} -emit-llvm -S "${SOURCE}" -o "${LL_D}"
+                         COMMAND ${CLANG} ${CXX_WARNING_FLAGS} ${RUNTIME_DEBUG_FLAG} -DDEBUG_RUNTIME -O3 -fno-ms-compatibility -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -std=gnu++98 -m${j} -target "${TARGET}" "-I${TARGET_RUNTIME_DIR}" -DCOMPILING_HALIDE_RUNTIME "-DLLVM_VERSION=${LLVM_VERSION}" -DBITS_${j} -emit-llvm -S "${SOURCE}" -o "${LL_D}"
                          COMMENT "${SOURCE} -> ${LL_D}"
                          # Make sure that the output of this command also depends
                          # on the header files that ${SOURCE} uses
@@ -165,7 +177,7 @@ function(add_runtime_modules TARGET_RUNTIME_FILES TARGET_RUNTIME_DIR)
                         )
       add_custom_command(OUTPUT "${LL}"
                          DEPENDS "${SOURCE}"
-                         COMMAND ${CLANG} ${CXX_WARNING_FLAGS} -O3 -fno-ms-compatibility -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -m${j} -target "${TARGET}" "-I${TARGET_RUNTIME_DIR}" -DCOMPILING_HALIDE_RUNTIME "-DLLVM_VERSION=${LLVM_VERSION}" -DBITS_${j} -emit-llvm -S "${SOURCE}" -o "${LL}"
+                         COMMAND ${CLANG} ${CXX_WARNING_FLAGS} -O3 -fno-ms-compatibility -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -std=gnu++98 -m${j} -target "${TARGET}" "-I${TARGET_RUNTIME_DIR}" -DCOMPILING_HALIDE_RUNTIME "-DLLVM_VERSION=${LLVM_VERSION}" -DBITS_${j} -emit-llvm -S "${SOURCE}" -o "${LL}"
                          COMMENT "${SOURCE} -> ${LL}")
 
       add_custom_command(OUTPUT "${BC_D}"
@@ -228,11 +240,13 @@ list(APPEND INITIAL_MODULES "${INITMOD_PREFIX}inlined_c.cpp")
 set(RUNTIME_HEADER_FILES
   HalideRuntime.h
   HalideRuntimeCuda.h
+  HalideRuntimeHexagonDma.h
   HalideRuntimeHexagonHost.h
   HalideRuntimeOpenCL.h
   HalideRuntimeMetal.h
   HalideRuntimeOpenGL.h
   HalideRuntimeOpenGLCompute.h
+  HalideRuntimeD3D12Compute.h
   HalideRuntimeQurt.h
   HalideBuffer.h
 )
@@ -248,6 +262,7 @@ endforeach()
 
 # The externally-visible header files that go into making Halide.h.
 # Don't include anything here that includes llvm headers.
+# Keep this list sorted in alphabetical order.
 set(HEADER_FILES
   AddImageChecks.h
   AddParameterChecks.h
@@ -257,6 +272,7 @@ set(HEADER_FILES
   Argument.h
   AssociativeOpsTable.h
   Associativity.h
+  AsyncProducers.h
   AutoSchedule.h
   AutoScheduleUtils.h
   BoundaryConditions.h
@@ -264,16 +280,18 @@ set(HEADER_FILES
   BoundsInference.h
   BoundSmallAllocations.h
   Buffer.h
+  CanonicalizeGPUVars.h
   Closure.h
   CodeGen_ARM.h
   CodeGen_C.h
+  CodeGen_D3D12Compute_Dev.h
   CodeGen_GPU_Dev.h
   CodeGen_GPU_Host.h
   CodeGen_Internal.h
   CodeGen_LLVM.h
+  CodeGen_Metal_Dev.h
   CodeGen_MIPS.h
   CodeGen_OpenCL_Dev.h
-  CodeGen_Metal_Dev.h
   CodeGen_OpenGL_Dev.h
   CodeGen_OpenGLCompute_Dev.h
   CodeGen_Posix.h
@@ -283,7 +301,6 @@ set(HEADER_FILES
   ConciseCasts.h
   CPlusPlusMangle.h
   CSE.h
-  CanonicalizeGPUVars.h
   Debug.h
   DebugArguments.h
   DebugToFile.h
@@ -310,8 +327,6 @@ set(HEADER_FILES
   Generator.h
   HexagonOffload.h
   HexagonOptimize.h
-  runtime/HalideRuntime.h
-  runtime/HalideBuffer.h
   ImageParam.h
   InferArguments.h
   InjectHostDevBufferCopies.h
@@ -322,8 +337,8 @@ set(HEADER_FILES
   Interval.h
   Introspection.h
   IntrusivePtr.h
-  IREquality.h
   IR.h
+  IREquality.h
   IRMatch.h
   IRMutator.h
   IROperator.h
@@ -345,26 +360,30 @@ set(HEADER_FILES
   ModulusRemainder.h
   Monotonic.h
   ObjectInstanceRegistry.h
-  Outputs.h
   OutputImageParam.h
+  Outputs.h
   ParallelRVar.h
   Param.h
-  ParamMap.h
   Parameter.h
+  ParamMap.h
   PartitionLoops.h
   Pipeline.h
   Prefetch.h
   Profiling.h
+  PurifyIndexMath.h
   PythonExtensionGen.h
   Qualify.h
   Random.h
-  RealizationOrder.h
   RDom.h
+  RealizationOrder.h
   Reduction.h
   RegionCosts.h
   RemoveDeadAllocations.h
+  RemoveExternLoops.h
   RemoveTrivialForLoops.h
   RemoveUndef.h
+  runtime/HalideBuffer.h
+  runtime/HalideRuntime.h
   Schedule.h
   ScheduleFunctions.h
   Scope.h
@@ -390,6 +409,7 @@ set(HEADER_FILES
   UniquifyVariableNames.h
   UnpackBuffers.h
   UnrollLoops.h
+  UnsafePromises.h
   Util.h
   Var.h
   VaryingAttributes.h
@@ -413,14 +433,17 @@ foreach (i ${RUNTIME_HEADER_FILES})
   configure_file(runtime/${i} "${CMAKE_BINARY_DIR}/include" COPYONLY)
 endforeach()
 
+# Keep this list sorted in alphabetical order.
 add_library(Halide ${HALIDE_LIBRARY_TYPE}
   AddImageChecks.cpp
   AddParameterChecks.cpp
   AlignLoads.cpp
   AllocationBoundsInference.cpp
   ApplySplit.cpp
+  Argument.cpp
   AssociativeOpsTable.cpp
   Associativity.cpp
+  AsyncProducers.cpp
   AutoSchedule.cpp
   AutoScheduleUtils.cpp
   BoundaryConditions.cpp
@@ -428,26 +451,27 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   BoundsInference.cpp
   BoundSmallAllocations.cpp
   Buffer.cpp
+  CanonicalizeGPUVars.cpp
   Closure.cpp
   CodeGen_ARM.cpp
   CodeGen_C.cpp
+  CodeGen_D3D12Compute_Dev.cpp
   CodeGen_GPU_Dev.cpp
   CodeGen_GPU_Host.cpp
   CodeGen_Hexagon.cpp
   CodeGen_Internal.cpp
   CodeGen_LLVM.cpp
+  CodeGen_Metal_Dev.cpp
   CodeGen_MIPS.cpp
   CodeGen_OpenCL_Dev.cpp
-  CodeGen_Metal_Dev.cpp
   CodeGen_OpenGL_Dev.cpp
   CodeGen_OpenGLCompute_Dev.cpp
+  CodeGen_Posix.cpp
   CodeGen_PowerPC.cpp
   CodeGen_PTX_Dev.cpp
-  CodeGen_Posix.cpp
   CodeGen_X86.cpp
   CPlusPlusMangle.cpp
   CSE.cpp
-  CanonicalizeGPUVars.cpp
   Debug.cpp
   DebugArguments.cpp
   DebugToFile.cpp
@@ -470,6 +494,15 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Generator.cpp
   HexagonOffload.cpp
   HexagonOptimize.cpp
+  ImageParam.cpp
+  InferArguments.cpp
+  InjectHostDevBufferCopies.cpp
+  InjectOpenGLIntrinsics.cpp
+  Inline.cpp
+  InlineReductions.cpp
+  IntegerDivisionTable.cpp
+  Interval.cpp
+  Introspection.cpp
   IR.cpp
   IREquality.cpp
   IRMatch.cpp
@@ -477,20 +510,11 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   IROperator.cpp
   IRPrinter.cpp
   IRVisitor.cpp
-  ImageParam.cpp
-  InferArguments.cpp
-  Interval.cpp
-  InjectHostDevBufferCopies.cpp
-  InjectOpenGLIntrinsics.cpp
-  Inline.cpp
-  InlineReductions.cpp
-  IntegerDivisionTable.cpp
-  Introspection.cpp
   JITModule.cpp
-  LLVM_Output.cpp
-  LLVM_Runtime_Linker.cpp
   Lerp.cpp
   LICM.cpp
+  LLVM_Output.cpp
+  LLVM_Runtime_Linker.cpp
   LoopCarry.cpp
   Lower.cpp
   LowerWarpShuffles.cpp
@@ -502,27 +526,48 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   ObjectInstanceRegistry.cpp
   OutputImageParam.cpp
   ParallelRVar.cpp
-  ParamMap.cpp
   Parameter.cpp
+  ParamMap.cpp
   PartitionLoops.cpp
   Pipeline.cpp
-  PrintLoopNest.cpp
   Prefetch.cpp
+  PrintLoopNest.cpp
   Profiling.cpp
+  PurifyIndexMath.cpp
   PythonExtensionGen.cpp
   Qualify.cpp
-  RDom.cpp
   Random.cpp
+  RDom.cpp
   RealizationOrder.cpp
   Reduction.cpp
   RegionCosts.cpp
   RemoveDeadAllocations.cpp
+  RemoveExternLoops.cpp
   RemoveTrivialForLoops.cpp
   RemoveUndef.cpp
   Schedule.cpp
   ScheduleFunctions.cpp
   SelectGPUAPI.cpp
   Simplify.cpp
+  Simplify_Add.cpp
+  Simplify_And.cpp
+  Simplify_Call.cpp
+  Simplify_Cast.cpp
+  Simplify_Div.cpp
+  Simplify_EQ.cpp
+  Simplify_Exprs.cpp
+  Simplify_Let.cpp
+  Simplify_LT.cpp
+  Simplify_Max.cpp
+  Simplify_Min.cpp
+  Simplify_Mod.cpp
+  Simplify_Mul.cpp
+  Simplify_Not.cpp
+  Simplify_Or.cpp
+  Simplify_Select.cpp
+  Simplify_Shuffle.cpp
+  Simplify_Stmts.cpp
+  Simplify_Sub.cpp
   SimplifySpecializations.cpp
   SkipStages.cpp
   SlidingWindow.cpp
@@ -542,6 +587,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   UniquifyVariableNames.cpp
   UnpackBuffers.cpp
   UnrollLoops.cpp
+  UnsafePromises.cpp
   Util.cpp
   Var.cpp
   VaryingAttributes.cpp
@@ -551,6 +597,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   ${HEADER_FILES}
   ${INITIAL_MODULES}
 )
+
 # Define Halide_SHARED or Halide_STATIC depending on library type
 target_compile_definitions(Halide PRIVATE "-DHalide_${HALIDE_LIBRARY_TYPE}")
 # Ensure that these tools are build first
@@ -627,6 +674,10 @@ if (TARGET_METAL)
   target_compile_definitions(Halide PRIVATE "-DWITH_METAL=1")
 endif()
 
+if (TARGET_D3D12COMPUTE)
+  target_compile_definitions(Halide PRIVATE "-DWITH_D3D12=1")
+endif()
+
 target_compile_definitions(Halide PRIVATE "-DLLVM_VERSION=${LLVM_VERSION}")
 target_compile_definitions(Halide PRIVATE "-DCOMPILING_HALIDE")
 target_compile_definitions(Halide PRIVATE ${LLVM_DEFINITIONS})
@@ -689,6 +740,3 @@ install(TARGETS Halide
         RUNTIME DESTINATION bin
         LIBRARY DESTINATION bin
         ARCHIVE DESTINATION lib)
-if (APPLE AND "${HALIDE_LIBRARY_TYPE}" STREQUAL "SHARED")
-  install(CODE "execute_process(COMMAND install_name_tool $<INSTALL_PREFIX>/bin/$<TARGET_FILE_NAME:Halide> $<INSTALL_PREFIX>/bin/$<TARGET_FILE_NAME:Halide>)")
-endif()

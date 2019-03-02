@@ -20,10 +20,10 @@ struct device_handle_wrapper {
 
 // TODO: Coarser grained locking, also consider all things that need
 // to be atomic with respect to each other. At present only
-// halide_copy_to_host and halide_copy_to_device are atomic with
-// respect to each other. halide_device_malloc and halide_device_free
-// are also candidates, but to do so they likely need to be able to do
-// a copy internaly as well.
+// halide_copy_to_host, halide_copy_to_device, and halide_buffer_copy
+// are atomic with respect to each other. halide_device_malloc and
+// halide_device_free are also candidates, but to do so they likely
+// need to be able to do a copy internaly as well.
 WEAK halide_mutex device_copy_mutex;
 
 WEAK int copy_to_host_already_locked(void *user_context, struct halide_buffer_t *buf) {
@@ -440,49 +440,144 @@ WEAK void halide_device_host_nop_free(void *user_context, void *obj) {
 }
 
 WEAK int halide_default_buffer_copy(void *user_context, struct halide_buffer_t *src,
-                                    const struct halide_device_interface_t *dst_device_interface,
-                                    struct halide_buffer_t *dst) {
-
-    const bool from_device = src->device && (src->device_dirty() || !src->host);
-    const bool to_device = dst_device_interface;
-    const bool from_host = !from_device;
-    const bool to_host = !to_device;
+                                           const struct halide_device_interface_t *dst_device_interface,
+                                           struct halide_buffer_t *dst) {
 
     debug(user_context)
         << "halide_default_buffer_copy\n"
         << " source: " << *src << "\n"
+        << " dst_device_interface: " << (void *)dst_device_interface << "\n"
         << " dst: " << *dst << "\n";
 
-    // We consider four cases, and decompose each into simpler cases
-    // using intermediate host memory in the src or dst buffers.
+    // The right thing is that all devices have to support
+    // device-to-device and device-to/from-arbitrarty-pointer.  This
+    // means there will always have to be a device specifc version of
+    // this function and the default can go away or fail. At present
+    // there are some devices, e.g. OpenGL and OpenGLCompute, for which
+    // this is not yet implemented.
+
+    return halide_error_code_device_buffer_copy_failed;
+}
+
+WEAK int halide_buffer_copy_already_locked(void *user_context, struct halide_buffer_t *src,
+                                    const struct halide_device_interface_t *dst_device_interface,
+                                    struct halide_buffer_t *dst) {
+    debug(user_context) << "halide_buffer_copy_already_locked called.\n";
     int err = 0;
-    if (from_device && to_device) {
-        // dev -> dev via dst host memory
-        debug(user_context) << " dev -> src via src host memory\n";
-        err = src->device_interface->impl->buffer_copy(user_context, src, NULL, dst);
-        if (!err) {
-            err = copy_to_device_already_locked(user_context, dst, dst_device_interface);
+
+    if (dst_device_interface && dst->device_interface &&
+        dst_device_interface != dst->device_interface) {
+        halide_error(user_context, "halide_buffer_copy does not support switching device interfaces");
+        return halide_error_code_incompatible_device_interface;
+    }
+
+    if (dst_device_interface && !dst->device) {
+        debug(user_context) << "halide_buffer_copy_already_locked: calling halide_device_malloc.\n";
+        err = halide_device_malloc(user_context, dst, dst_device_interface);
+        if (err) {
+            return err;
         }
-    } else if (from_device && to_host) {
-        // dev -> host via src host memory
-        debug(user_context) << " dev -> host via src host memory\n";
-        err = copy_to_host_already_locked(user_context, src);
-        if (!err) {
-            err = halide_default_buffer_copy(user_context, src, NULL, dst);
+    }
+
+    // First goal is correctness, the more interesting parts of which are:
+    //      1) Respect dirty bits so data is valid.
+    //      2) Don't infinitely recurse.
+    // Second goal is efficiency:
+    //      1) Try to do device-to-device if possible
+    //      2) Minimum number of copies and minimum amount of copying otherwise.
+    //      2a) e.g. for a device to different device buffer copy call where the copy must
+    //          go through host memory, the src buffer may be left in device dirty state
+    //          with the data copied through the destination host buffer to reduce the size
+    //          of the copy.
+    // The device specifc runtime routine may return an error for the
+    // device to device case with separate devices. This code will attempt
+    // to decompose the call via bouncing through host memory.
+    //
+    // At present some cases, such as different devices where there is
+    // no host buffer, will return an error. Some of these could be
+    // handled by allocating temporary host memory.
+    //
+    // It is assumed that if two device runtimes have copy compatible buffers
+    // both will handle a copy between their types of buffers.
+
+    // Give more descriptive names to conditions.
+    const bool from_device_valid = (src->device != 0) &&
+                                   (src->host == NULL || !src->host_dirty());
+    const bool to_device = dst_device_interface != NULL;
+    const bool to_host = dst_device_interface == NULL;
+    const bool from_host_exists = src->host != NULL;
+    const bool from_host_valid = from_host_exists &&
+                                 (!src->device_dirty() || (src->device_interface == NULL));
+    const bool to_host_exists = dst->host != NULL;
+
+    if (to_host && !to_host_exists) {
+        return halide_error_code_host_is_null;
+    }
+
+    // If a device to device copy is requested, try to do it directly.
+    err = halide_error_code_incompatible_device_interface;
+    if (from_device_valid && to_device) {
+        debug(user_context) << "halide_buffer_copy_already_locked: device to device case.\n";
+        err = dst_device_interface->impl->buffer_copy(user_context, src, dst_device_interface, dst);
+    }
+
+    if (err == halide_error_code_incompatible_device_interface) {
+        // Return an error for a case that cannot make progress without a temporary allocation.
+        // TODO: go ahead and do the temp allocation.
+        if (!from_host_exists && !to_host_exists) {
+            debug(user_context) << "halide_buffer_copy_already_locked: failing due to need for temp buffer.\n";
+            return halide_error_code_incompatible_device_interface;
         }
-    } else if (from_host && to_device) {
-        // host -> dev via dst host memory
-        debug(user_context) << " host -> dev via dst host memory\n";
-        err = halide_default_buffer_copy(user_context, src, NULL, dst);
-        if (!err) {
-            err = copy_to_device_already_locked(user_context, dst, dst_device_interface);
+
+        if (to_host && from_host_valid) {
+            device_copy c = make_buffer_copy(src, true, dst, true);
+            copy_memory(c, user_context);
+            err = 0;
+        } else if (to_host) {
+            debug(user_context) << "halide_buffer_copy_already_locked: to host case.\n";
+            err = src->device_interface->impl->buffer_copy(user_context, src, NULL, dst);
+            // Return on success or an error indicating something other
+            // than not handling this case went wrong.
+            if (err == halide_error_code_incompatible_device_interface) {
+                err = copy_to_host_already_locked(user_context, src);
+                if (!err) {
+                    err = halide_buffer_copy_already_locked(user_context, src, NULL, dst);
+                }
+            }
+        } else {
+            if (from_device_valid && to_host_exists) {
+                debug(user_context) << "halide_buffer_copy_already_locked: from_device_valid && to_host_exists case.\n";
+                // dev -> dev via dst host memory
+                debug(user_context) << " device -> device via dst host memory\n";
+                err = src->device_interface->impl->buffer_copy(user_context, src, NULL, dst);
+                if (err == 0) {
+                    dst->set_host_dirty(true);
+                    err = copy_to_device_already_locked(user_context, dst, dst_device_interface);
+                }
+            } else {
+                debug(user_context) << "halide_buffer_copy_already_locked: dev -> dev via src host memory.\n";
+                // dev -> dev via src host memory.
+                err = copy_to_host_already_locked(user_context, src);
+                if (err == 0) {
+                    err = dst_device_interface->impl->buffer_copy(user_context, src, dst_device_interface, dst);
+                }
+            }
         }
-    } else {
-        // host -> host
-        debug(user_context) << " host -> host\n";
-        device_copy copy = make_buffer_copy(src, true, dst, true);
-        copy_memory(copy, user_context);
-        dst->set_host_dirty();
+    }
+
+    if (err != 0) {
+        debug(user_context) << "halide_buffer_copy_already_locked: got error " << err << ".\n";
+    }
+    if (err == 0 && dst != src) {
+        if (dst_device_interface) {
+            debug(user_context) << "halide_buffer_copy_already_locked: setting device dirty.\n";
+            dst->set_host_dirty(false);
+            dst->set_device_dirty(true);
+        } else {
+            debug(user_context) << "halide_buffer_copy_already_locked: setting host dirty.\n";
+            dst->set_host_dirty(true);
+            dst->set_device_dirty(false);
+        }
     }
 
     return err;
@@ -491,72 +586,27 @@ WEAK int halide_default_buffer_copy(void *user_context, struct halide_buffer_t *
 WEAK int halide_buffer_copy(void *user_context, struct halide_buffer_t *src,
                             const struct halide_device_interface_t *dst_device_interface,
                             struct halide_buffer_t *dst) {
-    ScopedMutexLock lock(&device_copy_mutex);
-
     debug(user_context) << "halide_buffer_copy:\n"
                         << " src " << *src << "\n"
                         << " interface " << dst_device_interface << "\n"
                         << " dst " << *dst << "\n";
 
-    const struct halide_device_interface_t *src_device_interface = src->device_interface;
-
-    int err = 0;
-
-    if (dst->device_interface &&
-        dst_device_interface != dst->device_interface) {
-        halide_error(user_context, "halide_buffer_copy does not support switching device interfaces");
-        return halide_error_code_incompatible_device_interface;
-    }
-
-    if (dst_device_interface && !dst->device) {
-        err = halide_device_malloc(user_context, dst, dst_device_interface);
-        if (err) {
-            return err;
-        }
-    }
+    ScopedMutexLock lock(&device_copy_mutex);
 
     if (dst_device_interface) {
         dst_device_interface->impl->use_module();
     }
-    if (src_device_interface) {
-        src_device_interface->impl->use_module();
+    if (src->device_interface) {
+        src->device_interface->impl->use_module();
     }
 
-    if (dst_device_interface) {
-        // Make the dst interface handle arbitrary src device
-        // interfaces (e.g. CUDA might know how to copy out of an
-        // OpenGL texture). If the dst device interface doesn't
-        // recognize the src device interface, it should ask the src
-        // device interface to copy to host memory in the *dst* buffer
-        // first (so that only the subset required is copied), and
-        // then do a copy_to_device from there.
-        err = dst_device_interface->impl->buffer_copy(user_context, src, dst_device_interface, dst);
-    } else if (src_device_interface) {
-        // The src device interface can handle copies to host
-        err = src_device_interface->impl->buffer_copy(user_context, src, dst_device_interface, dst);
-    } else {
-        // This is a host->host copy. The default implementation can
-        // handle this.
-        err = halide_default_buffer_copy(user_context, src, dst_device_interface, dst);
-    }
-
-    if (dst != src) {
-        if (dst_device_interface) {
-            dst->set_device_dirty(true);
-        } else {
-            dst->set_host_dirty(true);
-        }
-    }
-
-    if (err) {
-        err = halide_error_code_device_buffer_copy_failed;
-    }
+    int err = halide_buffer_copy_already_locked(user_context, src, dst_device_interface, dst);
 
     if (dst_device_interface) {
         dst_device_interface->impl->release_module();
     }
-    if (src_device_interface) {
-        src_device_interface->impl->release_module();
+    if (src->device_interface) {
+        src->device_interface->impl->release_module();
     }
 
     return err;

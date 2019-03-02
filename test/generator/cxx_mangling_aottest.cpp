@@ -34,6 +34,7 @@ int main(int argc, char **argv) {
 
     const halide_filter_metadata_t *m = HalideTest::AnotherNamespace::cxx_mangling_metadata();
     assert(m != NULL);
+    assert(m->version == halide_filter_metadata_t::VERSION);
     printf("Name is: %s\n", m->name);
     assert(strcmp(m->name, "cxx_mangling") == 0);
 

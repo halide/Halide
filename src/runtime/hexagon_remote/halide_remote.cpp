@@ -289,7 +289,7 @@ int halide_hexagon_remote_set_performance_mode(int mode) {
     memset(&request, 0, sizeof(HAP_power_request_t));
     request.type = HAP_power_set_DCVS_v2;
     request.dcvs_v2.dcvs_enable = TRUE;
-    request.dcvs_v2.dcvs_option = HAP_power_dcvs_v2_payload::HAP_DCVS_V2_POWER_SAVER_MODE;
+    request.dcvs_v2.dcvs_option = HAP_DCVS_V2_POWER_SAVER_MODE;
     request.dcvs_v2.set_dcvs_params = TRUE;
     request.dcvs_v2.dcvs_params.min_corner = HAP_DCVS_VCORNER_DISABLE;
     request.dcvs_v2.dcvs_params.max_corner = HAP_DCVS_VCORNER_DISABLE;
@@ -336,8 +336,25 @@ int halide_hexagon_remote_run_v2(handle_t module_ptr, handle_t function,
         uint64_t dev;
         uint8_t* host;
     };
-    void **args = (void **)__builtin_alloca((input_buffersLen + scalarsLen + output_buffersLen) * sizeof(void *));
-    buffer_t *buffers = (buffer_t *)__builtin_alloca((input_buffersLen + output_buffersLen) * sizeof(buffer_t));
+
+
+    void **args = NULL;
+    buffer_t *buffers = NULL;
+
+    size_t args_size = (input_buffersLen + scalarsLen + output_buffersLen) * sizeof(void *);
+    size_t buffers_size = (input_buffersLen + output_buffersLen) * sizeof(buffer_t);
+
+    // Threshold to allocate on heap vs stack.
+    const size_t heap_allocation_threshold = 1024;
+    bool allocated_on_heap = (args_size + buffers_size) > heap_allocation_threshold;
+
+    if (allocated_on_heap) {
+        args = (void **)malloc(args_size);
+        buffers = (buffer_t *)malloc(buffers_size);
+    } else {
+        args = (void **)__builtin_alloca(args_size);
+        buffers = (buffer_t *)__builtin_alloca(buffers_size);
+    }
 
     void **next_arg = &args[0];
     buffer_t *next_buffer_t = &buffers[0];
@@ -359,6 +376,10 @@ int halide_hexagon_remote_run_v2(handle_t module_ptr, handle_t function,
     // Prior to running the pipeline, power HVX on (if it was not already on).
     int result = halide_hexagon_remote_power_hvx_on();
     if (result != 0) {
+        if (allocated_on_heap) {
+            free(buffers);
+            free(args);
+        }
         return result;
     }
 
@@ -367,6 +388,11 @@ int halide_hexagon_remote_run_v2(handle_t module_ptr, handle_t function,
 
     // Power HVX off.
     halide_hexagon_remote_power_hvx_off();
+
+    if (allocated_on_heap) {
+        free(buffers);
+        free(args);
+    }
 
     return result;
 }
@@ -385,7 +411,10 @@ int halide_hexagon_remote_poll_profiler_state(int *func, int *threads) {
     *threads = halide_profiler_get_state()->active_threads;
     return 0;
 }
-
+int halide_hexagon_remote_profiler_set_current_func(int current_func) {
+    halide_profiler_get_state()->current_func = current_func;
+    return 0;
+}
 halide_profiler_state *halide_profiler_get_state() {
     static halide_profiler_state hvx_profiler_state;
     return &hvx_profiler_state;
