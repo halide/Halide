@@ -905,19 +905,6 @@ extern void halide_memoization_cache_release(void *user_context, void *host);
  */
 extern void halide_memoization_cache_cleanup();
 
-/** Create a unique file with a name of the form prefixXXXXXsuffix in an arbitrary
- * (but writable) directory; this is typically $TMP or /tmp, but the specific
- * location is not guaranteed. (Note that the exact form of the file name
- * may vary; in particular, the suffix may be ignored on non-Posix systems.)
- * The file is created (but not opened), thus this can be called from
- * different threads (or processes, e.g. when building with parallel make)
- * without risking collision. Note that the caller is always responsible
- * for deleting this file. Returns nonzero value if an error occurs.
- */
-extern int halide_create_temp_file(void *user_context,
-  const char *prefix, const char *suffix,
-  char *path_buf, size_t path_buf_size);
-
 /** Annotate that a given range of memory has been initialized;
  * only used when Target::MSAN is enabled.
  *
