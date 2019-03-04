@@ -83,7 +83,7 @@ uint32_t absd(uint32_t a, uint32_t b) { return a < b ? b - a : a - b; }
         } if (target.has_feature(Target::OpenGLCompute)) {              \
             test_##name.gpu_tile(x, xi, 8, TailStrategy::Auto,          \
                                  DeviceAPI::OpenGLCompute);             \
-        } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) { \
+        } else if (target.features_any_of({Target::HVX_64, Target::HVX})) { \
             test_##name.hexagon();                                      \
         }                                                               \
         Buffer<type_ret> result = test_##name.realize(in.extent(0), target); \
@@ -111,7 +111,7 @@ uint32_t absd(uint32_t a, uint32_t b) { return a < b ? b - a : a - b; }
         } if (target.has_feature(Target::OpenGLCompute)) {              \
             test_##name.gpu_tile(x, xi, 8, TailStrategy::Auto,          \
                                  DeviceAPI::OpenGLCompute);             \
-        } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {     \
+        } else if (target.features_any_of({Target::HVX_64, Target::HVX})) {     \
             test_##name.hexagon();                                                  \
         }                                                                           \
         Buffer<type_ret> result = test_##name.realize(in.height(), target);         \
