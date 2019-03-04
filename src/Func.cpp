@@ -2580,7 +2580,7 @@ vector<Expr> FuncRef::args_with_implicit_vars(const vector<Expr> &e) const {
     CountVars rhs_count(e);
     if (!func.has_pure_definition() && implicit_placeholder_pos != -1) {
         user_assert(rhs_count.var_count > 0)
-            << "Pure definition with implicit variables not allowed with scaler rhs.\n";
+            << "Pure definition with implicit variables not allowed with scalar rhs.\n";
     }
 
     if (count.implicit_var_count > 0) {

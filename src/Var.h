@@ -54,7 +54,6 @@ public:
      * variable names.
      *
      \code
-     g(_) = f*3;
      g(_) = f(_)*3;
      g(x, _) = f(x, _)*3;
      g(x, y) = f(x, y)*3;
@@ -71,7 +70,7 @@ public:
      *
      * The following, however, defines g as four dimensional:
      \code
-     g(x, y, _) = f*3;
+     g(x, y, _) = f(_)*3;
      \endcode
      *
      * It is equivalent to:
