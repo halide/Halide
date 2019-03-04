@@ -3,7 +3,9 @@
 #include <set>
 #include <sstream>
 
+#ifndef LOWER_ON_HUGE_STACK
 #define LOWER_ON_HUGE_STACK __linux__
+#endif
 
 #if LOWER_ON_HUGE_STACK
 #include <ucontext.h>
