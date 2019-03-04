@@ -3,7 +3,7 @@
 #include <set>
 #include <sstream>
 
-#define LOWER_ON_HUGE_STACK (__linux__ || __APPLE__)
+#define LOWER_ON_HUGE_STACK __linux__
 
 #if LOWER_ON_HUGE_STACK
 #include <ucontext.h>
