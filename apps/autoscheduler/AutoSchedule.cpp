@@ -2669,8 +2669,10 @@ struct State {
                     Option o;
                     o.entire = (i == tilings.size() - 1);
 
-                    for (size_t j = 0; j < pure_size->size(); j++) {
-                        t[j] = ((*pure_size)[j] + t[j] - 1) / t[j];
+                    if (!target.has_gpu_feature()) {
+                        for (size_t j = 0; j < pure_size->size(); j++) {
+                            t[j] = ((*pure_size)[j] + t[j] - 1) / t[j];
+                        }
                     }
                     t.swap(o.tiling);
 
