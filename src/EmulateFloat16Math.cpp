@@ -1,4 +1,4 @@
-#include "LowerBFloatMath.h"
+#include "EmulateFloat16Math.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "CSE.h"
@@ -49,9 +49,7 @@ class WidenMath : public IRMutator {
 
             // Mutate the args
             for (size_t i = 0; i < op->args.size(); i++) {
-                const Expr &old_arg = op->args[i];
-                Expr new_arg = widen(mutate(old_arg));
-                new_args[i] = std::move(new_arg);
+                new_args[i] = widen(mutate(op->args[i]));
             }
 
             Type t = op->type;
@@ -78,6 +76,9 @@ class LowerBFloatConversions : public IRMutator {
     using IRMutator::visit;
 
     Expr bfloat_to_float(Expr e) {
+        if (e.type().is_bfloat()) {
+            e = reinterpret(e.type().with_code(Type::UInt), e);
+        }
         e = cast(UInt(32, e.type().lanes()), e);
         e = e << 16;
         e = reinterpret(Float(32, e.type().lanes()), e);
@@ -114,13 +115,20 @@ class LowerBFloatConversions : public IRMutator {
         }
     }
 
+    Expr visit(const FloatImm *op) override {
+        if (op->type.is_bfloat()) {
+            return Expr(bfloat16_t(op->value).to_bits());
+        } else {
+            return op;
+        }
+    }
 };
 
 class LowerFloat16Conversions : public IRMutator {
     using IRMutator::visit;
 
     // Taken from the branchless implementation by Phernost here,
-    // which they placed in the public domain:
+    // which they kindly placed in the public domain:
     // https://stackoverflow.com/questions/1659440/32-bit-to-16-bit-floating-point-conversion
 
     // That code was modified to round to nearest with ties to even on
@@ -171,6 +179,10 @@ class LowerFloat16Conversions : public IRMutator {
         return cast(Int(32, v.type().lanes()), v);
     }
 
+    Expr to_u32(Expr v) {
+        return cast(UInt(32, v.type().lanes()), v);
+    }
+
     Expr to_i16(Expr v) {
         return cast(Int(16, v.type().lanes()), v);
     }
@@ -193,7 +205,7 @@ class LowerFloat16Conversions : public IRMutator {
         Expr v = as_i32(value);
         Expr sign = v & cast(v.type(), signN);
         v = v ^ sign;
-        sign = lsr(sign, shiftSign);
+        sign = lsr(sign, 16);
         Expr s = cast(v.type(), mulN);
         s = to_i32(as_f32(s) * as_f32(v));
         v = v ^ ((s ^ v) & bool_to_mask(minN > as_i32(v)));
@@ -214,10 +226,17 @@ class LowerFloat16Conversions : public IRMutator {
     }
 
     Expr float16_to_float(Expr value) {
+        Expr h = to_i32(as_u16(value));
+        Expr f = as_f32(((h&0x8000)<<16) | (((h&0x7c00)+0x1C000)<<13) | ((h&0x03FF)<<13));
+        debug(0) << f << "\n";
+        return f;
+
+        /*
+        //return cast(Float(32, value.type().lanes()), reinterpret(Float(16, value.type().lanes()), value));
         Expr v = to_i32(as_u16(value));
         Expr sign = v & cast(v.type(), signC);
         v = v ^ sign;
-        sign = sign << shiftSign;
+        sign = sign << 16;
         v = v ^ (((v + minD) ^ v) & bool_to_mask(v > subC));
         v = v ^ (((v + maxD) ^ v) & bool_to_mask(v > maxC));
         Expr s = cast(v.type(), mulC);
@@ -229,6 +248,7 @@ class LowerFloat16Conversions : public IRMutator {
         v = as_f32(v);
         v = common_subexpression_elimination(v);
         return v;
+        */
     }
 
     Expr visit(const Cast *op) override {
@@ -256,7 +276,7 @@ class LowerFloat16Conversions : public IRMutator {
 
 }  // anonymous namespace
 
-Stmt lower_float16_math(const Stmt &stmt, const Target &t) {
+Stmt emulate_float16_math(const Stmt &stmt, const Target &t) {
     Stmt s = stmt;
     s = WidenMath().mutate(s);
     s = LowerBFloatConversions().mutate(s);

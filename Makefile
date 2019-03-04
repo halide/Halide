@@ -406,6 +406,7 @@ SOURCE_FILES = \
   EarlyFree.cpp \
   Elf.cpp \
   EliminateBoolVectors.cpp \
+  EmulateFloat16Math.cpp \
   Error.cpp \
   FastIntegerDivide.cpp \
   FindCalls.cpp \
@@ -441,7 +442,6 @@ SOURCE_FILES = \
   LoopCarry.cpp \
   Lower.cpp \
   LowerWarpShuffles.cpp \
-  LowerBFloatMath.cpp \
   MatlabWrapper.cpp \
   Memoization.cpp \
   Module.cpp \
@@ -571,6 +571,7 @@ HEADER_FILES = \
   EarlyFree.h \
   Elf.h \
   EliminateBoolVectors.h \
+  EmulateFloat16Math.h \
   Error.h \
   Expr.h \
   ExprUsesVar.h \
@@ -611,7 +612,6 @@ HEADER_FILES = \
   LLVM_Runtime_Linker.h \
   LoopCarry.h \
   Lower.h \
-  LowerBFloatMath.h \
   LowerWarpShuffles.h \
   MainPage.h \
   MatlabWrapper.h \

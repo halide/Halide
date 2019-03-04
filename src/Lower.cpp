@@ -19,6 +19,7 @@
 #include "DebugToFile.h"
 #include "Deinterleave.h"
 #include "EarlyFree.h"
+#include "EmulateFloat16Math.h"
 #include "FindCalls.h"
 #include "Func.h"
 #include "Function.h"
@@ -34,7 +35,6 @@
 #include "Inline.h"
 #include "LICM.h"
 #include "LoopCarry.h"
-#include "LowerBFloatMath.h"
 #include "LowerWarpShuffles.h"
 #include "Memoization.h"
 #include "PartitionLoops.h"
@@ -349,7 +349,7 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     debug(2) << "Lowering after lowering unsafe promises:\n" << s << "\n\n";
 
     debug(1) << "Emulating float16 math...\n";
-    s = lower_float16_math(s, t);
+    s = emulate_float16_math(s, t);
     debug(2) << "Lowering after emulating float16 math:\n" << s << "\n\n";
 
     s = remove_dead_allocations(s);

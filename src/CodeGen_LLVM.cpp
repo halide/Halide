@@ -1267,7 +1267,11 @@ void CodeGen_LLVM::visit(const UIntImm *op) {
 }
 
 void CodeGen_LLVM::visit(const FloatImm *op) {
-    value = ConstantFP::get(llvm_type_of(op->type), op->value);
+    if (op->type.is_bfloat()) {
+        value = ConstantInt::get(llvm_type_of(op->type), bfloat16_t(op->value).to_bits());
+    } else {
+        value = ConstantFP::get(llvm_type_of(op->type), op->value);
+    }
 }
 
 void CodeGen_LLVM::visit(const StringImm *op) {

@@ -312,6 +312,7 @@ set(HEADER_FILES
   EarlyFree.h
   Elf.h
   EliminateBoolVectors.h
+  EmulateFloat16Math.h
   Error.h
   Expr.h
   ExprUsesVar.h
@@ -352,7 +353,6 @@ set(HEADER_FILES
   LLVM_Runtime_Linker.h
   LoopCarry.h
   Lower.h
-  LowerBFloatMath.h
   LowerWarpShuffles.h
   MainPage.h
   MatlabWrapper.h
@@ -484,6 +484,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   EarlyFree.cpp
   Elf.cpp
   EliminateBoolVectors.cpp
+  EmulateFloat16Math.cpp
   Error.cpp
   FastIntegerDivide.cpp
   FindCalls.cpp
@@ -518,7 +519,6 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   LLVM_Runtime_Linker.cpp
   LoopCarry.cpp
   Lower.cpp
-  LowerBFloatMath.cpp
   LowerWarpShuffles.cpp
   MatlabWrapper.cpp
   Memoization.cpp

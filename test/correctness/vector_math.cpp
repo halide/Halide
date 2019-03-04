@@ -177,6 +177,8 @@ bool test(int lanes, int seed) {
     }
     Var x, y;
 
+    #if 0
+
     // Add
     if (verbose) printf("Add\n");
     Func f1;
@@ -610,6 +612,8 @@ bool test(int lanes, int seed) {
         */
     }
 
+    #endif
+
     // Lerp (where the weight is the same type as the values)
     if (verbose) printf("Lerp\n");
     Func f21;
@@ -620,7 +624,8 @@ bool test(int lanes, int seed) {
     } else if (t.is_int()) {
         weight = cast(UInt(t.bits(), t.lanes()), max(0, weight));
     }
-    f21(x, y) = lerp(input(x, y), input(x+1, y), weight);
+    //f21(x, y) = lerp(input(x, y), input(x+1, y), weight);
+    f21(x, y) = input(x, y) * (cast(weight.type(), 1) - weight) + input(x+1, y) * weight;
     Buffer<A> im21 = f21.realize(W, H);
 
     for (int y = 0; y < H; y++) {
@@ -677,6 +682,7 @@ int main(int argc, char **argv) {
     // Only native vector widths - llvm doesn't handle others well
     Halide::Internal::ThreadPool<bool> pool;
     std::vector<std::future<bool>> futures;
+    /*
     futures.push_back(pool.async(test<float>, 4, seed));
     futures.push_back(pool.async(test<float>, 8, seed));
     futures.push_back(pool.async(test<double>, 2, seed));
@@ -689,6 +695,7 @@ int main(int argc, char **argv) {
     futures.push_back(pool.async(test<bfloat16_t>, 8, seed));
     futures.push_back(pool.async(test<bfloat16_t>, 16, seed));
     futures.push_back(pool.async(test<float16_t>, 8, seed));
+    */
     futures.push_back(pool.async(test<float16_t>, 16, seed));
     bool ok = true;
     for (auto &f : futures) {
