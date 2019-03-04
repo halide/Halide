@@ -905,19 +905,6 @@ extern void halide_memoization_cache_release(void *user_context, void *host);
  */
 extern void halide_memoization_cache_cleanup();
 
-/** Create a unique file with a name of the form prefixXXXXXsuffix in an arbitrary
- * (but writable) directory; this is typically $TMP or /tmp, but the specific
- * location is not guaranteed. (Note that the exact form of the file name
- * may vary; in particular, the suffix may be ignored on non-Posix systems.)
- * The file is created (but not opened), thus this can be called from
- * different threads (or processes, e.g. when building with parallel make)
- * without risking collision. Note that the caller is always responsible
- * for deleting this file. Returns nonzero value if an error occurs.
- */
-extern int halide_create_temp_file(void *user_context,
-  const char *prefix, const char *suffix,
-  char *path_buf, size_t path_buf_size);
-
 /** Annotate that a given range of memory has been initialized;
  * only used when Target::MSAN is enabled.
  *
@@ -1206,83 +1193,83 @@ extern int halide_error_integer_division_by_zero(void *user_context);
 // @}
 
 /** Optional features a compilation Target can have.
+ * Be sure to keep this in sync with the Feature enum in Target.h and the implementation of
+ * get_runtime_compatible_target in Target.cpp if you add a new feature.
  */
 typedef enum halide_target_feature_t {
     halide_target_feature_jit = 0,  ///< Generate code that will run immediately inside the calling process.
-    halide_target_feature_debug = 1,  ///< Turn on debug info and output for runtime code.
-    halide_target_feature_no_asserts = 2,  ///< Disable all runtime checks, for slightly tighter code.
-    halide_target_feature_no_bounds_query = 3, ///< Disable the bounds querying functionality.
+    halide_target_feature_debug,  ///< Turn on debug info and output for runtime code.
+    halide_target_feature_no_asserts,  ///< Disable all runtime checks, for slightly tighter code.
+    halide_target_feature_no_bounds_query, ///< Disable the bounds querying functionality.
 
-    halide_target_feature_sse41 = 4,  ///< Use SSE 4.1 and earlier instructions. Only relevant on x86.
-    halide_target_feature_avx = 5,  ///< Use AVX 1 instructions. Only relevant on x86.
-    halide_target_feature_avx2 = 6,  ///< Use AVX 2 instructions. Only relevant on x86.
-    halide_target_feature_fma = 7,  ///< Enable x86 FMA instruction
-    halide_target_feature_fma4 = 8,  ///< Enable x86 (AMD) FMA4 instruction set
-    halide_target_feature_f16c = 9,  ///< Enable x86 16-bit float support
+    halide_target_feature_sse41,  ///< Use SSE 4.1 and earlier instructions. Only relevant on x86.
+    halide_target_feature_avx,  ///< Use AVX 1 instructions. Only relevant on x86.
+    halide_target_feature_avx2,  ///< Use AVX 2 instructions. Only relevant on x86.
+    halide_target_feature_fma,  ///< Enable x86 FMA instruction
+    halide_target_feature_fma4,  ///< Enable x86 (AMD) FMA4 instruction set
+    halide_target_feature_f16c,  ///< Enable x86 16-bit float support
 
-    halide_target_feature_armv7s = 10,  ///< Generate code for ARMv7s. Only relevant for 32-bit ARM.
-    halide_target_feature_no_neon = 11,  ///< Avoid using NEON instructions. Only relevant for 32-bit ARM.
+    halide_target_feature_armv7s,  ///< Generate code for ARMv7s. Only relevant for 32-bit ARM.
+    halide_target_feature_no_neon,  ///< Avoid using NEON instructions. Only relevant for 32-bit ARM.
 
-    halide_target_feature_vsx = 12,  ///< Use VSX instructions. Only relevant on POWERPC.
-    halide_target_feature_power_arch_2_07 = 13,  ///< Use POWER ISA 2.07 new instructions. Only relevant on POWERPC.
+    halide_target_feature_vsx,  ///< Use VSX instructions. Only relevant on POWERPC.
+    halide_target_feature_power_arch_2_07,  ///< Use POWER ISA 2.07 new instructions. Only relevant on POWERPC.
 
-    halide_target_feature_cuda = 14,  ///< Enable the CUDA runtime. Defaults to compute capability 2.0 (Fermi)
-    halide_target_feature_cuda_capability30 = 15,  ///< Enable CUDA compute capability 3.0 (Kepler)
-    halide_target_feature_cuda_capability32 = 16,  ///< Enable CUDA compute capability 3.2 (Tegra K1)
-    halide_target_feature_cuda_capability35 = 17,  ///< Enable CUDA compute capability 3.5 (Kepler)
-    halide_target_feature_cuda_capability50 = 18,  ///< Enable CUDA compute capability 5.0 (Maxwell)
+    halide_target_feature_cuda,  ///< Enable the CUDA runtime. Defaults to compute capability 2.0 (Fermi)
+    halide_target_feature_cuda_capability30,  ///< Enable CUDA compute capability 3.0 (Kepler)
+    halide_target_feature_cuda_capability32,  ///< Enable CUDA compute capability 3.2 (Tegra K1)
+    halide_target_feature_cuda_capability35,  ///< Enable CUDA compute capability 3.5 (Kepler)
+    halide_target_feature_cuda_capability50,  ///< Enable CUDA compute capability 5.0 (Maxwell)
 
-    halide_target_feature_opencl = 19,  ///< Enable the OpenCL runtime.
-    halide_target_feature_cl_doubles = 20,  ///< Enable double support on OpenCL targets
+    halide_target_feature_opencl,  ///< Enable the OpenCL runtime.
+    halide_target_feature_cl_doubles,  ///< Enable double support on OpenCL targets
 
-    halide_target_feature_opengl = 21,  ///< Enable the OpenGL runtime.
-    halide_target_feature_openglcompute = 22, ///< Enable OpenGL Compute runtime.
+    halide_target_feature_opengl,  ///< Enable the OpenGL runtime.
+    halide_target_feature_openglcompute, ///< Enable OpenGL Compute runtime.
 
-    halide_target_feature_unused_23 = 23, ///< Unused. (Formerly: Enable the RenderScript runtime.)
+    halide_target_feature_user_context,  ///< Generated code takes a user_context pointer as first argument
 
-    halide_target_feature_user_context = 24,  ///< Generated code takes a user_context pointer as first argument
+    halide_target_feature_matlab,  ///< Generate a mexFunction compatible with Matlab mex libraries. See tools/mex_halide.m.
 
-    halide_target_feature_matlab = 25,  ///< Generate a mexFunction compatible with Matlab mex libraries. See tools/mex_halide.m.
+    halide_target_feature_profile, ///< Launch a sampling profiler alongside the Halide pipeline that monitors and reports the runtime used by each Func
+    halide_target_feature_no_runtime, ///< Do not include a copy of the Halide runtime in any generated object file or assembly
 
-    halide_target_feature_profile = 26, ///< Launch a sampling profiler alongside the Halide pipeline that monitors and reports the runtime used by each Func
-    halide_target_feature_no_runtime = 27, ///< Do not include a copy of the Halide runtime in any generated object file or assembly
+    halide_target_feature_metal, ///< Enable the (Apple) Metal runtime.
+    halide_target_feature_mingw, ///< For Windows compile to MinGW toolset rather then Visual Studio
 
-    halide_target_feature_metal = 28, ///< Enable the (Apple) Metal runtime.
-    halide_target_feature_mingw = 29, ///< For Windows compile to MinGW toolset rather then Visual Studio
+    halide_target_feature_c_plus_plus_mangling, ///< Generate C++ mangled names for result function, et al
 
-    halide_target_feature_c_plus_plus_mangling = 30, ///< Generate C++ mangled names for result function, et al
+    halide_target_feature_large_buffers, ///< Enable 64-bit buffer indexing to support buffers > 2GB. Ignored if bits != 64.
 
-    halide_target_feature_large_buffers = 31, ///< Enable 64-bit buffer indexing to support buffers > 2GB. Ignored if bits != 64.
-
-    halide_target_feature_hvx_64 = 32, ///< Enable HVX 64 byte mode.
-    halide_target_feature_hvx_128 = 33, ///< Enable HVX 128 byte mode.
-    halide_target_feature_hvx_v62 = 34, ///< Enable Hexagon v62 architecture.
-    halide_target_feature_fuzz_float_stores = 35, ///< On every floating point store, set the last bit of the mantissa to zero. Pipelines for which the output is very different with this feature enabled may also produce very different output on different processors.
-    halide_target_feature_soft_float_abi = 36, ///< Enable soft float ABI. This only enables the soft float ABI calling convention, which does not necessarily use soft floats.
-    halide_target_feature_msan = 37, ///< Enable hooks for MSAN support.
-    halide_target_feature_avx512 = 38, ///< Enable the base AVX512 subset supported by all AVX512 architectures. The specific feature sets are AVX-512F and AVX512-CD. See https://en.wikipedia.org/wiki/AVX-512 for a description of each AVX subset.
-    halide_target_feature_avx512_knl = 39, ///< Enable the AVX512 features supported by Knight's Landing chips, such as the Xeon Phi x200. This includes the base AVX512 set, and also AVX512-CD and AVX512-ER.
-    halide_target_feature_avx512_skylake = 40, ///< Enable the AVX512 features supported by Skylake Xeon server processors. This adds AVX512-VL, AVX512-BW, and AVX512-DQ to the base set. The main difference from the base AVX512 set is better support for small integer ops. Note that this does not include the Knight's Landing features. Note also that these features are not available on Skylake desktop and mobile processors.
-    halide_target_feature_avx512_cannonlake = 41, ///< Enable the AVX512 features expected to be supported by future Cannonlake processors. This includes all of the Skylake features, plus AVX512-IFMA and AVX512-VBMI.
-    halide_target_feature_hvx_use_shared_object = 42, ///< Deprecated
-    halide_target_feature_trace_loads = 43, ///< Trace all loads done by the pipeline. Equivalent to calling Func::trace_loads on every non-inlined Func.
-    halide_target_feature_trace_stores = 44, ///< Trace all stores done by the pipeline. Equivalent to calling Func::trace_stores on every non-inlined Func.
-    halide_target_feature_trace_realizations = 45, ///< Trace all realizations done by the pipeline. Equivalent to calling Func::trace_realizations on every non-inlined Func.
-    halide_target_feature_cuda_capability61 = 46,  ///< Enable CUDA compute capability 6.1 (Pascal)
-    halide_target_feature_hvx_v65 = 47, ///< Enable Hexagon v65 architecture.
-    halide_target_feature_hvx_v66 = 48, ///< Enable Hexagon v66 architecture.
-    halide_target_feature_cl_half = 49,  ///< Enable half support on OpenCL targets
-    halide_target_feature_strict_float = 50, ///< Turn off all non-IEEE floating-point optimization. Currently applies only to LLVM targets.
-    halide_target_feature_legacy_buffer_wrappers = 51,  ///< Emit legacy wrapper code for buffer_t (vs halide_buffer_t) when AOT-compiled.
-    halide_target_feature_tsan = 52, ///< Enable hooks for TSAN support.
-    halide_target_feature_asan = 53, ///< Enable hooks for ASAN support.
-    halide_target_feature_d3d12compute = 54, ///< Enable Direct3D 12 Compute runtime.
-    halide_target_feature_check_unsafe_promises = 55, ///< Insert assertions for promises.
-    halide_target_feature_hexagon_dma = 56, ///< Enable Hexagon DMA buffers.
-    halide_target_feature_embed_bitcode = 57,  ///< Emulate clang -fembed-bitcode flag.
-    halide_target_feature_disable_llvm_loop_vectorize = 58,  ///< Disable loop vectorization in LLVM. (Ignored for non-LLVM targets.)
-    halide_target_feature_disable_llvm_loop_unroll = 59,  ///< Disable loop unrolling in LLVM. (Ignored for non-LLVM targets.)
-    halide_target_feature_end = 60 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
+    halide_target_feature_hvx_64, ///< Enable HVX 64 byte mode.
+    halide_target_feature_hvx_128, ///< Enable HVX 128 byte mode.
+    halide_target_feature_hvx_v62, ///< Enable Hexagon v62 architecture.
+    halide_target_feature_fuzz_float_stores, ///< On every floating point store, set the last bit of the mantissa to zero. Pipelines for which the output is very different with this feature enabled may also produce very different output on different processors.
+    halide_target_feature_soft_float_abi, ///< Enable soft float ABI. This only enables the soft float ABI calling convention, which does not necessarily use soft floats.
+    halide_target_feature_msan, ///< Enable hooks for MSAN support.
+    halide_target_feature_avx512, ///< Enable the base AVX512 subset supported by all AVX512 architectures. The specific feature sets are AVX-512F and AVX512-CD. See https://en.wikipedia.org/wiki/AVX-512 for a description of each AVX subset.
+    halide_target_feature_avx512_knl, ///< Enable the AVX512 features supported by Knight's Landing chips, such as the Xeon Phi x200. This includes the base AVX512 set, and also AVX512-CD and AVX512-ER.
+    halide_target_feature_avx512_skylake, ///< Enable the AVX512 features supported by Skylake Xeon server processors. This adds AVX512-VL, AVX512-BW, and AVX512-DQ to the base set. The main difference from the base AVX512 set is better support for small integer ops. Note that this does not include the Knight's Landing features. Note also that these features are not available on Skylake desktop and mobile processors.
+    halide_target_feature_avx512_cannonlake, ///< Enable the AVX512 features expected to be supported by future Cannonlake processors. This includes all of the Skylake features, plus AVX512-IFMA and AVX512-VBMI.
+    halide_target_feature_hvx_use_shared_object, ///< Deprecated
+    halide_target_feature_trace_loads, ///< Trace all loads done by the pipeline. Equivalent to calling Func::trace_loads on every non-inlined Func.
+    halide_target_feature_trace_stores, ///< Trace all stores done by the pipeline. Equivalent to calling Func::trace_stores on every non-inlined Func.
+    halide_target_feature_trace_realizations, ///< Trace all realizations done by the pipeline. Equivalent to calling Func::trace_realizations on every non-inlined Func.
+    halide_target_feature_cuda_capability61,  ///< Enable CUDA compute capability 6.1 (Pascal)
+    halide_target_feature_hvx_v65, ///< Enable Hexagon v65 architecture.
+    halide_target_feature_hvx_v66, ///< Enable Hexagon v66 architecture.
+    halide_target_feature_cl_half,  ///< Enable half support on OpenCL targets
+    halide_target_feature_strict_float, ///< Turn off all non-IEEE floating-point optimization. Currently applies only to LLVM targets.
+    halide_target_feature_legacy_buffer_wrappers,  ///< Emit legacy wrapper code for buffer_t (vs halide_buffer_t) when AOT-compiled.
+    halide_target_feature_tsan, ///< Enable hooks for TSAN support.
+    halide_target_feature_asan, ///< Enable hooks for ASAN support.
+    halide_target_feature_d3d12compute, ///< Enable Direct3D 12 Compute runtime.
+    halide_target_feature_check_unsafe_promises, ///< Insert assertions for promises.
+    halide_target_feature_hexagon_dma, ///< Enable Hexagon DMA buffers.
+    halide_target_feature_embed_bitcode,  ///< Emulate clang -fembed-bitcode flag.
+    halide_target_feature_disable_llvm_loop_vectorize,  ///< Disable loop vectorization in LLVM. (Ignored for non-LLVM targets.)
+    halide_target_feature_disable_llvm_loop_unroll,  ///< Disable loop unrolling in LLVM. (Ignored for non-LLVM targets.)
+    halide_target_feature_end ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 
 /** This function is called internally by Halide in some situations to determine
@@ -1646,6 +1633,22 @@ struct halide_filter_metadata_t {
     /** The function name of the filter. */
     const char* name;
 };
+
+/** halide_register_argv_and_metadata() is a **user-defined** function that
+ * must be provided in order to use the registration.cc files produced
+ * by Generators when the 'registration' output is requested. Each registration.cc
+ * file provides a static initializer that calls this function with the given
+ * filter's argv-call variant, its metadata, and (optionally) and additional
+ * textual data that the build system chooses to tack on for its own purposes.
+ * Note that this will be called at static-initializer time (i.e., before
+ * main() is called), and in an unpredictable order. Note that extra_key_value_pairs
+ * may be nullptr; if it's not null, it's expected to be a null-terminated list
+ * of strings, with an even number of entries. */
+void halide_register_argv_and_metadata(
+    int (*filter_argv_call)(void **),
+    const struct halide_filter_metadata_t *filter_metadata,
+    const char * const *extra_key_value_pairs
+);
 
 /** The functions below here are relevant for pipelines compiled with
  * the -profile target flag, which runs a sampling profiler thread

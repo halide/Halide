@@ -1485,7 +1485,7 @@ private:
         // Since we are now in the lowering phase, we expect all LoopLevels to be locked;
         // thus any new ones we synthesize we must explicitly lock.
         loop_level.lock();
-        Site s = {f->is_parallel() || f->for_type == ForType::Vectorized, loop_level};
+        Site s = {f->is_parallel(), loop_level};
         sites.push_back(s);
         f->body.accept(this);
         sites.pop_back();

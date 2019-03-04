@@ -959,7 +959,6 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
 
     bool is_128B = target.has_feature(Halide::Target::HVX_128);
     int a_elements = static_cast<int>(a_ty->getVectorNumElements());
-    int b_elements = static_cast<int>(b_ty->getVectorNumElements());
 
     llvm::Type *element_ty = a->getType()->getVectorElementType();
     internal_assert(element_ty);
@@ -1039,7 +1038,6 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
             a_ty = a->getType();
             b_ty = b->getType();
             a_elements = a_ty->getVectorNumElements();
-            b_elements = b_ty->getVectorNumElements();
         }
         if (start == 0 && result_ty == a_ty) {
             return a;
@@ -1065,7 +1063,7 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
             return call_intrin_cast(native_ty, intrin_id, {b, a, codegen(bytes_off)});
         }
         return CodeGen_Posix::shuffle_vectors(a, b, indices);
-    } else if (stride == 2 && result_elements*2 == a_elements + b_elements) {
+    } else if (stride == 2) {
         internal_assert(start == 0 || start == 1);
         // For stride 2 shuffles, we can use vpack or vdeal.
         // It's hard to use call_intrin here. We'll just slice and
@@ -1806,6 +1804,20 @@ void CodeGen_Hexagon::visit(const Call *op) {
                                 "halide.hexagon.mux" +
                                 type_suffix(op->args[1], op->args[2], false),
                                 op->args);
+            return;
+        } else if (op->is_intrinsic(Call::if_then_else_mask)) {
+            internal_assert(op->args.size() == 3);
+            // Because this is going to be scalarized by CodeGen_LLVM, we can
+            // convert back to a bool vector, because this bool vector will
+            // never be realized.
+            value = codegen(Call::make(op->type, Call::if_then_else, {op->args[0] != 0, op->args[1], op->args[2]}, Call::PureIntrinsic));
+            return;
+        } else if (op->is_intrinsic(Call::require_mask)) {
+            internal_assert(op->args.size() == 3);
+            // Because this is going to be scalarized by CodeGen_LLVM, we can
+            // convert back to a bool vector, because this bool vector will
+            // never be realized.
+            value = codegen(Call::make(op->type, Call::require, {op->args[0] != 0, op->args[1], op->args[2]}, Call::PureIntrinsic));
             return;
         } else if (op->is_intrinsic(Call::abs)) {
             internal_assert(op->args.size() == 1);

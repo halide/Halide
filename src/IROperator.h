@@ -1309,8 +1309,13 @@ inline Expr floor(Expr x) {
     } else if (t.element_of() == Float(16)) {
         return Internal::Call::make(t, "floor_f16", {std::move(x)}, Internal::Call::PureExtern);
     } else {
-        t = t.with_code(Type::Float);
-        return Internal::Call::make(t, "floor_f32", {cast(t, std::move(x))}, Internal::Call::PureExtern);
+        t = Float(32, t.lanes());
+        if (t.is_int() || t.is_uint()) {
+            // Already an integer
+            return cast(t, std::move(x));
+        } else {
+            return Internal::Call::make(t, "floor_f32", {cast(t, std::move(x))}, Internal::Call::PureExtern);
+        }
     }
 }
 
@@ -1326,8 +1331,13 @@ inline Expr ceil(Expr x) {
     } else if (x.type().element_of() == Float(16)) {
         return Internal::Call::make(t, "ceil_f16", {std::move(x)}, Internal::Call::PureExtern);
     } else {
-        t = t.with_code(Type::Float);
-        return Internal::Call::make(t, "ceil_f32", {cast(t, std::move(x))}, Internal::Call::PureExtern);
+        t = Float(32, t.lanes());
+        if (t.is_int() || t.is_uint()) {
+            // Already an integer
+            return cast(t, std::move(x));
+        } else {
+            return Internal::Call::make(t, "ceil_f32", {cast(t, std::move(x))}, Internal::Call::PureExtern);
+        }
     }
 }
 
@@ -1344,8 +1354,13 @@ inline Expr round(Expr x) {
     } else if (t.element_of() == Float(16)) {
         return Internal::Call::make(t, "round_f16", {std::move(x)}, Internal::Call::PureExtern);
     } else {
-        t = t.with_code(Type::Float);
-        return Internal::Call::make(t, "round_f32", {cast(t, std::move(x))}, Internal::Call::PureExtern);
+        t = Float(32, t.lanes());
+        if (t.is_int() || t.is_uint()) {
+            // Already an integer
+            return cast(t, std::move(x));
+        } else {
+            return Internal::Call::make(t, "round_f32", {cast(t, std::move(x))}, Internal::Call::PureExtern);
+        }
     }
 }
 
@@ -1360,8 +1375,13 @@ inline Expr trunc(Expr x) {
     } else if (t.element_of() == Float(16)) {
         return Internal::Call::make(t, "trunc_f16", {std::move(x)}, Internal::Call::PureExtern);
     } else {
-        t = t.with_code(Type::Float);
-        return Internal::Call::make(t, "trunc_f32", {cast(t, std::move(x))}, Internal::Call::PureExtern);
+        t = Float(32, t.lanes());
+        if (t.is_int() || t.is_uint()) {
+            // Already an integer
+            return cast(t, std::move(x));
+        } else {
+            return Internal::Call::make(t, "trunc_f32", {cast(t, std::move(x))}, Internal::Call::PureExtern);
+        }
     }
 }
 
@@ -1376,7 +1396,7 @@ inline Expr is_nan(Expr x) {
     } else if (x.type().element_of() == Float(16)) {
         return Internal::Call::make(t, "is_nan_f16", {std::move(x)}, Internal::Call::PureExtern);
     } else {
-        Type ft = x.type().with_code(Type::Float);
+        Type ft = Float(32, t.lanes());
         return Internal::Call::make(t, "is_nan_f32", {cast(ft, std::move(x))}, Internal::Call::PureExtern);
     }
 }
@@ -1651,8 +1671,8 @@ inline Expr popcount(Expr x) {
                                 {std::move(x)}, Internal::Call::PureIntrinsic);
 }
 
-/** Count the number of leading zero bits in an expression. The result is
- *  undefined if the value of the expression is zero. */
+/** Count the number of leading zero bits in an expression. If the expression is
+ * zero, the result is the number of bits in the type. */
 inline Expr count_leading_zeros(Expr x) {
     user_assert(x.defined()) << "count leading zeros of undefined Expr\n";
     Type t = x.type();
@@ -1662,8 +1682,8 @@ inline Expr count_leading_zeros(Expr x) {
                                 {std::move(x)}, Internal::Call::PureIntrinsic);
 }
 
-/** Count the number of trailing zero bits in an expression. The result is
- *  undefined if the value of the expression is zero. */
+/** Count the number of trailing zero bits in an expression. If the expression is
+ * zero, the result is the number of bits in the type. */
 inline Expr count_trailing_zeros(Expr x) {
     user_assert(x.defined()) << "count trailing zeros of undefined Expr\n";
     Type t = x.type();

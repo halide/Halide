@@ -40,8 +40,6 @@ Simplify::Simplify(bool r, const Scope<Interval> *bi, const Scope<ModulusRemaind
         if (bounds.min_defined || bounds.max_defined || bounds.alignment.modulus != 1) {
             bounds_and_alignment_info.push(iter.name(), bounds);
         }
-
-
     }
 
     for (auto iter = ai->cbegin(); iter != ai->cend(); ++iter) {
@@ -322,12 +320,6 @@ bool can_prove(Expr e, const Scope<Interval> &bounds) {
     Expr orig = e;
 
     e = simplify(e, true, bounds);
-
-    // When terms cancel, the simplifier doesn't always successfully
-    // kill the dead lets.
-    while (const Let *l = e.as<Let>()) {
-        e = l->body;
-    }
 
     // Take a closer look at all failed proof attempts to hunt for
     // simplifier weaknesses

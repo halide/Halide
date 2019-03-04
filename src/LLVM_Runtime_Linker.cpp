@@ -72,7 +72,6 @@ DECLARE_CPP_INITMOD(android_clock)
 DECLARE_CPP_INITMOD(android_host_cpu_count)
 DECLARE_CPP_INITMOD(android_io)
 DECLARE_CPP_INITMOD(android_opengl_context)
-DECLARE_CPP_INITMOD(android_tempfile)
 DECLARE_CPP_INITMOD(buffer_t)
 DECLARE_CPP_INITMOD(cache)
 DECLARE_CPP_INITMOD(can_use_target)
@@ -119,7 +118,6 @@ DECLARE_CPP_INITMOD(posix_clock)
 DECLARE_CPP_INITMOD(posix_error_handler)
 DECLARE_CPP_INITMOD(posix_get_symbol)
 DECLARE_CPP_INITMOD(posix_io)
-DECLARE_CPP_INITMOD(posix_tempfile)
 DECLARE_CPP_INITMOD(posix_print)
 DECLARE_CPP_INITMOD(posix_threads)
 DECLARE_CPP_INITMOD(posix_threads_tsan)
@@ -147,7 +145,6 @@ DECLARE_CPP_INITMOD(windows_abort)
 DECLARE_CPP_INITMOD(windows_io)
 DECLARE_CPP_INITMOD(windows_opencl)
 DECLARE_CPP_INITMOD(windows_profiler)
-DECLARE_CPP_INITMOD(windows_tempfile)
 DECLARE_CPP_INITMOD(windows_threads)
 DECLARE_CPP_INITMOD(windows_threads_tsan)
 DECLARE_CPP_INITMOD(windows_yield)
@@ -653,7 +650,6 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                     modules.push_back(get_initmod_posix_clock(c, bits_64, debug));
                 }
                 modules.push_back(get_initmod_posix_io(c, bits_64, debug));
-                modules.push_back(get_initmod_posix_tempfile(c, bits_64, debug));
                 modules.push_back(get_initmod_linux_host_cpu_count(c, bits_64, debug));
                 modules.push_back(get_initmod_linux_yield(c, bits_64, debug));
                 if (tsan) {
@@ -668,7 +664,6 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_posix_print(c, bits_64, debug));
                 modules.push_back(get_initmod_osx_clock(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_io(c, bits_64, debug));
-                modules.push_back(get_initmod_posix_tempfile(c, bits_64, debug));
                 modules.push_back(get_initmod_osx_host_cpu_count(c, bits_64, debug));
                 modules.push_back(get_initmod_osx_yield(c, bits_64, debug));
                 if (tsan) {
@@ -688,7 +683,6 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                     modules.push_back(get_initmod_posix_clock(c, bits_64, debug));
                 }
                 modules.push_back(get_initmod_android_io(c, bits_64, debug));
-                modules.push_back(get_initmod_android_tempfile(c, bits_64, debug));
                 modules.push_back(get_initmod_android_host_cpu_count(c, bits_64, debug));
                 modules.push_back(get_initmod_linux_yield(c, bits_64, debug)); // TODO: verify
                 if (tsan) {
@@ -703,7 +697,6 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_posix_print(c, bits_64, debug));
                 modules.push_back(get_initmod_windows_clock(c, bits_64, debug));
                 modules.push_back(get_initmod_windows_io(c, bits_64, debug));
-                modules.push_back(get_initmod_windows_tempfile(c, bits_64, debug));
                 modules.push_back(get_initmod_windows_yield(c, bits_64, debug));
                 if (tsan) {
                     modules.push_back(get_initmod_windows_threads_tsan(c, bits_64, debug));
@@ -720,7 +713,6 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_posix_print(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_clock(c, bits_64, debug));
                 modules.push_back(get_initmod_ios_io(c, bits_64, debug));
-                modules.push_back(get_initmod_posix_tempfile(c, bits_64, debug));
                 modules.push_back(get_initmod_osx_host_cpu_count(c, bits_64, debug));
                 modules.push_back(get_initmod_osx_yield(c, bits_64, debug));
                 if (tsan) {

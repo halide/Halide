@@ -6,6 +6,8 @@
 #include "IRPrinter.h"
 #include "Inline.h"
 #include "Qualify.h"
+#include "IROperator.h"
+#include "Substitute.h"
 
 namespace Halide {
 namespace Internal {
@@ -38,7 +40,7 @@ void validate_schedule_inlined_function(Function f) {
 
     for (size_t i = 0; i < stage_s.dims().size(); i++) {
         Dim d = stage_s.dims()[i];
-        if (d.is_parallel()) {
+        if (d.is_unordered_parallel()) {
             user_error << "Cannot parallelize dimension "
                        << d.var << " of function "
                        << f.name() << " because the function is scheduled inline.\n";
@@ -113,7 +115,11 @@ class Inliner : public IRMutator {
             internal_assert(args.size() == func_args.size());
 
             for (size_t i = 0; i < args.size(); i++) {
-                body = Let::make(func.name() + "." + func_args[i], args[i], body);
+                if (is_const(args[i]) || args[i].as<Variable>()) {
+                    body = substitute(func.name() + "." + func_args[i], args[i], body);
+                } else {
+                    body = Let::make(func.name() + "." + func_args[i], args[i], body);
+                }
             }
 
             found++;
@@ -154,7 +160,9 @@ class Inliner : public IRMutator {
         ScopedValue<int> old_found(found, 0);
         Stmt stmt = IRMutator::visit(op);
 
-        if (found > 1) {
+        // TODO: making this > 1 should be desirable,
+        // but explodes compiletimes in some situations.
+        if (found > 0) {
             stmt = common_subexpression_elimination(stmt);
         }
 
@@ -180,7 +188,9 @@ Stmt inline_function(Stmt s, Function f) {
 Expr inline_function(Expr e, Function f) {
     Inliner i(f);
     e = i.mutate(e);
-    if (i.found > 1) {
+    // TODO: making this > 1 should be desirable,
+    // but explodes compiletimes in some situations.
+    if (i.found > 0) {
         e = common_subexpression_elimination(e);
     }
     return e;
