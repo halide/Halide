@@ -196,8 +196,7 @@ void Simplify::ScopedFact::learn_true(const Expr &fact) {
                 info.replacement = eq->b;
                 simplify->var_info.push(v->name, info);
                 pop_list.push_back(v);
-            }
-            if (v->type.is_int()) {
+            } else if (v->type.is_int()) {
                 // Visit the rhs again to get bounds and alignment info to propagate to the LHS
                 // TODO: Visiting it again is inefficient
                 Simplify::ExprInfo expr_info;
