@@ -191,11 +191,13 @@ void Simplify::ScopedFact::learn_true(const Expr &fact) {
         const int64_t *modulus = m ? as_const_int(m->b) : nullptr;
         const int64_t *remainder = m ? as_const_int(eq->b) : nullptr;
         if (v) {
-            if (is_const(eq->b)) {
+            if (is_const(eq->b) || eq->b.as<Variable>()) {
+                // TODO: consider other cases where we might want to entirely substitute
                 info.replacement = eq->b;
                 simplify->var_info.push(v->name, info);
                 pop_list.push_back(v);
-            } else if (v->type.is_int()) {
+            }
+            if (v->type.is_int()) {
                 // Visit the rhs again to get bounds and alignment info to propagate to the LHS
                 // TODO: Visiting it again is inefficient
                 Simplify::ExprInfo expr_info;
