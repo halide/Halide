@@ -3,6 +3,13 @@
 #include <set>
 #include <sstream>
 
+#define LOWER_ON_HUGE_STACK (__linux__ || __APPLE__)
+
+#if LOWER_ON_HUGE_STACK
+#include <ucontext.h>
+#include <sys/mman.h>
+#endif
+
 #include "Lower.h"
 
 #include "AddImageChecks.h"
@@ -78,7 +85,8 @@ using std::set;
 using std::string;
 using std::vector;
 
-Module lower(const vector<Function> &output_funcs, const string &pipeline_name, const Target &t,
+namespace {
+Module lower_inner(const vector<Function> &output_funcs, const string &pipeline_name, const Target &t,
              const vector<Argument> &args, const LinkageType linkage_type,
              const vector<IRMutator *> &custom_passes) {
     std::vector<std::string> namespaces;
@@ -460,6 +468,66 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     }
 
     return result_module;
+}
+}
+
+#if LOWER_ON_HUGE_STACK
+struct payload {
+    ucontext_t lower_context;
+    ucontext_t main_context;
+    std::function<void()> f;
+};
+
+void lower_on_huge_stack(int a, int b) {
+    int arr[2] = {a, b};
+    payload *p;
+    memcpy(&p, arr, sizeof(p));
+    (p->f)();
+    swapcontext(&p->lower_context, &p->main_context);
+}
+#endif
+
+Module lower(const vector<Function> &output_funcs, const string &pipeline_name, const Target &t,
+             const vector<Argument> &args, const LinkageType linkage_type,
+             const vector<IRMutator *> &custom_passes) {
+
+    Module result;
+    auto callable = [&]() {result = lower_inner(output_funcs, pipeline_name, t, args, linkage_type, custom_passes);};
+
+    // Lowering on large programs potentially uses a lot of
+    // stack. While it's possible to rewrite many visitors or mutators
+    // to be less recursive and use the heap instead, this uses the
+    // same total amount of real memory, and is slower, so it
+    // complicates the code for no practical benefit. It's more
+    // efficient to just buy more address space for the stack. This is
+    // unfortunately platform-dependent.
+#if LOWER_ON_HUGE_STACK
+    payload p;
+    getcontext(&p.lower_context);
+    p.lower_context.uc_link = &p.main_context;
+    size_t stack_size = 1 << 30;
+    uint8_t *stack_bottom = (uint8_t *)mmap(nullptr, stack_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
+    if ((stack_bottom + 1) == nullptr) {
+        // Oh well, it was a nice thought
+        perror("Failed to allocate large stack for compilation.\n"
+               "Proceeding with existing stack.\n"
+               "Error was");
+        callable();
+    } else {
+        p.lower_context.uc_stack.ss_sp = stack_bottom;
+        p.lower_context.uc_stack.ss_size = stack_size;
+        p.f = callable;
+        payload *p_ptr = &p;
+        int arr[2];
+        memcpy(arr, &p_ptr, sizeof(payload *));
+        makecontext(&p.lower_context, (void (*)())lower_on_huge_stack, 2, arr[0], arr[1]);
+        swapcontext(&p.main_context, &p.lower_context);
+        munmap(stack_bottom, stack_size);
+    }
+#else
+    callable();
+#endif
+    return result;
 }
 
 Stmt lower_main_stmt(const std::vector<Function> &output_funcs, const std::string &pipeline_name,

@@ -84,6 +84,8 @@ class Module {
     Internal::IntrusivePtr<Internal::ModuleContents> contents;
 
 public:
+    Module() {}
+
     Module(const std::string &name, const Target &target);
 
     /** Get the target this module has been lowered for. */
