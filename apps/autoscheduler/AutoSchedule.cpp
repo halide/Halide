@@ -2229,10 +2229,6 @@ struct State {
             }
         }
 
-        if (target.has_gpu_feature() && contains_store_at_further_in_than_outermost()) {
-            return false;
-        }
-
         if (exceeds_shared_memory_limit(features, target)) {
             return false;
         }
