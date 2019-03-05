@@ -8,7 +8,7 @@ using namespace Halide;
 
 bool error_occurred = false;
 void my_error_handler(void *user_context, const char *msg) {
-    printf("%s\n", msg);
+    //printf("%s\n", msg);
     error_occurred = true;
 }
 
@@ -149,10 +149,13 @@ int unstructured_constraints() {
 
     f(x, y) = param(x, y)*2;
 
-    Pipeline pf(f);
-    pf.add_requirement(param.dim(0).min() == 0 && param.dim(0).extent() == 128,
-                       "Custom error message:",  param.dim(0).min(), param.dim(0).max());
+    Param<int> required_min, required_extent;
+    required_min.set(0);
+    required_extent.set(128);
 
+    Pipeline pf(f);
+    pf.add_requirement(param.dim(0).min() == required_min && param.dim(0).extent() == required_extent,
+                       "Custom message:",  param.dim(0).min(), param.dim(0).max());
 
     pf.set_error_handler(my_error_handler);
 
@@ -180,7 +183,9 @@ int unstructured_constraints() {
 
     Pipeline pg(g);
 
-    pg.add_requirement(g.output_buffer().dim(0).stride() == 2);
+    Param<int> required_stride;
+    required_stride.set(2);
+    pg.add_requirement(g.output_buffer().dim(0).stride() == required_stride);
     pg.set_error_handler(my_error_handler);
 
     error_occurred = false;

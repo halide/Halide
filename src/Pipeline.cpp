@@ -305,7 +305,14 @@ void Pipeline::compile_to_file(const string &filename_prefix,
 }
 
 vector<Argument> Pipeline::infer_arguments(Stmt body) {
-    contents->inferred_args = ::infer_arguments(body, contents->outputs);
+    Stmt s = body;
+    if (!contents->requirements.empty()) {
+        s = Block::make(contents->requirements);
+        if (body.defined()) {
+            s = Block::make(s, body);
+        }
+    }
+    contents->inferred_args = ::infer_arguments(s, contents->outputs);
 
     // Add the user context argument if it's not already there, or hook up our user context
     // Parameter to any existing one.
@@ -594,7 +601,7 @@ Realization Pipeline::realize(int x_size, const Target &target,
 
 Realization Pipeline::realize(const Target &target,
                               const ParamMap &param_map) {
-  return realize(vector<int32_t>(), target, param_map);
+    return realize(vector<int32_t>(), target, param_map);
 }
 
 void Pipeline::add_requirement(Expr condition, std::vector<Expr> &error_args) {
