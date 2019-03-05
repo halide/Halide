@@ -1446,7 +1446,7 @@ struct Test {
         int hvx_width = 0;
         if (target.has_feature(Target::HVX_64)) {
             hvx_width = 64;
-        } else if (target.has_feature(Target::HVX_128)) {
+        } else if (target.has_feature(Target::HVX)) {
             hvx_width = 128;
         }
 
