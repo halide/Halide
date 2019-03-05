@@ -2907,6 +2907,10 @@ struct State {
                 total_threads *= parallel->gpu_thread_extents[j];
             }
 
+            if (i >= (int)parallel->gpu_thread_extents.size()) {
+                total_threads *= v.extent;
+            }
+
             if (n_loops_tagged_gpu_thread >= 3 || total_threads >= MAX_THREADS_PER_BLOCK || v.extent > max_threads[i]) {
                 break;
             }
