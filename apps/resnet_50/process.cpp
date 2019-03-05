@@ -42,6 +42,8 @@ using namespace Halide::Tools;
                                              buff_name[2], \
                                              buff_name[3]
 
+bool buffers_loaded_from_desk = true;
+
 std::vector<int> load_shape(const std::string &shapefile) {
     std::ifstream infile(shapefile, std::ios::binary);
     int num_dims = 0;
@@ -63,9 +65,20 @@ void write_buffer_to_file(const Buffer<float> &buf, const std::string &filename)
 Buffer<float> load_buffer_from_file(const std::string &filename, std::vector<int> &shape) {
     Buffer<float> buffer(shape);
     std::ifstream infile(filename, std::ios::binary);
-    infile.read((char *) buffer.data(), buffer.size_in_bytes());
+    if (buffers_loaded_from_desk && !infile.good()) {
+      printf("Can't load %s, initlize buffers with random data\n", filename.c_str());
+      buffers_loaded_from_desk = false;
+    }
+    if (buffers_loaded_from_desk) {
+      infile.read((char *) buffer.data(), buffer.size_in_bytes());
+      assert(!infile.fail());
+    } else {
+      std::mt19937 randi(123);
+      buffer.for_each_value([&randi](float &v) {
+          v = randi() / (float) randi.max();
+      });
+    }
     infile.close();
-    assert(!infile.fail());
     return buffer;
 }
 
@@ -94,14 +107,13 @@ Buffer<float> load_fc_bias(std::string shapefile, std::string datafile) {
 }
 
 int main(int argc, char **argv) {
-    if (argc < 3) {
-        printf("Usage: iterations weight_dir seed output_file");
+    if (argc < 2) {
+        printf("Usage: iterations weight_dir seed {output_file}");
         return -1;
     }
     int iterations = atoi(argv[1]);
     std::string weight_dir = argv[2];
     int seed = atoi(argv[3]);
-    std::string output_file = argv[4];
 
     Buffer<float> input(3, 224, 224);
     Buffer<float> output(1000);
@@ -282,6 +294,16 @@ int main(int argc, char **argv) {
     printf("Execution time : %gms \n", best * 1e3);
     printf("**********************************************************************\n");
 
+    if (!buffers_loaded_from_desk) {
+      printf("Skip evaluation\n");
+      return 0;
+    }
+
+    if (argc < 3) {
+      printf("Please specifiy output dir for resnet50 predictions\n");
+      return 1;
+    }
+    std::string output_file = argv[4];
     float max_class_val = -FLT_MIN;
     int max_class = 0;
     for (int i = 0; i < 1000; ++i) {
@@ -294,4 +316,5 @@ int main(int argc, char **argv) {
 
     printf("Writing output layer to %s\n", output_file.c_str());
     write_buffer_to_file(output, output_file);
+    return 0;
 }

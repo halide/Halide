@@ -26,7 +26,11 @@ benchmark_and_validate: $(BIN)/process $(BIN)/pytorch_weights/ok
 	$< 10 $* $(BIN)/pytorch_weights/ $(SEED) $(BIN)/res50gen_output.bin
 	python3 validate_resnet50_output.py $(BIN)/res50gen_output.bin $(SEED)
 
+
+benchmark: $(BIN)/process
+	$< 10 $* shape_data/ $(SEED) $(BIN)/res50gen_output.bin
+
 clean:
 	rm -rf $(BIN)
 
-test: $(BIN)/process
+test: benchmark
