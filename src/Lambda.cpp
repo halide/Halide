@@ -16,10 +16,7 @@ public:
     using IRGraphVisitor::visit;
 
     void visit(const Internal::Variable *v) override {
-        int index = Var::implicit_index(v->name);
-        if (index != -1) {
-            if (index >= count) count = index + 1;
-        }
+        count = std::max(count, Var::implicit_index(v->name) + 1);
     }
 };
 }  // namespace
