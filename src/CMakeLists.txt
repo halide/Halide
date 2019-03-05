@@ -17,7 +17,6 @@ set(RUNTIME_CPP
   android_host_cpu_count
   android_io
   android_opengl_context
-  android_tempfile
   arm_cpu_features
   buffer_t
   cache
@@ -67,7 +66,6 @@ set(RUNTIME_CPP
   posix_get_symbol
   posix_io
   posix_print
-  posix_tempfile
   posix_threads
   posix_threads_tsan
   powerpc_cpu_features
@@ -93,7 +91,6 @@ set(RUNTIME_CPP
   windows_io
   windows_opencl
   windows_profiler
-  windows_tempfile
   windows_threads
   windows_threads_tsan
   windows_yield
@@ -106,7 +103,7 @@ set (RUNTIME_LL
   arm
   arm_no_neon
   hvx_64
-  hvx_128
+  hvx
   mips
   posix_math
   powerpc

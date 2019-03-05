@@ -547,7 +547,7 @@ int main(int argc, char **argv) {
     ScheduleVariant scheduling = CPU;
     if (target.has_gpu_feature()) {
         scheduling = TiledGPU;
-    } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+    } else if (target.features_any_of({Target::HVX_64, Target::HVX})) {
         scheduling = Hexagon;
     }
 
@@ -560,7 +560,7 @@ int main(int argc, char **argv) {
         }
     } else if (target.has_feature(Target::HVX_64)) {
         mul_vector_widths.push_back(64);
-    } else if (target.has_feature(Target::HVX_128)) {
+    } else if (target.has_feature(Target::HVX)) {
         mul_vector_widths.push_back(128);
     } else {
         for (int i = 2; i <= 16; i *= 2) {

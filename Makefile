@@ -691,7 +691,6 @@ RUNTIME_CPP_COMPONENTS = \
   android_host_cpu_count \
   android_io \
   android_opengl_context \
-  android_tempfile \
   arm_cpu_features \
   buffer_t \
   cache \
@@ -741,7 +740,6 @@ RUNTIME_CPP_COMPONENTS = \
   posix_get_symbol \
   posix_io \
   posix_print \
-  posix_tempfile \
   posix_threads \
   posix_threads_tsan \
   powerpc_cpu_features \
@@ -767,7 +765,6 @@ RUNTIME_CPP_COMPONENTS = \
   windows_io \
   windows_opencl \
   windows_profiler \
-  windows_tempfile \
   windows_threads \
   windows_threads_tsan \
   windows_yield \
@@ -780,7 +777,7 @@ RUNTIME_LL_COMPONENTS = \
   arm_no_neon \
   d3d12_abi_patch_64 \
   hvx_64 \
-  hvx_128 \
+  hvx \
   mips \
   posix_math \
   powerpc \

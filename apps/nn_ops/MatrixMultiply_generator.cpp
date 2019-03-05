@@ -66,7 +66,7 @@ public:
             vector_size_u8 = 64;
             vector_size_u32 = 16;
             use_hexagon = true;
-        } else if (get_target().has_feature(Halide::Target::HVX_128)) {
+        } else if (get_target().has_feature(Halide::Target::HVX)) {
             vector_size_u8 = 128;
             vector_size_u32 = 32;
             use_hexagon = true;

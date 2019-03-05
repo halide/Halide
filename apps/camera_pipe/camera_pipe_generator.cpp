@@ -166,10 +166,10 @@ public:
                 .reorder(c, x, y).unroll(c);
         } else {
             int vec = get_target().natural_vector_size(UInt(16));
-            bool use_hexagon = get_target().features_any_of({Target::HVX_64, Target::HVX_128});
+            bool use_hexagon = get_target().features_any_of({Target::HVX_64, Target::HVX});
             if (get_target().has_feature(Target::HVX_64)) {
                 vec = 32;
-            } else if (get_target().has_feature(Target::HVX_128)) {
+            } else if (get_target().has_feature(Target::HVX)) {
                 vec = 64;
             }
             for (Func f : intermediates) {
@@ -310,7 +310,7 @@ Func CameraPipe::apply_curve(Func input) {
 
     // How much to upsample the LUT by when sampling it.
     int lutResample = 1;
-    if (get_target().features_any_of({Target::HVX_64, Target::HVX_128})) {
+    if (get_target().features_any_of({Target::HVX_64, Target::HVX})) {
         // On HVX, LUT lookups are much faster if they are to LUTs not
         // greater than 256 elements, so we reduce the tonemap to 256
         // elements and use linear interpolation to upsample it.
@@ -497,7 +497,7 @@ void CameraPipe::generate() {
         //and in HVX 64 we need 4 threads, and on other devices,
         // we might need many threads.
         Expr strip_size;
-        if (get_target().has_feature(Target::HVX_128)) {
+        if (get_target().has_feature(Target::HVX)) {
             strip_size = processed.dim(1).extent() / 2;
         } else if (get_target().has_feature(Target::HVX_64)) {
             strip_size = processed.dim(1).extent() / 4;
@@ -509,7 +509,7 @@ void CameraPipe::generate() {
         int vec = get_target().natural_vector_size(UInt(16));
         if (get_target().has_feature(Target::HVX_64)) {
             vec = 32;
-        } else if (get_target().has_feature(Target::HVX_128)) {
+        } else if (get_target().has_feature(Target::HVX)) {
             vec = 64;
         }
 
@@ -549,7 +549,7 @@ void CameraPipe::generate() {
         demosaiced->intermed_store_at.set({processed, yo});
         demosaiced->output_compute_at.set({curved, x});
 
-        if (get_target().features_any_of({Target::HVX_64, Target::HVX_128})) {
+        if (get_target().features_any_of({Target::HVX_64, Target::HVX})) {
             processed.hexagon();
             denoised.align_storage(x, vec);
             deinterleaved.align_storage(x, vec);

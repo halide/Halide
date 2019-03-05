@@ -23,7 +23,7 @@ int main(int argc, char **argv) {
         f.gpu_tile(x, y, xo, yo, xi, yi, 8, 8);
         g.gpu_tile(x, y, xo, yo, xi, yi, 8, 8);
         h.gpu_tile(x, y, xo, yo, xi, yi, 8, 8);
-    } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+    } else if (target.features_any_of({Target::HVX_64, Target::HVX})) {
         f.hexagon().vectorize(x, 32);
         g.hexagon().vectorize(x, 32);
         h.hexagon().vectorize(x, 32);
