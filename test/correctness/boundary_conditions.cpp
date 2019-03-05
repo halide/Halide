@@ -24,7 +24,7 @@ void schedule_test(Func f, int vector_width, const Target &t) {
     }
     if (t.has_gpu_feature() && vector_width <= 16) {
         f.gpu_tile(x, y, xo, yo, xi, yi, 2, 2);
-    } else if (t.features_any_of({Target::HVX_64, Target::HVX_128})) {
+    } else if (t.features_any_of({Target::HVX_64, Target::HVX})) {
         // TODO: Non-native vector widths hang the compiler here.
         //f.hexagon();
     }

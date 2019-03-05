@@ -193,12 +193,11 @@ int get_cuda_capability_lower_bound(const Target &t) {
 
 bool is_using_hexagon(const Target &t) {
     return t.has_feature(Target::HVX_64)
-           || t.has_feature(Target::HVX_128)
+           || t.has_feature(Target::HVX)
            || t.has_feature(Target::HVX_v62)
            || t.has_feature(Target::HVX_v65)
            || t.has_feature(Target::HVX_v66)
            || t.has_feature(Target::HexagonDma)
-           || t.has_feature(Target::HVX_shared_object)
            || t.arch == Target::Hexagon;
 }
 
@@ -332,10 +331,10 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"large_buffers", Target::LargeBuffers},
     {"hvx_64", Target::HVX_64},
     {"hvx_128", Target::HVX_128},
+    {"hvx", Target::HVX},
     {"hvx_v62", Target::HVX_v62},
     {"hvx_v65", Target::HVX_v65},
     {"hvx_v66", Target::HVX_v66},
-    {"hvx_shared_object", Target::HVX_shared_object},
     {"fuzz_float_stores", Target::FuzzFloatStores},
     {"soft_float_abi", Target::SoftFloatABI},
     {"msan", Target::MSAN},
@@ -730,7 +729,7 @@ bool Target::supports_device_api(DeviceAPI api) const {
     case DeviceAPI::None:        return true;
     case DeviceAPI::Host:        return true;
     case DeviceAPI::Default_GPU: return has_gpu_feature() || has_feature(Target::OpenGLCompute);
-    case DeviceAPI::Hexagon:     return has_feature(Target::HVX_64) || has_feature(Target::HVX_128);
+    case DeviceAPI::Hexagon:     return has_feature(Target::HVX_64) || has_feature(Target::HVX);
     case DeviceAPI::HexagonDma:  return has_feature(Target::HexagonDma);
     default:                     return has_feature(target_feature_for_device_api(api));
     }
@@ -759,7 +758,7 @@ int Target::natural_vector_size(const Halide::Type &t) const {
     if (arch == Target::Hexagon) {
         if (is_integer) {
             // HVX is either 64 or 128 *byte* vector size.
-            if (has_feature(Halide::Target::HVX_128)) {
+            if (has_feature(Halide::Target::HVX)) {
                 return 128 / data_size;
             } else if (has_feature(Halide::Target::HVX_64)) {
                 return 64 / data_size;
@@ -804,7 +803,7 @@ bool Target::get_runtime_compatible_target(const Target& other, Target &result) 
     // (a) must be included if either target has the feature (union)
     // (b) must be included if both targets have the feature (intersection)
     // (c) must match across both targets; it is an error if one target has the feature and the other doesn't
-    const std::array<Feature, 15> union_features = {
+    const std::array<Feature, 15> union_features = {{
             // These are true union features.
             CUDA, OpenCL, OpenGL, OpenGLCompute, Metal, D3D12Compute, NoNEON,
 
@@ -812,15 +811,16 @@ bool Target::get_runtime_compatible_target(const Target& other, Target &result) 
             // we have to put their union in the result and then take a lower bound.
             CUDACapability30, CUDACapability32, CUDACapability35, CUDACapability50, CUDACapability61,
             HVX_v62, HVX_v65, HVX_v66
-    };
+    }};
 
-    const std::array<Feature, 12> intersection_features = {
+    const std::array<Feature, 12> intersection_features = {{
             SSE41, AVX, AVX2, FMA, FMA4, F16C, ARMv7s,VSX, AVX512, AVX512_KNL, AVX512_Skylake, AVX512_Cannonlake
-    };
+    }} ;
 
-    const std::array<Feature, 10> matching_features = {
-            SoftFloatABI, Debug, TSAN, ASAN, MSAN, HVX_64, HVX_128, MinGW, HexagonDma, HVX_shared_object
-    };
+    const std::array<Feature, 10> matching_features = {{
+            SoftFloatABI, Debug, TSAN, ASAN, MSAN, HVX_64, HVX, MinGW, HexagonDma
+    }};
+
 
     // bitsets need to be the same width.
     decltype(result.features) union_mask;
@@ -845,7 +845,7 @@ bool Target::get_runtime_compatible_target(const Target& other, Target &result) 
     }
 
     if ((features & matching_mask) != (other.features & matching_mask)) {
-        user_warning << "runtime targets must agree on SoftFloatABI, Debug, TSAN, ASAN, MSAN, HVX_64, HVX_128, MinGW, HexagonDma, and HVX_shared_object\n";
+        user_warning << "runtime targets must agree on SoftFloatABI, Debug, TSAN, ASAN, MSAN, HVX_64, HVX, MinGW, HexagonDma\n";
         return false;
     }
 
@@ -899,18 +899,18 @@ void target_test() {
 
     // 3 targets: {A,B,C}. Want gcd(A,B)=C
     std::vector<std::array<std::string, 3>> gcd_tests = {
-            {"x86-64-linux-sse41-fma", "x86-64-linux-sse41-fma", "x86-64-linux-sse41-fma"},
-            {"x86-64-linux-sse41-fma-no_asserts-no_runtime", "x86-64-linux-sse41-fma", "x86-64-linux-sse41-fma"},
-            {"x86-64-linux-avx2-sse41", "x86-64-linux-sse41-fma", "x86-64-linux-sse41"},
-            {"x86-64-linux-avx2-sse41", "x86-32-linux-sse41-fma", ""},
-            {"x86-64-linux-cuda", "x86-64-linux", "x86-64-linux-cuda"},
-            {"x86-64-linux-cuda-cuda_capability_50", "x86-64-linux-cuda", "x86-64-linux-cuda"},
-            {"x86-64-linux-cuda-cuda_capability_50", "x86-64-linux-cuda-cuda_capability_30", "x86-64-linux-cuda-cuda_capability_30"},
-            {"x86-64-linux-cuda", "x86-64-linux-opengl", "x86-64-linux-cuda-opengl"},
-            {"hexagon-32-qurt-hvx_v65", "hexagon-32-qurt-hvx_v62", "hexagon-32-qurt-hvx_v62"},
-            {"hexagon-32-qurt-hvx_v62", "hexagon-32-qurt", "hexagon-32-qurt"},
-            {"hexagon-32-qurt-hvx_v62-hvx_64", "hexagon-32-qurt", ""},
-            {"hexagon-32-qurt-hvx_v62-hvx_64", "hexagon-32-qurt-hvx_64", "hexagon-32-qurt-hvx_64"},
+            {{"x86-64-linux-sse41-fma", "x86-64-linux-sse41-fma", "x86-64-linux-sse41-fma"}},
+            {{"x86-64-linux-sse41-fma-no_asserts-no_runtime", "x86-64-linux-sse41-fma", "x86-64-linux-sse41-fma"}},
+            {{"x86-64-linux-avx2-sse41", "x86-64-linux-sse41-fma", "x86-64-linux-sse41"}},
+            {{"x86-64-linux-avx2-sse41", "x86-32-linux-sse41-fma", ""}},
+            {{"x86-64-linux-cuda", "x86-64-linux", "x86-64-linux-cuda"}},
+            {{"x86-64-linux-cuda-cuda_capability_50", "x86-64-linux-cuda", "x86-64-linux-cuda"}},
+            {{"x86-64-linux-cuda-cuda_capability_50", "x86-64-linux-cuda-cuda_capability_30", "x86-64-linux-cuda-cuda_capability_30"}},
+            {{"x86-64-linux-cuda", "x86-64-linux-opengl", "x86-64-linux-cuda-opengl"}},
+            {{"hexagon-32-qurt-hvx_v65", "hexagon-32-qurt-hvx_v62", "hexagon-32-qurt-hvx_v62"}},
+            {{"hexagon-32-qurt-hvx_v62", "hexagon-32-qurt", "hexagon-32-qurt"}},
+            {{"hexagon-32-qurt-hvx_v62-hvx_64", "hexagon-32-qurt", ""}},
+            {{"hexagon-32-qurt-hvx_v62-hvx_64", "hexagon-32-qurt-hvx_64", "hexagon-32-qurt-hvx_64"}},
     };
 
     for (const auto &test : gcd_tests) {

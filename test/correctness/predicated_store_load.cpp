@@ -91,7 +91,7 @@ int vectorized_predicated_store_scalarized_predicated_load_test(const Target &t)
     f(x, y) = 10;
     f(r.x, r.y) += g(2*r.x, r.y) + g(2*r.x + 1, r.y);
 
-    if (t.features_any_of({Target::HVX_64, Target::HVX_128})) {
+    if (t.features_any_of({Target::HVX_64, Target::HVX})) {
         f.update(0).hexagon().vectorize(r.x, 32);
     } else if (t.arch == Target::X86) {
         f.update(0).vectorize(r.x, 32);
@@ -119,7 +119,7 @@ int vectorized_dense_load_with_stride_minus_one_test(const Target &t) {
 
     f(x, y) = select(x < 23, g(size-x, y) * 2 + g(20-x, y), undef<int>());
 
-    if (t.features_any_of({Target::HVX_64, Target::HVX_128})) {
+    if (t.features_any_of({Target::HVX_64, Target::HVX})) {
         f.hexagon().vectorize(x, 32);
     } else if (t.arch == Target::X86) {
         f.vectorize(x, 32);
@@ -156,7 +156,7 @@ int multiple_vectorized_predicate_test(const Target &t) {
     f(x, y) = 10;
     f(r.x, r.y) = g(size-r.x, r.y) * 2 + g(67-r.x, r.y);
 
-    if (t.features_any_of({Target::HVX_64, Target::HVX_128})) {
+    if (t.features_any_of({Target::HVX_64, Target::HVX})) {
         f.update(0).hexagon().vectorize(r.x, 32);
     } else if (t.arch == Target::X86) {
         f.update(0).vectorize(r.x, 32);
@@ -188,7 +188,7 @@ int scalar_load_test(const Target &t) {
     f(x, y) = 10;
     f(r.x, r.y) += 1 + max(g(0, 1), g(2*r.x + 1, r.y));
 
-    if (t.features_any_of({Target::HVX_64, Target::HVX_128})) {
+    if (t.features_any_of({Target::HVX_64, Target::HVX})) {
         f.update(0).hexagon().vectorize(r.x, 32);
     } else if (t.arch == Target::X86) {
         f.update(0).vectorize(r.x, 32);
@@ -222,7 +222,7 @@ int scalar_store_test(const Target &t) {
 
     f.update(0).allow_race_conditions();
 
-    if (t.features_any_of({Target::HVX_64, Target::HVX_128})) {
+    if (t.features_any_of({Target::HVX_64, Target::HVX})) {
         f.update(0).hexagon().vectorize(r.x, 32);
     } else if (t.arch == Target::X86) {
         f.update(0).vectorize(r.x, 32);
@@ -256,7 +256,7 @@ int not_dependent_on_vectorized_var_test(const Target &t) {
 
     f.update(0).allow_race_conditions();
 
-    if (t.features_any_of({Target::HVX_64, Target::HVX_128})) {
+    if (t.features_any_of({Target::HVX_64, Target::HVX})) {
         f.update(0).hexagon().vectorize(r.z, 32);
     } else if (t.arch == Target::X86) {
         f.update(0).vectorize(r.z, 32);
@@ -287,7 +287,7 @@ int no_op_store_test(const Target &t) {
     f(2*r.x + 1, r.y) = f(2*r.x + 1, r.y);
     f(2*r.x, 3*r.y) = f(2*r.x, 3*r.y);
 
-    if (t.features_any_of({Target::HVX_64, Target::HVX_128})) {
+    if (t.features_any_of({Target::HVX_64, Target::HVX})) {
         f.update(0).hexagon().vectorize(r.x, 32);
         f.update(1).hexagon().vectorize(r.y, 32);
     } else if (t.arch == Target::X86) {
@@ -321,7 +321,7 @@ int vectorized_predicated_predicate_with_pure_call_test(const Target &t) {
     f(x, y) = 10;
     f(r.x, r.y) += abs(r.x*r.y) + g(2*r.x + 1, r.y);
 
-    if (t.features_any_of({Target::HVX_64, Target::HVX_128})) {
+    if (t.features_any_of({Target::HVX_64, Target::HVX})) {
         f.update(0).hexagon().vectorize(r.x, 32);
     } else if (t.arch == Target::X86) {
         f.update(0).vectorize(r.x, 32);
@@ -359,7 +359,7 @@ int vectorized_predicated_load_const_index_test(const Target &t) {
     f(x, y) = x + y;
     f(r.x, y) = clamp(select((r.x % 2) == 0, r.x, y) + input(r.x % 2, y), 0, 10);
 
-    if (t.features_any_of({Target::HVX_64, Target::HVX_128})) {
+    if (t.features_any_of({Target::HVX_64, Target::HVX})) {
         f.update().hexagon().vectorize(r.x, 32);
     } else if (t.arch == Target::X86) {
         f.update().vectorize(r.x, 32);

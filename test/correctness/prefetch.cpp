@@ -50,7 +50,7 @@ bool check(const vector<vector<Expr>> &expected, vector<vector<Expr>> &result) {
 Expr get_max_byte_size(const Target &t) {
     // See \ref reduce_prefetch_dimension for max_byte_size
     Expr max_byte_size;
-    if (t.features_any_of({Target::HVX_64, Target::HVX_128})) {
+    if (t.features_any_of({Target::HVX_64, Target::HVX})) {
         max_byte_size = Expr();
     } else if (t.arch == Target::ARM) {
         max_byte_size = 32;
