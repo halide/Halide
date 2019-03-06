@@ -138,6 +138,7 @@ DECLARE_CPP_INITMOD(qurt_yield)
 DECLARE_CPP_INITMOD(runtime_api)
 DECLARE_CPP_INITMOD(ssp)
 DECLARE_CPP_INITMOD(to_string)
+DECLARE_CPP_INITMOD(trace_helper)
 DECLARE_CPP_INITMOD(tracing)
 DECLARE_CPP_INITMOD(windows_clock)
 DECLARE_CPP_INITMOD(windows_cuda)
@@ -769,6 +770,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 // Hexagon device (they do work in the simulator
                 // though...).
                 modules.push_back(get_initmod_tracing(c, bits_64, debug));
+                modules.push_back(get_initmod_trace_helper(c, bits_64, debug));
                 modules.push_back(get_initmod_write_debug_image(c, bits_64, debug));
 
                 // TODO: Support this module in the Hexagon backend,

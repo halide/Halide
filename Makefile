@@ -754,6 +754,7 @@ RUNTIME_CPP_COMPONENTS = \
   runtime_api \
   ssp \
   to_string \
+  trace_helper \
   tracing \
   windows_abort \
   windows_clock \

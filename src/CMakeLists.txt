@@ -84,6 +84,7 @@ set(RUNTIME_CPP
   runtime_api
   ssp
   to_string
+  trace_helper
   tracing
   windows_abort
   windows_clock
