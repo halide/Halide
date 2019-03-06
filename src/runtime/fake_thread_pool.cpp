@@ -110,4 +110,27 @@ WEAK int halide_do_par_for(void *user_context, halide_task_t f,
   return (*custom_do_par_for)(user_context, f, min, size, closure);
 }
 
+WEAK int halide_do_loop_task(void *user_context, halide_loop_task_t f,
+                             int min, int size, uint8_t *closure, void *task_parent){
+  return custom_do_loop_task(user_context, f, min, size, closure, task_parent);
+}
+
+WEAK int halide_do_parallel_tasks(void *user_context, int num_tasks,
+                                  struct halide_parallel_task_t *tasks,
+                                  void *task_parent) {
+    return custom_do_parallel_tasks(user_context, num_tasks, tasks, task_parent);
+}
+
+WEAK int halide_semaphore_init(struct halide_semaphore_t *sema, int count) {
+    return custom_semaphore_init(sema, count);
+}
+
+WEAK int halide_semaphore_release(struct halide_semaphore_t *sema, int count) {
+    return custom_semaphore_release(sema, count);
+}
+
+WEAK bool halide_semaphore_try_acquire(struct halide_semaphore_t *sema, int count) {
+    return custom_semaphore_try_acquire(sema, count);
+}
+
 }  // extern "C"
