@@ -773,7 +773,7 @@ RUNTIME_LL_COMPONENTS = \
   arm_no_neon \
   d3d12_abi_patch_64 \
   hvx_64 \
-  hvx \
+  hvx_128 \
   mips \
   posix_math \
   powerpc \

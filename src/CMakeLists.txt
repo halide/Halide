@@ -103,7 +103,7 @@ set (RUNTIME_LL
   arm
   arm_no_neon
   hvx_64
-  hvx
+  hvx_128
   mips
   posix_math
   powerpc
