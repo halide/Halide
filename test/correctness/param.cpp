@@ -19,7 +19,7 @@ int main(int argc, char **argv) {
         if (target.has_gpu_feature()) {
             Var xo, xi;
             f.gpu_tile(x, xo, xi, 256);
-        } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        } else if (target.features_any_of({Target::HVX_64, Target::HVX})) {
             f.hexagon().vectorize(x, 32);
         }
 
@@ -62,7 +62,7 @@ int main(int argc, char **argv) {
         if (target.has_gpu_feature()) {
             Var xo, xi;
             f.gpu_tile(x, xo, xi, 256);
-        } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        } else if (target.features_any_of({Target::HVX_64, Target::HVX})) {
             f.hexagon().vectorize(x, 32);
         }
 

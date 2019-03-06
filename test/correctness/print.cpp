@@ -213,12 +213,12 @@ int main(int argc, char **argv) {
         f(x) = print(x * 3);
         f.set_custom_print(halide_print);
         f.vectorize(x, 32);
-        if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        if (target.features_any_of({Target::HVX_64, Target::HVX})) {
             f.hexagon();
         }
         Buffer<int> result = f.realize(128);
 
-        if (!target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        if (!target.features_any_of({Target::HVX_64, Target::HVX})) {
             assert((int)messages.size() == result.width());
             for (size_t i = 0; i < messages.size(); i++) {
                 assert(messages[i] == std::to_string(i * 3) + "\n");
@@ -238,12 +238,12 @@ int main(int argc, char **argv) {
         f(x) = print_when(x % 2 == 0, x * 3);
         f.set_custom_print(halide_print);
         f.vectorize(x, 32);
-        if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        if (target.features_any_of({Target::HVX_64, Target::HVX})) {
             f.hexagon();
         }
         Buffer<int> result = f.realize(128);
 
-        if (!target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        if (!target.features_any_of({Target::HVX_64, Target::HVX})) {
             assert((int)messages.size() == result.width() / 2);
             for (size_t i = 0; i < messages.size(); i++) {
                 assert(messages[i] == std::to_string(i * 2 * 3) + "\n");

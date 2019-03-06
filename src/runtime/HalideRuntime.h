@@ -905,19 +905,6 @@ extern void halide_memoization_cache_release(void *user_context, void *host);
  */
 extern void halide_memoization_cache_cleanup();
 
-/** Create a unique file with a name of the form prefixXXXXXsuffix in an arbitrary
- * (but writable) directory; this is typically $TMP or /tmp, but the specific
- * location is not guaranteed. (Note that the exact form of the file name
- * may vary; in particular, the suffix may be ignored on non-Posix systems.)
- * The file is created (but not opened), thus this can be called from
- * different threads (or processes, e.g. when building with parallel make)
- * without risking collision. Note that the caller is always responsible
- * for deleting this file. Returns nonzero value if an error occurs.
- */
-extern int halide_create_temp_file(void *user_context,
-  const char *prefix, const char *suffix,
-  char *path_buf, size_t path_buf_size);
-
 /** Annotate that a given range of memory has been initialized;
  * only used when Target::MSAN is enabled.
  *
@@ -1254,9 +1241,12 @@ typedef enum halide_target_feature_t {
 
     halide_target_feature_large_buffers, ///< Enable 64-bit buffer indexing to support buffers > 2GB. Ignored if bits != 64.
 
-    halide_target_feature_hvx_64, ///< Enable HVX 64 byte mode.
-    halide_target_feature_hvx_128, ///< Enable HVX 128 byte mode.
+    halide_target_feature_hvx_64, ///< (Deprecated) Enable HVX 64 byte mode.
+    halide_target_feature_hvx_128, ///< (Deprecated) Enable HVX 128 byte mode.
+    halide_target_feature_hvx = halide_target_feature_hvx_128, ///< Enable HVX instruction set.
     halide_target_feature_hvx_v62, ///< Enable Hexagon v62 architecture.
+    halide_target_feature_hvx_v65, ///< Enable Hexagon v65 architecture.
+    halide_target_feature_hvx_v66, ///< Enable Hexagon v66 architecture.
     halide_target_feature_fuzz_float_stores, ///< On every floating point store, set the last bit of the mantissa to zero. Pipelines for which the output is very different with this feature enabled may also produce very different output on different processors.
     halide_target_feature_soft_float_abi, ///< Enable soft float ABI. This only enables the soft float ABI calling convention, which does not necessarily use soft floats.
     halide_target_feature_msan, ///< Enable hooks for MSAN support.
@@ -1264,13 +1254,10 @@ typedef enum halide_target_feature_t {
     halide_target_feature_avx512_knl, ///< Enable the AVX512 features supported by Knight's Landing chips, such as the Xeon Phi x200. This includes the base AVX512 set, and also AVX512-CD and AVX512-ER.
     halide_target_feature_avx512_skylake, ///< Enable the AVX512 features supported by Skylake Xeon server processors. This adds AVX512-VL, AVX512-BW, and AVX512-DQ to the base set. The main difference from the base AVX512 set is better support for small integer ops. Note that this does not include the Knight's Landing features. Note also that these features are not available on Skylake desktop and mobile processors.
     halide_target_feature_avx512_cannonlake, ///< Enable the AVX512 features expected to be supported by future Cannonlake processors. This includes all of the Skylake features, plus AVX512-IFMA and AVX512-VBMI.
-    halide_target_feature_hvx_use_shared_object, ///< Deprecated
     halide_target_feature_trace_loads, ///< Trace all loads done by the pipeline. Equivalent to calling Func::trace_loads on every non-inlined Func.
     halide_target_feature_trace_stores, ///< Trace all stores done by the pipeline. Equivalent to calling Func::trace_stores on every non-inlined Func.
     halide_target_feature_trace_realizations, ///< Trace all realizations done by the pipeline. Equivalent to calling Func::trace_realizations on every non-inlined Func.
     halide_target_feature_cuda_capability61,  ///< Enable CUDA compute capability 6.1 (Pascal)
-    halide_target_feature_hvx_v65, ///< Enable Hexagon v65 architecture.
-    halide_target_feature_hvx_v66, ///< Enable Hexagon v66 architecture.
     halide_target_feature_cl_half,  ///< Enable half support on OpenCL targets
     halide_target_feature_strict_float, ///< Turn off all non-IEEE floating-point optimization. Currently applies only to LLVM targets.
     halide_target_feature_legacy_buffer_wrappers,  ///< Emit legacy wrapper code for buffer_t (vs halide_buffer_t) when AOT-compiled.

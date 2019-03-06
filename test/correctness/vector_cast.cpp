@@ -24,7 +24,7 @@ template <typename T>
 bool is_type_supported(int vec_width, const Target &target) {
     DeviceAPI device = DeviceAPI::Default_GPU;
 
-    if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+    if (target.features_any_of({Target::HVX_64, Target::HVX})) {
         device = DeviceAPI::Hexagon;
     }
     return target.supports_type(type_of<T>().with_lanes(vec_width), device);
@@ -58,7 +58,7 @@ bool test(int vec_width, const Target &target) {
         Var xo, xi;
         f.gpu_tile(x, xo, xi, 64);
     } else {
-        if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        if (target.features_any_of({Target::HVX_64, Target::HVX})) {
             // TODO: Non-native vector widths hang the compiler here.
             //f.hexagon();
         }

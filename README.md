@@ -316,21 +316,21 @@ OpenGLCompute backend.)
 Halide for Hexagon HVX
 ======================
 Halide supports offloading work to Qualcomm Hexagon DSP on Qualcomm Snapdragon 820
-devices or newer. The Hexagon DSP provides a set of 64 and 128 byte vector
-instructions - the Hexagon Vector eXtensions (HVX). HVX is well suited to image
-processing, and Halide for Hexagon HVX will generate the appropriate HVX vector
-instructions from a program authored in Halide.
+devices or newer. The Hexagon DSP provides a set of 128 byte vector instructions - 
+the Hexagon Vector eXtensions (HVX). HVX is well suited to image processing, and
+Halide for Hexagon HVX will generate the appropriate HVX vector instructions from 
+a program authored in Halide.
 
 Halide can be used to compile Hexagon object files directly, by using a target such
-as `hexagon-32-qurt-hvx_64` or `hexagon-32-qurt-hvx_128`.
+as `hexagon-32-qurt-hvx`.
 
 Halide can also be used to offload parts of a pipeline to Hexagon using the `hexagon`
 scheduling directive. To enable the `hexagon` scheduling directive, include the
-`hvx_64` or `hvx_128` target features in your target. The currently supported
-combination of targets is to use the HVX target features with an x86 linux
-host (to use the simulator) or with an ARM android target (to use Hexagon DSP hardware).
-For examples of using the `hexagon` scheduling directive on both the simulator and a
-Hexagon DSP, see the blur example app.
+`hvx` target feature in your target. The currently supported combination of targets 
+is to use the HVX target features with an x86 linux host (to use the simulator) or 
+with an ARM android target (to use Hexagon DSP hardware). For examples of using the
+`hexagon` scheduling directive on both the simulator and a Hexagon DSP, see the blur
+example app.
 
 To build and run an example app using the Hexagon target,
   1. Obtain and build LLVM and Clang v5.0 or later from llvm.org
@@ -374,7 +374,7 @@ To build and run the blur example in Halide/apps/blur on the simulator:
     cd apps/blur
     export HL_HEXAGON_SIM_REMOTE=../../src/runtime/hexagon_remote/bin/v60/hexagon_sim_remote
     export HL_HEXAGON_TOOLS=$SDK_LOC/Hexagon_Tools/8.0/Tools/
-    LD_LIBRARY_PATH=../../src/runtime/hexagon_remote/bin/host/:$HL_HEXAGON_TOOLS/lib/iss/:. HL_TARGET=host-hvx_128 make test
+    LD_LIBRARY_PATH=../../src/runtime/hexagon_remote/bin/host/:$HL_HEXAGON_TOOLS/lib/iss/:. HL_TARGET=host-hvx make test
 
 #### To build and run the blur example in Halide/apps/blur on Android:
 
@@ -388,4 +388,4 @@ created from the NDK using the make-standalone-toolchain.sh script:
 Now build and run the blur example using the script to run it on device:
 
     export HL_HEXAGON_TOOLS=$SDK_LOC/HEXAGON_Tools/8.0/Tools/
-    HL_TARGET=arm-64-android-hvx_128 ./adb_run_on_device.sh
+    HL_TARGET=arm-64-android-hvx ./adb_run_on_device.sh
