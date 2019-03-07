@@ -30,7 +30,7 @@ int main(int argc, char **argv) {
     if (target.has_gpu_feature()) {
         Var xi("xi"), yi("yi");
         dilate3x3.gpu_tile(x, y, xi, yi, 16, 16);
-    } else if (target.features_any_of({Target::HVX_64, Target::HVX})) {
+    } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
         dilate3x3.hexagon().vectorize(x, 64);
     } else {
         dilate3x3.vectorize(x, target.natural_vector_size<uint8_t>());

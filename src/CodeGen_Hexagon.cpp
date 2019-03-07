@@ -83,8 +83,8 @@ std::unique_ptr<llvm::Module> CodeGen_Hexagon::compile(const Module &module) {
         cl::ParseCommandLineOptions(options.size(), options.data());
     });
 
-    if (module.target().features_all_of({Halide::Target::HVX, Halide::Target::HVX_64})) {
-        user_error << "Both HVX_64 and HVX set at same time\n";
+    if (module.target().features_all_of({Halide::Target::HVX_128, Halide::Target::HVX_64})) {
+        user_error << "Both HVX_64 and HVX_128 set at same time\n";
     }
 
     return llvm_module;
@@ -93,7 +93,7 @@ std::unique_ptr<llvm::Module> CodeGen_Hexagon::compile(const Module &module) {
 namespace {
 
 Stmt call_halide_qurt_hvx_lock(const Target &target) {
-    Expr hvx_mode = target.has_feature(Target::HVX) ? 128 : 64;
+    Expr hvx_mode = target.has_feature(Target::HVX_128) ? 128 : 64;
     Expr hvx_lock = Call::make(Int(32), "halide_qurt_hvx_lock", {hvx_mode}, Call::Extern);
     string hvx_lock_result_name = unique_name("hvx_lock_result");
     Expr hvx_lock_result_var = Variable::make(Int(32), hvx_lock_result_name);
@@ -370,7 +370,7 @@ struct HvxIntrinsic {
 void CodeGen_Hexagon::init_module() {
     CodeGen_Posix::init_module();
 
-    bool is_128B = target.has_feature(Halide::Target::HVX);
+    bool is_128B = target.has_feature(Halide::Target::HVX_128);
 
     Type i8 = Int(8);
     Type i16 = Int(16);
@@ -829,7 +829,7 @@ Value *CodeGen_Hexagon::call_intrin_cast(llvm::Type *ret_ty,
 }
 
 Value *CodeGen_Hexagon::interleave_vectors(const vector<llvm::Value *> &v) {
-    bool is_128B = target.has_feature(Halide::Target::HVX);
+    bool is_128B = target.has_feature(Halide::Target::HVX_128);
     llvm::Type *v_ty = v[0]->getType();
     llvm::Type *element_ty = v_ty->getVectorElementType();
     int element_bits = element_ty->getScalarSizeInBits();
@@ -957,7 +957,7 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
     llvm::Type *b_ty = b->getType();
     internal_assert(a_ty == b_ty);
 
-    bool is_128B = target.has_feature(Halide::Target::HVX);
+    bool is_128B = target.has_feature(Halide::Target::HVX_128);
     int a_elements = static_cast<int>(a_ty->getVectorNumElements());
 
     llvm::Type *element_ty = a->getType()->getVectorElementType();
@@ -1117,7 +1117,7 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
 }
 
 Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_index) {
-    bool is_128B = target.has_feature(Halide::Target::HVX);
+    bool is_128B = target.has_feature(Halide::Target::HVX_128);
     llvm::Type *lut_ty = lut->getType();
     llvm::Type *idx_ty = idx->getType();
 
@@ -1308,7 +1308,7 @@ bool generate_vdelta(const std::vector<int> &indices, bool reverse, std::vector<
 }
 
 Value *CodeGen_Hexagon::vdelta(Value *lut, const vector<int> &indices) {
-    bool is_128B = target.has_feature(Halide::Target::HVX);
+    bool is_128B = target.has_feature(Halide::Target::HVX_128);
     llvm::Type *lut_ty = lut->getType();
     int lut_elements = lut_ty->getVectorNumElements();
     llvm::Type *element_ty = lut_ty->getVectorElementType();
@@ -1603,7 +1603,7 @@ string CodeGen_Hexagon::mcpu() const {
 
 string CodeGen_Hexagon::mattrs() const {
     std::stringstream attrs;
-    if (target.has_feature(Halide::Target::HVX)) {
+    if (target.has_feature(Halide::Target::HVX_128)) {
         attrs << "+hvx-length128b";
     } else {
         attrs << "+hvx-length64b";
@@ -1617,7 +1617,7 @@ bool CodeGen_Hexagon::use_soft_float_abi() const {
 }
 
 int CodeGen_Hexagon::native_vector_bits() const {
-    if (target.has_feature(Halide::Target::HVX)) {
+    if (target.has_feature(Halide::Target::HVX_128)) {
         return 128*8;
     } else {
         return 64*8;

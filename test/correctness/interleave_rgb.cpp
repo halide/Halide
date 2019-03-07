@@ -26,7 +26,7 @@ bool test_interleave() {
     } else if (target.has_feature(Target::HVX_64)) {
         const int vector_width = 64 / sizeof(T);
         interleaved.hexagon().vectorize(x, vector_width).unroll(c);
-    } else if (target.has_feature(Target::HVX)) {
+    } else if (target.has_feature(Target::HVX_128)) {
         const int vector_width = 128 / sizeof(T);
         interleaved.hexagon().vectorize(x, vector_width).unroll(c);
     } else {

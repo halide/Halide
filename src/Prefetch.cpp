@@ -357,10 +357,7 @@ Stmt reduce_prefetch_dimension(Stmt stmt, const Target &t) {
 
     // Hexagon's prefetch takes in a range of address and can be maximum of
     // two dimension. Other architectures generate one prefetch per cache line.
-    if (t.features_any_of({Target::HVX_64, Target::HVX})) {
-        // TODO: This isn't quite right, if we are in an offloading pipeline,
-        // this max_dim is only correct within loops offloaded to Hexagon. This
-        // probably also is independent of whether HVX is being used.
+    if (t.features_any_of({Target::HVX_64, Target::HVX_128})) {
         max_dim = 2;
     } else if (t.arch == Target::ARM) {
         // ARM's cache line size can be 32 or 64 bytes and it can switch the

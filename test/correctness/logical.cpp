@@ -31,7 +31,7 @@ int main(int argc, char **argv) {
         Target target = get_jit_target_from_environment();
         if (target.has_gpu_feature()) {
             f.gpu_tile(x, y, xi, yi, 16, 16).vectorize(xi, 4);
-        } else if (target.features_any_of({Target::HVX_64, Target::HVX})) {
+        } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
             f.hexagon().vectorize(x, 128);
         } else {
             f.vectorize(x, 8);
@@ -64,7 +64,7 @@ int main(int argc, char **argv) {
         Target target = get_jit_target_from_environment();
         if (target.has_gpu_feature()) {
             f.gpu_tile(x, y, xi, yi, 16, 16).vectorize(xi, 4);
-        } else if (target.features_any_of({Target::HVX_64, Target::HVX})) {
+        } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
             f.hexagon().vectorize(x, 128);
         } else {
             f.vectorize(x, 8);
@@ -95,7 +95,7 @@ int main(int argc, char **argv) {
 
         if (target.has_gpu_feature()) {
             f.gpu_tile(x, y, xi, yi, 16, 16).vectorize(xi, 4);
-        } else if (target.features_any_of({Target::HVX_64, Target::HVX})) {
+        } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
             f.hexagon().vectorize(x, 128);
         } else {
             f.vectorize(x, 128);
@@ -124,7 +124,7 @@ int main(int argc, char **argv) {
         Target target = get_jit_target_from_environment();
         if (target.has_gpu_feature()) {
             f.gpu_tile(x, y, xi, yi, 16, 16).vectorize(xi, 4);
-        } else if (target.features_any_of({Target::HVX_64, Target::HVX})) {
+        } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
             f.hexagon().vectorize(x, 128);
         } else {
             f.vectorize(x, 8);
@@ -181,7 +181,7 @@ int main(int argc, char **argv) {
             }
             if (target.has_gpu_feature()) {
                 gpu.gpu_tile(x, y, xi, yi, 16, 16).vectorize(xi, 4);
-            } else if (target.features_any_of({Target::HVX_64, Target::HVX})) {
+            } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
                 gpu.hexagon().vectorize(x, 128);
             } else {
                 // Just test vectorization
