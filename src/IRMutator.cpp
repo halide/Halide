@@ -14,13 +14,11 @@ IRMutator::~IRMutator() {
 }
 
 Expr IRMutator::mutate(const Expr &e) {
-    //return e.defined() ? ((const BaseExprNode *)e.get())->mutate_expr(this) : Expr();
-    return e.get()->mutate_expr(this);
+    return e.defined() ? e.get()->mutate_expr(this) : Expr();
 }
 
 Stmt IRMutator::mutate(const Stmt &s) {
-    //return s.defined() ? ((const BaseStmtNode *)s.get())->mutate_stmt(this) : Stmt();
-    return s.get()->mutate_stmt(this);
+    return s.defined() ? s.get()->mutate_stmt(this) : Stmt();
 }
 
 Expr IRMutator::visit(const IntImm *op)   {return op;}
@@ -143,33 +141,7 @@ Expr IRMutator::visit(const Let *op) {
     }
     return Let::make(op->name, std::move(value), std::move(body));
 }
-/*
-Expr IRMutator::visit(const Let *op) {
-    Expr result;
-    std::vector<pair<const Let *, Expr>> lets;
-    do {
-        Expr new_value = mutate(op->value);
-        lets.emplace_back(op, new_value);
-        result = op->body;
-    } while ((op = result.as<Let>()));
 
-    result = mutate(result);
-
-    for (auto it = lets.rbegin(); it != lets.rend(); it++) {
-        op = it->first;
-        Expr new_value = std::move(it->second);
-        if (new_value.same_as(op->value) && result.same_as(op->body)) {
-            result = op;
-        } else {
-            result = Let::make(op->name, std::move(new_value), result);
-        }
-    }
-
-    return result;
-}
-*/
-
-/*
 Stmt IRMutator::visit(const LetStmt *op) {
     Expr value = mutate(op->value);
     Stmt body = mutate(op->body);
@@ -179,45 +151,6 @@ Stmt IRMutator::visit(const LetStmt *op) {
     }
     return LetStmt::make(op->name, std::move(value), std::move(body));
 }
-*/
-
-Stmt IRMutator::visit(const LetStmt *op) {
-    Expr value = mutate(op->value);
-    Stmt body = mutate(op->body);
-    /*
-    if (value.same_as(op->value) &&
-        body.same_as(op->body)) {
-        return op;
-    }
-    */
-    return LetStmt::make(op->name, std::move(value), std::move(body));
-}
-
-/*
-Stmt IRMutator::visit(const LetStmt *op) {
-    Stmt result;
-    std::vector<pair<const LetStmt *, Expr>> lets;
-    do {
-        Expr new_value = mutate(op->value);
-        lets.emplace_back(op, new_value);
-        result = op->body;
-    } while ((op = result.as<LetStmt>()));
-
-    result = mutate(result);
-
-    for (auto it = lets.rbegin(); it != lets.rend(); it++) {
-        op = it->first;
-        Expr new_value = std::move(it->second);
-        if (new_value.same_as(op->value) && result.same_as(op->body)) {
-            result = op;
-        } else {
-            result = LetStmt::make(op->name, std::move(new_value), result);
-        }
-    }
-
-    return result;
-}
-*/
 
 Stmt IRMutator::visit(const AssertStmt *op) {
     Expr condition = mutate(op->condition);
@@ -352,26 +285,13 @@ Stmt IRMutator::visit(const Prefetch *op) {
 }
 
 Stmt IRMutator::visit(const Block *op) {
-    Stmt result;
-    vector<pair<const Block *, Stmt>> stmts;
-    do {
-        stmts.emplace_back(op, mutate(op->first));
-        result = op->rest;
-    } while ((op = result.as<Block>()));
-
-    result = mutate(result);
-
-    for (auto it = stmts.rbegin(); it != stmts.rend(); it++) {
-        op = it->first;
-        Stmt new_first = std::move(it->second);
-        if (new_first.same_as(op->first) && result.same_as(op->rest)) {
-            result = op;
-        } else {
-            result = Block::make(new_first, result);
-        }
+    Stmt first = mutate(op->first);
+    Stmt rest = mutate(op->rest);
+    if (first.same_as(op->first) &&
+        rest.same_as(op->rest)) {
+        return op;
     }
-
-    return result;
+    return Block::make(std::move(first), std::move(rest));
 }
 
 Stmt IRMutator::visit(const IfThenElse *op) {
@@ -387,14 +307,11 @@ Stmt IRMutator::visit(const IfThenElse *op) {
 }
 
 Stmt IRMutator::visit(const Evaluate *op) {
-    /*
     Expr v = mutate(op->value);
     if (v.same_as(op->value)) {
         return op;
     }
     return Evaluate::make(std::move(v));
-    */
-    return Evaluate::make(mutate(op->value));
 }
 
 Expr IRMutator::visit(const Shuffle *op) {
