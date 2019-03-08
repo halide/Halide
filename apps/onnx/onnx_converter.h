@@ -6,7 +6,9 @@
 #include "onnx/onnx_pb.h"
 
 struct Tensor {
-  onnx::ValueInfoProto shape;
+  std::string name;
+  onnx::TensorProto::DataType type;
+  std::vector<Halide::Expr> shape;
   Halide::Func rep;
 };
 
@@ -25,7 +27,6 @@ Node ConvertNode(
 struct Model {
   std::unordered_map<std::string, Halide::ImageParam> inputs;
   std::unordered_map<std::string, Tensor> outputs;
-  std::unordered_map<std::string, Tensor> default_values;
 
   std::unordered_map<std::string, Tensor> tensors;
 };

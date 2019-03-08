@@ -12,11 +12,7 @@ TEST(ConverterTest, testAbs) {
 
   std::vector<Tensor> node_inputs;
   node_inputs.resize(1);
-  node_inputs[0]
-      .shape.mutable_type()
-      ->mutable_tensor_type()
-      ->mutable_shape()
-      ->add_dim();
+  node_inputs[0].shape = {200};
   Halide::Buffer<float> input(200);
   std::uniform_real_distribution<float> dis(-1.0, 1.0);
   std::mt19937 rnd;
@@ -42,11 +38,7 @@ TEST(ConverterTest, testActivationFunction) {
 
   std::vector<Tensor> node_inputs;
   node_inputs.resize(1);
-  node_inputs[0]
-      .shape.mutable_type()
-      ->mutable_tensor_type()
-      ->mutable_shape()
-      ->add_dim();
+  node_inputs[0].shape = {200};
   Halide::Buffer<float> input(200);
   std::mt19937 rnd;
   std::uniform_real_distribution<float> dis(-1.0, 1.0);
@@ -75,11 +67,7 @@ TEST(ConverterTest, testCast) {
   attr->set_name("to");
   attr->set_i(onnx::TensorProto_DataType_FLOAT);
   node_inputs.resize(1);
-  node_inputs[0]
-      .shape.mutable_type()
-      ->mutable_tensor_type()
-      ->mutable_shape()
-      ->add_dim();
+  node_inputs[0].shape = {200};
   Halide::Buffer<int> input(200);
   std::mt19937 rnd;
   std::uniform_int_distribution<int> dis(-100, 100);
@@ -106,11 +94,7 @@ TEST(ConverterTest, testAdd) {
 
   std::vector<Tensor> node_inputs;
   node_inputs.resize(2);
-  node_inputs[0]
-      .shape.mutable_type()
-      ->mutable_tensor_type()
-      ->mutable_shape()
-      ->add_dim();
+  node_inputs[0].shape = {200};
   node_inputs[1].shape = node_inputs[0].shape;
   Halide::Buffer<float> in1(200);
   std::mt19937 rnd;
@@ -172,42 +156,10 @@ TEST(ConverterTest, testGemm) {
 
   std::vector<Tensor> node_inputs;
   node_inputs.resize(3);
-  node_inputs[0]
-      .shape.mutable_type()
-      ->mutable_tensor_type()
-      ->mutable_shape()
-      ->add_dim()
-      ->set_dim_value(32);
-  node_inputs[0]
-      .shape.mutable_type()
-      ->mutable_tensor_type()
-      ->mutable_shape()
-      ->add_dim()
-      ->set_dim_value(100);
-  node_inputs[1]
-      .shape.mutable_type()
-      ->mutable_tensor_type()
-      ->mutable_shape()
-      ->add_dim()
-      ->set_dim_value(100);
-  node_inputs[1]
-      .shape.mutable_type()
-      ->mutable_tensor_type()
-      ->mutable_shape()
-      ->add_dim()
-      ->set_dim_value(64);
-  node_inputs[2]
-      .shape.mutable_type()
-      ->mutable_tensor_type()
-      ->mutable_shape()
-      ->add_dim()
-      ->set_dim_value(32);
-  node_inputs[2]
-      .shape.mutable_type()
-      ->mutable_tensor_type()
-      ->mutable_shape()
-      ->add_dim()
-      ->set_dim_value(64);
+  node_inputs[0].shape = {32, 100};
+  node_inputs[1].shape = {100, 64};
+  node_inputs[2].shape = {32, 64};
+
   std::uniform_real_distribution<float> dis(-1.0, 1.0);
   std::uniform_real_distribution<float> dis10(-10.0, 10.0);
 
@@ -250,54 +202,8 @@ TEST(ConverterTest, testConv) {
 
   std::vector<Tensor> node_inputs;
   node_inputs.resize(2);
-  node_inputs[0]
-      .shape.mutable_type()
-      ->mutable_tensor_type()
-      ->mutable_shape()
-      ->add_dim()
-      ->set_dim_value(3);
-  node_inputs[0]
-      .shape.mutable_type()
-      ->mutable_tensor_type()
-      ->mutable_shape()
-      ->add_dim()
-      ->set_dim_value(5);
-  node_inputs[0]
-      .shape.mutable_type()
-      ->mutable_tensor_type()
-      ->mutable_shape()
-      ->add_dim()
-      ->set_dim_value(6);
-  node_inputs[0]
-      .shape.mutable_type()
-      ->mutable_tensor_type()
-      ->mutable_shape()
-      ->add_dim()
-      ->set_dim_value(11);
-  node_inputs[1]
-      .shape.mutable_type()
-      ->mutable_tensor_type()
-      ->mutable_shape()
-      ->add_dim()
-      ->set_dim_value(7);
-  node_inputs[1]
-      .shape.mutable_type()
-      ->mutable_tensor_type()
-      ->mutable_shape()
-      ->add_dim()
-      ->set_dim_value(5);
-  node_inputs[1]
-      .shape.mutable_type()
-      ->mutable_tensor_type()
-      ->mutable_shape()
-      ->add_dim()
-      ->set_dim_value(3);
-  node_inputs[1]
-      .shape.mutable_type()
-      ->mutable_tensor_type()
-      ->mutable_shape()
-      ->add_dim()
-      ->set_dim_value(3);
+  node_inputs[0].shape = {3, 5, 6, 11};
+  node_inputs[1].shape = {7, 5, 3, 3};
 
   std::uniform_real_distribution<float> dis(-1.0, 1.0);
   std::uniform_real_distribution<float> dis10(-10.0, 10.0);
@@ -349,30 +255,7 @@ TEST(ConverterTest, testSum) {
 
   std::vector<Tensor> node_inputs;
   node_inputs.resize(1);
-  node_inputs[0]
-      .shape.mutable_type()
-      ->mutable_tensor_type()
-      ->mutable_shape()
-      ->add_dim()
-      ->set_dim_value(7);
-  node_inputs[0]
-      .shape.mutable_type()
-      ->mutable_tensor_type()
-      ->mutable_shape()
-      ->add_dim()
-      ->set_dim_value(3);
-  node_inputs[0]
-      .shape.mutable_type()
-      ->mutable_tensor_type()
-      ->mutable_shape()
-      ->add_dim()
-      ->set_dim_value(5);
-  node_inputs[0]
-      .shape.mutable_type()
-      ->mutable_tensor_type()
-      ->mutable_shape()
-      ->add_dim()
-      ->set_dim_value(11);
+  node_inputs[0].shape = {7, 3, 5, 11};
   Halide::Buffer<float> in1(7, 3, 5, 11);
   std::uniform_real_distribution<float> dis(-1.0, 1.0);
   std::mt19937 rnd;
@@ -411,18 +294,7 @@ TEST(ConverterTest, testConcat) {
 
   std::vector<Tensor> node_inputs;
   node_inputs.resize(2);
-  node_inputs[0]
-      .shape.mutable_type()
-      ->mutable_tensor_type()
-      ->mutable_shape()
-      ->add_dim()
-      ->set_dim_value(7);
-  node_inputs[0]
-      .shape.mutable_type()
-      ->mutable_tensor_type()
-      ->mutable_shape()
-      ->add_dim()
-      ->set_dim_value(3);
+  node_inputs[0].shape = {7, 3};
   Halide::Buffer<float> in1(7, 3);
   std::uniform_real_distribution<float> dis(-1.0, 1.0);
   std::mt19937 rnd;
@@ -430,18 +302,7 @@ TEST(ConverterTest, testConcat) {
   Halide::Var i, j;
   node_inputs[0].rep(i, j) = in1(i, j);
 
-  node_inputs[1]
-      .shape.mutable_type()
-      ->mutable_tensor_type()
-      ->mutable_shape()
-      ->add_dim()
-      ->set_dim_value(5);
-  node_inputs[1]
-      .shape.mutable_type()
-      ->mutable_tensor_type()
-      ->mutable_shape()
-      ->add_dim()
-      ->set_dim_value(3);
+  node_inputs[1].shape = {5, 3};
   Halide::Buffer<float> in2(5, 3);
   in2.for_each_value([&](float& f) { f = dis(rnd); });
   node_inputs[1].rep(i, j) = in2(i, j);
@@ -456,6 +317,33 @@ TEST(ConverterTest, testConcat) {
     }
     for (int j = 0; j < 5; ++j) {
       EXPECT_EQ(in2(j, i), output(j + 7, i));
+    }
+  }
+}
+
+TEST(ConverterTest, testConstantFill) {
+  constexpr float const_value = 2.0f;
+  onnx::NodeProto concat_node;
+  concat_node.set_name("constant_fill_node");
+  concat_node.set_op_type("ConstantFill");
+  concat_node.add_output("y");
+  onnx::AttributeProto* shape_attr = concat_node.add_attribute();
+  shape_attr->set_name("shape");
+  shape_attr->add_ints(3);
+  shape_attr->add_ints(4);
+  onnx::AttributeProto* val_attr = concat_node.add_attribute();
+  val_attr->set_name("value");
+  val_attr->set_f(const_value);
+  onnx::AttributeProto* dtype_attr = concat_node.add_attribute();
+  dtype_attr->set_name("dtype");
+  dtype_attr->set_i(4);
+
+  Node converted = ConvertNode(concat_node, {}, "");
+  GOOGLE_CHECK_EQ(1, converted.outputs.size());
+  Halide::Buffer<uint16_t> output = converted.outputs[0].rep.realize(3, 4);
+  for (int i = 0; i < 3; ++i) {
+    for (int j = 0; j < 4; ++j) {
+      EXPECT_EQ(2u, output(i, j));
     }
   }
 }
