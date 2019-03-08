@@ -273,7 +273,11 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
     } else if (target.arch == Target::ARM) {
         if (target.bits == 32) {
             if (target.os == Target::IOS) {
+#if LLVM_VERSION >= 90
+                return llvm::DataLayout("e-m:o-p:32:32-Fi8-f64:32:64-v64:32:64-v128:32:128-a:0:32-n32-S32");
+#else
                 return llvm::DataLayout("e-m:o-p:32:32-f64:32:64-v64:32:64-v128:32:128-a:0:32-n32-S32");
+#endif
             } else {
 #if LLVM_VERSION >= 90
                 return llvm::DataLayout("e-m:e-p:32:32-Fi8-i64:64-v128:64:128-a:0:32-n32-S64");
