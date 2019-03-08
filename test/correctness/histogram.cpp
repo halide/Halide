@@ -40,8 +40,8 @@ bool test() {
     }
     */
     Target target = get_jit_target_from_environment();
-    if (target.features_any_of({Target::HVX_64, Target::HVX})) {
-        const int vector_size = target.has_feature(Target::HVX) ? 128 : 64;
+    if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        const int vector_size = target.has_feature(Target::HVX_128) ? 128 : 64;
         g
             .hexagon()
             .vectorize(x, vector_size);
@@ -77,7 +77,7 @@ bool test() {
 int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
 
-    if (target.features_any_of({Target::HVX_64, Target::HVX})) {
+    if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
         if (!test<uint8_t,  int16_t >() ||
             !test<uint16_t, uint16_t>() ||
             !test<uint8_t,  int32_t >() ||

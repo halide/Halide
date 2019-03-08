@@ -253,7 +253,7 @@ class PredicateLoadStore : public IRMutator {
 
     bool should_predicate_store_load(int bit_size) {
         if (in_hexagon) {
-            internal_assert(target.features_any_of({Target::HVX_64, Target::HVX}))
+            internal_assert(target.features_any_of({Target::HVX_64, Target::HVX_128}))
                 << "We are inside a hexagon loop, but the target doesn't have hexagon's features\n";
             return true;
         } else if (target.arch == Target::X86) {

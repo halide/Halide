@@ -191,7 +191,8 @@ void Simplify::ScopedFact::learn_true(const Expr &fact) {
         const int64_t *modulus = m ? as_const_int(m->b) : nullptr;
         const int64_t *remainder = m ? as_const_int(eq->b) : nullptr;
         if (v) {
-            if (is_const(eq->b)) {
+            if (is_const(eq->b) || eq->b.as<Variable>()) {
+                // TODO: consider other cases where we might want to entirely substitute
                 info.replacement = eq->b;
                 simplify->var_info.push(v->name, info);
                 pop_list.push_back(v);
