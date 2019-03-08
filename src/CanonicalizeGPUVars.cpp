@@ -182,7 +182,7 @@ class CanonicalizeGPUVars : public IRMutator {
             string name = canonicalize_let(it->first);
             if (name != it->first) {
                 Expr new_var = Variable::make(Int(32), name);
-                result = substitute(it->first, name, result);
+                result = substitute(it->first, new_var, result);
             }
             result = LetStmt::make(name, it->second, result);
         }
