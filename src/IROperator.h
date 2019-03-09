@@ -1885,6 +1885,10 @@ inline HALIDE_NO_USER_CODE_INLINE Expr require(Expr condition, Expr value, Args&
     return require(std::move(condition), collected_args);
 }
 
+namespace Internal {
+Expr requirement_failed_error(Expr condition, const std::vector<Expr> &args);
+}
+
 // @}
 
 /** Return an undef value of the given type. Halide skips stores that
