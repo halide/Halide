@@ -2767,6 +2767,12 @@ public:
     // calling from generate() as long as all Outputs have been defined.)
     Pipeline get_pipeline();
 
+    template<typename... Args>
+    HALIDE_NO_USER_CODE_INLINE
+    void add_requirement(Expr condition, Args&&... args) {
+        get_pipeline().add_requirement(condition, std::forward<Args>(args)...);
+    }
+
 protected:
     GeneratorBase(size_t size, const void *introspection_helper);
     void set_generator_names(const std::string &registered_name, const std::string &stub_name);
