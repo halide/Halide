@@ -80,6 +80,7 @@ class LiftLoopInvariants : public IRMutator {
 
     template<typename T, typename Body>
     Body visit_let(const T *op) {
+        // Visit an entire chain of lets in a single method to conserve stack space.
         struct Frame {
             const T *op;
             Expr new_value;

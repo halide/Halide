@@ -893,6 +893,7 @@ class SubstituteInConstants : public IRMutator {
     Scope<Expr> scope;
 
     Stmt visit(const LetStmt *op) override {
+        // Visit an entire chain of lets in a single method to conserve stack space.
         Stmt result;
         struct Frame {
             const LetStmt *op;

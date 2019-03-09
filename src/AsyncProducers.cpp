@@ -494,6 +494,7 @@ class ExpandAcquireNodes : public IRMutator {
     using IRMutator::visit;
 
     Stmt visit(const Block *op) override {
+        // Do an entire sequence of blocks in a single visit method to conserve stack space.
         vector<Stmt> stmts;
         Stmt result;
         do {

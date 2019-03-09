@@ -287,9 +287,10 @@ Stmt Simplify::visit(const Block *op) {
     Stmt rest = op->rest;
 
     if (const AssertStmt *first_assert = first.as<AssertStmt>()) {
-        // We won't be popping any knowledge until after the end of
-        // this chain of asserts, so we can use a single ScopedFact
-        // and progressively add knowledge to it.
+        // Handle an entire sequence of asserts here to avoid a deeply
+        // nested stack.  We won't be popping any knowledge until
+        // after the end of this chain of asserts, so we can use a
+        // single ScopedFact and progressively add knowledge to it.
         ScopedFact knowledge(this);
         vector<Stmt> result;
         result.push_back(first);

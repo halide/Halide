@@ -176,6 +176,7 @@ private:
 
     template<typename T, typename Body>
     Body visit_let(const T *op) {
+        // Visit an entire chain of lets in a single method to conserve stack space.
         struct Frame {
             const T *op;
             Expr new_value;
@@ -432,6 +433,7 @@ private:
     }
 
     Stmt visit(const Block *op) override {
+        // Visit a sequence of blocks in a single method to conserve stack space.
         Stmt result;
         vector<std::pair<const Block *, Stmt>> frames;
 
