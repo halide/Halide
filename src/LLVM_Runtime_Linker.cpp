@@ -754,7 +754,6 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_posix_print(c, bits_64, debug));
                 modules.push_back(get_initmod_fuchsia_clock(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_io(c, bits_64, debug));
-                modules.push_back(get_initmod_posix_tempfile(c, bits_64, debug));
                 modules.push_back(get_initmod_fuchsia_host_cpu_count(c, bits_64, debug));
                 modules.push_back(get_initmod_fuchsia_yield(c, bits_64, debug));
                 if (tsan) {
