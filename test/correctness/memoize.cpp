@@ -1,8 +1,8 @@
+#include "Halide.h"
+#include "HalideRuntime.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include "Halide.h"
-#include "HalideRuntime.h"
 
 using namespace Halide;
 
@@ -391,7 +391,7 @@ int main(int argc, char **argv) {
             }
         }
         // TODO work out an assertion on call count here.
-        fprintf(stderr, "Call count is %d.\n", call_count_with_arg);
+        printf("Call count is %d.\n", call_count_with_arg);
 
         // Return cache size to default.
         Internal::JITSharedRuntime::memoization_cache_set_size(0);
@@ -427,14 +427,14 @@ int main(int argc, char **argv) {
         }
 
         // TODO work out an assertion on call count here.
-        fprintf(stderr, "Call count before oversize realize is %d.\n", call_count_with_arg);
+        printf("Call count before oversize realize is %d.\n", call_count_with_arg);
         call_count_with_arg = 0;
 
         Buffer<uint8_t> big = g.realize(1024, 1024);
         Buffer<uint8_t> big2 = g.realize(1024, 1024);
 
         // TODO work out an assertion on call count here.
-        fprintf(stderr, "Call count after oversize realize is %d.\n", call_count_with_arg);
+        printf("Call count after oversize realize is %d.\n", call_count_with_arg);
 
         call_count_with_arg = 0;
         for (int v = 0; v < 1000; v++) {
@@ -449,7 +449,7 @@ int main(int argc, char **argv) {
             }
         }
 
-        fprintf(stderr, "Call count is %d.\n", call_count_with_arg);
+        printf("Call count is %d.\n", call_count_with_arg);
 
         // Return cache size to default.
         Internal::JITSharedRuntime::memoization_cache_set_size(0);
@@ -486,7 +486,7 @@ int main(int argc, char **argv) {
 
         // TODO work out an assertion on call counts here.
         for (int i = 0; i < 8; i++) {
-          fprintf(stderr, "Call count for thread %d is %d.\n", i, call_count_with_arg_parallel[i]);
+          printf("Call count for thread %d is %d.\n", i, call_count_with_arg_parallel[i]);
         }
 
         // Return cache size to default.
@@ -531,7 +531,7 @@ int main(int argc, char **argv) {
         }
 
         for (int i = 0; i < 4; i++) {
-          fprintf(stderr, "Call count for stage %d is %d.\n", i, call_count_staged[i]);
+          printf("Call count for stage %d is %d.\n", i, call_count_staged[i]);
         }
 
         result = output.realize(128, 128);
@@ -542,7 +542,7 @@ int main(int argc, char **argv) {
         }
 
         for (int i = 0; i < 4; i++) {
-            fprintf(stderr, "Call count for stage %d is %d.\n", i, call_count_staged[i]);
+            printf("Call count for stage %d is %d.\n", i, call_count_staged[i]);
         }
 
     }
@@ -608,11 +608,11 @@ int main(int argc, char **argv) {
             }
         }
 
-        fprintf(stderr, "In 100 attempts with flakey malloc, %d errors and %d full completions occured.\n", total_errors, completed);
+        printf("In 100 attempts with flakey malloc, %d errors and %d full completions occured.\n", total_errors, completed);
 
 
     }
 
-    fprintf(stderr, "Success!\n");
+    printf("Success!\n");
     return 0;
 }

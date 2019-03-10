@@ -1,3 +1,4 @@
+
 #include "RDom.h"
 #include "Generator.h"
 #include "IREquality.h"
@@ -108,10 +109,18 @@ class CheckRDomBounds : public IRGraphVisitor {
     }
 
     void visit(const Variable *op) override {
-        if (!op->param.defined() && !op->image.defined()) {
+        if (!op->param.defined() &&
+            !op->image.defined() &&
+            !internal_vars.contains(op->name)) {
             offending_free_var = op->name;
         }
     }
+
+    void visit(const Let *op) override {
+        ScopedBinding<int> bind(internal_vars, op->name, 0);
+        IRGraphVisitor::visit(op);
+    }
+    Scope<int> internal_vars;
 public:
     string offending_func;
     string offending_free_var;

@@ -102,7 +102,7 @@ Stmt Simplify::visit(const AssertStmt *op) {
         const bool const_false_conditions_expected =
             call && call->name == "halide_error_specialize_fail";
         if (!const_false_conditions_expected) {
-            user_warning << "This pipeline is guaranteed to fail an assertion at runtime with error: \n"
+            user_warning << "This pipeline is guaranteed to fail an assertion at runtime: \n"
                          << message << "\n";
         }
     } else if (is_one(cond)) {
@@ -117,7 +117,7 @@ Stmt Simplify::visit(const AssertStmt *op) {
 }
 
 Stmt Simplify::visit(const For *op) {
-    ConstBounds min_bounds, extent_bounds;
+    ExprInfo min_bounds, extent_bounds;
     Expr new_min = mutate(op->min, &min_bounds);
     Expr new_extent = mutate(op->extent, &extent_bounds);
 
@@ -125,14 +125,15 @@ Stmt Simplify::visit(const For *op) {
     if (min_bounds.min_defined || (min_bounds.max_defined && extent_bounds.max_defined)) {
         min_bounds.max += extent_bounds.max - 1;
         min_bounds.max_defined &= extent_bounds.max_defined;
+        min_bounds.alignment = ModulusRemainder{};
         bounds_tracked = true;
-        bounds_info.push(op->name, min_bounds);
+        bounds_and_alignment_info.push(op->name, min_bounds);
     }
 
     Stmt new_body = mutate(op->body);
 
     if (bounds_tracked) {
-        bounds_info.pop(op->name);
+        bounds_and_alignment_info.pop(op->name);
     }
 
     if (is_no_op(new_body)) {
@@ -180,24 +181,34 @@ Stmt Simplify::visit(const Store *op) {
 
     Expr predicate = mutate(op->predicate, nullptr);
     Expr value = mutate(op->value, nullptr);
-    Expr index = mutate(op->index, nullptr);
+
+    ExprInfo index_info;
+    Expr index = mutate(op->index, &index_info);
+
+    ExprInfo base_info;
+    if (const Ramp *r = index.as<Ramp>()) {
+        mutate(r->base, &base_info);
+    }
+    base_info.alignment = ModulusRemainder::intersect(base_info.alignment, index_info.alignment);
 
     const Load *load = value.as<Load>();
     const Broadcast *scalar_pred = predicate.as<Broadcast>();
+
+    ModulusRemainder align = ModulusRemainder::intersect(op->alignment, base_info.alignment);
 
     if (is_zero(predicate)) {
         // Predicate is always false
         return Evaluate::make(0);
     } else if (scalar_pred && !is_one(scalar_pred->value)) {
         return IfThenElse::make(scalar_pred->value,
-                                Store::make(op->name, value, index, op->param, const_true(value.type().lanes())));
+                                Store::make(op->name, value, index, op->param, const_true(value.type().lanes()), align));
     } else if (is_undef(value) || (load && load->name == op->name && equal(load->index, index))) {
         // foo[x] = foo[x] or foo[x] = undef is a no-op
         return Evaluate::make(0);
-    } else if (predicate.same_as(op->predicate) && value.same_as(op->value) && index.same_as(op->index)) {
+    } else if (predicate.same_as(op->predicate) && value.same_as(op->value) && index.same_as(op->index) && align == op->alignment) {
         return op;
     } else {
-        return Store::make(op->name, value, index, op->param, predicate);
+        return Store::make(op->name, value, index, op->param, predicate, align);
     }
 }
 

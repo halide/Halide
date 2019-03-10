@@ -138,7 +138,7 @@ void check_estimates_on_outputs(const vector<Function> &outputs) {
             }
             user_assert(found && est.min.type().is_int() && est.extent.type().is_int())
                 << "Please provide a valid estimate for dimension "
-                << est.var << " of output \"" << out.name() << "\"\n";
+                << arg << " of output \"" << out.name() << "\"\n";
         }
     }
 }
@@ -1957,7 +1957,7 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g, bool show_
     bool model_reuse = false;
 
     // Linear dropoff
-    Expr load_slope = cast<float>(arch_params.balance) / arch_params.last_level_cache_size;
+    float load_slope = arch_params.balance / arch_params.last_level_cache_size;
     for (const auto &f_load : group_load_costs) {
         internal_assert(g.inlined.find(f_load.first) == g.inlined.end())
             << "Intermediates of inlined pure fuction \"" << f_load.first
@@ -2386,28 +2386,13 @@ pair<VarOrRVar, VarOrRVar> Partitioner::split_dim(
     // care for the nested loops. If it is the update definition of the group output
     // however, we'd better make sure that no other member of the groups accesses
     // the inputs or outputs.
+
     TailStrategy strategy = TailStrategy::Auto;
     if ((stage_num > 0) && !v.is_rvar) {
-        if (!is_group_output) {
-            if (access_inputs_or_outputs(def, v, costs.inputs, outputs)) {
-                strategy = TailStrategy::GuardWithIf;
-            }
-        } else {
-            bool any_access_inputs_outputs = false;
-            for (const FStage &mem : g.members) {
-                if (mem.func.name() == f_handle.name()) {
-                    continue;
-                }
-                Definition mem_def = get_stage_definition(mem.func, mem.stage_num);
-                if (access_inputs_or_outputs(mem_def, v, costs.inputs, outputs)) {
-                    any_access_inputs_outputs = true;
-                    break;
-                }
-            }
-            if (any_access_inputs_outputs) {
-                strategy = TailStrategy::GuardWithIf;
-            }
-        }
+        // TODO: It's safe to use RoundUp here if we know there are no
+        // loads from any input, but at this point we've lost track of
+        // loads from inputs that happen inside inlined Funcs.
+        strategy = TailStrategy::GuardWithIf;
     }
 
     f_handle.split(v, outer, inner, factor, strategy);
@@ -3548,13 +3533,15 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
 }  // namespace Internal
 
 MachineParams MachineParams::generic() {
-    return MachineParams(16, 16 * 1024 * 1024, 40);
+    std::string params = Internal::get_env_variable("HL_MACHINE_PARAMS");
+    if (params.empty()) {
+        return MachineParams(16, 16 * 1024 * 1024, 40);
+    } else {
+        return MachineParams(params);
+    }
 }
 
 std::string MachineParams::to_string() const {
-    internal_assert(parallelism.type().is_int() &&
-                    last_level_cache_size.type().is_int() &&
-                    balance.type().is_int());
     std::ostringstream o;
     o << parallelism << "," << last_level_cache_size << "," << balance;
     return o.str();
@@ -3563,9 +3550,9 @@ std::string MachineParams::to_string() const {
 MachineParams::MachineParams(const std::string &s) {
     std::vector<std::string> v = Internal::split_string(s, ",");
     user_assert(v.size() == 3) << "Unable to parse MachineParams: " << s;
-    parallelism = Internal::string_to_int(v[0]);
-    last_level_cache_size = Internal::string_to_int(v[1]);
-    balance = Internal::string_to_int(v[2]);
+    parallelism = std::atoi(v[0].c_str());
+    last_level_cache_size = std::atoll(v[1].c_str());
+    balance = std::atof(v[2].c_str());
 }
 
 }  // namespace Halide

@@ -151,6 +151,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Evaluate *op)
     print_expr(op->value);
 }
 
+
 string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_extern_call(const Call *op) {
     internal_assert(!function_takes_user_context(op->name));
 
@@ -251,6 +252,20 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Broadcast *op
     rhs << ")";
 
     print_assignment(op->type.with_lanes(op->lanes), rhs.str());
+}
+
+void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Call *op) {
+    if (op->is_intrinsic(Call::gpu_thread_barrier)) {
+        // Halide only ever needs threadgroup memory fences:
+        // NOTE(marcos): using "WithGroupSync" here just to be safe, as a
+        // simple "GroupMemoryBarrier" is probably too relaxed for Halide
+        // (also note we need to return an integer)
+        do_indent();
+        stream << "GroupMemoryBarrierWithGroupSync();\n";
+        print_assignment(op->type, "0");
+    } else {
+        CodeGen_C::visit(op);
+    }
 }
 
 namespace {
@@ -903,9 +918,9 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
     // NOTE(marcos): it would be cleaner if we could just use an IRVisitor here
     // but in order to find the enclosing Stmt of a Load expression we need to
     // to walk through base Stmt nodes, and only IRMutator has this overload:
-    struct FindUninitializedSharedLoads : public IRMutator2 {
-        using IRMutator2::visit;
-        using IRMutator2::mutate;
+    struct FindUninitializedSharedLoads : public IRMutator {
+        using IRMutator::visit;
+        using IRMutator::mutate;
         virtual Expr visit(const Load *op) override {
             if (op->name == "__shared") {
                 if (!latest_store) {
@@ -914,10 +929,10 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
                     bad_load_expr = op;
                 }
             }
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
         virtual Stmt visit(const Store *op) override {
-            Stmt store = IRMutator2::visit(op);
+            Stmt store = IRMutator::visit(op);
             if (op->name == "__shared") {
                 latest_store = op;
             }
@@ -927,7 +942,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
             if (!bad_load_expr) {
                 current_stmt = &stmt;
             }
-            return IRMutator2::mutate(stmt);
+            return IRMutator::mutate(stmt);
         }
         const Stmt  *current_stmt  = nullptr;
         const Load  *bad_load_expr = nullptr;
@@ -938,17 +953,17 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
     if (fusl.bad_load_expr) {
         debug(1) << "Found a potential load-before-initialization on __shared buffer!\n";
         // use IRMutator to inject a zero-initialization before the load
-        struct ZeroInitializeSharedMemory : public IRMutator2 {
-            using IRMutator2::mutate;
+        struct ZeroInitializeSharedMemory : public IRMutator {
+            using IRMutator::mutate;
             virtual Stmt mutate(const Stmt &op) override {
                 if (&op != uninitialized_load_stmt) {
-                    return IRMutator2::mutate(op);
+                    return IRMutator::mutate(op);
                 }
 
                 debug(1) << "Patching __shared buffer with zero-intialization...\n";
 
                 const Load* lop = uninitialized_load_expr;
-                Stmt initialization = Store::make(lop->name, Expr(0), lop->index, Parameter(), lop->predicate);
+                Stmt initialization = Store::make(lop->name, Expr(0), lop->index, Parameter(), lop->predicate, ModulusRemainder());
                 return Block::make({ initialization, op });
             }
             const Stmt *uninitialized_load_stmt = nullptr;
@@ -1138,16 +1153,6 @@ void CodeGen_D3D12Compute_Dev::init_module() {
                << "#define atanh_f32(x) (log_f32((1+x)/(1-x))/2) \n"
                << "#define fast_inverse_f32      rcp   \n"
                << "#define fast_inverse_sqrt_f32 rsqrt \n"
-             // Halide only ever needs threadgroup memory fences:
-             // NOTE(marcos): using "WithGroupSync" here just to be safe, as a
-             // simple "GroupMemoryBarrier" is probably too relaxed for Halide
-             // (also note we need to return an integer)
-               << "\n"
-               << "int halide_gpu_thread_barrier() \n"
-                  "{ \n"
-                  "  GroupMemoryBarrierWithGroupSync(); \n"
-                  "  return 0; \n"
-                  "} \n"
                << "\n";
              //<< "}\n"; // close namespace
 

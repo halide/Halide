@@ -137,6 +137,24 @@ std::ostream &operator<<(std::ostream &out, const MemoryType &t) {
     return out;
 }
 
+std::ostream &operator<<(std::ostream &out, const TailStrategy &t) {
+    switch (t) {
+    case TailStrategy::Auto:
+        out << "Auto";
+        break;
+    case TailStrategy::GuardWithIf:
+        out << "GuardWithIf";
+        break;
+    case TailStrategy::ShiftInwards:
+        out << "ShiftInwards";
+        break;
+    case TailStrategy::RoundUp:
+        out << "RoundUp";
+        break;
+    }
+    return out;
+}
+
 ostream &operator<<(ostream &stream, const LoopLevel &loop_level) {
     return stream << "loop_level("
         << (loop_level.defined() ? loop_level.to_string() : "undefined")
@@ -161,11 +179,11 @@ void IRPrinter::test() {
     expr_source << (x + 3) * (y / 2 + 17);
     internal_assert(expr_source.str() == "((x + 3)*((y/2) + 17))");
 
-    Stmt store = Store::make("buf", (x * 17) / (x - 3), y - 1,  Parameter(), const_true());
+    Stmt store = Store::make("buf", (x * 17) / (x - 3), y - 1,  Parameter(), const_true(), ModulusRemainder());
     Stmt for_loop = For::make("x", -2, y + 2, ForType::Parallel, DeviceAPI::Host, store);
     vector<Expr> args(1); args[0] = x % 3;
     Expr call = Call::make(i32, "buf", args, Call::Extern);
-    Stmt store2 = Store::make("out", call + 1, x, Parameter(), const_true());
+    Stmt store2 = Store::make("out", call + 1, x, Parameter(), const_true(), ModulusRemainder(3, 5));
     Stmt for_loop2 = For::make("x", 0, y, ForType::Vectorized , DeviceAPI::Host, store2);
 
     Stmt producer = ProducerConsumer::make_produce("buf", for_loop);
@@ -545,11 +563,15 @@ void IRPrinter::visit(const Select *op) {
 
 void IRPrinter::visit(const Load *op) {
     const bool has_pred = !is_one(op->predicate);
+    const bool show_alignment = op->type.is_vector() && op->alignment.modulus > 1;
     if (has_pred) {
         stream << "(";
     }
     stream << op->name << "[";
     print(op->index);
+    if (show_alignment) {
+        stream << " aligned(" << op->alignment.modulus << ", " << op->alignment.remainder << ")";
+    }
     stream << "]";
     if (has_pred) {
         stream << " if ";
@@ -659,6 +681,7 @@ void IRPrinter::visit(const Acquire *op) {
 void IRPrinter::visit(const Store *op) {
     do_indent();
     const bool has_pred = !is_one(op->predicate);
+    const bool show_alignment = op->value.type().is_vector() && (op->alignment.modulus > 1);
     if (has_pred) {
         stream << "predicate (" << op->predicate << ")\n";
         indent += 2;
@@ -666,6 +689,12 @@ void IRPrinter::visit(const Store *op) {
     }
     stream << op->name << "[";
     print(op->index);
+    if (show_alignment) {
+        stream << " aligned("
+               << op->alignment.modulus
+               << ", "
+               << op->alignment.remainder << ")";
+    }
     stream << "] = ";
     print(op->value);
     stream << '\n';

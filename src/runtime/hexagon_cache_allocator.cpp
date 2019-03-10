@@ -2,6 +2,7 @@
 #include "mini_hexagon_dma.h"
 #include "scoped_mutex_lock.h"
 #include "hexagon_dma_pool.h"
+#include "printer.h"
 
 namespace Halide { namespace Runtime { namespace Internal { namespace Hexagon {
 
@@ -32,7 +33,7 @@ inline void* free_unused_buffers(void* user_context) {
         if (temp2->used == false) {
             int err = HAP_cache_unlock(temp2->l2memory);
             if (err != 0) {
-                halide_print(user_context, "HAP_cache_unlock failure\n");
+                error(user_context) << "Hexagon: HAP_cache_unlock failure on unused free\n";
                 return NULL;
             }
             // Set previous node details.
@@ -75,7 +76,7 @@ inline void *hexagon_cache_pool_get (void *user_context, size_t size, bool retry
     // If we are still here that means temp was null.
     temp = (pcache_pool) malloc(sizeof(hexagon_cache_pool_t));
     if (temp == NULL) {
-        halide_print(user_context, "Hexagon Cache Pool Allocation Failed.\n");
+        error(user_context) << "Hexagon: Out of memory (Cache Pool Allocation Failed)\n";
         return NULL;
     }
     uint8_t *mem = (uint8_t *)HAP_cache_lock(sizeof(char) * size, NULL);
@@ -86,11 +87,12 @@ inline void *hexagon_cache_pool_get (void *user_context, size_t size, bool retry
         prev = prev_node;
         if (mem == NULL) {
             free(temp);
-            halide_print(user_context, "HAP_cache_lock failed.\n");
+            error(user_context) << "Hexagon: Out of memory (HAP_cache_lock retry failed)\n";
             return NULL;
         }
     } else if (mem == NULL) {
-        halide_print(user_context, "HAP_cache_lock failed.\n");
+        free(temp);
+        error(user_context) << "Hexagon: Out of memory (HAP_cache_lock failed)\n";
         return NULL;
     }
     temp->l2memory = (void *)mem;
@@ -131,6 +133,7 @@ inline int hexagon_cache_pool_free(void *user_context) {
         if (temp->l2memory != NULL) {
             err = HAP_cache_unlock(temp->l2memory);
             if (err != QURT_EOK) {
+                error(user_context) << "Hexagon: HAP_cache_unlock failed on pool free\n";
                 return err;
             }
         }
@@ -150,23 +153,23 @@ WEAK void *halide_locked_cache_malloc(void *user_context, size_t size) {
     // TODO Currently option to retry allocation is disabled, we will have to decide if can be
     // set by user or pipeline.
     bool retry = false;
-    halide_print(user_context, "halide_locked_cache_malloc\n");
+    debug(user_context) << "halide_locked_cache_malloc\n";
     return hexagon_cache_pool_get(user_context, size, retry);
 }
 
 WEAK void halide_locked_cache_free(void *user_context, void *ptr) {
-    halide_print(user_context, "halide_locked_cache_free.\n");
+    debug(user_context) << "halide_locked_cache_free\n";
     hexagon_cache_pool_put(user_context, ptr);
 }
 
 WEAK int halide_hexagon_allocate_l2_pool(void *user_context) {
-   // TODO not sure what is required to be done here ?
-   halide_print(user_context, "halide_hexagon_allocate_l2_pool \n");
-   return halide_error_code_success;
+    // TODO not sure what is required to be done here ?
+    debug(user_context) << "halide_hexagon_allocate_l2_pool\n";
+    return halide_error_code_success;
 }
 
 WEAK int halide_hexagon_free_l2_pool(void *user_context) {
-    halide_print(user_context, "halide_hexagon_free_l2_pool \n");
+    debug(user_context) << "halide_hexagon_free_l2_pool\n";
     return hexagon_cache_pool_free(user_context);
 }
 

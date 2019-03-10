@@ -1,5 +1,5 @@
-#include <stdio.h>
 #include "Halide.h"
+#include <stdio.h>
 #include <fstream>
 #include <cassert>
 #include <iostream>

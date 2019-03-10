@@ -113,7 +113,7 @@ Interval bounds_of_inner_var(string var, Stmt s) {
 
 }
 
-class BoundsInference : public IRMutator2 {
+class BoundsInference : public IRMutator {
 public:
     const vector<Function> &funcs;
     // Each element in the list indicates a group of functions which loops
@@ -926,7 +926,7 @@ public:
         }
     }
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Stmt visit(const For *op) override {
         // Don't recurse inside loops marked 'Extern', they will be
@@ -1046,6 +1046,15 @@ public:
                     string var = s.stage_prefix + i;
                     Interval in = bounds_of_inner_var(var, body);
                     if (in.is_bounded()) {
+                        // bounds_of_inner_var doesn't understand
+                        // GuardWithIf, but we know split rvars never
+                        // have inner bounds that exceed the outer
+                        // ones.
+                        if (!s.rvars.empty()) {
+                            in.min = max(in.min, Variable::make(Int(32), var + ".min"));
+                            in.max = min(in.max, Variable::make(Int(32), var + ".max"));
+                        }
+
                         body = LetStmt::make(var + ".min", in.min, body);
                         body = LetStmt::make(var + ".max", in.max, body);
                     } else {
@@ -1073,7 +1082,7 @@ public:
 
     Stmt visit(const ProducerConsumer *p) override {
         in_pipeline.insert(p->name);
-        Stmt stmt = IRMutator2::visit(p);
+        Stmt stmt = IRMutator::visit(p);
         in_pipeline.erase(p->name);
         inner_productions.insert(p->name);
         return stmt;

@@ -73,6 +73,7 @@ protected:
         void visit(const For *) override;
         void visit(const Ramp *op) override;
         void visit(const Broadcast *op) override;
+        void visit(const Call *op) override;
         void visit(const Load *op) override;
         void visit(const Store *op) override;
         void visit(const Select *op) override;

@@ -17,8 +17,8 @@ using std::string;
 using std::vector;
 
 namespace {
-class SubstituteVarEstimates: public IRMutator2 {
-    using IRMutator2::visit;
+class SubstituteVarEstimates: public IRMutator {
+    using IRMutator::visit;
 
     Expr visit(const Variable *var) override {
         if (var->param.defined() && var->param.is_buffer()) {

@@ -14,18 +14,18 @@ protected:
     using IRVisitor::visit;
 
     void visit(const Call *op) override {
-        if (op->name == "halide_gpu_thread_barrier") {
+        if (op->is_intrinsic(Call::gpu_thread_barrier)) {
             count++;
         }
         IRVisitor::visit(op);
     }
 };
 
-class CheckBarrierCount : public IRMutator2 {
+class CheckBarrierCount : public IRMutator {
     int correct;
 public:
     CheckBarrierCount(int correct) : correct(correct) {}
-    using IRMutator2::mutate;
+    using IRMutator::mutate;
 
     Stmt mutate(const Stmt &s) override {
         CountBarriers c;

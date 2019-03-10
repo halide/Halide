@@ -297,6 +297,9 @@ struct Type {
     /** Trivial copy constructor. */
     Type(const Type &that) = default;
 
+    /** Trivial copy assignment operator. */
+    Type &operator=(const Type &that) = default;
+
     /** Type is a wrapper around halide_type_t with more methods for use
      * inside the compiler. This simply constructs the wrapper around
      * the runtime value. */
@@ -377,22 +380,19 @@ struct Type {
 
     /** Compare two types for equality */
     bool operator==(const Type &other) const {
-        return code() == other.code() && bits() == other.bits() && lanes() == other.lanes() &&
-            (code() != Handle || same_handle_type(other));
+        return type == other.type && (code() != Handle || same_handle_type(other));
     }
 
     /** Compare two types for inequality */
     bool operator!=(const Type &other) const {
-        return code() != other.code() || bits() != other.bits() || lanes() != other.lanes() ||
-            (code() == Handle && !same_handle_type(other));
+        return type != other.type || (code() == Handle && !same_handle_type(other));
     }
 
     /** Compare ordering of two types so they can be used in certain containers and algorithms */
     bool operator<(const Type &other) const {
-        return code() < other.code() || (code() == other.code() &&
-              (bits() < other.bits() || (bits() == other.bits() &&
-              (lanes() < other.lanes() || (lanes() == other.lanes() &&
-              (code() == Handle && handle_type < other.handle_type))))));
+        if (type < other.type) return true;
+        if (code() == Handle) return handle_type < other.handle_type;
+        return false;
     }
 
     /** Produce the scalar type (that of a single element) of this vector type */

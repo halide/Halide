@@ -140,7 +140,12 @@ void define_enums(py::module &m) {
         .value("CheckUnsafePromises", Target::Feature::CheckUnsafePromises)
         .value("HexagonDma", Target::Feature::HexagonDma)
         .value("EmbedBitcode", Target::Feature::EmbedBitcode)
+<<<<<<< HEAD
         .value("Vulkan", Target::Feature::Vulkan)
+=======
+        .value("DisableLLVMLoopVectorize", Target::Feature::DisableLLVMLoopVectorize)
+        .value("DisableLLVMLoopUnroll", Target::Feature::DisableLLVMLoopUnroll)
+>>>>>>> master
         .value("FeatureEnd", Target::Feature::FeatureEnd);
 
     py::enum_<halide_type_code_t>(m, "TypeCode")

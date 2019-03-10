@@ -1,8 +1,9 @@
-// Verifies that constraints on the input ImageParam propagates to the output
-// function.
+#include "Halide.h"
+
 #include <iostream>
 
-#include "Halide.h"
+// Verifies that constraints on the input ImageParam propagates to the output
+// function.
 
 using namespace Halide;
 using namespace Halide::Internal;
@@ -33,8 +34,8 @@ private:
     }
 };
 
-class Validator : public IRMutator2 {
-    using IRMutator2::mutate;
+class Validator : public IRMutator {
+    using IRMutator::mutate;
 
     Stmt mutate(const Stmt &s) override {
         CheckLoops c;

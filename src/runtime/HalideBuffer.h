@@ -15,6 +15,12 @@
 #include <stdint.h>
 #include <string.h>
 
+#if defined(__has_feature)
+#if __has_feature(memory_sanitizer)
+#include <sanitizer/msan_interface.h>
+#endif
+#endif
+
 #include "HalideRuntime.h"
 
 #ifdef _MSC_VER
@@ -630,17 +636,24 @@ public:
     /** Give Buffers access to the members of Buffers of different dimensionalities and types. */
     template<typename T2, int D2> friend class Buffer;
 
-    /** Determine if if an Buffer<T, D> can be constructed from some other Buffer type.
-     * If this can be determined at compile time, fail with a static assert; otherwise
-     * return a boolean based on runtime typing. */
+private:
     template<typename T2, int D2>
-    static bool can_convert_from(const Buffer<T2, D2> &other) {
+    static void static_assert_can_convert_from() {
         static_assert((!std::is_const<T2>::value || std::is_const<T>::value),
                       "Can't convert from a Buffer<const T> to a Buffer<T>");
         static_assert(std::is_same<typename std::remove_const<T>::type,
                                    typename std::remove_const<T2>::type>::value ||
                       T_is_void || Buffer<T2, D2>::T_is_void,
                       "type mismatch constructing Buffer");
+    }
+
+public:
+    /** Determine if if an Buffer<T, D> can be constructed from some other Buffer type.
+     * If this can be determined at compile time, fail with a static assert; otherwise
+     * return a boolean based on runtime typing. */
+    template<typename T2, int D2>
+    static bool can_convert_from(const Buffer<T2, D2> &other) {
+        static_assert_can_convert_from<T2, D2>();
         if (Buffer<T2, D2>::T_is_void && !T_is_void) {
             return other.type() == static_halide_type();
         }
@@ -651,6 +664,10 @@ public:
      * cannot be constructed from some other Buffer type. */
     template<typename T2, int D2>
     static void assert_can_convert_from(const Buffer<T2, D2> &other) {
+        // Explicitly call static_assert_can_convert_from() here so
+        // that we always get compile-time checking, even if compiling with
+        // assertions disabled.
+        static_assert_can_convert_from<T2, D2>();
         assert(can_convert_from(other));
     }
 
@@ -897,16 +914,31 @@ public:
     }
 
     /** Allocate a new image of known type using a vector of ints as the size. */
-    Buffer(const std::vector<int> &sizes) {
-        buf.type = static_halide_type();
-        buf.dimensions = (int)sizes.size();
-        make_shape_storage();
-        initialize_shape(sizes);
-        if (!any_zero(sizes)) {
-            check_overflow();
-            allocate();
+    explicit Buffer(const std::vector<int> &sizes) : Buffer(static_halide_type(), sizes) {}
+
+private:
+    // Create a copy of the sizes vector, ordered as specified by order.
+    static std::vector<int> make_ordered_sizes(const std::vector<int> &sizes, const std::vector<int> &order) {
+        assert(order.size() == sizes.size());
+        std::vector<int> ordered_sizes(sizes.size());
+        for (size_t i = 0; i < sizes.size(); ++i) {
+            ordered_sizes[i] = sizes.at(order[i]);
         }
+        return ordered_sizes;
     }
+
+public:
+    /** Allocate a new image of unknown type using a vector of ints as the size and
+     * a vector of indices indicating the storage order for each dimension. The
+     * length of the sizes vector and the storage-order vector must match. For instance,
+     * to allocate an interleaved RGB buffer, you would pass {2, 0, 1} for storage_order. */
+    Buffer(halide_type_t t, const std::vector<int> &sizes, const std::vector<int> &storage_order)
+        : Buffer(t, make_ordered_sizes(sizes, storage_order)) {
+        transpose(storage_order);
+    }
+
+    Buffer(const std::vector<int> &sizes, const std::vector<int> &storage_order)
+        : Buffer(static_halide_type(), sizes, storage_order) {}
 
     /** Make an Buffer that refers to a statically sized array. Does not
      * take ownership of the data, and does not set the host_dirty flag. */
@@ -1003,7 +1035,7 @@ public:
      * an array describing the shape.  Does not take ownership of the
      * data and does not set the host_dirty flag. */
     explicit Buffer(T *data, int d, const halide_dimension_t *shape) {
-        buf.type = halide_type_of<typename std::remove_cv<T>::type>();
+        buf.type = static_halide_type();
         buf.dimensions = d;
         buf.host = (uint8_t *) const_cast<typename std::remove_const<T>::type *>(data);
         make_shape_storage();
@@ -1375,6 +1407,34 @@ public:
         std::swap(buf.dim[d1], buf.dim[d2]);
     }
 
+    /** A generalized transpose: instead of swapping two dimensions,
+     * pass a vector that lists each dimension index exactly once, in the desired order.
+     * For instance, to transpose a 3-dimensional planar image to be interleaved,
+     * pass {2, 0, 1} for order */
+    void transpose(const std::vector<int> &order) {
+        assert((int) order.size() == dimensions());
+        if (dimensions() < 2) {
+            // My, that was easy
+            return;
+        }
+
+        std::vector<int> order_sorted = order;
+        for (size_t i = 1; i < order_sorted.size(); i++) {
+            for (size_t j = i; j > 0 && order_sorted[j-1] > order_sorted[j]; j--) {
+                std::swap(order_sorted[j], order_sorted[j-1]);
+                transpose(j, j-1);
+            }
+        }
+    }
+
+    /** Make an image which refers to the same data using a different
+     * ordering of the dimensions. */
+    Buffer<T, D> transposed(const std::vector<int> &order) const {
+        Buffer<T, D> im = *this;
+        im.transpose(order);
+        return im;
+    }
+
     /** Make a lower-dimensional image that refers to one slice of this image. */
     Buffer<T, D> sliced(int d, int pos) const {
         Buffer<T, D> im = *this;
@@ -1636,6 +1696,8 @@ public:
      * known as packed or chunky) memory layouts. */
     static Buffer<void, D> make_interleaved(halide_type_t t, int width, int height, int channels) {
         Buffer<void, D> im(t, channels, width, height);
+        // Note that this is equivalent to calling transpose({2, 0, 1}),
+        // but slightly more efficient.
         im.transpose(0, 1);
         im.transpose(1, 2);
         return im;
@@ -1648,10 +1710,7 @@ public:
      * generator has been compiled with support for interleaved (also
      * known as packed or chunky) memory layouts. */
     static Buffer<T, D> make_interleaved(int width, int height, int channels) {
-        Buffer<T, D> im(channels, width, height);
-        im.transpose(0, 1);
-        im.transpose(1, 2);
-        return im;
+        return make_interleaved(static_halide_type(), width, height, channels);
     }
 
     /** Wrap an existing interleaved image. */
@@ -1665,10 +1724,7 @@ public:
 
     /** Wrap an existing interleaved image. */
     static Buffer<T, D> make_interleaved(T *data, int width, int height, int channels) {
-        Buffer<T, D> im(data, channels, width, height);
-        im.transpose(0, 1);
-        im.transpose(1, 2);
-        return im;
+        return make_interleaved(static_halide_type(), data, width, height, channels);
     }
 
     /** Make a zero-dimensional Buffer */
@@ -2279,6 +2335,22 @@ public:
         return buf.is_bounds_query();
     }
 
+    /** Convenient check to verify that all of the interesting bytes in the Buffer
+     * are initialized under MSAN. Note that by default, we use for_each_value() here so that
+     * we skip any unused padding that isn't part of the Buffer; this isn't efficient,
+     * but in MSAN mode, it doesn't matter. (Pass true for the flag to force check
+     * the entire Buffer storage.) */
+    void msan_check_mem_is_initialized(bool entire = false) const {
+#if defined(__has_feature)
+#if __has_feature(memory_sanitizer)
+        if (entire) {
+            __msan_check_mem_is_initialized(data(), size_in_bytes());
+        } else {
+            for_each_value([](T &v) { __msan_check_mem_is_initialized(&v, sizeof(T)); ;});
+        }
+#endif
+#endif
+    }
 };
 
 }  // namespace Runtime

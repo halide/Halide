@@ -1,5 +1,6 @@
 #include <iostream>
 #include <string>
+#include <array>
 
 #include "Target.h"
 
@@ -165,9 +166,56 @@ Target calculate_host_target() {
 #endif
 #endif
 
-    Target t(os, arch, bits, initial_features);
+    return {os, arch, bits, initial_features};
+}
 
-    return Target(os, arch, bits, initial_features);
+int get_cuda_capability_lower_bound(const Target &t) {
+    if (!t.has_feature(Target::CUDA)) {
+        return -1;
+    }
+    if (t.has_feature(Target::CUDACapability30)) {
+        return 30;
+    }
+    if (t.has_feature(Target::CUDACapability32)) {
+        return 32;
+    }
+    if (t.has_feature(Target::CUDACapability35)) {
+        return 35;
+    }
+    if (t.has_feature(Target::CUDACapability50)) {
+        return 50;
+    }
+    if (t.has_feature(Target::CUDACapability61)) {
+        return 61;
+    }
+    return 20;
+}
+
+bool is_using_hexagon(const Target &t) {
+    return t.has_feature(Target::HVX_64)
+           || t.has_feature(Target::HVX_128)
+           || t.has_feature(Target::HVX_v62)
+           || t.has_feature(Target::HVX_v65)
+           || t.has_feature(Target::HVX_v66)
+           || t.has_feature(Target::HexagonDma)
+           || t.has_feature(Target::HVX_shared_object)
+           || t.arch == Target::Hexagon;
+}
+
+int get_hvx_lower_bound(const Target &t) {
+    if (!is_using_hexagon(t)) {
+        return -1;
+    }
+    if (t.has_feature(Target::HVX_v62)) {
+        return 62;
+    }
+    if (t.has_feature(Target::HVX_v65)) {
+        return 65;
+    }
+    if (t.has_feature(Target::HVX_v66)) {
+        return 66;
+    }
+    return 60;
 }
 
 }  // namespace
@@ -306,6 +354,8 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"check_unsafe_promises", Target::CheckUnsafePromises},
     {"hexagon_dma", Target::HexagonDma},
     {"embed_bitcode", Target::EmbedBitcode},
+    {"disable_llvm_loop_vectorize", Target::DisableLLVMLoopVectorize},
+    {"disable_llvm_loop_unroll", Target::DisableLLVMLoopUnroll},
     {"vulkan", Target::Vulkan},
     // NOTE: When adding features to this map, be sure to update
     // PyEnums.cpp and halide.cmake as well.
@@ -449,7 +499,7 @@ void bad_target_string(const std::string &target) {
     }
     separator = "";
     std::string oses;
-    for (auto os_entry : os_name_map) {
+    for (const auto &os_entry : os_name_map) {
         oses += separator + os_entry.first;
         separator = ", ";
     }
@@ -458,7 +508,7 @@ void bad_target_string(const std::string &target) {
     // assume the first line starts with "Features are ".
     int line_char_start = -(int)sizeof("Features are");
     std::string features;
-    for (auto feature_entry : feature_name_map) {
+    for (const auto &feature_entry : feature_name_map) {
         features += separator + feature_entry.first;
         if (features.length() - line_char_start > 70) {
             separator = "\n";
@@ -507,9 +557,7 @@ Target::Target(const std::string &target) {
     }
 }
 
-Target::Target(const char *s) {
-    *this = Target(std::string(s));
-}
+Target::Target(const char *s) : Target(std::string(s)) {}
 
 bool Target::validate_target_string(const std::string &s) {
     Target t;
@@ -642,6 +690,8 @@ bool Target::supports_type(const Type &t) const {
     if (t.bits() == 64) {
         if (t.is_float()) {
             return !has_feature(Metal) &&
+                   !has_feature(OpenGL) &&
+                   !has_feature(OpenGLCompute) &&
                    !has_feature(D3D12Compute) &&
                    (!has_feature(Target::OpenCL) || has_feature(Target::CLDoubles));
         } else {
@@ -759,6 +809,93 @@ int Target::natural_vector_size(const Halide::Type &t) const {
     }
 }
 
+bool Target::get_runtime_compatible_target(const Target& other, Target &result) {
+    // Create mask to select features that:
+    // (a) must be included if either target has the feature (union)
+    // (b) must be included if both targets have the feature (intersection)
+    // (c) must match across both targets; it is an error if one target has the feature and the other doesn't
+    const std::array<Feature, 15> union_features = {{
+            // These are true union features.
+            CUDA, OpenCL, OpenGL, OpenGLCompute, Metal, D3D12Compute, NoNEON,
+
+            // These features are actually intersection-y, but because targets only record the _highest_,
+            // we have to put their union in the result and then take a lower bound.
+            CUDACapability30, CUDACapability32, CUDACapability35, CUDACapability50, CUDACapability61,
+            HVX_v62, HVX_v65, HVX_v66
+    }};
+
+    const std::array<Feature, 12> intersection_features = {{
+            SSE41, AVX, AVX2, FMA, FMA4, F16C, ARMv7s,VSX, AVX512, AVX512_KNL, AVX512_Skylake, AVX512_Cannonlake
+    }};
+
+    const std::array<Feature, 10> matching_features = {{
+            SoftFloatABI, Debug, TSAN, ASAN, MSAN, HVX_64, HVX_128, MinGW, HexagonDma, HVX_shared_object
+    }};
+
+    // bitsets need to be the same width.
+    decltype(result.features) union_mask;
+    decltype(result.features) intersection_mask;
+    decltype(result.features) matching_mask;
+
+    for (auto& feature : union_features) {
+        union_mask.set(feature);
+    }
+
+    for (auto& feature : intersection_features) {
+        intersection_mask.set(feature);
+    }
+
+    for (auto& feature : matching_features) {
+        matching_mask.set(feature);
+    }
+
+    if (arch != other.arch || bits != other.bits || os != other.os) {
+        user_warning << "runtime targets must agree on platform (arch-bits-os)\n";
+        return false;
+    }
+
+    if ((features & matching_mask) != (other.features & matching_mask)) {
+        user_warning << "runtime targets must agree on SoftFloatABI, Debug, TSAN, ASAN, MSAN, HVX_64, HVX_128, MinGW, HexagonDma, and HVX_shared_object\n";
+        return false;
+    }
+
+    // Union of features is computed through bitwise-or, and masked away by the features we care about
+    // Intersection of features is computed through bitwise-and and masked away, too.
+    // We merge the bits via bitwise or.
+    Target output = Target{os, arch, bits};
+    output.features = ((features | other.features) & union_mask)
+            | ((features | other.features) & matching_mask)
+            | ((features & other.features) & intersection_mask);
+
+    // Pick tight lower bound for CUDA capability. Use fall-through to clear redundant features
+    int cuda_a = get_cuda_capability_lower_bound(*this);
+    int cuda_b = get_cuda_capability_lower_bound(other);
+
+    // get_cuda_capability_lower_bound returns -1 when unused. Casting to unsigned makes this
+    // large, so min selects the true lower bound when one target doesn't specify a capability,
+    // and the other doesn't use CUDA at all.
+    int cuda_capability = std::min((unsigned)cuda_a, (unsigned)cuda_b);
+    if (cuda_capability < 30) output.features.reset(CUDACapability30);
+    if (cuda_capability < 32) output.features.reset(CUDACapability32);
+    if (cuda_capability < 35) output.features.reset(CUDACapability35);
+    if (cuda_capability < 50) output.features.reset(CUDACapability50);
+    if (cuda_capability < 61) output.features.reset(CUDACapability61);
+
+    // Pick tight lower bound for HVX version. Use fall-through to clear redundant features
+    int hvx_a = get_hvx_lower_bound(*this);
+    int hvx_b = get_hvx_lower_bound(other);
+
+    // Same trick as above for CUDA
+    int hvx_version = std::min((unsigned)hvx_a, (unsigned)hvx_b);
+    if (hvx_version < 62) output.features.reset(HVX_v62);
+    if (hvx_version < 65) output.features.reset(HVX_v65);
+    if (hvx_version < 66) output.features.reset(HVX_v66);
+
+    result = output;
+    return true;
+}
+
+
 namespace Internal {
 
 void target_test() {
@@ -767,9 +904,40 @@ void target_test() {
         t.set_feature(feature.second);
     }
     for (int i = 0; i < (int)(Target::FeatureEnd); i++) {
-        if (i == halide_target_feature_unused_23) continue;
         internal_assert(t.has_feature((Target::Feature)i)) << "Feature " << i << " not in feature_names_map.\n";
     }
+
+    // 3 targets: {A,B,C}. Want gcd(A,B)=C
+    std::vector<std::array<std::string, 3>> gcd_tests = {
+            {{"x86-64-linux-sse41-fma", "x86-64-linux-sse41-fma", "x86-64-linux-sse41-fma"}},
+            {{"x86-64-linux-sse41-fma-no_asserts-no_runtime", "x86-64-linux-sse41-fma", "x86-64-linux-sse41-fma"}},
+            {{"x86-64-linux-avx2-sse41", "x86-64-linux-sse41-fma", "x86-64-linux-sse41"}},
+            {{"x86-64-linux-avx2-sse41", "x86-32-linux-sse41-fma", ""}},
+            {{"x86-64-linux-cuda", "x86-64-linux", "x86-64-linux-cuda"}},
+            {{"x86-64-linux-cuda-cuda_capability_50", "x86-64-linux-cuda", "x86-64-linux-cuda"}},
+            {{"x86-64-linux-cuda-cuda_capability_50", "x86-64-linux-cuda-cuda_capability_30", "x86-64-linux-cuda-cuda_capability_30"}},
+            {{"x86-64-linux-cuda", "x86-64-linux-opengl", "x86-64-linux-cuda-opengl"}},
+            {{"hexagon-32-qurt-hvx_v65", "hexagon-32-qurt-hvx_v62", "hexagon-32-qurt-hvx_v62"}},
+            {{"hexagon-32-qurt-hvx_v62", "hexagon-32-qurt", "hexagon-32-qurt"}},
+            {{"hexagon-32-qurt-hvx_v62-hvx_64", "hexagon-32-qurt", ""}},
+            {{"hexagon-32-qurt-hvx_v62-hvx_64", "hexagon-32-qurt-hvx_64", "hexagon-32-qurt-hvx_64"}},
+    };
+
+    for (const auto &test : gcd_tests) {
+        Target result{};
+        Target a{test[0]};
+        Target b{test[1]};
+        if (a.get_runtime_compatible_target(b, result)) {
+            internal_assert(!test[2].empty() && result == Target{test[2]})
+                << "Targets " << a.to_string() << " and " << b.to_string() << " were computed to have gcd "
+                << result.to_string() << " but expected '" << test[2] << "'\n";
+        } else {
+            internal_assert(test[2].empty())
+                << "Targets " << a.to_string() << " and " << b.to_string() << " were computed to have no gcd "
+                << "but " << test[2] << " was expected.";
+        }
+    }
+
     std::cout << "Target test passed" << std::endl;
 }
 

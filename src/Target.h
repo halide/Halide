@@ -101,11 +101,13 @@ struct Target {
         ASAN = halide_target_feature_asan,
         CheckUnsafePromises = halide_target_feature_check_unsafe_promises,
         EmbedBitcode = halide_target_feature_embed_bitcode,
+        DisableLLVMLoopVectorize = halide_target_feature_disable_llvm_loop_vectorize,
+        DisableLLVMLoopUnroll = halide_target_feature_disable_llvm_loop_unroll,
         Vulkan = halide_target_feature_vulkan,
         FeatureEnd = halide_target_feature_end
     };
     Target() : os(OSUnknown), arch(ArchUnknown), bits(0) {}
-    Target(OS o, Arch a, int b, std::vector<Feature> initial_features = std::vector<Feature>())
+    Target(OS o, Arch a, int b, const std::vector<Feature> &initial_features = std::vector<Feature>())
         : os(o), arch(a), bits(b) {
         for (const auto &f :initial_features) {
             set_feature(f);
@@ -187,6 +189,17 @@ struct Target {
     bool operator!=(const Target &other) const {
       return !(*this == other);
     }
+
+    /**
+     * Create a "greatest common denominator" runtime target that is compatible with
+     * both this target and \p other. Used by generators to conveniently select a suitable
+     * runtime when linking together multiple functions.
+     * 
+     * @param other The other target from which we compute the gcd target.
+     * @param[out] result The gcd target if we return true, otherwise unmodified. Can be the same as *this.
+     * @return Whether it was possible to find a compatible target (true) or not.
+     */
+    bool get_runtime_compatible_target(const Target& other, Target &result);
 
     /** Convert the Target into a string form that can be reconstituted
      * by merge_string(), which will always be of the form

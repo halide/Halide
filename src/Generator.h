@@ -317,7 +317,8 @@ std::string halide_type_to_c_type(const Type &t);
 
 /** generate_filter_main() is a convenient wrapper for GeneratorRegistry::create() +
  * compile_to_files(); it can be trivially wrapped by a "real" main() to produce a
- * command-line utility for ahead-of-time filter compilation. */
+ * command-line utility for ahead-of-time filter compilation.
+ * Note that this function is not thread-safe because it resets global states.*/
 int generate_filter_main(int argc, char **argv, std::ostream &cerr);
 
 // select_type<> is to std::conditional as switch is to if:
@@ -1749,10 +1750,24 @@ public:
         return ExternFuncArgument(this->exprs().at(0));
     }
 
-    void set_estimate(const T &value) {
-        for (Parameter &p : this->parameters_) {
-            p.set_estimate(Expr(value));
+    template <typename T2 = T, typename std::enable_if<!std::is_array<T2>::value>::type * = nullptr>
+    void set_estimate(const TBase &value) {
+        Expr e = Expr(value);
+        if (std::is_same<T2, bool>::value) {
+          e = cast<bool>(e);
         }
+        for (Parameter &p : this->parameters_) {
+            p.set_estimate(e);
+        }
+    }
+
+    template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
+    void set_estimate(size_t index, const TBase &value) {
+        Expr e = Expr(value);
+        if (std::is_same<T2, bool>::value) {
+          e = cast<bool>(e);
+        }
+        this->parameters_.at(index).set_estimate(e);
     }
 };
 
@@ -2606,14 +2621,16 @@ protected:
     using GeneratorContext = Halide::GeneratorContext;
     using ImageParam = Halide::ImageParam;
     using LoopLevel = Halide::LoopLevel;
+    using MemoryType = Halide::MemoryType;
+    using NameMangling = Halide::NameMangling;
     using Pipeline = Halide::Pipeline;
+    using PrefetchBoundStrategy = Halide::PrefetchBoundStrategy;
     using RDom = Halide::RDom;
     using TailStrategy = Halide::TailStrategy;
     using Target = Halide::Target;
     using Tuple = Halide::Tuple;
     using Type = Halide::Type;
     using Var = Halide::Var;
-    using NameMangling = Halide::NameMangling;
     template <typename T> static Expr cast(Expr e) { return Halide::cast<T>(e); }
     static inline Expr cast(Halide::Type t, Expr e) { return Halide::cast(t, e); }
     template <typename T> using GeneratorParam = Halide::GeneratorParam<T>;
@@ -2670,6 +2687,7 @@ public:
         bool emit_static_library{true};
         bool emit_cpp_stub{false};
         bool emit_schedule{false};
+        bool emit_registration{false};
 
         // This is an optional map used to replace the default extensions generated for
         // a file: if an key matches an output extension, emit those files with the
@@ -2748,6 +2766,12 @@ public:
     // the schedule() method. (This may be relaxed in the future to allow
     // calling from generate() as long as all Outputs have been defined.)
     Pipeline get_pipeline();
+
+    template<typename... Args>
+    HALIDE_NO_USER_CODE_INLINE
+    void add_requirement(Expr condition, Args&&... args) {
+        get_pipeline().add_requirement(condition, std::forward<Args>(args)...);
+    }
 
 protected:
     GeneratorBase(size_t size, const void *introspection_helper);

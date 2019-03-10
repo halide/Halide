@@ -297,9 +297,9 @@ Target find_gpu_target() {
     // return target;
 
 #ifdef _WIN32
-    if (LoadLibrary("d3d12.dll") != NULL) {
+    if (LoadLibraryA("d3d12.dll") != nullptr) {
         target.set_feature(Target::D3D12Compute);
-    } else if (LoadLibrary("OpenCL.dll") != NULL) {
+    } else if (LoadLibraryA("OpenCL.dll") != nullptr) {
         target.set_feature(Target::OpenCL);
     }
 #elif __APPLE__

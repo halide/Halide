@@ -162,15 +162,13 @@ void Func::define_extern(const std::string &function_name,
                          const std::vector<ExternFuncArgument> &args,
                          const std::vector<Type> &types,
                          const std::vector<Var> &arguments,
-                         NameMangling mangling,
-                         DeviceAPI device_api,
-                         bool uses_old_buffer_t) {
-    vector<string> dim_names(arguments.size());
-    for (size_t i = 0; i < arguments.size(); i++) {
-        dim_names[i] = arguments[i].name();
-    }
-    func.define_extern(function_name, args, types, dim_names,
-                       mangling, device_api, uses_old_buffer_t);
+                         NameMangling mangling, DeviceAPI device_api) {
+  vector<string> dim_names(arguments.size());
+  for (size_t i = 0; i < arguments.size(); i++) {
+    dim_names[i] = arguments[i].name();
+  }
+  func.define_extern(function_name, args, types, dim_names, mangling,
+                     device_api);
 }
 
 /** Get the types of the buffers returned by an extern definition. */
@@ -290,10 +288,7 @@ void Stage::set_dim_type(VarOrRVar var, ForType t) {
 
             // If it's an rvar and the for type is parallel, we need to
             // validate that this doesn't introduce a race condition.
-            if (!dims[i].is_pure() && var.is_rvar &&
-                (t == ForType::Vectorized || t == ForType::Parallel ||
-                 t == ForType::GPUBlock || t == ForType::GPUThread ||
-                 t == ForType::GPULane)) {
+            if (!dims[i].is_pure() && var.is_rvar && is_parallel(t)) {
                 user_assert(definition.schedule().allow_race_conditions())
                     << "In schedule for " << name()
                     << ", marking var " << var.name()
@@ -358,15 +353,15 @@ std::string Stage::dump_argument_list() const {
 
 namespace {
 
-class SubstituteSelfReference : public IRMutator2 {
-    using IRMutator2::visit;
+class SubstituteSelfReference : public IRMutator {
+    using IRMutator::visit;
 
     const string func;
     const Function substitute;
     const vector<Var> new_args;
 
     Expr visit(const Call *c) override {
-        Expr expr = IRMutator2::visit(c);
+        Expr expr = IRMutator::visit(c);
         c = expr.as<Call>();
         internal_assert(c);
 
@@ -1945,7 +1940,7 @@ Func Func::copy_to_device(DeviceAPI d) {
     ExternFuncArgument device_interface = make_device_interface_call(d);
     func.define_extern("halide_buffer_copy", {buffer, device_interface},
                        {call->type}, func.args(), // Reuse the existing dimension names
-                       NameMangling::C, d, false);
+                       NameMangling::C, d);
     return *this;
 }
 
@@ -2074,6 +2069,12 @@ Func &Func::bound(Var var, Expr min, Expr extent) {
 
     Bound b = {var.name(), min, extent, Expr(), Expr()};
     func.schedule().bounds().push_back(b);
+
+    // Propagate constant bounds into estimates as well.
+    if (!is_const(min)) min = Expr();
+    if (!is_const(extent)) extent = Expr();
+    estimate(var, min, extent);
+
     return *this;
 }
 
@@ -2088,6 +2089,26 @@ Func &Func::estimate(Var var, Expr min, Expr extent) {
 
     Bound b = {var.name(), min, extent, Expr(), Expr()};
     func.schedule().estimates().push_back(b);
+
+    // Propagate the estimate into the Parameter as well, so that
+    // the values in the metadata will be correct.
+    const auto &arg_names = func.args();
+    int dim = -1;
+    for (size_t i = 0; i < arg_names.size(); ++i) {
+        if (arg_names[i] == var.name()) {
+            dim = i;
+            break;
+        }
+    }
+    internal_assert(dim >= 0);
+    for (auto param : func.output_buffers()) {
+        if (min.defined()) {
+            param.set_min_constraint_estimate(dim, min);
+        }
+        if (extent.defined()) {
+            param.set_extent_constraint_estimate(dim, extent);
+        }
+    }
     return *this;
 }
 
@@ -3064,7 +3085,7 @@ void Func::set_custom_print(void (*cust_print)(void *, const char *)) {
     pipeline().set_custom_print(cust_print);
 }
 
-void Func::add_custom_lowering_pass(IRMutator2 *pass, std::function<void()> deleter) {
+void Func::add_custom_lowering_pass(IRMutator *pass, std::function<void()> deleter) {
     pipeline().add_custom_lowering_pass(pass, deleter);
 }
 

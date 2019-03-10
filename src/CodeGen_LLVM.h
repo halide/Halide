@@ -177,9 +177,11 @@ protected:
         *argument_t_type,
         *scalar_value_t_type,
         *device_interface_t_type,
+        *pseudostack_slot_t_type,
         *semaphore_t_type,
         *semaphore_acquire_t_type,
         *parallel_task_t_type;
+
     // @}
 
     /** Some useful llvm types for subclasses */
@@ -258,6 +260,9 @@ protected:
     // @{
     void create_assertion(llvm::Value *condition, Expr message, llvm::Value *error_code = nullptr);
     // @}
+
+    /** Codegen a block of asserts with pure conditions */
+    void codegen_asserts(const std::vector<const AssertStmt *> &asserts);
 
     /** Codegen a call to do_parallel_tasks */
     struct ParallelTask {
@@ -462,12 +467,6 @@ protected:
      */
     std::pair<llvm::Function *, int> find_vector_runtime_function(const std::string &name, int lanes);
 
-    /** Get the result of modulus-remainder analysis for a given expr. */
-    ModulusRemainder get_alignment_info(Expr e);
-
-    /** Alignment info for Int(32) variables in scope. */
-    Scope<ModulusRemainder> alignment_info;
-
 private:
 
     /** All the values in scope at the current code location during
@@ -496,7 +495,8 @@ private:
         const std::map<std::string, std::string> &metadata_name_map);
 
     /** Embed a constant expression as a global variable. */
-    llvm::Constant *embed_constant_expr(Expr e);
+    llvm::Constant *embed_constant_expr(Expr e, llvm::Type *t);
+    llvm::Constant *embed_constant_scalar_value_t(Expr e);
 
     llvm::Function *add_argv_wrapper(const std::string &name);
 

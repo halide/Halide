@@ -19,7 +19,7 @@ SCHEDULING_OPTS = use_parallel_sched=${PARALLEL_SCHED} use_prefetch_sched=${PREF
 
 $(BIN)/%.generator : %_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -O3 -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) -O3 -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 $(BIN)/%/conv3x3a16.o: $(BIN)/conv3x3.generator
 	@mkdir -p $(@D)

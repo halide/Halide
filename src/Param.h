@@ -21,7 +21,7 @@ namespace Halide {
 template<typename T = void>
 class Param {
     /** A reference-counted handle on the internal parameter object */
-    Internal::RegisteredParameter param;
+    Internal::Parameter param;
 
     // This is a deliberately non-existent type that allows us to compile Param<>
     // but provide less-confusing error messages if you attempt to call get<> or set<>
@@ -275,7 +275,7 @@ public:
      * statically compiling halide pipelines. */
     operator Argument() const {
         return Argument(name(), Argument::InputScalar, type(), 0,
-            param.scalar_expr(), param.min_value(), param.max_value());
+            param.get_argument_estimates());
     }
 
     const Internal::Parameter &parameter() const {
