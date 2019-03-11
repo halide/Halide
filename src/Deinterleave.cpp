@@ -570,7 +570,7 @@ class Interleaver : public IRMutator {
         return stmt;
     }
 
-    Stmt gather_stores(const Block *op) HALIDE_NEVER_INLINE {
+    HALIDE_NEVER_INLINE Stmt gather_stores(const Block *op) {
         const LetStmt *let = op->first.as<LetStmt>();
         const Store *store = op->first.as<Store>();
 
