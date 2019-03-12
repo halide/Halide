@@ -102,7 +102,7 @@ Stmt Simplify::visit(const AssertStmt *op) {
         const bool const_false_conditions_expected =
             call && call->name == "halide_error_specialize_fail";
         if (!const_false_conditions_expected) {
-            user_warning << "This pipeline is guaranteed to fail an assertion at runtime with error: \n"
+            user_warning << "This pipeline is guaranteed to fail an assertion at runtime: \n"
                          << message << "\n";
         }
     } else if (is_one(cond)) {

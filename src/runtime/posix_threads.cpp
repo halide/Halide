@@ -56,7 +56,7 @@ WEAK void *spawn_thread_helper(void *arg) {
 extern "C" {
 
 using namespace Halide::Runtime::Internal;
-  
+
 WEAK struct halide_thread *halide_spawn_thread(void (*f)(void *), void *closure) {
     spawned_thread *t = (spawned_thread *)malloc(sizeof(spawned_thread));
     t->f = f;
