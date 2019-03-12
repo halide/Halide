@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cstdio>
 
 #include "HalideRuntime.h"
 #include "HalideBuffer.h"

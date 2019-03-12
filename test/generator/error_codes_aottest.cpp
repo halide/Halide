@@ -23,14 +23,14 @@ int main(int argc, char **argv) {
 
     halide_buffer_t in = {0}, out = {0};
     halide_dimension_t shape[] = {{0, 64, 1},
-                                  {0, 64, 64}};
+                                  {0, 123, 64}};
 
-    in.host = (uint8_t *)malloc(64*64*4);
+    in.host = (uint8_t *)malloc(64*123*4);
     in.type = halide_type_of<int>();
     in.dim = shape;
     in.dimensions = 2;
 
-    out.host = (uint8_t *)malloc(64*64*4);
+    out.host = (uint8_t *)malloc(64*123*4);
     out.type = halide_type_of<int>();
     out.dim = shape;
     out.dimensions = 2;
@@ -48,7 +48,7 @@ int main(int argc, char **argv) {
 
     // Would read out of bounds on the input
     halide_dimension_t smaller[] = {{0, 50, 1},
-                                    {0, 64, 64}};
+                                    {0, 123, 64}};
     in.dim = smaller;
     result = error_codes(&in, 64, &out);
     correct = halide_error_code_access_out_of_bounds;
@@ -58,7 +58,7 @@ int main(int argc, char **argv) {
     // buffer extent negative, but in a way that doesn't trigger oob checks
     {
         halide_dimension_t bad_shape[] = {{0, 64, 1},
-                                          {0, -64, 64}};
+                                          {0, -123, 64}};
         halide_buffer_t i = in, o = out;
         i.dim = bad_shape;
         o.dim = bad_shape;
@@ -79,7 +79,7 @@ int main(int argc, char **argv) {
 
     // Input buffer requires addressing math that would overflow 32 bits.
     halide_dimension_t huge_stride[] = {{0, 64, 1},
-                                        {0, 64, 0x7fffffff}};
+                                        {0, 123, 0x7fffffff}};
     in.dim = huge_stride;
     result = error_codes(&in, 64, &out);
     correct = halide_error_code_buffer_allocation_too_large;
@@ -94,7 +94,7 @@ int main(int argc, char **argv) {
 
     // stride[0] is constrained to be 1
     halide_dimension_t wrong_stride[] = {{0, 64, 2},
-                                         {0, 64, 64}};
+                                         {0, 123, 64}};
     in.dim = wrong_stride;
     result = error_codes(&in, 64, &out);
     correct = halide_error_code_constraint_violated;
@@ -116,6 +116,15 @@ int main(int argc, char **argv) {
     result = error_codes(nullptr, 64, &out);
     correct = halide_error_code_buffer_argument_is_null;
     check(result, correct);
+
+    // Violate the custom requirement that the height of the input is 123
+    halide_dimension_t too_tall[] = {{0, 64, 1},
+                                      {0, 200, 64}};
+    in.dim = too_tall;
+    result = error_codes(&in, 64, &out);
+    correct = halide_error_code_requirement_failed;
+    check(result, correct);
+    in.dim = shape;
 
     printf("Success!\n");
     return 0;

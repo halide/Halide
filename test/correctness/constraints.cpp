@@ -8,7 +8,7 @@ using namespace Halide;
 
 bool error_occurred = false;
 void my_error_handler(void *user_context, const char *msg) {
-    printf("%s\n", msg);
+    //printf("%s\n", msg);
     error_occurred = true;
 }
 
@@ -139,6 +139,86 @@ int alignment_constraints() {
     return 0;
 }
 
+
+int unstructured_constraints() {
+    Func f, g;
+    Var x, y;
+    ImageParam param(Int(32), 2);
+    Buffer<int> image1(128, 73);
+    Buffer<int> image2(144, 23);
+
+    f(x, y) = param(x, y)*2;
+
+    Param<int> required_min, required_extent;
+    required_min.set(0);
+    required_extent.set(128);
+
+    Pipeline pf(f);
+    pf.add_requirement(param.dim(0).min() == required_min && param.dim(0).extent() == required_extent,
+                       "Custom message:",  param.dim(0).min(), param.dim(0).max());
+
+    pf.set_error_handler(my_error_handler);
+
+    // This should be fine
+    param.set(image1);
+    error_occurred = false;
+    pf.realize(20, 20);
+
+    if (error_occurred) {
+        printf("Error incorrectly raised\n");
+        return -1;
+    }
+    // This should be an error, because dimension 0 of image 2 is not from 0 to 128 like we promised
+    param.set(image2);
+    error_occurred = false;
+    pf.realize(20, 20);
+
+    if (!error_occurred) {
+        printf("Error incorrectly not raised\n");
+        return -1;
+    }
+
+    // Now try constraining the output buffer of a function
+    g(x, y) = x*y;
+
+    Pipeline pg(g);
+
+    Param<int> required_stride;
+    required_stride.set(2);
+    pg.add_requirement(g.output_buffer().dim(0).stride() == required_stride);
+    pg.set_error_handler(my_error_handler);
+
+    error_occurred = false;
+    pg.realize(image1);
+    if (!error_occurred) {
+        printf("Error incorrectly not raised when constraining output buffer\n");
+        return -1;
+    }
+
+    Func h;
+    h(x, y) = x*y;
+
+    Pipeline ph(h);
+    ph.set_error_handler(my_error_handler);
+    ph.add_requirement(h.output_buffer().dim(0).stride() == 1);
+    ph.add_requirement(h.output_buffer().dim(0).min() == 0);
+    ph.add_requirement(h.output_buffer().dim(0).extent() % 8 == 0);
+    ph.add_requirement(h.output_buffer().dim(1).min() == 0);
+
+    ph.add_requirement(h.output_buffer().dim(1).extent() == image1.dim(1).extent());
+
+    error_occurred = false;
+    h.realize(image1);
+
+    if (error_occurred) {
+        printf("Error incorrectly raised when constraining output buffer\n");
+        return -1;
+    }
+
+    return 0;
+}
+
+
 int main(int argc, char **argv) {
     int result;
 
@@ -146,6 +226,9 @@ int main(int argc, char **argv) {
     if (result != 0) return result;
 
     result = alignment_constraints();
+    if (result != 0) return result;
+
+    result = unstructured_constraints();
     if (result != 0) return result;
 
     printf("Success!\n");

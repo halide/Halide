@@ -700,6 +700,7 @@ RUNTIME_CPP_COMPONENTS = \
   destructors \
   device_interface \
   errors \
+  fake_get_symbol \
   fake_thread_pool \
   float16_t \
   gpu_device_selection \
@@ -757,6 +758,7 @@ RUNTIME_CPP_COMPONENTS = \
   runtime_api \
   ssp \
   to_string \
+  trace_helper \
   tracing \
   windows_abort \
   windows_clock \
@@ -777,7 +779,7 @@ RUNTIME_LL_COMPONENTS = \
   arm_no_neon \
   d3d12_abi_patch_64 \
   hvx_64 \
-  hvx \
+  hvx_128 \
   mips \
   posix_math \
   powerpc \
