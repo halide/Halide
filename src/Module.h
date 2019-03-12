@@ -152,13 +152,16 @@ public:
 /** Link a set of modules together into one module. */
 Module link_modules(const std::string &name, const std::vector<Module> &modules);
 
-/** Create an object file containing the Halide runtime for a given
- * target. For use with Target::NoRuntime. */
+/** Create an object file containing the Halide runtime for a given target. For
+ * use with Target::NoRuntime. Standalone runtimes are only compatible with
+ * pipelines compiled by the same build of Halide used to call this function. */
 void compile_standalone_runtime(const std::string &object_filename, Target t);
 
-/** Create an object and/or static library file containing the Halide runtime for a given
- * target. For use with Target::NoRuntime. Return an Outputs with just the actual
- * outputs filled in (typically, object_name and/or static_library_name).
+/** Create an object and/or static library file containing the Halide runtime
+ * for a given target. For use with Target::NoRuntime. Standalone runtimes are
+ * only compatible with pipelines compiled by the same build of Halide used to
+ * call this function. Return an Outputs with just the actual outputs filled in
+ * (typically, object_name and/or static_library_name).
  */
 Outputs compile_standalone_runtime(const Outputs &output_files, Target t);
 

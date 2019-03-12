@@ -2621,14 +2621,16 @@ protected:
     using GeneratorContext = Halide::GeneratorContext;
     using ImageParam = Halide::ImageParam;
     using LoopLevel = Halide::LoopLevel;
+    using MemoryType = Halide::MemoryType;
+    using NameMangling = Halide::NameMangling;
     using Pipeline = Halide::Pipeline;
+    using PrefetchBoundStrategy = Halide::PrefetchBoundStrategy;
     using RDom = Halide::RDom;
     using TailStrategy = Halide::TailStrategy;
     using Target = Halide::Target;
     using Tuple = Halide::Tuple;
     using Type = Halide::Type;
     using Var = Halide::Var;
-    using NameMangling = Halide::NameMangling;
     template <typename T> static Expr cast(Expr e) { return Halide::cast<T>(e); }
     static inline Expr cast(Halide::Type t, Expr e) { return Halide::cast(t, e); }
     template <typename T> using GeneratorParam = Halide::GeneratorParam<T>;
@@ -2764,6 +2766,12 @@ public:
     // the schedule() method. (This may be relaxed in the future to allow
     // calling from generate() as long as all Outputs have been defined.)
     Pipeline get_pipeline();
+
+    template<typename... Args>
+    HALIDE_NO_USER_CODE_INLINE
+    void add_requirement(Expr condition, Args&&... args) {
+        get_pipeline().add_requirement(condition, std::forward<Args>(args)...);
+    }
 
 protected:
     GeneratorBase(size_t size, const void *introspection_helper);
