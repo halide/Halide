@@ -314,12 +314,6 @@ Module lower(const vector<Function> &output_funcs,
     s = inject_early_frees(s);
     debug(2) << "Lowering after injecting early frees:\n" << s << "\n\n";
 
-    if (t.has_feature(Target::Profile)) {
-        debug(1) << "Injecting profiling...\n";
-        s = inject_profiling(s, pipeline_name);
-        debug(2) << "Lowering after injecting profiling:\n" << s << "\n\n";
-    }
-
     if (t.has_feature(Target::FuzzFloatStores)) {
         debug(1) << "Fuzzing floating point stores...\n";
         s = fuzz_float_stores(s);
@@ -330,6 +324,12 @@ Module lower(const vector<Function> &output_funcs,
     s = simplify_correlated_differences(s);
     s = bound_small_allocations(s);
     debug(2) << "Lowering after bounding small allocations:\n" << s << "\n\n";
+
+    if (t.has_feature(Target::Profile)) {
+        debug(1) << "Injecting profiling...\n";
+        s = inject_profiling(s, pipeline_name);
+        debug(2) << "Lowering after injecting profiling:\n" << s << "\n\n";
+    }
 
     if (t.has_feature(Target::CUDA)) {
         debug(1) << "Injecting warp shuffles...\n";
