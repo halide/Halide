@@ -1531,6 +1531,20 @@ extern int halide_downgrade_buffer_t(void *user_context, const char *name,
 extern int halide_downgrade_buffer_t_device_fields(void *user_context, const char *name,
                                                    const halide_buffer_t *new_buf, buffer_t *old_buf);
 
+/** Class that provides a type that implements half precision
+ *  floating point (IEEE754 2008 binary16) in software.
+ *
+ *  This type is enforced to be 16-bits wide and maintains no state
+ *  other than the raw IEEE754 binary16 bits so that it can passed
+ *  to code that checks a type's size and used for buffer_t allocation.
+ *
+ * TODO: reconcile this with Halide::float16_t; this is a stub to allow for
+ * header generation
+ * */
+struct halide_float16_t {
+    uint16_t bits;
+};
+
 /** halide_scalar_value_t is a simple union able to represent all the well-known
  * scalar values in a filter argument. Note that it isn't tagged with a type;
  * you must ensure you know the proper type before accessing. Most user
@@ -1550,6 +1564,7 @@ struct halide_scalar_value_t {
         uint16_t u16;
         uint32_t u32;
         uint64_t u64;
+        halide_float16_t f16;
         float f32;
         double f64;
         void *handle;

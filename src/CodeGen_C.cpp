@@ -358,6 +358,8 @@ string type_to_c_type(Type type, bool include_space, bool c_plus_plus = true) {
             oss << "float";
         } else if (type.bits() == 64) {
             oss << "double";
+        } else if (type.bits() == 16) {
+            oss << "halide_float16_t";
         } else {
             user_error << "Can't represent a float with this many bits in C: " << type << "\n";
         }

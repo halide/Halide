@@ -13,6 +13,16 @@ using namespace Halide::Runtime;
 
 const int kSize = 32;
 
+halide_float16_t make_float16(float f) {
+  assert(f == 0.f);  // TODO: support proper conversions in the runtime
+  return {0};
+}
+
+float to_float32(halide_float16_t f) {
+  assert(f.bits == 0);  // TODO: support proper conversions in the runtime
+  return 0.f;
+}
+
 inline std::ostream &operator<<(std::ostream &o, const halide_type_t &type) {
     if (type.code == halide_type_uint && type.bits == 1) {
         o << "bool";
@@ -43,6 +53,7 @@ struct typed_scalar {
             exit(-1);
         }
         switch (halide_type_code((halide_type_code_t) type.code, type.bits)) {
+            case halide_type_code(halide_type_float, 16):  return value.u.f16.bits == that.value.u.f16.bits;
             case halide_type_code(halide_type_float, 32):  return value.u.f32 == that.value.u.f32;
             case halide_type_code(halide_type_float, 64):  return value.u.f64 == that.value.u.f64;
             case halide_type_code(halide_type_int, 8):     return value.u.i8 == that.value.u.i8;
@@ -68,6 +79,7 @@ struct typed_scalar {
 
     friend std::ostream &operator<<(std::ostream &o, const typed_scalar &s) {
         switch (halide_type_code((halide_type_code_t) s.type.code, s.type.bits)) {
+            case halide_type_code(halide_type_float, 16):  o << to_float32(s.value.u.f16); break;
             case halide_type_code(halide_type_float, 32):  o << s.value.u.f32; break;
             case halide_type_code(halide_type_float, 64):  o << s.value.u.f64; break;
             case halide_type_code(halide_type_int, 8):     o << (int) s.value.u.i8; break;
@@ -288,6 +300,13 @@ const halide_scalar_value_t *make_scalar(uint64_t v) {
 }
 
 template <>
+const halide_scalar_value_t *make_scalar(halide_float16_t v) {
+    halide_scalar_value_t *s = new halide_scalar_value_t();
+    s->u.f16 = v;
+    return s;
+}
+
+template <>
 const halide_scalar_value_t *make_scalar(float v) {
     halide_scalar_value_t *s = new halide_scalar_value_t();
     s->u.f32 = v;
@@ -495,6 +514,17 @@ void check_metadata(const halide_filter_metadata_t &md, bool expect_ucon_at_0) {
           make_scalar<uint64_t>(640),
           make_scalar<uint64_t>(64),
           make_scalar<uint64_t>(2550),
+          nullptr,
+          nullptr,
+        },
+        {
+          "16",
+          halide_argument_kind_input_scalar,
+          0,
+          halide_type_t(halide_type_float, 16),
+          make_scalar<halide_float16_t>(make_float16(0.f)),
+          make_scalar<halide_float16_t>(make_float16(0.f)),
+          make_scalar<halide_float16_t>(make_float16(0.f)),
           nullptr,
           nullptr,
         },
@@ -1324,6 +1354,7 @@ int main(int argc, char **argv) {
         0,                 // Input<u16>
         0,                 // Input<u32>
         0,                 // Input<u64>
+        make_float16(0),   // Input<float16>
         0.f,               // Input<float>
         0.0,               // Input<double>
         nullptr,           // Input<void*>
@@ -1383,6 +1414,7 @@ int main(int argc, char **argv) {
         0,                 // Input<u16>
         0,                 // Input<u32>
         0,                 // Input<u64>
+        make_float16(0),   // Input<float16>
         0.f,               // Input<float>
         0.0,               // Input<double>
         nullptr,           // Input<void*>

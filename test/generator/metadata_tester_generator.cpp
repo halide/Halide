@@ -2,6 +2,8 @@
 
 namespace {
 
+using Halide::float16_t;
+
 enum class SomeEnum { Foo,
                       Bar };
 
@@ -21,6 +23,8 @@ public:
     Input<uint16_t> u16{ "u16", 160, 16, 2550 };
     Input<uint32_t> u32{ "u32", 320, 32, 2550 };
     Input<uint64_t> u64{ "u64", 640, 64, 2550 };
+    // TODO: use numbers more interesting than zero
+    Input<float16_t> f16{ "f16", float16_t(0.f), float16_t(0.f), float16_t(0.f) };
     Input<float> f32{ "f32", 32.1234f, -3200.1234f, 3200.1234f };
     Input<double> f64{ "f64", 64.25f, -6400.25f, 6400.25f };
     Input<void *> h{ "h", nullptr };

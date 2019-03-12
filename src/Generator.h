@@ -1843,6 +1843,7 @@ using GeneratorInputImplBase =
     typename select_type<
         cond<has_static_halide_type_method<TBase>::value, GeneratorInput_Buffer<T>>,
         cond<std::is_same<TBase, Func>::value,            GeneratorInput_Func<T>>,
+        cond<std::is_same<TBase, float16_t>::value,       GeneratorInput_Arithmetic<T>>,
         cond<std::is_arithmetic<TBase>::value,            GeneratorInput_Arithmetic<T>>,
         cond<std::is_scalar<TBase>::value,                GeneratorInput_Scalar<T>>
     >::type;

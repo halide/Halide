@@ -760,6 +760,7 @@ const std::map<std::string, Type> &get_halide_type_enum_map() {
         {"uint8", UInt(8)},
         {"uint16", UInt(16)},
         {"uint32", UInt(32)},
+        {"float16", Float(16)},
         {"float32", Float(32)},
         {"float64", Float(64)}
     };
