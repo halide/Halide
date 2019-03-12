@@ -699,6 +699,9 @@ RUNTIME_CPP_COMPONENTS = \
   fake_get_symbol \
   fake_thread_pool \
   float16_t \
+  fuchsia_clock \
+  fuchsia_host_cpu_count \
+  fuchsia_yield \
   gpu_device_selection \
   hexagon_cache_allocator \
   hexagon_cpu_features \
