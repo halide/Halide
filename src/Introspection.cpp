@@ -15,6 +15,7 @@
 #include <execinfo.h>
 
 #include <regex>
+#include <mutex>
 
 using std::vector;
 using std::pair;
@@ -2200,7 +2201,13 @@ private:
 };
 
 namespace {
+
 DebugSections *debug_sections = nullptr;
+
+#if __has_feature(thread_sanitizer)
+std::mutex get_variable_name_lock;
+#endif
+
 }
 
 bool dump_stack_frame() {
@@ -2212,6 +2219,15 @@ bool dump_stack_frame() {
 }
 
 std::string get_variable_name(const void *var, const std::string &expected_type) {
+
+#if __has_feature(thread_sanitizer)
+    // At least one version of libc++ will report data races inside the regex
+    // implementation if we call this from multiple threads at the same time
+    // (e.g. from correctness_vector_width); this mutex serves more to silence
+    // what is likely to be an irrelevant-to-us data race when using TSAN.
+    std::lock_guard<std::mutex> lock(get_variable_name_lock);
+#endif
+
     if (!debug_sections) return "";
     if (!debug_sections->working) return "";
     std::string name = debug_sections->get_stack_variable_name(var, expected_type);
