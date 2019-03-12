@@ -6,7 +6,7 @@ typedef int32_t zx_status_t;
 typedef int64_t zx_time_t;
 typedef int64_t zx_duration_t;
   
-zx_time_t zx_clock_get_monotonic(void);
+zx_time_t zx_clock_get_monotonic();
 
 zx_time_t zx_deadline_after(zx_duration_t nanoseconds);
 zx_status_t zx_nanosleep(zx_time_t deadline);
