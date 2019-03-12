@@ -44,11 +44,11 @@
 #include "RealizationOrder.h"
 #include "RemoveDeadAllocations.h"
 #include "RemoveExternLoops.h"
-#include "RemoveTrivialForLoops.h"
 #include "RemoveUndef.h"
 #include "ScheduleFunctions.h"
 #include "SelectGPUAPI.h"
 #include "Simplify.h"
+#include "SimplifyCorrelatedDifferences.h"
 #include "SimplifySpecializations.h"
 #include "SkipStages.h"
 #include "SlidingWindow.h"
@@ -174,6 +174,7 @@ Module lower(const vector<Function> &output_funcs,
     debug(2) << "Lowering after sliding window:\n" << s << '\n';
 
     debug(1) << "Performing allocation bounds inference...\n";
+    s = simplify_correlated_differences(s);
     s = allocation_bounds_inference(s, env, func_bounds);
     debug(2) << "Lowering after allocation bounds inference:\n" << s << '\n';
 
@@ -270,7 +271,7 @@ Module lower(const vector<Function> &output_funcs,
     debug(1) << "Simplifying...\n";
     s = simplify(s);
     s = unify_duplicate_lets(s);
-    s = remove_trivial_for_loops(s);
+    // s = remove_trivial_for_loops(s);
     debug(2) << "Lowering after second simplifcation:\n" << s << "\n\n";
 
     debug(1) << "Reduce prefetch dimension...\n";
@@ -278,6 +279,7 @@ Module lower(const vector<Function> &output_funcs,
     debug(2) << "Lowering after reduce prefetch dimension:\n" << s << "\n";
 
     debug(1) << "Unrolling...\n";
+    s = simplify_correlated_differences(s);
     s = unroll_loops(s);
     s = simplify(s);
     debug(2) << "Lowering after unrolling:\n" << s << "\n\n";
@@ -325,6 +327,7 @@ Module lower(const vector<Function> &output_funcs,
     }
 
     debug(1) << "Bounding small allocations...\n";
+    s = simplify_correlated_differences(s);
     s = bound_small_allocations(s);
     debug(2) << "Lowering after bounding small allocations:\n" << s << "\n\n";
 
@@ -352,7 +355,6 @@ Module lower(const vector<Function> &output_funcs,
     debug(2) << "Lowering after lowering unsafe promises:\n" << s << "\n\n";
 
     s = remove_dead_allocations(s);
-    s = remove_trivial_for_loops(s);
     s = simplify(s);
     s = loop_invariant_code_motion(s);
     debug(1) << "Lowering after final simplification:\n" << s << "\n\n";

@@ -393,12 +393,14 @@ class MonotonicVisitor : public IRVisitor {
 public:
     Monotonic result;
 
-    MonotonicVisitor(const std::string &v) : var(v), result(Monotonic::Unknown) {}
+    MonotonicVisitor(const std::string &v, const Scope<Monotonic> &parent) : var(v), result(Monotonic::Unknown) {
+        scope.set_containing_scope(&parent);
+    }
 };
 
-Monotonic is_monotonic(Expr e, const std::string &var) {
+Monotonic is_monotonic(Expr e, const std::string &var, const Scope<Monotonic> &scope) {
     if (!e.defined()) return Monotonic::Unknown;
-    MonotonicVisitor m(var);
+    MonotonicVisitor m(var, scope);
     e.accept(&m);
     return m.result;
 }

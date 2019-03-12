@@ -82,7 +82,7 @@ class UnrollLoops : public IRMutator {
                     iters = Block::make(iter, iters);
                 }
                 if (use_guard) {
-                    iters = IfThenElse::make(i < for_loop->extent, iters);
+                    iters = IfThenElse::make(likely_if_innermost(i < for_loop->extent), iters);
                 }
             }
 

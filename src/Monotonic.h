@@ -7,6 +7,7 @@
  */
 
 #include "IR.h"
+#include "Scope.h"
 
 namespace Halide {
 namespace Internal {
@@ -16,7 +17,8 @@ namespace Internal {
  * decreasing, or unknown.
  */
 enum class Monotonic {Constant, Increasing, Decreasing, Unknown};
-Monotonic is_monotonic(Expr e, const std::string &var);
+Monotonic is_monotonic(Expr e, const std::string &var,
+                       const Scope<Monotonic> &scope = Scope<Monotonic>::empty_scope());
 
 void is_monotonic_test();
 

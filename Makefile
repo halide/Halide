@@ -466,7 +466,6 @@ SOURCE_FILES = \
   RegionCosts.cpp \
   RemoveDeadAllocations.cpp \
   RemoveExternLoops.cpp \
-  RemoveTrivialForLoops.cpp \
   RemoveUndef.cpp \
   Schedule.cpp \
   ScheduleFunctions.cpp \
@@ -491,6 +490,7 @@ SOURCE_FILES = \
   Simplify_Shuffle.cpp \
   Simplify_Stmts.cpp \
   Simplify_Sub.cpp \
+  SimplifyCorrelatedDifferences.cpp \
   SimplifySpecializations.cpp \
   SkipStages.cpp \
   SlidingWindow.cpp \
@@ -638,7 +638,6 @@ HEADER_FILES = \
   RegionCosts.h \
   RemoveDeadAllocations.h \
   RemoveExternLoops.h \
-  RemoveTrivialForLoops.h \
   RemoveUndef.h \
   runtime/HalideBuffer.h \
   runtime/HalideRuntime.h \
@@ -647,6 +646,7 @@ HEADER_FILES = \
   Scope.h \
   SelectGPUAPI.h \
   Simplify.h \
+  SimplifyCorrelatedDifferences.h \
   SimplifySpecializations.h \
   SkipStages.h \
   SlidingWindow.h \
@@ -1977,7 +1977,7 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
 	cp $(BUILD_DIR)/halide_config.* $(DISTRIB_DIR)
 	cp $(ROOT_DIR)/halide.cmake $(DISTRIB_DIR)
 	ln -sf $(DISTRIB_DIR) halide
-	tar -czf $(DISTRIB_DIR)/halide.tgz \
+	tar -czf $(BUILD_DIR)/halide.tgz \
 		halide/bin \
 		halide/lib \
 		halide/include \
@@ -1987,6 +1987,7 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
 		halide/halide_config.* \
 		halide/halide.*
 	rm -rf halide
+	mv $(BUILD_DIR)/halide.tgz $(DISTRIB_DIR)/halide.tgz
 
 .PHONY: distrib
 distrib: $(DISTRIB_DIR)/halide.tgz
