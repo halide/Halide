@@ -1374,14 +1374,14 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
             // Since we successfully invert, the left hand side becomes
             // new_args
             lhs[arg_id] = new_args[arg_id];
-            // Record that we sucessfully invert, for those we fail
+            // Record that we successfully invert, for those we fail
             // we need to perform general scattering.
             canonicalized[arg_id] = true;
             canonicalized_vars.insert(variables[0]);
             lhs_substitute_map[variables[0]] = new_args[arg_id];
         }
 
-        // Sometimes we have this kind of pathelogical case:
+        // Sometimes we have this kind of pathological case:
         // f(x, y) = ...
         // k(n) = f(g(n), n)
         // When we update d_f, we the second n would be replaced by y
@@ -1478,7 +1478,7 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
         //
         // Another common pattern is the reverse of downsampling
         // if we see s * r.x + r.y and r.y has min == 0 and extent == s
-        // we simplify them to x and replace all occurence of r.x by x/4
+        // we simplify them to x and replace all occurrence of r.x by x/4
         // e.g.
         // f(4 * r.x + r.y) = g(r.x) + h(4 * r.x + r.y)
         // => f(x) = g(x/4) + h(x)
@@ -1519,7 +1519,7 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
                         lhs[i] = func_to_update_args[i];
                         Expr clamped_arg = clamp(func_to_update_args[i],
                                                  r_interval.min, r_interval.max);
-                        // Replace other occurence of rvar in lhs
+                        // Replace other occurrence of rvar in lhs
                         for (int j = 0; j < (int) lhs.size(); j++) {
                             if (j != i) {
                                 lhs[j] = simplify(substitute(
