@@ -5,6 +5,11 @@
 using namespace Halide;
 
 inline void do_cost_model_schedule(Halide::Pipeline p) {
+    for (int i = 0; i < 96; i++) {
+        p.get_func(i).compute_root();
+    }
+    return;
+
     Func loss_output = p.get_func(95);
     Func sum_1 = p.get_func(94);
     Func f2 = p.get_func(93);

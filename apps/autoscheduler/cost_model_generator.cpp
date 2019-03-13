@@ -3,7 +3,6 @@
 // backwards mode, for inference or training respectively.
 
 #include "Halide.h"
-#include "Derivative.h"
 
 #include "cost_model_schedule.h"
 #include "NetworkSize.h"
