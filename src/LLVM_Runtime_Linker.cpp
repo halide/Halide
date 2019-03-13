@@ -433,6 +433,17 @@ llvm::Triple get_triple_for_target(const Target &target) {
     return triple;
 }
 
+void convert_weak_to_strong(llvm::GlobalValue &gv) {
+    llvm::GlobalValue::LinkageTypes linkage = gv.getLinkage();
+    if (linkage == llvm::GlobalValue::WeakAnyLinkage) {
+        gv.setLinkage(llvm::GlobalValue::LinkOnceAnyLinkage);
+    } else if (linkage == llvm::GlobalValue::WeakODRLinkage) {
+        gv.setLinkage(llvm::GlobalValue::LinkOnceODRLinkage);
+    } else if (linkage == llvm::GlobalValue::ExternalWeakLinkage) {
+        gv.setLinkage(llvm::GlobalValue::ExternalLinkage);
+    }
+}
+
 }  // namespace Internal
 
 namespace {
@@ -485,12 +496,7 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t)
     // Enumerate the global variables.
     for (auto &gv : modules[0]->globals()) {
         // No variables are part of the public interface (even the ones labelled halide_)
-        llvm::GlobalValue::LinkageTypes linkage = gv.getLinkage();
-        if (linkage == llvm::GlobalValue::WeakAnyLinkage) {
-            gv.setLinkage(llvm::GlobalValue::LinkOnceAnyLinkage);
-        } else if (linkage == llvm::GlobalValue::WeakODRLinkage) {
-            gv.setLinkage(llvm::GlobalValue::LinkOnceODRLinkage);
-        }
+        Internal::convert_weak_to_strong(gv);
     }
 
     // Enumerate the functions.
@@ -506,14 +512,8 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t)
         internal_assert(!is_halide_extern_c_sym || f.isWeakForLinker() || f.isDeclaration())
             << " for function " << (std::string)f.getName() << "\n";
         can_strip = can_strip && !is_halide_extern_c_sym;
-
-        llvm::GlobalValue::LinkageTypes linkage = f.getLinkage();
         if (can_strip) {
-            if (linkage == llvm::GlobalValue::WeakAnyLinkage) {
-                f.setLinkage(llvm::GlobalValue::LinkOnceAnyLinkage);
-            } else if (linkage == llvm::GlobalValue::WeakODRLinkage) {
-                f.setLinkage(llvm::GlobalValue::LinkOnceODRLinkage);
-            }
+            Internal::convert_weak_to_strong(f);
         }
     }
 
