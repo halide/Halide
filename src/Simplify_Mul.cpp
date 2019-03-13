@@ -3,10 +3,8 @@
 namespace Halide {
 namespace Internal {
 
-// TODO: The fuzzer with seed 1525455315 causes an infinite loop somewhere in here
-
-Expr Simplify::visit(const Mul *op, ConstBounds *bounds) {
-    ConstBounds a_bounds, b_bounds;
+Expr Simplify::visit(const Mul *op, ExprInfo *bounds) {
+    ExprInfo a_bounds, b_bounds;
     Expr a = mutate(op->a, &a_bounds);
     Expr b = mutate(op->b, &b_bounds);
 
@@ -33,6 +31,9 @@ Expr Simplify::visit(const Mul *op, ConstBounds *bounds) {
             bounds->min_defined = true;
             bounds->min = a_bounds.min * b_bounds.min;
         }
+
+        bounds->alignment = a_bounds.alignment * b_bounds.alignment;
+        bounds->trim_bounds_using_alignment();
     }
 
     if (may_simplify(op->type)) {

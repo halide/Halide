@@ -51,8 +51,8 @@ inline bool uses_extern_image(Stmt s) {
     return uses.result;
 }
 
-class SplitTuples : public IRMutator2 {
-    using IRMutator2::visit;
+class SplitTuples : public IRMutator {
+    using IRMutator::visit;
 
     map<string, set<int>> func_value_indices;
 
@@ -66,7 +66,7 @@ class SplitTuples : public IRMutator2 {
             }
             return body;
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
@@ -77,7 +77,7 @@ class SplitTuples : public IRMutator2 {
         op->body.accept(&find);
 
         func_value_indices = find.func_value_indices;
-        Stmt stmt = IRMutator2::visit(op);
+        Stmt stmt = IRMutator::visit(op);
         func_value_indices = old_func_value_indices;
         return stmt;
     }
@@ -97,7 +97,7 @@ class SplitTuples : public IRMutator2 {
             }
             return body;
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
@@ -120,13 +120,13 @@ class SplitTuples : public IRMutator2 {
             // for scalar provides.
             return Call::make(op->type, name, args, op->call_type, f.get_contents());
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
     Stmt visit(const Provide *op) override {
         if (op->values.size() == 1) {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
 
         // Detect if the provide needs to be lowered atomically. By

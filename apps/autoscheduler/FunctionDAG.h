@@ -614,7 +614,11 @@ struct FunctionDAG {
                           expr);
                 const Variable *var = v.as<Variable>();
 
-                if (var && (!mul || coeff_imm) && (!add || constant_imm)) {
+                if (const IntImm *c = e.as<IntImm>()) {
+                    affine = true;
+                    coeff = 0;
+                    constant = c->value;
+                } else if (var && (!mul || coeff_imm) && (!add || constant_imm)) {
                     affine = true;
                     coeff = mul ? coeff_imm->value : 1;
                     constant = add ? constant_imm->value : 0;
@@ -685,10 +689,14 @@ struct FunctionDAG {
                 auto eval_bound = [&](const BoundInfo &b) {
                     if (b.affine) {
                         // Common-case performance optimization
-                        const auto &src_pair = consumer_loop[b.consumer_dim];
-                        int64_t src = b.uses_max ? src_pair.max() : src_pair.min();
-                        bounds_are_constant &= src_pair.constant_extent();
-                        return src * b.coeff + b.constant;
+                        if (b.coeff == 0) {
+                            return b.constant;
+                        } else {
+                            const auto &src_pair = consumer_loop[b.consumer_dim];
+                            int64_t src = b.uses_max ? src_pair.max() : src_pair.min();
+                            bounds_are_constant &= src_pair.constant_extent();
+                            return src * b.coeff + b.constant;
+                        }
                     } else {
                         Expr substituted = substitute(s, b.expr);
                         Expr e = simplify(substituted);
@@ -725,8 +733,8 @@ struct FunctionDAG {
 
         // A mutator to apply parameter estimates to the expressions
         // we encounter while constructing the graph.
-        class ApplyParamEstimates : public IRMutator2 {
-            using IRMutator2::visit;
+        class ApplyParamEstimates : public IRMutator {
+            using IRMutator::visit;
 
             Expr visit(const Variable *op) override {
                 Expr expr;

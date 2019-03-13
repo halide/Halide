@@ -29,7 +29,7 @@ export HL_NUM_PASSES=5
 # export HL_BEAM_SIZE=160
 # export HL_NUM_PASSES=1
 
-APPS="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate_generator conv_layer mat_mul_generator iir_blur_generator resnet_50 bgu"
+APPS="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate_generator conv_layer mat_mul_generator iir_blur_generator resnet_50_blockwise bgu"
 
 # Uncomment when there's a change that wouldn't be picked up by the Makefiles (e.g. new weights)
 for app in ${APPS}; do make -C ${HALIDE}/apps/${app} clean; done
@@ -48,7 +48,7 @@ make -j -C ${HALIDE}/apps/interpolate_generator bin/filter
 make -j -C ${HALIDE}/apps/conv_layer bin/process
 make -j -C ${HALIDE}/apps/mat_mul_generator bin/filter
 make -j -C ${HALIDE}/apps/iir_blur_generator bin/process
-make -j -C ${HALIDE}/apps/resnet_50 test
+make -j -C ${HALIDE}/apps/resnet_50_blockwise test
 make -j -C ${HALIDE}/apps/bgu bin/process
 
 # benchmark everything

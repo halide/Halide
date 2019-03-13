@@ -80,7 +80,7 @@ using std::vector;
 
 Module lower(const vector<Function> &output_funcs, const string &pipeline_name, const Target &t,
              const vector<Argument> &args, const LinkageType linkage_type,
-             const vector<IRMutator2 *> &custom_passes) {
+             const vector<IRMutator *> &custom_passes) {
     std::vector<std::string> namespaces;
     std::string simple_pipeline_name = extract_namespaces(pipeline_name, namespaces);
 
@@ -213,10 +213,15 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     debug(2) << "Lowering after destructuring tuple-valued realizations:\n" << s << "\n\n";
 
     // OpenGL relies on GPU var canonicalization occurring before
-    // storage flattening
-    debug(1) << "Canonicalizing GPU var names...\n";
-    s = canonicalize_gpu_vars(s);
-    debug(2) << "Lowering after canonicalizing GPU var names:\n" << s << '\n';
+    // storage flattening.
+    if (t.has_gpu_feature() ||
+        t.has_feature(Target::OpenGLCompute) ||
+        t.has_feature(Target::OpenGL)) {
+        debug(1) << "Canonicalizing GPU var names...\n";
+        s = canonicalize_gpu_vars(s);
+        debug(2) << "Lowering after canonicalizing GPU var names:\n"
+                 << s << '\n';
+    }
 
     debug(1) << "Performing storage flattening...\n";
     s = storage_flattening(s, outputs, env, t);
@@ -421,10 +426,10 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     // We're about to drop the environment and outputs vector, which
     // contain the only strong refs to Functions that may still be
     // pointed to by the IR. So make those refs strong.
-    class StrengthenRefs : public IRMutator2 {
-        using IRMutator2::visit;
+    class StrengthenRefs : public IRMutator {
+        using IRMutator::visit;
         Expr visit(const Call *c) override {
-            Expr expr = IRMutator2::visit(c);
+            Expr expr = IRMutator::visit(c);
             c = expr.as<Call>();
             internal_assert(c);
             if (c->func.defined()) {
@@ -459,7 +464,7 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
 }
 
 Stmt lower_main_stmt(const std::vector<Function> &output_funcs, const std::string &pipeline_name,
-                     const Target &t, const std::vector<IRMutator2 *> &custom_passes) {
+                     const Target &t, const std::vector<IRMutator *> &custom_passes) {
     // We really ought to start applying for appellation d'origine contrôlée
     // status on types representing arguments in the Halide compiler.
     vector<InferredArgument> inferred_args = infer_arguments(Stmt(), output_funcs);

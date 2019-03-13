@@ -6,31 +6,35 @@ namespace Internal {
 // Miscellaneous expression visitors that are too small to bother putting in their own files
 
 
-Expr Simplify::visit(const IntImm *op, ConstBounds *bounds) {
+Expr Simplify::visit(const IntImm *op, ExprInfo *bounds) {
     if (bounds && no_overflow_int(op->type)) {
         bounds->min_defined = bounds->max_defined = true;
         bounds->min = bounds->max = op->value;
+        bounds->alignment.remainder = op->value;
+        bounds->alignment.modulus = 0;
     }
     return op;
 }
 
-Expr Simplify::visit(const UIntImm *op, ConstBounds *bounds) {
+Expr Simplify::visit(const UIntImm *op, ExprInfo *bounds) {
     if (bounds && Int(64).can_represent(op->value)) {
         bounds->min_defined = bounds->max_defined = true;
         bounds->min = bounds->max = (int64_t)(op->value);
+        bounds->alignment.remainder = op->value;
+        bounds->alignment.modulus = 0;
     }
     return op;
 }
 
-Expr Simplify::visit(const FloatImm *op, ConstBounds *bounds) {
+Expr Simplify::visit(const FloatImm *op, ExprInfo *bounds) {
     return op;
 }
 
-Expr Simplify::visit(const StringImm *op, ConstBounds *bounds) {
+Expr Simplify::visit(const StringImm *op, ExprInfo *bounds) {
     return op;
 }
 
-Expr Simplify::visit(const Broadcast *op, ConstBounds *bounds) {
+Expr Simplify::visit(const Broadcast *op, ExprInfo *bounds) {
     Expr value = mutate(op->value, bounds);
     if (value.same_as(op->value)) {
         return op;
@@ -39,9 +43,9 @@ Expr Simplify::visit(const Broadcast *op, ConstBounds *bounds) {
     }
 }
 
-Expr Simplify::visit(const Variable *op, ConstBounds *bounds) {
-    if (bounds_info.contains(op->name)) {
-        const ConstBounds &b = bounds_info.get(op->name);
+Expr Simplify::visit(const Variable *op, ExprInfo *bounds) {
+    if (bounds_and_alignment_info.contains(op->name)) {
+        const ExprInfo &b = bounds_and_alignment_info.get(op->name);
         if (bounds) {
             *bounds = b;
         }
@@ -79,8 +83,8 @@ Expr Simplify::visit(const Variable *op, ConstBounds *bounds) {
 }
 
 
-Expr Simplify::visit(const Ramp *op, ConstBounds *bounds) {
-    ConstBounds base_bounds, stride_bounds;
+Expr Simplify::visit(const Ramp *op, ExprInfo *bounds) {
+    ExprInfo base_bounds, stride_bounds;
     Expr base = mutate(op->base, &base_bounds);
     Expr stride = mutate(op->stride, &stride_bounds);
     const int lanes = op->type.lanes();
@@ -90,6 +94,18 @@ Expr Simplify::visit(const Ramp *op, ConstBounds *bounds) {
         bounds->max_defined = base_bounds.max_defined && stride_bounds.max_defined;
         bounds->min = std::min(base_bounds.min, base_bounds.min + (lanes - 1) * stride_bounds.min);
         bounds->max = std::max(base_bounds.max, base_bounds.max + (lanes - 1) * stride_bounds.max);
+        // A ramp lane is b + l * s. Expanding b into mb * x + rb and s into ms * y + rs, we get:
+        //   mb * x + rb + l * (ms * y + rs)
+        // = mb * x + ms * l * y + rs * l + rb
+        // = gcd(rs, ms, mb) * z + rb
+        int64_t m = stride_bounds.alignment.modulus;
+        m = gcd(m, stride_bounds.alignment.remainder);
+        m = gcd(m, base_bounds.alignment.modulus);
+        int64_t r = base_bounds.alignment.remainder;
+        if (m != 0) {
+            r = mod_imp(base_bounds.alignment.remainder, m);
+        }
+        bounds->alignment = {m, r};
     }
 
     // A somewhat torturous way to check if the stride is zero,
@@ -109,11 +125,22 @@ Expr Simplify::visit(const Ramp *op, ConstBounds *bounds) {
     }
 }
 
-Expr Simplify::visit(const Load *op, ConstBounds *bounds) {
+Expr Simplify::visit(const Load *op, ExprInfo *bounds) {
     found_buffer_reference(op->name);
 
     Expr predicate = mutate(op->predicate, nullptr);
-    Expr index = mutate(op->index, nullptr);
+
+    ExprInfo index_info;
+    Expr index = mutate(op->index, &index_info);
+
+    ExprInfo base_info;
+    if (const Ramp *r = index.as<Ramp>()) {
+        mutate(r->base, &base_info);
+    }
+
+    base_info.alignment = ModulusRemainder::intersect(base_info.alignment, index_info.alignment);
+
+    ModulusRemainder align = ModulusRemainder::intersect(op->alignment, base_info.alignment);
 
     const Broadcast *b_index = index.as<Broadcast>();
     const Broadcast *b_pred = predicate.as<Broadcast>();
@@ -122,12 +149,12 @@ Expr Simplify::visit(const Load *op, ConstBounds *bounds) {
         return undef(op->type);
     } else if (b_index && b_pred) {
         // Load of a broadcast should be broadcast of the load
-        Expr load = Load::make(op->type.element_of(), op->name, b_index->value, op->image, op->param, b_pred->value);
+        Expr load = Load::make(op->type.element_of(), op->name, b_index->value, op->image, op->param, b_pred->value, align);
         return Broadcast::make(load, b_index->lanes);
-    } else if (predicate.same_as(op->predicate) && index.same_as(op->index)) {
+    } else if (predicate.same_as(op->predicate) && index.same_as(op->index) && align == op->alignment) {
         return op;
     } else {
-        return Load::make(op->type, op->name, index, op->image, op->param, predicate);
+        return Load::make(op->type, op->name, index, op->image, op->param, predicate, align);
     }
 }
 

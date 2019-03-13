@@ -41,7 +41,7 @@ protected:
     }
 };
 
-class CheckPredicatedStoreLoad : public IRMutator2 {
+class CheckPredicatedStoreLoad : public IRMutator {
     int expected_store_count;
     int expected_load_count;
 public:
@@ -54,7 +54,7 @@ public:
             expected_load_count = 0;
         }
     }
-    using IRMutator2::mutate;
+    using IRMutator::mutate;
 
     Stmt mutate(const Stmt &s) override {
         CountPredicatedStoreLoad c;

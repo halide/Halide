@@ -170,7 +170,7 @@ vector<vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, int fa
                     t.back() = 1;
                     result.push_back(t);
                 }
-                if (s[d] != 1 && !is_full && is_one) {
+                if (s[d] != 1 && !is_full) {
                     t.back() = s[d];
                     result.push_back(t);
                 }
@@ -1664,6 +1664,8 @@ struct LoopNest {
                 }
                 outer->children.emplace_back(inner);
 
+                // HACK
+                // bool may_slide = false;
                 bool may_slide = (!in_realization &&
                                   f->stages.size() == 1);
                 if (may_slide) {
@@ -1694,6 +1696,8 @@ struct LoopNest {
 
             // See if it's appropriate to slide over this loop Can't
             // slide at the root level if we intend to parallelize it.
+            // HACK
+            // bool may_slide = false;
             bool may_slide = (params.parallelism == 1) || !is_root();
 
             const auto &c = children[child];

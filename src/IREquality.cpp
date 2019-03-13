@@ -364,6 +364,8 @@ void IRComparer::visit(const Load *op) {
     compare_names(op->name, e->name);
     compare_expr(e->predicate, op->predicate);
     compare_expr(e->index, op->index);
+    compare_scalar(e->alignment.modulus, op->alignment.modulus);
+    compare_scalar(e->alignment.remainder, op->alignment.remainder);
 }
 
 void IRComparer::visit(const Ramp *op) {
@@ -445,6 +447,8 @@ void IRComparer::visit(const Store *op) {
     compare_expr(s->predicate, op->predicate);
     compare_expr(s->value, op->value);
     compare_expr(s->index, op->index);
+    compare_scalar(s->alignment.modulus, op->alignment.modulus);
+    compare_scalar(s->alignment.remainder, op->alignment.remainder);
 }
 
 void IRComparer::visit(const Provide *op) {

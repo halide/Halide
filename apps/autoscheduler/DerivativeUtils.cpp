@@ -18,9 +18,9 @@ using std::set;
 using std::string;
 using std::vector;
 
-class StripLets : public IRMutator2 {
+class StripLets : public IRMutator {
 public:
-    using IRMutator2::visit;
+    using IRMutator::visit;
     Expr visit(const Let *op) override {
         return mutate(op->body);
     }

@@ -52,16 +52,16 @@ int count_producers(Stmt in, const std::string &name) {
 }
 
 // Fold the storage of a function in a particular dimension by a particular factor
-class FoldStorageOfFunction : public IRMutator2 {
+class FoldStorageOfFunction : public IRMutator {
     string func;
     int dim;
     Expr factor;
     string dynamic_footprint;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Expr visit(const Call *op) override {
-        Expr expr = IRMutator2::visit(op);
+        Expr expr = IRMutator::visit(op);
         op = expr.as<Call>();
         internal_assert(op);
         if (op->name == func && op->call_type == Call::Halide) {
@@ -115,7 +115,7 @@ class FoldStorageOfFunction : public IRMutator2 {
 
                     // TODO: dynamic footprint is no longer the min, and may be tracked separately on producer and consumer sides (head vs tail)
                     valid_min =
-                        Load::make(Int(32), dynamic_footprint, 0, Buffer<>(), Parameter(), const_true());
+                        Load::make(Int(32), dynamic_footprint, 0, Buffer<>(), Parameter(), const_true(), ModulusRemainder());
                     Expr check = (old_min >= valid_min &&
                                   (old_min + old_extent - 1) < valid_min + factor);
                     no_wraparound = no_wraparound && check;
@@ -136,7 +136,7 @@ class FoldStorageOfFunction : public IRMutator2 {
     }
 
     Stmt visit(const Provide *op) override {
-        Stmt stmt = IRMutator2::visit(op);
+        Stmt stmt = IRMutator::visit(op);
         op = stmt.as<Provide>();
         internal_assert(op);
         if (op->name == func) {
@@ -154,14 +154,14 @@ public:
 };
 
 // Inject dynamic folding checks against a tracked live range.
-class InjectFoldingCheck : public IRMutator2 {
+class InjectFoldingCheck : public IRMutator {
     Function func;
     string head, tail, loop_var;
     Expr sema_var;
     int dim;
     bool in_produce;
     const StorageDim &storage_dim;
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Stmt visit(const ProducerConsumer *op) override {
         if (op->name == func.name()) {
@@ -175,7 +175,7 @@ class InjectFoldingCheck : public IRMutator2 {
                     // Update valid range based on bounds written to.
                     Box b = box_provided(body, func.name());
                     Expr old_leading_edge =
-                        Load::make(Int(32), head + "_next", 0, Buffer<>(), Parameter(), const_true());
+                        Load::make(Int(32), head + "_next", 0, Buffer<>(), Parameter(), const_true(), ModulusRemainder());
 
                     internal_assert(!b.empty());
 
@@ -192,9 +192,9 @@ class InjectFoldingCheck : public IRMutator2 {
                     Expr new_leading_edge_var = Variable::make(Int(32), new_leading_edge_var_name);
 
                     Stmt update_leading_edge =
-                        Store::make(head, new_leading_edge_var, 0, Parameter(), const_true());
+                        Store::make(head, new_leading_edge_var, 0, Parameter(), const_true(), ModulusRemainder());
                     Stmt update_next_leading_edge =
-                        Store::make(head + "_next", new_leading_edge_var, 0, Parameter(), const_true());
+                        Store::make(head + "_next", new_leading_edge_var, 0, Parameter(), const_true(), ModulusRemainder());
 
                     // Check the region being written to in this
                     // iteration lies within the range of coordinates
@@ -255,7 +255,7 @@ class InjectFoldingCheck : public IRMutator2 {
                     body = mutate(op->body);
                 } else {
                     Expr leading_edge =
-                        Load::make(Int(32), tail + "_next", 0, Buffer<>(), Parameter(), const_true());
+                        Load::make(Int(32), tail + "_next", 0, Buffer<>(), Parameter(), const_true(), ModulusRemainder());
 
                     if (func.schedule().async()) {
                         Expr new_leading_edge;
@@ -275,8 +275,8 @@ class InjectFoldingCheck : public IRMutator2 {
                         Expr release_producer =
                             Call::make(Int(32), "halide_semaphore_release", {sema_var, to_release}, Call::Extern);
                         // The consumer is going to get its own forked copy of the footprint, so it needs to update it too.
-                        Stmt update_leading_edge = Store::make(tail, new_leading_edge_var, 0, Parameter(), const_true());
-                        update_leading_edge = Block::make(Store::make(tail + "_next", new_leading_edge_var, 0, Parameter(), const_true()),
+                        Stmt update_leading_edge = Store::make(tail, new_leading_edge_var, 0, Parameter(), const_true(), ModulusRemainder());
+                        update_leading_edge = Block::make(Store::make(tail + "_next", new_leading_edge_var, 0, Parameter(), const_true(), ModulusRemainder()),
                                                           update_leading_edge);
                         update_leading_edge = Block::make(Evaluate::make(release_producer), update_leading_edge);
                         update_leading_edge = LetStmt::make(new_leading_edge_name, new_leading_edge, update_leading_edge);
@@ -298,7 +298,7 @@ class InjectFoldingCheck : public IRMutator2 {
 
             return ProducerConsumer::make(op->name, op->is_producer, body);
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
@@ -324,7 +324,7 @@ class InjectFoldingCheck : public IRMutator2 {
                 }
 
                 Stmt update_leading_edge =
-                    Store::make(head, leading_edge, 0, Parameter(), const_true());
+                    Store::make(head, leading_edge, 0, Parameter(), const_true(), ModulusRemainder());
                 body = Block::make(update_leading_edge, body);
 
                 // We don't need to make sure the min is moving
@@ -335,7 +335,7 @@ class InjectFoldingCheck : public IRMutator2 {
 
                 if (func.schedule().async()) {
                     Expr old_leading_edge =
-                        Load::make(Int(32), head, 0, Buffer<>(), Parameter(), const_true());
+                        Load::make(Int(32), head, 0, Buffer<>(), Parameter(), const_true(), ModulusRemainder());
                     Expr to_acquire;
                     if (storage_dim.fold_forward) {
                         to_acquire = leading_edge - old_leading_edge;
@@ -359,12 +359,12 @@ class InjectFoldingCheck : public IRMutator2 {
                 }
 
                 Stmt update_leading_edge =
-                    Store::make(tail, leading_edge, 0, Parameter(), const_true());
+                    Store::make(tail, leading_edge, 0, Parameter(), const_true(), ModulusRemainder());
                 body = Block::make(update_leading_edge, body);
 
                 if (func.schedule().async()) {
                     Expr old_leading_edge =
-                        Load::make(Int(32), tail, 0, Buffer<>(), Parameter(), const_true());
+                        Load::make(Int(32), tail, 0, Buffer<>(), Parameter(), const_true(), ModulusRemainder());
                     Expr to_release;
                     if (storage_dim.fold_forward) {
                         to_release = leading_edge - old_leading_edge;
@@ -379,7 +379,7 @@ class InjectFoldingCheck : public IRMutator2 {
 
             return LetStmt::make(op->name, op->value, body);
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
 
     }
@@ -402,18 +402,18 @@ struct Semaphore {
 };
 
 // Attempt to fold the storage of a particular function in a statement
-class AttemptStorageFoldingOfFunction : public IRMutator2 {
+class AttemptStorageFoldingOfFunction : public IRMutator {
     Function func;
     bool explicit_only;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Stmt visit(const ProducerConsumer *op) override {
         if (op->name == func.name()) {
             // Can't proceed into the pipeline for this func
             return op;
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
@@ -788,11 +788,11 @@ class AttemptStorageFoldingOfFunction : public IRMutator2 {
             // next scanline while a consumer is still on the last few
             // pixels of the previous scanline.
 
-            Expr head = Load::make(Int(32), dynamic_footprint + ".head", 0, Buffer<>(), Parameter(), const_true());
-            Expr tail = Load::make(Int(32), dynamic_footprint + ".tail", 0, Buffer<>(), Parameter(), const_true());
+            Expr head = Load::make(Int(32), dynamic_footprint + ".head", 0, Buffer<>(), Parameter(), const_true(), ModulusRemainder());
+            Expr tail = Load::make(Int(32), dynamic_footprint + ".tail", 0, Buffer<>(), Parameter(), const_true(), ModulusRemainder());
             Expr step = Variable::make(Int(32), func.name() + ".extent." + std::to_string(dims_folded.back().dim)) + dims_folded.back().factor;
-            Stmt reset_head = Store::make(dynamic_footprint + ".head_next", head - step, 0, Parameter(), const_true());
-            Stmt reset_tail = Store::make(dynamic_footprint + ".tail_next", tail - step, 0, Parameter(), const_true());
+            Stmt reset_head = Store::make(dynamic_footprint + ".head_next", head - step, 0, Parameter(), const_true(), ModulusRemainder());
+            Stmt reset_tail = Store::make(dynamic_footprint + ".tail_next", tail - step, 0, Parameter(), const_true(), ModulusRemainder());
             stmt = Block::make({stmt, reset_head, reset_tail});
         }
         return stmt;
@@ -813,10 +813,10 @@ public:
 };
 
 // Look for opportunities for storage folding in a statement
-class StorageFolding : public IRMutator2 {
+class StorageFolding : public IRMutator {
     const map<string, Function> &env;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Stmt visit(const Realize *op) override {
         Stmt body = mutate(op->body);
@@ -866,16 +866,16 @@ class StorageFolding : public IRMutator2 {
                     init = op->bounds[fold.dim].min + op->bounds[fold.dim].extent - 1;
                 }
                 if (!fold.head.empty()) {
-                    stmt = Block::make(Store::make(fold.head + "_next", init, 0, Parameter(), const_true()), stmt);
+                    stmt = Block::make(Store::make(fold.head + "_next", init, 0, Parameter(), const_true(), ModulusRemainder()), stmt);
                     stmt = Allocate::make(fold.head + "_next", Int(32), MemoryType::Stack, {}, const_true(), stmt);
-                    stmt = Block::make(Store::make(fold.head, init, 0, Parameter(), const_true()), stmt);
+                    stmt = Block::make(Store::make(fold.head, init, 0, Parameter(), const_true(), ModulusRemainder()), stmt);
                     stmt = Allocate::make(fold.head, Int(32), MemoryType::Stack, {}, const_true(), stmt);
                 }
                 if (!fold.tail.empty()) {
                     internal_assert(func.schedule().async()) << "Expected a single counter for synchronous folding";
-                    stmt = Block::make(Store::make(fold.tail + "_next", init, 0, Parameter(), const_true()), stmt);
+                    stmt = Block::make(Store::make(fold.tail + "_next", init, 0, Parameter(), const_true(), ModulusRemainder()), stmt);
                     stmt = Allocate::make(fold.tail + "_next", Int(32), MemoryType::Stack, {}, const_true(), stmt);
-                    stmt = Block::make(Store::make(fold.tail, init, 0, Parameter(), const_true()), stmt);
+                    stmt = Block::make(Store::make(fold.tail, init, 0, Parameter(), const_true(), ModulusRemainder()), stmt);
                     stmt = Allocate::make(fold.tail, Int(32), MemoryType::Stack, {}, const_true(), stmt);
                 }
             }
@@ -890,8 +890,8 @@ public:
 
 // Because storage folding runs before simplification, it's useful to
 // at least substitute in constants before running it, and also simplify the RHS of Let Stmts.
-class SubstituteInConstants : public IRMutator2 {
-    using IRMutator2::visit;
+class SubstituteInConstants : public IRMutator {
+    using IRMutator::visit;
 
     Scope<Expr> scope;
     Stmt visit(const LetStmt *op) override {
