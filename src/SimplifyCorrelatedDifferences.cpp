@@ -7,6 +7,7 @@
 #include "Monotonic.h"
 #include "Scope.h"
 #include "Simplify.h"
+#include "Solve.h"
 #include "Substitute.h"
 
 namespace Halide {
@@ -28,10 +29,12 @@ class SimplifyCorrelatedDifferences : public IRMutator {
 
     template<typename LetStmtOrLet, typename StmtOrExpr>
     StmtOrExpr visit_let(const LetStmtOrLet *op) {
-        if (op->value.type() != Int(32) || !is_pure(op->value)) {
+        if (op->value.type() != Int(32) ||
+            !is_pure(op->value)) {
             // We only care about pure index. They must be pure because we're going to substitute them inwards.
             return IRMutator::visit(op);
         }
+        ScopedBinding<> bind(uses_loop_var, op->name);
         auto m = is_monotonic(op->value, loop_var, monotonic);
         ScopedBinding<Monotonic> bind_monotonic(monotonic, op->name, m);
         lets.emplace_back(op->name, op->value);
@@ -83,13 +86,21 @@ class SimplifyCorrelatedDifferences : public IRMutator {
             return IRMutator::visit(op);
         }
         Expr e = IRMutator::visit(op);
-        if (is_monotonic(e, loop_var, monotonic) == Monotonic::Unknown) {
+        auto ma = is_monotonic(op->a, loop_var, monotonic);
+        auto mb = is_monotonic(op->b, loop_var, monotonic);
+
+        if ((ma == Monotonic::Increasing && mb == Monotonic::Increasing && std::is_same<T, Sub>::value) ||
+            (ma == Monotonic::Decreasing && mb == Monotonic::Decreasing && std::is_same<T, Sub>::value) ||
+            (ma == Monotonic::Increasing && mb == Monotonic::Decreasing && std::is_same<T, Add>::value) ||
+            (ma == Monotonic::Decreasing && mb == Monotonic::Increasing && std::is_same<T, Add>::value)) {
+
             for (auto it = lets.rbegin(); it != lets.rend(); it++) {
                 if (expr_uses_var(e, it->first)) {
                     e = Let::make(it->first, it->second, e);
                 }
             }
             e = common_subexpression_elimination(e);
+            e = solve_expression(e, loop_var).result;
             e = simplify(e);
 
             if ((debug::debug_level() > 0) &&
