@@ -153,7 +153,6 @@ llvm::GlobalValue::LinkageTypes llvm_linkage(LinkageType t) {
 }
 
 CodeGen_LLVM::CodeGen_LLVM(Target t) :
-    input_module(nullptr),
     function(nullptr), context(nullptr),
     builder(nullptr),
     value(nullptr),
@@ -501,8 +500,6 @@ MangledNames get_mangled_names(const LoweredFunc &f, const Target &target) {
 }  // namespace
 
 std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
-    input_module = &input;
-
     init_module();
 
     debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
@@ -590,8 +587,6 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
         std::string halide_command = "halide target=" + target.to_string();
         embed_bitcode(module.get(), halide_command);
     }
-
-    input_module = nullptr;
 
     // Disown the module and return it.
     return std::move(module);

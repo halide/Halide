@@ -120,7 +120,6 @@ protected:
     static bool llvm_PowerPC_enabled;
     static bool llvm_AMDGPU_enabled;
 
-    const Module *input_module;
     std::unique_ptr<llvm::Module> module;
     llvm::Function *function;
     llvm::LLVMContext *context;
