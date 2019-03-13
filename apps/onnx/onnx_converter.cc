@@ -31,6 +31,30 @@ Halide::Func FuncForNodeOutput(const onnx::NodeProto& node, int output_id) {
   return Halide::Func(SanitizeName(node.output(output_id)));
 }
 
+static void ConvertSubgraph(
+    const onnx::GraphProto& graph,
+    const std::string& device,
+    std::unordered_map<std::string, Tensor>& reps) {
+  // The nodes are always stored in topological order in the ONNX model.
+  for (const onnx::NodeProto& node : graph.node()) {
+    std::vector<Tensor> inputs;
+    for (const std::string& input_name : node.input()) {
+      if (input_name.empty()) {
+        inputs.push_back(Tensor());
+      } else {
+        inputs.push_back(reps.at(input_name));
+      }
+    }
+    Node n = ConvertNode(node, inputs, device);
+
+    for (int i = 0; i < node.output_size(); ++i) {
+      const std::string& output_name = node.output(i);
+      const Tensor& output_val = n.outputs[i];
+      reps[output_name] = output_val;
+    }
+  }
+}
+
 Halide::Expr GenerateCastExpr(
     const Halide::Expr& input,
     const onnx::NodeProto& node,
@@ -1402,7 +1426,8 @@ Node ConvertPoolingNode(
 
   Halide::Func basic_pool;
   if (node.op_type() == "MaxPool" || node.op_type() == "GlobalMaxPool") {
-    basic_pool(out_vars) = Halide::maximum(padded_input(x_vars), NameForNode(node, "_maximum"));
+    basic_pool(out_vars) =
+        Halide::maximum(padded_input(x_vars), NameForNode(node, "_maximum"));
   } else if (
       node.op_type() == "AveragePool" ||
       node.op_type() == "GlobalAveragePool") {
@@ -1410,7 +1435,9 @@ Node ConvertPoolingNode(
     for (Halide::Expr kernel_dim : kernel_shape) {
       num_pooling_vals *= kernel_dim;
     }
-    basic_pool(out_vars) = Halide::sum(padded_input(x_vars), NameForNode(node, "_sum")) / num_pooling_vals;
+    basic_pool(out_vars) =
+        Halide::sum(padded_input(x_vars), NameForNode(node, "_sum")) /
+        num_pooling_vals;
 
   } else {
     throw std::domain_error(
@@ -1507,11 +1534,15 @@ Node ConvertSoftmaxNode(
   if (node.op_type() == "LogSoftmax") {
     Halide::Func in = inputs[0].rep;
     result.outputs[0].rep(indices) =
-        in(indices)-Halide::log(Halide::sum(Halide::exp(in(denom_vars))));
+        in(indices)-Halide::maximum(in(denom_vars)) -
+        Halide::log(Halide::sum(
+            Halide::exp(in(denom_vars)-Halide::maximum(in(denom_vars)))));
   } else {
     Halide::Func in = inputs[0].rep;
     result.outputs[0].rep(indices) =
-        Halide::exp(in(indices)) / Halide::sum(Halide::exp(in(denom_vars)));
+        Halide::exp(in(indices)-Halide::maximum(in(denom_vars))) /
+        Halide::sum(
+            Halide::exp(in(denom_vars)-Halide::maximum(in(denom_vars))));
   }
   return result;
 }
@@ -1605,7 +1636,10 @@ Node ConvertSplitNode(
 
   // Split into equal parts.
   std::vector<Halide::Expr> splits;
-  Halide::Expr axis_dim = inputs[0].shape[axis];
+  if (axis < 0) {
+    axis += inputs[0].shape.size();
+  }
+  Halide::Expr axis_dim = inputs[0].shape.at(axis);
   const int64_t* axis_dim_size = Halide::Internal::as_const_int(axis_dim);
 
   if (user_splits.size() == 0) {
@@ -2232,10 +2266,429 @@ Node ConvertOneHotNode(
   return result;
 }
 
+Node ConvertLSTMNode(
+    const onnx::NodeProto& node,
+    const std::vector<Tensor>& inputs,
+    const std::string& device) {
+  int hidden_size = 1;
+  bool input_forget = false;
+  std::string direction = "forward";
+  for (const auto& attr : node.attribute()) {
+    if (attr.name() == "hidden_size") {
+      hidden_size = attr.i();
+    } else if (attr.name() == "input_forget") {
+      input_forget = static_cast<bool>(attr.i());
+    } else if (attr.name() == "direction") {
+      direction = attr.s();
+    } else if (
+        attr.name() == "clip" || attr.name() == "activation_alpha" ||
+        attr.name() == "activation_beta" || attr.name() == "activations") {
+      throw std::domain_error(attr.name() + " not supported yet");
+    }
+  }
+
+  // TBD: handle these cases
+  if (direction != "forward") {
+    throw std::domain_error("Unsupported direction");
+  }
+  if (input_forget) {
+    throw std::domain_error("input_forget not supported yet");
+  }
+
+  const int rank = inputs[0].shape.size();
+  if (rank != 3) {
+    throw std::domain_error("Invalid rank");
+  }
+  const int64_t* dim = Halide::Internal::as_const_int(
+      Halide::Internal::simplify(inputs[0].shape[0]));
+  if (!dim) {
+    throw std::domain_error("Unknown number of timesteps");
+  }
+  const int num_time_steps = *dim;
+  if (num_time_steps < 1) {
+    throw std::domain_error("At least one timestep is required");
+  }
+  // Build an onnx graph encoding the LSTM computations
+  onnx::GraphProto lstm_graph;
+
+  // TODO: generate unique prefixes in case there is more than 1 unnamed lstm
+  // node
+  const std::string prefix =
+      node.name().empty() ? std::string("lstm") : node.name();
+
+  // Split input into timesteps
+  onnx::NodeProto* split_node = lstm_graph.add_node();
+  split_node->set_name(prefix + "_split");
+  split_node->set_op_type("Split");
+  onnx::AttributeProto* attr = split_node->add_attribute();
+  attr->set_name("axis");
+  attr->set_i(0);
+  *split_node->add_input() = node.input(0);
+  for (int i = 0; i < num_time_steps; ++i) {
+    *split_node->add_output() = prefix + "_t" + std::to_string(i);
+  }
+
+  // Squeeze the first dim output the Xi, W and R tensors since we're only
+  // supporting unidirectional LSTM for now
+  onnx::NodeProto* W = lstm_graph.add_node();
+  W->set_name(node.input(1) + "_squeezed");
+  W->set_op_type("Squeeze");
+  attr = W->add_attribute();
+  attr->set_name("axes");
+  attr->add_ints(0);
+  *W->add_input() = node.input(1);
+  *W->add_output() = W->name();
+
+  onnx::NodeProto* R = lstm_graph.add_node();
+  R->set_name(node.input(2) + "_squeezed");
+  R->set_op_type("Squeeze");
+  attr = R->add_attribute();
+  attr->set_name("axes");
+  attr->add_ints(0);
+  *R->add_input() = node.input(2);
+  *R->add_output() = R->name();
+
+  onnx::NodeProto* B = nullptr;
+  if (inputs.size() >= 4 && !node.input(3).empty()) {
+    // Preprocess the bias tensor
+    onnx::NodeProto* Bs = lstm_graph.add_node();
+    Bs->set_name(node.input(3) + "_split");
+    Bs->set_op_type("Split");
+    attr = Bs->add_attribute();
+    attr->set_name("axis");
+    attr->set_i(1);
+    Bs->add_input(node.input(3));
+    Bs->add_output(Bs->name() + "_0");
+    Bs->add_output(Bs->name() + "_1");
+
+    B = lstm_graph.add_node();
+    B->set_name(node.input(3) + "_sum");
+    B->set_op_type("Add");
+    B->add_input(Bs->output(0));
+    B->add_input(Bs->output(1));
+    B->add_output(B->name());
+  } else {
+    B = lstm_graph.add_node();
+    B->set_name(prefix + "_zero");
+    B->set_op_type("ConstantFill");
+    attr = B->add_attribute();
+    attr->set_name("shape");
+    attr->add_ints(1);
+    B->add_output(B->name());
+  }
+
+  // Initial state if any
+  onnx::NodeProto* H_t = nullptr;
+  if (inputs.size() >= 6 && !node.input(5).empty()) {
+    H_t = lstm_graph.add_node();
+    H_t->set_name(node.input(5) + "_squeezed");
+    H_t->set_op_type("Squeeze");
+    attr = H_t->add_attribute();
+    attr->set_name("axes");
+    attr->add_ints(0);
+    *H_t->add_input() = node.input(5);
+    *H_t->add_output() = H_t->name();
+  }
+  onnx::NodeProto* C_t = nullptr;
+  if (inputs.size() >= 7 && !node.input(6).empty()) {
+    C_t = lstm_graph.add_node();
+    C_t->set_name(node.input(6) + "_squeezed");
+    C_t->set_op_type("Squeeze");
+    attr = C_t->add_attribute();
+    attr->set_name("axes");
+    attr->add_ints(0);
+    *C_t->add_input() = node.input(6);
+    *C_t->add_output() = C_t->name();
+  }
+
+  // Optional peephole inputs
+  onnx::NodeProto* P = nullptr;
+  if (inputs.size() >= 8 && !node.input(7).empty()) {
+    onnx::NodeProto* Ps = lstm_graph.add_node();
+    Ps->set_name(node.input(7) + "_squeezed");
+    Ps->set_op_type("Squeeze");
+    attr = Ps->add_attribute();
+    attr->set_name("axes");
+    attr->add_ints(0);
+    *Ps->add_input() = node.input(7);
+    *Ps->add_output() = Ps->name();
+
+    P = lstm_graph.add_node();
+    P->set_name(node.input(7) + "_split");
+    P->set_op_type("Split");
+    *P->add_input() = Ps->output(0);
+    *P->add_output() = P->name() + "_0";
+    *P->add_output() = P->name() + "_1";
+    *P->add_output() = P->name() + "_2";
+  }
+
+  std::vector<onnx::NodeProto*> Xt;
+  for (int i = 0; i < num_time_steps; ++i) {
+    onnx::NodeProto* Xi = lstm_graph.add_node();
+    Xi->set_name(split_node->output(i) + "_squeezed");
+    Xi->set_op_type("Squeeze");
+    attr = Xi->add_attribute();
+    attr->set_name("axes");
+    attr->add_ints(0);
+    *Xi->add_input() = split_node->output(i);
+    *Xi->add_output() = Xi->name();
+    Xt.push_back(Xi);
+  }
+
+  // Process each timestep
+  std::vector<onnx::NodeProto*> Hs;
+  for (int i = 0; i < num_time_steps; ++i) {
+    onnx::NodeProto* Xi = Xt[i];
+    onnx::NodeProto* Gi = lstm_graph.add_node();
+    // Gi = dot(x, transpose(w)) + bias
+    Gi->set_name(Xi->name() + "_gemm_" + std::to_string(i));
+    Gi->set_op_type("Gemm");
+    attr = Gi->add_attribute();
+    attr->set_name("transB");
+    attr->set_i(1);
+    *Gi->add_input() = Xi->name();
+    *Gi->add_input() = W->name();
+    *Gi->add_input() = B->name();
+    *Gi->add_output() = Gi->name();
+
+    onnx::NodeProto* Gii = Gi;
+    if (H_t) {
+      // Gii = Gi + dot(H_t, transpose(R));
+      Gii = lstm_graph.add_node();
+      Gii->set_name(Xi->name() + "_gemm2_" + std::to_string(i));
+      Gii->set_op_type("Gemm");
+      attr = Gii->add_attribute();
+      attr->set_name("transB");
+      attr->set_i(1);
+      *Gii->add_input() = H_t->name();
+      *Gii->add_input() = R->name();
+      *Gii->add_input() = Gi->name();
+      *Gii->add_output() = Gii->name();
+    }
+    // i, o, f, c = split(Gi, 4, -1)
+    onnx::NodeProto* split_node = lstm_graph.add_node();
+    split_node->set_name(prefix + "_split_" + std::to_string(i));
+    split_node->set_op_type("Split");
+    attr = split_node->add_attribute();
+    attr->set_name("axis");
+    attr->set_i(-1);
+    *split_node->add_input() = Gii->output(0);
+    for (int j = 0; j < 4; ++j) {
+      *split_node->add_output() = split_node->name() + "_" + std::to_string(j);
+    }
+    // i = sigmoid(i + p_i * C_t)
+    onnx::NodeProto* add = nullptr;
+    if (P && C_t) {
+      onnx::NodeProto* pict = lstm_graph.add_node();
+      pict->set_name(prefix + "_pi_ct_" + std::to_string(i));
+      pict->set_op_type("Mul");
+      *pict->add_input() = P->output(0);
+      *pict->add_input() = C_t->output(0);
+      *pict->add_output() = pict->name();
+
+      add = lstm_graph.add_node();
+      add->set_name(prefix + "i_pi_ct_" + std::to_string(i));
+      add->set_op_type("Add");
+      *add->add_input() = split_node->output(0);
+      *add->add_input() = pict->output(0);
+      *add->add_output() = add->name();
+    }
+
+    onnx::NodeProto* node_i = lstm_graph.add_node();
+    node_i->set_name(prefix + "_i_" + std::to_string(i));
+    node_i->set_op_type("Sigmoid");
+    if (add) {
+      *node_i->add_input() = add->output(0);
+    } else {
+      *node_i->add_input() = split_node->output(0);
+    }
+    *node_i->add_output() = node_i->name();
+
+    // f = sigmoid(f + p_f * C_t)
+    add = nullptr;
+    if (P && C_t) {
+      onnx::NodeProto* pfct = lstm_graph.add_node();
+      pfct->set_name(prefix + "_pf_ct_" + std::to_string(i));
+      pfct->set_op_type("Mul");
+      *pfct->add_input() = P->output(2);
+      *pfct->add_input() = C_t->output(0);
+      *pfct->add_output() = pfct->name();
+
+      add = lstm_graph.add_node();
+      add->set_name(prefix + "f_pf_ct_" + std::to_string(i));
+      add->set_op_type("Add");
+      *add->add_input() = split_node->output(2);
+      *add->add_input() = pfct->output(0);
+      *add->add_output() = add->name();
+    }
+
+    onnx::NodeProto* node_f = lstm_graph.add_node();
+    node_f->set_name(prefix + "_f_" + std::to_string(i));
+    node_f->set_op_type("Sigmoid");
+    if (add) {
+      *node_f->add_input() = add->output(0);
+    } else {
+      *node_f->add_input() = split_node->output(2);
+    }
+    *node_f->add_output() = node_f->name();
+
+    // c = tanh(c)
+    onnx::NodeProto* node_c = lstm_graph.add_node();
+    node_c->set_name(prefix + "_c_" + std::to_string(i));
+    node_c->set_op_type("Tanh");
+    *node_c->add_input() = split_node->output(3);
+    *node_c->add_output() = node_c->name();
+
+    // C = f * C_t + i*c
+    onnx::NodeProto* ic = lstm_graph.add_node();
+    ic->set_name(prefix + "_ic_" + std::to_string(i));
+    ic->set_op_type("Mul");
+    *ic->add_input() = node_i->output(0);
+    *ic->add_input() = node_c->output(0);
+    *ic->add_output() = ic->name();
+    onnx::NodeProto* C = ic;
+
+    if (C_t) {
+      // add f*C_t to ic
+      onnx::NodeProto* f_ct = lstm_graph.add_node();
+      f_ct->set_name(prefix + "_f_ct_" + std::to_string(i));
+      f_ct->set_op_type("Mul");
+      *f_ct->add_input() = node_f->output(0);
+      *f_ct->add_input() = C_t->output(0);
+      *f_ct->add_output() = f_ct->name();
+
+      add = lstm_graph.add_node();
+      add->set_name(prefix + "f_ct_ic_" + std::to_string(i));
+      add->set_op_type("Add");
+      *add->add_input() = f_ct->output(0);
+      *add->add_input() = ic->output(0);
+      *add->add_output() = add->name();
+      C = add;
+    }
+
+    // o = sigmoid(o + p_o * C)
+    add = nullptr;
+    if (P) {
+      onnx::NodeProto* po_c = lstm_graph.add_node();
+      po_c->set_name(prefix + "_po_c_" + std::to_string(i));
+      po_c->set_op_type("Mul");
+      *po_c->add_input() = C->output(0);
+      *po_c->add_input() = P->output(1);
+      *po_c->add_output() = po_c->name();
+
+      add = lstm_graph.add_node();
+      add->set_name(prefix + "o_po_c_" + std::to_string(i));
+      add->set_op_type("Add");
+      *add->add_input() = split_node->output(1);
+      *add->add_input() = po_c->output(0);
+      *add->add_output() = add->name();
+    }
+    onnx::NodeProto* node_o = lstm_graph.add_node();
+    node_o->set_name(prefix + "_o_" + std::to_string(i));
+    node_o->set_op_type("Sigmoid");
+    if (add) {
+      *node_o->add_input() = add->output(0);
+    } else {
+      *node_o->add_input() = split_node->output(1);
+    }
+    *node_o->add_output() = node_o->name();
+
+    // H = o * tanh(C)
+    onnx::NodeProto* hC = lstm_graph.add_node();
+    hC->set_name(prefix + "_hC_" + std::to_string(i));
+    hC->set_op_type("Tanh");
+    *hC->add_input() = C->output(0);
+    *hC->add_output() = hC->name();
+
+    onnx::NodeProto* H = lstm_graph.add_node();
+    H->set_name(prefix + "_H_" + std::to_string(i));
+    H->set_op_type("Mul");
+    *H->add_input() = node_o->output(0);
+    *H->add_input() = hC->output(0);
+    *H->add_output() = H->name();
+
+    H_t = H;
+    C_t = C;
+
+    onnx::NodeProto* Hu = lstm_graph.add_node();
+    Hu->set_name(prefix + "_H_unsqueeze_" + std::to_string(i));
+    Hu->set_op_type("Unsqueeze");
+    attr = Hu->add_attribute();
+    attr->set_name("axes");
+    attr->add_ints(0);
+    *Hu->add_input() = H->output(0);
+    *Hu->add_output() = Hu->name();
+    Hs.push_back(Hu);
+  }
+
+  if (node.output_size() >= 2 && !node.output(1).empty()) {
+    onnx::NodeProto* Y_h = Hs.back();
+    Y_h->set_name(node.output(1));
+    Y_h->set_output(0, node.output(1));
+  }
+
+  if (node.output_size() >= 3 && !node.output(2).empty()) {
+    onnx::NodeProto* Y_h = lstm_graph.add_node();
+    Y_h->set_name(node.output(2));
+    Y_h->set_op_type("Unsqueeze");
+    attr = Y_h->add_attribute();
+    attr->set_name("axes");
+    attr->add_ints(0);
+    Y_h->add_input(H_t->output(0));
+    Y_h->add_output(Y_h->name());
+  }
+
+  if (node.output_size() >= 1 && !node.output(0).empty()) {
+    onnx::NodeProto* Hconcat = lstm_graph.add_node();
+    Hconcat->set_name(node.output(0) + "_concat");
+    Hconcat->set_op_type("Concat");
+    for (const onnx::NodeProto* input : Hs) {
+      Hconcat->add_input(input->name());
+    }
+    Hconcat->add_output(Hconcat->name());
+    onnx::NodeProto* H = lstm_graph.add_node();
+    Hconcat->set_name(node.output(0));
+    H->set_op_type("Unsqueeze");
+    attr = H->add_attribute();
+    attr->set_name("axes");
+    attr->add_ints(1);
+    H->add_input(Hconcat->output(0));
+    H->add_output(H->name());
+  }
+
+  // populate rep with inputs;
+  assert(node.input_size() == inputs.size());
+  std::unordered_map<std::string, Tensor> reps;
+  for (int i = 0; i < node.input_size(); ++i) {
+    const std::string& input_name = node.input(i);
+    const Tensor& t = inputs[i];
+    reps[input_name] = t;
+  }
+
+  ConvertSubgraph(lstm_graph, device, reps);
+
+  // extract outputs from reps;
+  Node result;
+  result.inputs = inputs;
+  result.outputs.resize(node.output_size());
+  for (int i = 0; i < node.output_size(); ++i) {
+    if (!node.output(i).empty()) {
+      const Tensor& t = reps.at(node.output(i));
+      result.outputs[i] = t;
+    }
+  }
+  return result;
+}
+
 Node ConvertNode(
     const onnx::NodeProto& node,
     const std::vector<Tensor>& inputs,
     const std::string& device) {
+  // Handle meta ops
+  // TODO: add support for RNN and GRU
+  if (node.op_type() == "LSTM") {
+    return ConvertLSTMNode(node, inputs, device);
+  }
   // Handle metadata operations
   if (node.op_type() == "Shape" || node.op_type() == "Size") {
     return ConvertMetadataNode(node, inputs);
@@ -2475,23 +2928,20 @@ Model ConvertModel(const onnx::ModelProto& model, const std::string& device) {
                                 p};
   }
 
-  // Now convert the model nodes. The nodes are always stored in topological
-  // order in the ONNX model.
-  for (const onnx::NodeProto& node : model.graph().node()) {
-    std::vector<Tensor> inputs;
-    for (const std::string& input_name : node.input()) {
-      if (input_name.empty()) {
-        inputs.push_back(Tensor());
-      } else {
-        inputs.push_back(reps.at(input_name));
-      }
-    }
-    Node n = ConvertNode(node, inputs, device);
+  // Now convert the model nodes.
+  ConvertSubgraph(model.graph(), device, reps);
 
-    for (int i = 0; i < node.output_size(); ++i) {
-      const std::string& output_name = node.output(i);
-      const Tensor& output_val = n.outputs[i];
-      reps[output_name] = output_val;
+  // Check if output tensors are also used as inputs to other nodes. If that's
+  // the case they must be handled slightly differrently.
+  std::unordered_map<std::string, bool> output_types;
+  for (const auto& output : model.graph().output()) {
+    output_types.emplace(output.name(), false);
+  }
+  for (const auto& node : model.graph().node()) {
+    for (const auto& input_name : node.input()) {
+      if (output_types.find(input_name) != output_types.end()) {
+        output_types[input_name] = true;
+      }
     }
   }
 
@@ -2507,9 +2957,17 @@ Model ConvertModel(const onnx::ModelProto& model, const std::string& device) {
     // Merge type info.
     t.shape = FinalizeTypeInfo(output.type(), t, symbolic_dims, output.name());
 
+    Tensor t_out = t;
+    if (output_types[output.name()]) {
+      // The scheduler doesn't support outputs that are also used by other
+      // funcs. Make a copy of the output function to avoid this corner case.
+      t_out.rep = Halide::Func(t.rep.name() + "_output");
+      t_out.rep(Halide::_) = t.rep(Halide::_);
+    }
+
     // Encode the output shape as bounds on the value of the args to help the
     // the autoscheduler.
-    Halide::Func& f = t.rep;
+    Halide::Func& f = t_out.rep;
     const std::vector<Halide::Var>& args = f.args();
     const std::vector<Halide::Expr>& dims = t.shape;
 
@@ -2526,7 +2984,7 @@ Model ConvertModel(const onnx::ModelProto& model, const std::string& device) {
         f.estimate(args[i], 0, 1000);
       }
     }
-    result.outputs[output.name()] = t;
+    result.outputs[output.name()] = t_out;
   }
 
   return result;
