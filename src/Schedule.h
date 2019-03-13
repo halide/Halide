@@ -452,6 +452,10 @@ public:
     LoopLevel &compute_level();
     // @}
 
+    // TODO: docs
+    const std::string &store_with() const;
+    std::string &store_with();
+
     /** Pass an IRVisitor through to all Exprs referenced in the
      * Schedule. */
     void accept(IRVisitor *) const;

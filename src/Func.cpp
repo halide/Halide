@@ -2451,6 +2451,13 @@ Func &Func::compute_with(LoopLevel loop_level, LoopAlignStrategy align) {
     return *this;
 }
 
+Func &Func::store_with(Func other) {
+    invalidate_cache();
+    // TODO: Assert dimensionality+types matches
+    func.schedule().store_with() = other.name();
+    return *this;
+}
+
 Func &Func::compute_root() {
     return compute_at(LoopLevel::root());
 }

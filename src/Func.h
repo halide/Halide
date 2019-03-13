@@ -2068,6 +2068,9 @@ public:
      */
     Func &compute_root();
 
+    // TODO: docs
+    Func &store_with(Func f);
+
     /** Use the halide_memoization_cache_... interface to store a
      *  computed version of this function across invocations of the
      *  Func.

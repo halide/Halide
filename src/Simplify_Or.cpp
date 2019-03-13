@@ -102,7 +102,9 @@ Expr Simplify::visit(const Or *op, ExprInfo *bounds) {
         rewrite((x && y) || (x && z), x && (y || z)) ||
         rewrite((x && y) || (z && x), x && (y || z)) ||
         rewrite((y && x) || (x && z), x && (y || z)) ||
-        rewrite((y && x) || (z && x), x && (y || z))) {
+        rewrite((y && x) || (z && x), x && (y || z)) ||
+
+        rewrite((x < y) || (x == y), x <= y)) {
 
         return mutate(std::move(rewrite.result), bounds);
     }
