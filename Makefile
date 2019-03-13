@@ -468,7 +468,6 @@ SOURCE_FILES = \
   RegionCosts.cpp \
   RemoveDeadAllocations.cpp \
   RemoveExternLoops.cpp \
-  RemoveTrivialForLoops.cpp \
   RemoveUndef.cpp \
   Schedule.cpp \
   ScheduleFunctions.cpp \
@@ -493,6 +492,7 @@ SOURCE_FILES = \
   Simplify_Shuffle.cpp \
   Simplify_Stmts.cpp \
   Simplify_Sub.cpp \
+  SimplifyCorrelatedDifferences.cpp \
   SimplifySpecializations.cpp \
   SkipStages.cpp \
   SlidingWindow.cpp \
@@ -642,7 +642,6 @@ HEADER_FILES = \
   RegionCosts.h \
   RemoveDeadAllocations.h \
   RemoveExternLoops.h \
-  RemoveTrivialForLoops.h \
   RemoveUndef.h \
   runtime/HalideBuffer.h \
   runtime/HalideRuntime.h \
@@ -651,6 +650,7 @@ HEADER_FILES = \
   Scope.h \
   SelectGPUAPI.h \
   Simplify.h \
+  SimplifyCorrelatedDifferences.h \
   SimplifySpecializations.h \
   SkipStages.h \
   SlidingWindow.h \
@@ -1949,13 +1949,14 @@ $(BUILD_DIR)/halide_config.%: $(ROOT_DIR)/tools/halide_config.%.tpl
 	       | sed -e 's/@HALIDE_RTTI_RAW@/${HALIDE_RTTI_RAW}/g' > $@
 
 $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
-						   $(BIN_DIR)/libHalide.$(SHARED_EXT) \
-						   $(INCLUDE_DIR)/Halide.h \
-						   $(RUNTIME_EXPORTED_INCLUDES) \
-						   $(ROOT_DIR)/README*.md \
-               $(BUILD_DIR)/halide_config.cmake \
-               $(BUILD_DIR)/halide_config.make \
-						   $(ROOT_DIR)/halide.cmake
+                           $(BIN_DIR)/libHalide.$(SHARED_EXT) \
+                           $(INCLUDE_DIR)/Halide.h \
+                           $(RUNTIME_EXPORTED_INCLUDES) \
+                           $(ROOT_DIR)/README*.md \
+                           $(BUILD_DIR)/halide_config.cmake \
+                           $(BUILD_DIR)/halide_config.make \
+                           $(ROOT_DIR)/halide.cmake
+	rm -rf $(DISTRIB_DIR)
 	mkdir -p $(DISTRIB_DIR)/include \
 	         $(DISTRIB_DIR)/bin \
 	         $(DISTRIB_DIR)/lib \
@@ -1989,7 +1990,7 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
 	cp $(BUILD_DIR)/halide_config.* $(DISTRIB_DIR)
 	cp $(ROOT_DIR)/halide.cmake $(DISTRIB_DIR)
 	ln -sf $(DISTRIB_DIR) halide
-	tar -czf $(DISTRIB_DIR)/halide.tgz \
+	tar -czf $(BUILD_DIR)/halide.tgz \
 		halide/bin \
 		halide/lib \
 		halide/include \
@@ -1999,6 +2000,7 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
 		halide/halide_config.* \
 		halide/halide.*
 	rm -rf halide
+	mv $(BUILD_DIR)/halide.tgz $(DISTRIB_DIR)/halide.tgz
 
 .PHONY: distrib
 distrib: $(DISTRIB_DIR)/halide.tgz
