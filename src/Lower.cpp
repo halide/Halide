@@ -173,8 +173,11 @@ Module lower(const vector<Function> &output_funcs,
     s = sliding_window(s, env);
     debug(2) << "Lowering after sliding window:\n" << s << '\n';
 
-    debug(1) << "Performing allocation bounds inference...\n";
+    debug(1) << "Simplifying correlated differences...\n";
     s = simplify_correlated_differences(s);
+    debug(2) << "Lowering after simplifying correlated differences:\n" << s << '\n';
+
+    debug(1) << "Performing allocation bounds inference...\n";
     s = allocation_bounds_inference(s, env, func_bounds);
     debug(2) << "Lowering after allocation bounds inference:\n" << s << '\n';
 
@@ -277,8 +280,11 @@ Module lower(const vector<Function> &output_funcs,
     s = reduce_prefetch_dimension(s, t);
     debug(2) << "Lowering after reduce prefetch dimension:\n" << s << "\n";
 
-    debug(1) << "Unrolling...\n";
+    debug(1) << "Simplifying correlated differences...\n";
     s = simplify_correlated_differences(s);
+    debug(2) << "Lowering after simplifying correlated differences:\n" << s << '\n';
+
+    debug(1) << "Unrolling...\n";
     s = unroll_loops(s);
     s = simplify(s);
     debug(2) << "Lowering after unrolling:\n" << s << "\n\n";
@@ -319,8 +325,11 @@ Module lower(const vector<Function> &output_funcs,
         debug(2) << "Lowering after fuzzing floating point stores:\n" << s << "\n\n";
     }
 
-    debug(1) << "Bounding small allocations...\n";
+    debug(1) << "Simplifying correlated differences...\n";
     s = simplify_correlated_differences(s);
+    debug(2) << "Lowering after simplifying correlated differences:\n" << s << '\n';
+
+    debug(1) << "Bounding small allocations...\n";
     s = bound_small_allocations(s);
     debug(2) << "Lowering after bounding small allocations:\n" << s << "\n\n";
 
