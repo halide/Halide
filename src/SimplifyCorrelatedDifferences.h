@@ -34,9 +34,9 @@ namespace Internal {
  * encounters a subtract node where both sides have the same
  * monotonicity it substitutes, solves, and attempts to generally
  * simplify as aggressively as possible to try to cancel out the
- * repeated dependence on x. The same is done for addition nodes with
- * arguments of opposite monotonicity. Only index expressions outside of
- * Stores/Provides are considered.
+ * repeated dependence on the loop var. The same is done for addition
+ * nodes with arguments of opposite monotonicity. Only index
+ * expressions outside of Stores/Provides are considered.
  *
  * This pass is safe to use on code with repeated instances of the
  * same variable name (it must be, because we want to run it before
