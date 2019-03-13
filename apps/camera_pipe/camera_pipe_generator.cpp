@@ -460,7 +460,7 @@ void CameraPipe::generate() {
         // We can generate slightly better code if we know the output is even-sized
         if (!auto_schedule) {
             // TODO: The autoscheduler really ought to be able to
-            // accomodate bounds on the output Func.
+            // accommodate bounds on the output Func.
             Expr out_width = processed.width();
             Expr out_height = processed.height();
             processed.bound(c, 0, 3)
