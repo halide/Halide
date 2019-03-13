@@ -1,6 +1,8 @@
 #ifndef HALIDE_INTERNAL_DERIVATIVE_UTILS_H
 #define HALIDE_INTERNAL_DERIVATIVE_UTILS_H
 
+#include <set>
+
 #include "Bounds.h"
 #include "Derivative.h"
 #include "Expr.h"
