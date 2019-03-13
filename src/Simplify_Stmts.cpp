@@ -46,6 +46,9 @@ Stmt Simplify::visit(const IfThenElse *op) {
     }
 
     // Pull out common nodes
+    if (equal(then_case, else_case)) {
+        return then_case;
+    }
     const Acquire *then_acquire = then_case.as<Acquire>();
     const Acquire *else_acquire = else_case.as<Acquire>();
     const ProducerConsumer *then_pc = then_case.as<ProducerConsumer>();
@@ -74,6 +77,18 @@ Stmt Simplify::visit(const IfThenElse *op) {
                equal(then_block->rest, else_block->rest)) {
         return Block::make(mutate(IfThenElse::make(condition, then_block->first, else_block->first)),
                            then_block->rest);
+    } else if (then_block && equal(then_block->first, else_case)) {
+        return Block::make(else_case,
+                           mutate(IfThenElse::make(condition, then_block->rest)));
+    } else if (then_block && equal(then_block->rest, else_case)) {
+        return Block::make(mutate(IfThenElse::make(condition, then_block->first)),
+                           else_case);
+    } else if (else_block && equal(then_case, else_block->first)) {
+        return Block::make(then_case,
+                           mutate(IfThenElse::make(condition, Evaluate::make(0), else_block->rest)));
+    } else if (else_block && equal(then_case, else_block->rest)) {
+        return Block::make(mutate(IfThenElse::make(condition, Evaluate::make(0), else_block->first)),
+                           then_case);
     } else if (condition.same_as(op->condition) &&
         then_case.same_as(op->then_case) &&
         else_case.same_as(op->else_case)) {
