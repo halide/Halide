@@ -26,7 +26,7 @@ namespace Internal {
  *
  * In practice, this problem causes problems for unrolling, and
  * arbitrarily-bad overconservative behavior in bounds inference
- * (e.g.h ttps://github.com/halide/Halide/issues/3697 )
+ * (e.g. https://github.com/halide/Halide/issues/3697 )
  *
  * The function below attempts to address this by walking the IR,
  * remembering whether each let variable is monotonic increasing,
