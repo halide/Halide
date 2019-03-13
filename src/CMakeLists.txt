@@ -607,7 +607,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
 # We could expose the /MP flag to all targets, but that might end up saturating the build
 # since multiple MSBuild projects might get built in parallel, each of which compiling their
 # source files in parallel; the Halide library itself is a "knot" point of the build graph,
-# so compiling its files in parrallel should not oversubscribe the system
+# so compiling its files in parallel should not oversubscribe the system
 target_compile_options(Halide PUBLIC $<$<CXX_COMPILER_ID:MSVC>:/MP>)
 
 # Define Halide_SHARED or Halide_STATIC depending on library type
