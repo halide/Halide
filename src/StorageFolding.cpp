@@ -379,7 +379,7 @@ class InjectFoldingCheck : public IRMutator {
 
             return LetStmt::make(op->name, op->value, body);
         } else {
-            return IRMutator::visit(op);
+            return LetStmt::make(op->name, op->value, mutate(op->body));
         }
 
     }
@@ -891,22 +891,37 @@ class SubstituteInConstants : public IRMutator {
     using IRMutator::visit;
 
     Scope<Expr> scope;
+
     Stmt visit(const LetStmt *op) override {
-        Expr value = simplify(mutate(op->value));
+        // Visit an entire chain of lets in a single method to conserve stack space.
+        Stmt result;
+        struct Frame {
+            const LetStmt *op;
+            Expr new_value;
+            ScopedBinding<Expr> binding;
+            Frame(const LetStmt *op, Expr v, Scope<Expr> &scope) :
+                op(op),
+                new_value(std::move(v)),
+                binding(is_const(new_value), scope, op->name, new_value) {}
+        };
+        std::vector<Frame> frames;
 
-        Stmt body;
-        if (is_const(value)) {
-            ScopedBinding<Expr> bind(scope, op->name, value);
-            body = mutate(op->body);
-        } else {
-            body = mutate(op->body);
+        do {
+            result = op->body;
+            frames.emplace_back(op, simplify(mutate(op->value)), scope);
+        } while ((op = result.as<LetStmt>()));
+
+        result = mutate(result);
+
+        for (auto it = frames.rbegin(); it != frames.rend(); it++) {
+            if (it->new_value.same_as(it->op->value) && result.same_as(it->op->body)) {
+                result = it->op;
+            } else {
+                result = LetStmt::make(it->op->name, it->new_value, result);
+            }
         }
 
-        if (body.same_as(op->body) && value.same_as(op->value)) {
-            return op;
-        } else {
-            return LetStmt::make(op->name, value, body);
-        }
+        return result;
     }
 
     Expr visit(const Variable *op) override {
