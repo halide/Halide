@@ -89,6 +89,9 @@ DECLARE_CPP_INITMOD(errors)
 DECLARE_CPP_INITMOD(fake_get_symbol)
 DECLARE_CPP_INITMOD(fake_thread_pool)
 DECLARE_CPP_INITMOD(float16_t)
+DECLARE_CPP_INITMOD(fuchsia_clock)
+DECLARE_CPP_INITMOD(fuchsia_host_cpu_count)
+DECLARE_CPP_INITMOD(fuchsia_yield)
 DECLARE_CPP_INITMOD(gpu_device_selection)
 DECLARE_CPP_INITMOD(hexagon_dma)
 DECLARE_CPP_INITMOD(hexagon_host)
@@ -354,6 +357,8 @@ llvm::Triple get_triple_for_target(const Target &target) {
             // X86 on iOS for the simulator
             triple.setVendor(llvm::Triple::Apple);
             triple.setOS(llvm::Triple::IOS);
+        } else if (target.os == Target::Fuchsia) {
+            triple.setOS(llvm::Triple::Fuchsia);
         }
     } else if (target.arch == Target::ARM) {
         if (target.bits == 32) {
@@ -380,6 +385,8 @@ llvm::Triple get_triple_for_target(const Target &target) {
         } else if (target.os == Target::Linux) {
             triple.setOS(llvm::Triple::Linux);
             triple.setEnvironment(llvm::Triple::GNUEABIHF);
+        } else if (target.os == Target::Fuchsia) {
+            triple.setOS(llvm::Triple::Fuchsia);
         } else {
             user_error << "No arm support for this OS\n";
         }
@@ -424,6 +431,17 @@ llvm::Triple get_triple_for_target(const Target &target) {
     }
 
     return triple;
+}
+
+void convert_weak_to_strong(llvm::GlobalValue &gv) {
+    llvm::GlobalValue::LinkageTypes linkage = gv.getLinkage();
+    if (linkage == llvm::GlobalValue::WeakAnyLinkage) {
+        gv.setLinkage(llvm::GlobalValue::LinkOnceAnyLinkage);
+    } else if (linkage == llvm::GlobalValue::WeakODRLinkage) {
+        gv.setLinkage(llvm::GlobalValue::LinkOnceODRLinkage);
+    } else if (linkage == llvm::GlobalValue::ExternalWeakLinkage) {
+        gv.setLinkage(llvm::GlobalValue::ExternalLinkage);
+    }
 }
 
 }  // namespace Internal
@@ -478,12 +496,7 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t)
     // Enumerate the global variables.
     for (auto &gv : modules[0]->globals()) {
         // No variables are part of the public interface (even the ones labelled halide_)
-        llvm::GlobalValue::LinkageTypes linkage = gv.getLinkage();
-        if (linkage == llvm::GlobalValue::WeakAnyLinkage) {
-            gv.setLinkage(llvm::GlobalValue::LinkOnceAnyLinkage);
-        } else if (linkage == llvm::GlobalValue::WeakODRLinkage) {
-            gv.setLinkage(llvm::GlobalValue::LinkOnceODRLinkage);
-        }
+        Internal::convert_weak_to_strong(gv);
     }
 
     // Enumerate the functions.
@@ -499,14 +512,8 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t)
         internal_assert(!is_halide_extern_c_sym || f.isWeakForLinker() || f.isDeclaration())
             << " for function " << (std::string)f.getName() << "\n";
         can_strip = can_strip && !is_halide_extern_c_sym;
-
-        llvm::GlobalValue::LinkageTypes linkage = f.getLinkage();
         if (can_strip) {
-            if (linkage == llvm::GlobalValue::WeakAnyLinkage) {
-                f.setLinkage(llvm::GlobalValue::LinkOnceAnyLinkage);
-            } else if (linkage == llvm::GlobalValue::WeakODRLinkage) {
-                f.setLinkage(llvm::GlobalValue::LinkOnceODRLinkage);
-            }
+            Internal::convert_weak_to_strong(f);
         }
     }
 
@@ -749,6 +756,20 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                     modules.push_back(get_initmod_qurt_allocator(c, bits_64, debug));
                 }
                 modules.push_back(get_initmod_fake_thread_pool(c, bits_64, debug));
+            } else if (t.os == Target::Fuchsia) {
+                modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
+                modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
+                modules.push_back(get_initmod_posix_print(c, bits_64, debug));
+                modules.push_back(get_initmod_fuchsia_clock(c, bits_64, debug));
+                modules.push_back(get_initmod_posix_io(c, bits_64, debug));
+                modules.push_back(get_initmod_fuchsia_host_cpu_count(c, bits_64, debug));
+                modules.push_back(get_initmod_fuchsia_yield(c, bits_64, debug));
+                if (tsan) {
+                    modules.push_back(get_initmod_posix_threads_tsan(c, bits_64, debug));
+                } else {
+                    modules.push_back(get_initmod_posix_threads(c, bits_64, debug));
+                }
+                modules.push_back(get_initmod_posix_get_symbol(c, bits_64, debug));
             }
         }
 

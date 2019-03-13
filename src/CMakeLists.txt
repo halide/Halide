@@ -29,6 +29,9 @@ set(RUNTIME_CPP
   fake_get_symbol
   fake_thread_pool
   float16_t
+  fuchsia_clock
+  fuchsia_host_cpu_count
+  fuchsia_yield
   gpu_device_selection
   hexagon_cache_allocator
   hexagon_cpu_features
@@ -305,6 +308,8 @@ set(HEADER_FILES
   DebugToFile.h
   Definition.h
   Deinterleave.h
+  Derivative.h
+  DerivativeUtils.h
   DeviceArgument.h
   DeviceInterface.h
   Dimension.h
@@ -476,6 +481,8 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   DebugToFile.cpp
   Definition.cpp
   Deinterleave.cpp
+  Derivative.cpp
+  DerivativeUtils.cpp
   DeviceArgument.cpp
   DeviceInterface.cpp
   Dimension.cpp
