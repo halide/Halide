@@ -1,6 +1,7 @@
 #include "SimplifyCorrelatedDifferences.h"
 
 #include "CSE.h"
+#include "ExprUsesVar.h"
 #include "IROperator.h"
 #include "IRMutator.h"
 #include "Monotonic.h"
@@ -32,15 +33,11 @@ class SimplifyCorrelatedDifferences : public IRMutator {
             return IRMutator::visit(op);
         }
         auto m = is_monotonic(op->value, loop_var, monotonic);
-        if (m != Monotonic::Constant) {
-            ScopedBinding<Monotonic> bind_monotonic(monotonic, op->name, m);
-            lets.emplace_back(op->name, op->value);
-            auto result = IRMutator::visit(op);
-            lets.pop_back();
-            return result;
-        } else {
-            return IRMutator::visit(op);
-        }
+        ScopedBinding<Monotonic> bind_monotonic(monotonic, op->name, m);
+        lets.emplace_back(op->name, op->value);
+        auto result = IRMutator::visit(op);
+        lets.pop_back();
+        return result;
     }
 
     Expr visit(const Let *op) override {
@@ -87,19 +84,18 @@ class SimplifyCorrelatedDifferences : public IRMutator {
         }
         Expr e = IRMutator::visit(op);
         if (is_monotonic(e, loop_var, monotonic) == Monotonic::Unknown) {
-            Expr new_e = e;
             for (auto it = lets.rbegin(); it != lets.rend(); it++) {
-                if (is_pure(it->second)) {
-                    new_e = graph_substitute(it->first, it->second, new_e);
+                if (expr_uses_var(e, it->first)) {
+                    e = Let::make(it->first, it->second, e);
                 }
             }
-            new_e = simplify(common_subexpression_elimination(new_e));
+            e = common_subexpression_elimination(e);
+            e = simplify(e);
 
-            if (is_monotonic(new_e, loop_var, monotonic) == Monotonic::Unknown) {
-                // Well... that was pointless code bloat. Maybe there was a missed cancellation opportunity.
-                debug(1) << "Warning: expression is non-monotonic in loop variable " << loop_var << ": " << new_e << "\n";
-            } else {
-                e = new_e;
+            if ((debug::debug_level() > 0) &&
+                is_monotonic(e, loop_var, monotonic) == Monotonic::Unknown) {
+                // Might be a missed simplification opportunity. Log to help improve the simplifier.
+                debug(1) << "Warning: expression is non-monotonic in loop variable " << loop_var << ": " << e << "\n";
             }
         }
         return e;

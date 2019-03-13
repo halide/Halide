@@ -279,11 +279,12 @@ class MonotonicVisitor : public IRVisitor {
     }
 
     void visit(const Ramp *op) override {
-        internal_error << "Monotonic of vector\n";
+        Expr equiv = op->base + Variable::make(op->base.type(), unique_name('t')) * op->stride;
+        equiv.accept(this);
     }
 
     void visit(const Broadcast *op) override {
-        internal_error << "Monotonic of vector\n";
+        op->value.accept(this);
     }
 
     void visit(const Call *op) override {
