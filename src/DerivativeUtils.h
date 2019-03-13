@@ -90,7 +90,7 @@ std::map<std::string, BufferInfo> find_buffer_calls(const Func &func);
  */
 std::set<std::string> find_implicit_variables(Expr expr);
 /**
- * Substitute the variable. Also replace all occurrence in rdom.where() predicates.
+ * Substitute the variable. Also replace all occurrences in rdom.where() predicates.
  */
 Expr substitute_rdom_predicate(
     const std::string &name, const Expr &replacement, const Expr &expr);

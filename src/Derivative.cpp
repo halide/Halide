@@ -1478,7 +1478,7 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
         //
         // Another common pattern is the reverse of downsampling
         // if we see s * r.x + r.y and r.y has min == 0 and extent == s
-        // we simplify them to x and replace all occurrence of r.x by x/4
+        // we simplify them to x and replace all occurrences of r.x by x/4
         // e.g.
         // f(4 * r.x + r.y) = g(r.x) + h(4 * r.x + r.y)
         // => f(x) = g(x/4) + h(x)
