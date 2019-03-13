@@ -34,7 +34,6 @@ class SimplifyCorrelatedDifferences : public IRMutator {
             // We only care about pure index. They must be pure because we're going to substitute them inwards.
             return IRMutator::visit(op);
         }
-        ScopedBinding<> bind(uses_loop_var, op->name);
         auto m = is_monotonic(op->value, loop_var, monotonic);
         ScopedBinding<Monotonic> bind_monotonic(monotonic, op->name, m);
         lets.emplace_back(op->name, op->value);
