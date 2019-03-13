@@ -83,9 +83,11 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
               // Cancellations in linear expressions
               // 1 < 2
               rewrite(x < x + y, 0 < y) ||
+              rewrite(x < y + x, 0 < y) ||
 
               // 2 < 1
               rewrite(x + y < x, y < 0) ||
+              rewrite(y + x < x, y < 0) ||
 
               // 2 < 2
               rewrite(x + y < x + z, y < z) ||

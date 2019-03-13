@@ -384,7 +384,6 @@ set(HEADER_FILES
   RegionCosts.h
   RemoveDeadAllocations.h
   RemoveExternLoops.h
-  RemoveTrivialForLoops.h
   RemoveUndef.h
   runtime/HalideBuffer.h
   runtime/HalideRuntime.h
@@ -393,6 +392,7 @@ set(HEADER_FILES
   Scope.h
   SelectGPUAPI.h
   Simplify.h
+  SimplifyCorrelatedDifferences.h
   SimplifySpecializations.h
   SkipStages.h
   SlidingWindow.h
@@ -549,7 +549,6 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   RegionCosts.cpp
   RemoveDeadAllocations.cpp
   RemoveExternLoops.cpp
-  RemoveTrivialForLoops.cpp
   RemoveUndef.cpp
   Schedule.cpp
   ScheduleFunctions.cpp
@@ -574,6 +573,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Simplify_Shuffle.cpp
   Simplify_Stmts.cpp
   Simplify_Sub.cpp
+  SimplifyCorrelatedDifferences.cpp
   SimplifySpecializations.cpp
   SkipStages.cpp
   SlidingWindow.cpp
