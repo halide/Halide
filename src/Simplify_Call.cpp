@@ -125,55 +125,39 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
             return a;
         }
 
-        int64_t ib = 0;
-        if (const_int(b, &ib) || const_uint(b, (uint64_t *)(&ib))) {
-            Type t = op->type;
+        const bool shift_left = op->is_intrinsic(Call::shift_left);
+        const Type t = op->type;
 
-            bool shift_left = op->is_intrinsic(Call::shift_left);
-            if (ib < 0) {
-                constexpr int64_t i64_max = std::numeric_limits<int64_t>::max();
-                if (t.is_int()) {
-                    shift_left = !shift_left;
-                    // Ensure that corner case of ib = lowest() doesn't negate into itself
-                    ib = -std::max(ib, -i64_max);
+        int64_t ib = 0;
+        uint64_t ub = 0;
+        if (const_int(b, &ib)) {
+            // LLVM shl and shr instructions produce poison for negative shifts,
+            // or for shifts >= typesize, so we will follow suit in our simplifier.
+            user_assert(ib >= 0) << "bitshift by a constant negative amount is not legal in Halide.";
+            user_assert(ib < t.bits()) << "bitshift by a constant amount >= the type size is not legal in Halide.";
+            if (ib < t.bits() - 1) {
+                b = make_const(t, ((int64_t) 1LL) << ib);
+                if (shift_left) {
+                    return mutate(Mul::make(a, b), bounds);
                 } else {
-                    // It's a uint > 2^63-1, so we're definitely shifting out-of-range;
-                    // just clip to a large-enough value value and fall thru.
-                    ib = i64_max;
+                    return mutate(Div::make(a, b), bounds);
+                }
+            } else {
+                // (1 << ib) will overflow into the sign bit, making decomposition into mul or div
+                // probelmatic, so just special-case them here.
+                if (shift_left) {
+                    return mutate(select((a & 1) != 0, make_const(t, ((int64_t) 1LL) << ib), make_zero(t)), bounds);
+                } else {
+                    return mutate(select(a < 0, make_const(t, -1), make_zero(t)), bounds);
                 }
             }
-
-            if (ib >= 0) {
-                assert(t.bits() <= 64);
-                int max_shift = t.bits() - 1;
-                if (t.is_int()) {
-                    // One less if there is a sign bit
-                    max_shift -= 1;
-                }
-                if (ib <= max_shift) {
-                    ib = 1LL << ib;
-                    b = make_const(t, ib);
-
-                    if (shift_left) {
-                        return mutate(Mul::make(a, b), bounds);
-                    } else {
-                        return mutate(Div::make(a, b), bounds);
-                    }
-                } else {
-                    // We know that all the meaningful bits will be shifted away;
-                    // just replace with a constant 0 or -1 if possible.
-                    if (shift_left) {
-                        return make_zero(t);
-                    } else {
-                        // shift-right-out-of-bounds -> zero for uint.
-                        if (t.is_uint()) {
-                            return make_zero(t);
-                        } else {
-                            // shift-right-out-of-bounds -> zero or -1 for int.
-                            return mutate(select(a < 0, make_const(t, -1), make_zero(t)), bounds);
-                        }
-                    }
-                }
+        } else if (const_uint(b, &ub)) {
+            user_assert(ub < (uint64_t) t.bits()) << "bitshift by a constant amount >= the type size is not legal in Halide.";
+            b = make_const(t, ((uint64_t) 1ULL) << ub);
+            if (shift_left) {
+                return mutate(Mul::make(a, b), bounds);
+            } else {
+                return mutate(Div::make(a, b), bounds);
             }
         }
 

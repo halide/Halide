@@ -760,6 +760,7 @@ const std::map<std::string, Type> &get_halide_type_enum_map() {
         {"uint8", UInt(8)},
         {"uint16", UInt(16)},
         {"uint32", UInt(32)},
+        {"float16", Float(16)},
         {"float32", Float(32)},
         {"float64", Float(64)}
     };
@@ -813,10 +814,17 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
         " -x  A comma separated list of file extension pairs to substitute during\n"
         "     file naming, in the form [.old=.new[,.old2=.new2]]\n"
         "\n"
-        " -p  A comma-separted list of shared libraries that will be loaded before the\n"
+        " -p  A comma-separated list of shared libraries that will be loaded before the\n"
         "     generator is run. Useful for custom auto-schedulers. The generator must\n"
         "     either be linked against a shared libHalide or compiled with -rdynamic\n"
-        "     so that references in the shared library to libHalide can resolve.\n";
+        "     so that references in the shared library to libHalide can resolve.\n"
+        "\n"
+        "-r   The name of a standalone runtime to generate. Only honors EMIT_OPTIONS 'o'\n"
+        "     and 'static_library'. When multiple targets are specified, it picks a\n"
+        "     runtime that is compatible with all of the targets, or fails if it cannot\n"
+        "     find one. Flags across all of the targets that do not affect runtime code\n"
+        "     generation, such as `no_asserts` and `no_runtime`, are ignored.\n"
+        ;
 
     std::map<std::string, std::string> flags_info = { { "-f", "" },
                                                       { "-g", "" },
@@ -855,10 +863,23 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
 
     // It's possible that in the future loaded plugins might change
     // how arguments are parsed, so we handle those first.
-    for (auto lib : split_string(flags_info["-p"], ",")) {
+    for (const auto &lib : split_string(flags_info["-p"], ",")) {
         if (lib.empty()) continue;
 #ifdef _WIN32
-        if (LoadLibrary(lib.c_str()) != nullptr) {
+        int wide_len = MultiByteToWideChar(CP_UTF8, 0, lib.c_str(), -1, nullptr, 0);
+        if (wide_len < 1) {
+            cerr << "Failed to load: " << lib << " (unconvertible character)\n";
+            return 1;
+        }
+
+        std::vector<wchar_t> wide_lib(wide_len);
+        wide_len = MultiByteToWideChar(CP_UTF8, 0, lib.c_str(), -1, wide_lib.data(), wide_len);
+        if (wide_len < 1) {
+            cerr << "Failed to load: " << lib << " (unconvertible character)\n";
+            return 1;
+        }
+
+        if (LoadLibraryW(wide_lib.data()) != nullptr) {
             cerr << "Failed to load: " << lib << "\n";
             return 1;
         }
@@ -885,7 +906,7 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
         // no longer infer the name when only one Generator is registered
         cerr << "Either -g <name> or -r must be specified; available Generators are:\n";
         if (!generator_names.empty()) {
-            for (auto name : generator_names) {
+            for (const auto &name : generator_names) {
                 cerr << "    " << name << "\n";
             }
         } else {
@@ -977,17 +998,28 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
     auto target_strings = split_string(generator_args["target"].string_value, ",");
     std::vector<Target> targets;
     for (const auto &s : target_strings) {
-        targets.push_back(Target(s));
+        targets.emplace_back(s);
     }
 
     if (!runtime_name.empty()) {
-        if (targets.size() != 1) {
-            cerr << "Only one target allowed here";
-            return 1;
-        }
         std::string base_path = compute_base_path(output_dir, runtime_name, "");
-        Outputs output_files = compute_outputs(targets[0], base_path, emit_options);
-        compile_standalone_runtime(output_files, targets[0]);
+
+        Target gcd_target = targets[0];
+        for (size_t i = 1; i < targets.size(); i++) {
+            if (!gcd_target.get_runtime_compatible_target(targets[i], gcd_target)) {
+                user_error << "Failed to find compatible runtime target for "
+                           << gcd_target.to_string()
+                           << " and "
+                           << targets[i].to_string() << '\n';
+            }
+        }
+
+        if (targets.size() > 1) {
+            debug(1) << "Building runtime for computed target: " << gcd_target.to_string() << "\n";
+        }
+
+        Outputs output_files = compute_outputs(gcd_target, base_path, emit_options);
+        compile_standalone_runtime(output_files, gcd_target);
     }
 
     if (!generator_name.empty()) {

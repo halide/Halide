@@ -153,7 +153,6 @@ llvm::GlobalValue::LinkageTypes llvm_linkage(LinkageType t) {
 }
 
 CodeGen_LLVM::CodeGen_LLVM(Target t) :
-    input_module(nullptr),
     function(nullptr), context(nullptr),
     builder(nullptr),
     value(nullptr),
@@ -333,13 +332,8 @@ CodeGen_LLVM *CodeGen_LLVM::new_for_target(const Target &target,
 }
 
 void CodeGen_LLVM::initialize_llvm() {
-    static std::mutex initialize_llvm_mutex;
-    std::lock_guard<std::mutex> lock(initialize_llvm_mutex);
-
-    // Initialize the targets we want to generate code for which are enabled
-    // in llvm configuration
-    if (!llvm_initialized) {
-
+    static std::once_flag init_llvm_once;
+    std::call_once(init_llvm_once, []() {
         // You can hack in command-line args to llvm with the
         // environment variable HL_LLVM_ARGS, e.g. HL_LLVM_ARGS="-print-after-all"
         std::string args = get_env_variable("HL_LLVM_ARGS");
@@ -371,9 +365,7 @@ void CodeGen_LLVM::initialize_llvm() {
             Initialize##target##AsmPrinter();
         #include <llvm/Config/AsmPrinters.def>
         #undef LLVM_ASM_PRINTER
-
-        llvm_initialized = true;
-    }
+    });
 }
 
 void CodeGen_LLVM::init_context() {
@@ -448,7 +440,6 @@ CodeGen_LLVM::~CodeGen_LLVM() {
     delete builder;
 }
 
-bool CodeGen_LLVM::llvm_initialized = false;
 bool CodeGen_LLVM::llvm_X86_enabled = false;
 bool CodeGen_LLVM::llvm_ARM_enabled = false;
 bool CodeGen_LLVM::llvm_Hexagon_enabled = false;
@@ -509,8 +500,6 @@ MangledNames get_mangled_names(const LoweredFunc &f, const Target &target) {
 }  // namespace
 
 std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
-    input_module = &input;
-
     init_module();
 
     debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
@@ -598,8 +587,6 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
         std::string halide_command = "halide target=" + target.to_string();
         embed_bitcode(module.get(), halide_command);
     }
-
-    input_module = nullptr;
 
     // Disown the module and return it.
     return std::move(module);
@@ -1147,12 +1134,15 @@ void CodeGen_LLVM::optimize_module() {
         auto addAddressSanitizerPasses = [](const PassManagerBuilder &builder, legacy::PassManagerBase &pm) {
             constexpr bool compile_kernel = false;   // always false for user code
             constexpr bool recover = false;          // -fsanitize-recover, always false here
-
             constexpr bool use_after_scope = false;  // enable -fsanitize-address-use-after-scope?
-            pm.add(createAddressSanitizerFunctionPass(compile_kernel, recover, use_after_scope));
-
             constexpr bool use_globals_gc = false;  // Should ASan use GC-friendly instrumentation for globals?
+
+            pm.add(createAddressSanitizerFunctionPass(compile_kernel, recover, use_after_scope));
+#if LLVM_VERSION >= 90
+            pm.add(createModuleAddressSanitizerLegacyPassPass(compile_kernel, recover, use_globals_gc));
+#else
             pm.add(createAddressSanitizerModulePass(compile_kernel, recover, use_globals_gc));
+#endif
         };
         b.addExtension(PassManagerBuilder::EP_OptimizerLast, addAddressSanitizerPasses);
         b.addExtension(PassManagerBuilder::EP_EnabledOnOptLevel0, addAddressSanitizerPasses);

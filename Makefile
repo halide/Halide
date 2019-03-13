@@ -356,6 +356,7 @@ HEXAGON_RUNTIME_LIBS = \
   $(HEXAGON_RUNTIME_LIBS_DIR)/v60/libhalide_hexagon_remote_skel.so \
   $(HEXAGON_RUNTIME_LIBS_DIR)/v60/signed_by_debug/libhalide_hexagon_remote_skel.so
 
+# Keep this list sorted in alphabetical order.
 SOURCE_FILES = \
   AddImageChecks.cpp \
   AddParameterChecks.cpp \
@@ -373,18 +374,19 @@ SOURCE_FILES = \
   BoundsInference.cpp \
   BoundSmallAllocations.cpp \
   Buffer.cpp \
+  CanonicalizeGPUVars.cpp \
   Closure.cpp \
   CodeGen_ARM.cpp \
   CodeGen_C.cpp \
+  CodeGen_D3D12Compute_Dev.cpp \
   CodeGen_GPU_Dev.cpp \
   CodeGen_GPU_Host.cpp \
   CodeGen_Hexagon.cpp \
   CodeGen_Internal.cpp \
   CodeGen_LLVM.cpp \
-  CodeGen_MIPS.cpp \
-  CodeGen_D3D12Compute_Dev.cpp \
-  CodeGen_OpenCL_Dev.cpp \
   CodeGen_Metal_Dev.cpp \
+  CodeGen_MIPS.cpp \
+  CodeGen_OpenCL_Dev.cpp \
   CodeGen_OpenGL_Dev.cpp \
   CodeGen_OpenGLCompute_Dev.cpp \
   CodeGen_Posix.cpp \
@@ -393,12 +395,13 @@ SOURCE_FILES = \
   CodeGen_X86.cpp \
   CPlusPlusMangle.cpp \
   CSE.cpp \
-  CanonicalizeGPUVars.cpp \
   Debug.cpp \
   DebugArguments.cpp \
   DebugToFile.cpp \
   Definition.cpp \
   Deinterleave.cpp \
+  Derivative.cpp \
+  DerivativeUtils.cpp \
   DeviceArgument.cpp \
   DeviceInterface.cpp \
   Dimension.cpp \
@@ -448,8 +451,8 @@ SOURCE_FILES = \
   ObjectInstanceRegistry.cpp \
   OutputImageParam.cpp \
   ParallelRVar.cpp \
-  ParamMap.cpp \
   Parameter.cpp \
+  ParamMap.cpp \
   PartitionLoops.cpp \
   Pipeline.cpp \
   Prefetch.cpp \
@@ -478,8 +481,8 @@ SOURCE_FILES = \
   Simplify_Div.cpp \
   Simplify_EQ.cpp \
   Simplify_Exprs.cpp \
-  Simplify_LT.cpp \
   Simplify_Let.cpp \
+  Simplify_LT.cpp \
   Simplify_Max.cpp \
   Simplify_Min.cpp \
   Simplify_Mod.cpp \
@@ -517,7 +520,9 @@ SOURCE_FILES = \
   WrapCalls.cpp \
   WrapExternStages.cpp
 
-# The externally-visible header files that go into making Halide.h. Don't include anything here that includes llvm headers.
+# The externally-visible header files that go into making Halide.h.
+# Don't include anything here that includes llvm headers.
+# Keep this list sorted in alphabetical order.
 HEADER_FILES = \
   AddImageChecks.h \
   AddParameterChecks.h \
@@ -535,17 +540,18 @@ HEADER_FILES = \
   BoundsInference.h \
   BoundSmallAllocations.h \
   Buffer.h \
+  CanonicalizeGPUVars.h \
   Closure.h \
   CodeGen_ARM.h \
   CodeGen_C.h \
+  CodeGen_D3D12Compute_Dev.h \
   CodeGen_GPU_Dev.h \
   CodeGen_GPU_Host.h \
   CodeGen_Internal.h \
   CodeGen_LLVM.h \
-  CodeGen_MIPS.h \
-  CodeGen_D3D12Compute_Dev.h \
-  CodeGen_OpenCL_Dev.h \
   CodeGen_Metal_Dev.h \
+  CodeGen_MIPS.h \
+  CodeGen_OpenCL_Dev.h \
   CodeGen_OpenGL_Dev.h \
   CodeGen_OpenGLCompute_Dev.h \
   CodeGen_Posix.h \
@@ -555,12 +561,13 @@ HEADER_FILES = \
   ConciseCasts.h \
   CPlusPlusMangle.h \
   CSE.h \
-  CanonicalizeGPUVars.h \
   Debug.h \
   DebugArguments.h \
   DebugToFile.h \
   Definition.h \
   Deinterleave.h \
+  Derivative.h \
+  DerivativeUtils.h \
   DeviceArgument.h \
   DeviceInterface.h \
   Dimension.h \
@@ -582,8 +589,6 @@ HEADER_FILES = \
   Generator.h \
   HexagonOffload.h \
   HexagonOptimize.h \
-  runtime/HalideRuntime.h \
-  runtime/HalideBuffer.h \
   ImageParam.h \
   InferArguments.h \
   InjectHostDevBufferCopies.h \
@@ -594,8 +599,8 @@ HEADER_FILES = \
   Interval.h \
   Introspection.h \
   IntrusivePtr.h \
-  IREquality.h \
   IR.h \
+  IREquality.h \
   IRMatch.h \
   IRMutator.h \
   IROperator.h \
@@ -617,12 +622,12 @@ HEADER_FILES = \
   ModulusRemainder.h \
   Monotonic.h \
   ObjectInstanceRegistry.h \
-  Outputs.h \
   OutputImageParam.h \
+  Outputs.h \
   ParallelRVar.h \
   Param.h \
-  ParamMap.h \
   Parameter.h \
+  ParamMap.h \
   PartitionLoops.h \
   Pipeline.h \
   Prefetch.h \
@@ -631,14 +636,16 @@ HEADER_FILES = \
   PythonExtensionGen.h \
   Qualify.h \
   Random.h \
-  RealizationOrder.h \
   RDom.h \
+  RealizationOrder.h \
   Reduction.h \
   RegionCosts.h \
   RemoveDeadAllocations.h \
   RemoveExternLoops.h \
   RemoveTrivialForLoops.h \
   RemoveUndef.h \
+  runtime/HalideBuffer.h \
+  runtime/HalideRuntime.h \
   Schedule.h \
   ScheduleFunctions.h \
   Scope.h \
@@ -684,7 +691,6 @@ RUNTIME_CPP_COMPONENTS = \
   android_host_cpu_count \
   android_io \
   android_opengl_context \
-  android_tempfile \
   arm_cpu_features \
   buffer_t \
   cache \
@@ -694,8 +700,12 @@ RUNTIME_CPP_COMPONENTS = \
   destructors \
   device_interface \
   errors \
+  fake_get_symbol \
   fake_thread_pool \
   float16_t \
+  fuchsia_clock \
+  fuchsia_host_cpu_count \
+  fuchsia_yield \
   gpu_device_selection \
   hexagon_cache_allocator \
   hexagon_cpu_features \
@@ -734,7 +744,6 @@ RUNTIME_CPP_COMPONENTS = \
   posix_get_symbol \
   posix_io \
   posix_print \
-  posix_tempfile \
   posix_threads \
   posix_threads_tsan \
   powerpc_cpu_features \
@@ -752,6 +761,7 @@ RUNTIME_CPP_COMPONENTS = \
   runtime_api \
   ssp \
   to_string \
+  trace_helper \
   tracing \
   windows_abort \
   windows_clock \
@@ -760,7 +770,6 @@ RUNTIME_CPP_COMPONENTS = \
   windows_io \
   windows_opencl \
   windows_profiler \
-  windows_tempfile \
   windows_threads \
   windows_threads_tsan \
   windows_yield \
@@ -1305,6 +1314,7 @@ METADATA_TESTER_GENERATOR_ARGS=\
 	buffer_array_input8.size=2 \
 	buffer_array_input8.dim=3 \
 	buffer_array_input8.type=float32 \
+	buffer_f16_untyped.type=float16 \
 	array_outputs.size=2 \
 	array_outputs7.size=2 \
 	array_outputs8.size=2 \
@@ -1751,6 +1761,7 @@ TEST_APPS=\
 	resize \
 	stencil_chain \
 	wavelet \
+	resnet_50
 
 .PHONY: test_apps
 test_apps: distrib
@@ -1808,6 +1819,10 @@ ifneq (,$(findstring clang version 7.0,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
 
+ifneq (,$(findstring clang version 7.1,$(CLANG_VERSION)))
+CLANG_OK=yes
+endif
+
 ifneq (,$(findstring clang version 8.0,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
@@ -1836,7 +1851,7 @@ $(BUILD_DIR)/clang_ok:
 	@exit 1
 endif
 
-ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 60 70 80 90))
+ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 60 70 71 80 90))
 LLVM_OK=yes
 endif
 
@@ -1978,16 +1993,11 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
 		halide/bin \
 		halide/lib \
 		halide/include \
+		halide/tools \
 		halide/tutorial \
 		halide/README*.md \
-		halide/tools/mex_halide.m \
-		halide/tools/*.cpp \
-		halide/tools/halide_benchmark.h \
-		halide/tools/halide_image.h \
-		halide/tools/halide_image_io.h \
-		halide/tools/halide_image_info.h \
-		halide/tools/halide_malloc_trace.h \
-		halide/tools/halide_trace_config.h
+		halide/halide_config.* \
+		halide/halide.*
 	rm -rf halide
 
 .PHONY: distrib
