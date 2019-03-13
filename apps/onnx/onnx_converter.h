@@ -3,7 +3,7 @@
 #include <unordered_map>
 #include <vector>
 #include "Halide.h"
-#include "onnx/onnx_pb.h"
+#include "onnx.pb.h"
 
 struct Tensor {
   std::string name;
