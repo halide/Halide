@@ -2148,6 +2148,15 @@ check("v*.w += vrmpy(v*.b,v*.b)", hvx_width, i32_1 + i32(i8_1)*i8_1 + i32(i8_2)*
 int main(int argc, char **argv) {
     Test test;
 
+    // TODO: this test is intrinsically unsafe to use with multiple threads;
+    // all of the Exprs that we generate share the same ImageParams, which
+    // aren't meant to be safely used across multiple threads. A proper fix
+    // probably requires restructuring to ensure that every Expr has its
+    // own ImageParam(s), or possibly adding an IRMutator pass to mutate
+    // the Exprs as needed to ensure this. As a stopgap to avoid spurious
+    // crashes, we're simply going to limit this to a single thread.
+    num_threads = 1;
+
     if (argc > 1) {
         test.filter = argv[1];
         num_threads = 1;
