@@ -65,6 +65,10 @@ public:
         __sync_fetch_and_and(&lock, ~exclusive_held_mask);
     }
 
+    __attribute__((always_inline)) void init() {
+    	lock=0;
+    }
+
     SharedExclusiveSpinLock() : lock(0) {}
 };
 
@@ -130,6 +134,12 @@ public:
         // Need a memory barrier to guarantee all the writes are done.
         __sync_synchronize();
         lock.release_shared();
+    }
+
+    __attribute__((always_inline)) void init() {
+    	cursor=0;
+    	overage=0;
+    	lock.init();
     }
 
     TraceBuffer() : cursor(0), overage(0) {}
@@ -337,6 +347,7 @@ WEAK int halide_get_trace_file(void *user_context) {
             halide_trace_file_internally_opened = file;
             if (!halide_trace_buffer) {
                 halide_trace_buffer = (TraceBuffer *)malloc(sizeof(TraceBuffer));
+                halide_trace_buffer->init();
             }
         } else {
             halide_set_trace_file(0);
