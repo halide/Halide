@@ -66,7 +66,7 @@ public:
     }
 
     __attribute__((always_inline)) void init() {
-    	lock=0;
+    	lock = 0;
     }
 
     SharedExclusiveSpinLock() : lock(0) {}
@@ -137,8 +137,8 @@ public:
     }
 
     __attribute__((always_inline)) void init() {
-    	cursor=0;
-    	overage=0;
+    	cursor = 0;
+    	overage = 0;
     	lock.init();
     }
 
