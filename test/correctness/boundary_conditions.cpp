@@ -41,7 +41,7 @@ bool check_constant_exterior(const Buffer<T> &input, T exterior, Func f,
     result.set_min(test_min_x, test_min_y);
     f = lambda(x, y, f(x, y));
     schedule_test(f, vector_width, t);
-    f.realize(result, t);
+    f.realize(result, t); f.invalidate_cache();
     result.copy_to_host();
 
     for (int32_t y = test_min_y; y < test_min_y + test_extent_y; y++) {
@@ -67,7 +67,7 @@ bool check_repeat_edge(const Buffer<T> &input, Func f,
     result.set_min(test_min_x, test_min_y);
     f = lambda(x, y, f(x, y));
     schedule_test(f, vector_width, t);
-    f.realize(result, t);
+    f.realize(result, t); f.invalidate_cache();
     result.copy_to_host();
 
     for (int32_t y = test_min_y; y < test_min_y + test_extent_y; y++) {
@@ -91,7 +91,7 @@ bool check_repeat_image(const Buffer<T> &input, Func f,
     result.set_min(test_min_x, test_min_y);
     f = lambda(x, y, f(x, y));
     schedule_test(f, vector_width, t);
-    f.realize(result, t);
+    f.realize(result, t); f.invalidate_cache();
     result.copy_to_host();
 
     for (int32_t y = test_min_y; y < test_min_y + test_extent_y; y++) {
@@ -119,7 +119,7 @@ bool check_mirror_image(const Buffer<T> &input, Func f,
     result.set_min(test_min_x, test_min_y);
     f = lambda(x, y, f(x, y));
     schedule_test(f, vector_width, t);
-    f.realize(result, t);
+    f.realize(result, t); f.invalidate_cache();
     result.copy_to_host();
 
     for (int32_t y = test_min_y; y < test_min_y + test_extent_y; y++) {
@@ -151,7 +151,7 @@ bool check_mirror_interior(const Buffer<T> &input, Func f,
     result.set_min(test_min_x, test_min_y);
     f = lambda(x, y, f(x, y));
     schedule_test(f, vector_width, t);
-    f.realize(result, t);
+    f.realize(result, t); f.invalidate_cache();
     result.copy_to_host();
 
     for (int32_t y = test_min_y; y < test_min_y + test_extent_y; y++) {

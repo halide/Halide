@@ -661,8 +661,6 @@ class Func {
     // Helper function for recursive reordering support
     Func &reorder_storage(const std::vector<Var> &dims, size_t start);
 
-    void invalidate_cache();
-
 public:
 
     /** Declare a new undefined function with the given name */
@@ -2302,6 +2300,10 @@ public:
      * Stage of this Func. For introspection only: to modify schedule,
      * use the Func interface. */
     const Internal::StageSchedule &get_schedule() const { return Stage(*this).get_schedule(); }
+
+    /** Invalidate any internal cached state, e.g. because Funcs have
+     * been rescheduled, or to discard JIT memory that is no longer needed. */
+    void invalidate_cache();
 };
 
 namespace Internal {

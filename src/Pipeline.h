@@ -453,7 +453,7 @@ public:
     bool defined() const;
 
     /** Invalidate any internal cached state, e.g. because Funcs have
-     * been rescheduled. */
+     * been rescheduled, or to discard JIT memory that is no longer needed. */
     void invalidate_cache();
 
     /** Add a top-level precondition to the generated pipeline,

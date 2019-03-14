@@ -142,7 +142,7 @@ bool test(int lanes, int seed) {
     Func f1;
     f1(x, y) = input(x, y) + input(x+1, y);
     f1.vectorize(x, lanes);
-    Buffer<A> im1 = f1.realize(W, H);
+    Buffer<A> im1 = f1.realize(W, H); f1.invalidate_cache();
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
@@ -159,7 +159,7 @@ bool test(int lanes, int seed) {
     Func f2;
     f2(x, y) = input(x, y) - input(x+1, y);
     f2.vectorize(x, lanes);
-    Buffer<A> im2 = f2.realize(W, H);
+    Buffer<A> im2 = f2.realize(W, H); f2.invalidate_cache();
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
@@ -176,7 +176,7 @@ bool test(int lanes, int seed) {
     Func f3;
     f3(x, y) = input(x, y) * input(x+1, y);
     f3.vectorize(x, lanes);
-    Buffer<A> im3 = f3.realize(W, H);
+    Buffer<A> im3 = f3.realize(W, H); f3.invalidate_cache();
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
@@ -193,7 +193,7 @@ bool test(int lanes, int seed) {
     Func f4;
     f4(x, y) = select(input(x, y) > input(x+1, y), input(x+2, y), input(x+3, y));
     f4.vectorize(x, lanes);
-    Buffer<A> im4 = f4.realize(W, H);
+    Buffer<A> im4 = f4.realize(W, H); f4.invalidate_cache();
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
@@ -213,7 +213,7 @@ bool test(int lanes, int seed) {
     Expr yCoord = clamp(cast<int>(input(x+1, y)), 0, H-1);
     f5(x, y) = input(xCoord, yCoord);
     f5.vectorize(x, lanes);
-    Buffer<A> im5 = f5.realize(W, H);
+    Buffer<A> im5 = f5.realize(W, H); f5.invalidate_cache();
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
@@ -238,7 +238,7 @@ bool test(int lanes, int seed) {
     Func f5a;
     f5a(x, y) = input(x, y)*cast<A>(2);
     f5a.vectorize(y, lanes);
-    Buffer<A> im5a = f5a.realize(W, H);
+    Buffer<A> im5a = f5a.realize(W, H); f5a.invalidate_cache();
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
@@ -259,7 +259,7 @@ bool test(int lanes, int seed) {
 
     f6.update().vectorize(x, lanes);
 
-    Buffer<int> im6 = f6.realize(W, H);
+    Buffer<int> im6 = f6.realize(W, H); f6.invalidate_cache();
 
     for (int x = 0; x < W; x++) {
         int yCoord = x*x;
@@ -279,7 +279,7 @@ bool test(int lanes, int seed) {
     Func f7;
     f7(x, y) = clamp(input(x, y), cast<A>(10), cast<A>(20));
     f7.vectorize(x, lanes);
-    Buffer<A> im7 = f7.realize(W, H);
+    Buffer<A> im7 = f7.realize(W, H); f7.invalidate_cache();
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
@@ -295,7 +295,7 @@ bool test(int lanes, int seed) {
     Func f8;
     f8(x, y) = hypot(1.1f, cast<float>(input(x, y)));
     f8.vectorize(x, lanes);
-    Buffer<float> im8 = f8.realize(W, H);
+    Buffer<float> im8 = f8.realize(W, H); f8.invalidate_cache();
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
@@ -313,7 +313,7 @@ bool test(int lanes, int seed) {
     Func f9;
     f9(x, y) = input(x, y) / clamp(input(x+1, y), cast<A>(1), cast<A>(3));
     f9.vectorize(x, lanes);
-    Buffer<A> im9 = f9.realize(W, H);
+    Buffer<A> im9 = f9.realize(W, H); f9.invalidate_cache();
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
@@ -338,7 +338,7 @@ bool test(int lanes, int seed) {
         Func f10;
         f10(x, y) = (input(x, y)) / cast<A>(Expr(c));
         f10.vectorize(x, lanes);
-        Buffer<A> im10 = f10.realize(W, H);
+        Buffer<A> im10 = f10.realize(W, H); f10.invalidate_cache();
 
         for (int y = 0; y < H; y++) {
             for (int x = 0; x < W; x++) {
@@ -361,7 +361,7 @@ bool test(int lanes, int seed) {
     Func f11;
     f11(x, y) = select((x%2)==0, input(x/2, y), input(x/2, y+1));
     f11.vectorize(x, lanes);
-    Buffer<A> im11 = f11.realize(W, H);
+    Buffer<A> im11 = f11.realize(W, H); f11.invalidate_cache();
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
@@ -378,7 +378,7 @@ bool test(int lanes, int seed) {
     Func f12;
     f12(x, y) = input(W-1-x, H-1-y);
     f12.vectorize(x, lanes);
-    Buffer<A> im12 = f12.realize(W, H);
+    Buffer<A> im12 = f12.realize(W, H); f12.invalidate_cache();
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
@@ -395,7 +395,7 @@ bool test(int lanes, int seed) {
     Func f13;
     f13(x, y) = input(x+3, y);
     f13.vectorize(x, lanes);
-    Buffer<A> im13 = f13.realize(W, H);
+    Buffer<A> im13 = f13.realize(W, H); f13.invalidate_cache();
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
@@ -411,7 +411,7 @@ bool test(int lanes, int seed) {
         if (verbose) printf("Absolute value\n");
         Func f14;
         f14(x, y) = cast<A>(abs(input(x, y)));
-        Buffer<A> im14 = f14.realize(W, H);
+        Buffer<A> im14 = f14.realize(W, H); f14.invalidate_cache();
 
         for (int y = 0; y < H; y++) {
             for (int x = 0; x < W; x++) {
@@ -432,8 +432,8 @@ bool test(int lanes, int seed) {
         f16(x, y) = cast<int>(input(x, y)) * input(x, y+2) - cast<int>(input(x, y+1)) * input(x, y+3);
         f15.vectorize(x, lanes);
         f16.vectorize(x, lanes);
-        Buffer<int32_t> im15 = f15.realize(W, H);
-        Buffer<int32_t> im16 = f16.realize(W, H);
+        Buffer<int32_t> im15 = f15.realize(W, H); f15.invalidate_cache();
+        Buffer<int32_t> im16 = f16.realize(W, H); f16.invalidate_cache();
         for (int y = 0; y < H; y++) {
             for (int x = 0; x < W; x++) {
                 int correct15 = input(x, y)*input(x, y+2) + input(x, y+1)*input(x, y+3);
@@ -460,12 +460,12 @@ bool test(int lanes, int seed) {
         f18(x, y) = fast_log(a);
         f19(x, y) = fast_exp(b);
         f20(x, y) = fast_pow(a, b/16.0f);
-        Buffer<float> im15 = f15.realize(W, H);
-        Buffer<float> im16 = f16.realize(W, H);
-        Buffer<float> im17 = f17.realize(W, H);
-        Buffer<float> im18 = f18.realize(W, H);
-        Buffer<float> im19 = f19.realize(W, H);
-        Buffer<float> im20 = f20.realize(W, H);
+        Buffer<float> im15 = f15.realize(W, H); f15.invalidate_cache();
+        Buffer<float> im16 = f16.realize(W, H); f16.invalidate_cache();
+        Buffer<float> im17 = f17.realize(W, H); f17.invalidate_cache();
+        Buffer<float> im18 = f18.realize(W, H); f18.invalidate_cache();
+        Buffer<float> im19 = f19.realize(W, H); f19.invalidate_cache();
+        Buffer<float> im20 = f20.realize(W, H); f20.invalidate_cache();
 
         int worst_log_mantissa = 0;
         int worst_exp_mantissa = 0;
@@ -569,7 +569,7 @@ bool test(int lanes, int seed) {
         weight = cast(UInt(t.bits(), t.lanes()), max(0, weight));
     }
     f21(x, y) = lerp(input(x, y), input(x+1, y), weight);
-    Buffer<A> im21 = f21.realize(W, H);
+    Buffer<A> im21 = f21.realize(W, H); f21.invalidate_cache();
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
@@ -602,7 +602,7 @@ bool test(int lanes, int seed) {
     Func f22;
     f22(x, y) = absd(input(x, y), input(x+1, y));
     f22.vectorize(x, lanes);
-    Buffer<typename with_unsigned<A>::type> im22 = f22.realize(W, H);
+    Buffer<typename with_unsigned<A>::type> im22 = f22.realize(W, H); f22.invalidate_cache();
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
