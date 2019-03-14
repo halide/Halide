@@ -2712,14 +2712,16 @@ protected:
     using GeneratorContext = Halide::GeneratorContext;
     using ImageParam = Halide::ImageParam;
     using LoopLevel = Halide::LoopLevel;
+    using MemoryType = Halide::MemoryType;
+    using NameMangling = Halide::NameMangling;
     using Pipeline = Halide::Pipeline;
+    using PrefetchBoundStrategy = Halide::PrefetchBoundStrategy;
     using RDom = Halide::RDom;
     using TailStrategy = Halide::TailStrategy;
     using Target = Halide::Target;
     using Tuple = Halide::Tuple;
     using Type = Halide::Type;
     using Var = Halide::Var;
-    using NameMangling = Halide::NameMangling;
     template <typename T> static Expr cast(Expr e) { return Halide::cast<T>(e); }
     static inline Expr cast(Halide::Type t, Expr e) { return Halide::cast(t, e); }
     template <typename T> using GeneratorParam = Halide::GeneratorParam<T>;
@@ -2856,7 +2858,7 @@ public:
     template <typename... Args>
     void set_inputs(const Args &...args) {
         // set_inputs_vector() checks this too, but checking it here allows build_inputs() to avoid out-of-range checks.
-        GeneratorParamInfo &pi = param_info();
+        GeneratorParamInfo &pi = this->param_info();
         user_assert(sizeof...(args) == pi.inputs().size())
                 << "Expected exactly " << pi.inputs().size()
                 << " inputs but got " << sizeof...(args) << "\n";
@@ -2864,7 +2866,7 @@ public:
     }
 
     Realization realize(std::vector<int32_t> sizes) {
-        check_scheduled("realize");
+        this->check_scheduled("realize");
         return get_pipeline().realize(sizes, get_target());
     }
 
@@ -2872,12 +2874,12 @@ public:
     // select this method instead of the Realization-as-outparam variant
     template <typename... Args, typename std::enable_if<NoRealizations<Args...>::value>::type * = nullptr>
     Realization realize(Args&&... args) {
-        check_scheduled("realize");
+        this->check_scheduled("realize");
         return get_pipeline().realize(std::forward<Args>(args)..., get_target());
     }
 
     void realize(Realization r) {
-        check_scheduled("realize");
+        this->check_scheduled("realize");
         get_pipeline().realize(r, get_target());
     }
 
@@ -2946,6 +2948,12 @@ public:
         param_info_ptr->owned_extras.push_back(std::unique_ptr<Internal::GIOBase>(p));
         param_info_ptr->filter_outputs.push_back(p);
         return p;
+    }
+
+    template<typename... Args>
+    HALIDE_NO_USER_CODE_INLINE
+    void add_requirement(Expr condition, Args&&... args) {
+        get_pipeline().add_requirement(condition, std::forward<Args>(args)...);
     }
 
 protected:
@@ -3207,7 +3215,7 @@ public:
     // Note that this method will never return null:
     // if it cannot return a valid Generator, it should assert-fail.
     static std::unique_ptr<GeneratorBase> create(const std::string &name,
-                                                 const GeneratorContext &context);
+                                                 const Halide::GeneratorContext &context);
 
 private:
     using GeneratorFactoryMap = std::map<const std::string, GeneratorFactory>;

@@ -17,7 +17,6 @@ set(RUNTIME_CPP
   android_host_cpu_count
   android_io
   android_opengl_context
-  android_tempfile
   arm_cpu_features
   buffer_t
   cache
@@ -27,8 +26,12 @@ set(RUNTIME_CPP
   destructors
   device_interface
   errors
+  fake_get_symbol
   fake_thread_pool
   float16_t
+  fuchsia_clock
+  fuchsia_host_cpu_count
+  fuchsia_yield
   gpu_device_selection
   hexagon_cache_allocator
   hexagon_cpu_features
@@ -67,7 +70,6 @@ set(RUNTIME_CPP
   posix_get_symbol
   posix_io
   posix_print
-  posix_tempfile
   posix_threads
   posix_threads_tsan
   powerpc_cpu_features
@@ -85,6 +87,7 @@ set(RUNTIME_CPP
   runtime_api
   ssp
   to_string
+  trace_helper
   tracing
   windows_abort
   windows_clock
@@ -93,7 +96,6 @@ set(RUNTIME_CPP
   windows_io
   windows_opencl
   windows_profiler
-  windows_tempfile
   windows_threads
   windows_threads_tsan
   windows_yield
@@ -306,6 +308,8 @@ set(HEADER_FILES
   DebugToFile.h
   Definition.h
   Deinterleave.h
+  Derivative.h
+  DerivativeUtils.h
   DeviceArgument.h
   DeviceInterface.h
   Dimension.h
@@ -380,7 +384,6 @@ set(HEADER_FILES
   RegionCosts.h
   RemoveDeadAllocations.h
   RemoveExternLoops.h
-  RemoveTrivialForLoops.h
   RemoveUndef.h
   runtime/HalideBuffer.h
   runtime/HalideRuntime.h
@@ -389,6 +392,7 @@ set(HEADER_FILES
   Scope.h
   SelectGPUAPI.h
   Simplify.h
+  SimplifyCorrelatedDifferences.h
   SimplifySpecializations.h
   SkipStages.h
   SlidingWindow.h
@@ -477,6 +481,8 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   DebugToFile.cpp
   Definition.cpp
   Deinterleave.cpp
+  Derivative.cpp
+  DerivativeUtils.cpp
   DeviceArgument.cpp
   DeviceInterface.cpp
   Dimension.cpp
@@ -543,7 +549,6 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   RegionCosts.cpp
   RemoveDeadAllocations.cpp
   RemoveExternLoops.cpp
-  RemoveTrivialForLoops.cpp
   RemoveUndef.cpp
   Schedule.cpp
   ScheduleFunctions.cpp
@@ -568,6 +573,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Simplify_Shuffle.cpp
   Simplify_Stmts.cpp
   Simplify_Sub.cpp
+  SimplifyCorrelatedDifferences.cpp
   SimplifySpecializations.cpp
   SkipStages.cpp
   SlidingWindow.cpp

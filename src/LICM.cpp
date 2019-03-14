@@ -39,12 +39,12 @@ class CanLift : public IRVisitor {
         }
     }
 
-    const Scope<int> &varying;
+    const Scope<> &varying;
 
 public:
     bool result {true};
 
-    CanLift(const Scope<int> &v) : varying(v) {}
+    CanLift(const Scope<> &v) : varying(v) {}
 };
 
 // Lift pure loop invariants to the top level. Applied independently
@@ -52,7 +52,7 @@ public:
 class LiftLoopInvariants : public IRMutator {
     using IRMutator::visit;
 
-    Scope<int> varying;
+    Scope<> varying;
 
     bool can_lift(const Expr &e) {
         CanLift check(varying);
@@ -78,18 +78,46 @@ class LiftLoopInvariants : public IRMutator {
         return true;
     }
 
+    template<typename T, typename Body>
+    Body visit_let(const T *op) {
+        // Visit an entire chain of lets in a single method to conserve stack space.
+        struct Frame {
+            const T *op;
+            Expr new_value;
+            ScopedBinding<> binding;
+            Frame(const T *op, Expr v, Scope<> &scope) :
+                op(op), new_value(std::move(v)), binding(scope, op->name) {}
+        };
+        vector<Frame> frames;
+        Body result;
+        do {
+            frames.emplace_back(op, mutate(op->value), varying);
+            result = op->body;
+        } while ((op = result.template as<T>()));
+
+        result = mutate(result);
+
+        for (auto it = frames.rbegin(); it != frames.rend(); it++) {
+            if (it->new_value.same_as(it->op->value) && result.same_as(it->op->body)) {
+                result = it->op;
+            } else {
+                result = T::make(it->op->name, std::move(it->new_value), result);
+            }
+        }
+
+        return result;
+    }
+
     Expr visit(const Let *op) override {
-        ScopedBinding<int> p(varying, op->name, 0);
-        return IRMutator::visit(op);
+        return visit_let<Let, Expr>(op);
     }
 
     Stmt visit(const LetStmt *op) override {
-        ScopedBinding<int> p(varying, op->name, 0);
-        return IRMutator::visit(op);
+        return visit_let<LetStmt, Stmt>(op);
     }
 
     Stmt visit(const For *op) override {
-        ScopedBinding<int> p(varying, op->name, 0);
+        ScopedBinding<> p(varying, op->name);
         return IRMutator::visit(op);
     }
 
@@ -415,18 +443,51 @@ class GroupLoopInvariants : public IRMutator {
         return stmt;
     }
 
+    template<typename T, typename Body>
+    Body visit_let(const T *op) {
+        struct Frame {
+            const T *op;
+            Expr new_value;
+            ScopedBinding<int> binding;
+            Frame(const T *op, Expr v, int depth, Scope<int> &scope) :
+                op(op),
+                new_value(std::move(v)),
+                binding(scope, op->name, depth) {}
+        };
+        std::vector<Frame> frames;
+        Body result;
+
+        do {
+            result = op->body;
+            int d = 0;
+            if (depth > 0) {
+                d = expr_depth(op->value);
+            }
+            frames.emplace_back(op, mutate(op->value), d, var_depth);
+        } while ((op = result.template as<T>()));
+
+        result = mutate(result);
+
+        for (auto it = frames.rbegin(); it != frames.rend(); it++) {
+            if (it->new_value.same_as(it->op->value) && result.same_as(it->op->body)) {
+                result = it->op;
+            } else {
+                result = T::make(it->op->name, it->new_value, result);
+            }
+        }
+
+        return result;
+    }
+
     Expr visit(const Let *op) override {
-        ScopedBinding<int> bind(var_depth, op->name, expr_depth(op->value));
-        return IRMutator::visit(op);
+        return visit_let<Let, Expr>(op);
     }
 
     Stmt visit(const LetStmt *op) override {
-        ScopedBinding<int> bind(var_depth, op->name, expr_depth(op->value));
-        return IRMutator::visit(op);
+        return visit_let<LetStmt, Stmt>(op);
     }
 };
 
-// Turn for loops of size one into let statements
 Stmt loop_invariant_code_motion(Stmt s) {
     s = GroupLoopInvariants().mutate(s);
     s = common_subexpression_elimination(s);

@@ -174,46 +174,48 @@ private:
         }
     }
 
+    template<typename T, typename Body>
+    Body visit_let(const T *op) {
+        // Visit an entire chain of lets in a single method to conserve stack space.
+        struct Frame {
+            const T *op;
+            Expr new_value;
+            ScopedBinding<> binding;
+            Frame(const T * op, Expr v, Scope<> &scope) :
+                op(op), new_value(std::move(v)),
+                binding(!new_value.defined(), scope, op->name) {}
+        };
+        vector<Frame> frames;
+
+        Body result;
+        do {
+            frames.emplace_back(op, mutate(op->value), dead_vars);
+            result = op->body;
+        } while ((op = result.template as<T>()));
+
+        result = mutate(result);
+
+        if (result.defined()) {
+            for (auto it = frames.rbegin(); it != frames.rend(); it++) {
+                if (!it->new_value.defined()) continue;
+                predicate = substitute(it->op->name, it->new_value, predicate);
+                if (it->new_value.same_as(it->op->value) && result.same_as(it->op->body)) {
+                    result = it->op;
+                } else {
+                    result = T::make(it->op->name, std::move(it->new_value), result);
+                }
+            }
+        }
+
+        return result;
+    }
+
     Expr visit(const Let *op) override {
-        Expr value = mutate(op->value);
-        if (!value.defined()) {
-            dead_vars.push(op->name);
-        }
-        Expr body = mutate(op->body);
-        if (!value.defined()) {
-            dead_vars.pop(op->name);
-        }
-        if (!body.defined()) return Expr();
-        if (value.same_as(op->value) &&
-            body.same_as(op->body)) {
-            return op;
-        } else if (!value.defined()) {
-            return body;
-        } else {
-            Expr expr = Let::make(op->name, value, body);
-            predicate = substitute(op->name, value, predicate);
-            return expr;
-        }
+        return visit_let<Let, Expr>(op);
     }
 
     Stmt visit(const LetStmt *op) override {
-        Expr value = mutate(op->value);
-        if (!value.defined()) {
-            dead_vars.push(op->name);
-        }
-        Stmt body = mutate(op->body);
-        if (!value.defined()) {
-            dead_vars.pop(op->name);
-        }
-        if (!body.defined()) return Stmt();
-        if (value.same_as(op->value) &&
-            body.same_as(op->body)) {
-            return op;
-        } else if (!value.defined()) {
-            return body;
-        } else {
-            return LetStmt::make(op->name, value, body);
-        }
+        return visit_let<LetStmt, Stmt>(op);
     }
 
     Stmt visit(const AssertStmt *op) override {
@@ -431,18 +433,32 @@ private:
     }
 
     Stmt visit(const Block *op) override {
-        Stmt first = mutate(op->first);
-        Stmt rest = mutate(op->rest);
-        if (!first.defined()) {
-            return rest;
-        } else if (!rest.defined()) {
-            return first;
-        } else if (first.same_as(op->first) &&
-                   rest.same_as(op->rest)) {
-            return op;
-        } else {
-            return Block::make(first, rest);
+        // Visit a sequence of blocks in a single method to conserve stack space.
+        Stmt result;
+        vector<std::pair<const Block *, Stmt>> frames;
+
+        do {
+            Stmt next = mutate(op->first);
+            if (next.defined()) {
+                frames.emplace_back(op, std::move(next));
+            }
+            result = op->rest;
+        } while ((op = result.as<Block>()));
+
+        result = mutate(result);
+
+        for (auto it = frames.rbegin(); it != frames.rend(); it++) {
+            op = it->first;
+            Stmt new_first = std::move(it->second);
+            if (!result.defined()) {
+                result = new_first;
+            } else if (new_first.same_as(op->first) && result.same_as(op->rest)) {
+                result = op;
+            } else {
+                result = Block::make(new_first, result);
+            }
         }
+        return result;
     }
 
     Stmt visit(const IfThenElse *op) override {

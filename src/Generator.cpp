@@ -761,6 +761,7 @@ const std::map<std::string, Type> &get_halide_type_enum_map() {
         {"uint8", UInt(8)},
         {"uint16", UInt(16)},
         {"uint32", UInt(32)},
+        {"float16", Float(16)},
         {"float32", Float(32)},
         {"float64", Float(64)}
     };
@@ -866,7 +867,20 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
     for (const auto &lib : split_string(flags_info["-p"], ",")) {
         if (lib.empty()) continue;
 #ifdef _WIN32
-        if (LoadLibrary(lib.c_str()) != nullptr) {
+        int wide_len = MultiByteToWideChar(CP_UTF8, 0, lib.c_str(), -1, nullptr, 0);
+        if (wide_len < 1) {
+            cerr << "Failed to load: " << lib << " (unconvertible character)\n";
+            return 1;
+        }
+
+        std::vector<wchar_t> wide_lib(wide_len);
+        wide_len = MultiByteToWideChar(CP_UTF8, 0, lib.c_str(), -1, wide_lib.data(), wide_len);
+        if (wide_len < 1) {
+            cerr << "Failed to load: " << lib << " (unconvertible character)\n";
+            return 1;
+        }
+
+        if (LoadLibraryW(wide_lib.data()) != nullptr) {
             cerr << "Failed to load: " << lib << "\n";
             return 1;
         }

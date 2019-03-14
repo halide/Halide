@@ -35,9 +35,9 @@ void check(const Stmt &a, const Stmt &b) {
     if (!equal(simpler, b)) {
         std::cerr
             << "\nSimplification failure:\n"
-            << "Input: " << a << '\n'
-            << "Output: " << simpler << '\n'
-            << "Expected output: " << b << '\n';
+            << "Input:\n" << a << '\n'
+            << "Output:\n" << simpler << '\n'
+            << "Expected output:\n" << b << '\n';
         abort();
     }
 }
@@ -1217,6 +1217,47 @@ void check_boolean() {
     Stmt else_clause = AssertStmt::make(b2, Expr(33));
     check(IfThenElse::make(b1 == b2, then_clause, else_clause),
           IfThenElse::make(b1 == b2, then_clause, else_clause));
+
+    // Check common statements are pulled out of ifs.
+    check(IfThenElse::make(x < y, Evaluate::make(x+1), Evaluate::make(x+1)),
+          Evaluate::make(x+1));
+
+    check(IfThenElse::make(x < y,
+                           Block::make(Evaluate::make(x+1), Evaluate::make(x+2)),
+                           Block::make(Evaluate::make(x+1), Evaluate::make(x+3))),
+          Block::make(Evaluate::make(x+1),
+                      IfThenElse::make(x < y, Evaluate::make(x+2), Evaluate::make(x+3))));
+
+    check(IfThenElse::make(x < y,
+                           Block::make(Evaluate::make(x+1), Evaluate::make(x+2)),
+                           Block::make(Evaluate::make(x+3), Evaluate::make(x+2))),
+          Block::make(IfThenElse::make(x < y, Evaluate::make(x+1), Evaluate::make(x+3)),
+                      Evaluate::make(x+2)));
+
+
+    check(IfThenElse::make(x < y,
+                           Block::make(Evaluate::make(x+1), Evaluate::make(x+2)),
+                           Evaluate::make(x+2)),
+          Block::make(IfThenElse::make(x < y, Evaluate::make(x+1)),
+                      Evaluate::make(x+2)));
+
+    check(IfThenElse::make(x < y,
+                           Block::make(Evaluate::make(x+1), Evaluate::make(x+2)),
+                           Evaluate::make(x+1)),
+          Block::make(Evaluate::make(x+1),
+                      IfThenElse::make(x < y, Evaluate::make(x+2))));
+
+    check(IfThenElse::make(x < y,
+                           Evaluate::make(x+1),
+                           Block::make(Evaluate::make(x+1), Evaluate::make(x+2))),
+          Block::make(Evaluate::make(x+1),
+                      IfThenElse::make(x < y, Evaluate::make(0), Evaluate::make(x+2))));
+
+    check(IfThenElse::make(x < y,
+                           Evaluate::make(x+2),
+                           Block::make(Evaluate::make(x+1), Evaluate::make(x+2))),
+          Block::make(IfThenElse::make(x < y, Evaluate::make(0), Evaluate::make(x+1)),
+                      Evaluate::make(x+2)));
 
     // Simplifications of selects
     check(select(x == 3, 5, 7) + 7, select(x == 3, 12, 14));

@@ -106,7 +106,7 @@ struct thread_parker {
         EnterCriticalSection(&critical_section);
         while (should_park) {
             SleepConditionVariableCS(&condvar, &critical_section, -1);
-        } 
+        }
         LeaveCriticalSection(&critical_section);
     }
 
@@ -129,3 +129,4 @@ struct thread_parker {
 #include "synchronization_common.h"
 
 #include "thread_pool_common.h"
+
