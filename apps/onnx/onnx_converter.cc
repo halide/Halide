@@ -714,20 +714,17 @@ Halide::Func WinogradConv(const Tensor& W, const Halide::Func& input) {
   // is derived from the one used in the Winograd paper.
   static float BFilter[4][4] = {
       {1, 0, -1, 0}, {0, 1, 1, 0}, {0, -1, 1, 0}, {0, 1, 0, -1}};
-  // const Halide::Func B =
-  //    EncodeBufferAsFunc(Halide::Buffer<float>(&BFilter[0][0], 4, 4), {4, 4});
-  const Halide::Buffer<float> B(&BFilter[0][0], 4, 4);
+  const Halide::Func B =
+      EncodeBufferAsFunc(Halide::Buffer<float>(&BFilter[0][0], 4, 4), {4, 4});
 
   static float GFilter[3][4] = {
       {1, 0.5, 0.5, 0}, {0, 0.5, -0.5, 0}, {0, 0.5, 0.5, 1}};
-  // const Halide::Func G =
-  //    EncodeBufferAsFunc(Halide::Buffer<float>(&GFilter[0][0], 4, 3), {4, 3});
-  Halide::Buffer<float> G(&GFilter[0][0], 4, 3);
+   const Halide::Func G =
+      EncodeBufferAsFunc(Halide::Buffer<float>(&GFilter[0][0], 4, 3), {4, 3});
 
   static float AFilter[2][4] = {{1, 1, 1, 0}, {0, 1, -1, -1}};
-  // const Halide::Func A =
-  //    EncodeBufferAsFunc(Halide::Buffer<float>(&AFilter[0][0], 4, 2), {4, 2});
-  Halide::Buffer<float> A(&AFilter[0][0], 4, 2);
+   const Halide::Func A =
+      EncodeBufferAsFunc(Halide::Buffer<float>(&AFilter[0][0], 4, 2), {4, 2});
 
   Halide::Expr num_channels = W.shape[1];
   Halide::RDom dom1({{0, num_channels}}, input.name() + "_rdom1");
@@ -1531,18 +1528,14 @@ Node ConvertSoftmaxNode(
     denom_vars.push_back(rdom[i - axis]);
   }
 
+  Halide::Func in = inputs[0].rep;
+  Halide::Expr max = Halide::maximum(in(denom_vars));
   if (node.op_type() == "LogSoftmax") {
-    Halide::Func in = inputs[0].rep;
-    result.outputs[0].rep(indices) =
-        in(indices)-Halide::maximum(in(denom_vars)) -
-        Halide::log(Halide::sum(
-            Halide::exp(in(denom_vars)-Halide::maximum(in(denom_vars)))));
+    result.outputs[0].rep(indices) = in(indices) - max -
+        Halide::log(Halide::sum(Halide::exp(in(denom_vars) - max)));
   } else {
-    Halide::Func in = inputs[0].rep;
-    result.outputs[0].rep(indices) =
-        Halide::exp(in(indices)-Halide::maximum(in(denom_vars))) /
-        Halide::sum(
-            Halide::exp(in(denom_vars)-Halide::maximum(in(denom_vars))));
+    result.outputs[0].rep(indices) = Halide::exp(in(indices) - max) /
+        Halide::sum(Halide::exp(in(denom_vars) - max));
   }
   return result;
 }
@@ -2642,12 +2635,15 @@ Node ConvertLSTMNode(
     onnx::NodeProto* Hconcat = lstm_graph.add_node();
     Hconcat->set_name(node.output(0) + "_concat");
     Hconcat->set_op_type("Concat");
+    attr = Hconcat->add_attribute();
+    attr->set_name("axis");
+    attr->set_i(0);
     for (const onnx::NodeProto* input : Hs) {
       Hconcat->add_input(input->name());
     }
     Hconcat->add_output(Hconcat->name());
     onnx::NodeProto* H = lstm_graph.add_node();
-    Hconcat->set_name(node.output(0));
+    H->set_name(node.output(0));
     H->set_op_type("Unsqueeze");
     attr = H->add_attribute();
     attr->set_name("axes");
