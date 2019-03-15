@@ -2148,6 +2148,9 @@ check("v*.w += vrmpy(v*.b,v*.b)", hvx_width, i32_1 + i32(i8_1)*i8_1 + i32(i8_2)*
 int main(int argc, char **argv) {
     Test test;
 
+    printf("host is:      %s\n", get_host_target().to_string().c_str());
+    printf("HL_TARGET is: %s\n", get_target_from_environment().to_string().c_str());
+
     if (argc > 1) {
         test.filter = argv[1];
         num_threads = 1;

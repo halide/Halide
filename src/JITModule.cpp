@@ -424,7 +424,8 @@ void JITModule::add_symbol_for_export(const std::string &name, const Symbol &ext
     jit_module->exports[name] = extern_symbol;
 }
 
-void JITModule::add_extern_for_export(const std::string &name, const ExternCFunction &extern_c_function) {
+JITModule::Symbol JITModule::add_extern_for_export(const std::string &name,
+                                                   const ExternCFunction &extern_c_function) {
     Symbol symbol;
     symbol.address = extern_c_function.address();
 
@@ -456,6 +457,7 @@ void JITModule::add_extern_for_export(const std::string &name, const ExternCFunc
 
     symbol.llvm_type = llvm::FunctionType::get(ret_type, llvm_arg_types, false);
     jit_module->exports[name] = symbol;
+    return symbol;
 }
 
 void JITModule::memoization_cache_set_size(int64_t size) const {
