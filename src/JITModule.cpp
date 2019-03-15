@@ -1,3 +1,4 @@
+
 #include <mutex>
 #include <set>
 #include <stdint.h>
@@ -373,6 +374,28 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
     jit_module->entrypoint = entrypoint;
     jit_module->argv_entrypoint = argv_entrypoint;
     jit_module->name = function_name;
+}
+
+JITModule JITModule::make_trampolines_module(const Target &target_arg,
+                                             const std::map<std::string, JITExtern> &externs,
+                                             const std::string &suffix,
+                                             const std::vector<JITModule> &deps) {
+    Target target = target_arg;
+    target.set_feature(Target::JIT);
+
+    JITModule result;
+    std::unique_ptr<CodeGen_LLVM> codegen(CodeGen_LLVM::new_for_target(target, result.jit_module->context));
+    codegen->init_for_codegen("trampolines");
+    std::vector<std::string> requested_exports;
+    for (const std::pair<std::string, JITExtern> &extern_entry : externs) {
+        const std::string &name = extern_entry.first;
+        Symbol sym = result.add_extern_for_export(name, extern_entry.second.extern_c_function());
+        codegen->add_trampoline_wrapper(cast<llvm::FunctionType>(sym.llvm_type), name + suffix, name);
+        requested_exports.push_back(name + suffix);
+    }
+    result.compile_module(codegen->finalize_module(), "", target, deps,
+                          requested_exports);
+    return result;
 }
 
 const std::map<std::string, JITModule::Symbol> &JITModule::exports() const {
