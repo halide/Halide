@@ -50,6 +50,19 @@ CodeGen_X86::CodeGen_X86(Target t) : CodeGen_Posix(complete_x86_target(t)) {
     user_assert(llvm_X86_enabled) << "llvm build not configured with X86 target enabled.\n";
 }
 
+void CodeGen_X86::set_llvm_command_line_options() const {
+    CodeGen_Posix::set_llvm_command_line_options();
+
+    // -enable-mssa-loop-dependency=1 can dramatically improve
+    // compiletime (with no downside in runtime). We are limiting
+    // this to the x86 backend for now.
+    const std::vector<const char *> options = {
+        "halide-x86-backend",
+        "-enable-mssa-loop-dependency=1"
+    };
+    cl::ParseCommandLineOptions(options.size(), options.data());
+}
+
 namespace {
 
 // i32(i16_a)*i32(i16_b) +/- i32(i16_c)*i32(i16_d) can be done by

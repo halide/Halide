@@ -32,6 +32,7 @@ protected:
     int isa_version;
     bool use_soft_float_abi() const override;
     int native_vector_bits() const override;
+    void set_llvm_command_line_options() const override;
 
     llvm::Function *define_hvx_intrinsic(int intrin, Type ret_ty,
                                          const std::string &name,

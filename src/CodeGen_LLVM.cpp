@@ -334,19 +334,6 @@ CodeGen_LLVM *CodeGen_LLVM::new_for_target(const Target &target,
 void CodeGen_LLVM::initialize_llvm() {
     static std::once_flag init_llvm_once;
     std::call_once(init_llvm_once, []() {
-        // You can hack in command-line args to llvm with the
-        // environment variable HL_LLVM_ARGS, e.g. HL_LLVM_ARGS="-print-after-all"
-        std::string args = get_env_variable("HL_LLVM_ARGS");
-        if (!args.empty()) {
-            vector<std::string> arg_vec = split_string(args, " ");
-            vector<const char *> c_arg_vec;
-            c_arg_vec.push_back("llc");
-            for (const std::string &s : arg_vec) {
-                c_arg_vec.push_back(s.c_str());
-            }
-            cl::ParseCommandLineOptions((int)(c_arg_vec.size()), &c_arg_vec[0], "Halide compiler\n");
-        }
-
         InitializeNativeTarget();
         InitializeNativeTargetAsmPrinter();
         InitializeNativeTargetAsmParser();
@@ -366,6 +353,22 @@ void CodeGen_LLVM::initialize_llvm() {
         #include <llvm/Config/AsmPrinters.def>
         #undef LLVM_ASM_PRINTER
     });
+}
+
+void CodeGen_LLVM::set_llvm_command_line_options() const {
+    // ResetAllOptionOccurrences() doesn't actually reset the values;
+    // it just resets the counts of what flags have been seen.
+    cl::ResetAllOptionOccurrences();
+
+    // To actually reset all the value to their defaults, we must also do this:
+    for (auto &OM : cl::getRegisteredOptions()) {
+      OM.second->setDefault();
+    }
+
+    // You can hack in command-line args to llvm with the
+    // environment variable HL_LLVM_ARGS, e.g. HL_LLVM_ARGS="-print-after-all"
+    cl::ParseEnvironmentOptions("halide", "HL_LLVM_ARGS",
+                                "Halide compiler\n");
 }
 
 void CodeGen_LLVM::init_context() {
@@ -500,6 +503,8 @@ MangledNames get_mangled_names(const LoweredFunc &f, const Target &target) {
 }  // namespace
 
 std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
+    set_llvm_command_line_options();
+
     init_module();
 
     debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";

@@ -100,6 +100,12 @@ protected:
     virtual bool use_soft_float_abi() const = 0;
     // @}
 
+    /** This is called by the compile() method before doing anything else;
+     * it is intended to give subclasses a chance to customize llvm command-line
+     * flags (via ParseCommandLineOptions() or ParseEnvironmentOptions()) if necessary.
+     * Overrides should always call the base method first. */
+    virtual void set_llvm_command_line_options() const;
+
     /** Should indexing math be promoted to 64-bit on platforms with
      * 64-bit pointers? */
     virtual bool promote_indices() const {return true;}
