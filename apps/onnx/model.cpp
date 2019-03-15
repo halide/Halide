@@ -5,8 +5,8 @@
 #include <sys/time.h>
 #include <random>
 #include <unordered_set>
-#include "sysml/halide/common_types.h"
-#include "sysml/halide/onnx_converter.h"
+#include "common_types.h"
+#include "onnx_converter.h"
 
 namespace py = pybind11;
 

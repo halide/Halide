@@ -1,6 +1,6 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 import unittest
-from sysml.halide.model import Model
+from model import Model
 from onnx import helper
 from onnx import TensorProto
 import numpy as np
@@ -8,13 +8,11 @@ import numpy as np
 
 class ModelTest(unittest.TestCase):
     def setUp(self):
-        pass
-
+        pass 
     def test_empty_model(self):
         model = Model()
         with self.assertRaises(Exception):
-            model.GenerateSchedule()
-
+            model.GenerateSchedule() 
     def test_small_model(self):
         # Create one input
         X = helper.make_tensor_value_info('X', TensorProto.FLOAT, [2, 3])
@@ -32,7 +30,8 @@ class ModelTest(unittest.TestCase):
         model.BuildFromOnnxModel(onnx_model)
         schedule = model.OptimizeSchedule()
         schedule = schedule.replace('\n', ' ')
-        expected_schedule = r'// Target: .+// MachineParams: .+// Delete this line if not using Generator Pipeline pipeline = get_pipeline\(\);.+Func Y = pipeline.get_func\(1\);.+{.+}.+'
+        print("DEBUG:", schedule)
+        expected_schedule = r'// Target: .+// MachineParams: .+// Delete this line if not using Generator Pipeline pipeline = get_pipeline\(\);.+Func Y_1 = pipeline.get_func\(1\);.+{.+}.+'
         self.assertRegex(schedule, expected_schedule)
 
         input = np.random.rand(2, 3) - 0.5
@@ -40,8 +39,7 @@ class ModelTest(unittest.TestCase):
         self.assertEqual(1, len(outputs))
         output = outputs[0]
         expected = np.abs(input)
-        np.testing.assert_allclose(expected, output)
-
+        np.testing.assert_allclose(expected, output) 
     def test_scalars(self):
         # Create 2 inputs
         X = helper.make_tensor_value_info('X', TensorProto.INT32, [])
@@ -60,6 +58,7 @@ class ModelTest(unittest.TestCase):
         model.BuildFromOnnxModel(onnx_model)
         schedule = model.OptimizeSchedule()
         schedule = schedule.replace('\n', ' ')
+        print("DEBUG:", schedule)
         expected_schedule = r'// Target: .+// MachineParams: .+// Delete this line if not using Generator Pipeline pipeline = get_pipeline\(\);.+Func Z = pipeline.get_func\(2\);.+{.+}.+'
         self.assertRegex(schedule, expected_schedule)
 

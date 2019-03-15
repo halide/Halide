@@ -9,8 +9,7 @@ ONNX_SRC_DIR ?= $(error ONNX_SRC_DIR must provided)
 PROTOC = protoc
 PROTOCFLAGS = --cpp_out=.
 
-# Protobuff specific compiler & linker args.
-CXXFLAGS += -DGOOGLE_PROTOBUF_NO_RTTI -Wno-sign-compare --no-warning
+CXXFLAGS += -DGOOGLE_PROTOBUF_NO_RTTI -DONNX_RT_NAMESPACE -Wno-sign-compare --no-warning
 LDFLAGS += -lprotobuf
 
 
@@ -22,6 +21,7 @@ $(BIN)/onnx.proto:
 
 # protoc generates two files
 $(BIN)/onnx.pb.cc: $(BIN)/onnx.proto
+	@sed -i -e 's/package onnx/package onnx_rti/g' $<
 	$(PROTOC) $(PROTOCFLAGS) $<
 
 $(BIN)/onnx.pb.h: $(BIN)/onnx.pb.cc
@@ -46,9 +46,18 @@ PYBIND11_CFLAGS = $(shell $(PYTHON) -m pybind11 --includes) -frtti
 
 PY_EXT = $(shell $(PYTHON)-config --extension-suffix)
 
-PYCXXFLAGS =  $(CXXFLAGS) $(PYBIND11_CFLAGS)
+PYCXXFLAGS =  $(CXXFLAGS) $(PYBIND11_CFLAGS) -DONNX_RT_NAMESPACE
 HALIDE_LIB = $(HALIDE_DISTRIB_PATH)/bin/libHalide.so
 
 # Python extenstion for HalideModel
 $(BIN)/model_cpp: model.cpp $(ONNX_CONVERTER_LIB)
 	$(CXX) $(PYCXXFLAGS) -O3 -Wall -shared -fPIC -I$(BIN) $< $(ONNX_CONVERTER_LIB) $(HALIDE_LIB) -o $@$(PY_EXT) $(LDFLAGS)
+
+
+clean:
+	rm -rf $(BIN)
+
+# Run python unittests.
+test_model_python: $(BIN)/model_cpp
+	$(PYTHON) -m unittest model_test
+

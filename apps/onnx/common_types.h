@@ -1,7 +1,7 @@
 #pragma once
 
 #include <Halide.h>
-#include "sysml/halide/onnx_converter.h"
+#include "onnx_converter.h"
 
 struct HalideModel {
   std::shared_ptr<Model> model;
