@@ -1456,6 +1456,37 @@ Pipeline GeneratorBase::get_pipeline() {
     return pipeline;
 }
 
+void merge_aot_parameter(const Parameter &aot_param, Parameter* p) {
+    internal_assert(aot_param.dimensions() == p->dimensions());
+    for (int d = 0; d < p->dimensions(); d++) {
+        if (!p->min_constraint(d).same_as(aot_param.min_constraint(d))) {
+            debug(2) << "  Updating min_constraint(" << d << ") for " << p->name() << " -> " << aot_param.min_constraint(d) << "\n";
+            p->set_min_constraint(d, aot_param.min_constraint(d));
+        }
+        if (!p->extent_constraint(d).same_as(aot_param.extent_constraint(d))) {
+            debug(2) << "  Updating extent_constraint(" << d << ") for " << p->name() << " -> " << aot_param.extent_constraint(d) << "\n";
+            p->set_extent_constraint(d, aot_param.extent_constraint(d));
+        }
+        if (!p->stride_constraint(d).same_as(aot_param.stride_constraint(d))) {
+            debug(2) << "  Updating stride_constraint(" << d << ") for " << p->name() << " -> " << aot_param.stride_constraint(d) << "\n";
+            p->set_stride_constraint(d, aot_param.stride_constraint(d));
+        }
+        if (!p->min_constraint_estimate(d).same_as(aot_param.min_constraint_estimate(d))) {
+            debug(2) << "  Updating min_constraint_estimate(" << d << ") for " << p->name() << " -> " << aot_param.min_constraint_estimate(d) << "\n";
+            p->set_min_constraint_estimate(d, aot_param.min_constraint_estimate(d));
+        }
+        if (!p->extent_constraint_estimate(d).same_as(aot_param.extent_constraint_estimate(d))) {
+            debug(2) << "  Updating extent_constraint_estimate(" << d << ") for " << p->name() << " -> " << aot_param.extent_constraint_estimate(d) << "\n";
+            p->set_extent_constraint_estimate(d, aot_param.extent_constraint_estimate(d));
+        }
+    }
+    // alignment is an int, not an Expr
+    if (p->host_alignment() != aot_param.host_alignment()) {
+        debug(0) << "  Updating host_alignment() for " << p->name() << " -> " << aot_param.host_alignment() << "\n";
+        p->set_host_alignment(aot_param.host_alignment());
+    }
+}
+
 Module GeneratorBase::build_module(const std::string &function_name,
                                    const LinkageType linkage_type) {
     std::string auto_schedule_result;
@@ -1465,6 +1496,37 @@ Module GeneratorBase::build_module(const std::string &function_name,
     }
 
     ParamInfo &pi = param_info();
+
+    {
+        // If we had any Input<Func> or Output<Func> that had aot-only constraints
+        // placed upon them, update the Parameters now before we do anything else.
+        // (Some of this could be consolidated into the loops lower down, but doing it
+        // here makes the separation of issues more obvious.)
+        for (auto input : pi.filter_inputs) {
+            for (size_t i = 0; i < input->parameters_.size(); i++) {
+                auto &p = input->parameters_[i];
+                auto it = input->aot_parameters_.find(i);
+                if (it != input->aot_parameters_.end()) {
+                    debug(1) << "Updating dimensions_and_alignment() for input " << input->name() << "[" << i << "]\n";
+                    merge_aot_parameter(it->second, &p);
+                }
+            }
+        }
+
+        for (auto *output : pi.filter_outputs) {
+            for (size_t i = 0; i < output->funcs().size(); ++i) {
+                auto it = output->aot_parameters_.find(i);
+                if (it != output->aot_parameters_.end()) {
+                    debug(01) << "Updating dimensions_and_alignment() for output " << output->name() << "[" << i << "]\n";
+                    auto output_buffers = output->funcs()[i].function().output_buffers();
+                    for (auto &p : output_buffers) {
+                        merge_aot_parameter(it->second, &p);
+                    }
+                }
+            }
+        }
+    }
+
     std::vector<Argument> filter_arguments;
     for (auto input : pi.filter_inputs) {
         for (const auto &p : input->parameters_) {
@@ -1478,7 +1540,6 @@ Module GeneratorBase::build_module(const std::string &function_name,
         result.append(map_entry.second);
     }
 
-    auto outputs = pipeline.outputs();
     for (auto *output : pi.filter_outputs) {
         for (size_t i = 0; i < output->funcs().size(); ++i) {
             auto from = output->funcs()[i].name();
@@ -1689,6 +1750,17 @@ void GIOBase::check_matching_array_size(size_t size) const {
     } else {
         array_size_ = size;
     }
+}
+
+
+Parameter GIOBase::get_aot_parameter(int index) {
+    auto it = aot_parameters_.find(index);
+    if (it != aot_parameters_.end()) {
+        return it->second;
+    }
+    auto p = Parameter(type(), kind() != IOKind::Scalar, dims(), array_name(index));
+    aot_parameters_[index] = p;
+    return p;
 }
 
 GeneratorInputBase::GeneratorInputBase(size_t array_size,

@@ -10,11 +10,11 @@ using Halide::Runtime::Buffer;
 const int kSize = 32;
 
 template<typename Type>
-Buffer<Type> make_image(int extra) {
-    Buffer<Type> im(kSize, kSize, 3);
+Buffer<Type> make_image(int extra, int channels = 3) {
+    Buffer<Type> im(kSize, kSize, channels);
     for (int x = 0; x < kSize; x++) {
         for (int y = 0; y < kSize; y++) {
-            for (int c = 0; c < 3; c++) {
+            for (int c = 0; c < channels; c++) {
                 im(x, y, c) = static_cast<Type>(x + y + c + extra);
             }
         }
@@ -45,17 +45,17 @@ void verify(const Buffer<InputType> &input, float float_arg, int int_arg, const 
 }
 
 int main(int argc, char **argv) {
-    Buffer<uint8_t> buffer_input = make_image<uint8_t>(0);
-    Buffer<float> simple_input = make_image<float>(0);
-    Buffer<float> array_input0 = make_image<float>(0);
-    Buffer<float> array_input1 = make_image<float>(1);
+    Buffer<uint8_t> buffer_input = make_image<uint8_t>(0, 5);
+    Buffer<float> simple_input = make_image<float>(0, 7);
+    Buffer<float> array_input0 = make_image<float>(0, 9);
+    Buffer<float> array_input1 = make_image<float>(1, 11);
     Buffer<float> typed_buffer_output(kSize, kSize, 3);
     Buffer<float> untyped_buffer_output(kSize, kSize, 3);
     Buffer<float> tupled_output0(kSize, kSize, 3);
     Buffer<int32_t> tupled_output1(kSize, kSize, 3);
     Buffer<uint8_t> array_buffer_input0 = make_image<uint8_t>(0);
     Buffer<uint8_t> array_buffer_input1 = make_image<uint8_t>(1);
-    Buffer<float> simple_output(kSize, kSize, 3);
+    Buffer<float> simple_output(kSize, kSize, 5);
     Buffer<float> tuple_output0(kSize, kSize, 3), tuple_output1(kSize, kSize, 3);
     Buffer<int16_t> array_output0(kSize, kSize), array_output1(kSize, kSize);
     Buffer<uint8_t> static_compiled_buffer_output(kSize, kSize, 3);

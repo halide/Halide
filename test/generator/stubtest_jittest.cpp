@@ -11,11 +11,11 @@ const int kSize = 32;
 Var x, y, c;
 
 template<typename Type>
-Buffer<Type> make_image(int extra) {
-    Buffer<Type> im(kSize, kSize, 3);
+Buffer<Type> make_image(const std::string &name, int channels, int extra = 0) {
+    Buffer<Type> im(kSize, kSize, channels, name);
     for (int x = 0; x < kSize; x++) {
         for (int y = 0; y < kSize; y++) {
-            for (int c = 0; c < 3; c++) {
+            for (int c = 0; c < channels; c++) {
                 im(x, y, c) = static_cast<Type>(x + y + c + extra);
             }
         }
@@ -48,11 +48,11 @@ void verify(const Buffer<InputType> &input, float float_arg, int int_arg, const 
 int main(int argc, char **argv) {
     constexpr int kArrayCount = 2;
 
-    Buffer<uint8_t> buffer_input = make_image<uint8_t>(0);
-    Buffer<float> simple_input = make_image<float>(0);
+    Buffer<uint8_t> buffer_input = make_image<uint8_t>("buffer_inputz", 3);
+    Buffer<float> simple_input = make_image<float>("simple_inputz", 5);
     Buffer<float> array_input[kArrayCount] = {
-        make_image<float>(0),
-        make_image<float>(1)
+        make_image<float>("array_input_0z", 3, 0),
+        make_image<float>("array_input_1z", 3, 1)
     };
 
     std::vector<int> int_args = { 33, 66 };
@@ -67,19 +67,19 @@ int main(int argc, char **argv) {
         GeneratorContext(get_jit_target_from_environment()),
         // Use aggregate-initialization syntax to fill in an Inputs struct.
         {
-            buffer_input,  // typed_buffer_input
-            buffer_input,  // untyped_buffer_input
-            { buffer_input, buffer_input },
-            Func(simple_input),
-            { Func(array_input[0]), Func(array_input[1]) },
-            1.25f,
-            int_args_expr
+            buffer_input,                                    // typed_buffer_input
+            buffer_input,                                    // untyped_buffer_input
+            { buffer_input, buffer_input },                  // array_buffer_input
+            Func(simple_input),                              // simple_input
+            { Func(array_input[0]), Func(array_input[1]) },  // array_input
+            1.25f,                                           // float_arg
+            int_args_expr                                    // int_arg
         },
         gp);
 
     gp.intermediate_level.set(LoopLevel(gen.tuple_output, gen.tuple_output.args().at(1)));
 
-    Realization simple_output_realized = gen.simple_output.realize(kSize, kSize, 3);
+    Realization simple_output_realized = gen.simple_output.realize(kSize, kSize, 5);
     Buffer<float> s0 = simple_output_realized;
     verify(array_input[0], 1.f, 0, s0);
 

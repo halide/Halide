@@ -1214,6 +1214,38 @@ private:
     }
 };
 
+// TODO(srj): this name is terrible
+class DimensionsAndAlignment {
+public:
+    Dimension dim(int i) {
+        return Dimension(parameter_, i, Func());
+    }
+
+    const Dimension dim(int i) const {
+        return Dimension(parameter_, i, Func());
+    }
+
+    int host_alignment() const {
+        return parameter_.host_alignment();
+    }
+
+    void set_host_alignment(int bytes) {
+        parameter_.set_host_alignment(bytes);
+    }
+
+    int dimensions() const {
+        return parameter_.dimensions();
+    }
+
+private:
+    Parameter parameter_;
+
+    template<typename T> friend class GeneratorInput_Func;
+    template<typename T> friend class GeneratorOutput_Func;
+
+    explicit DimensionsAndAlignment(const Parameter &p) : parameter_(p) {}
+};
+
 /** GIOBase is the base class for all GeneratorInput<> and GeneratorOutput<>
  * instantiations; it is not part of the public API and should never be
  * used directly by user code.
@@ -1259,8 +1291,6 @@ protected:
             int dims);
     virtual ~GIOBase();
 
-    friend class GeneratorBase;
-
     mutable int array_size_;   // always 1 if is_array() == false.
                                // -1 if is_array() == true but unspecified.
 
@@ -1272,6 +1302,7 @@ protected:
     // Exactly one of these will have nonzero length
     std::vector<Func> funcs_;
     std::vector<Expr> exprs_;
+    std::map<int, Parameter> aot_parameters_;
 
     // Generator which owns this Input or Output. Note that this will be null
     // initially; the GeneratorBase itself will set this field when it initially
@@ -1295,7 +1326,10 @@ protected:
 
     virtual const char *input_or_output() const = 0;
 
+    Parameter get_aot_parameter(int index);
+
 private:
+    friend class GeneratorBase;
     template<typename T> friend class GeneratorParam_Synthetic;
 
     // No copy
@@ -1678,6 +1712,10 @@ public:
     HALIDE_FORWARD_METHOD_CONST(Func, value)
     HALIDE_FORWARD_METHOD_CONST(Func, values)
     // }@
+
+    DimensionsAndAlignment dimensions_and_alignment(int index = 0) {
+        return DimensionsAndAlignment(this->get_aot_parameter(index));
+    }
 };
 
 
@@ -2317,6 +2355,10 @@ public:
             f.estimate(var, min, extent);
         }
         return *this;
+    }
+
+    DimensionsAndAlignment dimensions_and_alignment(int index = 0) {
+        return DimensionsAndAlignment(this->get_aot_parameter(index));
     }
 };
 

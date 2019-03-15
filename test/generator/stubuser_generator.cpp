@@ -7,8 +7,8 @@ using StubNS1::StubNS2::StubTest;
 namespace {
 
 template<typename Type, int size = 32>
-Buffer<Type> make_image() {
-    Buffer<Type> im(size, size, 3);
+Buffer<Type> make_image(const std::string &name) {
+    Buffer<Type> im(size, size, 3, name);
     for (int x = 0; x < size; x++) {
         for (int y = 0; y < size; y++) {
             for (int c = 0; c < 3; c++) {
@@ -34,7 +34,7 @@ public:
     void generate() {
         Var x{"x"}, y{"y"}, c{"c"};
 
-        Buffer<uint8_t> constant_image = make_image<uint8_t>();
+        Buffer<uint8_t> constant_image = make_image<uint8_t>("constant_image");
 
         // We'll explicitly fill in the struct fields by name, just to show
         // it as an option. (Alternately, we could fill it in by using
