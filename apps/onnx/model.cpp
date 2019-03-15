@@ -5,15 +5,15 @@
 #include <sys/time.h>
 #include <random>
 #include <unordered_set>
-#include "common_types.h"
-#include "onnx_converter.h"
+#include "sysml/halide/common_types.h"
+#include "sysml/halide/onnx_converter.h"
 
 namespace py = pybind11;
 
 static HalideModel ConvertOnnxModel(
     std::string onnx_model_str,
     std::string device) {
-  onnx::ModelProto onnx_model;
+  onnx_namespace::ModelProto onnx_model;
   onnx_model.ParseFromString(onnx_model_str);
 
   if (onnx_model.graph().output_size() == 0) {
@@ -112,37 +112,37 @@ static void PrepareInput(
   Halide::ImageParam& input = pipeline.model->inputs.at(input_name);
   const int input_type = pipeline.input_types.at(input_name);
   switch (input_type) {
-    case onnx::TensorProto::BOOL:
+    case onnx_namespace::TensorProto::BOOL:
       PrepareImageParam<bool, T, Random>(input, input_shape, &input_array);
       break;
-    case onnx::TensorProto::INT8:
+    case onnx_namespace::TensorProto::INT8:
       PrepareImageParam<int8_t, T, Random>(input, input_shape, &input_array);
       break;
-    case onnx::TensorProto::INT16:
+    case onnx_namespace::TensorProto::INT16:
       PrepareImageParam<int16_t, T, Random>(input, input_shape, &input_array);
       break;
-    case onnx::TensorProto::INT32:
+    case onnx_namespace::TensorProto::INT32:
       PrepareImageParam<int32_t, T, Random>(input, input_shape, &input_array);
       break;
-    case onnx::TensorProto::INT64:
+    case onnx_namespace::TensorProto::INT64:
       PrepareImageParam<int64_t, T, Random>(input, input_shape, &input_array);
       break;
-    case onnx::TensorProto::UINT8:
+    case onnx_namespace::TensorProto::UINT8:
       PrepareImageParam<uint8_t, T, Random>(input, input_shape, &input_array);
       break;
-    case onnx::TensorProto::UINT16:
+    case onnx_namespace::TensorProto::UINT16:
       PrepareImageParam<uint8_t, T, Random>(input, input_shape, &input_array);
       break;
-    case onnx::TensorProto::UINT32:
+    case onnx_namespace::TensorProto::UINT32:
       PrepareImageParam<uint32_t, T, Random>(input, input_shape, &input_array);
       break;
-    case onnx::TensorProto::UINT64:
+    case onnx_namespace::TensorProto::UINT64:
       PrepareImageParam<uint64_t, T, Random>(input, input_shape, &input_array);
       break;
-    case onnx::TensorProto::FLOAT:
+    case onnx_namespace::TensorProto::FLOAT:
       PrepareImageParam<float, T, Random>(input, input_shape, &input_array);
       break;
-    case onnx::TensorProto::DOUBLE:
+    case onnx_namespace::TensorProto::DOUBLE:
       PrepareImageParam<double, T, Random>(input, input_shape, &input_array);
       break;
     default:
@@ -216,47 +216,47 @@ static void PrepareRandomInput(
   }
 
   switch (t.type) {
-    case onnx::TensorProto::BOOL: {
+    case onnx_namespace::TensorProto::BOOL: {
       PrepareInput<bool>(pipeline, input_name, input_shape);
       break;
     }
-    case onnx::TensorProto::INT8: {
+    case onnx_namespace::TensorProto::INT8: {
       PrepareInput<int8_t>(pipeline, input_name, input_shape);
       break;
     }
-    case onnx::TensorProto::INT16: {
+    case onnx_namespace::TensorProto::INT16: {
       PrepareInput<int16_t>(pipeline, input_name, input_shape);
       break;
     }
-    case onnx::TensorProto::INT32: {
+    case onnx_namespace::TensorProto::INT32: {
       PrepareInput<int32_t>(pipeline, input_name, input_shape);
       break;
     }
-    case onnx::TensorProto::INT64: {
+    case onnx_namespace::TensorProto::INT64: {
       PrepareInput<int64_t>(pipeline, input_name, input_shape);
       break;
     }
-    case onnx::TensorProto::UINT8: {
+    case onnx_namespace::TensorProto::UINT8: {
       PrepareInput<uint8_t>(pipeline, input_name, input_shape);
       break;
     }
-    case onnx::TensorProto::UINT16: {
+    case onnx_namespace::TensorProto::UINT16: {
       PrepareInput<uint16_t>(pipeline, input_name, input_shape);
       break;
     }
-    case onnx::TensorProto::UINT32: {
+    case onnx_namespace::TensorProto::UINT32: {
       PrepareInput<uint32_t>(pipeline, input_name, input_shape);
       break;
     }
-    case onnx::TensorProto::UINT64: {
+    case onnx_namespace::TensorProto::UINT64: {
       PrepareInput<uint64_t>(pipeline, input_name, input_shape);
       break;
     }
-    case onnx::TensorProto::FLOAT: {
+    case onnx_namespace::TensorProto::FLOAT: {
       PrepareInput<float>(pipeline, input_name, input_shape);
       break;
     }
-    case onnx::TensorProto::DOUBLE: {
+    case onnx_namespace::TensorProto::DOUBLE: {
       PrepareInput<double>(pipeline, input_name, input_shape);
       break;
     }
@@ -328,27 +328,27 @@ py::array_t<T> ExportOutput(
 
 static Halide::Type onnx_type_to_halide_type(int t) {
   switch (t) {
-    case onnx::TensorProto::FLOAT:
+    case onnx_namespace::TensorProto::FLOAT:
       return Halide::Type(halide_type_float, 8 * sizeof(float), 1);
-    case onnx::TensorProto::UINT8:
+    case onnx_namespace::TensorProto::UINT8:
       return Halide::Type(halide_type_uint, 8 * sizeof(uint8_t), 1);
-    case onnx::TensorProto::INT8:
+    case onnx_namespace::TensorProto::INT8:
       return Halide::Type(halide_type_int, 8 * sizeof(int8_t), 1);
-    case onnx::TensorProto::UINT16:
+    case onnx_namespace::TensorProto::UINT16:
       return Halide::Type(halide_type_uint, 8 * sizeof(uint16_t), 1);
-    case onnx::TensorProto::INT16:
+    case onnx_namespace::TensorProto::INT16:
       return Halide::Type(halide_type_int, 8 * sizeof(int16_t), 1);
-    case onnx::TensorProto::INT32:
+    case onnx_namespace::TensorProto::INT32:
       return Halide::Type(halide_type_int, 8 * sizeof(int32_t), 1);
-    case onnx::TensorProto::INT64:
+    case onnx_namespace::TensorProto::INT64:
       return Halide::Type(halide_type_int, 8 * sizeof(int64_t), 1);
-    case onnx::TensorProto::BOOL:
+    case onnx_namespace::TensorProto::BOOL:
       return Halide::Type(halide_type_uint, 1, 1);
-    case onnx::TensorProto::DOUBLE:
+    case onnx_namespace::TensorProto::DOUBLE:
       return Halide::Type(halide_type_float, 8 * sizeof(double), 1);
-    case onnx::TensorProto::UINT32:
+    case onnx_namespace::TensorProto::UINT32:
       return Halide::Type(halide_type_uint, 8 * sizeof(uint32_t), 1);
-    case onnx::TensorProto::UINT64:
+    case onnx_namespace::TensorProto::UINT64:
       return Halide::Type(halide_type_uint, 8 * sizeof(uint64_t), 1);
     default:
       throw std::domain_error("Unsupported output type");
@@ -398,37 +398,37 @@ static std::vector<py::array> Run(
 
   for (int i = 0; i < num_outputs; ++i) {
     switch (pipeline.output_types[i]) {
-      case onnx::TensorProto::FLOAT:
+      case onnx_namespace::TensorProto::FLOAT:
         results.push_back(ExportOutput<float>(outputs[i], pipeline, i));
         break;
-      case onnx::TensorProto::UINT8:
+      case onnx_namespace::TensorProto::UINT8:
         results.push_back(ExportOutput<uint8_t>(outputs[i], pipeline, i));
         break;
-      case onnx::TensorProto::INT8:
+      case onnx_namespace::TensorProto::INT8:
         results.push_back(ExportOutput<int8_t>(outputs[i], pipeline, i));
         break;
-      case onnx::TensorProto::UINT16:
+      case onnx_namespace::TensorProto::UINT16:
         results.push_back(ExportOutput<uint16_t>(outputs[i], pipeline, i));
         break;
-      case onnx::TensorProto::INT16:
+      case onnx_namespace::TensorProto::INT16:
         results.push_back(ExportOutput<int16_t>(outputs[i], pipeline, i));
         break;
-      case onnx::TensorProto::INT32:
+      case onnx_namespace::TensorProto::INT32:
         results.push_back(ExportOutput<int32_t>(outputs[i], pipeline, i));
         break;
-      case onnx::TensorProto::INT64:
+      case onnx_namespace::TensorProto::INT64:
         results.push_back(ExportOutput<int64_t>(outputs[i], pipeline, i));
         break;
-      case onnx::TensorProto::BOOL:
+      case onnx_namespace::TensorProto::BOOL:
         results.push_back(ExportOutput<bool>(outputs[i], pipeline, i));
         break;
-      case onnx::TensorProto::DOUBLE:
+      case onnx_namespace::TensorProto::DOUBLE:
         results.push_back(ExportOutput<double>(outputs[i], pipeline, i));
         break;
-      case onnx::TensorProto::UINT32:
+      case onnx_namespace::TensorProto::UINT32:
         results.push_back(ExportOutput<uint32_t>(outputs[i], pipeline, i));
         break;
-      case onnx::TensorProto::UINT64:
+      case onnx_namespace::TensorProto::UINT64:
         results.emplace_back(ExportOutput<uint64_t>(outputs[i], pipeline, i));
         break;
       default:
