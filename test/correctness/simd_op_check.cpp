@@ -254,6 +254,20 @@ struct Test {
             // accuracy differences between vectors and scalars.
             if (e > 0.001) {
                 error_msg << "The vector and scalar versions of " << name << " disagree. Maximum error: " << e << "\n";
+
+                string error_filename = output_directory + "error_" + name + ".s";
+                error.compile_to_assembly(error_filename, arg_types, target);
+
+                std::ifstream error_file;
+                error_file.open(error_filename);
+
+                error_msg << "Error assembly: \n";
+                string line;
+                while (getline(error_file, line)) {
+                    error_msg << line << "\n";
+                }
+
+                error_file.close();
             }
         }
 
