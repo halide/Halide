@@ -2626,6 +2626,7 @@ protected:
     using Pipeline = Halide::Pipeline;
     using PrefetchBoundStrategy = Halide::PrefetchBoundStrategy;
     using RDom = Halide::RDom;
+    using RVar = Halide::RVar;
     using TailStrategy = Halide::TailStrategy;
     using Target = Halide::Target;
     using Tuple = Halide::Tuple;
