@@ -1,6 +1,6 @@
 #include <cmath>
 #include <fstream>
-#include <set>
+#include <unordered_map>
 
 #if defined(_MSC_VER) && !defined(NOMINMAX)
 #define NOMINMAX
@@ -243,9 +243,9 @@ public:
     StubEmitter(std::ostream &dest,
                 const std::string &generator_registered_name,
                 const std::string &generator_stub_name,
-                const std::vector<Internal::GeneratorParamBase *>& generator_params,
-                const std::vector<Internal::GeneratorInputBase *>& inputs,
-                const std::vector<Internal::GeneratorOutputBase *>& outputs)
+                const std::vector<Internal::GeneratorParamBase *> &generator_params,
+                const std::vector<Internal::GeneratorInputBase *> &inputs,
+                const std::vector<Internal::GeneratorOutputBase *> &outputs)
         : stream(dest),
           generator_registered_name(generator_registered_name),
           generator_stub_name(generator_stub_name),
@@ -489,7 +489,7 @@ void StubEmitter::emit() {
     }
     stream << "\n";
 
-    for (auto p : generator_params) {
+    for (auto *p : generator_params) {
         std::string decl = p->get_type_decls();
         if (decl.empty()) continue;
         stream << decl << "\n";
@@ -713,13 +713,14 @@ GeneratorStub::GeneratorStub(const GeneratorContext &context,
 std::vector<std::vector<Func>> GeneratorStub::generate(const GeneratorParamsMap &generator_params,
                                                        const std::vector<std::vector<Internal::StubInput>> &inputs) {
     generator->set_generator_param_values(generator_params);
+    generator->call_configure();
     generator->set_inputs_vector(inputs);
     Pipeline p = generator->build_pipeline();
 
     std::vector<std::vector<Func>> v;
-    GeneratorBase::ParamInfo &pi = generator->param_info();
-    if (!pi.filter_outputs.empty()) {
-      for (auto output : pi.filter_outputs) {
+    GeneratorParamInfo &pi = generator->param_info();
+    if (!pi.outputs().empty()) {
+      for (auto *output : pi.outputs()) {
           const std::string &name = output->name();
           if (output->is_array()) {
               v.push_back(get_array_output(name));
@@ -739,13 +740,13 @@ std::vector<std::vector<Func>> GeneratorStub::generate(const GeneratorParamsMap 
 GeneratorStub::Names GeneratorStub::get_names() const {
     auto &pi = generator->param_info();
     Names names;
-    for (auto o : pi.generator_params) {
+    for (auto *o : pi.generator_params()) {
         names.generator_params.push_back(o->name);
     }
-    for (auto o : pi.filter_inputs) {
+    for (auto *o : pi.inputs()) {
         names.inputs.push_back(o->name());
     }
-    for (auto o : pi.filter_outputs) {
+    for (auto *o : pi.outputs()) {
         names.outputs.push_back(o->name());
     }
     return names;
@@ -1074,7 +1075,8 @@ void GeneratorParamBase::check_value_readable() const {
     if (name == "target") return;
     if (name == "auto_schedule") return;
     if (name == "machine_params") return;
-    user_assert(generator && generator->phase >= GeneratorBase::GenerateCalled)  << "The GeneratorParam \"" << name << "\" cannot be read before build() or generate() is called.\n";
+    user_assert(generator && generator->phase >= GeneratorBase::ConfigureCalled)
+        << "The GeneratorParam \"" << name << "\" cannot be read before build() or configure()/generate() is called.\n";
 }
 
 void GeneratorParamBase::check_value_writable() const {
@@ -1153,8 +1155,7 @@ GeneratorBase::~GeneratorBase() {
     ObjectInstanceRegistry::unregister_instance(this);
 }
 
-GeneratorBase::ParamInfo::ParamInfo(GeneratorBase *generator, const size_t size) {
-    std::set<std::string> names;
+GeneratorParamInfo::GeneratorParamInfo(GeneratorBase *generator, const size_t size) {
     std::vector<void *> vf = ObjectInstanceRegistry::instances_in_range(
         generator, size, ObjectInstanceRegistry::FilterParam);
     user_assert(vf.empty()) << "ImageParam and Param<> are no longer allowed in Generators; use Input<> instead.";
@@ -1165,14 +1166,14 @@ GeneratorBase::ParamInfo::ParamInfo(GeneratorBase *generator, const size_t size)
 
         if (gio->kind() != IOKind::Scalar) {
             owned_synthetic_params.push_back(GeneratorParam_Synthetic<Type>::make(generator, gn, n + ".type", *gio, SyntheticParamType::Type, gio->types_defined()));
-            generator_params.push_back(owned_synthetic_params.back().get());
+            filter_generator_params.push_back(owned_synthetic_params.back().get());
 
             owned_synthetic_params.push_back(GeneratorParam_Synthetic<int>::make(generator, gn, n + ".dim", *gio, SyntheticParamType::Dim, gio->dims_defined()));
-            generator_params.push_back(owned_synthetic_params.back().get());
+            filter_generator_params.push_back(owned_synthetic_params.back().get());
         }
         if (gio->is_array()) {
             owned_synthetic_params.push_back(GeneratorParam_Synthetic<size_t>::make(generator, gn, n + ".size", *gio, SyntheticParamType::ArraySize, gio->array_size_defined()));
-            generator_params.push_back(owned_synthetic_params.back().get());
+            filter_generator_params.push_back(owned_synthetic_params.back().get());
         }
     };
 
@@ -1214,12 +1215,7 @@ GeneratorBase::ParamInfo::ParamInfo(GeneratorBase *generator, const size_t size)
         names.insert(param->name);
         internal_assert(param->generator == nullptr || param->generator == generator);
         param->generator = generator;
-        generator_params.push_back(param);
-    }
-
-    // Do in separate loop so that synthetic params are also included
-    for (auto *g : generator_params) {
-        generator_params_by_name[g->name] = g;
+        filter_generator_params.push_back(param);
     }
 
     for (auto &g : owned_synthetic_params) {
@@ -1227,10 +1223,8 @@ GeneratorBase::ParamInfo::ParamInfo(GeneratorBase *generator, const size_t size)
     }
 }
 
-GeneratorBase::ParamInfo &GeneratorBase::param_info() {
-    if (!param_info_ptr) {
-        param_info_ptr.reset(new ParamInfo(this, size));
-    }
+GeneratorParamInfo &GeneratorBase::param_info() {
+    internal_assert(param_info_ptr != nullptr);
     return *param_info_ptr;
 }
 
@@ -1259,8 +1253,8 @@ std::vector<Func> GeneratorBase::get_array_output(const std::string &n) {
 // Find output by name. If not found, assert-fail. Never returns null.
 GeneratorOutputBase *GeneratorBase::find_output_by_name(const std::string &name) {
     // There usually are very few outputs, so a linear search is fine
-    ParamInfo &pi = param_info();
-    for (GeneratorOutputBase *output : pi.filter_outputs) {
+    GeneratorParamInfo &pi = param_info();
+    for (GeneratorOutputBase *output : pi.outputs()) {
         if (output->name() == name) {
             return output;
         }
@@ -1270,29 +1264,34 @@ GeneratorOutputBase *GeneratorBase::find_output_by_name(const std::string &name)
 }
 
 void GeneratorBase::set_generator_param_values(const GeneratorParamsMap &params) {
-    ParamInfo &pi = param_info();
+    GeneratorParamInfo &pi = param_info();
+
+    std::unordered_map<std::string, Internal::GeneratorParamBase *> generator_params_by_name;
+    for (auto *g : pi.generator_params()) {
+        generator_params_by_name[g->name] = g;
+    }
+
     for (auto &key_value : params) {
-        auto gp = pi.generator_params_by_name.find(key_value.first);
-        if (gp != pi.generator_params_by_name.end()) {
-            if (gp->second->is_looplevel_param()) {
-                if (!key_value.second.string_value.empty()) {
-                    gp->second->set_from_string(key_value.second.string_value);
-                } else {
-                    gp->second->set(key_value.second.loop_level);
-                }
-            } else {
+        auto gp = generator_params_by_name.find(key_value.first);
+        user_assert(gp != generator_params_by_name.end())
+            << "Generator " << generator_registered_name << " has no GeneratorParam named: " << key_value.first << "\n";
+        if (gp->second->is_looplevel_param()) {
+            if (!key_value.second.string_value.empty()) {
                 gp->second->set_from_string(key_value.second.string_value);
+            } else {
+                gp->second->set(key_value.second.loop_level);
             }
-            continue;
+        } else {
+            gp->second->set_from_string(key_value.second.string_value);
         }
-        user_error << "Generator " << generator_registered_name << " has no GeneratorParam named: " << key_value.first << "\n";
     }
 }
 
 void GeneratorBase::init_from_context(const Halide::GeneratorContext &context) {
-  Halide::GeneratorContext::init_from_context(context);
-  // pre-emptively build our param_info now
-  (void) this->param_info();
+    Halide::GeneratorContext::init_from_context(context);
+    internal_assert(param_info_ptr == nullptr);
+    // pre-emptively build our param_info now
+    param_info_ptr.reset(new GeneratorParamInfo(this, size));
 }
 
 void GeneratorBase::set_generator_names(const std::string &registered_name, const std::string &stub_name) {
@@ -1306,19 +1305,19 @@ void GeneratorBase::set_generator_names(const std::string &registered_name, cons
 void GeneratorBase::set_inputs_vector(const std::vector<std::vector<StubInput>> &inputs) {
     advance_phase(InputsSet);
     internal_assert(!inputs_set) << "set_inputs_vector() must be called at most once per Generator instance.\n";
-    ParamInfo &pi = param_info();
-    user_assert(inputs.size() == pi.filter_inputs.size())
-            << "Expected exactly " << pi.filter_inputs.size()
+    GeneratorParamInfo &pi = param_info();
+    user_assert(inputs.size() == pi.inputs().size())
+            << "Expected exactly " << pi.inputs().size()
             << " inputs but got " << inputs.size() << "\n";
-    for (size_t i = 0; i < pi.filter_inputs.size(); ++i) {
-        pi.filter_inputs[i]->set_inputs(inputs[i]);
+    for (size_t i = 0; i < pi.inputs().size(); ++i) {
+        pi.inputs()[i]->set_inputs(inputs[i]);
     }
     inputs_set = true;
 }
 
 void GeneratorBase::track_parameter_values(bool include_outputs) {
-    ParamInfo &pi = param_info();
-    for (auto input : pi.filter_inputs) {
+    GeneratorParamInfo &pi = param_info();
+    for (auto input : pi.inputs()) {
         if (input->kind() == IOKind::Buffer) {
             internal_assert(!input->parameters_.empty());
             for (auto &p : input->parameters_) {
@@ -1328,7 +1327,7 @@ void GeneratorBase::track_parameter_values(bool include_outputs) {
         }
     }
     if (include_outputs) {
-        for (auto output : pi.filter_outputs) {
+        for (auto output : pi.outputs()) {
             if (output->kind() == IOKind::Buffer) {
                 internal_assert(!output->funcs().empty());
                 for (auto &f : output->funcs()) {
@@ -1358,12 +1357,15 @@ void GeneratorBase::advance_phase(Phase new_phase) {
     case Created:
         internal_error << "Impossible";
         break;
+    case ConfigureCalled:
+        internal_assert(phase == Created) << "pase is "<<phase;
+        break;
     case InputsSet:
-        internal_assert(phase == Created);
+        internal_assert(phase == Created || phase == ConfigureCalled);
         break;
     case GenerateCalled:
-        // It's OK to advance from Created to GenerateCalled, skipping InputsSet.
-        internal_assert(phase == Created || phase == InputsSet);
+        // It's OK to advance directly to GenerateCalled.
+        internal_assert(phase == Created || phase == ConfigureCalled || phase == InputsSet);
         break;
     case ScheduleCalled:
         internal_assert(phase == GenerateCalled);
@@ -1373,19 +1375,26 @@ void GeneratorBase::advance_phase(Phase new_phase) {
 }
 
 
+void GeneratorBase::pre_configure() {
+    advance_phase(ConfigureCalled);
+}
+
+void GeneratorBase::post_configure() {
+}
+
 void GeneratorBase::pre_generate() {
     advance_phase(GenerateCalled);
-    ParamInfo &pi = param_info();
-    user_assert(pi.filter_outputs.size() > 0) << "Must use Output<> with generate() method.";
+    GeneratorParamInfo &pi = param_info();
+    user_assert(pi.outputs().size() > 0) << "Must use Output<> with generate() method.";
     user_assert(get_target() != Target()) << "The Generator target has not been set.";
 
     if (!inputs_set) {
-        for (auto input : pi.filter_inputs) {
+        for (auto *input : pi.inputs()) {
             input->init_internals();
         }
         inputs_set = true;
     }
-    for (auto output : pi.filter_outputs) {
+    for (auto *output : pi.outputs()) {
         output->init_internals();
     }
     track_parameter_values(false);
@@ -1407,10 +1416,10 @@ void GeneratorBase::post_schedule() {
 void GeneratorBase::pre_build() {
     advance_phase(GenerateCalled);
     advance_phase(ScheduleCalled);
-    ParamInfo &pi = param_info();
-    user_assert(pi.filter_outputs.empty()) << "May not use build() method with Output<>.";
+    GeneratorParamInfo &pi = param_info();
+    user_assert(pi.outputs().empty()) << "May not use build() method with Output<>.";
     if (!inputs_set) {
-        for (auto input : pi.filter_inputs) {
+        for (auto *input : pi.inputs()) {
             input->init_internals();
         }
         inputs_set = true;
@@ -1425,10 +1434,10 @@ void GeneratorBase::post_build() {
 Pipeline GeneratorBase::get_pipeline() {
     check_min_phase(GenerateCalled);
     if (!pipeline.defined()) {
-        ParamInfo &pi = param_info();
-        user_assert(pi.filter_outputs.size() > 0) << "Must use get_pipeline<> with Output<>.";
+        GeneratorParamInfo &pi = param_info();
+        user_assert(pi.outputs().size() > 0) << "Must use get_pipeline<> with Output<>.";
         std::vector<Func> funcs;
-        for (auto output : pi.filter_outputs) {
+        for (auto *output : pi.outputs()) {
             for (const auto &f : output->funcs()) {
                 user_assert(f.defined()) << "Output \"" << f.name() << "\" was not defined.\n";
                 if (output->dims_defined()) {
@@ -1459,14 +1468,15 @@ Pipeline GeneratorBase::get_pipeline() {
 Module GeneratorBase::build_module(const std::string &function_name,
                                    const LinkageType linkage_type) {
     std::string auto_schedule_result;
+    call_configure();
     Pipeline pipeline = build_pipeline();
     if (get_auto_schedule()) {
         auto_schedule_result = pipeline.auto_schedule(get_target(), get_machine_params());
     }
 
-    ParamInfo &pi = param_info();
+    GeneratorParamInfo &pi = param_info();
     std::vector<Argument> filter_arguments;
-    for (auto input : pi.filter_inputs) {
+    for (auto *input : pi.inputs()) {
         for (const auto &p : input->parameters_) {
             filter_arguments.push_back(to_argument(p, p.is_buffer() ? Expr() : input->get_def_expr()));
         }
@@ -1479,7 +1489,7 @@ Module GeneratorBase::build_module(const std::string &function_name,
     }
 
     auto outputs = pipeline.outputs();
-    for (auto *output : pi.filter_outputs) {
+    for (auto *output : pi.outputs()) {
         for (size_t i = 0; i < output->funcs().size(); ++i) {
             auto from = output->funcs()[i].name();
             auto to = output->array_name(i);
@@ -1498,12 +1508,14 @@ Module GeneratorBase::build_module(const std::string &function_name,
 
 void GeneratorBase::emit_cpp_stub(const std::string &stub_file_path) {
     user_assert(!generator_registered_name.empty() && !generator_stub_name.empty()) << "Generator has no name.\n";
+    // Make sure we call configure() so that extra inputs/outputs are added as necessary.
+    call_configure();
     // StubEmitter will want to access the GP/SP values, so advance the phase to avoid assert-fails.
     advance_phase(GenerateCalled);
     advance_phase(ScheduleCalled);
-    ParamInfo &pi = param_info();
+    GeneratorParamInfo &pi = param_info();
     std::ofstream file(stub_file_path);
-    StubEmitter emit(file, generator_registered_name, generator_stub_name, pi.generator_params, pi.filter_inputs, pi.filter_outputs);
+    StubEmitter emit(file, generator_registered_name, generator_stub_name, pi.generator_params(), pi.inputs(), pi.outputs());
     emit.emit();
 }
 
@@ -1672,6 +1684,13 @@ void GIOBase::check_matching_types(const std::vector<Type> &t) const {
     }
 }
 
+void GIOBase::check_gio_access() const {
+    // // Allow reading when no Generator is set, to avoid having to special-case ctor initing code
+    if (!generator) return;
+    user_assert(generator->phase > GeneratorBase::InputsSet)
+        << "The " << input_or_output() << " \"" << name() << "\" cannot be examined before build() or generate() is called.\n";
+}
+
 // If our dims are defined, ensure it matches the one passed in, asserting if not.
 // If our dims are not defined, just set to the one passed in.
 void GIOBase::check_matching_dims(int d) const {
@@ -1710,7 +1729,8 @@ GeneratorInputBase::~GeneratorInputBase() {
 }
 
 void GeneratorInputBase::check_value_writable() const {
-    user_assert(generator && generator->phase == GeneratorBase::InputsSet)  << "The Input " << name() << " cannot be set at this point.\n";
+    user_assert(generator && generator->phase == GeneratorBase::InputsSet)
+        << "The Input " << name() << " cannot be set at this point.\n";
 }
 
 void GeneratorInputBase::set_def_min_max() {
@@ -1836,7 +1856,8 @@ GeneratorOutputBase::~GeneratorOutputBase() {
 }
 
 void GeneratorOutputBase::check_value_writable() const {
-    user_assert(generator && generator->phase == GeneratorBase::GenerateCalled)  << "The Output " << name() << " can only be set inside generate().\n";
+    user_assert(generator && generator->phase == GeneratorBase::GenerateCalled)
+        << "The Output " << name() << " can only be set inside generate().\n";
 }
 
 void GeneratorOutputBase::init_internals() {

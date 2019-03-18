@@ -1374,8 +1374,8 @@ endif
 $(BIN_DIR)/$(TARGET)/generator_aotcpp_cxx_mangling: $(FILTERS_DIR)/cxx_mangling_externs.o
 $(BIN_DIR)/$(TARGET)/generator_aotcpp_cxx_mangling_define_extern: $(FILTERS_DIR)/cxx_mangling.cpp $(FILTERS_DIR)/cxx_mangling_externs.o $(FILTERS_DIR)/cxx_mangling_define_extern_externs.o
 
-$(BUILD_DIR)/stubuser_generator.o: $(FILTERS_DIR)/stubtest.stub.h
-$(BIN_DIR)/stubuser.generator: $(BUILD_DIR)/stubtest_generator.o
+$(BUILD_DIR)/stubuser_generator.o: $(FILTERS_DIR)/stubtest.stub.h $(FILTERS_DIR)/configure.stub.h
+$(BIN_DIR)/stubuser.generator: $(BUILD_DIR)/stubtest_generator.o $(BUILD_DIR)/configure_generator.o
 
 # stubtest has input and output funcs with undefined types and array sizes; this is fine for stub
 # usage (the types can be inferred), but for AOT compilation, we must make the types
