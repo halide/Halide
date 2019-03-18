@@ -15,7 +15,7 @@ std::string SanitizeName(const std::string& name) {
 }
 
 std::string NameForNode(
-    const onnx_namespace::NodeProto& node,
+    const onnx::NodeProto& node,
     const std::string& suffix) {
   if (!node.name().empty()) {
     return SanitizeName(node.name() + suffix);
@@ -26,17 +26,17 @@ std::string NameForNode(
   return SanitizeName(suffix);
 }
 
-Halide::Func FuncForNodeOutput(const onnx_namespace::NodeProto& node, int output_id) {
+Halide::Func FuncForNodeOutput(const onnx::NodeProto& node, int output_id) {
   assert(node.output_size() > output_id);
   return Halide::Func(SanitizeName(node.output(output_id)));
 }
 
 static void ConvertSubgraph(
-    const onnx_namespace::GraphProto& graph,
+    const onnx::GraphProto& graph,
     const std::string& device,
     std::unordered_map<std::string, Tensor>& reps) {
   // The nodes are always stored in topological order in the ONNX model.
-  for (const onnx_namespace::NodeProto& node : graph.node()) {
+  for (const onnx::NodeProto& node : graph.node()) {
     std::vector<Tensor> inputs;
     for (const std::string& input_name : node.input()) {
       if (input_name.empty()) {
@@ -57,39 +57,39 @@ static void ConvertSubgraph(
 
 Halide::Expr GenerateCastExpr(
     const Halide::Expr& input,
-    const onnx_namespace::NodeProto& node,
-    onnx_namespace::TensorProto::DataType* output_type) {
-  int tgt_type = onnx_namespace::TensorProto_DataType_UNDEFINED;
+    const onnx::NodeProto& node,
+    onnx::TensorProto::DataType* output_type) {
+  int tgt_type = onnx::TensorProto_DataType_UNDEFINED;
   for (const auto& attr : node.attribute()) {
     if (attr.name() == "to") {
       tgt_type = attr.i();
       break;
     }
   }
-  *output_type = static_cast<onnx_namespace::TensorProto::DataType>(tgt_type);
+  *output_type = static_cast<onnx::TensorProto::DataType>(tgt_type);
 
   switch (tgt_type) {
-    case onnx_namespace::TensorProto_DataType_FLOAT:
+    case onnx::TensorProto_DataType_FLOAT:
       return Halide::cast<float>(input);
-    case onnx_namespace::TensorProto_DataType_DOUBLE:
+    case onnx::TensorProto_DataType_DOUBLE:
       return Halide::cast<double>(input);
-    case onnx_namespace::TensorProto_DataType_INT8:
+    case onnx::TensorProto_DataType_INT8:
       return Halide::cast<int8_t>(input);
-    case onnx_namespace::TensorProto_DataType_INT16:
+    case onnx::TensorProto_DataType_INT16:
       return Halide::cast<int16_t>(input);
-    case onnx_namespace::TensorProto_DataType_INT32:
+    case onnx::TensorProto_DataType_INT32:
       return Halide::cast<int32_t>(input);
-    case onnx_namespace::TensorProto_DataType_INT64:
+    case onnx::TensorProto_DataType_INT64:
       return Halide::cast<int64_t>(input);
-    case onnx_namespace::TensorProto_DataType_UINT8:
+    case onnx::TensorProto_DataType_UINT8:
       return Halide::cast<uint8_t>(input);
-    case onnx_namespace::TensorProto_DataType_UINT16:
+    case onnx::TensorProto_DataType_UINT16:
       return Halide::cast<uint16_t>(input);
-    case onnx_namespace::TensorProto_DataType_UINT32:
+    case onnx::TensorProto_DataType_UINT32:
       return Halide::cast<uint32_t>(input);
-    case onnx_namespace::TensorProto_DataType_UINT64:
+    case onnx::TensorProto_DataType_UINT64:
       return Halide::cast<uint64_t>(input);
-    case onnx_namespace::TensorProto_DataType_BOOL:
+    case onnx::TensorProto_DataType_BOOL:
       return Halide::cast<bool>(input);
   }
   throw std::domain_error(
@@ -98,7 +98,7 @@ Halide::Expr GenerateCastExpr(
 
 Halide::Expr GenerateClipExpr(
     const Halide::Expr& input,
-    const onnx_namespace::NodeProto& node) {
+    const onnx::NodeProto& node) {
   float mini = -3.4028234663852886e+38;
   float maxi = 3.4028234663852886e+38;
   for (const auto& attr : node.attribute()) {
@@ -113,7 +113,7 @@ Halide::Expr GenerateClipExpr(
 
 Halide::Expr GenerateScaleExpr(
     const Halide::Expr& input,
-    const onnx_namespace::NodeProto& node) {
+    const onnx::NodeProto& node) {
   float scale = 1.0f;
   for (const auto& attr : node.attribute()) {
     if (attr.name() == "scale") {
@@ -171,7 +171,7 @@ Halide::Func EncodeBufferAsFunc(
   });                                                               \
   result.rep = EncodeBufferAsFunc(val, dims);
 
-Tensor BuildFromConstant(const onnx_namespace::TensorProto& value) {
+Tensor BuildFromConstant(const onnx::TensorProto& value) {
   Tensor result;
 
   std::vector<int> dims;
@@ -179,7 +179,7 @@ Tensor BuildFromConstant(const onnx_namespace::TensorProto& value) {
     result.shape.push_back(static_cast<int>(dim));
     dims.push_back(dim);
   }
-  result.type = static_cast<onnx_namespace::TensorProto::DataType>(value.data_type());
+  result.type = static_cast<onnx::TensorProto::DataType>(value.data_type());
 
   int stride = 1;
   std::vector<int> onnx_strides;
@@ -190,34 +190,34 @@ Tensor BuildFromConstant(const onnx_namespace::TensorProto& value) {
   std::reverse(onnx_strides.begin(), onnx_strides.end());
 
   switch (value.data_type()) {
-    case onnx_namespace::TensorProto_DataType_FLOAT: {
+    case onnx::TensorProto_DataType_FLOAT: {
       BUILD_CONSTANT_EXPR(float, float) break;
     }
-    case onnx_namespace::TensorProto_DataType_DOUBLE: {
+    case onnx::TensorProto_DataType_DOUBLE: {
       BUILD_CONSTANT_EXPR(double, double) break;
     }
-    case onnx_namespace::TensorProto_DataType_INT32: {
+    case onnx::TensorProto_DataType_INT32: {
       BUILD_CONSTANT_EXPR(int32_t, int32) break;
     }
-    case onnx_namespace::TensorProto_DataType_INT64: {
+    case onnx::TensorProto_DataType_INT64: {
       BUILD_CONSTANT_EXPR(int64_t, int64) break;
     }
-    case onnx_namespace::TensorProto_DataType_UINT32: {
+    case onnx::TensorProto_DataType_UINT32: {
       BUILD_CONSTANT_EXPR(uint32_t, uint64) break;
     }
-    case onnx_namespace::TensorProto_DataType_UINT64: {
+    case onnx::TensorProto_DataType_UINT64: {
       BUILD_CONSTANT_EXPR(uint64_t, uint64) break;
     }
-    case onnx_namespace::TensorProto_DataType_INT8: {
+    case onnx::TensorProto_DataType_INT8: {
       BUILD_CONSTANT_EXPR(int8_t, int32) break;
     }
-    case onnx_namespace::TensorProto_DataType_UINT8: {
+    case onnx::TensorProto_DataType_UINT8: {
       BUILD_CONSTANT_EXPR(uint8_t, int32) break;
     }
-    case onnx_namespace::TensorProto_DataType_INT16: {
+    case onnx::TensorProto_DataType_INT16: {
       BUILD_CONSTANT_EXPR(int16_t, int32) break;
     }
-    case onnx_namespace::TensorProto_DataType_UINT16: {
+    case onnx::TensorProto_DataType_UINT16: {
       BUILD_CONSTANT_EXPR(uint16_t, int32) break;
     }
     default:
@@ -227,13 +227,13 @@ Tensor BuildFromConstant(const onnx_namespace::TensorProto& value) {
 }
 #undef BUILD_CONSTANT_EXPR
 
-Node ConvertNullaryOpNode(const onnx_namespace::NodeProto& node) {
+Node ConvertNullaryOpNode(const onnx::NodeProto& node) {
   Node result;
 
   bool found_value = false;
   for (const auto& attr : node.attribute()) {
     if (attr.name() == "value") {
-      const onnx_namespace::TensorProto& value = attr.t();
+      const onnx::TensorProto& value = attr.t();
       result.outputs.resize(1);
       Tensor& out = result.outputs[0];
       out = BuildFromConstant(value);
@@ -250,7 +250,7 @@ Node ConvertNullaryOpNode(const onnx_namespace::NodeProto& node) {
 }
 
 Node ConvertUnaryOpNode(
-    const onnx_namespace::NodeProto& node,
+    const onnx::NodeProto& node,
     const std::vector<Tensor>& inputs) {
   assert(inputs.size() == 1);
 
@@ -279,7 +279,7 @@ Node ConvertUnaryOpNode(
   } else if (node.op_type() == "Atanh") {
     out.rep(Halide::_) = Halide::atanh(in.rep(Halide::_));
   } else if (node.op_type() == "Cast") {
-    onnx_namespace::TensorProto::DataType output_type;
+    onnx::TensorProto::DataType output_type;
     out.rep(Halide::_) =
         GenerateCastExpr(in.rep(Halide::_), node, &output_type);
     out.type = output_type;
@@ -301,7 +301,7 @@ Node ConvertUnaryOpNode(
     out.rep(Halide::_) = in.rep(Halide::_);
   } else if (node.op_type() == "IsNaN") {
     out.rep(Halide::_) = Halide::is_nan(in.rep(Halide::_));
-    out.type = onnx_namespace::TensorProto_DataType_BOOL;
+    out.type = onnx::TensorProto_DataType_BOOL;
   } else if (node.op_type() == "Log") {
     out.rep(Halide::_) = Halide::log(in.rep(Halide::_));
   } else if (node.op_type() == "Neg") {
@@ -352,7 +352,7 @@ Node ConvertUnaryOpNode(
 }
 
 Node ConvertBinaryOpNode(
-    const onnx_namespace::NodeProto& node,
+    const onnx::NodeProto& node,
     const std::vector<Tensor>& inputs) {
   assert(inputs.size() == 2);
 
@@ -436,7 +436,7 @@ Node ConvertBinaryOpNode(
   }
 
   if (boolean_output) {
-    out.type = onnx_namespace::TensorProto_DataType_BOOL;
+    out.type = onnx::TensorProto_DataType_BOOL;
   } else {
     out.type = inputs[0].type;
   }
@@ -445,7 +445,7 @@ Node ConvertBinaryOpNode(
 }
 
 Node ConvertVariadicOpNode(
-    const onnx_namespace::NodeProto& node,
+    const onnx::NodeProto& node,
     const std::vector<Tensor>& inputs) {
   assert(!inputs.empty());
   Node result;
@@ -483,7 +483,7 @@ Node ConvertVariadicOpNode(
 }
 
 Node ConvertMetadataNode(
-    const onnx_namespace::NodeProto& node,
+    const onnx::NodeProto& node,
     const std::vector<Tensor>& inputs) {
   if (inputs.size() != 1) {
     throw std::invalid_argument(
@@ -514,12 +514,12 @@ Node ConvertMetadataNode(
     }
     result.outputs[0].shape.push_back(static_cast<int>(input_shape.size()));
   }
-  result.outputs[0].type = onnx_namespace::TensorProto_DataType_INT64;
+  result.outputs[0].type = onnx::TensorProto_DataType_INT64;
   return result;
 }
 
 Node ConvertGemmNode(
-    const onnx_namespace::NodeProto& node,
+    const onnx::NodeProto& node,
     const std::vector<Tensor>& inputs,
     const std::string& device) {
   if (inputs.size() != 3) {
@@ -765,7 +765,7 @@ Halide::Func WinogradConv(const Tensor& W, const Halide::Func& input) {
 }
 
 Node ConvertConvNode(
-    const onnx_namespace::NodeProto& node,
+    const onnx::NodeProto& node,
     const std::vector<Tensor>& inputs,
     const std::string& device) {
   if (inputs.size() < 2) {
@@ -942,7 +942,7 @@ Node ConvertConvNode(
 }
 
 Node ConvertReductionNode(
-    const onnx_namespace::NodeProto& node,
+    const onnx::NodeProto& node,
     const std::vector<Tensor>& inputs) {
   std::set<int> reduction_axes;
   bool keepdims = true;
@@ -1044,7 +1044,7 @@ Node ConvertReductionNode(
   return result;
 }
 Node ConvertBatchNormNode(
-    const onnx_namespace::NodeProto& node,
+    const onnx::NodeProto& node,
     const std::vector<Tensor>& inputs) {
   bool spatial = true;
   float epsilon = 1e-5f;
@@ -1106,7 +1106,7 @@ Node ConvertBatchNormNode(
 }
 
 Node ConvertFlattenNode(
-    const onnx_namespace::NodeProto& node,
+    const onnx::NodeProto& node,
     const std::vector<Tensor>& inputs) {
   if (inputs.size() != 1) {
     throw std::invalid_argument(
@@ -1172,7 +1172,7 @@ Node ConvertFlattenNode(
 }
 
 Node ConvertTileNode(
-    const onnx_namespace::NodeProto& node,
+    const onnx::NodeProto& node,
     const std::vector<Tensor>& inputs) {
   if (inputs.size() != 2) {
     throw std::invalid_argument(
@@ -1220,7 +1220,7 @@ Node ConvertTileNode(
 }
 
 Node ConvertEluNode(
-    const onnx_namespace::NodeProto& node,
+    const onnx::NodeProto& node,
     const std::vector<Tensor>& inputs) {
   auto default_alpha = [&node]() -> float {
     if (node.op_type() == "Selu") {
@@ -1278,7 +1278,7 @@ Node ConvertEluNode(
 }
 
 Node ConvertDropoutNode(
-    const onnx_namespace::NodeProto& node,
+    const onnx::NodeProto& node,
     const std::vector<Tensor>& inputs) {
   float ratio = 0.5f;
   for (const auto& attr : node.attribute()) {
@@ -1327,7 +1327,7 @@ Node ConvertDropoutNode(
 }
 
 Node ConvertPoolingNode(
-    const onnx_namespace::NodeProto& node,
+    const onnx::NodeProto& node,
     const std::vector<Tensor>& inputs) {
   if (node.output_size() != 1) {
     throw std::domain_error(
@@ -1484,7 +1484,7 @@ Node ConvertPoolingNode(
 }
 
 Node ConvertSoftmaxNode(
-    const onnx_namespace::NodeProto& node,
+    const onnx::NodeProto& node,
     const std::vector<Tensor>& inputs) {
   int axis = 1;
   for (const auto& attr : node.attribute()) {
@@ -1541,7 +1541,7 @@ Node ConvertSoftmaxNode(
 }
 
 Node ConvertConcatNode(
-    const onnx_namespace::NodeProto& node,
+    const onnx::NodeProto& node,
     const std::vector<Tensor>& inputs) {
   if (inputs.size() < 1) {
     throw std::invalid_argument(
@@ -1597,7 +1597,7 @@ Node ConvertConcatNode(
 }
 
 Node ConvertSplitNode(
-    const onnx_namespace::NodeProto& node,
+    const onnx::NodeProto& node,
     const std::vector<Tensor>& inputs) {
   if (inputs.size() != 1) {
     throw std::invalid_argument(
@@ -1683,7 +1683,7 @@ Node ConvertSplitNode(
 }
 
 Node ConvertSliceNode(
-    const onnx_namespace::NodeProto& node,
+    const onnx::NodeProto& node,
     const std::vector<Tensor>& inputs) {
   if (inputs.size() != 1) {
     throw std::invalid_argument(
@@ -1776,7 +1776,7 @@ Node ConvertSliceNode(
 }
 
 Node ConvertPadNode(
-    const onnx_namespace::NodeProto& node,
+    const onnx::NodeProto& node,
     const std::vector<Tensor>& inputs) {
   if (inputs.size() != 1) {
     throw std::invalid_argument(
@@ -1835,7 +1835,7 @@ Node ConvertPadNode(
 }
 
 Node ConvertTransposeNode(
-    const onnx_namespace::NodeProto& node,
+    const onnx::NodeProto& node,
     const std::vector<Tensor>& inputs) {
   if (inputs.size() != 1) {
     throw std::invalid_argument(
@@ -1897,7 +1897,7 @@ Node ConvertTransposeNode(
 }
 
 Node ConvertUnsqueezeNode(
-    const onnx_namespace::NodeProto& node,
+    const onnx::NodeProto& node,
     const std::vector<Tensor>& inputs) {
   if (inputs.size() != 1) {
     throw std::invalid_argument(
@@ -1959,7 +1959,7 @@ Node ConvertUnsqueezeNode(
 }
 
 Node ConvertSqueezeNode(
-    const onnx_namespace::NodeProto& node,
+    const onnx::NodeProto& node,
     const std::vector<Tensor>& inputs) {
   if (inputs.size() != 1) {
     throw std::invalid_argument(
@@ -2030,7 +2030,7 @@ Node ConvertSqueezeNode(
 }
 
 Node ConvertConstantFillNode(
-    const onnx_namespace::NodeProto& node,
+    const onnx::NodeProto& node,
     const std::vector<Tensor>& inputs) {
   if (inputs.size() != 0) {
     throw std::invalid_argument(
@@ -2055,7 +2055,7 @@ Node ConvertConstantFillNode(
     }
     if (attr.name() == "dtype") {
       dtype = attr.i();
-      result.outputs[0].type = static_cast<onnx_namespace::TensorProto::DataType>(dtype);
+      result.outputs[0].type = static_cast<onnx::TensorProto::DataType>(dtype);
     }
     if (attr.name() == "extra_shape" || attr.name() == "input_as_shape") {
       throw std::invalid_argument(
@@ -2099,7 +2099,7 @@ Node ConvertConstantFillNode(
 }
 
 Node ConvertReshapeNode(
-    const onnx_namespace::NodeProto& node,
+    const onnx::NodeProto& node,
     const std::vector<Tensor>& inputs) {
   if (inputs.size() != 2) {
     throw std::invalid_argument(
@@ -2205,7 +2205,7 @@ Node ConvertReshapeNode(
 }
 
 Node ConvertOneHotNode(
-    const onnx_namespace::NodeProto& node,
+    const onnx::NodeProto& node,
     const std::vector<Tensor>& inputs) {
   if (inputs.size() != 3) {
     throw std::invalid_argument(
@@ -2260,7 +2260,7 @@ Node ConvertOneHotNode(
 }
 
 Node ConvertLSTMNode(
-    const onnx_namespace::NodeProto& node,
+    const onnx::NodeProto& node,
     const std::vector<Tensor>& inputs,
     const std::string& device) {
   int hidden_size = 1;
@@ -2302,7 +2302,7 @@ Node ConvertLSTMNode(
     throw std::domain_error("At least one timestep is required");
   }
   // Build an onnx graph encoding the LSTM computations
-  onnx_namespace::GraphProto lstm_graph;
+  onnx::GraphProto lstm_graph;
 
   // TODO: generate unique prefixes in case there is more than 1 unnamed lstm
   // node
@@ -2310,10 +2310,10 @@ Node ConvertLSTMNode(
       node.name().empty() ? std::string("lstm") : node.name();
 
   // Split input into timesteps
-  onnx_namespace::NodeProto* split_node = lstm_graph.add_node();
+  onnx::NodeProto* split_node = lstm_graph.add_node();
   split_node->set_name(prefix + "_split");
   split_node->set_op_type("Split");
-  onnx_namespace::AttributeProto* attr = split_node->add_attribute();
+  onnx::AttributeProto* attr = split_node->add_attribute();
   attr->set_name("axis");
   attr->set_i(0);
   *split_node->add_input() = node.input(0);
@@ -2323,7 +2323,7 @@ Node ConvertLSTMNode(
 
   // Squeeze the first dim output the Xi, W and R tensors since we're only
   // supporting unidirectional LSTM for now
-  onnx_namespace::NodeProto* W = lstm_graph.add_node();
+  onnx::NodeProto* W = lstm_graph.add_node();
   W->set_name(node.input(1) + "_squeezed");
   W->set_op_type("Squeeze");
   attr = W->add_attribute();
@@ -2332,7 +2332,7 @@ Node ConvertLSTMNode(
   *W->add_input() = node.input(1);
   *W->add_output() = W->name();
 
-  onnx_namespace::NodeProto* R = lstm_graph.add_node();
+  onnx::NodeProto* R = lstm_graph.add_node();
   R->set_name(node.input(2) + "_squeezed");
   R->set_op_type("Squeeze");
   attr = R->add_attribute();
@@ -2341,10 +2341,10 @@ Node ConvertLSTMNode(
   *R->add_input() = node.input(2);
   *R->add_output() = R->name();
 
-  onnx_namespace::NodeProto* B = nullptr;
+  onnx::NodeProto* B = nullptr;
   if (inputs.size() >= 4 && !node.input(3).empty()) {
     // Preprocess the bias tensor
-    onnx_namespace::NodeProto* Bs = lstm_graph.add_node();
+    onnx::NodeProto* Bs = lstm_graph.add_node();
     Bs->set_name(node.input(3) + "_split");
     Bs->set_op_type("Split");
     attr = Bs->add_attribute();
@@ -2371,7 +2371,7 @@ Node ConvertLSTMNode(
   }
 
   // Initial state if any
-  onnx_namespace::NodeProto* H_t = nullptr;
+  onnx::NodeProto* H_t = nullptr;
   if (inputs.size() >= 6 && !node.input(5).empty()) {
     H_t = lstm_graph.add_node();
     H_t->set_name(node.input(5) + "_squeezed");
@@ -2382,7 +2382,7 @@ Node ConvertLSTMNode(
     *H_t->add_input() = node.input(5);
     *H_t->add_output() = H_t->name();
   }
-  onnx_namespace::NodeProto* C_t = nullptr;
+  onnx::NodeProto* C_t = nullptr;
   if (inputs.size() >= 7 && !node.input(6).empty()) {
     C_t = lstm_graph.add_node();
     C_t->set_name(node.input(6) + "_squeezed");
@@ -2395,9 +2395,9 @@ Node ConvertLSTMNode(
   }
 
   // Optional peephole inputs
-  onnx_namespace::NodeProto* P = nullptr;
+  onnx::NodeProto* P = nullptr;
   if (inputs.size() >= 8 && !node.input(7).empty()) {
-    onnx_namespace::NodeProto* Ps = lstm_graph.add_node();
+    onnx::NodeProto* Ps = lstm_graph.add_node();
     Ps->set_name(node.input(7) + "_squeezed");
     Ps->set_op_type("Squeeze");
     attr = Ps->add_attribute();
@@ -2415,9 +2415,9 @@ Node ConvertLSTMNode(
     *P->add_output() = P->name() + "_2";
   }
 
-  std::vector<onnx_namespace::NodeProto*> Xt;
+  std::vector<onnx::NodeProto*> Xt;
   for (int i = 0; i < num_time_steps; ++i) {
-    onnx_namespace::NodeProto* Xi = lstm_graph.add_node();
+    onnx::NodeProto* Xi = lstm_graph.add_node();
     Xi->set_name(split_node->output(i) + "_squeezed");
     Xi->set_op_type("Squeeze");
     attr = Xi->add_attribute();
@@ -2429,10 +2429,10 @@ Node ConvertLSTMNode(
   }
 
   // Process each timestep
-  std::vector<onnx_namespace::NodeProto*> Hs;
+  std::vector<onnx::NodeProto*> Hs;
   for (int i = 0; i < num_time_steps; ++i) {
-    onnx_namespace::NodeProto* Xi = Xt[i];
-    onnx_namespace::NodeProto* Gi = lstm_graph.add_node();
+    onnx::NodeProto* Xi = Xt[i];
+    onnx::NodeProto* Gi = lstm_graph.add_node();
     // Gi = dot(x, transpose(w)) + bias
     Gi->set_name(Xi->name() + "_gemm_" + std::to_string(i));
     Gi->set_op_type("Gemm");
@@ -2444,7 +2444,7 @@ Node ConvertLSTMNode(
     *Gi->add_input() = B->name();
     *Gi->add_output() = Gi->name();
 
-    onnx_namespace::NodeProto* Gii = Gi;
+    onnx::NodeProto* Gii = Gi;
     if (H_t) {
       // Gii = Gi + dot(H_t, transpose(R));
       Gii = lstm_graph.add_node();
@@ -2459,7 +2459,7 @@ Node ConvertLSTMNode(
       *Gii->add_output() = Gii->name();
     }
     // i, o, f, c = split(Gi, 4, -1)
-    onnx_namespace::NodeProto* split_node = lstm_graph.add_node();
+    onnx::NodeProto* split_node = lstm_graph.add_node();
     split_node->set_name(prefix + "_split_" + std::to_string(i));
     split_node->set_op_type("Split");
     attr = split_node->add_attribute();
@@ -2470,9 +2470,9 @@ Node ConvertLSTMNode(
       *split_node->add_output() = split_node->name() + "_" + std::to_string(j);
     }
     // i = sigmoid(i + p_i * C_t)
-    onnx_namespace::NodeProto* add = nullptr;
+    onnx::NodeProto* add = nullptr;
     if (P && C_t) {
-      onnx_namespace::NodeProto* pict = lstm_graph.add_node();
+      onnx::NodeProto* pict = lstm_graph.add_node();
       pict->set_name(prefix + "_pi_ct_" + std::to_string(i));
       pict->set_op_type("Mul");
       *pict->add_input() = P->output(0);
@@ -2487,7 +2487,7 @@ Node ConvertLSTMNode(
       *add->add_output() = add->name();
     }
 
-    onnx_namespace::NodeProto* node_i = lstm_graph.add_node();
+    onnx::NodeProto* node_i = lstm_graph.add_node();
     node_i->set_name(prefix + "_i_" + std::to_string(i));
     node_i->set_op_type("Sigmoid");
     if (add) {
@@ -2500,7 +2500,7 @@ Node ConvertLSTMNode(
     // f = sigmoid(f + p_f * C_t)
     add = nullptr;
     if (P && C_t) {
-      onnx_namespace::NodeProto* pfct = lstm_graph.add_node();
+      onnx::NodeProto* pfct = lstm_graph.add_node();
       pfct->set_name(prefix + "_pf_ct_" + std::to_string(i));
       pfct->set_op_type("Mul");
       *pfct->add_input() = P->output(2);
@@ -2515,7 +2515,7 @@ Node ConvertLSTMNode(
       *add->add_output() = add->name();
     }
 
-    onnx_namespace::NodeProto* node_f = lstm_graph.add_node();
+    onnx::NodeProto* node_f = lstm_graph.add_node();
     node_f->set_name(prefix + "_f_" + std::to_string(i));
     node_f->set_op_type("Sigmoid");
     if (add) {
@@ -2526,24 +2526,24 @@ Node ConvertLSTMNode(
     *node_f->add_output() = node_f->name();
 
     // c = tanh(c)
-    onnx_namespace::NodeProto* node_c = lstm_graph.add_node();
+    onnx::NodeProto* node_c = lstm_graph.add_node();
     node_c->set_name(prefix + "_c_" + std::to_string(i));
     node_c->set_op_type("Tanh");
     *node_c->add_input() = split_node->output(3);
     *node_c->add_output() = node_c->name();
 
     // C = f * C_t + i*c
-    onnx_namespace::NodeProto* ic = lstm_graph.add_node();
+    onnx::NodeProto* ic = lstm_graph.add_node();
     ic->set_name(prefix + "_ic_" + std::to_string(i));
     ic->set_op_type("Mul");
     *ic->add_input() = node_i->output(0);
     *ic->add_input() = node_c->output(0);
     *ic->add_output() = ic->name();
-    onnx_namespace::NodeProto* C = ic;
+    onnx::NodeProto* C = ic;
 
     if (C_t) {
       // add f*C_t to ic
-      onnx_namespace::NodeProto* f_ct = lstm_graph.add_node();
+      onnx::NodeProto* f_ct = lstm_graph.add_node();
       f_ct->set_name(prefix + "_f_ct_" + std::to_string(i));
       f_ct->set_op_type("Mul");
       *f_ct->add_input() = node_f->output(0);
@@ -2562,7 +2562,7 @@ Node ConvertLSTMNode(
     // o = sigmoid(o + p_o * C)
     add = nullptr;
     if (P) {
-      onnx_namespace::NodeProto* po_c = lstm_graph.add_node();
+      onnx::NodeProto* po_c = lstm_graph.add_node();
       po_c->set_name(prefix + "_po_c_" + std::to_string(i));
       po_c->set_op_type("Mul");
       *po_c->add_input() = C->output(0);
@@ -2576,7 +2576,7 @@ Node ConvertLSTMNode(
       *add->add_input() = po_c->output(0);
       *add->add_output() = add->name();
     }
-    onnx_namespace::NodeProto* node_o = lstm_graph.add_node();
+    onnx::NodeProto* node_o = lstm_graph.add_node();
     node_o->set_name(prefix + "_o_" + std::to_string(i));
     node_o->set_op_type("Sigmoid");
     if (add) {
@@ -2587,13 +2587,13 @@ Node ConvertLSTMNode(
     *node_o->add_output() = node_o->name();
 
     // H = o * tanh(C)
-    onnx_namespace::NodeProto* hC = lstm_graph.add_node();
+    onnx::NodeProto* hC = lstm_graph.add_node();
     hC->set_name(prefix + "_hC_" + std::to_string(i));
     hC->set_op_type("Tanh");
     *hC->add_input() = C->output(0);
     *hC->add_output() = hC->name();
 
-    onnx_namespace::NodeProto* H = lstm_graph.add_node();
+    onnx::NodeProto* H = lstm_graph.add_node();
     H->set_name(prefix + "_H_" + std::to_string(i));
     H->set_op_type("Mul");
     *H->add_input() = node_o->output(0);
@@ -2603,7 +2603,7 @@ Node ConvertLSTMNode(
     H_t = H;
     C_t = C;
 
-    onnx_namespace::NodeProto* Hu = lstm_graph.add_node();
+    onnx::NodeProto* Hu = lstm_graph.add_node();
     Hu->set_name(prefix + "_H_unsqueeze_" + std::to_string(i));
     Hu->set_op_type("Unsqueeze");
     attr = Hu->add_attribute();
@@ -2615,13 +2615,13 @@ Node ConvertLSTMNode(
   }
 
   if (node.output_size() >= 2 && !node.output(1).empty()) {
-    onnx_namespace::NodeProto* Y_h = Hs.back();
+    onnx::NodeProto* Y_h = Hs.back();
     Y_h->set_name(node.output(1));
     Y_h->set_output(0, node.output(1));
   }
 
   if (node.output_size() >= 3 && !node.output(2).empty()) {
-    onnx_namespace::NodeProto* Y_h = lstm_graph.add_node();
+    onnx::NodeProto* Y_h = lstm_graph.add_node();
     Y_h->set_name(node.output(2));
     Y_h->set_op_type("Unsqueeze");
     attr = Y_h->add_attribute();
@@ -2632,17 +2632,17 @@ Node ConvertLSTMNode(
   }
 
   if (node.output_size() >= 1 && !node.output(0).empty()) {
-    onnx_namespace::NodeProto* Hconcat = lstm_graph.add_node();
+    onnx::NodeProto* Hconcat = lstm_graph.add_node();
     Hconcat->set_name(node.output(0) + "_concat");
     Hconcat->set_op_type("Concat");
     attr = Hconcat->add_attribute();
     attr->set_name("axis");
     attr->set_i(0);
-    for (const onnx_namespace::NodeProto* input : Hs) {
+    for (const onnx::NodeProto* input : Hs) {
       Hconcat->add_input(input->name());
     }
     Hconcat->add_output(Hconcat->name());
-    onnx_namespace::NodeProto* H = lstm_graph.add_node();
+    onnx::NodeProto* H = lstm_graph.add_node();
     H->set_name(node.output(0));
     H->set_op_type("Unsqueeze");
     attr = H->add_attribute();
@@ -2677,7 +2677,7 @@ Node ConvertLSTMNode(
 }
 
 Node ConvertNode(
-    const onnx_namespace::NodeProto& node,
+    const onnx::NodeProto& node,
     const std::vector<Tensor>& inputs,
     const std::string& device) {
   // Handle meta ops
@@ -2769,49 +2769,49 @@ Node ConvertNode(
 }
 
 Halide::ImageParam EncodeAsImageParam(
-    const onnx_namespace::ValueInfoProto& input,
+    const onnx::ValueInfoProto& input,
     std::unordered_map<std::string, Halide::Internal::Dimension>* symbolic_dims,
     std::vector<Halide::Expr>* shape) {
   Halide::Type t;
   switch (input.type().tensor_type().elem_type()) {
-    case onnx_namespace::TensorProto_DataType_FLOAT:
+    case onnx::TensorProto_DataType_FLOAT:
       t = Halide::type_of<float>();
       break;
-    case onnx_namespace::TensorProto_DataType_UINT8:
+    case onnx::TensorProto_DataType_UINT8:
       t = Halide::type_of<uint8_t>();
       break;
-    case onnx_namespace::TensorProto_DataType_INT8:
+    case onnx::TensorProto_DataType_INT8:
       t = Halide::type_of<int8_t>();
       break;
-    case onnx_namespace::TensorProto_DataType_UINT16:
+    case onnx::TensorProto_DataType_UINT16:
       t = Halide::type_of<uint16_t>();
       break;
-    case onnx_namespace::TensorProto_DataType_INT16:
+    case onnx::TensorProto_DataType_INT16:
       t = Halide::type_of<int16_t>();
       break;
-    case onnx_namespace::TensorProto_DataType_INT32:
+    case onnx::TensorProto_DataType_INT32:
       t = Halide::type_of<int32_t>();
       break;
-    case onnx_namespace::TensorProto_DataType_INT64:
+    case onnx::TensorProto_DataType_INT64:
       t = Halide::type_of<int64_t>();
       break;
-    case onnx_namespace::TensorProto_DataType_BOOL:
+    case onnx::TensorProto_DataType_BOOL:
       t = Halide::type_of<bool>();
       break;
-    case onnx_namespace::TensorProto_DataType_DOUBLE:
+    case onnx::TensorProto_DataType_DOUBLE:
       t = Halide::type_of<double>();
       break;
-    case onnx_namespace::TensorProto_DataType_UINT32:
+    case onnx::TensorProto_DataType_UINT32:
       t = Halide::type_of<uint32_t>();
       break;
-    case onnx_namespace::TensorProto_DataType_UINT64:
+    case onnx::TensorProto_DataType_UINT64:
       t = Halide::type_of<uint64_t>();
       break;
-    case onnx_namespace::TensorProto_DataType_STRING:
+    case onnx::TensorProto_DataType_STRING:
       throw std::domain_error("string can't be used as model input type");
-    case onnx_namespace::TensorProto_DataType_FLOAT16:
+    case onnx::TensorProto_DataType_FLOAT16:
       throw std::domain_error("float16 aren't supported as model input type");
-    case onnx_namespace::TensorProto_DataType_BFLOAT16:
+    case onnx::TensorProto_DataType_BFLOAT16:
       throw std::domain_error("bfloat16 aren't supported as model input type");
     default:
       throw std::domain_error("unexpected model input type");
@@ -2820,9 +2820,9 @@ Halide::ImageParam EncodeAsImageParam(
   Halide::ImageParam result(t, num_dims, SanitizeName(input.name()));
 
   // Encode the input shape as bounds on the dimensions for the autoscheduler.
-  const onnx_namespace::TensorShapeProto& dims = input.type().tensor_type().shape();
+  const onnx::TensorShapeProto& dims = input.type().tensor_type().shape();
   for (int i = 0; i < num_dims; ++i) {
-    const onnx_namespace::TensorShapeProto::Dimension& dim = dims.dim(i);
+    const onnx::TensorShapeProto::Dimension& dim = dims.dim(i);
     if (dim.has_dim_value()) {
       int dim_val = dim.dim_value();
       if (dim_val <= 0) {
@@ -2854,7 +2854,7 @@ Halide::ImageParam EncodeAsImageParam(
 }
 
 std::vector<Halide::Expr> FinalizeTypeInfo(
-    const onnx_namespace::TypeProto& tp,
+    const onnx::TypeProto& tp,
     const Tensor& t,
     const std::unordered_map<std::string, Halide::Internal::Dimension>&
         symbolic_dims,
@@ -2867,7 +2867,7 @@ std::vector<Halide::Expr> FinalizeTypeInfo(
     }
 
     if (tp.tensor_type().has_shape()) {
-      const onnx_namespace::TensorShapeProto& tp_shape = tp.tensor_type().shape();
+      const onnx::TensorShapeProto& tp_shape = tp.tensor_type().shape();
       if (result.size() != tp_shape.dim_size()) {
         throw std::invalid_argument(
             "Inconsistent ranks detected for tensor " + name);
@@ -2897,7 +2897,7 @@ std::vector<Halide::Expr> FinalizeTypeInfo(
   return result;
 }
 
-Model ConvertModel(const onnx_namespace::ModelProto& model, const std::string& device) {
+Model ConvertModel(const onnx::ModelProto& model, const std::string& device) {
   Model result;
   std::unordered_map<std::string, Tensor>& reps = result.tensors;
   std::unordered_map<std::string, Halide::Internal::Dimension> symbolic_dims;
@@ -2918,7 +2918,7 @@ Model ConvertModel(const onnx_namespace::ModelProto& model, const std::string& d
     Halide::ImageParam p(EncodeAsImageParam(input, &symbolic_dims, &shape));
     result.inputs[input.name()] = p;
     reps[input.name()] = Tensor{input.name(),
-                                static_cast<onnx_namespace::TensorProto::DataType>(
+                                static_cast<onnx::TensorProto::DataType>(
                                     input.type().tensor_type().elem_type()),
                                 shape,
                                 p};

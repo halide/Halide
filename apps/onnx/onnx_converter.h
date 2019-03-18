@@ -5,15 +5,9 @@
 #include "Halide.h"
 #include "onnx.pb.h"
 
-#ifdef ONNX_RT_NAMESPACE
-namespace onnx_namespace = onnx_rti;
-#else
-namespace onnx_namespace = onnx;
-#endif
-
 struct Tensor {
   std::string name;
-  onnx_namespace::TensorProto::DataType type;
+  onnx::TensorProto::DataType type;
   std::vector<Halide::Expr> shape;
   Halide::Func rep;
 };
@@ -26,7 +20,7 @@ struct Node {
 };
 
 Node ConvertNode(
-    const onnx_namespace::NodeProto& node,
+    const onnx::NodeProto& node,
     const std::vector<Tensor>& inputs,
     const std::string& device);
 
@@ -38,5 +32,5 @@ struct Model {
 };
 
 Model ConvertModel(
-    const onnx_namespace::ModelProto& model,
+    const onnx::ModelProto& model,
     const std::string& device);
