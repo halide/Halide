@@ -12,6 +12,7 @@
 #include "AutoSchedule.h"
 #include "ExternalCode.h"
 #include "IntrusivePtr.h"
+#include "IROperator.h"
 #include "JITModule.h"
 #include "Module.h"
 #include "ParamMap.h"
@@ -102,6 +103,8 @@ public:
                                                                     std::map<std::string, JITExtern> &externs_in_out);
 
     static std::function<std::string(Pipeline, const Target &, const MachineParams &)> custom_auto_scheduler;
+
+    int call_jit_code(const Target &target, const JITCallArgs &args);
 
  public:
     /** Make an undefined Pipeline object. */
@@ -255,11 +258,10 @@ public:
      * normally happens on the first call to realize. If you're
      * running your halide pipeline inside time-sensitive code and
      * wish to avoid including the time taken to compile a pipeline,
-     * then you can call this ahead of time. Returns the raw function
-     * pointer to the compiled pipeline. Default is to use the Target
+     * then you can call this ahead of time. Default is to use the Target
      * returned from Halide::get_jit_target_from_environment()
      */
-     void *compile_jit(const Target &target = get_jit_target_from_environment());
+     void compile_jit(const Target &target = get_jit_target_from_environment());
 
     /** Set the error handler function that be called in the case of
      * runtime errors during halide pipelines. If you are compiling
@@ -454,6 +456,22 @@ public:
     /** Invalidate any internal cached state, e.g. because Funcs have
      * been rescheduled. */
     void invalidate_cache();
+
+    /** Add a top-level precondition to the generated pipeline,
+     * expressed as a boolean Expr. The Expr may depend on parameters
+     * only, and may not call any Func or use a Var. If the condition
+     * is not true at runtime, the pipeline will call halide_error
+     * with the remaining arguments, and return
+     * halide_error_code_requirement_failed. Requirements are checked
+     * in the order added. */
+    void add_requirement(Expr condition, std::vector<Expr> &error);
+
+    template<typename ...Args>
+    inline HALIDE_NO_USER_CODE_INLINE void add_requirement(Expr condition, Args&&... args) {
+        std::vector<Expr> collected_args;
+        Internal::collect_print_args(collected_args, std::forward<Args>(args)...);
+        add_requirement(std::move(condition), collected_args);
+    }
 
 private:
 

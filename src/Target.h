@@ -22,7 +22,7 @@ struct Target {
     /** The operating system used by the target. Determines which
      * system calls to generate.
      * Corresponds to os_name_map in Target.cpp. */
-    enum OS {OSUnknown = 0, Linux, Windows, OSX, Android, IOS, QuRT, NoOS} os;
+    enum OS {OSUnknown = 0, Linux, Windows, OSX, Android, IOS, QuRT, NoOS, Fuchsia} os;
 
     /** The architecture used by the target. Determines the
      * instruction set to use.
@@ -193,7 +193,7 @@ struct Target {
      * Create a "greatest common denominator" runtime target that is compatible with
      * both this target and \p other. Used by generators to conveniently select a suitable
      * runtime when linking together multiple functions.
-     * 
+     *
      * @param other The other target from which we compute the gcd target.
      * @param[out] result The gcd target if we return true, otherwise unmodified. Can be the same as *this.
      * @return Whether it was possible to find a compatible target (true) or not.

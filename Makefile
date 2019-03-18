@@ -400,6 +400,8 @@ SOURCE_FILES = \
   DebugToFile.cpp \
   Definition.cpp \
   Deinterleave.cpp \
+  Derivative.cpp \
+  DerivativeUtils.cpp \
   DeviceArgument.cpp \
   DeviceInterface.cpp \
   Dimension.cpp \
@@ -466,7 +468,6 @@ SOURCE_FILES = \
   RegionCosts.cpp \
   RemoveDeadAllocations.cpp \
   RemoveExternLoops.cpp \
-  RemoveTrivialForLoops.cpp \
   RemoveUndef.cpp \
   Schedule.cpp \
   ScheduleFunctions.cpp \
@@ -491,6 +492,7 @@ SOURCE_FILES = \
   Simplify_Shuffle.cpp \
   Simplify_Stmts.cpp \
   Simplify_Sub.cpp \
+  SimplifyCorrelatedDifferences.cpp \
   SimplifySpecializations.cpp \
   SkipStages.cpp \
   SlidingWindow.cpp \
@@ -564,6 +566,8 @@ HEADER_FILES = \
   DebugToFile.h \
   Definition.h \
   Deinterleave.h \
+  Derivative.h \
+  DerivativeUtils.h \
   DeviceArgument.h \
   DeviceInterface.h \
   Dimension.h \
@@ -638,7 +642,6 @@ HEADER_FILES = \
   RegionCosts.h \
   RemoveDeadAllocations.h \
   RemoveExternLoops.h \
-  RemoveTrivialForLoops.h \
   RemoveUndef.h \
   runtime/HalideBuffer.h \
   runtime/HalideRuntime.h \
@@ -647,6 +650,7 @@ HEADER_FILES = \
   Scope.h \
   SelectGPUAPI.h \
   Simplify.h \
+  SimplifyCorrelatedDifferences.h \
   SimplifySpecializations.h \
   SkipStages.h \
   SlidingWindow.h \
@@ -687,7 +691,6 @@ RUNTIME_CPP_COMPONENTS = \
   android_host_cpu_count \
   android_io \
   android_opengl_context \
-  android_tempfile \
   arm_cpu_features \
   buffer_t \
   cache \
@@ -697,8 +700,12 @@ RUNTIME_CPP_COMPONENTS = \
   destructors \
   device_interface \
   errors \
+  fake_get_symbol \
   fake_thread_pool \
   float16_t \
+  fuchsia_clock \
+  fuchsia_host_cpu_count \
+  fuchsia_yield \
   gpu_device_selection \
   hexagon_cache_allocator \
   hexagon_cpu_features \
@@ -737,7 +744,6 @@ RUNTIME_CPP_COMPONENTS = \
   posix_get_symbol \
   posix_io \
   posix_print \
-  posix_tempfile \
   posix_threads \
   posix_threads_tsan \
   powerpc_cpu_features \
@@ -755,6 +761,7 @@ RUNTIME_CPP_COMPONENTS = \
   runtime_api \
   ssp \
   to_string \
+  trace_helper \
   tracing \
   windows_abort \
   windows_clock \
@@ -763,7 +770,6 @@ RUNTIME_CPP_COMPONENTS = \
   windows_io \
   windows_opencl \
   windows_profiler \
-  windows_tempfile \
   windows_threads \
   windows_threads_tsan \
   windows_yield \
@@ -1308,6 +1314,7 @@ METADATA_TESTER_GENERATOR_ARGS=\
 	buffer_array_input8.size=2 \
 	buffer_array_input8.dim=3 \
 	buffer_array_input8.type=float32 \
+	buffer_f16_untyped.type=float16 \
 	array_outputs.size=2 \
 	array_outputs7.size=2 \
 	array_outputs8.size=2 \
@@ -1367,8 +1374,8 @@ endif
 $(BIN_DIR)/$(TARGET)/generator_aotcpp_cxx_mangling: $(FILTERS_DIR)/cxx_mangling_externs.o
 $(BIN_DIR)/$(TARGET)/generator_aotcpp_cxx_mangling_define_extern: $(FILTERS_DIR)/cxx_mangling.cpp $(FILTERS_DIR)/cxx_mangling_externs.o $(FILTERS_DIR)/cxx_mangling_define_extern_externs.o
 
-$(BUILD_DIR)/stubuser_generator.o: $(FILTERS_DIR)/stubtest.stub.h
-$(BIN_DIR)/stubuser.generator: $(BUILD_DIR)/stubtest_generator.o
+$(BUILD_DIR)/stubuser_generator.o: $(FILTERS_DIR)/stubtest.stub.h $(FILTERS_DIR)/configure.stub.h
+$(BIN_DIR)/stubuser.generator: $(BUILD_DIR)/stubtest_generator.o $(BUILD_DIR)/configure_generator.o
 
 # stubtest has input and output funcs with undefined types and array sizes; this is fine for stub
 # usage (the types can be inferred), but for AOT compilation, we must make the types
@@ -1754,6 +1761,7 @@ TEST_APPS=\
 	resize \
 	stencil_chain \
 	wavelet \
+	resnet_50
 
 .PHONY: test_apps
 test_apps: distrib
@@ -1811,6 +1819,10 @@ ifneq (,$(findstring clang version 7.0,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
 
+ifneq (,$(findstring clang version 7.1,$(CLANG_VERSION)))
+CLANG_OK=yes
+endif
+
 ifneq (,$(findstring clang version 8.0,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
@@ -1839,7 +1851,7 @@ $(BUILD_DIR)/clang_ok:
 	@exit 1
 endif
 
-ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 60 70 80 90))
+ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 60 70 71 80 90))
 LLVM_OK=yes
 endif
 
@@ -1937,13 +1949,14 @@ $(BUILD_DIR)/halide_config.%: $(ROOT_DIR)/tools/halide_config.%.tpl
 	       | sed -e 's/@HALIDE_RTTI_RAW@/${HALIDE_RTTI_RAW}/g' > $@
 
 $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
-						   $(BIN_DIR)/libHalide.$(SHARED_EXT) \
-						   $(INCLUDE_DIR)/Halide.h \
-						   $(RUNTIME_EXPORTED_INCLUDES) \
-						   $(ROOT_DIR)/README*.md \
-               $(BUILD_DIR)/halide_config.cmake \
-               $(BUILD_DIR)/halide_config.make \
-						   $(ROOT_DIR)/halide.cmake
+                           $(BIN_DIR)/libHalide.$(SHARED_EXT) \
+                           $(INCLUDE_DIR)/Halide.h \
+                           $(RUNTIME_EXPORTED_INCLUDES) \
+                           $(ROOT_DIR)/README*.md \
+                           $(BUILD_DIR)/halide_config.cmake \
+                           $(BUILD_DIR)/halide_config.make \
+                           $(ROOT_DIR)/halide.cmake
+	rm -rf $(DISTRIB_DIR)
 	mkdir -p $(DISTRIB_DIR)/include \
 	         $(DISTRIB_DIR)/bin \
 	         $(DISTRIB_DIR)/lib \
@@ -1977,7 +1990,7 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
 	cp $(BUILD_DIR)/halide_config.* $(DISTRIB_DIR)
 	cp $(ROOT_DIR)/halide.cmake $(DISTRIB_DIR)
 	ln -sf $(DISTRIB_DIR) halide
-	tar -czf $(DISTRIB_DIR)/halide.tgz \
+	tar -czf $(BUILD_DIR)/halide.tgz \
 		halide/bin \
 		halide/lib \
 		halide/include \
@@ -1987,6 +2000,7 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
 		halide/halide_config.* \
 		halide/halide.*
 	rm -rf halide
+	mv $(BUILD_DIR)/halide.tgz $(DISTRIB_DIR)/halide.tgz
 
 .PHONY: distrib
 distrib: $(DISTRIB_DIR)/halide.tgz
