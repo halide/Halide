@@ -2314,8 +2314,10 @@ Stmt vtmpy_generator(Stmt s) {
 
 Stmt scatter_gather_generator(Stmt s) {
     // Generate vscatter-vgather instruction if target >= v65
+    s = substitute_in_all_lets(s);
     s = ScatterGatherGenerator().mutate(s);
     s = SyncronizationBarriers().mutate(s);
+    s = common_subexpression_elimination(s);
     return s;
 }
 
