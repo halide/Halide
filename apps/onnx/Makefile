@@ -59,5 +59,7 @@ clean:
 
 # Run python unittests.
 test_model_python: $(BIN)/model_cpp
-	$(PYTHON) -m unittest model_test
+	$(PYTHON) -m unittest model_test -v
+onnx_backend_test: $(BIN)/model_cpp
+	$(PYTHON) -m unittest halide_as_onnx_backend_test -v
 
