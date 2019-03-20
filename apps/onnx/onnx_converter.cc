@@ -719,11 +719,11 @@ Halide::Func WinogradConv(const Tensor& W, const Halide::Func& input) {
 
   static float GFilter[3][4] = {
       {1, 0.5, 0.5, 0}, {0, 0.5, -0.5, 0}, {0, 0.5, 0.5, 1}};
-   const Halide::Func G =
+  const Halide::Func G =
       EncodeBufferAsFunc(Halide::Buffer<float>(&GFilter[0][0], 4, 3), {4, 3});
 
   static float AFilter[2][4] = {{1, 1, 1, 0}, {0, 1, -1, -1}};
-   const Halide::Func A =
+  const Halide::Func A =
       EncodeBufferAsFunc(Halide::Buffer<float>(&AFilter[0][0], 4, 2), {4, 2});
 
   Halide::Expr num_channels = W.shape[1];
@@ -1531,11 +1531,11 @@ Node ConvertSoftmaxNode(
   Halide::Func in = inputs[0].rep;
   Halide::Expr max = Halide::maximum(in(denom_vars));
   if (node.op_type() == "LogSoftmax") {
-    result.outputs[0].rep(indices) = in(indices) - max -
-        Halide::log(Halide::sum(Halide::exp(in(denom_vars) - max)));
+    result.outputs[0].rep(indices) = in(indices)-max -
+        Halide::log(Halide::sum(Halide::exp(in(denom_vars)-max)));
   } else {
-    result.outputs[0].rep(indices) = Halide::exp(in(indices) - max) /
-        Halide::sum(Halide::exp(in(denom_vars) - max));
+    result.outputs[0].rep(indices) = Halide::exp(in(indices)-max) /
+        Halide::sum(Halide::exp(in(denom_vars)-max));
   }
   return result;
 }
@@ -1697,6 +1697,9 @@ Node ConvertSliceNode(
   for (const auto& attr : node.attribute()) {
     if (attr.name() == "axes") {
       for (int axis : attr.ints()) {
+        if (axis < 0) {
+          axis += num_dims;
+        }
         if (axis < 0 || axis >= num_dims) {
           throw std::invalid_argument(
               "Invalid axis for slice node " + node.name());
