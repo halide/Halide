@@ -269,8 +269,16 @@ struct ScopedBinding {
     }
 
     // allow move but not copy
-    ScopedBinding(const ScopedBinding& that) = delete;
-    ScopedBinding(ScopedBinding&& that) = default;
+    ScopedBinding(const ScopedBinding &that) = delete;
+    ScopedBinding(ScopedBinding &&that) :
+        scope(that.scope),
+        name(std::move(that.name)) {
+        // The move constructor must null out scope, so we don't try to pop it
+        that.scope = nullptr;
+    }
+
+    void operator=(const ScopedBinding &that) = delete;
+    void operator=(ScopedBinding &&that) = delete;
 };
 
 template<>
@@ -293,8 +301,16 @@ struct ScopedBinding<void> {
     }
 
     // allow move but not copy
-    ScopedBinding(const ScopedBinding& that) = delete;
-    ScopedBinding(ScopedBinding&& that) = default;
+    ScopedBinding(const ScopedBinding &that) = delete;
+    ScopedBinding(ScopedBinding &&that) :
+        scope(that.scope),
+        name(std::move(that.name)) {
+        // The move constructor must null out scope, so we don't try to pop it
+        that.scope = nullptr;
+    }
+
+    void operator=(const ScopedBinding &that) = delete;
+    void operator=(ScopedBinding &&that) = delete;
 };
 
 }  // namespace Internal

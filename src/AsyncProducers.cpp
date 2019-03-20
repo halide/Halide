@@ -494,15 +494,31 @@ class ExpandAcquireNodes : public IRMutator {
     using IRMutator::visit;
 
     Stmt visit(const Block *op) override {
-        Stmt first = mutate(op->first), rest = mutate(op->rest);
-        if (const Acquire *a = first.as<Acquire>()) {
-            // May as well nest the rest stmt inside the acquire
-            // node. It's also blocked on it.
-            return Acquire::make(a->semaphore, a->count,
-                                 mutate(Block::make(a->body, op->rest)));
-        } else {
-            return Block::make(first, rest);
+        // Do an entire sequence of blocks in a single visit method to conserve stack space.
+        vector<Stmt> stmts;
+        Stmt result;
+        do {
+            stmts.push_back(mutate(op->first));
+            result = op->rest;
+        } while ((op = result.as<Block>()));
+
+        result = mutate(result);
+
+        vector<pair<Expr, Expr>> semaphores;
+        for (auto it = stmts.rbegin(); it != stmts.rend(); it++) {
+            Stmt s = *it;
+            while (const Acquire *a = s.as<Acquire>()) {
+                semaphores.emplace_back(a->semaphore, a->count);
+                s = a->body;
+            }
+            result = Block::make(s, result);
+            while (!semaphores.empty()) {
+                result = Acquire::make(semaphores.back().first, semaphores.back().second, result);
+                semaphores.pop_back();
+            }
         }
+
+        return result;
     }
 
     Stmt visit(const Realize *op) override {

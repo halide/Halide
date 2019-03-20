@@ -515,6 +515,7 @@ struct Call : public ExprNode<Call> {
         undef,
         return_second,
         if_then_else,
+        if_then_else_mask,
         glsl_texture_load,
         glsl_texture_store,
         glsl_varying,
@@ -538,6 +539,7 @@ struct Call : public ExprNode<Call> {
         select_mask,
         extract_mask_element,
         require,
+        require_mask,
         size_of_halide_buffer_t,
         strict_float,
         quiet_div,
@@ -692,10 +694,11 @@ struct For : public StmtNode<For> {
 
     static Stmt make(const std::string &name, Expr min, Expr extent, ForType for_type, DeviceAPI device_api, Stmt body);
 
+    bool is_unordered_parallel() const {
+        return Halide::Internal::is_unordered_parallel(for_type);
+    }
     bool is_parallel() const {
-        return (for_type == ForType::Parallel ||
-                for_type == ForType::GPUBlock ||
-                for_type == ForType::GPUThread);
+        return Halide::Internal::is_parallel(for_type);
     }
 
     static const IRNodeType _node_type = IRNodeType::For;

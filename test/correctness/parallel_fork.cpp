@@ -84,7 +84,7 @@ int main(int argc, char **argv) {
     });
     printf("Serial time %f for %d calls.\n", time, count);
     fflush(stdout);
-    
+
     call_count = 0;
     both = make(Parallel);
     im = both.realize(10, 10, 2);

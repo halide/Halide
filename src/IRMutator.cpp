@@ -14,11 +14,11 @@ IRMutator::~IRMutator() {
 }
 
 Expr IRMutator::mutate(const Expr &e) {
-    return e.defined() ? ((const BaseExprNode *)e.get())->mutate_expr(this) : Expr();
+    return e.defined() ? e.get()->mutate_expr(this) : Expr();
 }
 
 Stmt IRMutator::mutate(const Stmt &s) {
-    return s.defined() ? ((const BaseStmtNode *)s.get())->mutate_stmt(this) : Stmt();
+    return s.defined() ? s.get()->mutate_stmt(this) : Stmt();
 }
 
 Expr IRMutator::visit(const IntImm *op)   {return op;}
