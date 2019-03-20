@@ -5,7 +5,7 @@ compiler:
   - gcc
 env:
   global:
-    # The Travis Ubuntu Trusty environment we run in currently promises 2 cores,
+    # The Travis Ubuntu Xenial environment we run in currently promises 2 cores,
     # so running lengthy make steps with -j2 is almost certainly a win.
     - MAKEFLAGS=-j2
   matrix:
@@ -17,36 +17,25 @@ env:
     # Test a mix of llvm versions, a mix of build systems, and a mix of shared vs static library
     # Don't build as a static library with cmake. It risks exceeding the travis memory limit.
     #
-    # Skip LLVM7 on Travis for now: the prebuilts are hard to get to work properly on Trusty,
-    # and Travis doesn't properly support Xenial yet
-    # - LLVM_VERSION=7.0.0 BUILD_SYSTEM=MAKE CXX_=g++-4.8 CC_=gcc-4.8
-    - LLVM_VERSION=6.0.0 BUILD_SYSTEM=MAKE CXX_=g++-4.8 CC_=gcc-4.8
-    - LLVM_VERSION=6.0.0 BUILD_SYSTEM=CMAKE CXX_=g++-4.8 CC_=gcc-4.8 HALIDE_SHARED_LIBRARY=1
+    # Note that gcc5.4 is the default install on Travis Xenial, so we'll just use that.
+    - LLVM_VERSION=8.0.0 BUILD_SYSTEM=MAKE
+    - LLVM_VERSION=8.0.0 BUILD_SYSTEM=CMAKE HALIDE_SHARED_LIBRARY=1
+    - LLVM_VERSION=7.0.1 BUILD_SYSTEM=MAKE
+    - LLVM_VERSION=6.0.1 BUILD_SYSTEM=MAKE
 cache: apt ccache
-dist: trusty
-# Note the commands below are written assuming Ubuntu 14.04LTS
-before_install:
-  # Needed for new libstdc++ and gcc4.8
-  - export CXX=${CXX_}
-  - export CC=${CC_}
-  - sudo add-apt-repository --yes ppa:ubuntu-toolchain-r/test/
-  - sudo apt-get update
+dist: xenial
+# Note the commands below are written assuming Ubuntu 16.04LTS
 install:
-  - sudo apt-get -y --force-yes install ${CXX} ${CC} libedit-dev
-  # Make gcc4.8 the default gcc version
-  - sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/${CC} 20
-  - sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/${CXX} 20
-  # Download the right llvm release
-  - wget https://releases.llvm.org/${LLVM_VERSION}/clang+llvm-${LLVM_VERSION}-x86_64-linux-gnu-ubuntu-14.04.tar.xz
-  - tar xvf clang+llvm-${LLVM_VERSION}-x86_64-linux-gnu-ubuntu-14.04.tar.xz
-  - sudo mv clang+llvm-${LLVM_VERSION}-x86_64-linux-gnu-ubuntu-14.04 /usr/local/llvm
+  # Travis Xenial uses gcc5.4 / cmake 3.12.4 by default, so no need to mess with
+  # install / setup for those.
+  #
+  # Download the right llvm release.
+  - wget https://releases.llvm.org/${LLVM_VERSION}/clang+llvm-${LLVM_VERSION}-x86_64-linux-gnu-ubuntu-16.04.tar.xz
+  - tar xvf clang+llvm-${LLVM_VERSION}-x86_64-linux-gnu-ubuntu-16.04.tar.xz
+  - sudo mv clang+llvm-${LLVM_VERSION}-x86_64-linux-gnu-ubuntu-16.04 /usr/local/llvm
   # Get libpng for the tutorials and apps
   - sudo apt-get -y --force-yes install libpng-dev
   # For generating docs
   - sudo apt-get -y --force-yes --no-install-recommends install doxygen
-  # Grab a version of CMake >= 3.4
-  - wget --no-check-certificate https://cmake.org/files/v3.5/cmake-3.5.2-Linux-x86_64.sh
-  - chmod a+x cmake-3.5.2-Linux-x86_64.sh
-  - sudo ./cmake-3.5.2-Linux-x86_64.sh --skip-license --prefix=/usr/local
 script:
   - test/scripts/build_travis.sh
