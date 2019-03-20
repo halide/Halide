@@ -10,7 +10,6 @@
 #include "LLVM_Headers.h"
 #include "LLVM_Output.h"
 #include "Param.h"
-#include "RemoveTrivialForLoops.h"
 #include "Substitute.h"
 
 namespace Halide {
@@ -723,9 +722,13 @@ class InjectHexagonRpc : public IRMutator {
 
         // After moving this to Hexagon, it doesn't need to be marked
         // Hexagon anymore.
-        Stmt body = For::make(loop->name, loop->min, loop->extent, loop->for_type,
-                              DeviceAPI::None, loop->body);
-        body = remove_trivial_for_loops(body);
+        Stmt body;
+        if (is_one(loop->extent)) {
+            body = LetStmt::make(loop->name, loop->min, loop->body);
+        } else {
+            body = For::make(loop->name, loop->min, loop->extent, loop->for_type,
+                             DeviceAPI::None, loop->body);
+        }
 
         // Build a closure for the device code.
         // TODO: Should this move the body of the loop to Hexagon,

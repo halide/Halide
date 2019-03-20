@@ -330,8 +330,8 @@ Stmt ProducerConsumer::make_consume(const std::string &name, Stmt body) {
 Stmt For::make(const std::string &name, Expr min, Expr extent, ForType for_type, DeviceAPI device_api, Stmt body) {
     internal_assert(min.defined()) << "For of undefined\n";
     internal_assert(extent.defined()) << "For of undefined\n";
-    internal_assert(min.type().is_scalar()) << "For with vector min\n";
-    internal_assert(extent.type().is_scalar()) << "For with vector extent\n";
+    internal_assert(min.type() == Int(32)) << "For with non-integer min\n";
+    internal_assert(extent.type() == Int(32)) << "For with non-integer extent\n";
     internal_assert(body.defined()) << "For of undefined\n";
 
     For *node = new For;

@@ -82,8 +82,8 @@ WEAK void halide_shutdown_thread_pool() {
 }
 
 WEAK int halide_set_num_threads(int n) {
-    if (n < 0) {
-        halide_error(NULL, "halide_set_num_threads: must be >= 0.");
+    if (n != 1) {
+        halide_error(NULL, "halide_set_num_threads: only supports a value of 1 on this platform.");
     }
     return 1;
 }

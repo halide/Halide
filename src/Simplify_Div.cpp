@@ -9,33 +9,58 @@ Expr Simplify::visit(const Div *op, ExprInfo *bounds) {
     Expr b = mutate(op->b, &b_bounds);
 
     if (bounds && no_overflow_int(op->type)) {
-        bounds->min_defined = bounds->max_defined =
-            (a_bounds.min_defined && b_bounds.min_defined &&
-             a_bounds.max_defined && b_bounds.max_defined &&
-             (b_bounds.min > 0 || b_bounds.max < 0));
-        if (bounds->min_defined) {
-            int64_t v1 = div_imp(a_bounds.min, b_bounds.min);
-            int64_t v2 = div_imp(a_bounds.min, b_bounds.max);
-            int64_t v3 = div_imp(a_bounds.max, b_bounds.min);
-            int64_t v4 = div_imp(a_bounds.max, b_bounds.max);
-            bounds->min = std::min(std::min(v1, v2), std::min(v3, v4));
-            bounds->max = std::max(std::max(v1, v2), std::max(v3, v4));
+        bounds->min = INT64_MAX;
+        bounds->max = INT64_MIN;
 
-            // Bounded numerator divided by constantish
-            // denominator can sometimes collapse things to a
-            // constant at this point.
-            if (bounds->min == bounds->max) {
-                if (op->type.can_represent(bounds->min)) {
-                    return make_const(op->type, bounds->min);
-                } else {
-                    // Even though this is 'no-overflow-int', if the result
-                    // we calculate can't fit into the destination type,
-                    // we're better off returning an overflow condition than
-                    // a known-wrong value. (Note that no_overflow_int() should
-                    // only be true for signed integers.)
-                    internal_assert(op->type.is_int());
-                    return make_signed_integer_overflow(op->type);
-                }
+        // Enumerate all possible values for the min and max and take the extreme values.
+        if (a_bounds.min_defined && b_bounds.min_defined && b_bounds.min != 0) {
+            int64_t v = div_imp(a_bounds.min, b_bounds.min);
+            bounds->min = std::min(bounds->min, v);
+            bounds->max = std::max(bounds->max, v);
+        }
+
+        if (a_bounds.min_defined && b_bounds.max_defined && b_bounds.max != 0) {
+            int64_t v = div_imp(a_bounds.min, b_bounds.max);
+            bounds->min = std::min(bounds->min, v);
+            bounds->max = std::max(bounds->max, v);
+        }
+
+        if (a_bounds.max_defined && b_bounds.max_defined && b_bounds.max != 0) {
+            int64_t v = div_imp(a_bounds.max, b_bounds.max);
+            bounds->min = std::min(bounds->min, v);
+            bounds->max = std::max(bounds->max, v);
+        }
+
+        if (a_bounds.max_defined && b_bounds.min_defined && b_bounds.min != 0) {
+            int64_t v = div_imp(a_bounds.max, b_bounds.min);
+            bounds->min = std::min(bounds->min, v);
+            bounds->max = std::max(bounds->max, v);
+        }
+
+        const bool b_positive = b_bounds.min_defined && b_bounds.min > 0;
+        const bool b_negative = b_bounds.max_defined && b_bounds.max < 0;
+
+        bounds->min_defined = ((a_bounds.min_defined && b_positive) ||
+                               (a_bounds.max_defined && b_negative));
+        bounds->max_defined = ((a_bounds.max_defined && b_positive) ||
+                               (a_bounds.min_defined && b_negative));
+
+        // Bounded numerator divided by constantish
+        // denominator can sometimes collapse things to a
+        // constant at this point
+        if (bounds->min_defined &&
+            bounds->max_defined &&
+            bounds->max == bounds->min) {
+            if (op->type.can_represent(bounds->min)) {
+                return make_const(op->type, bounds->min);
+            } else {
+                // Even though this is 'no-overflow-int', if the result
+                // we calculate can't fit into the destination type,
+                // we're better off returning an overflow condition than
+                // a known-wrong value. (Note that no_overflow_int() should
+                // only be true for signed integers.)
+                internal_assert(op->type.is_int());
+                return make_signed_integer_overflow(op->type);
             }
         }
         bounds->alignment = a_bounds.alignment / b_bounds.alignment;

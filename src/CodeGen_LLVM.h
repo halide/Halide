@@ -111,7 +111,6 @@ protected:
      * current module, function, context, builder, and most recently
      * generated llvm value. */
     //@{
-    static bool llvm_initialized;
     static bool llvm_X86_enabled;
     static bool llvm_ARM_enabled;
     static bool llvm_Hexagon_enabled;
@@ -121,7 +120,6 @@ protected:
     static bool llvm_PowerPC_enabled;
     static bool llvm_AMDGPU_enabled;
 
-    const Module *input_module;
     std::unique_ptr<llvm::Module> module;
     llvm::Function *function;
     llvm::LLVMContext *context;
