@@ -15,7 +15,7 @@ export HL_BEAM_SIZE=32
 export HL_NUM_PASSES=5
 export HL_RANDOM_DROPOUT=100
 
-APPS="resnet_50 bgu bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate_generator conv_layer mat_mul_generator iir_blur_generator"
+APPS="resnet_50_blockwise bgu bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate_generator conv_layer mat_mul_generator iir_blur_generator"
 
 while [ 1 ]; do
     for app in $APPS; do

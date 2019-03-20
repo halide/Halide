@@ -12,9 +12,9 @@ for app in ${APPS}; do
 done
 
 # For resnet we need to sum over the blocks
-echo resnet_50
+echo resnet_50_blockwise
 S=$(for ((block=0;block<16;block++)); do
-        cat ${HALIDE}/apps/resnet_50/samples/batch_*_${block}/*/bench.txt | cut -d' ' -f8 | sort -n | head -n1
+        cat ${HALIDE}/apps/resnet_50_blockwise/samples/batch_*_${block}/*/bench.txt | cut -d' ' -f8 | sort -n | head -n1
     done | paste -sd+ | bc)
 echo "$S * 1000" | bc
 
@@ -28,8 +28,8 @@ for app in ${APPS}; do
 done
 
 # For resnet we need to sum over the blocks
-echo resnet_50
+echo resnet_50_blockwise
 S=$(for ((block=0;block<16;block++)); do
-        ls -t ${HALIDE}/apps/resnet_50/samples/batch_*_${block}/0/bench.txt | head -n1 | xargs cat | cut -d' ' -f8
+        ls -t ${HALIDE}/apps/resnet_50_blockwise/samples/batch_*_${block}/0/bench.txt | head -n1 | xargs cat | cut -d' ' -f8
     done | paste -sd+ | bc)
 echo "$S * 1000" | bc

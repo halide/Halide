@@ -43,7 +43,7 @@ for config in 32,24000000,160 32,12000000,80 32,6000000,40 32,24000000,80 32,120
     # restrict to old space
     #export HL_NO_SUBTILING=1
 
-    APPS="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate_generator conv_layer mat_mul_generator iir_blur_generator resnet_50 bgu"
+    APPS="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate_generator conv_layer mat_mul_generator iir_blur_generator resnet_50_blockwise bgu"
     
     # Uncomment when there's a change that wouldn't be picked up by the Makefiles (e.g. new weights)
     for app in ${APPS}; do make -C ${HALIDE}/apps/${app} clean; done
@@ -56,7 +56,7 @@ for config in 32,24000000,160 32,12000000,80 32,6000000,40 32,24000000,80 32,120
             make -j32 -C ${HALIDE}/apps/${app} bin/process 2>stderr_${app}.txt >stdout_${app}.txt &
         fi
     done
-    make -C ${HALIDE}/apps/resnet_50 bin/pytorch_weights/ok > /dev/null 2> /dev/null
+    make -C ${HALIDE}/apps/resnet_50_blockwise bin/pytorch_weights/ok > /dev/null 2> /dev/null
     wait
     
     # benchmark everything
