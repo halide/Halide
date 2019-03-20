@@ -16,10 +16,15 @@ namespace Halide { namespace Runtime { namespace Internal { namespace Cuda {
 #define CUDA_FN_3020(ret, fn, fn_3020, args) WEAK ret (CUDAAPI *fn)args;
 #define CUDA_FN_4000(ret, fn, fn_4000, args) WEAK ret (CUDAAPI *fn)args;
 #include "cuda_functions.h"
+#undef CUDA_FN
+#undef CUDA_FN_OPTIONAL
+#undef CUDA_FN_3020
+#undef CUDA_FN_4000
 
 // The default implementation of halide_cuda_get_symbol attempts to load
 // the CUDA shared library/DLL, and then get the symbol from it.
 WEAK void *lib_cuda = NULL;
+volatile int WEAK lib_cuda_lock = 0;
 
 extern "C" WEAK void *halide_cuda_get_symbol(void *user_context, const char *name) {
     // Only try to load the library if we can't already get the symbol
@@ -69,6 +74,20 @@ WEAK void load_libcuda(void *user_context) {
     #define CUDA_FN_3020(ret, fn, fn_3020, args) fn = get_cuda_symbol<ret (CUDAAPI *)args>(user_context, #fn_3020);
     #define CUDA_FN_4000(ret, fn, fn_4000, args) fn = get_cuda_symbol<ret (CUDAAPI *)args>(user_context, #fn_4000);
     #include "cuda_functions.h"
+    #undef CUDA_FN
+    #undef CUDA_FN_OPTIONAL
+    #undef CUDA_FN_3020
+    #undef CUDA_FN_4000
+}
+
+// Call load_libcuda() if CUDA library has not been loaded.
+// This function is thread safe.
+// Note that initialization might fail. The caller can detect such failure by checking whether cuInit is NULL.
+WEAK void ensure_libcuda_init(void *user_context) {
+    ScopedSpinLock spinlock(&lib_cuda_lock);
+    if (!cuInit) {
+        load_libcuda(user_context);
+    }
 }
 
 extern WEAK halide_device_interface_t cuda_device_interface;
@@ -194,9 +213,7 @@ public:
         // The default acquire_context loads libcuda as a
         // side-effect. However, if acquire_context has been
         // overridden, we may still need to load libcuda
-        if (cuInit == NULL) {
-            load_libcuda(user_context);
-        }
+        ensure_libcuda_init(user_context);
 
         halide_assert(user_context, context != NULL);
         halide_assert(user_context, cuInit != NULL);
@@ -252,12 +269,10 @@ WEAK module_state *find_module_for_context(const registered_filters *filters, CU
 
 WEAK CUresult create_cuda_context(void *user_context, CUcontext *ctx) {
     // Initialize CUDA
+    ensure_libcuda_init(user_context);
     if (!cuInit) {
-        load_libcuda(user_context);
-        if (!cuInit) {
-            error(user_context) << "Could not find cuda system libraries";
-            return CUDA_ERROR_FILE_NOT_FOUND;
-        }
+        error(user_context) << "Could not find cuda system libraries";
+        return CUDA_ERROR_FILE_NOT_FOUND;
     }
 
     CUresult err = cuInit(0);

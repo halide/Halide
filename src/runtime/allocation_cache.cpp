@@ -16,7 +16,7 @@ WEAK halide_device_allocation_pool *device_allocation_pools = NULL;
 extern "C" {
 
 WEAK int halide_reuse_device_allocations(void *user_context, bool flag) {
-    __atomic_store_n(&halide_reuse_device_allocations_flag, flag, __ATOMIC_RELEASE);
+    halide_reuse_device_allocations_flag = flag;
 
     int err = 0;
     if (!flag) {
@@ -37,7 +37,7 @@ WEAK int halide_reuse_device_allocations(void *user_context, bool flag) {
  * finer-grained control. By default just returns the value most
  * recently set by the method above. */
 WEAK bool halide_can_reuse_device_allocations(void *user_context) {
-    return __atomic_load_n(&halide_reuse_device_allocations_flag, __ATOMIC_ACQUIRE);
+    return halide_reuse_device_allocations_flag;
 }
 
 WEAK void halide_register_device_allocation_pool(struct halide_device_allocation_pool *pool) {

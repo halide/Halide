@@ -213,10 +213,15 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     debug(2) << "Lowering after destructuring tuple-valued realizations:\n" << s << "\n\n";
 
     // OpenGL relies on GPU var canonicalization occurring before
-    // storage flattening
-    debug(1) << "Canonicalizing GPU var names...\n";
-    s = canonicalize_gpu_vars(s);
-    debug(2) << "Lowering after canonicalizing GPU var names:\n" << s << '\n';
+    // storage flattening.
+    if (t.has_gpu_feature() ||
+        t.has_feature(Target::OpenGLCompute) ||
+        t.has_feature(Target::OpenGL)) {
+        debug(1) << "Canonicalizing GPU var names...\n";
+        s = canonicalize_gpu_vars(s);
+        debug(2) << "Lowering after canonicalizing GPU var names:\n"
+                 << s << '\n';
+    }
 
     debug(1) << "Performing storage flattening...\n";
     s = storage_flattening(s, outputs, env, t);
