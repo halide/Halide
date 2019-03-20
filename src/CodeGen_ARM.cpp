@@ -12,6 +12,16 @@
 #include "Simplify.h"
 #include "Util.h"
 
+/*
+    Older versions of LLVM (< 4.0) required some custom code to
+    get strided stores to work well on ARM; more recent versions
+    do a good job without the old workarounds. Providing this via
+    ifdef is purely a stopgap measure for testing purposes; if this
+    lands, it should replace the old code, as we no longer support
+    the old versions of LLVM.
+*/
+#define USE_CUSTOM_STRIDED_STORE 0
+
 namespace Halide {
 namespace Internal {
 
@@ -730,6 +740,7 @@ void CodeGen_ARM::visit(const Store *op) {
             args[i] = codegen(shuffle->vectors[i]);
         }
 
+#if USE_CUSTOM_STRIDED_STORE
         // Declare the function
         std::ostringstream instr;
         vector<llvm::Type *> arg_types;
@@ -764,8 +775,31 @@ void CodeGen_ARM::visit(const Store *op) {
         llvm::Function *fn = dyn_cast_or_null<llvm::Function>(module->getOrInsertFunction(instr.str(), fn_type));
 #endif
         internal_assert(fn);
+#else  // not USE_CUSTOM_STRIDED_STORE
+        Value *shuffle_part1, *shuffle_part2;
+        if (num_vecs > 2) {
+            int mask_size = 2 * t.lanes();
+            SmallVector<Constant*, 256> constants;
+            for(int j = 0; j < mask_size; j++) {
+                Constant *constant = ConstantInt::get(i32_t, j);
+                constants.push_back(constant);
+            }
+            Constant* constants_vec = ConstantVector::get(constants);
+
+            Value *args3 = (num_vecs >= 3) ? UndefValue::get(llvm_type_of(t)) : args[3];
+
+            shuffle_part1 = builder->CreateShuffleVector(args[0], args[1], constants_vec);
+            shuffle_part2 = builder->CreateShuffleVector(args[2], args3, constants_vec);
+        } else {
+            shuffle_part1 = args[0];
+            shuffle_part2 = args[1];
+        }
+        llvm::Type *store_return_type = llvm_type_of(t.with_lanes(intrin_type.lanes() * num_vecs));
+        llvm::Type *store_return_pointer_type = store_return_type->getPointerTo();
+#endif  // not USE_CUSTOM_STRIDED_STORE
 
         // How many vst instructions do we need to generate?
+        // (LLVM >= 4.0 turns each shuffle + vector store pattern below into a vst.)
         int slices = t.lanes() / intrin_type.lanes();
 
         internal_assert(slices >= 1);
@@ -773,7 +807,7 @@ void CodeGen_ARM::visit(const Store *op) {
             Expr slice_base = simplify(ramp->base + i * num_vecs);
             Expr slice_ramp = Ramp::make(slice_base, ramp->stride, intrin_type.lanes() * num_vecs);
             Value *ptr = codegen_buffer_pointer(op->name, shuffle->vectors[0].type().element_of(), slice_base);
-
+#if USE_CUSTOM_STRIDED_STORE
             vector<Value *> slice_args = args;
             // Take a slice of each arg
             for (int j = 0; j < num_vecs ; j++) {
@@ -793,6 +827,20 @@ void CodeGen_ARM::visit(const Store *op) {
             }
 
             CallInst *store = builder->CreateCall(fn, slice_args);
+#else  // not USE_CUSTOM_STRIDED_STORE
+            SmallVector<Constant*, 256> constants;
+            for (int j = 0; j < intrin_type.lanes(); j++) {
+                for (int k = 0; k < num_vecs; k++) {
+                    Constant *constant = ConstantInt::get(i32_t, i + j + k*t.lanes());
+                    constants.push_back(constant);
+                }
+            }
+            Constant* constants_vec = ConstantVector::get(constants);
+            Value *all_shuffle = builder->CreateShuffleVector(shuffle_part1, shuffle_part2, constants_vec);
+            Value *bitcast = builder->CreateBitOrPointerCast(ptr, store_return_pointer_type);
+            StoreInst *store = cast<StoreInst>(builder->CreateStore(all_shuffle, bitcast));
+            store->setAlignment(alignment);
+#endif  // not USE_CUSTOM_STRIDED_STORE
             add_tbaa_metadata(store, op->name, slice_ramp);
         }
 
