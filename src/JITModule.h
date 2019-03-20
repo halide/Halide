@@ -100,8 +100,8 @@ struct JITModule {
      * depend on this one. This routine converts the ExternSignature
      * info into an LLVM type, which allows type safe linkage of
      * external routines. */
-    void add_extern_for_export(const std::string &name,
-                               const ExternCFunction &extern_c_function);
+    Symbol add_extern_for_export(const std::string &name,
+                                 const ExternCFunction &extern_c_function);
 
     /** Look up a symbol by name in this module or its dependencies. */
     Symbol find_symbol_by_name(const std::string &) const;

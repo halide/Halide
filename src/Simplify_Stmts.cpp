@@ -46,6 +46,9 @@ Stmt Simplify::visit(const IfThenElse *op) {
     }
 
     // Pull out common nodes
+    if (equal(then_case, else_case)) {
+        return then_case;
+    }
     const Acquire *then_acquire = then_case.as<Acquire>();
     const Acquire *else_acquire = else_case.as<Acquire>();
     const ProducerConsumer *then_pc = then_case.as<ProducerConsumer>();
@@ -74,6 +77,18 @@ Stmt Simplify::visit(const IfThenElse *op) {
                equal(then_block->rest, else_block->rest)) {
         return Block::make(mutate(IfThenElse::make(condition, then_block->first, else_block->first)),
                            then_block->rest);
+    } else if (then_block && equal(then_block->first, else_case)) {
+        return Block::make(else_case,
+                           mutate(IfThenElse::make(condition, then_block->rest)));
+    } else if (then_block && equal(then_block->rest, else_case)) {
+        return Block::make(mutate(IfThenElse::make(condition, then_block->first)),
+                           else_case);
+    } else if (else_block && equal(then_case, else_block->first)) {
+        return Block::make(then_case,
+                           mutate(IfThenElse::make(condition, Evaluate::make(0), else_block->rest)));
+    } else if (else_block && equal(then_case, else_block->rest)) {
+        return Block::make(mutate(IfThenElse::make(condition, Evaluate::make(0), else_block->first)),
+                           then_case);
     } else if (condition.same_as(op->condition) &&
         then_case.same_as(op->then_case) &&
         else_case.same_as(op->else_case)) {
@@ -102,7 +117,7 @@ Stmt Simplify::visit(const AssertStmt *op) {
         const bool const_false_conditions_expected =
             call && call->name == "halide_error_specialize_fail";
         if (!const_false_conditions_expected) {
-            user_warning << "This pipeline is guaranteed to fail an assertion at runtime with error: \n"
+            user_warning << "This pipeline is guaranteed to fail an assertion at runtime: \n"
                          << message << "\n";
         }
     } else if (is_one(cond)) {
@@ -138,6 +153,18 @@ Stmt Simplify::visit(const For *op) {
 
     if (is_no_op(new_body)) {
         return new_body;
+    } else if (extent_bounds.max_defined &&
+               extent_bounds.max == 0) {
+        return Evaluate::make(0);
+    } else if (extent_bounds.max_defined &&
+               extent_bounds.max == 1 &&
+               op->device_api == DeviceAPI::None) {
+        Stmt s = LetStmt::make(op->name, new_min, new_body);
+        if (extent_bounds.min_defined && extent_bounds.min == 1) {
+            return mutate(s);
+        } else {
+            return mutate(IfThenElse::make(new_extent > 0, s));
+        }
     } else if (op->min.same_as(new_min) &&
                op->extent.same_as(new_extent) &&
                op->body.same_as(new_body)) {
@@ -284,13 +311,40 @@ Stmt Simplify::visit(const ProducerConsumer *op) {
 
 Stmt Simplify::visit(const Block *op) {
     Stmt first = mutate(op->first);
-    Stmt rest;
+    Stmt rest = op->rest;
 
-    if (const AssertStmt *a = first.as<AssertStmt>()) {
-        // We can assume the asserted condition is true in the
-        // rest. This should propagate constraints.
-        auto f = scoped_truth(a->condition);
-        rest = mutate(op->rest);
+    if (const AssertStmt *first_assert = first.as<AssertStmt>()) {
+        // Handle an entire sequence of asserts here to avoid a deeply
+        // nested stack.  We won't be popping any knowledge until
+        // after the end of this chain of asserts, so we can use a
+        // single ScopedFact and progressively add knowledge to it.
+        ScopedFact knowledge(this);
+        vector<Stmt> result;
+        result.push_back(first);
+        knowledge.learn_true(first_assert->condition);
+
+        // Loop invariants: 'first' has already been mutated and is in
+        // the result list. 'first' was an AssertStmt before it was
+        // mutated, and its condition has been captured in
+        // 'knowledge'. 'rest' has not been mutated and is not in the
+        // result list.
+        const Block *rest_block;
+        while ((rest_block = rest.as<Block>()) &&
+               (first_assert = rest_block->first.as<AssertStmt>())) {
+            first = mutate(first_assert);
+            rest = rest_block->rest;
+            result.push_back(first);
+            if ((first_assert = first.as<AssertStmt>())) {
+                // If it didn't fold away to trivially true or false,
+                // learn the condition.
+                knowledge.learn_true(first_assert->condition);
+            }
+        }
+
+        result.push_back(mutate(rest));
+
+        return Block::make(result);
+
     } else {
         rest = mutate(op->rest);
     }

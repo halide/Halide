@@ -288,10 +288,7 @@ void Stage::set_dim_type(VarOrRVar var, ForType t) {
 
             // If it's an rvar and the for type is parallel, we need to
             // validate that this doesn't introduce a race condition.
-            if (!dims[i].is_pure() && var.is_rvar &&
-                (t == ForType::Vectorized || t == ForType::Parallel ||
-                 t == ForType::GPUBlock || t == ForType::GPUThread ||
-                 t == ForType::GPULane)) {
+            if (!dims[i].is_pure() && var.is_rvar && is_parallel(t)) {
                 user_assert(definition.schedule().allow_race_conditions())
                     << "In schedule for " << name()
                     << ", marking var " << var.name()
@@ -3114,8 +3111,8 @@ void Func::infer_input_bounds(Pipeline::RealizationArg outputs,
     pipeline().infer_input_bounds(std::move(outputs), param_map);
 }
 
-void *Func::compile_jit(const Target &target) {
-    return pipeline().compile_jit(target);
+void Func::compile_jit(const Target &target) {
+    pipeline().compile_jit(target);
 }
 
 Var _("_");

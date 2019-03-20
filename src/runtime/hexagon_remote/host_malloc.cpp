@@ -30,6 +30,14 @@ struct ion_allocation_data {
     ion_user_handle_t handle;
 };
 
+struct ion_allocation_data_newer {
+    uint64_t len;
+    uint32_t heap_id_mask;
+    uint32_t flags;
+    uint32_t fd;
+    uint32_t unused;
+};
+
 struct ion_fd_data {
     ion_user_handle_t handle;
     int fd;
@@ -40,21 +48,45 @@ struct ion_handle_data {
 };
 
 #define ION_IOC_ALLOC _IOWR('I', 0, ion_allocation_data)
+#define ION_IOC_ALLOC_NEWER _IOWR('I', 0, ion_allocation_data_newer)
 #define ION_IOC_FREE _IOWR('I', 1, ion_handle_data)
 #define ION_IOC_MAP _IOWR('I', 2, ion_fd_data)
 
+bool use_newer_ioctl = false;
+
+// ION IOCTL approach
+// This function will first try older IOCTL approach provided we have not determined
+// that we should use the newer IOCTL. Once we have determined we should use the
+// newer IOCTL method , we cease calling the older IOCTL.
 ion_user_handle_t ion_alloc(int ion_fd, size_t len, size_t align, unsigned int heap_id_mask, unsigned int flags) {
-    ion_allocation_data alloc = {
+
+    if (!use_newer_ioctl) {
+        ion_allocation_data alloc = {
+            len,
+            align,
+            heap_id_mask,
+            flags,
+            0
+        };
+        if (ioctl(ion_fd, ION_IOC_ALLOC, &alloc) >= 0) {
+            return alloc.handle;
+        }
+    }
+
+    // Lets try newer ioctl API
+    ion_allocation_data_newer alloc_newer = {
         len,
-        align,
         heap_id_mask,
         flags,
+        0,
         0
     };
-    if (ioctl(ion_fd, ION_IOC_ALLOC, &alloc) < 0) {
-        return -1;
+    if (ioctl(ion_fd, ION_IOC_ALLOC_NEWER, &alloc_newer) >= 0) {
+        use_newer_ioctl = true;
+        return alloc_newer.fd;
     }
-    return alloc.handle;
+    // Abject failure
+    return -1;
 }
 
 int ion_map(int ion_fd, ion_user_handle_t handle) {
@@ -103,7 +135,9 @@ extern "C" {
 __attribute__((weak)) void remote_register_buf(void* buf, int size, int fd);
 
 void halide_hexagon_host_malloc_init() {
+    if (ion_fd != -1) return;
     pthread_mutex_init(&allocations_mutex, NULL);
+    use_newer_ioctl = false;
     ion_fd = open("/dev/ion", O_RDONLY, 0);
     if (ion_fd < 0) {
         __android_log_print(ANDROID_LOG_ERROR, "halide", "open('/dev/ion') failed");
@@ -111,6 +145,7 @@ void halide_hexagon_host_malloc_init() {
 }
 
 void halide_hexagon_host_malloc_deinit() {
+    if (ion_fd == -1) return;
     close(ion_fd);
     ion_fd = -1;
     pthread_mutex_destroy(&allocations_mutex);
@@ -137,19 +172,24 @@ void *halide_hexagon_host_malloc(size_t size) {
         }
     }
 
-    ion_user_handle_t handle = ion_alloc(ion_fd, size, alignment, 1 << heap_id, ion_flags);
+    int buf_fd = 0;
+    ion_user_handle_t handle = 0;
+    handle = ion_alloc(ion_fd, size, alignment, 1 << heap_id, ion_flags);
     if (handle < 0) {
         __android_log_print(ANDROID_LOG_ERROR, "halide", "ion_alloc(%d, %d, %d, %d, %d) failed",
                             ion_fd, size, alignment, 1 << heap_id, ion_flags);
         return NULL;
     }
-
     // Map the ion handle to a file buffer.
-    int buf_fd = ion_map(ion_fd, handle);
-    if (buf_fd < 0) {
-        __android_log_print(ANDROID_LOG_ERROR, "halide", "ion_map(%d, %d) failed", ion_fd, handle);
-        ion_free(ion_fd, handle);
-        return NULL;
+    if (use_newer_ioctl) {
+       buf_fd = handle;
+    } else {
+        buf_fd = ion_map(ion_fd, handle);
+        if (buf_fd < 0) {
+           __android_log_print(ANDROID_LOG_ERROR, "halide", "ion_map(%d, %d) failed", ion_fd, handle);
+           ion_free(ion_fd, handle);
+           return NULL;
+        }
     }
 
     // Map the file buffer to a pointer.
@@ -158,7 +198,9 @@ void *halide_hexagon_host_malloc(size_t size) {
         __android_log_print(ANDROID_LOG_ERROR, "halide", "mmap(NULL, %d, PROT_READ | PROT_WRITE, MAP_SHARED, %d, 0) failed",
                             size, buf_fd);
         close(buf_fd);
-        ion_free(ion_fd, handle);
+        if (!use_newer_ioctl) {
+            ion_free(ion_fd, handle);
+        }
         return NULL;
     }
 
@@ -173,7 +215,9 @@ void *halide_hexagon_host_malloc(size_t size) {
         __android_log_print(ANDROID_LOG_ERROR, "halide", "malloc failed");
         munmap(buf, size);
         close(buf_fd);
-        ion_free(ion_fd, handle);
+        if (!use_newer_ioctl) {
+            ion_free(ion_fd, handle);
+        }
         return NULL;
     }
 
@@ -226,10 +270,11 @@ void halide_hexagon_host_free(void *ptr) {
 
     // free the ION allocation
     close(rec->buf_fd);
-    if (ion_free(ion_fd, rec->handle) < 0) {
-        __android_log_print(ANDROID_LOG_WARN, "halide", "ion_free(%d, %d) failed", ion_fd, rec->handle);
+    if (!use_newer_ioctl) {
+        if (ion_free(ion_fd, rec->handle) < 0) {
+            __android_log_print(ANDROID_LOG_WARN, "halide", "ion_free(%d, %d) failed", ion_fd, rec->handle);
+        }
     }
-
     free(rec);
 }
 

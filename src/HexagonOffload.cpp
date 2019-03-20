@@ -1,4 +1,3 @@
-#include <fstream>
 #include <iostream>
 #include <memory>
 
@@ -11,7 +10,6 @@
 #include "LLVM_Headers.h"
 #include "LLVM_Output.h"
 #include "Param.h"
-#include "RemoveTrivialForLoops.h"
 #include "Substitute.h"
 
 namespace Halide {
@@ -724,9 +722,13 @@ class InjectHexagonRpc : public IRMutator {
 
         // After moving this to Hexagon, it doesn't need to be marked
         // Hexagon anymore.
-        Stmt body = For::make(loop->name, loop->min, loop->extent, loop->for_type,
-                              DeviceAPI::None, loop->body);
-        body = remove_trivial_for_loops(body);
+        Stmt body;
+        if (is_one(loop->extent)) {
+            body = LetStmt::make(loop->name, loop->min, loop->body);
+        } else {
+            body = For::make(loop->name, loop->min, loop->extent, loop->for_type,
+                             DeviceAPI::None, loop->body);
+        }
 
         // Build a closure for the device code.
         // TODO: Should this move the body of the loop to Hexagon,
@@ -998,14 +1000,7 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
 
         debug(1) << "Signing Hexagon code: " << input.pathname() << " -> " << output.pathname() << "\n";
 
-        {
-            std::ofstream f(input.pathname(), std::ios::out|std::ios::binary);
-
-            f.write(shared_object.data(), shared_object.size());
-            f.flush();
-            internal_assert(f.good());
-            f.close();
-        }
+        write_entire_file(input.pathname(), shared_object);
 
         debug(1) << "Signing tool: (" << signer << ")\n";
         std::string cmd = signer + " " + input.pathname() + " " + output.pathname();
@@ -1014,16 +1009,7 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
             << "HL_HEXAGON_CODE_SIGNER failed: result = " << result
             << " for cmd (" << cmd << ")";
 
-        {
-            std::ifstream f(output.pathname(), std::ios::in|std::ios::binary);
-            f.seekg(0, std::ifstream::end);
-            size_t signed_size = f.tellg();
-            shared_object.resize(signed_size);
-            f.seekg(0, std::ifstream::beg);
-            f.read(shared_object.data(), shared_object.size());
-            internal_assert(f.good());
-            f.close();
-        }
+        shared_object = read_entire_file(output.pathname());
     }
 
     Halide::Buffer<uint8_t> result_buf(shared_object.size(), device_code.name());

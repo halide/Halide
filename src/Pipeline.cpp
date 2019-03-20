@@ -90,6 +90,8 @@ struct PipelineContents {
      * define_extern calls. */
     std::map<std::string, JITExtern> jit_externs;
 
+    std::vector<Stmt> requirements;
+
     PipelineContents() :
         module("", Target()) {
         user_context_arg.arg = Argument("__user_context", Argument::InputScalar, type_of<const void*>(), 0, ArgumentEstimates{});
@@ -255,7 +257,7 @@ void Pipeline::compile_to_python_extension(const string &filename,
 
 void Pipeline::print_loop_nest() {
     user_assert(defined()) << "Can't print loop nest of undefined Pipeline.\n";
-    std::cerr << Halide::Internal::print_loop_nest(contents->outputs);
+    debug(0) << Halide::Internal::print_loop_nest(contents->outputs);
 }
 
 void Pipeline::compile_to_lowered_stmt(const string &filename,
@@ -307,7 +309,14 @@ void Pipeline::compile_to_file(const string &filename_prefix,
 }
 
 vector<Argument> Pipeline::infer_arguments(Stmt body) {
-    contents->inferred_args = ::infer_arguments(body, contents->outputs);
+    Stmt s = body;
+    if (!contents->requirements.empty()) {
+        s = Block::make(contents->requirements);
+        if (body.defined()) {
+            s = Block::make(s, body);
+        }
+    }
+    contents->inferred_args = ::infer_arguments(s, contents->outputs);
 
     // Add the user context argument if it's not already there, or hook up our user context
     // Parameter to any existing one.
@@ -404,7 +413,8 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
             custom_passes.push_back(p.pass);
         }
 
-        contents->module = lower(contents->outputs, new_fn_name, target, lowering_args, linkage_type, custom_passes);
+        contents->module = lower(contents->outputs, new_fn_name, target, lowering_args,
+                                 linkage_type, contents->requirements, custom_passes);
     }
 
     return contents->module;
@@ -422,7 +432,7 @@ std::string Pipeline::generate_function_name() const {
     return name;
 }
 
-void *Pipeline::compile_jit(const Target &target_arg) {
+void Pipeline::compile_jit(const Target &target_arg) {
     user_assert(defined()) << "Pipeline is undefined\n";
 
     Target target(target_arg);
@@ -433,10 +443,11 @@ void *Pipeline::compile_jit(const Target &target_arg) {
 
     // If we're re-jitting for the same target, we can just keep the
     // old jit module.
-    if (contents->jit_target == target &&
-        contents->jit_module.compiled()) {
-        debug(2) << "Reusing old jit module compiled for :\n" << contents->jit_target << "\n";
-        return contents->jit_module.main_function();
+    if (contents->jit_target == target) {
+        if (contents->jit_module.compiled()) {
+            debug(2) << "Reusing old jit module compiled for :\n" << contents->jit_target << "\n";
+            return;
+        }
     }
 
     // Clear all cached info in case there is an error.
@@ -461,9 +472,10 @@ void *Pipeline::compile_jit(const Target &target_arg) {
 
     // Compile to a module and also compile any submodules.
     Module module = compile_to_module(args, name, target).resolve_submodules();
-    auto f = module.get_function_by_name(name);
 
     std::map<std::string, JITExtern> lowered_externs = contents->jit_externs;
+
+    auto f = module.get_function_by_name(name);
 
     // Compile to jit module
     JITModule jit_module(module, f, make_externs_jit_module(target_arg, lowered_externs));
@@ -481,8 +493,6 @@ void *Pipeline::compile_jit(const Target &target_arg) {
     }
 
     contents->jit_module = jit_module;
-
-    return jit_module.main_function();
 }
 
 
@@ -595,7 +605,36 @@ Realization Pipeline::realize(int x_size, const Target &target,
 
 Realization Pipeline::realize(const Target &target,
                               const ParamMap &param_map) {
-  return realize(vector<int32_t>(), target, param_map);
+    return realize(vector<int32_t>(), target, param_map);
+}
+
+void Pipeline::add_requirement(Expr condition, std::vector<Expr> &error_args) {
+    // It is an error for a requirement to reference a Func or a Var
+    class Checker : public IRGraphVisitor {
+        using IRGraphVisitor::visit;
+
+        void visit(const Variable *op) override {
+            if (!op->param.defined()) {
+                user_error << "Requirement " << condition << " refers to Var or RVar " << op->name << "\n";
+            }
+        }
+
+        void visit(const Call *op) override {
+            if (op->call_type == Call::Halide) {
+                user_error << "Requirement " << condition << " calls Func " << op->name << "\n";
+            }
+            IRGraphVisitor::visit(op);
+        }
+
+        const Expr &condition;
+    public:
+        Checker(const Expr &c) : condition(c) {
+            c.accept(this);
+        }
+    } checker(condition);
+
+    Expr error = Internal::requirement_failed_error(condition, error_args);
+    contents->requirements.emplace_back(Internal::AssertStmt::make(condition, error));
 }
 
 namespace {
@@ -702,9 +741,8 @@ struct Pipeline::JITCallArgs {
     const void **store;
 
     JITCallArgs(size_t size) : size(size) {
-        if (size > (sizeof(fixed_store) / sizeof(fixed_store[0]))) {
-            // TODO(zalman): Call new[]?
-            store = (const void **)malloc(sizeof(void *) * size);
+        if (size > kStoreSize) {
+            store = new ConstVoidPtr[size];
         } else {
             store = fixed_store;
         }
@@ -712,12 +750,15 @@ struct Pipeline::JITCallArgs {
 
     ~JITCallArgs() {
         if (store != fixed_store) {
-            free(store);
+            delete [] store;
         }
     }
 
 private:
-    const void *fixed_store[64];
+    static constexpr int kStoreSize = 64;
+    using ConstVoidPtr = const void *;
+    ConstVoidPtr fixed_store[kStoreSize];
+
     JITCallArgs(const JITCallArgs &) = delete;
     JITCallArgs(JITCallArgs &&) = delete;
     void operator=(const JITCallArgs &) = delete;
@@ -818,7 +859,7 @@ Pipeline::make_externs_jit_module(const Target &target,
             for (const InferredArgument &arg : pipeline_contents.inferred_args) {
                 // TODO: it's not clear whether arg.arg.type is correct for
                 // the arg.is_buffer() case (AFAIK, is_buffer()==true isn't possible
-                // in current mtrunk Halide, but may be in some side branches that
+                // in current trunk Halide, but may be in some side branches that
                 // have not yet landed, e.g. JavaScript). Forcing it to be
                 // the correct type here, just in case.
                 arg_types.push_back(arg.arg.is_buffer() ?
@@ -839,6 +880,10 @@ Pipeline::make_externs_jit_module(const Target &target,
         result.push_back(free_standing_jit_externs);
     }
     return result;
+}
+
+int Pipeline::call_jit_code(const Target &target, const JITCallArgs &args) {
+    return contents->jit_module.argv_function()(args.store);
 }
 
 void Pipeline::realize(RealizationArg outputs, const Target &t,
@@ -949,7 +994,7 @@ void Pipeline::realize(RealizationArg outputs, const Target &t,
     // exception.
 
     debug(2) << "Calling jitted function\n";
-    int exit_status = contents->jit_module.argv_function()(args.store);
+    int exit_status = call_jit_code(target, args);
     debug(2) << "Back from jitted function. Exit status was " << exit_status << "\n";
 
     // If we're profiling, report runtimes and reset profiler stats.
@@ -1024,7 +1069,7 @@ void Pipeline::infer_input_bounds(RealizationArg outputs, const ParamMap &param_
         }
 
         Internal::debug(2) << "Calling jitted function\n";
-        int exit_status = contents->jit_module.argv_function()(args.store);
+        int exit_status = call_jit_code(target, args);
         jit_context.report_if_error(exit_status);
         Internal::debug(2) << "Back from jitted function\n";
         bool changed = false;

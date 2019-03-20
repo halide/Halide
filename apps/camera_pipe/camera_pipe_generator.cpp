@@ -291,6 +291,9 @@ Func CameraPipe::color_correct(Func input) {
 
     if (!auto_schedule && !use_simple_autoscheduler) {
         matrix.compute_root();
+        if (get_target().has_gpu_feature()) {
+            matrix.gpu_single_thread();
+        }
     }
 
     Func corrected;
@@ -390,6 +393,9 @@ Func CameraPipe::sharpen(Func input) {
     sharpen_strength_x32() = u8_sat(sharpen_strength * 32);
     if (!auto_schedule && !use_simple_autoscheduler) {
         sharpen_strength_x32.compute_root();
+        if (get_target().has_gpu_feature()) {
+            sharpen_strength_x32.gpu_single_thread();
+        }
     }
 
     /* Optional tags to specify layout for HalideTraceViz */
@@ -499,6 +505,17 @@ void CameraPipe::generate() {
 
     } else if (get_target().has_gpu_feature()) {
 
+        // We can generate slightly better code if we know the output is even-sized
+        if (!auto_schedule) {
+            // TODO: The autoscheduler really ought to be able to
+            // accommodate bounds on the output Func.
+            Expr out_width = processed.width();
+            Expr out_height = processed.height();
+            processed.bound(c, 0, 3)
+                .bound(x, 0, (out_width / 2) * 2)
+                .bound(y, 0, (out_height / 2) * 2);
+        }
+
         Var xi, yi, xii, xio;
 
         /* 1391us on a gtx 980. */
@@ -530,6 +547,7 @@ void CameraPipe::generate() {
     } else {
         Expr out_width = processed.width();
         Expr out_height = processed.height();
+
         // In HVX 128, we need 2 threads to saturate HVX with work,
         //and in HVX 64 we need 4 threads, and on other devices,
         // we might need many threads.
@@ -549,6 +567,7 @@ void CameraPipe::generate() {
         } else if (get_target().has_feature(Target::HVX_128)) {
             vec = 64;
         }
+
         processed.compute_root()
             .reorder(c, x, y)
             .split(y, yi, yii, 2, TailStrategy::RoundUp)
