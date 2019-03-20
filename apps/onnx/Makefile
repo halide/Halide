@@ -9,7 +9,7 @@ ONNX_SRC_DIR ?= $(error ONNX_SRC_DIR must provided)
 PROTOC = protoc
 PROTOCFLAGS = --cpp_out=.
 
-CXXFLAGS += -DGOOGLE_PROTOBUF_NO_RTTI -Wno-sign-compare --no-warning
+CXXFLAGS += -DGOOGLE_PROTOBUF_NO_RTTI -Wno-sign-compare -Wno-unused-but-set-variable
 LDFLAGS += -lprotobuf-lite
 
 
