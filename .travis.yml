@@ -26,14 +26,14 @@ dist: xenial
 # Note the commands below are written assuming Ubuntu 16.04LTS
 before_install:
   # Note that gcc5.4 is the default install on Travis Xenial, but seems to have compilation
-  # issues with the llvm7 prebuilt; downgrade to 5.3 as workaround
-  - export CXX=g++-5.3
-  - export CC=gcc-5.3
+  # issues with the llvm7 prebuilt; downgrade to 4.8 as workaround
+  - export CXX=g++-4.8
+  - export CC=gcc-4.8
   - sudo add-apt-repository --yes ppa:ubuntu-toolchain-r/test/
   - sudo apt-get update
 install:
   - sudo apt-get -y --force-yes install ${CXX} ${CC}
-  # Make gcc5.3 the default gcc version
+  # Make gcc4.8 the default gcc version
   - sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/${CC} 20
   - sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/${CXX} 20
    # Download the right llvm release.
