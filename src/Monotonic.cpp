@@ -28,7 +28,9 @@ class MonotonicVisitor : public IRVisitor {
     }
 
     void visit(const StringImm *) override {
-        internal_error << "Monotonic on String\n";
+        // No: require() Exprs can includes Strings, which
+        // shouldn't affect the outcome. Just ignore them.
+        // internal_error << "Monotonic on String\n";
     }
 
     void visit(const Cast *op) override {
