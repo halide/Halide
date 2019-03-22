@@ -46,12 +46,11 @@ PYBIND11_CFLAGS = $(shell $(PYTHON) -m pybind11 --includes) -frtti
 
 PY_EXT = $(shell $(PYTHON)-config --extension-suffix)
 
-PYCXXFLAGS =  $(CXXFLAGS) $(PYBIND11_CFLAGS) 
-HALIDE_LIB = $(HALIDE_DISTRIB_PATH)/bin/libHalide.so
+PYCXXFLAGS =  $(CXXFLAGS) $(PYBIND11_CFLAGS)
 
 # Python extenstion for HalideModel
 $(BIN)/model_cpp: model.cpp $(ONNX_CONVERTER_LIB)
-	$(CXX) $(PYCXXFLAGS) -O3 -Wall -shared -fPIC -I$(BIN) $< $(ONNX_CONVERTER_LIB) $(HALIDE_LIB) -o $@$(PY_EXT) $(LDFLAGS)
+	$(CXX) $(PYCXXFLAGS) -O3 -Wall -shared -fPIC -I$(BIN) $< $(ONNX_CONVERTER_LIB) $(LIB_HALIDE) -o $@$(PY_EXT) $(LDFLAGS)
 
 
 clean:
