@@ -586,6 +586,16 @@ void check_bounds() {
     check(min(x, min(x, y)), min(x, y));
     check(min(y, min(x, y)), min(x, y));
 
+    check(min(min(x, y) + 1, x), min(y + 1, x));
+    check(min(min(x, y) - (-1), x), min(y + 1, x));
+    check(min(min(x, y) + (-1), x), min(min(x, y) + (-1), x));  // unchanged
+    check(min(min(x, y) - 1, x), min(min(x, y) + (-1), x));  // unchanged
+
+    check(max(max(x, y) - 1, x), max(y + (-1), x));
+    check(max(max(x, y) + (-1), x), max(y + (-1), x));
+    check(max(max(x, y) + 1, x), max(max(x, y) + 1, x));  // unchanged
+    check(max(max(x, y) - (-1), x), max(max(x, y) + 1, x));  // unchanged
+
     check(max(Expr(7), 3), 7);
     check(max(Expr(4.25f), 1.25f), 4.25f);
     check(max(broadcast(x, 4), broadcast(y, 4)),
