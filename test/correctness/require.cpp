@@ -64,6 +64,35 @@ static void test(int vector_width) {
             exit(1);
         }
     }
+
+
+    ImageParam input(Int(32), 2);
+    Expr h = require(p1 == p2, p1);
+    Func clamped = BoundaryConditions::repeat_edge(input, 0, 64, 0, h);
+    clamped.set_error_handler(&halide_error);
+
+    Buffer<int32_t> input_buf(64, 64);
+    input_buf.fill(0);
+    input.set(input_buf);
+    p1.set(16);
+    p2.set(15);
+
+    error_occurred = false;
+    result = clamped.realize(64, 3);
+    if (!error_occurred) {
+        printf("There should have been a requirement error (vector_width = %d)\n", vector_width);
+        exit(1);
+    }
+
+    p1.set(16);
+    p2.set(16);
+
+    error_occurred = false;
+    result = clamped.realize(64, 3);
+    if (error_occurred) {
+        printf("There should NOT have been a requirement error (vector_width = %d)\n", vector_width);
+        exit(1);
+    }
 }
 
 int main(int argc, char **argv) {
