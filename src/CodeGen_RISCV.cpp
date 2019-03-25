@@ -14,7 +14,6 @@ CodeGen_RISCV::CodeGen_RISCV(Target t) : CodeGen_Posix(t) {
     #if !(WITH_RISCV)
     user_error << "llvm build not configured with RISCV target enabled.\n";
     #endif
-    user_assert(llvm_Mips_enabled) << "llvm build not configured with RISCV target enabled.\n";
 }
 
 string CodeGen_RISCV::mcpu() const {
