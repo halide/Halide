@@ -1385,7 +1385,7 @@ void GeneratorBase::post_configure() {
 void GeneratorBase::pre_generate() {
     advance_phase(GenerateCalled);
     GeneratorParamInfo &pi = param_info();
-    user_assert(pi.outputs().size() > 0) << "Must use Output<> with generate() method.";
+    user_assert(!pi.outputs().empty()) << "Must use Output<> with generate() method.";
     user_assert(get_target() != Target()) << "The Generator target has not been set.";
 
     if (!inputs_set) {
@@ -1435,7 +1435,7 @@ Pipeline GeneratorBase::get_pipeline() {
     check_min_phase(GenerateCalled);
     if (!pipeline.defined()) {
         GeneratorParamInfo &pi = param_info();
-        user_assert(pi.outputs().size() > 0) << "Must use get_pipeline<> with Output<>.";
+        user_assert(!pi.outputs().empty()) << "Must use get_pipeline<> with Output<>.";
         std::vector<Func> funcs;
         for (auto *output : pi.outputs()) {
             for (const auto &f : output->funcs()) {
