@@ -1029,7 +1029,7 @@ public:
     Vec operator!() const {
         Vec r(empty);
         for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = !r.elements[i];
+            r.elements[i] = !(*this)[i];
         }
         return r;
     }
