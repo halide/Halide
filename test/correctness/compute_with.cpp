@@ -496,6 +496,9 @@ int rgb_yuv420_test() {
         u_part(x, y) = (( -38 * rgb(2*x, 2*y, 0) -  74 * rgb(2*x, 2*y, 1) + 112 * rgb(2*x, 2*y, 2) + 128) >> 8) + 128;
         v_part(x, y) = (( 112 * rgb(2*x, 2*y, 0) -  94 * rgb(2*x, 2*y, 1) -  18 * rgb(2*x, 2*y, 2) + 128) >> 8) + 128;
 
+        y_part.vectorize(x, 8);
+        u_part.vectorize(x, 8);
+        v_part.vectorize(x, 8);
         loads_total = 0;
         stores_total = 0;
         Pipeline p({y_part, u_part, v_part});
