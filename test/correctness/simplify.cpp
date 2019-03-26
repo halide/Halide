@@ -1208,6 +1208,13 @@ void check_boolean() {
 
     check(Block::make({IfThenElse::make(x < y, Evaluate::make(x+1)),
                        IfThenElse::make(x < y, Evaluate::make(x+2)),
+                       IfThenElse::make(x < y, Evaluate::make(x+3)),
+                       Evaluate::make(x+4)}),
+          Block::make(IfThenElse::make(x < y, Block::make({Evaluate::make(x+1), Evaluate::make(x+2), Evaluate::make(x+3)})),
+                      Evaluate::make(x+4)));
+
+    check(Block::make({IfThenElse::make(x < y, Evaluate::make(x+1)),
+                       IfThenElse::make(x < y, Evaluate::make(x+2)),
                        Evaluate::make(x+3)}),
           Block::make(IfThenElse::make(x < y, Block::make(Evaluate::make(x+1), Evaluate::make(x+2))),
                       Evaluate::make(x+3)));
