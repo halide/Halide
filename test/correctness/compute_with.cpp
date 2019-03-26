@@ -32,6 +32,8 @@ struct Bound {
 };
 
 map<string, Bound> stores, loads;
+uint64_t loads_total = 0, stores_total = 0;
+  
 // These mutexes (mutices?) are only needed for accessing stores/loads
 // from the my_trace callback (which can be called by multiple threads);
 // the ordinary code that initializes stores/loads is single-threaded
@@ -65,6 +67,7 @@ int my_trace(void *user_context, const halide_trace_event_t *e) {
                 exit(-1);
             }
         }
+        stores_total++;
     } else if (e->event == halide_trace_load) {
         std::lock_guard<std::mutex> lock(loads_mutex);
         const auto &iter = loads.find(fname);
@@ -74,6 +77,7 @@ int my_trace(void *user_context, const halide_trace_event_t *e) {
                 exit(-1);
             }
         }
+        loads_total++;
     }
     return 0;
 }
@@ -479,6 +483,7 @@ int rgb_yuv420_test() {
         }
     }
 
+    uint64_t load_count_ref, store_count_ref;
     {
         Var x("x"), y("y"), z("z");
         Func y_part("y_part"), u_part("u_part"), v_part("v_part"), rgb("rgb"), rgb_x("rgb_x");
@@ -491,7 +496,14 @@ int rgb_yuv420_test() {
         u_part(x, y) = (( -38 * rgb(2*x, 2*y, 0) -  74 * rgb(2*x, 2*y, 1) + 112 * rgb(2*x, 2*y, 2) + 128) >> 8) + 128;
         v_part(x, y) = (( 112 * rgb(2*x, 2*y, 0) -  94 * rgb(2*x, 2*y, 1) -  18 * rgb(2*x, 2*y, 2) + 128) >> 8) + 128;
 
-        Pipeline({y_part, u_part, v_part}).realize({y_im_ref, u_im_ref, v_im_ref});
+        loads_total = 0;
+        stores_total = 0;
+        Pipeline p({y_part, u_part, v_part});
+        p.set_custom_trace(&my_trace);
+        p.realize({y_im_ref, u_im_ref, v_im_ref},
+                  get_jit_target_from_environment().with_feature(Target::TraceLoads).with_feature(Target::TraceStores));
+        load_count_ref = loads_total;
+        store_count_ref = stores_total;
     }
 
     {
@@ -532,11 +544,6 @@ int rgb_yuv420_test() {
         rgb_x.compute_at(y_part, y).vectorize(x, 8);
         rgb.compute_at(y_part, y).vectorize(x, 8);
 
-        rgb_x.trace_loads().trace_stores();
-        rgb.trace_loads().trace_stores();
-        y_part.trace_loads().trace_stores();
-        u_part.trace_loads().trace_stores();
-        v_part.trace_loads().trace_stores();
         stores = {
             {rgb_x.name(), Bound(0, size - 1, -1, size - 2, 0, 2)},
             {rgb.name(), Bound(0, size - 1, 0, size - 1, 0, 2)},
@@ -552,9 +559,26 @@ int rgb_yuv420_test() {
             {v_part.name(), Bound()}, // There shouldn't be any load from v_part
         };
 
+        loads_total = 0;
+        stores_total = 0;
         Pipeline p({y_part, u_part, v_part});
         p.set_custom_trace(&my_trace);
-        p.realize({y_im, u_im, v_im});
+        p.realize({y_im, u_im, v_im}, get_jit_target_from_environment().with_feature(Target::TraceLoads).with_feature(Target::TraceStores));
+        bool too_many_memops = false;
+        if (stores_total > 2 * store_count_ref) {
+            printf("Store count for correctness_compute_with rgb to yuv420 case exceeds reference by more than 2x. (Reference: %lu, compute_with: %lu).\n",
+                   store_count_ref, stores_total);
+            too_many_memops = true;
+        }
+        if (loads_total > 2 * load_count_ref) {
+            printf("Load count for correctness_compute_with rgb to yuv420 case exceeds reference by more than 2x. (Reference: %lu, compute_with: %lu).\n",
+                   load_count_ref, loads_total);
+            too_many_memops = true;
+        }
+        if (too_many_memops) {
+            return -1;
+        }
+        
     }
 
     auto y_func = [y_im_ref](int x, int y) {
