@@ -1079,6 +1079,14 @@ void check_boolean() {
     check(x < 20 && x > 18, x < 20 && 18 < x);
     check(x > 18 && x < 20, 18 < x && x < 20);
 
+    check(x < y + 1 && x < y + 2 && x < y, x < y);
+    check(x < y + 1 && x < y - 2 && x < y, x < y + (-2));
+    check(x < y + 1 && x < y + z && x < y, x < min(z, 0) + y);
+
+    check(x < y + 1 || x < y + 2 || x < y, x < y + 2);
+    check(x < y + 1 || x < y - 2 || x < y, x < y + 1);
+    check(x < y + 1 || x < y + z || x < y, x < max(z, 1) + y);
+
     check(x <= 20 || x > 19, t);
     check(x > 19 || x <= 20, t);
     check(x <= 18 || x > 20, x <= 18 || 20 < x);
