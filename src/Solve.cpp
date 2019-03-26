@@ -265,8 +265,8 @@ private:
                 // (f(x) - a) - g(x) -> (f(x) - g(x)) - a
                 expr = mutate(sub_a->a - b - sub_a->b);
             } else if (sub_b && !b_failed) {
-                // f(x) - (g(x) - a) -> (f(x) - g(x)) - a
-                expr = mutate(a - sub_b->a - sub_b->b);
+                // f(x) - (g(x) - a) -> (f(x) - g(x)) + a
+                expr = mutate(a - sub_b->a + sub_b->b);
             } else if (mul_a && mul_b && equal(mul_a->a, mul_b->a)) {
                 // f(x)*a - f(x)*b -> f(x)*(a - b)
                 expr = mutate(mul_a->a * (mul_a->b - mul_b->b));
@@ -1653,6 +1653,8 @@ void solve_test() {
         check_solve(5 - (4 - 4*x), x*(4) + 1);
         check_solve(z - (y - x), x + (z - y));
         check_solve(z - (y - x) == 2, x  == 2 - (z - y));
+
+        check_solve(x - (x - y), (x - x) + y);
 
         // This is used to cause infinite recursion
         Expr expr = Add::make(z, Sub::make(x, y));

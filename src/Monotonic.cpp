@@ -34,7 +34,8 @@ class MonotonicVisitor : public IRVisitor {
     }
 
     void visit(const StringImm *) override {
-        internal_error << "Monotonic on String\n";
+        // require() Exprs can includes Strings.
+        result = Monotonic::Constant;
     }
 
     void visit(const Cast *op) override {
@@ -306,6 +307,12 @@ class MonotonicVisitor : public IRVisitor {
             op->is_intrinsic(Call::likely_if_innermost) ||
             op->is_intrinsic(Call::return_second)) {
             op->args.back().accept(this);
+            return;
+        }
+
+        if (op->is_intrinsic(Call::require)) {
+            // require() returns the value of the second arg in all non-failure cases
+            op->args[1].accept(this);
             return;
         }
 
