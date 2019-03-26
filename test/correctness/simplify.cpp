@@ -588,13 +588,23 @@ void check_bounds() {
 
     check(min(min(x, y) + 1, x), min(y + 1, x));
     check(min(min(x, y) - (-1), x), min(y + 1, x));
-    check(min(min(x, y) + (-1), x), min(min(x, y) + (-1), x));  // unchanged
-    check(min(min(x, y) - 1, x), min(min(x, y) + (-1), x));  // unchanged
+    check(min(min(x, y) + (-1), x), min(x, y) + (-1));
+    check(min(min(x, y) - 1, x), min(x, y) + (-1));
+
+    check(min(min(y, x) + 1, x), min(y + 1, x));
+    check(min(min(y, x) - (-1), x), min(y + 1, x));
+    check(min(min(y, x) + (-1), x), min(x, y) + (-1));
+    check(min(min(y, x) - 1, x), min(x, y) + (-1));
 
     check(max(max(x, y) - 1, x), max(y + (-1), x));
     check(max(max(x, y) + (-1), x), max(y + (-1), x));
-    check(max(max(x, y) + 1, x), max(max(x, y) + 1, x));  // unchanged
-    check(max(max(x, y) - (-1), x), max(max(x, y) + 1, x));  // unchanged
+    check(max(max(x, y) + 1, x), max(x, y) + 1);
+    check(max(max(x, y) - (-1), x), max(x, y) + 1);
+
+    check(max(max(y, x) - 1, x), max(y + (-1), x));
+    check(max(max(y, x) + (-1), x), max(y + (-1), x));
+    check(max(max(y, x) + 1, x), max(x, y) + 1);
+    check(max(max(y, x) - (-1), x), max(x, y) + 1);
 
     check(max(Expr(7), 3), 7);
     check(max(Expr(4.25f), 1.25f), 4.25f);
