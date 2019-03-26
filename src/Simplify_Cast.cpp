@@ -30,12 +30,8 @@ Expr Simplify::visit(const Cast *op, ExprInfo *bounds) {
                    const_float(value, &f) &&
                    std::isfinite(f)) {
             // float -> int
-            int64_t v = safe_numeric_cast<int64_t>(f);
-            if (bounds) {
-                bounds->min_defined = bounds->max_defined = true;
-                bounds->min = bounds->max = v;
-            }
-            return IntImm::make(op->type, v);
+            // Recursively call mutate just to set the bounds
+            return mutate(IntImm::make(op->type, safe_numeric_cast<int64_t>(f)), bounds);
         } else if (op->type.is_uint() &&
                    const_float(value, &f) &&
                    std::isfinite(f)) {
@@ -48,11 +44,8 @@ Expr Simplify::visit(const Cast *op, ExprInfo *bounds) {
         } else if (op->type.is_int() &&
                    const_int(value, &i)) {
             // int -> int
-            if (bounds) {
-                bounds->min_defined = bounds->max_defined = true;
-                bounds->min = bounds->max = i;
-            }
-            return IntImm::make(op->type, i);
+            // Recursively call mutate just to set the bounds
+            return mutate(IntImm::make(op->type, i), bounds);
         } else if (op->type.is_uint() &&
                    const_int(value, &i)) {
             // int -> uint
@@ -64,12 +57,8 @@ Expr Simplify::visit(const Cast *op, ExprInfo *bounds) {
         } else if (op->type.is_int() &&
                    const_uint(value, &u)) {
             // uint -> int
-            int64_t v = safe_numeric_cast<int64_t>(u);
-            if (bounds) {
-                bounds->min_defined = bounds->max_defined = true;
-                bounds->min = bounds->max = v;
-            }
-            return IntImm::make(op->type, v);
+            // Recursively call mutate just to set the bounds
+            return mutate(IntImm::make(op->type, safe_numeric_cast<int64_t>(u)), bounds);
         } else if (op->type.is_uint() &&
                    const_uint(value, &u)) {
             // uint -> uint
