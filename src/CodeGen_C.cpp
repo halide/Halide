@@ -640,6 +640,21 @@ public:
         return r;
     }
 
+    friend Vec operator&&(const Vec &a, const Vec &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = a[i] && b[i];
+        }
+        return r;
+    }
+    friend Vec operator||(const Vec &a, const Vec &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = a[i] || b[i];
+        }
+        return r;
+    }
+
     friend Vec operator+(const Vec &a, const ElementType &b) {
         Vec r(empty);
         for (size_t i = 0; i < Lanes; i++) {
@@ -700,6 +715,20 @@ public:
         Vec r(empty);
         for (size_t i = 0; i < Lanes; i++) {
             r.elements[i] = a[i] | b;
+        }
+        return r;
+    }
+    friend Vec operator&&(const Vec &a, const ElementType &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = a[i] && b;
+        }
+        return r;
+    }
+    friend Vec operator||(const Vec &a, const ElementType &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = a[i] || b;
         }
         return r;
     }
@@ -764,6 +793,20 @@ public:
         Vec r(empty);
         for (size_t i = 0; i < Lanes; i++) {
             r.elements[i] = a | b[i];
+        }
+        return r;
+    }
+    friend Vec operator&&(const ElementType &a, const Vec &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = a && b[i];
+        }
+        return r;
+    }
+    friend Vec operator||(const ElementType &a, const Vec &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = a || b[i];
         }
         return r;
     }
@@ -1002,6 +1045,20 @@ public:
     friend Vec operator|(const Vec &a, const Vec &b) {
         return Vec(from_native_vector, a.native_vector | b.native_vector);
     }
+    friend Vec operator&&(const Vec &a, const Vec &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = a.native_vector[i] && b.native_vector[i];
+        }
+        return r;
+    }
+    friend Vec operator||(const Vec &a, const Vec &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = a.native_vector[i] || b.native_vector[i];
+        }
+        return r;
+    }
 
     friend Vec operator+(const Vec &a, const ElementType &b) {
         return Vec(from_native_vector, a.native_vector + b);
@@ -1030,6 +1087,20 @@ public:
     friend Vec operator|(const Vec &a, const ElementType &b) {
         return Vec(from_native_vector, a.native_vector | b);
     }
+    friend Vec operator&&(const Vec &a, const ElementType &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = a.native_vector[i] && b;
+        }
+        return r;
+    }
+    friend Vec operator||(const Vec &a, const ElementType &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = a.native_vector[i] || b;
+        }
+        return r;
+    }
 
     friend Vec operator+(const ElementType &a, const Vec &b) {
         return Vec(from_native_vector, a + b.native_vector);
@@ -1057,6 +1128,20 @@ public:
     }
     friend Vec operator|(const ElementType &a, const Vec &b) {
         return Vec(from_native_vector, a | b.native_vector);
+    }
+    friend Vec operator&&(const ElementType &a, const Vec &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = a && b.native_vector[i];
+        }
+        return r;
+    }
+    friend Vec operator||(const ElementType &a, const Vec &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = a || b.native_vector[i];
+        }
+        return r;
     }
 
     // TODO: this should be improved by taking advantage of native operator support.
