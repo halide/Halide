@@ -202,39 +202,53 @@ TEST(ConverterTest, testConv) {
 
   std::vector<Tensor> node_inputs;
   node_inputs.resize(2);
-  node_inputs[0].shape = {3, 5, 6, 11};
+  node_inputs[0].shape = {3, 5, 6, 6};
   node_inputs[1].shape = {7, 5, 3, 3};
 
   std::uniform_real_distribution<float> dis(-1.0, 1.0);
   std::uniform_real_distribution<float> dis10(-10.0, 10.0);
 
   std::mt19937 rnd;
-  Halide::Buffer<float> in1(3, 5, 6, 11);
-  in1.for_each_value([&](float& f) { f = dis(rnd); });
-  Halide::Buffer<float> in2(7, 5, 3, 3);
-  in2.for_each_value([&](float& f) { f = dis10(rnd); });
-  Halide::Var i1, j1, k1, l1;
-  node_inputs[0].rep(i1, j1, k1, l1) = in1(i1, j1, k1, l1);
+  Halide::Buffer<float> weights(7, 5, 3, 3);
+  weights.for_each_value([&](float& f) { f = dis10(rnd); });
   Halide::Var i2, j2, k2, l2;
-  node_inputs[1].rep(i2, j2, k2, l2) = in2(i2, j2, k2, l2);
-  Node converted = ConvertNode(add_node, node_inputs, "");
+  node_inputs[1].rep(i2, j2, k2, l2) = weights(i2, j2, k2, l2);
 
-  GOOGLE_CHECK_EQ(1, converted.outputs.size());
-  Halide::Buffer<float> output = converted.outputs[0].rep.realize(3, 7, 4, 9);
+  const std::vector<int> in_shape[2] = {{3, 5, 6, 11}, {3, 5, 10, 14}};
+  const std::vector<int> out_shape[2] = {{3, 7, 4, 9}, {3, 7, 8, 12}};
 
-  for (int i = 0; i < 3; ++i) {
-    for (int j = 0; j < 7; ++j) {
-      for (int k = 0; k < 4; ++k) {
-        for (int l = 0; l < 9; ++l) {
-          float expected = 0;
-          for (int c = 0; c < 5; ++c) {
-            for (int w = 0; w < 3; ++w) {
-              for (int h = 0; h < 3; ++h) {
-                expected += in1(i, c, k + w, l + h) * in2(j, c, w, h);
+  for (int trial = 0; trial < 2; ++trial) {
+    node_inputs[0].shape.resize(4);
+    for (int dim = 0; dim < 4; ++dim) {
+      node_inputs[0].shape[dim] = in_shape[trial][dim];
+    }
+
+    Halide::Buffer<float> in(in_shape[trial]);
+    in.for_each_value([&](float& f) { f = dis(rnd); });
+    Halide::Var i1, j1, k1, l1;
+    node_inputs[0].rep = Halide::Func();
+    node_inputs[0].rep(i1, j1, k1, l1) = in(i1, j1, k1, l1);
+
+    Node converted = ConvertNode(add_node, node_inputs, "");
+
+    GOOGLE_CHECK_EQ(1, converted.outputs.size());
+    Halide::Buffer<float> output =
+        converted.outputs[0].rep.realize(out_shape[trial]);
+
+    for (int i = 0; i < 3; ++i) {
+      for (int j = 0; j < 7; ++j) {
+        for (int k = 0; k < out_shape[trial][2]; ++k) {
+          for (int l = 0; l < out_shape[trial][3]; ++l) {
+            float expected = 0;
+            for (int c = 0; c < 5; ++c) {
+              for (int w = 0; w < 3; ++w) {
+                for (int h = 0; h < 3; ++h) {
+                  expected += in(i, c, k + w, l + h) * weights(j, c, w, h);
+                }
               }
             }
+            EXPECT_NEAR(output(i, j, k, l), expected, 5e-4f);
           }
-          EXPECT_NEAR(output(i, j, k, l), expected, 5e-5f);
         }
       }
     }
@@ -277,6 +291,52 @@ TEST(ConverterTest, testSum) {
         }
       }
       EXPECT_NEAR(expected, output(0, i, 0, j), 1e-5);
+    }
+  }
+}
+
+TEST(ConverterTest, testWhereBroadcast) {
+  onnx::NodeProto where_node;
+  where_node.set_name("where_node");
+  where_node.set_op_type("Where");
+  where_node.add_input("c");
+  where_node.add_input("x");
+  where_node.add_input("y");
+  where_node.add_output("z");
+
+  std::vector<Tensor> node_inputs;
+  node_inputs.resize(3);
+  node_inputs[0].shape = {2, 2, 2};
+  node_inputs[1].shape = {2};
+  node_inputs[2].shape = {2, 2};
+  Halide::Buffer<bool> in_c(2, 2, 2);
+  in_c.for_each_element([&](int x, int y, int z) {
+    in_c(x,y,z) = (x == y && x == z);
+  });
+  Halide::Buffer<float> in_x(2);
+  Halide::Buffer<float> in_y(2, 2);
+  std::uniform_real_distribution<float> dis(-1.0, 1.0);
+  std::mt19937 rnd;
+  in_x.for_each_value([&](float& f) { f = dis(rnd); });
+  in_y.for_each_value([&](float& f) {f = dis(rnd);});
+  Halide::Var i("i"), j("j"), k("k");
+  node_inputs[0].rep(i, j, k) = in_c(i, j, k);
+  node_inputs[1].rep(i) = in_x(i);
+  node_inputs[2].rep(i, j) = in_y(i, j);
+
+  Node converted = ConvertNode(where_node, node_inputs, "");
+  GOOGLE_CHECK_EQ(1, converted.outputs.size());
+  Halide::Buffer<float> output = converted.outputs[0].rep.realize(2, 2, 2);
+
+  for (int i = 0; i < 2; ++i) {
+    for (int j = 0; j < 2; ++j) {
+      for (int k = 0; k < 2; ++k) {
+        if (in_c(i, j, k)) {
+          EXPECT_EQ(output(i, j, k), in_x(k));
+        } else {
+          EXPECT_EQ(output(i, j, k), in_y(j, k));
+        }
+      }
     }
   }
 }

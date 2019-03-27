@@ -709,33 +709,89 @@ DirectConv(const Tensor& W, const Halide::Func& input, int rank, int groups) {
   return direct_conv;
 }
 
+template <int m, int r>
+struct Filters {};
+
+template <>
+struct Filters<2, 3> {
+  static float* GetBFilter() {
+    return const_cast<float*>(&BFilter[0][0]);
+  }
+  static float* GetGFilter() {
+    return const_cast<float*>(&GFilter[0][0]);
+  }
+  static float* GetAFilter() {
+    return const_cast<float*>(&AFilter[0][0]);
+  }
+
+ private:
+  static constexpr float BFilter[4][4] = {{1, 0, -1, 0},
+                                          {0, 1, 1, 0},
+                                          {0, -1, 1, 0},
+                                          {0, 1, 0, -1}};
+  static constexpr float GFilter[3][4] = {{1, 0.5, 0.5, 0},
+                                          {0, 0.5, -0.5, 0},
+                                          {0, 0.5, 0.5, 1}};
+  static constexpr float AFilter[2][4] = {{1, 1, 1, 0}, {0, 1, -1, -1}};
+};
+
+template <>
+struct Filters<4, 3> {
+  static float* GetBFilter() {
+    return const_cast<float*>(&BFilter[0][0]);
+  }
+  static float* GetGFilter() {
+    return const_cast<float*>(&GFilter[0][0]);
+  }
+  static float* GetAFilter() {
+    return const_cast<float*>(&AFilter[0][0]);
+  }
+
+ private:
+  static constexpr float BFilter[6][6] = {{4, 0, -5, 0, 1, 0},
+                                          {0, -4, -4, 1, 1, 0},
+                                          {0, 4, -4, -1, 1, 0},
+                                          {0, -2, -1, 2, 1, 0},
+                                          {0, 2, -1, -2, 1, 0},
+                                          {0, 4, 0, -5, 0, 1}};
+  static constexpr float GFilter[3][6] = {
+      {0.25, -1.0 / 6, -1.0 / 6, 1.0 / 24, 1.0 / 24, 0},
+      {0, -1.0 / 6, 1.0 / 6, 1.0 / 12, -1.0 / 12, 0},
+      {0, -1.0 / 6, -1.0 / 6, 1.0 / 6, 1.0 / 6, 1}};
+  static constexpr float AFilter[4][6] = {{1, 1, 1, 1, 1, 0},
+                                          {0, 1, -1, 2, -2, 0},
+                                          {0, 1, 1, 4, 4, 0},
+                                          {0, 1, -1, 8, -8, 1}};
+};
+
+template <int m, int r>
 Halide::Func WinogradConv(const Tensor& W, const Halide::Func& input) {
   // We only support the case of a 3x3 convolution at the moment. The notation
   // is derived from the one used in the Winograd paper.
-  static float BFilter[4][4] = {
-      {1, 0, -1, 0}, {0, 1, 1, 0}, {0, -1, 1, 0}, {0, 1, 0, -1}};
-  const Halide::Func B =
-      EncodeBufferAsFunc(Halide::Buffer<float>(&BFilter[0][0], 4, 4), {4, 4});
+  const Halide::Func B = EncodeBufferAsFunc(
+      Halide::Buffer<float>(Filters<m, r>::GetBFilter(), m + r - 1, m + r - 1),
+      {m + r - 1, m + r - 1});
 
-  static float GFilter[3][4] = {
-      {1, 0.5, 0.5, 0}, {0, 0.5, -0.5, 0}, {0, 0.5, 0.5, 1}};
-  const Halide::Func G =
-      EncodeBufferAsFunc(Halide::Buffer<float>(&GFilter[0][0], 4, 3), {4, 3});
+  const Halide::Func G = EncodeBufferAsFunc(
+      Halide::Buffer<float>(Filters<m, r>::GetGFilter(), m + r - 1, r),
+      {m + r - 1, r});
 
-  static float AFilter[2][4] = {{1, 1, 1, 0}, {0, 1, -1, -1}};
-  const Halide::Func A =
-      EncodeBufferAsFunc(Halide::Buffer<float>(&AFilter[0][0], 4, 2), {4, 2});
+  const Halide::Func A = EncodeBufferAsFunc(
+      Halide::Buffer<float>(Filters<m, r>::GetAFilter(), m + r - 1, m),
+      {m + r - 1, m});
 
   Halide::Expr num_channels = W.shape[1];
   Halide::RDom dom1({{0, num_channels}}, input.name() + "_rdom1");
   Halide::RVar c_r = dom1;
-  const Halide::RDom dom2({{0, 3}, {0, 3}}, input.name() + "_rdom2");
+  const Halide::RDom dom2({{0, r}, {0, r}}, input.name() + "_rdom2");
   Halide::RVar r1 = dom2[0];
   Halide::RVar r2 = dom2[1];
-  const Halide::RDom dom3({{0, 4}, {0, 4}}, input.name() + "_rdom3");
+  const Halide::RDom dom3(
+      {{0, m + r - 1}, {0, m + r - 1}}, input.name() + "_rdom3");
   Halide::RVar r3 = dom3[0];
   Halide::RVar r4 = dom3[1];
-  const Halide::RDom dom4({{0, 4}, {0, 4}}, input.name() + "_rdom4");
+  const Halide::RDom dom4(
+      {{0, m + r - 1}, {0, m + r - 1}}, input.name() + "_rdom4");
   Halide::RVar alpha_r = dom4[0];
   Halide::RVar beta_r = dom4[1];
 
@@ -758,8 +814,8 @@ Halide::Func WinogradConv(const Tensor& W, const Halide::Func& input) {
 
   Halide::Func winograd_conv(input.name() + "_winograd");
   winograd_conv(b, k, x, y) = Halide::sum(
-      A(alpha_r, x % 2) * M(b, k, (x / 2) * 2, (y / 2) * 2, alpha_r, beta_r) *
-          A(beta_r, y % 2),
+      A(alpha_r, x % m) * M(b, k, (x / m) * m, (y / m) * m, alpha_r, beta_r) *
+          A(beta_r, y % m),
       input.name() + "_winograd_sum");
   return winograd_conv;
 }
@@ -852,6 +908,7 @@ Node ConvertConvNode(
   // Check if winograd can be used
   bool can_use_winograd = false;
   bool needs_extra_padding = false;
+  int m[2] = {2, 2};
   if (groups == 1 && rank == 4) {
     bool supported_shape = true;
     for (int i = 2; i < rank; ++i) {
@@ -861,10 +918,14 @@ Node ConvertConvNode(
         supported_shape = false;
         break;
       }
+
       dim = Halide::Internal::as_const_int(
           Halide::Internal::simplify(result.outputs[0].shape[i]));
+
       if (!dim || *dim % 2 != 0) {
         needs_extra_padding = true;
+      } else if (dim && *dim % 4 == 0) {
+        m[i - 2] = 4;
       }
       if (strides[i - 2] != 1) {
         supported_shape = false;
@@ -885,7 +946,11 @@ Node ConvertConvNode(
   // Convolve the input with the kernel
   Halide::Func basic_conv(X.rep.name() + "_conv");
   if (can_use_winograd) {
-    basic_conv = WinogradConv(W, padded_input);
+    if (m[0] == 4 && m[1] == 4) {
+      basic_conv = WinogradConv<4, 3>(W, padded_input);
+    } else {
+      basic_conv = WinogradConv<2, 3>(W, padded_input);
+    }
   } else {
     basic_conv = DirectConv(W, padded_input, rank, groups);
   }
@@ -2101,6 +2166,129 @@ Node ConvertConstantFillNode(
   return result;
 }
 
+Node ConvertWhereNode(
+    const onnx::NodeProto& node,
+    const std::vector<Tensor>& inputs) {
+  if (inputs.size() != 3) {
+    throw std::invalid_argument(
+        "Expected exactly three inputs for where node " + node.name());
+  }
+  const Tensor& cond = inputs[0];
+  const Tensor& input_1 = inputs[1];
+  const Tensor& input_2 = inputs[2];
+  if (input_1.type != input_2.type) {
+    throw std::invalid_argument(
+        "Expected inputs to have the same type for where node " + node.name());
+  }
+
+  const int rank = std::max(
+      std::max(input_1.shape.size(), input_2.shape.size()), cond.shape.size());
+
+  std::vector<Halide::Var> out_vars(rank);
+
+  // Broadcasting is right -> left.
+  auto broadcast_vars = [rank](
+                            const std::vector<Halide::Var>& out_vars,
+                            const std::vector<Halide::Expr>& input_shape) {
+    const int input_rank = input_shape.size();
+    std::vector<Halide::Expr> in_expr(input_rank);
+    for (int i = 1; i <= input_rank; ++i) {
+      in_expr[input_rank - i] =
+          select(input_shape[input_rank - i] == 1, 0, out_vars[rank - i]);
+    }
+    return in_expr;
+  };
+  const std::vector<Halide::Expr> cond_expr = broadcast_vars(out_vars, cond.shape);
+  const std::vector<Halide::Expr> input_1_expr =
+      broadcast_vars(out_vars, input_1.shape);
+  const std::vector<Halide::Expr> input_2_expr =
+      broadcast_vars(out_vars, input_2.shape);
+
+  Node result;
+  result.outputs.resize(1);
+  result.outputs[0].shape = input_1.shape;
+  result.outputs[0].type = input_1.type;
+  result.outputs[0].rep = FuncForNodeOutput(node, 0);
+
+  result.outputs[0].rep(out_vars) = Halide::select(
+      cond.rep(cond_expr), input_1.rep(input_1_expr), input_2.rep(input_2_expr));
+  return result;
+}
+
+Node ConvertGatherNode(
+    const onnx::NodeProto& node,
+    const std::vector<Tensor>& inputs) {
+  if (inputs.size() != 2) {
+    throw std::invalid_argument(
+        "Expected exactly two arguments for gather node " + node.name());
+  }
+
+  const Tensor& input = inputs[0];
+  const Tensor& indices = inputs[1];
+
+  const int in_rank = inputs[0].shape.size();
+  const int indices_rank = inputs[1].shape.size();
+  const int out_rank = in_rank + indices_rank - 1;
+
+  int axis = 0;
+  for (const auto& attr : node.attribute()) {
+    if (attr.name() == "axis") {
+      axis = attr.i();
+    }
+  }
+
+  if (axis >= in_rank || axis < -in_rank) {
+    throw std::invalid_argument(
+        "Expected axis to in range of the input rank r, [-r, r-1]");
+  }
+
+  if (axis < 0) {
+    axis += in_rank;
+  }
+
+  // This node acts like numpy.like, e.g flat indexing from the python docs:
+  // Ni, Nk = input.shape[:axis], input.shape[axis+1:]
+  // Nj = indices.shape
+  // for ii in ndindex(Ni):
+  //   for jj in ndindex(Nj):
+  //     for kk in ndindex(Nk):
+  //       out[ii + jj + kk] = input[ii + (indices[jj],) + kk]
+  //
+  std::vector<Halide::Expr> output_shape(out_rank);
+  std::vector<Halide::Var> output_vars(out_rank);
+  std::vector<Halide::Expr> input_vars(in_rank);
+  std::vector<Halide::Expr> indices_vars(indices_rank);
+  for (int i = 0; i < in_rank; ++i) {
+    if (i < axis) {
+      output_shape[i] = input.shape[i];
+      input_vars[i] = output_vars[i];
+    } else if (i == axis) {
+      for (int j = 0; j < indices_rank; ++j) {
+        output_shape[j + i] = indices.shape[j];
+        indices_vars[j] = output_vars[j + i];
+      }
+      // Buffers are 32-bit indexed.
+      input_vars[axis] = clamp(
+          Halide::cast<int>(indices.rep(indices_vars)),
+          0,
+          input.shape[axis] - 1);
+    } else {
+      output_shape[i + indices_rank - 1] = input.shape[i];
+      input_vars[i] = output_vars[i + indices_rank - 1];
+    }
+  }
+  Node result;
+  result.outputs.resize(1);
+  result.outputs[0].type = input.type;
+  result.outputs[0].shape = output_shape;
+  result.outputs[0].rep(output_vars) = require(
+      indices.rep(indices_vars) < INT_MAX,
+      input.rep(input_vars),
+      "Indices for gather node ",
+      node.name(), " must be INT_MAX at most");
+  return result;
+}
+
 Node ConvertReshapeNode(
     const onnx::NodeProto& node,
     const std::vector<Tensor>& inputs) {
@@ -2750,6 +2938,12 @@ Node ConvertNode(
   }
   if (node.op_type() == "ConstantFill") {
     return ConvertConstantFillNode(node, inputs);
+  }
+  if (node.op_type() == "Where") {
+    return ConvertWhereNode(node, inputs);
+  }
+  if (node.op_type() == "Gather") {
+    return ConvertGatherNode(node, inputs);
   }
 
   // Handle exponential linear units.
