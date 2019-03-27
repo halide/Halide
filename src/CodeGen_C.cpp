@@ -1906,16 +1906,14 @@ void CodeGen_C::visit(const Mod *op) {
         visit_binop(op->type, op->a, make_const(op->a.type(), (1 << bits)-1), "&");
     } else if (op->type.is_int()) {
         print_expr(lower_euclidean_mod(op->a, op->b));
+    } else if (op->type.is_float()) {
+        string arg0 = print_expr(op->a);
+        string arg1 = print_expr(op->b);
+        ostringstream rhs;
+        rhs << "fmod(" << arg0 << ", " << arg1 << ")";
+        print_assignment(op->type, rhs.str());
     } else {
-        if (op->type.is_float()) {
-            string arg0 = print_expr(op->a);
-            string arg1 = print_expr(op->b);
-            ostringstream rhs;
-            rhs << "fmod(" << arg0 << ", " << arg1 << ")";
-            print_assignment(op->type, rhs.str());
-        } else {
-            visit_binop(op->type, op->a, op->b, "%");
-        }
+        visit_binop(op->type, op->a, op->b, "%");
     }
 }
 
