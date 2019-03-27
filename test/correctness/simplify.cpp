@@ -1106,6 +1106,12 @@ void check_boolean() {
     check(x <= 20 && x >= 20, x <= 20 && 20 <= x);
     check(x >= 20 && x <= 20, 20 <= x && x <= 20);
 
+    check(min(x, 20) < min(x, 19), const_false());
+    check(min(x, 23) < min(x, 18) + 3, const_false());
+
+    check(max(x, 19) > max(x, 20), const_false());
+    check(max(x, 19) > max(x, 18) + 3, const_false());
+
     // check for substitution patterns
     check((b1 == t) && (b1 && b2), b1 && b2);
     check((b1 && b2) && (b1 == t), b1 && b2);
