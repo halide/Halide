@@ -2024,7 +2024,13 @@ private:
     void visit(const IfThenElse *op) override {
         op->condition.accept(this);
         if (expr_uses_vars(op->condition, scope)) {
-            if (!op->else_case.defined() || is_no_op(op->else_case)) {
+            if (op->else_case.defined() && !is_no_op(op->else_case)) {
+                // Treat it as two separate conditional blocks
+                Stmt equiv = Block::make(IfThenElse::make(op->condition, op->then_case),
+                                         IfThenElse::make(simplify(!op->condition), op->else_case));
+                equiv.accept(this);
+                return;
+            } else {
                 Expr c = op->condition;
                 const Call *call = c.as<Call>();
                 if (call && (call->is_intrinsic(Call::likely) ||
@@ -2119,10 +2125,6 @@ private:
                     trim_scope_pop(to_pop.back().v->name, to_pop.back().let_bounds);
                     to_pop.pop_back();
                 }
-            } else {
-                // Just take the union over the branches
-                op->then_case.accept(this);
-                op->else_case.accept(this);
             }
         } else {
             // If the condition is based purely on params, then we'll only
