@@ -272,17 +272,16 @@ public:
                 using IRMutator::visit;
                 Expr visit(const Select *op) override {
                     return Call::make(op->type, Call::if_then_else,
-                                      {mutate(op->condition), mutate(op->true_value), mutate(op->false_value)},
+                                      {mutate(op->condition),
+                                       mutate(op->true_value),
+                                       mutate(op->false_value)},
                                       Call::PureIntrinsic);
                 }
             } select_to_if_then_else;
 
             for (auto &e : exprs) {
                 e.value = select_to_if_then_else.mutate(e.value);
-                debug(0) << e.value << "\n";
             }
-
-
         }
 
         // Check if the dimension at index 'dim_idx' is always pure (i.e. equal to 'dim')

@@ -2024,13 +2024,7 @@ private:
     void visit(const IfThenElse *op) override {
         op->condition.accept(this);
         if (expr_uses_vars(op->condition, scope)) {
-            if (op->else_case.defined() && !is_no_op(op->else_case)) {
-                // Treat it as two separate conditional blocks
-                Stmt equiv = Block::make(IfThenElse::make(op->condition, op->then_case),
-                                         IfThenElse::make(simplify(!op->condition), op->else_case));
-                equiv.accept(this);
-                return;
-            } else {
+            if (!op->else_case.defined() || is_no_op(op->else_case)) {
                 Expr c = op->condition;
                 const Call *call = c.as<Call>();
                 if (call && (call->is_intrinsic(Call::likely) ||
@@ -2067,14 +2061,18 @@ private:
                     const GT *gt = solved.as<GT>();
                     const GE *ge = solved.as<GE>();
                     const EQ *eq = solved.as<EQ>();
-                    Expr rhs;
-                    if (lt) {rhs = lt->b;}
-                    if (le) {rhs = le->b;}
-                    if (gt) {rhs = gt->b;}
-                    if (ge) {rhs = ge->b;}
-                    if (eq) {rhs = eq->b;}
+                    Expr lhs, rhs;
+                    if (lt) {lhs = lt->a; rhs = lt->b;}
+                    if (le) {lhs = le->a; rhs = le->b;}
+                    if (gt) {lhs = gt->a; rhs = gt->b;}
+                    if (ge) {lhs = ge->a; rhs = ge->b;}
+                    if (eq) {lhs = eq->a; rhs = eq->b;}
 
                     if (!rhs.defined() || rhs.type() != Int(32)) {
+                        continue;
+                    }
+
+                    if (!equal(lhs, v)) {
                         continue;
                     }
 
@@ -2125,6 +2123,11 @@ private:
                     trim_scope_pop(to_pop.back().v->name, to_pop.back().let_bounds);
                     to_pop.pop_back();
                 }
+            } else {
+                // Treat it as two separate conditional blocks
+                Stmt equiv = Block::make(IfThenElse::make(op->condition, op->then_case),
+                                         IfThenElse::make(simplify(!op->condition), op->else_case));
+                equiv.accept(this);
             }
         } else {
             // If the condition is based purely on params, then we'll only
