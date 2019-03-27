@@ -1754,6 +1754,9 @@ int main(int argc, char **argv) {
         check(b << 63, Expr((uint64_t) 0x8000000000000000ULL));
     }
 
+    // Check a bounds-related fuzz tester failure found in issue https://github.com/halide/Halide/issues/3764
+    check(Let::make("b", 105, 336 / max(cast<int32_t>(cast<int16_t>(Variable::make(Int(32), "b"))), 38) + 29), 32);
+
     printf("Success!\n");
 
     return 0;
