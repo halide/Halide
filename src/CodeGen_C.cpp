@@ -217,6 +217,16 @@ private:
                 // will all be scalarized away prior to use, so don't emit
                 // them.
                 vector_types_used.insert(t);
+                if (t.is_int()) {
+                    // If we are including an int-vector type, also include
+                    // the same-width uint-vector type; there are various operations
+                    // that can use uint vectors for intermediate results (e.g. lerp(),
+                    // but also Mod, which can generate a call to abs() for int types,
+                    // which always produces uint results for int inputs in Halide);
+                    // it's easier to just err on the side of extra vectors we don't
+                    // use since they are just type declarations.
+                    vector_types_used.insert(t.with_code(halide_type_uint));
+                }
             }
         }
     }
@@ -225,9 +235,6 @@ private:
         if (t.is_vector() && t.is_int_or_uint() && (t.bits() >= 8 && t.bits() <= 32)) {
             Type doubled = t.with_bits(t.bits() * 2);
             include_type(doubled);
-            // lerp() can use uint types of the same width for int;
-            // add even though they may be unused
-            include_type(doubled.with_code(halide_type_uint));
         }
     }
 
