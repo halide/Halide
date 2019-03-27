@@ -271,11 +271,15 @@ public:
             class SelectToIfThenElse : public IRMutator {
                 using IRMutator::visit;
                 Expr visit(const Select *op) override {
-                    return Call::make(op->type, Call::if_then_else,
-                                      {mutate(op->condition),
-                                       mutate(op->true_value),
-                                       mutate(op->false_value)},
-                                      Call::PureIntrinsic);
+                    if (is_pure(op->condition)) {
+                        return Call::make(op->type, Call::if_then_else,
+                                          {mutate(op->condition),
+                                                  mutate(op->true_value),
+                                                  mutate(op->false_value)},
+                                          Call::PureIntrinsic);
+                    } else {
+                        return IRMutator::visit(op);
+                    }
                 }
             } select_to_if_then_else;
 
