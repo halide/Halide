@@ -265,6 +265,7 @@ protected:
     }
 
     void visit(const Call *op) override {
+        include_type(op->type);
         if (op->is_intrinsic(Call::lerp)) {
             // lower_lerp() can synthesize wider vector types.
             // It's not safe to feed temporary Exprs into IRGraphVisitor
