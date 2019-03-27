@@ -70,6 +70,7 @@ inline float cos_f32(float x) {return cosf(x);}
 inline float acos_f32(float x) {return acosf(x);}
 inline float tan_f32(float x) {return tanf(x);}
 inline float atan_f32(float x) {return atanf(x);}
+inline float atan2_f32(float x, float y) {return atan2f(x, y);}
 inline float sinh_f32(float x) {return sinhf(x);}
 inline float cosh_f32(float x) {return coshf(x);}
 inline float tanh_f32(float x) {return tanhf(x);}
@@ -88,6 +89,7 @@ inline double cos_f64(double x) {return cos(x);}
 inline double acos_f64(double x) {return acos(x);}
 inline double tan_f64(double x) {return tan(x);}
 inline double atan_f64(double x) {return atan(x);}
+inline double atan2_f64(double x, double y) {return atan2(x, y);}
 inline double sinh_f64(double x) {return sinh(x);}
 inline double cosh_f64(double x) {return cosh(x);}
 inline double tanh_f64(double x) {return tanh(x);}
@@ -624,6 +626,13 @@ public:
         }
         return r;
     }
+    Vec operator!() const {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = !r.elements[i];
+        }
+        return r;
+    }
 
     friend Vec operator+(const Vec &a, const Vec &b) {
         Vec r(empty);
@@ -1065,6 +1074,13 @@ public:
 
     Vec operator~() const {
         return Vec(from_native_vector, ~native_vector);
+    }
+    Vec operator!() const {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = !(*this)[i];
+        }
+        return r;
     }
 
     friend Vec operator+(const Vec &a, const Vec &b) {

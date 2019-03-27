@@ -40,6 +40,14 @@ Expr Simplify::visit(const Div *op, ExprInfo *bounds) {
         const bool b_positive = b_bounds.min_defined && b_bounds.min > 0;
         const bool b_negative = b_bounds.max_defined && b_bounds.max < 0;
 
+        if ((b_positive && !b_bounds.max_defined) ||
+            (b_negative && !b_bounds.min_defined)) {
+            // Take limit as b -> +/- infinity
+            int64_t v = 0;
+            bounds->min = std::min(bounds->min, v);
+            bounds->max = std::max(bounds->max, v);
+        }
+
         bounds->min_defined = ((a_bounds.min_defined && b_positive) ||
                                (a_bounds.max_defined && b_negative));
         bounds->max_defined = ((a_bounds.max_defined && b_positive) ||

@@ -1079,6 +1079,14 @@ void check_boolean() {
     check(x < 20 && x > 18, x < 20 && 18 < x);
     check(x > 18 && x < 20, 18 < x && x < 20);
 
+    check(x < y + 1 && x < y + 2 && x < y, x < y);
+    check(x < y + 1 && x < y - 2 && x < y, x < y + (-2));
+    check(x < y + 1 && x < y + z && x < y, x < min(z, 0) + y);
+
+    check(x < y + 1 || x < y + 2 || x < y, x < y + 2);
+    check(x < y + 1 || x < y - 2 || x < y, x < y + 1);
+    check(x < y + 1 || x < y + z || x < y, x < max(z, 1) + y);
+
     check(x <= 20 || x > 19, t);
     check(x > 19 || x <= 20, t);
     check(x <= 18 || x > 20, x <= 18 || 20 < x);
@@ -1745,6 +1753,9 @@ int main(int argc, char **argv) {
         check(a << 63, u64(0));
         check(b << 63, Expr((uint64_t) 0x8000000000000000ULL));
     }
+
+    // Check a bounds-related fuzz tester failure found in issue https://github.com/halide/Halide/issues/3764
+    check(Let::make("b", 105, 336 / max(cast<int32_t>(cast<int16_t>(Variable::make(Int(32), "b"))), 38) + 29), 32);
 
     printf("Success!\n");
 
