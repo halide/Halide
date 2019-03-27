@@ -219,6 +219,16 @@ private:
         }
     }
 
+    void include_lerp_types(const Type &t) {
+        if (t.is_vector() && t.is_int_or_uint() && (t.bits() >= 8 && t.bits() <= 32)) {
+            Type doubled = t.with_bits(t.bits() * 2);
+            include_type(doubled);
+            // lerp() can use uint types of the same width for int;
+            // add even though they may be unused
+            include_type(doubled.with_code(halide_type_uint));
+        }
+    }
+
 protected:
     void include(const Expr &e) override {
         include_type(e.type());
@@ -254,8 +264,14 @@ protected:
 
     void visit(const Call *op) override {
         if (op->is_intrinsic(Call::lerp)) {
-            // lower_lerp() can synthesize wider vector types
-            lower_lerp(op->args[0], op->args[1], op->args[2]).accept(this);
+            // lower_lerp() can synthesize wider vector types.
+            // It's not safe to feed temporary Exprs into IRGraphVisitor
+            // (it tracks the seen values by IRNode*, which could get recycled
+            // if we are unlucky), so just add widened versions of any
+            // types present -- it's safe to add types we might not use.
+            for (auto &a : op->args) {
+                include_lerp_types(a.type());
+            }
         } else if (op->is_intrinsic(Call::absd)) {
             // absd() can synthesize a new type
             include_type(op->type.with_code(op->type.is_int() ? Type::UInt : op->type.code()));
