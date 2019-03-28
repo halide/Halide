@@ -199,29 +199,48 @@ public:
 }  // namespace
 
 class TypeInfoGatherer : public IRGraphVisitor {
-public:
-    std::set<ForType> for_types_used;
-    std::set<Type> vector_types_used;
-
+private:
     using IRGraphVisitor::include;
     using IRGraphVisitor::visit;
 
-    void include(const Expr &e) override {
-        if (e.type().is_vector()) {
-            if (e.type().is_bool()) {
+    void include_type(const Type &t) {
+        if (t.is_vector()) {
+            if (t.is_bool()) {
                 // bool vectors are always emitted as uint8 in the C++ backend
                 // TODO: on some architectures, we could do better by choosing
                 // a bitwidth that matches the other vectors in use; EliminateBoolVectors
                 // could be used for this with a bit of work.
-                vector_types_used.insert(UInt(8).with_lanes(e.type().lanes()));
-            } else if (!e.type().is_handle()) {
+                vector_types_used.insert(UInt(8).with_lanes(t.lanes()));
+            } else if (!t.is_handle()) {
                 // Vector-handle types can be seen when processing (e.g.)
                 // require() statements that are vectorized, but they
                 // will all be scalarized away prior to use, so don't emit
                 // them.
-                vector_types_used.insert(e.type());
+                vector_types_used.insert(t);
+                if (t.is_int()) {
+                    // If we are including an int-vector type, also include
+                    // the same-width uint-vector type; there are various operations
+                    // that can use uint vectors for intermediate results (e.g. lerp(),
+                    // but also Mod, which can generate a call to abs() for int types,
+                    // which always produces uint results for int inputs in Halide);
+                    // it's easier to just err on the side of extra vectors we don't
+                    // use since they are just type declarations.
+                    vector_types_used.insert(t.with_code(halide_type_uint));
+                }
             }
         }
+    }
+
+    void include_lerp_types(const Type &t) {
+        if (t.is_vector() && t.is_int_or_uint() && (t.bits() >= 8 && t.bits() <= 32)) {
+            Type doubled = t.with_bits(t.bits() * 2);
+            include_type(doubled);
+        }
+    }
+
+protected:
+    void include(const Expr &e) override {
+        include_type(e.type());
         IRGraphVisitor::include(e);
     }
 
@@ -236,6 +255,44 @@ public:
         for_types_used.insert(op->for_type);
         IRGraphVisitor::visit(op);
     }
+
+    void visit(const Ramp *op) override {
+        include_type(op->type.with_lanes(op->lanes));
+        IRGraphVisitor::visit(op);
+    }
+
+    void visit(const Broadcast *op) override {
+        include_type(op->type.with_lanes(op->lanes));
+        IRGraphVisitor::visit(op);
+    }
+
+    void visit(const Cast *op) override {
+        include_type(op->type);
+        IRGraphVisitor::visit(op);
+    }
+
+    void visit(const Call *op) override {
+        include_type(op->type);
+        if (op->is_intrinsic(Call::lerp)) {
+            // lower_lerp() can synthesize wider vector types.
+            // It's not safe to feed temporary Exprs into IRGraphVisitor
+            // (it tracks the seen values by IRNode*, which could get recycled
+            // if we are unlucky), so just add widened versions of any
+            // types present -- it's safe to add types we might not use.
+            for (auto &a : op->args) {
+                include_lerp_types(a.type());
+            }
+        } else if (op->is_intrinsic(Call::absd)) {
+            // absd() can synthesize a new type
+            include_type(op->type.with_code(op->type.is_int() ? Type::UInt : op->type.code()));
+        }
+
+        IRGraphVisitor::visit(op);
+    }
+
+public:
+    std::set<ForType> for_types_used;
+    std::set<Type> vector_types_used;
 };
 
 CodeGen_C::CodeGen_C(ostream &s, Target t, OutputKind output_kind, const std::string &guard) :
@@ -1906,6 +1963,12 @@ void CodeGen_C::visit(const Mod *op) {
         visit_binop(op->type, op->a, make_const(op->a.type(), (1 << bits)-1), "&");
     } else if (op->type.is_int()) {
         print_expr(lower_euclidean_mod(op->a, op->b));
+    } else if (op->type.is_float()) {
+        string arg0 = print_expr(op->a);
+        string arg1 = print_expr(op->b);
+        ostringstream rhs;
+        rhs << "fmod(" << arg0 << ", " << arg1 << ")";
+        print_assignment(op->type, rhs.str());
     } else {
         visit_binop(op->type, op->a, op->b, "%");
     }
