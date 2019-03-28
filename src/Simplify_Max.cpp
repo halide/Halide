@@ -3,8 +3,8 @@
 namespace Halide {
 namespace Internal {
 
-Expr Simplify::visit(const Max *op, ConstBounds *bounds) {
-    ConstBounds a_bounds, b_bounds;
+Expr Simplify::visit(const Max *op, ExprInfo *bounds) {
+    ExprInfo a_bounds, b_bounds;
     Expr a = mutate(op->a, &a_bounds);
     Expr b = mutate(op->b, &b_bounds);
 
@@ -19,6 +19,8 @@ Expr Simplify::visit(const Max *op, ConstBounds *bounds) {
         } else {
             bounds->min = b_bounds.min;
         }
+        bounds->alignment = ModulusRemainder::unify(a_bounds.alignment, b_bounds.alignment);
+        bounds->trim_bounds_using_alignment();
     }
 
     // Early out when the bounds tells us one side or the other is smaller
@@ -111,6 +113,10 @@ Expr Simplify::visit(const Max *op, ConstBounds *bounds) {
              rewrite(max(min(max(x, y), z), y), max(min(x, z), y)) ||
              rewrite(max(min(max(y, x), z), y), max(y, min(x, z))) ||
              rewrite(max(max(x, c0), c1), max(x, fold(max(c0, c1)))) ||
+             rewrite(max(max(x, y) + c0, x), max(x, y + c0), c0 < 0) ||
+             rewrite(max(max(x, y) + c0, x), max(x, y) + c0, c0 > 0) ||
+             rewrite(max(max(y, x) + c0, x), max(y + c0, x), c0 < 0) ||
+             rewrite(max(max(y, x) + c0, x), max(y, x) + c0, c0 > 0) ||
 
              (no_overflow(op->type) &&
               (rewrite(max(x + c0, c1), max(x, fold(c1 - c0)) + c0) ||

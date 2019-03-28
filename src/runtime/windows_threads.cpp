@@ -14,7 +14,6 @@ extern "C" {
 
 // These sizes are large enough for 32-bit and 64-bit
 typedef uint64_t ConditionVariable;
-typedef uint64_t InitOnce;
 typedef void * Thread;
 typedef struct {
     uint64_t buf[5];
@@ -107,7 +106,7 @@ struct thread_parker {
         EnterCriticalSection(&critical_section);
         while (should_park) {
             SleepConditionVariableCS(&condvar, &critical_section, -1);
-        } 
+        }
         LeaveCriticalSection(&critical_section);
     }
 
@@ -130,3 +129,4 @@ struct thread_parker {
 #include "synchronization_common.h"
 
 #include "thread_pool_common.h"
+

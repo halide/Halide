@@ -3,24 +3,38 @@
 namespace Halide {
 namespace Internal {
 
-Expr Simplify::visit(const Mod *op, ConstBounds *bounds) {
-    ConstBounds a_bounds, b_bounds;
+Expr Simplify::visit(const Mod *op, ExprInfo *bounds) {
+    ExprInfo a_bounds, b_bounds;
     Expr a = mutate(op->a, &a_bounds);
     Expr b = mutate(op->b, &b_bounds);
 
+    // We always combine bounds here, even if not requested, because
+    // we can use them to simplify down to a constant if the bounds
+    // are tight enough.
+    ExprInfo mod_bounds;
+
     // Just use the bounds of the RHS
-    if (bounds && no_overflow_int(op->type)) {
-        bounds->min_defined = bounds->max_defined =
+    if (no_overflow_int(op->type)) {
+        mod_bounds.min_defined = mod_bounds.max_defined =
             (b_bounds.min_defined && b_bounds.max_defined &&
              (b_bounds.min > 0 || b_bounds.max < 0));
-        bounds->min = 0;
-        bounds->max = std::max(std::abs(b_bounds.min), std::abs(b_bounds.max)) - 1;
+        mod_bounds.min = 0;
+        mod_bounds.max = std::max(std::abs(b_bounds.min), std::abs(b_bounds.max)) - 1;
+        mod_bounds.alignment = a_bounds.alignment % b_bounds.alignment;
+        mod_bounds.trim_bounds_using_alignment();
+        if (bounds) {
+            *bounds = mod_bounds;
+        }
     }
 
     if (may_simplify(op->type)) {
         if (a_bounds.min_defined && a_bounds.min >= 0 &&
             a_bounds.max_defined && b_bounds.min_defined && a_bounds.max < b_bounds.min) {
             return a;
+        }
+
+        if (mod_bounds.min_defined && mod_bounds.max_defined && mod_bounds.min == mod_bounds.max) {
+            return make_const(op->type, mod_bounds.min);
         }
 
         int lanes = op->type.lanes();
@@ -33,6 +47,7 @@ Expr Simplify::visit(const Mod *op, ConstBounds *bounds) {
             rewrite(IRMatcher::Overflow() % x, a) ||
             rewrite(x % IRMatcher::Overflow(), b) ||
             rewrite(0 % x, 0) ||
+            rewrite(x % x, 0) ||
             (!op->type.is_float() &&
              (rewrite(x % 0, IRMatcher::Indeterminate()) ||
               rewrite(x % 1, 0)))) {

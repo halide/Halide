@@ -5,7 +5,7 @@ namespace Internal {
 
 using std::vector;
 
-Expr Simplify::visit(const Shuffle *op, ConstBounds *bounds) {
+Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
     if (op->is_extract_element() &&
         (op->vectors[0].as<Ramp>() ||
          op->vectors[0].as<Broadcast>())) {
@@ -24,7 +24,7 @@ Expr Simplify::visit(const Shuffle *op, ConstBounds *bounds) {
     vector<Expr> new_vectors;
     bool changed = false;
     for (Expr vector : op->vectors) {
-        ConstBounds v_bounds;
+        ExprInfo v_bounds;
         Expr new_vector = mutate(vector, &v_bounds);
         if (!vector.same_as(new_vector)) {
             changed = true;
@@ -37,6 +37,7 @@ Expr Simplify::visit(const Shuffle *op, ConstBounds *bounds) {
                 bounds->max_defined &= v_bounds.max_defined;
                 bounds->min = std::min(bounds->min, v_bounds.min);
                 bounds->max = std::max(bounds->max, v_bounds.max);
+                bounds->alignment = ModulusRemainder::unify(bounds->alignment, v_bounds.alignment);
             }
         }
         new_vectors.push_back(new_vector);
@@ -62,7 +63,8 @@ Expr Simplify::visit(const Shuffle *op, ConstBounds *bounds) {
         if (load_indices.size() == new_vectors.size()) {
             Type t = load_indices[0].type().with_lanes(op->indices.size());
             Expr shuffled_index = Shuffle::make(load_indices, op->indices);
-            shuffled_index = mutate(shuffled_index, nullptr);
+            ExprInfo shuffled_index_info;
+            shuffled_index = mutate(shuffled_index, &shuffled_index_info);
             if (shuffled_index.as<Ramp>()) {
                 Expr shuffled_predicate;
                 if (unpredicated) {
@@ -74,7 +76,7 @@ Expr Simplify::visit(const Shuffle *op, ConstBounds *bounds) {
                 t = first_load->type;
                 t = t.with_lanes(op->indices.size());
                 return Load::make(t, first_load->name, shuffled_index, first_load->image,
-                                  first_load->param, shuffled_predicate);
+                                  first_load->param, shuffled_predicate, shuffled_index_info.alignment);
             }
         }
     }

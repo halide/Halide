@@ -87,27 +87,33 @@ private:
         if (!p.defined()) return;
         if (already_have(p.name())) return;
 
-        Expr def, min, max;
+        ArgumentEstimates argument_estimates = p.get_argument_estimates();
         if (!p.is_buffer()) {
-            def = p.scalar_expr();
-            min = p.min_value();
-            max = p.max_value();
+            argument_estimates.scalar_def = p.scalar_expr();
+            argument_estimates.scalar_min = p.min_value();
+            argument_estimates.scalar_max = p.max_value();
+            argument_estimates.scalar_estimate = p.estimate();
         }
 
         InferredArgument a = {
             Argument(p.name(),
                      p.is_buffer() ? Argument::InputBuffer : Argument::InputScalar,
-                     p.type(), p.dimensions(), def, min, max),
+                     p.type(), p.dimensions(), argument_estimates),
             p,
             Buffer<>()};
         args.push_back(a);
 
         // Visit child expressions
-        if (!p.is_buffer()) {
-            visit_expr(def);
-            visit_expr(min);
-            visit_expr(max);
-        } else {
+        visit_expr(argument_estimates.scalar_def);
+        visit_expr(argument_estimates.scalar_min);
+        visit_expr(argument_estimates.scalar_max);
+        visit_expr(argument_estimates.scalar_estimate);
+        for (const auto &be : argument_estimates.buffer_estimates) {
+            visit_expr(be.min);
+            visit_expr(be.extent);
+        }
+
+        if (p.is_buffer()) {
             for (int i = 0; i < p.dimensions(); i++) {
                 visit_expr(p.min_constraint(i));
                 visit_expr(p.extent_constraint(i));
@@ -121,25 +127,25 @@ private:
         if (already_have(b.name())) return;
 
         InferredArgument a = {
-            Argument(b.name(), Argument::InputBuffer, b.type(), b.dimensions()),
+            Argument(b.name(), Argument::InputBuffer, b.type(), b.dimensions(), ArgumentEstimates{}),
             Parameter(),
             b};
         args.push_back(a);
     }
 
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         IRGraphVisitor::visit(op);
         include_parameter(op->param);
         include_buffer(op->image);
     }
 
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         IRGraphVisitor::visit(op);
         include_parameter(op->param);
         include_buffer(op->image);
     }
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         IRGraphVisitor::visit(op);
         if (op->func.defined()) {
             Function fn(op->func);

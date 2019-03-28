@@ -1,6 +1,6 @@
+#include "Halide.h"
 #include <stdio.h>
 #include <limits>
-#include "Halide.h"
 
 #ifdef _MSC_VER
 #pragma warning(disable:4800)  // forcing value to bool 'true' or 'false'

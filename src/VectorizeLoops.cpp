@@ -25,10 +25,10 @@ namespace {
 
 // For a given var, replace expressions like shuffle_vector(var, 4)
 // with var.lane.4
-class ReplaceShuffleVectors : public IRMutator2 {
+class ReplaceShuffleVectors : public IRMutator {
     string var;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Expr visit(const Shuffle *op) override {
         const Variable *v;
@@ -37,7 +37,7 @@ class ReplaceShuffleVectors : public IRMutator2 {
             v->name == var) {
             return Variable::make(op->type, var + ".lane." + std::to_string(op->indices[0]));
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 public:
@@ -158,6 +158,12 @@ Interval bounds_of_lanes(Expr e) {
         if (expr_uses_var(ib.max, let->name + ".max_lane")) {
             ib.max = Let::make(let->name + ".max_lane", ia.max, ib.max);
         }
+        if (expr_uses_var(ib.min, let->name)) {
+            ib.min = Let::make(let->name, let->value, ib.min);
+        }
+        if (expr_uses_var(ib.max, let->name)) {
+            ib.max = Let::make(let->name, let->value, ib.max);
+        }
         return ib;
     }
 
@@ -181,14 +187,14 @@ Interval bounds_of_lanes(Expr e) {
 // dimension to represent the separate copy of the allocation per
 // vector lane. This means loads and stores to them need to be
 // rewritten slightly.
-class RewriteAccessToVectorAlloc : public IRMutator2 {
+class RewriteAccessToVectorAlloc : public IRMutator {
     Expr var;
     string alloc;
     int lanes;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
-    Expr mutate_index(string a, Expr index) {
+    Expr mutate_index(const string &a, Expr index) {
         index = mutate(index);
         if (a == alloc) {
             return index * lanes + var;
@@ -197,14 +203,22 @@ class RewriteAccessToVectorAlloc : public IRMutator2 {
         }
     }
 
+    ModulusRemainder mutate_alignment(const string &a, const ModulusRemainder &align) {
+        if (a == alloc) {
+            return align * lanes;
+        } else {
+            return align;
+        }
+    }
+
     Expr visit(const Load *op) override {
         return Load::make(op->type, op->name, mutate_index(op->name, op->index),
-                          op->image, op->param, mutate(op->predicate));
+                          op->image, op->param, mutate(op->predicate), mutate_alignment(op->name, op->alignment));
     }
 
     Stmt visit(const Store *op) override {
         return Store::make(op->name, mutate(op->value), mutate_index(op->name, op->index),
-                           op->param, mutate(op->predicate));
+                           op->param, mutate(op->predicate), mutate_alignment(op->name, op->alignment));
     }
 
 public:
@@ -215,7 +229,7 @@ public:
 class UsesGPUVars : public IRVisitor {
 private:
     using IRVisitor::visit;
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         if (CodeGen_GPU_Dev::is_gpu_var(op->name)) {
             debug(3) << "Found gpu loop var: " << op->name << "\n";
             uses_gpu = true;
@@ -232,7 +246,7 @@ bool uses_gpu_vars(Expr s) {
 }
 
 // Wrap a vectorized predicate around a Load/Store node.
-class PredicateLoadStore : public IRMutator2 {
+class PredicateLoadStore : public IRMutator {
     string var;
     Expr vector_predicate;
     bool in_hexagon;
@@ -241,7 +255,7 @@ class PredicateLoadStore : public IRMutator2 {
     bool valid;
     bool vectorized;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     bool should_predicate_store_load(int bit_size) {
         if (in_hexagon) {
@@ -251,7 +265,10 @@ class PredicateLoadStore : public IRMutator2 {
         } else if (target.arch == Target::X86) {
             // Should only attempt to predicate store/load if the lane size is
             // no less than 4
-            return (bit_size == 32) && (lanes >= 4);
+            // TODO: disabling for now due to trunk LLVM breakage.
+            // See: https://github.com/halide/Halide/issues/3534
+            // return (bit_size == 32) && (lanes >= 4);
+            return false;
         }
         // For other architecture, do not predicate vector load/store
         return false;
@@ -283,7 +300,7 @@ class PredicateLoadStore : public IRMutator2 {
             predicate = mutate(Broadcast::make(op->predicate, lanes));
             index = mutate(Broadcast::make(op->index, lanes));
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
 
         predicate = merge_predicate(predicate, vector_predicate);
@@ -291,7 +308,7 @@ class PredicateLoadStore : public IRMutator2 {
             return op;
         }
         vectorized = true;
-        return Load::make(op->type, op->name, index, op->image, op->param, predicate);
+        return Load::make(op->type, op->name, index, op->image, op->param, predicate, op->alignment);
     }
 
     Stmt visit(const Store *op) override {
@@ -314,7 +331,7 @@ class PredicateLoadStore : public IRMutator2 {
             value = mutate(Broadcast::make(op->value, lanes));
             index = mutate(Broadcast::make(op->index, lanes));
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
 
         predicate = merge_predicate(predicate, vector_predicate);
@@ -322,13 +339,13 @@ class PredicateLoadStore : public IRMutator2 {
             return op;
         }
         vectorized = true;
-        return Store::make(op->name, value, index, op->param, predicate);
+        return Store::make(op->name, value, index, op->param, predicate, op->alignment);
     }
 
     Expr visit(const Call *op) override {
         // We should not vectorize calls with side-effects
         valid = valid && op->is_pure();
-        return IRMutator2::visit(op);
+        return IRMutator::visit(op);
     }
 
 public:
@@ -345,7 +362,7 @@ public:
 
 // Substitutes a vector for a scalar var in a Stmt. Used on the
 // body of every vectorized loop.
-class VectorSubs : public IRMutator2 {
+class VectorSubs : public IRMutator {
     // The var we're vectorizing
     string var;
 
@@ -379,7 +396,7 @@ class VectorSubs : public IRMutator2 {
         return Expr();
     }
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Expr visit(const Cast *op) override {
         Expr value = mutate(op->value);
@@ -459,7 +476,7 @@ class VectorSubs : public IRMutator2 {
             int w = index.type().lanes();
             predicate = widen(predicate, w);
             return Load::make(op->type.with_lanes(w), op->name, index, op->image,
-                              op->param, predicate);
+                              op->param, predicate, op->alignment);
         }
     }
 
@@ -693,7 +710,7 @@ class VectorSubs : public IRMutator2 {
         } else {
             int lanes = std::max(predicate.type().lanes(), std::max(value.type().lanes(), index.type().lanes()));
             return Store::make(op->name, widen(value, lanes), widen(index, lanes),
-                               op->param, widen(predicate, lanes));
+                               op->param, widen(predicate, lanes), op->alignment);
         }
     }
 
@@ -911,7 +928,7 @@ class VectorSubs : public IRMutator2 {
         for (int i = lanes - 1; i >= 0; --i) {
             // Hide all the vector let values in scope with a scalar version
             // in the appropriate lane.
-            for (Scope<Expr>::iterator iter = scope.begin(); iter != scope.end(); ++iter) {
+            for (Scope<Expr>::const_iterator iter = scope.cbegin(); iter != scope.cend(); ++iter) {
                 string name = iter.name() + ".lane." + std::to_string(i);
                 Expr lane = extract_lane(iter.value(), i);
                 e = substitute(iter.name(), Variable::make(lane.type(), name), e);
@@ -942,11 +959,11 @@ public:
 };
 
 // Vectorize all loops marked as such in a Stmt
-class VectorizeLoops : public IRMutator2 {
+class VectorizeLoops : public IRMutator {
     const Target &target;
     bool in_hexagon;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Stmt visit(const For *for_loop) override {
         bool old_in_hexagon = in_hexagon;
@@ -969,7 +986,7 @@ class VectorizeLoops : public IRMutator2 {
             Expr replacement = Ramp::make(for_loop->min, 1, extent->value);
             stmt = VectorSubs(for_loop->name, replacement, in_hexagon, target).mutate(for_loop->body);
         } else {
-            stmt = IRMutator2::visit(for_loop);
+            stmt = IRMutator::visit(for_loop);
         }
 
         if (for_loop->device_api == DeviceAPI::Hexagon) {

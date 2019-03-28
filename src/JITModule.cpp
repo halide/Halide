@@ -177,7 +177,7 @@ public:
 
     HalideJITMemoryManager(const std::vector<JITModule> &modules) : modules(modules) {}
 
-    virtual uint64_t getSymbolAddress(const std::string &name) override {
+    uint64_t getSymbolAddress(const std::string &name) override {
         for (size_t i = 0; i < modules.size(); i++) {
             const JITModule &m = modules[i];
             std::map<std::string, JITModule::Symbol>::const_iterator iter = m.exports().find(name);
@@ -191,12 +191,15 @@ public:
         return SectionMemoryManager::getSymbolAddress(name);
     }
 
-    virtual uint8_t *allocateCodeSection(uintptr_t size, unsigned alignment, unsigned section_id, StringRef section_name) override {
+    uint8_t *allocateCodeSection(uintptr_t size, unsigned alignment, unsigned section_id, StringRef section_name) override {
         uint8_t *result = SectionMemoryManager::allocateCodeSection(size, alignment, section_id, section_name);
         code_pages.push_back({result, size});
         return result;
     }
 
+#if LLVM_VERSION >= 80
+    // nothing
+#else
     void work_around_llvm_bugs() {
 
         for (auto p : code_pages) {
@@ -231,6 +234,8 @@ public:
 #endif
         }
     }
+#endif
+
 };
 
 }
@@ -247,6 +252,10 @@ JITModule::JITModule(const Module &m, const LoweredFunc &fn,
     std::vector<JITModule> shared_runtime = JITSharedRuntime::get(llvm_module.get(), m.target());
     deps_with_runtime.insert(deps_with_runtime.end(), shared_runtime.begin(), shared_runtime.end());
     compile_module(std::move(llvm_module), fn.name, m.target(), deps_with_runtime);
+    // If -time-passes is in HL_LLVM_ARGS, this will print llvm passes time statstics otherwise its no-op.
+#if LLVM_VERSION >= 80
+    llvm::reportAndResetTimings();
+#endif
 }
 
 void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &function_name, const Target &target,
@@ -332,8 +341,11 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
 
     debug(2) << "Finalizing object\n";
     ee->finalizeObject();
+#if LLVM_VERSION >= 80
+    // nothing
+#else
     memory_manager->work_around_llvm_bugs();
-
+#endif
     // Do any target-specific post-compilation module meddling
     for (size_t i = 0; i < listeners.size(); i++) {
         ee->UnregisterJITEventListener(listeners[i]);
@@ -412,7 +424,8 @@ void JITModule::add_symbol_for_export(const std::string &name, const Symbol &ext
     jit_module->exports[name] = extern_symbol;
 }
 
-void JITModule::add_extern_for_export(const std::string &name, const ExternCFunction &extern_c_function) {
+JITModule::Symbol JITModule::add_extern_for_export(const std::string &name,
+                                                   const ExternCFunction &extern_c_function) {
     Symbol symbol;
     symbol.address = extern_c_function.address();
 
@@ -444,6 +457,7 @@ void JITModule::add_extern_for_export(const std::string &name, const ExternCFunc
 
     symbol.llvm_type = llvm::FunctionType::get(ret_type, llvm_arg_types, false);
     jit_module->exports[name] = symbol;
+    return symbol;
 }
 
 void JITModule::memoization_cache_set_size(int64_t size) const {

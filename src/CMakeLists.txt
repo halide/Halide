@@ -17,7 +17,6 @@ set(RUNTIME_CPP
   android_host_cpu_count
   android_io
   android_opengl_context
-  android_tempfile
   arm_cpu_features
   buffer_t
   cache
@@ -27,10 +26,17 @@ set(RUNTIME_CPP
   destructors
   device_interface
   errors
+  fake_get_symbol
   fake_thread_pool
   float16_t
+  fuchsia_clock
+  fuchsia_host_cpu_count
+  fuchsia_yield
   gpu_device_selection
+  hexagon_cache_allocator
   hexagon_cpu_features
+  hexagon_dma
+  hexagon_dma_pool
   hexagon_host
   ios_io
   linux_clock
@@ -57,21 +63,23 @@ set(RUNTIME_CPP
   osx_host_cpu_count
   osx_opengl_context
   osx_yield
+  posix_abort
   posix_allocator
   posix_clock
   posix_error_handler
   posix_get_symbol
   posix_io
   posix_print
-  posix_tempfile
   posix_threads
   posix_threads_tsan
   powerpc_cpu_features
   prefetch
   profiler
   profiler_inlined
+  pseudostack
   qurt_allocator
   qurt_hvx
+  qurt_hvx_vtcm
   qurt_init_fini
   qurt_threads
   qurt_threads_tsan
@@ -79,14 +87,15 @@ set(RUNTIME_CPP
   runtime_api
   ssp
   to_string
+  trace_helper
   tracing
+  windows_abort
   windows_clock
   windows_cuda
   windows_get_symbol
   windows_io
   windows_opencl
   windows_profiler
-  windows_tempfile
   windows_threads
   windows_threads_tsan
   windows_yield
@@ -233,6 +242,7 @@ list(APPEND INITIAL_MODULES "${INITMOD_PREFIX}inlined_c.cpp")
 set(RUNTIME_HEADER_FILES
   HalideRuntime.h
   HalideRuntimeCuda.h
+  HalideRuntimeHexagonDma.h
   HalideRuntimeHexagonHost.h
   HalideRuntimeOpenCL.h
   HalideRuntimeMetal.h
@@ -254,6 +264,7 @@ endforeach()
 
 # The externally-visible header files that go into making Halide.h.
 # Don't include anything here that includes llvm headers.
+# Keep this list sorted in alphabetical order.
 set(HEADER_FILES
   AddImageChecks.h
   AddParameterChecks.h
@@ -263,6 +274,7 @@ set(HEADER_FILES
   Argument.h
   AssociativeOpsTable.h
   Associativity.h
+  AsyncProducers.h
   AutoSchedule.h
   AutoScheduleUtils.h
   BoundaryConditions.h
@@ -270,6 +282,7 @@ set(HEADER_FILES
   BoundsInference.h
   BoundSmallAllocations.h
   Buffer.h
+  CanonicalizeGPUVars.h
   Closure.h
   CodeGen_ARM.h
   CodeGen_C.h
@@ -278,9 +291,9 @@ set(HEADER_FILES
   CodeGen_GPU_Host.h
   CodeGen_Internal.h
   CodeGen_LLVM.h
+  CodeGen_Metal_Dev.h
   CodeGen_MIPS.h
   CodeGen_OpenCL_Dev.h
-  CodeGen_Metal_Dev.h
   CodeGen_OpenGL_Dev.h
   CodeGen_OpenGLCompute_Dev.h
   CodeGen_Posix.h
@@ -290,12 +303,13 @@ set(HEADER_FILES
   ConciseCasts.h
   CPlusPlusMangle.h
   CSE.h
-  CanonicalizeGPUVars.h
   Debug.h
   DebugArguments.h
   DebugToFile.h
   Definition.h
   Deinterleave.h
+  Derivative.h
+  DerivativeUtils.h
   DeviceArgument.h
   DeviceInterface.h
   Dimension.h
@@ -317,8 +331,6 @@ set(HEADER_FILES
   Generator.h
   HexagonOffload.h
   HexagonOptimize.h
-  runtime/HalideRuntime.h
-  runtime/HalideBuffer.h
   ImageParam.h
   InferArguments.h
   InjectHostDevBufferCopies.h
@@ -329,8 +341,8 @@ set(HEADER_FILES
   Interval.h
   Introspection.h
   IntrusivePtr.h
-  IREquality.h
   IR.h
+  IREquality.h
   IRMatch.h
   IRMutator.h
   IROperator.h
@@ -352,12 +364,12 @@ set(HEADER_FILES
   ModulusRemainder.h
   Monotonic.h
   ObjectInstanceRegistry.h
-  Outputs.h
   OutputImageParam.h
+  Outputs.h
   ParallelRVar.h
   Param.h
-  ParamMap.h
   Parameter.h
+  ParamMap.h
   PartitionLoops.h
   Pipeline.h
   Prefetch.h
@@ -366,18 +378,21 @@ set(HEADER_FILES
   PythonExtensionGen.h
   Qualify.h
   Random.h
-  RealizationOrder.h
   RDom.h
+  RealizationOrder.h
   Reduction.h
   RegionCosts.h
   RemoveDeadAllocations.h
-  RemoveTrivialForLoops.h
+  RemoveExternLoops.h
   RemoveUndef.h
+  runtime/HalideBuffer.h
+  runtime/HalideRuntime.h
   Schedule.h
   ScheduleFunctions.h
   Scope.h
   SelectGPUAPI.h
   Simplify.h
+  SimplifyCorrelatedDifferences.h
   SimplifySpecializations.h
   SkipStages.h
   SlidingWindow.h
@@ -422,14 +437,17 @@ foreach (i ${RUNTIME_HEADER_FILES})
   configure_file(runtime/${i} "${CMAKE_BINARY_DIR}/include" COPYONLY)
 endforeach()
 
+# Keep this list sorted in alphabetical order.
 add_library(Halide ${HALIDE_LIBRARY_TYPE}
   AddImageChecks.cpp
   AddParameterChecks.cpp
   AlignLoads.cpp
   AllocationBoundsInference.cpp
   ApplySplit.cpp
+  Argument.cpp
   AssociativeOpsTable.cpp
   Associativity.cpp
+  AsyncProducers.cpp
   AutoSchedule.cpp
   AutoScheduleUtils.cpp
   BoundaryConditions.cpp
@@ -437,6 +455,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   BoundsInference.cpp
   BoundSmallAllocations.cpp
   Buffer.cpp
+  CanonicalizeGPUVars.cpp
   Closure.cpp
   CodeGen_ARM.cpp
   CodeGen_C.cpp
@@ -446,23 +465,24 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   CodeGen_Hexagon.cpp
   CodeGen_Internal.cpp
   CodeGen_LLVM.cpp
+  CodeGen_Metal_Dev.cpp
   CodeGen_MIPS.cpp
   CodeGen_OpenCL_Dev.cpp
-  CodeGen_Metal_Dev.cpp
   CodeGen_OpenGL_Dev.cpp
   CodeGen_OpenGLCompute_Dev.cpp
+  CodeGen_Posix.cpp
   CodeGen_PowerPC.cpp
   CodeGen_PTX_Dev.cpp
-  CodeGen_Posix.cpp
   CodeGen_X86.cpp
   CPlusPlusMangle.cpp
   CSE.cpp
-  CanonicalizeGPUVars.cpp
   Debug.cpp
   DebugArguments.cpp
   DebugToFile.cpp
   Definition.cpp
   Deinterleave.cpp
+  Derivative.cpp
+  DerivativeUtils.cpp
   DeviceArgument.cpp
   DeviceInterface.cpp
   Dimension.cpp
@@ -480,6 +500,15 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Generator.cpp
   HexagonOffload.cpp
   HexagonOptimize.cpp
+  ImageParam.cpp
+  InferArguments.cpp
+  InjectHostDevBufferCopies.cpp
+  InjectOpenGLIntrinsics.cpp
+  Inline.cpp
+  InlineReductions.cpp
+  IntegerDivisionTable.cpp
+  Interval.cpp
+  Introspection.cpp
   IR.cpp
   IREquality.cpp
   IRMatch.cpp
@@ -487,20 +516,11 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   IROperator.cpp
   IRPrinter.cpp
   IRVisitor.cpp
-  ImageParam.cpp
-  InferArguments.cpp
-  Interval.cpp
-  InjectHostDevBufferCopies.cpp
-  InjectOpenGLIntrinsics.cpp
-  Inline.cpp
-  InlineReductions.cpp
-  IntegerDivisionTable.cpp
-  Introspection.cpp
   JITModule.cpp
-  LLVM_Output.cpp
-  LLVM_Runtime_Linker.cpp
   Lerp.cpp
   LICM.cpp
+  LLVM_Output.cpp
+  LLVM_Runtime_Linker.cpp
   LoopCarry.cpp
   Lower.cpp
   LowerWarpShuffles.cpp
@@ -512,23 +532,23 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   ObjectInstanceRegistry.cpp
   OutputImageParam.cpp
   ParallelRVar.cpp
-  ParamMap.cpp
   Parameter.cpp
+  ParamMap.cpp
   PartitionLoops.cpp
   Pipeline.cpp
-  PrintLoopNest.cpp
   Prefetch.cpp
+  PrintLoopNest.cpp
   Profiling.cpp
   PurifyIndexMath.cpp
   PythonExtensionGen.cpp
   Qualify.cpp
-  RDom.cpp
   Random.cpp
+  RDom.cpp
   RealizationOrder.cpp
   Reduction.cpp
   RegionCosts.cpp
   RemoveDeadAllocations.cpp
-  RemoveTrivialForLoops.cpp
+  RemoveExternLoops.cpp
   RemoveUndef.cpp
   Schedule.cpp
   ScheduleFunctions.cpp
@@ -541,8 +561,8 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Simplify_Div.cpp
   Simplify_EQ.cpp
   Simplify_Exprs.cpp
-  Simplify_LT.cpp
   Simplify_Let.cpp
+  Simplify_LT.cpp
   Simplify_Max.cpp
   Simplify_Min.cpp
   Simplify_Mod.cpp
@@ -553,6 +573,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Simplify_Shuffle.cpp
   Simplify_Stmts.cpp
   Simplify_Sub.cpp
+  SimplifyCorrelatedDifferences.cpp
   SimplifySpecializations.cpp
   SkipStages.cpp
   SlidingWindow.cpp
@@ -582,6 +603,12 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   ${HEADER_FILES}
   ${INITIAL_MODULES}
 )
+
+# We could expose the /MP flag to all targets, but that might end up saturating the build
+# since multiple MSBuild projects might get built in parallel, each of which compiling their
+# source files in parallel; the Halide library itself is a "knot" point of the build graph,
+# so compiling its files in parallel should not oversubscribe the system
+target_compile_options(Halide PUBLIC $<$<CXX_COMPILER_ID:MSVC>:/MP>)
 
 # Define Halide_SHARED or Halide_STATIC depending on library type
 target_compile_definitions(Halide PRIVATE "-DHalide_${HALIDE_LIBRARY_TYPE}")
@@ -725,6 +752,3 @@ install(TARGETS Halide
         RUNTIME DESTINATION bin
         LIBRARY DESTINATION bin
         ARCHIVE DESTINATION lib)
-if (APPLE AND "${HALIDE_LIBRARY_TYPE}" STREQUAL "SHARED")
-  install(CODE "execute_process(COMMAND install_name_tool $<INSTALL_PREFIX>/bin/$<TARGET_FILE_NAME:Halide> $<INSTALL_PREFIX>/bin/$<TARGET_FILE_NAME:Halide>)")
-endif()

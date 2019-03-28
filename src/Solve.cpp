@@ -33,12 +33,12 @@ bool no_overflow_int(Type t) {
  * common-subexpression-elimination. Fortunately this isn't a
  * public class, so the only user is in this file.
  */
-class SolveExpression : public IRMutator2 {
+class SolveExpression : public IRMutator {
 public:
     SolveExpression(const string &v, const Scope<Expr> &es) :
         failed(false), var(v), uses_var(false), external_scope(es) {}
 
-    using IRMutator2::mutate;
+    using IRMutator::mutate;
 
     Expr mutate(const Expr &e) override {
         map<Expr, CacheEntry, ExprCompare>::iterator iter = cache.find(e);
@@ -47,7 +47,7 @@ public:
             debug(4) << "Mutating " << e << " (" << uses_var << ")\n";
             bool old_uses_var = uses_var;
             uses_var = false;
-            Expr new_e = IRMutator2::mutate(e);
+            Expr new_e = IRMutator::mutate(e);
             CacheEntry entry = {new_e, uses_var};
             uses_var = old_uses_var || uses_var;
             cache[e] = entry;
@@ -105,7 +105,7 @@ private:
     // so the right of the subexpression can be considered a
     // constant. The mutator must preserve this property or set the
     // flag "failed" to true.
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     // Admit defeat. Isolated in a method for ease of debugging.
     Expr fail(Expr e) {
@@ -265,8 +265,8 @@ private:
                 // (f(x) - a) - g(x) -> (f(x) - g(x)) - a
                 expr = mutate(sub_a->a - b - sub_a->b);
             } else if (sub_b && !b_failed) {
-                // f(x) - (g(x) - a) -> (f(x) - g(x)) - a
-                expr = mutate(a - sub_b->a - sub_b->b);
+                // f(x) - (g(x) - a) -> (f(x) - g(x)) + a
+                expr = mutate(a - sub_b->a + sub_b->b);
             } else if (mul_a && mul_b && equal(mul_a->a, mul_b->a)) {
                 // f(x)*a - f(x)*b -> f(x)*(a - b)
                 expr = mutate(mul_a->a * (mul_a->b - mul_b->b));
@@ -411,7 +411,7 @@ private:
             op->is_intrinsic(Call::likely_if_innermost)) {
             return mutate(op->args[0]);
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
@@ -1128,9 +1128,9 @@ public:
 
 };
 
-class AndConditionOverDomain : public IRMutator2 {
+class AndConditionOverDomain : public IRMutator {
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Scope<Interval> scope;
     Scope<Expr> bound_vars;
@@ -1247,7 +1247,7 @@ class AndConditionOverDomain : public IRMutator2 {
 
     Expr visit(const Not *op) override {
         flipped = !flipped;
-        Expr expr = IRMutator2::visit(op);
+        Expr expr = IRMutator::visit(op);
         flipped = !flipped;
         return expr;
     }
@@ -1611,8 +1611,8 @@ void solve_test() {
     {
         // This case used to break due to signed integer overflow in
         // the simplifier.
-        Expr a16 = Load::make(Int(16), "a", {x}, Buffer<>(), Parameter(), const_true());
-        Expr b16 = Load::make(Int(16), "b", {x}, Buffer<>(), Parameter(), const_true());
+        Expr a16 = Load::make(Int(16), "a", {x}, Buffer<>(), Parameter(), const_true(), ModulusRemainder());
+        Expr b16 = Load::make(Int(16), "b", {x}, Buffer<>(), Parameter(), const_true(), ModulusRemainder());
         Expr lhs = pow(cast<int32_t>(a16), 2) + pow(cast<int32_t>(b16), 2);
 
         Scope<Interval> s;
@@ -1653,6 +1653,8 @@ void solve_test() {
         check_solve(5 - (4 - 4*x), x*(4) + 1);
         check_solve(z - (y - x), x + (z - y));
         check_solve(z - (y - x) == 2, x  == 2 - (z - y));
+
+        check_solve(x - (x - y), (x - x) + y);
 
         // This is used to cause infinite recursion
         Expr expr = Add::make(z, Sub::make(x, y));

@@ -29,7 +29,7 @@ public:
 
     using IRGraphVisitor::visit;
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         op->min.accept(this);
         op->extent.accept(this);
         bool old = in_device_loop;
@@ -41,7 +41,7 @@ public:
         in_device_loop = old;
     }
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         IRGraphVisitor::visit(op);
         if (op->image.defined()) {
             Result &r = buffers[op->name];
@@ -58,7 +58,7 @@ public:
         }
     }
 
-    void visit(const Provide *op) {
+    void visit(const Provide *op) override {
         IRGraphVisitor::visit(op);
         if (op->values.size() == 1) {
             auto it = buffers.find(op->name);
@@ -76,7 +76,7 @@ public:
         }
     }
 
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         if (op->param.defined() &&
             op->param.is_buffer() &&
             buffers.find(op->param.name()) == buffers.end()) {
@@ -140,7 +140,7 @@ Stmt add_image_checks(Stmt s,
     vector<Stmt> asserts_required;
     vector<Stmt> asserts_constrained;
     vector<Stmt> asserts_proposed;
-    vector<Stmt> asserts_elem_size;
+    vector<Stmt> asserts_type_checks;
     vector<Stmt> asserts_host_alignment;
     vector<Stmt> asserts_host_non_null;
     vector<Stmt> buffer_rewrites;
@@ -261,22 +261,15 @@ Stmt add_image_checks(Stmt s,
 
         // Check the type matches the internally-understood type
         {
-            string type_code_name = name + ".type.code";
-            string type_bits_name = name + ".type.bits";
-            string type_lanes_name = name + ".type.lanes";
-            Expr type_code = Variable::make(UInt(8), type_code_name, image, param, rdom);
-            Expr type_bits = Variable::make(UInt(8), type_bits_name, image, param, rdom);
-            Expr type_lanes = Variable::make(UInt(16), type_lanes_name, image, param, rdom);
+            string type_name = name + ".type";
+            Expr type_var = Variable::make(UInt(32), type_name, image, param, rdom);
+            uint32_t correct_type_bits = ((halide_type_t)type).as_u32();
+            Expr correct_type_expr = make_const(UInt(32), correct_type_bits);
             Expr error = Call::make(Int(32), "halide_error_bad_type",
-                                    {error_name,
-                                     type_code, make_const(UInt(8), (int)type.code()),
-                                     type_bits, make_const(UInt(8), type.bits()),
-                                     type_lanes, make_const(UInt(16), type.lanes())},
+                                    {error_name, type_var, correct_type_expr},
                                     Call::Extern);
-            asserts_elem_size.push_back(
-                AssertStmt::make((type_code == type.code()) &&
-                                 (type_bits == type.bits()) &&
-                                 (type_lanes == type.lanes()), error));
+            Stmt type_check = AssertStmt::make(type_var == correct_type_expr, error);
+            asserts_type_checks.push_back(type_check);
         }
 
         // Check the dimensions matches the internally-understood dimensions
@@ -287,7 +280,7 @@ Stmt add_image_checks(Stmt s,
                                     {error_name,
                                      dimensions_given, make_const(Int(32), dimensions)},
                                     Call::Extern);
-            asserts_elem_size.push_back(
+            asserts_type_checks.push_back(
                 AssertStmt::make(dimensions_given == dimensions, error));
         }
 
@@ -622,8 +615,8 @@ Stmt add_image_checks(Stmt s,
         }
 
         // Inject the code that checks that elem_sizes are ok.
-        for (size_t i = asserts_elem_size.size(); i > 0; i--) {
-            s = Block::make(asserts_elem_size[i-1], s);
+        for (size_t i = asserts_type_checks.size(); i > 0; i--) {
+            s = Block::make(asserts_type_checks[i-1], s);
         }
     }
 

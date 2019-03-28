@@ -171,6 +171,8 @@ HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_buffer_t);
 HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_dimension_t);
 HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_device_interface_t);
 HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_filter_metadata_t);
+HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_semaphore_t);
+HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_parallel_task_t);
 
 // You can make arbitrary user-defined types be "Known" using the
 // macro above. This is useful for making Param<> arguments for
@@ -295,6 +297,9 @@ struct Type {
     /** Trivial copy constructor. */
     Type(const Type &that) = default;
 
+    /** Trivial copy assignment operator. */
+    Type &operator=(const Type &that) = default;
+
     /** Type is a wrapper around halide_type_t with more methods for use
      * inside the compiler. This simply constructs the wrapper around
      * the runtime value. */
@@ -366,6 +371,10 @@ struct Type {
     HALIDE_ALWAYS_INLINE
     bool is_uint() const {return code() == UInt;}
 
+    /** Is this type an integer type of any sort? */
+    HALIDE_ALWAYS_INLINE
+    bool is_int_or_uint() const {return code() == Int || code() == UInt;}
+
     /** Is this type an opaque handle type (void *) */
     HALIDE_ALWAYS_INLINE
     bool is_handle() const {return code() == Handle;}
@@ -375,22 +384,19 @@ struct Type {
 
     /** Compare two types for equality */
     bool operator==(const Type &other) const {
-        return code() == other.code() && bits() == other.bits() && lanes() == other.lanes() &&
-            (code() != Handle || same_handle_type(other));
+        return type == other.type && (code() != Handle || same_handle_type(other));
     }
 
     /** Compare two types for inequality */
     bool operator!=(const Type &other) const {
-        return code() != other.code() || bits() != other.bits() || lanes() != other.lanes() ||
-            (code() == Handle && !same_handle_type(other));
+        return type != other.type || (code() == Handle && !same_handle_type(other));
     }
 
     /** Compare ordering of two types so they can be used in certain containers and algorithms */
     bool operator<(const Type &other) const {
-        return code() < other.code() || (code() == other.code() &&
-              (bits() < other.bits() || (bits() == other.bits() &&
-              (lanes() < other.lanes() || (lanes() == other.lanes() &&
-              (code() == Handle && handle_type < other.handle_type))))));
+        if (type < other.type) return true;
+        if (code() == Handle) return handle_type < other.handle_type;
+        return false;
     }
 
     /** Produce the scalar type (that of a single element) of this vector type */

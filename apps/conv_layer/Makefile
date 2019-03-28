@@ -6,7 +6,7 @@ all: $(BIN)/process
 
 $(BIN)/conv_layer.generator: conv_layer_generator.cpp $(GENERATOR_DEPS)
 	@-mkdir -p $(BIN)
-	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS)
 
 $(BIN)/conv_layer.a: $(BIN)/conv_layer.generator
 	@-mkdir -p $(BIN)

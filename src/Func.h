@@ -79,6 +79,7 @@ public:
     Stage(Internal::Function f, Internal::Definition d, size_t stage_index,
           const std::vector<Var> &args)
             : function(f), definition(d), stage_index(stage_index), dim_vars(args) {
+        internal_assert(definition.defined());
         internal_assert(definition.args().size() == dim_vars.size());
         definition.schedule().touched() = true;
     }
@@ -86,6 +87,7 @@ public:
     Stage(Internal::Function f, Internal::Definition d, size_t stage_index,
           const std::vector<std::string> &args)
             : function(f), definition(d), stage_index(stage_index) {
+        internal_assert(definition.defined());
         definition.schedule().touched() = true;
 
         std::vector<Var> dim_vars(args.size());
@@ -627,7 +629,7 @@ public:
 
 namespace Internal {
 struct ErrorBuffer;
-class IRMutator2;
+class IRMutator;
 }  // namespace Internal
 
 /** A halide function. This class represents one stage in a Halide
@@ -938,11 +940,10 @@ public:
      * normally happens on the first call to realize. If you're
      * running your halide pipeline inside time-sensitive code and
      * wish to avoid including the time taken to compile a pipeline,
-     * then you can call this ahead of time. Returns the raw function
-     * pointer to the compiled pipeline. Default is to use the Target
+     * then you can call this ahead of time. Default is to use the Target
      * returned from Halide::get_jit_target_from_environment()
      */
-    void *compile_jit(const Target &target = get_jit_target_from_environment());
+    void compile_jit(const Target &target = get_jit_target_from_environment());
 
     /** Set the error handler function that be called in the case of
      * runtime errors during halide pipelines. If you are compiling
@@ -1062,7 +1063,7 @@ public:
     /** Add a custom pass to be used during lowering, with the
      * function that will be called to delete it also passed in. Set
      * it to nullptr if you wish to retain ownership of the object. */
-    void add_custom_lowering_pass(Internal::IRMutator2 *pass, std::function<void()> deleter);
+    void add_custom_lowering_pass(Internal::IRMutator *pass, std::function<void()> deleter);
 
     /** Remove all previously-set custom lowering passes */
     void clear_custom_lowering_passes();
@@ -1148,80 +1149,40 @@ public:
      * fftw. */
     // @{
     void define_extern(const std::string &function_name,
-                       const std::vector<ExternFuncArgument> &params,
-                       Type t,
-                       int dimensionality,
-                       NameMangling mangling,
-                       bool uses_old_buffer_t) {
-        define_extern(function_name, params, t,
-                      Internal::make_argument_list(dimensionality),
-                      mangling, uses_old_buffer_t);
-    }
-
-    void define_extern(const std::string &function_name,
-                       const std::vector<ExternFuncArgument> &params,
-                       Type t,
+                       const std::vector<ExternFuncArgument> &params, Type t,
                        int dimensionality,
                        NameMangling mangling = NameMangling::Default,
-                       DeviceAPI device_api = DeviceAPI::Host,
-                       bool uses_old_buffer_t = false) {
-        define_extern(function_name, params, t,
-                      Internal::make_argument_list(dimensionality),
-                      mangling, device_api, uses_old_buffer_t);
+                       DeviceAPI device_api = DeviceAPI::Host) {
+      define_extern(function_name, params, t,
+                    Internal::make_argument_list(dimensionality), mangling,
+                    device_api);
     }
 
     void define_extern(const std::string &function_name,
                        const std::vector<ExternFuncArgument> &params,
-                       const std::vector<Type> &types,
-                       int dimensionality,
-                       NameMangling mangling,
-                       bool uses_old_buffer_t) {
-        define_extern(function_name, params, types,
-                      Internal::make_argument_list(dimensionality),
-                      mangling, uses_old_buffer_t);
+                       const std::vector<Type> &types, int dimensionality,
+                       NameMangling mangling) {
+      define_extern(function_name, params, types,
+                    Internal::make_argument_list(dimensionality), mangling);
     }
 
     void define_extern(const std::string &function_name,
                        const std::vector<ExternFuncArgument> &params,
-                       const std::vector<Type> &types,
-                       int dimensionality,
+                       const std::vector<Type> &types, int dimensionality,
                        NameMangling mangling = NameMangling::Default,
-                       DeviceAPI device_api = DeviceAPI::Host,
-                       bool uses_old_buffer_t = false) {
-        define_extern(function_name, params, types,
-                      Internal::make_argument_list(dimensionality),
-                      mangling, device_api, uses_old_buffer_t);
+                       DeviceAPI device_api = DeviceAPI::Host) {
+      define_extern(function_name, params, types,
+                    Internal::make_argument_list(dimensionality), mangling,
+                    device_api);
     }
 
     void define_extern(const std::string &function_name,
-                       const std::vector<ExternFuncArgument> &params,
-                       Type t,
-                       const std::vector<Var> &arguments,
-                       NameMangling mangling,
-                       bool uses_old_buffer_t) {
-        define_extern(function_name, params, std::vector<Type>{t},
-                      arguments, mangling, uses_old_buffer_t);
-    }
-
-    void define_extern(const std::string &function_name,
-                       const std::vector<ExternFuncArgument> &params,
-                       Type t,
+                       const std::vector<ExternFuncArgument> &params, Type t,
                        const std::vector<Var> &arguments,
                        NameMangling mangling = NameMangling::Default,
-                       DeviceAPI device_api = DeviceAPI::Host,
-                       bool uses_old_buffer_t = false) {
-        define_extern(function_name, params, std::vector<Type>{t},
-                      arguments, mangling, device_api, uses_old_buffer_t);
-    }
-
-    void define_extern(const std::string &function_name,
-                       const std::vector<ExternFuncArgument> &params,
-                       const std::vector<Type> &types,
-                       const std::vector<Var> &arguments,
-                       NameMangling mangling,
-                       bool uses_old_buffer_t) {
-        define_extern(function_name, params, types,
-                      arguments, mangling, DeviceAPI::Host, uses_old_buffer_t);
+                       DeviceAPI device_api = DeviceAPI::Host) {
+      define_extern(function_name, params, std::vector<Type>{t}, arguments,
+                    mangling, device_api);
     }
 
     void define_extern(const std::string &function_name,
@@ -1229,8 +1190,7 @@ public:
                        const std::vector<Type> &types,
                        const std::vector<Var> &arguments,
                        NameMangling mangling = NameMangling::Default,
-                       DeviceAPI device_api = DeviceAPI::Host,
-                       bool uses_old_buffer_t = false);
+                       DeviceAPI device_api = DeviceAPI::Host);
     // @}
 
     /** Get the types of the outputs of this Func. */
@@ -2113,6 +2073,24 @@ public:
      */
     Func &memoize();
 
+    /** Produce this Func asynchronously in a separate
+     * thread. Consumers will be run by the task system when the
+     * production is complete. If this Func's store level is different
+     * to its compute level, consumers will be run concurrently,
+     * blocking as necessary to prevent reading ahead of what the
+     * producer has computed. If storage is folded, then the producer
+     * will additionally not be permitted to run too far ahead of the
+     * consumer, to avoid clobbering data that has not yet been
+     * used.
+     *
+     * Take special care when combining this with custom thread pool
+     * implementations, as avoiding deadlock with producer-consumer
+     * parallelism requires a much more sophisticated parallel runtime
+     * than with data parallelism alone. It is strongly recommended
+     * you just use Halide's default thread pool, which guarantees no
+     * deadlock and a bound on the number of threads launched.
+     */
+    Func &async();
 
     /** Allocate storage for this function within f's loop over
      * var. Scheduling storage is optional, and can be used to
@@ -2318,6 +2296,11 @@ public:
     /** Get the source location of the pure definition of this
      * Func. See Stage::source_location() */
     std::string source_location() const;
+
+    /** Return the current StageSchedule associated with this initial
+     * Stage of this Func. For introspection only: to modify schedule,
+     * use the Func interface. */
+    const Internal::StageSchedule &get_schedule() const { return Stage(*this).get_schedule(); }
 };
 
 namespace Internal {

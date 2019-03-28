@@ -21,7 +21,7 @@ class FindImageInputs : public IRVisitor {
     using IRVisitor::visit;
     set<string> seen_image_param;
 
-    void visit(const Call *call) {
+    void visit(const Call *call) override {
         if (call->call_type == Call::Image) {
             input_type[call->name] = call->type;
 
@@ -61,13 +61,13 @@ class ExprCost : public IRVisitor {
     using IRVisitor::visit;
 
     // Immediate values and variables do not incur any cost.
-    void visit(const IntImm *) {}
-    void visit(const UIntImm *) {}
-    void visit(const FloatImm *) {}
-    void visit(const StringImm *) {}
-    void visit(const Variable *) {}
+    void visit(const IntImm *) override {}
+    void visit(const UIntImm *) override {}
+    void visit(const FloatImm *) override {}
+    void visit(const StringImm *) override {}
+    void visit(const Variable *) override {}
 
-    void visit(const Cast *op) {
+    void visit(const Cast *op) override {
         op->value.accept(this);
         arith += 1;
     }
@@ -84,35 +84,35 @@ class ExprCost : public IRVisitor {
     // beneficial. Write a test case to validate this and update the costs
     // accordingly.
 
-    void visit(const Add *op) { visit_binary_operator(op, 1); }
-    void visit(const Sub *op) { visit_binary_operator(op, 1); }
-    void visit(const Mul *op) { visit_binary_operator(op, 1); }
-    void visit(const Div *op) { visit_binary_operator(op, 1); }
-    void visit(const Mod *op) { visit_binary_operator(op, 1); }
-    void visit(const Min *op) { visit_binary_operator(op, 1); }
-    void visit(const Max *op) { visit_binary_operator(op, 1); }
-    void visit(const EQ *op) { visit_binary_operator(op, 1); }
-    void visit(const NE *op) { visit_binary_operator(op, 1); }
-    void visit(const LT *op) { visit_binary_operator(op, 1); }
-    void visit(const LE *op) { visit_binary_operator(op, 1); }
-    void visit(const GT *op) { visit_binary_operator(op, 1); }
-    void visit(const GE *op) { visit_binary_operator(op, 1); }
-    void visit(const And *op) { visit_binary_operator(op, 1); }
-    void visit(const Or *op) { visit_binary_operator(op, 1); }
+    void visit(const Add *op) override { visit_binary_operator(op, 1); }
+    void visit(const Sub *op) override { visit_binary_operator(op, 1); }
+    void visit(const Mul *op) override { visit_binary_operator(op, 1); }
+    void visit(const Div *op) override { visit_binary_operator(op, 1); }
+    void visit(const Mod *op) override { visit_binary_operator(op, 1); }
+    void visit(const Min *op) override { visit_binary_operator(op, 1); }
+    void visit(const Max *op) override { visit_binary_operator(op, 1); }
+    void visit(const EQ *op) override { visit_binary_operator(op, 1); }
+    void visit(const NE *op) override { visit_binary_operator(op, 1); }
+    void visit(const LT *op) override { visit_binary_operator(op, 1); }
+    void visit(const LE *op) override { visit_binary_operator(op, 1); }
+    void visit(const GT *op) override { visit_binary_operator(op, 1); }
+    void visit(const GE *op) override { visit_binary_operator(op, 1); }
+    void visit(const And *op) override { visit_binary_operator(op, 1); }
+    void visit(const Or *op) override { visit_binary_operator(op, 1); }
 
-    void visit(const Not *op) {
+    void visit(const Not *op) override {
         op->a.accept(this);
         arith += 1;
     }
 
-    void visit(const Select *op) {
+    void visit(const Select *op) override {
         op->condition.accept(this);
         op->true_value.accept(this);
         op->false_value.accept(this);
         arith += 1;
     }
 
-    void visit(const Call *call) {
+    void visit(const Call *call) override {
         if (call->is_intrinsic(Call::if_then_else)) {
             internal_assert(call->args.size() == 3);
 
@@ -205,32 +205,32 @@ class ExprCost : public IRVisitor {
         }
     }
 
-    void visit(const Shuffle *op) {
+    void visit(const Shuffle *op) override {
         arith += 1;
     }
 
-    void visit(const Let *let) {
+    void visit(const Let *let) override {
         let->value.accept(this);
         let->body.accept(this);
     }
 
     // None of the following IR nodes should be encountered when traversing the
     // IR at the level at which the auto scheduler operates.
-    void visit(const Load *) { internal_assert(false); }
-    void visit(const Ramp *) { internal_assert(false); }
-    void visit(const Broadcast *) { internal_assert(false); }
-    void visit(const LetStmt *) { internal_assert(false); }
-    void visit(const AssertStmt *) { internal_assert(false); }
-    void visit(const ProducerConsumer *) { internal_assert(false); }
-    void visit(const For *) { internal_assert(false); }
-    void visit(const Store *) { internal_assert(false); }
-    void visit(const Provide *) { internal_assert(false); }
-    void visit(const Allocate *) { internal_assert(false); }
-    void visit(const Free *) { internal_assert(false); }
-    void visit(const Realize *) { internal_assert(false); }
-    void visit(const Block *) { internal_assert(false); }
-    void visit(const IfThenElse *) { internal_assert(false); }
-    void visit(const Evaluate *) { internal_assert(false); }
+    void visit(const Load *) override { internal_assert(false); }
+    void visit(const Ramp *) override { internal_assert(false); }
+    void visit(const Broadcast *) override { internal_assert(false); }
+    void visit(const LetStmt *) override { internal_assert(false); }
+    void visit(const AssertStmt *) override { internal_assert(false); }
+    void visit(const ProducerConsumer *) override { internal_assert(false); }
+    void visit(const For *) override { internal_assert(false); }
+    void visit(const Store *) override { internal_assert(false); }
+    void visit(const Provide *) override { internal_assert(false); }
+    void visit(const Allocate *) override { internal_assert(false); }
+    void visit(const Free *) override { internal_assert(false); }
+    void visit(const Realize *) override { internal_assert(false); }
+    void visit(const Block *) override { internal_assert(false); }
+    void visit(const IfThenElse *) override { internal_assert(false); }
+    void visit(const Evaluate *) override { internal_assert(false); }
 
 public:
     int64_t arith;
@@ -262,8 +262,8 @@ Expr get_func_value_size(const Function &f) {
 //
 // TODO: Comment this out for now until we modify the compute expr cost and
 // detailed byte loads functions to account for likely exprs.
-/*class LikelyExpression : public IRMutator2 {
-    using IRMutator2::visit;
+/*class LikelyExpression : public IRMutator {
+    using IRMutator::visit;
 
     Expr visit(const Min *op) override {
         IRVisitor::visit(op);

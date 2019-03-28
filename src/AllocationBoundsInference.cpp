@@ -17,8 +17,8 @@ using std::vector;
 // let statements outside of each realize node, or at the top level if
 // they're not internal allocations.
 
-class AllocationInference : public IRMutator2 {
-    using IRMutator2::visit;
+class AllocationInference : public IRMutator {
+    using IRMutator::visit;
 
     const map<string, Function> &env;
     const FuncValueBounds &func_bounds;
@@ -49,7 +49,7 @@ class AllocationInference : public IRMutator2 {
         Stmt new_body = mutate(op->body);
         Stmt stmt = Realize::make(op->name, op->types, op->memory_type, op->bounds, op->condition, new_body);
 
-        internal_assert(b.size() == op->bounds.size());
+        internal_assert(b.size() == op->bounds.size()) << b.size() << " " << op->bounds.size() << "\n";
 
         for (size_t i = 0; i < b.size(); i++) {
             // Get any applicable bound on this dimension
@@ -128,8 +128,7 @@ public:
         for (map<string, Function>::const_iterator iter = e.begin();
              iter != e.end(); ++iter) {
             Function f = iter->second;
-            if (f.has_extern_definition() &&
-                !f.extern_definition_proxy_expr().defined()) {
+            if (f.has_extern_definition()) {
                 touched_by_extern.insert(f.name());
                 for (size_t i = 0; i < f.extern_arguments().size(); i++) {
                     ExternFuncArgument arg = f.extern_arguments()[i];

@@ -8,11 +8,19 @@ extern "C" {
 #define WIN32API __stdcall
 #endif
 
-WIN32API void *LoadLibraryA(const char *);
+int WIN32API MultiByteToWideChar(
+        unsigned int CodePage,
+        unsigned long dwFlags,
+        const char* lpMultiByteStr,
+        int cbMultiByte,
+        wchar_t* lpWideCharStr,
+        int cchWideChar);
+WIN32API void *LoadLibraryW(const wchar_t *);
 WIN32API void *GetProcAddress(void *, const char *);
 WIN32API unsigned SetErrorMode(unsigned);
 #define SEM_FAILCRITICALERRORS 0x0001
 #define SEM_NOOPENFILEERRORBOX 0x8000
+#define CP_UTF8 65001
 
 WEAK void *halide_default_get_symbol(const char *name) {
     return GetProcAddress(NULL, name);
@@ -21,7 +29,16 @@ WEAK void *halide_default_get_symbol(const char *name) {
 WEAK void *halide_default_load_library(const char *name) {
     // Suppress dialog windows during library open.
     unsigned old_mode = SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX);
-    void *lib = LoadLibraryA(name);
+    void* lib = NULL;
+    int wide_len = MultiByteToWideChar(CP_UTF8, 0, name, -1, NULL, 0);
+    if (wide_len > 0) {
+        wchar_t* wide_lib = (wchar_t*)malloc(wide_len * sizeof(*wide_lib));
+        wide_len = MultiByteToWideChar(CP_UTF8, 0, name, -1, wide_lib, wide_len);
+        if (wide_len > 0) {
+            lib = LoadLibraryW(wide_lib);
+        }
+        free(wide_lib);
+    }
     SetErrorMode(old_mode);
     return lib;
 }

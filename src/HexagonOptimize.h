@@ -18,12 +18,19 @@ Stmt optimize_hexagon_shuffles(Stmt s, int lut_alignment);
 /** Generate vtmpy instruction if possible */
 Stmt vtmpy_generator(Stmt s);
 
+/* Generate vscatter-vgather instructions on Hexagon using VTCM memory.
+ * The pass should be run before generating shuffles.
+ * Some expressions which generate vscatter-vgathers are:
+ *     1. out(x) = lut(foo(x)) -> vgather
+ *     2. out(idx(x)) = foo(x) -> vscatter */
+Stmt scatter_gather_generator(Stmt s);
+
 /** Hexagon deinterleaves when performing widening operations, and
  * interleaves when performing narrowing operations. This pass
  * rewrites widenings/narrowings to be explicit in the IR, and
  * attempts to simplify away most of the
  * interleaving/deinterleaving. */
-Stmt optimize_hexagon_instructions(Stmt s, Target t, Scope<ModulusRemainder>& alignment_info);
+Stmt optimize_hexagon_instructions(Stmt s, Target t);
 
 /** Generate deinterleave or interleave operations, operating on
  * groups of vectors at a time. */

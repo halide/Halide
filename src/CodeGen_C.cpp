@@ -70,6 +70,7 @@ inline float cos_f32(float x) {return cosf(x);}
 inline float acos_f32(float x) {return acosf(x);}
 inline float tan_f32(float x) {return tanf(x);}
 inline float atan_f32(float x) {return atanf(x);}
+inline float atan2_f32(float x, float y) {return atan2f(x, y);}
 inline float sinh_f32(float x) {return sinhf(x);}
 inline float cosh_f32(float x) {return coshf(x);}
 inline float tanh_f32(float x) {return tanhf(x);}
@@ -88,6 +89,7 @@ inline double cos_f64(double x) {return cos(x);}
 inline double acos_f64(double x) {return acos(x);}
 inline double tan_f64(double x) {return tan(x);}
 inline double atan_f64(double x) {return atan(x);}
+inline double atan2_f64(double x, double y) {return atan2(x, y);}
 inline double sinh_f64(double x) {return sinh(x);}
 inline double cosh_f64(double x) {return cosh(x);}
 inline double tanh_f64(double x) {return tanh(x);}
@@ -119,13 +121,36 @@ inline float float_from_bits(uint32_t bits) {
 }
 
 template<typename T>
-inline uint8_t halide_count_leading_zeros(T v) {
-    int bits = sizeof(v) * 8;
-    while (v) {
-        v >>= 1;
-        bits--;
+inline int halide_popcount(T a) {
+    int bits_set = 0;
+    while (a != 0) {
+        bits_set += a & 1;
+        a >>= 1;
     }
-    return bits;
+    return bits_set;
+}
+
+template<typename T>
+inline int halide_count_leading_zeros(T a) {
+    int leading_zeros = 0;
+    int bit = sizeof(a) * 8 - 1;
+    while (bit >= 0 && (a & (((T)1) << bit)) == 0) {
+        leading_zeros++;
+        bit--;
+    }
+    return leading_zeros;
+}
+
+template<typename T>
+inline int halide_count_trailing_zeros(T a) {
+    int trailing_zeros = 0;
+    constexpr int bits = sizeof(a) * 8;
+    int bit = 0;
+    while (bit < bits && (a & (((T)1) << bit)) == 0) {
+        trailing_zeros++;
+        bit++;
+    }
+    return trailing_zeros;
 }
 
 template<typename T>
@@ -138,6 +163,16 @@ template<typename A, typename B>
 const B &return_second(const A &a, const B &b) {
     (void) a;
     return b;
+}
+
+template<typename A, typename B>
+inline auto quiet_div(const A &a, const B &b) -> decltype(a / b) {
+    return b == 0 ? static_cast<decltype(a / b)>(0) : (a / b);
+}
+
+template<typename A, typename B>
+inline auto quiet_mod(const A &a, const B &b) -> decltype(a % b) {
+    return b == 0 ? static_cast<decltype(a % b)>(0) : (a % b);
 }
 
 namespace {
@@ -164,43 +199,96 @@ public:
 }  // namespace
 
 class TypeInfoGatherer : public IRGraphVisitor {
-public:
-    std::set<ForType> for_types_used;
-    std::set<Type> vector_types_used;
-
+private:
     using IRGraphVisitor::include;
     using IRGraphVisitor::visit;
 
-    void include(const Expr &e) {
-        if (e.type().is_vector()) {
-            if (e.type().is_bool()) {
+    void include_type(const Type &t) {
+        if (t.is_vector()) {
+            if (t.is_bool()) {
                 // bool vectors are always emitted as uint8 in the C++ backend
                 // TODO: on some architectures, we could do better by choosing
                 // a bitwidth that matches the other vectors in use; EliminateBoolVectors
                 // could be used for this with a bit of work.
-                vector_types_used.insert(UInt(8).with_lanes(e.type().lanes()));
-            } else if (!e.type().is_handle()) {
+                vector_types_used.insert(UInt(8).with_lanes(t.lanes()));
+            } else if (!t.is_handle()) {
                 // Vector-handle types can be seen when processing (e.g.)
                 // require() statements that are vectorized, but they
                 // will all be scalarized away prior to use, so don't emit
                 // them.
-                vector_types_used.insert(e.type());
+                vector_types_used.insert(t);
+                if (t.is_int()) {
+                    // If we are including an int-vector type, also include
+                    // the same-width uint-vector type; there are various operations
+                    // that can use uint vectors for intermediate results (e.g. lerp(),
+                    // but also Mod, which can generate a call to abs() for int types,
+                    // which always produces uint results for int inputs in Halide);
+                    // it's easier to just err on the side of extra vectors we don't
+                    // use since they are just type declarations.
+                    vector_types_used.insert(t.with_code(halide_type_uint));
+                }
             }
         }
+    }
+
+    void include_lerp_types(const Type &t) {
+        if (t.is_vector() && t.is_int_or_uint() && (t.bits() >= 8 && t.bits() <= 32)) {
+            Type doubled = t.with_bits(t.bits() * 2);
+            include_type(doubled);
+        }
+    }
+
+protected:
+    void include(const Expr &e) override {
+        include_type(e.type());
         IRGraphVisitor::include(e);
     }
 
     // GCC's __builtin_shuffle takes an integer vector of
     // the size of its input vector. Make sure this type exists.
-    void visit(const Shuffle *op) {
+    void visit(const Shuffle *op) override {
         vector_types_used.insert(Int(32, op->vectors[0].type().lanes()));
         IRGraphVisitor::visit(op);
     }
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         for_types_used.insert(op->for_type);
         IRGraphVisitor::visit(op);
     }
+
+    void visit(const Ramp *op) override {
+        include_type(op->type.with_lanes(op->lanes));
+        IRGraphVisitor::visit(op);
+    }
+
+    void visit(const Broadcast *op) override {
+        include_type(op->type.with_lanes(op->lanes));
+        IRGraphVisitor::visit(op);
+    }
+
+    void visit(const Cast *op) override {
+        include_type(op->type);
+        IRGraphVisitor::visit(op);
+    }
+
+    void visit(const Call *op) override {
+        include_type(op->type);
+        if (op->is_intrinsic(Call::lerp)) {
+            // lower_lerp() can synthesize wider vector types.
+            for (auto &a : op->args) {
+                include_lerp_types(a.type());
+            }
+        } else if (op->is_intrinsic(Call::absd)) {
+            // absd() can synthesize a new type
+            include_type(op->type.with_code(op->type.is_int() ? Type::UInt : op->type.code()));
+        }
+
+        IRGraphVisitor::visit(op);
+    }
+
+public:
+    std::set<ForType> for_types_used;
+    std::set<Type> vector_types_used;
 };
 
 CodeGen_C::CodeGen_C(ostream &s, Target t, OutputKind output_kind, const std::string &guard) :
@@ -542,6 +630,13 @@ public:
         }
         return r;
     }
+    Vec operator!() const {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = !r.elements[i];
+        }
+        return r;
+    }
 
     friend Vec operator+(const Vec &a, const Vec &b) {
         Vec r(empty);
@@ -603,6 +698,21 @@ public:
         Vec r(empty);
         for (size_t i = 0; i < Lanes; i++) {
             r.elements[i] = a[i] | b[i];
+        }
+        return r;
+    }
+
+    friend Vec operator&&(const Vec &a, const Vec &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = a[i] && b[i];
+        }
+        return r;
+    }
+    friend Vec operator||(const Vec &a, const Vec &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = a[i] || b[i];
         }
         return r;
     }
@@ -670,6 +780,20 @@ public:
         }
         return r;
     }
+    friend Vec operator&&(const Vec &a, const ElementType &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = a[i] && b;
+        }
+        return r;
+    }
+    friend Vec operator||(const Vec &a, const ElementType &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = a[i] || b;
+        }
+        return r;
+    }
 
     friend Vec operator+(const ElementType &a, const Vec &b) {
         Vec r(empty);
@@ -731,6 +855,20 @@ public:
         Vec r(empty);
         for (size_t i = 0; i < Lanes; i++) {
             r.elements[i] = a | b[i];
+        }
+        return r;
+    }
+    friend Vec operator&&(const ElementType &a, const Vec &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = a && b[i];
+        }
+        return r;
+    }
+    friend Vec operator||(const ElementType &a, const Vec &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = a || b[i];
         }
         return r;
     }
@@ -941,6 +1079,13 @@ public:
     Vec operator~() const {
         return Vec(from_native_vector, ~native_vector);
     }
+    Vec operator!() const {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = !(*this)[i];
+        }
+        return r;
+    }
 
     friend Vec operator+(const Vec &a, const Vec &b) {
         return Vec(from_native_vector, a.native_vector + b.native_vector);
@@ -968,6 +1113,20 @@ public:
     }
     friend Vec operator|(const Vec &a, const Vec &b) {
         return Vec(from_native_vector, a.native_vector | b.native_vector);
+    }
+    friend Vec operator&&(const Vec &a, const Vec &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = a.native_vector[i] && b.native_vector[i];
+        }
+        return r;
+    }
+    friend Vec operator||(const Vec &a, const Vec &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = a.native_vector[i] || b.native_vector[i];
+        }
+        return r;
     }
 
     friend Vec operator+(const Vec &a, const ElementType &b) {
@@ -997,6 +1156,20 @@ public:
     friend Vec operator|(const Vec &a, const ElementType &b) {
         return Vec(from_native_vector, a.native_vector | b);
     }
+    friend Vec operator&&(const Vec &a, const ElementType &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = a.native_vector[i] && b;
+        }
+        return r;
+    }
+    friend Vec operator||(const Vec &a, const ElementType &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = a.native_vector[i] || b;
+        }
+        return r;
+    }
 
     friend Vec operator+(const ElementType &a, const Vec &b) {
         return Vec(from_native_vector, a + b.native_vector);
@@ -1024,6 +1197,20 @@ public:
     }
     friend Vec operator|(const ElementType &a, const Vec &b) {
         return Vec(from_native_vector, a | b.native_vector);
+    }
+    friend Vec operator&&(const ElementType &a, const Vec &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = a && b.native_vector[i];
+        }
+        return r;
+    }
+    friend Vec operator||(const ElementType &a, const Vec &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = a || b.native_vector[i];
+        }
+        return r;
     }
 
     // TODO: this should be improved by taking advantage of native operator support.
@@ -1147,7 +1334,9 @@ private:
 )INLINE_CODE";
 
         const char *vector_selection_decl = R"INLINE_CODE(
-#if __has_attribute(ext_vector_type) || __has_attribute(vector_size)
+// Dec. 1, 2018: Apparently emscripten compilation runs with the __has_attribute true,
+// then fails to handle the vector intrinsics later.
+#if !defined(__EMSCRIPTEN__) && (__has_attribute(ext_vector_type) || __has_attribute(vector_size))
     #if __GNUC__ && !__clang__
         // GCC only allows powers-of-two; fall back to CppVector for other widths
         #define halide_cpp_use_native_vector(type, lanes) ((lanes & (lanes - 1)) == 0)
@@ -1159,7 +1348,7 @@ private:
     #define halide_cpp_use_native_vector(type, lanes) (false)
 #endif  // __has_attribute(ext_vector_type) || __has_attribute(vector_size)
 
- // Failsafe to allow forcing non-native vectors in case of unruly compilers
+// Failsafe to allow forcing non-native vectors in case of unruly compilers
 #if HALIDE_CPP_ALWAYS_USE_CPP_VECTORS
     #undef halide_cpp_use_native_vector
     #define halide_cpp_use_native_vector(type, lanes) (false)
@@ -1261,7 +1450,7 @@ class ExternCallPrototypes : public IRGraphVisitor {
 
     using IRGraphVisitor::visit;
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         IRGraphVisitor::visit(op);
 
         if (!processed.count(op->name)) {
@@ -1288,7 +1477,7 @@ class ExternCallPrototypes : public IRGraphVisitor {
         }
     }
 
-    void visit(const Allocate *op) {
+    void visit(const Allocate *op) override {
         IRGraphVisitor::visit(op);
         if (!op->free_function.empty()) {
             destructors.insert(op->free_function);
@@ -1599,30 +1788,6 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         }
         stream << "\n";
     }
-
-    if (is_header() && f.linkage == LinkageType::ExternalPlusMetadata) {
-        // C syntax for function-that-returns-function-pointer is fun.
-        const string getter = R"INLINE_CODE(
-
-// This allows the includer of this file to get the argv/metadata entry points
-// for this file without needing to know the specific function names;
-// if HALIDE_GET_STANDARD_ARGV_FUNCTION is defined before this file is
-// included, an inline function with that name is provided that return
-// a function pointer to the _argv() entry point (similarly,
-// HALIDE_GET_STANDARD_METADATA_FUNCTION -> _metadata() entry point).
-#ifdef HALIDE_GET_STANDARD_ARGV_FUNCTION
-inline int (*HALIDE_GET_STANDARD_ARGV_FUNCTION())(void**) {
-    return $NAME$_argv;
-}
-#endif
-#ifdef HALIDE_GET_STANDARD_METADATA_FUNCTION
-inline const struct halide_filter_metadata_t* (*HALIDE_GET_STANDARD_METADATA_FUNCTION())() {
-    return $NAME$_metadata;
-}
-#endif
-)INLINE_CODE";
-        stream << replace_all(getter, "$NAME$", f.name) << "\n\n";
-    }
 }
 
 void CodeGen_C::compile(const Buffer<> &buffer) {
@@ -1794,6 +1959,12 @@ void CodeGen_C::visit(const Mod *op) {
         visit_binop(op->type, op->a, make_const(op->a.type(), (1 << bits)-1), "&");
     } else if (op->type.is_int()) {
         print_expr(lower_euclidean_mod(op->a, op->b));
+    } else if (op->type.is_float()) {
+        string arg0 = print_expr(op->a);
+        string arg1 = print_expr(op->b);
+        ostringstream rhs;
+        rhs << "fmod(" << arg0 << ", " << arg1 << ")";
+        print_assignment(op->type, rhs.str());
     } else {
         visit_binop(op->type, op->a, op->b, "%");
     }
@@ -1968,10 +2139,16 @@ void CodeGen_C::visit(const Call *op) {
         string a0 = print_expr(op->args[0]);
         string a1 = print_expr(op->args[1]);
         rhs << a0 << " >> " << a1;
-    } else if (op->is_intrinsic(Call::count_leading_zeros)) {
+    } else if (op->is_intrinsic(Call::count_leading_zeros) ||
+               op->is_intrinsic(Call::count_trailing_zeros) ||
+               op->is_intrinsic(Call::popcount)) {
         internal_assert(op->args.size() == 1);
-        string a0 = print_expr(op->args[0]);
-        rhs << "halide_count_leading_zeros(" << a0 << ")";
+        if (op->args[0].type().is_vector()) {
+            rhs << print_scalarized_expr(op);
+        } else {
+            string a0 = print_expr(op->args[0]);
+            rhs << "halide_" << op->name << "(" << a0 << ")";
+        }
     } else if (op->is_intrinsic(Call::lerp)) {
         internal_assert(op->args.size() == 3);
         Expr e = lower_lerp(op->args[0], op->args[1], op->args[2]);
@@ -2151,6 +2328,22 @@ void CodeGen_C::visit(const Call *op) {
         user_error << "Signed integer overflow occurred during constant-folding. Signed"
             " integer overflow for int32 and int64 is undefined behavior in"
             " Halide.\n";
+    } else if (op->is_intrinsic(Call::quiet_div)) {
+        internal_assert(op->args.size() == 2);
+        // Don't bother checking for zero denominator here; the quiet_div
+        // implementation will always do a runtime check and return zero
+        // (rather than failing at runtime).
+        string a = print_expr(op->args[0]);
+        string b = print_expr(op->args[1]);
+        rhs << "::quiet_div(" << a << ", " << b << ")";
+    } else if (op->is_intrinsic(Call::quiet_mod)) {
+        internal_assert(op->args.size() == 2);
+        // Don't bother checking for zero denominator here; the quiet_mod
+        // implementation will always do a runtime check and return zero
+        // (rather than failing at runtime).
+        string a = print_expr(op->args[0]);
+        string b = print_expr(op->args[1]);
+        rhs << "::quiet_mod(" << a << ", " << b << ")";
     } else if (op->is_intrinsic(Call::prefetch)) {
         user_assert((op->args.size() == 4) && is_one(op->args[2]))
             << "Only prefetch of 1 cache line is supported in C backend.\n";
@@ -2396,6 +2589,44 @@ void CodeGen_C::visit(const ProducerConsumer *op) {
         stream << "// consume " << op->name << '\n';
     }
     print_stmt(op->body);
+}
+
+void CodeGen_C::visit(const Fork *op) {
+    // TODO: This doesn't actually work with nested tasks
+    do_indent();
+    stream << "#pragma omp parallel\n";
+    open_scope();
+    do_indent();
+    stream << "#pragma omp single\n";
+    open_scope();
+    do_indent();
+    stream << "#pragma omp task\n";
+    open_scope();
+    print_stmt(op->first);
+    close_scope("");
+    do_indent();
+    stream << "#pragma omp task\n";
+    open_scope();
+    print_stmt(op->rest);
+    close_scope("");
+    do_indent();
+    stream << "#pragma omp taskwait\n";
+    close_scope("");
+    close_scope("");
+}
+
+void CodeGen_C::visit(const Acquire *op) {
+    string id_sem = print_expr(op->semaphore);
+    string id_count = print_expr(op->count);
+    open_scope();
+    do_indent();
+    stream << "while (!halide_semaphore_try_acquire(" << id_sem << ", " << id_count << "))\n";
+    open_scope();
+    do_indent();
+    stream << "#pragma omp taskyield\n";
+    close_scope("");
+    op->body.accept(this);
+    close_scope("");
 }
 
 void CodeGen_C::visit(const For *op) {
@@ -2648,16 +2879,16 @@ void CodeGen_C::visit(const Shuffle *op) {
 }
 
 void CodeGen_C::test() {
-    LoweredArgument buffer_arg("buf", Argument::OutputBuffer, Int(32), 3);
-    LoweredArgument float_arg("alpha", Argument::InputScalar, Float(32), 0);
-    LoweredArgument int_arg("beta", Argument::InputScalar, Int(32), 0);
-    LoweredArgument user_context_arg("__user_context", Argument::InputScalar, type_of<const void*>(), 0);
+    LoweredArgument buffer_arg("buf", Argument::OutputBuffer, Int(32), 3, ArgumentEstimates{});
+    LoweredArgument float_arg("alpha", Argument::InputScalar, Float(32), 0, ArgumentEstimates{});
+    LoweredArgument int_arg("beta", Argument::InputScalar, Int(32), 0, ArgumentEstimates{});
+    LoweredArgument user_context_arg("__user_context", Argument::InputScalar, type_of<const void*>(), 0, ArgumentEstimates{});
     vector<LoweredArgument> args = { buffer_arg, float_arg, int_arg, user_context_arg };
     Var x("x");
     Param<float> alpha("alpha");
     Param<int> beta("beta");
     Expr e = Select::make(alpha > 4.0f, print_when(x < 1, 3), 2);
-    Stmt s = Store::make("buf", e, x, Parameter(), const_true());
+    Stmt s = Store::make("buf", e, x, Parameter(), const_true(), ModulusRemainder());
     s = LetStmt::make("x", beta+1, s);
     s = Block::make(s, Free::make("tmp.stack"));
     s = Allocate::make("tmp.stack", Int(32), MemoryType::Stack, {127}, const_true(), s);

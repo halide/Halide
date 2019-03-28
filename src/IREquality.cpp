@@ -48,48 +48,50 @@ private:
     template<typename T>
     CmpResult compare_scalar(T a, T b);
 
-    void visit(const IntImm *);
-    void visit(const UIntImm *);
-    void visit(const FloatImm *);
-    void visit(const StringImm *);
-    void visit(const Cast *);
-    void visit(const Variable *);
-    void visit(const Add *);
-    void visit(const Sub *);
-    void visit(const Mul *);
-    void visit(const Div *);
-    void visit(const Mod *);
-    void visit(const Min *);
-    void visit(const Max *);
-    void visit(const EQ *);
-    void visit(const NE *);
-    void visit(const LT *);
-    void visit(const LE *);
-    void visit(const GT *);
-    void visit(const GE *);
-    void visit(const And *);
-    void visit(const Or *);
-    void visit(const Not *);
-    void visit(const Select *);
-    void visit(const Load *);
-    void visit(const Ramp *);
-    void visit(const Broadcast *);
-    void visit(const Call *);
-    void visit(const Let *);
-    void visit(const LetStmt *);
-    void visit(const AssertStmt *);
-    void visit(const ProducerConsumer *);
-    void visit(const For *);
-    void visit(const Store *);
-    void visit(const Provide *);
-    void visit(const Allocate *);
-    void visit(const Free *);
-    void visit(const Realize *);
-    void visit(const Block *);
-    void visit(const IfThenElse *);
-    void visit(const Evaluate *);
-    void visit(const Shuffle *);
-    void visit(const Prefetch *);
+    void visit(const IntImm *) override;
+    void visit(const UIntImm *) override;
+    void visit(const FloatImm *) override;
+    void visit(const StringImm *) override;
+    void visit(const Cast *) override;
+    void visit(const Variable *) override;
+    void visit(const Add *) override;
+    void visit(const Sub *) override;
+    void visit(const Mul *) override;
+    void visit(const Div *) override;
+    void visit(const Mod *) override;
+    void visit(const Min *) override;
+    void visit(const Max *) override;
+    void visit(const EQ *) override;
+    void visit(const NE *) override;
+    void visit(const LT *) override;
+    void visit(const LE *) override;
+    void visit(const GT *) override;
+    void visit(const GE *) override;
+    void visit(const And *) override;
+    void visit(const Or *) override;
+    void visit(const Not *) override;
+    void visit(const Select *) override;
+    void visit(const Load *) override;
+    void visit(const Ramp *) override;
+    void visit(const Broadcast *) override;
+    void visit(const Call *) override;
+    void visit(const Let *) override;
+    void visit(const LetStmt *) override;
+    void visit(const AssertStmt *) override;
+    void visit(const ProducerConsumer *) override;
+    void visit(const For *) override;
+    void visit(const Acquire *) override;
+    void visit(const Store *) override;
+    void visit(const Provide *) override;
+    void visit(const Allocate *) override;
+    void visit(const Free *) override;
+    void visit(const Realize *) override;
+    void visit(const Block *) override;
+    void visit(const Fork *) override;
+    void visit(const IfThenElse *) override;
+    void visit(const Evaluate *) override;
+    void visit(const Shuffle *) override;
+    void visit(const Prefetch *) override;
 };
 
 template<typename T>
@@ -362,6 +364,8 @@ void IRComparer::visit(const Load *op) {
     compare_names(op->name, e->name);
     compare_expr(e->predicate, op->predicate);
     compare_expr(e->index, op->index);
+    compare_scalar(e->alignment.modulus, op->alignment.modulus);
+    compare_scalar(e->alignment.remainder, op->alignment.remainder);
 }
 
 void IRComparer::visit(const Ramp *op) {
@@ -416,6 +420,7 @@ void IRComparer::visit(const ProducerConsumer *op) {
     compare_stmt(s->body, op->body);
 }
 
+
 void IRComparer::visit(const For *op) {
     const For *s = stmt.as<For>();
 
@@ -423,6 +428,14 @@ void IRComparer::visit(const For *op) {
     compare_scalar(s->for_type, op->for_type);
     compare_expr(s->min, op->min);
     compare_expr(s->extent, op->extent);
+    compare_stmt(s->body, op->body);
+}
+
+void IRComparer::visit(const Acquire *op) {
+    const Acquire *s = stmt.as<Acquire>();
+
+    compare_expr(s->semaphore, op->semaphore);
+    compare_expr(s->count, op->count);
     compare_stmt(s->body, op->body);
 }
 
@@ -434,6 +447,8 @@ void IRComparer::visit(const Store *op) {
     compare_expr(s->predicate, op->predicate);
     compare_expr(s->value, op->value);
     compare_expr(s->index, op->index);
+    compare_scalar(s->alignment.modulus, op->alignment.modulus);
+    compare_scalar(s->alignment.remainder, op->alignment.remainder);
 }
 
 void IRComparer::visit(const Provide *op) {
@@ -474,6 +489,13 @@ void IRComparer::visit(const Realize *op) {
 
 void IRComparer::visit(const Block *op) {
     const Block *s = stmt.as<Block>();
+
+    compare_stmt(s->first, op->first);
+    compare_stmt(s->rest, op->rest);
+}
+
+void IRComparer::visit(const Fork *op) {
+    const Fork *s = stmt.as<Fork>();
 
     compare_stmt(s->first, op->first);
     compare_stmt(s->rest, op->rest);

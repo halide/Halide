@@ -49,7 +49,7 @@ private:
 
     using IRVisitor::visit;
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         if (CodeGen_GPU_Dev::is_gpu_var(op->name)) {
             internal_assert(is_zero(op->min));
         }
@@ -75,14 +75,14 @@ private:
         op->body.accept(this);
     }
 
-    void visit(const LetStmt *op) {
+    void visit(const LetStmt *op) override {
         if (expr_uses_var(shared_mem_size, op->name)) {
             shared_mem_size = Let::make(op->name, op->value, shared_mem_size);
         }
         op->body.accept(this);
     }
 
-    void visit(const Allocate *allocate) {
+    void visit(const Allocate *allocate) override {
         user_assert(!allocate->new_expr.defined()) << "Allocate node inside GPU kernel has custom new expression.\n" <<
             "(Memoization is not supported inside GPU kernels at present.)\n";
 
@@ -297,13 +297,6 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                       }
                   });
 
-        // Propagate anything known about alignment into the kernel via the closure
-        for (size_t i = 0; i < closure_args.size(); i++) {
-            if (alignment_info.contains(closure_args[i].name)) {
-                closure_args[i].alignment = alignment_info.get(closure_args[i].name);
-            }
-        }
-
         // Halide allows passing of scalar float and integer arguments. For
         // OpenGL, pack these into vec4 uniforms and varying attributes
         if (loop->device_api == DeviceAPI::GLSL) {
@@ -477,7 +470,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                                 0,
                                 num_args));
 
-        GlobalVariable *arg_types_array_storage;
+        GlobalVariable *arg_types_array_storage = nullptr;
         if (runtime_run_takes_types) {
             arg_types_array_storage = new GlobalVariable(
                               *module,

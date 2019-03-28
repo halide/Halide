@@ -13,16 +13,16 @@ public:
 protected:
     using IRVisitor::visit;
 
-    void visit(const Store *op) {
+    void visit(const Store *op) override {
         count++;
     }
 };
 
-class CheckStoreCount : public IRMutator2 {
+class CheckStoreCount : public IRMutator {
     int correct;
 public:
     CheckStoreCount(int correct) : correct(correct) {}
-    using IRMutator2::mutate;
+    using IRMutator::mutate;
 
     Stmt mutate(const Stmt &s) override {
         CountStores c;

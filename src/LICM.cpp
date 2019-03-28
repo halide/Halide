@@ -21,7 +21,7 @@ using std::vector;
 class CanLift : public IRVisitor {
     using IRVisitor::visit;
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         if (!op->is_pure()) {
             result = false;
         } else {
@@ -29,30 +29,30 @@ class CanLift : public IRVisitor {
         }
     }
 
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         result = false;
     }
 
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         if (varying.contains(op->name)) {
             result = false;
         }
     }
 
-    const Scope<int> &varying;
+    const Scope<> &varying;
 
 public:
     bool result {true};
 
-    CanLift(const Scope<int> &v) : varying(v) {}
+    CanLift(const Scope<> &v) : varying(v) {}
 };
 
 // Lift pure loop invariants to the top level. Applied independently
 // to each loop.
-class LiftLoopInvariants : public IRMutator2 {
-    using IRMutator2::visit;
+class LiftLoopInvariants : public IRMutator {
+    using IRMutator::visit;
 
-    Scope<int> varying;
+    Scope<> varying;
 
     bool can_lift(const Expr &e) {
         CanLift check(varying);
@@ -78,24 +78,52 @@ class LiftLoopInvariants : public IRMutator2 {
         return true;
     }
 
+    template<typename T, typename Body>
+    Body visit_let(const T *op) {
+        // Visit an entire chain of lets in a single method to conserve stack space.
+        struct Frame {
+            const T *op;
+            Expr new_value;
+            ScopedBinding<> binding;
+            Frame(const T *op, Expr v, Scope<> &scope) :
+                op(op), new_value(std::move(v)), binding(scope, op->name) {}
+        };
+        vector<Frame> frames;
+        Body result;
+        do {
+            frames.emplace_back(op, mutate(op->value), varying);
+            result = op->body;
+        } while ((op = result.template as<T>()));
+
+        result = mutate(result);
+
+        for (auto it = frames.rbegin(); it != frames.rend(); it++) {
+            if (it->new_value.same_as(it->op->value) && result.same_as(it->op->body)) {
+                result = it->op;
+            } else {
+                result = T::make(it->op->name, std::move(it->new_value), result);
+            }
+        }
+
+        return result;
+    }
+
     Expr visit(const Let *op) override {
-        ScopedBinding<int> p(varying, op->name, 0);
-        return IRMutator2::visit(op);
+        return visit_let<Let, Expr>(op);
     }
 
     Stmt visit(const LetStmt *op) override {
-        ScopedBinding<int> p(varying, op->name, 0);
-        return IRMutator2::visit(op);
+        return visit_let<LetStmt, Stmt>(op);
     }
 
     Stmt visit(const For *op) override {
-        ScopedBinding<int> p(varying, op->name, 0);
-        return IRMutator2::visit(op);
+        ScopedBinding<> p(varying, op->name);
+        return IRMutator::visit(op);
     }
 
 public:
 
-    using IRMutator2::mutate;
+    using IRMutator::mutate;
 
     Expr mutate(const Expr &e) override {
         if (should_lift(e)) {
@@ -110,7 +138,7 @@ public:
                 return Variable::make(e.type(), it->second);
             }
         } else {
-            return IRMutator2::mutate(e);
+            return IRMutator::mutate(e);
         }
     }
 
@@ -120,14 +148,14 @@ public:
 // The pass above can lift out the value of lets entirely, leaving
 // them as just renamings of other variables. Easier to substitute
 // them in as a post-pass rather than make the pass above more clever.
-class SubstituteTrivialLets : public IRMutator2 {
-    using IRMutator2::visit;
+class SubstituteTrivialLets : public IRMutator {
+    using IRMutator::visit;
 
     Expr visit(const Let *op) override {
         if (op->value.as<Variable>()) {
             return mutate(substitute(op->name, op->value, op->body));
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
@@ -135,13 +163,13 @@ class SubstituteTrivialLets : public IRMutator2 {
         if (op->value.as<Variable>()) {
             return mutate(substitute(op->name, op->value, op->body));
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 };
 
-class LICM : public IRMutator2 {
-    using IRMutator2::visit;
+class LICM : public IRMutator {
+    using IRMutator::visit;
 
     bool in_gpu_loop{false};
 
@@ -184,11 +212,11 @@ class LICM : public IRMutator2 {
 
         if (old_in_gpu_loop && in_gpu_loop) {
             // Don't lift lets to in-between gpu blocks/threads
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         } else if (op->device_api == DeviceAPI::GLSL ||
                    op->device_api == DeviceAPI::OpenGLCompute) {
             // Don't lift anything out of OpenGL loops
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         } else {
 
             // Lift invariants
@@ -227,7 +255,7 @@ class LICM : public IRMutator2 {
             // Track the set of variables used by the inner loop
             class CollectVars : public IRVisitor {
                 using IRVisitor::visit;
-                void visit(const Variable *op) {
+                void visit(const Variable *op) override {
                     vars.insert(op->name);
                 }
             public:
@@ -284,8 +312,8 @@ class LICM : public IRMutator2 {
 };
 
 // Reassociate summations to group together the loop invariants. Useful to run before LICM.
-class GroupLoopInvariants : public IRMutator2 {
-    using IRMutator2::visit;
+class GroupLoopInvariants : public IRMutator {
+    using IRMutator::visit;
 
     Scope<int> var_depth;
 
@@ -293,7 +321,7 @@ class GroupLoopInvariants : public IRMutator2 {
         using IRVisitor::visit;
         const Scope<int> &depth;
 
-        void visit(const Variable *op) {
+        void visit(const Variable *op) override {
             if (depth.contains(op->name)) {
                 result = std::max(result, depth.get(op->name));
             }
@@ -387,7 +415,7 @@ class GroupLoopInvariants : public IRMutator2 {
             // (If strict_float is off, we're allowed to reassociate,
             // and we do reassociate elsewhere, but there's no benefit to it
             // here and it's friendlier not to.)
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
 
         return reassociate_summation(op);
@@ -399,7 +427,7 @@ class GroupLoopInvariants : public IRMutator2 {
             // (If strict_float is off, we're allowed to reassociate,
             // and we do reassociate elsewhere, but there's no benefit to it
             // here and it's friendlier not to.)
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
 
         return reassociate_summation(op);
@@ -410,23 +438,56 @@ class GroupLoopInvariants : public IRMutator2 {
     Stmt visit(const For *op) override {
         depth++;
         ScopedBinding<int> bind(var_depth, op->name, depth);
-        Stmt stmt = IRMutator2::visit(op);
+        Stmt stmt = IRMutator::visit(op);
         depth--;
         return stmt;
     }
 
+    template<typename T, typename Body>
+    Body visit_let(const T *op) {
+        struct Frame {
+            const T *op;
+            Expr new_value;
+            ScopedBinding<int> binding;
+            Frame(const T *op, Expr v, int depth, Scope<int> &scope) :
+                op(op),
+                new_value(std::move(v)),
+                binding(scope, op->name, depth) {}
+        };
+        std::vector<Frame> frames;
+        Body result;
+
+        do {
+            result = op->body;
+            int d = 0;
+            if (depth > 0) {
+                d = expr_depth(op->value);
+            }
+            frames.emplace_back(op, mutate(op->value), d, var_depth);
+        } while ((op = result.template as<T>()));
+
+        result = mutate(result);
+
+        for (auto it = frames.rbegin(); it != frames.rend(); it++) {
+            if (it->new_value.same_as(it->op->value) && result.same_as(it->op->body)) {
+                result = it->op;
+            } else {
+                result = T::make(it->op->name, it->new_value, result);
+            }
+        }
+
+        return result;
+    }
+
     Expr visit(const Let *op) override {
-        ScopedBinding<int> bind(var_depth, op->name, expr_depth(op->value));
-        return IRMutator2::visit(op);
+        return visit_let<Let, Expr>(op);
     }
 
     Stmt visit(const LetStmt *op) override {
-        ScopedBinding<int> bind(var_depth, op->name, expr_depth(op->value));
-        return IRMutator2::visit(op);
+        return visit_let<LetStmt, Stmt>(op);
     }
 };
 
-// Turn for loops of size one into let statements
 Stmt loop_invariant_code_motion(Stmt s) {
     s = GroupLoopInvariants().mutate(s);
     s = common_subexpression_elimination(s);

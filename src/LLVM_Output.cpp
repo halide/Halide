@@ -85,11 +85,7 @@ size_t finish_member_header(std::ostream &out, size_t size) {
 }
 
 std::string member_name(const llvm::NewArchiveMember &m) {
-#if LLVM_VERSION < 50
-    return llvm::sys::path::filename(m.Buf->getBufferIdentifier()).str();
-#else
     return m.MemberName.str();
-#endif
 }
 
 std::map<std::string, size_t> write_string_table(std::ostream &out,
@@ -145,11 +141,7 @@ void write_symbol_table(std::ostream &out,
 
     std::map<std::string, size_t> name_to_member_index;
 
-#if LLVM_VERSION < 50
-    const auto kFileMagicUnknown = llvm::sys::fs::file_magic::unknown;
-#else
     const auto kFileMagicUnknown = llvm::file_magic::unknown;
-#endif
 
     llvm::LLVMContext context;
     for (size_t i = 0, n = members.size(); i < n; ++i) {
@@ -378,13 +370,17 @@ void emit_file(const llvm::Module &module_in, Internal::LLVMOStream& out, llvm::
     target_machine->Options.MCOptions.AsmVerbose = true;
 
     // Ask the target to add backend passes as necessary.
-#if LLVM_VERSION < 70
-    target_machine->addPassesToEmitFile(pass_manager, out, file_type);
-#else
+#if LLVM_VERSION >= 70
     target_machine->addPassesToEmitFile(pass_manager, out, nullptr, file_type);
+#else
+    target_machine->addPassesToEmitFile(pass_manager, out, file_type);
 #endif
 
     pass_manager.run(*module);
+    // If -time-passes is in HL_LLVM_ARGS, this will print llvm passes time statstics otherwise its no-op.
+#if LLVM_VERSION >= 80
+    llvm::reportAndResetTimings();
+#endif
 }
 
 std::unique_ptr<llvm::Module> compile_module_to_llvm_module(const Module &module, llvm::LLVMContext &context) {

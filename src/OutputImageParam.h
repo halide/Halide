@@ -21,7 +21,7 @@ protected:
     friend class Func;
 
     /** A reference-counted handle on the internal parameter object */
-    Internal::RegisteredParameter param;
+    Internal::Parameter param;
 
     /** Is this an input or an output? OutputImageParam is the base class for both. */
     Argument::Kind kind;

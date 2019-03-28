@@ -34,16 +34,66 @@ class Simplify : public VariadicVisitor<Simplify, Expr, Stmt> {
 public:
     Simplify(bool r, const Scope<Interval> *bi, const Scope<ModulusRemainder> *ai);
 
-    // We track constant integer bounds when they exist
-    struct ConstBounds {
+    struct ExprInfo {
+        // We track constant integer bounds when they exist
         int64_t min = 0, max = 0;
         bool min_defined = false, max_defined = false;
+        // And the alignment of integer variables
+        ModulusRemainder alignment;
+
+        void trim_bounds_using_alignment() {
+            if (alignment.modulus == 0) {
+                min_defined = max_defined = true;
+                min = max = alignment.remainder;
+            } else if (alignment.modulus > 1) {
+                if (min_defined) {
+                    int64_t new_min = min - mod_imp(min, alignment.modulus) + alignment.remainder;
+                    if (new_min < min) {
+                        new_min += alignment.modulus;
+                    }
+                    min = new_min;
+                }
+                if (max_defined) {
+                    int64_t new_max = max - mod_imp(max, alignment.modulus) + alignment.remainder;
+                    if (new_max > max) {
+                        new_max -= alignment.modulus;
+                    }
+                    max = new_max;
+                }
+            }
+
+            if (min_defined && max_defined && min == max) {
+                alignment.modulus = 0;
+                alignment.remainder = min;
+            }
+        }
+
+        // Mix in existing knowledge about this Expr
+        void intersect(const ExprInfo &other) {
+            if (min_defined && other.min_defined) {
+                min = std::max(min, other.min);
+            } else if (other.min_defined) {
+                min_defined = true;
+                min = other.min;
+            }
+
+            if (max_defined && other.max_defined) {
+                max = std::min(max, other.max);
+            } else if (other.max_defined) {
+                max_defined = true;
+                max = other.max;
+            }
+
+            alignment = ModulusRemainder::intersect(alignment, other.alignment);
+
+            trim_bounds_using_alignment();
+        }
     };
 
 #if LOG_EXPR_MUTATIONS
     static int debug_indent;
 
-    Expr mutate(const Expr &e, ConstBounds *b) {
+    Expr mutate(const Expr &e, ExprInfo *b) {
         const std::string spaces(debug_indent, ' ');
         debug(1) << spaces << "Simplifying Expr: " << e << "\n";
         debug_indent++;
@@ -60,7 +110,7 @@ public:
 
 #else
     HALIDE_ALWAYS_INLINE
-    Expr mutate(const Expr &e, ConstBounds *b) {
+    Expr mutate(const Expr &e, ExprInfo *b) {
         Expr new_e = Super::dispatch(e, b);
         internal_assert(new_e.type() == e.type()) << e << " -> " << new_e << "\n";
         return new_e;
@@ -117,9 +167,11 @@ public:
         int old_uses, new_uses;
     };
 
+    // Tracked for all let vars
     Scope<VarInfo> var_info;
-    Scope<ConstBounds> bounds_info;
-    Scope<ModulusRemainder> alignment_info;
+
+    // Only tracked for integer let vars
+    Scope<ExprInfo> bounds_and_alignment_info;
 
     // Symbols used by rewrite rules
     IRMatcher::Wild<0> x;
@@ -177,6 +229,10 @@ public:
 
         ScopedFact(Simplify *s) : simplify(s) {}
         ~ScopedFact();
+
+        // allow move but not copy
+        ScopedFact(const ScopedFact& that) = delete;
+        ScopedFact(ScopedFact&& that) = default;
     };
 
     // Tell the simplifier to learn from and exploit a boolean
@@ -198,42 +254,42 @@ public:
     template <typename T>
     Expr hoist_slice_vector(Expr e);
 
-    Stmt mutate_let_body(Stmt s, ConstBounds *) {return mutate(s);}
-    Expr mutate_let_body(Expr e, ConstBounds *bounds) {return mutate(e, bounds);}
+    Stmt mutate_let_body(Stmt s, ExprInfo *) {return mutate(s);}
+    Expr mutate_let_body(Expr e, ExprInfo *bounds) {return mutate(e, bounds);}
 
     template<typename T, typename Body>
-    Body simplify_let(const T *op, ConstBounds *bounds);
+    Body simplify_let(const T *op, ExprInfo *bounds);
 
-    Expr visit(const IntImm *op, ConstBounds *bounds);
-    Expr visit(const UIntImm *op, ConstBounds *bounds);
-    Expr visit(const FloatImm *op, ConstBounds *bounds);
-    Expr visit(const StringImm *op, ConstBounds *bounds);
-    Expr visit(const Broadcast *op, ConstBounds *bounds);
-    Expr visit(const Cast *op, ConstBounds *bounds);
-    Expr visit(const Variable *op, ConstBounds *bounds);
-    Expr visit(const Add *op, ConstBounds *bounds);
-    Expr visit(const Sub *op, ConstBounds *bounds);
-    Expr visit(const Mul *op, ConstBounds *bounds);
-    Expr visit(const Div *op, ConstBounds *bounds);
-    Expr visit(const Mod *op, ConstBounds *bounds);
-    Expr visit(const Min *op, ConstBounds *bounds);
-    Expr visit(const Max *op, ConstBounds *bounds);
-    Expr visit(const EQ *op, ConstBounds *bounds);
-    Expr visit(const NE *op, ConstBounds *bounds);
-    Expr visit(const LT *op, ConstBounds *bounds);
-    Expr visit(const LE *op, ConstBounds *bounds);
-    Expr visit(const GT *op, ConstBounds *bounds);
-    Expr visit(const GE *op, ConstBounds *bounds);
-    Expr visit(const And *op, ConstBounds *bounds);
-    Expr visit(const Or *op, ConstBounds *bounds);
-    Expr visit(const Not *op, ConstBounds *bounds);
-    Expr visit(const Select *op, ConstBounds *bounds);
-    Expr visit(const Ramp *op, ConstBounds *bounds);
+    Expr visit(const IntImm *op, ExprInfo *bounds);
+    Expr visit(const UIntImm *op, ExprInfo *bounds);
+    Expr visit(const FloatImm *op, ExprInfo *bounds);
+    Expr visit(const StringImm *op, ExprInfo *bounds);
+    Expr visit(const Broadcast *op, ExprInfo *bounds);
+    Expr visit(const Cast *op, ExprInfo *bounds);
+    Expr visit(const Variable *op, ExprInfo *bounds);
+    Expr visit(const Add *op, ExprInfo *bounds);
+    Expr visit(const Sub *op, ExprInfo *bounds);
+    Expr visit(const Mul *op, ExprInfo *bounds);
+    Expr visit(const Div *op, ExprInfo *bounds);
+    Expr visit(const Mod *op, ExprInfo *bounds);
+    Expr visit(const Min *op, ExprInfo *bounds);
+    Expr visit(const Max *op, ExprInfo *bounds);
+    Expr visit(const EQ *op, ExprInfo *bounds);
+    Expr visit(const NE *op, ExprInfo *bounds);
+    Expr visit(const LT *op, ExprInfo *bounds);
+    Expr visit(const LE *op, ExprInfo *bounds);
+    Expr visit(const GT *op, ExprInfo *bounds);
+    Expr visit(const GE *op, ExprInfo *bounds);
+    Expr visit(const And *op, ExprInfo *bounds);
+    Expr visit(const Or *op, ExprInfo *bounds);
+    Expr visit(const Not *op, ExprInfo *bounds);
+    Expr visit(const Select *op, ExprInfo *bounds);
+    Expr visit(const Ramp *op, ExprInfo *bounds);
     Stmt visit(const IfThenElse *op);
-    Expr visit(const Load *op, ConstBounds *bounds);
-    Expr visit(const Call *op, ConstBounds *bounds);
-    Expr visit(const Shuffle *op, ConstBounds *bounds);
-    Expr visit(const Let *op, ConstBounds *bounds);
+    Expr visit(const Load *op, ExprInfo *bounds);
+    Expr visit(const Call *op, ExprInfo *bounds);
+    Expr visit(const Shuffle *op, ExprInfo *bounds);
+    Expr visit(const Let *op, ExprInfo *bounds);
     Stmt visit(const LetStmt *op);
     Stmt visit(const AssertStmt *op);
     Stmt visit(const For *op);
@@ -246,6 +302,8 @@ public:
     Stmt visit(const Realize *op);
     Stmt visit(const Prefetch *op);
     Stmt visit(const Free *op);
+    Stmt visit(const Acquire *op);
+    Stmt visit(const Fork *op);
 };
 
 }

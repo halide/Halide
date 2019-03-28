@@ -26,6 +26,8 @@ public:
 protected:
     // ExprNode<> and StmtNode<> are allowed to call visit (to implement accept())
     template<typename T> friend struct ExprNode;
+
+
     template<typename T> friend struct StmtNode;
 
     virtual void visit(const IntImm *);
@@ -70,6 +72,8 @@ protected:
     virtual void visit(const Evaluate *);
     virtual void visit(const Shuffle *);
     virtual void visit(const Prefetch *);
+    virtual void visit(const Fork *);
+    virtual void visit(const Acquire *);
 };
 
 /** A base class for algorithms that walk recursively over the IR
@@ -88,7 +92,7 @@ protected:
 
 private:
     /** The nodes visited so far */
-    std::set<const IRNode *> visited;
+    std::set<IRHandle> visited;
 
 protected:
     /** These methods should call 'include' on the children to only
@@ -136,6 +140,8 @@ protected:
     void visit(const Evaluate *) override;
     void visit(const Shuffle *) override;
     void visit(const Prefetch *) override;
+    void visit(const Acquire *) override;
+    void visit(const Fork *) override;
     // @}
 };
 
@@ -217,12 +223,14 @@ private:
         case IRNodeType::AssertStmt:
         case IRNodeType::ProducerConsumer:
         case IRNodeType::For:
+        case IRNodeType::Acquire:
         case IRNodeType::Store:
         case IRNodeType::Provide:
         case IRNodeType::Allocate:
         case IRNodeType::Free:
         case IRNodeType::Realize:
         case IRNodeType::Block:
+        case IRNodeType::Fork:
         case IRNodeType::IfThenElse:
         case IRNodeType::Evaluate:
         case IRNodeType::Prefetch:
@@ -274,6 +282,8 @@ private:
             return ((T *)this)->visit((const ProducerConsumer *)node, std::forward<Args>(args)...);
         case IRNodeType::For:
             return ((T *)this)->visit((const For *)node, std::forward<Args>(args)...);
+        case IRNodeType::Acquire:
+            return ((T *)this)->visit((const Acquire *)node, std::forward<Args>(args)...);
         case IRNodeType::Store:
             return ((T *)this)->visit((const Store *)node, std::forward<Args>(args)...);
         case IRNodeType::Provide:
@@ -286,6 +296,8 @@ private:
             return ((T *)this)->visit((const Realize *)node, std::forward<Args>(args)...);
         case IRNodeType::Block:
             return ((T *)this)->visit((const Block *)node, std::forward<Args>(args)...);
+        case IRNodeType::Fork:
+            return ((T *)this)->visit((const Fork *)node, std::forward<Args>(args)...);
         case IRNodeType::IfThenElse:
             return ((T *)this)->visit((const IfThenElse *)node, std::forward<Args>(args)...);
         case IRNodeType::Evaluate:

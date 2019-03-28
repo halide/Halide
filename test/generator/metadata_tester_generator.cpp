@@ -2,6 +2,8 @@
 
 namespace {
 
+using Halide::float16_t;
+
 enum class SomeEnum { Foo,
                       Bar };
 
@@ -11,6 +13,7 @@ public:
     Input<Buffer<uint8_t>> typed_input_buffer{ "typed_input_buffer", 3 };
     Input<Buffer<>> dim_only_input_buffer{ "dim_only_input_buffer", 3 };  // must be overridden to type=UInt(8)
     Input<Buffer<>> untyped_input_buffer{ "untyped_input_buffer" };  // must be overridden to {UInt(8), 3}
+    Input<int32_t> no_default_value{ "no_default_value" };
     Input<bool> b{ "b", true };
     Input<int8_t> i8{ "i8", 8, -8, 127 };
     Input<int16_t> i16{ "i16", 16, -16, 127 };
@@ -48,6 +51,9 @@ public:
     Input<Buffer<>[]> buffer_array_input7{ "buffer_array_input7", 3 }; // buffer_array_input2.type must be set
     Input<Buffer<>[]> buffer_array_input8{ "buffer_array_input8" }; // dim and type must be set
 
+    Input<Buffer<float16_t>> buffer_f16_typed{ "buffer_f16_typed", 1 };
+    Input<Buffer<>> buffer_f16_untyped{ "buffer_f16_untyped", 1 };
+
     Output<Func> output{ "output" };  // must be overridden to {{Float(32), Float(32)}, 3}
     Output<Buffer<float>> typed_output_buffer{ "typed_output_buffer", 3 };
     Output<Buffer<float>> type_only_output_buffer{ "type_only_output_buffer" };  // untyped outputs can have type and/or dimensions inferred
@@ -69,7 +75,9 @@ public:
     Output<Buffer<>[]> array_outputs9{ "array_outputs9" };
 
     void generate() {
-        Var x, y, c;
+        Var x("x"), y("y"), c("c");
+
+        assert(buffer_f16_untyped.type() == Float(16));
 
         // These should all be zero; they are here to exercise the operator[] overloads
         Expr zero1 = array_input[1](x, y, c) - array_input[0](x, y, c);
@@ -125,6 +133,38 @@ public:
 
         // Verify compute_with works for Output<Buffer>
         dim_only_output_buffer.compute_with(Func(typed_output_buffer), x);
+
+        // Provide some bounds estimates for a Buffer input
+        typed_input_buffer.estimate(Halide::_0, 0, 2592);
+        typed_input_buffer.dim(1).set_bounds_estimate(42, 1968);
+
+        // Provide some bounds estimates for a Func input
+        input
+            .estimate(Halide::_0, 10, 2592)
+            .estimate(Halide::_1, 20, 1968)
+            .estimate(Halide::_2, 0, 3);
+
+        // Provide some scalar estimates.
+        b.set_estimate(false);
+        i8.set_estimate(3);
+        f32.set_estimate(48.5f);
+
+        array2_i8.set_estimate(0, 42);
+
+        // Provide some bounds estimates for an Output<Func>.
+        // Note that calling bound() implicitly calls estimate() as well.
+        output
+            .estimate(x, 10, 2592)
+            .estimate(y, 20, 1968)
+            .bound(c, 0, 3);
+
+        // Provide partial bounds estimates for an Output<Buffer>
+        typed_output_buffer.estimate(x, 10, 2592);
+        typed_output_buffer.dim(1).set_bounds_estimate(20, 1968);
+
+        // Note that calling set_bounds()/bound() implicitly calls set_bounds_estimate()/estimate() as well.
+        type_only_output_buffer.dim(1).set_bounds(0, 32);
+        type_only_output_buffer.bound(c, 0, 3);
     }
 
     void schedule() {

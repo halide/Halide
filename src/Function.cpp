@@ -32,11 +32,11 @@ struct FunctionContents;
 namespace {
 // Weaken all the references to a particular Function to break
 // reference cycles. Also count the number of references found.
-class WeakenFunctionPtrs : public IRMutator2 {
-    using IRMutator2::visit;
+class WeakenFunctionPtrs : public IRMutator {
+    using IRMutator::visit;
 
     Expr visit(const Call *c) override {
-        Expr expr = IRMutator2::visit(c);
+        Expr expr = IRMutator::visit(c);
         c = expr.as<Call>();
         internal_assert(c);
         if (c->func.defined() &&
@@ -84,7 +84,6 @@ struct FunctionContents {
 
     NameMangling extern_mangling = NameMangling::Default;
     DeviceAPI extern_function_device_api = DeviceAPI::Host;
-    bool extern_uses_old_buffer_t = false;
     Expr extern_proxy_expr;
 
     bool trace_loads = false, trace_stores = false, trace_realizations = false;
@@ -132,8 +131,8 @@ struct FunctionContents {
         }
     }
 
-    // Pass an IRMutator2 through to all Exprs referenced in the FunctionContents
-    void mutate(IRMutator2 *mutator) {
+    // Pass an IRMutator through to all Exprs referenced in the FunctionContents
+    void mutate(IRMutator *mutator) {
         func_schedule.mutate(mutator);
 
         if (init_def.defined()) {
@@ -189,13 +188,13 @@ struct CheckVars : public IRGraphVisitor {
 
     using IRVisitor::visit;
 
-    void visit(const Let *let) {
+    void visit(const Let *let) override {
         let->value.accept(this);
         ScopedBinding<> bind(defined_internally, let->name);
         let->body.accept(this);
     }
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         IRGraphVisitor::visit(op);
         if (op->name == name && op->call_type == Call::Halide) {
             for (size_t i = 0; i < op->args.size(); i++) {
@@ -211,7 +210,7 @@ struct CheckVars : public IRGraphVisitor {
         }
     }
 
-    void visit(const Variable *var) {
+    void visit(const Variable *var) override {
         // Is it a parameter?
         if (var->param.defined()) return;
 
@@ -254,7 +253,7 @@ class FreezeFunctions : public IRGraphVisitor {
 
     const string &func;
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         IRGraphVisitor::visit(op);
         if (op->call_type == Call::Halide &&
             op->func.defined() &&
@@ -336,7 +335,6 @@ void Function::deep_copy(FunctionPtr copy, DeepCopyMap &copied_map) const {
     copy->extern_function_name = contents->extern_function_name;
     copy->extern_mangling = contents->extern_mangling;
     copy->extern_function_device_api = contents->extern_function_device_api;
-    copy->extern_uses_old_buffer_t = contents->extern_uses_old_buffer_t;
     copy->extern_proxy_expr = contents->extern_proxy_expr;
     copy->trace_loads = contents->trace_loads;
     copy->trace_stores = contents->trace_stores;
@@ -685,8 +683,7 @@ void Function::define_extern(const std::string &function_name,
                              const std::vector<Type> &types,
                              const std::vector<string> &args,
                              NameMangling mangling,
-                             DeviceAPI device_api,
-                             bool use_old_buffer_t) {
+                             DeviceAPI device_api) {
 
     user_assert(!has_pure_definition() && !has_update_definition())
         << "In extern definition for Func \"" << name() << "\":\n"
@@ -702,8 +699,9 @@ void Function::define_extern(const std::string &function_name,
     contents->output_types = types;
     contents->extern_mangling = mangling;
     contents->extern_function_device_api = device_api;
-    contents->extern_uses_old_buffer_t = use_old_buffer_t;
 
+    std::vector<Expr> values;
+    contents->output_buffers.clear();
     for (size_t i = 0; i < types.size(); i++) {
         string buffer_name = name();
         if (types.size() > 1) {
@@ -711,21 +709,35 @@ void Function::define_extern(const std::string &function_name,
         }
         Parameter output(types[i], true, (int)args.size(), buffer_name);
         contents->output_buffers.push_back(output);
+
+        values.push_back(undef(types[i]));
     }
+
+    std::vector<Expr> arg_exprs;
+    for (size_t i = 0; i < args.size(); i++) {
+        arg_exprs.push_back(args[i]);
+    }
+
+    contents->init_def = Definition(arg_exprs, values, ReductionDomain(), true);
 
     // Reset the storage dims to match the pure args
     contents->func_schedule.storage_dims().clear();
+    contents->init_def.schedule().dims().clear();
     for (size_t i = 0; i < args.size(); i++) {
         contents->func_schedule.storage_dims().push_back(StorageDim {args[i]});
+        contents->init_def.schedule().dims().push_back(
+            Dim{args[i], ForType::Extern, DeviceAPI::None, Dim::Type::PureVar});
     }
-
+    // Add the dummy outermost dim
+    contents->init_def.schedule().dims().push_back(
+        Dim{Var::outermost().name(), ForType::Serial, DeviceAPI::None, Dim::Type::PureVar});
 }
 
 void Function::accept(IRVisitor *visitor) const {
     contents->accept(visitor);
 }
 
-void Function::mutate(IRMutator2 *mutator) {
+void Function::mutate(IRMutator *mutator) {
     contents->mutate(mutator);
 }
 
@@ -738,10 +750,12 @@ const std::string &Function::origin_name() const {
 }
 
 Definition &Function::definition() {
+    internal_assert(contents->init_def.defined());
     return contents->init_def;
 }
 
 const Definition &Function::definition() const {
+    internal_assert(contents->init_def.defined());
     return contents->init_def;
 }
 
@@ -840,10 +854,6 @@ Expr Function::make_call_to_extern_definition(const std::vector<Expr> &args,
         break;
     }
     return Call::make(Int(32), contents->extern_function_name, args, call_type, contents);
-}
-
-bool Function::extern_definition_uses_old_buffer_t() const {
-    return contents->extern_uses_old_buffer_t;
 }
 
 Expr Function::extern_definition_proxy_expr() const {
@@ -984,13 +994,13 @@ const Call *Function::is_wrapper() const {
 namespace {
 
 // Replace all calls to functions listed in 'substitutions' with their wrappers.
-class SubstituteCalls : public IRMutator2 {
-    using IRMutator2::visit;
+class SubstituteCalls : public IRMutator {
+    using IRMutator::visit;
 
     map<FunctionPtr, FunctionPtr> substitutions;
 
     Expr visit(const Call *c) override {
-        Expr expr = IRMutator2::visit(c);
+        Expr expr = IRMutator::visit(c);
         c = expr.as<Call>();
         internal_assert(c);
 

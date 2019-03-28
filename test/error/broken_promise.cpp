@@ -27,7 +27,7 @@ int main(int argc, char **argv) {
     in.set(ten_bit_data);
     lut.set(ten_bit_lut);
 
-    auto result = f.realize(100, Target("host-check_unsafe_promises"));
+    auto result = f.realize(100, get_jit_target_from_environment().with_feature(Target::CheckUnsafePromises));
 
     std::cout << "Success!\n";
     return 0;
