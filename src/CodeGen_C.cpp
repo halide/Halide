@@ -275,10 +275,6 @@ protected:
         include_type(op->type);
         if (op->is_intrinsic(Call::lerp)) {
             // lower_lerp() can synthesize wider vector types.
-            // It's not safe to feed temporary Exprs into IRGraphVisitor
-            // (it tracks the seen values by IRNode*, which could get recycled
-            // if we are unlucky), so just add widened versions of any
-            // types present -- it's safe to add types we might not use.
             for (auto &a : op->args) {
                 include_lerp_types(a.type());
             }
