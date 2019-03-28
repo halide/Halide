@@ -80,6 +80,16 @@ protected:
  * without visiting the same node twice. This is for passes that are
  * capable of interpreting the IR as a DAG instead of a tree. */
 class IRGraphVisitor : public IRVisitor {
+public:
+    IRGraphVisitor() = default;
+    virtual ~IRGraphVisitor();
+
+    IRGraphVisitor(IRGraphVisitor &&that);
+    IRGraphVisitor(const IRGraphVisitor &that);
+
+    void operator=(const IRGraphVisitor &that) = delete;
+    void operator=(IRGraphVisitor &&that) = delete;
+
 protected:
     /** By default these methods add the node to the visited set, and
      * return whether or not it was already there. If it wasn't there,

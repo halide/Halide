@@ -256,10 +256,29 @@ void IRVisitor::visit(const Shuffle *op) {
     }
 }
 
+IRGraphVisitor::IRGraphVisitor(const IRGraphVisitor &that) : visited(that.visited) {
+    for (const IRNode *v : visited) {
+        v->ref_count.increment();
+    }
+}
+
+IRGraphVisitor::IRGraphVisitor(IRGraphVisitor &&that) {
+    std::swap(this->visited, that.visited);
+}
+
+IRGraphVisitor::~IRGraphVisitor() {
+    for (const IRNode *v : visited) {
+        if (v->ref_count.decrement() == 0) {
+            delete v;
+        }
+    }
+}
+
 void IRGraphVisitor::include(const Expr &e) {
     auto r = visited.insert(e.get());
     if (r.second) {
         // Was newly inserted
+        e.get()->ref_count.increment();
         e.accept(this);
     }
 }
@@ -268,6 +287,7 @@ void IRGraphVisitor::include(const Stmt &s) {
     auto r = visited.insert(s.get());
     if (r.second) {
         // Was newly inserted
+        s.get()->ref_count.increment();
         s.accept(this);
     }
 }
