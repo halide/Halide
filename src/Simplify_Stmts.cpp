@@ -46,6 +46,9 @@ Stmt Simplify::visit(const IfThenElse *op) {
     }
 
     // Pull out common nodes
+    if (equal(then_case, else_case)) {
+        return then_case;
+    }
     const Acquire *then_acquire = then_case.as<Acquire>();
     const Acquire *else_acquire = else_case.as<Acquire>();
     const ProducerConsumer *then_pc = then_case.as<ProducerConsumer>();
@@ -74,6 +77,18 @@ Stmt Simplify::visit(const IfThenElse *op) {
                equal(then_block->rest, else_block->rest)) {
         return Block::make(mutate(IfThenElse::make(condition, then_block->first, else_block->first)),
                            then_block->rest);
+    } else if (then_block && equal(then_block->first, else_case)) {
+        return Block::make(else_case,
+                           mutate(IfThenElse::make(condition, then_block->rest)));
+    } else if (then_block && equal(then_block->rest, else_case)) {
+        return Block::make(mutate(IfThenElse::make(condition, then_block->first)),
+                           else_case);
+    } else if (else_block && equal(then_case, else_block->first)) {
+        return Block::make(then_case,
+                           mutate(IfThenElse::make(condition, Evaluate::make(0), else_block->rest)));
+    } else if (else_block && equal(then_case, else_block->rest)) {
+        return Block::make(mutate(IfThenElse::make(condition, Evaluate::make(0), else_block->first)),
+                           then_case);
     } else if (condition.same_as(op->condition) &&
         then_case.same_as(op->then_case) &&
         else_case.same_as(op->else_case)) {
@@ -138,6 +153,18 @@ Stmt Simplify::visit(const For *op) {
 
     if (is_no_op(new_body)) {
         return new_body;
+    } else if (extent_bounds.max_defined &&
+               extent_bounds.max == 0) {
+        return Evaluate::make(0);
+    } else if (extent_bounds.max_defined &&
+               extent_bounds.max == 1 &&
+               op->device_api == DeviceAPI::None) {
+        Stmt s = LetStmt::make(op->name, new_min, new_body);
+        if (extent_bounds.min_defined && extent_bounds.min == 1) {
+            return mutate(s);
+        } else {
+            return mutate(IfThenElse::make(new_extent > 0, s));
+        }
     } else if (op->min.same_as(new_min) &&
                op->extent.same_as(new_extent) &&
                op->body.same_as(new_body)) {
@@ -284,13 +311,40 @@ Stmt Simplify::visit(const ProducerConsumer *op) {
 
 Stmt Simplify::visit(const Block *op) {
     Stmt first = mutate(op->first);
-    Stmt rest;
+    Stmt rest = op->rest;
 
-    if (const AssertStmt *a = first.as<AssertStmt>()) {
-        // We can assume the asserted condition is true in the
-        // rest. This should propagate constraints.
-        auto f = scoped_truth(a->condition);
-        rest = mutate(op->rest);
+    if (const AssertStmt *first_assert = first.as<AssertStmt>()) {
+        // Handle an entire sequence of asserts here to avoid a deeply
+        // nested stack.  We won't be popping any knowledge until
+        // after the end of this chain of asserts, so we can use a
+        // single ScopedFact and progressively add knowledge to it.
+        ScopedFact knowledge(this);
+        vector<Stmt> result;
+        result.push_back(first);
+        knowledge.learn_true(first_assert->condition);
+
+        // Loop invariants: 'first' has already been mutated and is in
+        // the result list. 'first' was an AssertStmt before it was
+        // mutated, and its condition has been captured in
+        // 'knowledge'. 'rest' has not been mutated and is not in the
+        // result list.
+        const Block *rest_block;
+        while ((rest_block = rest.as<Block>()) &&
+               (first_assert = rest_block->first.as<AssertStmt>())) {
+            first = mutate(first_assert);
+            rest = rest_block->rest;
+            result.push_back(first);
+            if ((first_assert = first.as<AssertStmt>())) {
+                // If it didn't fold away to trivially true or false,
+                // learn the condition.
+                knowledge.learn_true(first_assert->condition);
+            }
+        }
+
+        result.push_back(mutate(rest));
+
+        return Block::make(result);
+
     } else {
         rest = mutate(op->rest);
     }
@@ -298,8 +352,12 @@ Stmt Simplify::visit(const Block *op) {
     // Check if both halves start with a let statement.
     const LetStmt *let_first = first.as<LetStmt>();
     const LetStmt *let_rest = rest.as<LetStmt>();
+    const Block *block_rest = rest.as<Block>();
     const IfThenElse *if_first = first.as<IfThenElse>();
-    const IfThenElse *if_rest = rest.as<IfThenElse>();
+    const IfThenElse *if_next =
+        rest.as<IfThenElse>() ? rest.as<IfThenElse>()
+                              : (block_rest ? block_rest->first.as<IfThenElse>() : nullptr);
+    Stmt if_rest = block_rest ? block_rest->rest : Stmt();
 
     if (is_no_op(first) &&
         is_no_op(rest)) {
@@ -325,34 +383,42 @@ Stmt Simplify::visit(const Block *op) {
 
         return LetStmt::make(var_name, let_first->value, new_block);
     } else if (if_first &&
-               if_rest &&
-               equal(if_first->condition, if_rest->condition) &&
+               if_next &&
+               equal(if_first->condition, if_next->condition) &&
                is_pure(if_first->condition)) {
         // Two ifs with matching conditions
-        Stmt then_case = mutate(Block::make(if_first->then_case, if_rest->then_case));
+        Stmt then_case = mutate(Block::make(if_first->then_case, if_next->then_case));
         Stmt else_case;
-        if (if_first->else_case.defined() && if_rest->else_case.defined()) {
-            else_case = mutate(Block::make(if_first->else_case, if_rest->else_case));
+        if (if_first->else_case.defined() && if_next->else_case.defined()) {
+            else_case = mutate(Block::make(if_first->else_case, if_next->else_case));
         } else if (if_first->else_case.defined()) {
             // We already simplified the body of the ifs.
             else_case = if_first->else_case;
         } else {
-            else_case = if_rest->else_case;
+            else_case = if_next->else_case;
         }
-        return IfThenElse::make(if_first->condition, then_case, else_case);
+        Stmt result = IfThenElse::make(if_first->condition, then_case, else_case);
+        if (if_rest.defined()) {
+            result = Block::make(result, if_rest);
+        }
+        return result;
     } else if (if_first &&
-               if_rest &&
-               !if_rest->else_case.defined() &&
+               if_next &&
+               !if_next->else_case.defined() &&
                is_pure(if_first->condition) &&
-               is_pure(if_rest->condition) &&
-               is_one(mutate((if_first->condition && if_rest->condition) == if_rest->condition, nullptr))) {
+               is_pure(if_next->condition) &&
+               is_one(mutate((if_first->condition && if_next->condition) == if_next->condition, nullptr))) {
         // Two ifs where the second condition is tighter than
         // the first condition.  The second if can be nested
         // inside the first one, because if it's true the
         // first one must also be true.
-        Stmt then_case = mutate(Block::make(if_first->then_case, if_rest));
+        Stmt then_case = mutate(Block::make(if_first->then_case, if_next));
         Stmt else_case = mutate(if_first->else_case);
-        return IfThenElse::make(if_first->condition, then_case, else_case);
+        Stmt result = IfThenElse::make(if_first->condition, then_case, else_case);
+        if (if_rest.defined()) {
+            result = Block::make(result, if_rest);
+        }
+        return result;
     } else if (op->first.same_as(first) &&
                op->rest.same_as(rest)) {
         return op;

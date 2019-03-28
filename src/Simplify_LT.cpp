@@ -83,9 +83,11 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
               // Cancellations in linear expressions
               // 1 < 2
               rewrite(x < x + y, 0 < y) ||
+              rewrite(x < y + x, 0 < y) ||
 
               // 2 < 1
               rewrite(x + y < x, y < 0) ||
+              rewrite(y + x < x, y < 0) ||
 
               // 2 < 2
               rewrite(x + y < x + z, y < z) ||
@@ -336,6 +338,12 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
               rewrite(min((x + c2)/c0, y) < x/c0, true, c0 > 0 && c2 + c0 <= 0) ||
               rewrite(max(y, (x + c2)/c0) < x/c0, false, c0 > 0 && c2 >= 0) ||
               rewrite(min(y, (x + c2)/c0) < x/c0, true, c0 > 0 && c2 + c0 <= 0) ||
+
+              // Comparison of two mins/maxes that don't cancel when subtracted
+              rewrite(min(x, c0) < min(x, c1), false, c0 >= c1) ||
+              rewrite(min(x, c0) < min(x, c1) + c2, false, c0 >= c1 + c2) ||
+              rewrite(max(x, c0) < max(x, c1), false, c0 >= c1) ||
+              rewrite(max(x, c0) < max(x, c1) + c2, false, c0 >= c1 + c2) ||
 
               // Comparison of aligned ramps can simplify to a comparison of the base
               rewrite(ramp(x * c3 + c2, c1) < broadcast(z * c0),

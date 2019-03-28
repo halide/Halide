@@ -2,6 +2,8 @@
 
 namespace {
 
+using Halide::float16_t;
+
 enum class SomeEnum { Foo,
                       Bar };
 
@@ -49,6 +51,9 @@ public:
     Input<Buffer<>[]> buffer_array_input7{ "buffer_array_input7", 3 }; // buffer_array_input2.type must be set
     Input<Buffer<>[]> buffer_array_input8{ "buffer_array_input8" }; // dim and type must be set
 
+    Input<Buffer<float16_t>> buffer_f16_typed{ "buffer_f16_typed", 1 };
+    Input<Buffer<>> buffer_f16_untyped{ "buffer_f16_untyped", 1 };
+
     Output<Func> output{ "output" };  // must be overridden to {{Float(32), Float(32)}, 3}
     Output<Buffer<float>> typed_output_buffer{ "typed_output_buffer", 3 };
     Output<Buffer<float>> type_only_output_buffer{ "type_only_output_buffer" };  // untyped outputs can have type and/or dimensions inferred
@@ -71,6 +76,8 @@ public:
 
     void generate() {
         Var x("x"), y("y"), c("c");
+
+        assert(buffer_f16_untyped.type() == Float(16));
 
         // These should all be zero; they are here to exercise the operator[] overloads
         Expr zero1 = array_input[1](x, y, c) - array_input[0](x, y, c);

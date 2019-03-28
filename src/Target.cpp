@@ -267,6 +267,7 @@ const std::map<std::string, Target::OS> os_name_map = {
     {"ios", Target::IOS},
     {"qurt", Target::QuRT},
     {"noos", Target::NoOS},
+    {"fuchsia", Target::Fuchsia},
 };
 
 bool lookup_os(const std::string &tok, Target::OS &result) {
@@ -850,12 +851,16 @@ bool Target::get_runtime_compatible_target(const Target& other, Target &result) 
     }
 
     if (arch != other.arch || bits != other.bits || os != other.os) {
-        user_warning << "runtime targets must agree on platform (arch-bits-os)\n";
+        Internal::debug(1) << "runtime targets must agree on platform (arch-bits-os)\n"
+                           << "  this:  " << *this << "\n"
+                           << "  other: " << other << "\n";
         return false;
     }
 
     if ((features & matching_mask) != (other.features & matching_mask)) {
-        user_warning << "runtime targets must agree on SoftFloatABI, Debug, TSAN, ASAN, MSAN, HVX_64, HVX_128, MinGW, HexagonDma, and HVX_shared_object\n";
+        Internal::debug(1) << "runtime targets must agree on SoftFloatABI, Debug, TSAN, ASAN, MSAN, HVX_64, HVX_128, MinGW, HexagonDma, and HVX_shared_object\n"
+                           << "  this:  " << *this << "\n"
+                           << "  other: " << other << "\n";
         return false;
     }
 

@@ -130,7 +130,7 @@ if (WITH_TEST_GENERATOR)
     set(DEPS )
     # ...but a few do. We'll special-case them.
     if("${NAME}" STREQUAL "stubuser")
-      set(DEPS "stubtest.generator")
+      set(DEPS "stubtest.generator" "configure.generator")
     elseif("${NAME}" STREQUAL "external_code")
       set(DEPS "external_code_generator_deps")
     endif()
@@ -223,6 +223,7 @@ if (WITH_TEST_GENERATOR)
   halide_define_aot_test(argvcall)
   halide_define_aot_test(can_use_target)
   halide_define_aot_test(cleanup_on_error)
+  halide_define_aot_test(configure)
   halide_define_aot_test(define_extern_opencl)
   halide_define_aot_test(embed_image)
   halide_define_aot_test(error_codes)
@@ -336,6 +337,7 @@ if (WITH_TEST_GENERATOR)
       buffer_array_input8.size=2
       buffer_array_input8.dim=3
       buffer_array_input8.type=float32
+      buffer_f16_untyped.type=float16
       array_outputs.size=2
       array_outputs7.size=2
       array_outputs8.size=2

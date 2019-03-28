@@ -28,7 +28,8 @@ class MonotonicVisitor : public IRVisitor {
     }
 
     void visit(const StringImm *) override {
-        internal_error << "Monotonic on String\n";
+        // require() Exprs can includes Strings.
+        result = Monotonic::Constant;
     }
 
     void visit(const Cast *op) override {
@@ -279,11 +280,12 @@ class MonotonicVisitor : public IRVisitor {
     }
 
     void visit(const Ramp *op) override {
-        internal_error << "Monotonic of vector\n";
+        Expr equiv = op->base + Variable::make(op->base.type(), unique_name('t')) * op->stride;
+        equiv.accept(this);
     }
 
     void visit(const Broadcast *op) override {
-        internal_error << "Monotonic of vector\n";
+        op->value.accept(this);
     }
 
     void visit(const Call *op) override {
@@ -292,6 +294,12 @@ class MonotonicVisitor : public IRVisitor {
             op->is_intrinsic(Call::likely_if_innermost) ||
             op->is_intrinsic(Call::return_second)) {
             op->args.back().accept(this);
+            return;
+        }
+
+        if (op->is_intrinsic(Call::require)) {
+            // require() returns the value of the second arg in all non-failure cases
+            op->args[1].accept(this);
             return;
         }
 
@@ -393,12 +401,14 @@ class MonotonicVisitor : public IRVisitor {
 public:
     Monotonic result;
 
-    MonotonicVisitor(const std::string &v) : var(v), result(Monotonic::Unknown) {}
+    MonotonicVisitor(const std::string &v, const Scope<Monotonic> &parent) : var(v), result(Monotonic::Unknown) {
+        scope.set_containing_scope(&parent);
+    }
 };
 
-Monotonic is_monotonic(Expr e, const std::string &var) {
+Monotonic is_monotonic(Expr e, const std::string &var, const Scope<Monotonic> &scope) {
     if (!e.defined()) return Monotonic::Unknown;
-    MonotonicVisitor m(var);
+    MonotonicVisitor m(var, scope);
     e.accept(&m);
     return m.result;
 }

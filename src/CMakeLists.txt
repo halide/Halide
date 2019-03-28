@@ -29,6 +29,9 @@ set(RUNTIME_CPP
   fake_get_symbol
   fake_thread_pool
   float16_t
+  fuchsia_clock
+  fuchsia_host_cpu_count
+  fuchsia_yield
   gpu_device_selection
   hexagon_cache_allocator
   hexagon_cpu_features
@@ -307,6 +310,8 @@ set(HEADER_FILES
   DebugToFile.h
   Definition.h
   Deinterleave.h
+  Derivative.h
+  DerivativeUtils.h
   DeviceArgument.h
   DeviceInterface.h
   Dimension.h
@@ -381,7 +386,6 @@ set(HEADER_FILES
   RegionCosts.h
   RemoveDeadAllocations.h
   RemoveExternLoops.h
-  RemoveTrivialForLoops.h
   RemoveUndef.h
   runtime/HalideBuffer.h
   runtime/HalideRuntime.h
@@ -390,6 +394,7 @@ set(HEADER_FILES
   Scope.h
   SelectGPUAPI.h
   Simplify.h
+  SimplifyCorrelatedDifferences.h
   SimplifySpecializations.h
   SkipStages.h
   SlidingWindow.h
@@ -478,6 +483,8 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   DebugToFile.cpp
   Definition.cpp
   Deinterleave.cpp
+  Derivative.cpp
+  DerivativeUtils.cpp
   DeviceArgument.cpp
   DeviceInterface.cpp
   Dimension.cpp
@@ -544,7 +551,6 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   RegionCosts.cpp
   RemoveDeadAllocations.cpp
   RemoveExternLoops.cpp
-  RemoveTrivialForLoops.cpp
   RemoveUndef.cpp
   Schedule.cpp
   ScheduleFunctions.cpp
@@ -569,6 +575,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Simplify_Shuffle.cpp
   Simplify_Stmts.cpp
   Simplify_Sub.cpp
+  SimplifyCorrelatedDifferences.cpp
   SimplifySpecializations.cpp
   SkipStages.cpp
   SlidingWindow.cpp
@@ -598,6 +605,12 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   ${HEADER_FILES}
   ${INITIAL_MODULES}
 )
+
+# We could expose the /MP flag to all targets, but that might end up saturating the build
+# since multiple MSBuild projects might get built in parallel, each of which compiling their
+# source files in parallel; the Halide library itself is a "knot" point of the build graph,
+# so compiling its files in parallel should not oversubscribe the system
+target_compile_options(Halide PUBLIC $<$<CXX_COMPILER_ID:MSVC>:/MP>)
 
 # Define Halide_SHARED or Halide_STATIC depending on library type
 target_compile_definitions(Halide PRIVATE "-DHalide_${HALIDE_LIBRARY_TYPE}")

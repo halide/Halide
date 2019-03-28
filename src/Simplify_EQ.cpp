@@ -23,11 +23,14 @@ Expr Simplify::visit(const EQ *op, ExprInfo *bounds) {
     if (op->a.type().is_bool()) {
         Expr a = mutate(op->a, nullptr);
         Expr b = mutate(op->b, nullptr);
+        const int lanes = op->type.lanes();
         auto rewrite = IRMatcher::rewriter(IRMatcher::eq(a, b), op->type);
         if (rewrite(x == 1, x)) {
             return rewrite.result;
         } else if (rewrite(x == 0, !x)) {
             return mutate(std::move(rewrite.result), bounds);
+        } else if (rewrite(x == x, const_true(lanes))) {
+	    return rewrite.result;
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             return op;
         } else {
@@ -38,6 +41,11 @@ Expr Simplify::visit(const EQ *op, ExprInfo *bounds) {
     ExprInfo delta_bounds;
     Expr delta = mutate(op->a - op->b, &delta_bounds);
     const int lanes = op->type.lanes();
+
+    // If the delta is 0, then it's just x == x
+    if (is_zero(delta)) {
+        return const_true(lanes);
+    }
 
     // Attempt to disprove using bounds analysis
     if (delta_bounds.min_defined && delta_bounds.min > 0) {
