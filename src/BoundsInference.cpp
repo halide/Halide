@@ -800,12 +800,17 @@ public:
                         CondValue &cond_val = s.exprs[k];
                         internal_assert(cond_val.value.defined());
                         cond_val.value = inline_function(cond_val.value, func);
-                        // Simplify after we inline, to cut down on
-                        // the number of lets and remove any false
-                        // dependencies.
-                        cond_val.value = simplify(cond_val.value);
                     }
                 }
+            }
+        }
+
+        // Simplify after we inline, to cut down on
+        // the number of lets and remove any false
+        // dependencies.
+        for (auto &s : stages) {
+            for (auto &cv : s.exprs) {
+                cv.value = simplify(cv.value);
             }
         }
 
