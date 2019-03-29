@@ -7,7 +7,7 @@ extern "C" {
 WEAK void halide_default_error(void *user_context, const char *msg) {
     char buf[4096];
     char *dst = halide_string_to_string(buf, buf + 4094, "Error: ");
-    dst = halide_string_to_string(dst, buf + 4094, msg);
+    dst = halide_string_to_string(dst, dst + 4094, msg);
     // We still have one character free. Add a newline if there
     // isn't one already.
     if (dst[-1] != '\n') {

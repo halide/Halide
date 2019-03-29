@@ -1114,6 +1114,12 @@ void check_boolean() {
     check(x <= 20 && x >= 20, x <= 20 && 20 <= x);
     check(x >= 20 && x <= 20, 20 <= x && x <= 20);
 
+    check(min(x, 20) < min(x, 19), const_false());
+    check(min(x, 23) < min(x, 18) + 3, const_false());
+
+    check(max(x, 19) > max(x, 20), const_false());
+    check(max(x, 19) > max(x, 18) + 3, const_false());
+
     // check for substitution patterns
     check((b1 == t) && (b1 && b2), b1 && b2);
     check((b1 && b2) && (b1 == t), b1 && b2);
@@ -1226,6 +1232,27 @@ void check_boolean() {
                       IfThenElse::make(x < y, Evaluate::make(x+2))),
           IfThenElse::make(x < y, Block::make(Evaluate::make(x+1), Evaluate::make(x+2))));
 
+    check(Block::make({IfThenElse::make(x < y, Evaluate::make(x+1), Evaluate::make(x+2)),
+                       IfThenElse::make(x < y, Evaluate::make(x+3), Evaluate::make(x+4)),
+                       Evaluate::make(x+5)}),
+          Block::make(IfThenElse::make(x < y,
+                                       Block::make(Evaluate::make(x+1), Evaluate::make(x+3)),
+                                       Block::make(Evaluate::make(x+2), Evaluate::make(x+4))),
+                      Evaluate::make(x+5)));
+
+    check(Block::make({IfThenElse::make(x < y, Evaluate::make(x+1)),
+                       IfThenElse::make(x < y, Evaluate::make(x+2)),
+                       IfThenElse::make(x < y, Evaluate::make(x+3)),
+                       Evaluate::make(x+4)}),
+          Block::make(IfThenElse::make(x < y, Block::make({Evaluate::make(x+1), Evaluate::make(x+2), Evaluate::make(x+3)})),
+                      Evaluate::make(x+4)));
+
+    check(Block::make({IfThenElse::make(x < y, Evaluate::make(x+1)),
+                       IfThenElse::make(x < y, Evaluate::make(x+2)),
+                       Evaluate::make(x+3)}),
+          Block::make(IfThenElse::make(x < y, Block::make(Evaluate::make(x+1), Evaluate::make(x+2))),
+                      Evaluate::make(x+3)));
+
     check(Block::make(IfThenElse::make(x < y, Evaluate::make(x+1), Evaluate::make(x+2)),
                       IfThenElse::make(x < y, Evaluate::make(x+3))),
           IfThenElse::make(x < y,
@@ -1325,6 +1352,8 @@ void check_boolean() {
     check(select(cond, y+x, x-z), select(cond, y, 0-z) + x);
     check(select(cond, x-z, x+y), select(cond, 0-z, y) + x);
     check(select(cond, x-z, y+x), select(cond, 0-z, y) + x);
+    check(select(cond, x/y, z/y), select(cond, x, z) / y);
+    check(select(cond, x%y, z%y), select(cond, x, z) % y);
 
 
     {
