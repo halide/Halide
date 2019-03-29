@@ -2063,10 +2063,10 @@ private:
                     const EQ *eq = solved.as<EQ>();
                     Expr lhs, rhs;
                     if (lt) {lhs = lt->a; rhs = lt->b;}
-                    if (le) {lhs = le->a; rhs = le->b;}
-                    if (gt) {lhs = gt->a; rhs = gt->b;}
-                    if (ge) {lhs = ge->a; rhs = ge->b;}
-                    if (eq) {lhs = eq->a; rhs = eq->b;}
+                    else if (le) {lhs = le->a; rhs = le->b;}
+                    else if (gt) {lhs = gt->a; rhs = gt->b;}
+                    else if (ge) {lhs = ge->a; rhs = ge->b;}
+                    else if (eq) {lhs = eq->a; rhs = eq->b;}
 
                     if (!rhs.defined() || rhs.type() != Int(32)) {
                         continue;
@@ -2125,6 +2125,7 @@ private:
                 }
             } else {
                 // Treat it as two separate conditional blocks
+                // TODO: This hits op->condition three times total!!!
                 Stmt equiv = Block::make(IfThenElse::make(op->condition, op->then_case),
                                          IfThenElse::make(simplify(!op->condition), op->else_case));
                 equiv.accept(this);
