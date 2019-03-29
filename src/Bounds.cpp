@@ -2027,8 +2027,19 @@ private:
     void visit(const IfThenElse *op) override {
         op->condition.accept(this);
         if (expr_uses_vars(op->condition, scope)) {
-            if (!op->else_case.defined() || is_no_op(op->else_case)) {
-                Expr c = op->condition;
+            // We need to simplify the condition to get it into a
+            // canonical form (e.g. (a < b) instead of !(a >= b))
+            vector<pair<Expr, Stmt>> cases;
+            {
+                Expr c = simplify(op->condition);
+                cases.emplace_back(c, op->then_case);
+                if (op->else_case.defined() && !is_no_op(op->else_case)) {
+                    cases.emplace_back(simplify(!c), op->else_case);
+                }
+            }
+            for (const auto &pair : cases) {
+                Expr c = pair.first;
+                Stmt body = pair.second;
                 const Call *call = c.as<Call>();
                 if (call && (call->is_intrinsic(Call::likely) ||
                              call->is_intrinsic(Call::likely_if_innermost) ||
@@ -2121,17 +2132,11 @@ private:
                 for (auto &p : to_pop) {
                     trim_scope_push(p.v->name, p.i, p.let_bounds);
                 }
-                op->then_case.accept(this);
+                body.accept(this);
                 while (!to_pop.empty()) {
                     trim_scope_pop(to_pop.back().v->name, to_pop.back().let_bounds);
                     to_pop.pop_back();
                 }
-            } else {
-                // Treat it as two separate conditional blocks
-                // TODO: This hits op->condition three times total!!!
-                Stmt equiv = Block::make(IfThenElse::make(op->condition, op->then_case),
-                                         IfThenElse::make(simplify(!op->condition), op->else_case));
-                equiv.accept(this);
             }
         } else {
             // If the condition is based purely on params, then we'll only
