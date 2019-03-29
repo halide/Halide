@@ -1352,6 +1352,8 @@ void check_boolean() {
     check(select(cond, y+x, x-z), select(cond, y, 0-z) + x);
     check(select(cond, x-z, x+y), select(cond, 0-z, y) + x);
     check(select(cond, x-z, y+x), select(cond, 0-z, y) + x);
+    check(select(cond, x/y, z/y), select(cond, x, z) / y);
+    check(select(cond, x%y, z%y), select(cond, x, z) % y);
 
 
     {
