@@ -73,6 +73,8 @@ Expr Simplify::visit(const Select *op, ExprInfo *bounds) {
              rewrite(select(x, y * z, w * y), y * select(x, z, w)) ||
              rewrite(select(x, z * y, y * w), y * select(x, z, w)) ||
              rewrite(select(x, z * y, w * y), select(x, z, w) * y) ||
+             rewrite(select(x, z / y, w / y), select(x, z, w) / y) ||
+             rewrite(select(x, z % y, w % y), select(x, z, w) % y) ||
 
              rewrite(select(x < y, x, y), min(x, y)) ||
              rewrite(select(x < y, y, x), max(x, y)) ||
