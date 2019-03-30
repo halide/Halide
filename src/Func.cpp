@@ -2908,11 +2908,17 @@ void Func::infer_input_bounds(int x_size, int y_size, int z_size, int w_size,
         // the halide_buffer_t fields. (We can't use crop because it explicitly
         // disallows expanding the fields in this unsafe manner.)
         Buffer<> im = Buffer<>::make_scalar(func.output_types()[i]);
+        // Deallocate all storage and ensure that host is null; since
+        // we are diddling the dimensions below, the host ptr will no longer
+        // reflect the allocation described by the dimensions, which is usually
+        // fine, unless an extern function wants to try accessing that memory
+        // (kerblam) or JIT helper code that wants to copy data across a VM
+        // barrier (stompity stomp stomp).
+        im.deallocate();
+        im.raw_buffer()->host = nullptr;
         for (int s : sizes) {
             if (!s) break;
             im.add_dimension();
-            // buf.host is going to be wrong no matter what, so don't
-            // bother adjusting it.
             im.raw_buffer()->dim[im.dimensions()-1].min = 0;
             im.raw_buffer()->dim[im.dimensions()-1].extent = s;
         }
