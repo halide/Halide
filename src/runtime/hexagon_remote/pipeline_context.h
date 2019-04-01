@@ -76,6 +76,15 @@ public:
         free(stack);
     }
 
+    void set_priority(int priority) {
+        if (priority > 0xFF) {
+            priority = 0xFF;        // Clamp to max priority
+        } else if (priority <= 0) {
+            return;                 // Ignore settings of zero and below
+        }
+        qurt_thread_set_priority(thread, priority);
+    }
+
     int run(pipeline_argv_t function, void **args) {
         // get a lock and set up work for the worker.
         qurt_mutex_lock(&work_mutex);

@@ -29,7 +29,7 @@ typedef unsigned int qurt_thread_t;
 #define QURT_THREAD_ATTR_TCB_PARTITION_RAM      0  /**< Creates threads in RAM/DDR. */
 #define QURT_THREAD_ATTR_TCB_PARTITION_TCM      1  /**< Creates threads in TCM. */
 #define QURT_THREAD_ATTR_TCB_PARTITION_DEFAULT  QURT_THREAD_ATTR_TCB_PARTITION_RAM  /**< Backward compatibility. */
-#define QURT_THREAD_ATTR_PRIORITY_DEFAULT       256  /**< */
+#define QURT_THREAD_ATTR_PRIORITY_DEFAULT       255  /**< */
 #define QURT_THREAD_ATTR_ASID_DEFAULT           0  /**< */
 #define QURT_THREAD_ATTR_AFFINITY_DEFAULT      (-1)  /**< */
 #define QURT_THREAD_ATTR_BUS_PRIO_DEFAULT       255  /**< */
