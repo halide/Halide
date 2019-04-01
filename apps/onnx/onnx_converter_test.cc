@@ -1,9 +1,12 @@
-#include <gtest/gtest.h>
 #include <cmath>
 #include <random>
 #include "onnx_converter.h"
 
-TEST(ConverterTest, testAbs) {
+
+#define EXPECT_EQ(a, b) if (a != b) { exit(-1); }
+#define EXPECT_NEAR(a, b, c) if (std::abs(a - b) > c) { exit(-1); }
+
+static void testAbs() {
   onnx::NodeProto abs_node;
   abs_node.set_name("abs_node");
   abs_node.set_op_type("Abs");
@@ -29,7 +32,7 @@ TEST(ConverterTest, testAbs) {
   }
 }
 
-TEST(ConverterTest, testActivationFunction) {
+static void testActivationFunction() {
   onnx::NodeProto relu_node;
   relu_node.set_name("relu_node");
   relu_node.set_op_type("Relu");
@@ -55,7 +58,7 @@ TEST(ConverterTest, testActivationFunction) {
   }
 }
 
-TEST(ConverterTest, testCast) {
+static void testCast() {
   onnx::NodeProto cast_node;
   cast_node.set_name("relu_node");
   cast_node.set_op_type("Cast");
@@ -84,7 +87,7 @@ TEST(ConverterTest, testCast) {
   }
 }
 
-TEST(ConverterTest, testAdd) {
+static void testAdd() {
   onnx::NodeProto add_node;
   add_node.set_name("add_node");
   add_node.set_op_type("Add");
@@ -116,7 +119,7 @@ TEST(ConverterTest, testAdd) {
   }
 }
 
-TEST(ConverterTest, testConstant) {
+static void testConstant() {
   onnx::NodeProto add_node;
   add_node.set_name("constant_node");
   add_node.set_op_type("Constant");
@@ -145,7 +148,7 @@ TEST(ConverterTest, testConstant) {
   }
 }
 
-TEST(ConverterTest, testGemm) {
+static void testGemm() {
   onnx::NodeProto add_node;
   add_node.set_name("gemm_node");
   add_node.set_op_type("Gemm");
@@ -192,7 +195,7 @@ TEST(ConverterTest, testGemm) {
   }
 }
 
-TEST(ConverterTest, testConv) {
+static void testConv() {
   onnx::NodeProto add_node;
   add_node.set_name("conv_node");
   add_node.set_op_type("Conv");
@@ -255,7 +258,7 @@ TEST(ConverterTest, testConv) {
   }
 }
 
-TEST(ConverterTest, testSum) {
+static void testSum() {
   onnx::NodeProto sum_node;
   sum_node.set_name("sum_node");
   sum_node.set_op_type("ReduceSum");
@@ -281,7 +284,6 @@ TEST(ConverterTest, testSum) {
 
   GOOGLE_CHECK_EQ(1, converted.outputs.size());
   Halide::Buffer<float> output = converted.outputs[0].rep.realize(1, 3, 1, 11);
-  float expected = 0.0f;
   for (int i = 0; i < 3; ++i) {
     for (int j = 0; j < 11; ++j) {
       float expected = 0.0f;
@@ -295,7 +297,7 @@ TEST(ConverterTest, testSum) {
   }
 }
 
-TEST(ConverterTest, testWhereBroadcast) {
+static void testWhereBroadcast() {
   onnx::NodeProto where_node;
   where_node.set_name("where_node");
   where_node.set_op_type("Where");
@@ -340,7 +342,7 @@ TEST(ConverterTest, testWhereBroadcast) {
   }
 }
 
-TEST(ConverterTest, testConcat) {
+static void testConcat() {
   onnx::NodeProto concat_node;
   concat_node.set_name("concat_node");
   concat_node.set_op_type("Concat");
@@ -380,7 +382,7 @@ TEST(ConverterTest, testConcat) {
   }
 }
 
-TEST(ConverterTest, testConstantFill) {
+static void testConstantFill() {
   constexpr float const_value = 2.0f;
   onnx::NodeProto concat_node;
   concat_node.set_name("constant_fill_node");
@@ -407,7 +409,7 @@ TEST(ConverterTest, testConstantFill) {
   }
 }
 
-TEST(ConverterTest, testModel) {
+static void testModel() {
   onnx::ModelProto model;
   onnx::ValueInfoProto* input_def = model.mutable_graph()->add_input();
   input_def->set_name("model_input");
@@ -488,4 +490,19 @@ TEST(ConverterTest, testModel) {
   Halide::Buffer<int64_t> output_shape = shape.rep.realize(2);
   EXPECT_EQ(3, output_shape(0));
   EXPECT_EQ(7, output_shape(1));
+}
+
+int main() {
+  testAbs();
+  testActivationFunction();
+  testCast();
+  testAdd();
+  testConstant();
+  testGemm();
+  testConv();
+  testSum();
+  testWhereBroadcast();
+  testConcat();
+  testConstantFill();
+  testModel();
 }
