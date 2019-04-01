@@ -14,23 +14,24 @@ LDFLAGS += -lprotobuf-lite
 
 
 # Copy onnx.proto to $(BIN)
-$(BIN)/onnx.proto:
+$(BIN)/onnx/onnx.proto:
 	@mkdir -p $(@D)
 	cp $(ONNX_SRC_DIR)/onnx/onnx.proto $@
 
 # protoc generates two files
-$(BIN)/onnx.pb.cc: $(BIN)/onnx.proto
+$(BIN)/onnx/onnx.pb.cc: $(BIN)/onnx/onnx.proto
 	@sed -i -e 's/package onnx;/package onnx;option optimize_for = LITE_RUNTIME;/g' $<
+	@mkdir -p $(@D)
 	$(PROTOC) $(PROTOCFLAGS) $<
 
-$(BIN)/onnx.pb.h: $(BIN)/onnx.pb.cc
+$(BIN)/onnx/onnx_pb.h: $(BIN)/onnx/onnx.pb.cc
+	cp $(BIN)/onnx/onnx.pb.h $(BIN)/onnx/onnx_pb.h
 
-$(BIN)/onnx.pb.o: $(BIN)/onnx.pb.cc $(BIN)/onnx.pb.h
-	@sed -i -e 's/bin\/onnx.pb.h/onnx.pb.h/g' $<
+$(BIN)/onnx.pb.o: $(BIN)/onnx/onnx.pb.cc $(BIN)/onnx/onnx_pb.h
+	@sed -i -e 's/bin\/onnx\/onnx.pb.h/onnx\/onnx.pb.h/g' $<
 	$(CXX) $(CXXFLAGS) -I$(BIN) -fPIC -c $< -o $@
 
-$(BIN)/onnx_converter_lib.o: onnx_converter.cc 
-	@sed -i -e 's/onnx\/onnx_pb.h/onnx.pb.h/g' onnx_converter.h
+$(BIN)/onnx_converter_lib.o: onnx_converter.cc $(BIN)/onnx/onnx_pb.h 
 	$(CXX) $(CXXFLAGS) -I$(BIN) -fPIC -c $< -o $@
 
 ONNX_CONVERTER_LIB = \
