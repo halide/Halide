@@ -2897,12 +2897,11 @@ Realization Func::realize(const Target &target,
     return realize(std::vector<int>{}, target, param_map);
 }
 
-void Func::infer_input_bounds(int x_size, int y_size, int z_size, int w_size,
-                              const ParamMap &param_map) {
+void Func::infer_input_bounds(const std::vector<int> &sizes, const ParamMap &param_map) {
     user_assert(defined()) << "Can't infer input bounds on an undefined Func.\n";
     vector<Buffer<>> outputs(func.outputs());
     for (size_t i = 0; i < outputs.size(); i++) {
-        Buffer<> im(func.output_types()[i], nullptr, {x_size, y_size, z_size, w_size});
+        Buffer<> im(func.output_types()[i], nullptr, sizes);
         outputs[i] = std::move(im);
     }
     Realization r(outputs);

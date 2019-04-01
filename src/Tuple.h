@@ -102,7 +102,7 @@ public:
 
     /** Construct a Realization that refers to the buffers in an
      * existing vector of Buffer<> */
-    explicit Realization(std::vector<Buffer<>> &e) : images(e) {
+    explicit Realization(const std::vector<Buffer<>> &e) : images(e) {
         user_assert(e.size() > 0) << "Realizations must have at least one element\n";
     }
 

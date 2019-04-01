@@ -68,15 +68,23 @@ public:
         RealizationArg(Realization &r) : r(&r) { }
         RealizationArg(Realization &&r) : r(&r) { }
         RealizationArg(halide_buffer_t *buf) : buf(buf) { }
+
         template<typename T, int D>
         RealizationArg(Runtime::Buffer<T, D> &dst) : buf(dst.raw_buffer()) { }
+
         template <typename T>
         HALIDE_NO_USER_CODE_INLINE RealizationArg(Buffer<T> &dst) : buf(dst.raw_buffer()) { }
+
         template<typename T, typename ...Args,
                  typename = typename std::enable_if<Internal::all_are_convertible<Buffer<>, Args...>::value>::type>
-            RealizationArg(Buffer<T> &a, Args&&... args) {
+        RealizationArg(Buffer<T> &a, Args&&... args) {
             buffer_list.reset(new std::vector<Buffer<>>({a, args...}));
         }
+
+        RealizationArg(const std::vector<Buffer<>> &list) {
+            buffer_list.reset(new std::vector<Buffer<>>(list));
+        }
+
         RealizationArg(RealizationArg &&from) = default;
 
         size_t size() {
@@ -433,7 +441,7 @@ public:
      * of the appropriate size and binding them to the unbound
      * ImageParams. */
     // @{
-    void infer_input_bounds(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0,
+    void infer_input_bounds(const std::vector<int> &sizes = {},
                             const ParamMap &param_map = ParamMap::empty_map());
     void infer_input_bounds(RealizationArg output,
                             const ParamMap &param_map = ParamMap::empty_map());

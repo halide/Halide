@@ -117,16 +117,15 @@ void define_pipeline(py::module &m) {
             return realization_to_object(p.realize(x_size, y_size, z_size, w_size, target, param_map));
         }, py::arg("x_size"), py::arg("y_size"), py::arg("z_size"), py::arg("w_size"), py::arg("target") = Target(), py::arg("param_map") = ParamMap())
 
-        .def("infer_input_bounds", [](Pipeline &p, int x_size, int y_size, int z_size, int w_size, const ParamMap &param_map) -> void {
-            p.infer_input_bounds(x_size, y_size, z_size, w_size, param_map);
-        }, py::arg("x_size") = 0, py::arg("y_size") = 0, py::arg("z_size") = 0, py::arg("w_size") = 0, py::arg("param_map") = ParamMap())
-
         .def("infer_input_bounds", [](Pipeline &p, Buffer<> buffer, const ParamMap &param_map) -> void {
             p.infer_input_bounds(Realization(buffer), param_map);
-        }, py::arg("dst"), py::arg("param_map") = ParamMap())
-        .def("infer_input_bounds", [](Pipeline &p, std::vector<Buffer<>> buffers, const ParamMap &param_map) -> void {
+        }, py::arg("output"), py::arg("param_map") = ParamMap())
+        .def("infer_input_bounds", [](Pipeline &p, const std::vector<int> &sizes, const ParamMap &param_map) -> void {
+            p.infer_input_bounds(sizes, param_map);
+        }, py::arg("sizes") = std::vector<int>{}, py::arg("param_map") = ParamMap())
+        .def("infer_input_bounds", [](Pipeline &p, const std::vector<Buffer<>> &buffers, const ParamMap &param_map) -> void {
             p.infer_input_bounds(Realization(buffers), param_map);
-        }, py::arg("dst"), py::arg("param_map") = ParamMap())
+        }, py::arg("output"), py::arg("param_map") = ParamMap())
 
         .def("infer_arguments", [](Pipeline &p) -> std::vector<Argument> {
             return p.infer_arguments();

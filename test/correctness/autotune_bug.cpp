@@ -32,7 +32,7 @@ int main(int argc, char **argv) {
         .reorder(y, x);
 
     blur_y.compile_jit();
-    blur_y.infer_input_bounds(AUTOTUNE_N);
+    blur_y.infer_input_bounds({AUTOTUNE_N});
     assert(in_img.get().data());
     blur_y.realize(AUTOTUNE_N);
 

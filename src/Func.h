@@ -797,15 +797,14 @@ public:
      ImageParam img(Int(32), 1);
      f(x) = img(x) + p;
 
-     Target t = get_jit_target_from_environment();
      Buffer<> in;
-     f.infer_input_bounds(10, 10, t, { { img, &in } });
+     f.infer_input_bounds({10, 10}, { { img, &in } });
      \endcode
      * On return, in will be an allocated buffer of the correct size
      * to evaulate f over a 10x10 region.
      */
     // @{
-    void infer_input_bounds(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0,
+    void infer_input_bounds(const std::vector<int> &sizes = {},
                             const ParamMap &param_map = ParamMap::empty_map());
     void infer_input_bounds(Pipeline::RealizationArg outputs,
                             const ParamMap &param_map = ParamMap::empty_map());

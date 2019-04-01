@@ -266,16 +266,15 @@ void define_func(py::module &m) {
         .def("output_buffer", &Func::output_buffer)
         .def("output_buffers", &Func::output_buffers)
 
-        .def("infer_input_bounds", (void (Func::*)(int, int, int, int, const ParamMap &)) &Func::infer_input_bounds,
-            py::arg("x_size") = 0, py::arg("y_size") = 0, py::arg("z_size") = 0, py::arg("w_size") = 0, py::arg("param_map") = ParamMap())
-
-        .def("infer_input_bounds", [](Func &f, Buffer<> buffer, const ParamMap &param_map) -> void {
-            f.infer_input_bounds(buffer, param_map);
-        }, py::arg("dst"), py::arg("param_map") = ParamMap())
-
-        .def("infer_input_bounds", [](Func &f, std::vector<Buffer<>> buffer, const ParamMap &param_map) -> void {
-            f.infer_input_bounds(Realization(buffer), param_map);
-        }, py::arg("dst"), py::arg("param_map") = ParamMap())
+        .def("infer_input_bounds", [](Func &f, Buffer<> output, const ParamMap &param_map) -> void {
+            f.infer_input_bounds(output, param_map);
+        }, py::arg("output"), py::arg("param_map") = ParamMap())
+        .def("infer_input_bounds", [](Func &f, const std::vector<int> &sizes, const ParamMap &param_map) -> void {
+            f.infer_input_bounds(sizes, param_map);
+        }, py::arg("sizes"), py::arg("param_map") = ParamMap())
+        .def("infer_input_bounds", [](Func &f, const std::vector<Buffer<>> &output, const ParamMap &param_map) -> void {
+            f.infer_input_bounds(Realization(output), param_map);
+        }, py::arg("output"), py::arg("param_map") = ParamMap())
 
         .def("in", (Func (Func::*)(const Func &)) &Func::in, py::arg("f"))
         .def("in", (Func (Func::*)(const std::vector<Func> &fs)) &Func::in, py::arg("fs"))

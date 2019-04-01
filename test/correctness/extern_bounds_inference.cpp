@@ -61,7 +61,7 @@ int main(int argc, char **argv) {
 
         f.define_extern("translate", args, UInt(8), 2);
 
-        f.infer_input_bounds(W, H);
+        f.infer_input_bounds({W, H});
 
         // Evaluating the output over [0, 29] x [0, 19] requires the input over [3, 32] x [7, 26]
         check(input, 3, W, 7, H);
@@ -92,7 +92,7 @@ int main(int argc, char **argv) {
         Var xi, yi;
         g.tile(x, y, xi, yi, 2, 4);
 
-        g.infer_input_bounds(W, H);
+        g.infer_input_bounds({W, H});
 
         check(input, 3, W + 5, 7, H + 10);
     }
@@ -120,7 +120,7 @@ int main(int argc, char **argv) {
         f2.compute_at(g, x);
         g.reorder(y, x).vectorize(y, 4);
 
-        g.infer_input_bounds(W, H);
+        g.infer_input_bounds({W, H});
 
         check(input, 3, W + 5, 7, H + 10);
     }

@@ -226,7 +226,7 @@ int main(int argc, char **argv) {
         f.set_custom_trace(&my_trace);
 
         // Check bounds inference is still cool with widths < 8
-        f.infer_input_bounds(5);
+        f.infer_input_bounds({5});
         int m = im.get().min(0), e = im.get().extent(0);
         if (m != 0 || e != 5) {
             printf("min, extent = %d, %d instead of 0, 5\n", m, e);
@@ -265,7 +265,7 @@ int main(int argc, char **argv) {
         f.specialize(param);
 
         param.set(true);
-        f.infer_input_bounds(100);
+        f.infer_input_bounds({100});
         int m = im.get().min(0);
         if (m != 10) {
             printf("min %d instead of 10\n", m);
@@ -273,7 +273,7 @@ int main(int argc, char **argv) {
         }
         param.set(false);
         im.reset();
-        f.infer_input_bounds(100);
+        f.infer_input_bounds({100});
         m = im.get().min(0);
         if (m != -10) {
             printf("min %d instead of -10\n", m);
@@ -344,7 +344,7 @@ int main(int argc, char **argv) {
         f.specialize(cond).vectorize(x, 4);
 
         // Confirm that the unrolling applies to both cases using bounds inference:
-        f.infer_input_bounds(3, 1);
+        f.infer_input_bounds({3, 1});
 
         if (im.get().extent(0) != 3) {
             printf("extent(0) was supposed to be 3.\n");
@@ -465,7 +465,7 @@ int main(int argc, char **argv) {
         // depending on the param.
 
         p.set(100);
-        f.infer_input_bounds(10);
+        f.infer_input_bounds({10});
         int w = im.get().width();
         int h = im.get().height();
         if (w != 10 || h != 1) {
@@ -475,7 +475,7 @@ int main(int argc, char **argv) {
         im.reset();
 
         p.set(-100);
-        f.infer_input_bounds(10);
+        f.infer_input_bounds({10});
         w = im.get().width();
         h = im.get().height();
         if (w != 1 || h != 10) {
@@ -499,7 +499,7 @@ int main(int argc, char **argv) {
         // does when p is 100), we only access the first row of the
         // input, and bounds inference should recognize this.
         p.set(100);
-        f.infer_input_bounds(10);
+        f.infer_input_bounds({10});
         int w = im.get().width();
         int h = im.get().height();
         if (w != 10 || h != 1) {
@@ -514,7 +514,7 @@ int main(int argc, char **argv) {
         // are evaluated, so the image must be loaded over the full
         // square.
         p.set(-100);
-        f.infer_input_bounds(10);
+        f.infer_input_bounds({10});
         w = im.get().width();
         h = im.get().height();
         if (w != 10 || h != 10) {
