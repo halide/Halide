@@ -30,7 +30,7 @@ $(BIN)/onnx.pb.o: $(BIN)/onnx.pb.cc $(BIN)/onnx.pb.h
 	$(CXX) $(CXXFLAGS) -I$(BIN) -fPIC -c $< -o $@
 
 $(BIN)/onnx_converter_lib.o: onnx_converter.cc 
-	@sed -i -e 's/onnx\/onnx_pb.h/onnx.pb.h/g' $<
+	@sed -i -e 's/onnx\/onnx_pb.h/onnx.pb.h/g' onnx_converter.h
 	$(CXX) $(CXXFLAGS) -I$(BIN) -fPIC -c $< -o $@
 
 ONNX_CONVERTER_LIB = \
