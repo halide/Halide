@@ -1,4 +1,5 @@
-#pragma once
+#ifndef CONVERT_MODEL_H_
+#define CONVERT_MODEL_H_
 
 #include <unordered_map>
 #include <vector>
@@ -16,10 +17,10 @@ struct Node {
   std::vector<Tensor> inputs;
   std::vector<Tensor> outputs;
 
-  std::vector<Halide::Func> internal_funcs;
+  std::vector<Halide::Expr> requirements;
 };
 
-Node ConvertNode(
+Node convert_node(
     const onnx::NodeProto& node,
     const std::vector<Tensor>& inputs,
     const std::string& device);
@@ -29,6 +30,10 @@ struct Model {
   std::unordered_map<std::string, Tensor> outputs;
 
   std::unordered_map<std::string, Tensor> tensors;
+
+  std::vector<Halide::Expr> requirements;
 };
 
-Model ConvertModel(const onnx::ModelProto& model, const std::string& device);
+Model convert_model(const onnx::ModelProto& model, const std::string& device);
+
+#endif

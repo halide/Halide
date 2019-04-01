@@ -20,7 +20,7 @@ TEST(ConverterTest, testAbs) {
   Halide::Var index;
   node_inputs[0].rep(index) = input(index);
 
-  Node converted = ConvertNode(abs_node, node_inputs, "");
+  Node converted = convert_node(abs_node, node_inputs, "");
 
   GOOGLE_CHECK_EQ(1, converted.outputs.size());
   Halide::Buffer<float> output = converted.outputs[0].rep.realize(200);
@@ -46,7 +46,7 @@ TEST(ConverterTest, testActivationFunction) {
   Halide::Var index;
   node_inputs[0].rep(index) = input(index);
 
-  Node converted = ConvertNode(relu_node, node_inputs, "");
+  Node converted = convert_node(relu_node, node_inputs, "");
 
   GOOGLE_CHECK_EQ(1, converted.outputs.size());
   Halide::Buffer<float> output = converted.outputs[0].rep.realize(200);
@@ -75,7 +75,7 @@ TEST(ConverterTest, testCast) {
   Halide::Var index;
   node_inputs[0].rep(index) = input(index);
 
-  Node converted = ConvertNode(cast_node, node_inputs, "");
+  Node converted = convert_node(cast_node, node_inputs, "");
 
   GOOGLE_CHECK_EQ(1, converted.outputs.size());
   Halide::Buffer<float> output = converted.outputs[0].rep.realize(200);
@@ -107,7 +107,7 @@ TEST(ConverterTest, testAdd) {
   node_inputs[0].rep(index) = in1(index);
   node_inputs[1].rep(index) = in2(index);
 
-  Node converted = ConvertNode(add_node, node_inputs, "");
+  Node converted = convert_node(add_node, node_inputs, "");
 
   GOOGLE_CHECK_EQ(1, converted.outputs.size());
   Halide::Buffer<float> output = converted.outputs[0].rep.realize(200);
@@ -134,7 +134,7 @@ TEST(ConverterTest, testConstant) {
     value.add_float_data(dis(rnd));
   }
 
-  Node converted = ConvertNode(add_node, {}, "");
+  Node converted = convert_node(add_node, {}, "");
 
   GOOGLE_CHECK_EQ(1, converted.outputs.size());
   Halide::Buffer<float> output = converted.outputs[0].rep.realize({3, 7});
@@ -176,7 +176,7 @@ TEST(ConverterTest, testGemm) {
   node_inputs[1].rep(i2, j2) = in2(i2, j2);
   Halide::Var i3, j3;
   node_inputs[2].rep(i3, j3) = in3(i3, j3);
-  Node converted = ConvertNode(add_node, node_inputs, "");
+  Node converted = convert_node(add_node, node_inputs, "");
 
   GOOGLE_CHECK_EQ(1, converted.outputs.size());
   Halide::Buffer<float> output = converted.outputs[0].rep.realize(32, 64);
@@ -229,7 +229,7 @@ TEST(ConverterTest, testConv) {
     node_inputs[0].rep = Halide::Func();
     node_inputs[0].rep(i1, j1, k1, l1) = in(i1, j1, k1, l1);
 
-    Node converted = ConvertNode(add_node, node_inputs, "");
+    Node converted = convert_node(add_node, node_inputs, "");
 
     GOOGLE_CHECK_EQ(1, converted.outputs.size());
     Halide::Buffer<float> output =
@@ -277,7 +277,7 @@ TEST(ConverterTest, testSum) {
   Halide::Var i, j, k, l;
   node_inputs[0].rep(i, j, k, l) = in1(i, j, k, l);
 
-  Node converted = ConvertNode(sum_node, node_inputs, "");
+  Node converted = convert_node(sum_node, node_inputs, "");
 
   GOOGLE_CHECK_EQ(1, converted.outputs.size());
   Halide::Buffer<float> output = converted.outputs[0].rep.realize(1, 3, 1, 11);
@@ -310,21 +310,20 @@ TEST(ConverterTest, testWhereBroadcast) {
   node_inputs[1].shape = {2};
   node_inputs[2].shape = {2, 2};
   Halide::Buffer<bool> in_c(2, 2, 2);
-  in_c.for_each_element([&](int x, int y, int z) {
-    in_c(x,y,z) = (x == y && x == z);
-  });
+  in_c.for_each_element(
+      [&](int x, int y, int z) { in_c(x, y, z) = (x == y && x == z); });
   Halide::Buffer<float> in_x(2);
   Halide::Buffer<float> in_y(2, 2);
   std::uniform_real_distribution<float> dis(-1.0, 1.0);
   std::mt19937 rnd;
   in_x.for_each_value([&](float& f) { f = dis(rnd); });
-  in_y.for_each_value([&](float& f) {f = dis(rnd);});
+  in_y.for_each_value([&](float& f) { f = dis(rnd); });
   Halide::Var i("i"), j("j"), k("k");
   node_inputs[0].rep(i, j, k) = in_c(i, j, k);
   node_inputs[1].rep(i) = in_x(i);
   node_inputs[2].rep(i, j) = in_y(i, j);
 
-  Node converted = ConvertNode(where_node, node_inputs, "");
+  Node converted = convert_node(where_node, node_inputs, "");
   GOOGLE_CHECK_EQ(1, converted.outputs.size());
   Halide::Buffer<float> output = converted.outputs[0].rep.realize(2, 2, 2);
 
@@ -367,7 +366,7 @@ TEST(ConverterTest, testConcat) {
   in2.for_each_value([&](float& f) { f = dis(rnd); });
   node_inputs[1].rep(i, j) = in2(i, j);
 
-  Node converted = ConvertNode(concat_node, node_inputs, "");
+  Node converted = convert_node(concat_node, node_inputs, "");
 
   GOOGLE_CHECK_EQ(1, converted.outputs.size());
   Halide::Buffer<float> output = converted.outputs[0].rep.realize(7 + 5, 3);
@@ -398,7 +397,7 @@ TEST(ConverterTest, testConstantFill) {
   dtype_attr->set_name("dtype");
   dtype_attr->set_i(4);
 
-  Node converted = ConvertNode(concat_node, {}, "");
+  Node converted = convert_node(concat_node, {}, "");
   GOOGLE_CHECK_EQ(1, converted.outputs.size());
   Halide::Buffer<uint16_t> output = converted.outputs[0].rep.realize(3, 4);
   for (int i = 0; i < 3; ++i) {
@@ -460,7 +459,7 @@ TEST(ConverterTest, testModel) {
   fifth_node->add_input("model_output");
   fifth_node->add_output("output_size");
 
-  Model converted = ConvertModel(model, "");
+  Model converted = convert_model(model, "");
 
   Halide::Buffer<float> input_values({3, 7});
   std::uniform_real_distribution<float> dis(-1.0, 1.0);
@@ -482,8 +481,8 @@ TEST(ConverterTest, testModel) {
   }
 
   Tensor size = converted.outputs.at("output_size");
-  Halide::Buffer<int64_t> output_size = size.rep.realize(1);
-  EXPECT_EQ(21, output_size(0));
+  Halide::Buffer<int64_t> output_size = size.rep.realize();
+  EXPECT_EQ(21, output_size());
 
   Tensor shape = converted.outputs.at("output_shape");
   Halide::Buffer<int64_t> output_shape = shape.rep.realize(2);

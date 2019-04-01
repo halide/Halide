@@ -2,11 +2,52 @@
 #include <exception>
 #include <unordered_set>
 
-static Halide::Expr DivUp(Halide::Expr num, int denom) {
+static Halide::Expr div_up(Halide::Expr num, int denom) {
   return Halide::Internal::simplify((num + denom - 1) / denom);
 }
 
-std::string SanitizeName(const std::string& name) {
+namespace {
+class FuncCallInliner : public Halide::Internal::IRMutator {
+  Halide::Expr visit(const Halide::Internal::Call* op) override {
+    if (op->call_type != Halide::Internal::Call::Halide) {
+      return Halide::Internal::IRMutator::visit(op);
+    }
+
+    assert(op->func.defined());
+
+    // Mutate the args
+    std::vector<Halide::Expr> args(op->args.size());
+    for (size_t i = 0; i < args.size(); i++) {
+      args[i] = mutate(op->args[i]);
+    }
+    // Grab the body
+    Halide::Internal::Function func(op->func);
+    Halide::Expr body =
+        qualify(func.name() + ".", func.values()[op->value_index]);
+
+    // Bind the args using Let nodes
+    const std::vector<std::string> func_args = func.args();
+    for (size_t i = 0; i < args.size(); i++) {
+      if (is_const(args[i]) || args[i].as<Halide::Internal::Variable>()) {
+        body = substitute(func.name() + "." + func_args[i], args[i], body);
+      } else {
+        body = Halide::Internal::Let::make(
+            func.name() + "." + func_args[i], args[i], body);
+      }
+    }
+
+    return body;
+  }
+};
+} // namespace
+
+Halide::Expr inline_func_call(Halide::Expr e) {
+  FuncCallInliner inliner;
+  Halide::Expr r = inliner.mutate(e);
+  return r;
+}
+
+std::string sanitize_name(const std::string& name) {
   std::string result = name;
   assert(!name.empty());
   // Replace dot with underscores since dots aren't allowed in Halide names.
@@ -14,27 +55,28 @@ std::string SanitizeName(const std::string& name) {
   return result;
 }
 
-std::string NameForNode(
+std::string name_for_node(
     const onnx::NodeProto& node,
     const std::string& suffix) {
   if (!node.name().empty()) {
-    return SanitizeName(node.name() + suffix);
+    return sanitize_name(node.name() + suffix);
   }
   if (node.output_size() > 0) {
-    return SanitizeName(node.output(0) + suffix);
+    return sanitize_name(node.output(0) + suffix);
   }
-  return SanitizeName(suffix);
+  return sanitize_name(suffix);
 }
 
-Halide::Func FuncForNodeOutput(const onnx::NodeProto& node, int output_id) {
+Halide::Func func_for_node_output(const onnx::NodeProto& node, int output_id) {
   assert(node.output_size() > output_id);
-  return Halide::Func(SanitizeName(node.output(output_id)));
+  return Halide::Func(sanitize_name(node.output(output_id)));
 }
 
-static void ConvertSubgraph(
+static void convert_subgraph(
     const onnx::GraphProto& graph,
     const std::string& device,
-    std::unordered_map<std::string, Tensor>& reps) {
+    std::unordered_map<std::string, Tensor>& reps,
+    std::vector<Halide::Expr>& requirements) {
   // The nodes are always stored in topological order in the ONNX model.
   for (const onnx::NodeProto& node : graph.node()) {
     std::vector<Tensor> inputs;
@@ -45,17 +87,21 @@ static void ConvertSubgraph(
         inputs.push_back(reps.at(input_name));
       }
     }
-    Node n = ConvertNode(node, inputs, device);
+    Node n = convert_node(node, inputs, device);
 
     for (int i = 0; i < node.output_size(); ++i) {
       const std::string& output_name = node.output(i);
       const Tensor& output_val = n.outputs[i];
       reps[output_name] = output_val;
     }
+
+    for (int i = 0; i < n.requirements.size(); ++i) {
+      requirements.push_back(n.requirements[i]);
+    }
   }
 }
 
-Halide::Expr GenerateCastExpr(
+Halide::Expr generate_cast_expr(
     const Halide::Expr& input,
     const onnx::NodeProto& node,
     onnx::TensorProto::DataType* output_type) {
@@ -96,7 +142,7 @@ Halide::Expr GenerateCastExpr(
       "Unsupported or unknown target type for node " + node.name());
 }
 
-Halide::Expr GenerateClipExpr(
+Halide::Expr generate_clip_expr(
     const Halide::Expr& input,
     const onnx::NodeProto& node) {
   float mini = -3.4028234663852886e+38;
@@ -111,7 +157,7 @@ Halide::Expr GenerateClipExpr(
   return Halide::clamp(input, mini, maxi);
 }
 
-Halide::Expr GenerateScaleExpr(
+Halide::Expr generate_scale_expr(
     const Halide::Expr& input,
     const onnx::NodeProto& node) {
   float scale = 1.0f;
@@ -124,37 +170,40 @@ Halide::Expr GenerateScaleExpr(
 }
 
 template <typename DataType>
-Halide::Func EncodeBufferAsFunc(
+Halide::Func encode_buffer_as_func(
     const Halide::Buffer<DataType>& vals,
-    const std::vector<int>& dims) {
-  Halide::Func result;
+    const std::vector<int>& dims,
+    const std::string& name) {
+  Halide::Func result(name);
 
-  if (dims.size() == 1 && dims[0] > 0 && dims[0] <= 10) {
+  if (dims.size() == 0) {
+    result() = Halide::Expr(vals());
+  }
+  else if (dims.size() == 1 && dims[0] > 0 && dims[0] <= 10) {
     Halide::Var var;
-    result(var) = Halide::Expr(vals(0));
+    Halide::Expr res = Halide::Expr(vals(0));
     for (int i = 1; i < dims[0]; ++i) {
-      result(var) =
-          Halide::select(var == i, Halide::Expr(vals(i)), result(var));
+      res = Halide::select(var == i, Halide::Expr(vals(i)), res);
     }
+    result(var) = res;
   } else if (
       dims.size() == 2 && dims[0] * dims[1] > 0 && dims[0] * dims[1] <= 16) {
     Halide::Var var1, var2;
-    result(var1, var2) = Halide::Expr(vals(0, 0));
+    Halide::Expr res = Halide::Expr(vals(0, 0));
     for (int i = 0; i < dims[0]; ++i) {
       for (int j = 0; j < dims[1]; ++j) {
-        result(var1, var2) = Halide::select(
-            var1 == i && var2 == j,
-            Halide::Expr(vals(i, j)),
-            result(var1, var2));
+        res = Halide::select(
+            var1 == i && var2 == j, Halide::Expr(vals(i, j)), res);
       }
     }
+    result(var1, var2) = res;
   } else {
     result(Halide::_) = vals(Halide::_);
   }
   return result;
 }
 
-#define BUILD_CONSTANT_EXPR(DataType, FieldName)                    \
+#define BUILD_CONSTANT_EXPR(DataType, FieldName, NodeName)          \
   Halide::Buffer<DataType> val(dims);                               \
   val.for_each_element([&](const int* halide_coords) {              \
     int onnx_index = 0;                                             \
@@ -169,9 +218,11 @@ Halide::Func EncodeBufferAsFunc(
       val(halide_coords) = *reinterpret_cast<const DataType*>(raw); \
     }                                                               \
   });                                                               \
-  result.rep = EncodeBufferAsFunc(val, dims);
+  result.rep = encode_buffer_as_func(val, dims, NodeName);
 
-Tensor BuildFromConstant(const onnx::TensorProto& value) {
+Tensor build_from_constant(
+    const onnx::TensorProto& value,
+    const std::string& name) {
   Tensor result;
 
   std::vector<int> dims;
@@ -191,34 +242,34 @@ Tensor BuildFromConstant(const onnx::TensorProto& value) {
 
   switch (value.data_type()) {
     case onnx::TensorProto_DataType_FLOAT: {
-      BUILD_CONSTANT_EXPR(float, float) break;
+      BUILD_CONSTANT_EXPR(float, float, name) break;
     }
     case onnx::TensorProto_DataType_DOUBLE: {
-      BUILD_CONSTANT_EXPR(double, double) break;
+      BUILD_CONSTANT_EXPR(double, double, name) break;
     }
     case onnx::TensorProto_DataType_INT32: {
-      BUILD_CONSTANT_EXPR(int32_t, int32) break;
+      BUILD_CONSTANT_EXPR(int32_t, int32, name) break;
     }
     case onnx::TensorProto_DataType_INT64: {
-      BUILD_CONSTANT_EXPR(int64_t, int64) break;
+      BUILD_CONSTANT_EXPR(int64_t, int64, name) break;
     }
     case onnx::TensorProto_DataType_UINT32: {
-      BUILD_CONSTANT_EXPR(uint32_t, uint64) break;
+      BUILD_CONSTANT_EXPR(uint32_t, uint64, name) break;
     }
     case onnx::TensorProto_DataType_UINT64: {
-      BUILD_CONSTANT_EXPR(uint64_t, uint64) break;
+      BUILD_CONSTANT_EXPR(uint64_t, uint64, name) break;
     }
     case onnx::TensorProto_DataType_INT8: {
-      BUILD_CONSTANT_EXPR(int8_t, int32) break;
+      BUILD_CONSTANT_EXPR(int8_t, int32, name) break;
     }
     case onnx::TensorProto_DataType_UINT8: {
-      BUILD_CONSTANT_EXPR(uint8_t, int32) break;
+      BUILD_CONSTANT_EXPR(uint8_t, int32, name) break;
     }
     case onnx::TensorProto_DataType_INT16: {
-      BUILD_CONSTANT_EXPR(int16_t, int32) break;
+      BUILD_CONSTANT_EXPR(int16_t, int32, name) break;
     }
     case onnx::TensorProto_DataType_UINT16: {
-      BUILD_CONSTANT_EXPR(uint16_t, int32) break;
+      BUILD_CONSTANT_EXPR(uint16_t, int32, name) break;
     }
     default:
       throw std::domain_error("Unsupported data type for constant");
@@ -227,7 +278,7 @@ Tensor BuildFromConstant(const onnx::TensorProto& value) {
 }
 #undef BUILD_CONSTANT_EXPR
 
-Node ConvertNullaryOpNode(const onnx::NodeProto& node) {
+Node convert_nullary_op_node(const onnx::NodeProto& node) {
   Node result;
 
   bool found_value = false;
@@ -236,7 +287,7 @@ Node ConvertNullaryOpNode(const onnx::NodeProto& node) {
       const onnx::TensorProto& value = attr.t();
       result.outputs.resize(1);
       Tensor& out = result.outputs[0];
-      out = BuildFromConstant(value);
+      out = build_from_constant(value, name_for_node(node, ""));
       found_value = true;
       break;
     }
@@ -249,7 +300,7 @@ Node ConvertNullaryOpNode(const onnx::NodeProto& node) {
   return result;
 }
 
-Node ConvertUnaryOpNode(
+Node convert_unary_op_node(
     const onnx::NodeProto& node,
     const std::vector<Tensor>& inputs) {
   assert(inputs.size() == 1);
@@ -262,7 +313,7 @@ Node ConvertUnaryOpNode(
   Tensor& out = result.outputs[0];
   out.shape = inputs[0].shape;
   out.type = inputs[0].type;
-  out.rep = FuncForNodeOutput(node, 0);
+  out.rep = func_for_node_output(node, 0);
 
   if (node.op_type() == "Abs") {
     out.rep(Halide::_) = Halide::abs(in.rep(Halide::_));
@@ -281,12 +332,12 @@ Node ConvertUnaryOpNode(
   } else if (node.op_type() == "Cast") {
     onnx::TensorProto::DataType output_type;
     out.rep(Halide::_) =
-        GenerateCastExpr(in.rep(Halide::_), node, &output_type);
+        generate_cast_expr(in.rep(Halide::_), node, &output_type);
     out.type = output_type;
   } else if (node.op_type() == "Ceil") {
     out.rep(Halide::_) = Halide::ceil(in.rep(Halide::_));
   } else if (node.op_type() == "Clip") {
-    out.rep(Halide::_) = GenerateClipExpr(in.rep(Halide::_), node);
+    out.rep(Halide::_) = generate_clip_expr(in.rep(Halide::_), node);
   } else if (node.op_type() == "Cos") {
     out.rep(Halide::_) = Halide::cos(in.rep(Halide::_));
   } else if (node.op_type() == "Cosh") {
@@ -313,7 +364,7 @@ Node ConvertUnaryOpNode(
   } else if (node.op_type() == "Relu") {
     out.rep(Halide::_) = Halide::max(in.rep(Halide::_), 0);
   } else if (node.op_type() == "Scale") {
-    out.rep(Halide::_) = GenerateScaleExpr(in.rep(Halide::_), node);
+    out.rep(Halide::_) = generate_scale_expr(in.rep(Halide::_), node);
   } else if (node.op_type() == "Sigmoid") {
     out.rep(Halide::_) = 1 / (1 + Halide::exp(-in.rep(Halide::_)));
   } else if (node.op_type() == "Sign") {
@@ -351,7 +402,7 @@ Node ConvertUnaryOpNode(
   return result;
 }
 
-Node ConvertBinaryOpNode(
+Node convert_binary_op_node(
     const onnx::NodeProto& node,
     const std::vector<Tensor>& inputs) {
   assert(inputs.size() == 2);
@@ -395,7 +446,7 @@ Node ConvertBinaryOpNode(
   Tensor& out = result.outputs[0];
   out.shape = out_shape;
 
-  out.rep = FuncForNodeOutput(node, 0);
+  out.rep = func_for_node_output(node, 0);
   bool boolean_output = false;
 
   if (node.op_type() == "Add" || node.op_type() == "Sum") {
@@ -444,7 +495,7 @@ Node ConvertBinaryOpNode(
   return result;
 }
 
-Node ConvertVariadicOpNode(
+Node convert_variadic_op_node(
     const onnx::NodeProto& node,
     const std::vector<Tensor>& inputs) {
   assert(!inputs.empty());
@@ -455,7 +506,7 @@ Node ConvertVariadicOpNode(
   Tensor& out = result.outputs[0];
   out.shape = inputs[0].shape;
   out.type = inputs[0].type;
-  out.rep = FuncForNodeOutput(node, 0);
+  out.rep = func_for_node_output(node, 0);
   out.rep(Halide::_) = inputs[0].rep(Halide::_);
 
   for (int i = 1; i < inputs.size(); ++i) {
@@ -482,7 +533,7 @@ Node ConvertVariadicOpNode(
   return result;
 }
 
-Node ConvertMetadataNode(
+Node convert_metadata_node(
     const onnx::NodeProto& node,
     const std::vector<Tensor>& inputs) {
   if (inputs.size() != 1) {
@@ -492,7 +543,7 @@ Node ConvertMetadataNode(
   Node result;
   result.inputs = inputs;
   result.outputs.resize(1);
-  result.outputs[0].rep = FuncForNodeOutput(node, 0);
+  result.outputs[0].rep = func_for_node_output(node, 0);
 
   std::vector<Halide::Expr> dims;
   Halide::Expr num_elements = 1;
@@ -503,9 +554,7 @@ Node ConvertMetadataNode(
   }
 
   if (node.op_type() == "Size") {
-    std::vector<Halide::Var> var(1);
-    result.outputs[0].rep(var) = Halide::cast<int64_t>(num_elements);
-    result.outputs[0].shape.push_back(1);
+    result.outputs[0].rep() = Halide::cast<int64_t>(num_elements);
   } else {
     std::vector<Halide::Var> var(1);
     result.outputs[0].rep(var) = Halide::cast<int64_t>(0);
@@ -518,7 +567,7 @@ Node ConvertMetadataNode(
   return result;
 }
 
-Node ConvertGemmNode(
+Node convert_gemm_node(
     const onnx::NodeProto& node,
     const std::vector<Tensor>& inputs,
     const std::string& device) {
@@ -555,11 +604,11 @@ Node ConvertGemmNode(
   Halide::Expr dim_k_from_a = transposeA ? A.shape[0] : A.shape[1];
   Halide::Expr dim_k_from_b = transposeB ? B.shape[1] : B.shape[0];
 
-  Halide::Expr dim_k = Halide::Internal::simplify(
-      Halide::require(dim_k_from_a == dim_k_from_b, dim_k_from_a));
+  result.requirements.push_back(dim_k_from_a == dim_k_from_b);
+  Halide::Expr dim_k = dim_k_from_a;
 
   Halide::Var i, j;
-  Halide::RDom k(0, dim_k, NameForNode(node, "_gemm_rdom"));
+  Halide::RDom k(0, dim_k, name_for_node(node, "_gemm_rdom"));
 
   // Check shapes
   result.outputs.resize(1);
@@ -567,7 +616,7 @@ Node ConvertGemmNode(
   out.type = A.type;
   out.shape.push_back(dim_i);
   out.shape.push_back(dim_j);
-  out.rep = FuncForNodeOutput(node, 0);
+  out.rep = func_for_node_output(node, 0);
 
   // To do: check that C != 0
   const Tensor& C = result.inputs[2];
@@ -675,7 +724,7 @@ Halide::Func GeneratePaddingExpr(
 }
 
 Halide::Func
-DirectConv(const Tensor& W, const Halide::Func& input, int rank, int groups) {
+direct_conv(const Tensor& W, const Halide::Func& input, int rank, int groups) {
   std::vector<std::pair<Halide::Expr, Halide::Expr>> extents;
   for (int i = 1; i < rank; ++i) {
     extents.emplace_back(0, W.shape[i]);
@@ -734,6 +783,9 @@ struct Filters<2, 3> {
                                           {0, 0.5, 0.5, 1}};
   static constexpr float AFilter[2][4] = {{1, 1, 1, 0}, {0, 1, -1, -1}};
 };
+constexpr float Filters<2, 3>::BFilter[4][4];
+constexpr float Filters<2, 3>::GFilter[3][4];
+constexpr float Filters<2, 3>::AFilter[2][4];
 
 template <>
 struct Filters<4, 3> {
@@ -763,22 +815,31 @@ struct Filters<4, 3> {
                                           {0, 1, 1, 4, 4, 0},
                                           {0, 1, -1, 8, -8, 1}};
 };
+constexpr float Filters<4, 3>::BFilter[6][6];
+constexpr float Filters<4, 3>::GFilter[3][6];
+constexpr float Filters<4, 3>::AFilter[4][6];
 
 template <int m, int r>
-Halide::Func WinogradConv(const Tensor& W, const Halide::Func& input) {
+Halide::Func winograd_conv(const Tensor& W, const Halide::Func& input) {
   // We only support the case of a 3x3 convolution at the moment. The notation
   // is derived from the one used in the Winograd paper.
-  const Halide::Func B = EncodeBufferAsFunc(
+  const Halide::Func B = encode_buffer_as_func(
       Halide::Buffer<float>(Filters<m, r>::GetBFilter(), m + r - 1, m + r - 1),
-      {m + r - 1, m + r - 1});
+      {m + r - 1, m + r - 1},
+      std::string("winograd_b_filter_") + std::to_string(m) + "_" +
+          std::to_string(r));
 
-  const Halide::Func G = EncodeBufferAsFunc(
+  const Halide::Func G = encode_buffer_as_func(
       Halide::Buffer<float>(Filters<m, r>::GetGFilter(), m + r - 1, r),
-      {m + r - 1, r});
+      {m + r - 1, r},
+      std::string("winograd_g_filter_") + std::to_string(m) + "_" +
+          std::to_string(r));
 
-  const Halide::Func A = EncodeBufferAsFunc(
+  const Halide::Func A = encode_buffer_as_func(
       Halide::Buffer<float>(Filters<m, r>::GetAFilter(), m + r - 1, m),
-      {m + r - 1, m});
+      {m + r - 1, m},
+      std::string("winograd_a_filter_") + std::to_string(m) + "_" +
+          std::to_string(r));
 
   Halide::Expr num_channels = W.shape[1];
   Halide::RDom dom1({{0, num_channels}}, input.name() + "_rdom1");
@@ -820,7 +881,7 @@ Halide::Func WinogradConv(const Tensor& W, const Halide::Func& input) {
   return winograd_conv;
 }
 
-Node ConvertConvNode(
+Node convert_conv_node(
     const onnx::NodeProto& node,
     const std::vector<Tensor>& inputs,
     const std::string& device) {
@@ -845,8 +906,8 @@ Node ConvertConvNode(
 
   std::string padding = "NOTSET";
   int groups = 1;
+  std::vector<int> kernel_shape;
   std::vector<int> dilations;
-  // std::vector<int> kernel_shape;
   std::vector<int> pads;
   std::vector<int> strides;
   for (const auto& attr : node.attribute()) {
@@ -858,11 +919,11 @@ Node ConvertConvNode(
       for (int axis : attr.ints()) {
         dilations.push_back(axis);
       }
-      // TODO: check that the kernel shape is compatible with the shape of W
-      /*} else if (attr.name() == "kernel_shape") {
-        for (int axis : attr.ints()) {
-          kernel_shape.push_back(axis);
-        }*/
+    } else if (attr.name() == "kernel_shape") {
+      for (int axis : attr.ints()) {
+        kernel_shape.push_back(axis);
+      }
+
     } else if (attr.name() == "pads") {
       for (int axis : attr.ints()) {
         pads.push_back(axis);
@@ -901,8 +962,17 @@ Node ConvertConvNode(
   for (int i = 2; i < rank; ++i) {
     Halide::Expr dim = X.shape[i] + pads[i - 2] + pads[rank + i - 4];
     dim -= (W.shape[i] - 1);
-    dim = DivUp(dim, strides[i - 2]);
+    dim = div_up(dim, strides[i - 2]);
     result.outputs[0].shape[i] = Halide::Internal::simplify(dim);
+  }
+
+  // Validate the kernel shape if specified
+  if (!kernel_shape.empty() && kernel_shape.size() + 2 != rank) {
+    throw std::invalid_argument(
+        "Invalid kernel shape specified for node" + node.name());
+  }
+  for (int i = 0; i < kernel_shape.size(); ++i) {
+    result.requirements.push_back(W.shape[i + 2] == kernel_shape[i]);
   }
 
   // Check if winograd can be used
@@ -912,15 +982,16 @@ Node ConvertConvNode(
   if (groups == 1 && rank == 4) {
     bool supported_shape = true;
     for (int i = 2; i < rank; ++i) {
-      const int64_t* dim = Halide::Internal::as_const_int(
-          Halide::Internal::simplify(W.shape[i]));
+      const Halide::Expr w_shape_expr = Halide::Internal::simplify(W.shape[i]);
+      const int64_t* dim = Halide::Internal::as_const_int(w_shape_expr);
       if (!dim || *dim != 3) {
         supported_shape = false;
         break;
       }
 
-      dim = Halide::Internal::as_const_int(
-          Halide::Internal::simplify(result.outputs[0].shape[i]));
+      const Halide::Expr out_shape_expr =
+          Halide::Internal::simplify(result.outputs[0].shape[i]);
+      dim = Halide::Internal::as_const_int(out_shape_expr);
 
       if (!dim || *dim % 2 != 0) {
         needs_extra_padding = true;
@@ -947,12 +1018,12 @@ Node ConvertConvNode(
   Halide::Func basic_conv(X.rep.name() + "_conv");
   if (can_use_winograd) {
     if (m[0] == 4 && m[1] == 4) {
-      basic_conv = WinogradConv<4, 3>(W, padded_input);
+      basic_conv = winograd_conv<4, 3>(W, padded_input);
     } else {
-      basic_conv = WinogradConv<2, 3>(W, padded_input);
+      basic_conv = winograd_conv<2, 3>(W, padded_input);
     }
   } else {
-    basic_conv = DirectConv(W, padded_input, rank, groups);
+    basic_conv = direct_conv(W, padded_input, rank, groups);
   }
 
   // Apply the strides if needed
@@ -977,7 +1048,7 @@ Node ConvertConvNode(
     conv_no_bias = basic_conv;
   }
 
-  result.outputs[0].rep = FuncForNodeOutput(node, 0);
+  result.outputs[0].rep = func_for_node_output(node, 0);
 
   // Return the result after applying the bias if any.
   if (inputs.size() == 3) {
@@ -1006,7 +1077,7 @@ Node ConvertConvNode(
   return result;
 }
 
-Node ConvertReductionNode(
+Node convert_reduction_node(
     const onnx::NodeProto& node,
     const std::vector<Tensor>& inputs) {
   std::set<int> reduction_axes;
@@ -1033,7 +1104,7 @@ Node ConvertReductionNode(
   Node result;
   result.inputs = inputs;
   result.outputs.resize(1);
-  result.outputs[0].rep = FuncForNodeOutput(node, 0);
+  result.outputs[0].rep = func_for_node_output(node, 0);
   std::vector<Halide::Expr> input_vars;
   std::vector<Halide::Expr> output_vars;
 
@@ -1049,7 +1120,7 @@ Node ConvertReductionNode(
     }
   }
 
-  Halide::RDom rdom(extents, NameForNode(node, "_rdom"));
+  Halide::RDom rdom(extents, name_for_node(node, "_rdom"));
   int current_reduction_dim = 0;
   for (int i = 0; i < input_shape.size(); ++i) {
     if (reduction_axes.find(i) != reduction_axes.end()) {
@@ -1068,7 +1139,7 @@ Node ConvertReductionNode(
       output_shape.push_back(input_shape[i]);
     }
   }
-  std::string reduction_name = NameForNode(node, "_reduction");
+  std::string reduction_name = name_for_node(node, "_reduction");
   if (node.op_type() == "ReduceSum") {
     result.outputs[0].rep(output_vars) =
         Halide::sum(result.inputs[0].rep(input_vars), reduction_name);
@@ -1108,7 +1179,7 @@ Node ConvertReductionNode(
 
   return result;
 }
-Node ConvertBatchNormNode(
+Node convert_batchnorm_node(
     const onnx::NodeProto& node,
     const std::vector<Tensor>& inputs) {
   bool spatial = true;
@@ -1156,7 +1227,7 @@ Node ConvertBatchNormNode(
   result.outputs.resize(node.output_size());
   result.outputs[0].shape = inputs[0].shape;
   result.outputs[0].type = inputs[0].type;
-  result.outputs[0].rep = FuncForNodeOutput(node, 0);
+  result.outputs[0].rep = func_for_node_output(node, 0);
 
   std::vector<Halide::Var> vars(rank);
   Halide::Var param_var = vars[1];
@@ -1170,7 +1241,7 @@ Node ConvertBatchNormNode(
   return result;
 }
 
-Node ConvertFlattenNode(
+Node convert_flatten_node(
     const onnx::NodeProto& node,
     const std::vector<Tensor>& inputs) {
   if (inputs.size() != 1) {
@@ -1211,7 +1282,7 @@ Node ConvertFlattenNode(
   Node result;
   result.inputs = inputs;
   result.outputs.resize(node.output_size());
-  result.outputs[0].rep = FuncForNodeOutput(node, 0);
+  result.outputs[0].rep = func_for_node_output(node, 0);
   result.outputs[0].type = inputs[0].type;
   result.outputs[0].shape.push_back(outer_size);
   result.outputs[0].shape.push_back(inner_size);
@@ -1236,7 +1307,7 @@ Node ConvertFlattenNode(
   return result;
 }
 
-Node ConvertTileNode(
+Node convert_tile_node(
     const onnx::NodeProto& node,
     const std::vector<Tensor>& inputs) {
   if (inputs.size() != 2) {
@@ -1253,7 +1324,7 @@ Node ConvertTileNode(
   Node result;
   result.inputs = inputs;
   result.outputs.resize(1);
-  result.outputs[0].rep = FuncForNodeOutput(node, 0);
+  result.outputs[0].rep = func_for_node_output(node, 0);
   result.outputs[0].type = inputs[0].type;
   std::vector<Halide::Expr>& output_shape = result.outputs[0].shape;
 
@@ -1267,7 +1338,7 @@ Node ConvertTileNode(
     }
   } catch (...) {
     for (int i = 0; i < rank; ++i) {
-      output_shape.push_back(Halide::Var());
+      output_shape.push_back(input.shape[i] * inline_func_call(repeats.rep(i)));
     }
   }
 
@@ -1284,7 +1355,7 @@ Node ConvertTileNode(
   return result;
 }
 
-Node ConvertEluNode(
+Node convert_elu_node(
     const onnx::NodeProto& node,
     const std::vector<Tensor>& inputs) {
   auto default_alpha = [&node]() -> float {
@@ -1320,7 +1391,7 @@ Node ConvertEluNode(
   result.outputs.resize(node.output_size());
   result.outputs[0].shape = inputs[0].shape;
   result.outputs[0].type = inputs[0].type;
-  result.outputs[0].rep = FuncForNodeOutput(node, 0);
+  result.outputs[0].rep = func_for_node_output(node, 0);
   const Tensor& X = inputs[0];
 
   if (node.op_type() == "Elu") {
@@ -1336,13 +1407,16 @@ Node ConvertEluNode(
   } else if (node.op_type() == "LeakyRelu") {
     result.outputs[0].rep(Halide::_) = Halide::select(
         X.rep(Halide::_) >= 0.0f, X.rep(Halide::_), alpha * X.rep(Halide::_));
+  } else if (node.op_type() == "ThresholdedRelu") {
+    result.outputs[0].rep(Halide::_) =
+        Halide::select(X.rep(Halide::_) > alpha, X.rep(Halide::_), 0);
   } else {
     throw std::domain_error("Invalid elu op " + node.op_type());
   }
   return result;
 }
 
-Node ConvertDropoutNode(
+Node convert_dropout_node(
     const onnx::NodeProto& node,
     const std::vector<Tensor>& inputs) {
   float ratio = 0.5f;
@@ -1377,12 +1451,12 @@ Node ConvertDropoutNode(
 
     result.outputs[0].shape = inputs[0].shape;
     result.outputs[0].type = inputs[0].type;
-    result.outputs[0].rep = FuncForNodeOutput(node, 0);
+    result.outputs[0].rep = func_for_node_output(node, 0);
     result.outputs[0].rep(vars) = inputs[0].rep(vars) * filter(vars) / ratio;
 
     result.outputs[1].shape = inputs[0].shape;
     result.outputs[1].type = inputs[0].type;
-    result.outputs[1].rep = FuncForNodeOutput(node, 1);
+    result.outputs[1].rep = func_for_node_output(node, 1);
     result.outputs[1].rep(vars) = filter(vars);
   } else {
     throw std::domain_error(
@@ -1391,7 +1465,7 @@ Node ConvertDropoutNode(
   return result;
 }
 
-Node ConvertPoolingNode(
+Node convert_pooling_node(
     const onnx::NodeProto& node,
     const std::vector<Tensor>& inputs) {
   if (node.output_size() != 1) {
@@ -1477,7 +1551,7 @@ Node ConvertPoolingNode(
     extents.emplace_back(0, kernel_shape[i]);
   }
 
-  Halide::RDom rdom(extents, NameForNode(node, "_pool_rdom"));
+  Halide::RDom rdom(extents, name_for_node(node, "_pool_rdom"));
   std::vector<Halide::Var> out_vars(rank);
   std::vector<Halide::Expr> x_vars(rank);
   x_vars[0] = out_vars[0];
@@ -1489,7 +1563,7 @@ Node ConvertPoolingNode(
   Halide::Func basic_pool;
   if (node.op_type() == "MaxPool" || node.op_type() == "GlobalMaxPool") {
     basic_pool(out_vars) =
-        Halide::maximum(padded_input(x_vars), NameForNode(node, "_maximum"));
+        Halide::maximum(padded_input(x_vars), name_for_node(node, "_maximum"));
   } else if (
       node.op_type() == "AveragePool" ||
       node.op_type() == "GlobalAveragePool") {
@@ -1498,7 +1572,7 @@ Node ConvertPoolingNode(
       num_pooling_vals *= kernel_dim;
     }
     basic_pool(out_vars) =
-        Halide::sum(padded_input(x_vars), NameForNode(node, "_sum")) /
+        Halide::sum(padded_input(x_vars), name_for_node(node, "_sum")) /
         num_pooling_vals;
 
   } else {
@@ -1533,22 +1607,22 @@ Node ConvertPoolingNode(
   result.inputs = inputs;
   result.outputs.resize(1);
   result.outputs[0].type = inputs[0].type;
-  result.outputs[0].rep = FuncForNodeOutput(node, 0);
-  result.outputs[0].rep = pool;
+  result.outputs[0].rep = func_for_node_output(node, 0);
+  result.outputs[0].rep(Halide::_) = pool(Halide::_);
 
   // Determine the shape of the output
   result.outputs[0].shape = inputs[0].shape;
   for (int i = 2; i < rank; ++i) {
     Halide::Expr dim = inputs[0].shape[i] + pads[i - 2] + pads[rank + i - 4];
     dim -= (kernel_shape[i - 2] - 1);
-    dim = DivUp(dim, strides[i - 2]);
+    dim = div_up(dim, strides[i - 2]);
     result.outputs[0].shape[i] = dim;
   }
 
   return result;
 }
 
-Node ConvertSoftmaxNode(
+Node convert_softmax_node(
     const onnx::NodeProto& node,
     const std::vector<Tensor>& inputs) {
   int axis = 1;
@@ -1577,14 +1651,14 @@ Node ConvertSoftmaxNode(
   result.outputs.resize(1);
   result.outputs[0].shape = inputs[0].shape;
   result.outputs[0].type = inputs[0].type;
-  result.outputs[0].rep = FuncForNodeOutput(node, 0);
+  result.outputs[0].rep = func_for_node_output(node, 0);
 
   std::vector<std::pair<Halide::Expr, Halide::Expr>> extents;
   for (int i = axis; i < rank; ++i) {
     extents.emplace_back(0, inputs[0].shape[i]);
   }
   std::vector<Halide::Var> indices(rank);
-  Halide::RDom rdom(extents, NameForNode(node, "_softmax_rdom"));
+  Halide::RDom rdom(extents, name_for_node(node, "_softmax_rdom"));
   std::vector<Halide::Expr> denom_vars;
   for (int i = 0; i < axis; ++i) {
     denom_vars.push_back(indices[i]);
@@ -1605,7 +1679,7 @@ Node ConvertSoftmaxNode(
   return result;
 }
 
-Node ConvertConcatNode(
+Node convert_concat_node(
     const onnx::NodeProto& node,
     const std::vector<Tensor>& inputs) {
   if (inputs.size() < 1) {
@@ -1625,7 +1699,7 @@ Node ConvertConcatNode(
   Node result;
   result.inputs = inputs;
   result.outputs.resize(1);
-  result.outputs[0].rep = FuncForNodeOutput(node, 0);
+  result.outputs[0].rep = func_for_node_output(node, 0);
   std::vector<Halide::Var> tgt_indices;
   tgt_indices.resize(num_dims);
   std::vector<Halide::Expr> src1_indices;
@@ -1652,7 +1726,7 @@ Node ConvertConcatNode(
         inputs[i].rep(src2_indices));
   }
 
-  result.outputs[0].rep = concat_funcs.back();
+  result.outputs[0].rep(tgt_indices) = concat_funcs.back()(tgt_indices);
   result.outputs[0].type = inputs[0].type;
   result.outputs[0].shape = inputs[0].shape;
   const Halide::Expr concatenated_size =
@@ -1661,7 +1735,7 @@ Node ConvertConcatNode(
   return result;
 }
 
-Node ConvertSplitNode(
+Node convert_split_node(
     const onnx::NodeProto& node,
     const std::vector<Tensor>& inputs) {
   if (inputs.size() != 1) {
@@ -1733,7 +1807,7 @@ Node ConvertSplitNode(
     result.outputs[i].shape = inputs[0].shape;
     std::vector<Halide::Var> out_vars(rank);
     std::vector<Halide::Expr> in_vars(rank);
-    result.outputs[i].rep = FuncForNodeOutput(node, i);
+    result.outputs[i].rep = func_for_node_output(node, i);
     for (int dim = 0; dim < rank; ++dim) {
       if (dim == axis) {
         result.outputs[i].shape[dim] = splits[i];
@@ -1747,7 +1821,7 @@ Node ConvertSplitNode(
   return result;
 }
 
-Node ConvertSliceNode(
+Node convert_slice_node(
     const onnx::NodeProto& node,
     const std::vector<Tensor>& inputs) {
   if (inputs.size() != 1) {
@@ -1811,7 +1885,7 @@ Node ConvertSliceNode(
 
   result.inputs = inputs;
   result.outputs.resize(1);
-  result.outputs[0].rep = FuncForNodeOutput(node, 0);
+  result.outputs[0].rep = func_for_node_output(node, 0);
   std::vector<Halide::Var> tgt_indices;
   tgt_indices.resize(num_dims);
 
@@ -1843,7 +1917,7 @@ Node ConvertSliceNode(
   return result;
 }
 
-Node ConvertPadNode(
+Node convert_pad_node(
     const onnx::NodeProto& node,
     const std::vector<Tensor>& inputs) {
   if (inputs.size() != 1) {
@@ -1885,7 +1959,7 @@ Node ConvertPadNode(
   Node result;
   result.inputs = inputs;
   result.outputs.resize(1);
-  result.outputs[0].rep = FuncForNodeOutput(node, 0);
+  result.outputs[0].rep = func_for_node_output(node, 0);
   result.outputs[0].rep = GeneratePaddingExpr(
       inputs[0].rep, inputs[0].shape, value, pads, padding_mode);
 
@@ -1902,7 +1976,7 @@ Node ConvertPadNode(
   return result;
 }
 
-Node ConvertTransposeNode(
+Node convert_transpose_node(
     const onnx::NodeProto& node,
     const std::vector<Tensor>& inputs) {
   if (inputs.size() != 1) {
@@ -1949,7 +2023,7 @@ Node ConvertTransposeNode(
   for (int i = 0; i < rank; ++i) {
     output_vars.push_back(input_vars[permutation[i]]);
   }
-  result.outputs[0].rep = FuncForNodeOutput(node, 0);
+  result.outputs[0].rep = func_for_node_output(node, 0);
   result.outputs[0].rep(output_vars) = input.rep(input_vars);
 
   result.outputs[0].type = input.type;
@@ -1964,7 +2038,7 @@ Node ConvertTransposeNode(
   return result;
 }
 
-Node ConvertUnsqueezeNode(
+Node convert_unsqueeze_node(
     const onnx::NodeProto& node,
     const std::vector<Tensor>& inputs) {
   if (inputs.size() != 1) {
@@ -2021,12 +2095,12 @@ Node ConvertUnsqueezeNode(
     output_shape.push_back(1);
   }
   result.outputs[0].type = inputs[0].type;
-  result.outputs[0].rep = FuncForNodeOutput(node, 0);
+  result.outputs[0].rep = func_for_node_output(node, 0);
   result.outputs[0].rep(out_vars) = inputs[0].rep(in_vars);
   return result;
 }
 
-Node ConvertSqueezeNode(
+Node convert_squeeze_node(
     const onnx::NodeProto& node,
     const std::vector<Tensor>& inputs) {
   if (inputs.size() != 1) {
@@ -2053,8 +2127,8 @@ Node ConvertSqueezeNode(
   }
   if (implicit) {
     for (int i = 0; i < rank; ++i) {
-      const int64_t* dim = Halide::Internal::as_const_int(
-          Halide::Internal::simplify(input.shape[i]));
+      const Halide::Expr dim_expr = Halide::Internal::simplify(input.shape[i]);
+      const int64_t* dim = Halide::Internal::as_const_int(dim_expr);
       if (!dim) {
         throw std::invalid_argument(
             "Unknown dimension for input dim " + std::to_string(i) +
@@ -2091,13 +2165,13 @@ Node ConvertSqueezeNode(
     }
   }
   result.outputs[0].type = input.type;
-  result.outputs[0].rep = FuncForNodeOutput(node, 0);
+  result.outputs[0].rep = func_for_node_output(node, 0);
   result.outputs[0].rep(output_vars) = input.rep(input_vars);
 
   return result;
 }
 
-Node ConvertConstantFillNode(
+Node convert_constant_fill_node(
     const onnx::NodeProto& node,
     const std::vector<Tensor>& inputs) {
   if (inputs.size() != 0) {
@@ -2107,7 +2181,7 @@ Node ConvertConstantFillNode(
 
   Node result;
   result.outputs.resize(1);
-  result.outputs[0].rep = FuncForNodeOutput(node, 0);
+  result.outputs[0].rep = func_for_node_output(node, 0);
   std::vector<int> shape;
   Halide::Expr value = 0.0f;
   int dtype = 1;
@@ -2166,7 +2240,7 @@ Node ConvertConstantFillNode(
   return result;
 }
 
-Node ConvertWhereNode(
+Node convert_where_node(
     const onnx::NodeProto& node,
     const std::vector<Tensor>& inputs) {
   if (inputs.size() != 3) {
@@ -2184,6 +2258,23 @@ Node ConvertWhereNode(
   const int rank = std::max(
       std::max(input_1.shape.size(), input_2.shape.size()), cond.shape.size());
 
+  std::vector<Halide::Expr> out_shape(rank);
+  for (int i = 1; i <= rank; ++i) {
+    out_shape[rank - i] = 1;
+    if (i <= cond.shape.size()) {
+      out_shape[rank - i] =
+          Halide::max(out_shape[rank - i], cond.shape[cond.shape.size() - i]);
+    }
+    if (i <= input_1.shape.size()) {
+      out_shape[rank - i] = Halide::max(
+          out_shape[rank - i], input_1.shape[input_1.shape.size() - i]);
+    }
+    if (i <= input_2.shape.size()) {
+      out_shape[rank - i] = Halide::max(
+          out_shape[rank - i], input_2.shape[input_2.shape.size() - i]);
+    }
+  }
+
   std::vector<Halide::Var> out_vars(rank);
 
   // Broadcasting is right -> left.
@@ -2198,7 +2289,8 @@ Node ConvertWhereNode(
     }
     return in_expr;
   };
-  const std::vector<Halide::Expr> cond_expr = broadcast_vars(out_vars, cond.shape);
+  const std::vector<Halide::Expr> cond_expr =
+      broadcast_vars(out_vars, cond.shape);
   const std::vector<Halide::Expr> input_1_expr =
       broadcast_vars(out_vars, input_1.shape);
   const std::vector<Halide::Expr> input_2_expr =
@@ -2206,16 +2298,18 @@ Node ConvertWhereNode(
 
   Node result;
   result.outputs.resize(1);
-  result.outputs[0].shape = input_1.shape;
+  result.outputs[0].shape = out_shape;
   result.outputs[0].type = input_1.type;
-  result.outputs[0].rep = FuncForNodeOutput(node, 0);
+  result.outputs[0].rep = func_for_node_output(node, 0);
 
   result.outputs[0].rep(out_vars) = Halide::select(
-      cond.rep(cond_expr), input_1.rep(input_1_expr), input_2.rep(input_2_expr));
+      cond.rep(cond_expr) != 0,
+      input_1.rep(input_1_expr),
+      input_2.rep(input_2_expr));
   return result;
 }
 
-Node ConvertGatherNode(
+Node convert_gather_node(
     const onnx::NodeProto& node,
     const std::vector<Tensor>& inputs) {
   if (inputs.size() != 2) {
@@ -2269,7 +2363,7 @@ Node ConvertGatherNode(
       }
       // Buffers are 32-bit indexed.
       input_vars[axis] = clamp(
-          Halide::cast<int>(indices.rep(indices_vars)),
+          Halide::cast<int>(inline_func_call(indices.rep(indices_vars))),
           0,
           input.shape[axis] - 1);
     } else {
@@ -2281,15 +2375,75 @@ Node ConvertGatherNode(
   result.outputs.resize(1);
   result.outputs[0].type = input.type;
   result.outputs[0].shape = output_shape;
-  result.outputs[0].rep(output_vars) = require(
-      indices.rep(indices_vars) < INT_MAX,
-      input.rep(input_vars),
-      "Indices for gather node ",
-      node.name(), " must be INT_MAX at most");
+  result.outputs[0].rep = func_for_node_output(node, 0);
+  result.outputs[0].rep(output_vars) = input.rep(input_vars);
+  result.requirements.push_back(indices.rep(indices_vars) < INT_MAX);
   return result;
 }
 
-Node ConvertReshapeNode(
+Node convert_expand_node(
+    const onnx::NodeProto& node,
+    const std::vector<Tensor>& inputs) {
+  if (inputs.size() != 2) {
+    throw std::invalid_argument(
+        "Expected exactly two inputs for expand node " + node.name());
+  }
+  if (node.output_size() != 1) {
+    throw std::invalid_argument(
+        "Expected exactly one output for expand node " + node.name());
+  }
+  const Tensor& input = inputs[0];
+  const Tensor& expand_shape = inputs[1];
+  const int in_rank = input.shape.size();
+  const Halide::Expr shape_expr =
+      Halide::Internal::simplify(expand_shape.shape[0]);
+  const int64_t* shape_dim_0 = Halide::Internal::as_const_int(shape_expr);
+  if (!shape_dim_0) {
+    throw std::invalid_argument(
+        "Can't infer rank statically for expand node " + node.name());
+  }
+  const int shape_rank = *shape_dim_0;
+  const int rank = std::max(in_rank, shape_rank);
+
+  Node result;
+  result.inputs = inputs;
+  result.outputs.resize(1);
+
+  std::vector<Halide::Var> out_vars(rank);
+  std::vector<Halide::Expr> in_exprs(in_rank);
+  std::vector<Halide::Expr> output_shape(rank);
+
+  // Broadcasting rule.
+  for (int i = 1; i <= rank; ++i) {
+    if (in_rank - i >= 0) {
+      in_exprs[in_rank - i] =
+          Halide::select(input.shape[in_rank - i] == 1, 0, out_vars[rank - i]);
+      if (shape_rank - i >= 0) {
+        Halide::Expr bcast_dim =
+            inline_func_call(expand_shape.rep(shape_rank - i));
+        result.requirements.push_back(
+            input.shape[in_rank - i] == bcast_dim ||
+            input.shape[in_rank - i] == 1 || bcast_dim == 1);
+        output_shape[rank - i] =
+            Halide::max(input.shape[in_rank - i], bcast_dim);
+      } else {
+        output_shape[rank - i] = input.shape[in_rank - i];
+      }
+    } else {
+      Halide::Expr bcast_dim =
+          inline_func_call(expand_shape.rep(shape_rank - i));
+      output_shape[rank - i] = bcast_dim;
+    }
+  }
+
+  result.outputs[0].type = inputs[0].type;
+  result.outputs[0].shape = output_shape;
+  result.outputs[0].rep = func_for_node_output(node, 0);
+  result.outputs[0].rep(out_vars) = input.rep(in_exprs);
+  return result;
+}
+
+Node convert_reshape_node(
     const onnx::NodeProto& node,
     const std::vector<Tensor>& inputs) {
   if (inputs.size() != 2) {
@@ -2308,8 +2462,9 @@ Node ConvertReshapeNode(
   if (new_shape.shape.size() != 1) {
     throw std::invalid_argument("invalid shape");
   }
-  const int64_t* num_dims = Halide::Internal::as_const_int(
-      Halide::Internal::simplify(new_shape.shape[0]));
+  const Halide::Expr shape_expr =
+      Halide::Internal::simplify(new_shape.shape[0]);
+  const int64_t* num_dims = Halide::Internal::as_const_int(shape_expr);
   if (!num_dims) {
     throw std::domain_error(
         "Couldn't statically infer the rank of the output of " + node.name());
@@ -2334,7 +2489,7 @@ Node ConvertReshapeNode(
       int dim = realized_shape(i);
       if (dim == -1) {
         unknown_dim = i;
-        output_shape.push_back(Halide::Var());
+        output_shape.push_back(Halide::Expr());
       } else {
         output_shape.push_back(dim);
         known_size *= dim;
@@ -2357,15 +2512,14 @@ Node ConvertReshapeNode(
     output_shape.resize(output_rank);
     Halide::Expr known_size = 1;
     for (int i = 0; i < output_rank; ++i) {
-      known_size *= Halide::cast<int>(new_shape.rep(i));
+      known_size *= Halide::cast<int>(inline_func_call(new_shape.rep(i)));
     }
     Halide::Expr unknown_dim_if_any = num_elems / Halide::abs(known_size);
 
     for (int i = 0; i < output_rank; ++i) {
-      output_shape[i] = Halide::select(
-          new_shape.rep(i) == -1,
-          unknown_dim_if_any,
-          Halide::cast<int>(new_shape.rep(i)));
+      Halide::Expr shp = inline_func_call(new_shape.rep(i));
+      output_shape[i] =
+          Halide::select(shp == -1, unknown_dim_if_any, Halide::cast<int>(shp));
     }
   }
 
@@ -2389,7 +2543,7 @@ Node ConvertReshapeNode(
     coeff_index = (coeff_index - coord) / input_shape[i];
   }
 
-  result.outputs[0].rep = FuncForNodeOutput(node, 0);
+  result.outputs[0].rep = func_for_node_output(node, 0);
   result.outputs[0].rep(output_coordinates) = input.rep(input_coordinates);
 
   return result;
@@ -2421,7 +2575,7 @@ Node ConvertOneHotNode(
   Node result;
   result.inputs = inputs;
   result.outputs.resize(1);
-  result.outputs[0].rep = FuncForNodeOutput(node, 0);
+  result.outputs[0].rep = func_for_node_output(node, 0);
 
   std::vector<Halide::Var> out_vars(rank + 1);
   std::vector<Halide::Var> in_vars(rank);
@@ -2450,7 +2604,7 @@ Node ConvertOneHotNode(
   return result;
 }
 
-Node ConvertLSTMNode(
+Node convert_lstm_node(
     const onnx::NodeProto& node,
     const std::vector<Tensor>& inputs,
     const std::string& device) {
@@ -2483,8 +2637,8 @@ Node ConvertLSTMNode(
   if (rank != 3) {
     throw std::domain_error("Invalid rank");
   }
-  const int64_t* dim = Halide::Internal::as_const_int(
-      Halide::Internal::simplify(inputs[0].shape[0]));
+  const Halide::Expr dim_expr = Halide::Internal::simplify(inputs[0].shape[0]);
+  const int64_t* dim = Halide::Internal::as_const_int(dim_expr);
   if (!dim) {
     throw std::domain_error("Unknown number of timesteps");
   }
@@ -2852,10 +3006,10 @@ Node ConvertLSTMNode(
     reps[input_name] = t;
   }
 
-  ConvertSubgraph(lstm_graph, device, reps);
+  Node result;
+  convert_subgraph(lstm_graph, device, reps, result.requirements);
 
   // extract outputs from reps;
-  Node result;
   result.inputs = inputs;
   result.outputs.resize(node.output_size());
   for (int i = 0; i < node.output_size(); ++i) {
@@ -2867,99 +3021,124 @@ Node ConvertLSTMNode(
   return result;
 }
 
-Node ConvertNode(
+Node convert_node(
     const onnx::NodeProto& node,
     const std::vector<Tensor>& inputs,
     const std::string& device) {
+  // Handle ATen ops whenever possible by converting them to native ONNX ops.
+  if (node.op_type() == "ATen") {
+    std::string actual_op;
+    for (const auto& attr : node.attribute()) {
+      if (attr.name() == "operator") {
+        actual_op = attr.s();
+        break;
+      }
+    }
+    onnx::NodeProto actual_node = node;
+    if (actual_op == "ceil") {
+      actual_node.set_op_type("Ceil");
+    } else if (actual_op == "floor") {
+      actual_node.set_op_type("Floor");
+    } else if (actual_op == "where") {
+      actual_node.set_op_type("Where");
+    } else {
+      throw std::domain_error(
+          "Unsupported ATen op type " + actual_op + " for node " + node.name());
+    }
+    return convert_node(actual_node, inputs, device);
+  }
   // Handle meta ops
   // TODO: add support for RNN and GRU
   if (node.op_type() == "LSTM") {
-    return ConvertLSTMNode(node, inputs, device);
+    return convert_lstm_node(node, inputs, device);
   }
   // Handle metadata operations
   if (node.op_type() == "Shape" || node.op_type() == "Size") {
-    return ConvertMetadataNode(node, inputs);
+    return convert_metadata_node(node, inputs);
   }
   // Start with nodes that require special handling.
   if (node.op_type() == "Gemm") {
-    return ConvertGemmNode(node, inputs, device);
+    return convert_gemm_node(node, inputs, device);
   }
   if (node.op_type() == "Conv") {
-    return ConvertConvNode(node, inputs, device);
+    return convert_conv_node(node, inputs, device);
   }
   if (node.op_type().find("Reduce") == 0) {
-    return ConvertReductionNode(node, inputs);
+    return convert_reduction_node(node, inputs);
   }
   if (node.op_type() == "BatchNormalization") {
-    return ConvertBatchNormNode(node, inputs);
+    return convert_batchnorm_node(node, inputs);
   }
   if (node.op_type() == "Dropout") {
-    return ConvertDropoutNode(node, inputs);
+    return convert_dropout_node(node, inputs);
   }
   if (node.op_type().length() >= 6 &&
       node.op_type().find("Pool") == node.op_type().length() - 4) {
-    return ConvertPoolingNode(node, inputs);
+    return convert_pooling_node(node, inputs);
   }
   if (node.op_type() == "Softmax" || node.op_type() == "LogSoftmax") {
-    return ConvertSoftmaxNode(node, inputs);
+    return convert_softmax_node(node, inputs);
   }
   if (node.op_type() == "Concat") {
-    return ConvertConcatNode(node, inputs);
+    return convert_concat_node(node, inputs);
   }
   if (node.op_type() == "Slice") {
-    return ConvertSliceNode(node, inputs);
+    return convert_slice_node(node, inputs);
   }
   if (node.op_type() == "Split") {
-    return ConvertSplitNode(node, inputs);
+    return convert_split_node(node, inputs);
   }
   if (node.op_type() == "Pad") {
-    return ConvertPadNode(node, inputs);
+    return convert_pad_node(node, inputs);
   }
   if (node.op_type() == "Transpose") {
-    return ConvertTransposeNode(node, inputs);
+    return convert_transpose_node(node, inputs);
   }
   if (node.op_type() == "Squeeze") {
-    return ConvertSqueezeNode(node, inputs);
+    return convert_squeeze_node(node, inputs);
   }
   if (node.op_type() == "Unsqueeze") {
-    return ConvertUnsqueezeNode(node, inputs);
+    return convert_unsqueeze_node(node, inputs);
   }
   if (node.op_type() == "Reshape") {
-    return ConvertReshapeNode(node, inputs);
+    return convert_reshape_node(node, inputs);
   }
   if (node.op_type() == "OneHot") {
     return ConvertOneHotNode(node, inputs);
   }
   if (node.op_type() == "Flatten") {
-    return ConvertFlattenNode(node, inputs);
+    return convert_flatten_node(node, inputs);
   }
   if (node.op_type() == "Tile") {
-    return ConvertTileNode(node, inputs);
+    return convert_tile_node(node, inputs);
   }
   if (node.op_type() == "ConstantFill") {
-    return ConvertConstantFillNode(node, inputs);
+    return convert_constant_fill_node(node, inputs);
   }
   if (node.op_type() == "Where") {
-    return ConvertWhereNode(node, inputs);
+    return convert_where_node(node, inputs);
   }
   if (node.op_type() == "Gather") {
-    return ConvertGatherNode(node, inputs);
+    return convert_gather_node(node, inputs);
+  }
+  if (node.op_type() == "Expand") {
+    return convert_expand_node(node, inputs);
   }
 
   // Handle exponential linear units.
   if (node.op_type() == "Elu" || node.op_type() == "Selu" ||
-      node.op_type() == "LeakyRelu") {
-    return ConvertEluNode(node, inputs);
+      node.op_type() == "LeakyRelu" || node.op_type() == "ThresholdedRelu") {
+    return convert_elu_node(node, inputs);
   }
   // Handle coefficient-wise operators.
   if (node.input_size() == 0) {
-    return ConvertNullaryOpNode(node);
+    return convert_nullary_op_node(node);
   } else if (node.input_size() == 1 && node.output_size() == 1) {
-    return ConvertUnaryOpNode(node, inputs);
+    return convert_unary_op_node(node, inputs);
   } else if (node.input_size() == 2 && node.output_size() == 1) {
-    return ConvertBinaryOpNode(node, inputs);
+    return convert_binary_op_node(node, inputs);
   } else if (node.input_size() > 2 && node.output_size() == 1) {
-    return ConvertVariadicOpNode(node, inputs);
+    return convert_variadic_op_node(node, inputs);
   }
 
   throw std::domain_error("Unsupported op type " + node.op_type());
@@ -3014,11 +3193,13 @@ Halide::ImageParam EncodeAsImageParam(
       throw std::domain_error("unexpected model input type");
   }
   int num_dims = input.type().tensor_type().shape().dim_size();
-  Halide::ImageParam result(t, num_dims, SanitizeName(input.name()));
+  Halide::ImageParam result(t, num_dims, sanitize_name(input.name()));
 
   // Encode the input shape as bounds on the dimensions for the autoscheduler.
   const onnx::TensorShapeProto& dims = input.type().tensor_type().shape();
+  Halide::Expr stride = 1;
   for (int i = 0; i < num_dims; ++i) {
+    result.dim(i).set_stride(stride);
     const onnx::TensorShapeProto::Dimension& dim = dims.dim(i);
     if (dim.has_dim_value()) {
       int dim_val = dim.dim_value();
@@ -3028,6 +3209,7 @@ Halide::ImageParam EncodeAsImageParam(
       result.dim(i).set_bounds(0, dim_val);
       result.dim(i).set_bounds_estimate(0, dim_val);
       shape->push_back(static_cast<int>(dim_val));
+      stride = stride * dim_val;
     } else {
       assert(dim.has_dim_param());
       if (symbolic_dims->find(dim.dim_param()) != symbolic_dims->end()) {
@@ -3041,6 +3223,7 @@ Halide::ImageParam EncodeAsImageParam(
         shape->push_back(new_dim.extent());
         symbolic_dims->emplace(dim.dim_param(), new_dim);
       }
+      stride = stride * shape->back();
 
       // Dimension is unknown, just make a guess.
       result.dim(i).set_bounds_estimate(0, 1000);
@@ -3050,12 +3233,13 @@ Halide::ImageParam EncodeAsImageParam(
   return result;
 }
 
-std::vector<Halide::Expr> FinalizeTypeInfo(
+std::vector<Halide::Expr> finalize_type_info(
     const onnx::TypeProto& tp,
     const Tensor& t,
     const std::unordered_map<std::string, Halide::Internal::Dimension>&
         symbolic_dims,
-    const std::string& name) {
+    const std::string& name,
+    std::vector<Halide::Expr>& requirements) {
   std::vector<Halide::Expr> result = t.shape;
   if (tp.has_tensor_type()) {
     if (t.type != tp.tensor_type().elem_type()) {
@@ -3072,15 +3256,13 @@ std::vector<Halide::Expr> FinalizeTypeInfo(
       for (int i = 0; i < tp_shape.dim_size(); ++i) {
         if (tp_shape.dim(i).has_dim_value()) {
           int dim_value = static_cast<int>(tp_shape.dim(i).dim_value());
-          Halide::Expr dim_check = (t.shape[i] == dim_value);
-          Halide::Expr dim = Halide::require(dim_check, dim_value);
+          requirements.push_back(t.shape[i] == dim_value);
           result[i] = dim_value;
         } else if (tp_shape.dim(i).has_dim_param()) {
           auto it = symbolic_dims.find(tp_shape.dim(i).dim_param());
           if (it != symbolic_dims.end()) {
             Halide::Expr dim = it->second.extent();
-            // Halide::Expr dim_check = (t.shape[i] == dim);
-
+            requirements.push_back(t.shape[i] == dim);
             result[i] = dim;
           }
         }
@@ -3094,14 +3276,14 @@ std::vector<Halide::Expr> FinalizeTypeInfo(
   return result;
 }
 
-Model ConvertModel(const onnx::ModelProto& model, const std::string& device) {
+Model convert_model(const onnx::ModelProto& model, const std::string& device) {
   Model result;
   std::unordered_map<std::string, Tensor>& reps = result.tensors;
   std::unordered_map<std::string, Halide::Internal::Dimension> symbolic_dims;
 
   // Encode the constants inputs.
   for (const auto& constant : model.graph().initializer()) {
-    Tensor t = BuildFromConstant(constant);
+    Tensor t = build_from_constant(constant, sanitize_name(constant.name()));
     reps[constant.name()] = t;
   }
 
@@ -3121,8 +3303,7 @@ Model ConvertModel(const onnx::ModelProto& model, const std::string& device) {
                                 p};
   }
 
-  // Now convert the model nodes.
-  ConvertSubgraph(model.graph(), device, reps);
+  convert_subgraph(model.graph(), device, reps, result.requirements);
 
   // Check if output tensors are also used as inputs to other nodes. If that's
   // the case they must be handled slightly differrently.
@@ -3148,7 +3329,8 @@ Model ConvertModel(const onnx::ModelProto& model, const std::string& device) {
     Tensor& t = reps.at(output.name());
 
     // Merge type info.
-    t.shape = FinalizeTypeInfo(output.type(), t, symbolic_dims, output.name());
+    t.shape = finalize_type_info(
+        output.type(), t, symbolic_dims, output.name(), result.requirements);
 
     Tensor t_out = t;
     if (output_types[output.name()]) {
