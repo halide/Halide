@@ -44,7 +44,7 @@ WEAK struct halide_thread *halide_spawn_thread(void (*f)(void *), void *closure)
     qurt_thread_attr_init(&thread_attr);
     qurt_thread_attr_set_stack_addr(&thread_attr, t->stack);
     qurt_thread_attr_set_stack_size(&thread_attr, STACK_SIZE);
-    qurt_thread_attr_set_priority(&thread_attr, 255);
+    qurt_thread_attr_set_priority(&thread_attr, 100);
     qurt_thread_create(&t->handle.val, &thread_attr, &spawn_thread_helper, t);
     return (halide_thread *)t;
 }
