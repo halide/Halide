@@ -397,6 +397,8 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
     get_md_bool(module.getModuleFlag("halide_use_soft_float_abi"), use_soft_float_abi);
     get_md_string(module.getModuleFlag("halide_mcpu"), mcpu);
     get_md_string(module.getModuleFlag("halide_mattrs"), mattrs);
+    bool disable_pic = false;
+    get_md_bool(module.getModuleFlag("halide_disable_pic"), disable_pic);
 
     bool per_instruction_fast_math_flags = false;
     get_md_bool(module.getModuleFlag("halide_per_instruction_fast_math_flags"), per_instruction_fast_math_flags);
@@ -437,6 +439,11 @@ void clone_target_options(const llvm::Module &from, llvm::Module &to) {
     if (get_md_string(from.getModuleFlag("halide_mattrs"), mattrs)) {
         to.addModuleFlag(llvm::Module::Warning, "halide_mattrs", llvm::MDString::get(context, mattrs));
     }
+
+    bool disable_pic = false;
+    if (get_md_bool(from.getModuleFlag("halide_disable_pic"), disable_pic)) {
+        to.addModuleFlag(llvm::Module::Warning, "halide_disable_pic", disable_pic ? 1 : 0);
+    }
 }
 
 std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &module) {
@@ -455,10 +462,13 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
     std::string mattrs = "";
     get_target_options(module, options, mcpu, mattrs);
 
+    bool disable_pic = false;
+    get_md_bool(module.getModuleFlag("halide_disable_pic"), disable_pic);
+
     return std::unique_ptr<llvm::TargetMachine>(llvm_target->createTargetMachine(module.getTargetTriple(),
                                                 mcpu, mattrs,
                                                 options,
-                                                llvm::Reloc::PIC_,
+                                                disable_pic ? llvm::Reloc::Static : llvm::Reloc::PIC_,
 #ifdef HALIDE_USE_CODEMODEL_LARGE
                                                 llvm::CodeModel::Large,
 #else

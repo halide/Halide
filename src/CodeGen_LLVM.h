@@ -98,6 +98,7 @@ protected:
     virtual std::string mcpu() const = 0;
     virtual std::string mattrs() const = 0;
     virtual bool use_soft_float_abi() const = 0;
+    virtual bool disable_pic() const;
     // @}
 
     /** Should indexing math be promoted to 64-bit on platforms with
