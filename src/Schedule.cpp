@@ -212,7 +212,7 @@ struct FuncScheduleContents {
     std::vector<Bound> bounds;
     std::vector<Bound> estimates;
     std::map<std::string, Internal::FunctionPtr> wrappers;
-    std::string store_with;
+    StoreWithDirective store_with;
     MemoryType memory_type;
     bool memoized, async;
 
@@ -358,11 +358,11 @@ bool FuncSchedule::memoized() const {
     return contents->memoized;
 }
 
-const std::string &FuncSchedule::store_with() const {
+const StoreWithDirective &FuncSchedule::store_with() const {
     return contents->store_with;
 }
 
-std::string &FuncSchedule::store_with() {
+StoreWithDirective &FuncSchedule::store_with() {
     return contents->store_with;
 }
 

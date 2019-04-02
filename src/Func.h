@@ -2070,6 +2070,7 @@ public:
 
     // TODO: docs
     Func &store_with(Func f);
+    Func &store_with(Func f, const std::vector<Expr> &where);
 
     /** Use the halide_memoization_cache_... interface to store a
      *  computed version of this function across invocations of the

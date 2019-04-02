@@ -71,6 +71,18 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
              rewrite(x*y - y*z, (x - z)*y) ||
              rewrite(y*x - z*y, y*(x - z)) ||
              rewrite(y*x - y*z, y*(x - z)) ||
+
+             rewrite((x + y*z) - (u + v*z), (x - u) + (y - v)*z) ||
+             rewrite((y*z + x) - (u + v*z), (x - u) + (y - v)*z) ||
+             rewrite((y*z + x) - (v*z + u), (x - u) + (y - v)*z) ||
+             rewrite((x + y*z) - (v*z + u), (x - u) + (y - v)*z) ||
+
+             rewrite(y*z - (u + v*z), (y - v)*z - u) ||
+             rewrite(y*z - (v*z + u), (y - v)*z - u) ||
+
+             rewrite((x + y*z) - v*z, x + (y - v)*z) ||
+             rewrite((y*z + x) - v*z, x + (y - v)*z) ||
+
              rewrite((x + y) - (x + z), y - z) ||
              rewrite((x + y) - (z + x), y - z) ||
              rewrite((y + x) - (x + z), y - z) ||
@@ -79,6 +91,42 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
              rewrite(((y + x) + z) - x, y + z) ||
              rewrite((z + (x + y)) - x, z + y) ||
              rewrite((z + (y + x)) - x, z + y) ||
+
+             rewrite((z + y) - (u + (v + z)), y - (u + v)) ||
+             rewrite((z + y) - (u + (z + v)), y - (u + v)) ||
+             rewrite((z + y) - ((v + z) + u), y - (v + u)) ||
+             rewrite((z + y) - ((z + v) + u), y - (v + u)) ||
+             rewrite((y + z) - (u + (v + z)), y - (u + v)) ||
+             rewrite((y + z) - (u + (z + v)), y - (u + v)) ||
+             rewrite((y + z) - ((v + z) + u), y - (v + u)) ||
+             rewrite((y + z) - ((z + v) + u), y - (v + u)) ||
+
+             rewrite(((y + z) + x) - (z + v), (y + x) - v) ||
+             rewrite(((y + z) + x) - (v + z), (y + x) - v) ||
+             rewrite(((z + y) + x) - (z + v), (y + x) - v) ||
+             rewrite(((z + y) + x) - (v + z), (y + x) - v) ||
+             rewrite((x + (y + z)) - (z + v), (y + x) - v) ||
+             rewrite((x + (y + z)) - (v + z), (y + x) - v) ||
+             rewrite((x + (z + y)) - (z + v), (y + x) - v) ||
+             rewrite((x + (z + y)) - (v + z), (y + x) - v) ||
+
+             rewrite((x + (y + z)) - (u + (v + z)), (x + y) - (u + v)) ||
+             rewrite((x + (z + y)) - (u + (v + z)), (x + y) - (u + v)) ||
+             rewrite((x + (z + y)) - (u + (z + v)), (x + y) - (u + v)) ||
+             rewrite((x + (y + z)) - (u + (z + v)), (x + y) - (u + v)) ||
+             rewrite(((y + z) + x) - (u + (v + z)), (y + x) - (u + v)) ||
+             rewrite(((z + y) + x) - (u + (v + z)), (y + x) - (u + v)) ||
+             rewrite(((z + y) + x) - (u + (z + v)), (y + x) - (u + v)) ||
+             rewrite(((y + z) + x) - (u + (z + v)), (y + x) - (u + v)) ||
+             rewrite((x + (y + z)) - ((v + z) + u), (x + y) - (v + u)) ||
+             rewrite((x + (z + y)) - ((v + z) + u), (x + y) - (v + u)) ||
+             rewrite((x + (z + y)) - ((z + v) + u), (x + y) - (v + u)) ||
+             rewrite((x + (y + z)) - ((z + v) + u), (x + y) - (v + u)) ||
+             rewrite(((y + z) + x) - ((v + z) + u), (y + x) - (v + u)) ||
+             rewrite(((z + y) + x) - ((v + z) + u), (y + x) - (v + u)) ||
+             rewrite(((z + y) + x) - ((z + v) + u), (y + x) - (v + u)) ||
+             rewrite(((y + z) + x) - ((z + v) + u), (y + x) - (v + u)) ||
+
              (no_overflow(op->type) &&
               (rewrite(max(x, y) - x, max(0, y - x)) ||
                rewrite(min(x, y) - x, min(0, y - x)) ||

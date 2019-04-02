@@ -361,6 +361,11 @@ struct PrefetchDirective {
     Parameter param;
 };
 
+struct StoreWithDirective {
+    std::string buffer;
+    std::vector<Expr> where;
+};
+
 struct FuncScheduleContents;
 struct StageScheduleContents;
 struct FunctionContents;
@@ -453,8 +458,8 @@ public:
     // @}
 
     // TODO: docs
-    const std::string &store_with() const;
-    std::string &store_with();
+    const StoreWithDirective &store_with() const;
+    StoreWithDirective &store_with();
 
     /** Pass an IRVisitor through to all Exprs referenced in the
      * Schedule. */

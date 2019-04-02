@@ -2452,9 +2452,21 @@ Func &Func::compute_with(LoopLevel loop_level, LoopAlignStrategy align) {
 }
 
 Func &Func::store_with(Func other) {
+    vector<Expr> a;
+    for (Var var : args()) {
+        a.push_back(var);
+    }
+    return store_with(other, a);
+}
+
+Func &Func::store_with(Func other, const std::vector<Expr> &where) {
     invalidate_cache();
-    // TODO: Assert dimensionality+types matches
-    func.schedule().store_with() = other.name();
+    user_assert(output_types().size() == other.output_types().size()) << "TODO";
+    for (size_t i = 0; i < output_types().size(); i++) {
+        user_assert(output_types()[i].bits() == other.output_types()[i].bits()) << "TODO";
+    }
+    user_assert((int)where.size() == other.dimensions()) << "TODO";
+    func.schedule().store_with() = {other.name(), where};
     return *this;
 }
 

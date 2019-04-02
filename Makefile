@@ -501,6 +501,7 @@ SOURCE_FILES = \
   StmtToHtml.cpp \
   StorageFlattening.cpp \
   StorageFolding.cpp \
+  StoreWith.cpp \
   StrictifyFloat.cpp \
   Substitute.cpp \
   Target.cpp \
@@ -659,6 +660,7 @@ HEADER_FILES = \
   StmtToHtml.h \
   StorageFlattening.h \
   StorageFolding.h \
+  StoreWith.h \
   StrictifyFloat.h \
   Substitute.h \
   Target.h \
