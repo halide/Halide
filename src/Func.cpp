@@ -2901,21 +2901,13 @@ void Func::infer_input_bounds(int x_size, int y_size, int z_size, int w_size,
                               const ParamMap &param_map) {
     user_assert(defined()) << "Can't infer input bounds on an undefined Func.\n";
     vector<Buffer<>> outputs(func.outputs());
-    int sizes[] = {x_size, y_size, z_size, w_size};
+    vector<int> sizes;
+    if (x_size) sizes.push_back(x_size);
+    if (y_size) sizes.push_back(y_size);
+    if (z_size) sizes.push_back(z_size);
+    if (w_size) sizes.push_back(w_size);
     for (size_t i = 0; i < outputs.size(); i++) {
-        // We're not actually going to read from these outputs, so
-        // make the allocation tiny, then "expand" them by directly manipulating
-        // the halide_buffer_t fields. (We can't use crop because it explicitly
-        // disallows expanding the fields in this unsafe manner.)
-        Buffer<> im = Buffer<>::make_scalar(func.output_types()[i]);
-        for (int s : sizes) {
-            if (!s) break;
-            im.add_dimension();
-            // buf.host is going to be wrong no matter what, so don't
-            // bother adjusting it.
-            im.raw_buffer()->dim[im.dimensions()-1].min = 0;
-            im.raw_buffer()->dim[im.dimensions()-1].extent = s;
-        }
+        Buffer<> im(func.output_types()[i], nullptr, sizes);
         outputs[i] = std::move(im);
     }
     Realization r(outputs);
