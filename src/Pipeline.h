@@ -445,6 +445,9 @@ public:
                             const ParamMap &param_map = ParamMap::empty_map());
     void infer_input_bounds(RealizationArg output,
                             const ParamMap &param_map = ParamMap::empty_map());
+    HALIDE_ATTRIBUTE_DEPRECATED("infer_input_bounds(x, y, z, w) is deprecated; use the vector<int> version instead.")
+    void infer_input_bounds(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0,
+                            const ParamMap &param_map = ParamMap::empty_map());
     // @}
 
     /** Infer the arguments to the Pipeline, sorted into a canonical order:

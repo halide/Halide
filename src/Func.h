@@ -808,6 +808,10 @@ public:
                             const ParamMap &param_map = ParamMap::empty_map());
     void infer_input_bounds(Pipeline::RealizationArg outputs,
                             const ParamMap &param_map = ParamMap::empty_map());
+
+    HALIDE_ATTRIBUTE_DEPRECATED("infer_input_bounds(x, y, z, w) is deprecated; use the vector<int> version instead.")
+    void infer_input_bounds(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0,
+                            const ParamMap &param_map = ParamMap::empty_map());
     // @}
 
     /** Statically compile this function to llvm bitcode, with the

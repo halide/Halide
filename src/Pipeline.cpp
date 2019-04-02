@@ -1133,6 +1133,16 @@ void Pipeline::infer_input_bounds(const std::vector<int> &sizes, const ParamMap 
     infer_input_bounds(r, param_map);
 }
 
+void Pipeline::infer_input_bounds(int x_size, int y_size, int z_size, int w_size,
+                                  const ParamMap &param_map) {
+    vector<int> sizes;
+    if (x_size) sizes.push_back(x_size);
+    if (y_size) sizes.push_back(y_size);
+    if (z_size) sizes.push_back(z_size);
+    if (w_size) sizes.push_back(w_size);
+    infer_input_bounds(sizes, param_map);
+}
+
 void Pipeline::invalidate_cache() {
     if (defined()) {
         contents->invalidate_cache();
