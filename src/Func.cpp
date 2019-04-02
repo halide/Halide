@@ -3130,8 +3130,8 @@ void Func::infer_input_bounds(Pipeline::RealizationArg outputs,
     pipeline().infer_input_bounds(std::move(outputs), param_map);
 }
 
-void *Func::compile_jit(const Target &target) {
-    return pipeline().compile_jit(target);
+void Func::compile_jit(const Target &target) {
+    pipeline().compile_jit(target);
 }
 
 Var _("_");
