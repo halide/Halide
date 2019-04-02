@@ -510,7 +510,7 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
     module->addModuleFlag(llvm::Module::Warning, "halide_use_soft_float_abi", use_soft_float_abi() ? 1 : 0);
     module->addModuleFlag(llvm::Module::Warning, "halide_mcpu", MDString::get(*context, mcpu()));
     module->addModuleFlag(llvm::Module::Warning, "halide_mattrs", MDString::get(*context, mattrs()));
-    module->addModuleFlag(llvm::Module::Warning, "halide_disable_pic", disable_pic() ? 1 : 0);
+    module->addModuleFlag(llvm::Module::Warning, "halide_use_pic", use_pic() ? 1 : 0);
     module->addModuleFlag(llvm::Module::Warning, "halide_per_instruction_fast_math_flags", input.any_strict_float());
 
     internal_assert(module && context && builder)
@@ -4064,8 +4064,8 @@ std::pair<llvm::Function *, int> CodeGen_LLVM::find_vector_runtime_function(cons
     return { nullptr, 0 };
 }
 
-bool CodeGen_LLVM::disable_pic() const {
-    return false;
+bool CodeGen_LLVM::use_pic() const {
+    return true;
 }
 
 }  // namespace Internal

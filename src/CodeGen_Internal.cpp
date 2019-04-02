@@ -397,8 +397,8 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
     get_md_bool(module.getModuleFlag("halide_use_soft_float_abi"), use_soft_float_abi);
     get_md_string(module.getModuleFlag("halide_mcpu"), mcpu);
     get_md_string(module.getModuleFlag("halide_mattrs"), mattrs);
-    bool disable_pic = false;
-    get_md_bool(module.getModuleFlag("halide_disable_pic"), disable_pic);
+    bool use_pic = true;
+    get_md_bool(module.getModuleFlag("halide_use_pic"), use_pic);
 
     bool per_instruction_fast_math_flags = false;
     get_md_bool(module.getModuleFlag("halide_per_instruction_fast_math_flags"), per_instruction_fast_math_flags);
@@ -440,9 +440,9 @@ void clone_target_options(const llvm::Module &from, llvm::Module &to) {
         to.addModuleFlag(llvm::Module::Warning, "halide_mattrs", llvm::MDString::get(context, mattrs));
     }
 
-    bool disable_pic = false;
-    if (get_md_bool(from.getModuleFlag("halide_disable_pic"), disable_pic)) {
-        to.addModuleFlag(llvm::Module::Warning, "halide_disable_pic", disable_pic ? 1 : 0);
+    bool use_pic = true;
+    if (get_md_bool(from.getModuleFlag("halide_use_pic"), use_pic)) {
+        to.addModuleFlag(llvm::Module::Warning, "halide_use_pic", use_pic ? 1 : 0);
     }
 }
 
@@ -462,13 +462,13 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
     std::string mattrs = "";
     get_target_options(module, options, mcpu, mattrs);
 
-    bool disable_pic = false;
-    get_md_bool(module.getModuleFlag("halide_disable_pic"), disable_pic);
+    bool use_pic = true;
+    get_md_bool(module.getModuleFlag("halide_use_pic"), use_pic);
 
     return std::unique_ptr<llvm::TargetMachine>(llvm_target->createTargetMachine(module.getTargetTriple(),
                                                 mcpu, mattrs,
                                                 options,
-                                                disable_pic ? llvm::Reloc::Static : llvm::Reloc::PIC_,
+                                                use_pic ? llvm::Reloc::PIC_ : llvm::Reloc::Static,
 #ifdef HALIDE_USE_CODEMODEL_LARGE
                                                 llvm::CodeModel::Large,
 #else
