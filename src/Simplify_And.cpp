@@ -101,7 +101,6 @@ Expr Simplify::visit(const And *op, ExprInfo *bounds) {
         rewrite((y || x) && (x || z), x || (y && z)) ||
         rewrite((y || x) && (z || x), x || (y && z)) ||
 
-
         rewrite(c0 < x && x == c1, fold(c0 < c1) && x == c1) ||
         rewrite(x <= c0 && x == c1, fold(c1 <= c0) && x == c1) ||
 

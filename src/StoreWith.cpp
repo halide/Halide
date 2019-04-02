@@ -468,6 +468,8 @@ Stmt lower_store_with(const Stmt &s, const map<string, Function> &env) {
             return Call::make(it->second, args, op->value_index);
         }
 
+        // TODO: ProducerConsumer?
+
         const map<string, Function> &env;
     public:
         RemapArgs(const map<string, Function> &env) : env(env) {}

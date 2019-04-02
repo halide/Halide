@@ -130,6 +130,18 @@ Stmt add_image_checks(Stmt s,
     Scope<Interval> empty_scope;
     map<string, Box> boxes = boxes_touched(s, empty_scope, fb);
 
+    // Merge buffers according to store_with directives
+    for (const auto &p : boxes) {
+        auto it = env.find(p.first);
+        if (it != env.end()) {
+            Function f = it->second;
+            const auto &store_with = f.schedule().store_with();
+            if (!store_with.buffer.empty()) {
+                merge_boxes(boxes[store_with.buffer], p.second);
+            }
+        }
+    }
+
     // Now iterate through all the buffers, creating a list of lets
     // and a list of asserts.
     vector<pair<string, Expr>> lets_overflow;
