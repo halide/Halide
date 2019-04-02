@@ -2,9 +2,14 @@ include ../support/Makefile.inc
 
 BIN ?= bin
 
-HL_TARTGET ?= host
+HL_TARGET ?= host
 
 ONNX_SRC_DIR ?= $(error ONNX_SRC_DIR must provided)
+
+PROTOC := $(shell which protoc)
+ifndef PROTOC
+  $(error "No protoc in $(PATH), you need to install protocol buffers")
+endif
 
 PROTOC = protoc
 PROTOCFLAGS = --cpp_out=.
