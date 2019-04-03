@@ -485,7 +485,8 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             Expr extent_initial = simplify(substitute(loop_var, op->min, max_initial - min_initial + 1), true, bounds);
             Expr extent_steady = simplify(max_steady - min_steady + 1, true, steady_bounds);
             Expr extent = Max::make(extent_initial, extent_steady);
-            extent = simplify(common_subexpression_elimination(extent), true, bounds);
+            // TODO: should call cse() here, but there can be duplicate names in the Expr.
+            extent = simplify(extent, true, bounds);
 
             // Find the StorageDim corresponding to dim.
             const std::vector<StorageDim>& storage_dims = func.schedule().storage_dims();
