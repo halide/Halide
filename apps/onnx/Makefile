@@ -4,24 +4,26 @@ BIN ?= bin
 
 HL_TARGET ?= host
 
-ONNX_SRC_DIR ?= $(error ONNX_SRC_DIR must provided)
-
 PROTOC := $(shell which protoc)
 ifndef PROTOC
   $(error "No protoc in $(PATH), you need to install protocol buffers")
 endif
 
-PROTOC = protoc
 PROTOCFLAGS = --cpp_out=.
 
 CXXFLAGS += -DGOOGLE_PROTOBUF_NO_RTTI -Wno-sign-compare -Wno-unused-but-set-variable
+CXXFLAGS += -I$(dir $(PROTOC))../include
+LDFLAGS += -L$(dir $(PROTOC))../lib
 LDFLAGS += -lprotobuf-lite
-
 
 # Copy onnx.proto to $(BIN)
 $(BIN)/onnx/onnx.proto:
 	@mkdir -p $(@D)
-	cp $(ONNX_SRC_DIR)/onnx/onnx.proto $@
+	if [ -f $(ONNX_SRC_DIR)/onnx/onnx.proto ]; then \
+		cp $(ONNX_SRC_DIR)/onnx/onnx.proto $@ ; \
+	else \
+		curl https://raw.githubusercontent.com/onnx/onnx/v1.4.1/onnx/onnx.proto > $@; \
+	fi
 
 # protoc generates two files
 $(BIN)/onnx/onnx.pb.cc: $(BIN)/onnx/onnx.proto
