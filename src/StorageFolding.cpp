@@ -455,8 +455,9 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                 continue;
             }
 
-            Expr min = simplify(common_subexpression_elimination(box[dim].min));
-            Expr max = simplify(common_subexpression_elimination(box[dim].max));
+            // TODO: should call cse() here, but there can be duplicate names in the Expr.
+            Expr min = simplify(box[dim].min);
+            Expr max = simplify(box[dim].max);
 
             Expr min_provided, max_provided, min_required, max_required;
             if (func.schedule().async() && !explicit_only) {
