@@ -228,6 +228,8 @@ using NodeMap = PerfectHashMap<FunctionDAG::Node, T>;
 template<typename T>
 using StageMap = PerfectHashMap<FunctionDAG::Node::Stage, T>;
 
+enum GPU_parallelism { block, thread, serial, none };
+
 // We're going to do a tree search over possible schedules to find an
 // optimal one. A tree search requires a state, and a function that
 // gives you children of the state (with costs). The following struct
@@ -279,6 +281,9 @@ struct LoopNest {
     // Which loop corresponds to the innermost storage dimension and will be vectorized. -1 means none of them.
     int vectorized_loop_index = -1;
 
+    // Apply gpu threads to this loop nest
+    GPU_parallelism gpu_label = none;
+
     void copy_from(const LoopNest &n) {
         size = n.size;
         children = n.children;
@@ -293,6 +298,7 @@ struct LoopNest {
         parallel = n.parallel;
         vector_dim = n.vector_dim;
         vectorized_loop_index = n.vectorized_loop_index;
+        gpu_label = n.gpu_label;
     };
 
     static void hash_combine(uint64_t &h, uint64_t next) {
@@ -1260,7 +1266,7 @@ struct LoopNest {
         }
     }
 
-    void compute_here(const FunctionDAG::Node *f, bool tileable, int v) {
+    void compute_here(const FunctionDAG::Node *f, bool tileable, int v, bool in_threads_loop) {
         const auto &bounds = get_bounds(f);
 
         if (!may_subtile()) {
@@ -1276,6 +1282,19 @@ struct LoopNest {
             node->innermost = true;
             node->vectorized_loop_index = -1;
             node->tileable = tileable && (is_root() || may_subtile());
+
+            // always set gpu_label as thread if legal. 
+            // if !in_threads_loop we are computing either at root level or inside a serial loop 
+            // if compute_root set gpu_label to none, parallelize_in_tiles creates block and thread loops later 
+            // if computing at serial loop set gpu_label to thread.
+            if (is_root()) {
+                node->gpu_label = none;
+            } else if (!in_threads_loop) {
+                node->gpu_label = thread;
+            } else {
+                node->gpu_label = serial;
+            }
+
             // Set up a bound for the inside of the
             // loop. computed/required is still the full region, but
             // the loop nest will be a single representative point.
@@ -1334,6 +1353,7 @@ struct LoopNest {
                 one_vector->vector_dim = v;
                 one_vector->size.resize(loop_dim, 1);
                 one_vector->innermost = true;
+                one_vector->gpu_label = serial;
                 auto b = node->get_bounds(f)->make_copy();
                 // Set the region computed inside this node to be the first vector lane
                 b->loops(s, node->vectorized_loop_index).set_extent(1);
@@ -1342,6 +1362,7 @@ struct LoopNest {
 
                 node->children.emplace_back(one_vector);
             }
+            // create two children
             children.emplace_back(node);
         }
     }
@@ -1359,6 +1380,10 @@ struct LoopNest {
         inner->tileable  = outer->tileable  = tileable && may_subtile();
         inner->vector_dim = outer->vector_dim = vector_dim;
         inner->vectorized_loop_index = outer->vectorized_loop_index = vectorized_loop_index;
+
+        internal_assert(gpu_label == none); 
+        inner->gpu_label = thread; // compute root funcs always allowed to use GPU threads
+        outer->gpu_label = block;
         outer->size = size;
         outer->innermost = false;
         outer->parallel = true;
@@ -1410,12 +1435,15 @@ struct LoopNest {
     }
 
     // Return all possible ways to compute f in tiles.
+    // in_threads_loop tracks whether or not function is going to be placed inside a
+    // loop marked gpu_threads, in which case f's loops cannot be gpu_threads
     vector<IntrusivePtr<const LoopNest>> compute_in_tiles(const FunctionDAG::Node *f,
                                                           const LoopNest *parent,
                                                           const MachineParams &params,
                                                           const Target &target,
                                                           int v,
-                                                          bool in_realization) const {
+                                                          bool in_realization,
+                                                          bool in_threads_loop) const {
         internal_assert(f);
 
         vector<IntrusivePtr<const LoopNest>> result;
@@ -1466,7 +1494,7 @@ struct LoopNest {
             // Place the computation inside this loop
             std::unique_ptr<LoopNest> r{new LoopNest};
             r->copy_from(*this);
-            r->compute_here(f, true, v);
+            r->compute_here(f, true, v, in_threads_loop);
             if (!in_realization) {
                 r->store_at.insert(f);
             } else {
@@ -1530,7 +1558,6 @@ struct LoopNest {
                 inner->bounds = bounds;
                 inner->store_at = store_at;
 
-
                 {
                     auto b = inner->get_bounds(node)->make_copy();
 
@@ -1563,29 +1590,85 @@ struct LoopNest {
                 if (!in_realization) {
                     outer->store_at.insert(f);
                 }
-                outer->children.emplace_back(inner);
 
                 bool may_slide = (!in_realization &&
-                                  f->stages.size() == 1);
+                                  f->stages.size() == 1 &&
+                                  !target.has_gpu_feature()); // disable sliding for GPU, often not useful
                 if (may_slide) {
+                    // should NEVER get here for GPU schedules, no sliding on GPU
                     // Store here, but compute further in. Currently
                     // don't have to worry about the constraints this
                     // places on parallelism, as we forced all the
                     // parallelism to the outer loop.
-                    auto opts = inner->compute_in_tiles(f, outer, params, target, v, true);
+                    auto opts = inner->compute_in_tiles(f, outer, params, target, v, true, in_threads_loop);
                     for (IntrusivePtr<const LoopNest> &n : opts) {
                         LoopNest *store_at_outer_compute_further_in = new LoopNest;
                         store_at_outer_compute_further_in->copy_from(*outer);
-                        store_at_outer_compute_further_in->children.pop_back();
                         store_at_outer_compute_further_in->children.emplace_back(std::move(n));
                         result.emplace_back(store_at_outer_compute_further_in);
                     }
                 }
 
-                // Site the computation inside the outer loop
-                outer->compute_here(f, true, v);
                 outer->tileable &= !in_realization;
-                result.emplace_back(outer);
+
+                if (!target.has_gpu_feature()) {
+                    outer->children.emplace_back(inner);
+                    // Site the computation inside the outer loop
+                    outer->compute_here(f, true, v, in_threads_loop);
+                    result.emplace_back(outer);
+                }
+
+                // Rules for assigning gpu_labels when splitting a loop:
+                // threaded loops can be split into: (threaded, serial) or (serial, threaded)
+                // block loops can only be split into: blocks, serial
+                // serial loops can only be split into: serial, serial
+                if (target.has_gpu_feature()) {
+                    switch (gpu_label) {
+                        case thread: {
+                            internal_assert(!in_threads_loop); // threads loop can't be inside threads loop
+                            outer->gpu_label = thread; 
+                            inner->gpu_label = serial;
+
+                            outer->children.emplace_back(inner);
+                            outer->compute_here(f, true, v, true);
+                            result.emplace_back(outer);
+
+                            // create new loop nests for other possible gpu_label assignment
+                            LoopNest *serial_outer = new LoopNest, *threaded_inner = new LoopNest;
+                            serial_outer->copy_from(*outer);
+                            threaded_inner->copy_from(*inner);
+                            serial_outer->gpu_label = serial;
+                            threaded_inner->gpu_label = thread;
+
+                            serial_outer->children.emplace_back(threaded_inner);
+                            serial_outer->compute_here(f, true, v, false);
+                            result.emplace_back(serial_outer);
+                            break;
+                        }
+                        case block: {
+                            internal_assert(!in_threads_loop);
+                            outer->gpu_label = block;
+                            inner->gpu_label = serial;
+
+                            outer->children.emplace_back(inner);
+                            outer->compute_here(f, true, v, false);
+                            result.emplace_back(outer);
+                            break;
+                        }
+                        case serial: {
+                            outer->gpu_label = serial;
+                            inner->gpu_label = serial;
+
+                            outer->children.emplace_back(inner);
+                            outer->compute_here(f, true, v, in_threads_loop);
+                            result.emplace_back(outer);
+                            break;
+                        }
+                        case none: {
+                            internal_error << "attempting to split a loop without gpu_label\n";
+                        }
+                    } 
+                } 
             }
         }
 
@@ -1596,6 +1679,9 @@ struct LoopNest {
             // See if it's appropriate to slide over this loop
             // Can't slide at the root level, or no parallelism
             bool may_slide = (params.parallelism == 1) || !is_root();
+
+            // Disable sliding for GPU schedules because it's usually not useful 
+            may_slide &= !target.has_gpu_feature();
 
             const auto &c = children[child];
             int num_ones = 0;
@@ -1623,7 +1709,9 @@ struct LoopNest {
                     // Don't fuse into serial loops, or we could never parallelize this Func.
                     continue;
                 }
-                auto opts = children[child]->compute_in_tiles(f, this, params, target, v, store_here);
+
+                in_threads_loop |= (children[child]->gpu_label == thread);
+                auto opts = children[child]->compute_in_tiles(f, this, params, target, v, store_here, in_threads_loop);
                 for (IntrusivePtr<const LoopNest> &n : opts) {
                     // (Only valid if one child calls f) Push the
                     // computation into the child. Possibly leaving
@@ -2602,7 +2690,7 @@ struct State {
                 // stride==1 constraint instead of assuming 0.
                 if (vector_dim > 0 && (node->is_output || node->is_input)) break;
 
-                auto tile_options = root->compute_in_tiles(node, nullptr, params, target, vector_dim, false);
+                auto tile_options = root->compute_in_tiles(node, nullptr, params, target, vector_dim, false, false);
                 for (IntrusivePtr<const LoopNest> &n : tile_options) {
                     auto child = make_child();
                     child->root = std::move(n);
@@ -2614,7 +2702,7 @@ struct State {
                     }
                 }
             }
-        } else {
+        } else { // second phase, parallelize compute root funcs 
             bool should_parallelize = false;
             const vector<int64_t> *pure_size = nullptr;
             if (params.parallelism > 1) {
