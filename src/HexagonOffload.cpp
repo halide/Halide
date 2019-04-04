@@ -735,6 +735,40 @@ class InjectHexagonRpc : public IRMutator {
         // or the loop itself? Currently, this moves the loop itself.
         Closure c(body);
 
+        // A buffer parameter potentially generates 3 scalar parameters (min,
+        // extent, stride) per dimension. Pipelines with many buffers may
+        // generate extreme numbers of scalar parameters, which can cause
+        // problems for LLVM. This logic moves scalar parameters of the type
+        // matching the type of these scalars to a single buffer.
+        // TODO(dsharlet): Maybe this is Int(64) in some cases?
+        Type scalars_buffer_type = Int(32);
+        std::string scalars_buffer_name = "scalar_indices";
+        std::vector<Stmt> scalars_buffer_init;
+        for (auto i = c.vars.begin(); i != c.vars.end();) {
+            if (i->second == scalars_buffer_type) {
+                int index = scalars_buffer_init.size();
+                scalars_buffer_init.push_back(Store::make(scalars_buffer_name, Variable::make(scalars_buffer_type, i->first),
+                                                          index, Parameter(), const_true(), ModulusRemainder()));
+                Expr replacement = Load::make(scalars_buffer_type, scalars_buffer_name, index, Buffer<>(),
+                                              Parameter(), const_true(), ModulusRemainder());
+                body = LetStmt::make(i->first, replacement, body);
+
+                i = c.vars.erase(i);
+            } else {
+                ++i;
+            }
+        }
+        if (!scalars_buffer_init.empty()) {
+            // If we put some scalars in the scalars buffer, add it to the closure.
+            Closure::Buffer scalars_buffer;
+            scalars_buffer.type = scalars_buffer_type;
+            scalars_buffer.dimensions = 1;
+            scalars_buffer.read = true;
+            scalars_buffer.write = false;
+            c.buffers[scalars_buffer_name] = scalars_buffer;
+        }
+        int scalars_buffer_extent = scalars_buffer_init.size();
+
         // Make an argument list, and generate a function in the
         // device_code module. The hexagon runtime code expects
         // the arguments to appear in the order of (input buffers,
@@ -763,8 +797,10 @@ class InjectHexagonRpc : public IRMutator {
             // alignment.
             replacement_params[i.first] = p;
 
-            // Add an assert to the body that validates the
-            // alignment of the buffer.
+            // Add an assert to the body that validates the alignment of the
+            // buffer. These buffers are either allocated by FastRPC or
+            // halide_hexagon_device_interface buffers, either should be aligned
+            // to 128 bytes.
             if (!device_code.target().has_feature(Target::NoAsserts)) {
                 Expr host_ptr = reinterpret<uint64_t>(Variable::make(Handle(), i.first));
                 Expr error = Call::make(Int(32), "halide_error_unaligned_host_ptr",
@@ -797,16 +833,28 @@ class InjectHexagonRpc : public IRMutator {
         std::vector<Expr> arg_flags;
 
         for (const auto& i : c.buffers) {
-            // The Hexagon runtime expects buffer args to be
-            // passed as just the device and host
-            // field. CodeGen_Hexagon knows how to unpack buffers
-            // passed this way.
-            Expr buf = Variable::make(type_of<halide_buffer_t *>(), i.first + ".buffer");
-            Expr device = Call::make(UInt(64), Call::buffer_get_device, {buf}, Call::Extern);
-            Expr host = Call::make(Handle(), Call::buffer_get_host, {buf}, Call::Extern);
-            Expr pseudo_buffer = Call::make(Handle(), Call::make_struct, {device, host}, Call::Intrinsic);
-            arg_ptrs.push_back(pseudo_buffer);
-            arg_sizes.push_back(Expr((uint64_t)(pseudo_buffer.type().bytes())));
+            // Buffers are passed to the hexagon host runtime as just device
+            // handles (uint64) and host (uint8*) fields.
+            if (i.first != scalars_buffer_name) {
+                // If this isn't the scalars buffer, assume it has a '.buffer'
+                // description in the IR.
+                Expr buf = Variable::make(type_of<halide_buffer_t *>(), i.first + ".buffer");
+                Expr device = Call::make(UInt(64), Call::buffer_get_device, {buf}, Call::Extern);
+                Expr host = Call::make(Handle(), Call::buffer_get_host, {buf}, Call::Extern);
+                Expr pseudo_buffer = Call::make(Handle(), Call::make_struct, {device, host}, Call::Intrinsic);
+                arg_ptrs.push_back(pseudo_buffer);
+                arg_sizes.push_back(Expr((uint64_t)(pseudo_buffer.type().bytes())));
+            } else {
+                // If this is the scalars buffer, it doesn't have a .buffer
+                // field. Rather than make one, It's easier to just skip the
+                // buffer_get_host call and reference the allocation directly.
+                // TODO: This is a bit of an ugly hack, it would be nice to find
+                // a better way to identify buffers without a '.buffer' description.
+                Expr host = Variable::make(Handle(), i.first);
+                Expr pseudo_buffer = Call::make(Handle(), Call::make_struct, {make_zero(UInt(64)), host}, Call::Intrinsic);
+                arg_ptrs.push_back(pseudo_buffer);
+                arg_sizes.push_back(Expr((uint64_t)scalars_buffer_extent * scalars_buffer_type.bytes()));
+            }
 
             // In the flags parameter, bit 0 set indicates the
             // buffer is read, bit 1 set indicates the buffer is
@@ -836,7 +884,13 @@ class InjectHexagonRpc : public IRMutator {
         params.push_back(Call::make(type_of<void**>(), Call::make_struct, arg_ptrs, Call::Intrinsic));
         params.push_back(Call::make(type_of<int*>(), Call::make_struct, arg_flags, Call::Intrinsic));
 
-        return call_extern_and_assert("halide_hexagon_run", params);
+        Stmt offload_call = call_extern_and_assert("halide_hexagon_run", params);
+        if (!scalars_buffer_init.empty()) {
+            offload_call = Block::make(Block::make(scalars_buffer_init), offload_call);
+        }
+        offload_call = Allocate::make(scalars_buffer_name, scalars_buffer_type, MemoryType::Auto,
+                                      {Expr(scalars_buffer_extent)}, const_true(), offload_call);
+        return offload_call;
     }
 
 public:
