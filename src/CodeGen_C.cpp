@@ -911,7 +911,11 @@ public:
     // TODO: could this be improved by taking advantage of native operator support?
     static Vec load(const void *base, int32_t offset) {
         Vec r(empty);
-        memcpy(&r.native_vector, ((const ElementType*)base + offset), sizeof(NativeVectorType));
+        // Note: do not use sizeof(NativeVectorType) here; if it's an unusual type
+        // (e.g. uint8x48, which could be produced by concat()), the actual implementation
+        // might be larger (e.g. it might really be a uint8x64). Only copy the amount
+        // that is in the logical type, to avoid possible overreads.
+        memcpy(&r.native_vector, ((const ElementType*)base + offset), sizeof(ElementType) * Lanes);
         return r;
     }
 
@@ -927,7 +931,11 @@ public:
 
     // TODO: could this be improved by taking advantage of native operator support?
     void store(void *base, int32_t offset) const {
-        memcpy(((ElementType*)base + offset), &native_vector, sizeof(NativeVectorType));
+        // Note: do not use sizeof(NativeVectorType) here; if it's an unusual type
+        // (e.g. uint8x48, which could be produced by concat()), the actual implementation
+        // might be larger (e.g. it might really be a uint8x64). Only copy the amount
+        // that is in the logical type, to avoid possible overwrites.
+        memcpy(((ElementType*)base + offset), &native_vector, sizeof(ElementType) * Lanes);
     }
 
     // scatter
