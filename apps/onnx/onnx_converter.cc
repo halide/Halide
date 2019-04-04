@@ -1,6 +1,8 @@
 #include "onnx_converter.h"
 #include <exception>
 #include <unordered_set>
+#include <climits>
+
 
 static Halide::Expr div_up(Halide::Expr num, int denom) {
     return Halide::Internal::simplify((num + denom - 1) / denom);
