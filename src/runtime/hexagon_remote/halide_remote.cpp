@@ -318,10 +318,53 @@ int halide_hexagon_remote_get_symbol_v4(handle_t module_ptr, const char* name, i
     return *sym_ptr != 0 ? 0 : -1;
 }
 
+// Thread priority for QURT threads
+// Negative: use the current default (don't explicitly reset it)
+// Positive: the priority needs to be set once the shared runtime is loaded
+int saved_thread_priority = -1;
+
+int halide_hexagon_remote_set_thread_priority(int priority) {
+    // Just save requested priority for now.  The priority can't actually
+    // be set in qurt_thread_pool until the shared runtime has been loaded.
+    saved_thread_priority = priority;
+    return 0;
+}
+
+int halide_hexagon_runtime_set_thread_priority(int priority) {
+    if (priority < 0) {
+        return 0;
+    }
+
+    // Find the halide_set_default_thread_priority function in the shared runtime,
+    // which we loaded with RTLD_GLOBAL.
+    void (*set_priority)(int) = NULL;
+    if (use_dlopenbuf()) {
+        set_priority = (void (*)(int)) halide_get_symbol("halide_set_default_thread_priority");
+    } else {
+        set_priority = (void (*)(int)) mmap_dlsym_libs("halide_set_default_thread_priority");
+    }
+
+    if (set_priority) {
+        set_priority(priority);
+    } else {
+        // This code being run is old, doesn't have set priority feature, do nothing.
+    }
+
+    return 0;
+}
+
 int halide_hexagon_remote_run_v2(handle_t module_ptr, handle_t function,
                                  const buffer *input_buffersPtrs, int input_buffersLen,
                                  buffer *output_buffersPtrs, int output_buffersLen,
                                  const scalar_t *scalars, int scalarsLen) {
+    if (saved_thread_priority > 0) {
+        // Existing thread
+        run_context.set_priority(saved_thread_priority);
+        // Future threads
+        halide_hexagon_runtime_set_thread_priority(saved_thread_priority);
+        saved_thread_priority = -1;   // Only do this once
+    }
+
     // Get a pointer to the argv version of the pipeline.
     pipeline_argv_t pipeline = reinterpret_cast<pipeline_argv_t>(function);
 

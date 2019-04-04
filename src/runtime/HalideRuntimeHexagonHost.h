@@ -113,6 +113,16 @@ extern int halide_hexagon_set_performance_mode(void *user_context, halide_hexago
 extern int halide_hexagon_set_performance(void *user_context, halide_hexagon_power_t *perf);
 // @}
 
+/** Set the priority for Hexagon threads.
+ * - Valid priority values range from 1 to 255
+ * - Smaller number for higher priority
+ * - The highest priority for a user thread is 1, 0 reserved for OS usage
+ * - If not set, Halide thread priority will default to 100
+ * - This should be called before running a pipeline. */
+// @{
+extern int halide_hexagon_set_thread_priority(void *user_context, int priority);
+// @}
+
 /** These are forward declared here to allow clients to override the
  *  Halide Hexagon runtime. Do not call them. */
 // @{

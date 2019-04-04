@@ -10,6 +10,7 @@
 // dlopen/mmap_dlopen calls.
 void *mmap_dlopen(const void *code, size_t size);
 void *mmap_dlsym(void *dlib, const char *name);
+void *mmap_dlsym_libs(const char *name);
 int mmap_dlclose(void *dlib);
 
 #endif
