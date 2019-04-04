@@ -462,7 +462,7 @@ void test_model() {
 
     Model converted = convert_model(model, "");
 
-    Halide::Buffer<float> input_values({3, 7});
+    Halide::Buffer<float> input_values(3, 7);
     std::uniform_real_distribution<float> dis(-1.0, 1.0);
     std::mt19937 rnd;
     input_values.for_each_value([&](float& f) { f = dis(rnd); });
