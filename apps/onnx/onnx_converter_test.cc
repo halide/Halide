@@ -114,7 +114,7 @@ void test_add() {
     GOOGLE_CHECK_EQ(1, converted.outputs.size());
     Halide::Buffer<float> output = converted.outputs[0].rep.realize(200);
     for (int i = 0; i < 200; ++i) {
-        EXPECT_NEAR(output(i), in1(i) + in2(i), 2e-5);
+        EXPECT_NEAR(output(i), in1(i) + in2(i), 1e-6);
     }
 }
 
