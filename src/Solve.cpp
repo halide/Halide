@@ -971,6 +971,15 @@ class SolveForInterval : public IRVisitor {
         }
     }
 
+    Expr let_or_subs(const std::string &name, Expr val, Expr body) {
+        const Variable *var = val.as<Variable>();
+        if (var && var->name == name) {
+            return body;
+        } else {
+            return Let::make(name, val, body);
+        }
+    }
+
     void visit(const LE *le) override {
         static string b_name = unique_name('b');
         static string c_name = unique_name('c');
@@ -1001,13 +1010,13 @@ class SolveForInterval : public IRVisitor {
             Expr b_var = Variable::make(b.type(), b_name);
             Expr c_var = Variable::make(c.type(), c_name);
             cached_solve((a <= c_var) && (b_var <= c_var || a >= b_var));
-            if (result.has_upper_bound()) {
-                result.min = Let::make(b_name, b, result.min);
-                result.min = Let::make(c_name, c, result.min);
+            if (result.has_lower_bound()) {
+                result.min = let_or_subs(b_name, b, result.min);
+                result.min = let_or_subs(c_name, c, result.min);
             }
             if (result.has_upper_bound()) {
-                result.max = Let::make(b_name, b, result.max);
-                result.max = Let::make(c_name, c, result.max);
+                result.max = let_or_subs(b_name, b, result.max);
+                result.max = let_or_subs(c_name, c, result.max);
             }
         } else if (const Min *min_a = le->a.as<Min>()) {
             // Rewrite (min(a, b) <= c) <==> (a <= c || (b <= c && a >= b))
@@ -1016,12 +1025,12 @@ class SolveForInterval : public IRVisitor {
             Expr c_var = Variable::make(c.type(), c_name);
             cached_solve((a <= c_var) || (b_var <= c_var && a >= b_var));
             if (result.has_lower_bound()) {
-                result.min = Let::make(b_name, b, result.min);
-                result.min = Let::make(c_name, c, result.min);
+                result.min = let_or_subs(b_name, b, result.min);
+                result.min = let_or_subs(c_name, c, result.min);
             }
             if (result.has_upper_bound()) {
-                result.max = Let::make(b_name, b, result.max);
-                result.max = Let::make(c_name, c, result.max);
+                result.max = let_or_subs(b_name, b, result.max);
+                result.max = let_or_subs(c_name, c, result.max);
             }
         } else {
             fail();
@@ -1056,12 +1065,12 @@ class SolveForInterval : public IRVisitor {
             Expr c_var = Variable::make(c.type(), c_name);
             cached_solve((a >= c_var) || (b_var >= c_var && a <= b_var));
             if (result.has_lower_bound()) {
-                result.min = Let::make(b_name, b, result.min);
-                result.min = Let::make(c_name, c, result.min);
+                result.min = let_or_subs(b_name, b, result.min);
+                result.min = let_or_subs(c_name, c, result.min);
             }
             if (result.has_upper_bound()) {
-                result.max = Let::make(b_name, b, result.max);
-                result.max = Let::make(c_name, c, result.max);
+                result.max = let_or_subs(b_name, b, result.max);
+                result.max = let_or_subs(c_name, c, result.max);
             }
         } else if (const Min *min_a = ge->a.as<Min>()) {
             // Rewrite (min(a, b) >= c) <==> (a >= c && (b >= c || a <= b))
@@ -1070,12 +1079,12 @@ class SolveForInterval : public IRVisitor {
             Expr c_var = Variable::make(c.type(), c_name);
             cached_solve((a >= c_var) && (b_var >= c_var || a <= b_var));
             if (result.has_lower_bound()) {
-                result.min = Let::make(b_name, b, result.min);
-                result.min = Let::make(c_name, c, result.min);
+                result.min = let_or_subs(b_name, b, result.min);
+                result.min = let_or_subs(c_name, c, result.min);
             }
             if (result.has_upper_bound()) {
-                result.max = Let::make(b_name, b, result.max);
-                result.max = Let::make(c_name, c, result.max);
+                result.max = let_or_subs(b_name, b, result.max);
+                result.max = let_or_subs(c_name, c, result.max);
             }
         } else {
             fail();
