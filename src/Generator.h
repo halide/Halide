@@ -516,6 +516,12 @@ public:
 
 #undef HALIDE_GENERATOR_PARAM_TYPED_SETTER
 
+    // Overload for std::string.
+    void set(const std::string &new_value) {
+        check_value_writable();
+        value_ = new_value;
+    }
+
 protected:
     virtual void set_impl(const T &new_value) { check_value_writable(); value_ = new_value; }
 
@@ -939,6 +945,33 @@ public:
         : Internal::GeneratorParamImplBase<T>(name, value) {}
 };
 
+// Explicitly initiate std::string type outside to avoid constructor duplicate signature.
+// Otherwise we need enable_if for std::string type here.
+template<>
+class GeneratorParam<std::string> : public Internal::GeneratorParamImpl<std::string> {
+public:
+    GeneratorParam<std::string>(const std::string &name, const std::string &value)
+        : GeneratorParamImpl<std::string>(name, value) {
+    }
+    void set_from_string(const std::string &new_value_string) override {
+        this->set(new_value_string);
+    }
+
+    std::string get_default_value() const override {
+        return this->value();
+    }
+
+    std::string call_to_string(const std::string &v) const override {
+        return v;
+    }
+
+    std::string get_c_type() const override {
+        return "std::string";
+    }
+
+private:
+    std::string value_;
+};
 
 /** Addition between GeneratorParam<T> and any type that supports operator+ with T.
  * Returns type of underlying operator+. */
