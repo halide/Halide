@@ -32,17 +32,6 @@ bool should_extract(const Expr &e, bool lift_all) {
         return false;
     }
 
-    if (const Call *a = e.as<Call>()) {
-        if (!a->is_pure() && (a->call_type != Call::Halide)) {
-            // Impure calls may have side-effects, thus may not be re-ordered
-            // or reduced in number.
-            // Call to Halide function may give different value depending on
-            // where it is evaluated; however, the value is constant within
-            // an expr. Thus, it is okay to lift out.
-            return false;
-        }
-    }
-
     if (lift_all) {
         return true;
     }
@@ -84,17 +73,17 @@ class GVN : public IRMutator {
 public:
     struct Entry {
         Expr expr;
-        int use_count;
+        int use_count = 0;
+        // All consumer Exprs for which this is the last child Expr.
+        map<ExprWithCompareCache, int> uses;
+        Entry(const Expr &e) : expr(e) {}
     };
     vector<Entry> entries;
 
-    typedef map<ExprWithCompareCache, int> CacheType;
-    CacheType numbering;
+    map<const BaseExprNode *, int> shallow_numbering, output_numbering;
+    map<ExprWithCompareCache, int> leaves;
 
-    map<Expr, int, ExprCompare> shallow_numbering;
-
-    Scope<int> let_substitutions;
-    int number;
+    int number = -1;
 
     IRCompareCache cache;
 
@@ -112,101 +101,43 @@ public:
     Expr mutate(const Expr &e) override {
         // Early out if we've already seen this exact Expr.
         {
-            map<Expr, int, ExprCompare>::iterator iter = shallow_numbering.find(e);
+            auto iter = shallow_numbering.find(e.get());
             if (iter != shallow_numbering.end()) {
                 number = iter->second;
-                internal_assert(entries[number].expr.type() == e.type());
-                return entries[number].expr;
+                auto &entry = entries[number];
+                return entry.expr;
             }
         }
 
-        // If e is a var, check if it has been redirected to an existing numbering.
-        if (const Variable *var = e.as<Variable>()) {
-            if (let_substitutions.contains(var->name)) {
-                number = let_substitutions.get(var->name);
-                internal_assert(entries[number].expr.type() == e.type());
-                return entries[number].expr;
-            }
-        }
-
-        // If e already has an entry, return that.
-        CacheType::iterator iter = numbering.find(with_cache(e));
-        if (iter != numbering.end()) {
-            number = iter->second;
-            shallow_numbering[e] = number;
-            internal_assert(entries[number].expr.type() == e.type());
-            return entries[number].expr;
-        }
-
-        // Rebuild using things already in the numbering.
-        Expr old_e = e;
+        // We haven't seen this exact Expr before. Rebuild it using
+        // things already in the numbering.
+        number = -1;
         Expr new_e = IRMutator::mutate(e);
 
-        // See if it's there in another form after being rebuilt
-        // (e.g. because it was a let variable).
-        iter = numbering.find(with_cache(new_e));
-        if (iter != numbering.end()) {
-            number = iter->second;
-            shallow_numbering[old_e] = number;
-            internal_assert(entries[number].expr.type() == old_e.type());
-            return entries[number].expr;
-        }
+        // 'number' is now set to the numbering for the last child of
+        // this Expr (or -1 if there are no children). Next we see if
+        // that child has an identical parent to this one.
 
-        // Add it to the numbering.
-        Entry entry = {new_e, 0};
-        number = (int)entries.size();
-        numbering[with_cache(new_e)] = number;
-        shallow_numbering[new_e] = number;
-        entries.push_back(entry);
-        internal_assert(new_e.type() == old_e.type());
-        return new_e;
-    }
-
-
-    using IRMutator::visit;
-
-    Expr visit(const Let *let) override {
-        // Visit the value and add it to the numbering.
-        Expr value = mutate(let->value);
-
-        // Make references to the variable point to the value instead.
-        let_substitutions.push(let->name, number);
-
-        // Visit the body and add it to the numbering.
-        Expr body = mutate(let->body);
-
-        let_substitutions.pop(let->name);
-
-        // Just return the body. We've removed the Let.
-        return body;
-    }
-
-    Expr visit(const Load *op) override {
-        Expr predicate = op->predicate;
-        // If the predicate is trivially true, there is no point to lift it out
-        if (!is_one(predicate)) {
-            predicate = mutate(op->predicate);
-        }
-        Expr index = mutate(op->index);
-        if (predicate.same_as(op->predicate) && index.same_as(op->index)) {
-            return op;
-        }
-        return Load::make(op->type, op->name, index, op->image, op->param, predicate, op->alignment);
-    }
-
-    Stmt visit(const Store *op) override {
-        Expr predicate = op->predicate;
-        // If the predicate is trivially true, there is no point to lift it out
-        if (!is_one(predicate)) {
-            predicate = mutate(op->predicate);
-        }
-        Expr value = mutate(op->value);
-        Expr index = mutate(op->index);
-        if (predicate.same_as(op->predicate) && value.same_as(op->value) && index.same_as(op->index)) {
-            return op;
+        auto &use_map = number == -1 ? leaves : entries[number].uses;
+        auto p = use_map.emplace(with_cache(new_e), (int)entries.size());
+        auto iter = p.first;
+        bool novel = p.second;
+        if (novel) {
+            // This is a never-before-seen Expr
+            number = (int)entries.size();
+            entries.emplace_back(new_e);
+            iter->second = number;
         } else {
-            return Store::make(op->name, value, index, op->param, predicate, op->alignment);
+            // This child already has a syntactically-equal parent
+            number = iter->second;
+            auto &entry = entries[number];
+            new_e = entry.expr;
         }
+
+        // Memorize this numbering for the old and new forms of this Expr
+        shallow_numbering[e.get()] = number;
+        output_numbering[new_e.get()] = number;
+        return new_e;
     }
 };
 
@@ -224,17 +155,19 @@ public:
         // If it's not the sort of thing we want to extract as a let,
         // just use the generic visitor to increment use counts for
         // the children.
-        debug(4) << "Include: " << e << "; should extract: " << should_extract(e, lift_all) << "\n";
+        debug(4) << "Include: " << e << " @ " << (const void *)e.get()
+                 << "; should extract: " << should_extract(e, lift_all) << "\n";
         if (!should_extract(e, lift_all)) {
             e.accept(this);
             return;
         }
 
         // Find this thing's number.
-        map<Expr, int, ExprCompare>::iterator iter = gvn.shallow_numbering.find(e);
-        if (iter != gvn.shallow_numbering.end()) {
-            GVN::Entry &entry = gvn.entries[iter->second];
-            entry.use_count++;
+        auto iter = gvn.output_numbering.find(e.get());
+        if (iter != gvn.output_numbering.end()) {
+            gvn.entries[iter->second].use_count++;
+        } else {
+            internal_error << "Expr not in shallow numbering!\n";
         }
 
         // Visit the children if we haven't been here before.
@@ -246,26 +179,54 @@ public:
 class Replacer : public IRMutator {
 public:
     map<Expr, Expr, ExprCompare> replacements;
+    Replacer() {}
     Replacer(const map<Expr, Expr, ExprCompare> &r) : replacements(r) {}
 
     using IRMutator::mutate;
 
     Expr mutate(const Expr &e) override {
-        map<Expr, Expr, ExprCompare>::iterator iter = replacements.find(e);
-
-        if (iter != replacements.end()) {
-            return iter->second;
+        auto p = replacements.emplace(e, Expr());
+        if (p.second) {
+            p.first->second = IRMutator::mutate(e);
         }
-
-        // Rebuild it, replacing children.
-        Expr new_e = IRMutator::mutate(e);
-
-        // In case we encounter this expr again.
-        replacements[e] = new_e;
-
-        return new_e;
+        return p.first->second;
     }
 };
+
+class RemoveLets : public Replacer {
+    using Replacer::visit;
+
+    Scope<const BaseExprNode *> scope;
+
+    Expr visit(const Variable *op) override {
+        if (scope.contains(op->name)) {
+            return scope.get(op->name);
+        } else {
+            return op;
+        }
+    }
+
+    Expr visit(const Let *op) override {
+        Expr new_value = mutate(op->value);
+        // When we enter a let, we invalidate all cached replacements
+        // with values that reference this var due to shadowing. When
+        // we leave a let, we similarly invalidate any cached
+        // replacements we learned on the inside that reference the
+        // var.
+
+        // A blunt way to handle this is to temporarily invalidate
+        // *all* replacements, so we never see the same Expr node on the
+        // inside and outside of a Let.
+        decltype(replacements) tmp;
+        tmp.swap(replacements);
+        ScopedBinding<const BaseExprNode *> bind(scope, op->name, new_value.get());
+        auto result = mutate(op->body);
+        tmp.swap(replacements);
+        return result;
+    }
+};
+
+
 
 class CSEEveryExprInStmt : public IRMutator {
     bool lift_all;
@@ -288,7 +249,11 @@ Expr common_subexpression_elimination(const Expr &e_in, bool lift_all) {
     // Early-out for trivial cases.
     if (is_const(e) || e.as<Variable>()) return e;
 
-    debug(4) << "\n\n\nInput to letify " << e << "\n";
+    debug(4) << "\n\n\nInput to CSE " << e << "\n";
+
+    e = RemoveLets().mutate(e);
+
+    debug(4) << "After removing lets: " << e << "\n";
 
     GVN gvn;
     e = gvn.mutate(e);
@@ -499,27 +464,6 @@ void cse_test() {
                              cse_pred_load,
                              select(t[0] > 10, t[0] + 2, t[0] + 3 + t[3]) + t[3]});
 
-        check(e, correct);
-    }
-
-    {
-        Expr handle_a = reinterpret(type_of<int *>(), make_zero(UInt(64)));
-        Expr handle_b = reinterpret(type_of<float *>(), make_zero(UInt(64)));
-        Expr handle_c = reinterpret(type_of<float *>(), make_zero(UInt(64)));
-        e = Call::make(Int(32), "dummy", {handle_a, handle_b, handle_c}, Call::Extern);
-
-        Expr t0 = Variable::make(handle_b.type(), "t0");
-        correct = Let::make("t0", handle_b,
-                            Call::make(Int(32), "dummy", {handle_a, t0, t0}, Call::Extern));
-        check(e, correct);
-
-    }
-
-    {
-        Expr nonpure_call_1 = Call::make(Int(32), "dummy1", {1}, Call::Intrinsic);
-        Expr nonpure_call_2 = Call::make(Int(32), "dummy2", {1}, Call::Extern);
-        e = nonpure_call_1 + nonpure_call_2 + nonpure_call_1 + nonpure_call_2;
-        correct = e; // Impure calls shouldn't get CSE'd
         check(e, correct);
     }
 
