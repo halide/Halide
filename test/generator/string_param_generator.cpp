@@ -5,7 +5,7 @@ using namespace Halide;
 namespace {
 class StringParam : public Halide::Generator<StringParam> {
 public:
-    GeneratorParam<std::string> param{"param", ""};
+    GeneratorParam<std::string> param{"param", "add_one"};
 
     Input<Buffer<float>> input{ "input", 1 };
     Output<Buffer<float>> output{ "output", 1 };

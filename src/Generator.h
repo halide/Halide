@@ -968,9 +968,6 @@ public:
     std::string get_c_type() const override {
         return "std::string";
     }
-
-private:
-    std::string value_;
 };
 
 /** Addition between GeneratorParam<T> and any type that supports operator+ with T.
