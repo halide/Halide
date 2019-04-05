@@ -179,7 +179,7 @@ public:
 class Replacer : public IRMutator {
 public:
     map<Expr, Expr, ExprCompare> replacements;
-    Replacer() {}
+    Replacer() = default;
     Replacer(const map<Expr, Expr, ExprCompare> &r) : replacements(r) {}
 
     using IRMutator::mutate;
