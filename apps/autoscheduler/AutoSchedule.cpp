@@ -3068,7 +3068,9 @@ struct State {
                 Func(p.first->node->func).reorder_storage(storage_vars);
             }
 
-            mark_gpu_threads(p.second.get(), stage);
+            if (target.has_gpu_feature()) {
+                mark_gpu_threads(p.second.get(), stage);
+            }
         }
 
         for (auto &p : state_map) {
