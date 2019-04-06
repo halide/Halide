@@ -1152,6 +1152,8 @@ struct LoopNest {
             debug(0) << " *\n";
         } else if (parallel) {
             debug(0) << " p\n";
+        } else if (gpu_label == thread) {
+            debug(0) << " gpu_thread\n";
         } else {
             debug(0) << '\n';
         }
@@ -1625,7 +1627,7 @@ struct LoopNest {
                 if (target.has_gpu_feature()) {
                     switch (gpu_label) {
                         case thread: {
-                            internal_assert(!in_threads_loop); // threads loop can't be inside threads loop
+                            internal_assert(in_threads_loop); // threads loop can't be inside threads loop
                             outer->gpu_label = thread; 
                             inner->gpu_label = serial;
 
@@ -1743,6 +1745,7 @@ struct LoopNest {
             size_t index = 0;
             bool innermost_pure_dim = false, outermost = false, parallel = false, exists = false, pure = false, constant_extent = false;
             bool vectorized = false;
+            bool gpu_threads = false;
             FuncVar() : orig(Var()), var(Var()) {}
         };
         const FunctionDAG::Node* node;
@@ -1900,6 +1903,8 @@ struct LoopNest {
                         StageScheduleState::FuncVar v;
                         StageScheduleState::FuncVar &parent = state.vars[i];
 
+                        parent.gpu_threads = gpu_label == thread && symbolic_loop[i].pure;
+
                         int64_t factor = (parent.extent + size[parent.index] - 1) / size[parent.index];
                         int64_t innermost_size = innermost_loop->size[parent.index];
 
@@ -1924,6 +1929,7 @@ struct LoopNest {
                             // Not split in this dimension
                             v = parent;
                             v.parallel = false;
+
                             parent.exists = false;
                             parent.extent = 1;
                         } else {
@@ -1958,6 +1964,7 @@ struct LoopNest {
                             v.accessor.clear();
                             v.extent = factor;
                             v.parallel = false;
+                            v.gpu_threads = false;
                             v.outermost = false;
                         }
                         new_inner.push_back(v);
@@ -2880,147 +2887,24 @@ struct State {
         }
     }
 
-    std::set<const FunctionDAG::Node*> get_store_at(const FunctionDAG& dag, const FunctionDAG::Node* node, const VarOrRVar& v) {
-        std::set<const FunctionDAG::Node*> store_at;
-
-        LoopLevel here(node->func, v);
-        here.lock();
-
-        for (const auto &n : dag.nodes) {
-            auto store_level = n.func.schedule().store_level();
-            store_level.lock();
-
-            if (here == store_level) {
-                store_at.insert(&n);
-            }
-        }
-
-        return store_at;
-    }
-
-    std::set<const FunctionDAG::Node*> get_compute_at(const FunctionDAG& dag, const FunctionDAG::Node* node, const VarOrRVar& v) {
-        std::set<const FunctionDAG::Node*> compute_at;
-
-        LoopLevel here(node->func, v.var);
-        here.lock();
-
-        for (const auto &n : dag.nodes) {
-            auto compute_level = n.func.schedule().compute_level();
-            compute_level.lock();
-
-            if (here == compute_level) {
-                compute_at.insert(&n);
-            }
-        }
-
-        return compute_at;
-    }
-
-    std::vector<std::set<const FunctionDAG::Node*>> collect_store_locations(const FunctionDAG& dag, LoopNest::StageScheduleState* state) {
-        std::vector<std::set<const FunctionDAG::Node*>> stored_outside(state->vars.size());
-
-        std::set<const FunctionDAG::Node*> stored = get_store_at(dag, state->node, Var::outermost());
-
-        int i = state->vars.size() - 1;
-        for (auto it = state->vars.rbegin(); it != state->vars.rend(); it++) {
-            stored_outside[i] = stored;
-            i--;
-
-            for (const auto* n : get_store_at(dag, state->node, it->var)) {
-                stored.insert(n);
-            }
-        }
-
-        return stored_outside;
-    }
-
-    std::vector<std::set<const FunctionDAG::Node*>> collect_compute_locations(const FunctionDAG& dag, LoopNest::StageScheduleState* state) {
-        std::vector<std::set<const FunctionDAG::Node*>> computed_inside;
-        std::set<const FunctionDAG::Node*> computed;
-
-        for (auto it = state->vars.begin(); it != state->vars.end(); it++) {
-            for (const auto* n : get_compute_at(dag, state->node, it->var)) {
-                computed.insert(n);
-            }
-
-            computed_inside.push_back(computed);
-        }
-
-        return computed_inside;
-    }
-
-    // If a func is stored outside a loop but computed inside it, then the loop
-    // cannot be parallelized because it might introduce race conditions
-    bool can_parallelize(const std::vector<std::set<const FunctionDAG::Node*>>& stored_outside, const std::vector<std::set<const FunctionDAG::Node*>>& computed_inside, int i) {
-        for (const auto* n : stored_outside[i]) {
-            if (computed_inside[i].count(n) > 0) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    bool mark_gpu_threads(const FunctionDAG& dag, LoopNest::StageScheduleState* state, Stage& stage, LoopNest::StageScheduleState* parallel, std::set<const FunctionDAG::Node*>& invalid) {
-        uint8_t n_loops_tagged_gpu_thread = 0;
-
-        auto stored_outside = collect_store_locations(dag, state);
-        auto computed_inside = collect_compute_locations(dag, state);
-
+    void mark_gpu_threads(LoopNest::StageScheduleState* state, Stage& stage) {
+        uint8_t num_loops_tagged_gpu_thread = 0;
+        int64_t total_threads = 1;
         int max_threads[3] = {1024, 1024, 64};
-        int i = 0;
 
-        int var_index = 0;
-        for (auto it = state->vars.begin(); it != state->vars.end(); it++, var_index++) {
-            // Only mark loops that exist, that have not been vectorized, and that can be
-            // parallelized (are pure)
-            if (!it->exists || it->vectorized || !it->pure) continue;
+        for (const auto& v : state->vars) {
+            if (!v.exists || !v.gpu_threads)  {
+                continue;
+            }
 
-            // Any parallel loop will have already been marked as a gpu_block
-            if (it->parallel) break;
-
-            if (!can_parallelize(stored_outside, computed_inside, var_index)) {
+            if (num_loops_tagged_gpu_thread >= 3 || total_threads >= MAX_THREADS_PER_BLOCK || v.extent > max_threads[num_loops_tagged_gpu_thread]) {
                 break;
-            }
-
-            const auto &v = *it;
-
-            int64_t total_threads = 1;
-            for (int j = 0; j < (int)parallel->gpu_thread_extents.size(); j++) {
-                if (j == i) {
-                    total_threads *= v.extent;
-                    continue;
-                }
-
-                total_threads *= parallel->gpu_thread_extents[j];
-            }
-
-            if (i >= (int)parallel->gpu_thread_extents.size()) {
-                total_threads *= v.extent;
-            }
-
-            if (n_loops_tagged_gpu_thread >= 3 || total_threads >= MAX_THREADS_PER_BLOCK || v.extent > max_threads[i]) {
-                break;
-            }
-
-            // Any funcs computed inside this loop cannot be marked as
-            // gpu_threads
-            for (const auto& n : computed_inside[var_index]) {
-                invalid.insert(n);
             }
 
             state->schedule_source << "\n    .gpu_threads(" << v.var.name() << ")";
             stage.gpu_threads(v.var);
-            n_loops_tagged_gpu_thread++;
-            if (i >= (int)parallel->gpu_thread_extents.size()) {
-                parallel->gpu_thread_extents.push_back(v.extent);
-            } else {
-                parallel->gpu_thread_extents[i] = std::max(parallel->gpu_thread_extents[i], v.extent);
-            }
-            i++;
+            num_loops_tagged_gpu_thread++;
         }
-
-        return n_loops_tagged_gpu_thread > 0;
     }
 
     bool can_fuse_gpu(const vector<int64_t>& parallel_extents) {
@@ -3183,81 +3067,8 @@ struct State {
                 p.second->schedule_source << ")";
                 Func(p.first->node->func).reorder_storage(storage_vars);
             }
-        }
 
-
-        if (target.has_gpu_feature()) {
-            std::set<const FunctionDAG::Node*> invalid;
-            for (const auto &n : dag.nodes) {
-                for (auto &p : state_map) {
-                    if (&n != p.second->node) {
-                        continue;
-                    }
-
-                    if (invalid.count(p.second->node) > 0) {
-                        continue;
-                    }
-
-                    if (p.first->node->is_input) continue;
-
-                    Stage stage(p.first->stage);
-
-                    // If at least one loop has been marked gpu_thread, we need to
-                    // ensure that it is enclosed by a gpu_block loop. Check if this
-                    // loop nest or one of its ancestors has been marked gpu_block
-                    LoopNest::StageScheduleState* enclosing_parallel = p.second.get();
-                    bool has_enclosing_parallel = p.second->parallel;
-
-                    if (!has_enclosing_parallel) {
-                        for (auto* ancestor : p.second->ancestors) {
-                            if (ancestor->parallel) {
-                                enclosing_parallel = ancestor;
-                                has_enclosing_parallel = true;
-                                break;
-                            }
-                        }
-                    }
-
-                    if (!mark_gpu_threads(dag, p.second.get(), stage, enclosing_parallel, invalid) || has_enclosing_parallel) {
-                        continue;
-                    }
-
-                    // There is no outer loop marked as gpu_block.
-                    // Split the outer loop to create a new outer var with
-                    // extent = 1 and mark it gpu_blocks()
-                    const auto& outer_var = p.second->ordered_vars.back();
-                    vector<VarOrRVar> vars;
-                    for (const auto& v : p.second->ordered_vars) {
-                        vars.push_back(v.var);
-                    }
-
-                    Var new_outer(outer_var.var.name() + "_outer");
-                    stage.split(outer_var.var, new_outer, outer_var.var, (int)outer_var.extent);
-
-                    // If there are store_ats at Var::outermost(), we need to ensure
-                    // that those store_ats are inside the new gpu_blocks() outer
-                    // loop so new_outer should be outside Var::outermost
-                    vars.push_back(Var::outermost());
-                    vars.push_back(new_outer);
-
-                    p.second->schedule_source << "\n    .reorder(";
-                    bool first = true;
-
-                    for (const auto& v : vars) {
-                        if (!first) {
-                            p.second->schedule_source << ", ";
-                        }
-                        p.second->schedule_source << v.name();
-                        first = false;
-                    }
-                    p.second->schedule_source << ")";
-
-                    stage.reorder(vars);
-                    stage.gpu_blocks(new_outer);
-                    p.second->parallel = true;
-                    p.second->schedule_source << "\n    .gpu_blocks(" << new_outer.name() << ")";
-                }
-            }
+            mark_gpu_threads(p.second.get(), stage);
         }
 
         for (auto &p : state_map) {
