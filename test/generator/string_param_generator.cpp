@@ -5,19 +5,47 @@ using namespace Halide;
 namespace {
 class StringParam : public Halide::Generator<StringParam> {
 public:
-    GeneratorParam<std::string> param{"param", "add_one"};
+    GeneratorParam<std::string> rpn{ "rpn_expr", "5 y * x +" };
 
-    Input<Buffer<float>> input{ "input", 1 };
-    Output<Buffer<float>> output{ "output", 1 };
+    Output<Buffer<int>> output{ "output", 2 };
 
     void generate() {
-        Var x;
-        if (param.value() == "add_one") {
-            output(x) = 1 + input(x);
-        } else {
-            output(x) = input(x);
+        std::vector<std::string> tokens = Halide::Internal::split_string(rpn.value(), " ");
+        std::stack<Halide::Expr> exprs;
+        // Assume input is a valid RPN expression no checks for simplicity.
+        for (const std::string &token : tokens) {
+            bool is_op = (token == "+" || token == "-" || token == "*" || token == "/");
+            bool is_var = (token == "x" || token == "y");
+            if (is_var) {
+                if (token == "x") {
+                    exprs.push(x);
+                } else {
+                    exprs.push(y);
+                }
+            } else if (is_op) {
+                Halide::Expr a = exprs.top();
+                exprs.pop();
+                Halide::Expr b = exprs.top();
+                exprs.pop();
+                if (token == "+") {
+                    exprs.push(a + b);
+                } else if (token == "-") {
+                    exprs.push(a - b);
+                } else if (token == "*") {
+                    exprs.push(a * b);
+                } else {
+                    exprs.push(a / b);
+                }
+            } else {
+                // Numerical constant.
+                exprs.push(std::stoi(token));
+            }
         }
+
+        output(x, y) = exprs.top();
     }
+
+    Var x, y;
 };
 }  // namespace
 
