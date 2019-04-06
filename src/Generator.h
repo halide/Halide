@@ -888,11 +888,35 @@ public:
 };
 
 template<typename T>
+class GeneratorParam_String : public Internal::GeneratorParamImpl<T> {
+public:
+    GeneratorParam_String(const std::string &name, const std::string &value)
+        : GeneratorParamImpl<T>(name, value) {
+    }
+    void set_from_string(const std::string &new_value_string) override {
+        this->set(new_value_string);
+    }
+
+    std::string get_default_value() const override {
+        return this->value();
+    }
+
+    std::string call_to_string(const std::string &v) const override {
+        return v;
+    }
+
+    std::string get_c_type() const override {
+        return "std::string";
+    }
+};
+
+template<typename T>
 using GeneratorParamImplBase =
     typename select_type<
         cond<std::is_same<T, Target>::value,        GeneratorParam_Target<T>>,
         cond<std::is_same<T, MachineParams>::value, GeneratorParam_MachineParams<T>>,
         cond<std::is_same<T, LoopLevel>::value,     GeneratorParam_LoopLevel>,
+        cond<std::is_same<T, std::string>::value,   GeneratorParam_String<T>>,
         cond<std::is_same<T, Type>::value,          GeneratorParam_Type<T>>,
         cond<std::is_same<T, bool>::value,          GeneratorParam_Bool<T>>,
         cond<std::is_arithmetic<T>::value,          GeneratorParam_Arithmetic<T>>,
@@ -932,6 +956,7 @@ using GeneratorParamImplBase =
 template <typename T>
 class GeneratorParam : public Internal::GeneratorParamImplBase<T> {
 public:
+    template <typename T2 = T, typename std::enable_if<!std::is_same<T2, std::string>::value>::type * = nullptr>
     GeneratorParam(const std::string &name, const T &value)
         : Internal::GeneratorParamImplBase<T>(name, value) {}
 
@@ -943,31 +968,6 @@ public:
 
     GeneratorParam(const std::string &name, const std::string &value)
         : Internal::GeneratorParamImplBase<T>(name, value) {}
-};
-
-// Explicitly initiate std::string type outside to avoid constructor duplicate signature.
-// Otherwise we need enable_if for std::string type here.
-template<>
-class GeneratorParam<std::string> : public Internal::GeneratorParamImpl<std::string> {
-public:
-    GeneratorParam<std::string>(const std::string &name, const std::string &value)
-        : GeneratorParamImpl<std::string>(name, value) {
-    }
-    void set_from_string(const std::string &new_value_string) override {
-        this->set(new_value_string);
-    }
-
-    std::string get_default_value() const override {
-        return this->value();
-    }
-
-    std::string call_to_string(const std::string &v) const override {
-        return v;
-    }
-
-    std::string get_c_type() const override {
-        return "std::string";
-    }
 };
 
 /** Addition between GeneratorParam<T> and any type that supports operator+ with T.
