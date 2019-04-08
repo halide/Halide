@@ -294,6 +294,9 @@ if (WITH_TEST_GENERATOR)
   halide_define_aot_test(pyramid
                          GENERATOR_ARGS levels=10)
 
+  halide_define_aot_test(string_param
+                         GENERATOR_ARGS "rpn_expr=5 x * y +")
+
   halide_define_aot_test(msan
                          HALIDE_TARGET_FEATURES msan)
 

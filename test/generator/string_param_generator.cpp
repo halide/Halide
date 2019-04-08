@@ -5,7 +5,7 @@ using namespace Halide;
 namespace {
 class StringParam : public Halide::Generator<StringParam> {
 public:
-    GeneratorParam<std::string> rpn{ "rpn_expr", "5 y * x +" };
+    GeneratorParam<std::string> rpn{ "rpn_expr", "" };
 
     Output<Buffer<int>> output{ "output", 2 };
 
