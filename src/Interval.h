@@ -74,10 +74,10 @@ struct Interval {
     static Interval make_intersection(const Interval &a, const Interval &b);
 
     /** An eagerly-simplifying max of two Exprs that respects infinities. */
-    static Expr make_max(Expr a, Expr b);
+    static Expr make_max(const Expr &a, const Expr &b);
 
     /** An eagerly-simplifying min of two Exprs that respects infinities. */
-    static Expr make_min(Expr a, Expr b);
+    static Expr make_min(const Expr &a, const Expr &b);
 
     bool operator==(const Interval &other) const {
         return (min.same_as(other.min)) && (max.same_as(other.max));
