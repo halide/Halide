@@ -154,9 +154,9 @@ class GraphSubstitute : public IRGraphMutator2 {
     Expr visit(const Let *op) override {
         Expr new_value = mutate(op->value);
         if (op->name == var) {
-            return Let::make(op->name, new_value, op->value);
+            return Let::make(op->name, new_value, op->body);
         } else {
-            return Let::make(op->name, new_value, mutate(op->value));
+            return Let::make(op->name, new_value, mutate(op->body));
         }
     }
 
