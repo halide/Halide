@@ -935,6 +935,9 @@ using GeneratorParamImplBase =
  *   - enum
  *   - Halide::Target
  *   - Halide::Type
+ *   - std::string
+ * Please don't use std::string unless there's no way to do what you want with some
+ * other type; in particular, don't use this if you can use enum instead.
  * All GeneratorParams have a default value. Arithmetic types can also
  * optionally specify min and max. Enum types must specify a string-to-value
  * map.
