@@ -898,7 +898,7 @@ public:
     }
 
     std::string get_default_value() const override {
-        return this->value();
+        return "\"" + this->value() + "\"";
     }
 
     std::string call_to_string(const std::string &v) const override {
