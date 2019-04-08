@@ -78,7 +78,7 @@ public:
         map<ExprWithCompareCache, int> uses;
         Entry(const Expr &e) : expr(e) {}
     };
-    vector<Entry> entries;
+    vector<std::unique_ptr<Entry>> entries;
 
     map<const BaseExprNode *, int> shallow_numbering, output_numbering;
     map<ExprWithCompareCache, int> leaves;
@@ -104,8 +104,7 @@ public:
             auto iter = shallow_numbering.find(e.get());
             if (iter != shallow_numbering.end()) {
                 number = iter->second;
-                auto &entry = entries[number];
-                return entry.expr;
+                return entries[number]->expr;
             }
         }
 
@@ -118,20 +117,19 @@ public:
         // this Expr (or -1 if there are no children). Next we see if
         // that child has an identical parent to this one.
 
-        auto &use_map = number == -1 ? leaves : entries[number].uses;
+        auto &use_map = number == -1 ? leaves : entries[number]->uses;
         auto p = use_map.emplace(with_cache(new_e), (int)entries.size());
         auto iter = p.first;
         bool novel = p.second;
         if (novel) {
             // This is a never-before-seen Expr
             number = (int)entries.size();
-            entries.emplace_back(new_e);
+            entries.emplace_back(new Entry(new_e));
             iter->second = number;
         } else {
             // This child already has a syntactically-equal parent
             number = iter->second;
-            auto &entry = entries[number];
-            new_e = entry.expr;
+            new_e = entries[number]->expr;
         }
 
         // Memorize this numbering for the old and new forms of this Expr
@@ -165,7 +163,7 @@ public:
         // Find this thing's number.
         auto iter = gvn.output_numbering.find(e.get());
         if (iter != gvn.output_numbering.end()) {
-            gvn.entries[iter->second].use_count++;
+            gvn.entries[iter->second]->use_count++;
         } else {
             internal_error << "Expr not in shallow numbering!\n";
         }
@@ -268,15 +266,14 @@ Expr common_subexpression_elimination(const Expr &e_in, bool lift_all) {
     vector<Expr> new_version(gvn.entries.size());
     map<Expr, Expr, ExprCompare> replacements;
     for (size_t i = 0; i < gvn.entries.size(); i++) {
-        const GVN::Entry &e = gvn.entries[i];
-        Expr old = e.expr;
-        if (e.use_count > 1) {
+        const auto &e = gvn.entries[i];
+        if (e->use_count > 1) {
             string name = unique_name('t');
-            lets.push_back({ name, e.expr });
+            lets.emplace_back(name, e->expr);
             // Point references to this expr to the variable instead.
-            replacements[e.expr] = Variable::make(e.expr.type(), name);
+            replacements[e->expr] = Variable::make(e->expr.type(), name);
         }
-        debug(4) << i << ": " << e.expr << ", " << e.use_count << "\n";
+        debug(4) << i << ": " << e->expr << ", " << e->use_count << "\n";
     }
 
     // Rebuild the expr to include references to the variables:
