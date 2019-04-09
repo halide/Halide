@@ -10,7 +10,9 @@ public:
     Output<Buffer<int>> output{ "output", 2 };
 
     void generate() {
-        std::vector<std::string> tokens = Halide::Internal::split_string(rpn.value(), " ");
+        // Remove cmake extra skip characters if any exist.
+        const std::string value = Halide::Internal::replace_all(rpn.value(), "\\ ", " ");
+        std::vector<std::string> tokens = Halide::Internal::split_string(value, " ");
         std::stack<Halide::Expr> exprs;
         // Assume input is a valid RPN expression no checks for simplicity.
         for (const std::string &token : tokens) {
