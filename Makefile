@@ -203,7 +203,25 @@ CXX_FLAGS += -funwind-tables
 print-%:
 	@echo '$*=$($*)'
 
-LLVM_STATIC_LIBS = -L $(LLVM_LIBDIR) $(shell $(LLVM_CONFIG) --link-static --libfiles bitwriter bitreader linker ipo mcjit $(X86_LLVM_CONFIG_LIB) $(ARM_LLVM_CONFIG_LIB) $(OPENCL_LLVM_CONFIG_LIB) $(METAL_LLVM_CONFIG_LIB) $(PTX_LLVM_CONFIG_LIB) $(AARCH64_LLVM_CONFIG_LIB) $(MIPS_LLVM_CONFIG_LIB) $(POWERPC_LLVM_CONFIG_LIB) $(HEXAGON_LLVM_CONFIG_LIB) $(AMDGPU_LLVM_CONFIG_LIB))
+LLVM_STATIC_LIBFILES = \
+	bitwriter \
+	bitreader \
+	linker \
+	ipo \
+	mcjit \
+	$(X86_LLVM_CONFIG_LIB) \
+	$(ARM_LLVM_CONFIG_LIB) \
+	$(OPENCL_LLVM_CONFIG_LIB) \
+	$(METAL_LLVM_CONFIG_LIB) \
+	$(PTX_LLVM_CONFIG_LIB) \
+	$(AARCH64_LLVM_CONFIG_LIB) \
+	$(MIPS_LLVM_CONFIG_LIB) \
+	$(POWERPC_LLVM_CONFIG_LIB) \
+	$(HEXAGON_LLVM_CONFIG_LIB) \
+	$(AMDGPU_LLVM_CONFIG_LIB) \
+	$(WEBASSEMBLY_LLVM_CONFIG_LIB)
+
+LLVM_STATIC_LIBS = -L $(LLVM_LIBDIR) $(shell $(LLVM_CONFIG) --link-static --libfiles $(LLVM_STATIC_LIBFILES))
 
 # Add a rpath to the llvm used for linking, in case multiple llvms are
 # installed. Bakes a path on the build system into the .so, so don't
@@ -218,7 +236,7 @@ TUTORIAL_CXX_FLAGS ?= -std=c++11 -g -fno-omit-frame-pointer $(RTTI_CXX_FLAGS) -I
 # plus our warning flags.
 # Also allow tests, via conditional compilation, to use the entire
 # capability of the CPU being compiled on via -march=native. This
-# presumes tests are run on the smae machine they are compiled on.
+# presumes tests are run on the same machine they are compiled on.
 TEST_CXX_FLAGS ?= $(TUTORIAL_CXX_FLAGS) $(CXX_WARNING_FLAGS) -march=native
 TEST_LD_FLAGS = -L$(BIN_DIR) -lHalide $(COMMON_LD_FLAGS)
 
@@ -1381,7 +1399,7 @@ $(BIN_DIR)/stubuser.generator: $(BUILD_DIR)/stubtest_generator.o $(BUILD_DIR)/co
 # usage (the types can be inferred), but for AOT compilation, we must make the types
 # concrete via generator args.
 STUBTEST_GENERATOR_ARGS=\
-    untyped_buffer_input.type=uint8 untyped_buffer_input.dim=3 \
+	untyped_buffer_input.type=uint8 untyped_buffer_input.dim=3 \
 	simple_input.type=float32 \
 	array_input.type=float32 array_input.size=2 \
 	int_arg.size=2 \

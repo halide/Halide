@@ -17,27 +17,36 @@
 #include "Pipeline.h"
 
 
-#if defined(_MSC_VER) && !defined(NOMINMAX)
-#define NOMINMAX
-#endif
-#ifdef _WIN32
-#include <windows.h>
-static bool have_symbol(const char *s) {
-    return GetProcAddress(GetModuleHandle(nullptr), s) != nullptr;
-}
-#else
-#include <dlfcn.h>
-static bool have_symbol(const char *s) {
-    return dlsym(nullptr, s) != nullptr;
-}
-#endif
-
 namespace Halide {
 namespace Internal {
 
 using std::string;
 
+#ifdef _MSC_VER
+#define NOMINMAX
+#endif
+#ifdef _WIN32
+#include <windows.h>
+void *get_symbol_address(const char *s) {
+    return (void *) GetProcAddress(GetModuleHandle(nullptr), s);
+}
+#else
+#include <dlfcn.h>
+void *get_symbol_address(const char *s) {
+    // Mac OS 10.11 fails to return a symbol address if nullptr or RTLD_DEFAULT
+    // is passed to dlsym. This seems to work.
+    void *handle = dlopen(nullptr, RTLD_LAZY);
+    void *result = dlsym(handle, s);
+    dlclose(handle);
+    return result;
+}
+#endif
+
 namespace {
+
+bool have_symbol(const char *s) {
+    return get_symbol_address(s) != nullptr;
+}
 
 typedef struct CUctx_st *CUcontext;
 

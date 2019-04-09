@@ -2307,8 +2307,7 @@ void CodeGen_LLVM::visit(const Call *op) {
             }
 
         } else {
-            Value *a = codegen(op->args[0]);
-            value = builder->CreateBitCast(a, llvm_dst);
+            value = builder->CreateBitCast(value, llvm_dst);
         }
     } else if (op->is_intrinsic(Call::shift_left)) {
         internal_assert(op->args.size() == 2);
