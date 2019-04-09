@@ -1,19 +1,25 @@
-#include <string>
-#include <stdint.h>
 #include <mutex>
 #include <set>
+#include <stdint.h>
+#include <string>
 
-#ifndef _WIN32
+#ifdef _WIN32
+#ifdef _MSC_VER
+#define NOMINMAX
+#endif
+#include <windows.h>
+#else
+#include <dlfcn.h>
 #include <sys/mman.h>
 #endif
 
 #include "CodeGen_Internal.h"
+#include "CodeGen_LLVM.h"
+#include "Debug.h"
 #include "JITModule.h"
 #include "LLVM_Headers.h"
-#include "LLVM_Runtime_Linker.h"
-#include "Debug.h"
 #include "LLVM_Output.h"
-#include "CodeGen_LLVM.h"
+#include "LLVM_Runtime_Linker.h"
 #include "Pipeline.h"
 
 
@@ -22,16 +28,11 @@ namespace Internal {
 
 using std::string;
 
-#ifdef _MSC_VER
-#define NOMINMAX
-#endif
 #ifdef _WIN32
-#include <windows.h>
 void *get_symbol_address(const char *s) {
     return (void *) GetProcAddress(GetModuleHandle(nullptr), s);
 }
 #else
-#include <dlfcn.h>
 void *get_symbol_address(const char *s) {
     // Mac OS 10.11 fails to return a symbol address if nullptr or RTLD_DEFAULT
     // is passed to dlsym. This seems to work.
