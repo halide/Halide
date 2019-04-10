@@ -1298,6 +1298,10 @@ $(FILTERS_DIR)/pyramid.a: $(BIN_DIR)/pyramid.generator
 	@mkdir -p $(@D)
 	$(CURDIR)/$< -g pyramid -f pyramid $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime levels=10
 
+$(FILTERS_DIR)/string_param.a: $(BIN_DIR)/string_param.generator
+	@mkdir -p $(@D)
+	$(CURDIR)/$< -g string_param -f string_param  $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime rpn_expr="5 y * x +"
+
 # memory_profiler_mandelbrot need profiler set
 $(FILTERS_DIR)/memory_profiler_mandelbrot.a: $(BIN_DIR)/memory_profiler_mandelbrot.generator
 	@mkdir -p $(@D)
