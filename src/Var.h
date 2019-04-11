@@ -167,12 +167,40 @@ public:
     }
 };
 
+template<int N = -1>
+struct ImplicitVar {
+public:
+    Var to_var() const {
+        if (N >= 0) {
+            return Var::implicit(N);
+        } else {
+            return Var("_");
+        }
+    }
+
+    operator Var() const {
+        return to_var();
+    }
+    operator Expr() const {
+        return to_var();
+    }
+};
+
 /** A placeholder variable for infered arguments. See \ref Var::implicit */
-HALIDE_EXPORT extern Var _;
+static constexpr ImplicitVar<> _;
 
 /** The first ten implicit Vars for use in scheduling. See \ref Var::implicit */
 // @{
-HALIDE_EXPORT extern Var _0, _1, _2, _3, _4, _5, _6, _7, _8, _9;
+static constexpr ImplicitVar<0> _0;
+static constexpr ImplicitVar<1> _1;
+static constexpr ImplicitVar<2> _2;
+static constexpr ImplicitVar<3> _3;
+static constexpr ImplicitVar<4> _4;
+static constexpr ImplicitVar<5> _5;
+static constexpr ImplicitVar<6> _6;
+static constexpr ImplicitVar<7> _7;
+static constexpr ImplicitVar<8> _8;
+static constexpr ImplicitVar<9> _9;
 // @}
 
 namespace Internal {
