@@ -80,7 +80,7 @@ public:
         for (auto &output : model_outputs_) {
             auto model_output = converted_model_.outputs.find(output.first);
             if (model_output == converted_model_.outputs.end()) {
-                std::cerr << "Can't bind output " + output.first << std::endl;
+                std::cerr << "Can't bind output " << output.first << std::endl;
                 abort();
             }
             *output.second = model_output->second.rep;
