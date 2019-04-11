@@ -185,7 +185,7 @@ struct ImplicitVar {
     }
 };
 
-/** A placeholder variable for infered arguments. See \ref Var::implicit */
+/** A placeholder variable for inferred arguments. See \ref Var::implicit */
 static constexpr ImplicitVar<> _;
 
 /** The first ten implicit Vars for use in scheduling. See \ref Var::implicit */
