@@ -169,7 +169,6 @@ public:
 
 template<int N = -1>
 struct ImplicitVar {
-public:
     Var to_var() const {
         if (N >= 0) {
             return Var::implicit(N);
