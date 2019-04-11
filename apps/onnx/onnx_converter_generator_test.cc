@@ -21,7 +21,7 @@ int main(int argc, char **argv) {
     for (int i = 0; i < 3; ++i) {
         for (int j = 0; j < 4; ++j) {
             if (C(i, j) != A(i, j) + B(i, j)) {
-                std::cout << "Unexpcted value for inputs at (" << i << "," << j << ") " << std::endl;
+                std::cout << "Unexpected value for inputs at (" << i << "," << j << ") " << std::endl;
                 return -1;
             }
         }

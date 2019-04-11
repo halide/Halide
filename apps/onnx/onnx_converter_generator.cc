@@ -1,12 +1,12 @@
+#include "Halide.h"
 #include "onnx_converter.h"
-#include <Halide.h>
-#include <map>
 #include <fstream>
+#include <map>
 
 namespace {
 
 // TODO: This should be an onnx_converter API.
-Halide::Type getHalideType(const Tensor &tensor) {
+Halide::Type get_halide_type(const Tensor &tensor) {
     switch (tensor.type) {
     case onnx::TensorProto_DataType_FLOAT:
         return Halide::Float(32);
@@ -45,13 +45,12 @@ public:
         if (!input) {
             throw std::invalid_argument(
                 "Can't read model file" + model_file_path.value());
-        } else {
-            std::stringstream buffer;
-            buffer << input.rdbuf();
-            if (!onnx_model.ParseFromString(buffer.str())) {
-                throw std::invalid_argument(
-                    "Can't parse model file" + model_file_path.value());
-            }
+        }
+        std::stringstream buffer;
+        buffer << input.rdbuf();
+        if (!onnx_model.ParseFromString(buffer.str())) {
+            throw std::invalid_argument(
+                "Can't parse model file" + model_file_path.value());
         }
 
         converted_model_ = convert_model(onnx_model, "");
@@ -64,23 +63,25 @@ public:
         for (const auto &output : converted_model_.outputs) {
             model_outputs_[output.first] = add_output<Buffer<>>(
                 output.first,
-                getHalideType(output.second),
+                get_halide_type(output.second),
                 output.second.rep.dimensions());
         }
     }
 
     void generate() {
-        for (auto &t : converted_model_.tensors) {
-            auto input = model_inputs_.find(t.first);
-            if (input != model_inputs_.end()) {
-                t.second.rep = *input->second;
+        for (auto const &input : model_inputs_) {
+            auto tensor = converted_model_.tensors.find(input.first);
+            if (tensor == converted_model_.tensors.end()) {
+                throw std::domain_error("Can't bind input " + input.first);
             }
+            tensor->second.rep = *input.second;
         }
-        for (const auto o : converted_model_.outputs) {
-            auto output = model_outputs_.find(o.first);
-            if (output != model_outputs_.end()) {
-                *output->second = o.second.rep;
+        for (auto &output : model_outputs_) {
+            auto model_output = converted_model_.outputs.find(output.first);
+            if (model_output == converted_model_.outputs.end()) {
+                throw std::domain_error("Can't bind output " + output.first);
             }
+            *output.second = model_output->second.rep;
         }
     }
 

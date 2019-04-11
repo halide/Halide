@@ -57,7 +57,7 @@ $(BIN)/onnx_converter.generator : onnx_converter_generator.cc $(GENERATOR_DEPS) 
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -I$(BIN) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
-# Convolution with autopad=SAME_UPPER isn't supported yet (Also depracted). TODO Enable this.
+# Convolution with autopad=SAME_UPPER isn't supported yet (Also deprecated). TODO Enable this.
 #$(BIN)/onnx_model_zoo/mnist/model.onnx:
 #	@mkdir -p $(@D)
 #	curl -o $(@D)/mnist.tar.gz https://onnxzoo.blob.core.windows.net/models/opset_8/mnist/mnist.tar.gz
