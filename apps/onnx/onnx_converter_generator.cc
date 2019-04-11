@@ -43,14 +43,14 @@ public:
         onnx::ModelProto onnx_model;
         std::fstream input(model_file_path.value(), std::ios::in | std::ios::binary);
         if (!input) {
-            throw std::invalid_argument(
-                "Can't read model file" + model_file_path.value());
+            std::cerr << "Can't read model file" << model_file_path.value() << std::endl;
+            abort();
         }
         std::stringstream buffer;
         buffer << input.rdbuf();
         if (!onnx_model.ParseFromString(buffer.str())) {
-            throw std::invalid_argument(
-                "Can't parse model file" + model_file_path.value());
+            std::cerr << "Can't parse model file" << model_file_path.value() << std::endl;
+            abort();
         }
 
         converted_model_ = convert_model(onnx_model, "");
@@ -72,14 +72,16 @@ public:
         for (auto const &input : model_inputs_) {
             auto tensor = converted_model_.tensors.find(input.first);
             if (tensor == converted_model_.tensors.end()) {
-                throw std::domain_error("Can't bind input " + input.first);
+                std::cerr << "Can't bind input " << input.first;
+								abort();
             }
             tensor->second.rep = *input.second;
         }
         for (auto &output : model_outputs_) {
             auto model_output = converted_model_.outputs.find(output.first);
             if (model_output == converted_model_.outputs.end()) {
-                throw std::domain_error("Can't bind output " + output.first);
+                std::cerr << "Can't bind output " + output.first << std::endl;
+                abort();
             }
             *output.second = model_output->second.rep;
         }
