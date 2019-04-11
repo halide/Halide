@@ -5,6 +5,7 @@
 #include <random>
 
 int main(int argc, char **argv) {
+    std::cout << "Running onnx_converter_generator_test..." << std::endl;
     Halide::Runtime::Buffer<float> A(3, 4);
     Halide::Runtime::Buffer<float> B(3, 4);
     Halide::Runtime::Buffer<float> C(3, 4);
@@ -25,6 +26,6 @@ int main(int argc, char **argv) {
             }
         }
     }
-    std::cout << "Succssful!" << std::endl;
+    std::cout << "Success!" << std::endl;
     return 0;
 }

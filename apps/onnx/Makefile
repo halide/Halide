@@ -72,13 +72,14 @@ $(BIN)/test_model.onnx: test_model_proto.txt $(BIN)/onnx/onnx.proto
 	cat $< | protoc --encode=onnx.ModelProto $(BIN)/onnx/onnx.proto > $@
 
 $(BIN)/test_model.a: $(BIN)/onnx_converter.generator $(BIN)/test_model.onnx
-	@mkdir -p @(@D)
+	@mkdir -p $(@D)
 	$< -g onnx_model_generator -o $(BIN) -f test_model target=$(HL_TARGET) model_file_path=$(BIN)/test_model.onnx
 
 $(BIN)/onnx_converter_generator_test: onnx_converter_generator_test.cc $(BIN)/test_model.a
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) -I$(BIN) $^ -o $@ $(LDFLAGS)
 
-test: $(BIN)/onnx_converter_test
+test: $(BIN)/onnx_converter_test $(BIN)/onnx_converter_generator_test
 	LD_LIBRARY_PATH=$(BIN) $(BIN)/onnx_converter_test
+	LD_LIBRARY_PATH=$(BIN) $(BIN)/onnx_converter_generator_test
 
