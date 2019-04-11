@@ -16,6 +16,18 @@
 namespace Halide {
 namespace Internal {
 
+// There is no __has_feature(undefined_sanitizer), so we use asan as
+// a proxy for detecting ubsan.
+#if defined(__has_feature)
+#if __has_feature(address_sanitizer)
+#define HALIDE_DISABLE_UBSAN  __attribute__((no_sanitize("undefined")))
+#endif
+#endif
+
+#ifndef HALIDE_DISABLE_UBSAN
+#define HALIDE_DISABLE_UBSAN
+#endif
+
 /** Does the first expression have the same structure as the second?
  * Variables in the first expression with the name * are interpreted
  * as wildcards, and their matching equivalent in the second
@@ -860,6 +872,7 @@ auto add(A a, B b) -> decltype(IRMatcher::operator+(a, b)) {return IRMatcher::op
 
 template<>
 HALIDE_ALWAYS_INLINE
+HALIDE_DISABLE_UBSAN
 int64_t constant_fold_bin_op<Add>(halide_type_t &t, int64_t a, int64_t b) noexcept {
     t.lanes |= ((t.bits >= 32) && add_would_overflow(t.bits, a, b)) ? MatcherState::signed_integer_overflow : 0;
     int dead_bits = 64 - t.bits;
@@ -892,6 +905,7 @@ auto sub(A a, B b) -> decltype(IRMatcher::operator-(a, b)) {return IRMatcher::op
 
 template<>
 HALIDE_ALWAYS_INLINE
+HALIDE_DISABLE_UBSAN
 int64_t constant_fold_bin_op<Sub>(halide_type_t &t, int64_t a, int64_t b) noexcept {
     t.lanes |= ((t.bits >= 32) && sub_would_overflow(t.bits, a, b)) ? MatcherState::signed_integer_overflow : 0;
     // Drop the high bits then sign-extend them back
@@ -925,6 +939,7 @@ auto mul(A a, B b) -> decltype(IRMatcher::operator*(a, b)) {return IRMatcher::op
 
 template<>
 HALIDE_ALWAYS_INLINE
+HALIDE_DISABLE_UBSAN
 int64_t constant_fold_bin_op<Mul>(halide_type_t &t, int64_t a, int64_t b) noexcept {
     t.lanes |= ((t.bits >= 32) && mul_would_overflow(t.bits, a, b)) ? MatcherState::signed_integer_overflow : 0;
     int dead_bits = 64 - t.bits;
