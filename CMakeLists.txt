@@ -146,6 +146,7 @@ check_llvm_target(NVPTX WITH_NVPTX)
 # AMDGPU target is WIP
 check_llvm_target(AMDGPU WITH_AMDGPU)
 
+option(WITH_PYTHON_BINDINGS "Include python bindings" OFF)
 option(TARGET_NATIVE_CLIENT "Include Native Client" OFF)
 option(TARGET_X86 "Include x86 target" ${WITH_X86})
 option(TARGET_ARM "Include ARM target" ${WITH_ARM})
@@ -492,3 +493,8 @@ add_custom_target(distrib
   COMMAND cmake -E rename "${CPACK_PACKAGE_VENDOR}.${CPACK_PACKAGE_EXT}" "${CPACK_PACKAGE_VENDOR}.${DISTRIB_PACKAGE_EXT}"
   BYPRODUCTS "${CPACK_PACKAGE_VENDOR}.${DISTRIB_PACKAGE_EXT}"
   USES_TERMINAL)
+
+if (WITH_PYTHON_BINDINGS)
+    add_subdirectory(python_bindings)
+endif()
+ 
