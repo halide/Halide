@@ -684,7 +684,9 @@ public:
     /** Construct a new Func to wrap a Buffer. */
     template<typename T>
     HALIDE_NO_USER_CODE_INLINE explicit Func(Buffer<T> &im) : Func() {
-        (*this)(_) = im(_);
+        // Don't use Halide::_ (avoid initialization-order-fiasco)
+        Var underscore = Var("_");
+        (*this)(underscore) = im(underscore);
     }
 
     /** Evaluate this function over some rectangular domain and return

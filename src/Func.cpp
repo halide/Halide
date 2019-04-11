@@ -48,7 +48,9 @@ Func::Func(const string &name) : func(unique_name(name)) {}
 Func::Func() : func(make_entity_name(this, "Halide:.*:Func", 'f')) {}
 
 Func::Func(Expr e) : func(make_entity_name(this, "Halide:.*:Func", 'f')) {
-    (*this)(_) = e;
+    // Don't use Halide::_ (avoid initialization-order-fiasco)
+    Var underscore = Var("_");
+    (*this)(underscore) = e;
 }
 
 Func::Func(Function f) : func(f) {}
@@ -209,7 +211,9 @@ std::pair<int, int> Func::add_implicit_vars(vector<Var> &args) const {
     int count = 0;
     std::vector<Var>::iterator iter = args.begin();
 
-    while (iter != args.end() && !iter->same_as(_)) {
+    // Don't use Halide::_ (avoid initialization-order-fiasco)
+    Var underscore = Var("_");
+    while (iter != args.end() && !iter->same_as(underscore)) {
         iter++;
     }
     if (iter != args.end()) {
@@ -233,12 +237,14 @@ std::pair<int, int> Func::add_implicit_vars(vector<Var> &args) const {
 }
 
 std::pair<int, int> Func::add_implicit_vars(vector<Expr> &args) const {
+    // Don't use Halide::_ (avoid initialization-order-fiasco)
+    Var underscore = Var("_");
     int placeholder_pos = -1;
     int count = 0;
     std::vector<Expr>::iterator iter = args.begin();
     while (iter != args.end()) {
         const Variable *var = iter->as<Variable>();
-        if (var && var->name == _.name())
+        if (var && var->name == underscore.name())
             break;
         iter++;
     }
