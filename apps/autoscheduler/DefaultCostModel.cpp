@@ -16,6 +16,8 @@
 #include "CostModel.h"
 #include "NetworkSize.h"
 
+// These are weights embedded from the raw arrays in the weights
+// dir. The embedding is done using binary2cpp.
 extern "C" float weights_pipeline_mean[];
 extern "C" int weights_pipeline_mean_length;
 extern "C" float weights_pipeline_std[];

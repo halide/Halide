@@ -137,7 +137,9 @@ public:
     // To avoid redundantly re-recording copies of the same
     // load Jacobian, we keep a count of how many times a
     // load with this Jacobian occurs.
-    int64_t count() const {return c;}
+    int64_t count() const {
+        return c;
+    }
 
     // Try to merge another LoadJacobian into this one, increasing the
     // count if the coefficients match.
@@ -213,10 +215,10 @@ class Span {
     int64_t min_, max_;
     bool constant_extent_;
 public:
-    int64_t min() const {return min_;}
-    int64_t max() const {return max_;}
-    int64_t extent() const {return max_ - min_ + 1;}
-    bool constant_extent() const {return constant_extent_;}
+    int64_t min() const { return min_; }
+    int64_t max() const { return max_; }
+    int64_t extent() const { return max_ - min_ + 1; }
+    bool constant_extent() const { return constant_extent_; }
 
     void union_with(const Span &other) {
         min_ = std::min(min_, other.min());
@@ -370,6 +372,7 @@ struct BoundContents {
         // Release a BoundContents object with this layout back to the pool
         void release(const BoundContents *b) const {
             internal_assert(b->layout == this) << "Releasing BoundContents onto the wrong pool!";
+            b->~BoundContents();
             pool.push_back(const_cast<BoundContents *>(b));
         }
     };

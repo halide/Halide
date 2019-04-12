@@ -4,7 +4,7 @@
   featurization. This also contains the top-level interface into the
   autoscheduler.
 
-  The most interesting classes to look are:
+  The most interesting classes to look at are:
 
   LoopNest               Represents one node in our tree representation of loop nests.
   State                  A state in the beam search. Holds a root loop nest.
@@ -15,8 +15,8 @@
   optimal_schedule             Runs the passes of the coarse-to-fine beam search
   optimal_schedule_pass        Runs a single pass of beam search
   LoopNest::compute_features   Recursively walks over a loop nest tree, computing our featurization using Halide's analysis tools.
-  LoopNest::apply              Actually applied a computed schedule to a Halide pipeline
-  State::generate_children     Generators successor states to a state in the beam search
+  LoopNest::apply              Actually apply a computed schedule to a Halide pipeline
+  State::generate_children     Generates successor states to a state in the beam search
 
   Environment variables used (directly or indirectly):
 
@@ -54,18 +54,16 @@
   If set to 1, limits the search space to that of Mullapudi et al.
 
 */
-#include <set>
-#include <queue>
 #include <algorithm>
-#include <fstream>
 #include <chrono>
+#include <fstream>
 #include <iostream>
+#include <queue>
 #include <random>
+#include <set>
+#include <sstream>
 #include <unordered_map>
 #include <unordered_set>
-#include <fstream>
-#include <sstream>
-#include <random>
 
 #include "Halide.h"
 #include "CostModel.h"
@@ -145,8 +143,7 @@ vector<vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, int fa
     if (d == -1) {
         result.push_back(vector<int64_t>());
     } else {
-        vector<vector<int64_t>> v;
-        v = generate_tilings(s, d - 1, factor, allow_splits);
+        vector<vector<int64_t>> v = generate_tilings(s, d - 1, factor, allow_splits);
         // If we're already generated too many tiling configurations
         // for the inner loops, search the outer loops with coarser
         // granularity.
@@ -154,7 +151,7 @@ vector<vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, int fa
             factor *= 2;
         }
 
-        for (auto t : v) {
+        for (auto &t : v) {
             bool is_full = false, is_one = false;
             // Skip trivial tilings
             if ((size_t)d == s.size() - 1) {
@@ -360,12 +357,12 @@ struct LoopNest {
 
     // All of a stage's interesting locations in the loop nest. Used to help compute the featurization of a stage.
     struct Sites {
-        const LoopNest *compute = nullptr, // Its containing compute_at site
-            *store = nullptr,              // Its containing store_at site
-            *produce = nullptr,            // Its own outermost node
-            *innermost = nullptr,          // Its innermost node - usually a SIMD loop
-            *task = nullptr;               // The parallel for loop it belongs to
-        bool inlined = false;              // Is the Func inlined?
+        const LoopNest *compute = nullptr;   // Its containing compute_at site
+        const LoopNest *store = nullptr;     // Its containing store_at site
+        const LoopNest *produce = nullptr;   // Its own outermost node
+        const LoopNest *innermost = nullptr; // Its innermost node - usually a SIMD loop
+        const LoopNest *task = nullptr;      // The parallel for loop it belongs to
+        bool inlined = false;                // Is the Func inlined?
     };
 
     // Compute all the sites of interest for each pipeline stage
@@ -438,6 +435,9 @@ struct LoopNest {
                     // any loops and just stop after we hit the
                     // required number of cores
                     parallel_tasks *= i;
+                    // If we haven't picked out parallel tiling yet,
+                    // assume that we'll target 8*cores when we do,
+                    // which is a common rule of thumb.
                     if (!parallel && parallel_tasks > params.parallelism * 8) {
                         // We would split this loop
                         parallel_tasks = params.parallelism * 8;
@@ -889,6 +889,7 @@ struct LoopNest {
                                     int count[5] = {0, 0, 0, 0, 0};
                                     for (int i = 0; i < e->producer->dimensions; i++) {
                                         auto stride = jac.first(i, vectorized_loop_index);
+                                        // stride is a rational. Check to see if it's a small integer.
                                         if (stride == 0) count[0]++;
                                         else if (stride == 1) count[1]++;
                                         else if (stride == 2) count[2]++;
@@ -1137,6 +1138,7 @@ struct LoopNest {
     const Bound &get_bounds(const FunctionDAG::Node *f) const {
         if (bounds.contains(f)) {
             const Bound &b = bounds.get(f);
+            // Expensive validation for debugging
             // b->validate();
             return b;
         }
@@ -2856,6 +2858,8 @@ void configure_pipeline_features(const FunctionDAG &dag,
                                  CostModel *cost_model) {
     cost_model->reset();
     const int pipeline_feat_size = head1_w * head1_h;
+    // We ignore the first seven pipeline features in the cost
+    // model. It's just a mask of which types are in use.
     static_assert(sizeof(PipelineFeatures) - 7 * sizeof(int) ==
                   sizeof(int) * pipeline_feat_size,
                   "Incorrect size for pipeline features");

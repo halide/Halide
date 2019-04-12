@@ -11,10 +11,6 @@ namespace Internal {
 // The algorithm-specific features. For legacy reasons these are
 // called PipelineFeatures in the code.
 struct PipelineFeatures {
-    PipelineFeatures() {
-        std::memset(this, 0, sizeof(PipelineFeatures));
-    }
-
     static constexpr int num_features() {
         return sizeof(PipelineFeatures) / sizeof(int);
     }
@@ -28,7 +24,7 @@ struct PipelineFeatures {
         return ((int *)(this))[idx];
     }
 
-    const int &operator[](int idx) const {
+    int operator[](int idx) const {
         return ((const int *)(this))[idx];
     }
 
@@ -46,7 +42,7 @@ struct PipelineFeatures {
         SelfCall,   // Recursive calls from a Func to itself
         ExternCall, // Math intrinsics, typically
         Let,
-        NumOpTypes,
+        NumOpTypes
     };
 
     enum class ScalarType {
@@ -61,9 +57,9 @@ struct PipelineFeatures {
     };
 
     // Not fed into the network, but helps avoid printing huge numbers of zeros while debugging things
-    int types_in_use[(int)ScalarType::NumScalarTypes];
+    int types_in_use[(int)ScalarType::NumScalarTypes] = {};
 
-    int op_histogram[(int)OpType::NumOpTypes][(int)ScalarType::NumScalarTypes];
+    int op_histogram[(int)OpType::NumOpTypes][(int)ScalarType::NumScalarTypes] = {};
 
     enum class AccessType {
         LoadFunc,
@@ -80,10 +76,15 @@ struct PipelineFeatures {
     // each case we illustrate such a call, assuming that the
     // variables of this Func are x, y, z, and that the
     // dimension vectorized over is the first (x).
-    int pointwise_accesses[(int)AccessType::NumAccessTypes][(int)ScalarType::NumScalarTypes],  // Square identity matrix. f(x - 2, y + 8, z + param)
-        transpose_accesses[(int)AccessType::NumAccessTypes][(int)ScalarType::NumScalarTypes],         // Square permutation matrix. f(y + 1, z - 3, x)
-        broadcast_accesses[(int)AccessType::NumAccessTypes][(int)ScalarType::NumScalarTypes],         // Each row sums to 1. Each column sums to 1 or 0. f(y, x)
-        slice_accesses[(int)AccessType::NumAccessTypes][(int)ScalarType::NumScalarTypes];             // Each row sums to 1 or 0. Each column sums to 1. f(z, y, x, 4)
+
+    // Square identity matrix. f(x - 2, y + 8, z + param)
+    int pointwise_accesses[(int)AccessType::NumAccessTypes][(int)ScalarType::NumScalarTypes] = {};
+    // Square permutation matrix. f(y + 1, z - 3, x)
+    int transpose_accesses[(int)AccessType::NumAccessTypes][(int)ScalarType::NumScalarTypes] = {};
+    // Each row sums to 1. Each column sums to 1 or 0. f(y, x)
+    int broadcast_accesses[(int)AccessType::NumAccessTypes][(int)ScalarType::NumScalarTypes] = {};
+    // Each row sums to 1 or 0. Each column sums to 1. f(z, y, x, 4)
+    int slice_accesses[(int)AccessType::NumAccessTypes][(int)ScalarType::NumScalarTypes] = {};
 
     void dump() const {
         for (int i = 0; i < (int)ScalarType::NumScalarTypes; i++) {
@@ -159,7 +160,7 @@ struct ScheduleFeatures {
         return ((double *)(this))[idx];
     }
 
-    const double &operator[](int idx) const {
+    double operator[](int idx) const {
         return ((const double *)(this))[idx];
     }
 
