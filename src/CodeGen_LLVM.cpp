@@ -1127,8 +1127,11 @@ void CodeGen_LLVM::optimize_module() {
     b.DisableUnrollLoops = get_target().has_feature(Target::DisableLLVMLoopUnroll);
     b.SLPVectorize = true;  // Note: SLP vectorization has no analogue in the Halide scheduling model
 #if LLVM_VERSION >= 90
-    // Clear ScEv info for all loops. This can reduce compile time for some
-    // complex schedules by a substantial amount (50% or more).
+    // Clear ScEv info for all loops. Certain Halide applications spend a very
+    // long time compiling in forgetLoop, and prefer to forget everything
+    // and rebuild SCEV (aka "Scalar Evolution") from scratch.
+    // Sample difference in compile time reduction at the time of this change was
+    // 21.04 -> 14.78 using current ToT release build. (See also https://reviews.llvm.org/rL358304)
     b.ForgetAllSCEVInLoopUnroll = true;
 #endif
 
