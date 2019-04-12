@@ -1126,6 +1126,11 @@ void CodeGen_LLVM::optimize_module() {
     b.LoopVectorize = !get_target().has_feature(Target::DisableLLVMLoopVectorize);
     b.DisableUnrollLoops = get_target().has_feature(Target::DisableLLVMLoopUnroll);
     b.SLPVectorize = true;  // Note: SLP vectorization has no analogue in the Halide scheduling model
+#if LLVM_VERSION >= 90
+    // Clear ScEv info for all loops. This can reduce compile time for some
+    // complex schedules by a substantial amount (50% or more).
+    b.ForgetAllSCEVInLoopUnroll = true;
+#endif
 
     if (TM) {
         TM->adjustPassManager(b);
