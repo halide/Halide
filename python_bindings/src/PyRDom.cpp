@@ -36,7 +36,8 @@ void define_rdom(py::module &m) {
         .def_readonly("x", &RDom::x)
         .def_readonly("y", &RDom::y)
         .def_readonly("z", &RDom::z)
-        .def_readonly("w", &RDom::w);
+        .def_readonly("w", &RDom::w)
+        .def("__getitem__", &RDom::operator[]);
 
     add_binary_operators_with<Expr>(rdom_class);
 }
