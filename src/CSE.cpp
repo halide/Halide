@@ -78,9 +78,9 @@ public:
         map<ExprWithCompareCache, int> uses;
         Entry(const Expr &e) : expr(e) {}
     };
-    vector<Entry> entries;
+    vector<std::unique_ptr<Entry>> entries;
 
-    map<const BaseExprNode *, int> shallow_numbering, output_numbering;
+    map<Expr, int, ExprCompare> shallow_numbering, output_numbering;
     map<ExprWithCompareCache, int> leaves;
 
     int number = -1;
@@ -101,11 +101,10 @@ public:
     Expr mutate(const Expr &e) override {
         // Early out if we've already seen this exact Expr.
         {
-            auto iter = shallow_numbering.find(e.get());
+            auto iter = shallow_numbering.find(e);
             if (iter != shallow_numbering.end()) {
                 number = iter->second;
-                auto &entry = entries[number];
-                return entry.expr;
+                return entries[number]->expr;
             }
         }
 
@@ -118,25 +117,24 @@ public:
         // this Expr (or -1 if there are no children). Next we see if
         // that child has an identical parent to this one.
 
-        auto &use_map = number == -1 ? leaves : entries[number].uses;
+        auto &use_map = number == -1 ? leaves : entries[number]->uses;
         auto p = use_map.emplace(with_cache(new_e), (int)entries.size());
         auto iter = p.first;
         bool novel = p.second;
         if (novel) {
             // This is a never-before-seen Expr
             number = (int)entries.size();
-            entries.emplace_back(new_e);
             iter->second = number;
+            entries.emplace_back(new Entry(new_e));
         } else {
             // This child already has a syntactically-equal parent
             number = iter->second;
-            auto &entry = entries[number];
-            new_e = entry.expr;
+            new_e = entries[number]->expr;
         }
 
         // Memorize this numbering for the old and new forms of this Expr
-        shallow_numbering[e.get()] = number;
-        output_numbering[new_e.get()] = number;
+        shallow_numbering[e] = number;
+        output_numbering[new_e] = number;
         return new_e;
     }
 };
@@ -155,7 +153,7 @@ public:
         // If it's not the sort of thing we want to extract as a let,
         // just use the generic visitor to increment use counts for
         // the children.
-        debug(4) << "Include: " << e << " @ " << (const void *)e.get()
+        debug(4) << "Include: " << e
                  << "; should extract: " << should_extract(e, lift_all) << "\n";
         if (!should_extract(e, lift_all)) {
             e.accept(this);
@@ -163,9 +161,9 @@ public:
         }
 
         // Find this thing's number.
-        auto iter = gvn.output_numbering.find(e.get());
+        auto iter = gvn.output_numbering.find(e);
         if (iter != gvn.output_numbering.end()) {
-            gvn.entries[iter->second].use_count++;
+            gvn.entries[iter->second]->use_count++;
         } else {
             internal_error << "Expr not in shallow numbering!\n";
         }
@@ -176,27 +174,23 @@ public:
 };
 
 /** Rebuild an expression using a map of replacements. Works on graphs without exploding. */
-class Replacer : public IRMutator {
+class Replacer : public IRGraphMutator2 {
 public:
-    map<Expr, Expr, ExprCompare> replacements;
-    Replacer() {}
-    Replacer(const map<Expr, Expr, ExprCompare> &r) : replacements(r) {}
-
-    using IRMutator::mutate;
-
-    Expr mutate(const Expr &e) override {
-        auto p = replacements.emplace(e, Expr());
-        if (p.second) {
-            p.first->second = IRMutator::mutate(e);
-        }
-        return p.first->second;
+    Replacer() = default;
+    Replacer(const map<Expr, Expr, ExprCompare> &r) : IRGraphMutator2() {
+        expr_replacements = r;
     }
+
+    void erase(const Expr &e) {
+        expr_replacements.erase(e);
+    }
+
 };
 
-class RemoveLets : public Replacer {
-    using Replacer::visit;
+class RemoveLets : public IRGraphMutator2 {
+    using IRGraphMutator2::visit;
 
-    Scope<const BaseExprNode *> scope;
+    Scope<Expr> scope;
 
     Expr visit(const Variable *op) override {
         if (scope.contains(op->name)) {
@@ -208,25 +202,22 @@ class RemoveLets : public Replacer {
 
     Expr visit(const Let *op) override {
         Expr new_value = mutate(op->value);
-        // When we enter a let, we invalidate all cached replacements
+        // When we enter a let, we invalidate all cached mutations
         // with values that reference this var due to shadowing. When
         // we leave a let, we similarly invalidate any cached
-        // replacements we learned on the inside that reference the
-        // var.
+        // mutations we learned on the inside that reference the var.
 
         // A blunt way to handle this is to temporarily invalidate
-        // *all* replacements, so we never see the same Expr node on the
-        // inside and outside of a Let.
-        decltype(replacements) tmp;
-        tmp.swap(replacements);
-        ScopedBinding<const BaseExprNode *> bind(scope, op->name, new_value.get());
+        // *all* mutations, so we never see the same Expr node
+        // on the inside and outside of a Let.
+        decltype(expr_replacements) tmp;
+        tmp.swap(expr_replacements);
+        ScopedBinding<Expr> bind(scope, op->name, new_value);
         auto result = mutate(op->body);
-        tmp.swap(replacements);
+        tmp.swap(expr_replacements);
         return result;
     }
 };
-
-
 
 class CSEEveryExprInStmt : public IRMutator {
     bool lift_all;
@@ -268,15 +259,14 @@ Expr common_subexpression_elimination(const Expr &e_in, bool lift_all) {
     vector<Expr> new_version(gvn.entries.size());
     map<Expr, Expr, ExprCompare> replacements;
     for (size_t i = 0; i < gvn.entries.size(); i++) {
-        const GVN::Entry &e = gvn.entries[i];
-        Expr old = e.expr;
-        if (e.use_count > 1) {
+        const auto &e = gvn.entries[i];
+        if (e->use_count > 1) {
             string name = unique_name('t');
-            lets.push_back({ name, e.expr });
+            lets.emplace_back(name, e->expr);
             // Point references to this expr to the variable instead.
-            replacements[e.expr] = Variable::make(e.expr.type(), name);
+            replacements[e->expr] = Variable::make(e->expr.type(), name);
         }
-        debug(4) << i << ": " << e.expr << ", " << e.use_count << "\n";
+        debug(4) << i << ": " << e->expr << ", " << e->use_count << "\n";
     }
 
     // Rebuild the expr to include references to the variables:
@@ -289,7 +279,7 @@ Expr common_subexpression_elimination(const Expr &e_in, bool lift_all) {
     for (size_t i = lets.size(); i > 0; i--) {
         Expr value = lets[i-1].second;
         // Drop this variable as an acceptible replacement for this expr.
-        replacer.replacements.erase(value);
+        replacer.erase(value);
         // Use containing lets in the value.
         value = replacer.mutate(lets[i-1].second);
         e = Let::make(lets[i-1].first, value, e);

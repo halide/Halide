@@ -309,14 +309,19 @@ WEAK int map_arguments(void *user_context, int arg_count,
         if ((arg_flags[i] & flag_mask) != flag_value) continue;
         remote_buffer &mapped_arg = mapped_args[mapped_count++];
         if (arg_flags[i] != 0) {
-            // This is a buffer, map it and put the mapped buffer into
-            // the result.
-            halide_assert(user_context, arg_sizes[i] == sizeof(uint64_t));
-            uint64_t device_handle = ((halide_buffer_t *)args[i])->device;
-            ion_device_handle *ion_handle = reinterpret<ion_device_handle *>(device_handle);
-            debug(user_context) << i << ", " << device_handle << "\n";
-            mapped_arg.data = reinterpret_cast<uint8_t*>(ion_handle->buffer);
-            mapped_arg.dataLen = ion_handle->size;
+            uint64_t device = *(uint64_t *)args[i];
+            uint8_t* host = *(uint8_t **)((uint8_t *)args[i] + sizeof(uint64_t));
+            if (device) {
+                // This argument has a device handle.
+                ion_device_handle *ion_handle = reinterpret<ion_device_handle *>(device);
+                debug(user_context) << i << ", " << device << "\n";
+                mapped_arg.data = reinterpret_cast<uint8_t*>(ion_handle->buffer);
+                mapped_arg.dataLen = ion_handle->size;
+            } else {
+                // This is just a host buffer, and the size is passed in as the arg size.
+                mapped_arg.data = host;
+                mapped_arg.dataLen = arg_sizes[i];
+            }
         } else {
             // This is a scalar, just put the pointer/size in the result.
             mapped_arg.data = (uint8_t*)args[i];
