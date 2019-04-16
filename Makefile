@@ -47,7 +47,10 @@ endif
 
 SHELL = bash
 CXX ?= g++
+# EMCC is the tool that invokes Emscripten
 EMCC ?= emcc
+# WASM_SHELL is the shell tool used to run AOT-compiled WebAssembly.
+# (Node could be used instead.)
 WASM_SHELL ?= d8
 PREFIX ?= /usr/local
 LLVM_CONFIG ?= llvm-config
@@ -59,7 +62,8 @@ CLANG ?= clang
 CLANG_VERSION = $(shell $(CLANG) --version)
 LLVM_BINDIR = $(shell $(LLVM_CONFIG) --bindir | sed -e 's/\\/\//g' -e 's/\([a-zA-Z]\):/\/\1/g')
 LLVM_LIBDIR = $(shell $(LLVM_CONFIG) --libdir | sed -e 's/\\/\//g' -e 's/\([a-zA-Z]\):/\/\1/g')
-# TODO: apparently no llvm_config flag to get canonical paths to tools
+# Apparently there is no llvm_config flag to get canonical paths to tools,
+# so we'll just construct one relative to --src-root and hope that is stable everywhere.
 LLVM_LLD_INCLUDE_DIR = $(shell $(LLVM_CONFIG) --src-root | sed -e 's/\\/\//g' -e 's/\([a-zA-Z]\):/\/\1/g')/tools/lld/include
 LLVM_SYSTEM_LIBS=$(shell ${LLVM_CONFIG} --system-libs --link-static | sed -e 's/[\/&]/\\&/g')
 LLVM_AS = $(LLVM_BINDIR)/llvm-as

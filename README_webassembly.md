@@ -10,7 +10,7 @@ As WebAssembly itself is still under active development, Halide's support has so
 - Halide's JIT for Wasm is extremely limited and really useful only for internal testing purposes.
 
 # Additional Tooling Requirements:
-- In additional to the usual install of LLVM and Clang, you'll need wasm-ld (via LLVM/tools/lld). All should be v9.x+ (current trunk)
+- In additional to the usual install of LLVM and Clang, you'll need wasm-ld (via LLVM/tools/lld). All should be v9.x+ (current trunk as of April 2019).
 - V8 library, v7.0+
 - d8 shell tool, v7.0+
 - Emscripten, 1.38.28+
@@ -46,7 +46,7 @@ In sum: don't plan on using Halide JIT mode with Wasm unless you are working on 
 
 # To Use Halide For WebAssembly:
 
-- Ensure WebAssembly is in LLVM_TARGETS_TO_BUILD:
+- Ensure WebAssembly is in LLVM_TARGETS_TO_BUILD; if you use the default (`"all"`) then it's already present, but otherwise, add it explicitly:
 ```
 -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX;AArch64;Mips;PowerPC;Hexagon;WebAssembly
 ```
