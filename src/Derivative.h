@@ -31,6 +31,11 @@ struct Derivative {
             name += "_unbounded";
         }
         auto it = adjoints.find(FuncKey{ name, update_id });
+        if (!bounded && it == adjoints.end()) {
+            // No boundary condition applied, use the original function
+            name = func.name();
+            it = adjoints.find(FuncKey{ name, update_id });
+        }
         internal_assert(it != adjoints.end()) << "Could not find Func " << name << "\n";
         return it->second;
     }
