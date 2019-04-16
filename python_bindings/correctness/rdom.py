@@ -14,13 +14,12 @@ def test_rdom():
     r.where(r.x <= r.y)
 
     diagonal[r.x, r.y] += 2
-    diagonal[r[0], r[1]] += 2
     output = diagonal.realize(domain_width, domain_height)
     
     for iy in range(domain_height):
         for ix in range(domain_width):
             if ix <= iy:
-                assert output[ix, iy] == 5
+                assert output[ix, iy] == 3
             else:
                 assert output[ix, iy] == 1
 
