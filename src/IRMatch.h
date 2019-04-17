@@ -864,7 +864,7 @@ int64_t constant_fold_bin_op<Add>(halide_type_t &t, int64_t a, int64_t b) noexce
     t.lanes |= ((t.bits >= 32) && add_would_overflow(t.bits, a, b)) ? MatcherState::signed_integer_overflow : 0;
     int dead_bits = 64 - t.bits;
     // Drop the high bits then sign-extend them back
-    return int64_t(uint64_t(a + b) << dead_bits) >> dead_bits;
+    return int64_t((uint64_t(a) + uint64_t(b)) << dead_bits) >> dead_bits;
 }
 
 template<>
@@ -896,7 +896,7 @@ int64_t constant_fold_bin_op<Sub>(halide_type_t &t, int64_t a, int64_t b) noexce
     t.lanes |= ((t.bits >= 32) && sub_would_overflow(t.bits, a, b)) ? MatcherState::signed_integer_overflow : 0;
     // Drop the high bits then sign-extend them back
     int dead_bits = 64 - t.bits;
-    return int64_t(uint64_t(a - b) << dead_bits) >> dead_bits;
+    return int64_t((uint64_t(a) - uint64_t(b)) << dead_bits) >> dead_bits;
 }
 
 template<>
@@ -929,7 +929,7 @@ int64_t constant_fold_bin_op<Mul>(halide_type_t &t, int64_t a, int64_t b) noexce
     t.lanes |= ((t.bits >= 32) && mul_would_overflow(t.bits, a, b)) ? MatcherState::signed_integer_overflow : 0;
     int dead_bits = 64 - t.bits;
     // Drop the high bits then sign-extend them back
-    return int64_t(uint64_t(a * b) << dead_bits) >> dead_bits;
+    return int64_t((uint64_t(a) * uint64_t(b)) << dead_bits) >> dead_bits;
 }
 
 template<>
