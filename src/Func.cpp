@@ -238,7 +238,7 @@ std::pair<int, int> Func::add_implicit_vars(vector<Expr> &args) const {
     std::vector<Expr>::iterator iter = args.begin();
     while (iter != args.end()) {
         const Variable *var = iter->as<Variable>();
-        if (var && var->name == _.name())
+        if (var && var->name == Var(_).name())
             break;
         iter++;
     }
@@ -3106,9 +3106,5 @@ void Func::infer_input_bounds(Pipeline::RealizationArg outputs,
 void Func::compile_jit(const Target &target) {
     pipeline().compile_jit(target);
 }
-
-Var _("_");
-Var _0("_0"), _1("_1"), _2("_2"), _3("_3"), _4("_4"),
-           _5("_5"), _6("_6"), _7("_7"), _8("_8"), _9("_9");
 
 }  // namespace Halide
