@@ -53,6 +53,8 @@
   HL_NO_SUBTILING
   If set to 1, limits the search space to that of Mullapudi et al.
 
+  TODO: expose these settings by adding some means to pass args to
+  generator plugins instead of environment vars.
 */
 #include <algorithm>
 #include <chrono>
@@ -2667,28 +2669,22 @@ struct State {
             }
         }
         if (!vars.empty()) {
-            string prefix = "Var ";
             for (const auto &p : vars) {
                 if (p.second.empty()) {
-                    src << prefix << p.first << "(\"" << p.first << "\")";
+                    src << "Var " << p.first << "(\"" << p.first << "\");\n";
                 } else {
-                    src << prefix << p.first << "(" << p.second << ")";
+                    src << "Var " << p.first << "(" << p.second << ");\n";
                 }
-                prefix = ", ";
             }
-            src << ";\n";
         }
         if (!rvars.empty()) {
-            string prefix = "RVar ";
             for (const auto &p : rvars) {
                 if (p.second.empty()) {
-                    src << prefix << p.first << "(\"" << p.first << "\")";
+                    src << "RVar " << p.first << "(\"" << p.first << "\");\n";
                 } else {
-                    src << prefix << p.first << "(" << p.second << ")";
+                    src << "RVar " << p.first << "(" << p.second << ");\n";
                 }
-                prefix = ", ";
             }
-            src << ";\n";
         }
 
         for (auto &p : state_map) {
