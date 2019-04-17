@@ -1,6 +1,8 @@
 #include "Halide.h"
 #include <stdio.h>
 
+namespace {
+
 using namespace Halide;
 
 struct event {
@@ -112,6 +114,8 @@ int my_trace(void *user_context, const halide_trace_event_t *ev) {
     trace[n_trace++] = e;
     return n_trace;
 }
+
+}  // namespace
 
 int main(int argc, char **argv) {
     ImageParam input(Float(32), 1, "i");

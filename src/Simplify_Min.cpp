@@ -113,16 +113,17 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
              rewrite(min(max(min(x, y), z), y), min(max(x, z), y)) ||
              rewrite(min(max(min(y, x), z), y), min(y, max(x, z))) ||
              rewrite(min(min(x, c0), c1), min(x, fold(min(c0, c1)))) ||
-             rewrite(min(min(x, y) + c0, x), min(x, y + c0), c0 > 0) ||
-             rewrite(min(min(x, y) + c0, x), min(x, y) + c0, c0 < 0) ||
-             rewrite(min(min(y, x) + c0, x), min(y + c0, x), c0 > 0) ||
-             rewrite(min(min(y, x) + c0, x), min(y, x) + c0, c0 < 0) ||
 
              // Canonicalize a clamp
              rewrite(min(max(x, c0), c1), max(min(x, c1), c0), c0 <= c1) ||
 
              (no_overflow(op->type) &&
-              (rewrite(min(x + c0, c1), min(x, fold(c1 - c0)) + c0) ||
+              (rewrite(min(min(x, y) + c0, x), min(x, y + c0), c0 > 0) ||
+               rewrite(min(min(x, y) + c0, x), min(x, y) + c0, c0 < 0) ||
+               rewrite(min(min(y, x) + c0, x), min(y + c0, x), c0 > 0) ||
+               rewrite(min(min(y, x) + c0, x), min(y, x) + c0, c0 < 0) ||
+
+               rewrite(min(x + c0, c1), min(x, fold(c1 - c0)) + c0) ||
 
                rewrite(min(x + c0, y + c1), min(x, y + fold(c1 - c0)) + c0, c1 > c0) ||
                rewrite(min(x + c0, y + c1), min(x + fold(c0 - c1), y) + c1, c0 > c1) ||
