@@ -112,7 +112,6 @@ set (RUNTIME_LL
   posix_math
   powerpc
   ptx_dev
-  riscv
   win32_math
   x86
   x86_avx

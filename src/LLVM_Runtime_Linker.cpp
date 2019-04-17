@@ -439,6 +439,8 @@ llvm::Triple get_triple_for_target(const Target &target) {
             triple.setOS(llvm::Triple::Linux);
             // TODO: Check what options there are here.
             triple.setEnvironment(llvm::Triple::GNUEABIHF);
+        } else if (target.os == Target::NoOS) {
+            // for baremetal environment
         } else {
             user_error << "No RISCV support for this OS\n";
         }
