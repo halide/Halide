@@ -4,12 +4,13 @@
 #include <vector>
 #include <algorithm>
 
-// A specialized hash map used in this file. It can only grow, and it
-// requires a perfect hash in the form of "id" and "max_id" fields on
-// each key. If the keys don't all have a consistent max_id, or if you
-// call make_large with the wrong max_id, you get UB. If you think
-// that might be happening, uncomment the assertions below for some
-// extra checking.
+// A specialized hash map used in the autoscheduler. It can only grow,
+// and it requires a perfect hash in the form of "id" and "max_id"
+// fields on each key. If the keys don't all have a consistent max_id,
+// or if you call make_large with the wrong max_id, you get UB. If you
+// think that might be happening, uncomment the assertions below for
+// some extra checking.
+
 template<typename K, typename T, int max_small_size = 4>
 class PerfectHashMap {
     using storage_type = std::vector<std::pair<const K *, T>>;
@@ -53,7 +54,7 @@ class PerfectHashMap {
     }
 
     void upgrade_from_small_to_large(int n) {
-        internal_assert(occupied <= max_small_size) << occupied << " " << max_small_size << "\n";
+        // internal_assert(occupied <= max_small_size) << occupied << " " << max_small_size << "\n";
         storage_type tmp(n);
         state = Large;
         tmp.swap(storage);
@@ -61,6 +62,7 @@ class PerfectHashMap {
         for (int i = 0; i < o; i++) {
             emplace_large(tmp[i].first, std::move(tmp[i].second));
         }
+        occupied = o;
     }
 
     // Methods when the map is in the empty state
@@ -73,12 +75,12 @@ class PerfectHashMap {
     }
 
     const T &get_empty(const K *n) const {
-        internal_error << "Calling get on an empty PerfectHashMap";
+        // internal_error << "Calling get on an empty PerfectHashMap";
         return unreachable_value();
     }
 
     T &get_empty(const K *n) {
-        internal_error << "Calling get on an empty PerfectHashMap";
+        // internal_error << "Calling get on an empty PerfectHashMap";
         return unreachable_value();
     }
 
@@ -339,7 +341,7 @@ public:
         it.iter = storage.data();
         it.end = it.iter + storage.size();
         if (it.key() == nullptr) it++;
-        internal_assert(it.iter == it.end || it.key());
+        // internal_assert(it.iter == it.end || it.key());
         return it;
     }
 
@@ -355,7 +357,7 @@ public:
         it.iter = storage.data();
         it.end = it.iter + storage.size();
         if (it.key() == nullptr) it++;
-        internal_assert(it.iter == it.end || it.key());
+        // internal_assert(it.iter == it.end || it.key());
         return it;
     }
 

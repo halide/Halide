@@ -33,11 +33,17 @@ autotune: $(BIN)/demo.generator $(AUTOSCHED_BIN)/augment_sample $(AUTOSCHED_BIN)
 		$(AUTOSCHED_SRC)/weights \
 		$(AUTOSCHED_BIN)
 
+$(BIN)/test_perfect_hash_map: test_perfect_hash_map.cpp PerfectHashMap.h
+	$(CXX) $(CXXFLAGS) $< -o $@
+
 # Simple jit-based test
 $(BIN)/test: test.cpp $(AUTOSCHED_BIN)/libauto_schedule.so
 	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) $< -o $@ $(LDFLAGS) $(LIB_HALIDE) $(HALIDE_SYSTEM_LIBS)
 
-test: $(BIN)/test
+test_perfect_hash_map: $(BIN)/test_perfect_hash_map
+	$(BIN)/test_perfect_hash_map
+
+test: $(BIN)/test test_perfect_hash_map
 	HL_WEIGHTS_DIR=weights LD_LIBRARY_PATH=$(BIN) $(BIN)/test
 
 clean:
