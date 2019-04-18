@@ -91,3 +91,10 @@ PYCXXFLAGS =  $(CXXFLAGS) $(PYBIND11_CFLAGS)
 # Python extenstion for HalideModel
 $(BIN)/model_cpp: model.cpp $(ONNX_CONVERTER_LIB)
 	$(CXX) $(PYCXXFLAGS) -O3 -Wall -shared -fPIC -I$(BIN) $< $(ONNX_CONVERTER_LIB) $(LIB_HALIDE) -o $@$(PY_EXT) $(LDFLAGS)
+
+
+model_test: $(BIN)/model_cpp$(PY_EXT)
+	PYTHONPATH="$(BIN)/:$$PYTHONPATH" $(PYTHON) -m unittest model_test.py -v
+
+halide_as_onnx_backend_test: $(BIN)/model_cpp$(PY_EXT)
+	PYTHONPATH="$(BIN)/:$$PYTHONPATH" $(PYTHON) -m unittest halide_as_onnx_backend_test.py -v
