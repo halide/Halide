@@ -982,7 +982,9 @@ Node convert_conv_node(
     const int rank = X.shape.size();
     if (rank != W.shape.size()) {
         throw std::invalid_argument(
-            "Inconsistent ranks for input tensors of Conv node " + node.name());
+            "Inconsistent ranks for input tensors of Conv node " + node.name() +
+            ", input of rank " + std::to_string(rank) + " weights of rank " +
+            std::to_string(W.shape.size()));
     }
     if (rank < 3) {
         throw std::invalid_argument(
@@ -1034,7 +1036,8 @@ Node convert_conv_node(
 
     if (padding != "NOTSET") {
         throw std::domain_error(
-            "Unsupported type of convolution for node " + node.name());
+            "Unsupported convolution padding " + padding + " for node " +
+            node.name());
     }
 
     // Determine the shape of the output
@@ -2647,6 +2650,38 @@ Node convert_random_node(
     return result;
 }
 
+Node convert_shrink_node(
+    const onnx::NodeProto &node,
+    const std::vector<Tensor> &inputs) {
+    if (inputs.size() != 1) {
+        throw std::invalid_argument(
+            "Expected one input for shrink node " + node.name());
+    }
+
+    const Tensor &input = inputs[0];
+    float bias = 0.0f;
+    float lambd = 0.5f;
+    for (const auto &attr : node.attribute()) {
+        if (attr.name() == "bias") {
+            bias = attr.f();
+        } else if (attr.name() == "lambd") {
+            lambd = attr.f();
+        }
+    }
+
+    Node result;
+    result.inputs = inputs;
+    result.outputs.resize(1);
+    result.outputs[0].shape = input.shape;
+    result.outputs[0].type = input.type;
+    result.outputs[0].rep = func_for_node_output(node, 0);
+    result.outputs[0].rep(Halide::_) = select(
+        input.rep(Halide::_) < -lambd,
+        input.rep(Halide::_) + bias,
+        select(input.rep(Halide::_) > lambd, input.rep(Halide::_) - bias, 0));
+    return result;
+}
+
 Node convert_reshape_node(
     const onnx::NodeProto &node,
     const std::vector<Tensor> &inputs) {
@@ -3334,6 +3369,9 @@ Node convert_node(
     }
     if (node.op_type() == "RandomUniform" || node.op_type() == "RandomNormal") {
         return convert_random_node(node, inputs);
+    }
+    if (node.op_type() == "Shrink") {
+        return convert_shrink_node(node, inputs);
     }
 
     // Handle exponential linear units.
