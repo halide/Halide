@@ -145,6 +145,7 @@ void define_enums(py::module &m) {
         .value("DisableLLVMLoopVectorize", Target::Feature::DisableLLVMLoopVectorize)
         .value("DisableLLVMLoopUnroll", Target::Feature::DisableLLVMLoopUnroll)
         .value("WasmSimd128", Target::Feature::WasmSimd128)
+        .value("WasmSignExt", Target::Feature::WasmSignExt)
         .value("FeatureEnd", Target::Feature::FeatureEnd);
 
     py::enum_<halide_type_code_t>(m, "TypeCode")

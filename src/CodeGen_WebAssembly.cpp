@@ -6,6 +6,8 @@
 #include "LLVM_Headers.h"
 #include "Util.h"
 
+#include <sstream>
+
 namespace Halide {
 namespace Internal {
 
@@ -99,29 +101,32 @@ string CodeGen_WebAssembly::mcpu() const {
 }
 
 string CodeGen_WebAssembly::mattrs() const {
-    // We believe support for this is wide enough as of early 2019
-    // to simply enable it by default, rather than hide it behind a Feature
-    string s = "+sign-ext";
+    std::ostringstream s;
+    string sep;
 
-    // TODO: not ready to enable by default
-    // s += ",+bulk-memory";
-
-    if (target.has_feature(Target::WasmSimd128)) {
-        s += ",+simd128";
+    if (target.has_feature(Target::WasmSignExt)) {
+        s << sep << "+sign-ext";
+        sep = ",";
     }
 
-    user_assert(target.os == Target::WebAssemblyRuntime)
-        << "wasmrt is the only supported 'os' for WebAssembly at this time.";
+    if (target.has_feature(Target::WasmSimd128)) {
+        s << sep << "+simd128";
+        sep = ",";
+    }
 
     // TODO: Emscripten doesn't seem to be able to validate wasm that contains this yet.
     // We could only generate for JIT mode (where we know we can enable it), but that
     // would mean the execution model for JIT vs AOT could be slightly different,
     // so leave it out entirely until we can do it uniformly.
     // if (target.has_feature(Target::JIT)) {
-    //     s += ",+nontrapping-fptoint";
+    //    s << sep << "+nontrapping-fptoint";
+    //    sep = ",";
     // }
 
-    return s;
+    user_assert(target.os == Target::WebAssemblyRuntime)
+        << "wasmrt is the only supported 'os' for WebAssembly at this time.";
+
+    return s.str();
 }
 
 bool CodeGen_WebAssembly::use_soft_float_abi() const {

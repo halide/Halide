@@ -1270,6 +1270,7 @@ typedef enum halide_target_feature_t {
     halide_target_feature_disable_llvm_loop_vectorize,  ///< Disable loop vectorization in LLVM. (Ignored for non-LLVM targets.)
     halide_target_feature_disable_llvm_loop_unroll,  ///< Disable loop unrolling in LLVM. (Ignored for non-LLVM targets.)
     halide_target_feature_wasm_simd128,  ///< Enable +simd128 instructions for WebAssembly codegen.
+    halide_target_feature_wasm_signext,  ///< Enable +sign-ext instructions for WebAssembly codegen.
 
     halide_target_feature_end ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
