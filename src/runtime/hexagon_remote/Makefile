@@ -26,7 +26,7 @@
 HEXAGON_SDK_ROOT ?= ${HOME}/Qualcomm/Hexagon_SDK/3.3.3
 HEXAGON_TOOLS_ROOT ?= ${HOME}/Qualcomm/Hexagon_SDK/3.3.3/tools/HEXAGON_Tools/8.1.05
 
-ANDROID_NDK_ROOT ?= ${HEXAGON_SDK_ROOT}/tools/android-ndk-r10d
+ANDROID_NDK_ROOT ?= ${HEXAGON_SDK_ROOT}/tools/android-ndk-r14b
 
 # QAIC compiler may vary depending on your build env.
 HEXAGON_QAIC ?= ${HEXAGON_SDK_ROOT}/tools/qaic/Ubuntu14/qaic
@@ -143,7 +143,7 @@ bin/%/signed_by_debug/libhalide_hexagon_remote_skel.so: bin/%/libhalide_hexagon_
 
 bin/%/libhalide_hexagon_host.so: bin/src/halide_hexagon_remote_stub.c bin/%/host_malloc.o bin/%/host_shim.o bin/%/libadsprpc_shim.o
 	mkdir -p $(@D)
-	$(CC-$*) $^ $(CCFLAGS-$*) -Wl,-soname,libhalide_hexagon_host.so -shared -o $@
+	$(CC-$*) $^ $(CCFLAGS-$*) -Wl,-soname,libhalide_hexagon_host.so -shared -static-libgcc -static-libstdc++ -o $@
 
 # Build rules for the simulator implementation.
 bin/%/sim_remote.o: sim_remote.cpp sim_protocol.h dlib.h known_symbols.h
@@ -186,7 +186,7 @@ bin/%/hexagon_sim_remote: bin/%/sim_remote.o bin/%/dlib.o bin/%/known_symbols.o 
 
 bin/host/libhalide_hexagon_host.so: bin/host/sim_host.o
 	mkdir -p $(@D)
-	$(CC-host) $^ $(CCFLAGS-host) -Wl,-soname,libhalide_hexagon_host.so -shared -o $@
+	$(CC-host) $^ $(CCFLAGS-host) -Wl,-soname,libhalide_hexagon_host.so -shared -static-libgcc -static-libstdc++ -o $@
 
 .PHONY: clean
 clean:
