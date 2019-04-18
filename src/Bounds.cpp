@@ -1218,6 +1218,8 @@ private:
                 // Substitute it in
                 var.max = val.max;
                 val.max = Expr();
+            } else if (val.is_single_point()) {
+                var.max = var.min;
             } else {
                 var.max = Variable::make(op->value.type().element_of(), max_name);
             }
@@ -1228,20 +1230,30 @@ private:
             op->body.accept(this);
         }
 
+        bool single_point = interval.is_single_point();
+
         if (interval.has_lower_bound()) {
-            if (val.min.defined() && expr_uses_var(interval.min, min_name)) {
+            if (val.min.defined() &&
+                expr_uses_var(interval.min, min_name)) {
                 interval.min = Let::make(min_name, val.min, interval.min);
             }
-            if (val.max.defined() && expr_uses_var(interval.min, max_name)) {
+            if (val.max.defined() &&
+                !val.is_single_point() &&
+                expr_uses_var(interval.min, max_name)) {
                 interval.min = Let::make(max_name, val.max, interval.min);
             }
         }
 
-        if (interval.has_upper_bound()) {
-            if (val.min.defined() && expr_uses_var(interval.max, min_name)) {
+        if (single_point) {
+            interval.max = interval.min;
+        } else if (interval.has_upper_bound()) {
+            if (val.min.defined() &&
+                expr_uses_var(interval.max, min_name)) {
                 interval.max = Let::make(min_name, val.min, interval.max);
             }
-            if (val.max.defined() && expr_uses_var(interval.max, max_name)) {
+            if (val.max.defined() &&
+                !val.is_single_point() &&
+                expr_uses_var(interval.max, max_name)) {
                 interval.max = Let::make(max_name, val.max, interval.max);
             }
         }
@@ -2431,21 +2443,26 @@ FuncValueBounds compute_function_value_bounds(const vector<string> &order,
 
             if (f.is_pure()) {
 
-                // Make a scope that says the args could be anything.
-                Scope<Interval> arg_scope;
-                for (size_t k = 0; k < f.args().size(); k++) {
-                    arg_scope.push(f_args[k], Interval::everything());
-                }
+                if (f.dimensions() == 0) {
+                    result = Interval::single_point(f.values()[j]);
+                } else {
 
-                result = compute_pure_function_definition_value_bounds(f.definition(), arg_scope, fb, j);
-                // These can expand combinatorially as we go down the
-                // pipeline if we don't run CSE on them.
-                if (result.has_lower_bound()) {
-                    result.min = simplify(common_subexpression_elimination(result.min));
-                }
+                    // Make a scope that says the args could be anything.
+                    Scope<Interval> arg_scope;
+                    for (size_t k = 0; k < f.args().size(); k++) {
+                        arg_scope.push(f_args[k], Interval::everything());
+                    }
 
-                if (result.has_upper_bound()) {
-                    result.max = simplify(common_subexpression_elimination(result.max));
+                    result = compute_pure_function_definition_value_bounds(f.definition(), arg_scope, fb, j);
+                    // These can expand combinatorially as we go down the
+                    // pipeline if we don't run CSE on them.
+                    if (result.has_lower_bound()) {
+                        result.min = simplify(common_subexpression_elimination(result.min));
+                    }
+
+                    if (result.has_upper_bound()) {
+                        result.max = simplify(common_subexpression_elimination(result.max));
+                    }
                 }
 
                 fb[key] = result;
