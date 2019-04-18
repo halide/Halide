@@ -53,7 +53,7 @@ public:
                 "Can't parse model file" + model_file_path.value());
         }
 
-        converted_model_ = convert_model(onnx_model, "");
+        converted_model_ = convert_model(onnx_model);
         for (const auto &input : converted_model_.inputs) {
             model_inputs_[input.first] = add_input<Buffer<>>(
                 input.first,
