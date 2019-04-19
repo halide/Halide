@@ -375,7 +375,7 @@ class FindExterns : public IRGraphVisitor {
                 }
                 ExternCFunction f(address, ExternSignature(op->type.element_of(), op->type.bits() == 0, arg_types));
                 JITExtern jit_extern(f);
-debug(0) << "FindExterns adds: " << op->name << "\n";
+                debug(2) << "FindExterns adds: " << op->name << "\n";
                 externs.emplace(op->name, jit_extern);
             }
         }
