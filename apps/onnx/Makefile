@@ -38,7 +38,7 @@ $(BIN)/onnx.pb.o: $(BIN)/onnx/onnx.pb.cc $(BIN)/onnx/onnx_pb.h
 	@sed -i -e 's/bin\/onnx\/onnx.pb.h/onnx\/onnx.pb.h/g' $<
 	$(CXX) $(CXXFLAGS) -I$(BIN) -fPIC -c $< -o $@
 
-$(BIN)/onnx_converter_lib.o: onnx_converter.cc $(BIN)/onnx/onnx_pb.h 
+$(BIN)/onnx_converter_lib.o: onnx_converter.cc $(BIN)/onnx/onnx_pb.h
 	$(CXX) $(CXXFLAGS) -I$(BIN) -fPIC -c $< -o $@
 
 ONNX_CONVERTER_LIB = \
@@ -52,6 +52,34 @@ clean:
 $(BIN)/onnx_converter_test: onnx_converter_test.cc $(ONNX_CONVERTER_LIB)
 	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) -I$(BIN) $< -o $@ $(LDFLAGS) $(ONNX_CONVERTER_LIB) $(LIB_HALIDE) $(HALIDE_SYSTEM_LIBS)
 
-test: $(BIN)/onnx_converter_test
+
+$(BIN)/onnx_converter.generator : onnx_converter_generator.cc $(GENERATOR_DEPS) $(ONNX_CONVERTER_LIB)
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) -I$(BIN) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+
+# Convolution with autopad=SAME_UPPER isn't supported yet (Also deprecated). TODO Enable this.
+#$(BIN)/onnx_model_zoo/mnist/model.onnx:
+#	@mkdir -p $(@D)
+#	curl -o $(@D)/mnist.tar.gz https://onnxzoo.blob.core.windows.net/models/opset_8/mnist/mnist.tar.gz
+#	tar xvzf $(@D)/mnist.tar.gz -C $(BIN)/onnx_model_zoo
+
+#$(BIN)/onnx_mnist_model.a : $(BIN)/onnx_converter.generator $(BIN)/onnx_model_zoo/mnist/model.onnx
+#	@mkdir -p $(@D)
+#	$^ -g onnx_model_inference -o $(BIN) -f onnx_model_inference target=$(HL_TARGET) model_file_path=$(BIN)/onnx_model_zoo/mnist/model.onnx
+
+$(BIN)/test_model.onnx: test_model_proto.txt $(BIN)/onnx/onnx.proto
+	@mkdir -p $(@D)
+	cat $< | protoc --encode=onnx.ModelProto $(BIN)/onnx/onnx.proto > $@
+
+$(BIN)/test_model.a: $(BIN)/onnx_converter.generator $(BIN)/test_model.onnx
+	@mkdir -p $(@D)
+	$< -g onnx_model_generator -o $(BIN) -f test_model target=$(HL_TARGET) model_file_path=$(BIN)/test_model.onnx
+
+$(BIN)/onnx_converter_generator_test: onnx_converter_generator_test.cc $(BIN)/test_model.a
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) -I$(BIN) $^ -o $@ $(LDFLAGS)
+
+test: $(BIN)/onnx_converter_test $(BIN)/onnx_converter_generator_test
 	LD_LIBRARY_PATH=$(BIN) $(BIN)/onnx_converter_test
+	LD_LIBRARY_PATH=$(BIN) $(BIN)/onnx_converter_generator_test
 
