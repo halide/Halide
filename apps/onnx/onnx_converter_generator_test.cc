@@ -26,6 +26,6 @@ int main(int argc, char **argv) {
             }
         }
     }
-    std::cout << "Success!" << std::endl;
+    std::cout << "Success!\n";
     return 0;
 }
