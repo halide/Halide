@@ -60,7 +60,7 @@ int main(int argc, char **argv) {
 
         // Check the map and hash map contain the same stuff in the same order
         if (h.size() != ref.size()) {
-            printf("Size mismatch: %d vs %d\n", (int)h.size(), (int)ref.size());
+            fprintf(stderr, "Size mismatch: %d vs %d\n", (int)h.size(), (int)ref.size());
             return -1;
         }
         // Use iterators to convert PerfectHashMap to map and compare to reference map
@@ -73,16 +73,17 @@ int main(int argc, char **argv) {
         auto ref_it = ref.begin();
         while (it != h_map.end()) {
             if (it->first != ref_it->first) {
-                printf("Key mismatch: %p vs %p\n", (const void *)it->first, (const void *)ref_it->first);
-                //return -1;
+                fprintf(stderr, "Key mismatch: %p vs %p\n", (const void *)it->first, (const void *)ref_it->first);
+                return -1;
             }
             if (it->second != ref_it->second) {
-                printf("Value mismatch: %d vs %d\n", it->second, ref_it->second);
-                //return -1;
+                fprintf(stderr, "Value mismatch: %d vs %d\n", it->second, ref_it->second);
+                return -1;
             }
             it++;
             ref_it++;
         }
     }
     printf("Perfect hash map test passed\n");
+    return 0;
 }
