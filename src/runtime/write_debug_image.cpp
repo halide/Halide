@@ -59,6 +59,7 @@ struct tiff_tag {
         this->tag_code = tag_code;
         this->type_code = 3;
         this->count = count;
+        memset(&this->value, 0, sizeof(this->value));  // ensure predictable output
         this->value.i16 = value;
     }
 
