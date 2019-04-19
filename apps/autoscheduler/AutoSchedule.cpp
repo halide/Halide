@@ -2514,7 +2514,14 @@ struct State {
                     bool operator<(const Option &other) const {
                         return idle_core_wastage < other.idle_core_wastage;
                     }
+                    // Ensure we don't accidentally copy this type
+                    Option() = default;
+                    Option(Option &&) = default;
+                    Option &operator=(Option &&) = default;
+                    Option(const Option &) = delete;
+                    Option &operator=(const Option &) = delete;
                 };
+
                 vector<Option> options;
                 for (size_t i = 0; i < tilings.size(); i++) {
                     auto &t = tilings[i];
