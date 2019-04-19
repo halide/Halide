@@ -308,9 +308,10 @@ struct BoundContents {
     }
 
     // We're frequently going to need to make these concrete bounds
-    // arrays.  It makes things more efficient if we figure out the memory
-    // layout of those data structures once ahead of time, and make each
-    // individual instance just use that.
+    // arrays.  It makes things more efficient if we figure out the
+    // memory layout of those data structures once ahead of time, and
+    // make each individual instance just use that. Note that this is
+    // not thread-safe.
     struct Layout {
         // number of Span to allocate
         int total_size;
@@ -329,9 +330,14 @@ struct BoundContents {
         // All the blocks of memory allocated
         mutable std::vector<void *> blocks;
 
+        mutable size_t num_live = 0;
+
         Layout() {}
 
         ~Layout() {
+            internal_assert(num_live == 0)
+                << "Destroying a Layout without returning all the BoundContents. "
+                << num_live << " are still live\n";
             for (auto b : blocks) {
                 free(b);
             }
@@ -366,6 +372,7 @@ struct BoundContents {
             }
             BoundContents *b = pool.back();
             pool.pop_back();
+            num_live++;
             return b;
         }
 
@@ -374,6 +381,7 @@ struct BoundContents {
             internal_assert(b->layout == this) << "Releasing BoundContents onto the wrong pool!";
             b->~BoundContents();
             pool.push_back(const_cast<BoundContents *>(b));
+            num_live--;
         }
     };
 };
