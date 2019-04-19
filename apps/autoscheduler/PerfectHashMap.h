@@ -54,7 +54,7 @@ class PerfectHashMap {
     }
 
     void upgrade_from_small_to_large(int n) {
-        // internal_assert(occupied <= max_small_size) << occupied << " " << max_small_size << "\n";
+        internal_assert(occupied <= max_small_size) << occupied << " " << max_small_size << "\n";
         storage_type tmp(n);
         state = Large;
         tmp.swap(storage);
@@ -75,12 +75,12 @@ class PerfectHashMap {
     }
 
     const T &get_empty(const K *n) const {
-        // internal_error << "Calling get on an empty PerfectHashMap";
+        internal_error << "Calling get on an empty PerfectHashMap";
         return unreachable_value();
     }
 
     T &get_empty(const K *n) {
-        // internal_error << "Calling get on an empty PerfectHashMap";
+        internal_error << "Calling get on an empty PerfectHashMap";
         return unreachable_value();
     }
 
@@ -341,7 +341,7 @@ public:
         it.iter = storage.data();
         it.end = it.iter + storage.size();
         if (it.key() == nullptr) it++;
-        // internal_assert(it.iter == it.end || it.key());
+        internal_assert(it.iter == it.end || it.key());
         return it;
     }
 
@@ -357,7 +357,7 @@ public:
         it.iter = storage.data();
         it.end = it.iter + storage.size();
         if (it.key() == nullptr) it++;
-        // internal_assert(it.iter == it.end || it.key());
+        internal_assert(it.iter == it.end || it.key());
         return it;
     }
 

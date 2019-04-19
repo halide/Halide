@@ -3,6 +3,27 @@
 #include <map>
 #include <random>
 #include <vector>
+#include <iostream>
+
+// Avoid a dependence on libHalide by defining a local internal_assert
+struct Asserter {
+    bool c;
+    Asserter(bool c) : c(c) {};
+    template<typename T>
+    Asserter &operator<<(T &&t) {
+        if (!c) {
+            std::cerr << t;
+        }
+        return *this;
+    }
+    ~Asserter() {
+        if (!c) {
+            exit(-1);
+        }
+    }
+};
+#define internal_assert(c) Asserter(c)
+#define internal_error Asserter(false)
 
 #include "PerfectHashMap.h"
 
@@ -52,7 +73,7 @@ int main(int argc, char **argv) {
         auto ref_it = ref.begin();
         while (it != h_map.end()) {
             if (it->first != ref_it->first) {
-                printf("Key mismatch: %p vs %p\n", (void *)it->first, (void *)ref_it->first);
+                printf("Key mismatch: %p vs %p\n", (const void *)it->first, (const void *)ref_it->first);
                 //return -1;
             }
             if (it->second != ref_it->second) {
