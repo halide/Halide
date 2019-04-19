@@ -193,6 +193,9 @@ WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *fil
                         __builtin_offsetof(halide_tiff_header, height_resolution));    // Height resolution
         tag++->assign16(284, 1, 2);                              // Planar configuration -- planar
         tag++->assign16(296, 1, 1);                              // Resolution Unit -- none
+        if (channels > 3) {
+            tag++->assign16(338, 1, 1);                          // ExtraSamples: 1 = assocalpha, 2 = unassalpha
+        }
         tag++->assign16(339, 1,
                         pixel_type_to_tiff_sample_type[type_code]);        // Sample type
         tag++->assign32(32997, 1, depth);                        // Image depth
