@@ -1250,6 +1250,10 @@ inline Expr erf(Expr x) {
     return Internal::halide_erf(std::move(x));
 }
 
+// Fast approximation to some trigonometric functions for Float(32)
+Expr fast_sin(Expr x);
+Expr fast_cos(Expr x);
+
 /** Fast approximate cleanly vectorizable log for Float(32). Returns
  * nonsense for x <= 0.0f. Accurate up to the last 5 bits of the
  * mantissa. Vectorizes cleanly. */
