@@ -338,6 +338,9 @@ struct BoundContents {
             internal_assert(num_live == 0)
                 << "Destroying a Layout without returning all the BoundContents. "
                 << num_live << " are still live\n";
+            for (auto *b : pool) {
+                b->~BoundContents();
+            }
             for (auto b : blocks) {
                 free(b);
             }
@@ -807,7 +810,9 @@ struct FunctionDAG {
             for (int s = 0; s <= (int)consumer.updates().size(); s++) {
                 stage_count++;
                 Halide::Stage halide_stage = Func(consumer);
-                if (s > 0) halide_stage = Func(consumer).update(s-1);
+                if (s > 0) {
+                    halide_stage = Func(consumer).update(s-1);
+                }
                 Node::Stage stage(halide_stage);
                 node.stages.emplace_back(std::move(stage));
             }
