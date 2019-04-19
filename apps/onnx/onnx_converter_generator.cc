@@ -43,13 +43,13 @@ public:
         onnx::ModelProto onnx_model;
         std::fstream input(model_file_path.value(), std::ios::in | std::ios::binary);
         if (!input) {
-            std::cerr << "Can't read model file" << model_file_path.value() << std::endl;
+            std::cerr << "Can't read model file" << model_file_path.value() << "\n";
             abort();
         }
         std::stringstream buffer;
         buffer << input.rdbuf();
         if (!onnx_model.ParseFromString(buffer.str())) {
-            std::cerr << "Can't parse model file" << model_file_path.value() << std::endl;
+            std::cerr << "Can't parse model file" << model_file_path.value() << "\n";
             abort();
         }
 
@@ -80,7 +80,7 @@ public:
         for (auto &output : model_outputs_) {
             auto model_output = converted_model_.outputs.find(output.first);
             if (model_output == converted_model_.outputs.end()) {
-                std::cerr << "Can't bind output " << output.first << std::endl;
+                std::cerr << "Can't bind output " << output.first << "\n";
                 abort();
             }
             *output.second = model_output->second.rep;

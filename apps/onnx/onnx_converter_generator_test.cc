@@ -5,7 +5,7 @@
 #include <random>
 
 int main(int argc, char **argv) {
-    std::cout << "Running onnx_converter_generator_test..." << std::endl;
+    std::cout << "Running onnx_converter_generator_test...\n";
     Halide::Runtime::Buffer<float> A(3, 4);
     Halide::Runtime::Buffer<float> B(3, 4);
     Halide::Runtime::Buffer<float> C(3, 4);
@@ -21,7 +21,7 @@ int main(int argc, char **argv) {
     for (int i = 0; i < 3; ++i) {
         for (int j = 0; j < 4; ++j) {
             if (C(i, j) != A(i, j) + B(i, j)) {
-                std::cerr << "Unexpected value for inputs at (" << i << "," << j << ") " << std::endl;
+                std::cerr << "Unexpected value for inputs at (" << i << "," << j << ") \n";
                 return -1;
             }
         }
