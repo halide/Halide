@@ -511,4 +511,5 @@ int main() {
     test_constant_fill();
     test_model();
     printf("Success!\n");
+    return 0;
 }
