@@ -554,20 +554,6 @@ static_assert(sizeof(halide_type_t) == 4, "halide_type_t");
 static_assert(sizeof(halide_dimension_t) == 16, "halide_dimension_t");
 static_assert(sizeof(wasm_halide_buffer_t) == 40, "wasm_halide_buffer_t");
 
-size_t size_in_bytes(const halide_buffer_t *b) {
-    int64_t begin = 0, end = 0;
-    for (int i = 0; i < b->dimensions; i++) {
-        const auto &d = b->dim[i];
-        if (d.stride > 0) {
-            end += d.stride * (d.extent - 1);
-        } else if (d.stride < 0) {
-            begin += d.stride * (d.extent - 1);
-        }
-    }
-    end += 1;
-    return (end - begin) * b->type.bytes();
-}
-
 // Given a halide_buffer_t on the host, allocate a wasm_halide_buffer_t in wasm
 // memory space and copy all relevant data. The resulting buf is laid out in
 // contiguous memory, and can be free with a single free().
@@ -588,7 +574,7 @@ wasm32_ptr_t hostbuf_to_wasmbuf(const Local<Context> &context, const halide_buff
     const size_t dims_offset = sizeof(wasm_halide_buffer_t);
     const size_t mem_needed_base = sizeof(wasm_halide_buffer_t) + dims_size_in_bytes;
     const size_t host_offset = align_up(mem_needed_base);
-    const size_t host_size_in_bytes = size_in_bytes(src);
+    const size_t host_size_in_bytes = src->size_in_bytes();
     const size_t mem_needed = host_offset + host_size_in_bytes;
 
     const wasm32_ptr_t dst_ptr = v8_WasmMemoryObject_malloc(context, mem_needed);
@@ -649,7 +635,7 @@ void wasmbuf_to_hostbuf(const Local<Context> &context, wasm32_ptr_t src_ptr, Hal
     if (src->host) {
         // Don't use dst.copy(); it can tweak strides in ways that matter.
         dst.allocate();
-        const size_t host_size_in_bytes = size_in_bytes(dst.raw_buffer());
+        const size_t host_size_in_bytes = dst.raw_buffer()->size_in_bytes();
         memcpy(dst.raw_buffer()->host, base + src->host, host_size_in_bytes);
     }
     dump_hostbuf(context, dst.raw_buffer(), "dst");
@@ -677,7 +663,7 @@ void copy_wasmbuf_to_existing_hostbuf(const Local<Context> &context, wasm32_ptr_
         memcpy(dst->dim, base + src->dim, sizeof(halide_dimension_t) * src->dimensions);
     }
     if (src->host) {
-        size_t host_size_in_bytes = size_in_bytes(dst);
+        size_t host_size_in_bytes = dst->size_in_bytes();
         memcpy(dst->host, base + src->host, host_size_in_bytes);
     }
 
@@ -710,7 +696,7 @@ void copy_hostbuf_to_existing_wasmbuf(const Local<Context> &context, const halid
         memcpy(base + dst->dim, src->dim, sizeof(halide_dimension_t) * src->dimensions);
     }
     if (src->host) {
-        size_t host_size_in_bytes = size_in_bytes(src);
+        size_t host_size_in_bytes = src->size_in_bytes();
         memcpy(base + dst->host, src->host, host_size_in_bytes);
     }
 
