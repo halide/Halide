@@ -377,6 +377,7 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
     jit_module->name = function_name;
 }
 
+/*static*/
 JITModule JITModule::make_trampolines_module(const Target &target_arg,
                                              const std::map<std::string, JITExtern> &externs,
                                              const std::string &suffix,
@@ -385,18 +386,22 @@ JITModule JITModule::make_trampolines_module(const Target &target_arg,
     target.set_feature(Target::JIT);
 
     JITModule result;
-    std::unique_ptr<CodeGen_LLVM> codegen(CodeGen_LLVM::new_for_target(target, result.jit_module->context));
-    codegen->init_for_codegen("trampolines");
+    std::vector<std::pair<std::string, ExternSignature>> extern_signatures;
     std::vector<std::string> requested_exports;
-    for (const std::pair<std::string, JITExtern> &extern_entry : externs) {
-        const std::string &callee_name = extern_entry.first;
+    for (const std::pair<std::string, JITExtern> &e : externs) {
+        const std::string &callee_name = e.first;
         const std::string wrapper_name = callee_name + suffix;
-        Symbol sym = result.add_extern_for_export(callee_name, extern_entry.second.extern_c_function());
-        codegen->add_trampoline_wrapper(cast<llvm::FunctionType>(sym.llvm_type), wrapper_name, callee_name);
+        const ExternCFunction &extern_c = e.second.extern_c_function();
+        result.add_extern_for_export(callee_name, extern_c);
         requested_exports.push_back(wrapper_name);
+        extern_signatures.push_back({callee_name, extern_c.signature()});
     }
-    result.compile_module(codegen->finalize_module(), "", target, deps,
-                          requested_exports);
+
+    std::unique_ptr<llvm::Module> llvm_module = CodeGen_LLVM::compile_trampolines(
+        target, result.jit_module->context, suffix, extern_signatures);
+
+    result.compile_module(std::move(llvm_module), /*function_name*/ "", target, deps, requested_exports);
+
     return result;
 }
 

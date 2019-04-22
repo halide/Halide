@@ -43,6 +43,10 @@ class GlobalVariable;
 #include "Target.h"
 
 namespace Halide {
+struct ExternSignature;
+}  // namespace Halide
+
+namespace Halide {
 namespace Internal {
 
 /** A code generator abstract base class. Actual code generators
@@ -71,27 +75,12 @@ public:
     /** Initialize internal llvm state for the enabled targets. */
     static void initialize_llvm();
 
-    /** Setup state for ad-hoc codegen. Used in JIT outside of compiling an entire Halide module.
-     * TODO: This probably shouldn't exist. */
-    void init_for_codegen(const std::string &name, bool any_strict_float = false);
+    static std::unique_ptr<llvm::Module> compile_trampolines(
+        const Target &target,
+        llvm::LLVMContext &context,
+        const std::string &suffix,
+        const std::vector<std::pair<std::string, ExternSignature>> externs);
 
-    /** Compile all functions included in codegen and return llvm
-     * module. Cannot add more code after calling this routine.
-     * TODO: This probably shouldn't exist. */
-    std::unique_ptr<llvm::Module> finalize_module();
-
-    /** Make a wrapper to call the function with an array of pointer
-     * args. This is easier for the JIT to call than a function with an
-     * unknown (at compile time) argument list.  Result is stored to the last void * in the
-     * args array.
-     * TODO: This probably shouldn't exist. */
-    // @{
-    llvm::Function *add_trampoline_wrapper(llvm::Function *fn, const std::string &name);
-    /** As above, but create the callee as an extern linkage function based on the passed name. */
-    llvm::Function *add_trampoline_wrapper(llvm::FunctionType *fn_type,
-                                           const std::string &wrapper_name,
-                                           const std::string &callee_name);
-    // @}
 protected:
     CodeGen_LLVM(Target t);
 
@@ -188,6 +177,9 @@ protected:
 
     /** Test if an item exists in the symbol table. */
     bool sym_exists(const std::string &name) const;
+
+    /** Given a Halide ExternSignature, return the equivalent llvm::FunctionType. */
+    llvm::FunctionType *signature_to_type(const ExternSignature &signature);
 
     /** Some useful llvm types */
     // @{
@@ -520,12 +512,16 @@ private:
     llvm::Constant *embed_constant_expr(Expr e, llvm::Type *t);
     llvm::Constant *embed_constant_scalar_value_t(Expr e);
 
-    llvm::Function *add_argv_wrapper(llvm::Function *fn, const std::string &name);
+    llvm::Function *add_argv_wrapper(llvm::Function *fn, const std::string &name, bool result_in_argv = false);
 
     llvm::Value *codegen_dense_vector_load(const Load *load, llvm::Value *vpred = nullptr);
 
     virtual void codegen_predicated_vector_load(const Load *op);
     virtual void codegen_predicated_vector_store(const Store *op);
+
+    void init_codegen(const std::string &name, bool any_strict_float = false);
+    std::unique_ptr<llvm::Module> finish_codegen();
+
 };
 
 }  // namespace Internal
