@@ -37,7 +37,7 @@ struct Derivative {
             it = adjoints.find(FuncKey{ name, update_id });
         }
         internal_assert(it != adjoints.end()) << "Could not find Func " << name << "\n";
-        return it->second;        
+        return it->second;
     }
 
     Func operator()(const Func &func, int update_id = -1, bool bounded = true) const {
