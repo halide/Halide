@@ -35,13 +35,13 @@ struct JITModule {
 
     struct Symbol {
         void *address = nullptr;
-        Symbol() : address(nullptr) {}
+        Symbol() = default;
         explicit Symbol(void *address) : address(address) {}
     };
 
     JITModule();
     JITModule(const Module &m, const LoweredFunc &fn,
-                     const std::vector<JITModule> &dependencies = std::vector<JITModule>());
+              const std::vector<JITModule> &dependencies = std::vector<JITModule>());
 
     /** Take a list of JITExterns and generate trampoline functions
      * which can be called dynamically via a function pointer that
@@ -110,8 +110,8 @@ struct JITModule {
      * depend on this one. This routine converts the ExternSignature
      * info into an LLVM type, which allows type safe linkage of
      * external routines. */
-    Symbol add_extern_for_export(const std::string &name,
-                                 const ExternCFunction &extern_c_function);
+    void add_extern_for_export(const std::string &name,
+                               const ExternCFunction &extern_c_function);
 
     /** Look up a symbol by name in this module or its dependencies. */
     Symbol find_symbol_by_name(const std::string &) const;
