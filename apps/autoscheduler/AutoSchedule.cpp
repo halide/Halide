@@ -1599,12 +1599,15 @@ struct LoopNest {
             if (gpu_label == none) {
                 inner->gpu_label = serial;
                 outer->gpu_label = parallelized;
+                outer->parallel = true;
             } else if (gpu_label == parallelized) {
                 inner->gpu_label = thread; // compute root funcs always allowed to use GPU threads
                 outer->gpu_label = block;
+                outer->parallel = true;
             } else if (gpu_label == thread) {
                 inner->gpu_label = serial;
                 outer->gpu_label = thread;
+                outer->parallel = false;
             } else {
                 internal_error << "invalid gpu label " << gpu_label << " for parallelized loop\n";
             }
@@ -1612,7 +1615,10 @@ struct LoopNest {
        
         outer->size = size;
         outer->innermost = false;
-        outer->parallel = true; // (KCMA) NOT SURE IF THIS SHOULD BE TRUE FOR GPU_THREADS LOOP
+
+        if (!target.has_gpu_feature()) 
+            outer->parallel = true; 
+         
         outer->tileable = may_subtile();
 
         // First make an inner loop representing a 1x1x1... tile
