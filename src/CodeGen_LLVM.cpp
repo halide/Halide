@@ -2860,7 +2860,6 @@ void CodeGen_LLVM::visit(const Call *op) {
         Halide::Expr abs_x_pow_y = Internal::halide_exp(Internal::halide_log(abs(x)) * y);
         Halide::Expr nan_expr = Halide::Internal::Call::make(
             x.type(), "nan_f32", {}, Halide::Internal::Call::PureExtern);
-        Halide::Expr x_pow_y = Internal::halide_exp(Internal::halide_log(x) * y);
         Expr iy = floor(y);
         Expr e = select(x > 0, abs_x_pow_y,  // Strictly positive x
                         y == 0.0f, 1.0f,  // x^0 == 1
