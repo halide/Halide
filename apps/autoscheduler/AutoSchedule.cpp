@@ -2096,7 +2096,7 @@ struct LoopNest {
                     fv.extent = p.extent();
                     fv.constant_extent = p.constant_extent();
                     fv.outermost = true;
-                    fv.parallel = l.pure && parallel;
+                    fv.parallel = l.pure && target.has_gpu_feature() ? gpu_label == block : parallel;
                     fv.exists = true;
                     fv.pure = l.pure;
                     fv.index = i;
