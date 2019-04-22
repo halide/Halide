@@ -94,7 +94,7 @@ uint32_t absd(uint32_t a, uint32_t b) { return a < b ? b - a : a - b; }
         for (int i = 0; i < in.extent(0); i++) {                        \
             type_ret c_result = c_name(in(i));                          \
             if (!relatively_equal(c_result, result(i), target)) {       \
-                fprintf(stderr, "For " #name "(%.20f, %2.0f) == %.20f from C and %.20f from %s.\n", (double)in(0, i), (double)in(1,i), (double)c_result, (double)result(i), target.to_string().c_str()); \
+                fprintf(stderr, "For " #name "(%.20f, %.20f) == %.20f from C and %.20f from %s.\n", (double)in(0, i), (double)in(1, i), (double)c_result, (double)result(i), target.to_string().c_str()); \
                 num_errors++;                                           \
             }                                                           \
         }                                                               \
