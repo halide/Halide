@@ -388,10 +388,11 @@ JITModule JITModule::make_trampolines_module(const Target &target_arg,
     codegen->init_for_codegen("trampolines");
     std::vector<std::string> requested_exports;
     for (const std::pair<std::string, JITExtern> &extern_entry : externs) {
-        const std::string &name = extern_entry.first;
-        Symbol sym = result.add_extern_for_export(name, extern_entry.second.extern_c_function());
-        codegen->add_trampoline_wrapper(cast<llvm::FunctionType>(sym.llvm_type), name + suffix, name);
-        requested_exports.push_back(name + suffix);
+        const std::string &callee_name = extern_entry.first;
+        const std::string wrapper_name = callee_name + suffix;
+        Symbol sym = result.add_extern_for_export(callee_name, extern_entry.second.extern_c_function());
+        codegen->add_trampoline_wrapper(cast<llvm::FunctionType>(sym.llvm_type), wrapper_name, callee_name);
+        requested_exports.push_back(wrapper_name);
     }
     result.compile_module(codegen->finalize_module(), "", target, deps,
                           requested_exports);

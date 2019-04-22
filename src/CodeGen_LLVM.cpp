@@ -517,59 +517,57 @@ MangledNames get_mangled_names(const LoweredFunc &f, const Target &target) {
 // args. This is easier for the JIT to call than a function with an
 // unknown (at compile time) argument list.
 llvm::Function *CodeGen_LLVM::add_trampoline_wrapper(llvm::Function *fn,
-                                               const std::string &name) {
-    llvm::Type *buffer_t_type = module->getTypeByName("struct.halide_buffer_t");
-    llvm::Type *i8 = llvm::Type::getInt8Ty(module->getContext());
-    llvm::Type *void_type = llvm::Type::getVoidTy(module->getContext());
-
+                                                     const std::string &name) {
     llvm::Type *result_type = void_t;
-    llvm::Type *args_t[] = {i8->getPointerTo()->getPointerTo()};
+    llvm::Type *args_t[] = {i8_t->getPointerTo()->getPointerTo()};
     llvm::FunctionType *func_t = llvm::FunctionType::get(result_type, args_t, false);
     llvm::Function *wrapper = llvm::Function::Create(func_t, llvm::GlobalValue::ExternalLinkage, name, module.get());
     llvm::BasicBlock *block = llvm::BasicBlock::Create(module->getContext(), "entry", wrapper);
-    llvm::IRBuilder<> builder(module->getContext());
-    builder.SetInsertPoint(block);
+    builder->SetInsertPoint(block);
 
     llvm::Value *arg_array = iterator_to_pointer(wrapper->arg_begin());
     std::vector<llvm::Value *> wrapper_args;
     for (llvm::Function::arg_iterator i = fn->arg_begin(); i != fn->arg_end(); i++) {
         // Get the address of the nth argument
-        llvm::Value *ptr = builder.CreateConstGEP1_32(arg_array, wrapper_args.size());
-        ptr = builder.CreateLoad(ptr);
+        llvm::Value *ptr = builder->CreateConstGEP1_32(arg_array, wrapper_args.size());
+        ptr = builder->CreateLoad(ptr);
         if (i->getType() == buffer_t_type->getPointerTo()) {
             // Cast the argument to a buffer_t *
-            wrapper_args.push_back(builder.CreatePointerCast(ptr, buffer_t_type->getPointerTo()));
+            wrapper_args.push_back(builder->CreatePointerCast(ptr, buffer_t_type->getPointerTo()));
         } else {
             // Cast to the appropriate type and load
-            ptr = builder.CreatePointerCast(ptr, i->getType()->getPointerTo());
-            wrapper_args.push_back(builder.CreateLoad(ptr));
+            ptr = builder->CreatePointerCast(ptr, i->getType()->getPointerTo());
+            wrapper_args.push_back(builder->CreateLoad(ptr));
         }
     }
     debug(4) << "Creating call from wrapper to actual function\n";
-    llvm::Value *result = builder.CreateCall(fn, wrapper_args);
-
-    if (fn->getReturnType() != void_type) {
-        llvm::Value *ptr = builder.CreateConstGEP1_32(arg_array, wrapper_args.size());
-        ptr = builder.CreateLoad(ptr);
+    llvm::CallInst *result = builder->CreateCall(fn, wrapper_args);
+    // This call should never inline
+    result->setIsNoInline();
+    if (fn->getReturnType() != void_t) {
+        llvm::Value *ptr = builder->CreateConstGEP1_32(arg_array, wrapper_args.size());
+        ptr = builder->CreateLoad(ptr);
         // Cast to the appropriate type and store
-        ptr = builder.CreatePointerCast(ptr, fn->getReturnType()->getPointerTo());
-        builder.CreateStore(result, ptr);
+        ptr = builder->CreatePointerCast(ptr, fn->getReturnType()->getPointerTo());
+        builder->CreateStore(result, ptr);
     }
-    builder.CreateRetVoid();
-
-    llvm::verifyFunction(*wrapper);
+    builder->CreateRetVoid();
+    internal_assert(!verifyFunction(*wrapper, &llvm::errs()));
     return wrapper;
 }
 
 llvm::Function *CodeGen_LLVM::add_trampoline_wrapper(llvm::FunctionType *fn_type,
-                                               const std::string &wrapper_name,
-                                               const std::string &callee_name) {
-    llvm::Function *callee = llvm::Function::Create(fn_type, llvm::Function::ExternalLinkage, callee_name, module.get());
+                                                     const std::string &wrapper_name,
+                                                     const std::string &callee_name) {
+    llvm::Function *callee = llvm::Function::Create(fn_type,
+        llvm::Function::ExternalLinkage, callee_name, module.get());
     return add_trampoline_wrapper(callee, wrapper_name);
 }
 
 void CodeGen_LLVM::init_for_codegen(const std::string &name, bool any_strict_float) {
     init_module();
+
+    internal_assert(module && context);
 
     debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
 
@@ -581,13 +579,6 @@ void CodeGen_LLVM::init_for_codegen(const std::string &name, bool any_strict_flo
     module->addModuleFlag(llvm::Module::Warning, "halide_mattrs", MDString::get(*context, mattrs()));
     module->addModuleFlag(llvm::Module::Warning, "halide_use_pic", use_pic() ? 1 : 0);
     module->addModuleFlag(llvm::Module::Warning, "halide_per_instruction_fast_math_flags", any_strict_float);
-}
-
-std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
-    init_for_codegen(input.name(), input.any_strict_float());
-
-    internal_assert(module && context && builder)
-        << "The CodeGen_LLVM subclass should have made an initial module before calling CodeGen_LLVM::compile\n";
 
     // Ensure some types we need are defined
     buffer_t_type = module->getTypeByName("struct.halide_buffer_t");
@@ -622,6 +613,13 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
 
     parallel_task_t_type = module->getTypeByName("struct.halide_parallel_task_t");
     internal_assert(parallel_task_t_type) << "Did not find halide_parallel_task_t in initial module";
+}
+
+std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
+    init_for_codegen(input.name(), input.any_strict_float());
+
+    internal_assert(module && context && builder)
+        << "The CodeGen_LLVM subclass should have made an initial module before calling CodeGen_LLVM::compile\n";
 
     add_external_code(input);
 
@@ -638,7 +636,7 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
         // If the Func is externally visible, also create the argv wrapper and metadata.
         // (useful for calling from JIT and other machine interfaces).
         if (f.linkage == LinkageType::ExternalPlusMetadata) {
-            llvm::Function *wrapper = add_argv_wrapper(names.argv_name);
+            llvm::Function *wrapper = add_argv_wrapper(function, names.argv_name);
             llvm::Function *metadata_getter = embed_metadata_getter(names.metadata_name,
                 names.simple_name, f.args, input.get_metadata_name_map());
 
@@ -1019,17 +1017,18 @@ Constant* CodeGen_LLVM::embed_constant_expr(Expr e, llvm::Type *t) {
 // Make a wrapper to call the function with an array of pointer
 // args. This is easier for the JIT to call than a function with an
 // unknown (at compile time) argument list.
-llvm::Function *CodeGen_LLVM::add_argv_wrapper(const std::string &name) {
+llvm::Function *CodeGen_LLVM::add_argv_wrapper(llvm::Function *fn,
+                                               const std::string &name) {
+    llvm::Type *result_type = i32_t;
     llvm::Type *args_t[] = {i8_t->getPointerTo()->getPointerTo()};
-    llvm::FunctionType *func_t = llvm::FunctionType::get(i32_t, args_t, false);
+    llvm::FunctionType *func_t = llvm::FunctionType::get(result_type, args_t, false);
     llvm::Function *wrapper = llvm::Function::Create(func_t, llvm::GlobalValue::ExternalLinkage, name, module.get());
     llvm::BasicBlock *block = llvm::BasicBlock::Create(module->getContext(), "entry", wrapper);
     builder->SetInsertPoint(block);
 
     llvm::Value *arg_array = iterator_to_pointer(wrapper->arg_begin());
-
     std::vector<llvm::Value *> wrapper_args;
-    for (llvm::Function::arg_iterator i = function->arg_begin(); i != function->arg_end(); i++) {
+    for (llvm::Function::arg_iterator i = fn->arg_begin(); i != fn->arg_end(); i++) {
         // Get the address of the nth argument
         llvm::Value *ptr = builder->CreateConstGEP1_32(arg_array, wrapper_args.size());
         ptr = builder->CreateLoad(ptr);
@@ -1043,7 +1042,7 @@ llvm::Function *CodeGen_LLVM::add_argv_wrapper(const std::string &name) {
         }
     }
     debug(4) << "Creating call from wrapper to actual function\n";
-    llvm::CallInst *result = builder->CreateCall(function, wrapper_args);
+    llvm::CallInst *result = builder->CreateCall(fn, wrapper_args);
     // This call should never inline
     result->setIsNoInline();
     builder->CreateRet(result);

@@ -520,7 +520,7 @@ private:
     llvm::Constant *embed_constant_expr(Expr e, llvm::Type *t);
     llvm::Constant *embed_constant_scalar_value_t(Expr e);
 
-    llvm::Function *add_argv_wrapper(const std::string &name);
+    llvm::Function *add_argv_wrapper(llvm::Function *fn, const std::string &name);
 
     llvm::Value *codegen_dense_vector_load(const Load *load, llvm::Value *vpred = nullptr);
 
