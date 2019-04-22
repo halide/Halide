@@ -165,12 +165,13 @@ namespace {
 JITModule::Symbol compile_and_get_function(ExecutionEngine &ee, const string &name) {
     debug(2) << "JIT Compiling " << name << "\n";
     llvm::Function *fn = ee.FindFunctionNamed(name.c_str());
-    void *f = (void *)ee.getFunctionAddress(name);
+    internal_assert(fn->getName() == name);
+    void *f = (void *) ee.getFunctionAddress(name);
     if (!f) {
         internal_error << "Compiling " << name << " returned nullptr\n";
     }
 
-    JITModule::Symbol symbol(f, fn->getFunctionType());
+    JITModule::Symbol symbol(f);
 
     debug(2) << "Function " << name << " is at " << f << "\n";
 
@@ -434,40 +435,10 @@ void JITModule::add_symbol_for_export(const std::string &name, const Symbol &ext
     jit_module->exports[name] = extern_symbol;
 }
 
-JITModule::Symbol JITModule::add_extern_for_export(const std::string &name,
-                                                   const ExternCFunction &extern_c_function) {
-    Symbol symbol;
-    symbol.address = extern_c_function.address();
-
-    // Struct types are uniqued on the context, but the lookup API is only available
-    // on the Module, not the Context.
-    llvm::Module dummy_module("ThisIsRidiculous", jit_module->context);
-    llvm::Type *halide_buffer_t = dummy_module.getTypeByName("struct.halide_buffer_t");
-    if (halide_buffer_t == nullptr) {
-        halide_buffer_t = llvm::StructType::create(jit_module->context, "struct.halide_buffer_t");
-    }
-    llvm::Type *halide_buffer_t_star = llvm::PointerType::get(halide_buffer_t, 0);
-
-    llvm::Type *ret_type;
-    auto signature = extern_c_function.signature();
-    if (signature.is_void_return()) {
-        ret_type = llvm::Type::getVoidTy(jit_module->context);
-    } else {
-        ret_type = llvm_type_of(&jit_module->context, signature.ret_type());
-    }
-
-    std::vector<llvm::Type *> llvm_arg_types;
-    for (const Type &t : signature.arg_types()) {
-        if (t == type_of<struct halide_buffer_t *>()) {
-            llvm_arg_types.push_back(halide_buffer_t_star);
-        } else {
-            llvm_arg_types.push_back(llvm_type_of(&jit_module->context, t));
-        }
-    }
-
-    symbol.llvm_type = llvm::FunctionType::get(ret_type, llvm_arg_types, false);
+void JITModule::add_extern_for_export(const std::string &name,
+                                      const ExternCFunction &extern_c_function) {
+    Symbol symbol(extern_c_function.address());
     jit_module->exports[name] = symbol;
-    return symbol;
 }
 
 void JITModule::memoization_cache_set_size(int64_t size) const {
