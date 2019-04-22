@@ -79,7 +79,7 @@ public:
         const Target &target,
         llvm::LLVMContext &context,
         const std::string &suffix,
-        const std::vector<std::pair<std::string, ExternSignature>> externs);
+        const std::vector<std::pair<std::string, ExternSignature>> &externs);
 
 protected:
     CodeGen_LLVM(Target t);

@@ -522,7 +522,7 @@ llvm::FunctionType *CodeGen_LLVM::signature_to_type(const ExternSignature &signa
     std::vector<llvm::Type *> llvm_arg_types;
     for (const Type &t : signature.arg_types()) {
         if (t == type_of<struct halide_buffer_t *>()) {
-            llvm_arg_types.push_back(buffer_t_type);
+            llvm_arg_types.push_back(buffer_t_type->getPointerTo());
         } else {
             llvm_arg_types.push_back(llvm_type_of(t));
         }
@@ -536,7 +536,7 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile_trampolines(
         const Target &target,
         llvm::LLVMContext &context,
         const std::string &suffix,
-        const std::vector<std::pair<std::string, ExternSignature>> externs) {
+        const std::vector<std::pair<std::string, ExternSignature>> &externs) {
     std::unique_ptr<CodeGen_LLVM> codegen(new_for_target(target, context));
     codegen->init_codegen("trampolines" + suffix);
     for (const std::pair<std::string, ExternSignature> &e : externs) {
@@ -1045,9 +1045,6 @@ llvm::Function *CodeGen_LLVM::add_argv_wrapper(llvm::Function *fn,
             // Cast to the appropriate type and store
             result_in_argv_ptr = builder->CreatePointerCast(result_in_argv_ptr, fn->getReturnType()->getPointerTo());
             builder->CreateStore(result, result_in_argv_ptr);
-        } else {
-            Constant *zero = ConstantInt::get(result_in_argv_ptr->getType(), 0);
-            builder->CreateStore(zero, result_in_argv_ptr);
         }
         builder->CreateRetVoid();
     } else {
