@@ -510,4 +510,5 @@ int main() {
     test_concat();
     test_constant_fill();
     test_model();
+    printf("Success!\n");
 }
