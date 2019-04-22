@@ -435,11 +435,10 @@ void JITModule::add_symbol_for_export(const std::string &name, const Symbol &ext
     jit_module->exports[name] = extern_symbol;
 }
 
-JITModule::Symbol JITModule::add_extern_for_export(const std::string &name,
-                                                   const ExternCFunction &extern_c_function) {
+void JITModule::add_extern_for_export(const std::string &name,
+                                      const ExternCFunction &extern_c_function) {
     Symbol symbol(extern_c_function.address());
     jit_module->exports[name] = symbol;
-    return symbol;
 }
 
 void JITModule::memoization_cache_set_size(int64_t size) const {
