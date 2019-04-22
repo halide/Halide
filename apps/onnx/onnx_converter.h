@@ -35,4 +35,6 @@ struct Model {
 
 Model convert_model(const onnx::ModelProto &model);
 
+Halide::Type get_halide_type(const Tensor &tensor);
+
 #endif
