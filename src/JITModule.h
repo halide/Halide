@@ -34,10 +34,9 @@ struct JITModule {
     IntrusivePtr<JITModuleContents> jit_module;
 
     struct Symbol {
-        void *address;
-        llvm::Type *llvm_type;
-        Symbol() : address(nullptr), llvm_type(nullptr) {}
-        Symbol(void *address, llvm::Type *llvm_type) : address(address), llvm_type(llvm_type) {}
+        void *address = nullptr;
+        Symbol() : address(nullptr) {}
+        explicit Symbol(void *address) : address(address) {}
     };
 
     JITModule();
