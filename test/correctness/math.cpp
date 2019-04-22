@@ -12,6 +12,8 @@ template <typename value_t>
 bool relatively_equal(value_t a, value_t b, Target target) {
     if (a == b) {
         return true;
+    } else if (std::isnan(a) && std::isnan(b)) {
+        return true;
     } else if (!std::numeric_limits<value_t>::is_integer) {
         double da = (double)a, db = (double)b;
         double relative_error;
@@ -257,7 +259,7 @@ int main(int argc, char **argv) {
     call_1_float_types(floor, 256, -25, 25);
     call_1_float_types(ceil, 256, -25, 25);
     call_1_float_types(trunc, 256, -25, 25);
-    call_2_float_types(pow, 256, .1f, 20, .1f, 2);
+    call_2_float_types(pow, 256, -2.0, 10.0, -4.0f, 4.0f);
 
     const int8_t int8_min = std::numeric_limits<int8_t>::min();
     const int16_t int16_min = std::numeric_limits<int16_t>::min();
