@@ -173,7 +173,7 @@ public:
         // If next region is free, combine with it
         auto next = std::next(it);
         if (next != regions.end() && !next->second.used) {
-            bddebug(2) << "combine next: "<< next->first << " w/ " << it->first << " " << "\n";
+            bddebug(2) << "combine next: " << next->first << " w/ " << it->first << " " << "\n";
             it->second.size += next->second.size;
             regions.erase(next);
         }
@@ -216,15 +216,15 @@ public:
         for (auto it : regions) {
             const uint32_t start = it.first;
             const Region &r = it.second;
-            bddebug(2)<<"R: " << start << ".." << (start+r.size-1)<<","<<r.used<<"\n";
-            internal_assert(start == prev_end) << "start " << start << " prev_end "<< prev_end<<"\n";
+            bddebug(2) << "R: " << start << ".." << (start+r.size-1) << "," << r.used << "\n";
+            internal_assert(start == prev_end) << "start " << start << " prev_end " << prev_end << "\n";
             // it's OK to have two used regions in a row, but not two free ones
             internal_assert(!(!prev_used && !r.used));
             prev_end = start + r.size;
             prev_used = r.used;
         }
-        internal_assert(prev_end == total_size) << "prev_end " << prev_end << " total_size "<< total_size<<"\n";
-        bddebug(2)<<"\n";
+        internal_assert(prev_end == total_size) << "prev_end " << prev_end << " total_size " << total_size << "\n";
+        bddebug(2) << "\n";
 #endif
     }
 
@@ -436,8 +436,8 @@ wasm32_ptr_t v8_WasmMemoryObject_malloc(const Local<Context> &context, size_t si
         Local<Object> buffer_string = context->GetEmbedderData(kString_buffer).As<Object>();
         Local<ArrayBuffer> wasm_memory = Local<ArrayBuffer>::Cast(memory_value->Get(buffer_string));
 
-        wdebug(0)<<"heap_base is: "<<heap_base<<"\n";
-        wdebug(0)<<"initial memory size is: "<<wasm_memory->ByteLength()<<"\n";
+        wdebug(0) << "heap_base is: " << heap_base << "\n";
+        wdebug(0) << "initial memory size is: " << wasm_memory->ByteLength() << "\n";
         bdmalloc->init(wasm_memory->ByteLength(), heap_base);
     }
 
@@ -447,29 +447,29 @@ wasm32_ptr_t v8_WasmMemoryObject_malloc(const Local<Context> &context, size_t si
 
         constexpr int kWasmPageSize = 65536;
         const int32_t pages_needed = (size + kWasmPageSize - 1) / 65536;
-        wdebug(0)<<"attempting to grow by pages: "<<pages_needed<<"\n";
+        wdebug(0) << "attempting to grow by pages: " << pages_needed << "\n";
 
         Local<Value> args[1] = {Integer::New(isolate, pages_needed)};
         int32_t result = memory_value
             ->Get(context, context->GetEmbedderData(kString_grow)).ToLocalChecked().As<Object>()
             ->CallAsFunction(context, memory_value, 1, args).ToLocalChecked()->Int32Value(context).ToChecked();
-        wdebug(0)<<"grow result: "<<result<<"\n";
+        wdebug(0) << "grow result: " << result << "\n";
         internal_assert(result == (int) (bdmalloc->get_total_size() / kWasmPageSize));
 
         Local<Object> buffer_string = context->GetEmbedderData(kString_buffer).As<Object>();
         Local<ArrayBuffer> wasm_memory = Local<ArrayBuffer>::Cast(memory_value->Get(buffer_string));
-        wdebug(0)<<"New ArrayBuffer size is: "<<wasm_memory->ByteLength()<<"\n";
+        wdebug(0) << "New ArrayBuffer size is: " << wasm_memory->ByteLength() << "\n";
 
         bdmalloc->grow_total_size(wasm_memory->ByteLength());
         p = bdmalloc->alloc_region(size);
     }
 
-    wdebug(2)<<"allocation of "<<size<<" at: "<<p<<"\n";
+    wdebug(2) << "allocation of " << size << " at: " << p << "\n";
     return p;
 }
 
 void v8_WasmMemoryObject_free(const Local<Context> &context, wasm32_ptr_t ptr) {
-    wdebug(2)<<"freeing ptr at: "<<ptr<<"\n";
+    wdebug(2) << "freeing ptr at: " << ptr << "\n";
     BDMalloc *bdmalloc = (BDMalloc *) context->GetAlignedPointerFromEmbedderData(kBDMallocPtr);
     bdmalloc->free_region(ptr);
 }
