@@ -376,6 +376,34 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
     jit_module->name = function_name;
 }
 
+/*static*/
+JITModule JITModule::make_trampolines_module(const Target &target_arg,
+                                             const std::map<std::string, JITExtern> &externs,
+                                             const std::string &suffix,
+                                             const std::vector<JITModule> &deps) {
+    Target target = target_arg;
+    target.set_feature(Target::JIT);
+
+    JITModule result;
+    std::vector<std::pair<std::string, ExternSignature>> extern_signatures;
+    std::vector<std::string> requested_exports;
+    for (const std::pair<std::string, JITExtern> &e : externs) {
+        const std::string &callee_name = e.first;
+        const std::string wrapper_name = callee_name + suffix;
+        const ExternCFunction &extern_c = e.second.extern_c_function();
+        result.add_extern_for_export(callee_name, extern_c);
+        requested_exports.push_back(wrapper_name);
+        extern_signatures.push_back({callee_name, extern_c.signature()});
+    }
+
+    std::unique_ptr<llvm::Module> llvm_module = CodeGen_LLVM::compile_trampolines(
+        target, result.jit_module->context, suffix, extern_signatures);
+
+    result.compile_module(std::move(llvm_module), /*function_name*/ "", target, deps, requested_exports);
+
+    return result;
+}
+
 const std::map<std::string, JITModule::Symbol> &JITModule::exports() const {
     return jit_module->exports;
 }
