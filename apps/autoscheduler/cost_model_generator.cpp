@@ -354,7 +354,7 @@ public:
 
         Expr cost_of_parallelism = cost_of_parallel_tasks + cost_of_parallel_launches;
 
-        // Make it easier the the model to penalize working sets that
+        // Make it easier for the model to penalize working sets that
         // start to fall out of cache by giving it a term that gets
         // multiplied by the working set.
         Expr cost_of_working_set = working_set * relu1(27, w, n);
