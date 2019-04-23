@@ -13,8 +13,6 @@ import base64
 import hashlib
 import datetime
 
-SAVE_MODEL = False
-
 
 class WatchdogTimer(Exception):
     def __init__(self, timeout=10*60):
@@ -64,13 +62,11 @@ class HalideBackend(BackendBase):
                   Halide.
         """
         onnx.checker.check_model(model)
-        if SAVE_MODEL:
-            cls.save_model(model)
 
         prepared = halide_model.Model()
         with WatchdogTimer(timeout=300):
             prepared.BuildFromOnnxModel(model)
-            # Optimize the schedule of non trivial models to make sure they
+            # Optimize the schedule of nontrivial models to make sure they
             # complete in a reasonable amount of time
             if len(model.graph.node) > 10:
                 prepared.OptimizeSchedule()
@@ -120,6 +116,7 @@ class HalideBackend(BackendBase):
     @classmethod
     def save_model(cls, model):
         """
+        Not implemented yet.
         """
         assert False
         return None
@@ -130,3 +127,7 @@ run_node = HalideBackend.run_node
 run_model = HalideBackend.run_model
 supports_device = HalideBackend.supports_device
 is_compatible = HalideBackend.is_compatible
+
+# TODO Query if JIT Target is cuda and device is available. We currently running on host.
+def is_cuda_avaiable():
+    return False

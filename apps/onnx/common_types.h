@@ -1,8 +1,8 @@
 #ifndef COMMON_TYPES_H_
 #define COMMON_TYPES_H_
 
+#include "Halide.h"
 #include "onnx_converter.h"
-#include <Halide.h>
 
 struct HalideModel {
     std::shared_ptr<Model> model;

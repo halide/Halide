@@ -19,7 +19,6 @@ class Model():
         elif type(onnx_model) is bytes:
             self.pipeline = model_cpp.ConvertOnnxModel(onnx_model)
         else:
-            # protobuf don't support swig, so we have to convert them to string.
             model_str = onnx_model.SerializeToString()
             self.pipeline = model_cpp.ConvertOnnxModel(model_str)
 

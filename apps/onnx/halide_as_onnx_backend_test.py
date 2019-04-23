@@ -6,7 +6,6 @@ from __future__ import unicode_literals
 import unittest
 import onnx.backend.test
 import halide_as_onnx_backend as halide_backend
-import torch.cuda
 
 # This is a pytest magic variable to load extra plugins
 #pytest_plugins = 'onnx.backend.test.report',
@@ -64,7 +63,7 @@ exclude_test_patterns = (
      '|test_inception_v2.*'  # Padding type not supported for pooling
 )
 
-if not torch.cuda.is_available():
+if halide_backend.is_cuda_avaiable():
     exclude_test_patterns += r'|test_.*cuda'
 
 exclude_test_patterns += ')'

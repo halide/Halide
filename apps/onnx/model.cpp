@@ -11,8 +11,9 @@
 
 namespace py = pybind11;
 
-static HalideModel convert_onnx_model(
-    std::string onnx_model_str) {
+namespace {
+HalideModel convert_onnx_model(
+    const std::string &onnx_model_str) {
     onnx::ModelProto onnx_model;
     onnx_model.ParseFromString(onnx_model_str);
 
@@ -55,7 +56,7 @@ static HalideModel convert_onnx_model(
     return result;
 }
 
-static std::string auto_schedule(HalideModel pipeline) {
+std::string auto_schedule(const HalideModel &pipeline) {
     // Generate a schedule for the pipeline.
     Halide::Target tgt = Halide::get_host_target();
     std::string schedule = pipeline.rep->auto_schedule(tgt);
@@ -75,7 +76,7 @@ struct Distribution<bool> {
 };
 
 template<typename HalideBufferType, typename T, bool Random>
-static void prepare_image_param(
+void prepare_image_param(
     Halide::ImageParam &image_param,
     const std::vector<int> &shape,
     const py::array_t<T> *np_data) {
@@ -111,7 +112,7 @@ static void prepare_image_param(
 }
 
 template<typename T, bool Random = false>
-static void prepare_input(
+void prepare_input(
     const HalideModel &pipeline,
     const std::string &input_name,
     const std::vector<int> &input_shape,
@@ -158,7 +159,7 @@ static void prepare_input(
 }
 
 template<typename T>
-static void prepare_input(
+void prepare_input(
     const HalideModel &pipeline,
     const std::string &input_name,
     const std::vector<int> &input_shape) {
@@ -166,7 +167,7 @@ static void prepare_input(
     prepare_input<T, true>(pipeline, input_name, input_shape, rand_array);
 }
 
-static void prepare_py_array_input(
+void prepare_py_array_input(
     const HalideModel &pipeline,
     const py::array &ndarray,
     const std::string &input_name) {
@@ -199,7 +200,7 @@ static void prepare_py_array_input(
     } else if (ndarray.dtype().is(py::dtype::of<double>())) {
         prepare_input<double>(pipeline, input_name, input_shape, ndarray);
     } else if (ndarray.dtype().kind() == 'i') {
-        // TODO : Figure out why static type casting doesn't work for singed intger!
+        // TODO : Figure out why static type casting doesn't work for signed intger!
         prepare_input<int>(pipeline, input_name, input_shape, ndarray);
     } else {
         throw std::invalid_argument(
@@ -208,7 +209,7 @@ static void prepare_py_array_input(
     }
 }
 
-static void prepare_random_input(
+void prepare_random_input(
     const HalideModel &pipeline,
     const std::string &input_name) {
     const Tensor &t = pipeline.model->tensors.at(input_name);
@@ -303,7 +304,7 @@ py::array_t<T> export_output(
     }
     std::reverse(np_strides.begin(), np_strides.end());
 
-    // TODO:Better handeling of scalar outputs.
+    // TODO:Better handling of scalar outputs.
     if (output_shape.size() > 0) {
         py::array_t<T, py::array::c_style> result(output_shape);
 
@@ -333,7 +334,8 @@ py::array_t<T> export_output(
     }
 }
 
-static Halide::Type onnx_type_to_halide_type(int t) {
+// TODO: Consider using get_tensor_type ?!
+Halide::Type onnx_type_to_halide_type(int t) {
     switch (t) {
     case onnx::TensorProto::FLOAT:
         return Halide::Type(halide_type_float, 8 * sizeof(float), 1);
@@ -362,8 +364,8 @@ static Halide::Type onnx_type_to_halide_type(int t) {
     }
 }
 
-static std::vector<py::array> run(
-    HalideModel pipeline,
+std::vector<py::array> run(
+    const HalideModel &pipeline,
     const std::vector<py::array> &inputs, const std::string &device) {
     if (inputs.size() == pipeline.model->inputs.size()) {
         for (int i = 0; i < inputs.size(); ++i) {
@@ -398,7 +400,9 @@ static std::vector<py::array> run(
     }
     Halide::Realization real(outputs);
     Halide::Target tgt;
+#ifdef NDEBUG
     tgt.set_feature(Halide::Target::NoAsserts, true);
+#endif
     tgt.set_feature(Halide::Target::DisableLLVMLoopUnroll);
     tgt.set_feature(Halide::Target::DisableLLVMLoopVectorize);
     if (device == "CUDA") {
@@ -458,7 +462,7 @@ static std::vector<py::array> run(
     return results;
 }
 
-double benchmark(HalideModel pipeline, int num_iters, const std::string &device) {
+double benchmark(const HalideModel &pipeline, int num_iters, const std::string &device) {
     if (num_iters < 1) {
         throw std::invalid_argument(
             "Requested " + std::to_string(num_iters) +
@@ -493,7 +497,9 @@ double benchmark(HalideModel pipeline, int num_iters, const std::string &device)
 
     Halide::Realization real(outputs);
     Halide::Target tgt;
+#ifdef NDEBUG
     tgt.set_feature(Halide::Target::NoAsserts, true);
+#endif
     tgt.set_feature(Halide::Target::DisableLLVMLoopUnroll);
     tgt.set_feature(Halide::Target::DisableLLVMLoopVectorize);
     if (device == "CUDA") {
@@ -517,11 +523,11 @@ double benchmark(HalideModel pipeline, int num_iters, const std::string &device)
     return total_runtime / num_iters;
 }
 
-void print_loop_nest(HalideModel pipeline) {
+void print_loop_nest(const HalideModel &pipeline) {
     pipeline.rep->print_loop_nest();
 }
 
-void print_lowered_statement(HalideModel pipeline) {
+void print_lowered_statement(const HalideModel &pipeline) {
     std::string tmp_file = std::tmpnam(nullptr);
     pipeline.rep->compile_to_lowered_stmt(tmp_file, pipeline.rep->infer_arguments());
     std::ifstream is(tmp_file);
@@ -531,6 +537,8 @@ void print_lowered_statement(HalideModel pipeline) {
     }
     std::remove(tmp_file.c_str());
 }
+
+}  // namespace
 
 PYBIND11_MODULE(model_cpp, m) {
     py::class_<HalideModel>(m, "HalideModel");

@@ -89,7 +89,7 @@ PY_EXT = $(shell $(PYTHON)-config --extension-suffix)
 PY_MODEL_EXT = model_cpp$(PY_EXT)
 PYCXXFLAGS =  $(CXXFLAGS) $(PYBIND11_CFLAGS)
 
-# Python extenstion for HalideModel
+# Python extension for HalideModel
 $(BIN)/$(PY_MODEL_EXT): model.cpp $(ONNX_CONVERTER_LIB)
 	$(CXX) $(PYCXXFLAGS) -O3 -Wall -shared -fPIC -I$(BIN) $< $(ONNX_CONVERTER_LIB) $(LIB_HALIDE) -o $@ $(LDFLAGS)
 
