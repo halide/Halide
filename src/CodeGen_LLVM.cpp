@@ -2861,7 +2861,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         Halide::Expr nan_expr = Halide::Internal::Call::make(
             x.type(), "nan_f32", {}, Halide::Internal::Call::PureExtern);
         Expr iy = floor(y);
-        Expr one = x.type().lanes() == 1 ? 1.0f : Broadcast::make(1.0f, x.type().lanes());
+        Expr one = make_one(x.type());
         Expr e = select(x > 0, abs_x_pow_y,  // Strictly positive x
                         y == 0.0f, one,  // x^0 == 1
                         y != iy, nan_expr,  // negative x to a non-integer power
