@@ -5,12 +5,9 @@ BIN ?= bin
 HL_TARGET ?= host
 
 PROTOC := $(shell which protoc)
-ifndef PROTOC
-  $(error "No protoc in $(PATH), you need to install protocol buffers")
-endif
 
+ifdef PROTOC
 PROTOCFLAGS = --cpp_out=.
-
 CXXFLAGS += -DGOOGLE_PROTOBUF_NO_RTTI -Wno-sign-compare -Wno-unused-but-set-variable
 CXXFLAGS += -I$(dir $(PROTOC))../include
 LDFLAGS += -L$(dir $(PROTOC))../lib
@@ -83,3 +80,8 @@ test: $(BIN)/onnx_converter_test $(BIN)/onnx_converter_generator_test
 	LD_LIBRARY_PATH=$(BIN) $(BIN)/onnx_converter_test
 	LD_LIBRARY_PATH=$(BIN) $(BIN)/onnx_converter_generator_test
 
+# No Protoc
+else
+test:
+	@echo "No protoc in $(PATH), you need to install protocal buffers"
+endif

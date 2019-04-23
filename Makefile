@@ -1896,7 +1896,8 @@ TEST_APPS=\
 	resize \
 	stencil_chain \
 	wavelet \
-	resnet_50
+	resnet_50 \
+	onnx
 
 .PHONY: test_apps
 test_apps: distrib
