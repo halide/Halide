@@ -83,5 +83,5 @@ test: $(BIN)/onnx_converter_test $(BIN)/onnx_converter_generator_test
 # No Protoc
 else
 test:
-	@echo "No protoc in $(PATH), you need to install protocal buffers"
+	@echo "No protoc in $(PATH), you need to install protocol buffers"
 endif
