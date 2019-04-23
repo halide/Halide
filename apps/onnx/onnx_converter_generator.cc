@@ -5,35 +5,6 @@
 
 namespace {
 
-// TODO: This should be an onnx_converter API.
-Halide::Type get_halide_type(const Tensor &tensor) {
-    switch (tensor.type) {
-    case onnx::TensorProto_DataType_FLOAT:
-        return Halide::Float(32);
-    case onnx::TensorProto_DataType_DOUBLE:
-        return Halide::Float(64);
-    case onnx::TensorProto_DataType_INT8:
-        return Halide::Int(8);
-    case onnx::TensorProto_DataType_INT16:
-        return Halide::Int(16);
-    case onnx::TensorProto_DataType_INT32:
-        return Halide::Int(32);
-    case onnx::TensorProto_DataType_UINT8:
-        return Halide::UInt(8);
-    case onnx::TensorProto_DataType_UINT16:
-        return Halide::UInt(16);
-    case onnx::TensorProto_DataType_UINT32:
-        return Halide::UInt(32);
-    case onnx::TensorProto_DataType_INT64:
-        return Halide::Int(64);
-    case onnx::TensorProto_DataType_BOOL:
-        return Halide::Bool();
-    default:
-        throw std::domain_error("Unsupported or unknown target type");
-    }
-    throw std::domain_error("Unsupported or unknown target type");
-}
-
 class OnnxModelConverterGenerator
     : public Halide::Generator<OnnxModelConverterGenerator> {
 public:
@@ -53,7 +24,7 @@ public:
             abort();
         }
 
-        converted_model_ = convert_model(onnx_model, "");
+        converted_model_ = convert_model(onnx_model);
         for (const auto &input : converted_model_.inputs) {
             model_inputs_[input.first] = add_input<Buffer<>>(
                 input.first,
