@@ -86,15 +86,16 @@ test: $(BIN)/onnx_converter_test $(BIN)/onnx_converter_generator_test
 PYTHON ?= python3
 PYBIND11_CFLAGS = $(shell $(PYTHON) -m pybind11 --includes) -frtti
 PY_EXT = $(shell $(PYTHON)-config --extension-suffix)
+PY_MODEL_EXT = model_cpp$(PY_EXT)
 PYCXXFLAGS =  $(CXXFLAGS) $(PYBIND11_CFLAGS)
 
 # Python extenstion for HalideModel
-$(BIN)/model_cpp: model.cpp $(ONNX_CONVERTER_LIB)
-	$(CXX) $(PYCXXFLAGS) -O3 -Wall -shared -fPIC -I$(BIN) $< $(ONNX_CONVERTER_LIB) $(LIB_HALIDE) -o $@$(PY_EXT) $(LDFLAGS)
+$(BIN)/$(PY_MODEL_EXT): model.cpp $(ONNX_CONVERTER_LIB)
+	$(CXX) $(PYCXXFLAGS) -O3 -Wall -shared -fPIC -I$(BIN) $< $(ONNX_CONVERTER_LIB) $(LIB_HALIDE) -o $@ $(LDFLAGS)
 
 
-model_test: $(BIN)/model_cpp$(PY_EXT)
+model_test: $(BIN)/$(PY_MODEL_EXT)
 	PYTHONPATH="$(BIN)/:$$PYTHONPATH" $(PYTHON) -m unittest model_test.py -v
 
-halide_as_onnx_backend_test: $(BIN)/model_cpp$(PY_EXT)
+halide_as_onnx_backend_test: $(BIN)/$(PY_MODEL_EXT)
 	PYTHONPATH="$(BIN)/:$$PYTHONPATH" $(PYTHON) -m unittest halide_as_onnx_backend_test.py -v
