@@ -316,7 +316,7 @@ define_test_group(run_tests)
 # TODO(srj): add test_avx512 variant
 # TODO(srj): add test_python variant
 # TODO(srj): add test_apps variant
-function(add_test TARGET)
+function(add_halide_test TARGET)
   set(options EXPECT_FAILURE)
   set(oneValueArgs WORKING_DIRECTORY)
   set(multiValueArgs GROUPS)
@@ -349,12 +349,13 @@ function(add_test TARGET)
     # It's probably a custom target or a group: just depend on it.
     add_custom_target("${EXEC_NAME}" DEPENDS "${TARGET}")
   else()
-    message(FATAL_ERROR "add_test(): unsupported type ${TARGET_TYPE} for ${TARGET}")
+    message(FATAL_ERROR "add_halide_test(): unsupported type ${TARGET_TYPE} for ${TARGET}")
   endif()
   set_target_properties("${EXEC_NAME}" PROPERTIES EXCLUDE_FROM_ALL TRUE)
   foreach(GROUP ${args_GROUPS})
     add_dependencies("${GROUP}" "${EXEC_NAME}")
   endforeach()
+  add_test(NAME ${TARGET} COMMAND ${COMMAND})
 
 endfunction()
 
@@ -374,6 +375,7 @@ add_subdirectory(src)
 option(WITH_TESTS "Build tests" ON)
 if (WITH_TESTS)
   message(STATUS "Building tests enabled")
+  enable_testing()
   add_subdirectory(test)
 else()
   message(STATUS "Building tests disabled")

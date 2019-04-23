@@ -32,6 +32,7 @@ struct Target {
         QuRT,
         NoOS,
         Fuchsia,
+        WebAssemblyRuntime
     } os;
 
     /** The architecture used by the target. Determines the
@@ -44,6 +45,7 @@ struct Target {
         MIPS,
         Hexagon,
         POWERPC,
+        WebAssembly,
     } arch;
 
     /** The bit-width of the target machine. Must be 0 for unknown, or 32 or 64. */
@@ -113,6 +115,8 @@ struct Target {
         EmbedBitcode = halide_target_feature_embed_bitcode,
         DisableLLVMLoopVectorize = halide_target_feature_disable_llvm_loop_vectorize,
         DisableLLVMLoopUnroll = halide_target_feature_disable_llvm_loop_unroll,
+        WasmSimd128 = halide_target_feature_wasm_simd128,
+        WasmSignExt = halide_target_feature_wasm_signext,
         FeatureEnd = halide_target_feature_end
     };
     Target() : os(OSUnknown), arch(ArchUnknown), bits(0) {}

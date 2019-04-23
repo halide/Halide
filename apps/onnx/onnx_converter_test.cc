@@ -11,7 +11,7 @@
         exit(-1);                    \
     }
 
-static void testAbs() {
+static void test_abs() {
     onnx::NodeProto abs_node;
     abs_node.set_name("abs_node");
     abs_node.set_op_type("Abs");
@@ -37,7 +37,7 @@ static void testAbs() {
     }
 }
 
-static void testActivationFunction() {
+static void test_activation_function() {
     onnx::NodeProto relu_node;
     relu_node.set_name("relu_node");
     relu_node.set_op_type("Relu");
@@ -63,7 +63,7 @@ static void testActivationFunction() {
     }
 }
 
-static void testCast() {
+static void test_cast() {
     onnx::NodeProto cast_node;
     cast_node.set_name("relu_node");
     cast_node.set_op_type("Cast");
@@ -92,7 +92,7 @@ static void testCast() {
     }
 }
 
-static void testAdd() {
+static void test_add() {
     onnx::NodeProto add_node;
     add_node.set_name("add_node");
     add_node.set_op_type("Add");
@@ -124,7 +124,7 @@ static void testAdd() {
     }
 }
 
-static void testConstant() {
+static void test_constant() {
     onnx::NodeProto add_node;
     add_node.set_name("constant_node");
     add_node.set_op_type("Constant");
@@ -153,7 +153,7 @@ static void testConstant() {
     }
 }
 
-static void testGemm() {
+static void test_gemm() {
     onnx::NodeProto add_node;
     add_node.set_name("gemm_node");
     add_node.set_op_type("Gemm");
@@ -200,7 +200,7 @@ static void testGemm() {
     }
 }
 
-static void testConv() {
+static void test_conv() {
     onnx::NodeProto add_node;
     add_node.set_name("conv_node");
     add_node.set_op_type("Conv");
@@ -263,7 +263,7 @@ static void testConv() {
     }
 }
 
-static void testSum() {
+static void test_sum() {
     onnx::NodeProto sum_node;
     sum_node.set_name("sum_node");
     sum_node.set_op_type("ReduceSum");
@@ -302,7 +302,7 @@ static void testSum() {
     }
 }
 
-static void testWhereBroadcast() {
+static void test_where_broadcast() {
     onnx::NodeProto where_node;
     where_node.set_name("where_node");
     where_node.set_op_type("Where");
@@ -347,7 +347,7 @@ static void testWhereBroadcast() {
     }
 }
 
-static void testConcat() {
+static void test_concat() {
     onnx::NodeProto concat_node;
     concat_node.set_name("concat_node");
     concat_node.set_op_type("Concat");
@@ -387,7 +387,7 @@ static void testConcat() {
     }
 }
 
-static void testConstantFill() {
+static void test_constant_fill() {
     constexpr float const_value = 2.0f;
     onnx::NodeProto concat_node;
     concat_node.set_name("constant_fill_node");
@@ -414,7 +414,7 @@ static void testConstantFill() {
     }
 }
 
-static void testModel() {
+static void test_model() {
     onnx::ModelProto model;
     onnx::ValueInfoProto *input_def = model.mutable_graph()->add_input();
     input_def->set_name("model_input");
@@ -498,16 +498,18 @@ static void testModel() {
 }
 
 int main() {
-    testAbs();
-    testActivationFunction();
-    testCast();
-    testAdd();
-    testConstant();
-    testGemm();
-    testConv();
-    testSum();
-    testWhereBroadcast();
-    testConcat();
-    testConstantFill();
-    testModel();
+    test_abs();
+    test_activation_function();
+    test_cast();
+    test_add();
+    test_constant();
+    test_gemm();
+    test_conv();
+    test_sum();
+    test_where_broadcast();
+    test_concat();
+    test_constant_fill();
+    test_model();
+    printf("Success!\n");
+    return 0;
 }

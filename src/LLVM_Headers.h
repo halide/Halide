@@ -21,6 +21,10 @@
 #pragma clang system_header
 #endif
 
+#ifdef WITH_WEBASSEMBLY
+#include <lld/Common/Driver.h>
+#endif
+
 #include <llvm/ExecutionEngine/MCJIT.h>
 #include <llvm/ExecutionEngine/SectionMemoryManager.h>
 #include <llvm/ExecutionEngine/JITEventListener.h>

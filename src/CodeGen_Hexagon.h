@@ -16,8 +16,6 @@ public:
     /** Create a Hexagon code generator for the given Hexagon target. */
     CodeGen_Hexagon(Target);
 
-    std::unique_ptr<llvm::Module> compile(const Module &module) override;
-
 protected:
     void compile_func(const LoweredFunc &f,
                       const std::string &simple_name, const std::string &extern_name) override;
