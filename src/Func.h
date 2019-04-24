@@ -33,6 +33,8 @@ struct VarOrRVar {
     VarOrRVar(const Var &v) : var(v), is_rvar(false) {}
     VarOrRVar(const RVar &r) : rvar(r), is_rvar(true) {}
     VarOrRVar(const RDom &r) : rvar(RVar(r)), is_rvar(true) {}
+    template<int N>
+    VarOrRVar(const ImplicitVar<N> &u) : var(u), is_rvar(false) {}
 
     const std::string &name() const {
         if (is_rvar) return rvar.name();

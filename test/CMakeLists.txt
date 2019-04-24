@@ -10,7 +10,7 @@ option(WITH_TEST_AUTO_SCHEDULE "Build auto_schedule tests" ON)
 if (WITH_TEST_INTERNAL)
   message(STATUS "Internal tests enabled")
   halide_project(test_internal internal internal.cpp)
-  add_test(test_internal
+  add_halide_test(test_internal
            GROUPS run_tests)
 else()
   message(WARNING "Internal tests disabled")
@@ -45,11 +45,11 @@ function(tests folder)
       list(APPEND GROUPS run_tests)
     endif()
     if("${folder}" STREQUAL "error")
-      add_test("${TARGET}"
+      add_halide_test("${TARGET}"
                GROUPS ${GROUPS}
                EXPECT_FAILURE)
     else()
-      add_test("${TARGET}"
+      add_halide_test("${TARGET}"
                GROUPS ${GROUPS})
     endif()
 
@@ -115,7 +115,7 @@ if (WITH_TEST_GENERATOR)
       target_link_libraries("${TARGET}" PUBLIC "${NAME}")
     endif()
 
-    add_test("${TARGET}"
+    add_halide_test("${TARGET}"
              GROUPS test_generator run_tests)
   endfunction(halide_define_aot_test)
 
@@ -182,7 +182,7 @@ if (WITH_TEST_GENERATOR)
     set(TARGET "generator_jit_${NAME}")
     halide_project("${TARGET}" "generator" "${GEN_TEST_DIR}/${FILE}")
     target_link_libraries("${TARGET}" PRIVATE "${NAME}.generator")
-    add_test("${TARGET}"
+    add_halide_test("${TARGET}"
              GROUPS test_generator run_tests)
   endforeach()
 
@@ -293,6 +293,8 @@ if (WITH_TEST_GENERATOR)
 
   halide_define_aot_test(pyramid
                          GENERATOR_ARGS levels=10)
+  halide_define_aot_test(string_param
+                         GENERATOR_ARGS rpn_expr="5 y * x +")
 
   halide_define_aot_test(msan
                          HALIDE_TARGET_FEATURES msan)

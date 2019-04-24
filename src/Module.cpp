@@ -347,7 +347,6 @@ Module link_modules(const std::string &name, const std::vector<Module> &modules)
     return output;
 }
 
-
 Buffer<uint8_t> Module::compile_to_buffer() const {
     // TODO: This Hexagon specific code should be removed as soon as possible.
     // This may involve adding more general support for post-processing and
