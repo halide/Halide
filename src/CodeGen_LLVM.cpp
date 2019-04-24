@@ -2858,11 +2858,12 @@ void CodeGen_LLVM::visit(const Call *op) {
         Expr x = op->args[0];
         Expr y = op->args[1];
         Halide::Expr abs_x_pow_y = Internal::halide_exp(Internal::halide_log(abs(x)) * y);
-        Halide::Expr nan_expr = Halide::Internal::Call::make(
-            x.type(), "nan_f32", {}, Halide::Internal::Call::PureExtern);
+        Halide::Expr nan_expr = make_const(x.type(), nan(""));
         Expr iy = floor(y);
         Expr one = make_one(x.type());
+        Expr zero = make_zero(x.type());
         Expr e = select(x > 0, abs_x_pow_y,  // Strictly positive x
+                        x == 0.0f && y != 0.0f, zero, // 0^y == 0
                         y == 0.0f, one,  // x^0 == 1
                         y != iy, nan_expr,  // negative x to a non-integer power
                         iy % 2 == 0, abs_x_pow_y,  // negative x to an even power
