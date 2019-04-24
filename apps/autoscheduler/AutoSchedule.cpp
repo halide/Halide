@@ -71,7 +71,7 @@ namespace Autoscheduler {
 // entirely unroll the thing. Sized for an architecture with 16 vector
 // registers.
 const int kUnrollLimit = 16;
-const vector<int> gpu_serial_sizes({1,2,3,4,5,6,7,8});
+const vector<int> gpu_serial_sizes({1,2,4,8});
 
 namespace {
 
@@ -157,26 +157,27 @@ bool may_subtile() {
 // max_s hold max gpu_thread counts of all siblings in each dimension. Used to make sure union of
 // thread counts is under 1024 threshold.
 vector<vector<int64_t>> generate_gpu_tilings(const vector<int64_t> &s, const vector<int64_t> &max_s,
-                                            int d, int outermost_dim, int vector_dim,
-                                            bool threads_inner) {
+                                            int d, int vector_dim, bool threads_inner) {
     vector<vector<int64_t>> result;
     if (d == -1) {
         result.push_back(vector<int64_t>());
     } else {
+        // set max thread count 64 for now in all dims
+        int64_t max_threads_extent = 64, total_threads_limit = 512; // less than 1024 to limit states
         int factor = 2;
         vector<vector<int64_t>> v;
-        v = generate_gpu_tilings(s, max_s, d - 1, outermost_dim, vector_dim, threads_inner);
+        v = generate_gpu_tilings(s, max_s, d - 1, vector_dim, threads_inner);
 
         for (auto t : v) {
             t.push_back(0);
-            // set max thread count 64 for now in all dims
-            int64_t max_threads_extent = 64, total_threads_limit = 1024; 
 
             int64_t min_threads = ( (d == vector_dim) ? 32 : 1 ); 
 
-            for (int64_t threads_ext = min_threads; threads_ext < s[d]; threads_ext *= factor) {
+            for (int64_t threads_ext = min_threads; threads_ext <= s[d]; threads_ext *= factor) {
                 // reject if inner exceeds hardware thread limit
-                if (threads_ext > max_threads_extent) break;
+                if (threads_ext > max_threads_extent) {
+                    break;
+                }
                 // reject if union of extents of this loop so far and sibling thread loops 
                 // is greater than thread count limit or if there are more than three thread 
                 // loops with extent > 1
@@ -195,12 +196,13 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<int64_t> &s, const vec
                     } else {
                         threads_at_dim = t[dim];
                     }
-                    int64_t union_threads_used = std::max(threads_at_dim, max_s[dim]);
-                    max_threads_used *= union_threads_used;
-                    not_ext1 += ( (union_threads_used > 1) ? 1 : 0 );
+                    int64_t union_threads = (dim < (int)(max_s.size())) ? std::max(threads_at_dim, max_s[dim]) : threads_at_dim;
+                    max_threads_used *= union_threads;
+                    not_ext1 += ( (union_threads > 1) ? 1 : 0 );
                 }
-                if ( (max_threads_used > total_threads_limit) || not_ext1 > 3) break;
-
+                if ( (max_threads_used > total_threads_limit) || not_ext1 > 3) {
+                    break;
+                }
                 if (threads_inner) {
                     int64_t other_ext = (s[d] + threads_ext - 1) / threads_ext;
                     t.back() = other_ext;
@@ -208,7 +210,6 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<int64_t> &s, const vec
                 else {
                     t.back() = threads_ext;
                 }
-
                 result.push_back(t);
             }
 
@@ -444,8 +445,7 @@ struct LoopNest {
         vector<int64_t> max_size = this->get_union_thread_counts(f);
 
         internal_assert(pure_size);
-        auto tilings = generate_gpu_tilings(*pure_size, max_size, (int)(pure_size->size() - 1), 
-                                            (int)(pure_size->size() - 1), v, false);
+        auto tilings = generate_gpu_tilings(*pure_size, max_size, (int)(pure_size->size() - 1), v, false);
 
         bool made_child = false;
         for (const auto &t : tilings) {
@@ -2022,7 +2022,6 @@ struct LoopNest {
             // Place the computation inside this loop
             std::unique_ptr<LoopNest> r{new LoopNest};
             r->copy_from(*this);
-
             r->compute_here(f, true, v, in_threads_loop);
 
             if (!in_realization) {
@@ -3341,7 +3340,7 @@ struct State {
                 
                         auto block_tilings = 
                             generate_gpu_tilings(*parallel_size, max_size, node->dimensions-1, 
-                                                node->dimensions-1, vector_dim, true);
+                                                 vector_dim, true);
 
                         // If no options, create a thread tiling as large as possible with block size (1,1,1).
                         // This can happen if the loops are too small to generate desired gpu tiles.
