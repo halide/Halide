@@ -268,7 +268,7 @@ LLVM_STATIC_LIBFILES = \
 
 LLVM_STATIC_LIBS = -L $(LLVM_LIBDIR) $(shell $(LLVM_CONFIG) --link-static --libfiles $(LLVM_STATIC_LIBFILES))
 
-ifneq ($(WITH_WEBASSEMBLY), )
+ifneq ($(WITH_V8), )
 # TODO: apparently no llvm_config flag to get canonical paths to tools
 LLVM_STATIC_LIBS += -L $(LLVM_LIBDIR) \
 	$(LLVM_LIBDIR)/liblldWasm.a \

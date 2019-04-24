@@ -21,7 +21,7 @@
 #pragma clang system_header
 #endif
 
-#ifdef WITH_WEBASSEMBLY
+#ifdef WITH_V8
 #include <lld/Common/Driver.h>
 #endif
 
