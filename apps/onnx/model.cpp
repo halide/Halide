@@ -400,9 +400,6 @@ std::vector<py::array> run(
     }
     Halide::Realization real(outputs);
     Halide::Target tgt;
-#ifdef NDEBUG
-    tgt.set_feature(Halide::Target::NoAsserts, true);
-#endif
     tgt.set_feature(Halide::Target::DisableLLVMLoopUnroll);
     tgt.set_feature(Halide::Target::DisableLLVMLoopVectorize);
     if (device == "CUDA") {
@@ -497,9 +494,6 @@ double benchmark(const HalideModel &pipeline, int num_iters, const std::string &
 
     Halide::Realization real(outputs);
     Halide::Target tgt;
-#ifdef NDEBUG
-    tgt.set_feature(Halide::Target::NoAsserts, true);
-#endif
     tgt.set_feature(Halide::Target::DisableLLVMLoopUnroll);
     tgt.set_feature(Halide::Target::DisableLLVMLoopVectorize);
     if (device == "CUDA") {
