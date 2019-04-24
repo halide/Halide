@@ -208,6 +208,11 @@ struct ScheduleFeatures {
     double working_set_at_realization = 0;
     double working_set_at_root = 0;
 
+    double num_full_warps = 0;
+    double warp_lane_utilization = 0;
+    double num_shared_mem_loads = 0;
+    double num_global_mem_loads = 0;
+
     void dump() const {
         std::cerr << "    num_realizations:                      " << num_realizations << '\n'
                   << "    num_productions:                       " << num_productions << '\n'
@@ -247,7 +252,11 @@ struct ScheduleFeatures {
                   << "    working_set_at_task:                   " << working_set_at_task << '\n'
                   << "    working_set_at_production:             " << working_set_at_production << '\n'
                   << "    working_set_at_realization:            " << working_set_at_realization << '\n'
-                  << "    working_set_at_root:                   " << working_set_at_root << '\n';
+                  << "    working_set_at_root:                   " << working_set_at_root << '\n'
+                  << "    num_full_warps:                        " << num_full_warps << '\n'
+                  << "    warp_lane_utilization:                 " << warp_lane_utilization << '\n'
+                  << "    num_shared_mem_loads:                  " << num_shared_mem_loads << '\n'
+                  << "    num_global_mem_loads:                  " << num_global_mem_loads << '\n';
 
     }
 };

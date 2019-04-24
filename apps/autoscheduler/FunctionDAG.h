@@ -47,6 +47,12 @@ struct OptionalRational {
         denominator /= g;
     }
 
+    OptionalRational operator*(int64_t factor) const {
+        if ((*this) == 0) return *this;
+        int64_t num = numerator * factor;
+        return OptionalRational{exists, num, denominator};
+    }
+
     OptionalRational operator*(const OptionalRational &other) const {
         if ((*this) == 0) return *this;
         if (other == 0) return other;
@@ -141,6 +147,35 @@ public:
         }
         c += other.count();
         return true;
+    }
+
+    // Scale the matrix coeffcients by the given factors
+    LoadJacobian operator*(const std::vector<int64_t>& factors) const {
+        bool all_one = true;
+        for (const auto& f : factors) {
+            if (f != 1) {
+                all_one = false;
+                break;
+            }
+        }
+
+        // If the scale factors are all one, nothing changes
+        if (all_one) {
+            return *this;
+        }
+
+        internal_assert(consumer_loop_dims() == factors.size());
+
+        vector<vector<OptionalRational>> matrix;
+        matrix.resize(producer_storage_dims());
+        for (size_t i = 0; i < producer_storage_dims(); i++) {
+            matrix[i].resize(consumer_loop_dims());
+            for (size_t j = 0; j < consumer_loop_dims(); j++) {
+                matrix[i][j] = (*this)(i, j) * factors[j];
+            }
+        }
+        LoadJacobian result(std::move(matrix), count());
+        return result;
     }
 
     LoadJacobian operator*(const LoadJacobian &other) const {
