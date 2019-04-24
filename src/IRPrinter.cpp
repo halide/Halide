@@ -560,7 +560,7 @@ void IRPrinter::visit(const Select *op) {
 
 void IRPrinter::visit(const Load *op) {
     const bool has_pred = !is_one(op->predicate);
-    const bool show_alignment = op->type.is_vector() && op->alignment.modulus > 1;
+    const bool show_alignment = op->type.is_vector() && op->alignment.modulus != 1;
     if (has_pred) {
         stream << "(";
     }
@@ -678,7 +678,7 @@ void IRPrinter::visit(const Acquire *op) {
 void IRPrinter::visit(const Store *op) {
     do_indent();
     const bool has_pred = !is_one(op->predicate);
-    const bool show_alignment = op->value.type().is_vector() && (op->alignment.modulus > 1);
+    const bool show_alignment = op->value.type().is_vector() && (op->alignment.modulus != 1);
     if (has_pred) {
         stream << "predicate (" << op->predicate << ")\n";
         indent += 2;
