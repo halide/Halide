@@ -107,19 +107,14 @@ class HalideBackend(BackendBase):
     @classmethod
     def supports_device(cls, device):  # type: (Text) -> bool
         """
-        Checks whether the backend is compiled with particular device support.
-        Always return True since we ignore the device and run on the host at the
-        moment.
+        Checks whether the backend is compiled with support for the requested
+        device and that device is available on the machine.
         """
-        return True
-
-    @classmethod
-    def save_model(cls, model):
-        """
-        Not implemented yet.
-        """
-        assert False
-        return None
+        if device == 'CPU':
+            return True
+        else:
+            # We don't support anything else at this time
+            return False
 
 
 prepare = HalideBackend.prepare
@@ -128,6 +123,3 @@ run_model = HalideBackend.run_model
 supports_device = HalideBackend.supports_device
 is_compatible = HalideBackend.is_compatible
 
-# TODO Query if JIT Target is cuda and device is available. We currently running on host.
-def is_cuda_avaiable():
-    return False

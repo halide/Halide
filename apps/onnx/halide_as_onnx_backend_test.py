@@ -61,12 +61,8 @@ exclude_test_patterns = (
      '|test_squeezenet.*'   # Results are not accurate enough
      '|test_inception_v1.*'   # LRN not supported yet
      '|test_inception_v2.*'  # Padding type not supported for pooling
+     ')'
 )
-
-if halide_backend.is_cuda_avaiable():
-    exclude_test_patterns += r'|test_.*cuda'
-
-exclude_test_patterns += ')'
 
 backend_test.exclude(exclude_test_patterns)
 

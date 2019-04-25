@@ -12,6 +12,7 @@
 namespace py = pybind11;
 
 namespace {
+
 HalideModel convert_onnx_model(
     const std::string &onnx_model_str) {
     onnx::ModelProto onnx_model;
@@ -279,28 +280,14 @@ template<typename T>
 py::array_t<T> export_output(
     const Halide::Buffer<T> &output_values,
     const HalideModel &pipeline,
-    int output_id) {
-    Tensor node = pipeline.model->outputs.at(pipeline.output_names.at(output_id));
-    std::vector<int> output_shape;
+    const std::vector<int> &output_shape) {
     int stride = 1;
-    const int rank = node.shape.size();
+    const int rank = output_shape.size();
     std::vector<int> np_strides;
     for (int i = 0; i < rank; ++i) {
-        const int64_t *dim = Halide::Internal::as_const_int(node.shape[i]);
-        if (!dim) {
-            throw std::invalid_argument(
-                "Couldn't statically infer dim " + std::to_string(i) + " of output " +
-                std::to_string(output_id));
-        }
-        output_shape.push_back(*dim);
         np_strides.push_back(stride);
-        dim = Halide::Internal::as_const_int(node.shape[rank - (i + 1)]);
-        if (!dim) {
-            throw std::invalid_argument(
-                "Couldn't statically infer dim " + std::to_string(rank - (i + 1)) +
-                " of output " + std::to_string(output_id));
-        }
-        stride *= *dim;
+        int dim = output_shape[rank - (i + 1)];
+        stride *= dim;
     }
     std::reverse(np_strides.begin(), np_strides.end());
 
@@ -367,10 +354,17 @@ Halide::Type onnx_type_to_halide_type(int t) {
 std::vector<py::array> run(
     const HalideModel &pipeline,
     const std::vector<py::array> &inputs, const std::string &device) {
+
+    std::map<std::string, std::vector<int>> input_shapes;
+
     if (inputs.size() == pipeline.model->inputs.size()) {
         for (int i = 0; i < inputs.size(); ++i) {
             const std::string &input_name = pipeline.input_names[i];
             prepare_py_array_input(pipeline, inputs[i], input_name);
+            std::vector<int> &input_shape = input_shapes[input_name];
+            for (int j = 0; j < inputs[i].ndim(); ++j) {
+                input_shape.push_back(inputs[i].shape(j));
+            }
         }
     } else {
         throw std::invalid_argument(
@@ -381,20 +375,13 @@ std::vector<py::array> run(
     // Return a list of numpy.ndarray (one per external output)
     const int num_outputs = pipeline.output_names.size();
 
+    std::map<std::string, std::vector<int>> output_shapes;
+    compute_output_shapes(*pipeline.model, input_shapes, &output_shapes);
+
     std::vector<Halide::Buffer<>> outputs(num_outputs);
     for (int i = 0; i < num_outputs; ++i) {
-        Tensor node = pipeline.model->outputs.at(pipeline.output_names.at(i));
-        std::vector<int> output_shape;
-        const int rank = node.shape.size();
-        for (int j = 0; j < rank; ++j) {
-            const int64_t *dim = Halide::Internal::as_const_int(node.shape[j]);
-            if (!dim) {
-                throw std::invalid_argument(
-                    "Couldn't statically infer dim " + std::to_string(j) +
-                    " of output " + std::to_string(i));
-            }
-            output_shape.push_back(*dim);
-        }
+        const std::string &output_name = pipeline.output_names.at(i);
+        const std::vector<int> &output_shape = output_shapes.at(output_name);
         outputs[i] = Halide::Buffer<>(
             onnx_type_to_halide_type(pipeline.output_types[i]), output_shape);
     }
@@ -411,39 +398,41 @@ std::vector<py::array> run(
     std::vector<py::array> results;
 
     for (int i = 0; i < num_outputs; ++i) {
+        const std::string &output_name = pipeline.output_names[i];
+        const std::vector<int> &output_shape = output_shapes.at(output_name);
         switch (pipeline.output_types[i]) {
         case onnx::TensorProto::FLOAT:
-            results.push_back(export_output<float>(outputs[i], pipeline, i));
+            results.push_back(export_output<float>(outputs[i], pipeline, output_shape));
             break;
         case onnx::TensorProto::UINT8:
-            results.push_back(export_output<uint8_t>(outputs[i], pipeline, i));
+            results.push_back(export_output<uint8_t>(outputs[i], pipeline, output_shape));
             break;
         case onnx::TensorProto::INT8:
-            results.push_back(export_output<int8_t>(outputs[i], pipeline, i));
+            results.push_back(export_output<int8_t>(outputs[i], pipeline, output_shape));
             break;
         case onnx::TensorProto::UINT16:
-            results.push_back(export_output<uint16_t>(outputs[i], pipeline, i));
+            results.push_back(export_output<uint16_t>(outputs[i], pipeline, output_shape));
             break;
         case onnx::TensorProto::INT16:
-            results.push_back(export_output<int16_t>(outputs[i], pipeline, i));
+            results.push_back(export_output<int16_t>(outputs[i], pipeline, output_shape));
             break;
         case onnx::TensorProto::INT32:
-            results.push_back(export_output<int32_t>(outputs[i], pipeline, i));
+            results.push_back(export_output<int32_t>(outputs[i], pipeline, output_shape));
             break;
         case onnx::TensorProto::INT64:
-            results.push_back(export_output<int64_t>(outputs[i], pipeline, i));
+            results.push_back(export_output<int64_t>(outputs[i], pipeline, output_shape));
             break;
         case onnx::TensorProto::BOOL:
-            results.push_back(export_output<bool>(outputs[i], pipeline, i));
+            results.push_back(export_output<bool>(outputs[i], pipeline, output_shape));
             break;
         case onnx::TensorProto::DOUBLE:
-            results.push_back(export_output<double>(outputs[i], pipeline, i));
+            results.push_back(export_output<double>(outputs[i], pipeline, output_shape));
             break;
         case onnx::TensorProto::UINT32:
-            results.push_back(export_output<uint32_t>(outputs[i], pipeline, i));
+            results.push_back(export_output<uint32_t>(outputs[i], pipeline, output_shape));
             break;
         case onnx::TensorProto::UINT64:
-            results.emplace_back(export_output<uint64_t>(outputs[i], pipeline, i));
+            results.emplace_back(export_output<uint64_t>(outputs[i], pipeline, output_shape));
             break;
         default:
             throw std::domain_error("Unsupported output type");
