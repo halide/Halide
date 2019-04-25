@@ -441,13 +441,6 @@ void CodeGen_ARM::visit(const Mul *op) {
     CodeGen_Posix::visit(op);
 }
 
-Expr CodeGen_ARM::sorted_avg(Expr a, Expr b) {
-    Type ty = a.type();
-    Type wide_ty = ty.with_bits(ty.bits() * 2);
-    // This will codegen to vhaddu (arm32) or uhadd (arm64).
-    return cast(ty, (cast(wide_ty, a) + cast(wide_ty, b))/2);
-}
-
 void CodeGen_ARM::visit(const Div *op) {
     if (!neon_intrinsics_disabled() &&
         op->type.is_vector() && is_two(op->b) &&
@@ -994,6 +987,12 @@ void CodeGen_ARM::visit(const Call *op) {
                 return;
             }
         }
+    } else if (op->is_intrinsic(Call::sorted_avg)) {
+        Type ty = op->type;
+        Type wide_ty = ty.with_bits(ty.bits() * 2);
+        // This will codegen to vhaddu (arm32) or uhadd (arm64).
+        value = codegen(cast(ty, (cast(wide_ty, op->args[0]) + cast(wide_ty, op->args[1]))/2));
+        return;
     }
 
     CodeGen_Posix::visit(op);
