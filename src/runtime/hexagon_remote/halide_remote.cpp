@@ -43,6 +43,12 @@ void halide_error(void *user_context, const char *str) {
     }
 }
 
+__attribute__((weak)) void* dlopenbuf(const char*filename, const char* data, int size, int perms);
+
+static bool use_dlopenbuf() {
+    return dlopenbuf != NULL;
+}
+
 void *halide_get_symbol(const char *name) {
     // Try dlsym first. We need to try both RTLD_SELF and
     // RTLD_DEFAULT. Sometimes, RTLD_SELF finds a symbol when
@@ -56,6 +62,13 @@ void *halide_get_symbol(const char *name) {
     def = dlsym(RTLD_DEFAULT, name);
     if (def) {
         return def;
+    }
+    if (!use_dlopenbuf()) {
+        // If we aren't using dlopenbuf, also try mmap_dlsym
+        def = mmap_dlsym(RTLD_DEFAULT, name);
+        if (def) {
+            return def;
+        }
     }
 
     // dlsym has some very unpredictable behavior that makes
@@ -72,12 +85,6 @@ void *halide_get_library_symbol(void *lib, const char *name) {
 }
 
 PipelineContext run_context(stack_alignment, stack_size);
-
-__attribute__((weak)) void* dlopenbuf(const char*filename, const char* data, int size, int perms);
-
-static bool use_dlopenbuf() {
-    return dlopenbuf != NULL;
-}
 
 int halide_hexagon_remote_load_library(const char *soname, int sonameLen,
                                        const unsigned char *code, int codeLen,
@@ -337,12 +344,7 @@ int halide_hexagon_runtime_set_thread_priority(int priority) {
 
     // Find the halide_set_default_thread_priority function in the shared runtime,
     // which we loaded with RTLD_GLOBAL.
-    void (*set_priority)(int) = NULL;
-    if (use_dlopenbuf()) {
-        set_priority = (void (*)(int)) halide_get_symbol("halide_set_default_thread_priority");
-    } else {
-        set_priority = (void (*)(int)) mmap_dlsym_libs("halide_set_default_thread_priority");
-    }
+    void (*set_priority)(int) = (void (*)(int)) halide_get_symbol("halide_set_default_thread_priority");
 
     if (set_priority) {
         set_priority(priority);

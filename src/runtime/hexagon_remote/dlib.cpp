@@ -7,6 +7,7 @@ extern "C" {
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include <dlfcn.h>
 }
 
 #include <HalideRuntime.h>
@@ -222,7 +223,7 @@ struct dlib_t {
                         log_printf("Symbol name not defined");
                         return false;
                     }
-                    S = (const char *)mmap_dlsym_libs(sym_name);
+                    S = (const char *)mmap_dlsym(RTLD_DEFAULT, sym_name);
                     if (!S) {
                         log_printf("Unresolved external symbol %s\n", sym_name);
                         return false;
@@ -495,23 +496,23 @@ void *mmap_dlopen(const void *code, size_t size) {
 void *mmap_dlsym(void *from, const char *name) {
     if (!from) return NULL;
 
+    if ((from == RTLD_SELF) || (from == RTLD_DEFAULT)) {
+        // Check all currently loaded libraries for a symbol
+        void *S = halide_get_symbol(name);
+        for (dlib_t *i = loaded_libs; i && !S; i = i->next) {
+            // TODO: We really should only look in
+            // libraries with an soname that is marked
+            // DT_NEEDED in this library.
+            S = mmap_dlsym(i, name);
+        }
+        return S;
+    }
+
     dlib_t *dlib = (dlib_t *)from;
     const Sym *sym = dlib->find_symbol(name);
     if (!sym) return NULL;
     if (!dlib->symbol_is_defined(sym)) return NULL;
     return (void *)dlib->get_symbol_addr(sym);
-}
-
-// Check all currently loaded libraries for a symbol
-void *mmap_dlsym_libs(const char *name) {
-    void *S = halide_get_symbol(name);
-    for (dlib_t *i = loaded_libs; i && !S; i = i->next) {
-        // TODO: We really should only look in
-        // libraries with an soname that is marked
-        // DT_NEEDED in this library.
-        S = mmap_dlsym(i, name);
-    }
-    return S;
 }
 
 int mmap_dlclose(void *dlib) {
