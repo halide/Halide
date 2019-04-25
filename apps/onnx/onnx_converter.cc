@@ -1,9 +1,8 @@
 #include "onnx_converter.h"
 #include <climits>
 #include <exception>
-#include <unordered_set>
-
 #include <math.h>
+#include <unordered_set>
 
 static Halide::Expr div_up(Halide::Expr num, int denom) {
     return Halide::Internal::simplify((num + denom - 1) / denom);
@@ -554,23 +553,26 @@ Node convert_metadata_node(
     result.outputs.resize(1);
     result.outputs[0].rep = func_for_node_output(node, 0);
 
-    std::vector<Halide::Expr> dims;
-    Halide::Expr num_elements = 1;
     const std::vector<Halide::Expr> &input_shape = inputs[0].shape;
-    for (int i = 0; i < input_shape.size(); ++i) {
-        dims.push_back(input_shape[i]);
-        num_elements *= input_shape[i];
-    }
 
     if (node.op_type() == "Size") {
-        result.outputs[0].rep() = Halide::cast<int64_t>(num_elements);
-    } else {
-        std::vector<Halide::Var> var(1);
-        result.outputs[0].rep(var) = Halide::cast<int64_t>(0);
-        for (int i = 0; i < dims.size(); ++i) {
-            result.outputs[0].rep(i) = Halide::cast<int64_t>(dims[i]);
+        Halide::Expr num_elements = 1;
+        for (int i = 0; i < input_shape.size(); ++i) {
+            num_elements *= input_shape[i];
         }
+        result.outputs[0].rep() = Halide::cast<int64_t>(num_elements);
+    } else if (node.op_type() == "Shape") {
+        Halide::Var var;
+        Halide::Expr res = Halide::Expr(static_cast<int64_t>(0));
+        for (int i = 0; i < input_shape.size(); ++i) {
+            res = Halide::select(var == i, Halide::cast<int64_t>(input_shape[i]), res);
+        }
+        result.outputs[0].rep(var) = res;
         result.outputs[0].shape.push_back(static_cast<int>(input_shape.size()));
+    } else {
+        throw std::domain_error(
+            "Unsupported op type " + node.op_type() + " for node " +
+            node.name());
     }
     result.outputs[0].type = onnx::TensorProto_DataType_INT64;
     return result;
