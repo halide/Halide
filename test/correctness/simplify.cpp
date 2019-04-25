@@ -554,10 +554,22 @@ void check_vectors() {
         int lanes = 4;
         std::vector<Expr> loads;
         for (int i = 0; i < lanes; i++) {
-            loads.push_back(Load::make(Float(32), "buf", x+i, Buffer<>(), Parameter(), const_true(), ModulusRemainder()));
+            loads.push_back(Load::make(Float(32), "buf", 4*x+i, Buffer<>(), Parameter(), const_true(), ModulusRemainder()));
         }
 
-        check(concat_vectors(loads), Load::make(Float(32, lanes), "buf", ramp(x, 1, lanes), Buffer<>(), Parameter(), const_true(lanes), ModulusRemainder()));
+        check(concat_vectors(loads), Load::make(Float(32, lanes), "buf", ramp(x*4, 1, lanes), Buffer<>(), Parameter(), const_true(lanes), ModulusRemainder(4, 0)));
+    }
+
+    // Check that concatenated loads of adjacent vectors collapse into a vector load, with appropriate alignment.
+    {
+        int lanes = 4;
+        int vectors = 4;
+        std::vector<Expr> loads;
+        for (int i = 0; i < vectors; i++) {
+          loads.push_back(Load::make(Float(32, lanes), "buf", ramp(i*lanes, 1, lanes), Buffer<>(), Parameter(), const_true(lanes), ModulusRemainder(4, 0)));
+        }
+
+        check(concat_vectors(loads), Load::make(Float(32, lanes*vectors), "buf", ramp(0, 1, lanes*vectors), Buffer<>(), Parameter(), const_true(vectors*lanes), ModulusRemainder(0, 0)));
     }
 
     {
