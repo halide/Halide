@@ -760,12 +760,15 @@ struct LoopNest {
 
         int num_full_warps = num_threads / 32;
         features.warp_lane_utilization = 1;
+        features.num_warps = num_full_warps;
 
         int partial_warp_lanes = num_threads % 32;
         if (partial_warp_lanes != 0) {
             features.warp_lane_utilization = (num_full_warps + partial_warp_lanes / 32.) / (num_full_warps + 1);
+            features.num_warps++;
         }
 
+        features.block_occupancy = (double)num_threads / MAX_THREADS_PER_BLOCK;
         return {num_full_warps, partial_warp_lanes};
     }
 
@@ -1131,7 +1134,6 @@ struct LoopNest {
             num_full_warps = warp_features.first;
             num_partial_warp_lanes = warp_features.second;
         }
-        feat.num_full_warps = num_full_warps;
 
         if (innermost || at_production || gpu_thread) { // These are the sites at which we compute load footprints
             // Pick the site at which we will compute the footprint relationship

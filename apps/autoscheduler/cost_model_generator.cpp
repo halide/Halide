@@ -240,7 +240,8 @@ public:
         Expr working_set_at_realization = schedule_features(n, idx++, w);
         Expr working_set_at_root = schedule_features(n, idx++, w);
 
-        Expr num_full_warps = schedule_features(n, idx++, w);
+        Expr num_warps = schedule_features(n, idx++, w);
+        Expr block_occupancy = schedule_features(n, idx++, w);
         Expr warp_lane_utilization = schedule_features(n, idx++, w);
         Expr num_shared_mem_loads = schedule_features(n, idx++, w);
         Expr num_global_mem_loads = schedule_features(n, idx++, w);
@@ -260,6 +261,7 @@ public:
         Expr idle_core_wastage = ceil(tasks_per_core) / max(1, tasks_per_core);
         compute_cost *= idle_core_wastage;
         compute_cost /= warp_lane_utilization;
+        compute_cost /= block_occupancy;
 
         Expr load_cost = (num_realizations * unique_lines_read_per_realization * relu1(5, w, n) +
                           num_realizations * unique_bytes_read_per_realization * relu1(6, w, n) +
@@ -272,8 +274,8 @@ public:
                           num_vectors * unique_lines_read_per_vector * relu1(13, w, n) +
                           num_tasks * unique_bytes_read_per_task * relu1(14, w, n) +
                           num_tasks * unique_lines_read_per_task * relu1(15, w, n) +
-                          num_shared_mem_loads * relu1(16, w, n) +
-                          num_global_mem_loads * relu1(17, w, n));
+                          num_shared_mem_loads * relu1(27, w, n) +
+                          num_global_mem_loads * relu1(28, w, n));
 
 
 
