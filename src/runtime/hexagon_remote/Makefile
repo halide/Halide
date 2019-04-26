@@ -24,7 +24,7 @@
 #
 
 HEXAGON_SDK_ROOT ?= ${HOME}/Qualcomm/Hexagon_SDK/3.3.3
-HEXAGON_TOOLS_ROOT ?= ${HOME}/Qualcomm/Hexagon_SDK/3.3.3/tools/HEXAGON_Tools/8.1.05
+HEXAGON_TOOLS_ROOT ?= ${HEXAGON_SDK_ROOT}/tools/HEXAGON_Tools/8.1.05
 
 ANDROID_NDK_ROOT ?= ${HEXAGON_SDK_ROOT}/tools/android-ndk-r10d
 
@@ -41,6 +41,8 @@ HEXAGON_SDK_LIBS ?= "${HEXAGON_SDK_ROOT}/libs"
 COMMON_FLAGS = -I ${HEXAGON_SDK_INCLUDES}/stddef -I../
 COMMON_CCFLAGS = ${COMMON_FLAGS} -O3 -I ${HEXAGON_SDK_LIBS}/common/remote/ship/android_Release
 HEXAGON_QAICFLAGS = ${COMMON_FLAGS}
+
+BIN ?= bin
 
 CC-host = ${CXX}
 CXX-host = ${CXX}
@@ -65,108 +67,112 @@ CCFLAGS-v60 := $(CCFLAGS-v60) -I ${HEXAGON_SDK_LIBS}/common/rtld/ship/hexagon_Re
 CCFLAGS-arm-64-android := $(CCFLAGS-arm-64-android) ${COMMON_CCFLAGS} -llog -fPIE -pie
 CCFLAGS-arm-32-android := $(CCFLAGS-arm-32-android) ${COMMON_CCFLAGS} -llog -fPIE -pie
 
+AR-v60 = ${HEXAGON_TOOLS_ROOT}/Tools/bin/hexagon-ar
+
 .PHONY: all
 all: hosts remotes
 
 .PHONY: hosts
 hosts: \
-	bin/arm-64-android/libhalide_hexagon_host.so \
-	bin/arm-32-android/libhalide_hexagon_host.so \
-	bin/host/libhalide_hexagon_host.so
+	$(BIN)/arm-64-android/libhalide_hexagon_host.so \
+	$(BIN)/arm-32-android/libhalide_hexagon_host.so \
+	$(BIN)/host/libhalide_hexagon_host.so
 
 .PHONY: remotes
 remotes: \
-	bin/v60/libhalide_hexagon_remote_skel.so \
-	bin/v60/signed_by_debug/libhalide_hexagon_remote_skel.so \
-	bin/v60/hexagon_sim_remote \
-	bin/v60/libsim_qurt.a \
-	bin/v60/libsim_qurt_vtcm.a
+	$(BIN)/v60/libhalide_hexagon_remote_skel.so \
+	$(BIN)/v60/signed_by_debug/libhalide_hexagon_remote_skel.so \
+	$(BIN)/v60/hexagon_sim_remote \
+	$(BIN)/v60/libsim_qurt.a \
+	$(BIN)/v60/libsim_qurt_vtcm.a
 
-bin/src/halide_hexagon_remote.h bin/src/halide_hexagon_remote_skel.c bin/src/halide_hexagon_remote_stub.c: halide_hexagon_remote.idl
+$(BIN)/src/halide_hexagon_remote.h $(BIN)/src/halide_hexagon_remote_skel.c $(BIN)/src/halide_hexagon_remote_stub.c: halide_hexagon_remote.idl
 	mkdir -p $(@D)
 	$(HEXAGON_QAIC) $(HEXAGON_QAICFLAGS) $^ -o $(@D)
 
-bin/%/halide_hexagon_remote_skel.o: bin/src/halide_hexagon_remote_skel.c
+$(BIN)/%/halide_hexagon_remote_skel.o: $(BIN)/src/halide_hexagon_remote_skel.c
 	mkdir -p $(@D)
 	$(CC-$*) $(CCFLAGS-$*) -fPIC -c $^ -o $@
 
-bin/%/thread_pool.o: thread_pool.cpp
+$(BIN)/%/thread_pool.o: thread_pool.cpp
 	mkdir -p $(@D)
 	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c thread_pool.cpp -o $@
 
-bin/%/halide_remote.o: halide_remote.cpp dlib.h known_symbols.h
+$(BIN)/%/halide_remote.o: halide_remote.cpp dlib.h known_symbols.h $(BIN)/src/halide_hexagon_remote.h
 	mkdir -p $(@D)
-	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c halide_remote.cpp -o $@
+	$(CXX-$*) $(CCFLAGS-$*) -I$(BIN)/src/ -fPIC -c halide_remote.cpp -o $@
 
-bin/%/dlib.o: dlib.cpp dlib.h
+$(BIN)/%/dlib.o: dlib.cpp dlib.h
 	mkdir -p $(@D)
 	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c dlib.cpp -o $@
 
-bin/%/host_malloc.o: host_malloc.cpp
+$(BIN)/%/host_malloc.o: host_malloc.cpp
 	mkdir -p $(@D)
 	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c host_malloc.cpp -o $@
 
-bin/%/libadsprpc_shim.o: libadsprpc_shim.cpp
+$(BIN)/%/libadsprpc_shim.o: libadsprpc_shim.cpp
 	mkdir -p $(@D)
 	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c libadsprpc_shim.cpp -o $@
 
-bin/%/host_shim.o: host_shim.cpp
+$(BIN)/%/host_shim.o: host_shim.cpp $(BIN)/src/halide_hexagon_remote.h
 	mkdir -p $(@D)
-	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c host_shim.cpp -o $@
+	$(CXX-$*) $(CCFLAGS-$*) -I$(BIN)/src/ -fPIC -c host_shim.cpp -o $@
 
-bin/%/known_symbols.o: known_symbols.cpp
+$(BIN)/%/known_symbols.o: known_symbols.cpp
 	mkdir -p $(@D)
 	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c known_symbols.cpp -o $@
 
-bin/%/nearbyint.o: nearbyint.cpp
+$(BIN)/%/nearbyint.o: nearbyint.cpp
 	mkdir -p $(@D)
 	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c nearbyint.cpp -o $@
 
-bin/%/c11_stubs.o: c11_stubs.cpp
+$(BIN)/%/c11_stubs.o: c11_stubs.cpp
 	mkdir -p $(@D)
 	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c c11_stubs.cpp -o $@
 
-bin/%/log.o: log.cpp
+$(BIN)/%/log.o: log.cpp
 	mkdir -p $(@D)
 	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c log.cpp -o $@
 
 # Build rules for the hexagon implementation.
-bin/%/libhalide_hexagon_remote_skel.so: bin/%/halide_remote.o bin/%/halide_hexagon_remote_skel.o bin/%/nearbyint.o bin/%/c11_stubs.o bin/%/log.o bin/%/dlib.o bin/%/known_symbols.o
+$(BIN)/%/libhalide_hexagon_remote_skel.so: $(BIN)/%/halide_remote.o $(BIN)/%/halide_hexagon_remote_skel.o $(BIN)/%/nearbyint.o $(BIN)/%/c11_stubs.o $(BIN)/%/log.o $(BIN)/%/dlib.o $(BIN)/%/known_symbols.o
 	mkdir -p $(@D)
 	$(CC-$*) -m$* -mG0lib -G0 -fpic -shared -lc $^ -Wl,-soname=libhalide_hexagon_remote_skel.so -Wl,--no-threads -o $@ \
 	-Wl,-Bsymbolic -Wl,--wrap=malloc -Wl,--wrap=calloc -Wl,--wrap=free \
 	-Wl,--wrap=realloc -Wl,--wrap=memalign -Wl,--wrap=__stack_chk_fail
 
-bin/%/signed_by_debug/libhalide_hexagon_remote_skel.so: bin/%/libhalide_hexagon_remote_skel.so
+$(BIN)/%/signed_by_debug/libhalide_hexagon_remote_skel.so: $(BIN)/%/libhalide_hexagon_remote_skel.so
 	mkdir -p $(@D)
 	python $(HEXAGON_ELFSIGNER) --no_disclaimer -i $^ -o `dirname $@`
 
-bin/%/libhalide_hexagon_host.so: bin/src/halide_hexagon_remote_stub.c bin/%/host_malloc.o bin/%/host_shim.o bin/%/libadsprpc_shim.o
+$(BIN)/%/libhalide_hexagon_host.so: $(BIN)/src/halide_hexagon_remote_stub.c $(BIN)/%/host_malloc.o $(BIN)/%/host_shim.o $(BIN)/%/libadsprpc_shim.o
 	mkdir -p $(@D)
 	$(CC-$*) $^ $(CCFLAGS-$*) -Wl,-soname,libhalide_hexagon_host.so -shared -o $@
 
 # Build rules for the simulator implementation.
-bin/%/sim_remote.o: sim_remote.cpp sim_protocol.h dlib.h known_symbols.h
+$(BIN)/%/sim_remote.o: sim_remote.cpp sim_protocol.h dlib.h known_symbols.h $(BIN)/src/halide_hexagon_remote.h
 	mkdir -p $(@D)
-	$(CXX-$*) $(CCFLAGS-$*) -c sim_remote.cpp -o $@
+	$(CXX-$*) $(CCFLAGS-$*) -I$(BIN)/src/ -c sim_remote.cpp -o $@
 
-bin/%/sim_host.o: sim_host.cpp sim_protocol.h
+$(BIN)/%/sim_host.o: sim_host.cpp sim_protocol.h
 	mkdir -p $(@D)
 	$(CXX-$*) -std=c++11 $(CCFLAGS-$*) -c sim_host.cpp -o $@
 
-bin/%/sim_qurt.o: sim_qurt.cpp
+$(BIN)/%/sim_qurt.o: sim_qurt.cpp
 	mkdir -p $(@D)
 	$(CXX-$*) $(CCFLAGS-$*) -c sim_qurt.cpp -o $@
 
-bin/%/libsim_qurt.a: bin/%/sim_qurt.o
-	ar rcs $@ $^
+$(BIN)/%/libsim_qurt.a: $(BIN)/%/sim_qurt.o
+	mkdir -p $(@D)
+	$(AR-$*) rcs $@ $^
 
-bin/%/sim_qurt_vtcm.o: sim_qurt_vtcm.cpp
+$(BIN)/%/sim_qurt_vtcm.o: sim_qurt_vtcm.cpp
 	mkdir -p $(@D)
 	$(CXX-$*) $(CCFLAGS-$*) -c sim_qurt_vtcm.cpp -o $@
 
-bin/%/libsim_qurt_vtcm.a: bin/%/sim_qurt_vtcm.o
-	ar rcs $@ $^
+$(BIN)/%/libsim_qurt_vtcm.a: $(BIN)/%/sim_qurt_vtcm.o
+	mkdir -p $(@D)
+	$(AR-$*) rcs $@ $^
 
 CRT0_STANDALONE=$(shell $(CXX-v60) -G0 -print-file-name=crt0_standalone.o)
 CRT0           =$(shell $(CXX-v60) -G0 -print-file-name=crt0.o)
@@ -177,17 +183,16 @@ LIB_GCC        =$(shell $(CXX-v60) -G0 -print-file-name=libgcc.a)
 FINI           =$(shell $(CXX-v60) -G0 -print-file-name=fini.o)
 LIBDL          =$(HEXAGON_TOOLS_ROOT)/Tools/target/hexagon/lib/v60/G0/libdl.a
 
-bin/%/hexagon_sim_remote: bin/%/sim_remote.o bin/%/dlib.o bin/%/known_symbols.o bin/%/libsim_qurt.a bin/%/libsim_qurt_vtcm.a
+$(BIN)/%/hexagon_sim_remote: $(BIN)/%/sim_remote.o $(BIN)/%/dlib.o $(BIN)/%/known_symbols.o $(BIN)/%/libsim_qurt.a $(BIN)/%/libsim_qurt_vtcm.a
 	mkdir -p $(@D)
-	$(LD-$*) -o $@ $(CRT0_STANDALONE) $(CRT0) $(INIT) bin/$*/sim_remote.o bin/$*/dlib.o bin/$*/known_symbols.o bin/$*/libsim_qurt.a $(LIBDL) \
-	--start-group  $(LIB_STANDALONE) --whole-archive $(LIB_C) bin/$*/libsim_qurt_vtcm.a --no-whole-archive $(LIB_GCC) --end-group $(FINI) \
+	$(LD-$*) -o $@ $(CRT0_STANDALONE) $(CRT0) $(INIT) $(BIN)/$*/sim_remote.o $(BIN)/$*/dlib.o $(BIN)/$*/known_symbols.o $(BIN)/$*/libsim_qurt.a $(LIBDL) \
+	--start-group  $(LIB_STANDALONE) --whole-archive $(LIB_C) $(BIN)/$*/libsim_qurt_vtcm.a --no-whole-archive $(LIB_GCC) --end-group $(FINI) \
 	--dynamic-linker= -E --force-dynamic
-	#$(CC-$*) -m$* -mG0lib -G0 -ldl -lc -lstandalone -lgcc  $^ $(LIBDL) -o $@
 
-bin/host/libhalide_hexagon_host.so: bin/host/sim_host.o
+$(BIN)/host/libhalide_hexagon_host.so: $(BIN)/host/sim_host.o
 	mkdir -p $(@D)
 	$(CC-host) $^ $(CCFLAGS-host) -Wl,-soname,libhalide_hexagon_host.so -shared -o $@
 
 .PHONY: clean
 clean:
-	rm -rf bin/
+	rm -rf $(BIN)/
