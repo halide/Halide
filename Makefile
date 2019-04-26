@@ -112,6 +112,7 @@ WITH_OPENCL ?= not-empty
 WITH_METAL ?= not-empty
 WITH_OPENGL ?= not-empty
 WITH_D3D12 ?= not-empty
+WITH_VULKAN ?= not-empty
 ifeq ($(OS), Windows_NT)
     WITH_INTROSPECTION ?=
 else
@@ -155,6 +156,8 @@ OPENGL_CXX_FLAGS=$(if $(WITH_OPENGL), -DWITH_OPENGL=1, )
 D3D12_CXX_FLAGS=$(if $(WITH_D3D12), -DWITH_D3D12=1, )
 D3D12_LLVM_CONFIG_LIB=$(if $(WITH_D3D12), , )
 
+VULKAN_CXX_FLAGS=$(if $(WITH_VULKAN), -DWITH_VULKAN=1, )
+
 AARCH64_CXX_FLAGS=$(if $(WITH_AARCH64), -DWITH_AARCH64=1, )
 AARCH64_LLVM_CONFIG_LIB=$(if $(WITH_AARCH64), aarch64, )
 
@@ -189,6 +192,7 @@ CXX_FLAGS += $(OPENCL_CXX_FLAGS)
 CXX_FLAGS += $(METAL_CXX_FLAGS)
 CXX_FLAGS += $(OPENGL_CXX_FLAGS)
 CXX_FLAGS += $(D3D12_CXX_FLAGS)
+CXX_FLAGS += $(VULKAN_CXX_FLAGS)
 CXX_FLAGS += $(MIPS_CXX_FLAGS)
 CXX_FLAGS += $(POWERPC_CXX_FLAGS)
 CXX_FLAGS += $(INTROSPECTION_CXX_FLAGS)
@@ -392,6 +396,7 @@ SOURCE_FILES = \
   CodeGen_Posix.cpp \
   CodeGen_PowerPC.cpp \
   CodeGen_PTX_Dev.cpp \
+  CodeGen_Vulkan_Dev.cpp \
   CodeGen_X86.cpp \
   CPlusPlusMangle.cpp \
   CSE.cpp \
@@ -557,6 +562,7 @@ HEADER_FILES = \
   CodeGen_Posix.h \
   CodeGen_PowerPC.h \
   CodeGen_PTX_Dev.h \
+  CodeGen_Vulkan_Dev.h \
   CodeGen_X86.h \
   ConciseCasts.h \
   CPlusPlusMangle.h \
@@ -763,6 +769,7 @@ RUNTIME_CPP_COMPONENTS = \
   to_string \
   trace_helper \
   tracing \
+  vulkan \
   windows_abort \
   windows_clock \
   windows_cuda \

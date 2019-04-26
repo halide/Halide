@@ -633,6 +633,7 @@ WEAK halide_device_interface_impl_t vulkan_device_interface_impl = {
     halide_vulkan_device_and_host_free,
     halide_default_buffer_copy,
     halide_default_device_crop,
+    halide_default_device_slice,
     halide_default_device_release_crop,
     halide_vulkan_wrap_vk_buffer,
     halide_vulkan_detach_vk_buffer,
@@ -649,9 +650,11 @@ WEAK halide_device_interface_t vulkan_device_interface = {
     halide_device_and_host_free,
     halide_buffer_copy,
     halide_device_crop,
+    halide_device_slice,
     halide_device_release_crop,
     halide_device_wrap_native,
     halide_device_detach_native,
+    NULL, // target capabilities.
     &vulkan_device_interface_impl
 };
 

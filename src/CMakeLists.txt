@@ -301,6 +301,7 @@ set(HEADER_FILES
   CodeGen_Posix.h
   CodeGen_PowerPC.h
   CodeGen_PTX_Dev.h
+  CodeGen_Vulkan_Dev.h
   CodeGen_X86.h
   ConciseCasts.h
   CPlusPlusMangle.h
@@ -475,6 +476,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   CodeGen_Posix.cpp
   CodeGen_PowerPC.cpp
   CodeGen_PTX_Dev.cpp
+  CodeGen_Vulkan_Dev.cpp
   CodeGen_X86.cpp
   CPlusPlusMangle.cpp
   CSE.cpp
