@@ -743,8 +743,8 @@ void CodeGen_Vulkan_Dev::init_module() {
     // OpExecutionMode or OpExecutionModeId -- are these also added at add_kernel time?
     // debug -- empty?
     // annotation -- empty?
-    // OpType instructions. What goes here? I'm going to guess every type used, so probably also an inserter thing.
-    //   Will need a type map to id, must decompose vector types.
+    //     I believe alignment info for load/store/etc. is done with annotations.
+    // OpType instructions. Contained in spir_v_types member.
     // Function declarations. Are there any?
     // Function bodies -- one per add_kernel
 }
