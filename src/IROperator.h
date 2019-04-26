@@ -167,6 +167,9 @@ Expr lossless_cast(Type t, Expr e);
  */
 void match_types(Expr &a, Expr &b);
 
+/** TODO: document this */
+void match_types_bitwise(Expr &a, Expr &b, const char *op_name);
+
 /** Halide's vectorizable transcendentals. */
 // @{
 Expr halide_log(Expr a);
@@ -1431,18 +1434,7 @@ inline Expr reinterpret(Expr e) {
  * same type). The type of the result is the type of the first
  * argument. */
 inline Expr operator&(Expr x, Expr y) {
-    user_assert(x.defined() && y.defined()) << "bitwise and of undefined Expr\n";
-    user_assert(x.type().is_int() || x.type().is_uint())
-        << "The first argument to bitwise and must be an integer or unsigned integer";
-    user_assert(y.type().is_int() || y.type().is_uint())
-        << "The second argument to bitwise and must be an integer or unsigned integer";
-    // First widen or narrow, then bitcast.
-    if (y.type().bits() != x.type().bits()) {
-        y = cast(y.type().with_bits(x.type().bits()), y);
-    }
-    if (y.type() != x.type()) {
-        y = reinterpret(x.type(), y);
-    }
+    match_types_bitwise(x, y, "bitwise and");
     Type t = x.type();
     return Internal::Call::make(t, Internal::Call::bitwise_and, {std::move(x), std::move(y)}, Internal::Call::PureIntrinsic);
 }
@@ -1451,18 +1443,7 @@ inline Expr operator&(Expr x, Expr y) {
  * same type). The type of the result is the type of the first
  * argument. */
 inline Expr operator|(Expr x, Expr y) {
-    user_assert(x.defined() && y.defined()) << "bitwise or of undefined Expr\n";
-    user_assert(x.type().is_int() || x.type().is_uint())
-        << "The first argument to bitwise or must be an integer or unsigned integer";
-    user_assert(y.type().is_int() || y.type().is_uint())
-        << "The second argument to bitwise or must be an integer or unsigned integer";
-    // First widen or narrow, then bitcast.
-    if (y.type().bits() != x.type().bits()) {
-        y = cast(y.type().with_bits(x.type().bits()), y);
-    }
-    if (y.type() != x.type()) {
-        y = reinterpret(x.type(), y);
-    }
+    match_types_bitwise(x, y, "bitwise or");
     Type t = x.type();
     return Internal::Call::make(t, Internal::Call::bitwise_or, {std::move(x), std::move(y)}, Internal::Call::PureIntrinsic);
 }
@@ -1471,18 +1452,7 @@ inline Expr operator|(Expr x, Expr y) {
  * have the same type). The type of the result is the type of the
  * first argument. */
 inline Expr operator^(Expr x, Expr y) {
-    user_assert(x.defined() && y.defined()) << "bitwise xor of undefined Expr\n";
-    user_assert(x.type().is_int() || x.type().is_uint())
-        << "The first argument to bitwise xor must be an integer or unsigned integer";
-    user_assert(y.type().is_int() || y.type().is_uint())
-        << "The second argument to bitwise xor must be an integer or unsigned integer";
-    // First widen or narrow, then bitcast.
-    if (y.type().bits() != x.type().bits()) {
-        y = cast(y.type().with_bits(x.type().bits()), y);
-    }
-    if (y.type() != x.type()) {
-        y = reinterpret(x.type(), y);
-    }
+    match_types_bitwise(x, y, "bitwise xor");
     Type t = x.type();
     return Internal::Call::make(t, Internal::Call::bitwise_xor, {std::move(x), std::move(y)}, Internal::Call::PureIntrinsic);
 }
@@ -1505,10 +1475,7 @@ inline Expr operator~(Expr x) {
  * arguments must have integer type. */
 // @{
 inline Expr operator<<(Expr x, Expr y) {
-    user_assert(x.defined() && y.defined()) << "shift left of undefined Expr\n";
-    user_assert(!x.type().is_float()) << "First argument to shift left is a float: " << x << "\n";
-    user_assert(!y.type().is_float()) << "Second argument to shift left is a float: " << y << "\n";
-    Internal::match_types(x, y);
+    Internal::match_types_bitwise(x, y, "shift left");
     Type t = x.type();
     return Internal::Call::make(t, Internal::Call::shift_left, {std::move(x), std::move(y)}, Internal::Call::PureIntrinsic);
 }
@@ -1534,10 +1501,7 @@ inline Expr operator<<(int x, Expr y) {
  * type. */
 // @{
 inline Expr operator>>(Expr x, Expr y) {
-    user_assert(x.defined() && y.defined()) << "shift right of undefined Expr\n";
-    user_assert(!x.type().is_float()) << "First argument to shift right is a float: " << x << "\n";
-    user_assert(!y.type().is_float()) << "Second argument to shift right is a float: " << y << "\n";
-    Internal::match_types(x, y);
+    Internal::match_types_bitwise(x, y, "shift right");
     Type t = x.type();
     return Internal::Call::make(t, Internal::Call::shift_right, {std::move(x), std::move(y)}, Internal::Call::PureIntrinsic);
 }

@@ -247,8 +247,8 @@ Expr lower_euclidean_div(Expr a, Expr b) {
         */
 
         Expr r = a - q*b;
-        Expr bs = b >> (a.type().bits() - 1);
-        Expr rs = r >> (a.type().bits() - 1);
+        Expr bs = b >> cast(b.type(), (a.type().bits() - 1));
+        Expr rs = r >> cast(r.type(), (a.type().bits() - 1));
         q = q - (rs & bs) + (rs & ~bs);
         return common_subexpression_elimination(q);
     } else {
@@ -269,8 +269,8 @@ Expr lower_euclidean_mod(Expr a, Expr b) {
           r = r + sign_mask & abs(b);
         */
 
-        Expr sign_mask = r >> (a.type().bits()-1);
-        r += sign_mask & abs(b);
+        Expr sign_mask = r >> cast(r.type(), (a.type().bits()-1));
+        r += sign_mask & cast(sign_mask.type(), abs(b));
         return common_subexpression_elimination(r);
     } else {
         return r;

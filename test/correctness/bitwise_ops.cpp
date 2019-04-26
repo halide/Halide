@@ -121,7 +121,7 @@ int main(int argc, char **argv) {
     // bit shift on mixed types
     Func f9;
     Expr a32 = cast<int32_t>(input(x));
-    Expr b8  = min(31, cast<uint8_t>(input(x+1)));
+    Expr b8  = cast<int32_t>(min(31, cast<uint8_t>(input(x+1))));
     f9(x) = a32 >> b8;
     Buffer<int> im9 = f9.realize(128);
     for (int x = 0; x < 128; x++) {
@@ -149,6 +149,14 @@ int main(int argc, char **argv) {
             return -1;
         }
     }
+
+    // bitwise xor scalar/vector
+    Expr vec = cast(UInt(8).with_lanes(4), 42) ^ 3;
+    assert(vec.type().lanes() == 4);
+
+    // Ensure signedness is preserved.
+    Expr vec2 = cast(UInt(8).with_lanes(4), 42) & 3;
+    assert(vec.type().is_uint());
 
     printf("Success!\n");
     return 0;
