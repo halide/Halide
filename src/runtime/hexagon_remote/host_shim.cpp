@@ -20,8 +20,8 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
     for (int i = 0; i < input_scalarsLen; i++) {
         int scalar_size = input_scalarsPtrs[i].dataLen;
         if (scalar_size > sizeof(scalar_t)) {
-            __android_log_print(ANDROID_LOG_ERROR, "halide", "Scalar argument %d is larger than %d bytes (%d bytes)",
-                                i, (int) sizeof(scalar_t), scalar_size);
+            __android_log_print(ANDROID_LOG_ERROR, "halide", "Scalar argument %d is larger than %lld bytes (%d bytes)",
+                                i, (long long) sizeof(scalar_t), scalar_size);
             return -1;
         }
         memcpy(&scalars[i], input_scalarsPtrs[i].data, scalar_size);
