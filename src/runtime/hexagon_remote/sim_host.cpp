@@ -1,11 +1,9 @@
 #include <vector>
-#include <sstream>
 #include <cassert>
 #include <memory>
 #include <mutex>
 
-#include <HalideRuntime.h>
-#include <HexagonWrapper.h>
+#include "HexagonWrapper.h"
 
 #include "sim_protocol.h"
 

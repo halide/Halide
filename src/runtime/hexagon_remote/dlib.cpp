@@ -9,7 +9,7 @@ extern "C" {
 #include <string.h>
 }
 
-#include <HalideRuntime.h>
+#include "HalideRuntime.h"
 #include "dlib.h"
 #include "log.h"
 
