@@ -177,7 +177,7 @@ void *halide_hexagon_host_malloc(size_t size) {
     handle = ion_alloc(ion_fd, size, alignment, 1 << heap_id, ion_flags);
     if (handle < 0) {
         __android_log_print(ANDROID_LOG_ERROR, "halide", "ion_alloc(%d, %d, %d, %d, %d) failed",
-                            ion_fd, size, alignment, 1 << heap_id, ion_flags);
+                            ion_fd, (int) size, (int) alignment, 1 << heap_id, ion_flags);
         return NULL;
     }
     // Map the ion handle to a file buffer.
@@ -196,7 +196,7 @@ void *halide_hexagon_host_malloc(size_t size) {
     void *buf = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, buf_fd, 0);
     if (buf == MAP_FAILED) {
         __android_log_print(ANDROID_LOG_ERROR, "halide", "mmap(NULL, %d, PROT_READ | PROT_WRITE, MAP_SHARED, %d, 0) failed",
-                            size, buf_fd);
+                            (int) size, buf_fd);
         close(buf_fd);
         if (!use_newer_ioctl) {
             ion_free(ion_fd, handle);
