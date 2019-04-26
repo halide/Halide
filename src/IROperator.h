@@ -167,7 +167,11 @@ Expr lossless_cast(Type t, Expr e);
  */
 void match_types(Expr &a, Expr &b);
 
-/** TODO: document this */
+/** Asserts that both expressions are integer types and are either
+ * both signed or both unsigned. If one argument is scalar and the
+ * other a vector, the scalar is broadcasted to have the same number
+ * of lanes as the vector. If one expression is of narrower type than
+ * the other, it is widened to the bit width of the wider. */
 void match_types_bitwise(Expr &a, Expr &b, const char *op_name);
 
 /** Halide's vectorizable transcendentals. */

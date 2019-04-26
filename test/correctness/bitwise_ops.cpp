@@ -158,6 +158,20 @@ int main(int argc, char **argv) {
     Expr vec2 = cast(UInt(8).with_lanes(4), 42) & 3;
     assert(vec.type().is_uint());
 
+    // Ensure that bitwise op is commutative re: type.  (This was not
+    // true at least for some time, which is problematic given that
+    // simplification and other things assume expressions can be
+    // reordered.)
+    {
+        Expr a = cast(UInt(8), 42);
+        Expr b = cast(UInt(16), 199);
+
+        Expr a_then_b = a ^ b;
+        Expr b_then_a = b ^ a;
+
+        assert(a_then_b.type() == b_then_a.type());
+    }
+
     printf("Success!\n");
     return 0;
 

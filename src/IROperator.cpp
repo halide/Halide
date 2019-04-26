@@ -512,12 +512,12 @@ void match_types_bitwise(Expr &x, Expr &y, const char *op_name) {
         internal_assert(x.type().lanes() == y.type().lanes()) << "Can't match types of differing widths";
     }
 
-    // Widen or narrow, then bitcast.
-    if (y.type().bits() != x.type().bits()) {
-        y = cast(y.type().with_bits(x.type().bits()), y);
-    }
-    if (y.type() != x.type()) {
-        y = reinterpret(x.type(), y);
+    // Cast to the wider type of the two. Already guaranteed to leave
+    // signed/unsigned on number of lanes unchanged.
+    if (x.type().bits() < y.type().bits()) {
+        x = cast(y.type(), x);
+    } else if (y.type().bits() < x.type().bits()) {
+        y = cast(x.type(), y);
     }
 }
 
