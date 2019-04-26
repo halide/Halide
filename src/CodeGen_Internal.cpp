@@ -247,8 +247,8 @@ Expr lower_euclidean_div(Expr a, Expr b) {
         */
 
         Expr r = a - q*b;
-        Expr bs = b >> cast(b.type(), (a.type().bits() - 1));
-        Expr rs = r >> cast(r.type(), (a.type().bits() - 1));
+        Expr bs = b >> make_const(b.type(), (a.type().bits() - 1));
+        Expr rs = r >> make_const(r.type(), (a.type().bits() - 1));
         q = q - (rs & bs) + (rs & ~bs);
         return common_subexpression_elimination(q);
     } else {
