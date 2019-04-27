@@ -400,9 +400,9 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
     }
 
     // Copy the pointer arguments to the simulator.
-    remote_buffer remote_input_buffersPtrs(&remote_input_buffers[0], input_buffersLen * sizeof(remote_buffer));
-    remote_buffer remote_output_buffersPtrs(&remote_output_buffers[0], output_buffersLen * sizeof(remote_buffer));
-    remote_buffer remote_input_scalarsPtrs(&remote_input_scalars[0], input_scalarsLen * sizeof(remote_buffer));
+    remote_buffer remote_input_buffersPtrs(input_buffersLen ? remote_input_buffers.data() : nullptr, input_buffersLen * sizeof(remote_buffer));
+    remote_buffer remote_output_buffersPtrs(output_buffersLen ? remote_output_buffers.data() : nullptr, output_buffersLen * sizeof(remote_buffer));
+    remote_buffer remote_input_scalarsPtrs(input_scalarsLen ? remote_input_scalars.data() : nullptr, input_scalarsLen * sizeof(remote_buffer));
 
     HEX_8u_t cycles_begin = 0;
     sim->GetSimulatedCycleCount(&cycles_begin);
