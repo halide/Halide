@@ -227,6 +227,7 @@ CodeGen_ARM::CodeGen_ARM(Target target) : CodeGen_Posix(target) {
     negations.push_back(Pattern("vqneg.v8i16", "sqneg.v8i16", 8,  -max(wild_i16x_, -32767)));
     negations.push_back(Pattern("vqneg.v4i32", "sqneg.v4i32", 4,  -max(wild_i32x_, -(0x7fffffff))));
 
+    // Widening multiplies.
     multiplies.push_back(Pattern("vmulls.v4i32", "smull.v4i32", 4,
                                  wild_i32x_ * wild_i32x_,
                                  Pattern::NarrowArgs));
@@ -383,6 +384,8 @@ void CodeGen_ARM::visit(const Mul *op) {
         return;
     }
 
+    // LLVM really struggles to generate mlal unless we generate mull intrinsics
+    // for the multiplication part first.
     for (size_t i = 0; i < multiplies.size() ; i++) {
         const Pattern &pattern = multiplies[i];
         //debug(4) << "Trying pattern: " << patterns[i].intrin << " " << patterns[i].pattern << "\n";
