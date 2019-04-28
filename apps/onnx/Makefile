@@ -5,12 +5,10 @@ BIN ?= bin
 HL_TARGET ?= host
 
 PROTOC := $(shell which protoc)
-ifndef PROTOC
-  $(error "No protoc in $(PATH), you need to install protocol buffers")
-endif
+
+ifdef PROTOC
 
 PROTOCFLAGS = --cpp_out=.
-
 CXXFLAGS += -DGOOGLE_PROTOBUF_NO_RTTI -Wno-sign-compare -Wno-unused-but-set-variable
 CXXFLAGS += -I$(dir $(PROTOC))../include
 LDFLAGS += -L$(dir $(PROTOC))../lib
@@ -99,3 +97,9 @@ model_test: $(BIN)/$(PY_MODEL_EXT)
 
 halide_as_onnx_backend_test: $(BIN)/$(PY_MODEL_EXT)
 	PYTHONPATH="$(BIN)/:$$PYTHONPATH" $(PYTHON) -m unittest halide_as_onnx_backend_test.py -v
+
+# No Protoc
+else
+test:
+	@echo "No protoc in $(PATH), you need to install protocol buffers"
+endif
