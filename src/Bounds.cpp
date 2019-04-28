@@ -2443,26 +2443,21 @@ FuncValueBounds compute_function_value_bounds(const vector<string> &order,
 
             if (f.is_pure()) {
 
-                if (f.dimensions() == 0) {
-                    result = Interval::single_point(f.values()[j]);
-                } else {
+                // Make a scope that says the args could be anything.
+                Scope<Interval> arg_scope;
+                for (size_t k = 0; k < f.args().size(); k++) {
+                    arg_scope.push(f_args[k], Interval::everything());
+                }
 
-                    // Make a scope that says the args could be anything.
-                    Scope<Interval> arg_scope;
-                    for (size_t k = 0; k < f.args().size(); k++) {
-                        arg_scope.push(f_args[k], Interval::everything());
-                    }
+                result = compute_pure_function_definition_value_bounds(f.definition(), arg_scope, fb, j);
+                // These can expand combinatorially as we go down the
+                // pipeline if we don't run CSE on them.
+                if (result.has_lower_bound()) {
+                    result.min = simplify(common_subexpression_elimination(result.min));
+                }
 
-                    result = compute_pure_function_definition_value_bounds(f.definition(), arg_scope, fb, j);
-                    // These can expand combinatorially as we go down the
-                    // pipeline if we don't run CSE on them.
-                    if (result.has_lower_bound()) {
-                        result.min = simplify(common_subexpression_elimination(result.min));
-                    }
-
-                    if (result.has_upper_bound()) {
-                        result.max = simplify(common_subexpression_elimination(result.max));
-                    }
+                if (result.has_upper_bound()) {
+                    result.max = simplify(common_subexpression_elimination(result.max));
                 }
 
                 fb[key] = result;
