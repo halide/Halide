@@ -155,7 +155,7 @@ int main(int argc, char **argv) {
         Func output("output");
         output(x, y, c) = cast<uint8_t>(blur_y(x, y, c));
 
-        // This time it's safe to evaluate the output over the some
+        // This time it's safe to evaluate the output over the same
         // domain as the input, because we have a boundary condition.
         Buffer<uint8_t> result = output.realize(input.width(), input.height(), 3);
 
