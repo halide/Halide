@@ -2863,8 +2863,8 @@ void CodeGen_LLVM::visit(const Call *op) {
         Expr one = make_one(x.type());
         Expr zero = make_zero(x.type());
         Expr e = select(x > 0, abs_x_pow_y,  // Strictly positive x
-                        x == 0.0f && y != 0.0f, zero, // 0^y == 0
                         y == 0.0f, one,  // x^0 == 1
+                        x == 0.0f, zero, // 0^y == 0
                         y != iy, nan_expr,  // negative x to a non-integer power
                         iy % 2 == 0, abs_x_pow_y,  // negative x to an even power
                         -abs_x_pow_y);  // negative x to an odd power
