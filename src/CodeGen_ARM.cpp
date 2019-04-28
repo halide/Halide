@@ -228,6 +228,12 @@ CodeGen_ARM::CodeGen_ARM(Target target) : CodeGen_Posix(target) {
     negations.push_back(Pattern("vqneg.v4i32", "sqneg.v4i32", 4,  -max(wild_i32x_, -(0x7fffffff))));
 
     // Widening multiplies.
+    multiplies.push_back(Pattern("vmulls.v2i64", "smull.v2i64", 2,
+                                 wild_i64x_ * wild_i64x_,
+                                 Pattern::NarrowArgs));
+    multiplies.push_back(Pattern("vmullu.v2i64", "umull.v2i64", 2,
+                                 wild_u64x_ * wild_u64x_,
+                                 Pattern::NarrowArgs));
     multiplies.push_back(Pattern("vmulls.v4i32", "smull.v4i32", 4,
                                  wild_i32x_ * wild_i32x_,
                                  Pattern::NarrowArgs));
