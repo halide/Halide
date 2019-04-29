@@ -82,7 +82,8 @@ class RemoveLikelyTags : public IRMutator {
     using IRMutator::visit;
 
     Expr visit(const Call *op) override {
-        if (op->is_intrinsic(Call::likely)) {
+        if (op->is_intrinsic(Call::likely) ||
+            op->is_intrinsic(Call::likely_if_innermost)) {
             internal_assert(op->args.size() == 1);
             return mutate(op->args[0]);
         } else {
@@ -1050,6 +1051,10 @@ bool has_likely_tag(Expr e) {
     HasLikelyTag h;
     e.accept(&h);
     return h.result;
+}
+
+Expr remove_likely_tags(Expr e) {
+    return RemoveLikelyTags().mutate(e);
 }
 
 Stmt partition_loops(Stmt s) {

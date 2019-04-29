@@ -9,27 +9,61 @@ Expr Simplify::visit(const Mul *op, ExprInfo *bounds) {
     Expr b = mutate(op->b, &b_bounds);
 
     if (bounds && no_overflow_int(op->type)) {
-        bool a_positive = a_bounds.min_defined && a_bounds.min > 0;
-        bool b_positive = b_bounds.min_defined && b_bounds.min > 0;
-        bool a_bounded = a_bounds.min_defined && a_bounds.max_defined;
-        bool b_bounded = b_bounds.min_defined && b_bounds.max_defined;
 
-        if (a_bounded && b_bounded) {
-            bounds->min_defined = bounds->max_defined = true;
-            int64_t v1 = a_bounds.min * b_bounds.min;
-            int64_t v2 = a_bounds.min * b_bounds.max;
-            int64_t v3 = a_bounds.max * b_bounds.min;
-            int64_t v4 = a_bounds.max * b_bounds.max;
-            bounds->min = std::min(std::min(v1, v2), std::min(v3, v4));
-            bounds->max = std::max(std::max(v1, v2), std::max(v3, v4));
-        } else if ((a_bounds.max_defined && b_bounded && b_positive) ||
-                   (b_bounds.max_defined && a_bounded && a_positive)) {
-            bounds->max_defined = true;
-            bounds->max = a_bounds.max * b_bounds.max;
-        } else if ((a_bounds.min_defined && b_bounded && b_positive) ||
-                   (b_bounds.min_defined && a_bounded && a_positive)) {
-            bounds->min_defined = true;
-            bounds->min = a_bounds.min * b_bounds.min;
+        bounds->min = INT64_MAX;
+        bounds->max = INT64_MIN;
+
+        const bool a_positive = a_bounds.min_defined && a_bounds.min >= 0;
+        const bool a_negative = a_bounds.max_defined && a_bounds.max <= 0;
+        const bool b_positive = b_bounds.min_defined && b_bounds.min >= 0;
+        const bool b_negative = b_bounds.max_defined && b_bounds.max <= 0;
+
+        const int bits = std::min(64, op->type.bits());
+        const bool min_min_exists = a_bounds.min_defined && b_bounds.min_defined && !mul_would_overflow(bits, a_bounds.min, b_bounds.min);
+        const bool max_min_exists = a_bounds.max_defined && b_bounds.min_defined && !mul_would_overflow(bits, a_bounds.max, b_bounds.min);
+        const bool min_max_exists = a_bounds.min_defined && b_bounds.max_defined && !mul_would_overflow(bits, a_bounds.min, b_bounds.max);
+        const bool max_max_exists = a_bounds.max_defined && b_bounds.max_defined && !mul_would_overflow(bits, a_bounds.max, b_bounds.max);
+        const bool all_products_exist = min_min_exists && max_min_exists && max_max_exists && min_max_exists;
+
+        bounds->min_defined = (all_products_exist ||
+                               ((a_positive || b_positive) && min_min_exists) ||
+                               (b_negative && max_min_exists) ||
+                               (a_negative && min_max_exists));
+        bounds->max_defined = (all_products_exist ||
+                               ((a_positive || b_positive) && max_max_exists) ||
+                               (b_negative && min_max_exists) ||
+                               (a_negative && max_min_exists));
+
+        // Enumerate all possible values for the min and max and take the extreme values.
+        if (min_min_exists) {
+            int64_t v = a_bounds.min * b_bounds.min;
+            bounds->min = std::min(bounds->min, v);
+            bounds->max = std::max(bounds->max, v);
+        }
+
+        if (min_max_exists) {
+            int64_t v = a_bounds.min * b_bounds.max;
+            bounds->min = std::min(bounds->min, v);
+            bounds->max = std::max(bounds->max, v);
+        }
+
+        if (max_min_exists) {
+            int64_t v = a_bounds.max * b_bounds.min;
+            bounds->min = std::min(bounds->min, v);
+            bounds->max = std::max(bounds->max, v);
+        }
+
+        if (max_max_exists) {
+            int64_t v = a_bounds.max * b_bounds.max;
+            bounds->min = std::min(bounds->min, v);
+            bounds->max = std::max(bounds->max, v);
+        }
+
+        if (!bounds->min_defined) {
+            bounds->min = 0;
+        }
+        if (!bounds->max_defined) {
+            bounds->max = 0;
         }
 
         bounds->alignment = a_bounds.alignment * b_bounds.alignment;
