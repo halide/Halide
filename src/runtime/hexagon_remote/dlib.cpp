@@ -494,8 +494,6 @@ void *mmap_dlopen(const void *code, size_t size) {
 }
 
 void *mmap_dlsym(void *from, const char *name) {
-    if (!from) return NULL;
-
     if ((from == RTLD_SELF) || (from == RTLD_DEFAULT)) {
         // Check all currently loaded libraries for a symbol
         void *S = halide_get_symbol(name);
@@ -507,6 +505,8 @@ void *mmap_dlsym(void *from, const char *name) {
         }
         return S;
     }
+
+    if (!from) return NULL;
 
     dlib_t *dlib = (dlib_t *)from;
     const Sym *sym = dlib->find_symbol(name);
