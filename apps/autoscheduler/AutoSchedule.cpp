@@ -227,14 +227,6 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<int64_t> &s, const vec
             }            
         }
     }
-    /**
-    if (d == outermost_dim) {
-        debug(0) << "thread block tiling loop with size: ";
-        for (int i = 0; i < (int)s.size(); i++) {
-            debug(0) << s[i] << ", ";
-        }
-    }
-    **/
     return result;
 }
 
@@ -453,7 +445,6 @@ struct LoopNest {
         vector<int64_t> max_size = this->get_union_thread_counts(f);
 
         internal_assert(pure_size);
-
         auto tilings = generate_gpu_tilings(*pure_size, max_size, (int)(pure_size->size() - 1), v, false);
 
         bool made_child = false;
@@ -597,8 +588,190 @@ struct LoopNest {
         }
     }
 
+    double producer_storage_stride(const LoadJacobian& jac, int producer_innermost_dim, const FunctionDAG::Edge* e, const Bound& producer_store_bounds) const {
+        // The producer's storage dimensions (from innermost outward)
+        std::vector<int64_t> storage_dims;
+        storage_dims.push_back(producer_innermost_dim >= 0 ? producer_innermost_dim : 0);
+        for (int i = 0; i < e->producer->dimensions; i++) {
+            if (i == storage_dims[0]) {
+                continue;
+            }
+
+            storage_dims.push_back(i);
+        }
+
+        std::vector<int64_t> storage_strides;
+        int64_t storage_stride = 1;
+        for (std::size_t i = 0; i < storage_dims.size(); i++) {
+            storage_strides.push_back(storage_stride);
+            storage_stride *= producer_store_bounds->region_required(storage_dims[i]).extent();
+        }
+
+        double stride = 0;
+        for (std::size_t i = 0; i < storage_dims.size(); i++) {
+            auto jac_stride = jac(i, vectorized_loop_index);
+
+            float s = (float)jac_stride.numerator / (float)jac_stride.denominator;
+            stride += s * storage_strides[i];
+        }
+
+        return stride;
+    }
+
+    bool all_strides_exist(const LoadJacobian& jac, const FunctionDAG::Edge* e) const {
+        for (int i = 0; i < e->producer->dimensions; i++) {
+            auto stride = jac(i, vectorized_loop_index);
+
+            if (!stride.exists) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    double num_shared_mem_loads_per_warp(const LoadJacobian& jac, int producer_innermost_dim, const FunctionDAG::Edge* e, const Bound& producer_store_bounds, double bytes, bool producer_has_been_scheduled, int num_threads) const {
+        // Assume worst case serialized loads if the stride
+        // is unknown
+        if (!all_strides_exist(jac, e)) {
+            return num_threads;
+        }
+
+        auto num_loads = [this, &jac, &e, &producer_store_bounds, &bytes, &num_threads](int innermost_dim) -> int {
+            double stride = producer_storage_stride(jac, innermost_dim, e, producer_store_bounds);
+
+            // No bank conflicts when stride is 0
+            if (stride == 0) {
+                return 1;
+            }
+
+            int num_bank_accesses[32] = {0};
+            int largest_index[32] = {-1};
+
+            stride = std::abs(stride);
+
+            // Each bank is 4 bytes so adjust the stride based
+            // on width of data being loaded
+            int num_banks_per_access = (bytes / 4);
+            stride *= num_banks_per_access;
+
+            // Compute counts of which banks are accessed
+            // Multiple accesses to the same bank with different
+            // indices will be serialized
+            for (int i = 0; i < num_threads; i++) {
+                for (int j = 0; j < num_banks_per_access; j++) {
+                    int index = (int)(i * stride) + j;
+                    int bank = index % 32;
+                    if (largest_index[bank] != index) {
+                        num_bank_accesses[bank]++;
+                    }
+                    largest_index[bank] = index;
+                }
+            }
+
+            int max_accesses = 0;
+            for (int i = 0; i < 32; i++) {
+                max_accesses = std::max(max_accesses, num_bank_accesses[i]);
+            }
+
+            return max_accesses;
+        };
+
+
+        if (producer_has_been_scheduled) {
+            return num_loads(producer_innermost_dim);
+        }
+
+        // Assume best case if producer has not been scheduled: try all the
+        // possible innermost dimensions and take the best
+        int min_loads = 32;
+        for (int i = 0; i < e->producer->dimensions; i++) {
+            min_loads = std::min(min_loads, num_loads(i));
+        }
+
+        return min_loads;
+    }
+
+    double num_global_mem_loads_per_warp(const LoadJacobian& jac, int producer_innermost_dim, const FunctionDAG::Edge* e, const Bound& producer_store_bounds, double bytes, bool producer_has_been_scheduled, int num_threads) const {
+        // Assume worst case serialized loads if the stride
+        // is unknown
+        if (!all_strides_exist(jac, e)) {
+            return num_threads;
+        }
+
+        auto num_loads = [this, &jac, &e, &producer_store_bounds, &bytes, &num_threads](int innermost_dim) -> int {
+            double stride = producer_storage_stride(jac, innermost_dim, e, producer_store_bounds);
+
+            if (stride == 0) {
+                return 1;
+            }
+
+            // Each words is 4 bytes so adjust the stride based
+            // on width of data being loaded
+            int num_words_per_access = (bytes / 4);
+            stride = std::abs(stride);
+            stride *= num_words_per_access;
+
+            int last_block_accessed = -1;
+            int num_accesses = 0;
+            for (int i = 0; i < num_threads; i++) {
+                for (int j = 0; j < num_words_per_access; j++) {
+                    int index = (int)(i * stride) + j;
+                    int block = index / 4;
+                    if (block != last_block_accessed) {
+                        last_block_accessed = block;
+                        num_accesses++;
+                    }
+                }
+            }
+            return num_accesses;
+        };
+
+        if (producer_has_been_scheduled) {
+            return num_loads(producer_innermost_dim);
+        }
+
+        // Assume best case if producer has not been scheduled: try all the
+        // possible innermost dimensions and take the best
+        int min_loads = 32;
+        for (int i = 0; i < e->producer->dimensions; i++) {
+            min_loads = std::min(min_loads, num_loads(i));
+        }
+
+        return min_loads;
+    }
+
+    std::pair<int, int> compute_warp_features(ScheduleFeatures& features) const {
+        int num_thread_loops = 0;
+        int64_t num_threads = 1;
+
+        if (vectorized_loop_index != -1) {
+            num_thread_loops = 1;
+            num_threads *= size[vectorized_loop_index];
+        }
+
+        for (std::size_t i = 0; i < size.size() && num_thread_loops < 3; i++) {
+            if (size[i] == 1 || (int)i == vectorized_loop_index) {
+                continue;
+            }
+
+            num_threads *= size[i];
+            num_thread_loops++;
+        }
+
+        int num_full_warps = num_threads / 32;
+        features.warp_lane_utilization = 1;
+
+        int partial_warp_lanes = num_threads % 32;
+        if (partial_warp_lanes != 0) {
+            features.warp_lane_utilization = (num_full_warps + partial_warp_lanes / 32.) / (num_full_warps + 1);
+        }
+
+        return {num_full_warps, partial_warp_lanes};
+    }
+
     void compute_features(const FunctionDAG &dag,
                           const MachineParams &params,
+                          const Target& target,
                           const StageMap<Sites> &sites,
                           int64_t instances,
                           int64_t parallelism,
@@ -693,7 +866,7 @@ struct LoopNest {
         if (is_root()) {
             // TODO: This block of code is repeated below. Refactor
             for (const auto &c : children) {
-                c->compute_features(dag, params, sites, subinstances, parallelism, this, parent, root, &working_set_here, features);
+                c->compute_features(dag, params, target, sites, subinstances, parallelism, this, parent, root, &working_set_here, features);
             }
 
             for (const auto *node : store_at) {
@@ -895,7 +1068,7 @@ struct LoopNest {
 
         // Recurse inwards
         for (const auto &c : children) {
-            c->compute_features(dag, params, sites, subinstances, subparallelism, this, parent, root, &working_set_here, features);
+            c->compute_features(dag, params, target, sites, subinstances, subparallelism, this, parent, root, &working_set_here, features);
         }
         for (const auto *node : store_at) {
             auto &feat = features->get(&(node->stages[0]));
@@ -948,7 +1121,19 @@ struct LoopNest {
 
         int64_t bytes_loaded = 0, lines_loaded = 0, allocation_bytes_loaded = 0;
         double num_dense_loads = 0, num_broadcasts = 0, num_gathers = 0, num_stride_2_loads = 0, num_stride_3_loads = 0, num_stride_4_loads = 0, num_loads = 0;
-        if (innermost || at_production) { // These are the sites at which we compute load footprints
+        double num_shared_mem_loads = 0;
+        double num_global_mem_loads = 0;
+        int num_full_warps = 0;
+        int num_partial_warp_lanes = 0;
+        bool gpu_thread = target.has_gpu_feature() && gpu_label == thread;
+        if (gpu_thread) {
+            auto warp_features = compute_warp_features(feat);
+            num_full_warps = warp_features.first;
+            num_partial_warp_lanes = warp_features.second;
+        }
+        feat.num_full_warps = num_full_warps;
+
+        if (innermost || at_production || gpu_thread) { // These are the sites at which we compute load footprints
             // Pick the site at which we will compute the footprint relationship
             const auto &consumer_site = sites.get(stage);
             const auto *consumer_store_site = innermost ? parent : consumer_site.store;
@@ -962,6 +1147,7 @@ struct LoopNest {
             vector<const FunctionDAG::Node::Stage *> pending;
             pending.emplace_back(stage);
             vector<pair<LoadJacobian, FunctionDAG::Node *>> jacobians;
+            vector<pair<LoadJacobian, FunctionDAG::Node *>> thread_jacobians;
             set<const FunctionDAG::Node *> done;
             while (!pending.empty()) {
                 auto p = pending.back();
@@ -993,6 +1179,31 @@ struct LoopNest {
                                 }
                             }
                             jacobians.swap(new_jacobians);
+                        }
+                    }
+
+                    if (gpu_thread) {
+                        if (e->consumer == stage) {
+                            for (auto &j : e->load_jacobians) {
+                                // Thread loops may not be innermost so in the
+                                // Jacobians we need to account for the stride
+                                // of the inner loops
+                                thread_jacobians.emplace_back(j * split_factor, e->producer);
+                            }
+                        } else {
+                            // Consumer was inlined. Concat the jacobians to look through it.
+                            decltype(jacobians) new_jacobians;
+                            for (auto &j1 : jacobians) {
+                                if (e->consumer->node == j1.second) {
+                                    for (auto &j2 : e->load_jacobians) {
+                                        LoadJacobian j = (j2 * split_factor) * j1.first;
+                                        new_jacobians.emplace_back(j, e->producer);
+                                    }
+                                } else {
+                                    new_jacobians.emplace_back(std::move(j1));
+                                }
+                            }
+                            thread_jacobians.swap(new_jacobians);
                         }
                     }
 
@@ -1095,6 +1306,95 @@ struct LoopNest {
                                 num_stride_4_loads += n;
                             } else {
                                 num_gathers += n;
+                            }
+                        }
+                    }
+
+                    if (gpu_thread) {
+                        int producer_innermost_dim =
+                            (e->producer->is_input ? 0 : // Assume default storage layout for inputs
+                             !producer_has_been_scheduled ? -1 :
+                             site.produce->vector_dim);
+
+                        // Shared or global memory?
+                        bool is_shared_mem = producer_store_site->gpu_label == block;
+
+                        double bytes = e->producer->bytes_per_point;
+
+                        // Grab the jacobians that describe the memory dependence
+                        for (const auto &jac : thread_jacobians) {
+                            if (jac.second != e->producer) continue;
+                            double n = jac.first.count();
+                            // internal_assert(n < 1024 * 1024 * 1024) << "Implausibly large n: " << jac.count() << " " << next_count << "\n";
+
+                            // Is this load loop-invariant over an
+                            // unrolled block? If so, we amortize the
+                            // number of loads to account for LICM.
+                            int64_t amortization = 1;
+                            if (feat.unrolled_loop_extent > 1) {
+                                for (size_t idx = 0; idx < stage->loop.size(); idx++) {
+                                    if (!stage->loop[idx].rvar) {
+                                        bool loop_invariant = true;
+                                        for (int i = 0; i < e->producer->dimensions; i++) {
+                                            if (!(jac.first(i, idx) == 0)) {
+                                                loop_invariant = false;
+                                                break;
+                                            }
+                                        }
+                                        if (loop_invariant) {
+                                            amortization *= parent->size[idx];
+                                        }
+                                    }
+                                }
+                            }
+                            // TODO: LICM still acts for the innermost loop of non-unrolled things
+
+                            n /= amortization;
+
+                            if (is_shared_mem) {
+                                num_shared_mem_loads += instances * num_full_warps * n * num_shared_mem_loads_per_warp(
+                                    jac.first,
+                                    producer_innermost_dim,
+                                    e,
+                                    producer_store_bounds,
+                                    bytes,
+                                    producer_has_been_scheduled,
+                                    32
+                                );
+
+                                if (num_partial_warp_lanes > 0) {
+                                    num_shared_mem_loads += instances * n * num_shared_mem_loads_per_warp(
+                                        jac.first,
+                                        producer_innermost_dim,
+                                        e,
+                                        producer_store_bounds,
+                                        bytes,
+                                        producer_has_been_scheduled,
+                                        num_partial_warp_lanes
+                                    );
+                                }
+                            } else {
+                                num_global_mem_loads += instances * num_full_warps * n * num_global_mem_loads_per_warp(
+                                    jac.first,
+                                    producer_innermost_dim,
+                                    e,
+                                    producer_store_bounds,
+                                    bytes,
+                                    producer_has_been_scheduled,
+                                    32
+                                );
+
+                                if (num_partial_warp_lanes > 0) {
+                                    num_global_mem_loads += instances * n * num_global_mem_loads_per_warp(
+                                        jac.first,
+                                        producer_innermost_dim,
+                                        e,
+                                        producer_store_bounds,
+                                        bytes,
+                                        producer_has_been_scheduled,
+                                        num_partial_warp_lanes
+                                    );
+                                }
                             }
                         }
                     }
@@ -1214,6 +1514,11 @@ struct LoopNest {
             }
             feat.unique_bytes_read_per_vector = bytes_loaded;
             feat.unique_lines_read_per_vector = lines_loaded;
+        }
+
+        if (gpu_thread) {
+            feat.num_shared_mem_loads = num_shared_mem_loads;
+            feat.num_global_mem_loads = num_global_mem_loads;
         }
 
         // Track features for inlined Funcs
@@ -1470,7 +1775,6 @@ struct LoopNest {
                       int v, 
                       bool in_threads_loop,
                       const Target &target) {
-      
         const auto &bounds = get_bounds(f);
 
         if (!may_subtile()) {
@@ -2397,7 +2701,7 @@ struct State {
         return nullptr;
     }
 
-    void compute_featurization(const FunctionDAG &dag, const MachineParams &params, StageMap<ScheduleFeatures> *features) {
+    void compute_featurization(const FunctionDAG &dag, const MachineParams &params, const Target& target, StageMap<ScheduleFeatures> *features) {
         StageMap<LoopNest::Sites> sites;
         sites.make_large(dag.nodes[0].stages[0].max_id);
         features->make_large(dag.nodes[0].stages[0].max_id);
@@ -2453,7 +2757,7 @@ struct State {
             }
         }
 
-        root->compute_features(dag, params, sites, 1, 1, nullptr, nullptr, *root, nullptr, features);
+        root->compute_features(dag, params, target, sites, 1, 1, nullptr, nullptr, *root, nullptr, features);
 
         for (const auto &n : dag.nodes) {
             if (sites.get(&(n.stages[0])).produce == nullptr) {
@@ -2464,9 +2768,9 @@ struct State {
         }
     }
 
-    void save_featurization(const FunctionDAG &dag, const MachineParams &params, const std::string &feature_file) {
+    void save_featurization(const FunctionDAG &dag, const MachineParams &params, const Target& target, const std::string &feature_file) {
         StageMap<ScheduleFeatures> features;
-        compute_featurization(dag, params, &features);
+        compute_featurization(dag, params, target, &features);
 
         std::ofstream binfile(feature_file, std::ios::binary | std::ios_base::trunc);
         for (const auto &n : dag.nodes) {
@@ -2571,7 +2875,7 @@ struct State {
 
     bool calculate_cost(const FunctionDAG &dag, const MachineParams &params, const Target& target, CostModel *cost_model, bool verbose = false) {
         StageMap<ScheduleFeatures> features;
-        compute_featurization(dag, params, &features);
+        compute_featurization(dag, params, target, &features);
 
         cost = 0;
 
@@ -3932,7 +4236,7 @@ std::string generate_schedules_new(const std::vector<Function> &outputs,
 
     string feature_file = get_env_variable("HL_FEATURE_FILE");
     if (!feature_file.empty()) {
-        optimal->save_featurization(dag, params, feature_file);
+        optimal->save_featurization(dag, params, target, feature_file);
     }
 
     return "";

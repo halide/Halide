@@ -239,6 +239,11 @@ public:
         Expr working_set_at_production = schedule_features(n, idx++, w);
         Expr working_set_at_realization = schedule_features(n, idx++, w);
         Expr working_set_at_root = schedule_features(n, idx++, w);
+
+        Expr num_full_warps = schedule_features(n, idx++, w);
+        Expr warp_lane_utilization = schedule_features(n, idx++, w);
+        Expr num_shared_mem_loads = schedule_features(n, idx++, w);
+        Expr num_global_mem_loads = schedule_features(n, idx++, w);
         assert(idx == head2_w);
 
 
@@ -254,6 +259,7 @@ public:
         Expr tasks_per_core = num_tasks / num_cores;
         Expr idle_core_wastage = ceil(tasks_per_core) / max(1, tasks_per_core);
         compute_cost *= idle_core_wastage;
+        compute_cost /= warp_lane_utilization;
 
         Expr load_cost = (num_realizations * unique_lines_read_per_realization * relu1(5, w, n) +
                           num_realizations * unique_bytes_read_per_realization * relu1(6, w, n) +
@@ -265,7 +271,11 @@ public:
                           num_scalars * unique_lines_read_per_vector * relu1(12, w, n) +
                           num_vectors * unique_lines_read_per_vector * relu1(13, w, n) +
                           num_tasks * unique_bytes_read_per_task * relu1(14, w, n) +
-                          num_tasks * unique_lines_read_per_task * relu1(15, w, n));
+                          num_tasks * unique_lines_read_per_task * relu1(15, w, n) +
+                          num_shared_mem_loads * relu1(16, w, n) +
+                          num_global_mem_loads * relu1(17, w, n));
+
+
 
         // Estimate the number of cache misses on the data that this writes to and their cost
         Expr lines_written_per_realization = inner_parallelism * (bytes_at_task / max(1, innermost_bytes_at_task));
