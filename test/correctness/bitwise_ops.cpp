@@ -139,7 +139,7 @@ int main(int argc, char **argv) {
     // bitwise and on mixed types
     Func f10;
     Expr a8 = cast<int8_t>(input(x));
-    f10(x) = a8 & 0xf0;
+    f10(x) = a8 & cast<int8_t>(0xf0);
     Buffer<int8_t> im10 = f10.realize(128);
     for (int x = 0; x < 128; x++) {
         int8_t correct = (int8_t)(input(x)) & 0xf0;

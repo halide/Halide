@@ -486,20 +486,6 @@ void match_types_bitwise(Expr &x, Expr &y, const char *op_name) {
       << "The first argument to " << op_name << " must be an integer or unsigned integer";
     user_assert(y.type().is_int() || y.type().is_uint())
       << "The second argument to " << op_name << " must be an integer or unsigned integer";
-
-    // Give explicit type to immediate constants in expression.
-    const IntImm *x_int_imm = x.as<IntImm>();
-    const IntImm *y_int_imm = y.as<IntImm>();
-    const UIntImm *x_uint_imm = x.as<UIntImm>();
-    const UIntImm *y_uint_imm = y.as<UIntImm>();
-    bool x_is_imm = x_int_imm || x_uint_imm;
-    bool y_is_imm = y_int_imm || y_uint_imm;
-    if (x_is_imm && !y_is_imm) {
-        x = cast(y.type().element_of(), x);
-    } else if (!x_is_imm && y_is_imm) {
-        y = cast(x.type().element_of(), y);
-    }
-
     user_assert(y.type().is_int() == x.type().is_int()) << "Arguments to " << op_name
       << " must be both be signed or both be unsigned.\n";
 
