@@ -226,6 +226,26 @@ CodeGen_ARM::CodeGen_ARM(Target target) : CodeGen_Posix(target) {
     negations.push_back(Pattern("vqneg.v16i8", "sqneg.v16i8", 16, -max(wild_i8x_, -127)));
     negations.push_back(Pattern("vqneg.v8i16", "sqneg.v8i16", 8,  -max(wild_i16x_, -32767)));
     negations.push_back(Pattern("vqneg.v4i32", "sqneg.v4i32", 4,  -max(wild_i32x_, -(0x7fffffff))));
+
+    // Widening multiplies.
+    multiplies.push_back(Pattern("vmulls.v2i64", "smull.v2i64", 2,
+                                 wild_i64x_ * wild_i64x_,
+                                 Pattern::NarrowArgs));
+    multiplies.push_back(Pattern("vmullu.v2i64", "umull.v2i64", 2,
+                                 wild_u64x_ * wild_u64x_,
+                                 Pattern::NarrowArgs));
+    multiplies.push_back(Pattern("vmulls.v4i32", "smull.v4i32", 4,
+                                 wild_i32x_ * wild_i32x_,
+                                 Pattern::NarrowArgs));
+    multiplies.push_back(Pattern("vmullu.v4i32", "umull.v4i32", 4,
+                                 wild_u32x_ * wild_u32x_,
+                                 Pattern::NarrowArgs));
+    multiplies.push_back(Pattern("vmulls.v8i16", "smull.v8i16", 8,
+                                 wild_i16x_ * wild_i16x_,
+                                 Pattern::NarrowArgs));
+    multiplies.push_back(Pattern("vmullu.v8i16", "umull.v8i16", 8,
+                                 wild_u16x_ * wild_u16x_,
+                                 Pattern::NarrowArgs));
 }
 
 Value *CodeGen_ARM::call_pattern(const Pattern &p, Type t, const vector<Expr> &args) {
@@ -360,9 +380,57 @@ void CodeGen_ARM::visit(const Mul *op) {
         return;
     }
 
+    Type t = op->type;
+    vector<Expr> matches;
+
+    int shift_amount = 0;
+    if (is_const_power_of_two_integer(op->b, &shift_amount)) {
+        // Let LLVM handle these.
+        CodeGen_Posix::visit(op);
+        return;
+    }
+
+    // LLVM really struggles to generate mlal unless we generate mull intrinsics
+    // for the multiplication part first.
+    for (size_t i = 0; i < multiplies.size() ; i++) {
+        const Pattern &pattern = multiplies[i];
+        //debug(4) << "Trying pattern: " << patterns[i].intrin << " " << patterns[i].pattern << "\n";
+        if (expr_match(pattern.pattern, op, matches)) {
+
+            //debug(4) << "Match!\n";
+            if (pattern.type == Pattern::Simple) {
+                value = call_pattern(pattern, t, matches);
+                return;
+            } else if (pattern.type == Pattern::NarrowArgs) {
+                Type narrow_t = t.with_bits(t.bits() / 2);
+                // Try to narrow all of the args.
+                bool all_narrow = true;
+                for (size_t i = 0; i < matches.size(); i++) {
+                    internal_assert(matches[i].type().bits() == t.bits());
+                    internal_assert(matches[i].type().lanes() == t.lanes());
+                    // debug(4) << "Attemping to narrow " << matches[i] << " to " << t << "\n";
+                    matches[i] = lossless_cast(narrow_t, matches[i]);
+                    if (!matches[i].defined()) {
+                        // debug(4) << "failed\n";
+                        all_narrow = false;
+                    } else {
+                        // debug(4) << "success: " << matches[i] << "\n";
+                        internal_assert(matches[i].type() == narrow_t);
+                    }
+                }
+
+                if (all_narrow) {
+                    value = call_pattern(pattern, t, matches);
+                    return;
+                }
+            }
+        }
+    }
+
     // Vector multiplies by 3, 5, 7, 9 should do shift-and-add or
     // shift-and-sub instead to reduce register pressure (the
     // shift is an immediate)
+    // TODO: Verify this is still good codegen.
     if (is_const(op->b, 3)) {
         value = codegen(op->a*2 + op->a);
         return;
@@ -375,67 +443,6 @@ void CodeGen_ARM::visit(const Mul *op) {
     } else if (is_const(op->b, 9)) {
         value = codegen(op->a*8 + op->a);
         return;
-    }
-
-    vector<Expr> matches;
-
-    int shift_amount = 0;
-    bool power_of_two = is_const_power_of_two_integer(op->b, &shift_amount);
-    if (power_of_two) {
-        for (size_t i = 0; i < left_shifts.size(); i++) {
-            const Pattern &pattern = left_shifts[i];
-            internal_assert(pattern.type == Pattern::LeftShift);
-            if (expr_match(pattern.pattern, op, matches)) {
-                llvm::Type *t_arg = llvm_type_of(matches[0].type());
-                llvm::Type *t_result = llvm_type_of(op->type);
-                Value *shift = nullptr;
-                if (target.bits == 32) {
-                    shift = ConstantInt::get(t_arg, shift_amount);
-                } else {
-                    shift = ConstantInt::get(i32_t, shift_amount);
-                }
-                value = call_pattern(pattern, t_result,
-                                     {codegen(matches[0]), shift});
-                return;
-            }
-        }
-    }
-
-    //
-    // Detect the cases where any of the operands has the pattern:
-    //      broadcast(widen(scalar))
-    // and convert it to
-    //      widen(broadcast(scalar))
-    // to be able to generate vmlal.x instructions correctly from llvm.
-    //
-    if (op->type.is_int() || op->type.is_uint()) {
-        // Check the first operand op->a for the pattern broadcast(widen(scalar))
-        //
-        const Broadcast *bcast_a = op->a.as<Broadcast>();
-        const Cast *cast_a = bcast_a ? bcast_a->value.as<Cast>() : nullptr;
-        const int lanes = op->type.lanes();
-
-        // If the pattern is there, and the cast is a widening cast
-        if (cast_a && cast_a->value.type().bits() < op->type.bits()) {
-            // generate a new Mul with flipped widen(broadcast(scalar))
-            Expr new_a = Cast::make(op->type,
-                                    Broadcast::make(cast_a->value, lanes));
-            debug(4) << "Replaced: " << op->a << "\n  with: " << new_a << "\n";
-            value = codegen(new_a * op->b);
-            return;
-        }
-
-        // Do the same for the second operand op->b
-        //
-        const Broadcast *bcast_b = op->b.as<Broadcast>();
-        const Cast *cast_b = bcast_b ? bcast_b->value.as<Cast>() : nullptr;
-        if (cast_b && cast_b->value.type().bits() < op->type.bits()) {
-            Expr new_b = Cast::make(op->type,
-                                   Broadcast::make(cast_b->value, lanes));
-            debug(4) << "Replaced: " << op->b << "\n  with: " << new_b << "\n";
-            value = codegen(op->a * new_b);
-            return;
-        }
     }
 
     CodeGen_Posix::visit(op);
