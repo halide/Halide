@@ -1987,7 +1987,7 @@ $(BUILD_DIR)/clang_ok:
 	@exit 1
 endif
 
-ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 60 70 71 80 90))
+ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 70 71 80 90))
 LLVM_OK=yes
 endif
 

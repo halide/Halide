@@ -504,11 +504,7 @@ void embed_bitcode(llvm::Module *M, const string &halide_command) {
     Triple triple(M->getTargetTriple());
     // Create a constant that contains the bitcode.
     llvm::raw_string_ostream OS(data);
-#if LLVM_VERSION >= 70
     llvm::WriteBitcodeToFile(*M, OS, /* ShouldPreserveUseListOrder */ true);
-#else
-    llvm::WriteBitcodeToFile(M, OS, /* ShouldPreserveUseListOrder */ true);
-#endif
     ArrayRef<uint8_t> module_data =
         ArrayRef<uint8_t>((const uint8_t *)OS.str().data(), OS.str().size());
 
