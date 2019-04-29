@@ -12,7 +12,7 @@ int main(int argc, char **argv) {
 
     MachineParams params(32, 16000000, 40);
     // Use a fixed target for the analysis to get consistent results from this test.
-    Target target("x86-64-linux-sse41-avx-avx2");
+    Target target("x86-64-avx2-disable_llvm_loop_vectorize-disable_llvm_loop_unroll-cuda");
 
     Var x("x"), y("y");
 
