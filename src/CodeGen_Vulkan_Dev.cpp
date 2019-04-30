@@ -670,7 +670,7 @@ CodeGen_Vulkan_Dev::SPIRVEmitter::emit_if_then_else(Expr condition,
 
     add_instruction(SpvOpLabel, { merge_label_id });
 
-    return { then_id, then_label_id, else_id, else_label_id };
+    return {{ then_id, then_label_id, else_id, else_label_id }};
 }
 
 void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const IfThenElse *op) {
@@ -785,6 +785,11 @@ std::string CodeGen_Vulkan_Dev::print_gpu_name(const std::string &name) {
 
 void CodeGen_Vulkan_Dev::dump() {
     // TODO: Figure out what goes here.
+    // For now: dump to stdout so source can be consumed by validator
+    auto module = compile_to_src();
+    for (auto v: module) {
+      debug(0) << v << " ";
+    }
 }
 
 }  // namespace Internal
