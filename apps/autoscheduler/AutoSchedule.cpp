@@ -1179,7 +1179,7 @@ struct LoopNest {
                 if (consumer_site.store->gpu_label == block) {
                     feat.num_shared_mem_stores = instances * num_full_warps * num_shared_mem_stores_per_warp(
                         store_jac,
-                        vectorized_loop_index,
+                        vector_dim,
                         stage->node,
                         bounds,
                         32
@@ -1188,7 +1188,7 @@ struct LoopNest {
                     if (num_partial_warp_lanes > 0) {
                         feat.num_shared_mem_stores += instances * num_shared_mem_stores_per_warp(
                             store_jac,
-                            vectorized_loop_index,
+                            vector_dim,
                             stage->node,
                             bounds,
                             num_partial_warp_lanes
@@ -1197,7 +1197,7 @@ struct LoopNest {
                 } else if (consumer_site.store->is_root()) {
                     feat.num_global_mem_stores = instances * num_full_warps * num_global_mem_stores_per_warp(
                         store_jac,
-                        vectorized_loop_index,
+                        vector_dim,
                         stage->node,
                         bounds,
                         32
@@ -1206,7 +1206,7 @@ struct LoopNest {
                     if (num_partial_warp_lanes > 0) {
                         feat.num_global_mem_stores = instances * num_global_mem_stores_per_warp(
                             store_jac,
-                            vectorized_loop_index,
+                            vector_dim,
                             stage->node,
                             bounds,
                             num_partial_warp_lanes
