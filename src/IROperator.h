@@ -167,6 +167,13 @@ Expr lossless_cast(Type t, Expr e);
  */
 void match_types(Expr &a, Expr &b);
 
+/** Asserts that both expressions are integer types and are either
+ * both signed or both unsigned. If one argument is scalar and the
+ * other a vector, the scalar is broadcasted to have the same number
+ * of lanes as the vector. If one expression is of narrower type than
+ * the other, it is widened to the bit width of the wider. */
+void match_types_bitwise(Expr &a, Expr &b, const char *op_name);
+
 /** Halide's vectorizable transcendentals. */
 // @{
 Expr halide_log(Expr a);
@@ -1428,64 +1435,82 @@ inline Expr reinterpret(Expr e) {
 }
 
 /** Return the bitwise and of two expressions (which need not have the
- * same type). The type of the result is the type of the first
- * argument. */
+ * same type).  The result type is the wider of the two expressions.
+ * Only integral types are allowed and both expressions must be signed
+ * or both must be unsigned. */
 inline Expr operator&(Expr x, Expr y) {
-    user_assert(x.defined() && y.defined()) << "bitwise and of undefined Expr\n";
-    user_assert(x.type().is_int() || x.type().is_uint())
-        << "The first argument to bitwise and must be an integer or unsigned integer";
-    user_assert(y.type().is_int() || y.type().is_uint())
-        << "The second argument to bitwise and must be an integer or unsigned integer";
-    // First widen or narrow, then bitcast.
-    if (y.type().bits() != x.type().bits()) {
-        y = cast(y.type().with_bits(x.type().bits()), y);
-    }
-    if (y.type() != x.type()) {
-        y = reinterpret(x.type(), y);
-    }
+    match_types_bitwise(x, y, "bitwise and");
     Type t = x.type();
     return Internal::Call::make(t, Internal::Call::bitwise_and, {std::move(x), std::move(y)}, Internal::Call::PureIntrinsic);
 }
 
+/** Return the bitwise and of an expression and an integer. The type
+ * of the result is the type of the expression argument. */
+// @{
+inline Expr operator&(Expr x, int y) {
+    Type t = x.type();
+    Internal::check_representable(t, y);
+    return Internal::Call::make(t, Internal::Call::bitwise_and, {std::move(x), Internal::make_const(t, y)}, Internal::Call::PureIntrinsic);
+}
+
+ inline Expr operator&(int x, Expr y) {
+    Type t = y.type();
+    Internal::check_representable(t, x);
+    return Internal::Call::make(t, Internal::Call::bitwise_and, {Internal::make_const(t, x), std::move(y)}, Internal::Call::PureIntrinsic);
+}
+// @}
+
 /** Return the bitwise or of two expressions (which need not have the
- * same type). The type of the result is the type of the first
- * argument. */
+ * same type).  The result type is the wider of the two expressions.
+ * Only integral types are allowed and both expressions must be signed
+ * or both must be unsigned. */
 inline Expr operator|(Expr x, Expr y) {
-    user_assert(x.defined() && y.defined()) << "bitwise or of undefined Expr\n";
-    user_assert(x.type().is_int() || x.type().is_uint())
-        << "The first argument to bitwise or must be an integer or unsigned integer";
-    user_assert(y.type().is_int() || y.type().is_uint())
-        << "The second argument to bitwise or must be an integer or unsigned integer";
-    // First widen or narrow, then bitcast.
-    if (y.type().bits() != x.type().bits()) {
-        y = cast(y.type().with_bits(x.type().bits()), y);
-    }
-    if (y.type() != x.type()) {
-        y = reinterpret(x.type(), y);
-    }
+    match_types_bitwise(x, y, "bitwise or");
     Type t = x.type();
     return Internal::Call::make(t, Internal::Call::bitwise_or, {std::move(x), std::move(y)}, Internal::Call::PureIntrinsic);
 }
 
-/** Return the bitwise exclusive or of two expressions (which need not
- * have the same type). The type of the result is the type of the
- * first argument. */
+/** Return the bitwise or of an expression and an integer. The type of
+ * the result is the type of the expression argument. */
+// @{
+inline Expr operator|(Expr x, int y) {
+    Type t = x.type();
+    Internal::check_representable(t, y);
+    return Internal::Call::make(t, Internal::Call::bitwise_or, {std::move(x), Internal::make_const(t, y)}, Internal::Call::PureIntrinsic);
+}
+
+inline Expr operator|(int x, Expr y) {
+    Type t = y.type();
+    Internal::check_representable(t, x);
+    return Internal::Call::make(t, Internal::Call::bitwise_or, {Internal::make_const(t, x), std::move(y)}, Internal::Call::PureIntrinsic);
+}
+// @}
+
+/** Return the bitwise xor of two expressions (which need not have the
+ * same type).  The result type is the wider of the two expressions.
+ * Only integral types are allowed and both expressions must be signed
+ * or both must be unsigned. */
 inline Expr operator^(Expr x, Expr y) {
-    user_assert(x.defined() && y.defined()) << "bitwise xor of undefined Expr\n";
-    user_assert(x.type().is_int() || x.type().is_uint())
-        << "The first argument to bitwise xor must be an integer or unsigned integer";
-    user_assert(y.type().is_int() || y.type().is_uint())
-        << "The second argument to bitwise xor must be an integer or unsigned integer";
-    // First widen or narrow, then bitcast.
-    if (y.type().bits() != x.type().bits()) {
-        y = cast(y.type().with_bits(x.type().bits()), y);
-    }
-    if (y.type() != x.type()) {
-        y = reinterpret(x.type(), y);
-    }
+    match_types_bitwise(x, y, "bitwise xor");
     Type t = x.type();
     return Internal::Call::make(t, Internal::Call::bitwise_xor, {std::move(x), std::move(y)}, Internal::Call::PureIntrinsic);
 }
+
+/** Return the bitwise xor of an expression and an integer. The type
+ * of the result is the type of the expression argument. */
+// @{
+inline Expr operator^(Expr x, int y) {
+    Type t = x.type();
+    Internal::check_representable(t, y);
+    return Internal::Call::make(t, Internal::Call::bitwise_xor, {std::move(x), Internal::make_const(t, y)}, Internal::Call::PureIntrinsic);
+}
+
+inline Expr operator^(int x, Expr y) {
+    Type t = y.type();
+    Internal::check_representable(t, x);
+    return Internal::Call::make(t, Internal::Call::bitwise_xor, {Internal::make_const(t, x), std::move(y)}, Internal::Call::PureIntrinsic);
+}
+// @}
 
 /** Return the bitwise not of an expression. */
 inline Expr operator~(Expr x) {
@@ -1505,10 +1530,7 @@ inline Expr operator~(Expr x) {
  * arguments must have integer type. */
 // @{
 inline Expr operator<<(Expr x, Expr y) {
-    user_assert(x.defined() && y.defined()) << "shift left of undefined Expr\n";
-    user_assert(!x.type().is_float()) << "First argument to shift left is a float: " << x << "\n";
-    user_assert(!y.type().is_float()) << "Second argument to shift left is a float: " << y << "\n";
-    Internal::match_types(x, y);
+    Internal::match_types_bitwise(x, y, "shift left");
     Type t = x.type();
     return Internal::Call::make(t, Internal::Call::shift_left, {std::move(x), std::move(y)}, Internal::Call::PureIntrinsic);
 }
@@ -1534,10 +1556,7 @@ inline Expr operator<<(int x, Expr y) {
  * type. */
 // @{
 inline Expr operator>>(Expr x, Expr y) {
-    user_assert(x.defined() && y.defined()) << "shift right of undefined Expr\n";
-    user_assert(!x.type().is_float()) << "First argument to shift right is a float: " << x << "\n";
-    user_assert(!y.type().is_float()) << "Second argument to shift right is a float: " << y << "\n";
-    Internal::match_types(x, y);
+    Internal::match_types_bitwise(x, y, "shift right");
     Type t = x.type();
     return Internal::Call::make(t, Internal::Call::shift_right, {std::move(x), std::move(y)}, Internal::Call::PureIntrinsic);
 }
