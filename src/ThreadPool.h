@@ -6,6 +6,7 @@
 #include <mutex>
 #include <queue>
 #include <thread>
+#include <utility>
 
 #ifdef _MSC_VER
 #else

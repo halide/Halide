@@ -2,7 +2,7 @@
 # Halide tutorial lesson 5
 
 # This lesson demonstrates how to manipulate the order in which you
-# evaluate pixels in a Func, including vectorization,
+# evaluate pixels in a hl.Func, including vectorization,
 # parallelization, unrolling, and tiling.
 
 # This lesson can be built by invoking the command:
@@ -21,9 +21,7 @@
 #include "Halide.h"
 #include <stdio.h>
 #using namespace Halide
-from halide import *
-
-min_, max_ = __builtins__.min, __builtins__.max
+import halide as hl
 
 def main():
 
@@ -31,11 +29,11 @@ def main():
     # several different ways, and see what order pixels are computed
     # in.
 
-    x, y = Var("x"), Var ("y")
+    x, y = hl.Var("x"), hl.Var ("y")
 
     # First we observe the default ordering.
     if True:
-        gradient = Func("gradient")
+        gradient = hl.Func("gradient")
         gradient[x, y] = x + y
         gradient.trace_stores()
 
@@ -71,7 +69,7 @@ def main():
 
     # Reorder variables.
     if True:
-        gradient = Func("gradient_col_major")
+        gradient = hl.Func("gradient_col_major")
         print("x, y", x, y)
         gradient[x, y] = x + y
         gradient.trace_stores()
@@ -107,13 +105,13 @@ def main():
 
     # Split a variable into two.
     if True:
-        gradient = Func("gradient_split")
+        gradient = hl.Func("gradient_split")
         gradient[x, y] = x + y
         gradient.trace_stores()
 
         # The most powerful primitive scheduling operation you can do
         # to a var is to split it into inner and outer sub-variables:
-        x_outer, x_inner = Var("x_outer"), Var("x_inner")
+        x_outer, x_inner = hl.Var("x_outer"), hl.Var("x_inner")
         gradient.split(x, x_outer, x_inner, 2)
 
         # This breaks the loop over x into two nested loops: an outer
@@ -150,7 +148,7 @@ def main():
 
     # Fuse two variables into one.
     if True:
-        gradient = Func("gradient_fused")
+        gradient = hl.Func("gradient_fused")
         gradient[x, y] = x + y
 
         # The opposite of splitting is 'fusing'. Fusing two variables
@@ -159,7 +157,7 @@ def main():
         # splitting, but it also sees use (as we'll see later in this
         # lesson). Like splitting, fusing by itself doesn't change
         # the order of evaluation.
-        fused = Var("fused")
+        fused = hl.Var("fused")
         gradient.fuse(x, y, fused)
 
         print("Evaluating gradient with x and y fused")
@@ -180,7 +178,7 @@ def main():
 
     # Evaluating in tiles.
     if True:
-        gradient = Func("gradient_tiled")
+        gradient = hl.Func("gradient_tiled")
         gradient[x, y] = x + y
         gradient.trace_stores()
 
@@ -194,7 +192,7 @@ def main():
         # good for performance if neighboring pixels use overlapping
         # input data, for example in a blur. We can express a tiled
         # traversal like so:
-        x_outer, x_inner, y_outer, y_inner = Var(), Var(), Var(), Var()
+        x_outer, x_inner, y_outer, y_inner = hl.Var(), hl.Var(), hl.Var(), hl.Var()
         gradient.split(x, x_outer, x_inner, 2)
         gradient.split(y, y_outer, y_inner, 2)
         gradient.reorder(x_inner, y_inner, x_outer, y_outer)
@@ -223,7 +221,7 @@ def main():
 
     # Evaluating in vectors.
     if True:
-        gradient = Func("gradient_in_vectors")
+        gradient = hl.Func("gradient_in_vectors")
         gradient[x, y] = x + y
         gradient.trace_stores()
 
@@ -234,7 +232,7 @@ def main():
         # single vectorized computation. This time we'll split by a
         # factor of four, because on X86 we can use SSE to compute in
         # 4-wide vectors.
-        x_outer, x_inner = Var("x_outer"), Var("x_inner")
+        x_outer, x_inner = hl.Var("x_outer"), hl.Var("x_inner")
         gradient.split(x, x_outer, x_inner, 4)
         gradient.vectorize(x_inner)
 
@@ -287,7 +285,7 @@ def main():
 
     # Unrolling a loop.
     if True:
-        gradient = Func("gradient_in_vectors")
+        gradient = hl.Func("gradient_in_vectors")
         gradient[x, y] = x + y
         gradient.trace_stores()
 
@@ -297,7 +295,7 @@ def main():
         # we expressed vectorizing. We split a dimension and then
         # fully unroll the loop of the inner variable. Unrolling
         # doesn't change the order in which things are evaluated.
-        x_outer, x_inner = Var("x_outer"), Var("x_inner")
+        x_outer, x_inner = hl.Var("x_outer"), hl.Var("x_inner")
         gradient.split(x, x_outer, x_inner, 2)
         gradient.unroll(x_inner)
 
@@ -332,7 +330,7 @@ def main():
 
     # Splitting by factors that don't divide the extent.
     if True:
-        gradient = Func("gradient_split_5x4")
+        gradient = hl.Func("gradient_split_5x4")
         gradient[x, y] = x + y
         gradient.trace_stores()
 
@@ -343,7 +341,7 @@ def main():
         # split by a factor of two again, but now we'll evaluate
         # gradient over a 5x4 box instead of the 4x4 box we've been
         # using.
-        x_outer, x_inner = Var("x_outer"), Var("x_inner")
+        x_outer, x_inner = hl.Var("x_outer"), hl.Var("x_inner")
         gradient.split(x, x_outer, x_inner, 2)
 
         print("Evaluating gradient over a 5x4 box with x split by two ")
@@ -356,7 +354,7 @@ def main():
                     xx = x_outer * 2
                     # Before we add x_inner, make sure we don't
                     # evaluate points outside of the 5x4 box. We'll
-                    # clamp x to be at most 3 (5 minus the split
+                    # hl.clamp x to be at most 3 (5 minus the split
                     # factor).
                     if xx > 3:
                         xx = 3
@@ -382,7 +380,7 @@ def main():
         #
         # x_outer runs from 0 to (x_extent + factor - 1)/factor
         # x_inner runs from 0 to factor
-        # x = min(x_outer * factor, x_extent - factor) + x_inner + x_min
+        # x = hl.min(x_outer * factor, x_extent - factor) + x_inner + x_min
         #
         # In our example, x_min was 0, x_extent was 5, and factor was 2.
 
@@ -407,20 +405,20 @@ def main():
         # often gives poor performance compared to fusing the
         # parallel variables into a single parallel for loop.
 
-        gradient = Func("gradient_fused_tiles")
+        gradient = hl.Func("gradient_fused_tiles")
         gradient[x, y] = x + y
         gradient.trace_stores()
 
         # First we'll tile, then we'll fuse the tile indices and
         # parallelize across the combination.
-        x_outer, y_outer = Var("x_outer"), Var("y_outer")
-        x_inner, y_inner = Var("x_inner"), Var("y_inner")
-        tile_index = Var("tile_index")
+        x_outer, y_outer = hl.Var("x_outer"), hl.Var("y_outer")
+        x_inner, y_inner = hl.Var("x_inner"), hl.Var("y_inner")
+        tile_index = hl.Var("tile_index")
         gradient.tile(x, y, x_outer, y_outer, x_inner, y_inner, 2, 2)
         gradient.fuse(x_outer, y_outer, tile_index)
         gradient.parallel(tile_index)
 
-        # The scheduling calls all return a reference to the Func, so
+        # The scheduling calls all return a reference to the hl.Func, so
         # you can also chain them together into a single statement to
         # make things slightly clearer:
         #
@@ -457,13 +455,13 @@ def main():
     # Putting it all together.
     if True:
         # Are you ready? We're going to use all of the features above now.
-        gradient_fast = Func("gradient_fast")
+        gradient_fast = hl.Func("gradient_fast")
         gradient_fast[x, y] = x + y
 
         # We'll process 256x256 tiles in parallel.
-        x_outer, y_outer = Var("x_outer"), Var("y_outer")
-        x_inner, y_inner = Var("x_inner"), Var("y_inner")
-        tile_index = Var("tile_index")
+        x_outer, y_outer = hl.Var("x_outer"), hl.Var("y_outer")
+        x_inner, y_inner = hl.Var("x_inner"), hl.Var("y_inner")
+        tile_index = hl.Var("tile_index")
         gradient_fast \
             .tile(x, y, x_outer, y_outer, x_inner, y_inner, 256, 256) \
             .fuse(x_outer, y_outer, tile_index) \
@@ -474,8 +472,8 @@ def main():
         # express this is to recursively tile again within each tile
         # into 4x2 subtiles, then vectorize the subtiles across x and
         # unroll them across y:
-        x_inner_outer, y_inner_outer = Var("x_inner_outer"), Var("y_inner_outer")
-        x_vectors, y_pairs = Var("x_vectors"), Var("y_pairs")
+        x_inner_outer, y_inner_outer = hl.Var("x_inner_outer"), hl.Var("y_inner_outer")
+        x_vectors, y_pairs = hl.Var("x_vectors"), hl.Var("y_pairs")
         gradient_fast \
             .tile(x_inner, y_inner, x_inner_outer, y_inner_outer, x_vectors, y_pairs, 4, 2) \
             .vectorize(x_vectors) \
@@ -501,14 +499,14 @@ def main():
             for y_inner_outer in range(256//2):
                 for x_inner_outer in range(256//4):
                     # We're vectorized across x
-                    xx = min_(x_outer * 256, 800-256) + x_inner_outer*4
+                    xx = min(x_outer * 256, 800-256) + x_inner_outer*4
                     x_vec = [xx + 0,
                                     xx + 1,
                                     xx + 2,
                                     xx + 3]
 
                     # And we unrolled across y
-                    y_base = min_(y_outer * 256, 600-256) + y_inner_outer*2
+                    y_base = min(y_outer * 256, 600-256) + y_inner_outer*2
 
                     if True:
                         # y_pairs = 0
@@ -523,7 +521,7 @@ def main():
                         for i in range(4):
                             #print("x_vec[%i], y_vec[%i]" % (i, i),
                             #      x_vec[i], y_vec[i])
-                            if result(x_vec[i], y_vec[i]) != val[i]:
+                            if result[x_vec[i], y_vec[i]] != val[i]:
                                 print("There was an error at %d %d!" % (x_vec[i], y_vec[i]))
                                 return -1
 
@@ -540,7 +538,7 @@ def main():
 
                         # Check the result.
                         for i in range(4):
-                            if result(x_vec[i], y_vec[i]) != val[i]:
+                            if result[x_vec[i], y_vec[i]] != val[i]:
                                 print("There was an error at %d %d!" % (x_vec[i], y_vec[i]))
 
 

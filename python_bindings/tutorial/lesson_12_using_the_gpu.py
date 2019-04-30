@@ -20,7 +20,7 @@
 #include "Halide.h"
 #include <stdio.h>
 #using namespace Halide
-from halide import *
+import halide as hl
 
 # Include some support code for loading pngs.
 #include "image_io.h"
@@ -33,7 +33,7 @@ from datetime import datetime
 
 
 # Define some Vars to use.
-x, y, c, i, ii, xi, yi = Var("x"), Var("y"), Var("c"), Var("i"), Var("ii"), Var("xi"), Var("yi")
+x, y, c, i, ii, xi, yi = hl.Var("x"), hl.Var("y"), hl.Var("c"), hl.Var("i"), hl.Var("ii"), hl.Var("xi"), hl.Var("yi")
 
 # We're going to want to schedule a pipeline in several ways, so we
 # define the pipeline in a class so that we can recreate it several
@@ -42,13 +42,13 @@ class MyPipeline:
 
     def __init__(self, input):
 
-        assert type(input) == Buffer_uint8
+        assert input.type() == hl.UInt(8)
 
-        self.lut = Func("lut")
-        self.padded = Func("padded")
-        self.padded16 = Func("padded16")
-        self.sharpen = Func("sharpen")
-        self.curved = Func("curved")
+        self.lut = hl.Func("lut")
+        self.padded = hl.Func("padded")
+        self.padded16 = hl.Func("padded16")
+        self.sharpen = hl.Func("sharpen")
+        self.curved = hl.Func("curved")
         self.input = input
 
 
@@ -56,14 +56,14 @@ class MyPipeline:
         # and then applies a look-up-table (LUT).
 
         # First we'll define the LUT. It will be a gamma curve.
-        self.lut[i] = cast(UInt(8), clamp(pow(i / 255.0, 1.2) * 255.0, 0, 255))
+        self.lut[i] = hl.cast(hl.UInt(8), hl.clamp(pow(i / 255.0, 1.2) * 255.0, 0, 255))
 
         # Augment the input with a boundary condition.
-        self.padded[x, y, c] = input[clamp(x, 0, input.width()-1),
-                                clamp(y, 0, input.height()-1), c]
+        self.padded[x, y, c] = input[hl.clamp(x, 0, input.width()-1),
+                                hl.clamp(y, 0, input.height()-1), c]
 
         # Cast it to 16-bit to do the math.
-        self.padded16[x, y, c] = cast(UInt(16), self.padded[x, y, c])
+        self.padded16[x, y, c] = hl.cast(hl.UInt(16), self.padded[x, y, c])
 
         # Next we sharpen it with a five-tap filter.
         self.sharpen[x, y, c] = (self.padded16[x, y, c] * 2-
@@ -90,7 +90,7 @@ class MyPipeline:
 
         # Look-up-tables don't vectorize well, so just parallelize
         # curved in slices of 16 scanlines.
-        yo, yi = Var("yo"), Var("yi")
+        yo, yi = hl.Var("yo"), hl.Var("yi")
         self.curved.split(y, yo, yi, 16) \
               .parallel(yo)
 
@@ -104,7 +104,7 @@ class MyPipeline:
         self.sharpen.vectorize(x, 8)
 
         # Compute the padded input at the same granularity as the
-        # sharpen. We'll leave the cast to 16-bit inlined into
+        # sharpen. We'll leave the hl.cast to 16-bit inlined into
         # sharpen.
         self.padded.store_at(self.curved, yo) \
             .compute_at(self.curved, yi)
@@ -122,7 +122,7 @@ class MyPipeline:
     # Now a schedule that uses CUDA or OpenCL.
     def schedule_for_gpu(self):
         # We make the decision about whether to use the GPU for each
-        # Func independently. If you have one Func computed on the
+        # hl.Func independently. If you have one hl.Func computed on the
         # CPU, and the next computed on the GPU, Halide will do the
         # copy-to-gpu under the hood. For this pipeline, there's no
         # reason to use the CPU for any of the stages. Halide will
@@ -136,7 +136,7 @@ class MyPipeline:
         # Let's compute the look-up-table using the GPU in 16-wide
         # one-dimensional thread blocks. First we split the index
         # into blocks of size 16:
-        block, thread = Var("block"), Var("thread")
+        block, thread = hl.Var("block"), hl.Var("thread")
         self.lut.split(i, block, thread, 16)
         # Then we tell cuda that our Vars 'block' and 'thread'
         # correspond to CUDA's notions of blocks and threads, or
@@ -149,7 +149,7 @@ class MyPipeline:
 
         # lut.gpu_tile(i, ii, 16)
 
-        # Func::gpu_tile method is similar to Func::tile, except that
+        # hl.Func::gpu_tile method is similar to hl.Func::tile, except that
         # it also specifies that the tile coordinates correspond to
         # GPU blocks, and the coordinates within each tile correspond
         # to GPU threads.
@@ -171,8 +171,8 @@ class MyPipeline:
         # We'll leave sharpen as inlined into curved.
 
         # Compute the padded input as needed per GPU block, storing the
-        # intermediate result in shared memory. Var::gpu_blocks, and
-        # Var::gpu_threads exist to help you schedule producers within
+        # intermediate result in shared memory. hl.Var::gpu_blocks, and
+        # hl.Var::gpu_threads exist to help you schedule producers within
         # GPU threads and blocks.
         self.padded.compute_at(self.curved, x)
 
@@ -181,14 +181,14 @@ class MyPipeline:
         self.padded.gpu_threads(x, y)
 
         # JIT-compile the pipeline for the GPU. CUDA or OpenCL are
-        # not enabled by default. We have to construct a Target
+        # not enabled by default. We have to construct a hl.Target
         # object, enable one of them, and then pass that target
         # object to compile_jit. Otherwise your CPU will very slowly
         # pretend it's a GPU, and use one thread per output pixel.
 
         # Start with a target suitable for the machine you're running
         # this on.
-        target = get_host_target()
+        target = hl.get_host_target()
 
         # Then enable OpenCL or CUDA.
         #use_opencl = False
@@ -198,12 +198,12 @@ class MyPipeline:
             # performance than CUDA, even with NVidia's drivers, because
             # NVidia's open source LLVM backend doesn't seem to do all
             # the same optimizations their proprietary compiler does.
-            target.set_feature(TargetFeature.OpenCL)
+            target.set_feature(hl.TargetFeature.OpenCL)
             print("(Using OpenCL)")
         else:
             # Uncomment the next line and comment out the line above to
             # try CUDA instead.
-            target.set_feature(TargetFeature.CUDA)
+            target.set_feature(hl.TargetFeature.CUDA)
             print("(Using CUDA)")
 
         # If you want to see all of the OpenCL or CUDA API calls done
@@ -211,17 +211,15 @@ class MyPipeline:
         # flag. This is helpful for figuring out which stages are
         # slow, or when CPU -> GPU copies happen. It hurts
         # performance though, so we'll leave it commented out.
-        # target.set_feature(TargetFeature.Debug)
+        # target.set_feature(hl.TargetFeature.Debug)
 
         self.curved.compile_jit(target)
 
     def test_performance(self):
         # Test the performance of the scheduled MyPipeline.
 
-        output = Buffer(UInt(8),
-                        self.input.width(),
-                        self.input.height(),
-                        self.input.channels())
+        output = hl.Buffer(hl.UInt(8), 
+                        [self.input.width(), self.input.height(), self.input.channels()])
 
         # Run the filter once to initialize any GPU runtime state.
         self.curved.realize(output)
@@ -250,22 +248,22 @@ class MyPipeline:
 
     def test_correctness(self, reference_output):
 
-        assert type(reference_output) == Buffer_uint8
+        assert reference_output.type() == hl.UInt(8)
         output = self.curved.realize(self.input.width(),
                                      self.input.height(),
                                      self.input.channels())
-        assert type(output) == Buffer_uint8
+        assert output.type() == hl.UInt(8)
 
         # Check against the reference output.
         for c in range(self.input.channels()):
             for y in range(self.input.height()):
                 for x in range(self.input.width()):
-                    if output(x, y, c) != reference_output(x, y, c):
+                    if output[x, y, c] != reference_output[x, y, c]:
                         print(
                             "Mismatch between output (%d) and "
                             "reference output (%d) at %d, %d, %d" % (
-                                output(x, y, c),
-                                reference_output(x, y, c),
+                                output[x, y, c],
+                                reference_output[x, y, c],
                                 x, y, c))
                         return
 
@@ -275,11 +273,10 @@ class MyPipeline:
 def main():
     # Load an input image.
     image_path = os.path.join(os.path.dirname(__file__), "../../tutorial/images/rgb.png")
-    input_data = imread(image_path)
-    input = Buffer(input_data)
+    input = hl.Buffer(imread(image_path))
 
     # Allocated an image that will store the correct output
-    reference_output = Buffer(UInt(8), input.width(), input.height(), input.channels())
+    reference_output = hl.Buffer(hl.UInt(8), [input.width(), input.height(), input.channels()])
 
     print("Testing performance on CPU:")
     p1 = MyPipeline(input)

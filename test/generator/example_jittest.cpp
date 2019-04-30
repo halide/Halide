@@ -65,30 +65,6 @@ int main(int argc, char **argv) {
         verify(img, 1.f, runtime_factor, 3);
     }
 
-    {
-        // You can also explicitly create a Stub instance and use it in a "stateful" manner;
-        // this is usually a bit less convenient that simply using the static generate()
-        // method, in that you must explicitly manage the instance and call the
-        // schedule() method yourself:
-
-        auto stub = example(context, {runtime_factor});
-        // We must call schedule() before calling realize()
-        stub.schedule();
-        Buffer<int32_t> img = stub.realize(kSize, kSize, 3);
-        verify(img, 1.f, runtime_factor, 3);
-    }
-
-    {
-        // Same as previous (creating a Stub instance), but specifying GeneratorParams:
-        example::GeneratorParams gp;
-        gp.compiletime_factor = 2.5f;
-        auto stub = example(context, {runtime_factor}, gp);
-        // We must call schedule() before calling realize()
-        stub.schedule();
-        Buffer<int32_t> img = stub.realize(kSize, kSize, 3);
-        verify(img, gp.compiletime_factor, runtime_factor, 3);
-    }
-
     printf("Success!\n");
     return 0;
 }

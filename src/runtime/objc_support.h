@@ -24,6 +24,10 @@ WEAK void drain_autorelease_pool(objc_id pool) {
     objc_msgSend(pool, sel_getUid("drain"));
 }
 
+WEAK void retain_ns_object(objc_id obj) {
+    objc_msgSend(obj, sel_getUid("retain"));
+}
+
 WEAK void release_ns_object(objc_id obj) {
     objc_msgSend(obj, sel_getUid("release"));
 }

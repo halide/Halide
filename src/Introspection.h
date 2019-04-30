@@ -22,15 +22,23 @@ namespace Introspection {
  * variable must be in a compilation unit compiled with -g to
  * work. The expected type helps distinguish between variables at the
  * same address, e.g a class instance vs its first member. */
-EXPORT std::string get_variable_name(const void *, const std::string &expected_type);
+std::string get_variable_name(const void *, const std::string &expected_type);
 
 /** Register an untyped heap object. Derive type information from an
  * introspectable pointer to a pointer to a global object of the same
  * type. Not thread-safe. */
-EXPORT void register_heap_object(const void *obj, size_t size, const void *helper);
+void register_heap_object(const void *obj, size_t size, const void *helper);
 
 /** Deregister a heap object. Not thread-safe. */
-EXPORT void deregister_heap_object(const void *obj, size_t size);
+void deregister_heap_object(const void *obj, size_t size);
+
+/** Dump the contents of the stack frame of the calling function. Used
+ * for debugging stack frame sizes inside the compiler. Returns
+ * whether or not it was able to find the relevant debug
+ * information. */
+bool dump_stack_frame();
+
+#define HALIDE_DUMP_STACK_FRAME {static bool check = Halide::Internal::Introspection::dump_stack_frame(); (void)check;}
 
 /** Return the address of a global with type T *. Call this to
  * generate something to pass as the last argument to
@@ -44,14 +52,14 @@ const void *get_introspection_helper() {
 
 /** Get the source location in the call stack, skipping over calls in
  * the Halide namespace. */
-EXPORT std::string get_source_location();
+std::string get_source_location();
 
 // This gets called automatically by anyone who includes Halide.h by
 // the code below. It tests if this functionality works for the given
 // compilation unit, and disables it if not.
-EXPORT void test_compilation_unit(bool (*test)(bool (*)(const void *, const std::string &)),
-                                  bool (*test_a)(const void *, const std::string &),
-                                  void (*calib)());
+void test_compilation_unit(bool (*test)(bool (*)(const void *, const std::string &)),
+                           bool (*test_a)(const void *, const std::string &),
+                           void (*calib)());
 }
 
 }
@@ -114,7 +122,7 @@ static bool test_a(const void *a_ptr, const std::string &my_name) {
     bool success = true;
     success &= Halide::Internal::check_introspection(&a->an_int, "int", my_name + ".an_int", __FILE__ , __LINE__);
     success &= Halide::Internal::check_introspection(&a->a_b, "HalideIntrospectionCanary::A::B", my_name + ".a_b", __FILE__ , __LINE__);
-    success &= Halide::Internal::check_introspection(&a->a_b.parent, "HalideIntrospectionCanary::A *", my_name + ".a_b.parent", __FILE__ , __LINE__);
+    success &= Halide::Internal::check_introspection(&a->a_b.parent, "HalideIntrospectionCanary::A \\*", my_name + ".a_b.parent", __FILE__ , __LINE__);
     success &= Halide::Internal::check_introspection(&a->a_b.a_float, "float", my_name + ".a_b.a_float", __FILE__ , __LINE__);
     success &= Halide::Internal::check_introspection(a->a_b.parent, "HalideIntrospectionCanary::A", my_name, __FILE__ , __LINE__);
     return success;
@@ -134,11 +142,11 @@ struct TestCompilationUnit {
         Halide::Internal::Introspection::test_compilation_unit(&test, &test_a, &offset_marker);
     }
 };
-}
+}  // namespace
 
 static TestCompilationUnit test_object;
 
-}
+}  // namespace HalideIntrospectionCanary
 
 #endif
 

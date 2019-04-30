@@ -1,7 +1,7 @@
 // Halide tutorial lesson 15: Generators part 1
 
 // This lesson demonstrates how to encapsulate Halide pipelines into
-// resuable components called generators.
+// reusable components called generators.
 
 // On linux, you can compile and run it like so:
 // g++ lesson_15*.cpp ../tools/GenGen.cpp -g -std=c++11 -fno-rtti -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_15_generate

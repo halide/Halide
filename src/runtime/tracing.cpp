@@ -65,6 +65,10 @@ public:
         __sync_fetch_and_and(&lock, ~exclusive_held_mask);
     }
 
+    __attribute__((always_inline)) void init() {
+    	lock = 0;
+    }
+
     SharedExclusiveSpinLock() : lock(0) {}
 };
 
@@ -72,7 +76,7 @@ const static int buffer_size = 1024 * 1024;
 
 class TraceBuffer {
     SharedExclusiveSpinLock lock;
-    uint32_t cursor;
+    uint32_t cursor, overage;
     uint8_t buf[buffer_size];
 
     // Attempt to atomically acquire space in the buffer to write a
@@ -82,7 +86,11 @@ class TraceBuffer {
         halide_assert(user_context, size <= buffer_size);
         uint32_t my_cursor = __sync_fetch_and_add(&cursor, size);
         if (my_cursor + size > sizeof(buf)) {
-            __sync_fetch_and_sub(&cursor, size);
+            // Don't try to back it out: instead, just allow this request to fail
+            // (along with all subsequent requests) and record the 'overage'
+            // that was added and should be ignored; then, in the next flush,
+            // remove the overage.
+            __sync_fetch_and_add(&overage, size);
             lock.release_shared();
             return NULL;
         } else {
@@ -98,8 +106,10 @@ public:
         lock.acquire_exclusive();
         bool success = true;
         if (cursor) {
+            cursor -= overage;
             success = (cursor == (uint32_t)write(fd, buf, cursor));
             cursor = 0;
+            overage = 0;
         }
         lock.release_exclusive();
         halide_assert(user_context, success && "Could not write to trace file");
@@ -126,7 +136,13 @@ public:
         lock.release_shared();
     }
 
-    TraceBuffer() : cursor(0) {}
+    __attribute__((always_inline)) void init() {
+    	cursor = 0;
+    	overage = 0;
+    	lock.init();
+    }
+
+    TraceBuffer() : cursor(0), overage(0) {}
 };
 
 WEAK TraceBuffer *halide_trace_buffer = NULL;
@@ -152,7 +168,8 @@ WEAK int32_t halide_default_trace(void *user_context, const halide_trace_event_t
         uint32_t header_bytes = (uint32_t)sizeof(halide_trace_packet_t);
         uint32_t coords_bytes = e->dimensions * (uint32_t)sizeof(int32_t);
         uint32_t name_bytes = strlen(e->func) + 1;
-        uint32_t total_size_without_padding = header_bytes + value_bytes + coords_bytes + name_bytes;
+        uint32_t trace_tag_bytes = e->trace_tag ? (strlen(e->trace_tag) + 1) : 1;
+        uint32_t total_size_without_padding = header_bytes + value_bytes + coords_bytes + name_bytes + trace_tag_bytes;
         uint32_t total_size = (total_size_without_padding + 3) & ~3;
 
         // Claim some space to write to in the trace buffer
@@ -177,6 +194,7 @@ WEAK int32_t halide_default_trace(void *user_context, const halide_trace_event_t
             memcpy((void *)packet->value(), e->value, value_bytes);
         }
         memcpy((void *)packet->func(), e->func, name_bytes);
+        memcpy((void *)packet->trace_tag(), e->trace_tag ? e->trace_tag : "", trace_tag_bytes);
 
         // Release it
         halide_trace_buffer->release_packet(packet);
@@ -206,7 +224,8 @@ WEAK int32_t halide_default_trace(void *user_context, const halide_trace_event_t
                                      "Consume",
                                      "End consume",
                                      "Begin pipeline",
-                                     "End pipeline"};
+                                     "End pipeline",
+                                     "Tag"};
 
         // Only print out the value on stores and loads.
         bool print_value = (e->event < 2);
@@ -278,6 +297,11 @@ WEAK int32_t halide_default_trace(void *user_context, const halide_trace_event_t
                 ss << ">";
             }
         }
+
+        if (e->trace_tag && *e->trace_tag) {
+            ss << " tag = \"" << e->trace_tag << "\"";
+        }
+
         ss << "\n";
         ss.msan_annotate_is_initialized();
 
@@ -323,6 +347,7 @@ WEAK int halide_get_trace_file(void *user_context) {
             halide_trace_file_internally_opened = file;
             if (!halide_trace_buffer) {
                 halide_trace_buffer = (TraceBuffer *)malloc(sizeof(TraceBuffer));
+                halide_trace_buffer->init();
             }
         } else {
             halide_set_trace_file(0);
@@ -355,31 +380,6 @@ __attribute__((destructor))
 WEAK void halide_trace_cleanup() {
     halide_shutdown_trace();
 }
-}
-
-// A wrapper for halide_trace called by the pipeline. Halide Stmt IR
-// has a hard time packing structs itself.
-WEAK int halide_trace_helper(void *user_context,
-                             const char *func,
-                             void *value, int *coords,
-                             int type_code, int type_bits, int type_lanes,
-                             int code,
-                             int parent_id, int value_index, int dimensions) {
-    halide_trace_event_t event;
-    event.func = func;
-    event.coordinates = coords;
-    event.value = value;
-    event.type.code = (halide_type_code_t)type_code;
-    event.type.bits = (uint8_t)type_bits;
-    event.type.lanes = (uint16_t)type_lanes;
-    event.event = (halide_trace_event_code_t)code;
-    event.parent_id = parent_id;
-    event.value_index = value_index;
-    if (event.type.lanes > 1) {
-        dimensions *= event.type.lanes;
-    }
-    event.dimensions = dimensions;
-    return halide_trace(user_context, &event);
 }
 
 }

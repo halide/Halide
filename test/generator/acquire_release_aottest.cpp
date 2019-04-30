@@ -179,13 +179,13 @@ void destroy_context() {
 // These functions replace the acquire/release implementation in src/runtime/cuda.cpp.
 // Since we don't parallelize access to the GPU in the schedule, we don't need synchronization
 // in our implementation of these functions.
-extern "C" int halide_acquire_cuda_context(void *user_context, CUcontext *ctx) {
+extern "C" int halide_cuda_acquire_context(void *user_context, CUcontext *ctx, bool create=true) {
     printf("Acquired CUDA context %p\n", cuda_ctx);
     *ctx = cuda_ctx;
     return 0;
 }
 
-extern "C" int halide_release_cuda_context(void *user_context) {
+extern "C" int halide_cuda_release_context(void *user_context) {
     printf("Releasing CUDA context %p\n", cuda_ctx);
     return 0;
 }

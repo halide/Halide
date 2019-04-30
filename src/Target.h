@@ -5,14 +5,14 @@
  * Defines the structure that describes a Halide target.
  */
 
-#include <stdint.h>
 #include <bitset>
+#include <stdint.h>
 #include <string>
 
 #include "Error.h"
+#include "Expr.h"
 #include "Type.h"
 #include "Util.h"
-#include "Expr.h"
 #include "runtime/HalideRuntime.h"
 
 namespace Halide {
@@ -22,12 +22,31 @@ struct Target {
     /** The operating system used by the target. Determines which
      * system calls to generate.
      * Corresponds to os_name_map in Target.cpp. */
-    enum OS {OSUnknown = 0, Linux, Windows, OSX, Android, IOS, QuRT, NoOS} os;
+    enum OS {
+        OSUnknown = 0,
+        Linux,
+        Windows,
+        OSX,
+        Android,
+        IOS,
+        QuRT,
+        NoOS,
+        Fuchsia,
+        WebAssemblyRuntime
+    } os;
 
     /** The architecture used by the target. Determines the
      * instruction set to use.
      * Corresponds to arch_name_map in Target.cpp. */
-    enum Arch {ArchUnknown = 0, X86, ARM, MIPS, Hexagon, POWERPC} arch;
+    enum Arch {
+        ArchUnknown = 0,
+        X86,
+        ARM,
+        MIPS,
+        Hexagon,
+        POWERPC,
+        WebAssembly,
+    } arch;
 
     /** The bit-width of the target machine. Must be 0 for unknown, or 32 or 64. */
     int bits;
@@ -59,6 +78,7 @@ struct Target {
         CUDACapability61 = halide_target_feature_cuda_capability61,
         OpenCL = halide_target_feature_opencl,
         CLDoubles = halide_target_feature_cl_doubles,
+        CLHalf = halide_target_feature_cl_half,
         OpenGL = halide_target_feature_opengl,
         OpenGLCompute = halide_target_feature_openglcompute,
         UserContext = halide_target_feature_user_context,
@@ -69,6 +89,7 @@ struct Target {
         MinGW = halide_target_feature_mingw,
         CPlusPlusMangling = halide_target_feature_c_plus_plus_mangling,
         LargeBuffers = halide_target_feature_large_buffers,
+        HexagonDma = halide_target_feature_hexagon_dma,
         HVX_64 = halide_target_feature_hvx_64,
         HVX_128 = halide_target_feature_hvx_128,
         HVX_v62 = halide_target_feature_hvx_v62,
@@ -85,13 +106,24 @@ struct Target {
         TraceLoads = halide_target_feature_trace_loads,
         TraceStores = halide_target_feature_trace_stores,
         TraceRealizations = halide_target_feature_trace_realizations,
+        D3D12Compute = halide_target_feature_d3d12compute,
+        StrictFloat = halide_target_feature_strict_float,
+        LegacyBufferWrappers = halide_target_feature_legacy_buffer_wrappers,
+        TSAN = halide_target_feature_tsan,
+        ASAN = halide_target_feature_asan,
+        CheckUnsafePromises = halide_target_feature_check_unsafe_promises,
+        EmbedBitcode = halide_target_feature_embed_bitcode,
+        DisableLLVMLoopVectorize = halide_target_feature_disable_llvm_loop_vectorize,
+        DisableLLVMLoopUnroll = halide_target_feature_disable_llvm_loop_unroll,
+        WasmSimd128 = halide_target_feature_wasm_simd128,
+        WasmSignExt = halide_target_feature_wasm_signext,
         FeatureEnd = halide_target_feature_end
     };
     Target() : os(OSUnknown), arch(ArchUnknown), bits(0) {}
-    Target(OS o, Arch a, int b, std::vector<Feature> initial_features = std::vector<Feature>())
+    Target(OS o, Arch a, int b, const std::vector<Feature> &initial_features = std::vector<Feature>())
         : os(o), arch(a), bits(b) {
-        for (size_t i = 0; i < initial_features.size(); i++) {
-            set_feature(initial_features[i]);
+        for (const auto &f :initial_features) {
+            set_feature(f);
         }
     }
 
@@ -106,78 +138,42 @@ struct Target {
      * Invalid target strings will fail with a user_error.
      */
     // @{
-    EXPORT explicit Target(const std::string &s);
-    EXPORT explicit Target(const char *s);
+    explicit Target(const std::string &s);
+    explicit Target(const char *s);
     // @}
 
     /** Check if a target string is valid. */
-    EXPORT static bool validate_target_string(const std::string &s);
+    static bool validate_target_string(const std::string &s);
 
-    void set_feature(Feature f, bool value = true) {
-        if (f == FeatureEnd) return;
-        user_assert(f < FeatureEnd) << "Invalid Target feature.\n";
-        features.set(f, value);
-    }
+    void set_feature(Feature f, bool value = true);
 
-    void set_features(std::vector<Feature> features_to_set, bool value = true) {
-        for (Feature f : features_to_set) {
-            set_feature(f, value);
-        }
-    }
+    void set_features(std::vector<Feature> features_to_set, bool value = true);
 
-    bool has_feature(Feature f) const {
-        if (f == FeatureEnd) return true;
-        user_assert(f < FeatureEnd) << "Invalid Target feature.\n";
-        return features[f];
-    }
+    bool has_feature(Feature f) const;
 
-    bool features_any_of(std::vector<Feature> test_features) const {
-        for (Feature f : test_features) {
-            if (has_feature(f)) {
-                return true;
-            }
-        }
-        return false;
-    }
+    bool features_any_of(std::vector<Feature> test_features) const;
 
-    bool features_all_of(std::vector<Feature> test_features) const {
-        for (Feature f : test_features) {
-            if (!has_feature(f)) {
-                return false;
-            }
-        }
-        return true;
-    }
+    bool features_all_of(std::vector<Feature> test_features) const;
 
     /** Return a copy of the target with the given feature set.
      * This is convenient when enabling certain features (e.g. NoBoundsQuery)
      * in an initialization list, where the target to be mutated may be
      * a const reference. */
-    Target with_feature(Feature f) const {
-        Target copy = *this;
-        copy.set_feature(f);
-        return copy;
-    }
+    Target with_feature(Feature f) const;
 
     /** Return a copy of the target with the given feature cleared.
      * This is convenient when disabling certain features (e.g. NoBoundsQuery)
      * in an initialization list, where the target to be mutated may be
      * a const reference. */
-    Target without_feature(Feature f) const {
-        Target copy = *this;
-        copy.set_feature(f, false);
-        return copy;
-    }
+    Target without_feature(Feature f) const;
 
     /** Is a fully feature GPU compute runtime enabled? I.e. is
      * Func::gpu_tile and similar going to work? Currently includes
-     * CUDA, OpenCL, and Metal. We do not include OpenGL, because it
-     * is not capable of gpgpu, and is not scheduled via
+     * CUDA, OpenCL, Metal and D3D12Compute. We do not include OpenGL,
+     * because it is not capable of gpgpu, and is not scheduled via
      * Func::gpu_tile.
      * TODO: Should OpenGLCompute be included here? */
-    bool has_gpu_feature() const {
-        return has_feature(CUDA) || has_feature(OpenCL) || has_feature(Metal);
-    }
+    bool has_gpu_feature() const;
 
     /** Does this target allow using a certain type. Generally all
      * types except 64-bit float and int/uint should be supported by
@@ -185,26 +181,16 @@ struct Target {
      *
      * It is likely better to call the version below which takes a DeviceAPI.
      */
-    bool supports_type(const Type &t) const {
-        if (t.bits() == 64) {
-            if (t.is_float()) {
-                return !has_feature(Metal) &&
-                       (!has_feature(Target::OpenCL) || has_feature(Target::CLDoubles));
-            } else {
-                return !has_feature(Metal);
-            }
-        }
-        return true;
-    }
+    bool supports_type(const Type &t) const;
 
     /** Does this target allow using a certain type on a certain device.
      * This is the prefered version of this routine.
      */
-    EXPORT bool supports_type(const Type &t, DeviceAPI device) const;
+    bool supports_type(const Type &t, DeviceAPI device) const;
 
     /** Returns whether a particular device API can be used with this
      * Target. */
-    EXPORT bool supports_device_api(DeviceAPI api) const;
+    bool supports_device_api(DeviceAPI api) const;
 
     bool operator==(const Target &other) const {
       return os == other.os &&
@@ -217,6 +203,17 @@ struct Target {
       return !(*this == other);
     }
 
+    /**
+     * Create a "greatest common denominator" runtime target that is compatible with
+     * both this target and \p other. Used by generators to conveniently select a suitable
+     * runtime when linking together multiple functions.
+     *
+     * @param other The other target from which we compute the gcd target.
+     * @param[out] result The gcd target if we return true, otherwise unmodified. Can be the same as *this.
+     * @return Whether it was possible to find a compatible target (true) or not.
+     */
+    bool get_runtime_compatible_target(const Target& other, Target &result);
+
     /** Convert the Target into a string form that can be reconstituted
      * by merge_string(), which will always be of the form
      *
@@ -228,59 +225,11 @@ struct Target {
      * *unless* t1 contains 'unknown' fields (in which case you'll get a string
      * that can't be parsed, which is intentional).
      */
-    EXPORT std::string to_string() const;
+    std::string to_string() const;
 
     /** Given a data type, return an estimate of the "natural" vector size
      * for that data type when compiling for this Target. */
-    int natural_vector_size(Halide::Type t) const {
-        user_assert(os != OSUnknown && arch != ArchUnknown && bits != 0)
-            << "natural_vector_size cannot be used on a Target with Unknown values.\n";
-
-        const bool is_integer = t.is_int() || t.is_uint();
-        const int data_size = t.bytes();
-
-        if (arch == Target::Hexagon) {
-            if (is_integer) {
-                // HVX is either 64 or 128 *byte* vector size.
-                if (has_feature(Halide::Target::HVX_128)) {
-                    return 128 / data_size;
-                } else if (has_feature(Halide::Target::HVX_64)) {
-                    return 64 / data_size;
-                } else {
-                    user_error << "Target uses hexagon arch without hvx_128 or hvx_64 set.\n";
-                    return 0;
-                }
-            } else {
-                // HVX does not have vector float instructions.
-                return 1;
-            }
-        } else if (arch == Target::X86) {
-            if (is_integer && (has_feature(Halide::Target::AVX512_Skylake) ||
-                               has_feature(Halide::Target::AVX512_Cannonlake))) {
-                // AVX512BW exists on Skylake and Cannonlake
-                return 64 / data_size;
-            } else if (t.is_float() && (has_feature(Halide::Target::AVX512) ||
-                                        has_feature(Halide::Target::AVX512_KNL) ||
-                                        has_feature(Halide::Target::AVX512_Skylake) ||
-                                        has_feature(Halide::Target::AVX512_Cannonlake))) {
-                // AVX512F is on all AVX512 architectures
-                return 64 / data_size;
-            } else if (has_feature(Halide::Target::AVX2)) {
-                // AVX2 uses 256-bit vectors for everything.
-                return 32 / data_size;
-            } else if (!is_integer && has_feature(Halide::Target::AVX)) {
-                // AVX 1 has 256-bit vectors for float, but not for
-                // integer instructions.
-                return 32 / data_size;
-            } else {
-                // SSE was all 128-bit. We ignore MMX.
-                return 16 / data_size;
-            }
-        } else {
-            // Assume 128-bit vectors on other targets.
-            return 16 / data_size;
-        }
-    }
+    int natural_vector_size(const Halide::Type &t) const;
 
     /** Given a data type, return an estimate of the "natural" vector size
      * for that data type when compiling for this Target. */
@@ -306,7 +255,7 @@ struct Target {
     }
 
     /** Was libHalide compiled with support for this target? */
-    EXPORT bool supported() const;
+    bool supported() const;
 
 private:
     /** A bitmask that stores the active features. */
@@ -314,30 +263,29 @@ private:
 };
 
 /** Return the target corresponding to the host machine. */
-EXPORT Target get_host_target();
+Target get_host_target();
 
 /** Return the target that Halide will use. If HL_TARGET is set it
  * uses that. Otherwise calls \ref get_host_target */
-EXPORT Target get_target_from_environment();
+Target get_target_from_environment();
 
 /** Return the target that Halide will use for jit-compilation. If
  * HL_JIT_TARGET is set it uses that. Otherwise calls \ref
  * get_host_target. Throws an error if the architecture, bit width,
  * and OS of the target do not match the host target, so this is only
  * useful for controlling the feature set. */
-EXPORT Target get_jit_target_from_environment();
+Target get_jit_target_from_environment();
 
 /** Get the Target feature corresponding to a DeviceAPI. For device
  * apis that do not correspond to any single target feature, returns
  * Target::FeatureEnd */
-EXPORT Target::Feature target_feature_for_device_api(DeviceAPI api);
+Target::Feature target_feature_for_device_api(DeviceAPI api);
 
 namespace Internal {
 
-EXPORT void target_test();
-
+void target_test();
 }
 
-}
+}  // namespace Halide
 
 #endif

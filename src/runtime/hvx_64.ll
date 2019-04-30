@@ -411,3 +411,64 @@ define weak_odr <32 x i32> @halide.hexagon.vtmpy.vh.vh.b.b(<32 x i16> %low_v, <3
   %res = call <32 x i32> @llvm.hexagon.V6.vtmpyhb(<32 x i32> %dv, i32 %const)
   ret <32 x i32> %res
 }
+
+declare void @llvm.hexagon.V6.vgathermh(i8*, i32, i32, <16 x i32>)
+declare void @llvm.hexagon.V6.vgathermw(i8*, i32, i32, <16 x i32>)
+
+define weak_odr void @halide.hexagon.vgather.h.h(i8* %dst_base, i32 %dst_index, i8* %src_ptr, i32 %size, <32 x i16> %index) nounwind uwtable {
+  %index32 = bitcast <32 x i16> %index to <16 x i32>
+  %src = ptrtoint i8* %src_ptr to i32
+  %dst_16base = bitcast i8* %dst_base to i16*
+  %dst_16ptr = getelementptr i16, i16* %dst_16base, i32 %dst_index
+  %dst_ptr = bitcast i16* %dst_16ptr to i8*
+  call void @llvm.hexagon.V6.vgathermh(i8* %dst_ptr, i32 %src, i32 %size, <16 x i32> %index32)
+  ret void
+}
+
+define weak_odr void @halide.hexagon.vgather.w.w(i8* %dst_base, i32 %dst_index, i8* %src_ptr, i32 %size, <16 x i32> %index) nounwind uwtable {
+  %src = ptrtoint i8* %src_ptr to i32
+  %dst_32base = bitcast i8* %dst_base to i32*
+  %dst_32ptr = getelementptr i32, i32* %dst_32base, i32 %dst_index
+  %dst_ptr = bitcast i32* %dst_32ptr to i8*
+  call void @llvm.hexagon.V6.vgathermw(i8* %dst_ptr, i32 %src, i32 %size, <16 x i32> %index)
+  ret void
+}
+
+declare void @llvm.hexagon.V6.vscattermh(i32, i32, <16 x i32>, <16 x i32>)
+declare void @llvm.hexagon.V6.vscattermw(i32, i32, <16 x i32>, <16 x i32>)
+
+define weak_odr void @halide.hexagon.vscatter.h.h(i8* %buf_ptr, i32 %size, <32 x i16> %idx, <32 x i16> %val) nounwind uwtable writeonly {
+  %idx32 = bitcast <32 x i16> %idx to <16 x i32>
+  %val32 = bitcast <32 x i16> %val to <16 x i32>
+  %buf = ptrtoint i8* %buf_ptr to i32
+  call void @llvm.hexagon.V6.vscattermh(i32 %buf, i32 %size, <16 x i32> %idx32, <16 x i32> %val32)
+  ret void
+}
+
+define weak_odr void @halide.hexagon.vscatter.w.w(i8* %buf_ptr, i32 %size, <16 x i32> %idx, <16 x i32> %val) nounwind uwtable writeonly {
+  %buf = ptrtoint i8* %buf_ptr to i32
+  call void @llvm.hexagon.V6.vscattermw(i32 %buf, i32 %size, <16 x i32> %idx, <16 x i32> %val)
+  ret void
+}
+
+declare void @llvm.hexagon.V6.vscattermh.add(i32, i32, <16 x i32>, <16 x i32>)
+declare void @llvm.hexagon.V6.vscattermw.add(i32, i32, <16 x i32>, <16 x i32>)
+
+define weak_odr void @halide.hexagon.vscatter_acc.h.h(i8* %buf_ptr, i32 %size, <32 x i16> %idx, <32 x i16> %val) nounwind uwtable writeonly {
+  %idx32 = bitcast <32 x i16> %idx to <16 x i32>
+  %val32 = bitcast <32 x i16> %val to <16 x i32>
+  %buf = ptrtoint i8* %buf_ptr to i32
+  call void @llvm.hexagon.V6.vscattermh.add(i32 %buf, i32 %size, <16 x i32> %idx32, <16 x i32> %val32)
+  ret void
+}
+
+define weak_odr void @halide.hexagon.vscatter_acc.w.w(i8* %buf_ptr, i32 %size, <16 x i32> %idx, <16 x i32> %val) nounwind uwtable writeonly {
+  %buf = ptrtoint i8* %buf_ptr to i32
+  call void @llvm.hexagon.V6.vscattermw.add(i32 %buf, i32 %size, <16 x i32> %idx, <16 x i32> %val)
+  ret void
+}
+
+define weak_odr void @halide.hexagon.scatter.release(i8* %ptr) nounwind uwtable {
+  call void asm sideeffect "vmem($0 + #0):scatter_release\0A; v1 = vmem($0 + #0)\0A", "=*m,*m,~{v1}"(i8* %ptr, i8* %ptr)
+  ret void
+}

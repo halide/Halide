@@ -51,7 +51,7 @@ void my_free(void *ctx, void *ptr) {
 // Custom lowering pass to count the number of IfThenElse statements found inside
 // ProducerConsumer nodes.
 int if_then_else_count = 0;
-class CountIfThenElse : public Internal::IRMutator2 {
+class CountIfThenElse : public Internal::IRMutator {
     int producer_consumers;
 
 public:
@@ -60,7 +60,7 @@ public:
     Internal::Stmt visit(const Internal::ProducerConsumer *op) override {
         // Only count ifs found inside a pipeline.
         producer_consumers++;
-        Internal::Stmt stmt = IRMutator2::visit(op);
+        Internal::Stmt stmt = IRMutator::visit(op);
         producer_consumers--;
         return stmt;
     }
@@ -68,12 +68,17 @@ public:
         if (producer_consumers > 0) {
             if_then_else_count++;
         }
-        return Internal::IRMutator2::visit(op);
+        return Internal::IRMutator::visit(op);
     }
-    using Internal::IRMutator2::visit;
+    using Internal::IRMutator::visit;
 };
 
 int main(int argc, char **argv) {
+    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
+        printf("Skipping test for WebAssembly as the wasm JIT cannot support set_custom_allocator.\n");
+        return 0;
+    }
+
     {
         Param<bool> param;
 
@@ -393,8 +398,8 @@ int main(int argc, char **argv) {
         f(x, y) = im(x, y);
         out(x, y) = f(x, y);
 
-        f.compute_at(out, x).specialize(cond1 && cond2).vectorize(x, 4);
-        out.compute_root().specialize(cond1 && cond2).vectorize(x, 4);
+        f.compute_at(out, x).specialize(cond1 && cond2).vectorize(x, 4, TailStrategy::RoundUp);
+        out.compute_root().specialize(cond1 && cond2).vectorize(x, 4, TailStrategy::RoundUp);
 
         if_then_else_count = 0;
         CountIfThenElse pass1;
@@ -422,8 +427,8 @@ int main(int argc, char **argv) {
         f(x, y) = im(x, y);
         out(x, y) = f(x, y);
 
-        f.compute_at(out, x).specialize(cond1).vectorize(x, 4);
-        out.compute_root().specialize(cond1 && cond2).vectorize(x, 4);
+        f.compute_at(out, x).specialize(cond1).vectorize(x, 4, TailStrategy::RoundUp);
+        out.compute_root().specialize(cond1 && cond2).vectorize(x, 4, TailStrategy::RoundUp);
 
         if_then_else_count = 0;
         CountIfThenElse pass2;

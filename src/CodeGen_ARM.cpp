@@ -3,22 +3,22 @@
 
 #include "CodeGen_ARM.h"
 #include "ConciseCasts.h"
-#include "IROperator.h"
-#include "IRMatch.h"
-#include "IREquality.h"
 #include "Debug.h"
-#include "Util.h"
-#include "Simplify.h"
+#include "IREquality.h"
+#include "IRMatch.h"
+#include "IROperator.h"
 #include "IRPrinter.h"
 #include "LLVM_Headers.h"
+#include "Simplify.h"
+#include "Util.h"
 
 namespace Halide {
 namespace Internal {
 
-using std::vector;
-using std::string;
 using std::ostringstream;
 using std::pair;
+using std::string;
+using std::vector;
 
 using namespace Halide::ConciseCasts;
 using namespace llvm;
@@ -226,6 +226,26 @@ CodeGen_ARM::CodeGen_ARM(Target target) : CodeGen_Posix(target) {
     negations.push_back(Pattern("vqneg.v16i8", "sqneg.v16i8", 16, -max(wild_i8x_, -127)));
     negations.push_back(Pattern("vqneg.v8i16", "sqneg.v8i16", 8,  -max(wild_i16x_, -32767)));
     negations.push_back(Pattern("vqneg.v4i32", "sqneg.v4i32", 4,  -max(wild_i32x_, -(0x7fffffff))));
+
+    // Widening multiplies.
+    multiplies.push_back(Pattern("vmulls.v2i64", "smull.v2i64", 2,
+                                 wild_i64x_ * wild_i64x_,
+                                 Pattern::NarrowArgs));
+    multiplies.push_back(Pattern("vmullu.v2i64", "umull.v2i64", 2,
+                                 wild_u64x_ * wild_u64x_,
+                                 Pattern::NarrowArgs));
+    multiplies.push_back(Pattern("vmulls.v4i32", "smull.v4i32", 4,
+                                 wild_i32x_ * wild_i32x_,
+                                 Pattern::NarrowArgs));
+    multiplies.push_back(Pattern("vmullu.v4i32", "umull.v4i32", 4,
+                                 wild_u32x_ * wild_u32x_,
+                                 Pattern::NarrowArgs));
+    multiplies.push_back(Pattern("vmulls.v8i16", "smull.v8i16", 8,
+                                 wild_i16x_ * wild_i16x_,
+                                 Pattern::NarrowArgs));
+    multiplies.push_back(Pattern("vmullu.v8i16", "umull.v8i16", 8,
+                                 wild_u16x_ * wild_u16x_,
+                                 Pattern::NarrowArgs));
 }
 
 Value *CodeGen_ARM::call_pattern(const Pattern &p, Type t, const vector<Expr> &args) {
@@ -308,7 +328,6 @@ void CodeGen_ARM::visit(const Cast *op) {
         }
     }
 
-
     // Catch extract-high-half-of-signed integer pattern and convert
     // it to extract-high-half-of-unsigned-integer. llvm peephole
     // optimization recognizes logical shift right but not arithemtic
@@ -361,9 +380,57 @@ void CodeGen_ARM::visit(const Mul *op) {
         return;
     }
 
+    Type t = op->type;
+    vector<Expr> matches;
+
+    int shift_amount = 0;
+    if (is_const_power_of_two_integer(op->b, &shift_amount)) {
+        // Let LLVM handle these.
+        CodeGen_Posix::visit(op);
+        return;
+    }
+
+    // LLVM really struggles to generate mlal unless we generate mull intrinsics
+    // for the multiplication part first.
+    for (size_t i = 0; i < multiplies.size() ; i++) {
+        const Pattern &pattern = multiplies[i];
+        //debug(4) << "Trying pattern: " << patterns[i].intrin << " " << patterns[i].pattern << "\n";
+        if (expr_match(pattern.pattern, op, matches)) {
+
+            //debug(4) << "Match!\n";
+            if (pattern.type == Pattern::Simple) {
+                value = call_pattern(pattern, t, matches);
+                return;
+            } else if (pattern.type == Pattern::NarrowArgs) {
+                Type narrow_t = t.with_bits(t.bits() / 2);
+                // Try to narrow all of the args.
+                bool all_narrow = true;
+                for (size_t i = 0; i < matches.size(); i++) {
+                    internal_assert(matches[i].type().bits() == t.bits());
+                    internal_assert(matches[i].type().lanes() == t.lanes());
+                    // debug(4) << "Attemping to narrow " << matches[i] << " to " << t << "\n";
+                    matches[i] = lossless_cast(narrow_t, matches[i]);
+                    if (!matches[i].defined()) {
+                        // debug(4) << "failed\n";
+                        all_narrow = false;
+                    } else {
+                        // debug(4) << "success: " << matches[i] << "\n";
+                        internal_assert(matches[i].type() == narrow_t);
+                    }
+                }
+
+                if (all_narrow) {
+                    value = call_pattern(pattern, t, matches);
+                    return;
+                }
+            }
+        }
+    }
+
     // Vector multiplies by 3, 5, 7, 9 should do shift-and-add or
     // shift-and-sub instead to reduce register pressure (the
     // shift is an immediate)
+    // TODO: Verify this is still good codegen.
     if (is_const(op->b, 3)) {
         value = codegen(op->a*2 + op->a);
         return;
@@ -376,30 +443,6 @@ void CodeGen_ARM::visit(const Mul *op) {
     } else if (is_const(op->b, 9)) {
         value = codegen(op->a*8 + op->a);
         return;
-    }
-
-    vector<Expr> matches;
-
-    int shift_amount = 0;
-    bool power_of_two = is_const_power_of_two_integer(op->b, &shift_amount);
-    if (power_of_two) {
-        for (size_t i = 0; i < left_shifts.size(); i++) {
-            const Pattern &pattern = left_shifts[i];
-            internal_assert(pattern.type == Pattern::LeftShift);
-            if (expr_match(pattern.pattern, op, matches)) {
-                llvm::Type *t_arg = llvm_type_of(matches[0].type());
-                llvm::Type *t_result = llvm_type_of(op->type);
-                Value *shift = nullptr;
-                if (target.bits == 32) {
-                    shift = ConstantInt::get(t_arg, shift_amount);
-                } else {
-                    shift = ConstantInt::get(i32_t, shift_amount);
-                }
-                value = call_pattern(pattern, t_result,
-                                     {codegen(matches[0]), shift});
-                return;
-            }
-        }
     }
 
     CodeGen_Posix::visit(op);
@@ -480,8 +523,10 @@ void CodeGen_ARM::visit(const Min *op) {
         // Use a 2-wide vector instead
         Value *undef = UndefValue::get(f32x2);
         Constant *zero = ConstantInt::get(i32_t, 0);
-        Value *a_wide = builder->CreateInsertElement(undef, codegen(op->a), zero);
-        Value *b_wide = builder->CreateInsertElement(undef, codegen(op->b), zero);
+        Value *a = codegen(op->a);
+        Value *a_wide = builder->CreateInsertElement(undef, a, zero);
+        Value *b = codegen(op->b);
+        Value *b_wide = builder->CreateInsertElement(undef, b, zero);
         Value *wide_result;
         if (target.bits == 32) {
             wide_result = call_intrin(f32x2, 2, "llvm.arm.neon.vmins.v2f32", {a_wide, b_wide});
@@ -553,8 +598,10 @@ void CodeGen_ARM::visit(const Max *op) {
         // Use a 2-wide vector instead
         Value *undef = UndefValue::get(f32x2);
         Constant *zero = ConstantInt::get(i32_t, 0);
-        Value *a_wide = builder->CreateInsertElement(undef, codegen(op->a), zero);
-        Value *b_wide = builder->CreateInsertElement(undef, codegen(op->b), zero);
+        Value *a = codegen(op->a);
+        Value *a_wide = builder->CreateInsertElement(undef, a, zero);
+        Value *b = codegen(op->b);
+        Value *b_wide = builder->CreateInsertElement(undef, b, zero);
         Value *wide_result;
         if (target.bits == 32) {
             wide_result = call_intrin(f32x2, 2, "llvm.arm.neon.vmaxs.v2f32", {a_wide, b_wide});
@@ -718,7 +765,11 @@ void CodeGen_ARM::visit(const Store *op) {
             arg_types.back() = llvm_type_of(intrin_type.element_of())->getPointerTo();
         }
         llvm::FunctionType *fn_type = FunctionType::get(llvm::Type::getVoidTy(*context), arg_types, false);
+#if LLVM_VERSION >= 90
+        llvm::FunctionCallee fn = module->getOrInsertFunction(instr.str(), fn_type);
+#else
         llvm::Function *fn = dyn_cast_or_null<llvm::Function>(module->getOrInsertFunction(instr.str(), fn_type));
+#endif
         internal_assert(fn);
 
         // How many vst instructions do we need to generate?
@@ -1002,4 +1053,5 @@ int CodeGen_ARM::native_vector_bits() const {
     return 128;
 }
 
-}}
+}  // namespace Internal
+}  // namespace Halide

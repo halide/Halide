@@ -13,7 +13,7 @@ public:
 
     using IRVisitor::visit;
 
-    void visit(const Shuffle *op) {
+    void visit(const Shuffle *op) override {
         if (op->is_interleave()) {
             result++;
         }
@@ -96,7 +96,7 @@ int main(int argc, char **argv) {
         define(g(x), g_def);
         std::vector<Expr> h_def;
         for (int i = 0; i < elements; i++) {
-            h_def.push_back(select(x % 2 == 0, 1.0f/element(f(x/2), i), element(g(x/2), i)*17.0f));
+            h_def.push_back(select(x % 2 == 0, element(f(x/2), i), element(g(x/2), i)*17.0f));
             g_def.push_back(cos(x + i));
         }
         define(h(x), h_def);
@@ -111,7 +111,7 @@ int main(int argc, char **argv) {
         for (int i = 0; i < elements; i++) {
             Buffer<float> result = results[i];
             for (int x = 0; x < 16; x++) {
-                float correct = ((x % 2) == 0) ? (1.0f/(sinf(x/2 + i))) : (cosf(x/2 + i)*17.0f);
+                float correct = ((x % 2) == 0) ? ((sinf(x/2 + i))) : (cosf(x/2 + i)*17.0f);
                 float delta = result(x) - correct;
                 if (delta > 0.01 || delta < -0.01) {
                     printf("result(%d) = %f instead of %f\n", x, result(x), correct);
@@ -276,6 +276,17 @@ int main(int argc, char **argv) {
     }
 
     for (int elements = 1; elements <= 5; elements++) {
+        const Target t = get_jit_target_from_environment();
+        if (t.arch == Target::WebAssembly &&
+            t.has_feature(Target::WasmSimd128) &&
+            elements == 5) {
+            // TODO: this bug is still active in v7.5; when it is fixed,
+            // find a way to re-enable this test iff we are using the appropriate
+            // version of v8.
+            printf("Skipping part of correctness_interleave test for WebAssembly+WasmSimd128 due to https://bugs.chromium.org/p/v8/issues/detail?id=9083.\n");
+            continue;
+        }
+
         // Make sure we don't interleave when the reordering would change the meaning.
         Realization* refs = nullptr;
         for (int i = 0; i < 2; i++) {

@@ -50,9 +50,17 @@ struct Outputs {
      * output is desired. */
     std::string static_library_name;
 
+    /** The name of the emitted Python extension glue C source file. Empty if no
+     * Python glue output is desired. */
+    std::string python_extension_name;
+
     /** The name of the emitted auto-schedule output file. Empty if no auto-schedule
      * output is desired. */
     std::string schedule_name;
+
+    /** The name of the emitted registration file. Empty if no registration
+     * output is desired. */
+    std::string registration_name;
 
     /** Make a new Outputs struct that emits everything this one does
      * and also an object file with the given name. */
@@ -127,14 +135,31 @@ struct Outputs {
     }
 
     /** Make a new Outputs struct that emits everything this one does
+     * and also a Python extension glue C source with the given name. */
+    Outputs python_extension(const std::string &python_extension_name) const {
+        Outputs updated = *this;
+        updated.python_extension_name = python_extension_name;
+        return updated;
+    }
+
+    /** Make a new Outputs struct that emits everything this one does
      * and also an auto-schedule output file with the given name. */
     Outputs schedule(const std::string &schedule_name) const {
         Outputs updated = *this;
         updated.schedule_name = schedule_name;
         return updated;
     }
+
+    /** Make a new Outputs struct that emits everything this one does
+     * and also a registration glue C++ source with the given name. */
+    Outputs registration(const std::string &registration_name) const {
+        Outputs updated = *this;
+        updated.registration_name = registration_name;
+        return updated;
+    }
+
 };
 
-}
+}  // namespace Halide
 
 #endif

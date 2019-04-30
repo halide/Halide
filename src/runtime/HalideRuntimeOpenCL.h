@@ -11,6 +11,8 @@ extern "C" {
  *  Routines specific to the Halide OpenCL runtime.
  */
 
+#define HALIDE_RUNTIME_OPENCL
+
 extern const struct halide_device_interface_t *halide_opencl_device_interface();
 
 /** These are forward declared here to allow clients to override the
@@ -85,6 +87,9 @@ extern int halide_opencl_detach_cl_mem(void *user_context, struct halide_buffer_
  *  returns 0.
  */
 extern uintptr_t halide_opencl_get_cl_mem(void *user_context, struct halide_buffer_t *buf);
+
+/** Returns the offset associated with the OpenCL memory allocation via device_crop or device_slice. */
+extern uint64_t halide_opencl_get_crop_offset(void *user_context, halide_buffer_t *buf);
 
 #ifdef __cplusplus
 } // End extern "C"

@@ -81,8 +81,6 @@ size_t fwrite(const void *, size_t, size_t, void *);
 ssize_t write(int fd, const void *buf, size_t bytes);
 int remove(const char *pathname);
 int ioctl(int fd, unsigned long request, ...);
-void exit(int);
-void abort();
 char *strncpy(char *dst, const char *src, size_t n);
 
 // Below are prototypes for various functions called by generated code
@@ -147,36 +145,20 @@ WEAK int halide_matlab_call_pipeline(void *user_context,
                                      int (*pipeline)(void **args), const halide_filter_metadata_t *metadata,
                                      int nlhs, mxArray **plhs, int nrhs, const mxArray **prhs);
 
-
-// Condition variables. Only available on some platforms (those that use the common thread pool).
-struct halide_cond {
-    uint64_t _private[8];
-};
-
-WEAK void halide_cond_init(struct halide_cond *cond);
-WEAK void halide_cond_destroy(struct halide_cond *cond);
-WEAK void halide_cond_broadcast(struct halide_cond *cond);
-WEAK void halide_cond_wait(struct halide_cond *cond, struct halide_mutex *mutex);
-
 WEAK int halide_trace_helper(void *user_context,
                              const char *func,
                              void *value, int *coords,
                              int type_code, int type_bits, int type_lanes,
                              int code,
-                             int parent_id, int value_index, int dimensions);
+                             int parent_id, int value_index, int dimensions,
+                             const char *trace_tag);
+
+struct halide_pseudostack_slot_t {
+    void *ptr;
+    size_t size;
+};
 
 }  // extern "C"
-
-/** A macro that calls halide_print if the supplied condition is
- * false, then aborts. Used for unrecoverable errors, or
- * should-never-happen errors. */
-#define _halide_stringify(x) #x
-#define _halide_expand_and_stringify(x) _halide_stringify(x)
-#define halide_assert(user_context, cond)                               \
-    if (!(cond)) {                                                      \
-        halide_print(user_context, __FILE__ ":" _halide_expand_and_stringify(__LINE__) " Assert failed: " #cond "\n"); \
-        abort();                                                        \
-    }
 
 // A convenient namespace for weak functions that are internal to the
 // halide runtime.
@@ -184,14 +166,6 @@ namespace Halide { namespace Runtime { namespace Internal {
 
 extern WEAK void halide_use_jit_module();
 extern WEAK void halide_release_jit_module();
-
-// Return a mask with all CPU-specific features supported by the current CPU set.
-struct CpuFeatures {
-    uint64_t known;     // mask of the CPU features we know how to detect
-    uint64_t available; // mask of the CPU features that are available
-                              // (always a subset of 'known')
-};
-extern WEAK CpuFeatures halide_get_cpu_features();
 
 template <typename T>
 __attribute__((always_inline)) void swap(T &a, T &b) {
@@ -219,7 +193,22 @@ __attribute__((always_inline)) T reinterpret(const U &x) {
 
 extern WEAK __attribute__((always_inline)) int halide_malloc_alignment();
 
+extern WEAK __attribute__((always_inline)) void halide_abort();
+
+void halide_thread_yield();
+
 }}}
+
+/** A macro that calls halide_print if the supplied condition is
+ * false, then aborts. Used for unrecoverable errors, or
+ * should-never-happen errors. */
+#define _halide_stringify(x) #x
+#define _halide_expand_and_stringify(x) _halide_stringify(x)
+#define halide_assert(user_context, cond)                               \
+    if (!(cond)) {                                                      \
+        halide_print(user_context, __FILE__ ":" _halide_expand_and_stringify(__LINE__) " Assert failed: " #cond "\n"); \
+        halide_abort();                                                        \
+    }
 
 using namespace Halide::Runtime::Internal;
 

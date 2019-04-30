@@ -63,12 +63,13 @@ int main(int argc, char **argv) {
     // Pass in a set of GeneratorParams: even though we aren't customizing
     // the values, we can set the LoopLevel values after-the-fact.
     StubTest::GeneratorParams gp;
-    auto gen = StubTest(
+    auto gen = StubTest::generate(
         GeneratorContext(get_jit_target_from_environment()),
         // Use aggregate-initialization syntax to fill in an Inputs struct.
         {
             buffer_input,  // typed_buffer_input
             buffer_input,  // untyped_buffer_input
+            { buffer_input, buffer_input },
             Func(simple_input),
             { Func(array_input[0]), Func(array_input[1]) },
             1.25f,
@@ -77,7 +78,6 @@ int main(int argc, char **argv) {
         gp);
 
     gp.intermediate_level.set(LoopLevel(gen.tuple_output, gen.tuple_output.args().at(1)));
-    gen.schedule();
 
     Realization simple_output_realized = gen.simple_output.realize(kSize, kSize, 3);
     Buffer<float> s0 = simple_output_realized;
@@ -90,7 +90,7 @@ int main(int argc, char **argv) {
     verify(array_input[0], 1.25f, 33, f1);
 
     for (int i = 0; i < kArrayCount; ++i) {
-        Realization array_output_realized = gen.array_output[i].realize(kSize, kSize, gen.get_target());
+        Realization array_output_realized = gen.array_output[i].realize(kSize, kSize, gen.target);
         Buffer<int16_t> g0 = array_output_realized;
         verify(array_input[i], 1.0f, int_args[i], g0);
     }
@@ -106,6 +106,12 @@ int main(int argc, char **argv) {
     Realization static_compiled_buffer_output_realized = gen.static_compiled_buffer_output.realize(kSize, kSize, 3);
     Buffer<uint8_t> b2 = static_compiled_buffer_output_realized;
     verify(buffer_input, 1.f, 42, b2);
+
+    for (int i = 0; i < 2; ++i) {
+        Realization array_buffer_output_realized = gen.array_buffer_output[i].realize(kSize, kSize, 3);
+        Buffer<uint8_t> b2 = array_buffer_output_realized;
+        verify(buffer_input, 1.f, 1 + i, b2);
+    }
 
     printf("Success!\n");
     return 0;

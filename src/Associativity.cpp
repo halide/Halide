@@ -2,13 +2,13 @@
 #include "CSE.h"
 #include "ExprUsesVar.h"
 #include "IREquality.h"
-#include "IROperator.h"
 #include "IRMatch.h"
 #include "IRMutator.h"
+#include "IROperator.h"
 #include "IRPrinter.h"
+#include "Simplify.h"
 #include "Solve.h"
 #include "Substitute.h"
-#include "Simplify.h"
 #include "Util.h"
 
 #include <algorithm>
@@ -25,7 +25,7 @@ using std::vector;
 
 namespace {
 
-template <typename T>
+template<typename T>
 vector<T> get_subvector(const vector<T> &v, const set<int> &indices) {
     vector<T> sub;
     for (const auto &index : indices) {
@@ -37,8 +37,8 @@ vector<T> get_subvector(const vector<T> &v, const set<int> &indices) {
 
 // Replace self-references to 'func' with arguments 'args' at
 // 'value_index' in the Expr/Stmt with some Var
-class ConvertSelfRef : public IRMutator2 {
-    using IRMutator2::visit;
+class ConvertSelfRef : public IRMutator {
+    using IRMutator::visit;
 
     const string &func;
     const vector<Expr> &args;
@@ -51,7 +51,7 @@ class ConvertSelfRef : public IRMutator2 {
         if (!is_solvable) {
             return op;
         }
-        Expr expr = IRMutator2::visit(op);
+        Expr expr = IRMutator::visit(op);
         op = expr.as<Call>();
         internal_assert(op);
 
@@ -757,7 +757,7 @@ void associativity_test() {
         check_associativity("f", {x}, {f_call_0*g_call_0 - f_call_1*g_call_1, f_call_0*g_call_1 + f_call_1*g_call_0},
                             AssociativeOp(
                               AssociativePattern(
-                                {xs[0]*ys[0] - xs[1]*ys[1], xs[1]*ys[0] + xs[0]*ys[1]},
+                                {xs[0]*ys[0] - ys[1]*xs[1], xs[1]*ys[0] + ys[1]*xs[0]},
                                 {make_const(ts[0], 1), make_const(ts[1], 0)},
                                 true),
                               {Replacement("x0", f_call_0), Replacement("x1", f_call_1)},
@@ -825,6 +825,5 @@ void associativity_test() {
     std::cout << "Associativity test passed" << std::endl;
 }
 
-
-}
-}
+}  // namespace Internal
+}  // namespace Halide

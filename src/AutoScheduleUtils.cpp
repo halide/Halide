@@ -1,14 +1,69 @@
+#include <sstream>
+
 #include "AutoScheduleUtils.h"
+#include "IREquality.h"
+#include "ImageParam.h"
 #include "Inline.h"
+#include "Param.h"
 #include "Simplify.h"
+#include "Var.h"
 
 namespace Halide {
 namespace Internal {
 
-using std::string;
 using std::map;
 using std::set;
+using std::string;
 using std::vector;
+
+namespace {
+class SubstituteVarEstimates: public IRMutator {
+    using IRMutator::visit;
+
+    Expr visit(const Variable *var) override {
+        if (var->param.defined() && var->param.is_buffer()) {
+            // This is a var associated with an ImageParam object. This
+            // should be something of the form XXX.min.[dim_index] or
+            // XXX.extent.[dim_index]
+            std::vector<std::string> v = split_string(var->name, ".");
+            user_assert(v.size() >= 3);
+            int d = string_to_int(v[v.size()-1]);
+            if (v[v.size()-2] == "min") {
+                Expr est = var->param.min_constraint_estimate(d);
+                return est.defined() ? est : var;
+            } else {
+                internal_assert(v[v.size()-2] == "extent");
+                Expr est = var->param.extent_constraint_estimate(d);
+                return est.defined() ? est : var;
+            }
+        } else if (var->param.defined() && !var->param.is_buffer() &&
+            var->param.estimate().defined()) {
+            // This is a var from a Param object
+            return var->param.estimate();
+        } else {
+            return var;
+        }
+    }
+};
+} // anonymous namespace
+
+Expr subsitute_var_estimates(Expr e) {
+    if (!e.defined()) return e;
+    return simplify(SubstituteVarEstimates().mutate(e));
+}
+
+Stmt subsitute_var_estimates(Stmt s) {
+    if (!s.defined()) return s;
+    return simplify(SubstituteVarEstimates().mutate(s));
+}
+
+int string_to_int(const string &s) {
+    std::istringstream iss(s);
+    int i;
+    iss >> i;
+    user_assert(!iss.fail() && iss.get() == EOF) << "Unable to parse: " << s;
+    return i;
+}
 
 Expr get_extent(const Interval &i) {
     if (!i.is_bounded()) {
@@ -50,6 +105,7 @@ void combine_load_costs(map<string, Expr> &result, const map<string, Expr> &part
 }
 
 Definition get_stage_definition(const Function &f, int stage_num) {
+    internal_assert(!f.has_extern_definition());
     if (stage_num == 0) {
         return f.definition();
     }
@@ -57,10 +113,19 @@ Definition get_stage_definition(const Function &f, int stage_num) {
     return f.update(stage_num - 1);
 }
 
+vector<Dim> &get_stage_dims(const Function &f, int stage_num) {
+    static vector<Dim> outermost_only =
+        {{Var::outermost().name(), ForType::Serial, DeviceAPI::None, Dim::Type::PureVar}};
+    if (f.has_extern_definition()) {
+        return outermost_only;
+    }
+    Definition def = get_stage_definition(f, stage_num);
+    internal_assert(def.defined());
+    return def.schedule().dims();
+}
+
 DimBounds get_stage_bounds(Function f, int stage_num, const DimBounds &pure_bounds) {
     DimBounds bounds;
-    Definition def = get_stage_definition(f, stage_num);
-
     // Assume that the domain of the pure vars across all the update
     // definitions is the same. This may not be true and can result in
     // over estimation of the extent.
@@ -68,10 +133,13 @@ DimBounds get_stage_bounds(Function f, int stage_num, const DimBounds &pure_boun
         bounds[b.first] = b.second;
     }
 
-    for (const auto &rvar : def.schedule().rvars()) {
-        Expr lower = SubstituteVarEstimates().mutate(rvar.min);
-        Expr upper = SubstituteVarEstimates().mutate(rvar.min + rvar.extent - 1);
-        bounds.emplace(rvar.var, Interval(simplify(lower),simplify(upper)));
+    if (!f.has_extern_definition()) {
+        Definition def = get_stage_definition(f, stage_num);
+        for (const auto &rvar : def.schedule().rvars()) {
+            Expr lower = subsitute_var_estimates(rvar.min);
+            Expr upper = subsitute_var_estimates(rvar.min + rvar.extent - 1);
+            bounds.emplace(rvar.var, Interval(lower, upper));
+        }
     }
 
     return bounds;
@@ -87,7 +155,8 @@ vector<DimBounds> get_stage_bounds(Function f, const DimBounds &pure_bounds) {
 }
 
 Expr perform_inline(Expr e, const map<string, Function> &env,
-                    const set<string> &inlines) {
+                    const set<string> &inlines,
+                    const vector<string> &order) {
     if (inlines.empty()) {
         return e;
     }
@@ -100,8 +169,24 @@ Expr perform_inline(Expr e, const map<string, Function> &env,
         // Find all the function calls in the current expression.
         FindAllCalls find;
         inlined_expr.accept(&find);
-        const set<string> &calls = find.funcs_called;
+        const set<string> &calls_unsorted = find.funcs_called;
+
+        vector<string> calls(calls_unsorted.begin(), calls_unsorted.end());
+        // Sort 'calls' based on the realization order in descending order
+        // if provided (i.e. last to be realized comes first).
+        if (!order.empty()) {
+            std::sort(calls.begin(), calls.end(),
+                [&order](const string &lhs, const string &rhs){
+                    const auto &iter_lhs = std::find(order.begin(), order.end(), lhs);
+                    const auto &iter_rhs = std::find(order.begin(), order.end(), rhs);
+                    return iter_lhs > iter_rhs;
+                }
+            );
+        }
+
         // Check if any of the calls are in the set of functions to be inlined.
+        // Inline from the last function to be realized to avoid extra
+        // inlining works.
         for (const auto &call : calls) {
             if (inlines.find(call) != inlines.end()) {
                 Function prod_func = env.at(call);
@@ -158,5 +243,35 @@ void disp_regions(const map<string, Box> &regions) {
     }
 }
 
+namespace {
+void check(Expr input, Expr expected) {
+    Expr result = simplify(subsitute_var_estimates(input));
+    expected = simplify(expected);
+    if (!equal(result, expected)) {
+        internal_error
+            << "\nsubsitute_var_estimates() failure:\n"
+            << "Input: " << input << '\n'
+            << "Result: " << result << '\n'
+            << "Expected result: " << expected << '\n';
+    }
 }
+}  // anonymous namespace
+
+void propagate_estimate_test() {
+    Param<int> p;
+    p.set_estimate(10);
+
+    ImageParam img(Int(32), 2);
+    img.dim(0).set_bounds_estimate(-3, 33);
+    img.dim(1).set_bounds_estimate(5, 55);
+
+    Var x("x"), y("y");
+    check(p + x + y, x + y + 10);
+    check(img.dim(0).min() + img.dim(1).min() + x, x + 2);
+    check(img.dim(0).extent() + img.dim(1).min() + img.dim(1).extent()*x, 55*x + 38);
+
+    std::cout << "Propagate estimate test passed" << std::endl;
 }
+
+}  // namespace Internal
+}  // namespace Halide

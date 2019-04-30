@@ -1,13 +1,15 @@
+#include "Halide.h"
 #include <stdio.h>
 #include <math.h>
-#include "Halide.h"
 #include <iostream>
 #include <limits>
 
 using namespace Halide;
 
+static int num_errors = 0;
+
 template <typename value_t>
-bool relatively_equal(value_t a, value_t b) {
+bool relatively_equal(value_t a, value_t b, Target target) {
     if (a == b) {
         return true;
     } else if (!std::numeric_limits<value_t>::is_integer) {
@@ -27,6 +29,22 @@ bool relatively_equal(value_t a, value_t b) {
 
         if (relative_error < .000001) {
             return true;
+        }
+
+        // For HLSL, try again with a lower error threshold, as it might be using
+        // fast but approximated trigonometric functions:
+        if (target.supports_device_api(DeviceAPI::D3D12Compute) ||
+            target.supports_device_api(DeviceAPI::OpenGLCompute))
+        {
+            // this threshold value has been empirically determined since there
+            // is no clear documentation on the precision of these algorithms
+            const double threshold = .001023;
+            if (relative_error < threshold) {
+                std::cout << "relatively_equal: relaxed threshold for (" << a << ", " << b << ") "
+                          << "with relative error " << relative_error
+                          << " (shader fast trig)" << std::endl;
+                return true;
+            }
         }
 
         std::cerr
@@ -64,20 +82,23 @@ uint32_t absd(uint32_t a, uint32_t b) { return a < b ? b - a : a - b; }
         test_##name(x) = name(in(x));                                   \
         if (target.has_gpu_feature()) {                                 \
             test_##name.gpu_tile(x, xi, 8);                             \
+        } if (target.has_feature(Target::OpenGLCompute)) {              \
+            test_##name.gpu_tile(x, xi, 8, TailStrategy::Auto,          \
+                                 DeviceAPI::OpenGLCompute);             \
         } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) { \
             test_##name.hexagon();                                      \
         }                                                               \
         Buffer<type_ret> result = test_##name.realize(in.extent(0), target); \
         for (int i = 0; i < in.extent(0); i++) {                        \
             type_ret c_result = c_name(in(i));                          \
-            if (!relatively_equal(c_result, result(i)))                 \
-                printf("For " #name "(%.20f) == %.20f from cpu and %.20f from GPU.\n", (double)in(i), (double)c_result, (double)result(i)); \
-            assert(relatively_equal(c_result, result(i)) &&             \
-                   "Failure on function " #name);                       \
+            if (!relatively_equal(c_result, result(i), target)) {       \
+                fprintf(stderr, "For " #name "(%.20f) == %.20f from C and %.20f from %s.\n", (double)in(i), (double)c_result, (double)result(i), target.to_string().c_str()); \
+                num_errors++;                                           \
+            }                                                           \
         }                                                               \
     }
 
-// Version for a one argument function
+// Version for a two argument function
 #define fun_2(type_ret, type, name, c_name)                                         \
     void test_##type##_##name(Buffer<type> in) {                                    \
         Target target = get_jit_target_from_environment();                          \
@@ -89,14 +110,19 @@ uint32_t absd(uint32_t a, uint32_t b) { return a < b ? b - a : a - b; }
         test_##name(x) = name(in(0, x), in(1, x));                                  \
         if (target.has_gpu_feature()) {                                             \
             test_##name.gpu_tile(x, xi, 8);                                         \
+        } if (target.has_feature(Target::OpenGLCompute)) {              \
+            test_##name.gpu_tile(x, xi, 8, TailStrategy::Auto,          \
+                                 DeviceAPI::OpenGLCompute);             \
         } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {     \
             test_##name.hexagon();                                                  \
         }                                                                           \
-        Buffer<type_ret> result = test_##name.realize(in.height(), target);          \
+        Buffer<type_ret> result = test_##name.realize(in.height(), target);         \
         for (int i = 0; i < in.height(); i++) {                                     \
             type_ret c_result = c_name(in(0, i), in(1, i));                         \
-            assert(relatively_equal(c_result, result(i)) &&                         \
-                   "Failure on function " #name);                                   \
+            if (!relatively_equal(c_result, result(i), target)) {       \
+                fprintf(stderr, "For " #name "(%.20f) == %.20f from C and %.20f from %s.\n", (double)in(i), (double)c_result, (double)result(i), target.to_string().c_str()); \
+                num_errors++;                                           \
+            }                                                           \
         }                                                                           \
     }
 
@@ -132,13 +158,10 @@ fun_1_float_types(atan)
 fun_1_float_types(sinh)
 fun_1_float_types(cosh)
 fun_1_float_types(tanh)
-#ifndef _MSC_VER
-// These functions don't exist in msvc < 2012
 fun_1_float_types(asinh)
 fun_1_float_types(acosh)
 fun_1_float_types(atanh)
 fun_1_float_types(round)
-#endif
 
 fun_2_float_types(pow)
 fun_2_float_types(atan2)
@@ -204,7 +227,7 @@ struct TestArgs {
     call_1(double, name, steps, start, end)
 
 #define call_2_float_types(name, steps, start1, end1, start2, end2) \
-    call_2(float, name, steps, start1, end1, start2, end2)        \
+    call_2(float, name, steps, start1, end1, start2, end2)          \
     call_2(double, name, steps, start1, end1, start2, end2)
 
 int main(int argc, char **argv) {
@@ -224,12 +247,10 @@ int main(int argc, char **argv) {
     call_1_float_types(cosh, 256, 0, 1);
     call_1_float_types(tanh, 256, 5 * -3.1415f, 5 * 3.1415f);
 
-#ifndef _MSC_VER
     call_1_float_types(asinh, 256, -10.0, 10.0);
     call_1_float_types(acosh, 256, 1.0, 10);
     call_1_float_types(atanh, 256, -1.0, 1.0);
     call_1_float_types(round, 256, -15, 15);
-#endif
 
     call_1_float_types(exp, 256, 0, 20);
     call_1_float_types(log, 256, 1, 1000000);
@@ -266,6 +287,11 @@ int main(int argc, char **argv) {
     call_2(uint32_t, absd, 256, uint32_min, uint32_max, uint32_min, uint32_max);
     // TODO: int64 isn't tested because the testing mechanism relies
     // on integer types being representable with doubles.
+
+    if (num_errors) {
+        fprintf(stderr, "Failed with %d total errors\n", num_errors);
+        exit(1);
+    }
 
     printf("Success!\n");
     return 0;

@@ -15,7 +15,7 @@ rm -rf tmp
 mkdir -p tmp
 
 # grab a trace
-HL_JIT_TARGET=host-trace_stores-trace_loads-trace_realizations HL_TRACE_FILE=$(pwd)/tmp/trace.bin make -C ../.. tutorial_lesson_08_scheduling_2
+HL_JIT_TARGET=host-trace_all HL_TRACE_FILE=$(pwd)/tmp/trace.bin make -C ../.. tutorial_lesson_08_scheduling_2
 ls tmp/trace.bin
 
 cat tmp/trace.bin | ../../bin/HalideTraceViz \

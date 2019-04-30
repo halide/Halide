@@ -9,7 +9,7 @@
 // - 2/3-D only
 // - Readable by the most tools
 // mat:
-// - Abitrary dimensionality, type
+// - Arbitrary dimensionality, type
 // - Readable by matlab, ImageStack, and many other tools
 // tmp:
 // - Dirt simple, easy to roll your own parser
@@ -216,7 +216,7 @@ WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *fil
                 }
                 offset += shape[0].extent * shape[1].extent * depth * bytes_per_element;
             }
-            int32_t count = shape[0].extent * shape[1].extent * depth;
+            int32_t count = shape[0].extent * shape[1].extent * depth * bytes_per_element;
             for (int32_t i = 0; i < channels; i++) {
                 if (!f.write((void*)(&count), 4)) {
                     return -5;
@@ -269,7 +269,7 @@ WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *fil
             // The element type
             6, 8, pixel_type_to_matlab_class_code[type_code], 1,
             // The shape
-            5, dims * 4};
+            5, (uint32_t)(dims * 4)};
 
         if (!f.write(&tags, sizeof(tags))) {
             return -7;
@@ -294,7 +294,7 @@ WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *fil
 
         // Payload header
         uint32_t payload_header[2] = {
-            pixel_type_to_matlab_type_code[type_code], payload_bytes
+            pixel_type_to_matlab_type_code[type_code], (uint32_t)payload_bytes
         };
         if (!f.write(payload_header, sizeof(payload_header))) {
             return -11;

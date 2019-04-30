@@ -23,21 +23,21 @@
 # We'll also include stdio for printf.
 #include <stdio.h>
 
-import halide as h
+import halide as hl
 
 def main():
 
     # This program defines a single-stage imaging pipeline that
     # outputs a grayscale diagonal gradient.
 
-    # A 'Func' object represents a pipeline stage. It's a pure
+    # A 'hl.Func' object represents a pipeline stage. It's a pure
     # function that defines what value each pixel should have. You
     # can think of it as a computed image.
-    gradient = h.Func("gradient")
+    gradient = hl.Func("gradient")
 
-    # Var objects are names to use as variables in the definition of
-    # a Func. They have no meaning by themselves.
-    x, y = h.Var("x"), h.Var("y")
+    # hl.Var objects are names to use as variables in the definition of
+    # a hl.Func. They have no meaning by themselves.
+    x, y = hl.Var("x"), hl.Var("y")
 
     # We typically use Vars named 'x' and 'y' to correspond to the x
     # and y axes of an image, and we write them in that order. If
@@ -45,17 +45,17 @@ def main():
     # then x is the column index, and y is the row index.
 
     # Funcs are defined at any integer coordinate of its variables as
-    # an Expr in terms of those variables and other functions.
-    # Here, we'll define an Expr which has the value x + y. Vars have
+    # an hl.Expr in terms of those variables and other functions.
+    # Here, we'll define an hl.Expr which has the value x + y. Vars have
     # appropriate operator overloading so that expressions like
-    # 'x + y' become 'Expr' objects.
+    # 'x + y' become 'hl.Expr' objects.
     e = x + y
-    assert type(e) == h.Expr
+    assert type(e) == hl.Expr
 
-    # Now we'll add a definition for the Func object. At pixel x, y,
-    # the image will have the value of the Expr e. On the left hand
-    # side we have the Func we're defining and some Vars. On the right
-    # hand side we have some Expr object that uses those same Vars.
+    # Now we'll add a definition for the hl.Func object. At pixel x, y,
+    # the image will have the value of the hl.Expr e. On the left hand
+    # side we have the hl.Func we're defining and some Vars. On the right
+    # hand side we have some hl.Expr object that uses those same Vars.
     gradient[x, y] = e
 
     # This is the same as writing:
@@ -63,27 +63,27 @@ def main():
     #   gradient[x, y] = x + y
     #
     # which is the more common form, but we are showing the
-    # intermediate Expr here for completeness.
+    # intermediate hl.Expr here for completeness.
 
-    # That line of code defined the Func, but it didn't actually
+    # That line of code defined the hl.Func, but it didn't actually
     # compute the output image yet. At this stage it's just Funcs,
     # Exprs, and Vars in memory, representing the structure of our
     # imaging pipeline. We're meta-programming. This C++ program is
     # constructing a Halide program in memory. Actually computing
     # pixel data comes next.
 
-    # Now we 'realize' the Func, which JIT compiles some code that
+    # Now we 'realize' the hl.Func, which JIT compiles some code that
     # implements the pipeline we've defined, and then runs it.  We
     # also need to tell Halide the domain over which to evaluate the
-    # Func, which determines the range of x and y above, and the
+    # hl.Func, which determines the range of x and y above, and the
     # resolution of the output image. Halide.h also provides a basic
     # templatized image type we can use. We'll make an 800 x 600
     # image.
     output = gradient.realize(800, 600)
-    assert type(output) == h.Buffer_int32
+    assert output.type() == hl.Int(32)
 
-    # Halide does type inference for you. Var objects represent
-    # 32-bit integers, so the Expr object 'x + y' also represents a
+    # Halide does type inference for you. hl.Var objects represent
+    # 32-bit integers, so the hl.Expr object 'x + y' also represents a
     # 32-bit integer, and so 'gradient' defines a 32-bit image, and
     # so we got a 32-bit signed integer image out when we call
     # 'realize'. Halide types and type-casting rules are equivalent
@@ -93,17 +93,17 @@ def main():
     # expecting:
     for j in range(output.height()):
         for i in range(output.width()):
-            # We can access a pixel of an Buffer object using similar
+            # We can access a pixel of an hl.Buffer object using similar
             # syntax to defining and using functions.
-            if (output(i, j) != i + j):
+            if (output[i, j] != i + j):
                 print("Something went wrong!\n"
                        "Pixel %d, %d was supposed to be %d, but instead it's %d\n"
-                        % (i, j, i+j, output(i, j)))
+                        % (i, j, i+j, output[i, j]))
                 return -1
 
 
-    # Everything worked! We defined a Func, then called 'realize' on
-    # it to generate and run machine code that produced a Buffer.
+    # Everything worked! We defined a hl.Func, then called 'realize' on
+    # it to generate and run machine code that produced a hl.Buffer.
     print("Success!")
 
     return 0

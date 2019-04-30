@@ -1,25 +1,27 @@
 #include <algorithm>
 
-#include "Pipeline.h"
 #include "Argument.h"
 #include "FindCalls.h"
 #include "Func.h"
-#include "InferArguments.h"
 #include "IRVisitor.h"
+#include "InferArguments.h"
 #include "LLVM_Headers.h"
 #include "LLVM_Output.h"
 #include "Lower.h"
 #include "Outputs.h"
+#include "ParamMap.h"
+#include "Pipeline.h"
 #include "PrintLoopNest.h"
 #include "RealizationOrder.h"
+#include "WasmExecutor.h"
 
 using namespace Halide::Internal;
 
 namespace Halide {
 
-using std::vector;
-using std::string;
 using std::set;
+using std::string;
+using std::vector;
 
 namespace {
 
@@ -56,12 +58,16 @@ struct PipelineContents {
     JITModule jit_module;
     Target jit_target;
 
+    // Cached compiled JavaScript and/or wasm if defined */
+    WasmModule wasm_module;
+
     /** Clear all cached state */
     void invalidate_cache() {
         module = Module("", Target());
         jit_module = JITModule();
         jit_target = Target();
         inferred_args.clear();
+        wasm_module = WasmModule();
     }
 
     // The outputs
@@ -89,11 +95,12 @@ struct PipelineContents {
      * define_extern calls. */
     std::map<std::string, JITExtern> jit_externs;
 
+    std::vector<Stmt> requirements;
+
     PipelineContents() :
         module("", Target()) {
-        user_context_arg.arg = Argument("__user_context", Argument::InputScalar, type_of<const void*>(), 0);
-        user_context_arg.param = Parameter(Handle(), false, 0, "__user_context",
-                                           /*is_explicit_name*/ true, /*register_instance*/ false);
+        user_context_arg.arg = Argument("__user_context", Argument::InputScalar, type_of<const void*>(), 0, ArgumentEstimates{});
+        user_context_arg.param = Parameter(Handle(), false, 0, "__user_context");
     }
 
     ~PipelineContents() {
@@ -104,7 +111,7 @@ struct PipelineContents {
         invalidate_cache();
         for (size_t i = 0; i < custom_lowering_passes.size(); i++) {
             if (custom_lowering_passes[i].deleter) {
-                custom_lowering_passes[i].deleter(custom_lowering_passes[i].pass);
+                custom_lowering_passes[i].deleter();
             }
         }
         custom_lowering_passes.clear();
@@ -113,12 +120,12 @@ struct PipelineContents {
 
 namespace Internal {
 template<>
-EXPORT RefCount &ref_count<PipelineContents>(const PipelineContents *p) {
+RefCount &ref_count<PipelineContents>(const PipelineContents *p) {
     return p->ref_count;
 }
 
 template<>
-EXPORT void destroy<PipelineContents>(const PipelineContents *p) {
+void destroy<PipelineContents>(const PipelineContents *p) {
     delete p;
 }
 }
@@ -150,11 +157,25 @@ vector<Func> Pipeline::outputs() const {
     return funcs;
 }
 
+std::function<std::string(Pipeline, const Target &, const MachineParams &)> *Pipeline::get_custom_auto_scheduler_ptr() {
+    static std::function<string(Pipeline, const Target &, const MachineParams &)> custom_auto_scheduler = nullptr;
+    return &custom_auto_scheduler;
+}
+
 string Pipeline::auto_schedule(const Target &target, const MachineParams &arch_params) {
+    auto custom_auto_scheduler = *get_custom_auto_scheduler_ptr();
+    if (custom_auto_scheduler) {
+        return custom_auto_scheduler(*this, target, arch_params);
+    }
+
     user_assert(target.arch == Target::X86 || target.arch == Target::ARM ||
                 target.arch == Target::POWERPC || target.arch == Target::MIPS)
         << "Automatic scheduling is currently supported only on these architectures.";
     return generate_schedules(contents->outputs, target, arch_params);
+}
+
+void Pipeline::set_custom_auto_scheduler(std::function<string(Pipeline, const Target &, const MachineParams &)> auto_scheduler) {
+    *get_custom_auto_scheduler_ptr() = auto_scheduler;
 }
 
 Func Pipeline::get_func(size_t index) {
@@ -164,8 +185,8 @@ Func Pipeline::get_func(size_t index) {
         std::map<string, Function> more_funcs = find_transitive_calls(f);
         env.insert(more_funcs.begin(), more_funcs.end());
     }
-    // Compute a realization order
-    vector<string> order = realization_order(contents->outputs, env);
+    // Compute a topological order
+    vector<string> order = topological_order(contents->outputs, env);
 
     user_assert(index < order.size())
         << "Index value passed is " << index << "; however, there are only "
@@ -231,9 +252,17 @@ void Pipeline::compile_to_c(const string &filename,
     m.compile(Outputs().c_source(output_name(filename, m, ".c")));
 }
 
+void Pipeline::compile_to_python_extension(const string &filename,
+                                           const vector<Argument> &args,
+                                           const string &fn_name,
+                                           const Target &target) {
+    Module m = compile_to_module(args, fn_name, target);
+    m.compile(Outputs().python_extension(output_name(filename, m, ".py.c")));
+}
+
 void Pipeline::print_loop_nest() {
     user_assert(defined()) << "Can't print loop nest of undefined Pipeline.\n";
-    std::cerr << Halide::Internal::print_loop_nest(contents->outputs);
+    debug(0) << Halide::Internal::print_loop_nest(contents->outputs);
 }
 
 void Pipeline::compile_to_lowered_stmt(const string &filename,
@@ -285,7 +314,14 @@ void Pipeline::compile_to_file(const string &filename_prefix,
 }
 
 vector<Argument> Pipeline::infer_arguments(Stmt body) {
-    contents->inferred_args = ::infer_arguments(body, contents->outputs);
+    Stmt s = body;
+    if (!contents->requirements.empty()) {
+        s = Block::make(contents->requirements);
+        if (body.defined()) {
+            s = Block::make(s, body);
+        }
+    }
+    contents->inferred_args = ::infer_arguments(s, contents->outputs);
 
     // Add the user context argument if it's not already there, or hook up our user context
     // Parameter to any existing one.
@@ -304,16 +340,52 @@ vector<Argument> Pipeline::infer_arguments(Stmt body) {
     // (we'll embed those in the binary by default), and minus the user_context arg.
     vector<Argument> result;
     for (const InferredArgument &arg : contents->inferred_args) {
-        debug(1) << "Inferred argument: " << arg.arg.type << " " << arg.arg.name << "\n";
+        debug(2) << "Inferred argument: " << arg.arg.type << " " << arg.arg.name << "\n";
         if (!arg.buffer.defined() &&
             arg.arg.name != contents->user_context_arg.arg.name) {
             result.push_back(arg.arg);
         }
     }
 
-
     return result;
 }
+
+class FindExterns : public IRGraphVisitor {
+    using IRGraphVisitor::visit;
+
+    void visit(const Call *op) override {
+        IRGraphVisitor::visit(op);
+
+        if ((op->call_type == Call::Extern || op->call_type == Call::PureExtern) && externs.count(op->name) == 0) {
+            void *address = get_symbol_address(op->name.c_str());
+            if (address == nullptr && !starts_with(op->name, "_")) {
+                std::string underscored_name = "_" + op->name;
+                address = get_symbol_address(underscored_name.c_str());
+            }
+            if (address != nullptr) {
+                // TODO: here and below for arguments, we force types to scalar,
+                // which means this code cannot support functions which actually do
+                // take vectors. But generally the function is actually scalar and
+                // call sites which use vectors will have to be scalarized into a
+                // separate call per lane. Not sure there is anywhere to get
+                // information to make a distinction in the current design.
+                std::vector<Type> arg_types;
+                for (Expr e : op->args) {
+                    arg_types.push_back(e.type().element_of());
+                }
+                ExternCFunction f(address, ExternSignature(op->type.element_of(), op->type.bits() == 0, arg_types));
+                JITExtern jit_extern(f);
+                debug(2) << "FindExterns adds: " << op->name << "\n";
+                externs.emplace(op->name, jit_extern);
+            }
+        }
+    }
+
+public:
+    FindExterns(std::map<std::string, JITExtern> &externs) : externs(externs) {}
+
+    std::map<std::string, JITExtern> &externs;
+};
 
 vector<Argument> Pipeline::infer_arguments() {
     return infer_arguments(Stmt());
@@ -322,7 +394,7 @@ vector<Argument> Pipeline::infer_arguments() {
 Module Pipeline::compile_to_module(const vector<Argument> &args,
                                    const string &fn_name,
                                    const Target &target,
-                                   const Internal::LoweredFunc::LinkageType linkage_type) {
+                                   const LinkageType linkage_type) {
     user_assert(defined()) << "Can't compile undefined Pipeline.\n";
 
     for (Function f : contents->outputs) {
@@ -378,12 +450,13 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
         // We can avoid relowering and just reuse the existing module.
         debug(2) << "Reusing old module\n";
     } else {
-        vector<IRMutator2 *> custom_passes;
+        vector<IRMutator *> custom_passes;
         for (CustomLoweringPass p : contents->custom_lowering_passes) {
             custom_passes.push_back(p.pass);
         }
 
-        contents->module = lower(contents->outputs, new_fn_name, target, lowering_args, linkage_type, custom_passes);
+        contents->module = lower(contents->outputs, new_fn_name, target, lowering_args,
+                                 linkage_type, contents->requirements, custom_passes);
     }
 
     return contents->module;
@@ -401,22 +474,32 @@ std::string Pipeline::generate_function_name() const {
     return name;
 }
 
-void *Pipeline::compile_jit(const Target &target_arg) {
+void Pipeline::compile_jit(const Target &target_arg) {
     user_assert(defined()) << "Pipeline is undefined\n";
 
     Target target(target_arg);
     target.set_feature(Target::JIT);
     target.set_feature(Target::UserContext);
 
-    debug(2) << "jit-compiling for: " << target_arg.to_string() << "\n";
+    debug(2) << "jit-compiling for: " << target_arg << "\n";
 
     // If we're re-jitting for the same target, we can just keep the
     // old jit module.
-    if (contents->jit_target == target &&
-        contents->jit_module.compiled()) {
-        debug(2) << "Reusing old jit module compiled for :\n" << contents->jit_target.to_string() << "\n";
-        return contents->jit_module.main_function();
+    if (contents->jit_target == target) {
+        if (target.arch == Target::WebAssembly) {
+            if (contents->wasm_module.contents.defined()) {
+                debug(2) << "Reusing old wasm module compiled for :\n" << contents->jit_target << "\n";
+                return;
+            }
+        }
+        if (contents->jit_module.compiled()) {
+            debug(2) << "Reusing old jit module compiled for :\n" << contents->jit_target << "\n";
+            return;
+        }
     }
+
+    // Clear all cached info in case there is an error.
+    contents->invalidate_cache();
 
     contents->jit_target = target;
 
@@ -437,9 +520,38 @@ void *Pipeline::compile_jit(const Target &target_arg) {
 
     // Compile to a module and also compile any submodules.
     Module module = compile_to_module(args, name, target).resolve_submodules();
-    auto f = module.get_function_by_name(name);
 
     std::map<std::string, JITExtern> lowered_externs = contents->jit_externs;
+
+    if (target.arch == Target::WebAssembly) {
+        FindExterns find_externs(lowered_externs);
+        for (const LoweredFunc &f : contents->module.functions()) {
+            f.body.accept(&find_externs);
+        }
+        if (debug::debug_level() >= 1) {
+            for (const auto &p : lowered_externs) {
+              debug(1) << "Found extern: " << p.first << "\n";
+            }
+        }
+
+        vector<Argument> args_and_outputs = args;
+        for (auto &out : contents->outputs) {
+            for (Type t : out.output_types()) {
+                args_and_outputs.emplace_back(out.name(), Argument::OutputBuffer, t, out.dimensions(), ArgumentEstimates{});
+            }
+        }
+
+        contents->wasm_module = WasmModule::compile(
+            module,
+            args_and_outputs,
+            contents->module.name(),
+            lowered_externs,
+            make_externs_jit_module(target, lowered_externs)
+        );
+        return;
+    }
+
+    auto f = module.get_function_by_name(name);
 
     // Compile to jit module
     JITModule jit_module(module, f, make_externs_jit_module(target_arg, lowered_externs));
@@ -457,8 +569,6 @@ void *Pipeline::compile_jit(const Target &target_arg) {
     }
 
     contents->jit_module = jit_module;
-
-    return jit_module.main_function();
 }
 
 
@@ -505,7 +615,7 @@ const std::map<std::string, JITExtern> &Pipeline::get_jit_externs() {
     return contents->jit_externs;
 }
 
-void Pipeline::add_custom_lowering_pass(IRMutator2 *pass, void (*deleter)(IRMutator2 *)) {
+void Pipeline::add_custom_lowering_pass(IRMutator *pass, std::function<void()> deleter) {
     user_assert(defined()) << "Pipeline is undefined\n";
     contents->invalidate_cache();
     CustomLoweringPass p = {pass, deleter};
@@ -527,8 +637,8 @@ const JITHandlers &Pipeline::jit_handlers() {
     return contents->jit_handlers;
 }
 
-Realization Pipeline::realize(vector<int32_t> sizes,
-                              const Target &target) {
+Realization Pipeline::realize(vector<int32_t> sizes, const Target &target,
+                              const ParamMap &param_map) {
     user_assert(defined()) << "Pipeline is undefined\n";
     vector<Buffer<>> bufs;
     for (auto & out : contents->outputs) {
@@ -539,38 +649,68 @@ Realization Pipeline::realize(vector<int32_t> sizes,
         }
     }
     Realization r(bufs);
-    realize(r, target);
+    realize(r, target, param_map);
     for (size_t i = 0; i < r.size(); i++) {
         r[i].copy_to_host();
     }
     return r;
 }
 
-Realization Pipeline::realize(int x_size, int y_size, int z_size, int w_size,
-                              const Target &target) {
-    return realize({x_size, y_size, z_size, w_size}, target);
+Realization Pipeline::realize(int x_size, int y_size, int z_size, int w_size, const Target &target,
+                              const ParamMap &param_map) {
+  return realize({x_size, y_size, z_size, w_size}, target, param_map);
 }
 
-Realization Pipeline::realize(int x_size, int y_size, int z_size,
-                              const Target &target) {
-    return realize({x_size, y_size, z_size}, target);
+Realization Pipeline::realize(int x_size, int y_size, int z_size, const Target &target,
+                              const ParamMap &param_map) {
+  return realize({x_size, y_size, z_size}, target, param_map);
 }
 
-Realization Pipeline::realize(int x_size, int y_size,
-                              const Target &target) {
-    return realize({x_size, y_size}, target);
+Realization Pipeline::realize(int x_size, int y_size, const Target &target,
+                              const ParamMap &param_map) {
+  return realize({x_size, y_size}, target, param_map);
 }
 
-Realization Pipeline::realize(int x_size,
-                              const Target &target) {
+Realization Pipeline::realize(int x_size, const Target &target,
+                              const ParamMap &param_map) {
     // Use an explicit vector here, since {x_size} can be interpreted
     // as a scalar initializer
     vector<int32_t> v = {x_size};
-    return realize(v, target);
+    return realize(v, target, param_map);
 }
 
-Realization Pipeline::realize(const Target &target) {
-    return realize(vector<int32_t>(), target);
+Realization Pipeline::realize(const Target &target,
+                              const ParamMap &param_map) {
+    return realize(vector<int32_t>(), target, param_map);
+}
+
+void Pipeline::add_requirement(Expr condition, std::vector<Expr> &error_args) {
+    // It is an error for a requirement to reference a Func or a Var
+    class Checker : public IRGraphVisitor {
+        using IRGraphVisitor::visit;
+
+        void visit(const Variable *op) override {
+            if (!op->param.defined()) {
+                user_error << "Requirement " << condition << " refers to Var or RVar " << op->name << "\n";
+            }
+        }
+
+        void visit(const Call *op) override {
+            if (op->call_type == Call::Halide) {
+                user_error << "Requirement " << condition << " calls Func " << op->name << "\n";
+            }
+            IRGraphVisitor::visit(op);
+        }
+
+        const Expr &condition;
+    public:
+        Checker(const Expr &c) : condition(c) {
+            c.accept(this);
+        }
+    } checker(condition);
+
+    Expr error = Internal::requirement_failed_error(condition, error_args);
+    contents->requirements.emplace_back(Internal::AssertStmt::make(condition, error));
 }
 
 namespace {
@@ -628,11 +768,9 @@ struct ErrorBuffer {
 struct JITFuncCallContext {
     ErrorBuffer error_buffer;
     JITUserContext jit_context;
-    Parameter &user_context_param;
     bool custom_error_handler;
 
-    JITFuncCallContext(const JITHandlers &handlers, Parameter &user_context_param)
-        : user_context_param(user_context_param) {
+    JITFuncCallContext(const JITHandlers &handlers) {
         void *user_context = nullptr;
         JITHandlers local_handlers = handlers;
         if (local_handlers.custom_error == nullptr) {
@@ -643,7 +781,6 @@ struct JITFuncCallContext {
             custom_error_handler = true;
         }
         JITSharedRuntime::init_jit_user_context(jit_context, user_context, local_handlers);
-        user_context_param.set_scalar(&jit_context);
 
         debug(2) << "custom_print: " << (void *)jit_context.handlers.custom_print << '\n'
                  << "custom_malloc: " << (void *)jit_context.handlers.custom_malloc << '\n'
@@ -670,101 +807,107 @@ struct JITFuncCallContext {
 
     void finalize(int exit_status) {
         report_if_error(exit_status);
-        user_context_param.set_scalar((void *)nullptr); // Don't leave param hanging with pointer to stack.
     }
 };
 
 }  // namespace
 
+struct Pipeline::JITCallArgs {
+    size_t size{0};
+    const void **store;
+
+    JITCallArgs(size_t size) : size(size) {
+        if (size > kStoreSize) {
+            store = new ConstVoidPtr[size];
+        } else {
+            store = fixed_store;
+        }
+    }
+
+    ~JITCallArgs() {
+        if (store != fixed_store) {
+            delete [] store;
+        }
+    }
+
+private:
+    static constexpr int kStoreSize = 64;
+    using ConstVoidPtr = const void *;
+    ConstVoidPtr fixed_store[kStoreSize];
+
+    JITCallArgs(const JITCallArgs &) = delete;
+    JITCallArgs(JITCallArgs &&) = delete;
+    void operator=(const JITCallArgs &) = delete;
+};
+
 // Make a vector of void *'s to pass to the jit call using the
 // currently bound value for all of the params and image
 // params.
-vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const Target &target) {
+void Pipeline::prepare_jit_call_arguments(RealizationArg &outputs, const Target &target,
+                                          const ParamMap &param_map, void *user_context,
+                                          bool is_bounds_inference, JITCallArgs &args_result) {
     user_assert(defined()) << "Can't realize an undefined Pipeline\n";
 
-    compile_jit(target);
-
     JITModule &compiled_module = contents->jit_module;
-    internal_assert(compiled_module.argv_function());
+    internal_assert(compiled_module.argv_function() ||
+                    contents->wasm_module.contents.defined());
 
-    struct OutputBufferType {
-        Function func;
-        Type type;
-        int dims;
-    };
-    vector<OutputBufferType> output_buffer_types;
-    for (Function f : contents->outputs) {
-        for (Type t : f.output_types()) {
-            OutputBufferType obt = {f, t, f.dimensions()};
-            output_buffer_types.push_back(obt);
-        }
-    }
-
-    user_assert(output_buffer_types.size() == dst.size())
-        << "Realization contains wrong number of Images (" << dst.size()
-        << ") for realizing pipeline with " << output_buffer_types.size()
-        << " outputs\n";
-
-    // Check the type and dimensionality of the buffer
-    for (size_t i = 0; i < dst.size(); i++) {
-        Function func = output_buffer_types[i].func;
-        int  dims = output_buffer_types[i].dims;
-        Type type = output_buffer_types[i].type;
-        user_assert(dst[i].dimensions() == dims)
-            << "Can't realize Func \"" << func.name()
-            << "\" into Buffer at " << (void *)dst[i].data()
-            << " because Buffer is " << dst[i].dimensions()
-            << "-dimensional, but Func \"" << func.name()
-            << "\" is " << dims << "-dimensional.\n";
-        // For our purposes here, consider all Handle types equivalent:
-        // Buffer<> doesn't retain handle-traits (thus it collapses all
-        // all Handle types into void*), but Func does not, so we can have
-        // confusing cases where Buffer<char*> is not "compatible" with Func<char*>.
-        // (Buffer-of-handle-type is a degenerate case anyway...)
-        user_assert(dst[i].type() == type ||
-                    (dst[i].type().is_handle() && type.is_handle()))
-            << "Can't realize Func \"" << func.name()
-            << "\" into Buffer at " << (void *)dst[i].data()
-            << " because Buffer has type " << Type(dst[i].type())
-            << ", but Func \"" << func.name()
-            << "\" has type " << type << ".\n";
-    }
-
+    const bool no_param_map = &param_map == &ParamMap::empty_map();
 
     // Come up with the void * arguments to pass to the argv function
-    vector<const void *> arg_values;
-
+    size_t arg_index = 0;
     for (const InferredArgument &arg : contents->inferred_args) {
-        if (arg.param.defined() && arg.param.is_buffer()) {
-            // ImageParam arg
-            Buffer<> buf = arg.param.buffer();
-            if (buf.defined()) {
-                arg_values.push_back(buf.raw_buffer());
+        if (arg.param.defined()) {
+            if (arg.param.same_as(contents->user_context_arg.param)) {
+                args_result.store[arg_index++] = user_context;
             } else {
-                // Unbound
-                arg_values.push_back(nullptr);
+                Buffer<> *buf_out_param = nullptr;
+                const Parameter &p = no_param_map ? arg.param : param_map.map(arg.param, buf_out_param);
+                user_assert(is_bounds_inference || !buf_out_param)
+                    << "Cannot pass Buffer<> pointers in parameters map to a compute call.\n";
+
+                if (p.is_buffer()) {
+                    // ImageParam arg
+                    Buffer<> buf = p.buffer();
+                    if (buf.defined()) {
+                        args_result.store[arg_index++] = p.raw_buffer();
+                    } else {
+                        // Unbound
+                        args_result.store[arg_index++] = nullptr;
+                    }
+                    debug(2) << "JIT input ImageParam argument ";
+                } else {
+                    args_result.store[arg_index++] = p.scalar_address();
+                    debug(2) << "JIT input scalar argument ";
+                }
             }
-            debug(1) << "JIT input ImageParam argument ";
-        } else if (arg.param.defined()) {
-            arg_values.push_back(arg.param.scalar_address());
-            debug(1) << "JIT input scalar argument ";
         } else {
-            debug(1) << "JIT input Image argument ";
+            debug(2) << "JIT input Image argument ";
             internal_assert(arg.buffer.defined());
-            arg_values.push_back(arg.buffer.raw_buffer());
+            args_result.store[arg_index++] = arg.buffer.raw_buffer();
         }
-        const void *ptr = arg_values.back();
-        debug(1) << arg.arg.name << " @ " << ptr << "\n";
+        const void *ptr = args_result.store[arg_index - 1];
+        debug(2) << arg.arg.name << " @ " << ptr << "\n";
     }
 
     // Then the outputs
-    for (size_t i = 0; i < dst.size(); i++) {
-        arg_values.push_back(dst[i].raw_buffer());
-        const void *ptr = arg_values.back();
-        debug(1) << "JIT output buffer @ " << ptr << ", " << dst[i].data() << "\n";
+    if (outputs.r) {
+        for (size_t i = 0; i < outputs.r->size(); i++) {
+            const halide_buffer_t *buf = (*outputs.r)[i].raw_buffer();
+            args_result.store[arg_index++] = buf;
+            debug(2) << "JIT output buffer @ " << (const void *)buf << ", " << (const void *)buf->host << "\n";
+        }
+    } else if (outputs.buf) {
+        args_result.store[arg_index++] = outputs.buf;
+        debug(2) << "JIT output buffer @ " << (const void *)outputs.buf << ", " << (const void *)outputs.buf->host << "\n";
+    } else {
+        for (const Buffer<> &buffer : *outputs.buffer_list) {
+            const halide_buffer_t *buf = buffer.raw_buffer();
+            args_result.store[arg_index++] = buf;
+            debug(2) << "JIT output buffer @ " << (const void *)buf << ", " << (const void *)buf->host << "\n";
+        }
     }
 
-    return arg_values;
 }
 
 std::vector<JITModule>
@@ -793,7 +936,7 @@ Pipeline::make_externs_jit_module(const Target &target,
             for (const InferredArgument &arg : pipeline_contents.inferred_args) {
                 // TODO: it's not clear whether arg.arg.type is correct for
                 // the arg.is_buffer() case (AFAIK, is_buffer()==true isn't possible
-                // in current mtrunk Halide, but may be in some side branches that
+                // in current trunk Halide, but may be in some side branches that
                 // have not yet landed, e.g. JavaScript). Forcing it to be
                 // the correct type here, just in case.
                 arg_types.push_back(arg.arg.is_buffer() ?
@@ -816,16 +959,37 @@ Pipeline::make_externs_jit_module(const Target &target,
     return result;
 }
 
-void Pipeline::realize(Realization dst, const Target &t) {
+int Pipeline::call_jit_code(const Target &target, const JITCallArgs &args) {
+    if (target.arch == Target::WebAssembly) {
+        internal_assert(contents->wasm_module.contents.defined());
+        return contents->wasm_module.run(args.store);
+    }
+    return contents->jit_module.argv_function()(args.store);
+}
+
+void Pipeline::realize(RealizationArg outputs, const Target &t,
+                       const ParamMap &param_map) {
     Target target = t;
     user_assert(defined()) << "Can't realize an undefined Pipeline\n";
 
-    debug(2) << "Realizing Pipeline for " << target.to_string() << "\n";
+    debug(2) << "Realizing Pipeline for " << target << "\n";
 
-    for (size_t i = 0; i < dst.size(); i++) {
-        user_assert(dst[i].data() != nullptr)
-            << "Buffer at " << &(dst[i]) << " is unallocated. "
-            << "The Buffers in a Realization passed to realize must all be allocated\n";
+    if (outputs.r) {
+        for (size_t i = 0; i < outputs.r->size(); i++) {
+            user_assert((*outputs.r)[i].data() != nullptr || (*outputs.r)[i].has_device_allocation())
+                << "Buffer at " << &((*outputs.r)[i]) << " is unallocated. "
+                << "The Buffers in a Realization passed to realize must all be allocated\n";
+        }
+    } else if (outputs.buffer_list) {
+        for (const Buffer<> &buf : *outputs.buffer_list) {
+            user_assert(buf.data() != nullptr || buf.has_device_allocation())
+                << "Buffer at " << &buf << " is unallocated. "
+                << "The Buffers in a Realization passed to realize must all be allocated\n";
+        }
+    } else {
+        user_assert(outputs.buf && (outputs.buf->host || outputs.buf->device))
+            << "Buffer at " << (void *)outputs.buf << " is unallocated. "
+            << "The Buffers passed to realize must all be allocated\n";
     }
 
     // If target is unspecified...
@@ -838,8 +1002,6 @@ void Pipeline::realize(Realization dst, const Target &t) {
             target = get_jit_target_from_environment();
         }
     }
-
-    vector<const void *> args = prepare_jit_call_arguments(dst, target);
 
     // We need to make a context for calling the jitted function to
     // carry the the set of custom handlers. Here's how handlers get
@@ -863,7 +1025,17 @@ void Pipeline::realize(Realization dst, const Target &t) {
     // user_context is just a pointer to a JITUserContext, which is a
     // member of the JITFuncCallContext which we will declare now:
 
-    JITFuncCallContext jit_context(jit_handlers(), contents->user_context_arg.param);
+    // Ensure the module is compiled.
+    compile_jit(target);
+
+    // This has to happen after a runtime has been compiled in compile_jit.
+    JITFuncCallContext jit_context(jit_handlers());
+    void *user_context_storage = &jit_context.jit_context;
+
+    JITCallArgs args(contents->inferred_args.size() + outputs.size());
+    prepare_jit_call_arguments(outputs, target, param_map,
+                               &user_context_storage, false, args);
+
 
     // The handlers in the jit_context default to the default handlers
     // in the runtime of the shared module (e.g. halide_print_impl,
@@ -903,7 +1075,7 @@ void Pipeline::realize(Realization dst, const Target &t) {
     // exception.
 
     debug(2) << "Calling jitted function\n";
-    int exit_status = contents->jit_module.argv_function()(&(args[0]));
+    int exit_status = call_jit_code(target, args);
     debug(2) << "Back from jitted function. Exit status was " << exit_status << "\n";
 
     // If we're profiling, report runtimes and reset profiler stats.
@@ -913,7 +1085,7 @@ void Pipeline::realize(Realization dst, const Target &t) {
         JITModule::Symbol reset_sym =
             contents->jit_module.find_symbol_by_name("halide_profiler_reset");
         if (report_sym.address && reset_sym.address) {
-            void *uc = jit_context.user_context_param.scalar<void *>();
+            void *uc = &jit_context.jit_context;
             void (*report_fn_ptr)(void *) = (void (*)(void *))(report_sym.address);
             report_fn_ptr(uc);
 
@@ -925,11 +1097,19 @@ void Pipeline::realize(Realization dst, const Target &t) {
     jit_context.finalize(exit_status);
 }
 
-void Pipeline::infer_input_bounds(Realization dst) {
-
+void Pipeline::infer_input_bounds(RealizationArg outputs, const ParamMap &param_map) {
     Target target = get_jit_target_from_environment();
 
-    vector<const void *> args = prepare_jit_call_arguments(dst, target);
+    compile_jit(target);
+
+    // This has to happen after a runtime has been compiled in compile_jit.
+    JITFuncCallContext jit_context(jit_handlers());
+    void *user_context_storage = &jit_context.jit_context;
+
+    size_t args_size = contents->inferred_args.size() + outputs.size();
+    JITCallArgs args(args_size);
+    prepare_jit_call_arguments(outputs, target, param_map,
+                               &user_context_storage, true, args);
 
     struct TrackedBuffer {
         // The query buffer, and a backup to check for changes. We
@@ -938,11 +1118,11 @@ void Pipeline::infer_input_bounds(Realization dst) {
         // it's simpler to use the runtime buffer class.
         Runtime::Buffer<> query, orig;
     };
-    vector<TrackedBuffer> tracked_buffers(args.size());
+    vector<TrackedBuffer> tracked_buffers(args_size);
 
     vector<size_t> query_indices;
     for (size_t i = 0; i < contents->inferred_args.size(); i++) {
-        if (args[i] == nullptr) {
+        if (args.store[i] == nullptr) {
             query_indices.push_back(i);
             InferredArgument ia = contents->inferred_args[i];
             internal_assert(ia.param.defined() && ia.param.is_buffer());
@@ -950,17 +1130,15 @@ void Pipeline::infer_input_bounds(Realization dst) {
             vector<int> initial_shape(ia.param.dimensions(), 0);
             tracked_buffers[i].query = Runtime::Buffer<>(ia.param.type(), nullptr, initial_shape);
             tracked_buffers[i].orig = Runtime::Buffer<>(ia.param.type(), nullptr, initial_shape);
-            args[i] = tracked_buffers[i].query.raw_buffer();
+            args.store[i] = tracked_buffers[i].query.raw_buffer();
         }
     }
 
     // No need to query if all the inputs are bound already.
     if (query_indices.empty()) {
-        debug(1) << "All inputs are bound. No need for bounds inference\n";
+        debug(2) << "All inputs are bound. No need for bounds inference\n";
         return;
     }
-
-    JITFuncCallContext jit_context(jit_handlers(), contents->user_context_arg.param);
 
     int iter = 0;
     const int max_iters = 16;
@@ -972,7 +1150,7 @@ void Pipeline::infer_input_bounds(Realization dst) {
         }
 
         Internal::debug(2) << "Calling jitted function\n";
-        int exit_status = contents->jit_module.argv_function()(&(args[0]));
+        int exit_status = call_jit_code(target, args);
         jit_context.report_if_error(exit_status);
         Internal::debug(2) << "Back from jitted function\n";
         bool changed = false;
@@ -999,23 +1177,34 @@ void Pipeline::infer_input_bounds(Realization dst) {
         << " didn't converge after " << max_iters
         << " iterations. There may be unsatisfiable constraints\n";
 
-    debug(1) << "Bounds inference converged after " << iter << " iterations\n";
+    debug(2) << "Bounds inference converged after " << iter << " iterations\n";
 
     // Now allocate the resulting buffers
     for (size_t i : query_indices) {
         InferredArgument ia = contents->inferred_args[i];
-        internal_assert(!ia.param.buffer().defined());
+        Buffer<> *buf_out_param = nullptr;
+        Parameter &p = param_map.map(ia.param, buf_out_param);
+
+        if (&p != &ia.param) {
+            user_assert(buf_out_param != nullptr) << "Output Buffer<> arguments to infer_input_bounds in parameters map must be passed as pointers.\n";
+        }
+        internal_assert(!p.buffer().defined());
 
         // Allocate enough memory with the right type and dimensionality.
         tracked_buffers[i].query.allocate();
 
-        // Bind this parameter to this buffer, giving away the
-        // buffer. The user retrieves it via ImageParam::get.
-        ia.param.set_buffer(Buffer<>(std::move(tracked_buffers[i].query)));
+        if (buf_out_param != nullptr) {
+            *buf_out_param = Buffer<>(*tracked_buffers[i].query.raw_buffer());
+        } else {
+            // Bind this parameter to this buffer, giving away the
+            // buffer. The user retrieves it via ImageParam::get.
+            p.set_buffer(Buffer<>(std::move(tracked_buffers[i].query)));
+        }
     }
 }
 
-void Pipeline::infer_input_bounds(int x_size, int y_size, int z_size, int w_size) {
+void Pipeline::infer_input_bounds(int x_size, int y_size, int z_size, int w_size,
+                                  const ParamMap &param_map) {
     user_assert(defined()) << "Can't infer input bounds on an undefined Pipeline.\n";
 
     vector<int> size;
@@ -1029,7 +1218,7 @@ void Pipeline::infer_input_bounds(int x_size, int y_size, int z_size, int w_size
         bufs.emplace_back(t, size);
     }
     Realization r(bufs);
-    infer_input_bounds(r);
+    infer_input_bounds(r, param_map);
 }
 
 void Pipeline::invalidate_cache() {

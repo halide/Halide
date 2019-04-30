@@ -23,8 +23,7 @@ public:
         }
 
         g.define_extern("extern_stage", {in2, f}, Int(32), 2,
-                        NameMangling::Default,
-                        true /* uses old buffer_t */);
+                        NameMangling::Default);
 
         // Schedule the extern stage per tile of the output to give
         // the buffers a non-trivial min

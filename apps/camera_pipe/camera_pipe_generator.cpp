@@ -1,5 +1,6 @@
 #include "Halide.h"
 #include <stdint.h>
+#include "halide_trace_config.h"
 
 namespace {
 
@@ -152,7 +153,18 @@ public:
     void schedule() {
         Pipeline p(output);
 
-        if (!auto_schedule) {
+        if (auto_schedule) {
+            // blank
+        } else if (get_target().has_gpu_feature()) {
+            Var xi, yi;
+            for (Func f : intermediates) {
+                f.compute_at(intermed_compute_at).gpu_threads(x, y);
+            }
+            output.compute_at(output_compute_at)
+                .unroll(x, 2)
+                .gpu_threads(x, y)
+                .reorder(c, x, y).unroll(c);
+        } else {
             int vec = get_target().natural_vector_size(UInt(16));
             bool use_hexagon = get_target().features_any_of({Target::HVX_64, Target::HVX_128});
             if (get_target().has_feature(Target::HVX_64)) {
@@ -166,6 +178,9 @@ public:
                     .vectorize(x, 2*vec, TailStrategy::RoundUp)
                     .fold_storage(y, 4);
             }
+            intermediates[1].compute_with(
+                intermediates[0], x,
+                {{x, LoopAlignStrategy::AlignStart}, {y, LoopAlignStrategy::AlignStart}});
             output.compute_at(output_compute_at)
                 .vectorize(x)
                 .unroll(y)
@@ -177,6 +192,18 @@ public:
                     f.align_storage(x, vec);
                 }
             }
+        }
+
+        /* Optional tags to specify layout for HalideTraceViz */
+        Halide::Trace::FuncConfig cfg;
+        cfg.pos = { 860, 340 - 220 };
+        cfg.max = 1024;
+        for (Func f : intermediates) {
+            std::string label = f.name();
+            std::replace(label.begin(), label.end(), '_', '@');
+            cfg.pos.y += 220;
+            cfg.labels = {{label}};
+            f.add_trace_tag(cfg.to_trace_tag());
         }
     }
 
@@ -250,6 +277,9 @@ Func CameraPipe::color_correct(Func input) {
 
     if (!auto_schedule) {
         matrix.compute_root();
+        if (get_target().has_gpu_feature()) {
+            matrix.gpu_single_thread();
+        }
     }
 
     Func corrected;
@@ -311,6 +341,18 @@ Func CameraPipe::apply_curve(Func input) {
     if (!auto_schedule) {
         // It's a LUT, compute it once ahead of time.
         curve.compute_root();
+        if (get_target().has_gpu_feature()) {
+            Var xi;
+            curve.gpu_tile(x, xi, 32);
+        }
+    }
+
+    /* Optional tags to specify layout for HalideTraceViz */
+    {
+        Halide::Trace::FuncConfig cfg;
+        cfg.labels = {{"tone curve"}};
+        cfg.pos = { 580, 1000 };
+        curve.add_trace_tag(cfg.to_trace_tag());
     }
 
     Func curved;
@@ -337,6 +379,17 @@ Func CameraPipe::sharpen(Func input) {
     sharpen_strength_x32() = u8_sat(sharpen_strength * 32);
     if (!auto_schedule) {
         sharpen_strength_x32.compute_root();
+        if (get_target().has_gpu_feature()) {
+            sharpen_strength_x32.gpu_single_thread();
+        }
+    }
+
+    /* Optional tags to specify layout for HalideTraceViz */
+    {
+        Halide::Trace::FuncConfig cfg;
+        cfg.labels = {{"sharpen strength"}};
+        cfg.pos = { 10, 1000 };
+        sharpen_strength_x32.add_trace_tag(cfg.to_trace_tag());
     }
 
     // Make an unsharp mask by blurring in y, then in x.
@@ -394,10 +447,52 @@ void CameraPipe::generate() {
             .estimate(x, 0, 2592)
             .estimate(y, 0, 1968);
 
+    } else if (get_target().has_gpu_feature()) {
+
+        // We can generate slightly better code if we know the output is even-sized
+        if (!auto_schedule) {
+            // TODO: The autoscheduler really ought to be able to
+            // accommodate bounds on the output Func.
+            Expr out_width = processed.width();
+            Expr out_height = processed.height();
+            processed.bound(c, 0, 3)
+                .bound(x, 0, (out_width / 2) * 2)
+                .bound(y, 0, (out_height / 2) * 2);
+        }
+
+        Var xi, yi, xii, xio;
+
+        /* 1391us on a gtx 980. */
+        processed.compute_root()
+            .reorder(c, x, y)
+            .unroll(x, 2)
+            .gpu_tile(x, y, xi, yi, 28, 12);
+
+        curved.compute_at(processed, x)
+            .unroll(x, 2)
+            .gpu_threads(x, y);
+
+        corrected.compute_at(processed, x)
+            .unroll(x, 2)
+            .gpu_threads(x, y);
+
+        demosaiced->output_compute_at.set({processed, x});
+        demosaiced->intermed_compute_at.set({processed, x});
+
+        denoised.compute_at(processed, x)
+            .tile(x, y, xi, yi, 2, 2).unroll(xi).unroll(yi)
+            .gpu_threads(x, y);
+
+        deinterleaved.compute_at(processed, x)
+            .unroll(x, 2)
+            .gpu_threads(x, y)
+            .reorder(c, x, y).unroll(c);
+
     } else {
 
         Expr out_width = processed.width();
         Expr out_height = processed.height();
+
         // In HVX 128, we need 2 threads to saturate HVX with work,
         //and in HVX 64 we need 4 threads, and on other devices,
         // we might need many threads.
@@ -417,6 +512,7 @@ void CameraPipe::generate() {
         } else if (get_target().has_feature(Target::HVX_128)) {
             vec = 64;
         }
+
         processed.compute_root()
             .reorder(c, x, y)
             .split(y, yi, yii, 2, TailStrategy::RoundUp)
@@ -465,6 +561,46 @@ void CameraPipe::generate() {
             .bound(c, 0, 3)
             .bound(x, 0, ((out_width)/(2*vec))*(2*vec))
             .bound(y, 0, (out_height/strip_size)*strip_size);
+
+        /* Optional tags to specify layout for HalideTraceViz */
+        {
+            Halide::Trace::FuncConfig cfg;
+            cfg.max = 1024;
+            cfg.pos = { 10, 348 };
+            cfg.labels = {{"input"}};
+            input.add_trace_tag(cfg.to_trace_tag());
+
+            cfg.pos = { 305, 360 };
+            cfg.labels = {{"denoised"}};
+            denoised.add_trace_tag(cfg.to_trace_tag());
+
+            cfg.pos = { 580, 120 };
+            const int y_offset = 220;
+            cfg.strides = {{1, 0}, {0, 1}, {0, y_offset}};
+            cfg.labels = {
+                { "gr", { 0, 0 * y_offset } },
+                { "r",  { 0, 1 * y_offset }},
+                { "b",  { 0, 2 * y_offset }},
+                { "gb", { 0, 3 * y_offset }},
+            };
+            deinterleaved.add_trace_tag(cfg.to_trace_tag());
+
+            cfg.color_dim = 2;
+            cfg.strides = {{1, 0}, {0, 1}, {0, 0}};
+            cfg.pos = { 1140, 360 };
+            cfg.labels = {{"demosaiced"}};
+            processed.add_trace_tag(cfg.to_trace_tag());
+
+            cfg.pos = { 1400, 360 };
+            cfg.labels = {{"color-corrected"}};
+            corrected.add_trace_tag(cfg.to_trace_tag());
+
+            cfg.max = 256;
+            cfg.pos = { 1660, 360 };
+            cfg.labels = {{"gamma-corrected"}};
+            curved.add_trace_tag(cfg.to_trace_tag());
+
+        }
     }
 };
 

@@ -11,6 +11,7 @@ namespace llvm {
 class Value;
 class Module;
 class Function;
+class FunctionType;
 class IRBuilderDefaultInserter;
 class ConstantFolder;
 template<typename, typename> class IRBuilder;
@@ -28,18 +29,22 @@ class NamedMDNode;
 class DataLayout;
 class BasicBlock;
 class GlobalVariable;
-}
+}  // namespace llvm
 
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
-#include <memory>
 
 #include "IRVisitor.h"
 #include "Module.h"
-#include "Scope.h"
 #include "ModulusRemainder.h"
+#include "Scope.h"
 #include "Target.h"
+
+namespace Halide {
+struct ExternSignature;
+}  // namespace Halide
 
 namespace Halide {
 namespace Internal {
@@ -70,6 +75,12 @@ public:
     /** Initialize internal llvm state for the enabled targets. */
     static void initialize_llvm();
 
+    static std::unique_ptr<llvm::Module> compile_trampolines(
+        const Target &target,
+        llvm::LLVMContext &context,
+        const std::string &suffix,
+        const std::vector<std::pair<std::string, ExternSignature>> &externs);
+
 protected:
     CodeGen_LLVM(Target t);
 
@@ -86,7 +97,7 @@ protected:
      * call to end_func with the same arguments, to generate the
      * appropriate cleanup code. */
     // @{
-    virtual void begin_func(LoweredFunc::LinkageType linkage, const std::string &simple_name,
+    virtual void begin_func(LinkageType linkage, const std::string &simple_name,
                             const std::string &extern_name, const std::vector<LoweredArgument> &args);
     virtual void end_func(const std::vector<LoweredArgument> &args);
     // @}
@@ -98,6 +109,7 @@ protected:
     virtual std::string mcpu() const = 0;
     virtual std::string mattrs() const = 0;
     virtual bool use_soft_float_abi() const = 0;
+    virtual bool use_pic() const;
     // @}
 
     /** Should indexing math be promoted to 64-bit on platforms with
@@ -111,7 +123,6 @@ protected:
      * current module, function, context, builder, and most recently
      * generated llvm value. */
     //@{
-    static bool llvm_initialized;
     static bool llvm_X86_enabled;
     static bool llvm_ARM_enabled;
     static bool llvm_Hexagon_enabled;
@@ -119,14 +130,17 @@ protected:
     static bool llvm_NVPTX_enabled;
     static bool llvm_Mips_enabled;
     static bool llvm_PowerPC_enabled;
+    static bool llvm_AMDGPU_enabled;
+    static bool llvm_WebAssembly_enabled;
 
-    const Module *input_module;
     std::unique_ptr<llvm::Module> module;
     llvm::Function *function;
     llvm::LLVMContext *context;
     llvm::IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter> *builder;
     llvm::Value *value;
     llvm::MDNode *very_likely_branch;
+    llvm::MDNode *default_fp_math_md;
+    llvm::MDNode *strict_fp_math_md;
     std::vector<LoweredArgument> current_function_args;
     //@}
 
@@ -164,6 +178,9 @@ protected:
     /** Test if an item exists in the symbol table. */
     bool sym_exists(const std::string &name) const;
 
+    /** Given a Halide ExternSignature, return the equivalent llvm::FunctionType. */
+    llvm::FunctionType *signature_to_type(const ExternSignature &signature);
+
     /** Some useful llvm types */
     // @{
     llvm::Type *void_t, *i1_t, *i8_t, *i16_t, *i32_t, *i64_t, *f16_t, *f32_t, *f64_t;
@@ -173,7 +190,12 @@ protected:
         *metadata_t_type,
         *argument_t_type,
         *scalar_value_t_type,
-        *device_interface_t_type;
+        *device_interface_t_type,
+        *pseudostack_slot_t_type,
+        *semaphore_t_type,
+        *semaphore_acquire_t_type,
+        *parallel_task_t_type;
+
     // @}
 
     /** Some useful llvm types for subclasses */
@@ -253,6 +275,27 @@ protected:
     void create_assertion(llvm::Value *condition, Expr message, llvm::Value *error_code = nullptr);
     // @}
 
+    /** Codegen a block of asserts with pure conditions */
+    void codegen_asserts(const std::vector<const AssertStmt *> &asserts);
+
+    /** Codegen a call to do_parallel_tasks */
+    struct ParallelTask {
+        Stmt body;
+        struct SemAcquire {
+            Expr semaphore;
+            Expr count;
+        };
+        std::vector<SemAcquire> semaphores;
+        std::string loop_var;
+        Expr min, extent;
+        Expr serial;
+        std::string name;
+    };
+    int task_depth;
+    void get_parallel_tasks(Stmt s, std::vector<ParallelTask> &tasks, std::pair<std::string, int> prefix);
+    void do_parallel_tasks(const std::vector<ParallelTask> &tasks);
+    void do_as_parallel_task(Stmt s);
+
     /** Return the the pipeline with the given error code. Will run
      * the destructor block. */
     void return_with_error_code(llvm::Value *error_code);
@@ -306,61 +349,63 @@ protected:
      * architecture-specific code to perform peephole
      * optimizations. The result of each is stored in \ref value */
     // @{
-    virtual void visit(const IntImm *);
-    virtual void visit(const UIntImm *);
-    virtual void visit(const FloatImm *);
-    virtual void visit(const StringImm *);
-    virtual void visit(const Cast *);
-    virtual void visit(const Variable *);
-    virtual void visit(const Add *);
-    virtual void visit(const Sub *);
-    virtual void visit(const Mul *);
-    virtual void visit(const Div *);
-    virtual void visit(const Mod *);
-    virtual void visit(const Min *);
-    virtual void visit(const Max *);
-    virtual void visit(const EQ *);
-    virtual void visit(const NE *);
-    virtual void visit(const LT *);
-    virtual void visit(const LE *);
-    virtual void visit(const GT *);
-    virtual void visit(const GE *);
-    virtual void visit(const And *);
-    virtual void visit(const Or *);
-    virtual void visit(const Not *);
-    virtual void visit(const Select *);
-    virtual void visit(const Load *);
-    virtual void visit(const Ramp *);
-    virtual void visit(const Broadcast *);
-    virtual void visit(const Call *);
-    virtual void visit(const Let *);
-    virtual void visit(const LetStmt *);
-    virtual void visit(const AssertStmt *);
-    virtual void visit(const ProducerConsumer *);
-    virtual void visit(const For *);
-    virtual void visit(const Store *);
-    virtual void visit(const Block *);
-    virtual void visit(const IfThenElse *);
-    virtual void visit(const Evaluate *);
-    virtual void visit(const Shuffle *);
-    virtual void visit(const Prefetch *);
+    void visit(const IntImm *) override;
+    void visit(const UIntImm *) override;
+    void visit(const FloatImm *) override;
+    void visit(const StringImm *) override;
+    void visit(const Cast *) override;
+    void visit(const Variable *) override;
+    void visit(const Add *) override;
+    void visit(const Sub *) override;
+    void visit(const Mul *) override;
+    void visit(const Div *) override;
+    void visit(const Mod *) override;
+    void visit(const Min *) override;
+    void visit(const Max *) override;
+    void visit(const EQ *) override;
+    void visit(const NE *) override;
+    void visit(const LT *) override;
+    void visit(const LE *) override;
+    void visit(const GT *) override;
+    void visit(const GE *) override;
+    void visit(const And *) override;
+    void visit(const Or *) override;
+    void visit(const Not *) override;
+    void visit(const Select *) override;
+    void visit(const Load *) override;
+    void visit(const Ramp *) override;
+    void visit(const Broadcast *) override;
+    void visit(const Call *) override;
+    void visit(const Let *) override;
+    void visit(const LetStmt *) override;
+    void visit(const AssertStmt *) override;
+    void visit(const ProducerConsumer *) override;
+    void visit(const For *) override;
+    void visit(const Acquire *) override;
+    void visit(const Store *) override;
+    void visit(const Block *) override;
+    void visit(const Fork *) override;
+    void visit(const IfThenElse *) override;
+    void visit(const Evaluate *) override;
+    void visit(const Shuffle *) override;
+    void visit(const Prefetch *) override;
     // @}
 
     /** Generate code for an allocate node. It has no default
      * implementation - it must be handled in an architecture-specific
      * way. */
-    virtual void visit(const Allocate *) = 0;
+    void visit(const Allocate *) override = 0;
 
     /** Generate code for a free node. It has no default
      * implementation and must be handled in an architecture-specific
      * way. */
-    virtual void visit(const Free *) = 0;
+    void visit(const Free *) override = 0;
 
     /** These IR nodes should have been removed during
      * lowering. CodeGen_LLVM will error out if they are present */
     // @{
-    virtual void visit(const Provide *);
-    virtual void visit(const Realize *);
+    void visit(const Provide *) override;
+    void visit(const Realize *) override;
     // @}
 
     /** If we have to bail out of a pipeline midway, this should
@@ -436,12 +481,6 @@ protected:
      */
     std::pair<llvm::Function *, int> find_vector_runtime_function(const std::string &name, int lanes);
 
-    /** Get the result of modulus-remainder analysis for a given expr. */
-    ModulusRemainder get_alignment_info(Expr e);
-
-    /** Alignment info for Int(32) variables in scope. */
-    Scope<ModulusRemainder> alignment_info;
-
 private:
 
     /** All the values in scope at the current code location during
@@ -457,6 +496,9 @@ private:
      * to this block. */
     llvm::BasicBlock *destructor_block;
 
+    /** Turn off all unsafe math flags in scopes while this is set. */
+    bool strict_float;
+
     /** Embed an instance of halide_filter_metadata_t in the code, using
      * the given name (by convention, this should be ${FUNCTIONNAME}_metadata)
      * as extern "C" linkage. Note that the return value is a function-returning-
@@ -467,22 +509,27 @@ private:
         const std::map<std::string, std::string> &metadata_name_map);
 
     /** Embed a constant expression as a global variable. */
-    llvm::Constant *embed_constant_expr(Expr e);
+    llvm::Constant *embed_constant_expr(Expr e, llvm::Type *t);
+    llvm::Constant *embed_constant_scalar_value_t(Expr e);
 
-    llvm::Function *add_argv_wrapper(const std::string &name);
+    llvm::Function *add_argv_wrapper(llvm::Function *fn, const std::string &name, bool result_in_argv = false);
 
     llvm::Value *codegen_dense_vector_load(const Load *load, llvm::Value *vpred = nullptr);
 
     virtual void codegen_predicated_vector_load(const Load *op);
     virtual void codegen_predicated_vector_store(const Store *op);
+
+    void init_codegen(const std::string &name, bool any_strict_float = false);
+    std::unique_ptr<llvm::Module> finish_codegen();
+
 };
 
-}
+}  // namespace Internal
 
 /** Given a Halide module, generate an llvm::Module. */
-EXPORT std::unique_ptr<llvm::Module> codegen_llvm(const Module &module,
-                                                  llvm::LLVMContext &context);
+std::unique_ptr<llvm::Module> codegen_llvm(const Module &module,
+                                           llvm::LLVMContext &context);
 
-}
+}  // namespace Halide
 
 #endif

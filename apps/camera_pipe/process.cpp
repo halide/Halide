@@ -67,18 +67,20 @@ int main(int argc, char **argv) {
     double best;
 
     best = benchmark(timing_iterations, 1, [&]() {
-        camera_pipe(input, matrix_3200, matrix_7000,
-                    color_temp, gamma, contrast, sharpen, blackLevel, whiteLevel,
-                    output);
-    });
+            camera_pipe(input, matrix_3200, matrix_7000,
+                        color_temp, gamma, contrast, sharpen, blackLevel, whiteLevel,
+                        output);
+            output.device_sync();
+        });
     fprintf(stderr, "Halide (manual):\t%gus\n", best * 1e6);
 
     #ifndef NO_AUTO_SCHEDULE
     best = benchmark(timing_iterations, 1, [&]() {
-        camera_pipe_auto_schedule(input, matrix_3200, matrix_7000,
-                                  color_temp, gamma, contrast, sharpen, blackLevel, whiteLevel,
-            output);
-    });
+            camera_pipe_auto_schedule(input, matrix_3200, matrix_7000,
+                                      color_temp, gamma, contrast, sharpen, blackLevel, whiteLevel,
+                                      output);
+            output.device_sync();
+        });
     fprintf(stderr, "Halide (auto):\t%gus\n", best * 1e6);
     #endif
 

@@ -1,43 +1,53 @@
-#include <string>
-#include <stdint.h>
 #include <mutex>
 #include <set>
+#include <stdint.h>
+#include <string>
 
-#ifndef _WIN32
+#ifdef _WIN32
+#ifdef _MSC_VER
+#define NOMINMAX
+#endif
+#include <windows.h>
+#else
+#include <dlfcn.h>
 #include <sys/mman.h>
 #endif
 
 #include "CodeGen_Internal.h"
+#include "CodeGen_LLVM.h"
+#include "Debug.h"
 #include "JITModule.h"
 #include "LLVM_Headers.h"
-#include "LLVM_Runtime_Linker.h"
-#include "Debug.h"
 #include "LLVM_Output.h"
-#include "CodeGen_LLVM.h"
+#include "LLVM_Runtime_Linker.h"
 #include "Pipeline.h"
 
-
-#if defined(_MSC_VER) && !defined(NOMINMAX)
-#define NOMINMAX
-#endif
-#ifdef _WIN32
-#include <windows.h>
-static bool have_symbol(const char *s) {
-    return GetProcAddress(GetModuleHandle(nullptr), s) != nullptr;
-}
-#else
-#include <dlfcn.h>
-static bool have_symbol(const char *s) {
-    return dlsym(nullptr, s) != nullptr;
-}
-#endif
 
 namespace Halide {
 namespace Internal {
 
 using std::string;
 
+#ifdef _WIN32
+void *get_symbol_address(const char *s) {
+    return (void *) GetProcAddress(GetModuleHandle(nullptr), s);
+}
+#else
+void *get_symbol_address(const char *s) {
+    // Mac OS 10.11 fails to return a symbol address if nullptr or RTLD_DEFAULT
+    // is passed to dlsym. This seems to work.
+    void *handle = dlopen(nullptr, RTLD_LAZY);
+    void *result = dlsym(handle, s);
+    dlclose(handle);
+    return result;
+}
+#endif
+
 namespace {
+
+bool have_symbol(const char *s) {
+    return get_symbol_address(s) != nullptr;
+}
 
 typedef struct CUctx_st *CUcontext;
 
@@ -114,7 +124,7 @@ void load_metal() {
 #endif
 }
 
-}
+}  // namespace
 
 using namespace llvm;
 
@@ -144,10 +154,10 @@ public:
 };
 
 template <>
-EXPORT RefCount &ref_count<JITModuleContents>(const JITModuleContents *f) { return f->ref_count; }
+RefCount &ref_count<JITModuleContents>(const JITModuleContents *f) { return f->ref_count; }
 
 template <>
-EXPORT void destroy<JITModuleContents>(const JITModuleContents *f) { delete f; }
+void destroy<JITModuleContents>(const JITModuleContents *f) { delete f; }
 
 namespace {
 
@@ -155,12 +165,13 @@ namespace {
 JITModule::Symbol compile_and_get_function(ExecutionEngine &ee, const string &name) {
     debug(2) << "JIT Compiling " << name << "\n";
     llvm::Function *fn = ee.FindFunctionNamed(name.c_str());
-    void *f = (void *)ee.getFunctionAddress(name);
+    internal_assert(fn->getName() == name);
+    void *f = (void *) ee.getFunctionAddress(name);
     if (!f) {
         internal_error << "Compiling " << name << " returned nullptr\n";
     }
 
-    JITModule::Symbol symbol(f, fn->getFunctionType());
+    JITModule::Symbol symbol(f);
 
     debug(2) << "Function " << name << " is at " << f << "\n";
 
@@ -177,7 +188,7 @@ public:
 
     HalideJITMemoryManager(const std::vector<JITModule> &modules) : modules(modules) {}
 
-    virtual uint64_t getSymbolAddress(const std::string &name) override {
+    uint64_t getSymbolAddress(const std::string &name) override {
         for (size_t i = 0; i < modules.size(); i++) {
             const JITModule &m = modules[i];
             std::map<std::string, JITModule::Symbol>::const_iterator iter = m.exports().find(name);
@@ -191,12 +202,15 @@ public:
         return SectionMemoryManager::getSymbolAddress(name);
     }
 
-    virtual uint8_t *allocateCodeSection(uintptr_t size, unsigned alignment, unsigned section_id, StringRef section_name) override {
+    uint8_t *allocateCodeSection(uintptr_t size, unsigned alignment, unsigned section_id, StringRef section_name) override {
         uint8_t *result = SectionMemoryManager::allocateCodeSection(size, alignment, section_id, section_name);
         code_pages.push_back({result, size});
         return result;
     }
 
+#if LLVM_VERSION >= 80
+    // nothing
+#else
     void work_around_llvm_bugs() {
 
         for (auto p : code_pages) {
@@ -217,7 +231,7 @@ public:
             // isn't right.
             debug(2) << "Flushing cache from " << (void *)start
                      << " to " << (void *)end << "\n";
-            __builtin___clear_cache(start, end);
+            __builtin___clear_cache((char*)start, (char*)end);
 #endif
 
 #ifndef _WIN32
@@ -231,6 +245,8 @@ public:
 #endif
         }
     }
+#endif
+
 };
 
 }
@@ -247,6 +263,10 @@ JITModule::JITModule(const Module &m, const LoweredFunc &fn,
     std::vector<JITModule> shared_runtime = JITSharedRuntime::get(llvm_module.get(), m.target());
     deps_with_runtime.insert(deps_with_runtime.end(), shared_runtime.begin(), shared_runtime.end());
     compile_module(std::move(llvm_module), fn.name, m.target(), deps_with_runtime);
+    // If -time-passes is in HL_LLVM_ARGS, this will print llvm passes time statstics otherwise its no-op.
+#if LLVM_VERSION >= 80
+    llvm::reportAndResetTimings();
+#endif
 }
 
 void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &function_name, const Target &target,
@@ -312,7 +332,8 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
 
     // Retrieve function pointers from the compiled module (which also
     // triggers compilation)
-    debug(1) << "JIT compiling " << module_name << "\n";
+    debug(1) << "JIT compiling " << module_name
+             << " for " << target.to_string() << "\n";
 
     std::map<std::string, Symbol> exports;
 
@@ -331,8 +352,11 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
 
     debug(2) << "Finalizing object\n";
     ee->finalizeObject();
+#if LLVM_VERSION >= 80
+    // nothing
+#else
     memory_manager->work_around_llvm_bugs();
-
+#endif
     // Do any target-specific post-compilation module meddling
     for (size_t i = 0; i < listeners.size(); i++) {
         ee->UnregisterJITEventListener(listeners[i]);
@@ -350,6 +374,34 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
     jit_module->entrypoint = entrypoint;
     jit_module->argv_entrypoint = argv_entrypoint;
     jit_module->name = function_name;
+}
+
+/*static*/
+JITModule JITModule::make_trampolines_module(const Target &target_arg,
+                                             const std::map<std::string, JITExtern> &externs,
+                                             const std::string &suffix,
+                                             const std::vector<JITModule> &deps) {
+    Target target = target_arg;
+    target.set_feature(Target::JIT);
+
+    JITModule result;
+    std::vector<std::pair<std::string, ExternSignature>> extern_signatures;
+    std::vector<std::string> requested_exports;
+    for (const std::pair<std::string, JITExtern> &e : externs) {
+        const std::string &callee_name = e.first;
+        const std::string wrapper_name = callee_name + suffix;
+        const ExternCFunction &extern_c = e.second.extern_c_function();
+        result.add_extern_for_export(callee_name, extern_c);
+        requested_exports.push_back(wrapper_name);
+        extern_signatures.push_back({callee_name, extern_c.signature()});
+    }
+
+    std::unique_ptr<llvm::Module> llvm_module = CodeGen_LLVM::compile_trampolines(
+        target, result.jit_module->context, suffix, extern_signatures);
+
+    result.compile_module(std::move(llvm_module), /*function_name*/ "", target, deps, requested_exports);
+
+    return result;
 }
 
 const std::map<std::string, JITModule::Symbol> &JITModule::exports() const {
@@ -411,37 +463,9 @@ void JITModule::add_symbol_for_export(const std::string &name, const Symbol &ext
     jit_module->exports[name] = extern_symbol;
 }
 
-void JITModule::add_extern_for_export(const std::string &name, const ExternCFunction &extern_c_function) {
-    Symbol symbol;
-    symbol.address = extern_c_function.address();
-
-    // Struct types are uniqued on the context, but the lookup API is only available
-    // on the Module, not the Context.
-    llvm::Module dummy_module("ThisIsRidiculous", jit_module->context);
-    llvm::Type *halide_buffer_t = dummy_module.getTypeByName("struct.halide_buffer_t");
-    if (halide_buffer_t == nullptr) {
-        halide_buffer_t = llvm::StructType::create(jit_module->context, "struct.halide_buffer_t");
-    }
-    llvm::Type *halide_buffer_t_star = llvm::PointerType::get(halide_buffer_t, 0);
-
-    llvm::Type *ret_type;
-    auto signature = extern_c_function.signature();
-    if (signature.is_void_return()) {
-        ret_type = llvm::Type::getVoidTy(jit_module->context);
-    } else {
-        ret_type = llvm_type_of(&jit_module->context, signature.ret_type());
-    }
-
-    std::vector<llvm::Type *> llvm_arg_types;
-    for (const Type &t : signature.arg_types()) {
-        if (t == type_of<struct halide_buffer_t *>()) {
-            llvm_arg_types.push_back(halide_buffer_t_star);
-        } else {
-            llvm_arg_types.push_back(llvm_type_of(&jit_module->context, t));
-        }
-    }
-
-    symbol.llvm_type = llvm::FunctionType::get(ret_type, llvm_arg_types, false);
+void JITModule::add_extern_for_export(const std::string &name,
+                                      const ExternCFunction &extern_c_function) {
+    Symbol symbol(extern_c_function.address());
     jit_module->exports[name] = symbol;
 }
 
@@ -615,6 +639,14 @@ enum RuntimeKind {
     OpenGL,
     OpenGLCompute,
     Hexagon,
+    D3D12Compute,
+    OpenCLDebug,
+    MetalDebug,
+    CUDADebug,
+    OpenGLDebug,
+    OpenGLComputeDebug,
+    HexagonDebug,
+    D3D12ComputeDebug,
     MaxRuntimeKind
 };
 
@@ -633,13 +665,17 @@ JITModule &shared_runtimes(RuntimeKind k) {
 JITModule &make_module(llvm::Module *for_module, Target target,
                        RuntimeKind runtime_kind, const std::vector<JITModule> &deps,
                        bool create) {
+
     JITModule &runtime = shared_runtimes(runtime_kind);
     if (!runtime.compiled() && create) {
         // Ensure that JIT feature is set on target as it must be in
         // order for the right runtime components to be added.
         target.set_feature(Target::JIT);
+        // msan doesn't work for jit modules
+        target.set_feature(Target::MSAN, false);
 
         Target one_gpu(target);
+        one_gpu.set_feature(Target::Debug, false);
         one_gpu.set_feature(Target::OpenCL, false);
         one_gpu.set_feature(Target::Metal, false);
         one_gpu.set_feature(Target::CUDA, false);
@@ -647,34 +683,80 @@ JITModule &make_module(llvm::Module *for_module, Target target,
         one_gpu.set_feature(Target::HVX_128, false);
         one_gpu.set_feature(Target::OpenGL, false);
         one_gpu.set_feature(Target::OpenGLCompute, false);
+        one_gpu.set_feature(Target::D3D12Compute, false);
         string module_name;
         switch (runtime_kind) {
+        case OpenCLDebug:
+            one_gpu.set_feature(Target::Debug);
+            one_gpu.set_feature(Target::OpenCL);
+            module_name = "debug_opencl";
+            break;
         case OpenCL:
             one_gpu.set_feature(Target::OpenCL);
-            module_name = "opencl";
+            module_name += "opencl";
+            break;
+        case MetalDebug:
+            one_gpu.set_feature(Target::Debug);
+            one_gpu.set_feature(Target::Metal);
+            load_metal();
+            module_name = "debug_metal";
             break;
         case Metal:
             one_gpu.set_feature(Target::Metal);
-            module_name = "metal";
+            module_name += "metal";
             load_metal();
+            break;
+        case CUDADebug:
+            one_gpu.set_feature(Target::Debug);
+            one_gpu.set_feature(Target::CUDA);
+            module_name = "debug_cuda";
             break;
         case CUDA:
             one_gpu.set_feature(Target::CUDA);
-            module_name = "cuda";
+            module_name += "cuda";
+            break;
+        case OpenGLDebug:
+            one_gpu.set_feature(Target::Debug);
+            one_gpu.set_feature(Target::OpenGL);
+            module_name = "debug_opengl";
+            load_opengl();
             break;
         case OpenGL:
             one_gpu.set_feature(Target::OpenGL);
-            module_name = "opengl";
+            module_name += "opengl";
+            load_opengl();
+            break;
+        case OpenGLComputeDebug:
+            one_gpu.set_feature(Target::Debug);
+            one_gpu.set_feature(Target::OpenGLCompute);
+            module_name = "debug_openglcompute";
             load_opengl();
             break;
         case OpenGLCompute:
             one_gpu.set_feature(Target::OpenGLCompute);
-            module_name = "openglcompute";
+            module_name += "openglcompute";
             load_opengl();
+            break;
+        case HexagonDebug:
+            one_gpu.set_feature(Target::Debug);
+            one_gpu.set_feature(Target::HVX_64);
+            module_name = "debug_hexagon";
             break;
         case Hexagon:
             one_gpu.set_feature(Target::HVX_64);
-            module_name = "hexagon";
+            module_name += "hexagon";
+            break;
+        case D3D12ComputeDebug:
+            one_gpu.set_feature(Target::Debug);
+            one_gpu.set_feature(Target::D3D12Compute);
+            module_name = "debug_d3d12compute";
+            break;
+        case D3D12Compute:
+            one_gpu.set_feature(Target::D3D12Compute);
+            module_name += "d3d12compute";
+            #if !defined(_WIN32)
+                internal_error << "JIT support for Direct3D 12 is only implemented on Windows 10 and above.\n";
+            #endif
             break;
         default:
             module_name = "shared runtime";
@@ -782,37 +864,50 @@ std::vector<JITModule> JITSharedRuntime::get(llvm::Module *for_module, const Tar
     // Add all requested GPU modules, each only depending on the main shared runtime.
     std::vector<JITModule> gpu_modules;
     if (target.has_feature(Target::OpenCL)) {
-        JITModule m = make_module(for_module, target, OpenCL, result, create);
+        auto kind = target.has_feature(Target::Debug) ? OpenCLDebug : OpenCL;
+        JITModule m = make_module(for_module, target, kind, result, create);
         if (m.compiled()) {
             result.push_back(m);
         }
     }
     if (target.has_feature(Target::Metal)) {
-        JITModule m = make_module(for_module, target, Metal, result, create);
+        auto kind = target.has_feature(Target::Debug) ? MetalDebug : Metal;
+        JITModule m = make_module(for_module, target, kind, result, create);
         if (m.compiled()) {
             result.push_back(m);
         }
     }
     if (target.has_feature(Target::CUDA)) {
-        JITModule m = make_module(for_module, target, CUDA, result, create);
+        auto kind = target.has_feature(Target::Debug) ? CUDADebug : CUDA;
+        JITModule m = make_module(for_module, target, kind, result, create);
         if (m.compiled()) {
             result.push_back(m);
         }
     }
     if (target.has_feature(Target::OpenGL)) {
-        JITModule m = make_module(for_module, target, OpenGL, result, create);
+        auto kind = target.has_feature(Target::Debug) ? OpenGLDebug : OpenGL;
+        JITModule m = make_module(for_module, target, kind, result, create);
         if (m.compiled()) {
             result.push_back(m);
         }
     }
     if (target.has_feature(Target::OpenGLCompute)) {
-        JITModule m = make_module(for_module, target, OpenGLCompute, result, create);
+        auto kind = target.has_feature(Target::Debug) ? OpenGLComputeDebug : OpenGLCompute;
+        JITModule m = make_module(for_module, target, kind, result, create);
         if (m.compiled()) {
             result.push_back(m);
         }
     }
     if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
-        JITModule m = make_module(for_module, target, Hexagon, result, create);
+        auto kind = target.has_feature(Target::Debug) ? HexagonDebug : Hexagon;
+        JITModule m = make_module(for_module, target, kind, result, create);
+        if (m.compiled()) {
+            result.push_back(m);
+        }
+    }
+    if (target.has_feature(Target::D3D12Compute)) {
+        auto kind = target.has_feature(Target::Debug) ? D3D12ComputeDebug : D3D12Compute;
+        JITModule m = make_module(for_module, target, kind, result, create);
         if (m.compiled()) {
             result.push_back(m);
         }
@@ -858,5 +953,5 @@ void JITSharedRuntime::memoization_cache_set_size(int64_t size) {
     }
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

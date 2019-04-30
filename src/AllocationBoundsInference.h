@@ -5,8 +5,8 @@
  * Defines the lowering pass that determines how large internal allocations should be.
  */
 
-#include "IR.h"
 #include "Bounds.h"
+#include "IR.h"
 
 namespace Halide {
 namespace Internal {
@@ -16,7 +16,7 @@ namespace Internal {
 Stmt allocation_bounds_inference(Stmt s,
                                  const std::map<std::string, Function> &env,
                                  const std::map<std::pair<std::string, int>, Interval> &func_bounds);
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

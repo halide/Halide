@@ -1,12 +1,12 @@
-#include "bin/src/halide_hexagon_remote.h"
-#include <HalideRuntime.h>
+#include "halide_hexagon_remote.h"
+#include "HalideRuntime.h"
 
 #include <stdlib.h>
 #include <stdio.h>
 #include <dlfcn.h>
 #include <unistd.h>
 #include <memory.h>
-#include <hexagon_standalone.h>
+#include "hexagon_standalone.h"
 
 #include "sim_protocol.h"
 #include "log.h"
@@ -46,23 +46,6 @@ void log_printf(const char *fmt, ...) {
 
 extern "C" {
 
-// Provide an implementation of qurt to redirect to the appropriate
-// simulator calls.
-int qurt_hvx_lock(int mode) {
-    SIM_ACQUIRE_HVX;
-    if (mode == 0) {
-        SIM_CLEAR_HVX_DOUBLE_MODE;
-    } else {
-        SIM_SET_HVX_DOUBLE_MODE;
-    }
-    return 0;
-}
-
-int qurt_hvx_unlock() {
-    SIM_RELEASE_HVX;
-    return 0;
-}
-
 void halide_print(void *user_context, const char *str) {
     log_printf("%s", str);
 }
@@ -101,9 +84,9 @@ void *halide_get_library_symbol(void *lib, const char *name) {
     return dlsym(lib, name);
 }
 
-}  // extern "C"
-
 __attribute__ ((weak)) void* dlopenbuf(const char*filename, const char* data, int size, int perms);
+
+}  // extern "C"
 
 static void dllib_init() {
     // The simulator needs this call to enable dlopen to work...

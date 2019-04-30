@@ -24,7 +24,6 @@ WEAK int halide_qurt_hvx_lock(void *user_context, int size) {
         error(user_context) << "qurt_hvx_lock failed\n";
         return -1;
     }
-
     return 0;
 }
 

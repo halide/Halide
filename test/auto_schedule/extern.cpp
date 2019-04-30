@@ -103,9 +103,43 @@ void test_case_2() {
     g.print_loop_nest();
 }
 
+// Test with an extern Func that consumes a non-pure Func.
+// The autoscheduler will have to deal properly with scheduling
+// the non-pure Func non-inlined even though it is unbounded.
+void test_case_3() {
+
+    ImageParam input(UInt(8), 2);
+    Var x("x"), y("y");
+    Func f0("f0"), f1("f1"), f2("f2"), g("g");
+
+    f0(x, y) = input(x, y) * 2;
+
+    // make f1, which is a sum (not pure).
+    RDom r(0, 2, "r");
+    f1(x, y) = sum(f0(x + r.x, y));
+
+    f2.define_extern("translate", {f1, Expr(0), Expr(0)}, UInt(8), 2);
+
+    g(x, y) = f2(x, y);
+
+    g.estimate(x, 0, 10).estimate(y, 0, 10);
+    input.dim(0).set_bounds_estimate(0, 10);
+    input.dim(1).set_bounds_estimate(0, 10);
+
+    // Auto-schedule the pipeline
+    Target target = get_jit_target_from_environment();
+    Pipeline p(g);
+
+    p.auto_schedule(target);
+
+    // Inspect the schedule
+    g.print_loop_nest();
+}
+
 int main(int argc, char **argv) {
     test_case_1();
     test_case_2();
+    test_case_3();
 
     printf("Success!\n");
     return 0;
