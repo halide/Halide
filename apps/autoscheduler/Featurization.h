@@ -213,6 +213,8 @@ struct ScheduleFeatures {
     double warp_lane_utilization = 0;
     double num_shared_mem_loads = 0;
     double num_global_mem_loads = 0;
+    double num_shared_mem_stores = 0;
+    double num_global_mem_stores = 0;
 
     void dump() const {
         std::cerr << "    num_realizations:                      " << num_realizations << '\n'
@@ -258,7 +260,9 @@ struct ScheduleFeatures {
                   << "    block_occupancy:                       " << block_occupancy << '\n'
                   << "    warp_lane_utilization:                 " << warp_lane_utilization << '\n'
                   << "    num_shared_mem_loads:                  " << num_shared_mem_loads << '\n'
-                  << "    num_global_mem_loads:                  " << num_global_mem_loads << '\n';
+                  << "    num_global_mem_loads:                  " << num_global_mem_loads << '\n'
+                  << "    num_shared_mem_stores:                 " << num_shared_mem_stores << '\n'
+                  << "    num_global_mem_stores:                 " << num_global_mem_stores << '\n';
 
     }
 };

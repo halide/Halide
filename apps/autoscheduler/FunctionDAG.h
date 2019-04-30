@@ -20,6 +20,11 @@ using std::map;
 using std::string;
 using std::unique_ptr;
 
+template<typename T, typename... Args>
+std::unique_ptr<T> make_unique(Args&&... args) {
+    return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
+}
+
 // An optional rational type used when analyzing memory dependencies
 struct OptionalRational {
     bool exists = false;
@@ -106,6 +111,9 @@ class LoadJacobian {
     int64_t c;
 
 public:
+    LoadJacobian(const vector<vector<OptionalRational>>& matrix, int64_t c = 1) :
+        coeffs(matrix), c(c) {}
+
     LoadJacobian(vector<vector<OptionalRational>> &&matrix, int64_t c = 1) :
         coeffs(matrix), c(c) {}
 
@@ -559,6 +567,8 @@ struct FunctionDAG {
 
             // Ids for perfect hashing on stages.
             int id, max_id;
+
+            std::unique_ptr<LoadJacobian> store_jacobian;
 
             vector<Edge *> incoming_edges;
 
@@ -1435,6 +1445,10 @@ struct FunctionDAG {
             stage.features.transpose_accesses[(int)type][(int)type_class] += is_transpose;
             stage.features.broadcast_accesses[(int)type][(int)type_class] += is_broadcast;
             stage.features.slice_accesses[(int)type][(int)type_class] += is_slice;
+
+            if (type == PipelineFeatures::AccessType::Store) {
+                stage.store_jacobian = make_unique<LoadJacobian>(matrix);
+            }
 
             for (auto *e : stage.incoming_edges) {
                 if (e->producer->func.name() == name) {

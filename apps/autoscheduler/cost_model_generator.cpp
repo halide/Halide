@@ -245,6 +245,8 @@ public:
         Expr warp_lane_utilization = schedule_features(n, idx++, w);
         Expr num_shared_mem_loads = schedule_features(n, idx++, w);
         Expr num_global_mem_loads = schedule_features(n, idx++, w);
+        Expr num_shared_mem_stores = schedule_features(n, idx++, w);
+        Expr num_global_mem_stores = schedule_features(n, idx++, w);
         assert(idx == head2_w);
 
 
@@ -255,6 +257,7 @@ public:
                                     num_scalars * relu1(1, w, n)),
                                    (vector_size * num_vectors * relu1(2, w, n) +
                                     num_scalars * relu1(3, w, n)));
+        compute_cost += num_warps * relu1(31, w, n);
 
         Expr num_tasks = max(1, inner_parallelism * outer_parallelism);
         Expr tasks_per_core = num_tasks / num_cores;
@@ -294,7 +297,9 @@ public:
                            relu1(21, w, n));
 
         Expr store_cost = num_realizations * (lines_written_per_realization * alpha +
-                                              bytes_at_realization * beta);
+                                              bytes_at_realization * beta) +
+                          num_shared_mem_stores * relu1(29, w, n) +
+                          num_global_mem_stores * relu1(30, w, n);
 
         // Now account for false sharing of cache lines. The
         // probability of a store hitting a cache line also hit by

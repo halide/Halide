@@ -3,7 +3,7 @@
 
 namespace Halide {
 const int head1_channels = 8, head1_w = 40, head1_h = 7;
-const int head2_channels = 24, head2_w = 44;
+const int head2_channels = 24, head2_w = 46;
 const int conv1_channels = 32;
 }
 
