@@ -288,7 +288,8 @@ CodeGen_LLVM *CodeGen_LLVM::new_for_target(const Target &target,
                                 Target::OpenGL,
                                 Target::OpenGLCompute,
                                 Target::Metal,
-                                Target::D3D12Compute})) {
+                                Target::D3D12Compute,
+                                Target::Vulkan})) {
 #ifdef WITH_X86
         if (target.arch == Target::X86) {
             return make_codegen<CodeGen_GPU_Host<CodeGen_X86>>(target, context);
