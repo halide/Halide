@@ -2377,7 +2377,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         Expr p_wide = cast(wide_ty, op->args[0]) * cast(wide_ty, op->args[1]);
         const IntImm *shift = op->args[2].as<IntImm>();
         internal_assert(shift != nullptr) << "Third argument to mulhi_shr intrinsic must be integer immediate.\n";
-        value = codegen(cast(ty, p_wide >> (shift->value + ty.bits())));
+        value = codegen(cast(ty, p_wide >> make_const(p_wide.type(), (shift->value + ty.bits()))));
     } else if (op->is_intrinsic(Call::sorted_avg)) {
         internal_assert(op->args.size() == 2);
         // b > a, so the following works without widening:

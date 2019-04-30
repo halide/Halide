@@ -441,7 +441,7 @@ void match_types(Expr &a, Expr &b) {
         << "Can't do arithmetic on opaque pointer types: "
         << a << ", " << b << "\n";
 
-    // First widen to match
+    // Broadcast scalar to match vector
     if (a.type().is_scalar() && b.type().is_vector()) {
         a = Broadcast::make(std::move(a), b.type().lanes());
     } else if (a.type().is_vector() && b.type().is_scalar()) {
@@ -452,7 +452,7 @@ void match_types(Expr &a, Expr &b) {
 
     Type ta = a.type(), tb = b.type();
 
-    // If type widening has made the types match no additional casts are needed
+    // If type broadcasting has made the types match no additional casts are needed
     if (ta == tb) return;
 
     if (!ta.is_float() && tb.is_float()) {
@@ -477,6 +477,36 @@ void match_types(Expr &a, Expr &b) {
         b = cast(Int(bits, lanes), std::move(b));
     } else {
         internal_error << "Could not match types: " << ta << ", " << tb << "\n";
+    }
+}
+
+void match_types_bitwise(Expr &x, Expr &y, const char *op_name) {
+    user_assert(x.defined() && y.defined()) << op_name << " of undefined Expr\n";
+    user_assert(x.type().is_int() || x.type().is_uint())
+      << "The first argument to " << op_name << " must be an integer or unsigned integer";
+    user_assert(y.type().is_int() || y.type().is_uint())
+      << "The second argument to " << op_name << " must be an integer or unsigned integer";
+    if (y.type().is_int() != x.type().is_int()) {
+        debug(0) << "signed/unsigned mismatch for " << op_name << " x: " << x << " y: " << y << "\n";
+    }
+    user_assert(y.type().is_int() == x.type().is_int()) << "Arguments to " << op_name
+      << " must be both be signed or both be unsigned.\n";
+
+    // Broadcast scalar to match vector
+    if (x.type().is_scalar() && y.type().is_vector()) {
+        x = Broadcast::make(std::move(x), y.type().lanes());
+    } else if (x.type().is_vector() && y.type().is_scalar()) {
+        y = Broadcast::make(std::move(y), x.type().lanes());
+    } else {
+        internal_assert(x.type().lanes() == y.type().lanes()) << "Can't match types of differing widths";
+    }
+
+    // Cast to the wider type of the two. Already guaranteed to leave
+    // signed/unsigned on number of lanes unchanged.
+    if (x.type().bits() < y.type().bits()) {
+        x = cast(y.type(), x);
+    } else if (y.type().bits() < x.type().bits()) {
+        y = cast(x.type(), y);
     }
 }
 

@@ -407,7 +407,7 @@ void CodeGen_X86::visit(const Cast *op) {
 
 void CodeGen_X86::visit(const Call *op) {
     if (op->is_intrinsic(Call::mulhi_shr) &&
-        op->type.is_vector() && (op->type.bits() == 8 || op->type.bits() == 16)) {
+        op->type.is_vector() && op->type.bits() == 16) {
         internal_assert(op->args.size() == 3);
         Expr p;
         if (op->type.is_uint()) {
@@ -418,7 +418,7 @@ void CodeGen_X86::visit(const Call *op) {
         const IntImm *shift = op->args[2].as<IntImm>();
         internal_assert(shift != nullptr) << "Third argument to mulhi_shr intrinsic must be integer immediate.\n";
         if (shift->value != 0) {
-            p = p >> shift->value;
+	    p = p >> make_const(p.type(), shift->value);
         }
         value = codegen(p);
         return;

@@ -1897,7 +1897,7 @@ void CodeGen_Hexagon::visit(const Call *op) {
         const IntImm *shift = op->args[2].as<IntImm>();
         internal_assert(shift != nullptr) << "Third argument to mulhi_shr intrinsic must be integer immediate.\n";
         if (shift->value != 0) {
-            p = p >> shift->value;
+            p = p >> make_const(p.type(), shift->value);
         }
 
         value = codegen(p);
