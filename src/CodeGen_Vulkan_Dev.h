@@ -107,6 +107,9 @@ protected:
         // IDs are allocated in numerical order of use.
         uint32_t next_id{0};
 
+        // The void type does not map to a Halide type, but must be unique
+        uint32_t void_id;
+
         // SPIR-V instructions in a module must be in a specific
         // order. This order doesn't correspond to the order in which they
         // are created. Hence we generate into a set of blocks, each of
@@ -120,6 +123,9 @@ protected:
         std::vector<uint32_t> spir_v_types;
         std::vector<uint32_t> spir_v_kernels;
 
+        // Top-level function for adding kernels
+        void add_kernel(Stmt s, const std::string &name, const std::vector<DeviceArgument> &args);
+
         std::map<Type, uint32_t> type_map;
         // Separate map for pointers to function locals
         std::map<Type, uint32_t> pointer_type_map_local;
@@ -130,6 +136,9 @@ protected:
         void add_instruction(std::vector<uint32_t> &region, uint32_t opcode,
                              std::initializer_list<uint32_t> words);
         void add_instruction(uint32_t opcode, std::initializer_list<uint32_t> words);
+        void add_instruction(std::vector<uint32_t> &region, uint32_t opcode,
+                            std::vector<uint32_t> words);
+        void add_instruction(uint32_t opcode, std::vector<uint32_t> words);
         uint32_t map_type(const Type &type);
         // This takes a regular type, but makes pointer to a local variable.
         uint32_t map_pointer_type_local(const Type &type);

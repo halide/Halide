@@ -22,7 +22,17 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::add_instruction(uint32_t opcode, std::ini
     spir_v_kernels.push_back(((1 + words.size()) << 16) | opcode);
     spir_v_kernels.insert(spir_v_kernels.end(), words.begin(), words.end());
 }
-    
+void CodeGen_Vulkan_Dev::SPIRVEmitter::add_instruction(std::vector<uint32_t> &region, uint32_t opcode,
+                                                        std::vector<uint32_t> words) {
+  region.push_back(((1 + words.size()) << 16) | opcode);
+  region.insert(region.end(), words.begin(), words.end());
+}
+
+void CodeGen_Vulkan_Dev::SPIRVEmitter::add_instruction(uint32_t opcode, std::vector<uint32_t> words) {
+  spir_v_kernels.push_back(((1 + words.size()) << 16) | opcode);
+  spir_v_kernels.insert(spir_v_kernels.end(), words.begin(), words.end());
+}
+
 uint32_t CodeGen_Vulkan_Dev::SPIRVEmitter::emit_constant(const Type &t, const void *data) {
     std::string key(t.bytes() + 4, ' ');
     key[0] = t.code();
@@ -792,6 +802,50 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit_binop(Type t, Expr a, Expr b, int32
     add_instruction(opcode, { type_id, id, a_id, b_id });
 }
 
+
+void CodeGen_Vulkan_Dev::SPIRVEmitter::add_kernel(Stmt s,
+                                                  const std::string &name,
+                                                  const std::vector<DeviceArgument> &args) {
+    debug(2) << "Adding Vulkan kernel " << name << "\n";
+
+    // Add function definition
+    // TODO: can we use one of the function control annotations?
+
+    // Declare the function type.  TODO: should this be unique?
+    // First, gather all the types of the parameters
+    uint32_t function_type_id = next_id++;
+    std::vector<uint32_t> param_type_ids;
+    param_type_ids.push_back(function_type_id);
+    // return type
+    param_type_ids.push_back(void_id);
+
+    for (auto arg: args) {
+        auto type_id = arg.is_buffer ? map_pointer_type_input(arg.type) : map_type(arg.type);
+        param_type_ids.push_back(type_id);
+    }
+    add_instruction(spir_v_types, SpvOpTypeFunction, param_type_ids);
+
+    // Add definition and parameters
+    uint32_t function_id = next_id++;
+    add_instruction(SpvOpFunction, {function_id, SpvFunctionControlMaskNone, function_type_id});
+    for (size_t i = 0; i < args.size(); i++) {
+        auto param_id = next_id++;
+        // The first two entries in param_type_ids are the function type id and return type
+        add_instruction(SpvOpFunctionParameter, {param_type_ids[2+i], param_id});
+        symbol_table.push(args[i].name, param_id);
+    }
+
+    s.accept(this);
+
+    // Insert function end delimiter
+    add_instruction(SpvOpFunctionEnd, {});
+
+    // Pop scope
+    for (auto arg: args) {
+        symbol_table.pop(arg.name);
+    }
+}
+
 CodeGen_Vulkan_Dev::CodeGen_Vulkan_Dev(Target t) {
 }
 
@@ -804,6 +858,9 @@ void CodeGen_Vulkan_Dev::init_module() {
     emitter.spir_v_header.push_back(SpvSourceLanguageUnknown);
     emitter.spir_v_header.push_back(0); // Bound placeholder
     emitter.spir_v_header.push_back(0); // Reserved for schema.
+
+    // the unique void type
+    emitter.void_id = emitter.next_id++;
 
 
     // OpCapability instructions
@@ -825,8 +882,7 @@ void CodeGen_Vulkan_Dev::add_kernel(Stmt stmt,
                                     const std::string &name,
                                     const std::vector<DeviceArgument> &args) {
     current_kernel_name = name;
-
-    stmt.accept(&emitter);
+    emitter.add_kernel(stmt, name, args);
 }
 
 std::vector<char> CodeGen_Vulkan_Dev::compile_to_src() {
@@ -835,7 +891,7 @@ std::vector<char> CodeGen_Vulkan_Dev::compile_to_src() {
     emitter.spir_v_header[3] = emitter.next_id;
 
     std::vector<char> final_module;
-    size_t total_size = (emitter.spir_v_header.size() + emitter.spir_v_entrypoints.size() + emitter.spir_v_types.size() + emitter.spir_v_kernels.size()) * sizeof(uint32_t);
+    size_t total_size = (emitter.spir_v_header.size() + emitter.spir_v_entrypoints.size() + emitter.spir_v_annotations.size() + emitter.spir_v_types.size() + emitter.spir_v_kernels.size()) * sizeof(uint32_t);
     final_module.reserve(total_size);
     final_module.insert(final_module.end(), (const char *)emitter.spir_v_header.data(), (const char *)(emitter.spir_v_header.data() + emitter.spir_v_header.size()));
     final_module.insert(final_module.end(), (const char *)emitter.spir_v_entrypoints.data(), (const char *)(emitter.spir_v_entrypoints.data() + emitter.spir_v_entrypoints.size()));
