@@ -9,6 +9,9 @@
 
 #include "spirv/spirv.h"
 
+// Temporary:
+#include <fstream>
+
 namespace Halide {
 namespace Internal {
 
@@ -609,6 +612,8 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const For *op) {
         add_instruction(SpvOpCompositeExtract, {map_type(UInt(32)), gpu_var_id, intrinsic_id, intrinsic.second});
         {
             ScopedBinding<uint32_t> binding(symbol_table, op->name, gpu_var_id);
+            //std::cerr << "Loop body is " << op->body;
+            //if (!op->body.as<For>()) return;
             op->body.accept(this);
         }
 
@@ -827,7 +832,7 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::add_kernel(Stmt s,
 
     // Add definition and parameters
     uint32_t function_id = next_id++;
-    add_instruction(SpvOpFunction, {function_id, SpvFunctionControlMaskNone, function_type_id});
+    add_instruction(SpvOpFunction, {void_id, function_id, SpvFunctionControlMaskNone, function_type_id});
     for (size_t i = 0; i < args.size(); i++) {
         auto param_id = next_id++;
         // The first two entries in param_type_ids are the function type id and return type
@@ -860,7 +865,19 @@ void CodeGen_Vulkan_Dev::init_module() {
     emitter.spir_v_header.push_back(0); // Reserved for schema.
 
     // the unique void type
+    emitter.next_id++; // 0 is not a valid id
     emitter.void_id = emitter.next_id++;
+    emitter.add_instruction(emitter.spir_v_types, SpvOpTypeVoid, {emitter.void_id});
+
+    // Capabilities
+    emitter.add_instruction(emitter.spir_v_header, SpvOpCapability, {SpvCapabilityAddresses});
+    emitter.add_instruction(emitter.spir_v_header, SpvOpCapability, {SpvCapabilityKernel});
+
+    // Memory model
+    // TODO: 32-bit or 64-bit?
+    // TODO: Which memory model?
+    emitter.add_instruction(emitter.spir_v_header, SpvOpMemoryModel,
+                            {SpvAddressingModelPhysical32, SpvMemoryModelOpenCL});
 
 
     // OpCapability instructions
@@ -883,6 +900,7 @@ void CodeGen_Vulkan_Dev::add_kernel(Stmt stmt,
                                     const std::vector<DeviceArgument> &args) {
     current_kernel_name = name;
     emitter.add_kernel(stmt, name, args);
+    dump();
 }
 
 std::vector<char> CodeGen_Vulkan_Dev::compile_to_src() {
@@ -914,11 +932,11 @@ std::string CodeGen_Vulkan_Dev::print_gpu_name(const std::string &name) {
 
 void CodeGen_Vulkan_Dev::dump() {
     // TODO: Figure out what goes here.
-    // For now: dump to stdout so source can be consumed by validator
+    // For now: dump to file so source can be consumed by validator
     auto module = compile_to_src();
-    for (auto v: module) {
-      debug(0) << v << " ";
-    }
+    std::ofstream f("out.spv", std::ios::out | std::ios::binary);
+    f.write((char*)(module.data()), module.size());
+    f.close();
 }
 
 }  // namespace Internal
