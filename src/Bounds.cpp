@@ -1218,6 +1218,8 @@ private:
                 // Substitute it in
                 var.max = val.max;
                 val.max = Expr();
+            } else if (val.is_single_point()) {
+                var.max = var.min;
             } else {
                 var.max = Variable::make(op->value.type().element_of(), max_name);
             }
@@ -1228,20 +1230,30 @@ private:
             op->body.accept(this);
         }
 
+        bool single_point = interval.is_single_point();
+
         if (interval.has_lower_bound()) {
-            if (val.min.defined() && expr_uses_var(interval.min, min_name)) {
+            if (val.min.defined() &&
+                expr_uses_var(interval.min, min_name)) {
                 interval.min = Let::make(min_name, val.min, interval.min);
             }
-            if (val.max.defined() && expr_uses_var(interval.min, max_name)) {
+            if (val.max.defined() &&
+                !val.is_single_point() &&
+                expr_uses_var(interval.min, max_name)) {
                 interval.min = Let::make(max_name, val.max, interval.min);
             }
         }
 
-        if (interval.has_upper_bound()) {
-            if (val.min.defined() && expr_uses_var(interval.max, min_name)) {
+        if (single_point) {
+            interval.max = interval.min;
+        } else if (interval.has_upper_bound()) {
+            if (val.min.defined() &&
+                expr_uses_var(interval.max, min_name)) {
                 interval.max = Let::make(min_name, val.min, interval.max);
             }
-            if (val.max.defined() && expr_uses_var(interval.max, max_name)) {
+            if (val.max.defined() &&
+                !val.is_single_point() &&
+                expr_uses_var(interval.max, max_name)) {
                 interval.max = Let::make(max_name, val.max, interval.max);
             }
         }

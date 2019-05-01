@@ -1,4 +1,4 @@
-#include <HalideRuntime.h>
+#include "HalideRuntime.h"
 
 #include <stdlib.h>
 #include <stdio.h>

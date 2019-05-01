@@ -1,12 +1,12 @@
-#include "bin/src/halide_hexagon_remote.h"
-#include <HalideRuntime.h>
+#include "halide_hexagon_remote.h"
+#include "HalideRuntime.h"
 
 #include <stdlib.h>
 #include <stdio.h>
 #include <dlfcn.h>
 #include <unistd.h>
 #include <memory.h>
-#include <hexagon_standalone.h>
+#include "hexagon_standalone.h"
 
 #include "sim_protocol.h"
 #include "log.h"

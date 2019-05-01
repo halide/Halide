@@ -121,7 +121,7 @@ int main(int argc, char **argv) {
     // bit shift on mixed types
     Func f9;
     Expr a32 = cast<int32_t>(input(x));
-    Expr b8  = min(31, cast<uint8_t>(input(x+1)));
+    Expr b8  = cast<int32_t>(min(31, cast<uint8_t>(input(x+1))));
     f9(x) = a32 >> b8;
     Buffer<int> im9 = f9.realize(128);
     for (int x = 0; x < 128; x++) {
@@ -139,7 +139,7 @@ int main(int argc, char **argv) {
     // bitwise and on mixed types
     Func f10;
     Expr a8 = cast<int8_t>(input(x));
-    f10(x) = a8 & 0xf0;
+    f10(x) = a8 & cast<int8_t>(0xf0);
     Buffer<int8_t> im10 = f10.realize(128);
     for (int x = 0; x < 128; x++) {
         int8_t correct = (int8_t)(input(x)) & 0xf0;
@@ -148,6 +148,28 @@ int main(int argc, char **argv) {
                    input(x), im10(x), correct);
             return -1;
         }
+    }
+
+    // bitwise xor scalar/vector
+    Expr vec = cast(UInt(8).with_lanes(4), 42) ^ 3;
+    assert(vec.type().lanes() == 4);
+
+    // Ensure signedness is preserved.
+    Expr vec2 = cast(UInt(8).with_lanes(4), 42) & 3;
+    assert(vec.type().is_uint());
+
+    // Ensure that bitwise op is commutative re: type.  (This was not
+    // true at least for some time, which is problematic given that
+    // simplification and other things assume expressions can be
+    // reordered.)
+    {
+        Expr a = cast(UInt(8), 42);
+        Expr b = cast(UInt(16), 199);
+
+        Expr a_then_b = a ^ b;
+        Expr b_then_a = b ^ a;
+
+        assert(a_then_b.type() == b_then_a.type());
     }
 
     printf("Success!\n");
