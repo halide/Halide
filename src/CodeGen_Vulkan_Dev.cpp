@@ -115,6 +115,11 @@ uint32_t CodeGen_Vulkan_Dev::SPIRVEmitter::map_type(const Type &t) {
             }
         }
         type_map[t] = type_id;
+        if (t.is_int_or_uint()) {
+            // these are the same type according to Vulkan
+            auto type_code_of_other = t.code() == Type::Int ? Type::UInt : Type::Int;
+            type_map[Type(type_code_of_other, t.bits(), t.lanes())] = type_id;
+        }
         return type_id;
     } else {
         return item->second;
