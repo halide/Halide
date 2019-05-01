@@ -2376,7 +2376,16 @@ void CodeGen_C::visit(const Call *op) {
         rhs << print_extern_call(op);
     }
 
-    print_assignment(op->type, rhs.str());
+    // Special-case for some calls that have IR that returns int, but really return void
+    if (op->name == "halide_msan_annotate_memory_is_initialized" ||
+        op->name == "halide_msan_annotate_buffer_is_initialized") {
+        do_indent();
+        stream << rhs.str() << ";\n";
+        // Make an innocuous assignment value for our caller (probably an Evaluate node) to ignore.
+        print_assignment(op->type, "0");
+    } else {
+        print_assignment(op->type, rhs.str());
+    }
 }
 
 string CodeGen_C::print_scalarized_expr(Expr e) {
