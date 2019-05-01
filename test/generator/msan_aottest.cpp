@@ -98,7 +98,7 @@ extern "C" int halide_msan_annotate_memory_is_initialized(void *user_context, co
                 fprintf(stderr, "Failure: Expected error message of len=87, saw %d bytes\n", (unsigned int) len);
                 exit(-1);
             }
-            return;  // stay in this state
+            return 0;  // stay in this state
         }
         if (output_previous != nullptr || len != sizeof(halide_buffer_t)) {
             fprintf(stderr, "Failure: Expected sizeof(halide_buffer_t), saw %d\n", (unsigned int) len);
