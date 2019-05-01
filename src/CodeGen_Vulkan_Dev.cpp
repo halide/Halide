@@ -129,10 +129,23 @@ uint32_t CodeGen_Vulkan_Dev::SPIRVEmitter::map_pointer_type_local(const Type &ty
         uint32_t base_type_id = map_type(type);
         ref = next_id++;
         add_instruction(spir_v_types, SpvOpTypePointer, { ref, SpvStorageClassFunction, base_type_id });
+        pointer_type_map_local[type] = ref;
     }
     return ref;
 }
 
+// TODO: Probably should unify all the pointer types into a single map
+uint32_t CodeGen_Vulkan_Dev::SPIRVEmitter::map_pointer_type_input(const Type &type) {
+    uint32_t &ref = pointer_type_map_input[type];
+
+    if (ref == 0) {
+      uint32_t base_type_id = map_type(type);
+      ref = next_id++;
+      add_instruction(spir_v_types, SpvOpTypePointer, { ref, SpvStorageClassInput, base_type_id });
+      pointer_type_map_input[type] = ref;
+    }
+    return ref;
+}
 void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Variable *var) {
     id = symbol_table.get(var->name);
 }
@@ -532,64 +545,122 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const ProducerConsumer *) {
 #endif
 }
 
-void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const For *op) {
-    // TODO: Handle types (parallel) of loops?
-    internal_assert(op->for_type == ForType::Serial) << "CodeGen_Vulkan_Dev::SPIRVEmitter::visit unhandled For type: " << op->for_type << "\n";
-
-    // TODO: Loop vars are alway int32_t right?
-    uint32_t index_type_id = map_type(Int(32));
-    uint32_t index_var_type_id = map_pointer_type_local(Int(32));
-    
-    op->min.accept(this);
-    uint32_t min_id = id;
-    op->extent.accept(this);
-    uint32_t extent_id = id;
-
-    // Compute max.
-    uint32_t max_id = next_id++;
-    add_instruction(SpvOpIAdd, { index_type_id, max_id, min_id, extent_id });
-    
-    // Declare loop var
-    uint32_t loop_var_id = next_id++;
-    add_instruction(SpvOpVariable, { index_var_type_id, loop_var_id, min_id });
-
-    uint32_t header_label_id = next_id++;
-    uint32_t loop_top_label_id = next_id++;
-    uint32_t body_label_id = next_id++;
-    uint32_t continue_label_id = next_id++;
-    uint32_t merge_label_id = next_id++;
-    add_instruction(SpvOpLabel, { header_label_id });
-    add_instruction(SpvOpLoopMerge, { merge_label_id, continue_label_id, SpvLoopControlMaskNone });
-    add_instruction(SpvOpBranch, { loop_top_label_id });
-    add_instruction(SpvOpLabel, { loop_top_label_id });
-
-    // loop test.
-    uint32_t cur_index_id = next_id++;
-    add_instruction(SpvOpLoad, { index_type_id, cur_index_id, loop_var_id });
-    
-    uint32_t loop_test_id = next_id++;
-    add_instruction(SpvOpSLessThanEqual, { loop_test_id, cur_index_id, max_id });
-    add_instruction(SpvOpBranchConditional, { loop_test_id, body_label_id, merge_label_id });
-
-    add_instruction(SpvOpLabel, { body_label_id });
-
-    {
-        ScopedBinding<uint32_t> binding(symbol_table, op->name, cur_index_id);
-    
-        op->body.accept(this);
+namespace {
+std::pair<std::string, uint32_t> simt_intrinsic(const std::string &name) {
+    if (ends_with(name, ".__thread_id_x")) {
+      return {"LocalInvocationId", 0};
+    } else if (ends_with(name, ".__thread_id_y")) {
+      return {"LocalInvocationId", 1};
+    } else if (ends_with(name, ".__thread_id_z")) {
+      return {"LocalInvocationId", 2};
+    } else if (ends_with(name, ".__block_id_x")) {
+      return {"WorkgroupId", 0};
+    } else if (ends_with(name, ".__block_id_y")) {
+      return {"WorkgroupId", 1};
+    } else if (ends_with(name, ".__block_id_z")) {
+      return {"WorkgroupId", 2};
+    } else if (ends_with(name, "id_w")) {
+      user_error << "Vulkan only supports <=3 dimensions for gpu blocks";
     }
+    internal_error << "simt_intrinsic called on bad variable name: " << name << "\n";
+    return {"", -1};
+}
+} // anonymous namespace
 
-    add_instruction(SpvOpBranch, { continue_label_id });
-    add_instruction(SpvOpLabel, { continue_label_id });
+void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const For *op) {
 
-    // Loop var update?
-    uint32_t next_index_id = next_id++;
-    int32_t one = 1;
-    uint32_t constant_one_id = emit_constant(Int(32), &one);
-    add_instruction(SpvOpIAdd, { index_type_id, next_index_id, cur_index_id, constant_one_id});
-    add_instruction(SpvOpStore, { index_type_id, next_index_id, loop_var_id });
-    add_instruction(SpvOpBranch, { header_label_id });
-    add_instruction(SpvOpLabel, { merge_label_id });
+    if (is_gpu_var(op->name)) {
+        internal_assert((op->for_type == ForType::GPUBlock) ||
+                        (op->for_type == ForType::GPUThread))
+            << "kernel loops must be either gpu block or gpu thread\n";
+        // This should always be true at this point in codegen
+        internal_assert(is_zero(op->min));
+
+        auto intrinsic = simt_intrinsic(op->name);
+
+        // The builtins are pointers to vec3
+        uint32_t intrinsic_type_id = map_pointer_type_input(Type(Type::UInt, 32, 3));
+
+        // If the symbol table does not contain mappings for the SIMT intrinsic,
+        // we need to add them first
+        // TODO: could be done at module init time, and could use ScopedBinding
+        if (!symbol_table.contains(intrinsic.first)) {
+            uint32_t intrinsic_id = next_id++;
+            add_instruction(spir_v_types, SpvOpVariable, {intrinsic_type_id, intrinsic_id, SpvStorageClassInput});
+            symbol_table.push(intrinsic.first, intrinsic_id);
+
+            // Annotate that this is the specific builtin
+            auto built_in_kind = starts_with(intrinsic.first, "Workgroup") ? SpvBuiltInWorkgroupId : SpvBuiltInLocalInvocationId;
+            add_instruction(spir_v_annotations, SpvOpDecorate, {intrinsic_id, SpvDecorationBuiltIn, built_in_kind});
+        }
+
+        uint32_t intrinsic_id = symbol_table.get(intrinsic.first);
+        uint32_t gpu_var_id = next_id++;
+        add_instruction(SpvOpCompositeExtract, {map_type(UInt(32)), gpu_var_id, intrinsic_id, intrinsic.second});
+        {
+            ScopedBinding<uint32_t> binding(symbol_table, op->name, gpu_var_id);
+            op->body.accept(this);
+        }
+
+    } else {
+
+        internal_assert(op->for_type == ForType::Serial) << "CodeGen_Vulkan_Dev::SPIRVEmitter::visit unhandled For type: " << op->for_type << "\n";
+
+        // TODO: Loop vars are alway int32_t right?
+        uint32_t index_type_id = map_type(Int(32));
+        uint32_t index_var_type_id = map_pointer_type_local(Int(32));
+
+        op->min.accept(this);
+        uint32_t min_id = id;
+        op->extent.accept(this);
+        uint32_t extent_id = id;
+
+        // Compute max.
+        uint32_t max_id = next_id++;
+        add_instruction(SpvOpIAdd, { index_type_id, max_id, min_id, extent_id });
+
+        // Declare loop var
+        uint32_t loop_var_id = next_id++;
+        add_instruction(SpvOpVariable, { index_var_type_id, loop_var_id, min_id });
+
+        uint32_t header_label_id = next_id++;
+        uint32_t loop_top_label_id = next_id++;
+        uint32_t body_label_id = next_id++;
+        uint32_t continue_label_id = next_id++;
+        uint32_t merge_label_id = next_id++;
+        add_instruction(SpvOpLabel, { header_label_id });
+        add_instruction(SpvOpLoopMerge, { merge_label_id, continue_label_id, SpvLoopControlMaskNone });
+        add_instruction(SpvOpBranch, { loop_top_label_id });
+        add_instruction(SpvOpLabel, { loop_top_label_id });
+
+        // loop test.
+        uint32_t cur_index_id = next_id++;
+        add_instruction(SpvOpLoad, { index_type_id, cur_index_id, loop_var_id });
+
+        uint32_t loop_test_id = next_id++;
+        add_instruction(SpvOpSLessThanEqual, { loop_test_id, cur_index_id, max_id });
+        add_instruction(SpvOpBranchConditional, { loop_test_id, body_label_id, merge_label_id });
+
+        add_instruction(SpvOpLabel, { body_label_id });
+
+        {
+            ScopedBinding<uint32_t> binding(symbol_table, op->name, cur_index_id);
+
+            op->body.accept(this);
+        }
+
+        add_instruction(SpvOpBranch, { continue_label_id });
+        add_instruction(SpvOpLabel, { continue_label_id });
+
+        // Loop var update?
+        uint32_t next_index_id = next_id++;
+        int32_t one = 1;
+        uint32_t constant_one_id = emit_constant(Int(32), &one);
+        add_instruction(SpvOpIAdd, { index_type_id, next_index_id, cur_index_id, constant_one_id});
+        add_instruction(SpvOpStore, { index_type_id, next_index_id, loop_var_id });
+        add_instruction(SpvOpBranch, { header_label_id });
+        add_instruction(SpvOpLabel, { merge_label_id });
+    }
 }
 
 void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Ramp *op) {
@@ -733,6 +804,7 @@ void CodeGen_Vulkan_Dev::init_module() {
     emitter.spir_v_header.push_back(SpvSourceLanguageUnknown);
     emitter.spir_v_header.push_back(0); // Bound placeholder
     emitter.spir_v_header.push_back(0); // Reserved for schema.
+
 
     // OpCapability instructions
     //    Enumerate type maps and add subwidth integer types if used
