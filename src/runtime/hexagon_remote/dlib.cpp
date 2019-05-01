@@ -10,7 +10,7 @@ extern "C" {
 #include <dlfcn.h>
 }
 
-#include <HalideRuntime.h>
+#include "HalideRuntime.h"
 #include "dlib.h"
 #include "log.h"
 

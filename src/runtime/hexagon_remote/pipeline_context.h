@@ -1,7 +1,7 @@
 #ifndef HALIDE_HEXAGON_REMOTE_PIPELINE_CONTEXT_H
 #define HALIDE_HEXAGON_REMOTE_PIPELINE_CONTEXT_H
 
-#include <HalideRuntime.h>
+#include "HalideRuntime.h"
 
 #include <qurt.h>
 

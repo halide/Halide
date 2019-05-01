@@ -31,6 +31,16 @@ ifeq ($(UNAME), Darwin)
 CXXFLAGS += -fvisibility=hidden
 endif
 
+ifeq ($(UNAME), Linux)
+USE_EXPORT_DYNAMIC=-rdynamic
+else
+ifeq ($(UNAME), Darwin)
+USE_EXPORT_DYNAMIC=-undefined dynamic_lookup
+else
+USE_EXPORT_DYNAMIC=
+endif
+endif
+
 # To run apps on android that support this, build a separate toolchain from the Android NDK
 # using the make-standalone-toolchain.sh script:
 #$ build/tools/make-standalone-toolchain.sh --arch=arm64 --platform=android-21 --install-dir=$ANDROID_ARM64_TOOLCHAIN

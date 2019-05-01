@@ -1,6 +1,6 @@
-#include "bin/src/halide_hexagon_remote.h"
-#include <HalideRuntime.h>
-#include <HalideRuntimeHexagonHost.h>
+#include "halide_hexagon_remote.h"
+#include "HalideRuntime.h"
+#include "HalideRuntimeHexagonHost.h"
 
 #include <stdlib.h>
 #include <stdio.h>

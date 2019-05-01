@@ -247,8 +247,8 @@ Expr lower_euclidean_div(Expr a, Expr b) {
         */
 
         Expr r = a - q*b;
-        Expr bs = b >> (a.type().bits() - 1);
-        Expr rs = r >> (a.type().bits() - 1);
+        Expr bs = b >> make_const(b.type(), (a.type().bits() - 1));
+        Expr rs = r >> make_const(r.type(), (a.type().bits() - 1));
         q = q - (rs & bs) + (rs & ~bs);
         return common_subexpression_elimination(q);
     } else {
@@ -269,8 +269,8 @@ Expr lower_euclidean_mod(Expr a, Expr b) {
           r = r + sign_mask & abs(b);
         */
 
-        Expr sign_mask = r >> (a.type().bits()-1);
-        r += sign_mask & abs(b);
+        Expr sign_mask = r >> cast(r.type(), (a.type().bits()-1));
+        r += sign_mask & cast(sign_mask.type(), abs(b));
         return common_subexpression_elimination(r);
     } else {
         return r;
@@ -397,6 +397,8 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
     get_md_bool(module.getModuleFlag("halide_use_soft_float_abi"), use_soft_float_abi);
     get_md_string(module.getModuleFlag("halide_mcpu"), mcpu);
     get_md_string(module.getModuleFlag("halide_mattrs"), mattrs);
+    bool use_pic = true;
+    get_md_bool(module.getModuleFlag("halide_use_pic"), use_pic);
 
     bool per_instruction_fast_math_flags = false;
     get_md_bool(module.getModuleFlag("halide_per_instruction_fast_math_flags"), per_instruction_fast_math_flags);
@@ -411,7 +413,7 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
     options.GuaranteedTailCallOpt = false;
     options.StackAlignmentOverride = 0;
     options.FunctionSections = true;
-    options.UseInitArray = false;
+    options.UseInitArray = true;
     options.FloatABIType =
         use_soft_float_abi ? llvm::FloatABI::Soft : llvm::FloatABI::Hard;
     options.RelaxELFRelocations = false;
@@ -437,6 +439,11 @@ void clone_target_options(const llvm::Module &from, llvm::Module &to) {
     if (get_md_string(from.getModuleFlag("halide_mattrs"), mattrs)) {
         to.addModuleFlag(llvm::Module::Warning, "halide_mattrs", llvm::MDString::get(context, mattrs));
     }
+
+    bool use_pic = true;
+    if (get_md_bool(from.getModuleFlag("halide_use_pic"), use_pic)) {
+        to.addModuleFlag(llvm::Module::Warning, "halide_use_pic", use_pic ? 1 : 0);
+    }
 }
 
 std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &module) {
@@ -455,10 +462,13 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
     std::string mattrs = "";
     get_target_options(module, options, mcpu, mattrs);
 
+    bool use_pic = true;
+    get_md_bool(module.getModuleFlag("halide_use_pic"), use_pic);
+
     return std::unique_ptr<llvm::TargetMachine>(llvm_target->createTargetMachine(module.getTargetTriple(),
                                                 mcpu, mattrs,
                                                 options,
-                                                llvm::Reloc::PIC_,
+                                                use_pic ? llvm::Reloc::PIC_ : llvm::Reloc::Static,
 #ifdef HALIDE_USE_CODEMODEL_LARGE
                                                 llvm::CodeModel::Large,
 #else
@@ -494,11 +504,7 @@ void embed_bitcode(llvm::Module *M, const string &halide_command) {
     Triple triple(M->getTargetTriple());
     // Create a constant that contains the bitcode.
     llvm::raw_string_ostream OS(data);
-#if LLVM_VERSION >= 70
     llvm::WriteBitcodeToFile(*M, OS, /* ShouldPreserveUseListOrder */ true);
-#else
-    llvm::WriteBitcodeToFile(M, OS, /* ShouldPreserveUseListOrder */ true);
-#endif
     ArrayRef<uint8_t> module_data =
         ArrayRef<uint8_t>((const uint8_t *)OS.str().data(), OS.str().size());
 
