@@ -142,7 +142,23 @@ uint32_t CodeGen_Vulkan_Dev::SPIRVEmitter::map_type_to_pair(const Type &t) {
     return ref;
 }
 
+uint32_t CodeGen_Vulkan_Dev::SPIRVEmitter::map_pointer_type(const Type &type, const uint32_t storage_class) {
+    auto key = std::make_pair(type, storage_class);
+    uint32_t &ref = pointer_type_map[key];
+    if (ref == 0) {
+        uint32_t base_type_id = map_type(type);
+        ref = next_id++;
+        add_instruction(spir_v_types, SpvOpTypePointer, { ref, storage_class, base_type_id });
+        pointer_type_map[key] = ref;
+    }
+
+    return ref;
+}
+
+// TODO: remove
 uint32_t CodeGen_Vulkan_Dev::SPIRVEmitter::map_pointer_type_local(const Type &type) {
+    return map_pointer_type(type, SpvStorageClassFunction);
+#if 0
     uint32_t &ref = pointer_type_map_local[type];
 
     if (ref == 0) {
@@ -152,10 +168,13 @@ uint32_t CodeGen_Vulkan_Dev::SPIRVEmitter::map_pointer_type_local(const Type &ty
         pointer_type_map_local[type] = ref;
     }
     return ref;
+#endif
 }
 
-// TODO: Probably should unify all the pointer types into a single map
+// TODO: remove
 uint32_t CodeGen_Vulkan_Dev::SPIRVEmitter::map_pointer_type_input(const Type &type) {
+    return map_pointer_type(type, SpvStorageClassInput);
+#if 0
     uint32_t &ref = pointer_type_map_input[type];
 
     if (ref == 0) {
@@ -165,7 +184,9 @@ uint32_t CodeGen_Vulkan_Dev::SPIRVEmitter::map_pointer_type_input(const Type &ty
       pointer_type_map_input[type] = ref;
     }
     return ref;
+#endif
 }
+
 void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Variable *var) {
     id = symbol_table.get(var->name);
 }
@@ -530,7 +551,29 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Load *op) {
 }
 
 void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Store *op) {
-  debug(2) << "Vulkan codegen: Store: " << op << "\n";
+    debug(2) << "Vulkan codegen: Store: " << (Stmt)op << "\n";
+
+    user_assert(is_one(op->predicate)) << "Predicated stores not supported by the Vulkan backend\n";
+
+    // TODO: implement vector writes
+    // TODO: correct casting to the appropriate memory space
+
+    internal_assert(!(op->index.type().is_vector()));
+    internal_assert(op->param.defined() && op->param.is_buffer());
+
+    op->value.accept(this);
+    uint32_t value_id = id;
+
+    // Construct the pointer to write to
+    uint32_t base_id = symbol_table.get(op->name);
+    op->index.accept(this);
+    uint32_t index_id = id;
+    uint32_t ptr_type_id = map_pointer_type(op->value.type(), SpvStorageClassGeneric);
+    uint32_t access_chain_id = next_id++;
+    add_instruction(SpvOpInBoundsAccessChain, {ptr_type_id, access_chain_id, base_id, index_id});
+
+    add_instruction(SpvOpStore, {access_chain_id, value_id});
+
 }
 
 void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Let *let) {
@@ -764,6 +807,9 @@ CodeGen_Vulkan_Dev::SPIRVEmitter::emit_if_then_else(Expr condition,
     else_case.accept(this);
     uint32_t else_id = id;
 
+    // Every basic block must end with a branch instruction
+    add_instruction(SpvOpBranch, {merge_label_id});
+
     add_instruction(SpvOpLabel, { merge_label_id });
 
     return {{ then_id, then_label_id, else_id, else_label_id }};
@@ -835,7 +881,8 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::add_kernel(Stmt s,
     param_type_ids.push_back(void_id);
 
     for (auto arg: args) {
-        auto type_id = arg.is_buffer ? map_pointer_type_input(arg.type) : map_type(arg.type);
+        auto type_id = arg.is_buffer ? map_pointer_type(arg.type, SpvStorageClassCrossWorkgroup)
+                                     : map_type(arg.type);
         param_type_ids.push_back(type_id);
     }
     add_instruction(spir_v_types, SpvOpTypeFunction, param_type_ids);
@@ -886,6 +933,7 @@ void CodeGen_Vulkan_Dev::init_module() {
     // Capabilities
     emitter.add_instruction(emitter.spir_v_header, SpvOpCapability, {SpvCapabilityAddresses});
     emitter.add_instruction(emitter.spir_v_header, SpvOpCapability, {SpvCapabilityKernel});
+    emitter.add_instruction(emitter.spir_v_header, SpvOpCapability, {SpvCapabilityGenericPointer});
 
     // Memory model
     // TODO: 32-bit or 64-bit?

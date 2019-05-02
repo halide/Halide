@@ -127,9 +127,7 @@ protected:
         void add_kernel(Stmt s, const std::string &name, const std::vector<DeviceArgument> &args);
 
         std::map<Type, uint32_t> type_map;
-        // Separate map for pointers to function locals
-        std::map<Type, uint32_t> pointer_type_map_local;
-        std::map<Type, uint32_t> pointer_type_map_input;
+        std::map<std::pair<Type, uint32_t>, uint32_t> pointer_type_map;
         std::map<Type, uint32_t> pair_type_map;
         std::map<std::string, uint32_t> constant_map;
 
@@ -141,9 +139,10 @@ protected:
         void add_instruction(uint32_t opcode, std::vector<uint32_t> words);
         uint32_t map_type(const Type &type);
         // This takes a regular type, but makes pointer to a local variable.
+        // TODO: remove the next two functions
         uint32_t map_pointer_type_local(const Type &type);
-        // Same, for input variables
         uint32_t map_pointer_type_input(const Type &type);
+        uint32_t map_pointer_type(const Type &type, const uint32_t storage_class);
         uint32_t map_type_to_pair(const Type &t);
         uint32_t emit_constant(const Type &t, const void *data);
         void scalarize(Expr e);
