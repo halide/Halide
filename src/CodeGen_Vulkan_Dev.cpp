@@ -37,6 +37,7 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::add_instruction(uint32_t opcode, std::vec
 }
 
 uint32_t CodeGen_Vulkan_Dev::SPIRVEmitter::emit_constant(const Type &t, const void *data) {
+    // TODO: this needs to emit OpConstantComposite for constants with lane > 1
     std::string key(t.bytes() + 4, ' ');
     key[0] = t.code();
     key[1] = t.bits();
@@ -52,9 +53,9 @@ uint32_t CodeGen_Vulkan_Dev::SPIRVEmitter::emit_constant(const Type &t, const vo
         uint32_t type_id = map_type(t);
         uint32_t extra_words = (t.bytes() + 3) / 4;
         uint32_t constant_id = next_id++;
-        spir_v_kernels.push_back(((3 + extra_words) << 16) | SpvOpConstant);
-        spir_v_kernels.push_back(type_id);
-        spir_v_kernels.push_back(constant_id);
+        spir_v_types.push_back(((3 + extra_words) << 16) | SpvOpConstant);
+        spir_v_types.push_back(type_id);
+        spir_v_types.push_back(constant_id);
 
         const uint8_t *data_temp = (const uint8_t *)data;
         size_t bytes_copied = 0;
@@ -619,6 +620,7 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const For *op) {
             ScopedBinding<uint32_t> binding(symbol_table, op->name, gpu_var_id);
             //std::cerr << "Loop body is " << op->body;
             //if (!op->body.as<For>()) return;
+            std::cerr << "Loop body is LetStmt? " << op->body.as<LetStmt>() << " or LetExpr? " << op->body.as<Let>() << "\n";
             op->body.accept(this);
         }
 
@@ -802,7 +804,7 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Acquire *) {
 }
 
 // TODO: fast math decorations.
-void CodeGen_Vulkan_Dev::SPIRVEmitter::visit_binop(Type t, Expr a, Expr b, int32_t opcode) {
+void CodeGen_Vulkan_Dev::SPIRVEmitter::visit_binop(Type t, Expr a, Expr b, uint32_t opcode) {
     uint32_t type_id = map_type(t);
     a.accept(this);
     uint32_t a_id = id;
@@ -845,9 +847,13 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::add_kernel(Stmt s,
         symbol_table.push(args[i].name, param_id);
     }
 
+    // Insert the starting label
+    add_instruction(SpvOpLabel, {next_id++});
+
     s.accept(this);
 
-    // Insert function end delimiter
+    // Insert return and  function end delimiter
+    add_instruction(SpvOpReturn, {});
     add_instruction(SpvOpFunctionEnd, {});
 
     // Pop scope
