@@ -123,6 +123,11 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
                rewrite(min(min(y, x) + c0, x), min(y + c0, x), c0 > 0) ||
                rewrite(min(min(y, x) + c0, x), min(y, x) + c0, c0 < 0) ||
 
+               rewrite(min(x, min(x, y) + c0), min(x, y + c0), c0 > 0) ||
+               rewrite(min(x, min(x, y) + c0), min(x, y) + c0, c0 < 0) ||
+               rewrite(min(x, min(y, x) + c0), min(x, y + c0), c0 > 0) ||
+               rewrite(min(x, min(y, x) + c0), min(x, y) + c0, c0 < 0) ||
+
                rewrite(min(x + c0, c1), min(x, fold(c1 - c0)) + c0) ||
 
                rewrite(min(x + c0, y + c1), min(x, y + fold(c1 - c0)) + c0, c1 > c0) ||
