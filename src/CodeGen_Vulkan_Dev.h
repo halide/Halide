@@ -100,7 +100,7 @@ protected:
         void visit(const Fork *) override;
         void visit(const Acquire *) override;
 
-        void visit_binop(Type t, Expr a, Expr b, int32_t opcode);
+        void visit_binop(Type t, Expr a, Expr b, uint32_t opcode);
 
         // ID of last generated Expr.
         uint32_t id;

@@ -90,7 +90,13 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::scalarize(Expr e) {
 }
 
 uint32_t CodeGen_Vulkan_Dev::SPIRVEmitter::map_type(const Type &t) {
-    auto item = type_map.find(t);
+    // These are the same according to Vulkan, so we use the unsigned
+    // variant as the key
+    auto key_typecode = t.is_int_or_uint() ? Type::UInt : t.code();
+
+    Type t_key(key_typecode, t.bits(), t.lanes());
+
+    auto item = type_map.find(t_key);
     if  (item == type_map.end()) {
         // TODO, handle arrays, pointers, halide_buffer_t
         uint32_t type_id = 0;
@@ -115,12 +121,7 @@ uint32_t CodeGen_Vulkan_Dev::SPIRVEmitter::map_type(const Type &t) {
                 internal_error << "Unsupported type in Vulkan backend " << t << "\n";
             }
         }
-        type_map[t] = type_id;
-        if (t.is_int_or_uint()) {
-            // these are the same type according to Vulkan
-            auto type_code_of_other = t.code() == Type::Int ? Type::UInt : Type::Int;
-            type_map[Type(type_code_of_other, t.bits(), t.lanes())] = type_id;
-        }
+        type_map[t_key] = type_id;
         return type_id;
     } else {
         return item->second;
@@ -519,6 +520,7 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Select *op) {
 }
 
 void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Load *op) {
+
 #if 0
     uint32_t result_type = map_type(op->type);
     uint32_t pointer_id = id;
@@ -528,6 +530,7 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Load *op) {
 }
 
 void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Store *op) {
+  debug(2) << "Vulkan codegen: Store: " << op << "\n";
 }
 
 void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Let *let) {
