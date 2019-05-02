@@ -163,16 +163,37 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<int64_t> &s, const vec
         result.push_back(vector<int64_t>());
     } else {
         // set max thread count 64 for now in all dims
-        int64_t max_threads_extent = 64, total_threads_limit = 512; // less than 1024 to limit states
+        int64_t max_threads_extent = 64, total_threads_limit = 1024; // less than 1024 to limit states
         int factor = 2;
         vector<vector<int64_t>> v;
         v = generate_gpu_tilings(s, max_s, d - 1, vector_dim, threads_inner);
 
         for (auto t : v) {
             t.push_back(0);
+            
+            int64_t max_threads_used = 1, not_ext1 = 0;
+
+            for (int dim = d+1; dim < (int)(max_s.size()); dim++) {
+                max_threads_used *= max_s[dim];
+                not_ext1 += ( (max_s[dim] > 1) ? 1 : 0 );
+            }
+            for (int dim = 0; dim < d; dim++) {
+                int64_t blocks_at_dim, threads_at_dim;
+                if (threads_inner) {
+                    blocks_at_dim = t[dim];
+                    threads_at_dim = (s[dim] + blocks_at_dim - 1) / blocks_at_dim;
+                } else {
+                    threads_at_dim = t[dim];
+                }
+                int64_t union_threads = (dim < (int)(max_s.size())) ? std::max(threads_at_dim, max_s[dim]) : threads_at_dim;
+                max_threads_used *= union_threads;
+                not_ext1 += ( (union_threads > 1) ? 1 : 0 );
+            }
+
+            //debug(0) << "max threads used: " << max_threads_used << "\n";
 
             int64_t min_threads = ( (d == vector_dim) ? 32 : 1 ); 
-
+            //debug(0) << "vector_dim: " << vector_dim << "\n";
             for (int64_t threads_ext = min_threads; threads_ext <= s[d]; threads_ext *= factor) {
                 // reject if inner exceeds hardware thread limit
                 if (threads_ext > max_threads_extent) {
@@ -181,33 +202,27 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<int64_t> &s, const vec
                 // reject if union of extents of this loop so far and sibling thread loops 
                 // is greater than thread count limit or if there are more than three thread 
                 // loops with extent > 1
-                int64_t max_threads_used = (d < (int)(max_s.size())) ? std::max(threads_ext, max_s[d]) : threads_ext;
+                int64_t union_threads = (d < (int)(max_s.size())) ? std::max(threads_ext, max_s[d]) : threads_ext;
+                //debug(0) << "threads ext: " << threads_ext << " union_threads: " << union_threads << "\n";
+                int64_t total_threads_used = max_threads_used * union_threads;
+                int64_t total_not_ext1 = not_ext1 + ( (union_threads > 1) ? 1 : 0 );
 
-                int not_ext1 = (max_threads_used > 1) ? 1 : 0;
-                for (int dim = d+1; dim < (int)(max_s.size()); dim++) {
-                    max_threads_used *= max_s[dim];
-                    not_ext1 += ( (max_s[dim] > 1) ? 1 : 0 );
-                }
-                for (int dim = 0; dim < d; dim++) {
-                    int64_t blocks_at_dim, threads_at_dim;
-                    if (threads_inner) {
-                        blocks_at_dim = t[dim];
-                        threads_at_dim = (s[dim] + blocks_at_dim - 1) / blocks_at_dim;
-                    } else {
-                        threads_at_dim = t[dim];
-                    }
-                    int64_t union_threads = (dim < (int)(max_s.size())) ? std::max(threads_at_dim, max_s[dim]) : threads_at_dim;
-                    max_threads_used *= union_threads;
-                    not_ext1 += ( (union_threads > 1) ? 1 : 0 );
-                }
-                if ( (max_threads_used > total_threads_limit) || not_ext1 > 3) {
+                if ( (total_threads_used > total_threads_limit) || total_not_ext1 > 3) {
+                    //debug(0) << "total threads used: " << total_threads_used << " total not ext 1: " << total_not_ext1 << "\n";
+                    //debug(0) << "max_s contents: ";
+                    // for (int i = 0; i < (int)(max_s.size()); i++) 
+                    //     debug(0) << max_s[i] << ",";
+                    // debug(0) << "\ntiles sizes for this thread loop: ";
+                    // for (int i = 0; i < d; i++) 
+                    //     debug(0) << t[i] << ",";
+                    // debug(0) << threads_ext;
+                    // debug(0) << "\n";
                     break;
                 }
                 if (threads_inner) {
                     int64_t other_ext = (s[d] + threads_ext - 1) / threads_ext;
                     t.back() = other_ext;
-                }
-                else {
+                } else {
                     t.back() = threads_ext;
                 }
                 result.push_back(t);
@@ -218,7 +233,14 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<int64_t> &s, const vec
             // but 16 may be an important threads tiling factor 
             int64_t threads16 = 16;
             int64_t other16 = (s[d] + threads16 - 1) / threads16;
-            if (threads16 < s[d] && other16 < s[d] && other16 > 1) {
+            if ((d == vector_dim) && threads16 < s[d] && other16 < s[d] && other16 > 1) {
+                int64_t union_threads = (d < (int)(max_s.size())) ? std::max(threads16, max_s[d]) : threads16;
+                int64_t total_threads_used = max_threads_used * union_threads;
+                int64_t total_not_ext1 = not_ext1 + ( (union_threads > 1) ? 1 : 0 );
+
+                if ( (total_threads_used > total_threads_limit) || total_not_ext1 > 3) {
+                    break;
+                }
                 if (threads_inner)
                     t.back() = other16;
                 else
@@ -400,23 +422,34 @@ struct LoopNest {
     int vectorized_loop_index = -1;
 
     // Apply gpu threads to this loop nest
-    GPU_parallelism gpu_label = none;
+    mutable GPU_parallelism gpu_label = none;
 
     // given a newly inserted node f into this LoopNest, get union of thread counts in each dimension 
     // across all siblings of f. 
-    vector<int64_t> get_union_thread_counts(const FunctionDAG::Node *f) {
-        vector<int64_t> max_size{0,0,0};
+    vector<int64_t> get_union_thread_counts(const FunctionDAG::Node *f) const {
+        vector<int64_t> max_size{1,1,1};
         // find the loop nests we just created and get max gpu_thread extents of other children
         for (auto &c : children) {
-            if (c->node != f && c->gpu_label == thread) {
-                for (int dim = 0; dim < (int)(c->size.size()); dim++) {
-                    if ( dim >= (int)(max_size.size()) ) {
-                        max_size.push_back(c->size[dim]);
-                    } else {
-                        max_size[dim] = std::max(max_size[dim], c->size[dim]); 
+            if (c->node != f) {
+                if (c->gpu_label == thread) {
+                    for (int dim = 0; dim < (int)(c->size.size()); dim++) {
+                        if ( dim >= (int)(max_size.size()) ) {
+                            max_size.push_back(c->size[dim]);
+                        } else {
+                            max_size[dim] = std::max(max_size[dim], c->size[dim]); 
+                        }
                     }
-                }
-            }
+                } else if (c->children.size() > 0) { // descend into children for thread blocks in serial loops
+                    vector<int64_t> child_max_sizes = c->get_union_thread_counts(f);
+                    for (int dim = 0; dim < (int)(child_max_sizes.size()); dim++) {
+                        if (dim >= (int)(max_size.size())) {
+                            max_size.push_back(child_max_sizes[dim]);
+                        } else {
+                            max_size[dim] = std::max(max_size[dim], child_max_sizes[dim]);
+                        }
+                    }
+                } // otherwise this a serial loop with no threaded descendants
+            } 
         }
         return max_size;
     }
@@ -443,6 +476,11 @@ struct LoopNest {
                                 vector<IntrusivePtr<const LoopNest>> &result) {
         const vector<int64_t> *pure_size = this->get_pure_size(f);
         vector<int64_t> max_size = this->get_union_thread_counts(f);
+        // debug(0) << "SIZE OF GPU THREAD LOOP TO TILE: ";
+        // for (int i = 0; i < (int)(pure_size->size()); i++) {
+        //     debug(0) << (*pure_size)[i] << ",";
+        // }
+        // debug(0) << "\n";
 
         internal_assert(pure_size);
         auto tilings = generate_gpu_tilings(*pure_size, max_size, (int)(pure_size->size() - 1), v, false);
@@ -458,6 +496,12 @@ struct LoopNest {
             }
             result.emplace_back(new_parent);
             made_child = true;
+        }
+        if (!made_child) { // if we can't tile into gpu threads the inserted node, make it serial 
+            for (auto &c : children) {
+                if (c->node == f) 
+                    c->gpu_label = serial;
+            }
         }
         return made_child;
     }
@@ -2109,8 +2153,9 @@ struct LoopNest {
             // if GPU and creating a threads loop INSIDE a block loop, create child for each thread tiling
             if ( !is_root() && !in_threads_loop && target.has_gpu_feature() ) {
                 bool made_child = r->add_gpu_thread_tilings(f, params, target, v, result);
-                if (!made_child) // no good thread tilings, just keep r with the untiled thread loop inserted
+                if (!made_child) { // no good thread tilings, just keep r with the untiled loop inserted as serial
                     result.emplace_back(r.release());
+                }
             } else { // computing at root or inside a threads loop
                 result.emplace_back(r.release());
             }
@@ -2237,24 +2282,24 @@ struct LoopNest {
                     switch (gpu_label) { 
                         case thread: {
                             // create new loop nests for gpu_label assignment (serial, threads)
-                            LoopNest *serial_outer = new LoopNest, *threaded_inner = new LoopNest;
-                            serial_outer->copy_from(*outer);
-                            threaded_inner->copy_from(*inner);
+                            // LoopNest *serial_outer = new LoopNest, *threaded_inner = new LoopNest;
+                            // serial_outer->copy_from(*outer);
+                            // threaded_inner->copy_from(*inner);
 
-                            serial_outer->gpu_label = serial;
-                            threaded_inner->gpu_label = thread;
+                            // serial_outer->gpu_label = serial;
+                            // threaded_inner->gpu_label = thread;
 
-                            serial_outer->children.emplace_back(threaded_inner);
-                            serial_outer->compute_here(f, true, v, false, target);
+                            // serial_outer->children.emplace_back(threaded_inner);
+                            // serial_outer->compute_here(f, true, v, false, target);
 
-                            // find the child we just created inside serial_outer to retile it into 
-                            // a gpu threads and serial loop
-                            bool made_child = serial_outer->add_gpu_thread_tilings(f, params, target, v, result);
+                            // // find the child we just created inside serial_outer to retile it into 
+                            // // a gpu threads and serial loop
+                            // bool made_child = serial_outer->add_gpu_thread_tilings(f, params, target, v, result);
 
-                            if (made_child) 
-                                delete serial_outer;
-                            else // no good thread tilings, just add serial_outer with untiled thread loop inserted
-                                result.emplace_back(serial_outer);
+                            // if (made_child) 
+                            //     delete serial_outer;
+                            // else // no good thread tilings, just add serial_outer with untiled thread loop inserted
+                            //     result.emplace_back(serial_outer);
 
                             // create (threads, serial) option
                             internal_assert(in_threads_loop); // threads loop can't be inside threads loop
@@ -2279,8 +2324,9 @@ struct LoopNest {
 
                             if (made_child) 
                                 delete outer;
-                            else // no good thread tilings, just add the untiled thread loop
+                            else {// no good thread tilings, just add the untiled thread loop
                                 result.emplace_back(outer);
+                            }
                             break;
                         }
 
