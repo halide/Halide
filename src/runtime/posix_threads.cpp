@@ -30,6 +30,12 @@ extern int pthread_mutex_lock(pthread_mutex_t *mutex);
 extern int pthread_mutex_unlock(pthread_mutex_t *mutex);
 extern int pthread_mutex_destroy(pthread_mutex_t *mutex);
 
+#ifdef __APPLE__
+extern void pthread_set_name_np(const char*);
+#elif __linux__
+extern void pthread_setname_np(pthread_t, const char*);
+#endif
+
 typedef unsigned int pthread_key_t;
 
 extern int pthread_key_create(pthread_key_t *key, void (*destructor)(void*));
@@ -47,6 +53,11 @@ struct spawned_thread {
 };
 WEAK void *spawn_thread_helper(void *arg) {
     spawned_thread *t = (spawned_thread *)arg;
+#ifdef __APPLE__
+    pthread_set_name_np("halide_worker");
+#elif __linux__
+    pthread_setname_np(t->handle, "halide_worker");
+#endif
     t->f(t->closure);
     return NULL;
 }
