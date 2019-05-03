@@ -566,11 +566,12 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Store *op) {
 
     // Construct the pointer to write to
     uint32_t base_id = symbol_table.get(op->name);
+
     op->index.accept(this);
     uint32_t index_id = id;
-    uint32_t ptr_type_id = map_pointer_type(op->value.type(), SpvStorageClassGeneric);
+    uint32_t ptr_type_id = map_pointer_type(op->value.type(), SpvStorageClassCrossWorkgroup);
     uint32_t access_chain_id = next_id++;
-    add_instruction(SpvOpInBoundsAccessChain, {ptr_type_id, access_chain_id, base_id, index_id});
+    add_instruction(SpvOpAccessChain, {ptr_type_id, access_chain_id, base_id, index_id});
 
     add_instruction(SpvOpStore, {access_chain_id, value_id});
 
@@ -651,8 +652,10 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const For *op) {
         // TODO: could be done at module init time, and could use ScopedBinding
         if (!symbol_table.contains(intrinsic.first)) {
             uint32_t intrinsic_id = next_id++;
+            uint32_t intrinsic_loaded_id = next_id++;
             add_instruction(spir_v_types, SpvOpVariable, {intrinsic_type_id, intrinsic_id, SpvStorageClassInput});
-            symbol_table.push(intrinsic.first, intrinsic_id);
+            add_instruction(SpvOpLoad, {map_type(Type(Type::UInt, 32, 3)), intrinsic_loaded_id, intrinsic_id});
+            symbol_table.push(intrinsic.first, intrinsic_loaded_id);
 
             // Annotate that this is the specific builtin
             auto built_in_kind = starts_with(intrinsic.first, "Workgroup") ? SpvBuiltInWorkgroupId : SpvBuiltInLocalInvocationId;
@@ -890,12 +893,26 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::add_kernel(Stmt s,
     // Add definition and parameters
     uint32_t function_id = next_id++;
     add_instruction(SpvOpFunction, {void_id, function_id, SpvFunctionControlMaskNone, function_type_id});
+
+    std::vector<uint32_t> entry_point_interface;
+    entry_point_interface.push_back(SpvExecutionModelKernel);
+    entry_point_interface.push_back(function_id);
+    //TODO: add the string name
+    entry_point_interface.push_back(0);
+
     for (size_t i = 0; i < args.size(); i++) {
         auto param_id = next_id++;
         // The first two entries in param_type_ids are the function type id and return type
         add_instruction(SpvOpFunctionParameter, {param_type_ids[2+i], param_id});
         symbol_table.push(args[i].name, param_id);
+
+        // Also add them to the entry point interface
+        //entry_point_interface.push_back(param_id);
     }
+
+    // Add the entry point and exection mode
+    add_instruction(spir_v_entrypoints,
+                    SpvOpEntryPoint, entry_point_interface);
 
     // Insert the starting label
     add_instruction(SpvOpLabel, {next_id++});
@@ -971,10 +988,11 @@ std::vector<char> CodeGen_Vulkan_Dev::compile_to_src() {
     emitter.spir_v_header[3] = emitter.next_id;
 
     std::vector<char> final_module;
-    size_t total_size = (emitter.spir_v_header.size() + emitter.spir_v_entrypoints.size() + emitter.spir_v_annotations.size() + emitter.spir_v_types.size() + emitter.spir_v_kernels.size()) * sizeof(uint32_t);
+    size_t total_size = (emitter.spir_v_header.size() + emitter.spir_v_entrypoints.size() + emitter.spir_v_execution_modes.size() + emitter.spir_v_annotations.size() + emitter.spir_v_types.size() + emitter.spir_v_kernels.size()) * sizeof(uint32_t);
     final_module.reserve(total_size);
     final_module.insert(final_module.end(), (const char *)emitter.spir_v_header.data(), (const char *)(emitter.spir_v_header.data() + emitter.spir_v_header.size()));
     final_module.insert(final_module.end(), (const char *)emitter.spir_v_entrypoints.data(), (const char *)(emitter.spir_v_entrypoints.data() + emitter.spir_v_entrypoints.size()));
+    final_module.insert(final_module.end(), (const char *)emitter.spir_v_execution_modes.data(), (const char *)(emitter.spir_v_execution_modes.data() + emitter.spir_v_execution_modes.size()));
     final_module.insert(final_module.end(), (const char *)emitter.spir_v_annotations.data(), (const char *)(emitter.spir_v_annotations.data() + emitter.spir_v_annotations.size()));
     final_module.insert(final_module.end(), (const char *)emitter.spir_v_types.data(), (const char *)(emitter.spir_v_types.data() + emitter.spir_v_types.size()));
     final_module.insert(final_module.end(), (const char *)emitter.spir_v_kernels.data(), (const char *)(emitter.spir_v_kernels.data() + emitter.spir_v_kernels.size()));

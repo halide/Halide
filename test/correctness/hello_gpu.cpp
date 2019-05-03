@@ -16,6 +16,8 @@ int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
     if (target.has_gpu_feature()) {
         f.gpu_tile(x, y, xi, yi, 8, 8);
+    } else {
+        printf("NO GPU TARGET\n");
     }
 
     printf("Realizing function...\n");

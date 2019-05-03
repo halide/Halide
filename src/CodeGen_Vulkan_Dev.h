@@ -119,6 +119,7 @@ protected:
         // char for ease of adding words to them.
         std::vector<uint32_t> spir_v_header;
         std::vector<uint32_t> spir_v_entrypoints;
+        std::vector<uint32_t> spir_v_execution_modes;
         std::vector<uint32_t> spir_v_annotations;
         std::vector<uint32_t> spir_v_types;
         std::vector<uint32_t> spir_v_kernels;
