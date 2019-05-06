@@ -569,9 +569,11 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Store *op) {
 
     op->index.accept(this);
     uint32_t index_id = id;
-    uint32_t ptr_type_id = map_pointer_type(op->value.type(), SpvStorageClassCrossWorkgroup);
+    uint32_t ptr_type_id = map_pointer_type(op->value.type(), SpvStorageClassUniform);
     uint32_t access_chain_id = next_id++;
-    add_instruction(SpvOpAccessChain, {ptr_type_id, access_chain_id, base_id, index_id});
+    auto zero = 0;
+    add_instruction(SpvOpInBoundsAccessChain, {ptr_type_id, access_chain_id, base_id,
+                                               emit_constant(UInt(32), &zero), index_id});
 
     add_instruction(SpvOpStore, {access_chain_id, value_id});
 
@@ -644,23 +646,10 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const For *op) {
 
         auto intrinsic = simt_intrinsic(op->name);
 
-        // The builtins are pointers to vec3
-        uint32_t intrinsic_type_id = map_pointer_type_input(Type(Type::UInt, 32, 3));
 
         // If the symbol table does not contain mappings for the SIMT intrinsic,
         // we need to add them first
-        // TODO: could be done at module init time, and could use ScopedBinding
-        if (!symbol_table.contains(intrinsic.first)) {
-            uint32_t intrinsic_id = next_id++;
-            uint32_t intrinsic_loaded_id = next_id++;
-            add_instruction(spir_v_types, SpvOpVariable, {intrinsic_type_id, intrinsic_id, SpvStorageClassInput});
-            add_instruction(SpvOpLoad, {map_type(Type(Type::UInt, 32, 3)), intrinsic_loaded_id, intrinsic_id});
-            symbol_table.push(intrinsic.first, intrinsic_loaded_id);
-
-            // Annotate that this is the specific builtin
-            auto built_in_kind = starts_with(intrinsic.first, "Workgroup") ? SpvBuiltInWorkgroupId : SpvBuiltInLocalInvocationId;
-            add_instruction(spir_v_annotations, SpvOpDecorate, {intrinsic_id, SpvDecorationBuiltIn, built_in_kind});
-        }
+        internal_assert(symbol_table.contains(intrinsic.first)); 
 
         uint32_t intrinsic_id = symbol_table.get(intrinsic.first);
         uint32_t gpu_var_id = next_id++;
@@ -867,6 +856,7 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit_binop(Type t, Expr a, Expr b, uint3
 }
 
 
+
 void CodeGen_Vulkan_Dev::SPIRVEmitter::add_kernel(Stmt s,
                                                   const std::string &name,
                                                   const std::vector<DeviceArgument> &args) {
@@ -876,46 +866,72 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::add_kernel(Stmt s,
     // TODO: can we use one of the function control annotations?
 
     // Declare the function type.  TODO: should this be unique?
-    // First, gather all the types of the parameters
     uint32_t function_type_id = next_id++;
-    std::vector<uint32_t> param_type_ids;
-    param_type_ids.push_back(function_type_id);
-    // return type
-    param_type_ids.push_back(void_id);
 
-    for (auto arg: args) {
-        auto type_id = arg.is_buffer ? map_pointer_type(arg.type, SpvStorageClassCrossWorkgroup)
-                                     : map_type(arg.type);
-        param_type_ids.push_back(type_id);
-    }
-    add_instruction(spir_v_types, SpvOpTypeFunction, param_type_ids);
+    add_instruction(spir_v_types, SpvOpTypeFunction, {function_type_id, void_id});
 
     // Add definition and parameters
     uint32_t function_id = next_id++;
     add_instruction(SpvOpFunction, {void_id, function_id, SpvFunctionControlMaskNone, function_type_id});
 
+
+    // Insert the starting label
+    add_instruction(SpvOpLabel, {next_id++});
+
     std::vector<uint32_t> entry_point_interface;
-    entry_point_interface.push_back(SpvExecutionModelKernel);
+    entry_point_interface.push_back(SpvExecutionModelGLCompute);
     entry_point_interface.push_back(function_id);
     //TODO: add the string name
     entry_point_interface.push_back(0);
+    // TODO: only add the SIMT intrinsics used
+    auto intrinsics = {"WorkgroupId", "LocalInvocationId"};
+    for (auto intrinsic: intrinsics) {
+        uint32_t intrinsic_id = next_id++;
+        uint32_t intrinsic_loaded_id = next_id++;
+        // The builtins are pointers to vec3
+        uint32_t intrinsic_type_id = map_pointer_type_input(Type(Type::UInt, 32, 3));
 
-    for (size_t i = 0; i < args.size(); i++) {
-        auto param_id = next_id++;
-        // The first two entries in param_type_ids are the function type id and return type
-        add_instruction(SpvOpFunctionParameter, {param_type_ids[2+i], param_id});
-        symbol_table.push(args[i].name, param_id);
+        add_instruction(spir_v_types, SpvOpVariable, {intrinsic_type_id, intrinsic_id, SpvStorageClassInput});
+        add_instruction(SpvOpLoad, {map_type(Type(Type::UInt, 32, 3)), intrinsic_loaded_id, intrinsic_id});
+        symbol_table.push(intrinsic, intrinsic_loaded_id);
 
-        // Also add them to the entry point interface
-        //entry_point_interface.push_back(param_id);
+        // Annotate that this is the specific builtin
+        auto built_in_kind = starts_with(intrinsic, "Workgroup") ? SpvBuiltInWorkgroupId : SpvBuiltInLocalInvocationId;
+        add_instruction(spir_v_annotations, SpvOpDecorate, {intrinsic_id, SpvDecorationBuiltIn, built_in_kind});
+
+        // Add the builtin to the interface
+        entry_point_interface.push_back(intrinsic_id);
     }
+
 
     // Add the entry point and exection mode
     add_instruction(spir_v_entrypoints,
                     SpvOpEntryPoint, entry_point_interface);
 
-    // Insert the starting label
-    add_instruction(SpvOpLabel, {next_id++});
+    for (size_t i = 0; i < args.size(); i++) {
+        uint32_t param_id = next_id++;
+        // GLSL-style: each input buffer is a runtime array in a buffer struct
+        if (args[i].is_buffer) {
+            uint32_t element_type = map_type(args[i].type);
+            uint32_t runtime_arr_type = next_id++;
+            uint32_t struct_type = next_id++;
+            uint32_t ptr_struct_type = next_id++;
+            add_instruction(spir_v_types, SpvOpTypeRuntimeArray, {runtime_arr_type, element_type});
+            add_instruction(spir_v_types, SpvOpTypeStruct, {struct_type, runtime_arr_type});
+            add_instruction(spir_v_types, SpvOpTypePointer, {ptr_struct_type,
+                                                             SpvStorageClassUniform,
+                                                             struct_type});
+            // TODO: may need to add decorations for bufferblock/binding
+            add_instruction(spir_v_types, SpvOpVariable, {ptr_struct_type, param_id, SpvStorageClassUniform});
+        } else {
+            uint32_t param_ptr_id = next_id++;
+            add_instruction(spir_v_types, SpvOpVariable, {map_pointer_type(args[i].type, SpvStorageClassUniform),
+                                                          param_ptr_id, SpvStorageClassUniform});
+            add_instruction(SpvOpLoad, {map_type(args[i].type), param_id, param_ptr_id});
+        }
+        symbol_table.push(args[i].name, param_id);
+    }
+
 
     s.accept(this);
 
@@ -932,6 +948,24 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::add_kernel(Stmt s,
 CodeGen_Vulkan_Dev::CodeGen_Vulkan_Dev(Target t) {
 }
 
+namespace {
+void add_extension(const std::string &extension_name, std::vector<uint32_t> &section) {
+    uint32_t extra_words = (extension_name.size() + 1 + 3) / 4;
+    section.push_back(((1 + extra_words) << 16) | SpvOpExtension);
+
+    const char *data_temp = (const char *)extension_name.c_str();
+    size_t bytes_copied = 0;
+    for (uint32_t i = 0; i < extra_words; i++) {
+        uint32_t word;
+        size_t to_copy = std::min(extension_name.size() + 1 - bytes_copied, (size_t)4);
+        memcpy(&word, data_temp, to_copy);
+        bytes_copied += to_copy;
+        section.push_back(word);
+        data_temp += 4;
+    }
+
+}
+}
 void CodeGen_Vulkan_Dev::init_module() {
     debug(2) << "Vulkan device codegen init_module\n";
 
@@ -948,15 +982,20 @@ void CodeGen_Vulkan_Dev::init_module() {
     emitter.add_instruction(emitter.spir_v_types, SpvOpTypeVoid, {emitter.void_id});
 
     // Capabilities
-    emitter.add_instruction(emitter.spir_v_header, SpvOpCapability, {SpvCapabilityAddresses});
-    emitter.add_instruction(emitter.spir_v_header, SpvOpCapability, {SpvCapabilityKernel});
-    emitter.add_instruction(emitter.spir_v_header, SpvOpCapability, {SpvCapabilityGenericPointer});
+    // TODO: only add those required by the generated code
+    emitter.add_instruction(emitter.spir_v_header, SpvOpCapability, {SpvCapabilityShader});
+    emitter.add_instruction(emitter.spir_v_header, SpvOpCapability, {SpvCapabilityInt8});
+    emitter.add_instruction(emitter.spir_v_header, SpvOpCapability, {SpvCapabilityUniformAndStorageBuffer8BitAccess});
+
+    // Extensions
+    // TODO: only add those required by the generated code
+    add_extension(std::string("SPV_KHR_8bit_storage"), emitter.spir_v_header);
 
     // Memory model
     // TODO: 32-bit or 64-bit?
     // TODO: Which memory model?
     emitter.add_instruction(emitter.spir_v_header, SpvOpMemoryModel,
-                            {SpvAddressingModelPhysical32, SpvMemoryModelOpenCL});
+                            {SpvAddressingModelLogical, SpvMemoryModelGLSL450});
 
 
     // OpCapability instructions
