@@ -199,6 +199,21 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const UIntImm *imm) {
     id = emit_constant(imm->type, &imm->value);
 }
 
+namespace {
+void encode_string(std::vector<uint32_t>& section, const uint32_t words,
+                   const size_t str_size, const char* str) {
+    size_t bytes_copied = 0;
+    for (uint32_t i = 0; i < words; i++) {
+      uint32_t word;
+      size_t to_copy = std::min(str_size + 1 - bytes_copied, (size_t)4);
+      memcpy(&word, str, to_copy);
+      bytes_copied += to_copy;
+      section.push_back(word);
+      str += 4;
+    }
+
+}
+}
 void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const StringImm *imm) {
     uint32_t extra_words = (imm->value.size() + 1 + 3) / 4;
     id = next_id++;
@@ -206,15 +221,8 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const StringImm *imm) {
     spir_v_kernels.push_back(id);
 
     const char *data_temp = (const char *)imm->value.c_str();
-    size_t bytes_copied = 0;
-    for (uint32_t i = 0; i < extra_words; i++) {
-        uint32_t word;
-        size_t to_copy = std::min(imm->value.size() + 1 - bytes_copied, (size_t)4);
-        memcpy(&word, data_temp, to_copy);
-        bytes_copied += to_copy;
-        spir_v_kernels.push_back(word);
-        data_temp += 4;
-    }
+    const size_t data_size = imm->value.size();
+    encode_string(spir_v_kernels, extra_words, data_size, data_temp);
 }
 
 void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const FloatImm *imm) {
@@ -882,7 +890,9 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::add_kernel(Stmt s,
     entry_point_interface.push_back(SpvExecutionModelGLCompute);
     entry_point_interface.push_back(function_id);
     //TODO: add the string name
-    entry_point_interface.push_back(0);
+    //entry_point_interface.push_back(0);
+    encode_string(entry_point_interface, (name.size() + 1 + 3)/4, name.size(), name.c_str());
+
     // TODO: only add the SIMT intrinsics used
     auto intrinsics = {"WorkgroupId", "LocalInvocationId"};
     for (auto intrinsic: intrinsics) {
@@ -954,16 +964,8 @@ void add_extension(const std::string &extension_name, std::vector<uint32_t> &sec
     section.push_back(((1 + extra_words) << 16) | SpvOpExtension);
 
     const char *data_temp = (const char *)extension_name.c_str();
-    size_t bytes_copied = 0;
-    for (uint32_t i = 0; i < extra_words; i++) {
-        uint32_t word;
-        size_t to_copy = std::min(extension_name.size() + 1 - bytes_copied, (size_t)4);
-        memcpy(&word, data_temp, to_copy);
-        bytes_copied += to_copy;
-        section.push_back(word);
-        data_temp += 4;
-    }
-
+    const size_t data_size = extension_name.size();
+    encode_string(section, extra_words, data_size, data_temp);
 }
 }
 void CodeGen_Vulkan_Dev::init_module() {
