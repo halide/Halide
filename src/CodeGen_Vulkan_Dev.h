@@ -123,9 +123,15 @@ protected:
         std::vector<uint32_t> spir_v_annotations;
         std::vector<uint32_t> spir_v_types;
         std::vector<uint32_t> spir_v_kernels;
+        // The next one is cleared in between kernels, and tracks the allocations
+        std::vector<uint32_t> spir_v_kernel_allocations;
 
         // Top-level function for adding kernels
         void add_kernel(Stmt s, const std::string &name, const std::vector<DeviceArgument> &args);
+
+        // Function for allocating variables in function scope, with optional initializer.
+        // These will appear at the beginning of the function, as required by SPIR-V
+        void add_allocation(uint32_t result_type_id, uint32_t result_id, uint32_t storage_class, uint32_t initializer=0);
 
         std::map<Type, uint32_t> type_map;
         std::map<std::pair<Type, uint32_t>, uint32_t> pointer_type_map;

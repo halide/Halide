@@ -701,8 +701,9 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const For *op) {
         add_instruction(SpvOpIAdd, { index_type_id, max_id, min_id, extent_id });
 
         // Declare loop var
+        // TODO: Can we use the phi node for this?
         uint32_t loop_var_id = next_id++;
-        add_instruction(SpvOpVariable, { index_var_type_id, loop_var_id, min_id });
+        add_allocation(index_var_type_id, loop_var_id, SpvStorageClassFunction, min_id);
 
         uint32_t header_label_id = next_id++;
         uint32_t loop_top_label_id = next_id++;
@@ -877,6 +878,23 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit_binop(Type t, Expr a, Expr b, uint3
     add_instruction(opcode, { type_id, id, a_id, b_id });
 }
 
+
+void CodeGen_Vulkan_Dev::SPIRVEmitter::add_allocation(uint32_t result_type_id,
+                                                      uint32_t result_id,
+                                                      uint32_t storage_class,
+                                                      uint32_t initializer) {
+    if (initializer) {
+        add_instruction(spir_v_kernel_allocations, SpvOpVariable, {result_type_id,
+                                                                  result_id,
+                                                                  storage_class,
+                                                                  initializer});
+    } else {
+        add_instruction(spir_v_kernel_allocations, SpvOpVariable, {result_type_id,
+                                                                  result_id,
+                                                                  storage_class});
+    }
+}
+
 void CodeGen_Vulkan_Dev::SPIRVEmitter::add_kernel(Stmt s,
                                                   const std::string &name,
                                                   const std::vector<DeviceArgument> &args) {
@@ -885,8 +903,6 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::add_kernel(Stmt s,
     // Add function definition
     // TODO: can we use one of the function control annotations?
     // TODO: We may need to use decorations to define the localsize
-    // TODO: We need to gather all OpVariable instructions with Function scope
-    //       and place them in the first basic block of the function
 
     // Declare the function type.  TODO: should this be unique?
     uint32_t function_type_id = next_id++;
@@ -900,11 +916,17 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::add_kernel(Stmt s,
     // Insert the starting label
     add_instruction(SpvOpLabel, {next_id++});
 
+    // TODO: what about variables that need the SIMT intrinsics for their initializer?
+    // Save the location where we'll insert OpVariable instructions
+    size_t index = spir_v_kernels.size();
+
     std::vector<uint32_t> entry_point_interface;
     entry_point_interface.push_back(SpvExecutionModelGLCompute);
     entry_point_interface.push_back(function_id);
     // Add the string name of the function
     encode_string(entry_point_interface, (name.size() + 1 + 3)/4, name.size(), name.c_str());
+
+
 
     // TODO: only add the SIMT intrinsics used
     auto intrinsics = {"WorkgroupId", "LocalInvocationId"};
@@ -970,6 +992,11 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::add_kernel(Stmt s,
     add_instruction(SpvOpReturn, {});
     add_instruction(SpvOpFunctionEnd, {});
 
+    // Insert the allocations in the right place
+    auto it = spir_v_kernels.begin() + index;
+    spir_v_kernels.insert(it, spir_v_kernel_allocations.begin(), spir_v_kernel_allocations.end());
+    spir_v_kernel_allocations.clear();
+
     // Pop scope
     for (auto arg: args) {
         symbol_table.pop(arg.name);
@@ -1029,8 +1056,9 @@ void CodeGen_Vulkan_Dev::init_module() {
     // OpEntryPoint instructions -- tricky as we don't know them until the kernels are added. May need to insert as we go.
     // OpExecutionMode or OpExecutionModeId -- are these also added at add_kernel time?
     // debug -- empty?
-    // annotation -- empty?
+    // annotation
     //     I believe alignment info for load/store/etc. is done with annotations.
+    //     Also need various annotations for SIMT intrinsics, struct layouts, etc
     // OpType instructions. Contained in spir_v_types member.
     // Function declarations. Are there any?
     // Function bodies -- one per add_kernel
