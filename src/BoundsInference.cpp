@@ -805,15 +805,6 @@ public:
             }
         }
 
-        // Simplify after we inline, to cut down on
-        // the number of lets and remove any false
-        // dependencies.
-        for (auto &s : stages) {
-            for (auto &cv : s.exprs) {
-                cv.value = simplify(cv.value);
-            }
-        }
-
         // Remove the inlined stages
         vector<Stage> new_stages;
         for (size_t i = 0; i < stages.size(); i++) {
