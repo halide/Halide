@@ -889,8 +889,7 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::add_kernel(Stmt s,
     std::vector<uint32_t> entry_point_interface;
     entry_point_interface.push_back(SpvExecutionModelGLCompute);
     entry_point_interface.push_back(function_id);
-    //TODO: add the string name
-    //entry_point_interface.push_back(0);
+    // Add the string name of the function
     encode_string(entry_point_interface, (name.size() + 1 + 3)/4, name.size(), name.c_str());
 
     // TODO: only add the SIMT intrinsics used
@@ -931,7 +930,15 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::add_kernel(Stmt s,
             add_instruction(spir_v_types, SpvOpTypePointer, {ptr_struct_type,
                                                              SpvStorageClassUniform,
                                                              struct_type});
-            // TODO: may need to add decorations for bufferblock/binding
+            // Annotate the struct to indicate it's passed in a GLSL-style buffer block
+            add_instruction(spir_v_annotations, SpvOpDecorate, {struct_type, SpvDecorationBufferBlock});
+            // Annotate the array with its stride
+            add_instruction(spir_v_annotations, SpvOpDecorate, {runtime_arr_type,
+                                                                SpvDecorationArrayStride,
+                                                                (uint32_t)(args[i].type.bytes())});
+            // Annotate the offset for the array
+            add_instruction(spir_v_annotations, SpvOpMemberDecorate, {struct_type, 0, SpvDecorationOffset, (uint32_t)0});
+            // TODO: May have to set DescriptorSet and Binding
             add_instruction(spir_v_types, SpvOpVariable, {ptr_struct_type, param_id, SpvStorageClassUniform});
         } else {
             uint32_t param_ptr_id = next_id++;
