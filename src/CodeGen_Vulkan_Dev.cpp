@@ -672,18 +672,14 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const For *op) {
         auto intrinsic = simt_intrinsic(op->name);
 
 
-        // If the symbol table does not contain mappings for the SIMT intrinsic,
-        // we need to add them first
-        internal_assert(symbol_table.contains(intrinsic.first)); 
+        // Intrinsics are inserted when adding the kernel
+        internal_assert(symbol_table.contains(intrinsic.first));
 
         uint32_t intrinsic_id = symbol_table.get(intrinsic.first);
         uint32_t gpu_var_id = next_id++;
         add_instruction(SpvOpCompositeExtract, {map_type(UInt(32)), gpu_var_id, intrinsic_id, intrinsic.second});
         {
             ScopedBinding<uint32_t> binding(symbol_table, op->name, gpu_var_id);
-            //std::cerr << "Loop body is " << op->body;
-            //if (!op->body.as<For>()) return;
-            std::cerr << "Loop body is LetStmt? " << op->body.as<LetStmt>() << " or LetExpr? " << op->body.as<Let>() << "\n";
             op->body.accept(this);
         }
 
@@ -889,6 +885,8 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::add_kernel(Stmt s,
     // Add function definition
     // TODO: can we use one of the function control annotations?
     // TODO: We may need to use decorations to define the localsize
+    // TODO: We need to gather all OpVariable instructions with Function scope
+    //       and place them in the first basic block of the function
 
     // Declare the function type.  TODO: should this be unique?
     uint32_t function_type_id = next_id++;
