@@ -549,13 +549,30 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Select *op) {
 }
 
 void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Load *op) {
+  debug(2) << "Vulkan codegen: Store: " << (Expr)op << "\n";
+  user_assert(is_one(op->predicate)) << "Predicated loads not supported by the Vulkan backend\n";
 
-#if 0
-    uint32_t result_type = map_type(op->type);
-    uint32_t pointer_id = id;
-    id = next_id++;
-    add_instruction(SpvOpLoad, { result_type, id, pointer_id });
-#endif
+  // TODO: implement vector loads
+  // TODO: correct casting to the appropriate memory space
+
+  internal_assert(!(op->index.type().is_vector()));
+  internal_assert(op->param.defined() && op->param.is_buffer());
+
+  // Construct the pointer to read from
+  uint32_t base_id = symbol_table.get(op->name);
+
+  op->index.accept(this);
+  uint32_t index_id = id;
+  uint32_t ptr_type_id = map_pointer_type(op->type, SpvStorageClassUniform);
+  uint32_t access_chain_id = next_id++;
+  auto zero = 0;
+  add_instruction(SpvOpInBoundsAccessChain, {ptr_type_id, access_chain_id, base_id,
+                                             emit_constant(UInt(32), &zero), index_id});
+
+  id = next_id++;
+  uint32_t result_type_id = map_type(op->type);
+  add_instruction(SpvOpLoad, {result_type_id, id, access_chain_id});
+
 }
 
 void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Store *op) {
@@ -863,8 +880,6 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit_binop(Type t, Expr a, Expr b, uint3
     add_instruction(opcode, { type_id, id, a_id, b_id });
 }
 
-
-
 void CodeGen_Vulkan_Dev::SPIRVEmitter::add_kernel(Stmt s,
                                                   const std::string &name,
                                                   const std::vector<DeviceArgument> &args) {
@@ -872,6 +887,7 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::add_kernel(Stmt s,
 
     // Add function definition
     // TODO: can we use one of the function control annotations?
+    // TODO: We may need to use decorations to define the localsize
 
     // Declare the function type.  TODO: should this be unique?
     uint32_t function_type_id = next_id++;
@@ -881,7 +897,6 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::add_kernel(Stmt s,
     // Add definition and parameters
     uint32_t function_id = next_id++;
     add_instruction(SpvOpFunction, {void_id, function_id, SpvFunctionControlMaskNone, function_type_id});
-
 
     // Insert the starting label
     add_instruction(SpvOpLabel, {next_id++});
