@@ -812,6 +812,7 @@ CodeGen_Vulkan_Dev::SPIRVEmitter::emit_if_then_else(Expr condition,
     uint32_t else_label_id = next_id++;
     uint32_t merge_label_id = next_id++;
 
+    add_instruction(SpvOpSelectionMerge, {merge_label_id, SpvSelectionControlMaskNone});
     add_instruction(SpvOpBranchConditional, { cond_id, then_label_id, else_label_id });
     add_instruction(SpvOpLabel, { then_label_id });
 
