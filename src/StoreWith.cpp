@@ -7,6 +7,7 @@
 #include "IROperator.h"
 #include "PartitionLoops.h"
 #include "Simplify.h"
+#include "Simplify_Internal.h"
 #include "Substitute.h"
 #include "Solve.h"
 #include "UniquifyVariableNames.h"
@@ -38,7 +39,12 @@ struct Use {
     string name;
     bool is_store;
 
-    Use(const vector<Expr> &t, const vector<Expr> &s, const vector<Expr> &p, const string &n, const vector<pair<string, Expr>> &lets, bool is_store) :
+    Use(const vector<Expr> &t,
+        const vector<Expr> &s,
+        const vector<Expr> &p,
+        const string &n,
+        const vector<pair<string, Expr>> &lets,
+        bool is_store) :
         time(t), site(s), predicate(const_true()), name(n), is_store(is_store) {
 
         for (auto it = lets.rbegin(); it != lets.rend(); it++) {
@@ -78,7 +84,7 @@ struct Use {
         }
 
         predicate = substitute(renaming, predicate);
-        dump();
+        // dump();
     }
 
     Use() = default;
@@ -168,7 +174,7 @@ struct Use {
                 find_terms(sub->b, -c);
             } else if (mul && coeff) {
                 find_terms(mul->a, c * (int)(*coeff));
-            } else if (mod && coeff) {
+            } else if (false && mod && coeff) {
                 // Remove the mod using an auxiliary variable.
                 find_terms(mod->a, c);
                 add_term(aux(), c * (int)(*coeff));
@@ -249,11 +255,17 @@ struct Use {
     };
 
     class System {
+    public:
         // A bunch of equalities
         vector<Equality> equalities;
-        // An additional non-equality term
+        // A simplifier instance, which slowly accumulates knowledge
+        // about the bounds of different variables.
+        Simplify *simplifier;
+        // An additional arbitrary term to place non-linear constraints
         Expr remainder;
         int c = 0;
+
+        System(Simplify *s) : simplifier(s) {}
 
         void add_equality(const EQ *eq) {
             equalities.emplace_back(eq);
@@ -272,12 +284,52 @@ struct Use {
             c += 3;
         }
 
-    public:
-
         void add_term(const Expr &e) {
             const EQ *eq = e.as<EQ>();
+            const LT *lt = e.as<LT>();
+            const LE *le = e.as<LE>();
             if (eq && eq->a.type() == Int(32)) {
                 add_equality(eq);
+            } else if (const And *a = e.as<And>()) {
+                add_term(a->a);
+                add_term(a->b);
+            } else if (const GT *gt = e.as<GT>()) {
+                add_term(gt->b < gt->a);
+            } else if (const GE *ge = e.as<GE>()) {
+                add_term(ge->b <= ge->a);
+            } else if (le && le->a.type() == Int(32)) {
+                const Variable *va = le->a.as<Variable>();
+                const Variable *vb = le->b.as<Variable>();
+                if (is_const(le->a) && vb) {
+                    simplifier->learn_true(e);
+                } else if (is_const(le->b) && va) {
+                    simplifier->learn_true(e);
+                } else {
+                    Expr v = aux();
+                    simplifier->learn_true(-1 < v);
+                    add_term(le->a + v == le->b);
+                }
+            } else if (lt && lt->a.type() == Int(32)) {
+                const Variable *va = lt->a.as<Variable>();
+                const Variable *vb = lt->b.as<Variable>();
+                if (is_const(lt->a) && vb) {
+                    simplifier->learn_true(e);
+                } else if (is_const(lt->b) && va) {
+                    simplifier->learn_true(e);
+                } else {
+                    Expr v = aux();
+                    simplifier->learn_true(0 < v);
+                    add_term(lt->a + v == lt->b);
+                }
+            } else if (const Let *l = e.as<Let>()) {
+                if (l->value.type().is_bool()) {
+                    add_term(substitute(l->name, l->value, l->body));
+                } else {
+                    Expr eq = Variable::make(l->value.type(), l->name) == l->value;
+                    simplifier->learn_true(eq);
+                    add_term(eq);
+                    add_term(l->body);
+                }
             } else {
                 add_non_linear_term(e);
             }
@@ -293,20 +345,42 @@ struct Use {
 
         void dump() const {
             for (auto &e : equalities) {
-                debug(0) << " " << e.to_expr() << "\n";
+                debug(0) << " " << simplifier->mutate(e.to_expr(), nullptr) << "\n";
             }
             if (remainder.defined()) {
-                debug(0) << " " << remainder << "\n";
+                debug(0) << " " << simplifier->mutate(remainder, nullptr) << "\n";
+            }
+            const auto &info = simplifier->bounds_and_alignment_info;
+            for (auto it = info.cbegin(); it != info.cend(); ++it){
+                bool used = false;
+                for (auto &e : equalities) {
+                    used |= expr_uses_var(e.to_expr(), it.name());
+                }
+                if (remainder.defined()) {
+                    used |= expr_uses_var(remainder, it.name());
+                }
+                if (!used) continue;
+                if (it.value().min_defined && it.value().max_defined) {
+                    debug(0) << it.value().min << " <= " << it.name()
+                             << " <= " << it.value().max << "\n";
+                } else if (it.value().min_defined) {
+                    debug(0) << it.value().min << " <= " << it.name() << "\n";
+                } else if (it.value().max_defined) {
+                    debug(0) << it.name() << " <= " << it.value().max << "\n";
+                }
             }
         }
 
         bool infeasible() const {
             for (auto &e : equalities) {
-                if (is_zero(simplify(e.to_expr()))) {
+                if (is_zero(simplifier->mutate(e.to_expr(), nullptr))) {
                     return true;
                 }
             }
-            return remainder.defined() && can_prove(!remainder);
+            if (remainder.defined() && is_zero(simplifier->mutate(remainder, nullptr))) {
+                return true;
+            }
+            return false;
         }
 
         int complexity() const {
@@ -322,12 +396,49 @@ struct Use {
                                  return a.terms.size() < b.terms.size();
                              });
 
-            // Find something of the form var == expr to substitute
-            // out.
+            // Eliminate divs and mods by introducing new variables
+            for (int i = 0; i < (int)equalities.size(); i++) {
+                Expr lhs, rhs;
+                for (auto &p : equalities[i].terms) {
+                    const Mod *mod = p.first.as<Mod>();
+                    const Div *div = p.first.as<Div>();
+                    if (mod) {
+                        lhs = mod->a;
+                        rhs = mod->b;
+                    } else if (div) {
+                        lhs = div->a;
+                        rhs = div->b;
+                    }
+                    if (is_const(rhs)) {
+                        break;
+                    } else {
+                        lhs = rhs = Expr();
+                    }
+                }
+                if (lhs.defined()) {
+                    Expr k1 = aux(), k2 = aux();
+                    Expr replacement = k1 + k2 * rhs;
+                    auto subs = [&](Expr e) {
+                        e = substitute(lhs % rhs, k1, e);
+                        e = substitute(lhs / rhs, k2, e);
+                        return simplifier->mutate(e, nullptr);
+                    };
+                    std::unique_ptr<System> new_system(new System(simplifier));
+                    if (remainder.defined()) {
+                        new_system->add_term(subs(remainder));
+                    }
+                    for (int j = 0; j < (int)equalities.size(); j++) {
+                        new_system->add_term(subs(equalities[j].to_expr()));
+                    }
+                    new_system->add_term(lhs == replacement);
+                    simplifier->learn_true(-1 < k1);
+                    simplifier->learn_true(k1 < rhs);
+                    result.emplace_back(std::move(new_system));
+                    return;
+                }
+            }
 
-            // debug(0) << "Looking for variables to eliminate in:\n";
-            // dump();
-
+            // Eliminate an unbounded variable
             std::vector<const Variable *> vars;
             for (int i = 0; i < (int)equalities.size(); i++) {
                 if (equalities[i].num_vars == 0) {
@@ -343,7 +454,6 @@ struct Use {
                     // candidates for elimination to things that
                     // co-occur with *all* previously-found candidates.
                     if (!equalities[i].uses_var(v->name)) {
-                        // debug(0) << "Not going to mine: " << equalities[i].to_expr() << " for candidates because it doesn't contain " << v->name << "\n";
                         skip_it = true;
                         break;
                     }
@@ -354,7 +464,8 @@ struct Use {
 
                 for (const auto &p : equalities[i].terms) {
                     const Variable *var = p.first.as<Variable>();
-                    if (var && (p.second == 1 || p.second == -1)) {
+                    if (var &&
+                        (p.second == 1 || p.second == -1)) {
 
                         Expr rhs = 0;
                         for (const auto &p2 : equalities[i].terms) {
@@ -363,7 +474,9 @@ struct Use {
                             }
                         }
 
-                        rhs = simplify(rhs);
+                        rhs = simplifier->mutate(rhs, nullptr);
+                        simplifier->learn_true(p.first == -p.second * rhs);
+
                         if (expr_uses_var(rhs, var->name)) {
                             // Didn't successfully eliminate it - it
                             // still occurs inside a non-linearity on
@@ -372,12 +485,17 @@ struct Use {
                         }
 
                         // debug(0) << "Considering elimination " << var->name << " = " << rhs << "\n";
-
                         vars.push_back(var);
 
-                        std::unique_ptr<System> new_system(new System);
+                        auto subs = [&](Expr e) {
+                            e = substitute(var->name, rhs, e);
+                            e = simplifier->mutate(e, nullptr);
+                            return e;
+                        };
+
+                        std::unique_ptr<System> new_system(new System(simplifier));
                         if (remainder.defined()) {
-                            new_system->add_term(simplify(substitute(var->name, rhs, remainder)));
+                            new_system->add_term(subs(remainder));
                         }
                         for (int j = 0; j < (int)equalities.size(); j++) {
                             if (i == j) {
@@ -386,7 +504,7 @@ struct Use {
                                 continue;
                             }
                             // In the other equations, we replace the variable with the right-hand-side
-                            new_system->add_term(simplify(substitute(var->name, rhs, equalities[j].to_expr())));
+                            new_system->add_term(subs(equalities[j].to_expr()));
                         }
                         result.emplace_back(std::move(new_system));
                     }
@@ -405,65 +523,27 @@ struct Use {
             return true;
         }
 
-        // Strip the lets
-        vector<pair<string, Expr>> lets;
-        while (const Let *l = e.as<Let>()) {
-            if (l->value.type().is_bool()) {
-                // Substitute in boolean lets. They might be equations to mine.
-                e = substitute(l->name, l->value, l->body);
-            } else {
-                lets.emplace_back(l->name, l->value);
-                e = l->body;
-            }
-        }
-
         // The expression was constructed to be mostly a big
         // conjunction of equalities, so break it into those terms and
         // start substituting out variables.
-        vector<Expr> pending;
-
-        std::unique_ptr<System> system(new System);
-
-        debug(0) << "Expr: " << e << "\n";
-        pending.push_back(e);
-
-        while (!pending.empty()) {
-            Expr next = pending.back();
-            pending.pop_back();
-            internal_assert(next.type().is_bool()) << next << "\n";
-            if (const And *a = next.as<And>()) {
-                pending.push_back(a->a);
-                pending.push_back(a->b);
-            } else if (const LT *lt = next.as<LT>()) {
-                pending.push_back(lt->a + max(aux(), 1) == lt->b);
-            } else if (const LE *le = next.as<LE>()) {
-                pending.push_back(le->a + max(aux(), 0) == le->b);
-            } else {
-                system->add_term(next);
-            }
-        }
-
-        // Encode the lets as additional equalities
-        while (!lets.empty()) {
-            const auto &p = lets.back();
-            system->add_term(Variable::make(p.second.type(), p.first) == p.second);
-            lets.pop_back();
-        }
+        Simplify simplifier(true, nullptr, nullptr);
+        std::unique_ptr<System> system(new System(&simplifier));
+        system->add_term(e);
 
         std::deque<std::unique_ptr<System>> beam;
         beam.emplace_back(std::move(system));
-
-        // TO FIX: I'm hitting the same state exponentially many times!
 
         while (!beam.empty()) {
             // Take the best thing
             std::unique_ptr<System> next = std::move(beam.front());
             beam.pop_front();
 
-            debug(0) << "Top of beam: " << next->complexity() << "\n";
-            next->dump();
+            // debug(0) << "Top of beam: " << next->complexity() << "\n";
+            // next->dump();
 
-            if (next->infeasible()) return true;
+            if (next->infeasible()) {
+                return true;
+            }
 
             // Generate children
             next->make_children(beam);
@@ -475,11 +555,10 @@ struct Use {
                                  return a->complexity() < b->complexity();
                              });
 
-            while (beam.size() > 4) {
+            while (beam.size() > 32) {
                 beam.pop_back();
             }
         }
-
         return false;
     }
 
@@ -786,7 +865,7 @@ Stmt lower_store_with(const Stmt &s, const map<string, Function> &env) {
                                 check1 = u1.safely_before(u2);
                                 debug(0) << (check1 ? "Success!\n" : "Failure!\n");
                             }
-                            if (false && check2) {
+                            if (check2) {
                                 debug(0) << "\n *** Checking " << n2 << " before " << n1 << "\n";
                                 u1.dump();
                                 u2.dump();
