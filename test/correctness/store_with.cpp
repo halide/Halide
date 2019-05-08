@@ -199,7 +199,7 @@ int main(int argc, char **argv) {
         h.async();
         */
 
-        out.realize(100);
+        out.realize(128);
     }
 
     printf("Success!\n");
