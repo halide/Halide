@@ -200,17 +200,17 @@ public:
             ++iter;
         }
 
-        const std::string &name() {
+        const std::string &name() const {
             return iter->first;
         }
 
-        const SmallStack<T> &stack() {
+        const SmallStack<T> &stack() const {
             return iter->second;
         }
 
         template<typename T2 = T,
                  typename = typename std::enable_if<!std::is_same<T2, void>::value>::type>
-        const T2 &value() {
+        const T2 &value() const {
             return iter->second.top_ref();
         }
     };
