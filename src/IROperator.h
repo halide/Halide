@@ -1530,19 +1530,15 @@ inline Expr operator~(Expr x) {
  * arguments must have integer type. */
 // @{
 inline Expr operator<<(Expr x, Expr y) {
-    Internal::match_types_bitwise(x, y, "shift left");
+    Expr unsigned_amount = lossless_cast(UInt(x.type().bits(), x.type().lanes()), y);
+    user_assert(unsigned_amount.defined()) << "In shift left expression:\n   (" << x << ") << (" << y << ")\nthe amount must be unsigned and sizeable to the same size as value.\n";
     Type t = x.type();
-    return Internal::Call::make(t, Internal::Call::shift_left, {std::move(x), std::move(y)}, Internal::Call::PureIntrinsic);
+    return Internal::Call::make(t, Internal::Call::shift_left, {std::move(x), std::move(unsigned_amount)}, Internal::Call::PureIntrinsic);
 }
 inline Expr operator<<(Expr x, int y) {
-    Type t = x.type();
+    Type t = UInt(x.type().bits(), x.type().lanes());
     Internal::check_representable(t, y);
     return std::move(x) << Internal::make_const(t, y);
-}
-inline Expr operator<<(int x, Expr y) {
-    Type t = y.type();
-    Internal::check_representable(t, x);
-    return Internal::make_const(t, x) << std::move(y);
 }
 // @}
 
@@ -1556,19 +1552,15 @@ inline Expr operator<<(int x, Expr y) {
  * type. */
 // @{
 inline Expr operator>>(Expr x, Expr y) {
-    Internal::match_types_bitwise(x, y, "shift right");
+    Expr unsigned_amount = lossless_cast(UInt(x.type().bits(), x.type().lanes()), y);
+    user_assert(unsigned_amount.defined()) << "In shift right expression\n    (" << x << ") >> (" << y << ")\nthe amount must be unsigned and sizeable to the same size as value.\n";
     Type t = x.type();
     return Internal::Call::make(t, Internal::Call::shift_right, {std::move(x), std::move(y)}, Internal::Call::PureIntrinsic);
 }
 inline Expr operator>>(Expr x, int y) {
-    Type t = x.type();
+    Type t = UInt(x.type().bits(), x.type().lanes());
     Internal::check_representable(t, y);
     return std::move(x) >> Internal::make_const(t, y);
-}
-inline Expr operator>>(int x, Expr y) {
-    Type t = y.type();
-    Internal::check_representable(t, x);
-    return Internal::make_const(t, x) >> std::move(y);
 }
 // @}
 

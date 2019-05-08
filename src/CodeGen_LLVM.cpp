@@ -2404,11 +2404,19 @@ void CodeGen_LLVM::visit(const Call *op) {
         internal_assert(op->args.size() == 2);
         Value *a = codegen(op->args[0]);
         Value *b = codegen(op->args[1]);
+        if (op->args[0].type() != op->args[1].type()) {
+            llvm::Type *llvm_type_lhs = llvm_type_of(op->args[0].type());
+            b = builder->CreateBitCast(b, llvm_type_lhs);
+        }
         value = builder->CreateShl(a, b);
     } else if (op->is_intrinsic(Call::shift_right)) {
         internal_assert(op->args.size() == 2);
         Value *a = codegen(op->args[0]);
         Value *b = codegen(op->args[1]);
+        if (op->args[0].type() != op->args[1].type()) {
+            llvm::Type *llvm_type_lhs = llvm_type_of(op->args[0].type());
+            b = builder->CreateBitCast(b, llvm_type_lhs);
+        }
         if (op->type.is_int()) {
             value = builder->CreateAShr(a, b);
         } else {

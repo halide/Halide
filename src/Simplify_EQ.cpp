@@ -30,7 +30,7 @@ Expr Simplify::visit(const EQ *op, ExprInfo *bounds) {
         } else if (rewrite(x == 0, !x)) {
             return mutate(std::move(rewrite.result), bounds);
         } else if (rewrite(x == x, const_true(lanes))) {
-	    return rewrite.result;
+            return rewrite.result;
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             return op;
         } else {
