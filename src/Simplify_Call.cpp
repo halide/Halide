@@ -132,7 +132,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         if (const_uint(b, &ub)) {
             // LLVM shl and shr instructions produce poison for negative shifts,
             // or for shifts >= typesize, so we will follow suit in our simplifier.
-          user_assert(ub < (uint64_t)t.bits()) << "bitshift by a constant amount >= the type size is not legal in Halide.";
+            user_assert(ub < (uint64_t)t.bits()) << "bitshift by a constant amount >= the type size is not legal in Halide.";
             if (a.type().is_uint() || ub < (uint64_t)t.bits() - 1) {
                 b = make_const(t, ((int64_t) 1LL) << ub);
                 if (shift_left) {
