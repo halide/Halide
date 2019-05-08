@@ -1237,7 +1237,7 @@ void CodeGen_LLVM::optimize_module() {
     //FIXME: How-to if additional passes wanted or a custom pipeline is used:
     /*
     std::string pipeline("inline");
-    if (auto err = pb.parsePassPipeline(MPM, pipeline, true, debug_pass_manager)) {
+    if (auto err = pb.parsePassPipeline(mpm, pipeline, true, debug_pass_manager)) {
       llvm::errs() << "Failed to parse pass pipeline: " << pipeline << ".Err: "
           << llvm::toString(std::move(err)) << "\n";
       exit(1);
