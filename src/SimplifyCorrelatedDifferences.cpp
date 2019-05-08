@@ -35,23 +35,29 @@ class SimplifyCorrelatedDifferences : public IRMutator {
             ScopedBinding<Monotonic> binding;
             Frame(const LetStmtOrLet *op, const string &loop_var, Scope<Monotonic> &scope) :
                 op(op),
-                binding(op->value.type() == Int(32) && is_pure(op->value),
-                        scope, op->name, is_monotonic(op->value, loop_var, scope)) {}
+                binding(scope, op->name, is_monotonic(op->value, loop_var, scope)) {}
+            Frame(const LetStmtOrLet *op) : op(op) {}
         };
         std::vector<Frame> frames;
         StmtOrExpr result;
 
         do {
             result = op->body;
-            frames.emplace_back(op, loop_var, monotonic);
-            lets.emplace_back(op->name, op->value);
+            if (op->value.type() == Int(32) && is_pure(op->value)) {
+                frames.emplace_back(op, loop_var, monotonic);
+                lets.emplace_back(op->name, op->value);
+            } else {
+                frames.emplace_back(op);
+            }
         } while ((op = result.template as<LetStmtOrLet>()));
 
         result = mutate(result);
 
         for (auto it = frames.rbegin(); it != frames.rend(); it++) {
             result = LetStmtOrLet::make(it->op->name, it->op->value, result);
-            lets.pop_back();
+            if (it->binding.bound()) {
+                lets.pop_back();
+            }
         }
 
         return result;
