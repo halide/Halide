@@ -44,12 +44,14 @@ class SimplifyCorrelatedDifferences : public IRMutator {
         do {
             result = op->body;
             frames.emplace_back(op, loop_var, monotonic);
+            lets.emplace_back(op->name, op->value);
         } while ((op = result.template as<LetStmtOrLet>()));
 
         result = mutate(result);
 
         for (auto it = frames.rbegin(); it != frames.rend(); it++) {
             result = LetStmtOrLet::make(it->op->name, it->op->value, result);
+            lets.pop_back();
         }
 
         return result;
