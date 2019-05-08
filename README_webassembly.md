@@ -77,7 +77,7 @@ If you want to test ahead-of-time code generation (and you almost certainly will
 
 - The simplest way to install is probably via the Emscripten emsdk (https://emscripten.org/docs/getting_started/downloads.html).
 
-- After installing Emscripten, be sure that it is configured to use the version of LLVM that you configured earlier, rather than its built-in version (which is an older version which won't work well with Halide); if you installed via `emsdk`, you need to edit `~/.emscripten` and set `LLVM_ROOT` to point at the LLVM you have built. (If you fail with errors like `WASM_BACKEND selected but could not find lld (wasm-ld)`, you forgot to do this step.)
+- The default Halide makefile sets a custom value for `EM_CONFIG` to ensure that we use the correct version of LLVM (i.e., the version used by the rest of Halide), rather than relying on `~/.emscripten` being set correctly. If you are using Emscripten in your own build system in conjunction with Halide, you'll probably need to edit your own `~/.emscripten` file to ensure that `LLVM_ROOT` points at the LLVM you built earlier (or pass a custom `--em-config` flag, or set the `EM_CONFIG` env var). If you fail with errors like `WASM_BACKEND selected but could not find lld (wasm-ld)`, you forgot to do this step.
 
 - Set `WASM_SHELL=/path/to/d8`
 

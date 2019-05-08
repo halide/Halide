@@ -7,8 +7,9 @@ extern "C" {
 extern void AnnotateMemoryIsInitialized(const char *file, int line,
                                         const void *mem, size_t size);
 
-WEAK void halide_msan_annotate_memory_is_initialized(void *user_context, const void *ptr, uint64_t len) {
+WEAK int halide_msan_annotate_memory_is_initialized(void *user_context, const void *ptr, uint64_t len) {
     AnnotateMemoryIsInitialized("Halide", 0, ptr, (size_t) len);
+    return 0;
 }
 
 namespace Halide {
@@ -35,28 +36,29 @@ WEAK void annotate_helper(void *uc, const device_copy &c, int d, int64_t off) {
 // (but *not* the buffer_t itself); it takes pains to only mark the active memory ranges
 // (skipping padding), and sorting into ranges to always mark the smallest number of
 // ranges, in monotonically increasing memory order.
-WEAK void halide_msan_annotate_buffer_is_initialized(void *user_context, halide_buffer_t *b) {
+WEAK int halide_msan_annotate_buffer_is_initialized(void *user_context, halide_buffer_t *b) {
     if (b == NULL) {
-        return;
+        return 0;
     }
 
     Halide::Runtime::Internal::device_copy c = Halide::Runtime::Internal::make_host_to_device_copy(b);
     if (c.chunk_size == 0) {
-        return;
+        return 0;
     }
 
     if (b->device_dirty()) {
         // buffer has been computed on a gpu, but not copied back:
         // don't annotate as initialized. (We'll assume that subsequent
         // calls to halide_copy_to_host will force another call.)
-        return;
+        return 0;
     }
 
     annotate_helper(user_context, c, MAX_COPY_DIMS-1, 0);
+    return 0;
 }
 
 WEAK void halide_msan_annotate_buffer_is_initialized_as_destructor(void *user_context, void *b) {
-    return halide_msan_annotate_buffer_is_initialized(user_context, (halide_buffer_t *)b);
+    (void) halide_msan_annotate_buffer_is_initialized(user_context, (halide_buffer_t *)b);
 }
 
 }

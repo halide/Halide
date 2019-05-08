@@ -271,7 +271,7 @@ void print_object_properties(Isolate *isolate, const Local<Value> &v) {
         int len = properties->Length();
         wdebug(0) << "Number of properties = " << len << ":\n";
         for(int i = 0 ; i < len ; ++i) {
-            const v8::Handle<v8::Value> key = properties->Get(i);
+            const v8::Local<v8::Value> key = properties->Get(i);
             String::Utf8Value str(isolate, key);
             wdebug(0) << "\t" << i + 1 << ". " << *str << "\n";
         }
@@ -1443,7 +1443,7 @@ int WasmModuleContents::run(const void **args) {
 
     std::vector<wasm32_ptr_t> wbufs(arguments.size(), 0);
 
-    std::vector<v8::Handle<Value>> js_args;
+    std::vector<v8::Local<Value>> js_args;
     for (size_t i = 0; i < arguments.size(); i++) {
         const Argument &arg = arguments[i];
         const void *arg_ptr = args[i];

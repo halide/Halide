@@ -618,6 +618,26 @@ void check_bounds() {
     check(max(max(y, x) + 1, x), max(x, y) + 1);
     check(max(max(y, x) - (-1), x), max(x, y) + 1);
 
+    check(min(x, min(x, y) + 1), min(y + 1, x));
+    check(min(x, min(x, y) - (-1)), min(y + 1, x));
+    check(min(x, min(x, y) + (-1)), min(x, y) + (-1));
+    check(min(x, min(x, y) - 1), min(x, y) + (-1));
+
+    check(min(x, min(y, x) + 1), min(y + 1, x));
+    check(min(x, min(y, x) - (-1)), min(y + 1, x));
+    check(min(x, min(y, x) + (-1)), min(x, y) + (-1));
+    check(min(x, min(y, x) - 1), min(x, y) + (-1));
+
+    check(max(x, max(x, y) - 1), max(y + (-1), x));
+    check(max(x, max(x, y) + (-1)), max(y + (-1), x));
+    check(max(x, max(x, y) + 1), max(x, y) + 1);
+    check(max(x, max(x, y) - (-1)), max(x, y) + 1);
+
+    check(max(x, max(y, x) - 1), max(y + (-1), x));
+    check(max(x, max(y, x) + (-1)), max(y + (-1), x));
+    check(max(x, max(y, x) + 1), max(x, y) + 1);
+    check(max(x, max(y, x) - (-1)), max(x, y) + 1);
+
     check(max(Expr(7), 3), 7);
     check(max(Expr(4.25f), 1.25f), 4.25f);
     check(max(broadcast(x, 4), broadcast(y, 4)),
