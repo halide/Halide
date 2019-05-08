@@ -262,6 +262,7 @@ LLVM_STATIC_LIBFILES = \
 	bitreader \
 	linker \
 	ipo \
+	passes \
 	mcjit \
 	$(X86_LLVM_CONFIG_LIB) \
 	$(ARM_LLVM_CONFIG_LIB) \

@@ -45,13 +45,15 @@
 #include <llvm/Support/DynamicLibrary.h>
 #include <llvm/Support/DataExtractor.h>
 #include <llvm/Analysis/TargetLibraryInfo.h>
+#include <llvm/Passes/PassBuilder.h>
+#include <llvm/Transforms/IPO/Inliner.h>
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
 #include <llvm/Transforms/IPO.h>
 #include <llvm/Transforms/Utils/ModuleUtils.h>
 #include <llvm/Transforms/Utils/SymbolRewriter.h>
 #include <llvm/Transforms/Instrumentation.h>
 #if LLVM_VERSION >= 90
-#include "llvm/Transforms/Instrumentation/AddressSanitizer.h"
+#include <llvm/Transforms/Instrumentation/AddressSanitizer.h>
 #endif
 #if LLVM_VERSION >= 80
 #include <llvm/Transforms/Instrumentation/ThreadSanitizer.h>
