@@ -1530,7 +1530,7 @@ inline Expr operator~(Expr x) {
  * arguments must have integer type. */
 // @{
 inline Expr operator<<(Expr x, Expr y) {
-    Expr unsigned_amount = lossless_cast(UInt(x.type().bits(), x.type().lanes()), y);
+    Expr unsigned_amount = lossless_cast(UInt(x.type().bits(), y.type().lanes()), y);
     user_assert(unsigned_amount.defined()) << "In shift left expression:\n   (" << x << ") << (" << y << ")\nthe amount must be unsigned and losslessly castable to the same size as value.\n";
     Type t = x.type();
     return Internal::Call::make(t, Internal::Call::shift_left, {std::move(x), std::move(unsigned_amount)}, Internal::Call::PureIntrinsic);
@@ -1552,7 +1552,7 @@ inline Expr operator<<(Expr x, int y) {
  * type. */
 // @{
 inline Expr operator>>(Expr x, Expr y) {
-    Expr unsigned_amount = lossless_cast(UInt(x.type().bits(), x.type().lanes()), y);
+    Expr unsigned_amount = lossless_cast(UInt(x.type().bits(), y.type().lanes()), y);
     user_assert(unsigned_amount.defined()) << "In shift right expression\n    (" << x << ") >> (" << y << ")\nthe amount must be unsigned and losslessly castable to the same size as value.\n";
     Type t = x.type();
     return Internal::Call::make(t, Internal::Call::shift_right, {std::move(x), std::move(y)}, Internal::Call::PureIntrinsic);
