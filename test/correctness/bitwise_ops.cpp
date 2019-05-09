@@ -105,7 +105,7 @@ int main(int argc, char **argv) {
     // arithmetic shift right
     Func f8;
     Expr a = reinterpret<int>(input(x));
-    Expr b = reinterpret<int>(input(x+1));
+    Expr b = reinterpret<unsigned>(input(x+1));
     f8(x) = a >> (b & 0xf);
     Buffer<int> im8 = f8.realize(128);
     for (int x = 0; x < 128; x++) {
@@ -116,7 +116,6 @@ int main(int argc, char **argv) {
             return -1;
         }
     }
-
 
     // bit shift on mixed types
     Func f9;

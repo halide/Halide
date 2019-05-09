@@ -222,6 +222,23 @@ def test_reorder():
     assert b.dim(2).stride() == b2.dim(2).stride()
     assert b.dim(3).stride() == b2.dim(3).stride()
 
+def test_overflow():
+    # size = INT_MAX
+    w_intmax = 0x7FFFFFFF
+
+    # When size == INT_MAX, we should not emit error
+    size_intmax = np.ndarray(dtype=np.uint8, shape=(w_intmax))
+    hl.Buffer(size_intmax)
+
+    # size = INT_MAX + 1
+    w_over_intmax = 0x7FFFFFFF + 1
+
+    # We should emit the error when the size > INT_MAX
+    size_over_intmax = np.ndarray(dtype=np.uint8, shape=(w_over_intmax))
+    try:
+        hl.Buffer(size_over_intmax)
+    except ValueError as e:
+        assert 'Out of range arguments to make_dim_vec.' in str(e)
 
 if __name__ == "__main__":
     test_make_interleaved()
@@ -234,4 +251,4 @@ if __name__ == "__main__":
     test_float16()
     test_int64()
     test_reorder()
-
+    test_overflow()
