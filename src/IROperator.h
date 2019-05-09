@@ -1563,7 +1563,7 @@ inline Expr operator>>(Expr x, Expr y) {
         << "   with types " << x.type() << " >> " << y.type() << "\n"
         << "the RHS must be unsigned and losslessly castable to the same size as the LHS.\n";
     Type t = x.type();
-    return Internal::Call::make(t, Internal::Call::shift_right, {std::move(x), std::move(y)}, Internal::Call::PureIntrinsic);
+    return Internal::Call::make(t, Internal::Call::shift_right, {std::move(x), std::move(unsigned_amount)}, Internal::Call::PureIntrinsic);
 }
 inline Expr operator>>(Expr x, int y) {
     Type t = UInt(x.type().bits(), x.type().lanes());
