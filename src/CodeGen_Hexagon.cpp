@@ -598,32 +598,32 @@ void CodeGen_Hexagon::init_module() {
         // We map arithmetic and logical shifts to just "shr", depending on type.
         { IPICK(is_128B, Intrinsic::hexagon_V6_vlsrhv), u16v1, "shr.vuh.vuh", {u16v1, u16v1} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vlsrwv), u32v1, "shr.vuw.vuw", {u32v1, u32v1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vasrhv), i16v1, "shr.vh.vh",   {i16v1, i16v1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vasrwv), i32v1, "shr.vw.vw",   {i32v1, i32v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vasrhv), i16v1, "shr.vh.vuh",   {i16v1, u16v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vasrwv), i32v1, "shr.vw.vuw",   {i32v1, u32v1} },
 
         { IPICK(is_128B, Intrinsic::hexagon_V6_vaslhv), u16v1, "shl.vuh.vuh", {u16v1, u16v1} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vaslwv), u32v1, "shl.vuw.vuw", {u32v1, u32v1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vaslhv), i16v1, "shl.vh.vh",   {i16v1, i16v1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vaslwv), i32v1, "shl.vw.vw",   {i32v1, i32v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vaslhv), i16v1, "shl.vh.vuh",   {i16v1, u16v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vaslwv), i32v1, "shl.vw.vuw",   {i32v1, u32v1} },
 
         { IPICK(is_128B, Intrinsic::hexagon_V6_vlsrh),  u16v1, "shr.vuh.uh", {u16v1, u16} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vlsrw),  u32v1, "shr.vuw.uw", {u32v1, u32} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vasrh),  i16v1, "shr.vh.h",   {i16v1, i16} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vasrw),  i32v1, "shr.vw.w",   {i32v1, i32} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vasrh),  i16v1, "shr.vh.uh",   {i16v1, u16} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vasrw),  i32v1, "shr.vw.uw",   {i32v1, u32} },
 
         { IPICK(is_128B, Intrinsic::hexagon_V6_vaslh),  u16v1, "shl.vuh.uh", {u16v1, u16} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vaslw),  u32v1, "shl.vuw.uw", {u32v1, u32} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vaslh),  i16v1, "shl.vh.h",   {i16v1, i16} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vaslw),  i32v1, "shl.vw.w",   {i32v1, i32} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vasrh_acc), i16v1, "add_shr.vh.vh.h", {i16v1, i16v1, i16}, HvxIntrinsic::BroadcastScalarsToWords | HvxIntrinsic::v65OrLater },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vaslh_acc), i16v1, "add_shl.vh.vh.h", {i16v1, i16v1, i16}, HvxIntrinsic::BroadcastScalarsToWords | HvxIntrinsic::v65OrLater },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vasrw_acc), i32v1, "add_shr.vw.vw.w", {i32v1, i32v1, i32} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vaslw_acc), i32v1, "add_shl.vw.vw.w", {i32v1, i32v1, i32} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vaslh),  i16v1, "shl.vh.uh",   {i16v1, u16} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vaslw),  i32v1, "shl.vw.uw",   {i32v1, u32} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vasrh_acc), i16v1, "add_shr.vh.vh.uh", {i16v1, i16v1, i16}, HvxIntrinsic::BroadcastScalarsToWords | HvxIntrinsic::v65OrLater },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vaslh_acc), i16v1, "add_shl.vh.vh.uh", {i16v1, i16v1, i16}, HvxIntrinsic::BroadcastScalarsToWords | HvxIntrinsic::v65OrLater },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vasrw_acc), i32v1, "add_shr.vw.vw.uw", {i32v1, i32v1, i32} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vaslw_acc), i32v1, "add_shl.vw.vw.uw", {i32v1, i32v1, i32} },
 
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vasrwh), i16v1, "trunc_shr.vw.w",   {i32v2, i32} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vasrhubsat), u8v1, "trunc_satub_shr.vh.h",  {i16v2, i16} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vasrwuhsat), u16v1, "trunc_satuh_shr.vw.w", {i32v2, i32} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vasrwhsat),  i16v1, "trunc_sath_shr.vw.w",  {i32v2, i32} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vasrwh), i16v1, "trunc_shr.vw.uw",   {i32v2, u32} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vasrhubsat), u8v1, "trunc_satub_shr.vh.uh",  {i16v2, u16} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vasrwuhsat), u16v1, "trunc_satuh_shr.vw.uw", {i32v2, u32} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vasrwhsat),  i16v1, "trunc_sath_shr.vw.uw",  {i32v2, u32} },
 
         // Bitwise operators
         { IPICK(is_128B, Intrinsic::hexagon_V6_vand),  u8v1,  "and.vb.vb",  {u8v1,  u8v1} },
@@ -1716,6 +1716,7 @@ void CodeGen_Hexagon::visit(const Call *op) {
             internal_assert(op->args.size() == 2);
             string instr = op->is_intrinsic(Call::shift_left) ? "halide.hexagon.shl" : "halide.hexagon.shr";
             Expr b = maybe_scalar(op->args[1]);
+            internal_assert(b.type().is_uint());
             value = call_intrin(op->type,
                                 instr + type_suffix(op->args[0], b),
                                 {op->args[0], b});
