@@ -334,9 +334,12 @@ int main(int argc, char **argv) {
     }
 
     std::ifstream file(weights_out_dir + "/best/rate");
-    std::string line;
-    std::getline(file, line);
-    float best_rate_overall = stof(line);
+    float best_rate_overall = 0.f;
+    if (file) {
+        std::string line;
+        std::getline(file, line);
+        best_rate_overall = stof(line);
+    }
     std::cout << "Initial best validation rate: " << best_rate_overall << std::endl;
     file.close();
     for (float learning_rate : rates) {
