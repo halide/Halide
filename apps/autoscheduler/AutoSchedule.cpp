@@ -3646,9 +3646,13 @@ struct State {
             stage.gpu_blocks(v);
             n_loops_tagged_gpu_blocks++;
         }
+
+        if (n_loops_tagged_gpu_blocks > 0) {
+            state->parallel = true;
+        }
     }
 
-    void mark_gpu_threads(LoopNest::StageScheduleState* state, Stage& stage) {
+    bool mark_gpu_threads(LoopNest::StageScheduleState* state, Stage& stage) {
         uint8_t num_loops_tagged_gpu_thread = 0;
         int64_t total_threads = 1;
         int max_threads[3] = {1024, 1024, 64};
@@ -3666,6 +3670,8 @@ struct State {
             stage.gpu_threads(v.var);
             num_loops_tagged_gpu_thread++;
         }
+
+        return num_loops_tagged_gpu_thread > 0;
     }
 
     bool can_fuse_gpu(const vector<int64_t>& parallel_extents) {
@@ -3828,9 +3834,75 @@ struct State {
                 p.second->schedule_source << ")";
                 Func(p.first->node->func).reorder_storage(storage_vars);
             }
+        }
 
-            if (target.has_gpu_feature()) {
-                mark_gpu_threads(p.second.get(), stage);
+        if (target.has_gpu_feature()) {
+            std::set<const FunctionDAG::Node*> invalid;
+            // Iterate from output backwards
+            for (const auto &n : dag.nodes) {
+                for (auto &p : state_map) {
+                    if (&n != p.second->node) {
+                        continue;
+                    }
+
+                    if (p.first->node->is_input) continue;
+
+                    Stage stage(p.first->stage);
+
+                    // If at least one loop has been marked gpu_thread, we need to
+                    // ensure that it is enclosed by a gpu_block loop. Check if this
+                    // loop nest or one of its ancestors has been marked gpu_block
+                    LoopNest::StageScheduleState* enclosing_parallel = p.second.get();
+                    bool has_enclosing_parallel = p.second->parallel;
+
+                    if (!has_enclosing_parallel) {
+                        for (auto* ancestor : p.second->ancestors) {
+                            if (ancestor->parallel) {
+                                enclosing_parallel = ancestor;
+                                has_enclosing_parallel = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (!mark_gpu_threads(p.second.get(), stage) || has_enclosing_parallel) {
+                        continue;
+                    }
+
+                    // There is no outer loop marked as gpu_block.
+                    // Split the outer loop to create a new outer var with
+                    // extent = 1 and mark it gpu_blocks()
+                    const auto& outer_var = p.second->ordered_vars.back();
+                    vector<VarOrRVar> vars;
+                    for (const auto& v : p.second->ordered_vars) {
+                        vars.push_back(v.var);
+                    }
+
+                    Var new_outer(outer_var.var.name() + "_outer");
+                    stage.split(outer_var.var, new_outer, outer_var.var, (int)outer_var.extent);
+
+                    // If there are store_ats at Var::outermost(), we need to ensure
+                    // that those store_ats are retained at the Var::outermost level
+                    vars.push_back(new_outer);
+                    vars.push_back(Var::outermost());
+
+                    p.second->schedule_source << "\n    .reorder(";
+                    bool first = true;
+
+                    for (const auto& v : vars) {
+                        if (!first) {
+                            p.second->schedule_source << ", ";
+                        }
+                        p.second->schedule_source << v.name();
+                        first = false;
+                    }
+                    p.second->schedule_source << ")";
+
+                    stage.reorder(vars);
+                    stage.gpu_blocks(new_outer);
+                    p.second->parallel = true;
+                    p.second->schedule_source << "\n    .gpu_blocks(" << new_outer.name() << ")";
+                }
             }
         }
 
