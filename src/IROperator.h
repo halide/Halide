@@ -1531,7 +1531,11 @@ inline Expr operator~(Expr x) {
 // @{
 inline Expr operator<<(Expr x, Expr y) {
     Expr unsigned_amount = lossless_cast(UInt(x.type().bits(), y.type().lanes()), y);
-    user_assert(unsigned_amount.defined()) << "In shift left expression:\n   (" << x << ") << (" << y << ")\nthe amount must be unsigned and losslessly castable to the same size as value.\n";
+    user_assert(unsigned_amount.defined())
+        << "In shift left expression:\n"
+        << "   (" << x << ") << (" << y << ")\n"
+        << "   with types " << x.type() << " << " << y.type() << "\n"
+        << "the RHS must be unsigned and losslessly castable to the same size as the LHS.\n";
     Type t = x.type();
     return Internal::Call::make(t, Internal::Call::shift_left, {std::move(x), std::move(unsigned_amount)}, Internal::Call::PureIntrinsic);
 }
@@ -1553,9 +1557,13 @@ inline Expr operator<<(Expr x, int y) {
 // @{
 inline Expr operator>>(Expr x, Expr y) {
     Expr unsigned_amount = lossless_cast(UInt(x.type().bits(), y.type().lanes()), y);
-    user_assert(unsigned_amount.defined()) << "In shift right expression\n    (" << x << ") >> (" << y << ")\nthe amount must be unsigned and losslessly castable to the same size as value.\n";
+    user_assert(unsigned_amount.defined())
+        << "In shift right expression:\n"
+        << "   (" << x << ") >> (" << y << ")\n"
+        << "   with types " << x.type() << " >> " << y.type() << "\n"
+        << "the RHS must be unsigned and losslessly castable to the same size as the LHS.\n";
     Type t = x.type();
-    return Internal::Call::make(t, Internal::Call::shift_right, {std::move(x), std::move(y)}, Internal::Call::PureIntrinsic);
+    return Internal::Call::make(t, Internal::Call::shift_right, {std::move(x), std::move(unsigned_amount)}, Internal::Call::PureIntrinsic);
 }
 inline Expr operator>>(Expr x, int y) {
     Type t = UInt(x.type().bits(), x.type().lanes());
