@@ -159,10 +159,7 @@ struct Use {
             const Add *add = e.as<Add>();
             const Sub *sub = e.as<Sub>();
             const Mul *mul = e.as<Mul>();
-            const Mod *mod = e.as<Mod>();
-            const int64_t *coeff = (mul ? as_const_int(mul->b) :
-                                    mod ? as_const_int(mod->b) :
-                                    nullptr);
+            const int64_t *coeff = (mul ? as_const_int(mul->b) : nullptr);
             if (coeff && mul_would_overflow(64, c, *coeff)) {
                 coeff = nullptr;
             }
@@ -174,10 +171,6 @@ struct Use {
                 find_terms(sub->b, -c);
             } else if (mul && coeff) {
                 find_terms(mul->a, c * (int)(*coeff));
-            } else if (false && mod && coeff) {
-                // Remove the mod using an auxiliary variable.
-                find_terms(mod->a, c);
-                add_term(aux(), c * (int)(*coeff));
             } else {
                 add_term(e, c);
             }
@@ -196,6 +189,7 @@ struct Use {
             } else if (e.as<Variable>()) {
                 num_vars++;
             }
+
         }
 
         Equality(const EQ *eq) {
@@ -206,14 +200,6 @@ struct Use {
 
         std::map<Expr, int, IRDeepCompare> terms;
         int num_vars = 0;
-
-        Equality operator-(const Equality &other) const {
-            Equality result = *this;
-            for (const auto &p : other.terms) {
-                result.add_term(p.first, -p.second);
-            }
-            return result;
-        }
 
         bool uses_var(const std::string &name) const {
             for (const auto &p : terms) {
@@ -263,14 +249,18 @@ struct Use {
         Simplify *simplifier;
         // An additional arbitrary term to place non-linear constraints
         Expr remainder;
-        int c = 0;
 
-        System(Simplify *s) : simplifier(s) {}
+        // A heuristic for how close we are to finding infeasibility
+        float c = 0;
+
+        // IDs for debugging and training a good heuristic
+        static int id_counter;
+        int id, parent_id;
+
+        System(Simplify *s, int pid) : simplifier(s), id(id_counter++), parent_id(pid) {}
 
         void add_equality(const EQ *eq) {
             equalities.emplace_back(eq);
-            // Measure complexity as the number of terms. non-vars count double.
-            c += 2 * equalities.back().terms.size() - equalities.back().num_vars;
         }
 
         void add_non_linear_term(const Expr &e) {
@@ -285,6 +275,7 @@ struct Use {
         }
 
         void add_term(const Expr &e) {
+            debug(0) << "Adding term " << e << "\n";
             const EQ *eq = e.as<EQ>();
             const LT *lt = e.as<LT>();
             const LE *le = e.as<LE>();
@@ -300,9 +291,19 @@ struct Use {
             } else if (le && le->a.type() == Int(32)) {
                 const Variable *va = le->a.as<Variable>();
                 const Variable *vb = le->b.as<Variable>();
-                if (is_const(le->a) && vb) {
+                if (const Min *min_b = le->b.as<Min>()) {
+                    // x <= min(y, z) -> x <= y && x <= z
+                    add_term(le->a <= min_b->a);
+                    add_term(le->a <= min_b->b);
+                } else if (const Max *max_a = le->a.as<Max>()) {
+                    // max(x, y) <= z -> x <= z && y <= z
+                    add_term(max_a->a <= le->b);
+                    add_term(max_a->b <= le->b);
+                } else if (is_const(le->a) && vb) {
+                    debug(0) << "Telling simplifier that " << e << "\n";
                     simplifier->learn_true(e);
                 } else if (is_const(le->b) && va) {
+                    debug(0) << "Telling simplifier that " << e << "\n";
                     simplifier->learn_true(e);
                 } else {
                     Expr v = aux();
@@ -312,9 +313,19 @@ struct Use {
             } else if (lt && lt->a.type() == Int(32)) {
                 const Variable *va = lt->a.as<Variable>();
                 const Variable *vb = lt->b.as<Variable>();
-                if (is_const(lt->a) && vb) {
+                if (const Min *min_b = lt->b.as<Min>()) {
+                    // x <= min(y, z) -> x <= y && x <= z
+                    add_term(le->a < min_b->a);
+                    add_term(le->a < min_b->b);
+                } else if (const Max *max_a = lt->a.as<Max>()) {
+                    // max(x, y) <= z -> x <= z && y <= z
+                    add_term(max_a->a < le->b);
+                    add_term(max_a->b < le->b);
+                } else if (is_const(lt->a) && vb) {
+                    debug(0) << "Telling simplifier that " << e << "\n";
                     simplifier->learn_true(e);
                 } else if (is_const(lt->b) && va) {
+                    debug(0) << "Telling simplifier that " << e << "\n";
                     simplifier->learn_true(e);
                 } else {
                     Expr v = aux();
@@ -326,6 +337,7 @@ struct Use {
                     add_term(substitute(l->name, l->value, l->body));
                 } else {
                     Expr eq = Variable::make(l->value.type(), l->name) == l->value;
+                    debug(0) << "Telling simplifier that " << eq << "\n";
                     simplifier->learn_true(eq);
                     add_term(eq);
                     add_term(l->body);
@@ -345,10 +357,10 @@ struct Use {
 
         void dump() const {
             for (auto &e : equalities) {
-                debug(0) << " " << simplifier->mutate(e.to_expr(), nullptr) << "\n";
+                debug(0) << " " << e.to_expr() << "\n";
             }
             if (remainder.defined()) {
-                debug(0) << " " << simplifier->mutate(remainder, nullptr) << "\n";
+                debug(0) << " " << remainder << "\n";
             }
             const auto &info = simplifier->bounds_and_alignment_info;
             for (auto it = info.cbegin(); it != info.cend(); ++it){
@@ -374,16 +386,61 @@ struct Use {
         bool infeasible() const {
             for (auto &e : equalities) {
                 if (is_zero(simplifier->mutate(e.to_expr(), nullptr))) {
+                    debug(0) << "INFEASIBLE: " << id << "\n";
                     return true;
                 }
             }
             if (remainder.defined() && is_zero(simplifier->mutate(remainder, nullptr))) {
+                debug(0) << "INFEASIBLE: " << id << "\n";
                 return true;
             }
             return false;
         }
 
-        int complexity() const {
+        void compute_complexity(Simplify *simplify) {
+            std::map<std::string, int> inequalities;
+            int non_linear_terms = 0, num_terms = 0;
+            for (auto &e : equalities) {
+                for (auto &p : e.terms) {
+                    Simplify::ExprInfo info;
+                    simplify->mutate(p.first, &info);
+                    if (const Variable *var = p.first.as<Variable>()) {
+                        inequalities[var->name] = (int)info.max_defined + (int)info.min_defined;
+                    } else if (!is_const(p.first)) {
+                        non_linear_terms++;
+                    }
+                    num_terms++;
+                }
+            }
+            int unconstrained_vars = 0;
+            int semi_constrained_vars = 0;
+            int totally_constrained_vars = 0;
+            int num_constraints = (int)equalities.size() + (int)remainder.defined();
+            for (const auto &p : inequalities) {
+                if (p.second == 0) {
+                    unconstrained_vars++;
+                } else if (p.second == 1) {
+                    semi_constrained_vars++;
+                } else {
+                    totally_constrained_vars++;
+                }
+            }
+            debug(0) << "FEATURES " << id << " " << parent_id << " " << non_linear_terms << " " << unconstrained_vars << " " << semi_constrained_vars << " " << totally_constrained_vars << " " << num_terms << " " << num_constraints << "\n";
+            int terms[] = {non_linear_terms, unconstrained_vars, semi_constrained_vars,
+                           totally_constrained_vars, num_terms, num_constraints};
+            // Use a linear combination of these features to decide
+            // which stats are the most promising to explore. Trained
+            // by tracking which states lead to success in the
+            // store_with test and minimizing cross-entropy loss on a
+            // linear classifier.
+            float coeffs[] = {-0.2117f, -0.0170f, -0.2342f, -0.0031f,  0.0517f, -0.0789f};
+            c = 0.0f;
+            for (int i = 0; i < 6; i++) {
+                c += terms[i] * coeffs[i];
+            }
+        }
+
+        float complexity() const {
             return c;
         }
 
@@ -423,7 +480,7 @@ struct Use {
                         e = substitute(lhs / rhs, k2, e);
                         return simplifier->mutate(e, nullptr);
                     };
-                    std::unique_ptr<System> new_system(new System(simplifier));
+                    std::unique_ptr<System> new_system(new System(simplifier, id));
                     if (remainder.defined()) {
                         new_system->add_term(subs(remainder));
                     }
@@ -433,6 +490,7 @@ struct Use {
                     new_system->add_term(lhs == replacement);
                     simplifier->learn_true(-1 < k1);
                     simplifier->learn_true(k1 < rhs);
+                    new_system->compute_complexity(simplifier);
                     result.emplace_back(std::move(new_system));
                     return;
                 }
@@ -493,7 +551,7 @@ struct Use {
                             return e;
                         };
 
-                        std::unique_ptr<System> new_system(new System(simplifier));
+                        std::unique_ptr<System> new_system(new System(simplifier, id));
                         if (remainder.defined()) {
                             new_system->add_term(subs(remainder));
                         }
@@ -506,6 +564,7 @@ struct Use {
                             // In the other equations, we replace the variable with the right-hand-side
                             new_system->add_term(subs(equalities[j].to_expr()));
                         }
+                        new_system->compute_complexity(simplifier);
                         result.emplace_back(std::move(new_system));
                     }
                 }
@@ -513,10 +572,10 @@ struct Use {
         }
     };
 
-    bool can_disprove(Expr e) const {
-        debug(0) << "Attempting to disprove: " << e << "\n";
-
+    bool can_disprove(Expr e, int beam_size) const {
         e = common_subexpression_elimination(simplify(remove_likely_tags(e)));
+
+        debug(0) << "Attempting to disprove: " << e << "\n";
 
         if (is_zero(e)) {
             debug(0) << "Trivially false\n";
@@ -527,8 +586,11 @@ struct Use {
         // conjunction of equalities, so break it into those terms and
         // start substituting out variables.
         Simplify simplifier(true, nullptr, nullptr);
-        std::unique_ptr<System> system(new System(&simplifier));
+        std::unique_ptr<System> system(new System(&simplifier, 0));
         system->add_term(e);
+
+        debug(0) << "Encoded as a system:\n";
+        system->dump();
 
         std::deque<std::unique_ptr<System>> beam;
         beam.emplace_back(std::move(system));
@@ -538,8 +600,8 @@ struct Use {
             std::unique_ptr<System> next = std::move(beam.front());
             beam.pop_front();
 
-            // debug(0) << "Top of beam: " << next->complexity() << "\n";
-            // next->dump();
+            debug(0) << "Top of beam: " << next->complexity() << "\n";
+            next->dump();
 
             if (next->infeasible()) {
                 return true;
@@ -555,14 +617,14 @@ struct Use {
                                  return a->complexity() < b->complexity();
                              });
 
-            while (beam.size() > 32) {
+            while ((int)beam.size() > beam_size) {
                 beam.pop_back();
             }
         }
         return false;
     }
 
-    bool safely_before(const Use &other) const {
+    bool safely_before(const Use &other, int beam_size) const {
         // We want to prove that for every site in the shared
         // allocation, this use happens strictly before (<) the other
         // use. We negate this, and encode the problem as disproving:
@@ -598,7 +660,7 @@ struct Use {
 
         // Try to disprove each clause in turn.
         for (const auto &e : before) {
-            if (!can_disprove(e && may_assume)) {
+            if (!can_disprove(e && may_assume, beam_size)) {
                 // Trigger the simplifier logging code
                 return can_prove(!(e && may_assume));
                 // return false;
@@ -608,6 +670,8 @@ struct Use {
         return true;
     }
 };
+
+int Use::System::id_counter = 0;
 
 std::vector<Use> get_times_of_all_uses(const Stmt &s, string buf) {
     class PolyhedralClock : public IRVisitor {
@@ -855,23 +919,27 @@ Stmt lower_store_with(const Stmt &s, const map<string, Function> &env) {
                     // and outputs. Uses as outputs must be after
                     // temporaries and inputs.
 
-                    bool check1 = true, check2 = false;// true;
+                    bool check1 = true, check2 = true;
                     for (const auto &u1 : uses_1) {
                         for (const auto &u2 : uses_2) {
-                            if (check1) {
-                                debug(0) << "\n *** Checking " << n1 << " before " << n2 << "\n";
+                            if (!check1 && !check2) break;
+                            bool c1 = check1, c2 = check2;
+                            // We need to prove one of the two
+                            // things. The other will probably fail,
+                            // slowly. Race them against each other
+                            // with steadily increasing beam size
+                            // until we succeed on one of the proofs.
+                            for (int beam_size = 1; beam_size < 8192; beam_size *= 2) {
+                                debug(0) << "beam size " << beam_size << " " << c1 << " " << c2 << "\n";
+                                debug(0) << "Ordering:\n";
                                 u1.dump();
                                 u2.dump();
-                                check1 = u1.safely_before(u2);
-                                debug(0) << (check1 ? "Success!\n" : "Failure!\n");
+                                c1 = check1 && u1.safely_before(u2, beam_size);
+                                c2 = check2 && u2.safely_before(u1, beam_size);
+                                if (c1 || c2) break;
                             }
-                            if (check2) {
-                                debug(0) << "\n *** Checking " << n2 << " before " << n1 << "\n";
-                                u1.dump();
-                                u2.dump();
-                                check2 = u2.safely_before(u1);
-                                debug(0) << (check2 ? "Success!\n" : "Failure!\n");
-                            }
+                            check1 = c1;
+                            check2 = c2;
                         }
                     }
                     user_assert(check1 || check2)

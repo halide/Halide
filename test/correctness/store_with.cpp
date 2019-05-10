@@ -3,6 +3,7 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
+    #if 0
     if (1) {
         // Parallel in-place
         Func f, g;
@@ -84,17 +85,17 @@ int main(int argc, char **argv) {
         g.realize(100);
     }
 
-    if (0) {
+    if (1) {
         // Concat
         Func f, g, h;
         Var x, y;
 
         f(x) = 18701;
         g(x) = 345;
-        h(x) = select(x < 100, f(x), g(x - 100));
+        h(x) = select(x < 100, f(x), g(max(0, x - 100)));
 
         // TODO: We need to move add_image_checks later for this to
-        // work out nicely. Right now it'll be overconservative.
+        // work out nicely without the max. Right now it'll be overconservative.
 
         f.compute_root().store_with(h);
         g.compute_root().store_with(h, {x + 100});
@@ -193,13 +194,57 @@ int main(int argc, char **argv) {
         h.compute_root().vectorize(x, 8, TailStrategy::RoundUp).store_with(out, {2*x+1});  // Store h in the odd spots
         out.vectorize(x, 8, TailStrategy::RoundUp);
 
-        /*
         f.async();
         g.async();
         h.async();
-        */
 
         out.realize(128);
+    }
+
+    if (1) {
+        // A double integration in-place
+        Func f, g, h;
+        Var x;
+        f(x) = x;
+        RDom r(1, 99);
+        g(x) = f(x);
+        g(r) += g(r-1);
+        h(x) = g(x);
+        h(r) += h(r-1);
+
+        f.compute_root().store_with(h);
+        g.compute_root().store_with(h);
+        h.bound(x, 0, 100);
+        Buffer<int> buf = h.realize(100);
+
+        for (int i = 0; i < 100; i++) {
+            printf("%d %d\n", i, buf(i));
+        }
+    }
+    #endif
+
+    if (1) {
+        // A tiled pyramid
+        Func f, g, h;
+        Var x, y;
+
+        f(x, y) = x + y;
+
+        g(x, y) = f(x/2, y/2) + 1;
+        h(x, y) = g(x/2, y/2) + 2;
+
+        // Store f densely in the top left of every 16x16 tile of h
+        f.compute_at(h.in(), Var::outermost()).store_with(h, {16*(x/4) + x%4, 16*(y/4) + y%4}).vectorize(x).unroll(y);
+        // Store g at every 2nd pixel of h, similarly compacted
+        g.compute_at(h.in(), Var::outermost()).store_with(h, {16*(x/8) + x%8, 16*(y/8) + y%8}).vectorize(x).unroll(y);
+
+        Var xi, yi;
+        h.compute_at(h.in(), x).vectorize(x).unroll(y);
+        h = h.in();
+        h.bound(x, 0, 128).bound(y, 0, 128).tile(x, y, xi, yi, 16, 16, TailStrategy::RoundUp);
+
+        h.realize(128, 128);
+
     }
 
     printf("Success!\n");

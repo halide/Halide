@@ -173,13 +173,14 @@ void learn_true_helper(const Expr &fact, Simplify *simplify, Simplify::ScopedFac
             // v < i
             expr_info.max_defined = true;
             expr_info.max = *i - 1;
-        }
-        v = lt->b.as<Variable>();
-        i = as_const_int(lt->a);
-        if (v && i) {
-            // i < v
-            expr_info.min_defined = true;
-            expr_info.min = *i + 1;
+        } else {
+            v = lt->b.as<Variable>();
+            i = as_const_int(lt->a);
+            if (v && i) {
+                // i < v
+                expr_info.min_defined = true;
+                expr_info.min = *i + 1;
+            }
         }
     } else if (const LE *le = fact.as<LE>()) {
         v = le->a.as<Variable>();
@@ -188,13 +189,14 @@ void learn_true_helper(const Expr &fact, Simplify *simplify, Simplify::ScopedFac
             // v <= i
             expr_info.max_defined = true;
             expr_info.max = *i;
-        }
-        v = le->b.as<Variable>();
-        i = as_const_int(le->a);
-        if (v && i) {
-            // i <= v
-            expr_info.min_defined = true;
-            expr_info.min = *i;
+        } else {
+            v = le->b.as<Variable>();
+            i = as_const_int(le->a);
+            if (v && i) {
+                // i <= v
+                expr_info.min_defined = true;
+                expr_info.min = *i;
+            }
         }
     } else if (const And *a = fact.as<And>()) {
         // Both must be true
