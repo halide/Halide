@@ -3,7 +3,6 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    #if 0
     if (1) {
         // Parallel in-place
         Func f, g;
@@ -11,10 +10,11 @@ int main(int argc, char **argv) {
         f(x) = x;
         g(x) = f(x) + 3;
         f.compute_root().store_with(g);
-        g.vectorize(x, 8, TailStrategy::GuardWithIf).parallel(x);
-        f.vectorize(x, 4).parallel(x);
+        g.vectorize(x, 8, TailStrategy::RoundUp).parallel(x);
+        f.vectorize(x, 4, TailStrategy::RoundUp).parallel(x);
         g.realize(128);
     }
+    return 0;
 
     if (1) {
         Func f, g;
@@ -221,7 +221,6 @@ int main(int argc, char **argv) {
             printf("%d %d\n", i, buf(i));
         }
     }
-    #endif
 
     if (1) {
         // A tiled pyramid
@@ -233,18 +232,39 @@ int main(int argc, char **argv) {
         g(x, y) = f(x/2, y/2) + 1;
         h(x, y) = g(x/2, y/2) + 2;
 
-        // Store f densely in the top left of every 16x16 tile of h
-        f.compute_at(h.in(), Var::outermost()).store_with(h, {16*(x/4) + x%4, 16*(y/4) + y%4}).vectorize(x).unroll(y);
-        // Store g at every 2nd pixel of h, similarly compacted
-        g.compute_at(h.in(), Var::outermost()).store_with(h, {16*(x/8) + x%8, 16*(y/8) + y%8}).vectorize(x).unroll(y);
+        // Store a 4x4 block of f densely in the top left of every 16x16 tile of h
+        f.compute_at(h, Var::outermost()).store_with(h, {16*(x/4) + x%4, 16*(y/4) + y%4}).vectorize(x).unroll(y);
+        // Store an 8x8 block of g similarly compacted in the bottom
+        // right. It doesn't collide with f, and We're OK to overwrite
+        // it when computing h because we compute h serially across x
+        // and y.
+        g.compute_at(h, Var::outermost()).store_with(h, {16*(x/8) + x%8 + 8, 16*(y/8) + y%8 + 8}).vectorize(x).unroll(y);
 
         Var xi, yi;
         h.compute_at(h.in(), x).vectorize(x).unroll(y);
         h = h.in();
-        h.bound(x, 0, 128).bound(y, 0, 128).tile(x, y, xi, yi, 16, 16, TailStrategy::RoundUp);
+        h.bound(x, 0, 128).bound(y, 0, 128).tile(x, y, xi, yi, 16, 16, TailStrategy::RoundUp).vectorize(xi).unroll(yi);
 
         h.realize(128, 128);
 
+    }
+
+    if (0) {
+        Func f, g, h;
+        Var x;
+        f(x) = x;
+        g(x) = f(x) * f(x + 1);
+        h(x) = g(x) + 8;
+        f.compute_at(g, Var::outermost()).store_with(g);
+        g.compute_root().parallel(x);
+        h.compute_root();
+        Buffer<int> out = h.realize(100);
+        for (int i = 0; i < 100; i++) {
+            int correct = i*(i+1) + 8;
+            if (out(i) != correct) {
+                printf("out(%d) = %d instead of %d\n", i, out(i), correct);
+            }
+        }
     }
 
     printf("Success!\n");

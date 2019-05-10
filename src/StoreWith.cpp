@@ -32,17 +32,26 @@ Expr aux() {
     return k;
 }
 
+// One dimension of a polyhedral time vector
+struct ClockDim {
+    Expr t;
+    bool parallel;
+    ClockDim(const Expr &t, bool p) : t(t), parallel(p) {}
+};
+
 // Return the symbolic times and sites for all uses of a buffer.
 struct Use {
-    vector<Expr> time, site;
+    vector<ClockDim> time;
+    vector<Expr> site;
     Expr predicate;
     string name;
     bool is_store;
 
-    Use(const vector<Expr> &t,
+    Use(const vector<ClockDim> &t,
         const vector<Expr> &s,
         const vector<Expr> &p,
         const string &n,
+        const vector<string> &loops,
         const vector<pair<string, Expr>> &lets,
         bool is_store) :
         time(t), site(s), predicate(const_true()), name(n), is_store(is_store) {
@@ -57,20 +66,21 @@ struct Use {
 
         // Make any variables unique to this use
         map<string, Expr> renaming;
-        for (auto &e : time) {
-            if (const Variable *v = e.as<Variable>()) {
-                string new_name = unique_name('t');
-                Expr new_var = Variable::make(Int(32), new_name);
-                debug(0) << v->name << " -> " << new_var << "\n";
-                renaming[v->name] = new_var;
-                e = new_var;
-            }
+        for (const auto &v : loops) {
+            string new_name = unique_name('t');
+            Expr new_var = Variable::make(Int(32), new_name);
+            debug(0) << v << " -> " << new_var << "\n";
+            renaming[v] = new_var;
         }
 
         // TODO: parallel variables don't get included in the renaming, which means they're not unique across uses!
 
         for (auto &e : site) {
             e = substitute(renaming, e);
+        }
+
+        for (auto &e : time) {
+            e.t = substitute(renaming, e.t);
         }
 
         for (const auto &e : p) {
@@ -91,7 +101,7 @@ struct Use {
 
     // Return a boolean in DNF form encoding whether one time vector
     // is < another . Quadratic in loop depth.
-    vector<Expr> happens_before(const Use &other, bool includes_equal = false, size_t start = 0) const {
+    vector<Expr> may_happen_before(const Use &other, bool includes_equal = false, size_t start = 0) const {
         vector<Expr> result;
 
         // Lexicographic order starting at the given index
@@ -116,14 +126,32 @@ struct Use {
             return result;
         }
 
-        result = happens_before(other, includes_equal, start + 1);
-
-        for (auto &e : result) {
-            e = substitute(time[start], other.time[start], e);
-            e = other.time[start] == time[start] && e;
+        if (is_const(other.time[start].t) &&
+            is_const(time[start].t)) {
+            // Early out if it can be resolved statically on this dimension
+            if (can_prove(time[start].t < other.time[start].t)) {
+                result.push_back(const_true());
+                return result;
+            }
+            if (can_prove(time[start].t > other.time[start].t)) {
+                return result;
+            }
         }
 
-        result.push_back(other.time[start] > time[start]);
+        result = may_happen_before(other, includes_equal, start + 1);
+
+        for (auto &e : result) {
+            e = substitute(time[start].t, other.time[start].t, e);
+            e = other.time[start].t == time[start].t && e;
+        }
+
+        if (time[start].parallel) {
+            internal_assert(other.time[start].parallel);
+            result.push_back(other.time[start].t != time[start].t);
+        } else {
+            internal_assert(!other.time[start].parallel);
+            result.push_back(other.time[start].t > time[start].t);
+        }
 
         return result;
     }
@@ -133,7 +161,7 @@ struct Use {
                  << " of " << name << ":\n"
                  << "Clock: ";
         for (const auto &e : time) {
-            debug(0) << e << " ";
+            debug(0) << e.t << (e.parallel ? " p" : " s") << ", ";
         }
         debug(0) << "\n";
         debug(0) << "Site: ";
@@ -144,12 +172,8 @@ struct Use {
         debug(0) << "Predicate: " << predicate << "\n";
     }
 
-    vector<Expr> happens_before_or_at_the_same_time(const Use &other) const {
-        return happens_before(other, true);
-    }
-
-    vector<Expr> happens_strictly_before(const Use &other) const {
-        return happens_before(other, false);
+    vector<Expr> may_happen_before_or_at_the_same_time(const Use &other) const {
+        return may_happen_before(other, true);
     }
 
     struct Equality {
@@ -307,6 +331,7 @@ struct Use {
                     simplifier->learn_true(e);
                 } else {
                     Expr v = aux();
+                    debug(0) << "Telling simplifier that " << (-1 < v) << "\n";
                     simplifier->learn_true(-1 < v);
                     add_term(le->a + v == le->b);
                 }
@@ -329,6 +354,7 @@ struct Use {
                     simplifier->learn_true(e);
                 } else {
                     Expr v = aux();
+                    debug(0) << "Telling simplifier that " << (0 < v) << "\n";
                     simplifier->learn_true(0 < v);
                     add_term(lt->a + v == lt->b);
                 }
@@ -488,6 +514,7 @@ struct Use {
                         new_system->add_term(subs(equalities[j].to_expr()));
                     }
                     new_system->add_term(lhs == replacement);
+                    debug(0) << "Telling simplifier that: " << ((-1 < k1) && (k1 < rhs)) << '\n';
                     simplifier->learn_true(-1 < k1);
                     simplifier->learn_true(k1 < rhs);
                     new_system->compute_complexity(simplifier);
@@ -533,7 +560,9 @@ struct Use {
                         }
 
                         rhs = simplifier->mutate(rhs, nullptr);
-                        simplifier->learn_true(p.first == -p.second * rhs);
+                        // debug(0) << "Telling simplifier that: " << (p.first == rhs) << '\n';
+                        // TODO: rhs may simplifier to p.first if we already knew the fact.
+                        // simplifier->learn_true(p.first == rhs);
 
                         if (expr_uses_var(rhs, var->name)) {
                             // Didn't successfully eliminate it - it
@@ -628,7 +657,7 @@ struct Use {
         // We want to prove that for every site in the shared
         // allocation, this use happens strictly before (<) the other
         // use. We negate this, and encode the problem as disproving:
-        // other.happens_before_or_at_the_same_time(this) &&
+        // other.might_happen_before_or_at_the_same_time_as(this) &&
         // same_site(other)
 
         // We'll generate that boolean expression in DNF form, and
@@ -656,7 +685,7 @@ struct Use {
         */
 
         // Now consider temporal constraints too.
-        auto before = other.happens_before_or_at_the_same_time(*this);
+        auto before = other.may_happen_before_or_at_the_same_time(*this);
 
         // Try to disprove each clause in turn.
         for (const auto &e : before) {
@@ -677,18 +706,22 @@ std::vector<Use> get_times_of_all_uses(const Stmt &s, string buf) {
     class PolyhedralClock : public IRVisitor {
         using IRVisitor::visit;
 
-        vector<Expr> clock;
+        vector<ClockDim> clock;
         vector<Expr> predicate;
+        vector<string> loops;
+        vector<pair<string, Expr>> lets;
+
         const string &buf;
 
         void visit(const Block *op) override {
             int i = 0;
-            clock.push_back(i);
+            clock.emplace_back(i, false);
             Stmt rest;
             do {
                 op->first.accept(this);
                 rest = op->rest;
-                clock.back() = ++i;
+                clock.back().t = ++i;
+
             } while ((op = rest.as<Block>()));
             rest.accept(this);
             clock.pop_back();
@@ -698,14 +731,11 @@ std::vector<Use> get_times_of_all_uses(const Stmt &s, string buf) {
             Expr loop_var = Variable::make(Int(32), op->name);
             predicate.push_back(loop_var >= op->min);
             predicate.push_back(loop_var < op->min + op->extent);
-            if (op->is_parallel()) {
-                // No useful ordering, so add nothing to the clock
-                op->body.accept(this);
-            } else {
-                clock.push_back(Variable::make(Int(32), op->name));
-                op->body.accept(this);
-                clock.pop_back();
-            }
+            loops.push_back(op->name);
+            clock.emplace_back(Variable::make(Int(32), op->name), op->is_parallel());
+            op->body.accept(this);
+            clock.pop_back();
+            loops.pop_back();
             predicate.pop_back();
         }
 
@@ -740,10 +770,8 @@ std::vector<Use> get_times_of_all_uses(const Stmt &s, string buf) {
         }
 
         void found_use(const vector<Expr> &site, const string &name, bool is_store) {
-            uses.emplace_back(clock, site, predicate, name, lets, is_store);
+            uses.emplace_back(clock, site, predicate, name, loops, lets, is_store);
         }
-
-        vector<pair<string, Expr>> lets;
 
         void visit(const Let *op) override {
             op->value.accept(this);
@@ -774,9 +802,9 @@ std::vector<Use> get_times_of_all_uses(const Stmt &s, string buf) {
             }
 
             // The RHS is evaluated before the store happens
-            clock.push_back(0);
+            clock.emplace_back(0, false);
             IRVisitor::visit(op);
-            clock.back() = 1;
+            clock.back().t = 1;
             if (op->name == buf) {
                 found_use(op->args, op->name, true);
             }
