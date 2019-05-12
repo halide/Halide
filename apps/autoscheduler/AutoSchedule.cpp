@@ -1777,7 +1777,18 @@ struct LoopNest {
             debug(0) << '\n';
         }
         for (auto p : store_at) {
-            debug(0) << prefix << "realize: " << p->func.name() << " with " << p->stages.size() << " stages\n";
+            debug(0) << prefix << "realize: " << p->func.name() << " [";
+            for (int i = 0; i < p->dimensions; i++) {
+                if (i > 0) {
+                    debug(0) << ", ";
+                }
+                const auto& region = get_bounds(p)->region_computed(i);
+                debug(0) << region.extent();
+                if (region.constant_extent()) {
+                    debug(0) << "c";
+                }
+            }
+            debug(0) << "] with " << p->stages.size() << " stages\n";
         }
         for (size_t i = children.size(); i > 0; i--) {
             children[i-1]->dump(prefix, this);
@@ -2081,6 +2092,23 @@ struct LoopNest {
         return outer;
     }
 
+    // All store ats further in than the block level must be fixed
+    // sized allocations. This method checks if f will require a dynamic
+    // allocation
+    bool requires_dynamic_allocation(const FunctionDAG::Node *f, const Target &target, bool in_threads_loop) const {
+        if (!target.has_gpu_feature() || !in_threads_loop) {
+            return false;
+        }
+
+        for (int i = 0; i < f->dimensions; i++) {
+            if (!get_bounds(f)->region_computed(i).constant_extent()) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     // Return all possible ways to compute f in tiles.
     // in_threads_loop tracks whether or not function is going to be placed inside a
     // loop marked gpu_threads, in which case f's loops cannot be gpu_threads
@@ -2135,9 +2163,12 @@ struct LoopNest {
         // HACK (when true)
         const bool force_only_output_compute_root = false;
 
+        bool dynamic_allocation = requires_dynamic_allocation(f, target, in_threads_loop);
+
         if ((!is_root() || f->is_output || !force_only_output_compute_root) &&
             !innermost &&
-            (!in_realization || size.empty() || vector_dim == -1 || size[vector_dim] == 1)) {
+            (!in_realization || size.empty() || vector_dim == -1 || size[vector_dim] == 1) &&
+            !dynamic_allocation) {
 
             // Place the computation inside this loop
             std::unique_ptr<LoopNest> r{new LoopNest};
@@ -2245,7 +2276,9 @@ struct LoopNest {
                     outer->set_bounds(node, b);
                 }
 
-                if (!in_realization) {
+                bool dynamic_allocation = outer->requires_dynamic_allocation(f, target, in_threads_loop);
+
+                if (!in_realization && !dynamic_allocation) {
                     outer->store_at.insert(f);
                 }
 
@@ -2302,13 +2335,16 @@ struct LoopNest {
                             //     result.emplace_back(serial_outer);
 
                             // create (threads, serial) option
-                            internal_assert(in_threads_loop); // threads loop can't be inside threads loop
-                            outer->gpu_label = thread;
-                            inner->gpu_label = serial;
 
-                            outer->children.emplace_back(inner);
-                            outer->compute_here(f, true, v, true, target);
-                            result.emplace_back(outer);
+                            if (!dynamic_allocation) {
+                                internal_assert(in_threads_loop); // threads loop can't be inside threads loop
+                                outer->gpu_label = thread;
+                                inner->gpu_label = serial;
+
+                                outer->children.emplace_back(inner);
+                                outer->compute_here(f, true, v, true, target);
+                                result.emplace_back(outer);
+                            }
                             break;
                         }
 
@@ -2331,21 +2367,23 @@ struct LoopNest {
                         }
 
                         case serial: {
-                            outer->gpu_label = serial;
-                            inner->gpu_label = serial;
+                            if (!dynamic_allocation) {
+                                outer->gpu_label = serial;
+                                inner->gpu_label = serial;
 
-                            outer->children.emplace_back(inner);
-                            outer->compute_here(f, true, v, in_threads_loop, target);
+                                outer->children.emplace_back(inner);
+                                outer->compute_here(f, true, v, in_threads_loop, target);
 
-                            if (!in_threads_loop) {
-                                bool made_child = outer->add_gpu_thread_tilings(f, params, target, v, result);
+                                if (!in_threads_loop) {
+                                    bool made_child = outer->add_gpu_thread_tilings(f, params, target, v, result);
 
-                                if (made_child)
-                                    delete outer;
-                                else // no good thread tilings, just add the untiled thread loop
+                                    if (made_child)
+                                        delete outer;
+                                    else // no good thread tilings, just add the untiled thread loop
+                                        result.emplace_back(outer);
+                                } else { // inside a threads loop, can't generate thread loop tilings
                                     result.emplace_back(outer);
-                            } else { // inside a threads loop, can't generate thread loop tilings
-                                result.emplace_back(outer);
+                                }
                             }
                             break;
                         }
