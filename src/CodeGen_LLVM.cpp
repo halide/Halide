@@ -1447,7 +1447,7 @@ Expr CodeGen_LLVM::mulhi_shr(Expr a, Expr b, int shr) {
     Type wide_ty = ty.with_bits(ty.bits() * 2);
 
     Expr p_wide = cast(wide_ty, a) * cast(wide_ty, b);
-    return cast(ty, p_wide >> make_const(p_wide.type(), (shr + ty.bits())));
+    return cast(ty, p_wide >> (shr + ty.bits()));
 }
 
 Expr CodeGen_LLVM::sorted_avg(Expr a, Expr b) {
@@ -1474,7 +1474,7 @@ void CodeGen_LLVM::visit(const Div *op) {
         value = builder->CreateFDiv(a, b);
     } else if (is_const_power_of_two_integer(op->b, &shift_amount) &&
                (op->type.is_int() || op->type.is_uint())) {
-        value = codegen(op->a >> make_const(op->a.type(), shift_amount));
+        value = codegen(op->a >> shift_amount);
     } else if (const_int_divisor &&
                op->type.is_int() &&
                (op->type.bits() == 8 || op->type.bits() == 16 || op->type.bits() == 32) &&
@@ -1496,11 +1496,11 @@ void CodeGen_LLVM::visit(const Div *op) {
         Expr num = op->a;
 
         // Make an all-ones mask if the numerator is negative
-        Expr sign = num >> make_const(num.type(), op->type.bits() - 1);
+        Expr sign = num >> make_const(op->type, op->type.bits() - 1);
 
         // Flip the numerator bits if the mask is high.
         num = cast(num.type().with_code(Type::UInt), num);
-        num = num ^ cast(num.type(), sign);
+        num = num ^ sign;
 
         // Multiply and keep the high half of the
         // result, and then apply the shift.
@@ -1508,7 +1508,7 @@ void CodeGen_LLVM::visit(const Div *op) {
         num = mulhi_shr(num, mult, shift);
 
         // Maybe flip the bits back again.
-        num = cast(op->type, num ^ cast(num.type(), sign));
+        num = num ^ sign;
 
         value = codegen(num);
 
@@ -2402,17 +2402,13 @@ void CodeGen_LLVM::visit(const Call *op) {
         }
     } else if (op->is_intrinsic(Call::shift_left)) {
         internal_assert(op->args.size() == 2);
-        internal_assert(op->args[0].type().bits() == op->args[1].type().bits());
         Value *a = codegen(op->args[0]);
         Value *b = codegen(op->args[1]);
-        internal_assert(a->getType() == b->getType()) << "LLVM type mismatch on (" << op->args[0] << ") << (" << op->args[1] << ").\n";
         value = builder->CreateShl(a, b);
     } else if (op->is_intrinsic(Call::shift_right)) {
         internal_assert(op->args.size() == 2);
-        internal_assert(op->args[0].type().bits() == op->args[1].type().bits());
         Value *a = codegen(op->args[0]);
         Value *b = codegen(op->args[1]);
-        internal_assert(a->getType() == b->getType()) << "LLVM type mismatch on (" << op->args[0] << ") >> (" << op->args[1] << ").\n";
         if (op->type.is_int()) {
             value = builder->CreateAShr(a, b);
         } else {

@@ -159,7 +159,7 @@ Expr fast_integer_divide(Expr numerator, Expr denominator) {
         result = (cast(wide, mul) * numerator);
 
         if (t.bits() < 32) result = result / (1 << t.bits());
-        else result = result >> Internal::make_const(result.type(), t.bits());
+        else result = result >> t.bits();
 
         result = cast(t, result);
 
@@ -167,7 +167,7 @@ Expr fast_integer_divide(Expr numerator, Expr denominator) {
         result = result + (numerator - result)/2;
 
         // Do a final shift
-        result = result >> cast(result.type(), shift);
+        result = result >> shift;
 
 
     } else {
@@ -209,11 +209,11 @@ Expr fast_integer_divide(Expr numerator, Expr denominator) {
         // Multiply-keep-high-half
         result = (cast(wide, mul) * numerator);
         if (t.bits() < 32) result = result / (1 << t.bits());
-        else result = result >> Internal::make_const(result.type(), t.bits());
+        else result = result >> t.bits();
         result = cast(t, result);
 
         // Do the final shift
-        result = result >> cast(result.type(), shift);
+        result = result >> shift;
 
         // Maybe flip the bits again
         result = xsign ^ result;

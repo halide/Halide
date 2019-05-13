@@ -1047,7 +1047,7 @@ private:
                             }
                         } else if (is_const(b)) {
                             // We can normalize to multiplication
-                            Expr equiv = a * (make_const(t, 1) << b);
+                            Expr equiv = a * (1 << b);
                             equiv.accept(this);
                         }
                     } else if (op->is_intrinsic(Call::shift_right)) {
@@ -2529,8 +2529,7 @@ void constant_bound_test() {
     using namespace ConciseCasts;
 
     {
-        Param<int16_t> a;
-        Param<uint16_t> b;
+        Param<int16_t> a, b;
         check_constant_bound(a >> b, i16(-32768), i16(32767));
     }
 
@@ -2788,8 +2787,7 @@ void bounds_test() {
     }
 
     {
-        Param<int16_t> x("x");
-        Param<uint16_t> y("y");
+        Param<int16_t> x("x"), y("y");
         x.set_range(i16(-32), i16(-16));
         y.set_range(i16(0), i16(4));
         check_constant_bound((x >> y), i16(-32), i16(-1));

@@ -109,9 +109,9 @@ int main(int argc, char **argv) {
             n *= n;
             n *= n;
             n += 100;
-            uint64_t hi = n >> 32;
-            uint64_t lo = n & 0xffffffff;
-            args.push_back((Expr(hi) << 32) | Expr(lo));
+            int32_t hi = n >> 32;
+            int32_t lo = n & 0xffffffff;
+            args.push_back((cast<uint64_t>(hi) << 32) | lo);
             Expr dn = cast<double>((float)(n));
             args.push_back(dn);
         }
