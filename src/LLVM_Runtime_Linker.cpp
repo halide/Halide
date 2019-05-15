@@ -973,9 +973,6 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             if (t.arch == Target::POWERPC) {
                 modules.push_back(get_initmod_powerpc_ll(c));
             }
-            if (t.arch == Target::RISCV) {
-              //                modules.push_back(get_initmod_riscv_ll(c));
-            }
             if (t.arch == Target::Hexagon) {
                 modules.push_back(get_initmod_qurt_hvx(c, bits_64, debug));
                 if (t.has_feature(Target::HVX_64)) {

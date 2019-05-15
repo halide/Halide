@@ -17,8 +17,6 @@ public:
      * enabled using the appropriate flags in the target struct. */
     CodeGen_RISCV(Target);
 
-    static void test();
-
 protected:
 
     using CodeGen_Posix::visit;
