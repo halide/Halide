@@ -1664,42 +1664,6 @@ void CodeGen_Hexagon::visit(const Mul *op) {
     }
 }
 
-Expr CodeGen_Hexagon::mulhi_shr(Expr a, Expr b, int shr) {
-    Type ty = a.type();
-    if (ty.is_vector() && (ty.bits() == 8 || ty.bits() == 16)) {
-        Type wide_ty = ty.with_bits(ty.bits() * 2);
-
-        // Generate a widening multiply.
-        Expr p_wide = Call::make(wide_ty, "halide.hexagon.mpy" + type_suffix(a, b),
-                                 {a, b}, Call::PureExtern);
-
-        // Keep the high half (truncate the low half). This also
-        // re-interleaves after mpy deinterleaved.
-        Expr p = Call::make(ty, "halide.hexagon.trunclo" + type_suffix(p_wide, false),
-                            {p_wide}, Call::PureExtern);
-
-        // Apply the remaining shift.
-        if (shr != 0) {
-            p = p >> shr;
-        }
-
-        return p;
-    } else {
-        return CodeGen_Posix::mulhi_shr(a, b, shr);
-    }
-}
-
-Expr CodeGen_Hexagon::sorted_avg(Expr a, Expr b) {
-    Type ty = a.type();
-    if (ty.is_vector() && ((ty.is_uint() && (ty.bits() == 8 || ty.bits() == 16)) ||
-                           (ty.is_int() && (ty.bits() == 16 || ty.bits() == 32)))) {
-        return Call::make(ty, "halide.hexagon.avg" + type_suffix(a, b),
-                          {a, b}, Call::PureExtern);
-    } else {
-        return CodeGen_Posix::sorted_avg(a, b);
-    }
-}
-
 void CodeGen_Hexagon::visit(const Div *op) {
     CodeGen_Posix::visit(op);
 }
@@ -1915,6 +1879,35 @@ void CodeGen_Hexagon::visit(const Call *op) {
         Value *ptr = codegen(op->args[0]);
         llvm::Function *fn = module->getFunction("halide.hexagon.scatter.release");
         value = builder->CreateCall(fn, {ptr});
+        return;
+    } else if (op->is_intrinsic(Call::mulhi_shr) &&
+               op->type.is_vector() && (op->type.bits() == 8 || op->type.bits() == 16)) {
+        internal_assert(op->args.size() == 3);
+        Type wide_ty = op->type.with_bits(op->type.bits() * 2);
+
+        // Generate a widening multiply.
+        Expr p_wide = Call::make(wide_ty, "halide.hexagon.mpy" + type_suffix(op->args[0], op->args[1]),
+                                 {op->args[0], op->args[1]}, Call::PureExtern);
+
+        // Keep the high half (truncate the low half). This also
+        // re-interleaves after mpy deinterleaved.
+        Expr p = Call::make(op->type, "halide.hexagon.trunclo" + type_suffix(p_wide, false),
+                            {p_wide}, Call::PureExtern);
+
+        // Apply the remaining shift.
+        const UIntImm *shift = op->args[2].as<UIntImm>();
+        internal_assert(shift != nullptr) << "Third argument to mulhi_shr intrinsic must be an unsigned integer immediate.\n";
+        if (shift->value != 0) {
+            p = p >> make_const(p.type(), shift->value);
+        }
+
+        value = codegen(p);
+        return;
+    } else if (op->is_intrinsic(Call::sorted_avg) &&
+               op->type.is_vector() && ((op->type.is_uint() && (op->type.bits() == 8 || op->type.bits() == 16)) ||
+                                        (op->type.is_int() && (op->type.bits() == 16 || op->type.bits() == 32)))) {
+        value = codegen(Call::make(op->type, "halide.hexagon.avg" + type_suffix(op->args[0], op->args[1]),
+                                   {op->args[0], op->args[1]}, Call::PureExtern));
         return;
     }
 

@@ -1442,28 +1442,9 @@ void CodeGen_LLVM::visit(const Mul *op) {
     }
 }
 
-Expr CodeGen_LLVM::mulhi_shr(Expr a, Expr b, int shr) {
-    Type ty = a.type();
-    Type wide_ty = ty.with_bits(ty.bits() * 2);
-
-    Expr p_wide = cast(wide_ty, a) * cast(wide_ty, b);
-    return cast(ty, p_wide >> make_const(p_wide.type(), (shr + ty.bits())));
-}
-
-Expr CodeGen_LLVM::sorted_avg(Expr a, Expr b) {
-    // b > a, so the following works without widening:
-    // a + (b - a)/2
-    return a + (b - a)/2;
-}
-
 void CodeGen_LLVM::visit(const Div *op) {
     user_assert(!is_zero(op->b)) << "Division by constant zero in expression: " << Expr(op) << "\n";
 
-    // Detect if it's a small int division
-    const int64_t *const_int_divisor = as_const_int(op->b);
-    const uint64_t *const_uint_divisor = as_const_uint(op->b);
-
-    int shift_amount;
     if (op->type.is_float()) {
         // Don't call codegen() multiple times within an argument list:
         // order-of-evaluation isn't guaranteed and can vary by compiler,
@@ -1472,117 +1453,16 @@ void CodeGen_LLVM::visit(const Div *op) {
         Value *a = codegen(op->a);
         Value *b = codegen(op->b);
         value = builder->CreateFDiv(a, b);
-    } else if (is_const_power_of_two_integer(op->b, &shift_amount) &&
-               (op->type.is_int() || op->type.is_uint())) {
-        value = codegen(op->a >> make_const(op->a.type(), shift_amount));
-    } else if (const_int_divisor &&
-               op->type.is_int() &&
-               (op->type.bits() == 8 || op->type.bits() == 16 || op->type.bits() == 32) &&
-               *const_int_divisor > 1 &&
-               ((op->type.bits() > 8 && *const_int_divisor < 256) || *const_int_divisor < 128)) {
-
-        int64_t multiplier, shift;
-        if (op->type.bits() == 32) {
-            multiplier = IntegerDivision::table_s32[*const_int_divisor][2];
-            shift      = IntegerDivision::table_s32[*const_int_divisor][3];
-        } else if (op->type.bits() == 16) {
-            multiplier = IntegerDivision::table_s16[*const_int_divisor][2];
-            shift      = IntegerDivision::table_s16[*const_int_divisor][3];
-        } else {
-            // 8 bit
-            multiplier = IntegerDivision::table_s8[*const_int_divisor][2];
-            shift      = IntegerDivision::table_s8[*const_int_divisor][3];
-        }
-        Expr num = op->a;
-
-        // Make an all-ones mask if the numerator is negative
-        Expr sign = num >> make_const(num.type(), op->type.bits() - 1);
-
-        // Flip the numerator bits if the mask is high.
-        num = cast(num.type().with_code(Type::UInt), num);
-        num = num ^ cast(num.type(), sign);
-
-        // Multiply and keep the high half of the
-        // result, and then apply the shift.
-        Expr mult = make_const(num.type(), multiplier);
-        num = mulhi_shr(num, mult, shift);
-
-        // Maybe flip the bits back again.
-        num = cast(op->type, num ^ cast(num.type(), sign));
-
-        value = codegen(num);
-
-    } else if (const_uint_divisor &&
-               op->type.is_uint() &&
-               (op->type.bits() == 8 || op->type.bits() == 16 || op->type.bits() == 32) &&
-               *const_uint_divisor > 1 && *const_uint_divisor < 256) {
-
-        int64_t method, multiplier, shift;
-        if (op->type.bits() == 32) {
-            method     = IntegerDivision::table_u32[*const_uint_divisor][1];
-            multiplier = IntegerDivision::table_u32[*const_uint_divisor][2];
-            shift      = IntegerDivision::table_u32[*const_uint_divisor][3];
-        } else if (op->type.bits() == 16) {
-            method     = IntegerDivision::table_u16[*const_uint_divisor][1];
-            multiplier = IntegerDivision::table_u16[*const_uint_divisor][2];
-            shift      = IntegerDivision::table_u16[*const_uint_divisor][3];
-        } else {
-            method     = IntegerDivision::table_u8[*const_uint_divisor][1];
-            multiplier = IntegerDivision::table_u8[*const_uint_divisor][2];
-            shift      = IntegerDivision::table_u8[*const_uint_divisor][3];
-        }
-
-        internal_assert(method != 0)
-            << "method 0 division is for powers of two and should have been handled elsewhere\n";
-        Expr num = op->a;
-
-        // Widen, multiply, narrow
-        Expr mult = make_const(num.type(), multiplier);
-        Expr val = mulhi_shr(num, mult, method == 1 ? shift : 0);
-
-        if (method == 2) {
-            // Average with original numerator.
-            val = sorted_avg(val, num);
-
-            // Do the final shift
-            if (shift) {
-                val = val >> make_const(op->type, shift);
-            }
-        }
-
-        value = codegen(val);
     } else {
-        value = codegen(lower_euclidean_div(op->a, op->b));
+        value = codegen(lower_int_uint_div(op->a, op->b));
     }
 }
 
 void CodeGen_LLVM::visit(const Mod *op) {
-    // Detect if it's a small int modulus
-    const int64_t *const_int_divisor = as_const_int(op->b);
-    const uint64_t *const_uint_divisor = as_const_uint(op->b);
-
-    int bits;
     if (op->type.is_float()) {
         value = codegen(simplify(op->a - op->b * floor(op->a/op->b)));
-    } else if (is_const_power_of_two_integer(op->b, &bits)) {
-        value = codegen(op->a & (op->b - 1));
-    } else if (const_int_divisor &&
-               op->type.is_int() &&
-               (op->type.bits() == 8 || op->type.bits() == 16 || op->type.bits() == 32) &&
-               *const_int_divisor > 1 &&
-               ((op->type.bits() > 8 && *const_int_divisor < 256) || *const_int_divisor < 128)) {
-        // We can use our fast signed integer division
-        value = codegen(common_subexpression_elimination(op->a - (op->a / op->b) * op->b));
-    } else if (const_uint_divisor &&
-               op->type.is_uint() &&
-               (op->type.bits() == 8 || op->type.bits() == 16 || op->type.bits() == 32) &&
-               *const_uint_divisor > 1 && *const_uint_divisor < 256) {
-        // We can use our fast unsigned integer division
-        value = codegen(common_subexpression_elimination(op->a - (op->a / op->b) * op->b));
     } else {
-        // To match our definition of division, mod should be between 0
-        // and |b|.
-        value = codegen(lower_euclidean_mod(op->a, op->b));
+        value = codegen(lower_int_uint_mod(op->a, op->b));
     }
 }
 
@@ -2492,6 +2372,21 @@ void CodeGen_LLVM::visit(const Call *op) {
         } else {
             internal_error << "mod_round_to_zero of non-integer type.\n";
         }
+    } else if (op->is_intrinsic(Call::mulhi_shr)) {
+        internal_assert(op->args.size() == 3);
+        
+        Type ty = op->type;
+        Type wide_ty = ty.with_bits(ty.bits() * 2);
+
+        Expr p_wide = cast(wide_ty, op->args[0]) * cast(wide_ty, op->args[1]);
+        const UIntImm *shift = op->args[2].as<UIntImm>();
+        internal_assert(shift != nullptr) << "Third argument to mulhi_shr intrinsic must be an unsigned integer immediate.\n";
+        value = codegen(cast(ty, p_wide >> (shift->value + ty.bits())));
+    } else if (op->is_intrinsic(Call::sorted_avg)) {
+        internal_assert(op->args.size() == 2);
+        // b > a, so the following works without widening:
+        // a + (b - a)/2
+        value = codegen(op->args[0] + (op->args[1] - op->args[0])/2);
     } else if (op->is_intrinsic(Call::lerp)) {
         internal_assert(op->args.size() == 3);
         value = codegen(lower_lerp(op->args[0], op->args[1], op->args[2]));

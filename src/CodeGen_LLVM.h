@@ -332,17 +332,6 @@ protected:
      * when multiple Allocate nodes shared the same memory. */
     virtual std::string get_allocation_name(const std::string &n) {return n;}
 
-    /** Helpers for implementing fast integer division. */
-    // @{
-    // Compute high_half(a*b) >> shr. Note that this is a shift in
-    // addition to the implicit shift due to taking the upper half of
-    // the multiply result.
-    virtual Expr mulhi_shr(Expr a, Expr b, int shr);
-    // Compute (a+b)/2, assuming a < b.
-    virtual Expr sorted_avg(Expr a, Expr b);
-    // @}
-
-
     using IRVisitor::visit;
 
     /** Generate code for various IR nodes. These can be overridden by
