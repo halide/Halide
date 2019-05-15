@@ -12,6 +12,7 @@
 #include "CodeGen_LLVM.h"
 #include "CodeGen_MIPS.h"
 #include "CodeGen_PowerPC.h"
+#include "CodeGen_RISCV.h"
 #include "CodeGen_WebAssembly.h"
 #include "CodeGen_X86.h"
 #include "Debug.h"
@@ -86,12 +87,6 @@ using std::vector;
         LLVMInitialize##target##AsmPrinter(); \
 
 // Override above empty init function with macro for supported targets.
-#ifdef WITH_X86
-#define InitializeX86Target()       InitializeTarget(X86)
-#define InitializeX86AsmParser()    InitializeAsmParser(X86)
-#define InitializeX86AsmPrinter()   InitializeAsmPrinter(X86)
-#endif
-
 #ifdef WITH_ARM
 #define InitializeARMTarget()       InitializeTarget(ARM)
 #define InitializeARMAsmParser()    InitializeAsmParser(ARM)
@@ -116,6 +111,12 @@ using std::vector;
 #define InitializeAArch64AsmPrinter()   InitializeAsmPrinter(AArch64)
 #endif
 
+#ifdef WITH_HEXAGON
+#define InitializeHexagonTarget()       InitializeTarget(Hexagon)
+#define InitializeHexagonAsmParser()    InitializeAsmParser(Hexagon)
+#define InitializeHexagonAsmPrinter()   InitializeAsmPrinter(Hexagon)
+#endif
+
 #ifdef WITH_MIPS
 #define InitializeMipsTarget()       InitializeTarget(Mips)
 #define InitializeMipsAsmParser()    InitializeAsmParser(Mips)
@@ -128,10 +129,16 @@ using std::vector;
 #define InitializePowerPCAsmPrinter()   InitializeAsmPrinter(PowerPC)
 #endif
 
-#ifdef WITH_HEXAGON
-#define InitializeHexagonTarget()       InitializeTarget(Hexagon)
-#define InitializeHexagonAsmParser()    InitializeAsmParser(Hexagon)
-#define InitializeHexagonAsmPrinter()   InitializeAsmPrinter(Hexagon)
+#ifdef WITH_RISCV
+#define InitializeRISCVTarget()       InitializeTarget(RISCV)
+#define InitializeRISCVAsmParser()    InitializeAsmParser(RISCV)
+#define InitializeRISCVAsmPrinter()   InitializeAsmPrinter(RISCV)
+#endif
+
+#ifdef WITH_X86
+#define InitializeX86Target()       InitializeTarget(X86)
+#define InitializeX86AsmParser()    InitializeAsmParser(X86)
+#define InitializeX86AsmPrinter()   InitializeAsmPrinter(X86)
 #endif
 
 #ifdef WITH_WEBASSEMBLY
@@ -322,6 +329,11 @@ CodeGen_LLVM *CodeGen_LLVM::new_for_target(const Target &target,
             return make_codegen<CodeGen_GPU_Host<CodeGen_WebAssembly>>(target, context);
         }
 #endif
+#ifdef WITH_RISCV
+        if (target.arch == Target::RISCV) {
+            return make_codegen<CodeGen_GPU_Host<CodeGen_RISCV>>(target, context);
+        }
+#endif
         user_error << "Invalid target architecture for GPU backend: "
                    << target.to_string() << "\n";
         return nullptr;
@@ -338,6 +350,8 @@ CodeGen_LLVM *CodeGen_LLVM::new_for_target(const Target &target,
         return make_codegen<CodeGen_Hexagon>(target, context);
     } else if (target.arch == Target::WebAssembly) {
         return make_codegen<CodeGen_WebAssembly>(target, context);
+    } else if (target.arch == Target::RISCV) {
+        return make_codegen<CodeGen_RISCV>(target, context);
     }
 
     user_error << "Unknown target architecture: "
@@ -463,6 +477,7 @@ bool CodeGen_LLVM::llvm_Mips_enabled = false;
 bool CodeGen_LLVM::llvm_PowerPC_enabled = false;
 bool CodeGen_LLVM::llvm_AMDGPU_enabled = false;
 bool CodeGen_LLVM::llvm_WebAssembly_enabled = false;
+bool CodeGen_LLVM::llvm_RISCV_enabled = false;
 
 namespace {
 

@@ -584,5 +584,9 @@ template class CodeGen_GPU_Host<CodeGen_PowerPC>;
 template class CodeGen_GPU_Host<CodeGen_WebAssembly>;
 #endif
 
+#ifdef WITH_RISCV
+template class CodeGen_GPU_Host<CodeGen_RISCV>;
+#endif
+
 }  // namespace Internal
 }  // namespace Halide

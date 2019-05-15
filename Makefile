@@ -111,6 +111,7 @@ WITH_X86 ?= $(findstring x86, $(LLVM_COMPONENTS))
 WITH_ARM ?= $(findstring arm, $(LLVM_COMPONENTS))
 WITH_HEXAGON ?= $(findstring hexagon, $(LLVM_COMPONENTS))
 WITH_MIPS ?= $(findstring mips, $(LLVM_COMPONENTS))
+WITH_RISCV ?= $(findstring riscv, $(LLVM_COMPONENTS))
 WITH_AARCH64 ?= $(findstring aarch64, $(LLVM_COMPONENTS))
 WITH_POWERPC ?= $(findstring powerpc, $(LLVM_COMPONENTS))
 WITH_PTX ?= $(findstring nvptx, $(LLVM_COMPONENTS))
@@ -186,6 +187,9 @@ D3D12_LLVM_CONFIG_LIB=$(if $(WITH_D3D12), , )
 AARCH64_CXX_FLAGS=$(if $(WITH_AARCH64), -DWITH_AARCH64=1, )
 AARCH64_LLVM_CONFIG_LIB=$(if $(WITH_AARCH64), aarch64, )
 
+RISCV_CXX_FLAGS=$(if $(WITH_RISCV), -DWITH_RISCV=1, )
+RISCV_LLVM_CONFIG_LIB=$(if $(WITH_RISCV), riscv, )
+
 INTROSPECTION_CXX_FLAGS=$(if $(WITH_INTROSPECTION), -DWITH_INTROSPECTION, )
 EXCEPTIONS_CXX_FLAGS=$(if $(WITH_EXCEPTIONS), -DWITH_EXCEPTIONS, )
 
@@ -245,6 +249,7 @@ CXX_FLAGS += $(INTROSPECTION_CXX_FLAGS)
 CXX_FLAGS += $(EXCEPTIONS_CXX_FLAGS)
 CXX_FLAGS += $(AMDGPU_CXX_FLAGS)
 CXX_FLAGS += $(JSVM_CXX_FLAGS)
+CXX_FLAGS += $(RISCV_CXX_FLAGS)
 
 # This is required on some hosts like powerpc64le-linux-gnu because we may build
 # everything with -fno-exceptions.  Without -funwind-tables, libHalide.so fails
@@ -270,7 +275,8 @@ LLVM_STATIC_LIBFILES = \
 	$(POWERPC_LLVM_CONFIG_LIB) \
 	$(HEXAGON_LLVM_CONFIG_LIB) \
 	$(AMDGPU_LLVM_CONFIG_LIB) \
-	$(WEBASSEMBLY_LLVM_CONFIG_LIB)
+	$(WEBASSEMBLY_LLVM_CONFIG_LIB) \
+	$(RISCV_LLVM_CONFIG_LIB)
 
 LLVM_STATIC_LIBS = -L $(LLVM_LIBDIR) $(shell $(LLVM_CONFIG) --link-static --libfiles $(LLVM_STATIC_LIBFILES))
 
@@ -469,6 +475,7 @@ SOURCE_FILES = \
   CodeGen_Posix.cpp \
   CodeGen_PowerPC.cpp \
   CodeGen_PTX_Dev.cpp \
+  CodeGen_RISCV.cpp \
   CodeGen_WebAssembly.cpp \
   CodeGen_X86.cpp \
   CPlusPlusMangle.cpp \
@@ -636,6 +643,7 @@ HEADER_FILES = \
   CodeGen_Posix.h \
   CodeGen_PowerPC.h \
   CodeGen_PTX_Dev.h \
+  CodeGen_RISCV.h \
   CodeGen_WebAssembly.h \
   CodeGen_X86.h \
   ConciseCasts.h \
@@ -839,6 +847,7 @@ RUNTIME_CPP_COMPONENTS = \
   qurt_threads \
   qurt_threads_tsan \
   qurt_yield \
+  riscv_cpu_features \
   runtime_api \
   ssp \
   to_string \

@@ -75,6 +75,9 @@ Target calculate_host_target() {
     int bits = use_64_bits ? 64 : 32;
     std::vector<Target::Feature> initial_features;
 
+#if __riscv__
+    Target::Arch arch = Target::RISCV;
+#else
 #if __mips__ || __mips || __MIPS__
     Target::Arch arch = Target::MIPS;
 #else
@@ -162,6 +165,7 @@ Target calculate_host_target() {
 #endif
 #endif
 
+#endif
 #endif
 #endif
 #endif
@@ -288,6 +292,7 @@ const std::map<std::string, Target::Arch> arch_name_map = {
     {"powerpc", Target::POWERPC},
     {"hexagon", Target::Hexagon},
     {"wasm", Target::WebAssembly},
+    {"riscv", Target::RISCV},
 };
 
 bool lookup_arch(const std::string &tok, Target::Arch &result) {
@@ -619,6 +624,9 @@ bool Target::supported() const {
 #endif
 #if !defined(WITH_WEBASSEMBLY)
     bad |= arch == Target::WebAssembly;
+#endif
+#if !defined(WITH_RISCV)
+    bad |= arch == Target::RISCV;
 #endif
 #if !defined(WITH_PTX)
     bad |= has_feature(Target::CUDA);
