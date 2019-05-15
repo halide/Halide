@@ -180,7 +180,7 @@ Module lower(const vector<Function> &output_funcs,
     debug(2) << "Lowering after simplifying correlated differences:\n" << s << '\n';
 
     debug(1) << "Merging buffers using store_with directives...\n";
-    s = lower_store_with(s, env);
+    s = lower_store_with(s, outputs, env);
     debug(2) << "Lowering after merging buffers:\n" << s << '\n';
 
     debug(1) << "Performing allocation bounds inference...\n";

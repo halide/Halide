@@ -26,13 +26,15 @@ Expr Simplify::visit(const Mul *op, ExprInfo *bounds) {
         const bool all_products_exist = min_min_exists && max_min_exists && max_max_exists && min_max_exists;
 
         bounds->min_defined = (all_products_exist ||
-                               ((a_positive || b_positive) && min_min_exists) ||
-                               (b_negative && max_min_exists) ||
-                               (a_negative && min_max_exists));
+                               (a_positive && max_min_exists) ||
+                               (b_positive && min_max_exists) ||
+                               (a_negative && min_max_exists) ||
+                               (b_negative && max_min_exists));
         bounds->max_defined = (all_products_exist ||
-                               ((a_positive || b_positive) && max_max_exists) ||
-                               (b_negative && min_max_exists) ||
-                               (a_negative && max_min_exists));
+                               (a_positive && max_max_exists) ||
+                               (b_positive && max_max_exists) ||
+                               (b_negative && min_min_exists) ||
+                               (a_negative && min_min_exists));
 
         // Enumerate all possible values for the min and max and take the extreme values.
         if (min_min_exists) {

@@ -646,10 +646,9 @@ struct Use {
 
                 for (const auto &p : equalities[i].terms) {
                     const Variable *var = p.first.as<Variable>();
+
                     if (var &&
                         (p.second == 1 || p.second == -1)) {
-
-                        // debug(0) << "Considering eliminating " << var->name << "\n";
 
                         Expr rhs = 0;
                         for (const auto &p2 : equalities[i].terms) {
@@ -750,6 +749,8 @@ struct Use {
     bool can_disprove(Expr e, int beam_size) const {
         e = common_subexpression_elimination(simplify(remove_likely_tags(e)));
 
+        // debug(0) << "*** Attempting disproof " << e << "\n";
+
         if (is_zero(e)) {
             // The simplifier was capable of doing the proof by itself
             // using peephole rules alone.
@@ -772,8 +773,10 @@ struct Use {
             std::unique_ptr<System> next = std::move(beam.front());
             beam.pop_front();
 
+            /*
             debug(0) << "Top of beam: " << next->complexity() << "\n";
             next->dump();
+            */
 
             if (next->infeasible()) {
                 // We found that the initial system eventually implied
@@ -883,6 +886,7 @@ std::vector<Use> get_times_of_all_uses(const Stmt &s, string buf) {
 
         void visit(const For *op) override {
             Expr loop_var = Variable::make(Int(32), op->name);
+            // TODO: We may be able to encode things as smaller systems when the loop has constant extent. Currently we get a redundant pair of slack variables for the two inequalities, where really only one (loop_var - min) should be necessary
             predicate.push_back(loop_var >= op->min);
             predicate.push_back(loop_var < op->min + op->extent);
             loops.push_back(op->name);
@@ -890,6 +894,7 @@ std::vector<Use> get_times_of_all_uses(const Stmt &s, string buf) {
             op->body.accept(this);
             clock.pop_back();
             loops.pop_back();
+            predicate.pop_back();
             predicate.pop_back();
         }
 
@@ -989,7 +994,7 @@ std::vector<Use> get_times_of_all_uses(const Stmt &s, string buf) {
 
 }  // namespace
 
-Stmt lower_store_with(const Stmt &s, const map<string, Function> &env) {
+Stmt lower_store_with(const Stmt &s, const vector<Function> &outputs, const map<string, Function> &env) {
     debug(3) << "Checking legality of store_with on: " << s << "\n";
 
     // Remap the args on all accesses, but not the names, using the
@@ -1065,6 +1070,12 @@ Stmt lower_store_with(const Stmt &s, const map<string, Function> &env) {
 
         debug(3) << "Simplified: " << simpler << "\n";
 
+        // Add dummy realize nodes for the outputs
+        for (auto f : outputs) {
+            Region r;
+            simpler = Realize::make(f.name(), f.output_types(), MemoryType::Heap, r, const_true(), simpler);
+        }
+
         // For each buffer, figure out what other buffers are also stored there.
         map<string, vector<string>> groups;
         for (const auto &p : env) {
@@ -1115,6 +1126,11 @@ Stmt lower_store_with(const Stmt &s, const map<string, Function> &env) {
 
                         for (const auto &u1 : uses_1) {
                             for (const auto &u2 : uses_2) {
+                                /*
+                                debug(0) << "Ordering:\n";
+                                u1.dump(std::cerr);
+                                u2.dump(std::cerr);
+                                */
                                 const int beam_size = 32;
                                 if (!u1.safely_before(u2, beam_size)) {
                                     std::ostringstream err;
