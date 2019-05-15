@@ -5,12 +5,10 @@ BIN ?= bin
 HL_TARGET ?= host
 
 PROTOC := $(shell which protoc)
-ifndef PROTOC
-  $(error "No protoc in $(PATH), you need to install protocol buffers")
-endif
+
+ifdef PROTOC
 
 PROTOCFLAGS = --cpp_out=.
-
 CXXFLAGS += -DGOOGLE_PROTOBUF_NO_RTTI -Wno-sign-compare -Wno-unused-but-set-variable
 CXXFLAGS += -I$(dir $(PROTOC))../include
 LDFLAGS += -L$(dir $(PROTOC))../lib
@@ -83,3 +81,25 @@ test: $(BIN)/onnx_converter_test $(BIN)/onnx_converter_generator_test
 	LD_LIBRARY_PATH=$(BIN) $(BIN)/onnx_converter_test
 	LD_LIBRARY_PATH=$(BIN) $(BIN)/onnx_converter_generator_test
 
+PYTHON ?= python3
+PYBIND11_CFLAGS = $(shell $(PYTHON) -m pybind11 --includes) -frtti
+PY_EXT = $(shell $(PYTHON)-config --extension-suffix)
+PY_MODEL_EXT = model_cpp$(PY_EXT)
+PYCXXFLAGS =  $(CXXFLAGS) $(PYBIND11_CFLAGS)
+
+# Python extension for HalideModel
+$(BIN)/$(PY_MODEL_EXT): model.cpp $(ONNX_CONVERTER_LIB)
+	$(CXX) $(PYCXXFLAGS) -O3 -Wall -shared -fPIC -I$(BIN) $< $(ONNX_CONVERTER_LIB) $(LIB_HALIDE) -o $@ $(LDFLAGS)
+
+
+model_test: $(BIN)/$(PY_MODEL_EXT)
+	PYTHONPATH="$(BIN)/:$$PYTHONPATH" $(PYTHON) -m unittest model_test.py -v
+
+halide_as_onnx_backend_test: $(BIN)/$(PY_MODEL_EXT)
+	PYTHONPATH="$(BIN)/:$$PYTHONPATH" $(PYTHON) -m unittest halide_as_onnx_backend_test.py -v
+
+# No Protoc
+else
+test:
+	@echo "No protoc in $(PATH), you need to install protocol buffers"
+endif

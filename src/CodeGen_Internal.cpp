@@ -269,7 +269,8 @@ Expr lower_int_uint_div(Expr a, Expr b) {
         // Multiply and keep the high half of the
         // result, and then apply the shift.
         Expr mult = make_const(num.type(), multiplier);
-        num = Call::make(num.type(), Call::mulhi_shr, { num, mult, (int)shift }, Call::PureIntrinsic);
+        num = Call::make(num.type(), Call::mulhi_shr, { num, mult, make_const(UInt(num.type().bits()), shift) },
+                         Call::PureIntrinsic);
 
         // Maybe flip the bits back again.
         num = num ^ sign;
@@ -301,7 +302,9 @@ Expr lower_int_uint_div(Expr a, Expr b) {
 
         // Widen, multiply, narrow
         Expr mult = make_const(num.type(), multiplier);
-        Expr val = Call::make(num.type(), Call::mulhi_shr, { num, mult, method == 1 ? (int)shift : 0 }, Call::PureIntrinsic);
+        Expr val = Call::make(num.type(), Call::mulhi_shr,
+                              { num, mult, make_const(UInt(num.type().bits()), method == 1 ? (int)shift : 0) },
+                              Call::PureIntrinsic);
 
         if (method == 2) {
             // Average with original numerator.
@@ -373,8 +376,8 @@ Expr lower_euclidean_div(Expr a, Expr b) {
         */
 
         Expr r = a - q*b;
-        Expr bs = b >> (a.type().bits() - 1);
-        Expr rs = r >> (a.type().bits() - 1);
+        Expr bs = b >> make_const(b.type(), (a.type().bits() - 1));
+        Expr rs = r >> make_const(r.type(), (a.type().bits() - 1));
         q = q - (rs & bs) + (rs & ~bs);
         return common_subexpression_elimination(q);
     } else {
@@ -395,8 +398,8 @@ Expr lower_euclidean_mod(Expr a, Expr b) {
           r = r + sign_mask & abs(b);
         */
 
-        Expr sign_mask = r >> (a.type().bits()-1);
-        r += sign_mask & abs(b);
+        Expr sign_mask = r >> cast(r.type(), (a.type().bits()-1));
+        r += sign_mask & cast(sign_mask.type(), abs(b));
         return common_subexpression_elimination(r);
     } else {
         return r;
@@ -539,7 +542,7 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
     options.GuaranteedTailCallOpt = false;
     options.StackAlignmentOverride = 0;
     options.FunctionSections = true;
-    options.UseInitArray = false;
+    options.UseInitArray = true;
     options.FloatABIType =
         use_soft_float_abi ? llvm::FloatABI::Soft : llvm::FloatABI::Hard;
     options.RelaxELFRelocations = false;
@@ -630,11 +633,7 @@ void embed_bitcode(llvm::Module *M, const string &halide_command) {
     Triple triple(M->getTargetTriple());
     // Create a constant that contains the bitcode.
     llvm::raw_string_ostream OS(data);
-#if LLVM_VERSION >= 70
     llvm::WriteBitcodeToFile(*M, OS, /* ShouldPreserveUseListOrder */ true);
-#else
-    llvm::WriteBitcodeToFile(M, OS, /* ShouldPreserveUseListOrder */ true);
-#endif
     ArrayRef<uint8_t> module_data =
         ArrayRef<uint8_t>((const uint8_t *)OS.str().data(), OS.str().size());
 
