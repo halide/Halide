@@ -3,6 +3,7 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
+
     if (1) {
         // Parallel in-place
         Func f, g;
@@ -14,7 +15,6 @@ int main(int argc, char **argv) {
         f.vectorize(x, 4, TailStrategy::RoundUp).parallel(x);
         g.realize(128);
     }
-    return 0;
 
     if (1) {
         Func f, g;
@@ -234,8 +234,9 @@ int main(int argc, char **argv) {
 
         // Store a 4x4 block of f densely in the top left of every 16x16 tile of h
         f.compute_at(h, Var::outermost()).store_with(h, {16*(x/4) + x%4, 16*(y/4) + y%4}).vectorize(x).unroll(y);
+
         // Store an 8x8 block of g similarly compacted in the bottom
-        // right. It doesn't collide with f, and We're OK to overwrite
+        // right. It doesn't collide with f, and we're OK to overwrite
         // it when computing h because we compute h serially across x
         // and y.
         g.compute_at(h, Var::outermost()).store_with(h, {16*(x/8) + x%8 + 8, 16*(y/8) + y%8 + 8}).vectorize(x).unroll(y);
