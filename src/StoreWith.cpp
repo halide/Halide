@@ -755,8 +755,8 @@ struct Use {
         // debug(0) << "*** Attempting disproof " << e << "\n";
 
         if (is_zero(e)) {
-            // The simplifier was capable of doing the proof by itself
-            // using peephole rules alone.
+            // The simplifier was capable of doing the disproof by itself
+            // using peephole rules alone. No need to continue.
             return true;
         }
 
@@ -782,9 +782,9 @@ struct Use {
             */
 
             if (next->infeasible()) {
-                // We found that the initial system eventually implied
-                // a falsehood, so we successfully disproved the
-                // original expression.
+                // We found that the initial constraint system
+                // eventually implied a falsehood, so we successfully
+                // disproved the original expression.
                 return true;
             }
 
