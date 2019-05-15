@@ -39,13 +39,28 @@ struct ClockDim {
     ClockDim(const Expr &t, bool p) : t(t), parallel(p) {}
 };
 
-// Return the symbolic times and sites for all uses of a buffer.
+// A class representing a use of a buffer at some symbolic time
 struct Use {
+    // Lexicographically-ordered time vector, ala polyhedral optimization
     vector<ClockDim> time;
+
+    // The site in the buffer accessed. Mostly a function of the
+    // variables in the time vector. May or may not be
+    // piecewise-quasi-affine, but often is.
     vector<Expr> site;
+
+    // A bunch of constraints on the variables referenced, coming from
+    // if statements and loop bounds that surround the use. The
+    // constrains are mostly linear, but can include arbirtary
+    // non-linearities too from RDom::where clauses.
     Expr predicate;
+
+    // The buffer accessed
     string name;
-    bool is_store;
+
+    // The source of the use, for debugging and error messages.
+    Stmt original_store;
+    Expr original_load;
 
     Use(const vector<ClockDim> &t,
         const vector<Expr> &s,
@@ -53,9 +68,11 @@ struct Use {
         const string &n,
         const vector<string> &loops,
         const vector<pair<string, Expr>> &lets,
-        bool is_store) :
-        time(t), site(s), predicate(const_true()), name(n), is_store(is_store) {
+        Stmt store, Expr load) :
+        time(t), site(s), predicate(const_true()), name(n),
+        original_store(store), original_load(load) {
 
+        // Wrap the lets around the site.
         for (auto it = lets.rbegin(); it != lets.rend(); it++) {
             for (auto &e : site) {
                 if (expr_uses_var(e, it->first)) {
@@ -64,16 +81,15 @@ struct Use {
             }
         }
 
-        // Make any variables unique to this use
+        // Make any variables unique to this use so that we can talk
+        // about different uses at distinct values of the loop
+        // variables.
         map<string, Expr> renaming;
         for (const auto &v : loops) {
             string new_name = unique_name('t');
             Expr new_var = Variable::make(Int(32), new_name);
-            //debug(0) << v << " -> " << new_var << "\n";
             renaming[v] = new_var;
         }
-
-        // TODO: parallel variables don't get included in the renaming, which means they're not unique across uses!
 
         for (auto &e : site) {
             e = substitute(renaming, e);
@@ -83,10 +99,11 @@ struct Use {
             e.t = substitute(renaming, e.t);
         }
 
+        // Collapse the predicate vector down to a single Expr so that
+        // we can wrap lets around it once.
         for (const auto &e : p) {
             predicate = predicate && e;
         }
-
         for (auto it = lets.rbegin(); it != lets.rend(); it++) {
             if (expr_uses_var(predicate, it->first)) {
                 predicate = Let::make(it->first, it->second, predicate);
@@ -100,22 +117,14 @@ struct Use {
     Use() = default;
 
     // Return a boolean in DNF form encoding whether one time vector
-    // is < another . Quadratic in loop depth.
-    vector<Expr> may_happen_before(const Use &other, bool includes_equal = false, size_t start = 0) const {
+    // could be <= another.
+    vector<Expr> may_happen_before(const Use &other, size_t start = 0) const {
         vector<Expr> result;
 
         // Lexicographic order starting at the given index
 
-        if (start == time.size() && start == other.time.size()) {
-            // Both are empty
-            if (includes_equal) {
-                result.push_back(const_true());
-            }
-            return result;
-        }
-
         if (start == time.size()) {
-            // Empty vs non-empty
+            // The empty time vector is <= all others.
             result.push_back(const_true());
             return result;
         }
@@ -138,10 +147,11 @@ struct Use {
             }
         }
 
-        // Figure out the result if there's a tie on this dimension
-        result = may_happen_before(other, includes_equal, start + 1);
+        // Get the result if there's a tie on this dimension. It's a
+        // vector representing a DNF form boolean Expr.
+        result = may_happen_before(other, start + 1);
 
-        // AND this with the statement that there is indeed a tie
+        // AND each clause with the statement that there is indeed a tie
         for (auto &e : result) {
             // Substitute just to simplify the expression a little.
             e = substitute(time[start].t, other.time[start].t, e);
@@ -149,7 +159,7 @@ struct Use {
         }
 
         // Then OR in the case where there isn't a tie and this may
-        // happen before other.
+        // happen before other, by adding a clause to the vector.
         if (time[start].parallel) {
             // If we're looking at a parallel loop, any distinct loop
             // iteration may have already run, or may be running at
@@ -172,28 +182,42 @@ struct Use {
         return result;
     }
 
-    void dump() const {
-        return;
-        debug(0) << (is_store ? "Store" : "Load")
-                 << " of " << name << ":\n"
-                 << "Clock: ";
+    template<typename OutStream>
+    void dump(OutStream &s) const {
+        if (original_store.defined()) {
+            s << "store of " << name << ":\n"
+              << original_store;
+        } else if (original_load.defined()) {
+            s << "load of " << name << ":\n"
+              << original_load << "\n";
+        }
+        s << "Time vector: ";
         for (const auto &e : time) {
-            debug(0) << e.t << (e.parallel ? " p" : " s") << ", ";
+            s << e.t << (e.parallel ? " p" : " s") << ", ";
         }
-        debug(0) << "\n";
-        debug(0) << "Site: ";
+        s << "\n";
+        s << "Site: ";
         for (const auto &e : site) {
-            debug(0) << e << " ";
+            s << e << " ";
         }
-        debug(0) << "\n";
-        debug(0) << "Predicate: " << predicate << "\n";
+        s << "\n";
+        s << "Predicate: " << predicate << "\n";
     }
 
-    vector<Expr> may_happen_before_or_at_the_same_time(const Use &other) const {
-        return may_happen_before(other, true);
-    }
-
+    // A mostly-linear constraint. Represented as a linear combination
+    // of terms that sum to zero. The terms are usually Variables, but
+    // may be non-linear functions of Variables too.
     struct Equality {
+
+        // We keep the terms unique by storing them in a map sorted by
+        // deep equality on the Exprs.
+        std::map<Expr, int, IRDeepCompare> terms;
+
+        // Track the number of terms that are just Variable
+        // nodes. Useful for prioritizing work.
+        int num_vars = 0;
+
+        // Recursively extract all the linear terms from an Expr
         void find_terms(const Expr &e, int c) {
             if (c == 0) return;
             if (is_zero(e)) return;
@@ -239,9 +263,6 @@ struct Use {
         }
         Equality() = default;
 
-        std::map<Expr, int, IRDeepCompare> terms;
-        int num_vars = 0;
-
         bool uses_var(const std::string &name) const {
             for (const auto &p : terms) {
                 if (expr_uses_var(p.second, name)) {
@@ -251,6 +272,9 @@ struct Use {
             return false;
         }
 
+        // Convert this constraint back to a boolean Expr by putting
+        // all the positive coefficients on one side and all the
+        // negative coefficients on the other.
         Expr to_expr() const {
             Expr lhs, rhs;
             auto accum = [](Expr &a, Expr e, int c) {
@@ -281,24 +305,44 @@ struct Use {
         }
     };
 
+    // A system of constraints. We're going to construct systems of
+    // constraints that have solutions that are all of the correctness
+    // violations (places where one Func clobbers a value in the
+    // shared buffer that the other Func still needs), and then try to
+    // prove that these systems have no solutions by finding a
+    // sequence of variable substitutions that turns one of the terms
+    // into the constant false.
     class System {
     public:
         // A bunch of equalities
         vector<Equality> equalities;
-        // A simplifier instance, which slowly accumulates knowledge
-        // about the bounds of different variables.
+
+        // A shared simplifier instance, which slowly accumulates
+        // knowledge about the bounds of different variables. We
+        // prefer to encode constraints this way whenever we can,
+        // because then they get automatically exploited whenever we
+        // simplify something. Ultimately the way we prove things
+        // infeasible is by slowly deducing bounds on the free
+        // variables and then finding that one of our equalities above
+        // can't be satisfied given the bounds we have learned.
         Simplify *simplifier;
+
+        // The most-recently-performed substition, for debugging
+        Expr most_recent_substitution;
+
         // An additional arbitrary term to place non-linear constraints
-        Expr remainder;
+        Expr non_linear_term;
 
         // A heuristic for how close we are to finding infeasibility
         float c = 0;
 
-        // IDs for debugging and training a good heuristic
+        // unique IDs for each system for debugging and training a good heuristic
         static int id_counter;
         int id, parent_id;
 
-        System(Simplify *s, int pid) : simplifier(s), id(id_counter++), parent_id(pid) {}
+        System(Simplify *s, Expr subs, int pid) :
+            simplifier(s), most_recent_substitution(subs),
+            id(id_counter++), parent_id(pid) {}
 
         void add_equality(const EQ *eq) {
             equalities.emplace_back(eq);
@@ -306,15 +350,14 @@ struct Use {
 
         void add_non_linear_term(const Expr &e) {
             internal_assert(e.type().is_bool()) << e << "\n";
-            if (is_zero(e) || !remainder.defined()) {
-                remainder = e;
+            if (is_zero(e) || !non_linear_term.defined()) {
+                non_linear_term = e;
             } else {
-                remainder = remainder && e;
+                non_linear_term = non_linear_term && e;
             }
         }
 
         void add_term(const Expr &e) {
-            //debug(0) << "Adding term " << e << "\n";
             const EQ *eq = e.as<EQ>();
             const LT *lt = e.as<LT>();
             const LE *le = e.as<LE>();
@@ -339,14 +382,11 @@ struct Use {
                     add_term(max_a->a <= le->b);
                     add_term(max_a->b <= le->b);
                 } else if (is_const(le->a) && vb) {
-                    //debug(0) << "Telling simplifier that " << e << "\n";
                     simplifier->learn_true(e);
                 } else if (is_const(le->b) && va) {
-                    //debug(0) << "Telling simplifier that " << e << "\n";
                     simplifier->learn_true(e);
                 } else {
                     Expr v = aux();
-                    //debug(0) << "Telling simplifier that " << (-1 < v) << "\n";
                     simplifier->learn_true(-1 < v);
                     add_term(le->a + v == le->b);
                 }
@@ -362,47 +402,43 @@ struct Use {
                     add_term(max_a->a < le->b);
                     add_term(max_a->b < le->b);
                 } else if (is_const(lt->a) && vb) {
-                    //debug(0) << "Telling simplifier that " << e << "\n";
                     simplifier->learn_true(e);
                 } else if (is_const(lt->b) && va) {
-                    //debug(0) << "Telling simplifier that " << e << "\n";
                     simplifier->learn_true(e);
                 } else {
                     Expr v = aux();
-                    //debug(0) << "Telling simplifier that " << (0 < v) << "\n";
                     simplifier->learn_true(0 < v);
                     add_term(lt->a + v == lt->b);
                 }
             } else if (const Let *l = e.as<Let>()) {
+                // Treat lets as equality constraints in the new variable.
                 if (l->value.type().is_bool()) {
+                    // We want to examine booleans more directly, so
+                    // substitute them in.
                     add_term(substitute(l->name, l->value, l->body));
                 } else {
                     Expr eq = Variable::make(l->value.type(), l->name) == l->value;
-                    //debug(0) << "Telling simplifier that " << eq << "\n";
                     simplifier->learn_true(eq);
                     add_term(eq);
                     add_term(l->body);
                 }
+            } else if (is_one(e)) {
+                // There's nothing we can learn from a tautology
             } else {
+                // If all else fails, treat it as a non-linearity
                 add_non_linear_term(e);
             }
         }
 
-        Expr non_linear_term() const {
-            if (remainder.defined()) {
-                return remainder;
-            } else {
-                return const_true();
-            }
-        }
-
         void dump() const {
-            return;
+            if (most_recent_substitution.defined()) {
+                debug(0) << "Substitution: " << most_recent_substitution << "\n";
+            }
             for (auto &e : equalities) {
                 debug(0) << " " << e.to_expr() << "\n";
             }
-            if (remainder.defined()) {
-                debug(0) << " r: " << remainder << "\n";
+            if (non_linear_term.defined()) {
+                debug(0) << " non-linear: " << non_linear_term << "\n";
             }
             const auto &info = simplifier->bounds_and_alignment_info;
             for (auto it = info.cbegin(); it != info.cend(); ++it){
@@ -410,42 +446,58 @@ struct Use {
                 for (auto &e : equalities) {
                     used |= expr_uses_var(e.to_expr(), it.name());
                 }
-                if (remainder.defined()) {
-                    used |= expr_uses_var(remainder, it.name());
+                if (non_linear_term.defined()) {
+                    used |= expr_uses_var(non_linear_term, it.name());
                 }
                 if (!used) continue;
                 if (it.value().min_defined && it.value().max_defined) {
-                    debug(0) << it.value().min << " <= " << it.name()
+                    debug(0) << " " << it.value().min << " <= " << it.name()
                              << " <= " << it.value().max << "\n";
                 } else if (it.value().min_defined) {
-                    debug(0) << it.value().min << " <= " << it.name() << "\n";
+                    debug(0) << " " << it.value().min << " <= " << it.name() << "\n";
                 } else if (it.value().max_defined) {
-                    debug(0) << it.name() << " <= " << it.value().max << "\n";
+                    debug(0) << " " << it.name() << " <= " << it.value().max << "\n";
                 }
             }
         }
 
         bool infeasible() const {
+            // Check if any of the equalities or the non-linear term
+            // are unsatisfiable or otherwise simplify to const false
+            // given all the knowledge we have accumulated into the
+            // simplifier instance.
             for (auto &e : equalities) {
                 if (is_zero(simplifier->mutate(e.to_expr(), nullptr))) {
-                    //debug(0) << "INFEASIBLE: " << id << "\n";
                     return true;
                 }
             }
-            if (remainder.defined() && is_zero(simplifier->mutate(remainder, nullptr))) {
-                //debug(0) << "INFEASIBLE: " << id << "\n";
+            if (non_linear_term.defined() && is_zero(simplifier->mutate(non_linear_term, nullptr))) {
                 return true;
             }
             return false;
         }
 
-        void compute_complexity(Simplify *simplify) {
+        void finalize() {
+            // We'll preferentially find substitutions from the
+            // earlier equations, so sort the system, putting low
+            // term-count expressions with lots of naked vars first
+            std::stable_sort(equalities.begin(), equalities.end(),
+                             [](const Equality &a, const Equality &b) {
+                                 if (a.terms.size() < b.terms.size()) return true;
+                                 if (a.terms.size() > b.terms.size()) return false;
+                                 return a.num_vars < b.num_vars;
+                             });
+            compute_complexity();
+        }
+
+        // Compute our heuristic for which systems are closest to infeasible
+        void compute_complexity() {
             std::map<std::string, int> inequalities;
             int non_linear_terms = 0, num_terms = 0;
             for (auto &e : equalities) {
                 for (auto &p : e.terms) {
                     Simplify::ExprInfo info;
-                    simplify->mutate(p.first, &info);
+                    simplifier->mutate(p.first, &info);
                     if (const Variable *var = p.first.as<Variable>()) {
                         inequalities[var->name] = (int)info.max_defined + (int)info.min_defined;
                     } else if (!is_const(p.first)) {
@@ -457,7 +509,7 @@ struct Use {
             int unconstrained_vars = 0;
             int semi_constrained_vars = 0;
             int totally_constrained_vars = 0;
-            int num_constraints = (int)equalities.size() + (int)remainder.defined();
+            int num_constraints = (int)equalities.size() + (int)non_linear_term.defined();
             for (const auto &p : inequalities) {
                 if (p.second == 0) {
                     unconstrained_vars++;
@@ -467,7 +519,7 @@ struct Use {
                     totally_constrained_vars++;
                 }
             }
-            //debug(0) << "FEATURES " << id << " " << parent_id << " " << non_linear_terms << " " << unconstrained_vars << " " << semi_constrained_vars << " " << totally_constrained_vars << " " << num_terms << " " << num_constraints << "\n";
+            // debug(0) << "FEATURES " << id << " " << parent_id << " " << non_linear_terms << " " << unconstrained_vars << " " << semi_constrained_vars << " " << totally_constrained_vars << " " << num_terms << " " << num_constraints << "\n";
             int terms[] = {non_linear_terms, unconstrained_vars, semi_constrained_vars,
                            totally_constrained_vars, num_terms, num_constraints};
             // Use a linear combination of these features to decide
@@ -487,13 +539,6 @@ struct Use {
         }
 
         void make_children(std::deque<std::unique_ptr<System>> &result) {
-            // Sort the system, putting low term-count expressions with naked vars first
-            std::stable_sort(equalities.begin(), equalities.end(),
-                             [](const Equality &a, const Equality &b) {
-                                 if (a.terms.size() < b.terms.size()) return true;
-                                 if (a.terms.size() > b.terms.size()) return false;
-                                 return a.num_vars < b.num_vars;
-                             });
 
             /*
             debug(0) << "Sorted system: \n";
@@ -527,23 +572,24 @@ struct Use {
                         e = substitute(lhs / rhs, k2, e);
                         return simplifier->mutate(e, nullptr);
                     };
-                    std::unique_ptr<System> new_system(new System(simplifier, id));
-                    if (remainder.defined()) {
-                        new_system->add_term(subs(remainder));
+                    std::unique_ptr<System> new_system(new System(simplifier, lhs == rhs, id));
+                    if (non_linear_term.defined()) {
+                        new_system->add_term(subs(non_linear_term));
                     }
                     for (int j = 0; j < (int)equalities.size(); j++) {
                         new_system->add_term(subs(equalities[j].to_expr()));
                     }
                     new_system->add_term(lhs == replacement);
-                    //debug(0) << "Telling simplifier that: " << ((-1 < k1) && (k1 < rhs)) << '\n';
                     simplifier->learn_true(-1 < k1);
                     simplifier->learn_true(k1 < rhs);
-                    new_system->compute_complexity(simplifier);
+                    new_system->finalize();
                     result.emplace_back(std::move(new_system));
                     return;
                 }
             }
 
+            // Which equations should we mine for
+            // substitutions. Initially all of them are promising.
             vector<bool> interesting(equalities.size(), true);
 
             // A list of all variables we could potentially eliminate
@@ -574,7 +620,8 @@ struct Use {
                 }
             }
 
-            // The set of equations that share a common eliminable variable
+            // The set of pairs of equations that share a common
+            // eliminable variable
             set<pair<int, int>> has_common_variable;
             for (auto p : eqs_that_reference_var) {
                 for (int i : p.second) {
@@ -591,7 +638,9 @@ struct Use {
                     // elimination from something with no naked vars.
                     continue;
                 }
+
                 if (!interesting[i]) {
+                    // We've decided that this equation isn't one we want to mine.
                     continue;
                 }
 
@@ -600,7 +649,7 @@ struct Use {
                     if (var &&
                         (p.second == 1 || p.second == -1)) {
 
-                        //debug(0) << "Considering eliminating " << var->name << "\n";
+                        // debug(0) << "Considering eliminating " << var->name << "\n";
 
                         Expr rhs = 0;
                         for (const auto &p2 : equalities[i].terms) {
@@ -610,11 +659,6 @@ struct Use {
                         }
 
                         rhs = simplifier->mutate(rhs, nullptr);
-                        //debug(0) << "Telling simplifier that: " << (p.first == rhs) << '\n';
-                        // TODO: rhs may simplifier to p.first if we already knew the fact.
-                        if (!equal(p.first, rhs)) {
-                            simplifier->learn_true(p.first == rhs);
-                        }
 
                         if (expr_uses_var(rhs, var->name)) {
                             // Didn't successfully eliminate it - it
@@ -623,15 +667,45 @@ struct Use {
                             continue;
                         }
 
+                        // Tell the simplifier that LHS == RHS. This
+                        // may give it tighter bounds for the LHS
+                        // variable based on what is currently known
+                        // about the bounds of the RHS. This is the
+                        // primary mechanism by which the simplifier
+                        // instance learns things - not from the
+                        // substitutions we actually perform, but from
+                        // every potential substitution. Avoid telling
+                        // the simplifier that x == x.
+                        if (!equal(p.first, rhs)) {
+                            simplifier->learn_true(p.first == rhs);
+                        }
+
                         //debug(0) << "Attempting elimination of " << var->name << "\n";
 
                         // We have a candidate for elimination. Rule
                         // out searching all equalities that don't
-                        // share a common variable with this one.
+                        // share a common variable with this one,
+                        // because we equally could have done any
+                        // substitutions resulting from those first
+                        // without affecting this substitution, and
+                        // doing things in a canonical order avoids
+                        // exploring the same states an exponential
+                        // number of times.
                         for (int j = 0; j < (int)equalities.size(); j++) {
                             if (interesting[j]) {
                                 interesting[j] = has_common_variable.count({i, j});
                             }
+                        }
+
+                        // If the RHS is just a variable then we'll
+                        // just greedily perform this elimination -
+                        // there's no reason to need to backtrack on
+                        // it, so nuke all other candidate
+                        // children. There typically won't be any
+                        // because x == y will sort to the front of
+                        // the list of equalities.
+                        if (rhs.as<Variable>()) {
+                            result.clear();
                         }
 
                         auto subs = [&](Expr e) {
@@ -640,15 +714,11 @@ struct Use {
                             return e;
                         };
 
-                        // If the RHS is just a variable then greedily
-                        // perform this elimination.
-                        if (rhs.as<Variable>()) {
-                            result.clear();
-                        }
-
-                        std::unique_ptr<System> new_system(new System(simplifier, id));
-                        if (remainder.defined()) {
-                            new_system->add_term(subs(remainder));
+                        // Make a child system with the substitution
+                        // performed and this equality eliminated.
+                        std::unique_ptr<System> new_system(new System(simplifier, p.first == rhs, id));
+                        if (non_linear_term.defined()) {
+                            new_system->add_term(subs(non_linear_term));
                         }
                         for (int j = 0; j < (int)equalities.size(); j++) {
                             if (i == j) {
@@ -659,9 +729,12 @@ struct Use {
                             // In the other equations, we replace the variable with the right-hand-side
                             new_system->add_term(subs(equalities[j].to_expr()));
                         }
-                        new_system->compute_complexity(simplifier);
+                        new_system->finalize();
                         result.emplace_back(std::move(new_system));
 
+                        // No point considering further candidates if
+                        // we're just doing a variable1 = variable2
+                        // substitution.
                         if (rhs.as<Variable>()) {
                             return;
                         }
@@ -671,53 +744,56 @@ struct Use {
         }
     };
 
+    // Attempt to disprove a boolean expr by constructing a constraint
+    // system and performing a backtracking search over substitutions
+    // using beam search.
     bool can_disprove(Expr e, int beam_size) const {
-        //debug(0) << "\n** Attempting to disprove: " << e << "\n\n";
-
         e = common_subexpression_elimination(simplify(remove_likely_tags(e)));
 
-        //debug(0) << "Simplified: " << e << "\n";
-
         if (is_zero(e)) {
-            //debug(0) << "Trivially false\n";
+            // The simplifier was capable of doing the proof by itself
+            // using peephole rules alone.
             return true;
         }
 
-        // The expression was constructed to be mostly a big
-        // conjunction of equalities, so break it into those terms and
-        // start substituting out variables.
+        // Make a simplifier instance to hold all of our shared
+        // knowledge, and construct the initial system of constraints
+        // from the expression.
         Simplify simplifier(true, nullptr, nullptr);
-        std::unique_ptr<System> system(new System(&simplifier, 0));
+        std::unique_ptr<System> system(new System(&simplifier, Expr(), 0));
         system->add_term(e);
+        system->finalize();
 
-        //debug(0) << "Encoded as a system:\n";
-        system->dump();
-
+        // Beam search time.
         std::deque<std::unique_ptr<System>> beam;
         beam.emplace_back(std::move(system));
-
         while (!beam.empty()) {
             // Take the best thing
             std::unique_ptr<System> next = std::move(beam.front());
             beam.pop_front();
 
-            //debug(0) << "Top of beam: " << next->complexity() << "\n";
+            debug(0) << "Top of beam: " << next->complexity() << "\n";
             next->dump();
 
             if (next->infeasible()) {
+                // We found that the initial system eventually implied
+                // a falsehood, so we successfully disproved the
+                // original expression.
                 return true;
             }
 
             // Generate children
             next->make_children(beam);
 
-            // Take top K
+            // Take the top beam_size results by sorting all the
+            // children and then popping off the end. Not the most
+            // efficient way to do it, but this is not the long pole
+            // here.
             std::stable_sort(beam.begin(), beam.end(),
                              [&](const std::unique_ptr<System> &a,
                                  const std::unique_ptr<System> &b) {
                                  return a->complexity() < b->complexity();
                              });
-
             while ((int)beam.size() > beam_size) {
                 beam.pop_back();
             }
@@ -725,46 +801,51 @@ struct Use {
         return false;
     }
 
+    // Try to prove that for every site in a shared buffer, this use
+    // always happens strictly before another.
     bool safely_before(const Use &other, int beam_size) const {
-        // We want to prove that for every site in the shared
-        // allocation, this use happens strictly before (<) the other
-        // use. We negate this, and encode the problem as disproving:
-        // other.might_happen_before_or_at_the_same_time_as(this) &&
-        // same_site(other)
 
-        // We'll generate that boolean expression in DNF form, and
+        // We'll do a proof by contradiction. Assume that there is a
+        // site where the other use happens before or at the same time
+        // as this one, and derive a contradiction using the beam
+        // search code above.
+
+        // We'll generate the boolean expression in DNF form, and
         // attempt to disprove every single clause.
-
         Expr same_site = const_true();
         for (size_t i = 0; i < site.size(); i++) {
             same_site = same_site && site[i] == other.site[i];
         }
-
         Expr may_assume = simplify(same_site && predicate && other.predicate);
 
         //debug(0) << "Same site: " << same_site << "\n";
         //debug(0) << "Predicate: " << predicate << "\n";
         //debug(0) << "Other predicate: " << other.predicate << "\n";
 
-        /*
-        // First try to prove this term false. If we can, then these
-        // two uses never alias and we don't need to worry about
+        // First try to cheaply prove this term false. If we can, then
+        // these two uses never alias and we don't need to worry about
         // anything temporal (e.g. one use writes to even rows and the
         // other use writes to odd rows).
-        if (can_disprove(may_assume)) {
+
+        // We don't use can_disprove, because it's expensive when it
+        // fails, and this is supposed to be an early-out. We've
+        // already applied the simplifier so let's just check if the
+        // simplifier already successfully disproved it.
+
+        if (is_zero(may_assume)) {
             return true;
         }
-        */
 
         // Now consider temporal constraints too.
-        auto before = other.may_happen_before_or_at_the_same_time(*this);
+        auto before = other.may_happen_before(*this);
 
         // Try to disprove each clause in turn.
         for (const auto &e : before) {
             if (!can_disprove(e && may_assume, beam_size)) {
-                // Trigger the simplifier logging code
+                // We failed. The simplifier does fancy logging when
+                // it fails to prove things that are probably actually
+                // true, so trigger the simplifier again.
                 return can_prove(!(e && may_assume));
-                // return false;
             }
         }
 
@@ -774,6 +855,7 @@ struct Use {
 
 int Use::System::id_counter = 0;
 
+// Scrape all uses of a given buffer from a Stmt.
 std::vector<Use> get_times_of_all_uses(const Stmt &s, string buf) {
     class PolyhedralClock : public IRVisitor {
         using IRVisitor::visit;
@@ -841,8 +923,8 @@ std::vector<Use> get_times_of_all_uses(const Stmt &s, string buf) {
             predicate.pop_back();
         }
 
-        void found_use(const vector<Expr> &site, const string &name, bool is_store) {
-            uses.emplace_back(clock, site, predicate, name, loops, lets, is_store);
+        void found_use(const vector<Expr> &site, const string &name, Stmt store, Expr load) {
+            uses.emplace_back(clock, site, predicate, name, loops, lets, store, load);
         }
 
         void visit(const Let *op) override {
@@ -861,9 +943,9 @@ std::vector<Use> get_times_of_all_uses(const Stmt &s, string buf) {
 
         void visit(const Provide *op) override {
             {
-                // TODO: skip this block if the buffer is an output - undef
-                // sites in outputs may have meaningful values we're
-                // supposed to not touch.
+                // TODO: skip undef-checking if the buffer is an
+                // output - undef sites in outputs may have meaningful
+                // values we're supposed to not touch.
                 bool rhs_undef = true;
                 for (const auto &e : op->values) {
                     rhs_undef &= is_undef(e);
@@ -878,7 +960,7 @@ std::vector<Use> get_times_of_all_uses(const Stmt &s, string buf) {
             IRVisitor::visit(op);
             clock.back().t = 1;
             if (op->name == buf) {
-                found_use(op->args, op->name, true);
+                found_use(op->args, op->name, op, Expr());
             }
             clock.pop_back();
         }
@@ -886,7 +968,7 @@ std::vector<Use> get_times_of_all_uses(const Stmt &s, string buf) {
         void visit(const Call *op) override {
             IRVisitor::visit(op);
             if (op->name == buf) {
-                found_use(op->args, op->name, false);
+                found_use(op->args, op->name, Stmt(), op);
             }
         }
     public:
@@ -896,9 +978,11 @@ std::vector<Use> get_times_of_all_uses(const Stmt &s, string buf) {
 
     s.accept(&clock);
 
+    /*
     for (const auto &u : clock.uses) {
         u.dump();
     }
+    */
 
     return clock.uses;
 }
@@ -906,10 +990,11 @@ std::vector<Use> get_times_of_all_uses(const Stmt &s, string buf) {
 }  // namespace
 
 Stmt lower_store_with(const Stmt &s, const map<string, Function> &env) {
-    // First check legality on a simplified version of the stmt
-    //debug(0) << "Checking legality of store_with on: " << s << "\n";
+    debug(3) << "Checking legality of store_with on: " << s << "\n";
 
-    // Remap the args on all accesses, but not the names
+    // Remap the args on all accesses, but not the names, using the
+    // additional args to store_with that specify the coordinate
+    // mapping between the two buffers.
     class RemapArgs : public IRMutator {
         using IRMutator::visit;
 
@@ -967,8 +1052,6 @@ Stmt lower_store_with(const Stmt &s, const map<string, Function> &env) {
             return Call::make(it->second, args, op->value_index);
         }
 
-        // TODO: ProducerConsumer?
-
         const map<string, Function> &env;
     public:
         RemapArgs(const map<string, Function> &env) : env(env) {}
@@ -980,9 +1063,9 @@ Stmt lower_store_with(const Stmt &s, const map<string, Function> &env) {
         // Check legality on a simplified version
         Stmt simpler = simplify(uniquify_variable_names(stmt));
 
-        //debug(0) << "Simplified: " << simpler << "\n";
+        debug(3) << "Simplified: " << simpler << "\n";
 
-        // For each buffer, what other buffers are also stored there
+        // For each buffer, figure out what other buffers are also stored there.
         map<string, vector<string>> groups;
         for (const auto &p : env) {
             const auto &stored_with = p.second.schedule().store_with();
@@ -1021,44 +1104,30 @@ Stmt lower_store_with(const Stmt &s, const map<string, Function> &env) {
                         //debug(0) << "Ordering " << n1 << " " << n2 << "\n";
                         auto uses_2 = get_times_of_all_uses(op->body, n2);
 
-                        // Check all uses of 1 are before all uses of 2, or vice-versa
+                        // Check all uses of 1 are before all uses of 2
 
-                        // TODO: can constrain this in various ways. No
-                        // point checking topologically invalid
-                        // orderings. Uses as inputs must be before temporaries
-                        // and outputs. Uses as outputs must be after
-                        // temporaries and inputs.
+                        // TODO: can constrain this in various
+                        // ways. No point checking topologically
+                        // invalid orderings. Uses as inputs must be
+                        // before temporaries and outputs. Uses as
+                        // outputs must be after temporaries and
+                        // inputs.
 
-                        bool check1 = true, check2 = true;
                         for (const auto &u1 : uses_1) {
                             for (const auto &u2 : uses_2) {
-                                if (!check1 && !check2) break;
-                                bool c1 = check1, c2 = check2;
-                                // We need to prove one of the two
-                                // things. The other will probably fail,
-                                // slowly. Race them against each other
-                                // with steadily increasing beam size
-                                // until we succeed on one of the proofs.
-                                for (int beam_size = 1; beam_size <= 32; beam_size *= 2) {
-                                    /*
-                                    debug(0) << "beam size " << beam_size << " " << c1 << " " << c2 << "\n";
-                                    debug(0) << "Ordering:\n";
-                                    u1.dump();
-                                    u2.dump();
-                                    debug(0) << "\n\n A then B\n";
-                                    */
-                                    c1 = check1 && u1.safely_before(u2, beam_size);
-                                    //debug(0) << "\n\n B then A\n";
-                                    c2 = false && check2 && u2.safely_before(u1, beam_size);
-                                    if (c1 || c2) break;
+                                const int beam_size = 32;
+                                if (!u1.safely_before(u2, beam_size)) {
+                                    std::ostringstream err;
+                                    err << "Cannot store " << n1 << " in the same buffer as " << n2 << "\n"
+                                        << "In this code:\n" << Stmt(op) << "\n"
+                                        << "Failed to prove that at every site, this ";
+                                    u1.dump(err);
+                                    err << "Always happens before than this ";
+                                    u2.dump(err);
+                                    user_error << err.str();
                                 }
-                                check1 = c1;
-                                check2 = c2;
                             }
                         }
-                        user_assert(check1 || check2)
-                            << "Could not prove it's safe to store " << n1
-                            << " in the same buffer as " << n2 << '\n';
                     }
                 }
             }
@@ -1072,7 +1141,7 @@ Stmt lower_store_with(const Stmt &s, const map<string, Function> &env) {
         simpler.accept(&checker);
     }
 
-    // Remap the names
+    // We now know that everything is legal. Remap the buffer names.
     class RemapNames : public IRMutator {
         using IRMutator::visit;
 
