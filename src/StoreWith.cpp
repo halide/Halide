@@ -161,6 +161,9 @@ struct Use {
         // Then OR in the case where there isn't a tie and this may
         // happen before other, by adding a clause to the vector.
         if (time[start].parallel) {
+            // TODO: synchronous parallel (vectorize) is different,
+            // because *no* other iteration could have run earlier.
+
             // If we're looking at a parallel loop, any distinct loop
             // iteration may have already run, or may be running at
             // the same time. Avoid encoding using != so that we most
@@ -886,15 +889,25 @@ std::vector<Use> get_times_of_all_uses(const Stmt &s, string buf) {
 
         void visit(const For *op) override {
             Expr loop_var = Variable::make(Int(32), op->name);
-            // TODO: We may be able to encode things as smaller systems when the loop has constant extent. Currently we get a redundant pair of slack variables for the two inequalities, where really only one (loop_var - min) should be necessary
-            predicate.push_back(loop_var >= op->min);
-            predicate.push_back(loop_var < op->min + op->extent);
+            // TODO: We may be able to encode things as smaller
+            // systems when the loop has constant extent. Currently we
+            // get a redundant pair of slack variables for the two
+            // inequalities, where really only one (loop_var - min)
+            // should be necessary
+            // predicate.push_back(loop_var >= op->min);
+            // predicate.push_back(loop_var < op->min + op->extent);
+            if (!is_const(op->min)) {
+                // Rebase at zero to get a variable with more constant bounds
+                Expr v = aux();
+                predicate.push_back(v == loop_var - op->min && v >= 0 && v < op->extent);
+            } else {
+                predicate.push_back(loop_var >= op->min && loop_var < op->min + op->extent);
+            }
             loops.push_back(op->name);
             clock.emplace_back(Variable::make(Int(32), op->name), op->is_parallel());
             op->body.accept(this);
             clock.pop_back();
             loops.pop_back();
-            predicate.pop_back();
             predicate.pop_back();
         }
 
