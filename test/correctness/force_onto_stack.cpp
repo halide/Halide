@@ -24,6 +24,10 @@ void my_error(void *user_context, const char* msg) {
 
 
 int main(int argc, char **argv) {
+    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
+        printf("Skipping test for WebAssembly as the wasm JIT cannot support set_custom_allocator().\n");
+        return 0;
+    }
 
     {
         Func f("f"), g;

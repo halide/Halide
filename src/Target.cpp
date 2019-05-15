@@ -9,7 +9,7 @@
 #include "Error.h"
 #include "LLVM_Headers.h"
 #include "Util.h"
-#include "DeviceInterface.h"
+#include "WasmExecutor.h"
 
 #if defined(__powerpc__) && defined(__linux__)
 // This uses elf.h and must be included after "LLVM_Headers.h", which
@@ -75,6 +75,9 @@ Target calculate_host_target() {
     int bits = use_64_bits ? 64 : 32;
     std::vector<Target::Feature> initial_features;
 
+#if __riscv__
+    Target::Arch arch = Target::RISCV;
+#else
 #if __mips__ || __mips || __MIPS__
     Target::Arch arch = Target::MIPS;
 #else
@@ -162,6 +165,7 @@ Target calculate_host_target() {
 #endif
 #endif
 
+#endif
 #endif
 #endif
 #endif
@@ -268,6 +272,7 @@ const std::map<std::string, Target::OS> os_name_map = {
     {"qurt", Target::QuRT},
     {"noos", Target::NoOS},
     {"fuchsia", Target::Fuchsia},
+    {"wasmrt", Target::WebAssemblyRuntime}
 };
 
 bool lookup_os(const std::string &tok, Target::OS &result) {
@@ -286,6 +291,8 @@ const std::map<std::string, Target::Arch> arch_name_map = {
     {"mips", Target::MIPS},
     {"powerpc", Target::POWERPC},
     {"hexagon", Target::Hexagon},
+    {"wasm", Target::WebAssembly},
+    {"riscv", Target::RISCV},
 };
 
 bool lookup_arch(const std::string &tok, Target::Arch &result) {
@@ -357,6 +364,8 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"embed_bitcode", Target::EmbedBitcode},
     {"disable_llvm_loop_vectorize", Target::DisableLLVMLoopVectorize},
     {"disable_llvm_loop_unroll", Target::DisableLLVMLoopUnroll},
+    {"wasm_simd128", Target::WasmSimd128},
+    {"wasm_signext", Target::WasmSignExt},
     {"vulkan", Target::Vulkan},
     // NOTE: When adding features to this map, be sure to update
     // PyEnums.cpp and halide.cmake as well.
@@ -402,7 +411,7 @@ Target get_jit_target_from_environment() {
     } else {
         Target t(target);
         t.set_feature(Target::JIT);
-        user_assert(t.os == host.os && t.arch == host.arch && t.bits == host.bits)
+        user_assert((t.os == host.os && t.arch == host.arch && t.bits == host.bits) || Internal::WasmModule::can_jit_target(t))
             << "HL_JIT_TARGET must match the host OS, architecture, and bit width.\n"
             << "HL_JIT_TARGET was " << target << ". "
             << "Host is " << host.to_string() << ".\n";
@@ -614,6 +623,12 @@ bool Target::supported() const {
 #if !defined(WITH_HEXAGON)
     bad |= arch == Target::Hexagon;
 #endif
+#if !defined(WITH_WEBASSEMBLY)
+    bad |= arch == Target::WebAssembly;
+#endif
+#if !defined(WITH_RISCV)
+    bad |= arch == Target::RISCV;
+#endif
 #if !defined(WITH_PTX)
     bad |= has_feature(Target::CUDA);
 #endif
@@ -628,6 +643,12 @@ bool Target::supported() const {
 #endif
 #if !defined(WITH_D3D12)
     bad |= has_feature(Target::D3D12Compute);
+#endif
+#if defined(WITH_WEBASSEMBLY) && LLVM_VERSION < 90
+    // LLVM8 supports wasm, but there are fixes and improvements
+    // in trunk that may not be in 8 (or that we haven't tested with),
+    // so, for now, declare that wasm with LLVM < 9.0 is unsupported.
+    bad = true;
 #endif
 #if !defined(WITH_VULKAN)
     bad |= has_feature(Target::Vulkan);
@@ -804,6 +825,18 @@ int Target::natural_vector_size(const Halide::Type &t) const {
         } else {
             // SSE was all 128-bit. We ignore MMX.
             return 16 / data_size;
+        }
+    } else if (arch == Target::WebAssembly) {
+        if (has_feature(Halide::Target::WasmSimd128)) {
+            if (t.bits() == 64) {
+                // int64 and float64 aren't supported in simd128.
+                return 1;
+            }
+            // 128-bit vectors for other types.
+            return 16 / data_size;
+        } else {
+            // No vectors, sorry.
+            return 1;
         }
     } else {
         // Assume 128-bit vectors on other targets.

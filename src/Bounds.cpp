@@ -1047,7 +1047,7 @@ private:
                             }
                         } else if (is_const(b)) {
                             // We can normalize to multiplication
-                            Expr equiv = a * (1 << b);
+                            Expr equiv = a * (make_const(t, 1) << b);
                             equiv.accept(this);
                         }
                     } else if (op->is_intrinsic(Call::shift_right)) {
@@ -1218,6 +1218,8 @@ private:
                 // Substitute it in
                 var.max = val.max;
                 val.max = Expr();
+            } else if (val.is_single_point()) {
+                var.max = var.min;
             } else {
                 var.max = Variable::make(op->value.type().element_of(), max_name);
             }
@@ -1228,20 +1230,30 @@ private:
             op->body.accept(this);
         }
 
+        bool single_point = interval.is_single_point();
+
         if (interval.has_lower_bound()) {
-            if (val.min.defined() && expr_uses_var(interval.min, min_name)) {
+            if (val.min.defined() &&
+                expr_uses_var(interval.min, min_name)) {
                 interval.min = Let::make(min_name, val.min, interval.min);
             }
-            if (val.max.defined() && expr_uses_var(interval.min, max_name)) {
+            if (val.max.defined() &&
+                !val.is_single_point() &&
+                expr_uses_var(interval.min, max_name)) {
                 interval.min = Let::make(max_name, val.max, interval.min);
             }
         }
 
-        if (interval.has_upper_bound()) {
-            if (val.min.defined() && expr_uses_var(interval.max, min_name)) {
+        if (single_point) {
+            interval.max = interval.min;
+        } else if (interval.has_upper_bound()) {
+            if (val.min.defined() &&
+                expr_uses_var(interval.max, min_name)) {
                 interval.max = Let::make(min_name, val.min, interval.max);
             }
-            if (val.max.defined() && expr_uses_var(interval.max, max_name)) {
+            if (val.max.defined() &&
+                !val.is_single_point() &&
+                expr_uses_var(interval.max, max_name)) {
                 interval.max = Let::make(max_name, val.max, interval.max);
             }
         }
@@ -2517,7 +2529,8 @@ void constant_bound_test() {
     using namespace ConciseCasts;
 
     {
-        Param<int16_t> a, b;
+        Param<int16_t> a;
+        Param<uint16_t> b;
         check_constant_bound(a >> b, i16(-32768), i16(32767));
     }
 
@@ -2775,7 +2788,8 @@ void bounds_test() {
     }
 
     {
-        Param<int16_t> x("x"), y("y");
+        Param<int16_t> x("x");
+        Param<uint16_t> y("y");
         x.set_range(i16(-32), i16(-16));
         y.set_range(i16(0), i16(4));
         check_constant_bound((x >> y), i16(-32), i16(-1));

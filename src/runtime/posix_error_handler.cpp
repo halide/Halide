@@ -15,7 +15,7 @@ WEAK void halide_default_error(void *user_context, const char *msg) {
         dst[1] = 0;
         dst += 1;
     }
-    halide_msan_annotate_memory_is_initialized(user_context, buf, dst - buf + 1);
+    (void) halide_msan_annotate_memory_is_initialized(user_context, buf, dst - buf + 1);
     halide_print(user_context, buf);
     Halide::Runtime::Internal::halide_abort();
 }

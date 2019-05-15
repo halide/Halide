@@ -405,22 +405,26 @@ void CodeGen_X86::visit(const Cast *op) {
     CodeGen_Posix::visit(op);
 }
 
-Expr CodeGen_X86::mulhi_shr(Expr a, Expr b, int shr) {
-    Type ty = a.type();
-    if (ty.is_vector() && ty.bits() == 16) {
-        // We can use pmulhu for this op.
+void CodeGen_X86::visit(const Call *op) {
+    if (op->is_intrinsic(Call::mulhi_shr) &&
+        op->type.is_vector() && op->type.bits() == 16) {
+        internal_assert(op->args.size() == 3);
         Expr p;
-        if (ty.is_uint()) {
-            p = u16(u32(a) * u32(b) / 65536);
+        if (op->type.is_uint()) {
+            p = u16(u32(op->args[0]) * u32(op->args[1]) / 65536);
         } else {
-            p = i16(i32(a) * i32(b) / 65536);
+            p = i16(i32(op->args[0]) * i32(op->args[1]) / 65536);
         }
-        if (shr) {
-            p = p >> shr;
+        const UIntImm *shift = op->args[2].as<UIntImm>();
+        internal_assert(shift != nullptr) << "Third argument to mulhi_shr intrinsic must be an unsigned integer immediate.\n";
+        if (shift->value != 0) {
+            p = p >> shift->value;
         }
-        return p;
+        value = codegen(p);
+        return;
     }
-    return CodeGen_Posix::mulhi_shr(a, b, shr);
+
+    CodeGen_Posix::visit(op);
 }
 
 string CodeGen_X86::mcpu() const {

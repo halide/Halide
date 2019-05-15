@@ -554,10 +554,22 @@ void check_vectors() {
         int lanes = 4;
         std::vector<Expr> loads;
         for (int i = 0; i < lanes; i++) {
-            loads.push_back(Load::make(Float(32), "buf", x+i, Buffer<>(), Parameter(), const_true(), ModulusRemainder()));
+            loads.push_back(Load::make(Float(32), "buf", 4*x+i, Buffer<>(), Parameter(), const_true(), ModulusRemainder()));
         }
 
-        check(concat_vectors(loads), Load::make(Float(32, lanes), "buf", ramp(x, 1, lanes), Buffer<>(), Parameter(), const_true(lanes), ModulusRemainder()));
+        check(concat_vectors(loads), Load::make(Float(32, lanes), "buf", ramp(x*4, 1, lanes), Buffer<>(), Parameter(), const_true(lanes), ModulusRemainder(4, 0)));
+    }
+
+    // Check that concatenated loads of adjacent vectors collapse into a vector load, with appropriate alignment.
+    {
+        int lanes = 4;
+        int vectors = 4;
+        std::vector<Expr> loads;
+        for (int i = 0; i < vectors; i++) {
+          loads.push_back(Load::make(Float(32, lanes), "buf", ramp(i*lanes, 1, lanes), Buffer<>(), Parameter(), const_true(lanes), ModulusRemainder(4, 0)));
+        }
+
+        check(concat_vectors(loads), Load::make(Float(32, lanes*vectors), "buf", ramp(0, 1, lanes*vectors), Buffer<>(), Parameter(), const_true(vectors*lanes), ModulusRemainder(0, 0)));
     }
 
     {
@@ -605,6 +617,26 @@ void check_bounds() {
     check(max(max(y, x) + (-1), x), max(y + (-1), x));
     check(max(max(y, x) + 1, x), max(x, y) + 1);
     check(max(max(y, x) - (-1), x), max(x, y) + 1);
+
+    check(min(x, min(x, y) + 1), min(y + 1, x));
+    check(min(x, min(x, y) - (-1)), min(y + 1, x));
+    check(min(x, min(x, y) + (-1)), min(x, y) + (-1));
+    check(min(x, min(x, y) - 1), min(x, y) + (-1));
+
+    check(min(x, min(y, x) + 1), min(y + 1, x));
+    check(min(x, min(y, x) - (-1)), min(y + 1, x));
+    check(min(x, min(y, x) + (-1)), min(x, y) + (-1));
+    check(min(x, min(y, x) - 1), min(x, y) + (-1));
+
+    check(max(x, max(x, y) - 1), max(y + (-1), x));
+    check(max(x, max(x, y) + (-1)), max(y + (-1), x));
+    check(max(x, max(x, y) + 1), max(x, y) + 1);
+    check(max(x, max(x, y) - (-1)), max(x, y) + 1);
+
+    check(max(x, max(y, x) - 1), max(y + (-1), x));
+    check(max(x, max(y, x) + (-1)), max(y + (-1), x));
+    check(max(x, max(y, x) + 1), max(x, y) + 1);
+    check(max(x, max(y, x) - (-1)), max(x, y) + 1);
 
     check(max(Expr(7), 3), 7);
     check(max(Expr(4.25f), 1.25f), 4.25f);
@@ -1352,6 +1384,8 @@ void check_boolean() {
     check(select(cond, y+x, x-z), select(cond, y, 0-z) + x);
     check(select(cond, x-z, x+y), select(cond, 0-z, y) + x);
     check(select(cond, x-z, y+x), select(cond, 0-z, y) + x);
+    check(select(cond, x/y, z/y), select(cond, x, z) / y);
+    check(select(cond, x%y, z%y), select(cond, x, z) % y);
 
 
     {

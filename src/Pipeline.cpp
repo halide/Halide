@@ -13,6 +13,7 @@
 #include "Pipeline.h"
 #include "PrintLoopNest.h"
 #include "RealizationOrder.h"
+#include "WasmExecutor.h"
 
 using namespace Halide::Internal;
 
@@ -57,12 +58,16 @@ struct PipelineContents {
     JITModule jit_module;
     Target jit_target;
 
+    // Cached compiled JavaScript and/or wasm if defined */
+    WasmModule wasm_module;
+
     /** Clear all cached state */
     void invalidate_cache() {
         module = Module("", Target());
         jit_module = JITModule();
         jit_target = Target();
         inferred_args.clear();
+        wasm_module = WasmModule();
     }
 
     // The outputs
@@ -345,6 +350,43 @@ vector<Argument> Pipeline::infer_arguments(Stmt body) {
     return result;
 }
 
+class FindExterns : public IRGraphVisitor {
+    using IRGraphVisitor::visit;
+
+    void visit(const Call *op) override {
+        IRGraphVisitor::visit(op);
+
+        if ((op->call_type == Call::Extern || op->call_type == Call::PureExtern) && externs.count(op->name) == 0) {
+            void *address = get_symbol_address(op->name.c_str());
+            if (address == nullptr && !starts_with(op->name, "_")) {
+                std::string underscored_name = "_" + op->name;
+                address = get_symbol_address(underscored_name.c_str());
+            }
+            if (address != nullptr) {
+                // TODO: here and below for arguments, we force types to scalar,
+                // which means this code cannot support functions which actually do
+                // take vectors. But generally the function is actually scalar and
+                // call sites which use vectors will have to be scalarized into a
+                // separate call per lane. Not sure there is anywhere to get
+                // information to make a distinction in the current design.
+                std::vector<Type> arg_types;
+                for (Expr e : op->args) {
+                    arg_types.push_back(e.type().element_of());
+                }
+                ExternCFunction f(address, ExternSignature(op->type.element_of(), op->type.bits() == 0, arg_types));
+                JITExtern jit_extern(f);
+                debug(2) << "FindExterns adds: " << op->name << "\n";
+                externs.emplace(op->name, jit_extern);
+            }
+        }
+    }
+
+public:
+    FindExterns(std::map<std::string, JITExtern> &externs) : externs(externs) {}
+
+    std::map<std::string, JITExtern> &externs;
+};
+
 vector<Argument> Pipeline::infer_arguments() {
     return infer_arguments(Stmt());
 }
@@ -444,6 +486,12 @@ void Pipeline::compile_jit(const Target &target_arg) {
     // If we're re-jitting for the same target, we can just keep the
     // old jit module.
     if (contents->jit_target == target) {
+        if (target.arch == Target::WebAssembly) {
+            if (contents->wasm_module.contents.defined()) {
+                debug(2) << "Reusing old wasm module compiled for :\n" << contents->jit_target << "\n";
+                return;
+            }
+        }
         if (contents->jit_module.compiled()) {
             debug(2) << "Reusing old jit module compiled for :\n" << contents->jit_target << "\n";
             return;
@@ -474,6 +522,34 @@ void Pipeline::compile_jit(const Target &target_arg) {
     Module module = compile_to_module(args, name, target).resolve_submodules();
 
     std::map<std::string, JITExtern> lowered_externs = contents->jit_externs;
+
+    if (target.arch == Target::WebAssembly) {
+        FindExterns find_externs(lowered_externs);
+        for (const LoweredFunc &f : contents->module.functions()) {
+            f.body.accept(&find_externs);
+        }
+        if (debug::debug_level() >= 1) {
+            for (const auto &p : lowered_externs) {
+              debug(1) << "Found extern: " << p.first << "\n";
+            }
+        }
+
+        vector<Argument> args_and_outputs = args;
+        for (auto &out : contents->outputs) {
+            for (Type t : out.output_types()) {
+                args_and_outputs.emplace_back(out.name(), Argument::OutputBuffer, t, out.dimensions(), ArgumentEstimates{});
+            }
+        }
+
+        contents->wasm_module = WasmModule::compile(
+            module,
+            args_and_outputs,
+            contents->module.name(),
+            lowered_externs,
+            make_externs_jit_module(target, lowered_externs)
+        );
+        return;
+    }
 
     auto f = module.get_function_by_name(name);
 
@@ -773,7 +849,8 @@ void Pipeline::prepare_jit_call_arguments(RealizationArg &outputs, const Target 
     user_assert(defined()) << "Can't realize an undefined Pipeline\n";
 
     JITModule &compiled_module = contents->jit_module;
-    internal_assert(compiled_module.argv_function());
+    internal_assert(compiled_module.argv_function() ||
+                    contents->wasm_module.contents.defined());
 
     const bool no_param_map = &param_map == &ParamMap::empty_map();
 
@@ -883,6 +960,10 @@ Pipeline::make_externs_jit_module(const Target &target,
 }
 
 int Pipeline::call_jit_code(const Target &target, const JITCallArgs &args) {
+    if (target.arch == Target::WebAssembly) {
+        internal_assert(contents->wasm_module.contents.defined());
+        return contents->wasm_module.run(args.store);
+    }
     return contents->jit_module.argv_function()(args.store);
 }
 

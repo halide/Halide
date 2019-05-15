@@ -275,10 +275,6 @@ protected:
         include_type(op->type);
         if (op->is_intrinsic(Call::lerp)) {
             // lower_lerp() can synthesize wider vector types.
-            // It's not safe to feed temporary Exprs into IRGraphVisitor
-            // (it tracks the seen values by IRNode*, which could get recycled
-            // if we are unlucky), so just add widened versions of any
-            // types present -- it's safe to add types we might not use.
             for (auto &a : op->args) {
                 include_lerp_types(a.type());
             }
@@ -1020,7 +1016,11 @@ public:
     // TODO: could this be improved by taking advantage of native operator support?
     static Vec load(const void *base, int32_t offset) {
         Vec r(empty);
-        memcpy(&r.native_vector, ((const ElementType*)base + offset), sizeof(NativeVectorType));
+        // Note: do not use sizeof(NativeVectorType) here; if it's an unusual type
+        // (e.g. uint8x48, which could be produced by concat()), the actual implementation
+        // might be larger (e.g. it might really be a uint8x64). Only copy the amount
+        // that is in the logical type, to avoid possible overreads.
+        memcpy(&r.native_vector, ((const ElementType*)base + offset), sizeof(ElementType) * Lanes);
         return r;
     }
 
@@ -1036,7 +1036,11 @@ public:
 
     // TODO: could this be improved by taking advantage of native operator support?
     void store(void *base, int32_t offset) const {
-        memcpy(((ElementType*)base + offset), &native_vector, sizeof(NativeVectorType));
+        // Note: do not use sizeof(NativeVectorType) here; if it's an unusual type
+        // (e.g. uint8x48, which could be produced by concat()), the actual implementation
+        // might be larger (e.g. it might really be a uint8x64). Only copy the amount
+        // that is in the logical type, to avoid possible overwrites.
+        memcpy(((ElementType*)base + offset), &native_vector, sizeof(ElementType) * Lanes);
     }
 
     // scatter

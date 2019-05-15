@@ -84,12 +84,14 @@ set(RUNTIME_CPP
   qurt_threads
   qurt_threads_tsan
   qurt_yield
+  riscv_cpu_features
   runtime_api
   ssp
   to_string
   trace_helper
   tracing
   vulkan
+  wasm_cpu_features
   windows_abort
   windows_clock
   windows_cuda
@@ -114,6 +116,7 @@ set (RUNTIME_LL
   posix_math
   powerpc
   ptx_dev
+  wasm_math
   win32_math
   x86
   x86_avx
@@ -301,7 +304,9 @@ set(HEADER_FILES
   CodeGen_Posix.h
   CodeGen_PowerPC.h
   CodeGen_PTX_Dev.h
+  CodeGen_RISCV.h
   CodeGen_Vulkan_Dev.h
+  CodeGen_WebAssembly.h
   CodeGen_X86.h
   ConciseCasts.h
   CPlusPlusMangle.h
@@ -421,6 +426,7 @@ set(HEADER_FILES
   Var.h
   VaryingAttributes.h
   VectorizeLoops.h
+  WasmExecutor.h
   WrapCalls.h
   WrapExternStages.h
 )
@@ -476,7 +482,9 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   CodeGen_Posix.cpp
   CodeGen_PowerPC.cpp
   CodeGen_PTX_Dev.cpp
+  CodeGen_RISCV.cpp
   CodeGen_Vulkan_Dev.cpp
+  CodeGen_WebAssembly.cpp
   CodeGen_X86.cpp
   CPlusPlusMangle.cpp
   CSE.cpp
@@ -602,6 +610,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Var.cpp
   VaryingAttributes.cpp
   VectorizeLoops.cpp
+  WasmExecutor.cpp
   WrapCalls.cpp
   WrapExternStages.cpp
   ${HEADER_FILES}
@@ -668,6 +677,11 @@ if (TARGET_POWERPC)
   list(APPEND LLVM_COMPONENTS PowerPC)
 endif()
 
+if (TARGET_WEBASSEMBLY)
+  target_compile_definitions(Halide PRIVATE "-DWITH_WEBASSEMBLY=1")
+  list(APPEND LLVM_COMPONENTS WebAssembly)
+endif()
+
 if (TARGET_PTX)
   target_compile_definitions(Halide PRIVATE "-DWITH_PTX=1")
   list(APPEND LLVM_COMPONENTS NVPTX)
@@ -678,7 +692,12 @@ if (TARGET_AMDGPU)
   list(APPEND LLVM_COMPONENTS AMDGPU)
 endif()
 
-if (TARGET_OPENCL)
+if (TARGET_RISCV)
+  target_compile_definitions(Halide PRIVATE "-DWITH_RISCV=1")
+  list(APPEND LLVM_COMPONENTS RISCV)
+endif()
+
+  if (TARGET_OPENCL)
   target_compile_definitions(Halide PRIVATE "-DWITH_OPENCL=1")
 endif()
 

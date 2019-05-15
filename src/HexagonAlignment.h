@@ -50,7 +50,7 @@ public:
         if (known_alignment) {
             *aligned_offset = op->alignment.remainder % native_lanes;
         }
-        return known_alignment;
+        return known_alignment && (*aligned_offset == 0);
     }
 
     bool is_aligned(const Load *op, int64_t *aligned_offset) {
