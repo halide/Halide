@@ -9,7 +9,7 @@
 #include "Error.h"
 #include "LLVM_Headers.h"
 #include "Util.h"
-#include "DeviceInterface.h"
+#include "WasmExecutor.h"
 
 #if defined(__powerpc__) && defined(__linux__)
 // This uses elf.h and must be included after "LLVM_Headers.h", which
@@ -271,6 +271,8 @@ const std::map<std::string, Target::OS> os_name_map = {
     {"ios", Target::IOS},
     {"qurt", Target::QuRT},
     {"noos", Target::NoOS},
+    {"fuchsia", Target::Fuchsia},
+    {"wasmrt", Target::WebAssemblyRuntime}
 };
 
 bool lookup_os(const std::string &tok, Target::OS &result) {
@@ -289,6 +291,7 @@ const std::map<std::string, Target::Arch> arch_name_map = {
     {"mips", Target::MIPS},
     {"powerpc", Target::POWERPC},
     {"hexagon", Target::Hexagon},
+    {"wasm", Target::WebAssembly},
     {"riscv", Target::RISCV},
 };
 
@@ -361,6 +364,8 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"embed_bitcode", Target::EmbedBitcode},
     {"disable_llvm_loop_vectorize", Target::DisableLLVMLoopVectorize},
     {"disable_llvm_loop_unroll", Target::DisableLLVMLoopUnroll},
+    {"wasm_simd128", Target::WasmSimd128},
+    {"wasm_signext", Target::WasmSignExt},
     // NOTE: When adding features to this map, be sure to update
     // PyEnums.cpp and halide.cmake as well.
 };
@@ -405,7 +410,7 @@ Target get_jit_target_from_environment() {
     } else {
         Target t(target);
         t.set_feature(Target::JIT);
-        user_assert(t.os == host.os && t.arch == host.arch && t.bits == host.bits)
+        user_assert((t.os == host.os && t.arch == host.arch && t.bits == host.bits) || Internal::WasmModule::can_jit_target(t))
             << "HL_JIT_TARGET must match the host OS, architecture, and bit width.\n"
             << "HL_JIT_TARGET was " << target << ". "
             << "Host is " << host.to_string() << ".\n";
@@ -617,6 +622,9 @@ bool Target::supported() const {
 #if !defined(WITH_HEXAGON)
     bad |= arch == Target::Hexagon;
 #endif
+#if !defined(WITH_WEBASSEMBLY)
+    bad |= arch == Target::WebAssembly;
+#endif
 #if !defined(WITH_RISCV)
     bad |= arch == Target::RISCV;
 #endif
@@ -634,6 +642,12 @@ bool Target::supported() const {
 #endif
 #if !defined(WITH_D3D12)
     bad |= has_feature(Target::D3D12Compute);
+#endif
+#if defined(WITH_WEBASSEMBLY) && LLVM_VERSION < 90
+    // LLVM8 supports wasm, but there are fixes and improvements
+    // in trunk that may not be in 8 (or that we haven't tested with),
+    // so, for now, declare that wasm with LLVM < 9.0 is unsupported.
+    bad = true;
 #endif
     return !bad;
 }
@@ -801,6 +815,18 @@ int Target::natural_vector_size(const Halide::Type &t) const {
             // SSE was all 128-bit. We ignore MMX.
             return 16 / data_size;
         }
+    } else if (arch == Target::WebAssembly) {
+        if (has_feature(Halide::Target::WasmSimd128)) {
+            if (t.bits() == 64) {
+                // int64 and float64 aren't supported in simd128.
+                return 1;
+            }
+            // 128-bit vectors for other types.
+            return 16 / data_size;
+        } else {
+            // No vectors, sorry.
+            return 1;
+        }
     } else {
         // Assume 128-bit vectors on other targets.
         return 16 / data_size;
@@ -812,7 +838,7 @@ bool Target::get_runtime_compatible_target(const Target& other, Target &result) 
     // (a) must be included if either target has the feature (union)
     // (b) must be included if both targets have the feature (intersection)
     // (c) must match across both targets; it is an error if one target has the feature and the other doesn't
-    const std::array<Feature, 15> union_features = {
+    const std::array<Feature, 15> union_features = {{
             // These are true union features.
             CUDA, OpenCL, OpenGL, OpenGLCompute, Metal, D3D12Compute, NoNEON,
 
@@ -820,15 +846,15 @@ bool Target::get_runtime_compatible_target(const Target& other, Target &result) 
             // we have to put their union in the result and then take a lower bound.
             CUDACapability30, CUDACapability32, CUDACapability35, CUDACapability50, CUDACapability61,
             HVX_v62, HVX_v65, HVX_v66
-    };
+    }};
 
-    const std::array<Feature, 12> intersection_features = {
+    const std::array<Feature, 12> intersection_features = {{
             SSE41, AVX, AVX2, FMA, FMA4, F16C, ARMv7s,VSX, AVX512, AVX512_KNL, AVX512_Skylake, AVX512_Cannonlake
-    };
+    }};
 
-    const std::array<Feature, 10> matching_features = {
+    const std::array<Feature, 10> matching_features = {{
             SoftFloatABI, Debug, TSAN, ASAN, MSAN, HVX_64, HVX_128, MinGW, HexagonDma, HVX_shared_object
-    };
+    }};
 
     // bitsets need to be the same width.
     decltype(result.features) union_mask;
@@ -848,12 +874,16 @@ bool Target::get_runtime_compatible_target(const Target& other, Target &result) 
     }
 
     if (arch != other.arch || bits != other.bits || os != other.os) {
-        user_warning << "runtime targets must agree on platform (arch-bits-os)\n";
+        Internal::debug(1) << "runtime targets must agree on platform (arch-bits-os)\n"
+                           << "  this:  " << *this << "\n"
+                           << "  other: " << other << "\n";
         return false;
     }
 
     if ((features & matching_mask) != (other.features & matching_mask)) {
-        user_warning << "runtime targets must agree on SoftFloatABI, Debug, TSAN, ASAN, MSAN, HVX_64, HVX_128, MinGW, HexagonDma, and HVX_shared_object\n";
+        Internal::debug(1) << "runtime targets must agree on SoftFloatABI, Debug, TSAN, ASAN, MSAN, HVX_64, HVX_128, MinGW, HexagonDma, and HVX_shared_object\n"
+                           << "  this:  " << *this << "\n"
+                           << "  other: " << other << "\n";
         return false;
     }
 
@@ -907,18 +937,18 @@ void target_test() {
 
     // 3 targets: {A,B,C}. Want gcd(A,B)=C
     std::vector<std::array<std::string, 3>> gcd_tests = {
-            {"x86-64-linux-sse41-fma", "x86-64-linux-sse41-fma", "x86-64-linux-sse41-fma"},
-            {"x86-64-linux-sse41-fma-no_asserts-no_runtime", "x86-64-linux-sse41-fma", "x86-64-linux-sse41-fma"},
-            {"x86-64-linux-avx2-sse41", "x86-64-linux-sse41-fma", "x86-64-linux-sse41"},
-            {"x86-64-linux-avx2-sse41", "x86-32-linux-sse41-fma", ""},
-            {"x86-64-linux-cuda", "x86-64-linux", "x86-64-linux-cuda"},
-            {"x86-64-linux-cuda-cuda_capability_50", "x86-64-linux-cuda", "x86-64-linux-cuda"},
-            {"x86-64-linux-cuda-cuda_capability_50", "x86-64-linux-cuda-cuda_capability_30", "x86-64-linux-cuda-cuda_capability_30"},
-            {"x86-64-linux-cuda", "x86-64-linux-opengl", "x86-64-linux-cuda-opengl"},
-            {"hexagon-32-qurt-hvx_v65", "hexagon-32-qurt-hvx_v62", "hexagon-32-qurt-hvx_v62"},
-            {"hexagon-32-qurt-hvx_v62", "hexagon-32-qurt", "hexagon-32-qurt"},
-            {"hexagon-32-qurt-hvx_v62-hvx_64", "hexagon-32-qurt", ""},
-            {"hexagon-32-qurt-hvx_v62-hvx_64", "hexagon-32-qurt-hvx_64", "hexagon-32-qurt-hvx_64"},
+            {{"x86-64-linux-sse41-fma", "x86-64-linux-sse41-fma", "x86-64-linux-sse41-fma"}},
+            {{"x86-64-linux-sse41-fma-no_asserts-no_runtime", "x86-64-linux-sse41-fma", "x86-64-linux-sse41-fma"}},
+            {{"x86-64-linux-avx2-sse41", "x86-64-linux-sse41-fma", "x86-64-linux-sse41"}},
+            {{"x86-64-linux-avx2-sse41", "x86-32-linux-sse41-fma", ""}},
+            {{"x86-64-linux-cuda", "x86-64-linux", "x86-64-linux-cuda"}},
+            {{"x86-64-linux-cuda-cuda_capability_50", "x86-64-linux-cuda", "x86-64-linux-cuda"}},
+            {{"x86-64-linux-cuda-cuda_capability_50", "x86-64-linux-cuda-cuda_capability_30", "x86-64-linux-cuda-cuda_capability_30"}},
+            {{"x86-64-linux-cuda", "x86-64-linux-opengl", "x86-64-linux-cuda-opengl"}},
+            {{"hexagon-32-qurt-hvx_v65", "hexagon-32-qurt-hvx_v62", "hexagon-32-qurt-hvx_v62"}},
+            {{"hexagon-32-qurt-hvx_v62", "hexagon-32-qurt", "hexagon-32-qurt"}},
+            {{"hexagon-32-qurt-hvx_v62-hvx_64", "hexagon-32-qurt", ""}},
+            {{"hexagon-32-qurt-hvx_v62-hvx_64", "hexagon-32-qurt-hvx_64", "hexagon-32-qurt-hvx_64"}},
     };
 
     for (const auto &test : gcd_tests) {

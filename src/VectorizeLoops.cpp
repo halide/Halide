@@ -158,6 +158,12 @@ Interval bounds_of_lanes(Expr e) {
         if (expr_uses_var(ib.max, let->name + ".max_lane")) {
             ib.max = Let::make(let->name + ".max_lane", ia.max, ib.max);
         }
+        if (expr_uses_var(ib.min, let->name)) {
+            ib.min = Let::make(let->name, let->value, ib.min);
+        }
+        if (expr_uses_var(ib.max, let->name)) {
+            ib.max = Let::make(let->name, let->value, ib.max);
+        }
         return ib;
     }
 

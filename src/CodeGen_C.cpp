@@ -70,6 +70,7 @@ inline float cos_f32(float x) {return cosf(x);}
 inline float acos_f32(float x) {return acosf(x);}
 inline float tan_f32(float x) {return tanf(x);}
 inline float atan_f32(float x) {return atanf(x);}
+inline float atan2_f32(float x, float y) {return atan2f(x, y);}
 inline float sinh_f32(float x) {return sinhf(x);}
 inline float cosh_f32(float x) {return coshf(x);}
 inline float tanh_f32(float x) {return tanhf(x);}
@@ -88,6 +89,7 @@ inline double cos_f64(double x) {return cos(x);}
 inline double acos_f64(double x) {return acos(x);}
 inline double tan_f64(double x) {return tan(x);}
 inline double atan_f64(double x) {return atan(x);}
+inline double atan2_f64(double x, double y) {return atan2(x, y);}
 inline double sinh_f64(double x) {return sinh(x);}
 inline double cosh_f64(double x) {return cosh(x);}
 inline double tanh_f64(double x) {return tanh(x);}
@@ -197,29 +199,48 @@ public:
 }  // namespace
 
 class TypeInfoGatherer : public IRGraphVisitor {
-public:
-    std::set<ForType> for_types_used;
-    std::set<Type> vector_types_used;
-
+private:
     using IRGraphVisitor::include;
     using IRGraphVisitor::visit;
 
-    void include(const Expr &e) override {
-        if (e.type().is_vector()) {
-            if (e.type().is_bool()) {
+    void include_type(const Type &t) {
+        if (t.is_vector()) {
+            if (t.is_bool()) {
                 // bool vectors are always emitted as uint8 in the C++ backend
                 // TODO: on some architectures, we could do better by choosing
                 // a bitwidth that matches the other vectors in use; EliminateBoolVectors
                 // could be used for this with a bit of work.
-                vector_types_used.insert(UInt(8).with_lanes(e.type().lanes()));
-            } else if (!e.type().is_handle()) {
+                vector_types_used.insert(UInt(8).with_lanes(t.lanes()));
+            } else if (!t.is_handle()) {
                 // Vector-handle types can be seen when processing (e.g.)
                 // require() statements that are vectorized, but they
                 // will all be scalarized away prior to use, so don't emit
                 // them.
-                vector_types_used.insert(e.type());
+                vector_types_used.insert(t);
+                if (t.is_int()) {
+                    // If we are including an int-vector type, also include
+                    // the same-width uint-vector type; there are various operations
+                    // that can use uint vectors for intermediate results (e.g. lerp(),
+                    // but also Mod, which can generate a call to abs() for int types,
+                    // which always produces uint results for int inputs in Halide);
+                    // it's easier to just err on the side of extra vectors we don't
+                    // use since they are just type declarations.
+                    vector_types_used.insert(t.with_code(halide_type_uint));
+                }
             }
         }
+    }
+
+    void include_lerp_types(const Type &t) {
+        if (t.is_vector() && t.is_int_or_uint() && (t.bits() >= 8 && t.bits() <= 32)) {
+            Type doubled = t.with_bits(t.bits() * 2);
+            include_type(doubled);
+        }
+    }
+
+protected:
+    void include(const Expr &e) override {
+        include_type(e.type());
         IRGraphVisitor::include(e);
     }
 
@@ -234,6 +255,40 @@ public:
         for_types_used.insert(op->for_type);
         IRGraphVisitor::visit(op);
     }
+
+    void visit(const Ramp *op) override {
+        include_type(op->type.with_lanes(op->lanes));
+        IRGraphVisitor::visit(op);
+    }
+
+    void visit(const Broadcast *op) override {
+        include_type(op->type.with_lanes(op->lanes));
+        IRGraphVisitor::visit(op);
+    }
+
+    void visit(const Cast *op) override {
+        include_type(op->type);
+        IRGraphVisitor::visit(op);
+    }
+
+    void visit(const Call *op) override {
+        include_type(op->type);
+        if (op->is_intrinsic(Call::lerp)) {
+            // lower_lerp() can synthesize wider vector types.
+            for (auto &a : op->args) {
+                include_lerp_types(a.type());
+            }
+        } else if (op->is_intrinsic(Call::absd)) {
+            // absd() can synthesize a new type
+            include_type(op->type.with_code(op->type.is_int() ? Type::UInt : op->type.code()));
+        }
+
+        IRGraphVisitor::visit(op);
+    }
+
+public:
+    std::set<ForType> for_types_used;
+    std::set<Type> vector_types_used;
 };
 
 CodeGen_C::CodeGen_C(ostream &s, Target t, OutputKind output_kind, const std::string &guard) :
@@ -575,6 +630,13 @@ public:
         }
         return r;
     }
+    Vec operator!() const {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = !r.elements[i];
+        }
+        return r;
+    }
 
     friend Vec operator+(const Vec &a, const Vec &b) {
         Vec r(empty);
@@ -636,6 +698,21 @@ public:
         Vec r(empty);
         for (size_t i = 0; i < Lanes; i++) {
             r.elements[i] = a[i] | b[i];
+        }
+        return r;
+    }
+
+    friend Vec operator&&(const Vec &a, const Vec &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = a[i] && b[i];
+        }
+        return r;
+    }
+    friend Vec operator||(const Vec &a, const Vec &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = a[i] || b[i];
         }
         return r;
     }
@@ -703,6 +780,20 @@ public:
         }
         return r;
     }
+    friend Vec operator&&(const Vec &a, const ElementType &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = a[i] && b;
+        }
+        return r;
+    }
+    friend Vec operator||(const Vec &a, const ElementType &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = a[i] || b;
+        }
+        return r;
+    }
 
     friend Vec operator+(const ElementType &a, const Vec &b) {
         Vec r(empty);
@@ -764,6 +855,20 @@ public:
         Vec r(empty);
         for (size_t i = 0; i < Lanes; i++) {
             r.elements[i] = a | b[i];
+        }
+        return r;
+    }
+    friend Vec operator&&(const ElementType &a, const Vec &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = a && b[i];
+        }
+        return r;
+    }
+    friend Vec operator||(const ElementType &a, const Vec &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = a || b[i];
         }
         return r;
     }
@@ -911,7 +1016,11 @@ public:
     // TODO: could this be improved by taking advantage of native operator support?
     static Vec load(const void *base, int32_t offset) {
         Vec r(empty);
-        memcpy(&r.native_vector, ((const ElementType*)base + offset), sizeof(NativeVectorType));
+        // Note: do not use sizeof(NativeVectorType) here; if it's an unusual type
+        // (e.g. uint8x48, which could be produced by concat()), the actual implementation
+        // might be larger (e.g. it might really be a uint8x64). Only copy the amount
+        // that is in the logical type, to avoid possible overreads.
+        memcpy(&r.native_vector, ((const ElementType*)base + offset), sizeof(ElementType) * Lanes);
         return r;
     }
 
@@ -927,7 +1036,11 @@ public:
 
     // TODO: could this be improved by taking advantage of native operator support?
     void store(void *base, int32_t offset) const {
-        memcpy(((ElementType*)base + offset), &native_vector, sizeof(NativeVectorType));
+        // Note: do not use sizeof(NativeVectorType) here; if it's an unusual type
+        // (e.g. uint8x48, which could be produced by concat()), the actual implementation
+        // might be larger (e.g. it might really be a uint8x64). Only copy the amount
+        // that is in the logical type, to avoid possible overwrites.
+        memcpy(((ElementType*)base + offset), &native_vector, sizeof(ElementType) * Lanes);
     }
 
     // scatter
@@ -974,6 +1087,13 @@ public:
     Vec operator~() const {
         return Vec(from_native_vector, ~native_vector);
     }
+    Vec operator!() const {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = !(*this)[i];
+        }
+        return r;
+    }
 
     friend Vec operator+(const Vec &a, const Vec &b) {
         return Vec(from_native_vector, a.native_vector + b.native_vector);
@@ -1001,6 +1121,20 @@ public:
     }
     friend Vec operator|(const Vec &a, const Vec &b) {
         return Vec(from_native_vector, a.native_vector | b.native_vector);
+    }
+    friend Vec operator&&(const Vec &a, const Vec &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = a.native_vector[i] && b.native_vector[i];
+        }
+        return r;
+    }
+    friend Vec operator||(const Vec &a, const Vec &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = a.native_vector[i] || b.native_vector[i];
+        }
+        return r;
     }
 
     friend Vec operator+(const Vec &a, const ElementType &b) {
@@ -1030,6 +1164,20 @@ public:
     friend Vec operator|(const Vec &a, const ElementType &b) {
         return Vec(from_native_vector, a.native_vector | b);
     }
+    friend Vec operator&&(const Vec &a, const ElementType &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = a.native_vector[i] && b;
+        }
+        return r;
+    }
+    friend Vec operator||(const Vec &a, const ElementType &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = a.native_vector[i] || b;
+        }
+        return r;
+    }
 
     friend Vec operator+(const ElementType &a, const Vec &b) {
         return Vec(from_native_vector, a + b.native_vector);
@@ -1057,6 +1205,20 @@ public:
     }
     friend Vec operator|(const ElementType &a, const Vec &b) {
         return Vec(from_native_vector, a | b.native_vector);
+    }
+    friend Vec operator&&(const ElementType &a, const Vec &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = a && b.native_vector[i];
+        }
+        return r;
+    }
+    friend Vec operator||(const ElementType &a, const Vec &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = a || b.native_vector[i];
+        }
+        return r;
     }
 
     // TODO: this should be improved by taking advantage of native operator support.
@@ -1805,6 +1967,12 @@ void CodeGen_C::visit(const Mod *op) {
         visit_binop(op->type, op->a, make_const(op->a.type(), (1 << bits)-1), "&");
     } else if (op->type.is_int()) {
         print_expr(lower_euclidean_mod(op->a, op->b));
+    } else if (op->type.is_float()) {
+        string arg0 = print_expr(op->a);
+        string arg1 = print_expr(op->b);
+        ostringstream rhs;
+        rhs << "fmod(" << arg0 << ", " << arg1 << ")";
+        print_assignment(op->type, rhs.str());
     } else {
         visit_binop(op->type, op->a, op->b, "%");
     }

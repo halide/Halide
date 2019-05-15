@@ -905,25 +905,12 @@ extern void halide_memoization_cache_release(void *user_context, void *host);
  */
 extern void halide_memoization_cache_cleanup();
 
-/** Create a unique file with a name of the form prefixXXXXXsuffix in an arbitrary
- * (but writable) directory; this is typically $TMP or /tmp, but the specific
- * location is not guaranteed. (Note that the exact form of the file name
- * may vary; in particular, the suffix may be ignored on non-Posix systems.)
- * The file is created (but not opened), thus this can be called from
- * different threads (or processes, e.g. when building with parallel make)
- * without risking collision. Note that the caller is always responsible
- * for deleting this file. Returns nonzero value if an error occurs.
- */
-extern int halide_create_temp_file(void *user_context,
-  const char *prefix, const char *suffix,
-  char *path_buf, size_t path_buf_size);
-
 /** Annotate that a given range of memory has been initialized;
  * only used when Target::MSAN is enabled.
  *
  * The default implementation uses the LLVM-provided AnnotateMemoryIsInitialized() function.
  */
-extern void halide_msan_annotate_memory_is_initialized(void *user_context, const void *ptr, uint64_t len);
+extern int halide_msan_annotate_memory_is_initialized(void *user_context, const void *ptr, uint64_t len);
 
 /** Mark the data pointed to by the buffer_t as initialized (but *not* the buffer_t itself),
  * using halide_msan_annotate_memory_is_initialized() for marking.
@@ -934,7 +921,7 @@ extern void halide_msan_annotate_memory_is_initialized(void *user_context, const
  *
  * Most client code should never need to replace the default implementation.
  */
-extern void halide_msan_annotate_buffer_is_initialized(void *user_context, struct halide_buffer_t *buffer);
+extern int halide_msan_annotate_buffer_is_initialized(void *user_context, struct halide_buffer_t *buffer);
 extern void halide_msan_annotate_buffer_is_initialized_as_destructor(void *user_context, void *buffer);
 
 /** The error codes that may be returned by a Halide pipeline. */
@@ -1282,6 +1269,9 @@ typedef enum halide_target_feature_t {
     halide_target_feature_embed_bitcode,  ///< Emulate clang -fembed-bitcode flag.
     halide_target_feature_disable_llvm_loop_vectorize,  ///< Disable loop vectorization in LLVM. (Ignored for non-LLVM targets.)
     halide_target_feature_disable_llvm_loop_unroll,  ///< Disable loop unrolling in LLVM. (Ignored for non-LLVM targets.)
+    halide_target_feature_wasm_simd128,  ///< Enable +simd128 instructions for WebAssembly codegen.
+    halide_target_feature_wasm_signext,  ///< Enable +sign-ext instructions for WebAssembly codegen.
+
     halide_target_feature_end ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 

@@ -409,15 +409,9 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     // Output string stream
 
     // Ask the target to add backend passes as necessary.
-#if LLVM_VERSION >= 70
     bool fail = target_machine->addPassesToEmitFile(module_pass_manager, ostream, nullptr,
                                                     TargetMachine::CGFT_AssemblyFile,
                                                     true);
-#else
-    bool fail = target_machine->addPassesToEmitFile(module_pass_manager, ostream,
-                                                    TargetMachine::CGFT_AssemblyFile,
-                                                    true);
-#endif
     if (fail) {
         internal_error << "Failed to set up passes to emit PTX source\n";
     }

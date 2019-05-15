@@ -54,7 +54,7 @@ protected:
             intrin64("llvm.aarch64.neon." + i64),
             intrin_lanes(l), pattern(p), type(t) {}
     };
-    std::vector<Pattern> casts, left_shifts, averagings, negations;
+    std::vector<Pattern> casts, averagings, negations, multiplies;
 
     // Call an intrinsic as defined by a pattern. Dispatches to the
     // 32- or 64-bit name depending on the target's bit width.

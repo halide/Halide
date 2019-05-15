@@ -416,7 +416,7 @@ Expr CodeGen_X86::mulhi_shr(Expr a, Expr b, int shr) {
             p = i16(i32(a) * i32(b) / 65536);
         }
         if (shr) {
-            p = p >> shr;
+            p = p >> make_const(p.type(), shr);
         }
         return p;
     }

@@ -17,6 +17,11 @@ void my_free(void *user_context, void *ptr) {
 }
 
 int main(int argc, char **argv) {
+    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
+        printf("Skipping test for WebAssembly as the wasm JIT cannot support set_custom_allocator().\n");
+        return 0;
+    }
+
     // Make a long producer-consumer chain with intermediates
     // allocated on pseudostack. It should simplify down to two
     // allocations.

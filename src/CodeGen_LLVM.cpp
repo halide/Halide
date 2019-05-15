@@ -13,6 +13,7 @@
 #include "CodeGen_MIPS.h"
 #include "CodeGen_PowerPC.h"
 #include "CodeGen_RISCV.h"
+#include "CodeGen_WebAssembly.h"
 #include "CodeGen_X86.h"
 #include "Debug.h"
 #include "Deinterleave.h"
@@ -25,6 +26,7 @@
 #include "LLVM_Runtime_Linker.h"
 #include "Lerp.h"
 #include "MatlabWrapper.h"
+#include "Pipeline.h"
 #include "Simplify.h"
 #include "Util.h"
 
@@ -139,6 +141,12 @@ using std::vector;
 #define InitializeX86AsmPrinter()   InitializeAsmPrinter(X86)
 #endif
 
+#ifdef WITH_WEBASSEMBLY
+#define InitializeWebAssemblyTarget()       InitializeTarget(WebAssembly)
+#define InitializeWebAssemblyAsmParser()    InitializeAsmParser(WebAssembly)
+#define InitializeWebAssemblyAsmPrinter()   InitializeAsmPrinter(WebAssembly)
+#endif
+
 namespace {
 
 // Get the LLVM linkage corresponding to a Halide linkage type.
@@ -160,7 +168,6 @@ llvm::GlobalValue::LinkageTypes llvm_linkage(LinkageType t) {
 }
 
 CodeGen_LLVM::CodeGen_LLVM(Target t) :
-    input_module(nullptr),
     function(nullptr), context(nullptr),
     builder(nullptr),
     value(nullptr),
@@ -317,12 +324,16 @@ CodeGen_LLVM *CodeGen_LLVM::new_for_target(const Target &target,
             return make_codegen<CodeGen_GPU_Host<CodeGen_PowerPC>>(target, context);
         }
 #endif
+#ifdef WITH_WEBASSEMBLY
+        if (target.arch == Target::WebAssembly) {
+            return make_codegen<CodeGen_GPU_Host<CodeGen_WebAssembly>>(target, context);
+        }
+#endif
 #ifdef WITH_RISCV
         if (target.arch == Target::RISCV) {
             return make_codegen<CodeGen_GPU_Host<CodeGen_RISCV>>(target, context);
         }
 #endif
-
         user_error << "Invalid target architecture for GPU backend: "
                    << target.to_string() << "\n";
         return nullptr;
@@ -337,6 +348,8 @@ CodeGen_LLVM *CodeGen_LLVM::new_for_target(const Target &target,
         return make_codegen<CodeGen_PowerPC>(target, context);
     } else if (target.arch == Target::Hexagon) {
         return make_codegen<CodeGen_Hexagon>(target, context);
+    } else if (target.arch == Target::WebAssembly) {
+        return make_codegen<CodeGen_WebAssembly>(target, context);
     } else if (target.arch == Target::RISCV) {
         return make_codegen<CodeGen_RISCV>(target, context);
     }
@@ -347,13 +360,8 @@ CodeGen_LLVM *CodeGen_LLVM::new_for_target(const Target &target,
 }
 
 void CodeGen_LLVM::initialize_llvm() {
-    static std::mutex initialize_llvm_mutex;
-    std::lock_guard<std::mutex> lock(initialize_llvm_mutex);
-
-    // Initialize the targets we want to generate code for which are enabled
-    // in llvm configuration
-    if (!llvm_initialized) {
-
+    static std::once_flag init_llvm_once;
+    std::call_once(init_llvm_once, []() {
         // You can hack in command-line args to llvm with the
         // environment variable HL_LLVM_ARGS, e.g. HL_LLVM_ARGS="-print-after-all"
         std::string args = get_env_variable("HL_LLVM_ARGS");
@@ -385,9 +393,7 @@ void CodeGen_LLVM::initialize_llvm() {
             Initialize##target##AsmPrinter();
         #include <llvm/Config/AsmPrinters.def>
         #undef LLVM_ASM_PRINTER
-
-        llvm_initialized = true;
-    }
+    });
 }
 
 void CodeGen_LLVM::init_context() {
@@ -462,7 +468,6 @@ CodeGen_LLVM::~CodeGen_LLVM() {
     delete builder;
 }
 
-bool CodeGen_LLVM::llvm_initialized = false;
 bool CodeGen_LLVM::llvm_X86_enabled = false;
 bool CodeGen_LLVM::llvm_ARM_enabled = false;
 bool CodeGen_LLVM::llvm_Hexagon_enabled = false;
@@ -471,6 +476,7 @@ bool CodeGen_LLVM::llvm_NVPTX_enabled = false;
 bool CodeGen_LLVM::llvm_Mips_enabled = false;
 bool CodeGen_LLVM::llvm_PowerPC_enabled = false;
 bool CodeGen_LLVM::llvm_AMDGPU_enabled = false;
+bool CodeGen_LLVM::llvm_WebAssembly_enabled = false;
 bool CodeGen_LLVM::llvm_RISCV_enabled = false;
 
 namespace {
@@ -523,23 +529,57 @@ MangledNames get_mangled_names(const LoweredFunc &f, const Target &target) {
 
 }  // namespace
 
-std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
-    input_module = &input;
+llvm::FunctionType *CodeGen_LLVM::signature_to_type(const ExternSignature &signature) {
+    internal_assert(void_t != nullptr && buffer_t_type != nullptr);
+    llvm::Type *ret_type = signature.is_void_return()
+        ? void_t
+        : llvm_type_of(signature.ret_type());
+    std::vector<llvm::Type *> llvm_arg_types;
+    for (const Type &t : signature.arg_types()) {
+        if (t == type_of<struct halide_buffer_t *>()) {
+            llvm_arg_types.push_back(buffer_t_type->getPointerTo());
+        } else {
+            llvm_arg_types.push_back(llvm_type_of(t));
+        }
+    }
 
+    return llvm::FunctionType::get(ret_type, llvm_arg_types, false);
+}
+
+/*static*/
+std::unique_ptr<llvm::Module> CodeGen_LLVM::compile_trampolines(
+        const Target &target,
+        llvm::LLVMContext &context,
+        const std::string &suffix,
+        const std::vector<std::pair<std::string, ExternSignature>> &externs) {
+    std::unique_ptr<CodeGen_LLVM> codegen(new_for_target(target, context));
+    codegen->init_codegen("trampolines" + suffix);
+    for (const std::pair<std::string, ExternSignature> &e : externs) {
+        const std::string &callee_name = e.first;
+        const std::string wrapper_name = callee_name + suffix;
+        llvm::FunctionType *fn_type = codegen->signature_to_type(e.second);
+        llvm::Function *callee = llvm::Function::Create(fn_type,
+            llvm::Function::ExternalLinkage, callee_name, codegen->module.get());
+        codegen->add_argv_wrapper(callee, wrapper_name, /*result_in_argv*/ true);
+    }
+    return codegen->finish_codegen();
+}
+
+void CodeGen_LLVM::init_codegen(const std::string &name, bool any_strict_float) {
     init_module();
+
+    internal_assert(module && context);
 
     debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
 
-    module->setModuleIdentifier(input.name());
+    module->setModuleIdentifier(name);
 
     // Add some target specific info to the module as metadata.
     module->addModuleFlag(llvm::Module::Warning, "halide_use_soft_float_abi", use_soft_float_abi() ? 1 : 0);
     module->addModuleFlag(llvm::Module::Warning, "halide_mcpu", MDString::get(*context, mcpu()));
     module->addModuleFlag(llvm::Module::Warning, "halide_mattrs", MDString::get(*context, mattrs()));
-    module->addModuleFlag(llvm::Module::Warning, "halide_per_instruction_fast_math_flags", input.any_strict_float());
-
-    internal_assert(module && context && builder)
-        << "The CodeGen_LLVM subclass should have made an initial module before calling CodeGen_LLVM::compile\n";
+    module->addModuleFlag(llvm::Module::Warning, "halide_use_pic", use_pic() ? 1 : 0);
+    module->addModuleFlag(llvm::Module::Warning, "halide_per_instruction_fast_math_flags", any_strict_float);
 
     // Ensure some types we need are defined
     buffer_t_type = module->getTypeByName("struct.halide_buffer_t");
@@ -574,6 +614,13 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
 
     parallel_task_t_type = module->getTypeByName("struct.halide_parallel_task_t");
     internal_assert(parallel_task_t_type) << "Did not find halide_parallel_task_t in initial module";
+}
+
+std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
+    init_codegen(input.name(), input.any_strict_float());
+
+    internal_assert(module && context && builder)
+        << "The CodeGen_LLVM subclass should have made an initial module before calling CodeGen_LLVM::compile\n";
 
     add_external_code(input);
 
@@ -590,7 +637,7 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
         // If the Func is externally visible, also create the argv wrapper and metadata.
         // (useful for calling from JIT and other machine interfaces).
         if (f.linkage == LinkageType::ExternalPlusMetadata) {
-            llvm::Function *wrapper = add_argv_wrapper(names.argv_name);
+            llvm::Function *wrapper = add_argv_wrapper(function, names.argv_name);
             llvm::Function *metadata_getter = embed_metadata_getter(names.metadata_name,
                 names.simple_name, f.args, input.get_metadata_name_map());
 
@@ -602,6 +649,10 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
 
     debug(2) << module.get() << "\n";
 
+    return finish_codegen();
+}
+
+std::unique_ptr<llvm::Module> CodeGen_LLVM::finish_codegen() {
     // Verify the module is ok
     internal_assert(!verifyModule(*module, &llvm::errs()));
     debug(2) << "Done generating llvm bitcode\n";
@@ -613,8 +664,6 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
         std::string halide_command = "halide target=" + target.to_string();
         embed_bitcode(module.get(), halide_command);
     }
-
-    input_module = nullptr;
 
     // Disown the module and return it.
     return std::move(module);
@@ -968,18 +1017,25 @@ Constant* CodeGen_LLVM::embed_constant_expr(Expr e, llvm::Type *t) {
 
 // Make a wrapper to call the function with an array of pointer
 // args. This is easier for the JIT to call than a function with an
-// unknown (at compile time) argument list.
-llvm::Function *CodeGen_LLVM::add_argv_wrapper(const std::string &name) {
-    llvm::Type *args_t[] = {i8_t->getPointerTo()->getPointerTo()};
-    llvm::FunctionType *func_t = llvm::FunctionType::get(i32_t, args_t, false);
-    llvm::Function *wrapper = llvm::Function::Create(func_t, llvm::GlobalValue::ExternalLinkage, name, module.get());
-    llvm::BasicBlock *block = llvm::BasicBlock::Create(module->getContext(), "entry", wrapper);
-    builder->SetInsertPoint(block);
+// unknown (at compile time) argument list. If result_in_argv is false,
+// the internal function result is returned as the wrapper function
+// result; if result_in_argv is true, the internal function result
+// is stored as the last item in the argv list (which must be one
+// longer than the number of arguments), and the wrapper's actual
+// return type is always 'void'.
+llvm::Function *CodeGen_LLVM::add_argv_wrapper(llvm::Function *fn,
+                                               const std::string &name,
+                                               bool result_in_argv) {
+    llvm::Type *wrapper_result_type = result_in_argv ? void_t : i32_t;
+    llvm::Type *wrapper_args_t[] = {i8_t->getPointerTo()->getPointerTo()};
+    llvm::FunctionType *wrapper_func_t = llvm::FunctionType::get(wrapper_result_type, wrapper_args_t, false);
+    llvm::Function *wrapper_func = llvm::Function::Create(wrapper_func_t, llvm::GlobalValue::ExternalLinkage, name, module.get());
+    llvm::BasicBlock *wrapper_block = llvm::BasicBlock::Create(module->getContext(), "entry", wrapper_func);
+    builder->SetInsertPoint(wrapper_block);
 
-    llvm::Value *arg_array = iterator_to_pointer(wrapper->arg_begin());
-
+    llvm::Value *arg_array = iterator_to_pointer(wrapper_func->arg_begin());
     std::vector<llvm::Value *> wrapper_args;
-    for (llvm::Function::arg_iterator i = function->arg_begin(); i != function->arg_end(); i++) {
+    for (llvm::Function::arg_iterator i = fn->arg_begin(); i != fn->arg_end(); i++) {
         // Get the address of the nth argument
         llvm::Value *ptr = builder->CreateConstGEP1_32(arg_array, wrapper_args.size());
         ptr = builder->CreateLoad(ptr);
@@ -993,12 +1049,27 @@ llvm::Function *CodeGen_LLVM::add_argv_wrapper(const std::string &name) {
         }
     }
     debug(4) << "Creating call from wrapper to actual function\n";
-    llvm::CallInst *result = builder->CreateCall(function, wrapper_args);
+    llvm::CallInst *result = builder->CreateCall(fn, wrapper_args);
     // This call should never inline
     result->setIsNoInline();
-    builder->CreateRet(result);
-    internal_assert(!verifyFunction(*wrapper, &llvm::errs()));
-    return wrapper;
+
+    if (result_in_argv) {
+        llvm::Value *result_in_argv_ptr = builder->CreateConstGEP1_32(arg_array, wrapper_args.size());
+        if (fn->getReturnType() != void_t) {
+            result_in_argv_ptr = builder->CreateLoad(result_in_argv_ptr);
+            // Cast to the appropriate type and store
+            result_in_argv_ptr = builder->CreatePointerCast(result_in_argv_ptr, fn->getReturnType()->getPointerTo());
+            builder->CreateStore(result, result_in_argv_ptr);
+        }
+        builder->CreateRetVoid();
+    } else {
+        // We could probably support other types as return values,
+        // but int32 results are all that have actually been tested.
+        internal_assert(fn->getReturnType() == i32_t);
+        builder->CreateRet(result);
+    }
+    internal_assert(!verifyFunction(*wrapper_func, &llvm::errs()));
+    return wrapper_func;
 }
 
 llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_name,
@@ -1153,6 +1224,14 @@ void CodeGen_LLVM::optimize_module() {
     b.LoopVectorize = !get_target().has_feature(Target::DisableLLVMLoopVectorize);
     b.DisableUnrollLoops = get_target().has_feature(Target::DisableLLVMLoopUnroll);
     b.SLPVectorize = true;  // Note: SLP vectorization has no analogue in the Halide scheduling model
+#if LLVM_VERSION >= 90
+    // Clear ScEv info for all loops. Certain Halide applications spend a very
+    // long time compiling in forgetLoop, and prefer to forget everything
+    // and rebuild SCEV (aka "Scalar Evolution") from scratch.
+    // Sample difference in compile time reduction at the time of this change was
+    // 21.04 -> 14.78 using current ToT release build. (See also https://reviews.llvm.org/rL358304)
+    b.ForgetAllSCEVInLoopUnroll = true;
+#endif
 
     if (TM) {
         TM->adjustPassManager(b);
@@ -1383,7 +1462,7 @@ Expr CodeGen_LLVM::mulhi_shr(Expr a, Expr b, int shr) {
     Type wide_ty = ty.with_bits(ty.bits() * 2);
 
     Expr p_wide = cast(wide_ty, a) * cast(wide_ty, b);
-    return cast(ty, p_wide >> (shr + ty.bits()));
+    return cast(ty, p_wide >> make_const(p_wide.type(), (shr + ty.bits())));
 }
 
 Expr CodeGen_LLVM::sorted_avg(Expr a, Expr b) {
@@ -1410,7 +1489,7 @@ void CodeGen_LLVM::visit(const Div *op) {
         value = builder->CreateFDiv(a, b);
     } else if (is_const_power_of_two_integer(op->b, &shift_amount) &&
                (op->type.is_int() || op->type.is_uint())) {
-        value = codegen(op->a >> shift_amount);
+        value = codegen(op->a >> make_const(op->a.type(), shift_amount));
     } else if (const_int_divisor &&
                op->type.is_int() &&
                (op->type.bits() == 8 || op->type.bits() == 16 || op->type.bits() == 32) &&
@@ -1432,11 +1511,11 @@ void CodeGen_LLVM::visit(const Div *op) {
         Expr num = op->a;
 
         // Make an all-ones mask if the numerator is negative
-        Expr sign = num >> make_const(op->type, op->type.bits() - 1);
+        Expr sign = num >> make_const(num.type(), op->type.bits() - 1);
 
         // Flip the numerator bits if the mask is high.
         num = cast(num.type().with_code(Type::UInt), num);
-        num = num ^ sign;
+        num = num ^ cast(num.type(), sign);
 
         // Multiply and keep the high half of the
         // result, and then apply the shift.
@@ -1444,7 +1523,7 @@ void CodeGen_LLVM::visit(const Div *op) {
         num = mulhi_shr(num, mult, shift);
 
         // Maybe flip the bits back again.
-        num = num ^ sign;
+        num = cast(op->type, num ^ cast(num.type(), sign));
 
         value = codegen(num);
 
@@ -2334,18 +2413,21 @@ void CodeGen_LLVM::visit(const Call *op) {
             }
 
         } else {
-            Value *a = codegen(op->args[0]);
-            value = builder->CreateBitCast(a, llvm_dst);
+            value = builder->CreateBitCast(value, llvm_dst);
         }
     } else if (op->is_intrinsic(Call::shift_left)) {
         internal_assert(op->args.size() == 2);
+        internal_assert(op->args[0].type().bits() == op->args[1].type().bits());
         Value *a = codegen(op->args[0]);
         Value *b = codegen(op->args[1]);
+        internal_assert(a->getType() == b->getType()) << "LLVM type mismatch on (" << op->args[0] << ") << (" << op->args[1] << ").\n";
         value = builder->CreateShl(a, b);
     } else if (op->is_intrinsic(Call::shift_right)) {
         internal_assert(op->args.size() == 2);
+        internal_assert(op->args[0].type().bits() == op->args[1].type().bits());
         Value *a = codegen(op->args[0]);
         Value *b = codegen(op->args[1]);
+        internal_assert(a->getType() == b->getType()) << "LLVM type mismatch on (" << op->args[0] << ") >> (" << op->args[1] << ").\n";
         if (op->type.is_int()) {
             value = builder->CreateAShr(a, b);
         } else {
@@ -4089,6 +4171,10 @@ std::pair<llvm::Function *, int> CodeGen_LLVM::find_vector_runtime_function(cons
     }
 
     return { nullptr, 0 };
+}
+
+bool CodeGen_LLVM::use_pic() const {
+    return true;
 }
 
 }  // namespace Internal

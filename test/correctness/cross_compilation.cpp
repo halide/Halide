@@ -16,27 +16,26 @@ int main(int argc, char **argv) {
     f(x) = x;
 
     std::string targets[] = {
-        "arm-32-linux",
-        "arm-64-linux",
-
-//        "arm-64-android",
         "arm-32-android",
         "arm-32-ios",
-        // "x86-64-linux",
-        // "x86-32-linux",
-        "x86-64-osx",
+        "arm-32-linux",
+        "arm-64-android",
+        "arm-64-ios",
+        "arm-64-linux",
+        "x86-32-linux",
         "x86-32-osx",
-        // "x86-64-windows",
-        // "x86-32-windows",
-//        "arm-64-ios",
-        // "mips-32-android"
+        "x86-32-windows",
+        "x86-64-linux",
+        "x86-64-osx",
+        "x86-64-windows",
+        "wasm-32-wasmrt",
     };
 
     for (const std::string &t : targets) {
         Target target(t);
         if (!target.supported()) continue;
 
-std::cerr << "Test generating: "<<target<<"\n";
+        std::cout << "Test generating: "<<target<<"\n";
         std::string object_name = Internal::get_test_tmp_dir() + "test_object_" + t;
         std::string lib_name = Internal::get_test_tmp_dir() + "test_lib_" + t;
         if (target.os == Target::Windows && !target.has_feature(Target::MinGW)) {

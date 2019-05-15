@@ -149,8 +149,8 @@ class DetermineAllocStride : public IRVisitor {
         } else if (const Variable *var = e.as<Variable>()) {
             if (var->name == lane_var) {
                 return 1;
-            } else if (dependent_vars.contains(lane_var)) {
-                return dependent_vars.get(lane_var);
+            } else if (dependent_vars.contains(var->name)) {
+                return dependent_vars.get(var->name);
             } else {
                 return 0;
             }
@@ -180,7 +180,10 @@ class DetermineAllocStride : public IRVisitor {
         } else if (const Let *let = e.as<Let>()) {
             ScopedBinding<Expr> bind(dependent_vars, let->name, warp_stride(let->value));
             return warp_stride(let->body);
+        } else if (!expr_uses_vars(e, dependent_vars)) {
+            return 0;
         }
+
         return Expr();
     }
 
@@ -290,6 +293,10 @@ public:
         vector<Expr> bad;
         for (Expr e : stores) {
             Expr s = warp_stride(e);
+            if (s.defined()) {
+                // Constant-fold
+                s = simplify(s);
+            }
             if (!stride.defined()) {
                 stride = s;
             }

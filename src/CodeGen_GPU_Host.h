@@ -11,6 +11,7 @@
 #include "CodeGen_MIPS.h"
 #include "CodeGen_PowerPC.h"
 #include "CodeGen_RISCV.h"
+#include "CodeGen_WebAssembly.h"
 #include "CodeGen_X86.h"
 
 #include "IR.h"
