@@ -238,7 +238,7 @@ Expr lower_int_uint_div(Expr a, Expr b) {
     int shift_amount;
     if (is_const_power_of_two_integer(b, &shift_amount) &&
         (t.is_int() || t.is_uint())) {
-        return a >> shift_amount;
+        return a >> make_const(a.type(), shift_amount);
     } else if (const_int_divisor &&
                t.is_int() &&
                (t.bits() == 8 || t.bits() == 16 || t.bits() == 32) &&
@@ -260,10 +260,11 @@ Expr lower_int_uint_div(Expr a, Expr b) {
         Expr num = a;
 
         // Make an all-ones mask if the numerator is negative
-        Expr sign = num >> make_const(t, t.bits() - 1);
+        Type num_as_uint_t = num.type().with_code(Type::UInt);
+        Expr sign = cast(num_as_uint_t, num >> make_const(t, t.bits() - 1));
 
         // Flip the numerator bits if the mask is high.
-        num = cast(num.type().with_code(Type::UInt), num);
+        num = cast(num_as_uint_t, num);
         num = num ^ sign;
 
         // Multiply and keep the high half of the
@@ -273,7 +274,7 @@ Expr lower_int_uint_div(Expr a, Expr b) {
                          Call::PureIntrinsic);
 
         // Maybe flip the bits back again.
-        num = num ^ sign;
+        num = cast(a.type(), num ^ sign);
 
         return num;
     } else if (const_uint_divisor &&

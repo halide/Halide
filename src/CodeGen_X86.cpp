@@ -408,6 +408,7 @@ void CodeGen_X86::visit(const Cast *op) {
 void CodeGen_X86::visit(const Call *op) {
     if (op->is_intrinsic(Call::mulhi_shr) &&
         op->type.is_vector() && op->type.bits() == 16) {
+        internal_assert(op->args.size() == 3);
         Expr p;
         if (op->type.is_uint()) {
             p = u16(u32(op->args[0]) * u32(op->args[1]) / 65536);
