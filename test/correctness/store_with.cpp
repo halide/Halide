@@ -223,6 +223,19 @@ int main(int argc, char **argv) {
     }
 
     if (1) {
+        // Something that only works because vector loop iterations
+        // occur simultaneously, so stores from one lane definitely
+        // aren't visible to others absent some other sequence point.
+        Func f, g;
+        Var x;
+        f(x) = x;
+        g(x) = f(31 - x);
+        f.compute_root().store_with(g);
+        g.bound(x, 0, 32).vectorize(x);
+        g.realize(32);
+    }
+
+    if (1) {
         // A tiled pyramid
         Func f, g, h;
         Var x, y;
@@ -233,24 +246,30 @@ int main(int argc, char **argv) {
         h(x, y) = g(x/2, y/2) + 2;
 
         // Store a 4x4 block of f densely in the top left of every 16x16 tile of h
-        f.compute_at(h, Var::outermost()).store_with(h, {16*(x/4) + x%4, 16*(y/4) + y%4}).vectorize(x).unroll(y);
+        f.compute_at(h, Var::outermost())
+            .store_with(h, {16*(x/4) + x%4, 16*(y/4) + y%4})
+            .vectorize(x).unroll(y);
 
         // Store an 8x8 block of g similarly compacted in the bottom
         // right. It doesn't collide with f, and we're OK to overwrite
-        // it when computing h because we compute h serially across x
-        // and y.
-        g.compute_at(h, Var::outermost()).store_with(h, {16*(x/8) + x%8 + 8, 16*(y/8) + y%8 + 8}).vectorize(x).unroll(y);
+        // it when computing h because we compute h serially across y
+        // and vectorized across x.
+        g.compute_at(h, Var::outermost())
+            .store_with(h, {16*(x/8) + x%8 + 8, 16*(y/8) + y%8 + 8})
+            .vectorize(x).unroll(y);
 
         Var xi, yi;
         h.compute_at(h.in(), x).vectorize(x).unroll(y);
         h = h.in();
-        h.bound(x, 0, 128).bound(y, 0, 128).tile(x, y, xi, yi, 16, 16, TailStrategy::RoundUp).vectorize(xi).unroll(yi);
+        h.align_bounds(x, 16).align_bounds(y, 16)
+            .tile(x, y, xi, yi, 16, 16)
+            .vectorize(xi).unroll(yi);
 
         h.realize(128, 128);
-
     }
 
     if (0) {
+        // TODO: figure out how to test explicitly failing cases
         Func f, g, h;
         Var x;
         f(x) = x;
@@ -266,6 +285,18 @@ int main(int argc, char **argv) {
                 printf("out(%d) = %d instead of %d\n", i, out(i), correct);
             }
         }
+    }
+
+    if (0) {
+        // An entire in-place pipeline
+        ImageParam im(Float(32), 2);
+        Func f;
+        Var x, y;
+        f(x, y) = im(x, y) + 17;
+
+        // TODO: Add imageparam overloads
+        f.store_with(im);
+        f.realize(128);
     }
 
     printf("Success!\n");

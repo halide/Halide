@@ -5,6 +5,7 @@
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "IRPrinter.h"
 #include "PartitionLoops.h"
 #include "Simplify.h"
 #include "Simplify_Internal.h"
@@ -35,8 +36,8 @@ Expr aux() {
 // One dimension of a polyhedral time vector
 struct ClockDim {
     Expr t;
-    bool parallel;
-    ClockDim(const Expr &t, bool p) : t(t), parallel(p) {}
+    ForType loop_type;
+    ClockDim(const Expr &t, ForType loop_type) : t(t), loop_type(loop_type) {}
 };
 
 // A class representing a use of a buffer at some symbolic time
@@ -99,6 +100,21 @@ struct Use {
             e.t = substitute(renaming, e.t);
         }
 
+        // Synchronous parallel loops like vector or gpu warp lanes
+        // are implicitly innermost. I.e. sequence points that look
+        // like they're within the loop are actually outside the
+        // loop. Handle this by bubbling those dimensions to the end
+        // of the time vector.
+        auto end = time.end();
+        for (auto it = time.begin(); it != end;) {
+            if (is_parallel(it->loop_type) && !is_unordered_parallel(it->loop_type)) {
+                std::rotate(it, it + 1, time.end());
+                end--;
+            } else {
+                it++;
+            }
+        }
+
         // Collapse the predicate vector down to a single Expr so that
         // we can wrap lets around it once.
         for (const auto &e : p) {
@@ -158,9 +174,11 @@ struct Use {
             e = other.time[start].t == time[start].t && e;
         }
 
+        internal_assert(other.time[start].loop_type == time[start].loop_type);
+
         // Then OR in the case where there isn't a tie and this may
         // happen before other, by adding a clause to the vector.
-        if (time[start].parallel) {
+        if (is_parallel(time[start].loop_type)) {
             // TODO: synchronous parallel (vectorize) is different,
             // because *no* other iteration could have run earlier.
 
@@ -172,13 +190,11 @@ struct Use {
             // two for each nested parallel loop, but parallel loop
             // nestings are seldom more than 2 deep (parallel,
             // vectorize).
-            internal_assert(other.time[start].parallel);
             result.push_back(other.time[start].t < time[start].t);
             result.push_back(other.time[start].t > time[start].t);
         } else {
             // If we're looking at a serial loop, any earlier loop
             // iteration has already happened.
-            internal_assert(!other.time[start].parallel);
             result.push_back(other.time[start].t > time[start].t);
         }
 
@@ -196,7 +212,11 @@ struct Use {
         }
         s << "Time vector: ";
         for (const auto &e : time) {
-            s << e.t << (e.parallel ? " p" : " s") << ", ";
+            if (is_const(e.t)) {
+                s << e.t << ", ";
+            } else {
+                s << e.t << ' ' << e.loop_type << ", ";
+            }
         }
         s << "\n";
         s << "Site: ";
@@ -543,11 +563,6 @@ struct Use {
 
         void make_children(std::deque<std::unique_ptr<System>> &result) {
 
-            /*
-            debug(0) << "Sorted system: \n";
-            dump();
-            */
-
             // Eliminate divs and mods by introducing new variables
             for (int i = 0; i < (int)equalities.size(); i++) {
                 Expr lhs, rhs;
@@ -650,17 +665,38 @@ struct Use {
                 for (const auto &p : equalities[i].terms) {
                     const Variable *var = p.first.as<Variable>();
 
-                    if (var &&
-                        (p.second == 1 || p.second == -1)) {
+                    if (var) {
 
-                        Expr rhs = 0;
+                        Expr rhs = 0, rhs_remainder = 0;
                         for (const auto &p2 : equalities[i].terms) {
-                            if (!p2.first.same_as(p.first)) {
-                                rhs += p2.first * (p2.second * -p.second);
+                            // Every term on the RHS has to be either
+                            // divisible by p.first, or in total
+                            // bounded by p.first
+                            if (p2.first.same_as(p.first)) {
+                                // This is the LHS
+                            } else if (p2.second % p.second == 0) {
+                                rhs += p2.first * (p2.second / p.second);
+                            } else {
+                                rhs_remainder += p2.first * p2.second;
                             }
                         }
-
+                        Simplify::ExprInfo remainder_bounds;
+                        rhs_remainder = simplifier->mutate(rhs_remainder, &remainder_bounds);
                         rhs = simplifier->mutate(rhs, nullptr);
+
+                        // We have:
+                        // p.first * p.second == rhs * p.second + rhs_remainder
+
+                        if (remainder_bounds.max_defined &&
+                            remainder_bounds.max < std::abs(p.second) &&
+                            remainder_bounds.min_defined &&
+                            remainder_bounds.min > -std::abs(p.second)) {
+                            // We have:
+                            // p.first == rhs_a && 0 == rhs_b
+                        } else {
+                            // We don't have a substitution
+                            continue;
+                        }
 
                         if (expr_uses_var(rhs, var->name)) {
                             // Didn't successfully eliminate it - it
@@ -725,7 +761,9 @@ struct Use {
                         for (int j = 0; j < (int)equalities.size(); j++) {
                             if (i == j) {
                                 // The equation we exploited to get
-                                // the substitution goes away.
+                                // the substitution gets reduced
+                                // modulo the coefficient.
+                                new_system->add_term(simplifier->mutate(rhs_remainder == 0, nullptr));
                                 continue;
                             }
                             // In the other equations, we replace the variable with the right-hand-side
@@ -875,7 +913,7 @@ std::vector<Use> get_times_of_all_uses(const Stmt &s, string buf) {
 
         void visit(const Block *op) override {
             int i = 0;
-            clock.emplace_back(i, false);
+            clock.emplace_back(i, ForType::Serial);
             Stmt rest;
             do {
                 op->first.accept(this);
@@ -904,7 +942,7 @@ std::vector<Use> get_times_of_all_uses(const Stmt &s, string buf) {
                 predicate.push_back(loop_var >= op->min && loop_var < op->min + op->extent);
             }
             loops.push_back(op->name);
-            clock.emplace_back(Variable::make(Int(32), op->name), op->is_parallel());
+            clock.emplace_back(Variable::make(Int(32), op->name), op->for_type);
             op->body.accept(this);
             clock.pop_back();
             loops.pop_back();
@@ -974,7 +1012,7 @@ std::vector<Use> get_times_of_all_uses(const Stmt &s, string buf) {
             }
 
             // The RHS is evaluated before the store happens
-            clock.emplace_back(0, false);
+            clock.emplace_back(0, ForType::Serial);
             IRVisitor::visit(op);
             clock.back().t = 1;
             if (op->name == buf) {
