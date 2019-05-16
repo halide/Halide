@@ -1,6 +1,7 @@
 #include "CodeGen_Internal.h"
 #include "CSE.h"
 #include "Debug.h"
+#include "IntegerDivisionTable.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "LLVM_Headers.h"
@@ -223,6 +224,135 @@ bool function_takes_user_context(const std::string &name) {
 bool can_allocation_fit_on_stack(int64_t size) {
     user_assert(size > 0) << "Allocation size should be a positive number\n";
     return (size <= 1024 * 16);
+}
+
+Expr lower_int_uint_div(Expr a, Expr b) {
+    // Detect if it's a small int division
+    const int64_t *const_int_divisor = as_const_int(b);
+    const uint64_t *const_uint_divisor = as_const_uint(b);
+
+    Type t = a.type();
+    internal_assert(!t.is_float())
+            << "lower_int_uint_div is not meant to handle floating-point case.\n";
+
+    int shift_amount;
+    if (is_const_power_of_two_integer(b, &shift_amount) &&
+        (t.is_int() || t.is_uint())) {
+        return a >> make_const(a.type(), shift_amount);
+    } else if (const_int_divisor &&
+               t.is_int() &&
+               (t.bits() == 8 || t.bits() == 16 || t.bits() == 32) &&
+               *const_int_divisor > 1 &&
+               ((t.bits() > 8 && *const_int_divisor < 256) || *const_int_divisor < 128)) {
+
+        int64_t multiplier, shift;
+        if (t.bits() == 32) {
+            multiplier = IntegerDivision::table_s32[*const_int_divisor][2];
+            shift      = IntegerDivision::table_s32[*const_int_divisor][3];
+        } else if (t.bits() == 16) {
+            multiplier = IntegerDivision::table_s16[*const_int_divisor][2];
+            shift      = IntegerDivision::table_s16[*const_int_divisor][3];
+        } else {
+            // 8 bit
+            multiplier = IntegerDivision::table_s8[*const_int_divisor][2];
+            shift      = IntegerDivision::table_s8[*const_int_divisor][3];
+        }
+        Expr num = a;
+
+        // Make an all-ones mask if the numerator is negative
+        Type num_as_uint_t = num.type().with_code(Type::UInt);
+        Expr sign = cast(num_as_uint_t, num >> make_const(t, t.bits() - 1));
+
+        // Flip the numerator bits if the mask is high.
+        num = cast(num_as_uint_t, num);
+        num = num ^ sign;
+
+        // Multiply and keep the high half of the
+        // result, and then apply the shift.
+        Expr mult = make_const(num.type(), multiplier);
+        num = Call::make(num.type(), Call::mulhi_shr, { num, mult, make_const(UInt(num.type().bits()), shift) },
+                         Call::PureIntrinsic);
+
+        // Maybe flip the bits back again.
+        num = cast(a.type(), num ^ sign);
+
+        return num;
+    } else if (const_uint_divisor &&
+               t.is_uint() &&
+               (t.bits() == 8 || t.bits() == 16 || t.bits() == 32) &&
+               *const_uint_divisor > 1 && *const_uint_divisor < 256) {
+
+        int64_t method, multiplier, shift;
+        if (t.bits() == 32) {
+            method     = IntegerDivision::table_u32[*const_uint_divisor][1];
+            multiplier = IntegerDivision::table_u32[*const_uint_divisor][2];
+            shift      = IntegerDivision::table_u32[*const_uint_divisor][3];
+        } else if (t.bits() == 16) {
+            method     = IntegerDivision::table_u16[*const_uint_divisor][1];
+            multiplier = IntegerDivision::table_u16[*const_uint_divisor][2];
+            shift      = IntegerDivision::table_u16[*const_uint_divisor][3];
+        } else {
+            method     = IntegerDivision::table_u8[*const_uint_divisor][1];
+            multiplier = IntegerDivision::table_u8[*const_uint_divisor][2];
+            shift      = IntegerDivision::table_u8[*const_uint_divisor][3];
+        }
+
+        internal_assert(method != 0)
+            << "method 0 division is for powers of two and should have been handled elsewhere\n";
+        Expr num = a;
+
+        // Widen, multiply, narrow
+        Expr mult = make_const(num.type(), multiplier);
+        Expr val = Call::make(num.type(), Call::mulhi_shr,
+                              { num, mult, make_const(UInt(num.type().bits()), method == 1 ? (int)shift : 0) },
+                              Call::PureIntrinsic);
+
+        if (method == 2) {
+            // Average with original numerator.
+            val = Call::make(val.type(), Call::sorted_avg, { val, num }, Call::PureIntrinsic);
+
+            // Do the final shift
+            if (shift) {
+                val = val >> make_const(t, shift);
+            }
+        }
+
+        return val;
+    } else {
+        return lower_euclidean_div(a, b);
+    }
+}
+
+Expr lower_int_uint_mod(Expr a, Expr b) {
+    // Detect if it's a small int modulus
+    const int64_t *const_int_divisor = as_const_int(b);
+    const uint64_t *const_uint_divisor = as_const_uint(b);
+
+    Type t = a.type();
+    internal_assert(!t.is_float())
+            << "lower_int_uint_div is not meant to handle floating-point case.\n";
+
+    int bits;
+    if (is_const_power_of_two_integer(b, &bits)) {
+        return a & (b - 1);
+    } else if (const_int_divisor &&
+               t.is_int() &&
+               (t.bits() == 8 || t.bits() == 16 || t.bits() == 32) &&
+               *const_int_divisor > 1 &&
+               ((t.bits() > 8 && *const_int_divisor < 256) || *const_int_divisor < 128)) {
+        // We can use our fast signed integer division
+        return common_subexpression_elimination(a - (a / b) * b);
+    } else if (const_uint_divisor &&
+               t.is_uint() &&
+               (t.bits() == 8 || t.bits() == 16 || t.bits() == 32) &&
+               *const_uint_divisor > 1 && *const_uint_divisor < 256) {
+        // We can use our fast unsigned integer division
+        return common_subexpression_elimination(a - (a / b) * b);
+    } else {
+        // To match our definition of division, mod should be between 0
+        // and |b|.
+        return lower_euclidean_mod(a, b);
+    }
 }
 
 Expr lower_euclidean_div(Expr a, Expr b) {
