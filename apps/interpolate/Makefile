@@ -4,7 +4,7 @@ CXXFLAGS += -g -Wall
 
 .PHONY: clean
 
-$(BIN)/interpolate: interpolate.cpp
+$(BIN)/interpolate: interpolate.cpp $(LIB_HALIDE)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) interpolate.cpp $(LIB_HALIDE) -o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
