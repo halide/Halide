@@ -885,9 +885,9 @@ public:
             switch (arg.metadata->kind) {
             case halide_argument_kind_input_scalar: {
                 if (!strcmp(arg.metadata->name, "__user_context")) {
-                  arg.scalar_value.u.handle = nullptr;
-                  info() << "Argument value for: __user_context is special-cased as: nullptr";
-                  break;
+                    arg.scalar_value.u.handle = nullptr;
+                    info() << "Argument value for: __user_context is special-cased as: nullptr";
+                    break;
                 }
                 std::vector<std::pair<const halide_scalar_value_t*, const char*>> values;
                 // If this gets any more complex, smarten it up, but for now,
