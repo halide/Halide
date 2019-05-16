@@ -87,10 +87,8 @@ public:
         // Convert back to 16-bit
         output(x, y, c) = cast<uint16_t>(clamp(color(x, y, c), 0.0f, 1.0f) * 65535.0f);
 
-        /* THE SCHEDULE */
-
-        // Provide estimates on the input image.
-        // (This can be useful in conjunction with RunGen as well
+        /* ESTIMATES */
+        // (This can be useful in conjunction with RunGen and benchmarks as well
         // as auto-schedule, so we do it in all cases.)
         input.dim(0).set_bounds_estimate(0, 1536);
         input.dim(1).set_bounds_estimate(0, 2560);
@@ -104,6 +102,7 @@ public:
               .estimate(y, 0, 2560)
               .estimate(c, 0, 3);
 
+        /* THE SCHEDULE */
         if (auto_schedule) {
             // Nothing.
         } else if (get_target().has_gpu_feature()) {

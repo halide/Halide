@@ -127,3 +127,5 @@ HL_AVCONV ?= avconv
 # Utility to show h264 video
 HL_VIDEOPLAYER ?= mplayer
 
+%.benchmark: $(BIN)/%.rungen
+	@$^ --benchmarks=all --default_input_buffers --default_input_scalars --output_extents=estimate --parsable_output

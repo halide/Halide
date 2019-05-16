@@ -884,24 +884,38 @@ public:
             auto &arg = arg_pair.second;
             switch (arg.metadata->kind) {
             case halide_argument_kind_input_scalar: {
+                if (!strcmp(arg.metadata->name, "__user_context")) {
+                  arg.scalar_value.u.handle = nullptr;
+                  info() << "Argument value for: __user_context is special-cased as: nullptr";
+                  break;
+                }
+                std::vector<std::pair<const halide_scalar_value_t*, const char*>> values;
+                // If this gets any more complex, smarten it up, but for now,
+                // simpleminded code is fine.
                 if (arg.raw_string == "default") {
-                    if (!arg.metadata->scalar_def) {
-                        fail() << "Argument value for: " << arg.metadata->name << " was specified as using the default, but no default was found in the metadata.";
-                    }
-                    info() << "Argument value for: " << arg.metadata->name << " is parsed from metadata as: "
-                           << scalar_to_string(arg.metadata->type, *arg.metadata->scalar_def);
-                    arg.scalar_value = *arg.metadata->scalar_def;
+                    values.push_back({arg.metadata->scalar_def, "default"});
                 } else if (arg.raw_string == "estimate") {
-                    if (!strcmp(arg.metadata->name, "__user_context")) {
-                      arg.scalar_value.u.handle = nullptr;
-                      info() << "Argument value for: __user_context is special-cased as: nullptr";
-                    } else {
-                      if (!arg.metadata->scalar_estimate) {
-                          fail() << "Argument value for: " << arg.metadata->name << " was specified as using the estimate, but no estimate was found in the metadata.";
-                      }
-                      info() << "Argument value for: " << arg.metadata->name << " is parsed from metadata as: "
-                             << scalar_to_string(arg.metadata->type, *arg.metadata->scalar_estimate);
-                      arg.scalar_value = *arg.metadata->scalar_estimate;
+                    values.push_back({arg.metadata->scalar_estimate, "estimate"});
+                } else if (arg.raw_string == "default,estimate") {
+                    values.push_back({arg.metadata->scalar_def, "default"});
+                    values.push_back({arg.metadata->scalar_estimate, "estimate"});
+                } else if (arg.raw_string == "estimate,default") {
+                    values.push_back({arg.metadata->scalar_estimate, "estimate"});
+                    values.push_back({arg.metadata->scalar_def, "default"});
+                }
+                if (!values.empty()) {
+                    bool set = false;
+                    for (auto &v : values) {
+                        if (!v.first) continue;
+                        info() << "Argument value for: " << arg.metadata->name << " is parsed from metadata (" << v.second << ") as: "
+                               << scalar_to_string(arg.metadata->type, *v.first);
+                        arg.scalar_value = *v.first;
+                        set = true;
+                        break;
+                    }
+                    if (!set) {
+                        fail() << "Argument value for: " << arg.metadata->name << " was specified as '" << arg.raw_string << "', "
+                               << "but no default and/or estimate was found in the metadata.";
                     }
                 } else {
                     if (!parse_scalar(arg.metadata->type, arg.raw_string, &arg.scalar_value)) {
@@ -1168,11 +1182,20 @@ public:
         config.max_iters = benchmark_max_iters;
         auto result = Halide::Tools::benchmark(benchmark_inner, config);
 
-        out() << "Benchmark for " << md->name << " produces best case of " << result.wall_time << " sec/iter (over "
-              << result.samples << " samples, "
-              << result.iterations << " iterations, "
-              << "accuracy " << std::setprecision(2) << (result.accuracy * 100.0) << "%).\n"
-              << "Best output throughput is " << (megapixels_out() / result.wall_time) << " mpix/sec.\n";
+        if (!parsable_output) {
+            out() << "Benchmark for " << md->name << " produces best case of " << result.wall_time << " sec/iter (over "
+                  << result.samples << " samples, "
+                  << result.iterations << " iterations, "
+                  << "accuracy " << std::setprecision(2) << (result.accuracy * 100.0) << "%).\n"
+                  << "Best output throughput is " << (megapixels_out() / result.wall_time) << " mpix/sec.\n";
+        } else {
+            out() << md->name << "  BEST_TIME_MSEC_PER_ITER  " << result.wall_time * 1000.f << "\n"
+                  << md->name << "  SAMPLES                  " << result.samples << "\n"
+                  << md->name << "  ITERATIONS               " << result.iterations << "\n"
+                  << md->name << "  TIMING_ACCURACY          " << result.accuracy << "\n"
+                  << md->name << "  THROUGHPUT_MPIX_PER_SEC  " << (megapixels_out() / result.wall_time) << "\n"
+                  << md->name << "  HALIDE_TARGET            " << md->target << "\n";
+        }
     }
 
     struct Output {
@@ -1247,6 +1270,10 @@ public:
         halide_set_custom_print(quiet ? rungen_halide_print_quiet : rungen_halide_print);
     }
 
+    void set_parsable_output(bool parsable_output = true) {
+        this->parsable_output = parsable_output;
+    }
+
 private:
     std::map<std::string, Shape> bounds_query_input_shapes() const {
         assert(!output_shapes.empty());
@@ -1304,6 +1331,7 @@ private:
     const struct halide_filter_metadata_t * const md;
     std::map<std::string, ArgData> args;
     std::map<std::string, Shape> output_shapes;
+    bool parsable_output = false;
 };
 
 }  // namespace RunGen
