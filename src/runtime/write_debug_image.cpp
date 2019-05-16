@@ -124,10 +124,8 @@ WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *fil
                                              int32_t type_code, struct halide_buffer_t *buf) {
 
     if (buf->is_bounds_query()) {
-        // Viewed as an extern stage, debug_to_file has no inputs and
-        // no particular requirements on the output shape, so silently
-        // do nothing.
-        return 0;
+        halide_error(user_context, "Bounds query buffer passed to halide_debug_to_file");
+        return -1;
     }
 
     if (buf->dimensions > 4) {

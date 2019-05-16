@@ -661,7 +661,8 @@ Realization Pipeline::realize(vector<int32_t> sizes, const Target &target,
     bool needs_crop = false;
     vector<std::pair<int32_t, int32_t>> crop(sizes.size());
     for (size_t d = 0; d < sizes.size(); d++) {
-        needs_crop |= (sizes[d] != r[0].dim(d).extent()) || (r[0].dim(d).min() != 0);
+        needs_crop |= ((r[0].dim(d).extent() != sizes[d]) ||
+                       (r[0].dim(d).min() != 0));
         crop[d].first = 0;
         crop[d].second = sizes[d];
     }
