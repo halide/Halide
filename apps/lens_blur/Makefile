@@ -28,3 +28,6 @@ clean:
 	rm -rf $(BIN)
 
 test: $(BIN)/out.png
+
+benchmark: $(BIN)/process
+	@$(NICE_BENCH) $(BIN)/process $(IMAGES)/rgb_small.png 32 13 0.5 32 3 $(BIN)/out.png

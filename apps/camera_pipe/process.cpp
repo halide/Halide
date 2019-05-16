@@ -28,9 +28,7 @@ int main(int argc, char **argv) {
     halide_enable_malloc_trace();
 #endif
 
-    fprintf(stderr, "input: %s\n", argv[1]);
     Buffer<uint16_t> input = load_and_convert_image(argv[1]);
-    fprintf(stderr, "       %d %d\n", input.width(), input.height());
     Buffer<uint8_t> output(((input.width() - 32)/32)*32, ((input.height() - 24)/32)*32, 3);
 
 #ifdef HL_MEMINFO
@@ -72,7 +70,7 @@ int main(int argc, char **argv) {
                         output);
             output.device_sync();
         });
-    fprintf(stderr, "Halide (manual):\t%gus\n", best * 1e6);
+    printf("Manually-tuned time: %gms\n", best * 1e3);
 
     #ifndef NO_AUTO_SCHEDULE
     best = benchmark(timing_iterations, 1, [&]() {
@@ -81,12 +79,10 @@ int main(int argc, char **argv) {
                                       output);
             output.device_sync();
         });
-    fprintf(stderr, "Halide (auto):\t%gus\n", best * 1e6);
+    printf("Auto-scheduled time: %gms\n", best * 1e3);
     #endif
 
-    fprintf(stderr, "output: %s\n", argv[7]);
     convert_and_save_image(output, argv[7]);
-    fprintf(stderr, "        %d %d\n", output.width(), output.height());
 
     return 0;
 }

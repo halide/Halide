@@ -127,3 +127,7 @@ HL_AVCONV ?= avconv
 # Utility to show h264 video
 HL_VIDEOPLAYER ?= mplayer
 
+# 'nice' prefix to use when running benchmarks.
+# Default to empty; some users may want to increase priority via e.g. NICE_BENCH=sudo nice -n -10
+NICE_BENCH ?=
+

@@ -49,3 +49,6 @@ $(BIN)/viz_auto.mp4: $(BIN)/viz/process ../support/viz_auto.sh ../../bin/HalideT
 
 viz_auto: $(BIN)/viz_auto.mp4
 	$(HL_VIDEOPLAYER) $^
+
+benchmark: $(BIN)/process
+	@@$(NICE_BENCH) $(BIN)/process $(IMAGES)/bayer_raw.png 3700 2.0 50 1.0 $(TIMING_ITERATIONS) $(BIN)/out.png $(BIN)/h_auto.png

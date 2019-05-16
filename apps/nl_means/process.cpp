@@ -29,8 +29,8 @@ int main(int argc, char **argv) {
 
     // Timing code
 
-    printf("Input size: %d by %d, patch size: %d, search area: %d, sigma: %f\n",
-            input.width(), input.height(), patch_size, search_area, sigma);
+    // printf("Input size: %d by %d, patch size: %d, search area: %d, sigma: %f\n",
+    //         input.width(), input.height(), patch_size, search_area, sigma);
 
     // Manually-tuned version
     double min_t_manual = benchmark(timing_iterations, 1, [&]() {

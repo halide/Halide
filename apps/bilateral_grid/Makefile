@@ -55,3 +55,6 @@ $(BIN)/viz_auto.mp4: $(BIN)/filter_viz ../support/viz_auto.sh ../../bin/HalideTr
 
 viz_auto: $(BIN)/viz_auto.mp4
 	$(HL_VIDEOPLAYER) $^
+
+benchmark: $(BIN)/filter
+	@$(NICE_BENCH) $(BIN)/filter $(IMAGES)/gray.png $(BIN)/out.png 0.1 10

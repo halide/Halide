@@ -58,3 +58,6 @@ $(BIN)/viz_auto.mp4: $(BIN)/process_viz ../support/viz_auto.sh ../../bin/HalideT
 
 viz_auto: $(BIN)/viz_auto.mp4
 	$(HL_VIDEOPLAYER) $^
+
+benchmark: $(BIN)/process
+	@$(NICE_BENCH) $(BIN)/process $(IMAGES)/rgb.png 8 1 1 10 $(BIN)/out.png

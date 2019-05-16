@@ -1890,8 +1890,8 @@ TEST_APPS=\
 	HelloMatlab \
 	bilateral_grid \
 	blur \
-	camera_pipe \
 	c_backend \
+	camera_pipe \
 	conv_layer \
 	fft \
 	interpolate \
@@ -1899,17 +1899,43 @@ TEST_APPS=\
 	linear_algebra \
 	local_laplacian \
 	nl_means \
+	onnx \
 	resize \
-	stencil_chain \
-	wavelet \
 	resnet_50 \
-	onnx
+	stencil_chain \
+	wavelet
 
 .PHONY: test_apps
 test_apps: distrib
 	@for APP in $(TEST_APPS); do \
 		echo Testing app $${APP}... ; \
 		make -C $(ROOT_DIR)/apps/$${APP} test \
+			HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
+			BIN=$(ROOT_DIR)/apps/$${APP}/bin \
+			|| exit 1 ; \
+	done
+
+BENCHMARK_APPS=\
+	bilateral_grid \
+	camera_pipe \
+	lens_blur \
+	local_laplacian \
+	nl_means \
+	stencil_chain
+
+.PHONY: benchmark_apps
+benchmark_apps: distrib
+	@for APP in $(BENCHMARK_APPS); do \
+		echo Building app $${APP}... ; \
+		make -C $(ROOT_DIR)/apps/$${APP} test \
+			HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
+			BIN=$(ROOT_DIR)/apps/$${APP}/bin > /dev/null \
+			|| exit 1 ; \
+	done
+	@for APP in $(BENCHMARK_APPS); do \
+		echo ;\
+		echo Benchmarking app $${APP}... ; \
+		make -C $(ROOT_DIR)/apps/$${APP} benchmark \
 			HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
 			BIN=$(ROOT_DIR)/apps/$${APP}/bin \
 			|| exit 1 ; \
