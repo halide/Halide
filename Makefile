@@ -1217,8 +1217,10 @@ init_time_compilation_%:
 
 TIME_COMPILATION ?= /usr/bin/time -a -f "$@,%U,%S,%E" -o
 
+# This rules uses make, rather than $(MAKE), to explicitly drop any -j flag,
+# in order to serialize the performance tests.
 run_tests: $(ALL_TESTS)
-	$(MAKE) -f $(THIS_MAKEFILE) test_performance test_auto_schedule
+	make -f $(THIS_MAKEFILE) test_performance test_auto_schedule
 
 build_tests: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=$(BIN_DIR)/correctness_%) \
 	$(PERFORMANCE_TESTS:$(ROOT_DIR)/test/performance/%.cpp=$(BIN_DIR)/performance_%) \
