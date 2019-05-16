@@ -114,6 +114,7 @@ class AddDummyRealizations : public IRMutator {
     using IRMutator::visit;
 
     Stmt visit(const ProducerConsumer *op) override {
+        Stmt s = IRMutator::visit(op);
         for (Function out : outputs) {
             if (op->name == out.name()) {
                 std::vector<Range> output_bounds;
@@ -128,10 +129,10 @@ class AddDummyRealizations : public IRMutator {
                                      MemoryType::Auto,
                                      output_bounds,
                                      const_true(),
-                                     mutate(op->body));
+                                     s);
             }
         }
-        return IRMutator::visit(op);
+        return s;
     }
 
 public:
