@@ -1218,7 +1218,7 @@ init_time_compilation_%:
 TIME_COMPILATION ?= /usr/bin/time -a -f "$@,%U,%S,%E" -o
 
 run_tests: $(ALL_TESTS)
-	make -f $(THIS_MAKEFILE) test_performance test_auto_schedule
+	$(MAKE) -f $(THIS_MAKEFILE) test_performance test_auto_schedule
 
 build_tests: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=$(BIN_DIR)/correctness_%) \
 	$(PERFORMANCE_TESTS:$(ROOT_DIR)/test/performance/%.cpp=$(BIN_DIR)/performance_%) \
@@ -1736,7 +1736,7 @@ $(BIN_DIR)/tutorial_%: $(ROOT_DIR)/tutorial/%.cpp $(BIN_DIR)/libHalide.$(SHARED_
 	@ if [[ $@ == *_run ]]; then \
 		export TUTORIAL=$* ;\
 		export LESSON=`echo $${TUTORIAL} | cut -b1-9`; \
-		make -f $(THIS_MAKEFILE) tutorial_$${TUTORIAL/run/generate}; \
+		$(MAKE) -f $(THIS_MAKEFILE) tutorial_$${TUTORIAL/run/generate}; \
 		$(CXX) $(TUTORIAL_CXX_FLAGS) $(IMAGE_IO_CXX_FLAGS) $(OPTIMIZE_FOR_BUILD_TIME) $< \
 		-I$(TMP_DIR) -I$(INCLUDE_DIR) $(TMP_DIR)/$${LESSON}_*.a $(GEN_AOT_LD_FLAGS) $(IMAGE_IO_LIBS) -lz -o $@; \
 	else \
@@ -1884,16 +1884,16 @@ auto_schedule_%: $(BIN_DIR)/auto_schedule_%
 	@-echo
 
 time_compilation_test_%: $(BIN_DIR)/test_%
-	$(TIME_COMPILATION) compile_times_correctness.csv make -f $(THIS_MAKEFILE) $(@:time_compilation_test_%=test_%)
+	$(TIME_COMPILATION) compile_times_correctness.csv $(MAKE) -f $(THIS_MAKEFILE) $(@:time_compilation_test_%=test_%)
 
 time_compilation_performance_%: $(BIN_DIR)/performance_%
-	$(TIME_COMPILATION) compile_times_performance.csv make -f $(THIS_MAKEFILE) $(@:time_compilation_performance_%=performance_%)
+	$(TIME_COMPILATION) compile_times_performance.csv $(MAKE) -f $(THIS_MAKEFILE) $(@:time_compilation_performance_%=performance_%)
 
 time_compilation_opengl_%: $(BIN_DIR)/opengl_%
-	$(TIME_COMPILATION) compile_times_opengl.csv make -f $(THIS_MAKEFILE) $(@:time_compilation_opengl_%=opengl_%)
+	$(TIME_COMPILATION) compile_times_opengl.csv $(MAKE) -f $(THIS_MAKEFILE) $(@:time_compilation_opengl_%=opengl_%)
 
 time_compilation_generator_%: $(BIN_DIR)/%.generator
-	$(TIME_COMPILATION) compile_times_generator.csv make -f $(THIS_MAKEFILE) $(@:time_compilation_generator_%=$(FILTERS_DIR)/%.a)
+	$(TIME_COMPILATION) compile_times_generator.csv $(MAKE) -f $(THIS_MAKEFILE) $(@:time_compilation_generator_%=$(FILTERS_DIR)/%.a)
 
 TEST_APPS=\
 	HelloMatlab \
@@ -1918,7 +1918,7 @@ TEST_APPS=\
 test_apps: distrib
 	@for APP in $(TEST_APPS); do \
 		echo Testing app $${APP}... ; \
-		make -C $(ROOT_DIR)/apps/$${APP} test \
+		$(MAKE) -C $(ROOT_DIR)/apps/$${APP} test \
 			HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
 			BIN=$(ROOT_DIR)/apps/$${APP}/bin \
 			|| exit 1 ; \
@@ -1926,7 +1926,7 @@ test_apps: distrib
 
 .PHONY: test_python2
 test_python2: distrib $(BIN_DIR)/host/runtime.a
-	make -C $(ROOT_DIR)/python_bindings \
+	$(MAKE) -C $(ROOT_DIR)/python_bindings \
 		-f $(ROOT_DIR)/python_bindings/Makefile \
 		test \
 		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
@@ -1936,7 +1936,7 @@ test_python2: distrib $(BIN_DIR)/host/runtime.a
 
 .PHONY: test_python
 test_python: distrib $(BIN_DIR)/host/runtime.a
-	make -C $(ROOT_DIR)/python_bindings \
+	$(MAKE) -C $(ROOT_DIR)/python_bindings \
 		-f $(ROOT_DIR)/python_bindings/Makefile \
 		test \
 		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
