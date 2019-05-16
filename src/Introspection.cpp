@@ -935,6 +935,23 @@ private:
             llvm::StringRef name;
             iter->getName(name);
             debug(2) << "Section: " << name.str() << "\n";
+#if LLVM_VERSION >= 90
+            // ignore errors, just leave strings empty
+            auto e = iter->getContents();
+            if (e) {
+                if (name == prefix + "debug_info") {
+                    debug_info = *e;
+                } else if (name == prefix + "debug_abbrev") {
+                    debug_abbrev = *e;
+                } else if (name == prefix + "debug_str") {
+                    debug_str = *e;
+                } else if (name == prefix + "debug_line") {
+                    debug_line = *e;
+                } else if (name == prefix + "debug_ranges") {
+                    debug_ranges = *e;
+                }
+            }
+#else
             if (name == prefix + "debug_info") {
                 iter->getContents(debug_info);
             } else if (name == prefix + "debug_abbrev") {
@@ -946,6 +963,7 @@ private:
             } else if (name == prefix + "debug_ranges") {
                 iter->getContents(debug_ranges);
             }
+#endif
         }
 
         if (debug_info.empty() ||
