@@ -162,14 +162,6 @@ protected:
         // Returns Phi node inputs.
         template <typename StmtOrExpr>
         PhiNodeInputs emit_if_then_else(Expr condition, StmtOrExpr then_case, StmtOrExpr else_case);
-
-        /** Helpers for implementing fast integer division. */
-        Expr mulhi_shr(Expr a, Expr b, int shr);
-        // Compute (a+b)/2, assuming a < b.
-        Expr sorted_avg(Expr a, Expr b);
-
-        friend uint32_t lower_int_uint_div<CodeGen_Vulkan_Dev::SPIRVEmitter, uint32_t>(CodeGen_Vulkan_Dev::SPIRVEmitter *, Expr a, Expr b);
-        friend uint32_t lower_int_uint_mod<CodeGen_Vulkan_Dev::SPIRVEmitter, uint32_t>(CodeGen_Vulkan_Dev::SPIRVEmitter *cg, Expr a, Expr b);
     } emitter;
 
     std::string current_kernel_name;

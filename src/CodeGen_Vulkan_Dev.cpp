@@ -284,84 +284,13 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Mul *op) {
     visit_binop(op->type, op->a, op->b, op->type.is_float() ? SpvOpFMul : SpvOpIMul);
 }
 
-// TODO: Wait for PR which makes this an intrinsic and then generate directly.
-Expr CodeGen_Vulkan_Dev::SPIRVEmitter::mulhi_shr(Expr a, Expr b, int shr) {
-    internal_error << "Unimplemented.\n";
-    return Expr();
-#if 0
-    uint32_t type_id = map_type(a.type());
-
-    a.accept(this);
-    uint32_t a_id = id;
-    a.accept(this);
-    uint32_t b_id = id;
-
-    uint32_t pair_type_id = map_type_to_pair(a.type());
-
-    // Double width multiply
-    uint32_t product_pair = next_id++;
-    spir_v_kernels.push_back((5 << 16) | (a.type().is_uint()) ? SpvOpUMulExtended : SpvOpSMulExtended);
-    spir_v_kernels.push_back(pair_type_id);
-    spir_v_kernels.push_back(a_id);
-    spir_v_kernels.push_back(b_id);
-
-    // Extract the halves of the double width result and
-    // assemble them into the shifted signle width one.
-    uint32_t low_item_id = next_id++;
-    spir_v_kernels.push_back((5 << 16) | SpvOpCompositeExtract);
-    spir_v_kernels.push_back(type_id);
-    spir_v_kernels.push_back(low_item_id);
-    spir_v_kernels.push_back(product_pair);
-    spir_v_kernels.push_back(0);
-    
-    uint32_t high_item_id = next_id++;
-    spir_v_kernels.push_back((5 << 16) | SpvOpCompositeExtract);
-    spir_v_kernels.push_back(type_id);
-    spir_v_kernels.push_back(high_item_id);
-    spir_v_kernels.push_back(product_pair);
-    spir_v_kernels.push_back(1);
-
-    // TODO: This part is incorrect. We just need the high part
-    // shifted down by shr. The low part is not used.
-    uint32_t low_part_id = next_id++;
-    spir_v_kernels.push_back((5 << 16) | SpvOpShiftRightLogical);
-    spir_v_kernels.push_back(type_id);
-    spir_v_kernels.push_back(low_part_id);
-    spir_v_kernels.push_back(low_item_id);
-    spir_v_kernels.push_back(shr);
-    
-    uint32_t high_part_id = next_id++;
-    spir_v_kernels.push_back((5 << 16) | SpvOpShiftLeftLogical);
-    spir_v_kernels.push_back(type_id);
-    spir_v_kernels.push_back(high_part_id);
-    spir_v_kernels.push_back(high_item_id);
-    spir_v_kernels.push_back(a.type().bits() - shr);
-
-    uint32_t result_id = next_id++;
-    spir_v_kernels.push_back((4 << 16) | SpvOpBitwiseOr);
-    spir_v_kernels.push_back(type_id);
-    spir_v_kernels.push_back(result_id);
-    spir_v_kernels.push_back(low_part_id);
-    spir_v_kernels.push_back(high_part_id);
-
-    return result_id;
-#endif
-}
-
-Expr CodeGen_Vulkan_Dev::SPIRVEmitter::sorted_avg(Expr a, Expr b) {
-    // b > a, so the following works without widening:
-    // a + (b - a)/2
-    return a + (b - a)/2;
-}
-
 void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Div *op) {
     user_assert(!is_zero(op->b)) << "Division by constant zero in expression: " << Expr(op) << "\n";
 
     if (op->type.is_float()) {
         visit_binop(op->type, op->a, op->b, SpvOpFDiv);
     } else {
-        // TODO: Wait for division refactor PR to make be able to use LLVM constant divide logic
-        Expr e = lower_euclidean_div(op->a, op->b);
+        Expr e = lower_int_uint_div(op->a, op->b);
         e.accept(this);
     }
 }
@@ -371,8 +300,7 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Mod *op) {
         // Takes sign of result from op->b
         visit_binop(op->type, op->a, op->b, SpvOpFMod);
     } else {
-        // TODO: Wait for division refactor PR to make be able to use LLVM constant divide logic
-        Expr e = lower_euclidean_mod(op->a, op->b);
+        Expr e = lower_int_uint_mod(op->a, op->b);
         e.accept(this);
     }
 }
@@ -533,6 +461,55 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Call *op) {
             internal_error << "mod_round_to_zero of non-integer type.\n";
         }
         visit_binop(op->type, op->args[0], op->args[1], opcode);
+    } else if (op->is_intrinsic("mulhi_shr")) {
+        internal_assert(op->args.size() == 3);
+        uint32_t type_id = map_type(op->type);
+
+        op->args[0].accept(this);
+        uint32_t a_id = id;
+        op->args[1].accept(this);
+        uint32_t b_id = id;
+
+        uint32_t pair_type_id = map_type_to_pair(op->type);
+
+        // Double width multiply
+        uint32_t product_pair = next_id++;
+        spir_v_kernels.push_back((5 << 16) | (op->type.is_uint() ? SpvOpUMulExtended : SpvOpSMulExtended));
+        spir_v_kernels.push_back(pair_type_id);
+        spir_v_kernels.push_back(a_id);
+        spir_v_kernels.push_back(b_id);
+
+        uint32_t high_item_id = next_id++;
+        spir_v_kernels.push_back((5 << 16) | SpvOpCompositeExtract);
+        spir_v_kernels.push_back(type_id);
+        spir_v_kernels.push_back(high_item_id);
+        spir_v_kernels.push_back(product_pair);
+        spir_v_kernels.push_back(1);
+
+        const UIntImm *shift = op->args[2].as<UIntImm>();
+        internal_assert(shift != nullptr) << "Third argument to mulhi_shr intrinsic must be an unsigned integer immediate.\n";
+
+        uint32_t result_id;
+        if (shift->value != 0) {
+            // TODO: This code depends on compilation happening on a little-endian host.
+            uint32_t shr_id = emit_constant(shift->type, &shift->value);
+            result_id = next_id++;
+            spir_v_kernels.push_back((5 << 16) | (op->type.is_uint() ? SpvOpShiftRightLogical : SpvOpShiftRightArithmetic));
+            spir_v_kernels.push_back(type_id);
+            spir_v_kernels.push_back(result_id);
+            spir_v_kernels.push_back(high_item_id);
+            spir_v_kernels.push_back(shr_id);
+        } else {
+            result_id = high_item_id;
+        }
+
+        id = result_id;
+    } else if (op->is_intrinsic("sorted_avg")) {
+        internal_assert(op->args.size() == 2);
+        // b > a, so the following works without widening:
+        // a + (b - a)/2
+        Expr e = op->args[0] + (op->args[1] - op->args[0]) / 2;
+        e.accept(this);
     }
 }
 
