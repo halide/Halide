@@ -67,9 +67,24 @@ LDFLAGS-host ?= $(LDFLAGS)
 LDFLAGS-arm-64-android ?= -llog -fPIE -pie
 LDFLAGS-arm-32-android ?= -llog -fPIE -pie
 
+# For MinGW, we need libHalide.dll to be someplace that the app we build can find it,
+# since Windows has nothing like --rpath, so we'll make a "symlink" for libHalide.dll
+# from the app's bin/ folder to the distrib/ folder we are using, and depend on that.
+ifeq ($(OS), Windows_NT)
+
+$(BIN)/libHalide.dll: $(HALIDE_DISTRIB_PATH)/bin/libHalide.dll
+	@mkdir -p $(@D)
+	@ln $^ $@
+
+LIB_HALIDE = $(BIN)/libHalide.dll
+
+else
+
 LIB_HALIDE = $(HALIDE_DISTRIB_PATH)/bin/libHalide.$(SHARED_EXT)
 
-GENERATOR_DEPS ?= $(HALIDE_DISTRIB_PATH)/bin/libHalide.$(SHARED_EXT) $(HALIDE_DISTRIB_PATH)/include/Halide.h $(HALIDE_DISTRIB_PATH)/tools/GenGen.cpp
+endif
+
+GENERATOR_DEPS ?= $(LIB_HALIDE) $(HALIDE_DISTRIB_PATH)/include/Halide.h $(HALIDE_DISTRIB_PATH)/tools/GenGen.cpp
 
 LIBPNG_LIBS_DEFAULT = $(shell libpng-config --ldflags)
 LIBPNG_CXX_FLAGS ?= $(shell libpng-config --cflags)
