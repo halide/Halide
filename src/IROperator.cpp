@@ -486,8 +486,11 @@ void match_types_bitwise(Expr &x, Expr &y, const char *op_name) {
       << "The first argument to " << op_name << " must be an integer or unsigned integer";
     user_assert(y.type().is_int() || y.type().is_uint())
       << "The second argument to " << op_name << " must be an integer or unsigned integer";
-    user_assert(y.type().is_int() == x.type().is_int()) << "Arguments to " << op_name
-      << " must be both be signed or both be unsigned.\n";
+    user_assert(y.type().is_int() == x.type().is_int())
+      << "Arguments to " << op_name
+      << " must be both be signed or both be unsigned.\n"
+      << "LHS type: " << x.type() << " RHS type: " << y.type() << "\n"
+      << "LHS value: " << x << " RHS value: " << y << "\n";
 
     // Broadcast scalar to match vector
     if (x.type().is_scalar() && y.type().is_vector()) {

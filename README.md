@@ -153,8 +153,11 @@ Some useful environment variables
 `HL_DEBUG_CODEGEN=1` will print out pseudocode for what Halide is
 compiling. Higher numbers will print more detail.
 
-`HL_NUM_THREADS=...` specifies the size of the thread pool. This has no
-effect on OS X or iOS, where we just use grand central dispatch.
+`HL_NUM_THREADS=...` specifies the number of threads to create for the
+thread pool. When the async scheduling directive is used, more threads
+than this number may be required and thus allocated. A maximum of 256
+threads is allowed. (By default, the number of cores on the host is
+used.)
 
 `HL_TRACE_FILE=...` specifies a binary target file to dump tracing data
 into (ignored unless at least one `trace_` feature is enabled in `HL_TARGET` or

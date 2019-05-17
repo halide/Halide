@@ -21,12 +21,12 @@ halide_generator(dgemm.generator SRCS blas_l3_generators.cpp)
 function(add_halide_blas_library)
   set(options )
   set(oneValueArgs TARGET NAME)
-  set(multiValueArgs GENERATOR_ARGS)
+  set(multiValueArgs)
   cmake_parse_arguments(args "" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
   halide_library_from_generator(${args_TARGET}
       GENERATOR ${args_NAME}.generator
       HALIDE_TARGET_FEATURES no_asserts no_bounds_query
-      GENERATOR_ARGS ${args_ARGN}
+      ${args_UNPARSED_ARGUMENTS}
   )
   target_link_libraries(halide_blas PUBLIC ${args_TARGET})
 endfunction()

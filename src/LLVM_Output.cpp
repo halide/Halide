@@ -175,7 +175,7 @@ void write_symbol_table(std::ostream &out,
 
             llvm::SmallString<128> symbols_buf;
             llvm::raw_svector_ostream symbols(symbols_buf);
-            std::error_code err = sym.printName(symbols);
+            auto err = sym.printName(symbols);
             internal_assert(!err);
             std::string name = symbols.str().str();
             if (name_to_member_index.find(name) != name_to_member_index.end()) {

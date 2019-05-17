@@ -313,7 +313,11 @@ ModulusRemainder ModulusRemainder::unify(const ModulusRemainder &a, const Modulu
     // Reduce them to the same modulus and the same remainder
     int64_t modulus = gcd(a.modulus, b.modulus);
 
-    // Remainders are positive, and a.remainder >= b.remainder, so this can't overflow.
+    if (sub_would_overflow(64, a.remainder, b.remainder)) {
+        // The modulus is not representable as an int64.
+        return {0, 1};
+    }
+
     int64_t diff = a.remainder - b.remainder;
 
     modulus = gcd(diff, modulus);

@@ -132,6 +132,7 @@ protected:
     static bool llvm_PowerPC_enabled;
     static bool llvm_AMDGPU_enabled;
     static bool llvm_WebAssembly_enabled;
+    static bool llvm_RISCV_enabled;
 
     std::unique_ptr<llvm::Module> module;
     llvm::Function *function;
@@ -331,17 +332,6 @@ protected:
      * allocate node uses. Used so that alias analysis understands
      * when multiple Allocate nodes shared the same memory. */
     virtual std::string get_allocation_name(const std::string &n) {return n;}
-
-    /** Helpers for implementing fast integer division. */
-    // @{
-    // Compute high_half(a*b) >> shr. Note that this is a shift in
-    // addition to the implicit shift due to taking the upper half of
-    // the multiply result.
-    virtual Expr mulhi_shr(Expr a, Expr b, int shr);
-    // Compute (a+b)/2, assuming a < b.
-    virtual Expr sorted_avg(Expr a, Expr b);
-    // @}
-
 
     using IRVisitor::visit;
 

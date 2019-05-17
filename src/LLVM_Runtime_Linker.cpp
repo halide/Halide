@@ -251,6 +251,14 @@ DECLARE_NO_INITMOD(wasm_cpu_features)
 DECLARE_NO_INITMOD(wasm_math)
 #endif  // WITH_WEBASSEMBLY
 
+#ifdef WITH_RISCV
+//DECLARE_LL_INITMOD(riscv)
+DECLARE_CPP_INITMOD(riscv_cpu_features)
+#else
+//DECLARE_NO_INITMOD(riscv)
+DECLARE_NO_INITMOD(riscv_cpu_features)
+#endif  // WITH_RISCV
+
 namespace {
 
 llvm::DataLayout get_data_layout_for_target(Target target) {
@@ -324,6 +332,13 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
             return llvm::DataLayout("e-m:e-p:32:32-i64:64-n32:64-S128");
         } else {
             return llvm::DataLayout("e-m:e-p:64:64-i64:64-n32:64-S128");
+        }
+    } else if (target.arch == Target::RISCV) {
+        // TODO: Valdidate this data layout is correct for RISCV. Assumption is it is like MIPS.
+        if (target.bits == 32) {
+            return llvm::DataLayout("e-m:e-p:32:32-i64:64-n32-S128");
+        } else {
+            return llvm::DataLayout("e-m:e-p:64:64-i64:64-i128:128-n64-S128");
         }
     } else {
         internal_error << "Bad target arch: " << target.arch << "\n";
@@ -448,6 +463,23 @@ llvm::Triple get_triple_for_target(const Target &target) {
             triple.setArch(llvm::Triple::wasm64);
         }
         triple.setObjectFormat(llvm::Triple::Wasm);
+    } else if (target.arch == Target::RISCV) {
+        if (target.bits == 32) {
+            triple.setArch(llvm::Triple::riscv32);
+        } else {
+            user_assert(target.bits == 64) << "Target must be 32- or 64-bit.\n";
+            triple.setArch(llvm::Triple::riscv64);
+        }
+
+        if (target.os == Target::Linux) {
+            triple.setOS(llvm::Triple::Linux);
+            // TODO: Check what options there are here.
+            triple.setEnvironment(llvm::Triple::GNUEABIHF);
+        } else if (target.os == Target::NoOS) {
+            // for baremetal environment
+        } else {
+            user_error << "No RISCV support for this OS\n";
+        }
     } else {
         internal_error << "Bad target arch: " << target.arch << "\n";
     }
@@ -995,6 +1027,9 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             }
             if (t.arch == Target::Hexagon) {
                 modules.push_back(get_initmod_hexagon_cpu_features(c, bits_64, debug));
+            }                
+            if (t.arch == Target::RISCV) {
+                modules.push_back(get_initmod_riscv_cpu_features(c, bits_64, debug));
             }
             if (t.arch == Target::WebAssembly) {
                 modules.push_back(get_initmod_wasm_cpu_features(c, bits_64, debug));
