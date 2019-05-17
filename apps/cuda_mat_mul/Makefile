@@ -20,7 +20,7 @@ $(BIN)/mat_mul.a: $(BIN)/mat_mul.generator
 
 $(BIN)/runner: runner.cpp $(BIN)/mat_mul.a
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -I$(BIN) -Wall -O3 $^ -o $@ $(LDFLAGS) -lcudart -lcublas
+	$(CXX) $(CXXFLAGS) -I$(BIN) -Wall $^ -o $@ $(LDFLAGS) -lcudart -lcublas
 
 test: $(BIN)/runner
 	HL_CUDA_JIT_MAX_REGISTERS=256 $(BIN)/runner $(MATRIX_SIZE)

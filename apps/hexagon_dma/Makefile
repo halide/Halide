@@ -174,9 +174,9 @@ RAW_RO=
 endif
 
 $(BIN)/process_yuv_linear_basic-%: process_yuv_linear_basic.cpp $(NV12_RO) $(NV12_RW) $(P010_RO) $(P010_RW) mock_dma_implementation.cpp
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 $^ -o $@ $(LDFLAGS-$*)
+	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall $^ -o $@ $(LDFLAGS-$*)
 $(BIN)/process_raw_linear_interleaved_basic-%: process_raw_linear_interleaved_basic.cpp $(RAW_RO) $(RAW_RW) mock_dma_implementation.cpp
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 $^ -o $@ $(LDFLAGS-$*)
+	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall $^ -o $@ $(LDFLAGS-$*)
 
 clean:
 	rm -rf $(BIN)
