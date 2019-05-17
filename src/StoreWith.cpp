@@ -1119,13 +1119,15 @@ Stmt lower_store_with(const Stmt &s, const vector<Function> &outputs, const map<
         // Check legality on a simplified version
         Stmt simpler = simplify(uniquify_variable_names(stmt));
 
-        debug(3) << "Simplified: " << simpler << "\n";
+        debug(0) << "Simplified: " << simpler << "\n";
 
         // Add dummy realize nodes for the outputs
         for (auto f : outputs) {
             Region r;
-            simpler = Realize::make(f.name(), f.output_types(), MemoryType::Heap, r, const_true(), simpler);
+            simpler = Realize::make(f.name(), f.output_types(), MemoryType::Auto, r, const_true(), simpler);
         }
+
+        // TODO: Add dummy realize nodes for the inputs
 
         // For each buffer, figure out what other buffers are also stored there.
         map<string, vector<string>> groups;
@@ -1135,6 +1137,8 @@ Stmt lower_store_with(const Stmt &s, const vector<Function> &outputs, const map<
                 groups[stored_with.buffer].push_back(p.first);
             }
         }
+
+        // TODO: assert that nothing is async
 
         class CheckEachRealization : public IRVisitor {
             using IRVisitor::visit;
