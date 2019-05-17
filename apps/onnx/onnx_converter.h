@@ -37,4 +37,9 @@ Model convert_model(const onnx::ModelProto &model);
 
 Halide::Type get_halide_type(const Tensor &tensor);
 
+void compute_output_shapes(
+    const Model &model,
+    const std::map<std::string, std::vector<int>> &input_shapes,
+    std::map<std::string, std::vector<int>> *output_shapes);
+
 #endif

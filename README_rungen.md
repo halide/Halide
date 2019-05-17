@@ -199,19 +199,21 @@ especially for benchmarking.
 
 ## Benchmarking
 
-To run a benchmark, use the `--benchmark` flag:
+To run a benchmark, use the `--benchmarks=all` flag:
 
 ```
-# When you specify the --benchmark flag, outputs become optional.
-$ ./bin/local_laplacian.rungen --benchmark input=zero:[1920,1080,3] levels=8 alpha=1 beta=1
+$ ./bin/local_laplacian.rungen --benchmarks=all input=zero:[1920,1080,3] levels=8 alpha=1 beta=1 --output_extents=[100,200,3]
 Benchmark for local_laplacian produces best case of 0.0494629 sec/iter, over 3 blocks of 10 iterations.
 Best output throughput is 39.9802 mpix/sec.
 ```
 
-Note: this uses Halide's `halide_benchmark.h` to measure the execution time,
-which runs several consecutive sample sets (default=3) of multiple iterations
-(default=10) each, then chooses the best average time. You can use the
-`--benchmark_samples` and `--benchmark_iterations` to override these defaults.
+You can use `--default_input_buffers` and `--default_input_scalars` here as well:
+
+```
+$ ./bin/local_laplacian.rungen --benchmarks=all --default_input_buffers --default_input_scalars --output_extents=estimate
+Benchmark for local_laplacian produces best case of 0.0494629 sec/iter, over 3 blocks of 10 iterations.
+Best output throughput is 39.9802 mpix/sec.
+```
 
 Note: `halide_benchmark.h` is known to be inaccurate for GPU filters; see
 https://github.com/halide/Halide/issues/2278
@@ -222,8 +224,7 @@ To track memory usage, use the `--track_memory` flag, which measures the
 high-water-mark of CPU memory usage.
 
 ```
-# When you specify the --track_memory flag, outputs become optional.
-$ ./bin/local_laplacian.rungen --track_memory input=zero:[1920,1080,3] levels=8 alpha=1 beta=1
+$ ./bin/local_laplacian.rungen --track_memory input=zero:[1920,1080,3] levels=8 alpha=1 beta=1 --output_extents=[100,200,3]
 Maximum Halide memory: 82688420 bytes for output of 1.97754 mpix.
 ```
 

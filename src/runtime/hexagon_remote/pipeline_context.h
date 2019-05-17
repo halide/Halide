@@ -1,7 +1,7 @@
 #ifndef HALIDE_HEXAGON_REMOTE_PIPELINE_CONTEXT_H
 #define HALIDE_HEXAGON_REMOTE_PIPELINE_CONTEXT_H
 
-#include <HalideRuntime.h>
+#include "HalideRuntime.h"
 
 #include <qurt.h>
 
@@ -74,6 +74,15 @@ public:
         qurt_mutex_destroy(&work_mutex);
 
         free(stack);
+    }
+
+    void set_priority(int priority) {
+        if (priority > 0xFF) {
+            priority = 0xFF;        // Clamp to max priority
+        } else if (priority <= 0) {
+            return;                 // Ignore settings of zero and below
+        }
+        qurt_thread_set_priority(thread, priority);
     }
 
     int run(pipeline_argv_t function, void **args) {

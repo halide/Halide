@@ -20,7 +20,6 @@ env:
     # Note that gcc5.4 is the default install on Travis Xenial, so we'll just use that.
     - LLVM_VERSION=8.0.0 BUILD_SYSTEM=MAKE
     - LLVM_VERSION=8.0.0 BUILD_SYSTEM=CMAKE HALIDE_SHARED_LIBRARY=1
-    - LLVM_VERSION=6.0.1 BUILD_SYSTEM=MAKE
     #
     # llvm7 prebuilts are cranky on Travis and give flaky failures; we just skipped them
     # in Trusty and continue to skip them in Xenial.

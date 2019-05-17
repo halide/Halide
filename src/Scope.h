@@ -250,18 +250,27 @@ std::ostream &operator<<(std::ostream &stream, const Scope<T>& s) {
  * a name within the scope of this helper's lifetime. */
 template<typename T = void>
 struct ScopedBinding {
-    Scope<T> *scope;
+    Scope<T> *scope = nullptr;
     std::string name;
+
+    ScopedBinding() = default;
+
     ScopedBinding(Scope<T> &s, const std::string &n, const T &value) :
         scope(&s), name(n) {
         scope->push(name, value);
     }
+
     ScopedBinding(bool condition, Scope<T> &s, const std::string &n, const T &value) :
         scope(condition ? &s : nullptr), name(n) {
         if (condition) {
             scope->push(name, value);
         }
     }
+
+    bool bound() const {
+        return scope != nullptr;
+    }
+
     ~ScopedBinding() {
         if (scope) {
             scope->pop(name);
