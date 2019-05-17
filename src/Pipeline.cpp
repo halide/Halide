@@ -169,7 +169,8 @@ string Pipeline::auto_schedule(const Target &target, const MachineParams &arch_p
     }
 
     user_assert(target.arch == Target::X86 || target.arch == Target::ARM ||
-                target.arch == Target::POWERPC || target.arch == Target::MIPS)
+                target.arch == Target::POWERPC || target.arch == Target::MIPS ||
+                target.arch == Target::WebAssembly)
         << "Automatic scheduling is currently supported only on these architectures.";
     return generate_schedules(contents->outputs, target, arch_params);
 }

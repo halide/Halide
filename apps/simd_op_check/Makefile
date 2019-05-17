@@ -1,6 +1,5 @@
 CXX-host ?= c++
 
-BIN ?= bin
 
 OPTIMIZE ?= -O3
 

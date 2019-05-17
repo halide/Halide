@@ -1,7 +1,6 @@
 include ../support/Makefile.inc
 
 CXXFLAGS += -g -Wall
-BIN ?= bin
 
 .PHONY: clean
 
@@ -41,19 +40,19 @@ $(BIN)/fft.generator: fft_generator.cpp fft.cpp fft.h $(GENERATOR_DEPS)
 # Generate four AOT compiled FFT variants. Forward versions have gain set to 1 / 256.0
 $(BIN)/fft_forward_r2c.a: $(BIN)/fft.generator
 	@mkdir -p $(@D)
-	$^ -g fft -o $(BIN) -f fft_forward_r2c target=$(HL_TARGET) direction=samples_to_frequency size0=16 size1=16 gain=0.00390625 input_number_type=real output_number_type=complex
+	$^ -g fft -o $(@D) -f fft_forward_r2c target=$(HL_TARGET) direction=samples_to_frequency size0=16 size1=16 gain=0.00390625 input_number_type=real output_number_type=complex
 
 $(BIN)/fft_inverse_c2r.a: $(BIN)/fft.generator
 	@mkdir -p $(@D)
-	$^ -g fft -o $(BIN) -f fft_inverse_c2r target=$(HL_TARGET) direction=frequency_to_samples size0=16 size1=16 input_number_type=complex output_number_type=real
+	$^ -g fft -o $(@D) -f fft_inverse_c2r target=$(HL_TARGET) direction=frequency_to_samples size0=16 size1=16 input_number_type=complex output_number_type=real
 
 $(BIN)/fft_forward_c2c.a: $(BIN)/fft.generator
 	@mkdir -p $(@D)
-	$^ -g fft -o $(BIN) -f fft_forward_c2c target=$(HL_TARGET) direction=samples_to_frequency size0=16 size1=16 gain=0.00390625 input_number_type=complex output_number_type=complex
+	$^ -g fft -o $(@D) -f fft_forward_c2c target=$(HL_TARGET) direction=samples_to_frequency size0=16 size1=16 gain=0.00390625 input_number_type=complex output_number_type=complex
 
 $(BIN)/fft_inverse_c2c.a: $(BIN)/fft.generator
 	@mkdir -p $(@D)
-	$^ -g fft -o $(BIN) -f fft_inverse_c2c target=$(HL_TARGET) direction=frequency_to_samples size0=16 size1=16 input_number_type=complex output_number_type=complex
+	$^ -g fft -o $(@D) -f fft_inverse_c2c target=$(HL_TARGET) direction=frequency_to_samples size0=16 size1=16 input_number_type=complex output_number_type=complex
 
 $(BIN)/fft_aot_test: fft_aot_test.cpp $(BIN)/fft_forward_r2c.a $(BIN)/fft_inverse_c2r.a $(BIN)/fft_forward_c2c.a $(BIN)/fft_inverse_c2c.a
 	@mkdir -p $(@D)

@@ -1,9 +1,7 @@
 include ../support/Makefile.inc
 
-BIN ?= bin
 BUILD = $(BIN)/build
 CXXFLAGS += -Wall -march=native -I /opt/local/include
-HL_TARGET ?= host
 LIBHALIDE_BLAS = $(BIN)/libhalide_blas.a
 HALIDEBLAS_FLAGS ?= -DUSE_HALIDE
 EMIT_OPTIONS = stmt,assembly,o,h

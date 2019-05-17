@@ -18,14 +18,14 @@ $(BIN)/auto_viz_demo.generator: auto_viz_demo_generator.cpp $(GENERATOR_DEPS)
 
 $(BIN)/auto_viz_demo_%.a: $(BIN)/auto_viz_demo.generator
 	@mkdir -p $(@D)
-	$^ -g auto_viz_demo -o $(BIN) -f auto_viz_demo_$* \
+	$^ -g auto_viz_demo -o $(@D) -f auto_viz_demo_$* \
 	target=$(TRACE_TARGET)-no_runtime \
 	schedule_type=$$(echo $* | cut -d_ -f1) \
 	upsample=$$(echo $* | cut -d_ -f2 | sed 's/up/true/;s/down/false/')
 
 $(BIN)/runtime.a: $(BIN)/auto_viz_demo.generator
 	@mkdir -p $(@D)
-	$^ -r runtime -o $(BIN) target=$(TRACE_TARGET)
+	$^ -r runtime -o $(@D) target=$(TRACE_TARGET)
 
 $(BIN)/auto_viz_demo: auto_viz_demo.cpp $(LIBRARIES) $(BIN)/runtime.a
 	@mkdir -p $(@D)

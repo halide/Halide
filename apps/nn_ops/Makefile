@@ -1,6 +1,5 @@
 include ../support/Makefile.inc
 
-BIN ?= bin
 
 all: $(BIN)/host/AveragePool $(BIN)/host/Convolution $(BIN)/host/DepthwiseConvolution $(BIN)/host/Im2col $(BIN)/host/MatrixMultiply $(BIN)/host/MaxPool
 

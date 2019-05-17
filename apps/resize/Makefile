@@ -25,7 +25,7 @@ $(BIN)/resize.generator: resize_generator.cpp $(GENERATOR_DEPS)
 
 $(BIN)/resize_%.a: $(BIN)/resize.generator
 	@mkdir -p $(@D)
-	$^ -g resize -o $(BIN) -f resize_$* \
+	$^ -g resize -o $(@D) -f resize_$* \
 	target=$(HL_TARGET)-no_runtime \
 	interpolation_type=$$(echo $* | cut -d_ -f1) \
 	input.type=$$(echo $* | cut -d_ -f2) \
@@ -33,7 +33,7 @@ $(BIN)/resize_%.a: $(BIN)/resize.generator
 
 $(BIN)/runtime.a: $(BIN)/resize.generator
 	@mkdir -p $(@D)
-	$^ -r runtime -o $(BIN) target=$(HL_TARGET)
+	$^ -r runtime -o $(@D) target=$(HL_TARGET)
 
 $(BIN)/resize: resize.cpp $(LIBRARIES) $(BIN)/runtime.a
 	@mkdir -p $(@D)

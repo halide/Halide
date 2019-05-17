@@ -1,9 +1,10 @@
 HALIDE_DISTRIB_PATH ?= ../../distrib
 LDFLAGS ?=
-BIN ?= ./bin
 IMAGES ?= ../images
-HL_TARGET ?= host
 UNAME ?= $(shell uname)
+
+HL_TARGET ?= host
+BIN ?= bin/$(HL_TARGET)
 
 SANITIZER_FLAGS ?=
 

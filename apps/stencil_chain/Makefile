@@ -1,6 +1,5 @@
 include ../support/Makefile.inc
 
-BIN ?= bin
 
 all: $(BIN)/process
 
@@ -10,11 +9,11 @@ $(BIN)/stencil_chain.generator: stencil_chain_generator.cpp $(GENERATOR_DEPS)
 
 $(BIN)/stencil_chain.a: $(BIN)/stencil_chain.generator
 	@mkdir -p $(@D)
-	$^ -g stencil_chain -o $(BIN) -f stencil_chain target=$(HL_TARGET) auto_schedule=false
+	$^ -g stencil_chain -o $(@D) -f stencil_chain target=$(HL_TARGET) auto_schedule=false
 
 $(BIN)/stencil_chain_auto_schedule.a: $(BIN)/stencil_chain.generator
 	@mkdir -p $(@D)
-	$^ -g stencil_chain -o $(BIN) -f stencil_chain_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true
+	$^ -g stencil_chain -o $(@D) -f stencil_chain_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true
 
 $(BIN)/process: process.cpp $(BIN)/stencil_chain.a $(BIN)/stencil_chain_auto_schedule.a
 	@mkdir -p $(@D)

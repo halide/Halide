@@ -1,6 +1,5 @@
 include ../support/Makefile.inc
 
-BIN ?= bin
 
 all: $(BIN)/process
 
@@ -10,11 +9,11 @@ $(BIN)/lens_blur.generator: lens_blur_generator.cpp $(GENERATOR_DEPS)
 
 $(BIN)/lens_blur.a: $(BIN)/lens_blur.generator
 	@-mkdir -p $(BIN)
-	$^ -g lens_blur -o $(BIN) -f lens_blur target=$(HL_TARGET) auto_schedule=false
+	$^ -g lens_blur -o $(@D) -f lens_blur target=$(HL_TARGET) auto_schedule=false
 
 $(BIN)/lens_blur_auto_schedule.a: $(BIN)/lens_blur.generator
 	@-mkdir -p $(BIN)
-	$^ -g lens_blur -o $(BIN) -f lens_blur_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true
+	$^ -g lens_blur -o $(@D) -f lens_blur_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true
 
 $(BIN)/process: process.cpp $(BIN)/lens_blur.a $(BIN)/lens_blur_auto_schedule.a
 	@-mkdir -p $(BIN)

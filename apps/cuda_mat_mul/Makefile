@@ -1,6 +1,5 @@
 include ../support/Makefile.inc
 
-BIN ?= bin
 MATRIX_SIZE ?= 1024
 
 CUDA_SDK ?= /usr/local/cuda-8.0
@@ -16,7 +15,7 @@ $(BIN)/mat_mul.generator: mat_mul_generator.cpp $(GENERATOR_DEPS)
 
 $(BIN)/mat_mul.a: $(BIN)/mat_mul.generator
 	@mkdir -p $(@D)
-	$^ -g mat_mul -o $(BIN) target=host-cuda-cuda_capability_50 size=$(MATRIX_SIZE)
+	$^ -g mat_mul -o $(@D) target=host-cuda-cuda_capability_50 size=$(MATRIX_SIZE)
 
 $(BIN)/runner: runner.cpp $(BIN)/mat_mul.a
 	@mkdir -p $(@D)

@@ -1,10 +1,5 @@
 include ../support/Makefile.inc
 
-BIN ?= bin
-
-# If HL_TARGET isn't set, use host
-HL_TARGET ?= host
-
 all: test
 
 clean:
@@ -20,12 +15,12 @@ $(BIN)/%.generator: %_generator.cpp $(GENERATOR_DEPS)
 $(BIN)/%.a $(BIN)/%.h: $(BIN)/%.generator
 	@echo Running Generator $<
 	@mkdir -p $(@D)
-	@$< -g $(notdir $*) -o $(BIN) target=$(HL_TARGET)-no_runtime
+	@$< -g $(notdir $*) -o $(@D) target=$(HL_TARGET)-no_runtime
 
 $(BIN)/runtime_$(HL_TARGET).a: $(BIN)/haar_x.generator
 	@echo Compiling Halide runtime for target $(HL_TARGET)
 	@mkdir -p $(@D)
-	@$< -r runtime_$(HL_TARGET) -o $(BIN) target=$(HL_TARGET)
+	@$< -r runtime_$(HL_TARGET) -o $(@D) target=$(HL_TARGET)
 
 HL_MODULES = \
 	$(BIN)/daubechies_x.a \

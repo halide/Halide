@@ -1,6 +1,5 @@
 include ../support/Makefile.inc
 
-BIN ?= bin
 SEED = 123
 
 all: $(BIN)/process
@@ -16,7 +15,7 @@ $(BIN)/resnet50.generator: Resnet50Generator.cpp $(GENERATOR_DEPS)
 
 $(BIN)/resnet50.a: $(BIN)/resnet50.generator
 	@mkdir -p $(@D)
-	$^ -g resnet50 -o $(BIN) -f resnet50 target=$(HL_TARGET) auto_schedule=false
+	$^ -g resnet50 -o $(@D) -f resnet50 target=$(HL_TARGET) auto_schedule=false
 
 $(BIN)/process: process.cpp $(BIN)/resnet50.a
 	@mkdir -p $(@D)

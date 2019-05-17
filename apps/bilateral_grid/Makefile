@@ -8,15 +8,15 @@ $(BIN)/bilateral_grid.generator: bilateral_grid_generator.cpp $(GENERATOR_DEPS)
 
 $(BIN)/bilateral_grid.a: $(BIN)/bilateral_grid.generator
 	@mkdir -p $(@D)
-	$^ -g bilateral_grid -o $(BIN) -f bilateral_grid target=$(HL_TARGET) auto_schedule=false
+	$^ -g bilateral_grid -o $(@D) -f bilateral_grid target=$(HL_TARGET) auto_schedule=false
 
 $(BIN)/bilateral_grid_auto_schedule.a: $(BIN)/bilateral_grid.generator
 	@mkdir -p $(@D)
-	$^ -g bilateral_grid -o $(BIN) -f bilateral_grid_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true -e static_library,h,schedule
+	$^ -g bilateral_grid -o $(@D) -f bilateral_grid_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true -e static_library,h,schedule
 
 $(BIN)/viz/bilateral_grid.a: $(BIN)/bilateral_grid.generator
 	@mkdir -p $(@D)
-	$^ -g bilateral_grid -o $(BIN)/viz target=$(HL_TARGET)-trace_all
+	$^ -g bilateral_grid -o $(@D) target=$(HL_TARGET)-trace_all
 
 $(BIN)/filter: $(BIN)/bilateral_grid.a $(BIN)/bilateral_grid_auto_schedule.a filter.cpp
 	@mkdir -p $(@D)

@@ -46,7 +46,6 @@ GENERATOR_LIBS = -lHalide -lz -lcurses
 CXXFLAGS       = -std=c++11 -g -DDTX_FONT=\"$(DTX_FONT)\" $(HALIDE_INC_PATH)
 
 # Output directory.
-BIN ?= bin
 
 .PHONY: run clean
 
@@ -83,10 +82,10 @@ $(BIN)/main.o: \
 # depends on the halide filter source in sample_filter.cpp
 #
 $(BIN)/sample_filter_cpu.o $(BIN)/sample_filter_cpu.h: $(BIN)/sample_filter.generator
-	LD_LIBRARY_PATH=../../bin $(BIN)/sample_filter.generator -g sample_filter -e o,h,stmt -o $(BIN) -f sample_filter_cpu target=$(HL_TARGET)
+	LD_LIBRARY_PATH=../../bin $(BIN)/sample_filter.generator -g sample_filter -e o,h,stmt -o $(@D) -f sample_filter_cpu target=$(HL_TARGET)
 
 $(BIN)/sample_filter_opengl.o $(BIN)/sample_filter_opengl.h: $(BIN)/sample_filter.generator
-	LD_LIBRARY_PATH=../../bin $(BIN)/sample_filter.generator -g sample_filter -e o,h,stmt -o $(BIN) -f sample_filter_opengl target=host-opengl-debug
+	LD_LIBRARY_PATH=../../bin $(BIN)/sample_filter.generator -g sample_filter -e o,h,stmt -o $(@D) -f sample_filter_opengl target=host-opengl-debug
 
 $(BIN)/sample_filter.generator: sample_filter_generator.cpp
 	@mkdir -p $(@D)

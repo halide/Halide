@@ -48,7 +48,6 @@ LDFLAGS-arm-64-profile-android ?= -llog -fPIE -pie
 LDFLAGS-arm-32-profile-android ?= -llog -fPIE -pie
 OPTION := none
 
-BIN ?= bin
 
 all: $(BIN)/process_yuv_linear_basic-host \
 	 $(BIN)/process_raw_linear_interleaved_basic-host \
