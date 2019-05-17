@@ -41,6 +41,16 @@ USE_EXPORT_DYNAMIC=
 endif
 endif
 
+ifeq ($(OS), Windows_NT)
+SHARED_EXT=dll
+else
+ifeq ($(UNAME), Darwin)
+SHARED_EXT=dylib
+else
+SHARED_EXT=so
+endif
+endif
+
 # To run apps on android that support this, build a separate toolchain from the Android NDK
 # using the make-standalone-toolchain.sh script:
 #$ build/tools/make-standalone-toolchain.sh --arch=arm64 --platform=android-21 --install-dir=$ANDROID_ARM64_TOOLCHAIN
@@ -57,9 +67,24 @@ LDFLAGS-host ?= $(LDFLAGS)
 LDFLAGS-arm-64-android ?= -llog -fPIE -pie
 LDFLAGS-arm-32-android ?= -llog -fPIE -pie
 
-LIB_HALIDE = $(HALIDE_DISTRIB_PATH)/lib/libHalide.a
+# For MinGW, we need libHalide.dll to be someplace that the app we build can find it,
+# since Windows has nothing like --rpath, so we'll make a "symlink" for libHalide.dll
+# from the app's bin/ folder to the distrib/ folder we are using, and depend on that.
+ifeq ($(OS), Windows_NT)
 
-GENERATOR_DEPS ?= $(HALIDE_DISTRIB_PATH)/lib/libHalide.a $(HALIDE_DISTRIB_PATH)/include/Halide.h $(HALIDE_DISTRIB_PATH)/tools/GenGen.cpp
+$(BIN)/libHalide.dll: $(HALIDE_DISTRIB_PATH)/bin/libHalide.dll
+	@mkdir -p $(@D)
+	@ln $^ $@
+
+LIB_HALIDE = $(BIN)/libHalide.dll
+
+else
+
+LIB_HALIDE = $(HALIDE_DISTRIB_PATH)/bin/libHalide.$(SHARED_EXT)
+
+endif
+
+GENERATOR_DEPS ?= $(LIB_HALIDE) $(HALIDE_DISTRIB_PATH)/include/Halide.h $(HALIDE_DISTRIB_PATH)/tools/GenGen.cpp
 
 LIBPNG_LIBS_DEFAULT = $(shell libpng-config --ldflags)
 LIBPNG_CXX_FLAGS ?= $(shell libpng-config --cflags)
