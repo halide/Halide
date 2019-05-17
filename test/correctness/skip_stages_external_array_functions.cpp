@@ -120,31 +120,33 @@ int main(int argc, char **argv) {
 
         f4.compile_jit();
 
+        Buffer<int> out(10);
+
         reset_counts();
         toggle1.set(true);
         toggle2.set(true);
-        f4.realize(10);
+        f4.realize(out);
         check_queries(2, 2, 2);
         check_counts(1, 1, 1);
 
         reset_counts();
         toggle1.set(false);
         toggle2.set(true);
-        f4.realize(10);
+        f4.realize(out);
         check_queries(2, 2, 2);
         check_counts(1, 0, 1);
 
         reset_counts();
         toggle1.set(true);
         toggle2.set(false);
-        f4.realize(10);
+        f4.realize(out);
         check_queries(2, 2, 2);
         check_counts(1, 1, 0);
 
         reset_counts();
         toggle1.set(false);
         toggle2.set(false);
-        f4.realize(10);
+        f4.realize(out);
         check_queries(2, 2, 2);
         check_counts(0, 0, 0);
 
