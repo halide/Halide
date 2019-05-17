@@ -14,7 +14,7 @@ $(BIN)/%/AveragePool.o: $(BIN)/AveragePool.generator
 
 $(BIN)/%/AveragePool: AveragePool.cpp $(BIN)/%/AveragePool.o
 	@mkdir -p $(@D)
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 AveragePool.cpp $(BIN)/$*/AveragePool.o -o $(BIN)/$*/AveragePool $(LDFLAGS-$*)
+	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall AveragePool.cpp $(BIN)/$*/AveragePool.o -o $(BIN)/$*/AveragePool $(LDFLAGS-$*)
 
 $(BIN)/Convolution.generator: Convolution_generator.cpp common.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
@@ -26,7 +26,7 @@ $(BIN)/%/Convolution.o: $(BIN)/Convolution.generator
 
 $(BIN)/%/Convolution: Convolution.cpp common_reference.cpp $(BIN)/%/Convolution.o
 	@mkdir -p $(@D)
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 Convolution.cpp common_reference.cpp $(BIN)/$*/Convolution.o -o $(BIN)/$*/Convolution $(LDFLAGS-$*)
+	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall Convolution.cpp common_reference.cpp $(BIN)/$*/Convolution.o -o $(BIN)/$*/Convolution $(LDFLAGS-$*)
 
 $(BIN)/DepthwiseConvolution.generator: DepthwiseConvolution_generator.cpp common.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
@@ -50,7 +50,7 @@ $(BIN)/%/DepthwiseConvolution_8.o: $(BIN)/DepthwiseConvolution.generator
 
 $(BIN)/%/DepthwiseConvolution: DepthwiseConvolution.cpp common_reference.cpp $(BIN)/%/DepthwiseConvolution_1.o $(BIN)/%/DepthwiseConvolution_2.o $(BIN)/%/DepthwiseConvolution_4.o $(BIN)/%/DepthwiseConvolution_8.o
 	@mkdir -p $(@D)
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 DepthwiseConvolution.cpp common_reference.cpp $(BIN)/$*/DepthwiseConvolution_1.o $(BIN)/$*/DepthwiseConvolution_2.o $(BIN)/$*/DepthwiseConvolution_4.o $(BIN)/$*/DepthwiseConvolution_8.o -o $(BIN)/$*/DepthwiseConvolution $(LDFLAGS-$*)
+	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall DepthwiseConvolution.cpp common_reference.cpp $(BIN)/$*/DepthwiseConvolution_1.o $(BIN)/$*/DepthwiseConvolution_2.o $(BIN)/$*/DepthwiseConvolution_4.o $(BIN)/$*/DepthwiseConvolution_8.o -o $(BIN)/$*/DepthwiseConvolution $(LDFLAGS-$*)
 
 $(BIN)/Im2col.generator: Im2col_generator.cpp common.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
@@ -62,7 +62,7 @@ $(BIN)/%/Im2col.o: $(BIN)/Im2col.generator
 
 $(BIN)/%/Im2col: Im2col.cpp $(BIN)/%/Im2col.o
 	@mkdir -p $(@D)
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 Im2col.cpp $(BIN)/$*/Im2col.o -o $(BIN)/$*/Im2col $(LDFLAGS-$*)
+	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall Im2col.cpp $(BIN)/$*/Im2col.o -o $(BIN)/$*/Im2col $(LDFLAGS-$*)
 
 $(BIN)/MatrixMultiply.generator: MatrixMultiply_generator.cpp common.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
@@ -74,7 +74,7 @@ $(BIN)/%/MatrixMultiply.o: $(BIN)/MatrixMultiply.generator
 
 $(BIN)/%/MatrixMultiply: MatrixMultiply.cpp common_reference.cpp $(BIN)/%/MatrixMultiply.o
 	@mkdir -p $(@D)
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 MatrixMultiply.cpp common_reference.cpp $(BIN)/$*/MatrixMultiply.o -o $(BIN)/$*/MatrixMultiply $(LDFLAGS-$*)
+	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall MatrixMultiply.cpp common_reference.cpp $(BIN)/$*/MatrixMultiply.o -o $(BIN)/$*/MatrixMultiply $(LDFLAGS-$*)
 
 $(BIN)/MaxPool.generator: MaxPool_generator.cpp common.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
@@ -86,7 +86,7 @@ $(BIN)/%/MaxPool.o: $(BIN)/MaxPool.generator
 
 $(BIN)/%/MaxPool: MaxPool.cpp $(BIN)/%/MaxPool.o
 	@mkdir -p $(@D)
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 MaxPool.cpp $(BIN)/$*/MaxPool.o -o $(BIN)/$*/MaxPool $(LDFLAGS-$*)
+	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall MaxPool.cpp $(BIN)/$*/MaxPool.o -o $(BIN)/$*/MaxPool $(LDFLAGS-$*)
 
 run-host: $(BIN)/host/AveragePool $(BIN)/host/DepthwiseConvolution $(BIN)/host/Convolution $(BIN)/host/Im2col $(BIN)/host/MatrixMultiply $(BIN)/host/MaxPool
 	./AveragePool.sh $(BIN)/host/AveragePool

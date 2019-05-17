@@ -89,7 +89,7 @@ PYCXXFLAGS =  $(CXXFLAGS) $(PYBIND11_CFLAGS)
 
 # Python extension for HalideModel
 $(BIN)/$(PY_MODEL_EXT): model.cpp $(ONNX_CONVERTER_LIB)
-	$(CXX) $(PYCXXFLAGS) -O3 -Wall -shared -fPIC -I$(BIN) $< $(ONNX_CONVERTER_LIB) $(LIB_HALIDE) -o $@ $(LDFLAGS)
+	$(CXX) $(PYCXXFLAGS) -Wall -shared -fPIC -I$(BIN) $< $(ONNX_CONVERTER_LIB) $(LIB_HALIDE) -o $@ $(LDFLAGS)
 
 
 model_test: $(BIN)/$(PY_MODEL_EXT)
