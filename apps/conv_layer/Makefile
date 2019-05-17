@@ -2,15 +2,15 @@ include ../support/Makefile.inc
 
 all: $(BIN)/process
 
-$(BIN)/conv_layer.generator: conv_layer_generator.cpp $(GENERATOR_DEPS)
+$(GENERATOR_BIN)/conv_layer.generator: conv_layer_generator.cpp $(GENERATOR_DEPS)
 	@-mkdir -p $(BIN)
 	$(CXX) $(CXXFLAGS) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS)
 
-$(BIN)/conv_layer.a: $(BIN)/conv_layer.generator
+$(BIN)/conv_layer.a: $(GENERATOR_BIN)/conv_layer.generator
 	@-mkdir -p $(BIN)
 	$^ -g conv_layer -o $(@D) -f conv_layer target=$(HL_TARGET) auto_schedule=false
 
-$(BIN)/conv_layer_auto_schedule.a: $(BIN)/conv_layer.generator
+$(BIN)/conv_layer_auto_schedule.a: $(GENERATOR_BIN)/conv_layer.generator
 	@-mkdir -p $(BIN)
 	$^ -g conv_layer -o $(@D) -f conv_layer_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true
 

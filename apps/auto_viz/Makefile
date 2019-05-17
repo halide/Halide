@@ -12,18 +12,18 @@ TRACE_TARGET=$(HL_TARGET)-trace_all
 
 all: $(OUTPUTS)
 
-$(BIN)/auto_viz_demo.generator: auto_viz_demo_generator.cpp $(GENERATOR_DEPS)
+$(GENERATOR_BIN)/auto_viz_demo.generator: auto_viz_demo_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
-$(BIN)/auto_viz_demo_%.a: $(BIN)/auto_viz_demo.generator
+$(BIN)/auto_viz_demo_%.a: $(GENERATOR_BIN)/auto_viz_demo.generator
 	@mkdir -p $(@D)
 	$^ -g auto_viz_demo -o $(@D) -f auto_viz_demo_$* \
 	target=$(TRACE_TARGET)-no_runtime \
 	schedule_type=$$(echo $* | cut -d_ -f1) \
 	upsample=$$(echo $* | cut -d_ -f2 | sed 's/up/true/;s/down/false/')
 
-$(BIN)/runtime.a: $(BIN)/auto_viz_demo.generator
+$(BIN)/runtime.a: $(GENERATOR_BIN)/auto_viz_demo.generator
 	@mkdir -p $(@D)
 	$^ -r runtime -o $(@D) target=$(TRACE_TARGET)
 

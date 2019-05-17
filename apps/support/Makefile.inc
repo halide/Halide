@@ -3,8 +3,19 @@ LDFLAGS ?=
 IMAGES ?= ../images
 UNAME ?= $(shell uname)
 
+BIN_DIR ?= bin
 HL_TARGET ?= host
-BIN ?= bin/$(HL_TARGET)
+
+# Most build outputs go here, so that you can vary the test and/or benchmark output
+# easily by changing HL_TARGET and not have to worry about cleaning the output
+# (e.g. to add different GPU or SIMD features).
+BIN ?= $(BIN_DIR)/$(HL_TARGET)
+
+# GENERATOR_BIN is used mainly for Generators, which are always built
+# (and executed) on the host, regardless of the final target; this saves a bit
+# of recompile time (and disk space). (It would still provide correct results
+# if we output them to $(BIN), it would just be inefficient.)
+GENERATOR_BIN ?= $(BIN_DIR)/host
 
 SANITIZER_FLAGS ?=
 

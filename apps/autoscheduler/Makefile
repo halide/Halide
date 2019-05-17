@@ -4,14 +4,14 @@ include ../support/autoscheduler.inc
 # A sample generator to autoschedule. Note that if it statically links
 # to libHalide, then it must be build with $(USE_EXPORT_DYNAMIC), or the
 # autoscheduler can't find the libHalide symbols that it needs.
-$(BIN)/demo.generator: demo_generator.cpp $(GENERATOR_DEPS)
+$(GENERATOR_BIN)/demo.generator: demo_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 # To use the autoscheduler, set a few environment variables and use the -p flag to the generator to load the autoscheduler as a plugin
-$(BIN)/demo.a: $(BIN)/demo.generator $(AUTOSCHED_BIN)/libauto_schedule.so
+$(BIN)/demo.a: $(GENERATOR_BIN)/demo.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=weights \
-	$(BIN)/demo.generator -g demo -o $(@D) -f demo target=$(HL_TARGET) auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so
+	$(GENERATOR_BIN)/demo.generator -g demo -o $(@D) -f demo target=$(HL_TARGET) auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so
 
 $(BIN)/demo.rungen: $(BIN)/RunGenMain.o $(BIN)/demo.registration.cpp $(BIN)/demo.a
 	$(CXX) -I $(BIN) $^ -o $@ $(HALIDE_SYSTEM_LIBS) $(IMAGE_IO_FLAGS)
@@ -22,9 +22,9 @@ demo: $(BIN)/demo.rungen
 
 # demonstrates an autotuning loop
 # (using $(AUTOSCHED_BIN) and $(AUTOSCHED_SRC) here seems overkill, but makes copy-n-paste elsewhere easier)
-autotune: $(BIN)/demo.generator $(AUTOSCHED_BIN)/augment_sample $(AUTOSCHED_BIN)/train_cost_model $(AUTOSCHED_BIN)/libauto_schedule.so $(AUTOSCHED_SRC)/autotune_loop.sh
+autotune: $(GENERATOR_BIN)/demo.generator $(AUTOSCHED_BIN)/augment_sample $(AUTOSCHED_BIN)/train_cost_model $(AUTOSCHED_BIN)/libauto_schedule.so $(AUTOSCHED_SRC)/autotune_loop.sh
 	bash $(AUTOSCHED_SRC)/autotune_loop.sh \
-		$(BIN)/demo.generator \
+		$(GENERATOR_BIN)/demo.generator \
 		demo \
 		x86-64-avx2 \
 		$(AUTOSCHED_SRC)/weights \

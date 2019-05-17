@@ -17,7 +17,7 @@ $(BIN)/%.a $(BIN)/%.h: $(BIN)/%.generator
 	@mkdir -p $(@D)
 	@$< -g $(notdir $*) -o $(@D) target=$(HL_TARGET)-no_runtime
 
-$(BIN)/runtime_$(HL_TARGET).a: $(BIN)/haar_x.generator
+$(BIN)/runtime_$(HL_TARGET).a: $(GENERATOR_BIN)/haar_x.generator
 	@echo Compiling Halide runtime for target $(HL_TARGET)
 	@mkdir -p $(@D)
 	@$< -r runtime_$(HL_TARGET) -o $(@D) target=$(HL_TARGET)

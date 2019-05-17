@@ -4,19 +4,19 @@ all: $(BIN)/process
 
 TIMING_ITERATIONS ?= 5
 
-$(BIN)/camera_pipe.generator: camera_pipe_generator.cpp $(GENERATOR_DEPS)
+$(GENERATOR_BIN)/camera_pipe.generator: camera_pipe_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
-$(BIN)/camera_pipe.a: $(BIN)/camera_pipe.generator
+$(BIN)/camera_pipe.a: $(GENERATOR_BIN)/camera_pipe.generator
 	@mkdir -p $(@D)
 	$^ -g camera_pipe -o $(@D) -f camera_pipe target=$(HL_TARGET) auto_schedule=false
 
-$(BIN)/camera_pipe_auto_schedule.a: $(BIN)/camera_pipe.generator
+$(BIN)/camera_pipe_auto_schedule.a: $(GENERATOR_BIN)/camera_pipe.generator
 	@mkdir -p $(@D)
 	$^ -g camera_pipe -o $(@D) -f camera_pipe_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true
 
-$(BIN)/viz/camera_pipe.a: $(BIN)/camera_pipe.generator
+$(BIN)/viz/camera_pipe.a: $(GENERATOR_BIN)/camera_pipe.generator
 	@mkdir -p $(@D)
 	$^ -g camera_pipe -o $(@D) target=$(HL_TARGET)-trace_all
 

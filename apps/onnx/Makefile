@@ -48,7 +48,7 @@ $(BIN)/onnx_converter_test: onnx_converter_test.cc $(ONNX_CONVERTER_LIB)
 	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) -I$(BIN) $< -o $@ $(LDFLAGS) $(ONNX_CONVERTER_LIB) $(LIB_HALIDE) $(HALIDE_SYSTEM_LIBS)
 
 
-$(BIN)/onnx_converter.generator : onnx_converter_generator.cc $(GENERATOR_DEPS) $(ONNX_CONVERTER_LIB)
+$(GENERATOR_BIN)/onnx_converter.generator : onnx_converter_generator.cc $(GENERATOR_DEPS) $(ONNX_CONVERTER_LIB)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -I$(BIN) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
@@ -58,7 +58,7 @@ $(BIN)/onnx_converter.generator : onnx_converter_generator.cc $(GENERATOR_DEPS) 
 #	curl -o $(@D)/mnist.tar.gz https://onnxzoo.blob.core.windows.net/models/opset_8/mnist/mnist.tar.gz
 #	tar xvzf $(@D)/mnist.tar.gz -C $(BIN)/onnx_model_zoo
 
-#$(BIN)/onnx_mnist_model.a : $(BIN)/onnx_converter.generator $(BIN)/onnx_model_zoo/mnist/model.onnx
+#$(BIN)/onnx_mnist_model.a : $(GENERATOR_BIN)/onnx_converter.generator $(BIN)/onnx_model_zoo/mnist/model.onnx
 #	@mkdir -p $(@D)
 #	$^ -g onnx_model_inference -o $(@D) -f onnx_model_inference target=$(HL_TARGET) model_file_path=$(BIN)/onnx_model_zoo/mnist/model.onnx
 
@@ -66,7 +66,7 @@ $(BIN)/test_model.onnx: test_model_proto.txt $(BIN)/onnx/onnx.proto
 	@mkdir -p $(@D)
 	cat $< | protoc --encode=onnx.ModelProto $(BIN)/onnx/onnx.proto > $@
 
-$(BIN)/test_model.a: $(BIN)/onnx_converter.generator $(BIN)/test_model.onnx
+$(BIN)/test_model.a: $(GENERATOR_BIN)/onnx_converter.generator $(BIN)/test_model.onnx
 	@mkdir -p $(@D)
 	$< -g onnx_model_generator -o $(@D) -f test_model target=$(HL_TARGET) model_file_path=$(BIN)/test_model.onnx
 

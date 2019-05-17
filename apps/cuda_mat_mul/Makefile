@@ -9,11 +9,11 @@ LDFLAGS += -L $(CUDA_SDK)/lib64
 
 all: $(BIN)/runner
 
-$(BIN)/mat_mul.generator: mat_mul_generator.cpp $(GENERATOR_DEPS)
+$(GENERATOR_BIN)/mat_mul.generator: mat_mul_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
-$(BIN)/mat_mul.a: $(BIN)/mat_mul.generator
+$(BIN)/mat_mul.a: $(GENERATOR_BIN)/mat_mul.generator
 	@mkdir -p $(@D)
 	$^ -g mat_mul -o $(@D) target=host-cuda-cuda_capability_50 size=$(MATRIX_SIZE)
 

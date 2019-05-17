@@ -3,15 +3,15 @@ include ../support/Makefile.inc
 
 all: $(BIN)/process
 
-$(BIN)/local_laplacian.generator: local_laplacian_generator.cpp $(GENERATOR_DEPS)
+$(GENERATOR_BIN)/local_laplacian.generator: local_laplacian_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
-$(BIN)/local_laplacian.a: $(BIN)/local_laplacian.generator
+$(BIN)/local_laplacian.a: $(GENERATOR_BIN)/local_laplacian.generator
 	@mkdir -p $(@D)
 	$^ -g local_laplacian -o $(@D) -f local_laplacian target=$(HL_TARGET) auto_schedule=false
 
-$(BIN)/local_laplacian_auto_schedule.a: $(BIN)/local_laplacian.generator
+$(BIN)/local_laplacian_auto_schedule.a: $(GENERATOR_BIN)/local_laplacian.generator
 	@mkdir -p $(@D)
 	$^ -g local_laplacian -o $(@D) -f local_laplacian_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true
 
@@ -28,7 +28,7 @@ $(BIN)/out.tiff: $(BIN)/process
 	$(BIN)/process $(IMAGES)/rgb.png 8 1 1 10 $(BIN)/out.tiff
 
 # Build rules for generating a visualization of the pipeline using HalideTraceViz
-$(BIN)/viz/local_laplacian.a: $(BIN)/local_laplacian.generator
+$(BIN)/viz/local_laplacian.a: $(GENERATOR_BIN)/local_laplacian.generator
 	@mkdir -p $(@D)
 	$^ -g local_laplacian -o $(@D) target=$(HL_TARGET)-trace_all pyramid_levels=6
 

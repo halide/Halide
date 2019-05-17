@@ -33,24 +33,24 @@ bench_48x48: $(BIN)/bench_fft
 bench_64x64: $(BIN)/bench_fft
 	$(BIN)/bench_fft 64 64 $(BIN)/
 
-$(BIN)/fft.generator: fft_generator.cpp fft.cpp fft.h $(GENERATOR_DEPS)
+$(GENERATOR_BIN)/fft.generator: fft_generator.cpp fft.cpp fft.h $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 # Generate four AOT compiled FFT variants. Forward versions have gain set to 1 / 256.0
-$(BIN)/fft_forward_r2c.a: $(BIN)/fft.generator
+$(BIN)/fft_forward_r2c.a: $(GENERATOR_BIN)/fft.generator
 	@mkdir -p $(@D)
 	$^ -g fft -o $(@D) -f fft_forward_r2c target=$(HL_TARGET) direction=samples_to_frequency size0=16 size1=16 gain=0.00390625 input_number_type=real output_number_type=complex
 
-$(BIN)/fft_inverse_c2r.a: $(BIN)/fft.generator
+$(BIN)/fft_inverse_c2r.a: $(GENERATOR_BIN)/fft.generator
 	@mkdir -p $(@D)
 	$^ -g fft -o $(@D) -f fft_inverse_c2r target=$(HL_TARGET) direction=frequency_to_samples size0=16 size1=16 input_number_type=complex output_number_type=real
 
-$(BIN)/fft_forward_c2c.a: $(BIN)/fft.generator
+$(BIN)/fft_forward_c2c.a: $(GENERATOR_BIN)/fft.generator
 	@mkdir -p $(@D)
 	$^ -g fft -o $(@D) -f fft_forward_c2c target=$(HL_TARGET) direction=samples_to_frequency size0=16 size1=16 gain=0.00390625 input_number_type=complex output_number_type=complex
 
-$(BIN)/fft_inverse_c2c.a: $(BIN)/fft.generator
+$(BIN)/fft_inverse_c2c.a: $(GENERATOR_BIN)/fft.generator
 	@mkdir -p $(@D)
 	$^ -g fft -o $(@D) -f fft_inverse_c2c target=$(HL_TARGET) direction=frequency_to_samples size0=16 size1=16 input_number_type=complex output_number_type=complex
 

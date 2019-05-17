@@ -9,11 +9,11 @@ $(BIN)/pytorch_weights/ok:
 	python3 load_weights.py $(@D)
 	echo "ok" > $@
 
-$(BIN)/resnet50.generator: Resnet50Generator.cpp $(GENERATOR_DEPS)
+$(GENERATOR_BIN)/resnet50.generator: Resnet50Generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
-$(BIN)/resnet50.a: $(BIN)/resnet50.generator
+$(BIN)/resnet50.a: $(GENERATOR_BIN)/resnet50.generator
 	@mkdir -p $(@D)
 	$^ -g resnet50 -o $(@D) -f resnet50 target=$(HL_TARGET) auto_schedule=false
 

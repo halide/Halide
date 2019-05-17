@@ -3,15 +3,15 @@ include ../support/Makefile.inc
 
 all: $(BIN)/process
 
-$(BIN)/stencil_chain.generator: stencil_chain_generator.cpp $(GENERATOR_DEPS)
+$(GENERATOR_BIN)/stencil_chain.generator: stencil_chain_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
-$(BIN)/stencil_chain.a: $(BIN)/stencil_chain.generator
+$(BIN)/stencil_chain.a: $(GENERATOR_BIN)/stencil_chain.generator
 	@mkdir -p $(@D)
 	$^ -g stencil_chain -o $(@D) -f stencil_chain target=$(HL_TARGET) auto_schedule=false
 
-$(BIN)/stencil_chain_auto_schedule.a: $(BIN)/stencil_chain.generator
+$(BIN)/stencil_chain_auto_schedule.a: $(GENERATOR_BIN)/stencil_chain.generator
 	@mkdir -p $(@D)
 	$^ -g stencil_chain -o $(@D) -f stencil_chain_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true
 

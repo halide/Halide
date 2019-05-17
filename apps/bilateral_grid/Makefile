@@ -2,19 +2,19 @@ include ../support/Makefile.inc
 
 all: $(BIN)/filter
 
-$(BIN)/bilateral_grid.generator: bilateral_grid_generator.cpp $(GENERATOR_DEPS)
+$(GENERATOR_BIN)/bilateral_grid.generator: bilateral_grid_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
-$(BIN)/bilateral_grid.a: $(BIN)/bilateral_grid.generator
+$(BIN)/bilateral_grid.a: $(GENERATOR_BIN)/bilateral_grid.generator
 	@mkdir -p $(@D)
 	$^ -g bilateral_grid -o $(@D) -f bilateral_grid target=$(HL_TARGET) auto_schedule=false
 
-$(BIN)/bilateral_grid_auto_schedule.a: $(BIN)/bilateral_grid.generator
+$(BIN)/bilateral_grid_auto_schedule.a: $(GENERATOR_BIN)/bilateral_grid.generator
 	@mkdir -p $(@D)
 	$^ -g bilateral_grid -o $(@D) -f bilateral_grid_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true -e static_library,h,schedule
 
-$(BIN)/viz/bilateral_grid.a: $(BIN)/bilateral_grid.generator
+$(BIN)/viz/bilateral_grid.a: $(GENERATOR_BIN)/bilateral_grid.generator
 	@mkdir -p $(@D)
 	$^ -g bilateral_grid -o $(@D) target=$(HL_TARGET)-trace_all
 
