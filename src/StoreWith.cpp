@@ -1138,10 +1138,15 @@ Stmt lower_store_with(const Stmt &s, const vector<Function> &outputs, const map<
 
         class CheckEachRealization : public IRVisitor {
             using IRVisitor::visit;
+
+            Scope<> realizations;
+
             void visit(const Realize *op) override {
+                ScopedBinding<> bind(realizations, op->name);
+                IRVisitor::visit(op);
+
                 auto it = groups.find(op->name);
                 if (it == groups.end()) {
-                    IRVisitor::visit(op);
                     return;
                 }
 
@@ -1199,10 +1204,52 @@ Stmt lower_store_with(const Stmt &s, const vector<Function> &outputs, const map<
                 }
             }
 
+            void visit(const Call *op) override {
+                IRVisitor::visit(op);
+                if (op->call_type == Call::Halide) {
+                    auto it = parent.find(op->name);
+                    if (it != parent.end()) {
+                        user_assert(realizations.contains(it->second))
+                            << "Cannot store " << op->name << " with " << it->second
+                            << " because there is a use of " << op->name
+                            << " outside of the store_at level of " << it->second << "\n";
+                    }
+                }
+            }
+
+            void visit(const Provide *op) override {
+                IRVisitor::visit(op);
+                auto it = parent.find(op->name);
+                if (it != parent.end()) {
+                    user_assert(realizations.contains(it->second))
+                        << "Cannot store " << op->name << " with " << it->second
+                        << " because there is a store to " << op->name
+                        << " outside of the store_at level of " << it->second << "\n";
+                }
+            }
+
+            void visit(const Variable *op) override {
+                auto it = parent.find(op->name);
+                if (it != parent.end()) {
+                    user_assert(realizations.contains(it->second))
+                        << "Cannot store " << op->name << " with " << it->second
+                        << " because there is a direct reference to the allocation of " << op->name
+                        << ". This may be caused by passing it to an extern stage.\n";
+                    // TODO worry about GPU copies and store_with
+                }
+            }
+
             std::map<string, vector<string>> groups;
+            std::map<string, string> parent;
 
         public:
-            CheckEachRealization(const std::map<string, vector<string>> &groups) : groups(groups) {}
+            CheckEachRealization(const std::map<string, vector<string>> &groups) : groups(groups) {
+                for (const auto &p : groups)  {
+                    for (const auto &c : p.second) {
+                        parent[c] = p.first;
+                    }
+                }
+            }
         } checker(groups);
 
         simpler.accept(&checker);
