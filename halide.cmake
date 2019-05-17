@@ -495,6 +495,8 @@ function(_halide_runtime_target_name HALIDE_TARGET OUTVAR)
         embed_bitcode
         disable_llvm_loop_vectorize
         disable_llvm_loop_unroll
+        wasm_simd128
+        wasm_signext
         vulkan
       )
     # Synthesize a one-or-two-char abbreviation based on the feature's position
