@@ -5,7 +5,7 @@ using namespace Halide;
 int main(int argc, char **argv) {
 
     if (1) {
-        // Parallel in-place
+        // Pointwise parallel in-place
         Func f, g;
         Var x;
         f(x) = x;
@@ -17,6 +17,7 @@ int main(int argc, char **argv) {
     }
 
     if (1) {
+        // A scan done directly within the output buffer to elide a copy.
         Func f, g;
         Var x, y;
 
@@ -57,6 +58,7 @@ int main(int argc, char **argv) {
     }
 
     if (1) {
+        // Set the even values to be a function of the odd values.
         Func f, g;
         Var x;
 
@@ -72,7 +74,7 @@ int main(int argc, char **argv) {
     }
 
     if (1) {
-        // Broadcast
+        // Move some specific values around within a buffer
         Func f, g;
         Var x;
         f(x) = 12345;
@@ -178,6 +180,13 @@ int main(int argc, char **argv) {
 
         out.realize(100);
 
+        for (int i = 0; i < 100; i++) {
+            int correct = (i & 1) ? (i * 2) : (i + 1);
+            if (buf(i) != correct) {
+                printf("buf(%d) = %d instead of %d\n", i, buf(i), correct);
+                return -1;
+            }
+        }
     }
 
     if (1) {
@@ -190,16 +199,28 @@ int main(int argc, char **argv) {
         out(x) = select(x % 2 == 0, g(x/2), h(x/2));
 
         f.compute_root().vectorize(x, 8).store_with(out);
-        g.compute_root().vectorize(x, 8, TailStrategy::RoundUp).store_with(out, {2*x}); // Store g at the even spots in out
-        h.compute_root().vectorize(x, 8, TailStrategy::RoundUp).store_with(out, {2*x+1});  // Store h in the odd spots
+        // Store g at the even spots in out
+        g.compute_root().vectorize(x, 8, TailStrategy::RoundUp).store_with(out, {2*x});
+        // Store h in the odd spots
+        h.compute_root().vectorize(x, 8, TailStrategy::RoundUp).store_with(out, {2*x+1});
         out.vectorize(x, 8, TailStrategy::RoundUp);
 
         f.async();
         g.async();
         h.async();
 
-        out.realize(128);
+        Buffer<int> buf = out.realize(128);
+
+        for (int i = 0; i < 100; i++) {
+            int correct = (i & 1) ? (i * 2) : (i + 1);
+            if (buf(i) != correct) {
+                printf("buf(%d) = %d instead of %d\n", i, buf(i), correct);
+                return -1;
+            }
+        }
     }
+
+    return 0;
 
     if (1) {
         // A double integration in-place
@@ -218,7 +239,11 @@ int main(int argc, char **argv) {
         Buffer<int> buf = h.realize(100);
 
         for (int i = 0; i < 100; i++) {
-            printf("%d %d\n", i, buf(i));
+            int correct = (i * (i + 1) * (i + 2)) / 6;
+            if (buf(i) != correct) {
+                printf("buf(%d) = %d instead of %d\n", i, buf(i), correct);
+                return -1;
+            }
         }
     }
 
