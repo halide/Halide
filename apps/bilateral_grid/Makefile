@@ -16,11 +16,11 @@ $(BIN)/%/bilateral_grid_auto_schedule.a: $(GENERATOR_BIN)/bilateral_grid.generat
 
 $(BIN)/%/filter: $(BIN)/%/bilateral_grid.a $(BIN)/%/bilateral_grid_auto_schedule.a filter.cpp
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -ffast-math -Wall -Werror -I$(BIN)/$* $^ -o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) -I$(BIN)/$* $^ -o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS)
 
 $(BIN)/%/filter_viz: $(BIN)/%-trace_all/bilateral_grid.a filter.cpp ../../bin/HalideTraceViz
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -DNO_AUTO_SCHEDULE -ffast-math -Wall -Werror -I$(BIN)/$*-trace_all filter.cpp $(BIN)/$*-trace_all/bilateral_grid.a -o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) -DNO_AUTO_SCHEDULE -I$(BIN)/$*-trace_all filter.cpp $(BIN)/$*-trace_all/bilateral_grid.a -o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS)
 
 ../../bin/HalideTraceViz: ../../util/HalideTraceViz.cpp
 	$(MAKE) -C ../../ bin/HalideTraceViz
@@ -31,11 +31,11 @@ $(BIN)/%/bilateral_grid.mp4: $(BIN)/%/filter_viz viz.sh ../../bin/HalideTraceViz
 
 $(BIN)/%/out.png: $(BIN)/%/filter
 	@mkdir -p $(@D)
-	$(BIN)/$*/filter $(IMAGES)/gray.png $(BIN)/$*/out.png 0.1 10
+	$< $(IMAGES)/gray.png $@ 0.1 10
 
 $(BIN)/%/out.tiff: $(BIN)/%/filter
 	@mkdir -p $(@D)
-	$(BIN)/$*/filter $(IMAGES)/gray.png $(BIN)/$*/out.tiff 0.1 10
+	$< $(IMAGES)/gray.png $@ 0.1 10
 
 clean:
 	rm -rf $(BIN)
