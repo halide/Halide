@@ -1,9 +1,22 @@
 HALIDE_DISTRIB_PATH ?= ../../distrib
 LDFLAGS ?=
-BIN ?= ./bin
 IMAGES ?= ../images
-HL_TARGET ?= host
 UNAME ?= $(shell uname)
+
+BIN_DIR ?= bin
+
+# Most build outputs go into $(BIN)/$(HL_TARGET)/$(HL_TARGET)/, so that you can vary the test
+# and/or benchmark output easily by changing HL_TARGET and not have to worry
+# about cleaning the output (e.g. to add different GPU or SIMD features).
+BIN ?= $(BIN_DIR)
+HL_TARGET ?= host
+
+
+# GENERATOR_BIN is used mainly for Generators, which are always built
+# (and executed) on the host, regardless of the final target; this saves a bit
+# of recompile time (and disk space). (It would still provide correct results
+# if we output them to $(BIN), it would just be inefficient.)
+GENERATOR_BIN ?= $(BIN)/host
 
 SANITIZER_FLAGS ?=
 
@@ -130,13 +143,13 @@ endif
 $(BIN)/%.registration.cpp: $(BIN)/%.a
 	@echo $@ produced implicitly by $^
 
-$(BIN)/RunGenMain.o: $(HALIDE_DISTRIB_PATH)/tools/RunGenMain.cpp $(HALIDE_DISTRIB_PATH)/tools/RunGen.h
+$(BIN)/%/RunGenMain.o: $(HALIDE_DISTRIB_PATH)/tools/RunGenMain.cpp $(HALIDE_DISTRIB_PATH)/tools/RunGen.h
 	@mkdir -p $(@D)
-	@$(CXX) -c $< $(CXXFLAGS) $(IMAGE_IO_CXX_FLAGS) -I$(BIN) -o $@
+	@$(CXX) -c $< $(CXXFLAGS) $(IMAGE_IO_CXX_FLAGS) -I$(BIN)/$* -o $@
 
 # Really, .SECONDARY is what we want, but it won't accept wildcards
-.PRECIOUS: $(BIN)/%.rungen
-$(BIN)/%.rungen: $(BIN)/RunGenMain.o $(BIN)/%.a $(BIN)/%.registration.cpp
+.PRECIOUS: $(BIN)/$(HL_TARGET)/%.rungen
+$(BIN)/$(HL_TARGET)/%.rungen: $(BIN)/$(HL_TARGET)/RunGenMain.o $(BIN)/$(HL_TARGET)/%.a $(BIN)/$(HL_TARGET)/%.registration.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS)
 
 RUNARGS ?=
@@ -145,7 +158,7 @@ RUNARGS ?=
 #
 #     make foo.run RUNARGS='input=a output=baz'
 #
-$(BIN)/%.run: $(BIN)/%.rungen
+$(BIN)/$(HL_TARGET)/%.run: $(BIN)/$(HL_TARGET)/%.rungen
 	@$(CURDIR)/$< $(RUNARGS)
 
 # Utility to convert raw video -> h264. HL_AVCONV=ffmpeg will work too.
@@ -154,5 +167,5 @@ HL_AVCONV ?= avconv
 # Utility to show h264 video
 HL_VIDEOPLAYER ?= mplayer
 
-%.benchmark: $(BIN)/%.rungen
+%.benchmark: $(BIN)/$(HL_TARGET)/%.rungen
 	@$^ --benchmarks=all --default_input_buffers --default_input_scalars --output_extents=estimate --parsable_output
