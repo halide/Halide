@@ -649,8 +649,11 @@ Realization Pipeline::realize(vector<int32_t> sizes, const Target &target,
         }
     }
     Realization r(bufs);
-    // Do an output bounds query
-    realize(r, target, param_map);
+    // Do an output bounds query if we can. Otherwise just assume the
+    // output size is good.
+    if (!target.has_feature(Target::NoBoundsQuery)) {
+        realize(r, target, param_map);
+    }
     for (size_t i = 0; i < r.size(); i++) {
         r[i].allocate();
     }
@@ -659,12 +662,15 @@ Realization Pipeline::realize(vector<int32_t> sizes, const Target &target,
 
     // Crop back to the requested size if necessary
     bool needs_crop = false;
-    vector<std::pair<int32_t, int32_t>> crop(sizes.size());
-    for (size_t d = 0; d < sizes.size(); d++) {
-        needs_crop |= ((r[0].dim(d).extent() != sizes[d]) ||
-                       (r[0].dim(d).min() != 0));
-        crop[d].first = 0;
-        crop[d].second = sizes[d];
+    vector<std::pair<int32_t, int32_t>> crop;
+    if (!target.has_feature(Target::NoBoundsQuery)) {
+        crop.resize(sizes.size());
+        for (size_t d = 0; d < sizes.size(); d++) {
+            needs_crop |= ((r[0].dim(d).extent() != sizes[d]) ||
+                           (r[0].dim(d).min() != 0));
+            crop[d].first = 0;
+            crop[d].second = sizes[d];
+        }
     }
     for (size_t i = 0; i < r.size(); i++) {
         if (needs_crop) {
