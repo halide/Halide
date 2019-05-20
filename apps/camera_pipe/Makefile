@@ -16,7 +16,7 @@ $(BIN)/%/camera_pipe_auto_schedule.a: $(GENERATOR_BIN)/camera_pipe.generator
 	@mkdir -p $(@D)
 	$^ -g camera_pipe -o $(@D) -f camera_pipe_auto_schedule target=$*-no_runtime auto_schedule=true
 
-$(BIN)/%/process: process.cpp $(BIN)/$(HL_TARGET)/camera_pipe.a $(BIN)/$(HL_TARGET)/camera_pipe_auto_schedule.a
+$(BIN)/%/process: process.cpp $(BIN)/%/camera_pipe.a $(BIN)/%/camera_pipe_auto_schedule.a
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -Wall -I$(BIN)/$* $^ -o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS)
 
