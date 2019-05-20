@@ -194,7 +194,7 @@ RISCV_CXX_FLAGS=$(if $(WITH_RISCV), -DWITH_RISCV=1, )
 RISCV_LLVM_CONFIG_LIB=$(if $(WITH_RISCV), riscv, )
 
 INTROSPECTION_CXX_FLAGS=$(if $(WITH_INTROSPECTION), -DWITH_INTROSPECTION, )
-EXCEPTIONS_CXX_FLAGS=$(if $(WITH_EXCEPTIONS), -DWITH_EXCEPTIONS, )
+EXCEPTIONS_CXX_FLAGS=$(if $(WITH_EXCEPTIONS), -DWITH_EXCEPTIONS -fexceptions, )
 
 HEXAGON_CXX_FLAGS=$(if $(WITH_HEXAGON), -DWITH_HEXAGON=1, )
 HEXAGON_LLVM_CONFIG_LIB=$(if $(WITH_HEXAGON), hexagon, )
@@ -1906,8 +1906,8 @@ TEST_APPS=\
 	HelloMatlab \
 	bilateral_grid \
 	blur \
-	camera_pipe \
 	c_backend \
+	camera_pipe \
 	conv_layer \
 	fft \
 	interpolate \
@@ -1915,11 +1915,11 @@ TEST_APPS=\
 	linear_algebra \
 	local_laplacian \
 	nl_means \
+	onnx \
 	resize \
-	stencil_chain \
-	wavelet \
 	resnet_50 \
-	onnx
+	stencil_chain \
+	wavelet
 
 .PHONY: test_apps
 test_apps: distrib
@@ -1927,7 +1927,35 @@ test_apps: distrib
 		echo Testing app $${APP}... ; \
 		make -C $(ROOT_DIR)/apps/$${APP} test \
 			HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
-			BIN=$(ROOT_DIR)/apps/$${APP}/bin \
+			BIN=$(CURDIR)/$(BIN_DIR)/apps/$${APP}/bin \
+			|| exit 1 ; \
+	done
+
+BENCHMARK_APPS=\
+	bilateral_grid \
+	camera_pipe \
+	lens_blur \
+	local_laplacian \
+	nl_means \
+	stencil_chain
+
+.PHONY: benchmark_apps
+benchmark_apps: distrib
+	@for APP in $(BENCHMARK_APPS); do \
+		echo Building $${APP}... ; \
+		$(MAKE) -C $(ROOT_DIR)/apps/$${APP} \
+		    $(CURDIR)/$(BIN_DIR)/apps/$${APP}/bin/$${APP}.rungen \
+			HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
+			BIN=$(CURDIR)/$(BIN_DIR)/apps/$${APP}/bin > /dev/null \
+			|| exit 1 ; \
+	done
+	@for APP in $(BENCHMARK_APPS); do \
+		echo ;\
+		echo Benchmarking $${APP}... ; \
+		make -C $(ROOT_DIR)/apps/$${APP} \
+			$${APP}.benchmark \
+			HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
+			BIN=$(CURDIR)/$(BIN_DIR)/apps/$${APP}/bin \
 			|| exit 1 ; \
 	done
 
