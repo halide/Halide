@@ -156,9 +156,13 @@ RUNARGS ?=
 
 # Pseudo target that allows us to build-and-run in one step, e.g.
 #
-#     make foo.run RUNARGS='input=a output=baz'
+#     make bin/host/foo.run RUNARGS='input=a output=baz'
 #
 $(BIN)/%.run: $(BIN)/%.rungen
+	@$(CURDIR)/$< $(RUNARGS)
+
+# Also allow 'foo.run' as a shortcut to mean host
+%.run: $(BIN)/host/%.rungen
 	@$(CURDIR)/$< $(RUNARGS)
 
 # Utility to convert raw video -> h264. HL_AVCONV=ffmpeg will work too.
