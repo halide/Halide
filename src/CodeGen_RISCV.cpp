@@ -5,7 +5,6 @@
 namespace Halide {
 namespace Internal {
 
-using std::vector;
 using std::string;
 
 using namespace llvm;
