@@ -145,11 +145,11 @@ $(BIN)/%.registration.cpp: $(BIN)/%.a
 
 $(BIN)/%/RunGenMain.o: $(HALIDE_DISTRIB_PATH)/tools/RunGenMain.cpp $(HALIDE_DISTRIB_PATH)/tools/RunGen.h
 	@mkdir -p $(@D)
-	@$(CXX) -c $< $(CXXFLAGS) $(IMAGE_IO_CXX_FLAGS) -I$(BIN)/$* -o $@
+	$(CXX) -c $< $(CXXFLAGS) $(IMAGE_IO_CXX_FLAGS) -I$(BIN)/$* -o $@
 
 # Really, .SECONDARY is what we want, but it won't accept wildcards
-.PRECIOUS: $(BIN)/$(HL_TARGET)/%.rungen
-$(BIN)/$(HL_TARGET)/%.rungen: $(BIN)/$(HL_TARGET)/RunGenMain.o $(BIN)/$(HL_TARGET)/%.a $(BIN)/$(HL_TARGET)/%.registration.cpp
+.PRECIOUS: $(BIN)/%.rungen
+$(BIN)/%.rungen: $(BIN)/%/RunGenMain.o $(BIN)/%.a $(BIN)/%.registration.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS)
 
 RUNARGS ?=
@@ -158,7 +158,7 @@ RUNARGS ?=
 #
 #     make foo.run RUNARGS='input=a output=baz'
 #
-$(BIN)/$(HL_TARGET)/%.run: $(BIN)/$(HL_TARGET)/%.rungen
+$(BIN)/%.run: $(BIN)/%.rungen
 	@$(CURDIR)/$< $(RUNARGS)
 
 # Utility to convert raw video -> h264. HL_AVCONV=ffmpeg will work too.
@@ -167,5 +167,5 @@ HL_AVCONV ?= avconv
 # Utility to show h264 video
 HL_VIDEOPLAYER ?= mplayer
 
-%.benchmark: $(BIN)/$(HL_TARGET)/%.rungen
+%.benchmark: $(BIN)/%.rungen
 	@$^ --benchmarks=all --default_input_buffers --default_input_scalars --output_extents=estimate --parsable_output
