@@ -30,7 +30,7 @@ $(BIN)/%/runtime.a: $(GENERATOR_BIN)/haar_x.generator
 	@$< -r runtime -o $(@D) target=$*
 
 $(BIN)/%/wavelet: wavelet.cpp $(foreach V,$(VARIANTS),$(BIN)/%/$(V).a) $(BIN)/%/runtime.a
-	@$(CXX) $(CXXFLAGS) -I$(BIN)/$* $^ $(IMAGE_IO_LIBS) $(LDFLAGS) -o $@
+	@$(CXX) $(CXXFLAGS) $(IMAGE_IO_CXX_FLAGS) -I$(BIN)/$* $^ $(IMAGE_IO_LIBS) $(LDFLAGS) -o $@
 
 test: $(BIN)/$(HL_TARGET)/wavelet
 	@echo Testing wavelet...
