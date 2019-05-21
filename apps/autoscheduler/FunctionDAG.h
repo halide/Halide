@@ -172,7 +172,7 @@ public:
             return *this;
         }
 
-        internal_assert(consumer_loop_dims() == factors.size());
+        internal_assert(consumer_loop_dims() == 0 || consumer_loop_dims() == factors.size());
 
         vector<vector<OptionalRational>> matrix;
         matrix.resize(producer_storage_dims());

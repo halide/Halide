@@ -3890,13 +3890,11 @@ struct State {
                     // If at least one loop has been marked gpu_thread, we need to
                     // ensure that it is enclosed by a gpu_block loop. Check if this
                     // loop nest or one of its ancestors has been marked gpu_block
-                    LoopNest::StageScheduleState* enclosing_parallel = p.second.get();
                     bool has_enclosing_parallel = p.second->parallel;
 
                     if (!has_enclosing_parallel) {
                         for (auto* ancestor : p.second->ancestors) {
                             if (ancestor->parallel) {
-                                enclosing_parallel = ancestor;
                                 has_enclosing_parallel = true;
                                 break;
                             }
