@@ -40,6 +40,628 @@ struct ClockDim {
     ClockDim(const Expr &t, ForType loop_type) : t(t), loop_type(loop_type) {}
 };
 
+
+// A mostly-linear constraint. Represented as a linear combination
+// of terms that sum to zero. The terms are usually Variables, but
+// may be non-linear functions of Variables too.
+struct Equality {
+
+    // We keep the terms unique by storing them in a map sorted by
+    // deep equality on the Exprs.
+    std::map<Expr, int, IRDeepCompare> terms;
+
+    // Track the number of terms that are just Variable
+    // nodes. Useful for prioritizing work.
+    int num_vars = 0;
+
+    // Recursively extract all the linear terms from an Expr
+    void find_terms(const Expr &e, int c) {
+        if (c == 0) return;
+        if (is_zero(e)) return;
+        const Add *add = e.as<Add>();
+        const Sub *sub = e.as<Sub>();
+        const Mul *mul = e.as<Mul>();
+        const int64_t *coeff = (mul ? as_const_int(mul->b) : nullptr);
+        if (coeff && mul_would_overflow(64, c, *coeff)) {
+            coeff = nullptr;
+        }
+        if (add) {
+            find_terms(add->a, c);
+            find_terms(add->b, c);
+        } else if (sub) {
+            find_terms(sub->a, c);
+            find_terms(sub->b, -c);
+        } else if (mul && coeff) {
+            find_terms(mul->a, c * (int)(*coeff));
+        } else {
+            add_term(e, c);
+        }
+    }
+
+    void add_term(const Expr &e, int c) {
+        auto p = terms.emplace(e, c);
+        if (!p.second) {
+            p.first->second += c;
+            if (p.first->second == 0) {
+                terms.erase(p.first);
+                if (e.as<Variable>()) {
+                    num_vars--;
+                }
+            }
+        } else if (e.as<Variable>()) {
+            num_vars++;
+        }
+    }
+
+
+    Equality(const EQ *eq) {
+        find_terms(eq->a, 1);
+        find_terms(eq->b, -1);
+    }
+    Equality() = default;
+
+    bool uses_var(const std::string &name) const {
+        for (const auto &p : terms) {
+            if (expr_uses_var(p.second, name)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Convert this constraint back to a boolean Expr by putting
+    // all the positive coefficients on one side and all the
+    // negative coefficients on the other.
+    Expr to_expr() const {
+        Expr lhs, rhs;
+        auto accum = [](Expr &a, Expr e, int c) {
+            Expr t = e;
+            if (c != 1) {
+                t *= c;
+            }
+            if (a.defined()) {
+                a += t;
+            } else {
+                a = t;
+            }
+        };
+        for (auto p : terms) {
+            if (p.second > 0) {
+                accum(lhs, p.first, p.second);
+            } else {
+                accum(rhs, p.first, -p.second);
+            }
+        }
+        if (!lhs.defined()) {
+            lhs = 0;
+        }
+        if (!rhs.defined()) {
+            rhs = 0;
+        }
+        return lhs == rhs;
+    }
+};
+
+// A system of constraints. We're going to construct systems of
+// constraints that have solutions that are all of the correctness
+// violations (places where one Func clobbers a value in the
+// shared buffer that the other Func still needs), and then try to
+// prove that these systems have no solutions by finding a
+// sequence of variable substitutions that turns one of the terms
+// into the constant false.
+struct System {
+
+    // A bunch of equalities
+    vector<Equality> equalities;
+
+    // A shared simplifier instance, which slowly accumulates
+    // knowledge about the bounds of different variables. We
+    // prefer to encode constraints this way whenever we can,
+    // because then they get automatically exploited whenever we
+    // simplify something. Ultimately the way we prove things
+    // infeasible is by slowly deducing bounds on the free
+    // variables and then finding that one of our equalities above
+    // can't be satisfied given the bounds we have learned.
+    Simplify *simplifier;
+
+    // The most-recently-performed substition, for debugging
+    Expr most_recent_substitution;
+
+    // An additional arbitrary term to place non-linear constraints
+    Expr non_linear_term;
+
+    // A heuristic for how close we are to finding infeasibility
+    float c = 0;
+
+    // unique IDs for each system for debugging and training a good heuristic
+    static int id_counter;
+    int id, parent_id;
+
+    System(Simplify *s, Expr subs, int pid) :
+        simplifier(s), most_recent_substitution(subs),
+        id(id_counter++), parent_id(pid) {}
+
+    void add_equality(const EQ *eq) {
+        equalities.emplace_back(eq);
+    }
+
+    void add_non_linear_term(const Expr &e) {
+        internal_assert(e.type().is_bool()) << e << "\n";
+        if (is_zero(e) || !non_linear_term.defined()) {
+            non_linear_term = e;
+        } else {
+            non_linear_term = non_linear_term && e;
+        }
+    }
+
+    void add_term(const Expr &e) {
+        const EQ *eq = e.as<EQ>();
+        const LT *lt = e.as<LT>();
+        const LE *le = e.as<LE>();
+        if (eq && eq->a.type() == Int(32)) {
+            add_equality(eq);
+        } else if (const And *a = e.as<And>()) {
+            add_term(a->a);
+            add_term(a->b);
+        } else if (const GT *gt = e.as<GT>()) {
+            add_term(gt->b < gt->a);
+        } else if (const GE *ge = e.as<GE>()) {
+            add_term(ge->b <= ge->a);
+        } else if (le && le->a.type() == Int(32)) {
+            const Variable *va = le->a.as<Variable>();
+            const Variable *vb = le->b.as<Variable>();
+            if (const Min *min_b = le->b.as<Min>()) {
+                // x <= min(y, z) -> x <= y && x <= z
+                add_term(le->a <= min_b->a);
+                add_term(le->a <= min_b->b);
+            } else if (const Max *max_a = le->a.as<Max>()) {
+                // max(x, y) <= z -> x <= z && y <= z
+                add_term(max_a->a <= le->b);
+                add_term(max_a->b <= le->b);
+            } else if (is_const(le->a) && vb) {
+                simplifier->learn_true(e);
+            } else if (is_const(le->b) && va) {
+                simplifier->learn_true(e);
+            } else {
+                Expr v = aux();
+                simplifier->learn_true(-1 < v);
+                add_term(le->a + v == le->b);
+            }
+        } else if (lt && lt->a.type() == Int(32)) {
+            const Variable *va = lt->a.as<Variable>();
+            const Variable *vb = lt->b.as<Variable>();
+            if (const Min *min_b = lt->b.as<Min>()) {
+                // x <= min(y, z) -> x <= y && x <= z
+                add_term(le->a < min_b->a);
+                add_term(le->a < min_b->b);
+            } else if (const Max *max_a = lt->a.as<Max>()) {
+                // max(x, y) <= z -> x <= z && y <= z
+                add_term(max_a->a < le->b);
+                add_term(max_a->b < le->b);
+            } else if (is_const(lt->a) && vb) {
+                simplifier->learn_true(e);
+            } else if (is_const(lt->b) && va) {
+                simplifier->learn_true(e);
+            } else {
+                Expr v = aux();
+                simplifier->learn_true(0 < v);
+                add_term(lt->a + v == lt->b);
+            }
+        } else if (const Let *l = e.as<Let>()) {
+            // Treat lets as equality constraints in the new variable.
+            if (l->value.type().is_bool()) {
+                // We want to examine booleans more directly, so
+                // substitute them in.
+                add_term(substitute(l->name, l->value, l->body));
+            } else {
+                Expr eq = Variable::make(l->value.type(), l->name) == l->value;
+                simplifier->learn_true(eq);
+                add_term(eq);
+                add_term(l->body);
+            }
+        } else if (is_one(e)) {
+            // There's nothing we can learn from a tautology
+        } else {
+            // If all else fails, treat it as a non-linearity
+            add_non_linear_term(e);
+        }
+    }
+
+    void dump() const {
+        if (most_recent_substitution.defined()) {
+            debug(0) << "Substitution: " << most_recent_substitution << "\n";
+        }
+        for (auto &e : equalities) {
+            debug(0) << " " << e.to_expr() << "\n";
+        }
+        if (non_linear_term.defined()) {
+            debug(0) << " non-linear: " << non_linear_term << "\n";
+        }
+        const auto &info = simplifier->bounds_and_alignment_info;
+        for (auto it = info.cbegin(); it != info.cend(); ++it){
+            bool used = false;
+            for (auto &e : equalities) {
+                used |= expr_uses_var(e.to_expr(), it.name());
+            }
+            if (non_linear_term.defined()) {
+                used |= expr_uses_var(non_linear_term, it.name());
+            }
+            if (!used) continue;
+            if (it.value().min_defined && it.value().max_defined) {
+                debug(0) << " " << it.value().min << " <= " << it.name()
+                         << " <= " << it.value().max << "\n";
+            } else if (it.value().min_defined) {
+                debug(0) << " " << it.value().min << " <= " << it.name() << "\n";
+            } else if (it.value().max_defined) {
+                debug(0) << " " << it.name() << " <= " << it.value().max << "\n";
+            }
+        }
+    }
+
+    bool infeasible() const {
+        // Check if any of the equalities or the non-linear term
+        // are unsatisfiable or otherwise simplify to const false
+        // given all the knowledge we have accumulated into the
+        // simplifier instance.
+        for (auto &e : equalities) {
+            if (is_zero(simplifier->mutate(e.to_expr(), nullptr))) {
+                return true;
+            }
+        }
+        if (non_linear_term.defined() && is_zero(simplifier->mutate(non_linear_term, nullptr))) {
+            return true;
+        }
+        return false;
+    }
+
+    void finalize() {
+        // We'll preferentially find substitutions from the
+        // earlier equations, so sort the system, putting low
+        // term-count expressions with lots of naked vars first
+        std::stable_sort(equalities.begin(), equalities.end(),
+                         [](const Equality &a, const Equality &b) {
+                             if (a.terms.size() < b.terms.size()) return true;
+                             if (a.terms.size() > b.terms.size()) return false;
+                             return a.num_vars < b.num_vars;
+                         });
+        compute_complexity();
+    }
+
+    // Compute our heuristic for which systems are closest to infeasible
+    void compute_complexity() {
+        std::map<std::string, int> inequalities;
+        int non_linear_terms = 0, num_terms = 0;
+        for (auto &e : equalities) {
+            for (auto &p : e.terms) {
+                Simplify::ExprInfo info;
+                simplifier->mutate(p.first, &info);
+                if (const Variable *var = p.first.as<Variable>()) {
+                    inequalities[var->name] = (int)info.max_defined + (int)info.min_defined;
+                } else if (!is_const(p.first)) {
+                    non_linear_terms++;
+                }
+                num_terms++;
+            }
+        }
+        int unconstrained_vars = 0;
+        int semi_constrained_vars = 0;
+        int totally_constrained_vars = 0;
+        int num_constraints = (int)equalities.size() + (int)non_linear_term.defined();
+        for (const auto &p : inequalities) {
+            if (p.second == 0) {
+                unconstrained_vars++;
+            } else if (p.second == 1) {
+                semi_constrained_vars++;
+            } else {
+                totally_constrained_vars++;
+            }
+        }
+        // debug(0) << "FEATURES " << id << " " << parent_id << " " << non_linear_terms << " " << unconstrained_vars << " " << semi_constrained_vars << " " << totally_constrained_vars << " " << num_terms << " " << num_constraints << "\n";
+        int terms[] = {non_linear_terms, unconstrained_vars, semi_constrained_vars,
+                       totally_constrained_vars, num_terms, num_constraints};
+        // Use a linear combination of these features to decide
+        // which stats are the most promising to explore. Trained
+        // by tracking which states lead to success in the
+        // store_with test and minimizing cross-entropy loss on a
+        // linear classifier.
+        float coeffs[] = {0.0006f,  0.3839f,  0.1992f,  0.0388f, -0.0215f, -0.4192f};
+        c = 0.0f;
+        for (int i = 0; i < 6; i++) {
+            c += terms[i] * coeffs[i];
+        }
+    }
+
+    float complexity() const {
+        return c;
+    }
+
+    void make_children(std::deque<std::unique_ptr<System>> &result) {
+
+        // Eliminate divs and mods by introducing new variables
+        for (int i = 0; i < (int)equalities.size(); i++) {
+            Expr lhs, rhs;
+            for (auto &p : equalities[i].terms) {
+                const Mod *mod = p.first.as<Mod>();
+                const Div *div = p.first.as<Div>();
+                if (mod) {
+                    lhs = mod->a;
+                    rhs = mod->b;
+                } else if (div) {
+                    lhs = div->a;
+                    rhs = div->b;
+                }
+                if (is_const(rhs)) {
+                    break;
+                } else {
+                    lhs = rhs = Expr();
+                }
+            }
+            if (lhs.defined()) {
+                Expr k1 = aux(), k2 = aux();
+                Expr replacement = k1 + k2 * rhs;
+                auto subs = [&](Expr e) {
+                    e = substitute(lhs % rhs, k1, e);
+                    e = substitute(lhs / rhs, k2, e);
+                    return simplifier->mutate(e, nullptr);
+                };
+                std::unique_ptr<System> new_system(new System(simplifier, lhs == rhs, id));
+                if (non_linear_term.defined()) {
+                    new_system->add_term(subs(non_linear_term));
+                }
+                for (int j = 0; j < (int)equalities.size(); j++) {
+                    new_system->add_term(subs(equalities[j].to_expr()));
+                }
+                new_system->add_term(lhs == replacement);
+                simplifier->learn_true(-1 < k1);
+                simplifier->learn_true(k1 < rhs);
+                new_system->finalize();
+                result.emplace_back(std::move(new_system));
+                return;
+            }
+        }
+
+        // Which equations should we mine for
+        // substitutions. Initially all of them are promising.
+        vector<bool> interesting(equalities.size(), true);
+
+        // A list of all variables we could potentially eliminate
+        set<string> eliminable_vars;
+        for (int i = 0; i < (int)equalities.size(); i++) {
+            for (const auto &p : equalities[i].terms) {
+                const Variable *var = p.first.as<Variable>();
+                if (var && (p.second == 1 || p.second == -1)) {
+                    eliminable_vars.insert(var->name);
+                }
+            }
+        }
+
+        /*
+          for (const auto &v : eliminable_vars) {
+          debug(0) << "Eliminable var: " << v << "\n";
+          }
+        */
+
+        // A mapping from eliminable variables to the equalities that reference them.
+        map<string, vector<int>> eqs_that_reference_var;
+        for (int i = 0; i < (int)equalities.size(); i++) {
+            Expr eq = equalities[i].to_expr();
+            for (const auto &v : eliminable_vars) {
+                if (expr_uses_var(eq, v)) {
+                    eqs_that_reference_var[v].push_back(i);
+                }
+            }
+        }
+
+        // The set of pairs of equations that share a common
+        // eliminable variable
+        set<pair<int, int>> has_common_variable;
+        for (auto p : eqs_that_reference_var) {
+            for (int i : p.second) {
+                for (int j : p.second) {
+                    has_common_variable.insert({i, j});
+                }
+            }
+        }
+
+        // Eliminate a variable
+        for (int i = 0; i < (int)equalities.size(); i++) {
+            if (equalities[i].num_vars == 0) {
+                // We're not going to be able to find an
+                // elimination from something with no naked vars.
+                continue;
+            }
+
+            if (!interesting[i]) {
+                // We've decided that this equation isn't one we want to mine.
+                continue;
+            }
+
+            for (const auto &p : equalities[i].terms) {
+                const Variable *var = p.first.as<Variable>();
+
+                if (var) {
+
+                    Expr rhs = 0, rhs_remainder = 0;
+                    for (const auto &p2 : equalities[i].terms) {
+                        // Every term on the RHS has to be either
+                        // divisible by p.first, or in total
+                        // bounded by p.first
+                        if (p2.first.same_as(p.first)) {
+                            // This is the LHS
+                        } else if (p2.second % p.second == 0) {
+                            rhs -= p2.first * (p2.second / p.second);
+                        } else {
+                            rhs_remainder -= p2.first * p2.second;
+                        }
+                    }
+
+                    // We have:
+                    // p.first * p.second == rhs * p.second + rhs_remainder
+
+                    Simplify::ExprInfo remainder_bounds;
+                    rhs_remainder = simplifier->mutate(rhs_remainder, &remainder_bounds);
+                    rhs = simplifier->mutate(rhs, nullptr);
+
+                    if (remainder_bounds.max_defined &&
+                        remainder_bounds.max < std::abs(p.second) &&
+                        remainder_bounds.min_defined &&
+                        remainder_bounds.min > -std::abs(p.second)) {
+                        // We have:
+                        // p.first == -rhs && 0 == rhs_remainder
+                    } else {
+                        // We don't have a substitution
+                        continue;
+                    }
+
+                    if (expr_uses_var(rhs, var->name)) {
+                        // Didn't successfully eliminate it - it
+                        // still occurs inside a non-linearity on
+                        // the right.
+                        continue;
+                    }
+
+                    // Tell the simplifier that LHS == RHS. This
+                    // may give it tighter bounds for the LHS
+                    // variable based on what is currently known
+                    // about the bounds of the RHS. This is the
+                    // primary mechanism by which the simplifier
+                    // instance learns things - not from the
+                    // substitutions we actually perform, but from
+                    // every potential substitution. Avoid telling
+                    // the simplifier that x == x.
+                    if (!equal(p.first, rhs)) {
+                        simplifier->learn_true(p.first == rhs);
+                    }
+
+                    //debug(0) << "Attempting elimination of " << var->name << "\n";
+
+                    // We have a candidate for elimination. Rule
+                    // out searching all equalities that don't
+                    // share a common variable with this one,
+                    // because we equally could have done any
+                    // substitutions resulting from those first
+                    // without affecting this substitution, and
+                    // doing things in a canonical order avoids
+                    // exploring the same states an exponential
+                    // number of times.
+                    for (int j = 0; j < (int)equalities.size(); j++) {
+                        if (interesting[j]) {
+                            interesting[j] = has_common_variable.count({i, j});
+                        }
+                    }
+
+                    // If the RHS is just a variable then we'll
+                    // just greedily perform this elimination -
+                    // there's no reason to need to backtrack on
+                    // it, so nuke all other candidate
+                    // children. There typically won't be any
+                    // because x == y will sort to the front of
+                    // the list of equalities.
+                    if (rhs.as<Variable>()) {
+                        result.clear();
+                    }
+
+                    auto subs = [&](Expr e) {
+                        e = substitute(var->name, rhs, e);
+                        e = simplifier->mutate(e, nullptr);
+                        return e;
+                    };
+
+                    // Make a child system with the substitution
+                    // performed and this equality eliminated.
+                    std::unique_ptr<System> new_system(new System(simplifier, p.first == rhs, id));
+                    if (non_linear_term.defined()) {
+                        new_system->add_term(subs(non_linear_term));
+                    }
+                    for (int j = 0; j < (int)equalities.size(); j++) {
+                        if (i == j) {
+                            // The equation we exploited to get
+                            // the substitution gets reduced
+                            // modulo the coefficient.
+                            new_system->add_term(simplifier->mutate(rhs_remainder == 0, nullptr));
+                            continue;
+                        }
+                        // In the other equations, we replace the variable with the right-hand-side
+                        new_system->add_term(subs(equalities[j].to_expr()));
+                    }
+                    new_system->finalize();
+                    result.emplace_back(std::move(new_system));
+
+                    // No point considering further candidates if
+                    // we're just doing a variable1 = variable2
+                    // substitution.
+                    if (rhs.as<Variable>()) {
+                        return;
+                    }
+                }
+            }
+        }
+    }
+};
+
+int System::id_counter = 0;
+
+// Attempt to disprove a boolean expr by constructing a constraint
+// system and performing a backtracking search over substitutions
+// using beam search.
+bool can_disprove(Expr e, int beam_size) {
+    e = common_subexpression_elimination(simplify(remove_likely_tags(e)));
+
+    // debug(0) << "*** Attempting disproof " << e << "\n";
+
+    if (is_zero(e)) {
+        // The simplifier was capable of doing the disproof by itself
+        // using peephole rules alone. No need to continue.
+        return true;
+    }
+
+    // Make a simplifier instance to hold all of our shared
+    // knowledge, and construct the initial system of constraints
+    // from the expression.
+    Simplify simplifier(true, nullptr, nullptr);
+    std::unique_ptr<System> system(new System(&simplifier, Expr(), 0));
+    system->add_term(e);
+    system->finalize();
+
+    // Beam search time.
+    std::deque<std::unique_ptr<System>> beam;
+    beam.emplace_back(std::move(system));
+    while (!beam.empty()) {
+        // Take the best thing
+        std::unique_ptr<System> next = std::move(beam.front());
+        beam.pop_front();
+
+        /*
+          debug(0) << "Top of beam: " << next->complexity() << "\n";
+          next->dump();
+        */
+
+        if (next->infeasible()) {
+            // We found that the initial constraint system
+            // eventually implied a falsehood, so we successfully
+            // disproved the original expression.
+            return true;
+        }
+
+        // Generate children
+        next->make_children(beam);
+
+        // Take the top beam_size results by sorting all the
+        // children and then popping off the end. Not the most
+        // efficient way to do it, but this is not the long pole
+        // here.
+        std::stable_sort(beam.begin(), beam.end(),
+                         [&](const std::unique_ptr<System> &a,
+                             const std::unique_ptr<System> &b) {
+                             return a->complexity() < b->complexity();
+                         });
+        while ((int)beam.size() > beam_size) {
+            beam.pop_back();
+        }
+    }
+    return false;
+}
+
 // A class representing a use of a buffer at some symbolic time
 struct Use {
     // Lexicographically-ordered time vector, ala polyhedral optimization
@@ -227,624 +849,6 @@ struct Use {
         s << "Predicate: " << predicate << "\n";
     }
 
-    // A mostly-linear constraint. Represented as a linear combination
-    // of terms that sum to zero. The terms are usually Variables, but
-    // may be non-linear functions of Variables too.
-    struct Equality {
-
-        // We keep the terms unique by storing them in a map sorted by
-        // deep equality on the Exprs.
-        std::map<Expr, int, IRDeepCompare> terms;
-
-        // Track the number of terms that are just Variable
-        // nodes. Useful for prioritizing work.
-        int num_vars = 0;
-
-        // Recursively extract all the linear terms from an Expr
-        void find_terms(const Expr &e, int c) {
-            if (c == 0) return;
-            if (is_zero(e)) return;
-            const Add *add = e.as<Add>();
-            const Sub *sub = e.as<Sub>();
-            const Mul *mul = e.as<Mul>();
-            const int64_t *coeff = (mul ? as_const_int(mul->b) : nullptr);
-            if (coeff && mul_would_overflow(64, c, *coeff)) {
-                coeff = nullptr;
-            }
-            if (add) {
-                find_terms(add->a, c);
-                find_terms(add->b, c);
-            } else if (sub) {
-                find_terms(sub->a, c);
-                find_terms(sub->b, -c);
-            } else if (mul && coeff) {
-                find_terms(mul->a, c * (int)(*coeff));
-            } else {
-                add_term(e, c);
-            }
-        }
-
-        void add_term(const Expr &e, int c) {
-            auto p = terms.emplace(e, c);
-            if (!p.second) {
-                p.first->second += c;
-                if (p.first->second == 0) {
-                    terms.erase(p.first);
-                    if (e.as<Variable>()) {
-                        num_vars--;
-                    }
-                }
-            } else if (e.as<Variable>()) {
-                num_vars++;
-            }
-        }
-
-
-        Equality(const EQ *eq) {
-            find_terms(eq->a, 1);
-            find_terms(eq->b, -1);
-        }
-        Equality() = default;
-
-        bool uses_var(const std::string &name) const {
-            for (const auto &p : terms) {
-                if (expr_uses_var(p.second, name)) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        // Convert this constraint back to a boolean Expr by putting
-        // all the positive coefficients on one side and all the
-        // negative coefficients on the other.
-        Expr to_expr() const {
-            Expr lhs, rhs;
-            auto accum = [](Expr &a, Expr e, int c) {
-                Expr t = e;
-                if (c != 1) {
-                    t *= c;
-                }
-                if (a.defined()) {
-                    a += t;
-                } else {
-                    a = t;
-                }
-            };
-            for (auto p : terms) {
-                if (p.second > 0) {
-                    accum(lhs, p.first, p.second);
-                } else {
-                    accum(rhs, p.first, -p.second);
-                }
-            }
-            if (!lhs.defined()) {
-                lhs = 0;
-            }
-            if (!rhs.defined()) {
-                rhs = 0;
-            }
-            return lhs == rhs;
-        }
-    };
-
-    // A system of constraints. We're going to construct systems of
-    // constraints that have solutions that are all of the correctness
-    // violations (places where one Func clobbers a value in the
-    // shared buffer that the other Func still needs), and then try to
-    // prove that these systems have no solutions by finding a
-    // sequence of variable substitutions that turns one of the terms
-    // into the constant false.
-    class System {
-    public:
-        // A bunch of equalities
-        vector<Equality> equalities;
-
-        // A shared simplifier instance, which slowly accumulates
-        // knowledge about the bounds of different variables. We
-        // prefer to encode constraints this way whenever we can,
-        // because then they get automatically exploited whenever we
-        // simplify something. Ultimately the way we prove things
-        // infeasible is by slowly deducing bounds on the free
-        // variables and then finding that one of our equalities above
-        // can't be satisfied given the bounds we have learned.
-        Simplify *simplifier;
-
-        // The most-recently-performed substition, for debugging
-        Expr most_recent_substitution;
-
-        // An additional arbitrary term to place non-linear constraints
-        Expr non_linear_term;
-
-        // A heuristic for how close we are to finding infeasibility
-        float c = 0;
-
-        // unique IDs for each system for debugging and training a good heuristic
-        static int id_counter;
-        int id, parent_id;
-
-        System(Simplify *s, Expr subs, int pid) :
-            simplifier(s), most_recent_substitution(subs),
-            id(id_counter++), parent_id(pid) {}
-
-        void add_equality(const EQ *eq) {
-            equalities.emplace_back(eq);
-        }
-
-        void add_non_linear_term(const Expr &e) {
-            internal_assert(e.type().is_bool()) << e << "\n";
-            if (is_zero(e) || !non_linear_term.defined()) {
-                non_linear_term = e;
-            } else {
-                non_linear_term = non_linear_term && e;
-            }
-        }
-
-        void add_term(const Expr &e) {
-            const EQ *eq = e.as<EQ>();
-            const LT *lt = e.as<LT>();
-            const LE *le = e.as<LE>();
-            if (eq && eq->a.type() == Int(32)) {
-                add_equality(eq);
-            } else if (const And *a = e.as<And>()) {
-                add_term(a->a);
-                add_term(a->b);
-            } else if (const GT *gt = e.as<GT>()) {
-                add_term(gt->b < gt->a);
-            } else if (const GE *ge = e.as<GE>()) {
-                add_term(ge->b <= ge->a);
-            } else if (le && le->a.type() == Int(32)) {
-                const Variable *va = le->a.as<Variable>();
-                const Variable *vb = le->b.as<Variable>();
-                if (const Min *min_b = le->b.as<Min>()) {
-                    // x <= min(y, z) -> x <= y && x <= z
-                    add_term(le->a <= min_b->a);
-                    add_term(le->a <= min_b->b);
-                } else if (const Max *max_a = le->a.as<Max>()) {
-                    // max(x, y) <= z -> x <= z && y <= z
-                    add_term(max_a->a <= le->b);
-                    add_term(max_a->b <= le->b);
-                } else if (is_const(le->a) && vb) {
-                    simplifier->learn_true(e);
-                } else if (is_const(le->b) && va) {
-                    simplifier->learn_true(e);
-                } else {
-                    Expr v = aux();
-                    simplifier->learn_true(-1 < v);
-                    add_term(le->a + v == le->b);
-                }
-            } else if (lt && lt->a.type() == Int(32)) {
-                const Variable *va = lt->a.as<Variable>();
-                const Variable *vb = lt->b.as<Variable>();
-                if (const Min *min_b = lt->b.as<Min>()) {
-                    // x <= min(y, z) -> x <= y && x <= z
-                    add_term(le->a < min_b->a);
-                    add_term(le->a < min_b->b);
-                } else if (const Max *max_a = lt->a.as<Max>()) {
-                    // max(x, y) <= z -> x <= z && y <= z
-                    add_term(max_a->a < le->b);
-                    add_term(max_a->b < le->b);
-                } else if (is_const(lt->a) && vb) {
-                    simplifier->learn_true(e);
-                } else if (is_const(lt->b) && va) {
-                    simplifier->learn_true(e);
-                } else {
-                    Expr v = aux();
-                    simplifier->learn_true(0 < v);
-                    add_term(lt->a + v == lt->b);
-                }
-            } else if (const Let *l = e.as<Let>()) {
-                // Treat lets as equality constraints in the new variable.
-                if (l->value.type().is_bool()) {
-                    // We want to examine booleans more directly, so
-                    // substitute them in.
-                    add_term(substitute(l->name, l->value, l->body));
-                } else {
-                    Expr eq = Variable::make(l->value.type(), l->name) == l->value;
-                    simplifier->learn_true(eq);
-                    add_term(eq);
-                    add_term(l->body);
-                }
-            } else if (is_one(e)) {
-                // There's nothing we can learn from a tautology
-            } else {
-                // If all else fails, treat it as a non-linearity
-                add_non_linear_term(e);
-            }
-        }
-
-        void dump() const {
-            if (most_recent_substitution.defined()) {
-                debug(0) << "Substitution: " << most_recent_substitution << "\n";
-            }
-            for (auto &e : equalities) {
-                debug(0) << " " << e.to_expr() << "\n";
-            }
-            if (non_linear_term.defined()) {
-                debug(0) << " non-linear: " << non_linear_term << "\n";
-            }
-            const auto &info = simplifier->bounds_and_alignment_info;
-            for (auto it = info.cbegin(); it != info.cend(); ++it){
-                bool used = false;
-                for (auto &e : equalities) {
-                    used |= expr_uses_var(e.to_expr(), it.name());
-                }
-                if (non_linear_term.defined()) {
-                    used |= expr_uses_var(non_linear_term, it.name());
-                }
-                if (!used) continue;
-                if (it.value().min_defined && it.value().max_defined) {
-                    debug(0) << " " << it.value().min << " <= " << it.name()
-                             << " <= " << it.value().max << "\n";
-                } else if (it.value().min_defined) {
-                    debug(0) << " " << it.value().min << " <= " << it.name() << "\n";
-                } else if (it.value().max_defined) {
-                    debug(0) << " " << it.name() << " <= " << it.value().max << "\n";
-                }
-            }
-        }
-
-        bool infeasible() const {
-            // Check if any of the equalities or the non-linear term
-            // are unsatisfiable or otherwise simplify to const false
-            // given all the knowledge we have accumulated into the
-            // simplifier instance.
-            for (auto &e : equalities) {
-                if (is_zero(simplifier->mutate(e.to_expr(), nullptr))) {
-                    return true;
-                }
-            }
-            if (non_linear_term.defined() && is_zero(simplifier->mutate(non_linear_term, nullptr))) {
-                return true;
-            }
-            return false;
-        }
-
-        void finalize() {
-            // We'll preferentially find substitutions from the
-            // earlier equations, so sort the system, putting low
-            // term-count expressions with lots of naked vars first
-            std::stable_sort(equalities.begin(), equalities.end(),
-                             [](const Equality &a, const Equality &b) {
-                                 if (a.terms.size() < b.terms.size()) return true;
-                                 if (a.terms.size() > b.terms.size()) return false;
-                                 return a.num_vars < b.num_vars;
-                             });
-            compute_complexity();
-        }
-
-        // Compute our heuristic for which systems are closest to infeasible
-        void compute_complexity() {
-            std::map<std::string, int> inequalities;
-            int non_linear_terms = 0, num_terms = 0;
-            for (auto &e : equalities) {
-                for (auto &p : e.terms) {
-                    Simplify::ExprInfo info;
-                    simplifier->mutate(p.first, &info);
-                    if (const Variable *var = p.first.as<Variable>()) {
-                        inequalities[var->name] = (int)info.max_defined + (int)info.min_defined;
-                    } else if (!is_const(p.first)) {
-                        non_linear_terms++;
-                    }
-                    num_terms++;
-                }
-            }
-            int unconstrained_vars = 0;
-            int semi_constrained_vars = 0;
-            int totally_constrained_vars = 0;
-            int num_constraints = (int)equalities.size() + (int)non_linear_term.defined();
-            for (const auto &p : inequalities) {
-                if (p.second == 0) {
-                    unconstrained_vars++;
-                } else if (p.second == 1) {
-                    semi_constrained_vars++;
-                } else {
-                    totally_constrained_vars++;
-                }
-            }
-            // debug(0) << "FEATURES " << id << " " << parent_id << " " << non_linear_terms << " " << unconstrained_vars << " " << semi_constrained_vars << " " << totally_constrained_vars << " " << num_terms << " " << num_constraints << "\n";
-            int terms[] = {non_linear_terms, unconstrained_vars, semi_constrained_vars,
-                           totally_constrained_vars, num_terms, num_constraints};
-            // Use a linear combination of these features to decide
-            // which stats are the most promising to explore. Trained
-            // by tracking which states lead to success in the
-            // store_with test and minimizing cross-entropy loss on a
-            // linear classifier.
-            float coeffs[] = {0.0006f,  0.3839f,  0.1992f,  0.0388f, -0.0215f, -0.4192f};
-            c = 0.0f;
-            for (int i = 0; i < 6; i++) {
-                c += terms[i] * coeffs[i];
-            }
-        }
-
-        float complexity() const {
-            return c;
-        }
-
-        void make_children(std::deque<std::unique_ptr<System>> &result) {
-
-            // Eliminate divs and mods by introducing new variables
-            for (int i = 0; i < (int)equalities.size(); i++) {
-                Expr lhs, rhs;
-                for (auto &p : equalities[i].terms) {
-                    const Mod *mod = p.first.as<Mod>();
-                    const Div *div = p.first.as<Div>();
-                    if (mod) {
-                        lhs = mod->a;
-                        rhs = mod->b;
-                    } else if (div) {
-                        lhs = div->a;
-                        rhs = div->b;
-                    }
-                    if (is_const(rhs)) {
-                        break;
-                    } else {
-                        lhs = rhs = Expr();
-                    }
-                }
-                if (lhs.defined()) {
-                    Expr k1 = aux(), k2 = aux();
-                    Expr replacement = k1 + k2 * rhs;
-                    auto subs = [&](Expr e) {
-                        e = substitute(lhs % rhs, k1, e);
-                        e = substitute(lhs / rhs, k2, e);
-                        return simplifier->mutate(e, nullptr);
-                    };
-                    std::unique_ptr<System> new_system(new System(simplifier, lhs == rhs, id));
-                    if (non_linear_term.defined()) {
-                        new_system->add_term(subs(non_linear_term));
-                    }
-                    for (int j = 0; j < (int)equalities.size(); j++) {
-                        new_system->add_term(subs(equalities[j].to_expr()));
-                    }
-                    new_system->add_term(lhs == replacement);
-                    simplifier->learn_true(-1 < k1);
-                    simplifier->learn_true(k1 < rhs);
-                    new_system->finalize();
-                    result.emplace_back(std::move(new_system));
-                    return;
-                }
-            }
-
-            // Which equations should we mine for
-            // substitutions. Initially all of them are promising.
-            vector<bool> interesting(equalities.size(), true);
-
-            // A list of all variables we could potentially eliminate
-            set<string> eliminable_vars;
-            for (int i = 0; i < (int)equalities.size(); i++) {
-                for (const auto &p : equalities[i].terms) {
-                    const Variable *var = p.first.as<Variable>();
-                    if (var && (p.second == 1 || p.second == -1)) {
-                        eliminable_vars.insert(var->name);
-                    }
-                }
-            }
-
-            /*
-            for (const auto &v : eliminable_vars) {
-                debug(0) << "Eliminable var: " << v << "\n";
-            }
-            */
-
-            // A mapping from eliminable variables to the equalities that reference them.
-            map<string, vector<int>> eqs_that_reference_var;
-            for (int i = 0; i < (int)equalities.size(); i++) {
-                Expr eq = equalities[i].to_expr();
-                for (const auto &v : eliminable_vars) {
-                    if (expr_uses_var(eq, v)) {
-                        eqs_that_reference_var[v].push_back(i);
-                    }
-                }
-            }
-
-            // The set of pairs of equations that share a common
-            // eliminable variable
-            set<pair<int, int>> has_common_variable;
-            for (auto p : eqs_that_reference_var) {
-                for (int i : p.second) {
-                    for (int j : p.second) {
-                        has_common_variable.insert({i, j});
-                    }
-                }
-            }
-
-            // Eliminate a variable
-            for (int i = 0; i < (int)equalities.size(); i++) {
-                if (equalities[i].num_vars == 0) {
-                    // We're not going to be able to find an
-                    // elimination from something with no naked vars.
-                    continue;
-                }
-
-                if (!interesting[i]) {
-                    // We've decided that this equation isn't one we want to mine.
-                    continue;
-                }
-
-                for (const auto &p : equalities[i].terms) {
-                    const Variable *var = p.first.as<Variable>();
-
-                    if (var) {
-
-                        Expr rhs = 0, rhs_remainder = 0;
-                        for (const auto &p2 : equalities[i].terms) {
-                            // Every term on the RHS has to be either
-                            // divisible by p.first, or in total
-                            // bounded by p.first
-                            if (p2.first.same_as(p.first)) {
-                                // This is the LHS
-                            } else if (p2.second % p.second == 0) {
-                                rhs += p2.first * (p2.second / p.second);
-                            } else {
-                                rhs_remainder += p2.first * p2.second;
-                            }
-                        }
-                        Simplify::ExprInfo remainder_bounds;
-                        rhs_remainder = simplifier->mutate(rhs_remainder, &remainder_bounds);
-                        rhs = simplifier->mutate(rhs, nullptr);
-
-                        // We have:
-                        // p.first * p.second == rhs * p.second + rhs_remainder
-
-                        if (remainder_bounds.max_defined &&
-                            remainder_bounds.max < std::abs(p.second) &&
-                            remainder_bounds.min_defined &&
-                            remainder_bounds.min > -std::abs(p.second)) {
-                            // We have:
-                            // p.first == rhs_a && 0 == rhs_b
-                        } else {
-                            // We don't have a substitution
-                            continue;
-                        }
-
-                        if (expr_uses_var(rhs, var->name)) {
-                            // Didn't successfully eliminate it - it
-                            // still occurs inside a non-linearity on
-                            // the right.
-                            continue;
-                        }
-
-                        // Tell the simplifier that LHS == RHS. This
-                        // may give it tighter bounds for the LHS
-                        // variable based on what is currently known
-                        // about the bounds of the RHS. This is the
-                        // primary mechanism by which the simplifier
-                        // instance learns things - not from the
-                        // substitutions we actually perform, but from
-                        // every potential substitution. Avoid telling
-                        // the simplifier that x == x.
-                        if (!equal(p.first, rhs)) {
-                            simplifier->learn_true(p.first == rhs);
-                        }
-
-                        //debug(0) << "Attempting elimination of " << var->name << "\n";
-
-                        // We have a candidate for elimination. Rule
-                        // out searching all equalities that don't
-                        // share a common variable with this one,
-                        // because we equally could have done any
-                        // substitutions resulting from those first
-                        // without affecting this substitution, and
-                        // doing things in a canonical order avoids
-                        // exploring the same states an exponential
-                        // number of times.
-                        for (int j = 0; j < (int)equalities.size(); j++) {
-                            if (interesting[j]) {
-                                interesting[j] = has_common_variable.count({i, j});
-                            }
-                        }
-
-                        // If the RHS is just a variable then we'll
-                        // just greedily perform this elimination -
-                        // there's no reason to need to backtrack on
-                        // it, so nuke all other candidate
-                        // children. There typically won't be any
-                        // because x == y will sort to the front of
-                        // the list of equalities.
-                        if (rhs.as<Variable>()) {
-                            result.clear();
-                        }
-
-                        auto subs = [&](Expr e) {
-                            e = substitute(var->name, rhs, e);
-                            e = simplifier->mutate(e, nullptr);
-                            return e;
-                        };
-
-                        // Make a child system with the substitution
-                        // performed and this equality eliminated.
-                        std::unique_ptr<System> new_system(new System(simplifier, p.first == rhs, id));
-                        if (non_linear_term.defined()) {
-                            new_system->add_term(subs(non_linear_term));
-                        }
-                        for (int j = 0; j < (int)equalities.size(); j++) {
-                            if (i == j) {
-                                // The equation we exploited to get
-                                // the substitution gets reduced
-                                // modulo the coefficient.
-                                new_system->add_term(simplifier->mutate(rhs_remainder == 0, nullptr));
-                                continue;
-                            }
-                            // In the other equations, we replace the variable with the right-hand-side
-                            new_system->add_term(subs(equalities[j].to_expr()));
-                        }
-                        new_system->finalize();
-                        result.emplace_back(std::move(new_system));
-
-                        // No point considering further candidates if
-                        // we're just doing a variable1 = variable2
-                        // substitution.
-                        if (rhs.as<Variable>()) {
-                            return;
-                        }
-                    }
-                }
-            }
-        }
-    };
-
-    // Attempt to disprove a boolean expr by constructing a constraint
-    // system and performing a backtracking search over substitutions
-    // using beam search.
-    bool can_disprove(Expr e, int beam_size) const {
-        e = common_subexpression_elimination(simplify(remove_likely_tags(e)));
-
-        // debug(0) << "*** Attempting disproof " << e << "\n";
-
-        if (is_zero(e)) {
-            // The simplifier was capable of doing the disproof by itself
-            // using peephole rules alone. No need to continue.
-            return true;
-        }
-
-        // Make a simplifier instance to hold all of our shared
-        // knowledge, and construct the initial system of constraints
-        // from the expression.
-        Simplify simplifier(true, nullptr, nullptr);
-        std::unique_ptr<System> system(new System(&simplifier, Expr(), 0));
-        system->add_term(e);
-        system->finalize();
-
-        // Beam search time.
-        std::deque<std::unique_ptr<System>> beam;
-        beam.emplace_back(std::move(system));
-        while (!beam.empty()) {
-            // Take the best thing
-            std::unique_ptr<System> next = std::move(beam.front());
-            beam.pop_front();
-
-            /*
-            debug(0) << "Top of beam: " << next->complexity() << "\n";
-            next->dump();
-            */
-
-            if (next->infeasible()) {
-                // We found that the initial constraint system
-                // eventually implied a falsehood, so we successfully
-                // disproved the original expression.
-                return true;
-            }
-
-            // Generate children
-            next->make_children(beam);
-
-            // Take the top beam_size results by sorting all the
-            // children and then popping off the end. Not the most
-            // efficient way to do it, but this is not the long pole
-            // here.
-            std::stable_sort(beam.begin(), beam.end(),
-                             [&](const std::unique_ptr<System> &a,
-                                 const std::unique_ptr<System> &b) {
-                                 return a->complexity() < b->complexity();
-                             });
-            while ((int)beam.size() > beam_size) {
-                beam.pop_back();
-            }
-        }
-        return false;
-    }
-
     // Try to prove that for every site in a shared buffer, this use
     // always happens strictly before another.
     bool safely_before(const Use &other, int beam_size) const {
@@ -896,8 +900,6 @@ struct Use {
         return true;
     }
 };
-
-int Use::System::id_counter = 0;
 
 // Scrape all uses of a given buffer from a Stmt.
 std::vector<Use> get_times_of_all_uses(const Stmt &s, string buf) {
@@ -1119,7 +1121,7 @@ Stmt lower_store_with(const Stmt &s, const vector<Function> &outputs, const map<
         // Check legality on a simplified version
         Stmt simpler = simplify(uniquify_variable_names(stmt));
 
-        debug(0) << "Simplified: " << simpler << "\n";
+        // debug(0) << "Simplified: " << simpler << "\n";
 
         // Add dummy realize nodes for the outputs
         for (auto f : outputs) {
@@ -1135,6 +1137,46 @@ Stmt lower_store_with(const Stmt &s, const vector<Function> &outputs, const map<
             const auto &stored_with = p.second.schedule().store_with();
             if (!stored_with.buffer.empty()) {
                 groups[stored_with.buffer].push_back(p.first);
+
+                // Check the coordinate mapping doesn't store distinct
+                // values at the same site.
+
+                // Try to find a set of distinct coords in the
+                // buffer's domain that are stored at the same
+                // site. WLOG assume that one of the sites is
+                // lexicographically before the other, so that we can
+                // use our constraint system machinery.
+                vector<Expr> disproofs;
+                map<string, Expr> remapping1, remapping2;
+                for (int i = 0; i < p.second.dimensions(); i++) {
+                    string n1 = unique_name('t');
+                    string n2 = unique_name('t');
+                    Expr v1 = Variable::make(Int(32), n1);
+                    Expr v2 = Variable::make(Int(32), n2);
+                    string v = p.second.args()[i];
+                    remapping1[v] = v1;
+                    remapping2[v] = v2;
+
+                    for (auto &e : disproofs) {
+                        e = e && (v1 == v2);
+                    }
+                    disproofs.push_back(v1 > v2);
+                }
+                Expr same_dst = const_true();
+                for (int i = 0; i < p.second.dimensions(); i++) {
+                    same_dst =
+                        (same_dst &&
+                         (substitute(remapping1, stored_with.where[i]) ==
+                          substitute(remapping2, stored_with.where[i])));
+                }
+                for (auto &e : disproofs) {
+                    const int beam_size = 32;
+                    if (!can_disprove(e && same_dst, beam_size)) {
+                        user_error << "Failed to prove that store_with mapping for " << p.first
+                                   << " does not attempt place multiple values at the same site of "
+                                   << stored_with.buffer << "\n";
+                    }
+                }
             }
         }
 
@@ -1172,7 +1214,6 @@ Stmt lower_store_with(const Stmt &s, const vector<Function> &outputs, const map<
                     for (size_t j = i+1; j < names.size(); j++) {
                         const string &n2 = names[j];
 
-                        //debug(0) << "Ordering " << n1 << " " << n2 << "\n";
                         auto uses_2 = get_times_of_all_uses(op->body, n2);
 
                         // Check all uses of 1 are before all uses of 2
