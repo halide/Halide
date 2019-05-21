@@ -407,6 +407,11 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Not *op) {
 
 void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Call *op) {
     if (op->is_intrinsic(Call::gpu_thread_barrier)) {
+        // TODO: Check the scopes here and figure out if this is the
+        // right memory barrier. Might be able to use
+        // SpvMemorySemanticsMaskNone instead.
+        add_instruction(SpvOpControlBarrier, { current_function_id, current_function_id,
+                                               SpvMemorySemanticsAcquireReleaseMask });
     } else if (op->is_intrinsic(Call::bitwise_and)) {
         internal_assert(op->args.size() == 2);
         visit_binop(op->type, op->args[0], op->args[1], SpvOpBitwiseAnd);
@@ -526,30 +531,29 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Select *op) {
 }
 
 void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Load *op) {
-  debug(2) << "Vulkan codegen: Store: " << (Expr)op << "\n";
-  user_assert(is_one(op->predicate)) << "Predicated loads not supported by the Vulkan backend\n";
+    debug(2) << "Vulkan codegen: Store: " << (Expr)op << "\n";
+    user_assert(is_one(op->predicate)) << "Predicated loads not supported by the Vulkan backend\n";
 
-  // TODO: implement vector loads
-  // TODO: correct casting to the appropriate memory space
+    // TODO: implement vector loads
+    // TODO: correct casting to the appropriate memory space
 
-  internal_assert(!(op->index.type().is_vector()));
-  internal_assert(op->param.defined() && op->param.is_buffer());
+    internal_assert(!(op->index.type().is_vector()));
+    internal_assert(op->param.defined() && op->param.is_buffer());
 
-  // Construct the pointer to read from
-  uint32_t base_id = symbol_table.get(op->name);
+    // Construct the pointer to read from
+    uint32_t base_id = symbol_table.get(op->name);
 
-  op->index.accept(this);
-  uint32_t index_id = id;
-  uint32_t ptr_type_id = map_pointer_type(op->type, SpvStorageClassUniform);
-  uint32_t access_chain_id = next_id++;
-  auto zero = 0;
-  add_instruction(SpvOpInBoundsAccessChain, {ptr_type_id, access_chain_id, base_id,
-                                             emit_constant(UInt(32), &zero), index_id});
+    op->index.accept(this);
+    uint32_t index_id = id;
+    uint32_t ptr_type_id = map_pointer_type(op->type, SpvStorageClassUniform);
+    uint32_t access_chain_id = next_id++;
+    auto zero = 0;
+    add_instruction(SpvOpInBoundsAccessChain, {ptr_type_id, access_chain_id, base_id,
+                                               emit_constant(UInt(32), &zero), index_id});
 
-  id = next_id++;
-  uint32_t result_type_id = map_type(op->type);
-  add_instruction(SpvOpLoad, {result_type_id, id, access_chain_id});
-
+    id = next_id++;
+    uint32_t result_type_id = map_type(op->type);
+    add_instruction(SpvOpLoad, {result_type_id, id, access_chain_id});
 }
 
 void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Store *op) {
@@ -887,8 +891,8 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::add_kernel(Stmt s,
     add_instruction(spir_v_types, SpvOpTypeFunction, {function_type_id, void_id});
 
     // Add definition and parameters
-    uint32_t function_id = next_id++;
-    add_instruction(SpvOpFunction, {void_id, function_id, SpvFunctionControlMaskNone, function_type_id});
+    current_function_id = next_id++;
+    add_instruction(SpvOpFunction, {void_id, current_function_id, SpvFunctionControlMaskNone, function_type_id});
 
     // Insert the starting label
     add_instruction(SpvOpLabel, {next_id++});
@@ -899,7 +903,7 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::add_kernel(Stmt s,
 
     std::vector<uint32_t> entry_point_interface;
     entry_point_interface.push_back(SpvExecutionModelGLCompute);
-    entry_point_interface.push_back(function_id);
+    entry_point_interface.push_back(current_function_id);
     // Add the string name of the function
     encode_string(entry_point_interface, (name.size() + 1 + 3)/4, name.size(), name.c_str());
 
@@ -978,6 +982,9 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::add_kernel(Stmt s,
     for (auto arg: args) {
         symbol_table.pop(arg.name);
     }
+
+    // Reset to an invalid value for safety.
+    current_function_id = 0;
 }
 
 CodeGen_Vulkan_Dev::CodeGen_Vulkan_Dev(Target t) {

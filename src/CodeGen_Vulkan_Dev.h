@@ -126,6 +126,9 @@ protected:
         // The next one is cleared in between kernels, and tracks the allocations
         std::vector<uint32_t> spir_v_kernel_allocations;
 
+        // Id of entry point for kernel currently being compiled.
+        uint32_t current_function_id;
+
         // Top-level function for adding kernels
         void add_kernel(Stmt s, const std::string &name, const std::vector<DeviceArgument> &args);
 
@@ -165,7 +168,6 @@ protected:
     } emitter;
 
     std::string current_kernel_name;
-
 };
 
 }  // namespace Internal
