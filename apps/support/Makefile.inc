@@ -89,7 +89,7 @@ ifeq ($(OS), Windows_NT)
 
 $(BIN)/libHalide.dll: $(HALIDE_DISTRIB_PATH)/bin/libHalide.dll
 	@mkdir -p $(@D)
-	@ln $^ $@
+	@cp $^ $@
 
 LIB_HALIDE = $(BIN)/libHalide.dll
 
