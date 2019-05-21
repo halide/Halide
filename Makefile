@@ -1908,6 +1908,7 @@ TEST_APPS=\
 	linear_algebra \
 	local_laplacian \
 	nl_means \
+	nn_ops \
 	onnx \
 	resize \
 	resnet_50 \
