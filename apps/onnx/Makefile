@@ -36,19 +36,17 @@ $(BIN)/%/onnx.pb.o: $(BIN)/%/onnx/onnx.pb.cc $(BIN)/%/onnx/onnx_pb.h
 $(BIN)/%/onnx_converter_lib.o: onnx_converter.cc $(BIN)/%/onnx/onnx_pb.h
 	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -fPIC -c $< -o $@
 
-ONNX_CONVERTER_LIB = \
-		$(BIN)/$(HL_TARGET)/onnx.pb.o \
-		$(BIN)/$(HL_TARGET)/onnx_converter_lib.o
+$(BIN)/%/oclib.a: $(BIN)/%/onnx_converter_lib.o $(BIN)/%/onnx.pb.o
+	ar q $@ $^
 
 clean:
 	rm -rf $(BIN)
 
 # Simple unit test
-$(BIN)/%/onnx_converter_test: onnx_converter_test.cc $(ONNX_CONVERTER_LIB)
-	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) -I$(BIN)/$* $< -o $@ $(LDFLAGS) $(ONNX_CONVERTER_LIB) $(LIB_HALIDE) $(HALIDE_SYSTEM_LIBS)
+$(BIN)/%/onnx_converter_test: onnx_converter_test.cc $(BIN)/%/oclib.a
+	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) -I$(BIN)/$* $^ -o $@ $(LDFLAGS) $(LIB_HALIDE) $(HALIDE_SYSTEM_LIBS)
 
-
-$(GENERATOR_BIN)/onnx_converter.generator : onnx_converter_generator.cc $(GENERATOR_DEPS) $(ONNX_CONVERTER_LIB)
+$(GENERATOR_BIN)/onnx_converter.generator : onnx_converter_generator.cc $(GENERATOR_DEPS) $(GENERATOR_BIN)/oclib.a
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -I$(GENERATOR_BIN) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
@@ -85,8 +83,8 @@ PY_MODEL_EXT = model_cpp$(PY_EXT)
 PYCXXFLAGS =  $(CXXFLAGS) $(PYBIND11_CFLAGS)
 
 # Python extension for HalideModel
-$(BIN)/%/$(PY_MODEL_EXT): model.cpp $(ONNX_CONVERTER_LIB)
-	$(CXX) $(PYCXXFLAGS) -Wall -shared -fPIC -I$(BIN)/$* $< $(ONNX_CONVERTER_LIB) $(LIB_HALIDE) -o $@ $(LDFLAGS)
+$(BIN)/%/$(PY_MODEL_EXT): model.cpp $(BIN)/%/oclib.a
+	$(CXX) $(PYCXXFLAGS) -Wall -shared -fPIC -I$(BIN)/$* $^ $(LIB_HALIDE) -o $@ $(LDFLAGS)
 
 
 model_test: $(BIN)/$(HL_TARGET)/$(PY_MODEL_EXT)
