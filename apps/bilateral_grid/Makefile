@@ -14,13 +14,13 @@ $(BIN)/%/bilateral_grid_auto_schedule.a: $(GENERATOR_BIN)/bilateral_grid.generat
 	@mkdir -p $(@D)
 	$^ -g bilateral_grid -o $(@D) -f bilateral_grid_auto_schedule target=$*-no_runtime auto_schedule=true -e static_library,h,schedule
 
-$(BIN)/%/filter: $(BIN)/%/bilateral_grid.a $(BIN)/%/bilateral_grid_auto_schedule.a filter.cpp
+$(BIN)/%/filter: filter.cpp $(BIN)/%/bilateral_grid.a $(BIN)/%/bilateral_grid_auto_schedule.a
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -I$(BIN)/$* $^ -o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS)
 
-$(BIN)/%/filter_viz: $(BIN)/%-trace_all/bilateral_grid.a filter.cpp ../../bin/HalideTraceViz
+$(BIN)/%/filter_viz: filter.cpp $(BIN)/%-trace_all/bilateral_grid.a
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -DNO_AUTO_SCHEDULE -I$(BIN)/$*-trace_all filter.cpp $(BIN)/$*-trace_all/bilateral_grid.a -o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) -DNO_AUTO_SCHEDULE -I$(BIN)/$*-trace_all $^ -o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS)
 
 ../../bin/HalideTraceViz: ../../util/HalideTraceViz.cpp
 	$(MAKE) -C ../../ bin/HalideTraceViz
