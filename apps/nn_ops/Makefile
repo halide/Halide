@@ -31,6 +31,10 @@ $(GENERATOR_BIN)/DepthwiseConvolution.generator: DepthwiseConvolution_generator.
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
+$(BIN)/%/runtime.a: $(GENERATOR_BIN)/DepthwiseConvolution.generator
+	@mkdir -p $(@D)
+	@$< -r runtime -o $(@D) target=$*
+
 $(BIN)/%/DepthwiseConvolution_1.o: $(GENERATOR_BIN)/DepthwiseConvolution.generator
 	@mkdir -p $(@D)
 	$^ -g DepthwiseConvolution -o $(@D) -e o,h -f DepthwiseConvolution_1 target=$* depth_multiplier=1
@@ -47,9 +51,9 @@ $(BIN)/%/DepthwiseConvolution_8.o: $(GENERATOR_BIN)/DepthwiseConvolution.generat
 	@mkdir -p $(@D)
 	$^ -g DepthwiseConvolution -o $(@D) -e o,h -f DepthwiseConvolution_8 target=$* depth_multiplier=8
 
-$(BIN)/%/DepthwiseConvolution: DepthwiseConvolution.cpp common_reference.cpp $(BIN)/%/DepthwiseConvolution_1.o $(BIN)/%/DepthwiseConvolution_2.o $(BIN)/%/DepthwiseConvolution_4.o $(BIN)/%/DepthwiseConvolution_8.o
+$(BIN)/%/DepthwiseConvolution: DepthwiseConvolution.cpp common_reference.cpp $(BIN)/%/DepthwiseConvolution_1.o $(BIN)/%/DepthwiseConvolution_2.o $(BIN)/%/DepthwiseConvolution_4.o $(BIN)/%/DepthwiseConvolution_8.o $(BIN)/%/runtime.a
 	@mkdir -p $(@D)
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall DepthwiseConvolution.cpp common_reference.cpp $(BIN)/$*/DepthwiseConvolution_1.o $(BIN)/$*/DepthwiseConvolution_2.o $(BIN)/$*/DepthwiseConvolution_4.o $(BIN)/$*/DepthwiseConvolution_8.o -o $(@D)/DepthwiseConvolution $(LDFLAGS-$*)
+	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall $^ -o $(@D)/DepthwiseConvolution $(LDFLAGS-$*)
 
 $(GENERATOR_BIN)/Im2col.generator: Im2col_generator.cpp common.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
