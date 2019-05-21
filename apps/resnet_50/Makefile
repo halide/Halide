@@ -20,7 +20,7 @@ $(BIN)/resnet50.a: $(BIN)/resnet50.generator
 
 $(BIN)/process: process.cpp $(BIN)/resnet50.a
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -I$(BIN) -Wall -O3 $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS)
+	$(CXX) $(CXXFLAGS) -I$(BIN) -Wall $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS)
 
 benchmark_and_validate: $(BIN)/process $(BIN)/pytorch_weights/ok
 	$< 10 $* $(BIN)/pytorch_weights/ $(SEED) $(BIN)/res50gen_output.bin

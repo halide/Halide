@@ -18,7 +18,7 @@ $(BIN)/conv_layer_auto_schedule.a: $(BIN)/conv_layer.generator
 
 $(BIN)/process: process.cpp $(BIN)/conv_layer.a $(BIN)/conv_layer_auto_schedule.a
 	@-mkdir -p $(BIN)
-	$(CXX) $(CXXFLAGS) -I$(BIN) -Wall -O3 $^ -o $@ $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) -I$(BIN) -Wall $^ -o $@ $(LDFLAGS)
 
 run: $(BIN)/process
 	@-mkdir -p $(BIN)
