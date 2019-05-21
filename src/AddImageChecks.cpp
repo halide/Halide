@@ -137,7 +137,17 @@ Stmt add_image_checks(Stmt s,
             Function f = it->second;
             const auto &store_with = f.schedule().store_with();
             if (!store_with.buffer.empty()) {
-                merge_boxes(boxes[store_with.buffer], p.second);
+                // Remap the boxes using the store_with coordinate mapping
+                Scope<Interval> scope;
+                for (int i = 0; i < f.dimensions(); i++) {
+                    scope.push(f.args()[i], p.second[i]);
+                }
+                Box remapped;
+                remapped.used = p.second.used;
+                for (const auto &e : store_with.where) {
+                    remapped.push_back(bounds_of_expr_in_scope(e, scope));
+                }
+                merge_boxes(boxes[store_with.buffer], remapped);
             }
         }
     }
