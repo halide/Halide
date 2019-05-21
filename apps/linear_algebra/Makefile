@@ -1,8 +1,10 @@
 include ../support/Makefile.inc
 
-BUILD = $(BIN)/$(HL_TARGET)/build
+BIN ?= bin
+BUILD = $(BIN)/build
 CXXFLAGS += -Wall -march=native -I /opt/local/include
-LIBHALIDE_BLAS = $(BIN)/$(HL_TARGET)/libhalide_blas.a
+HL_TARGET ?= host
+LIBHALIDE_BLAS = $(BIN)/libhalide_blas.a
 HALIDEBLAS_FLAGS ?= -DUSE_HALIDE
 EMIT_OPTIONS = stmt,assembly,o,h
 
@@ -59,19 +61,19 @@ KERNELS = \
 	dgemm_transAB \
 
 BENCHMARKS = \
-	$(BIN)/$(HL_TARGET)/cblas_benchmarks \
-	$(BIN)/$(HL_TARGET)/atlas_benchmarks \
-	$(BIN)/$(HL_TARGET)/openblas_benchmarks \
-	$(BIN)/$(HL_TARGET)/eigen_benchmarks \
-	$(BIN)/$(HL_TARGET)/halide_benchmarks
+	$(BIN)/cblas_benchmarks \
+	$(BIN)/atlas_benchmarks \
+	$(BIN)/openblas_benchmarks \
+	$(BIN)/eigen_benchmarks \
+	$(BIN)/halide_benchmarks
 
 .PHONY: clean run_benchmarks
 all: $(BENCHMARKS)
 	make run_benchmarks
 
 ifneq ("$(wildcard /usr/include/cblas.h)","")
-test: $(BIN)/$(HL_TARGET)/test_halide_blas
-	$(BIN)/$(HL_TARGET)/test_halide_blas
+test: $(BIN)/test_halide_blas
+	$(BIN)/test_halide_blas
 else
 test:
 	@echo /usr/include/cblas.h not found: skipping linear_algebra tests...
@@ -90,7 +92,7 @@ $(BUILD)/halide_blas.o: src/halide_blas.cpp src/halide_blas.h $(KERNEL_HEADERS)
 $(LIBHALIDE_BLAS): $(KERNEL_OBJECTS) $(BUILD)/halide_blas.o
 	$(AR) q $@ $(filter-out %.a,$^)
 
-$(BIN)/%/test_halide_blas: tests/test_halide_blas.cpp $(LIBHALIDE_BLAS)
+$(BIN)/test_halide_blas: tests/test_halide_blas.cpp $(LIBHALIDE_BLAS)
 	$(CXX) $(CXXFLAGS) -Wno-unused-variable -o $(@) -I../../include/ -I../support -Isrc -I$(BUILD) \
 	$(CBLAS_FLAGS) $^ $(CBLAS_LIBS) $(LDFLAGS)
 
@@ -103,20 +105,20 @@ L1_BENCHMARKS = scopy dcopy sscal dscal saxpy daxpy sdot ddot sasum dasum
 L2_BENCHMARKS = sgemv_notrans dgemv_notrans sgemv_trans dgemv_trans sger dger
 L3_BENCHMARKS = sgemm_notrans dgemm_notrans sgemm_transA dgemm_transA sgemm_transB dgemm_transB sgemm_transAB dgemm_transAB
 
-cblas_l1_benchmark_%: $(BIN)/$(HL_TARGET)/cblas_benchmarks
-	@$(foreach size,$(L1_BENCHMARK_SIZES),$(BIN)/$(HL_TARGET)/cblas_benchmarks $(@:cblas_l1_benchmark_%=%) $(size);)
+cblas_l1_benchmark_%: $(BIN)/cblas_benchmarks
+	@$(foreach size,$(L1_BENCHMARK_SIZES),$(BIN)/cblas_benchmarks $(@:cblas_l1_benchmark_%=%) $(size);)
 
-atlas_l1_benchmark_%: $(BIN)/$(HL_TARGET)/atlas_benchmarks
-	@$(foreach size,$(L1_BENCHMARK_SIZES),$(BIN)/$(HL_TARGET)/atlas_benchmarks $(@:atlas_l1_benchmark_%=%) $(size);)
+atlas_l1_benchmark_%: $(BIN)/atlas_benchmarks
+	@$(foreach size,$(L1_BENCHMARK_SIZES),$(BIN)/atlas_benchmarks $(@:atlas_l1_benchmark_%=%) $(size);)
 
-openblas_l1_benchmark_%: $(BIN)/$(HL_TARGET)/openblas_benchmarks
-	@$(foreach size,$(L1_BENCHMARK_SIZES),$(BIN)/$(HL_TARGET)/openblas_benchmarks $(@:openblas_l1_benchmark_%=%) $(size);)
+openblas_l1_benchmark_%: $(BIN)/openblas_benchmarks
+	@$(foreach size,$(L1_BENCHMARK_SIZES),$(BIN)/openblas_benchmarks $(@:openblas_l1_benchmark_%=%) $(size);)
 
-eigen_l1_benchmark_%: $(BIN)/$(HL_TARGET)/eigen_benchmarks
-	@$(foreach size,$(L1_BENCHMARK_SIZES),$(BIN)/$(HL_TARGET)/eigen_benchmarks $(@:eigen_l1_benchmark_%=%) $(size);)
+eigen_l1_benchmark_%: $(BIN)/eigen_benchmarks
+	@$(foreach size,$(L1_BENCHMARK_SIZES),$(BIN)/eigen_benchmarks $(@:eigen_l1_benchmark_%=%) $(size);)
 
-halide_l1_benchmark_%: $(BIN)/$(HL_TARGET)/halide_benchmarks
-	@$(foreach size,$(L1_BENCHMARK_SIZES),$(BIN)/$(HL_TARGET)/halide_benchmarks $(@:halide_l1_benchmark_%=%) $(size);)
+halide_l1_benchmark_%: $(BIN)/halide_benchmarks
+	@$(foreach size,$(L1_BENCHMARK_SIZES),$(BIN)/halide_benchmarks $(@:halide_l1_benchmark_%=%) $(size);)
 
 l1_benchmarks: \
 	$(L1_BENCHMARKS:%=cblas_l1_benchmark_%) \
@@ -125,20 +127,20 @@ l1_benchmarks: \
 	$(L1_BENCHMARKS:%=eigen_l1_benchmark_%) \
 	$(L1_BENCHMARKS:%=halide_l1_benchmark_%)
 
-cblas_l2_benchmark_%: $(BIN)/$(HL_TARGET)/cblas_benchmarks
-	@$(foreach size,$(L2_BENCHMARK_SIZES),$(BIN)/$(HL_TARGET)/cblas_benchmarks $(@:cblas_l2_benchmark_%=%) $(size);)
+cblas_l2_benchmark_%: $(BIN)/cblas_benchmarks
+	@$(foreach size,$(L2_BENCHMARK_SIZES),$(BIN)/cblas_benchmarks $(@:cblas_l2_benchmark_%=%) $(size);)
 
-atlas_l2_benchmark_%: $(BIN)/$(HL_TARGET)/atlas_benchmarks
-	@$(foreach size,$(L2_BENCHMARK_SIZES),$(BIN)/$(HL_TARGET)/atlas_benchmarks $(@:atlas_l2_benchmark_%=%) $(size);)
+atlas_l2_benchmark_%: $(BIN)/atlas_benchmarks
+	@$(foreach size,$(L2_BENCHMARK_SIZES),$(BIN)/atlas_benchmarks $(@:atlas_l2_benchmark_%=%) $(size);)
 
-openblas_l2_benchmark_%: $(BIN)/$(HL_TARGET)/openblas_benchmarks
-	@$(foreach size,$(L2_BENCHMARK_SIZES),$(BIN)/$(HL_TARGET)/openblas_benchmarks $(@:openblas_l2_benchmark_%=%) $(size);)
+openblas_l2_benchmark_%: $(BIN)/openblas_benchmarks
+	@$(foreach size,$(L2_BENCHMARK_SIZES),$(BIN)/openblas_benchmarks $(@:openblas_l2_benchmark_%=%) $(size);)
 
-eigen_l2_benchmark_%: $(BIN)/$(HL_TARGET)/eigen_benchmarks
-	@$(foreach size,$(L2_BENCHMARK_SIZES),$(BIN)/$(HL_TARGET)/eigen_benchmarks $(@:eigen_l2_benchmark_%=%) $(size);)
+eigen_l2_benchmark_%: $(BIN)/eigen_benchmarks
+	@$(foreach size,$(L2_BENCHMARK_SIZES),$(BIN)/eigen_benchmarks $(@:eigen_l2_benchmark_%=%) $(size);)
 
-halide_l2_benchmark_%: $(BIN)/$(HL_TARGET)/halide_benchmarks
-	@$(foreach size,$(L2_BENCHMARK_SIZES),$(BIN)/$(HL_TARGET)/halide_benchmarks $(@:halide_l2_benchmark_%=%) $(size);)
+halide_l2_benchmark_%: $(BIN)/halide_benchmarks
+	@$(foreach size,$(L2_BENCHMARK_SIZES),$(BIN)/halide_benchmarks $(@:halide_l2_benchmark_%=%) $(size);)
 
 l2_benchmarks: \
 	$(L2_BENCHMARKS:%=cblas_l2_benchmark_%) \
@@ -147,20 +149,20 @@ l2_benchmarks: \
 	$(L2_BENCHMARKS:%=eigen_l2_benchmark_%) \
 	$(L2_BENCHMARKS:%=halide_l2_benchmark_%)
 
-cblas_l3_benchmark_%: $(BIN)/$(HL_TARGET)/cblas_benchmarks
-	@$(foreach size,$(L3_BENCHMARK_SIZES),$(BIN)/$(HL_TARGET)/cblas_benchmarks $(@:cblas_l3_benchmark_%=%) $(size);)
+cblas_l3_benchmark_%: $(BIN)/cblas_benchmarks
+	@$(foreach size,$(L3_BENCHMARK_SIZES),$(BIN)/cblas_benchmarks $(@:cblas_l3_benchmark_%=%) $(size);)
 
-atlas_l3_benchmark_%: $(BIN)/$(HL_TARGET)/atlas_benchmarks
-	@$(foreach size,$(L3_BENCHMARK_SIZES),$(BIN)/$(HL_TARGET)/atlas_benchmarks $(@:atlas_l3_benchmark_%=%) $(size);)
+atlas_l3_benchmark_%: $(BIN)/atlas_benchmarks
+	@$(foreach size,$(L3_BENCHMARK_SIZES),$(BIN)/atlas_benchmarks $(@:atlas_l3_benchmark_%=%) $(size);)
 
-openblas_l3_benchmark_%: $(BIN)/$(HL_TARGET)/openblas_benchmarks
-	@$(foreach size,$(L3_BENCHMARK_SIZES),$(BIN)/$(HL_TARGET)/openblas_benchmarks $(@:openblas_l3_benchmark_%=%) $(size);)
+openblas_l3_benchmark_%: $(BIN)/openblas_benchmarks
+	@$(foreach size,$(L3_BENCHMARK_SIZES),$(BIN)/openblas_benchmarks $(@:openblas_l3_benchmark_%=%) $(size);)
 
-eigen_l3_benchmark_%: $(BIN)/$(HL_TARGET)/eigen_benchmarks
-	@$(foreach size,$(L3_BENCHMARK_SIZES),$(BIN)/$(HL_TARGET)/eigen_benchmarks $(@:eigen_l3_benchmark_%=%) $(size);)
+eigen_l3_benchmark_%: $(BIN)/eigen_benchmarks
+	@$(foreach size,$(L3_BENCHMARK_SIZES),$(BIN)/eigen_benchmarks $(@:eigen_l3_benchmark_%=%) $(size);)
 
-halide_l3_benchmark_%: $(BIN)/$(HL_TARGET)/halide_benchmarks
-	@$(foreach size,$(L3_BENCHMARK_SIZES),$(BIN)/$(HL_TARGET)/halide_benchmarks $(@:halide_l3_benchmark_%=%) $(size);)
+halide_l3_benchmark_%: $(BIN)/halide_benchmarks
+	@$(foreach size,$(L3_BENCHMARK_SIZES),$(BIN)/halide_benchmarks $(@:halide_l3_benchmark_%=%) $(size);)
 
 l3_benchmarks: \
 	$(L3_BENCHMARKS:%=cblas_l3_benchmark_%) \
@@ -179,23 +181,23 @@ benchmarks.csv: $(BENCHMARKS)
 	make --no-print-directory run_benchmarks > benchmarks.dat
 	awk '{printf("%s,%s,%s,%s,%s\n",$$1,$$2,$$3,$$4,$$5)}' benchmarks.dat > benchmarks.csv
 
-$(BIN)/%/cblas_benchmarks: benchmarks/cblas_benchmarks.cpp benchmarks/clock.h benchmarks/macros.h
+$(BIN)/cblas_benchmarks: benchmarks/cblas_benchmarks.cpp benchmarks/clock.h benchmarks/macros.h
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -o $(@) -I$(BUILD) $(CBLAS_FLAGS) $(<) $(CBLAS_LIBS)
 
-$(BIN)/%/atlas_benchmarks: benchmarks/cblas_benchmarks.cpp benchmarks/clock.h benchmarks/macros.h
+$(BIN)/atlas_benchmarks: benchmarks/cblas_benchmarks.cpp benchmarks/clock.h benchmarks/macros.h
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -o $(@) -I$(BUILD) $(ATLAS_FLAGS) $(<) $(ATLAS_LIBS)
 
-$(BIN)/%/openblas_benchmarks: benchmarks/cblas_benchmarks.cpp benchmarks/clock.h benchmarks/macros.h
+$(BIN)/openblas_benchmarks: benchmarks/cblas_benchmarks.cpp benchmarks/clock.h benchmarks/macros.h
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -o $(@) -I$(BUILD) $(OPENBLAS_FLAGS) $(<) $(OPENBLAS_LIBS)
 
-$(BIN)/%/eigen_benchmarks: benchmarks/eigen_benchmarks.cpp benchmarks/clock.h benchmarks/macros.h
+$(BIN)/eigen_benchmarks: benchmarks/eigen_benchmarks.cpp benchmarks/clock.h benchmarks/macros.h
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -o $(@) -I$(BUILD) $(EIGEN_INCLUDES) $(<)
 
-$(BIN)/%/halide_benchmarks: benchmarks/halide_benchmarks.cpp benchmarks/clock.h benchmarks/macros.h $(LIBHALIDE_BLAS)
+$(BIN)/halide_benchmarks: benchmarks/halide_benchmarks.cpp benchmarks/clock.h benchmarks/macros.h $(LIBHALIDE_BLAS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -o $(@) -Isrc -I$(BUILD) $(HALIDEBLAS_FLAGS) $(<) $(LIBHALIDE_BLAS) $(LDFLAGS)
 
@@ -205,7 +207,7 @@ $(BUILD)/%.generator: src/%_generators.cpp $(GENERATOR_DEPS)
 
 # This can use any of the generators; pick an arbitrary one
 $(BUILD)/halide_runtime.o: $(BUILD)/blas_l1.generator
-	$< -o $(BUILD) -e o -r halide_runtime target=$*
+	$< -o $(BUILD) -e o -r halide_runtime target=$(HL_TARGET)
 
 $(BUILD)/halide_scopy_impl.o $(BUILD)/halide_scopy_impl.h: $(BUILD)/blas_l1.generator
 	$< -g saxpy -f halide_scopy_impl -o $(BUILD) -e $(EMIT_OPTIONS) \
