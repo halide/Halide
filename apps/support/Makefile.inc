@@ -87,11 +87,11 @@ LDFLAGS-arm-32-android ?= -llog -fPIE -pie
 # from the app's bin/ folder to the distrib/ folder we are using, and depend on that.
 ifeq ($(OS), Windows_NT)
 
-$(BIN)/libHalide.dll: $(HALIDE_DISTRIB_PATH)/bin/libHalide.dll
+$(BIN)/host/libHalide.dll: $(HALIDE_DISTRIB_PATH)/bin/libHalide.dll
 	@mkdir -p $(@D)
 	@cp $^ $@
 
-LIB_HALIDE = $(BIN)/libHalide.dll
+LIB_HALIDE = $(BIN)/host/libHalide.dll
 
 else
 
