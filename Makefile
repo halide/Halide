@@ -905,6 +905,10 @@ endif
 endif
 endif
 
+V8_DEPS=
+ifneq ($(WITH_V8), )
+ifeq ($(suffix $(V8_LIB_PATH)), .a)
+
 # Note that this rule is only used if V8_LIB_PATH is a static library
 $(BIN_DIR)/libv8_halide.$(SHARED_EXT): $(V8_LIB_PATH)
 	@mkdir -p $(@D)
@@ -913,12 +917,12 @@ ifeq ($(UNAME), Darwin)
 	install_name_tool -id $(CURDIR)/$(BIN_DIR)/libv8_halide.$(SHARED_EXT) $(BIN_DIR)/libv8_halide.$(SHARED_EXT)
 endif
 
-V8_DEPS=
-ifneq ($(WITH_V8), )
-ifeq ($(suffix $(V8_LIB_PATH)), .a)
-	V8_DEPS=$(BIN_DIR)/libv8_halide.$(SHARED_EXT)
+V8_DEPS=$(BIN_DIR)/libv8_halide.$(SHARED_EXT)
+
 else
-	V8_DEPS=$(V8_LIB_PATH)
+
+V8_DEPS=$(V8_LIB_PATH)
+
 endif
 endif
 
