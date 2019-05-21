@@ -5,7 +5,7 @@ all: $(BIN)/$(HL_TARGET)/process
 
 $(GENERATOR_BIN)/local_laplacian.generator: local_laplacian_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 $(BIN)/%/local_laplacian.a: $(GENERATOR_BIN)/local_laplacian.generator
 	@mkdir -p $(@D)

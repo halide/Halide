@@ -5,7 +5,7 @@ all: $(BIN)/$(HL_TARGET)/AveragePool $(BIN)/$(HL_TARGET)/Convolution $(BIN)/$(HL
 
 $(GENERATOR_BIN)/AveragePool.generator: AveragePool_generator.cpp common.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 $(BIN)/%/AveragePool.o: $(GENERATOR_BIN)/AveragePool.generator
 	@mkdir -p $(@D)
@@ -17,7 +17,7 @@ $(BIN)/%/AveragePool: AveragePool.cpp $(BIN)/%/AveragePool.o
 
 $(GENERATOR_BIN)/Convolution.generator: Convolution_generator.cpp common.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 $(BIN)/%/Convolution.o: $(GENERATOR_BIN)/Convolution.generator
 	@mkdir -p $(@D)
@@ -29,7 +29,7 @@ $(BIN)/%/Convolution: Convolution.cpp common_reference.cpp $(BIN)/%/Convolution.
 
 $(GENERATOR_BIN)/DepthwiseConvolution.generator: DepthwiseConvolution_generator.cpp common.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 $(BIN)/%/runtime.a: $(GENERATOR_BIN)/DepthwiseConvolution.generator
 	@mkdir -p $(@D)
@@ -57,7 +57,7 @@ $(BIN)/%/DepthwiseConvolution: DepthwiseConvolution.cpp common_reference.cpp $(B
 
 $(GENERATOR_BIN)/Im2col.generator: Im2col_generator.cpp common.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 $(BIN)/%/Im2col.o: $(GENERATOR_BIN)/Im2col.generator
 	@mkdir -p $(@D)
@@ -69,7 +69,7 @@ $(BIN)/%/Im2col: Im2col.cpp $(BIN)/%/Im2col.o
 
 $(GENERATOR_BIN)/MatrixMultiply.generator: MatrixMultiply_generator.cpp common.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 $(BIN)/%/MatrixMultiply.o: $(GENERATOR_BIN)/MatrixMultiply.generator
 	@mkdir -p $(@D)
@@ -81,7 +81,7 @@ $(BIN)/%/MatrixMultiply: MatrixMultiply.cpp common_reference.cpp $(BIN)/%/Matrix
 
 $(GENERATOR_BIN)/MaxPool.generator: MaxPool_generator.cpp common.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 $(BIN)/%/MaxPool.o: $(GENERATOR_BIN)/MaxPool.generator
 	@mkdir -p $(@D)

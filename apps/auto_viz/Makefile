@@ -8,7 +8,7 @@ all: $(OUTPUTS)
 
 $(GENERATOR_BIN)/auto_viz_demo.generator: auto_viz_demo_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 # Can't have multiple wildcards in Make, so we'll use a macro
 # to stamp out all the rules we need

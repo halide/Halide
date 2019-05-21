@@ -5,7 +5,7 @@ all: $(BIN)/$(HL_TARGET)/process
 
 $(GENERATOR_BIN)/lens_blur.generator: lens_blur_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS)
 
 $(BIN)/%/lens_blur.a: $(GENERATOR_BIN)/lens_blur.generator
 	@mkdir -p $(@D)

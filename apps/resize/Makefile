@@ -21,7 +21,7 @@ all: $(OUTPUTS)
 
 $(GENERATOR_BIN)/resize.generator: resize_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 
 # Can't have multiple wildcards in Make, so we'll use a macro
