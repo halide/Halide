@@ -79,10 +79,18 @@ CXX-arm-64-android ?= $(ANDROID_ARM64_TOOLCHAIN)/bin/aarch64-linux-android-c++
 CXX-arm-32-android ?= $(ANDROID_ARM_TOOLCHAIN)/bin/arm-linux-androideabi-c++
 
 CXXFLAGS-host ?= $(CXXFLAGS)
+CXXFLAGS-host-opencl ?= $(CXXFLAGS)
+CXXFLAGS-host-opengl ?= $(CXXFLAGS)
+CXXFLAGS-host-cuda ?= $(CXXFLAGS)
+CXXFLAGS-host-metal ?= $(CXXFLAGS)
 CXXFLAGS-arm-64-android ?= $(CXXFLAGS)
 CXXFLAGS-arm-32-android ?= $(CXXFLAGS)
 
 LDFLAGS-host ?= $(LDFLAGS)
+LDFLAGS-host-opencl ?= $(LDFLAGS)
+LDFLAGS-host-opengl ?= $(LDFLAGS)
+LDFLAGS-host-cuda ?= $(LDFLAGS)
+LDFLAGS-host-metal ?= $(LDFLAGS)
 LDFLAGS-arm-64-android ?= -llog -fPIE -pie
 LDFLAGS-arm-32-android ?= -llog -fPIE -pie
 
