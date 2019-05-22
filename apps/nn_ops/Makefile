@@ -37,19 +37,19 @@ $(BIN)/%/runtime.a: $(GENERATOR_BIN)/DepthwiseConvolution.generator
 
 $(BIN)/%/DepthwiseConvolution_1.o: $(GENERATOR_BIN)/DepthwiseConvolution.generator
 	@mkdir -p $(@D)
-	$^ -g DepthwiseConvolution -o $(@D) -e o,h -f DepthwiseConvolution_1 target=$* depth_multiplier=1
+	$^ -g DepthwiseConvolution -o $(@D) -e o,h -f DepthwiseConvolution_1 target=$*-no_runtime depth_multiplier=1
 
 $(BIN)/%/DepthwiseConvolution_2.o: $(GENERATOR_BIN)/DepthwiseConvolution.generator
 	@mkdir -p $(@D)
-	$^ -g DepthwiseConvolution -o $(@D) -e o,h -f DepthwiseConvolution_2 target=$* depth_multiplier=2
+	$^ -g DepthwiseConvolution -o $(@D) -e o,h -f DepthwiseConvolution_2 target=$*-no_runtime depth_multiplier=2
 
 $(BIN)/%/DepthwiseConvolution_4.o: $(GENERATOR_BIN)/DepthwiseConvolution.generator
 	@mkdir -p $(@D)
-	$^ -g DepthwiseConvolution -o $(@D) -e o,h -f DepthwiseConvolution_4 target=$* depth_multiplier=4
+	$^ -g DepthwiseConvolution -o $(@D) -e o,h -f DepthwiseConvolution_4 target=$*-no_runtime depth_multiplier=4
 
 $(BIN)/%/DepthwiseConvolution_8.o: $(GENERATOR_BIN)/DepthwiseConvolution.generator
 	@mkdir -p $(@D)
-	$^ -g DepthwiseConvolution -o $(@D) -e o,h -f DepthwiseConvolution_8 target=$* depth_multiplier=8
+	$^ -g DepthwiseConvolution -o $(@D) -e o,h -f DepthwiseConvolution_8 target=$*-no_runtime depth_multiplier=8
 
 $(BIN)/%/DepthwiseConvolution: DepthwiseConvolution.cpp common_reference.cpp $(BIN)/%/DepthwiseConvolution_1.o $(BIN)/%/DepthwiseConvolution_2.o $(BIN)/%/DepthwiseConvolution_4.o $(BIN)/%/DepthwiseConvolution_8.o $(BIN)/%/runtime.a
 	@mkdir -p $(@D)
