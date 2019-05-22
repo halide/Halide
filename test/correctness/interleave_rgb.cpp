@@ -54,6 +54,16 @@ int main(int argc, char **argv) {
     if (!test_interleave<uint16_t>()) return -1;
     if (!test_interleave<uint32_t>()) return -1;
 
+    Buffer<int32_t> planar = Buffer<int32_t>(256, 128, 3);
+    planar.for_each_element([&](int x, int y, int c) { planar(x, y, c) = x * 3 + y * 5 + c * 7; });
+
+    Buffer<int32_t> interleaved = planar.copy_interleaved();
+    assert(interleaved.stride(0) == 3);
+    assert(interleaved.stride(2) == 1);
+    planar.for_each_element([&](int x, int y, int c) {
+        assert(planar(x, y, c) == interleaved(x, y, c));
+    });
+
     printf("Success!\n");
     return 0;
 }

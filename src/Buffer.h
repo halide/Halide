@@ -487,7 +487,11 @@ public:
     }
 
     Buffer<T> copy() const {
-        return Buffer<T>(std::move(contents->buf.copy()));
+        return Buffer<T>(std::move(contents->buf.as<T>().copy()));
+    }
+
+    Buffer<T> copy_interleaved() const {
+        return Buffer<T>(std::move(contents->buf.as<T>().copy_interleaved()));
     }
 
     template<typename T2>

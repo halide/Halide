@@ -1180,6 +1180,16 @@ public:
         return dst;
     }
 
+    /** Like copy(), but the resulting Buffer is always interleaved.
+     * Requires that the source buffer have exactly 3 dimensions. */
+    Buffer<not_const_T, D> copy_interleaved(void *(*allocate_fn)(size_t) = nullptr,
+                                            void (*deallocate_fn)(void *) = nullptr) const {
+        assert(dimensions() == 3);
+        Buffer<not_const_T, D> dst = Buffer<not_const_T, D>::make_interleaved(width(), height(), channels(), allocate_fn, deallocate_fn);
+        dst.copy_from(*this);
+        return dst;
+    }
+
     /** Make a copy of the Buffer which shares the underlying host and/or device
      * allocations as the existing Buffer. This is purely syntactic sugar for
      * cases where you have a const reference to a Buffer but need a temporary
@@ -1694,12 +1704,15 @@ public:
      * using (x, y, c). Passing it to a generator requires that the
      * generator has been compiled with support for interleaved (also
      * known as packed or chunky) memory layouts. */
-    static Buffer<void, D> make_interleaved(halide_type_t t, int width, int height, int channels) {
-        Buffer<void, D> im(t, channels, width, height);
-        // Note that this is equivalent to calling transpose({2, 0, 1}),
-        // but slightly more efficient.
-        im.transpose(0, 1);
-        im.transpose(1, 2);
+    static Buffer<void, D> make_interleaved(halide_type_t t, int width, int height, int channels,
+                                            void *(*allocate_fn)(size_t) = nullptr,
+                                            void (*deallocate_fn)(void *) = nullptr) {
+        const int row_stride = width * channels;
+        const halide_dimension_t dimensions[3] = {{0, width, channels},
+                                                  {0, height, row_stride},
+                                                  {0, channels, 1}};
+        Buffer<void, D> im(t, nullptr, 3, dimensions);
+        im.allocate(allocate_fn, deallocate_fn);
         return im;
     }
 
@@ -1709,8 +1722,10 @@ public:
      * using (x, y, c). Passing it to a generator requires that the
      * generator has been compiled with support for interleaved (also
      * known as packed or chunky) memory layouts. */
-    static Buffer<T, D> make_interleaved(int width, int height, int channels) {
-        return make_interleaved(static_halide_type(), width, height, channels);
+    static Buffer<T, D> make_interleaved(int width, int height, int channels,
+                                         void *(*allocate_fn)(size_t) = nullptr,
+                                         void (*deallocate_fn)(void *) = nullptr) {
+        return make_interleaved(static_halide_type(), width, height, channels, allocate_fn, deallocate_fn);
     }
 
     /** Wrap an existing interleaved image. */
