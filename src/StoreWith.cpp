@@ -899,6 +899,14 @@ struct Use {
 
         return true;
     }
+
+    bool is_store() const {
+        return original_store.defined();
+    }
+
+    bool is_load() const {
+        return original_load.defined();
+    }
 };
 
 // Scrape all uses of a given buffer from a Stmt.
@@ -1169,7 +1177,9 @@ Stmt lower_store_with(const Stmt &s, const vector<Function> &outputs, const map<
                          (substitute(remapping1, stored_with.where[i]) ==
                           substitute(remapping2, stored_with.where[i])));
                 }
+                debug(0) << "Same dst: " << same_dst << "\n";
                 for (auto &e : disproofs) {
+                    debug(0) << e << "\n";
                     const int beam_size = 32;
                     if (!can_disprove(e && same_dst, beam_size)) {
                         user_error << "Failed to prove that store_with mapping for " << p.first
@@ -1197,6 +1207,41 @@ Stmt lower_store_with(const Stmt &s, const vector<Function> &outputs, const map<
                 }
 
                 auto names = it->second;
+
+                const int beam_size = 32;
+
+                for (const string &n : names) {
+                    // Check we didn't create race conditions on any
+                    // of the stored_with things. The code should
+                    // behave as if the Func is compute root - all
+                    // update definitions appear to happen serially
+                    // for each site.
+
+                    // TODO: This doesn't capture redundantly
+                    // recomputing a histogram within each tile, but
+                    // into the same storage!!
+
+                    auto uses = get_times_of_all_uses(op->body, n);
+                    for (size_t i = 0; i < uses.size(); i++) {
+                        const auto &u1 = uses[i];
+                        if (!u1.is_store()) continue;
+                        for (size_t j = i + 1; j < uses.size(); j++) {
+                            const auto &u2 = uses[j];
+                            if (!u2.is_store()) continue;
+                            if (!u1.safely_before(u2, beam_size)) {
+                                std::ostringstream err;
+                                err << "Cannot store " << n << " in the same buffer as " << op->name << "\n"
+                                    << "In this code:\n" << Stmt(op) << "\n"
+                                    << "Failed to prove that at every site, this ";
+                                u1.dump(err);
+                                err << "Always happens before than this ";
+                                u2.dump(err);
+                                user_error << err.str();
+                            }
+                        }
+                    }
+                }
+
                 names.push_back(it->first);
 
                 /*
@@ -1232,7 +1277,6 @@ Stmt lower_store_with(const Stmt &s, const vector<Function> &outputs, const map<
                                 u1.dump(std::cerr);
                                 u2.dump(std::cerr);
                                 */
-                                const int beam_size = 32;
                                 if (!u1.safely_before(u2, beam_size)) {
                                     std::ostringstream err;
                                     err << "Cannot store " << n1 << " in the same buffer as " << n2 << "\n"

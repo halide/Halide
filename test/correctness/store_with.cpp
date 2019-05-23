@@ -356,6 +356,28 @@ int main(int argc, char **argv) {
         }
     }
 
+    if (1) {
+        // We can place the storage outside a parallel loop provided that there are no race conditions.
+        Func f1, f2, g, h;
+        Var x;
+        RDom r(0, 100);
+        f1(x) = x;
+        f1(x) += r;
+        f2(x) = x;
+        // No race conditions on f2 because it's a race between atomic
+        // stores of the same value. No race conditions on f1 because
+        // distinct threads write to distinct sites.
+        g(x) = f2(x - 1) + f2(x + 1) + f1(x);
+        h(x) = g(x);
+
+        Var xo, xi;
+        g.compute_root().split(x, xo, xi, 16, TailStrategy::RoundUp).parallel(xo);
+        f1.compute_at(g, xo).store_with(g, {x + 256});
+        f2.compute_at(g, xo).store_with(g, {x + 512});
+        h.bound(x, 0, 128);
+        h.realize(128);
+    }
+
     // TODO: tuple test
 
     // TODO: desirable extensions to store with:
@@ -365,7 +387,7 @@ int main(int argc, char **argv) {
 
 #ifdef WITH_EXCEPTIONS
 
-#define UNREACHABLE do {printf("There was supposed to be an error before line %d\n", __LINE__); return -1;} while (0)
+#define ASSERT_UNREACHABLE do {printf("There was supposed to be an error before line %d\n", __LINE__); return -1;} while (0)
 
     try {
         // Can't do in-place with shiftinwards tail strategies.
@@ -376,7 +398,7 @@ int main(int argc, char **argv) {
         f.compute_root().store_with(g);
         g.vectorize(x, 8, TailStrategy::ShiftInwards);
         g.compile_jit();
-        UNREACHABLE;
+        ASSERT_UNREACHABLE;
     } catch (CompileError &) {}
 
     try {
@@ -387,7 +409,7 @@ int main(int argc, char **argv) {
         g(x) = f(x) + f(x+100);
         f.compute_root().store_with(g);
         g.realize(100);
-        UNREACHABLE;
+        ASSERT_UNREACHABLE;
     } catch (RuntimeError &) {}
 
     try {
@@ -400,7 +422,7 @@ int main(int argc, char **argv) {
         f.compute_at(g, Var::outermost()).store_with(g);
         g.compute_root();
         h.compile_jit();
-        UNREACHABLE;
+        ASSERT_UNREACHABLE;
     } catch (CompileError &) {}
 
     try {
@@ -413,12 +435,45 @@ int main(int argc, char **argv) {
         f.compute_at(g, Var::outermost()).store_with(g, {x/2 + 1000});
         g.compute_root().bound(x, 0, 100);
         h.compile_jit();
-        UNREACHABLE;
-    } catch (CompileError &e) {
-        std::cerr << e.what() << "\n";
-    }
+        ASSERT_UNREACHABLE;
+    } catch (CompileError &e) {}
 
-    // Can't create race conditions by storing with something outside a parallel loop and computing inside it
+    try {
+        // Can't create race conditions by storing with something
+        // outside a parallel loop and computing inside it.
+        Func f, g, h;
+        Var x;
+        RDom r(0, 100);
+        f(x) = x;
+        f(x) += r;
+        g(x) = f(x - 1) + f(x + 1);
+        h(x) = g(x);
+
+        Var xo, xi;
+        g.compute_root().split(x, xo, xi, 16, TailStrategy::RoundUp).parallel(xo);
+        f.compute_at(g, xo).store_with(g, {x + 256});
+        h.bound(x, 0, 128);
+        h.realize(128);
+        ASSERT_UNREACHABLE;
+    } catch (CompileError &e) {}
+
+    try {
+        // Redundant recompute on the same memory is problematic even
+        // without parallelism, if there are read-modify-writes.
+        Func f, g, h;
+        Var x;
+        f(x) = x;
+        RDom r(0, 256);
+        f(r) += 1;
+        g(x) = f(x);
+
+        Var xo, xi;
+        g.compute_root().split(x, xo, xi, 16, TailStrategy::RoundUp);
+        f.compute_at(g, xo).store_with(g, {x + 256});
+        g.bound(x, 0, 256);
+        g.realize(256);
+        ASSERT_UNREACHABLE;
+    } catch (CompileError &e) {}
 
 #else
     printf("Not testing store_with failure cases because Halide was compiled without exceptions\n");
