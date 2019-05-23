@@ -583,7 +583,6 @@ int main(int argc, char **argv) {
         g(x) = cast<uint32_t>(f(x)[0] + f(x)[1]);
         f.compute_root().store_with(g);
         g.realize(128);
-
         ASSERT_UNREACHABLE;
     } catch (CompileError &e) {
         if (verbose) std::cerr << e.what() << "\n";

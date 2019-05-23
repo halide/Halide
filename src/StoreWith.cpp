@@ -801,9 +801,6 @@ struct Use {
         // Then OR in the case where there isn't a tie and this may
         // happen before other, by adding a clause to the vector.
         if (is_parallel(time[start].loop_type)) {
-            // TODO: synchronous parallel (vectorize) is different,
-            // because *no* other iteration could have run earlier.
-
             // If we're looking at a parallel loop, any distinct loop
             // iteration may have already run, or may be running at
             // the same time. Avoid encoding using != so that we most
@@ -937,13 +934,6 @@ std::vector<Use> get_times_of_all_uses(const Stmt &s, string buf) {
 
         void visit(const For *op) override {
             Expr loop_var = Variable::make(Int(32), op->name);
-            // TODO: We may be able to encode things as smaller
-            // systems when the loop has constant extent. Currently we
-            // get a redundant pair of slack variables for the two
-            // inequalities, where really only one (loop_var - min)
-            // should be necessary
-            // predicate.push_back(loop_var >= op->min);
-            // predicate.push_back(loop_var < op->min + op->extent);
             if (!is_const(op->min)) {
                 // Rebase at zero to get a variable with more constant bounds
                 Expr v = aux();
@@ -1103,9 +1093,6 @@ Stmt lower_store_with(const Stmt &s, const vector<Function> &outputs, const map<
             internal_assert(it != env.end());
 
             const auto &stored_with = it->second.schedule().store_with();
-            // Assumes no transitive buggery
-
-            // TODO: assert stored_with in scope
 
             if (stored_with.buffer.empty()) {
                 return IRMutator::visit(op);
@@ -1137,7 +1124,8 @@ Stmt lower_store_with(const Stmt &s, const vector<Function> &outputs, const map<
             simpler = Realize::make(f.name(), f.output_types(), MemoryType::Auto, r, const_true(), simpler);
         }
 
-        // TODO: Add dummy realize nodes for the inputs
+        // TODO: Once we support storing with inputs, we should add
+        // dummy realize nodes for the inputs here.
 
         // For each buffer, figure out what other buffers are also stored there.
         map<string, vector<string>> groups;
@@ -1236,10 +1224,6 @@ Stmt lower_store_with(const Stmt &s, const vector<Function> &outputs, const map<
                     // update definitions appear to happen serially
                     // for each site.
 
-                    // TODO: This doesn't capture redundantly
-                    // recomputing a histogram within each tile, but
-                    // into the same storage!!
-
                     auto uses = get_times_of_all_uses(op->body, n);
                     for (size_t i = 0; i < uses.size(); i++) {
                         const auto &u1 = uses[i];
@@ -1281,13 +1265,6 @@ Stmt lower_store_with(const Stmt &s, const vector<Function> &outputs, const map<
                         auto uses_2 = get_times_of_all_uses(op->body, n2);
 
                         // Check all uses of 1 are before all uses of 2
-
-                        // TODO: can constrain this in various
-                        // ways. No point checking topologically
-                        // invalid orderings. Uses as inputs must be
-                        // before temporaries and outputs. Uses as
-                        // outputs must be after temporaries and
-                        // inputs.
 
                         for (const auto &u1 : uses_1) {
                             for (const auto &u2 : uses_2) {
@@ -1387,8 +1364,6 @@ Stmt lower_store_with(const Stmt &s, const vector<Function> &outputs, const map<
                 return IRMutator::visit(op);
             }
 
-            // TODO: assert stored_with in scope
-
             Stmt p = IRMutator::visit(op);
             op = p.as<Provide>();
             internal_assert(op);
@@ -1412,7 +1387,6 @@ Stmt lower_store_with(const Stmt &s, const vector<Function> &outputs, const map<
             Expr c = IRMutator::visit(op);
             op = c.as<Call>();
             internal_assert(op);
-            // TODO: handle store_with input params
             auto stored_with_it = env.find(stored_with.buffer);
             internal_assert(stored_with_it != env.end());
             return Call::make(op->type, stored_with_it->second.name(), op->args,
