@@ -209,8 +209,10 @@ endif
 
 ifneq (,$(findstring node,$(WASM_SHELL)))
 	EMCC_ENVIRONMENT=node
+	WASM_SHELL_ARG_SEP=
 else
 	EMCC_ENVIRONMENT=shell
+	WASM_SHELL_ARG_SEP="--"
 endif
 
 # We slurp in the default ~/.emscripten config file and make an altered version
@@ -254,4 +256,4 @@ $(BIN)/%.rungen_wasm: $(BIN)/%.rungen.js
 .PHONY: %.benchmark_wasm
 %.benchmark_wasm: $(BIN)/$(HL_TARGET)/%.rungen.js
 	@[[ "$(HL_TARGET)" == "wasm-32-wasmrt"* ]] || (echo "HL_TARGET must begin with wasm-32-wasmrt for target $@" && exit 1)
-	@cd $(<D); $(WASM_SHELL) $(<F) -- --benchmarks=all --default_input_buffers --default_input_scalars --output_extents=estimate --parsable_output
+	@cd $(<D); $(WASM_SHELL) $(<F) $(WASM_SHELL_ARG_SEP) --benchmarks=all --default_input_buffers --default_input_scalars --output_extents=estimate --parsable_output
