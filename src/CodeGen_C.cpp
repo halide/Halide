@@ -2376,7 +2376,18 @@ void CodeGen_C::visit(const Call *op) {
         rhs << print_extern_call(op);
     }
 
-    print_assignment(op->type, rhs.str());
+    // Special-case halide_print, which has IR that returns int, but really return void.
+    // The clean thing to do would be to change the definition of halide_print() to return
+    // an ignored int, but as halide_print() has many overrides downstream (and in third-party
+    // consumers), this is arguably a simpler fix for allowing halide_print() to work in the C++ backend.
+    if (op->name == "halide_print") {
+        do_indent();
+        stream << rhs.str() << ";\n";
+        // Make an innocuous assignment value for our caller (probably an Evaluate node) to ignore.
+        print_assignment(op->type, "0");
+    } else {
+        print_assignment(op->type, rhs.str());
+    }
 }
 
 string CodeGen_C::print_scalarized_expr(Expr e) {
