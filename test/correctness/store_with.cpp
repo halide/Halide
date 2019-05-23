@@ -351,6 +351,7 @@ int main(int argc, char **argv) {
                 int correct = x/4 + y/4 + 3;
                 if (buf(x, y) != correct) {
                     printf("%d: buf(%d, %d) = %d instead of %d\n", __LINE__, x, y, buf(x, y), correct);
+                    return -1;
                 }
             }
         }
@@ -375,10 +376,45 @@ int main(int argc, char **argv) {
         f1.compute_at(g, xo).store_with(g, {x + 256});
         f2.compute_at(g, xo).store_with(g, {x + 512});
         h.bound(x, 0, 128);
-        h.realize(128);
+        Buffer<int> buf = h.realize(128);
+
+        for (int i = 0; i < 128; i++) {
+            int correct = 4950 + i*3;
+            if (buf(i) != correct) {
+                printf("%d: buf(%d) = %d instead of %d\n", __LINE__, i, buf(i), correct);
+                return -1;
+            }
+        }
     }
 
-    // TODO: tuple test
+    if (1) {
+        // Test mixing types and tuples (while preserving bit-widths)
+        Func f, g, h;
+        Var x;
+
+        f(x) = {cast<uint8_t>(x), cast<float>(x)};
+        g(x) = {cast<int8_t>(x), cast<uint32_t>(f(x)[0] + f(x)[1])};
+
+        f.compute_root().store_with(g);
+
+        Buffer<int8_t> b1(128);
+        Buffer<uint32_t> b2(128);
+        g.realize({b1, b2});
+
+        // All of the types involved can store the numbers involved exactly.
+        for (int i = 0; i < 128; i++) {
+            int actual1 = (int)b1(i);
+            int actual2 = (int)b2(i);
+            int correct1 = i;
+            int correct2 = 2*i;
+            if (correct1 != actual1 || correct2 != actual2) {
+                printf("%d: buf(%d) = {%d, %d} instead of {%d, %d}\n",
+                       __LINE__, i, actual1, actual2, correct1, correct2);
+                return -1;
+            }
+        }
+
+    }
 
     // TODO: desirable extensions to store with:
     // - accommodate type or tuple dimensionality mismatches by adding new inner dimensions (e.g. widening downsamples in-place)
@@ -388,6 +424,8 @@ int main(int argc, char **argv) {
 #ifdef WITH_EXCEPTIONS
 
 #define ASSERT_UNREACHABLE do {printf("There was supposed to be an error before line %d\n", __LINE__); return -1;} while (0)
+
+    const bool verbose = false;
 
     try {
         // Can't do in-place with shiftinwards tail strategies.
@@ -399,7 +437,9 @@ int main(int argc, char **argv) {
         g.vectorize(x, 8, TailStrategy::ShiftInwards);
         g.compile_jit();
         ASSERT_UNREACHABLE;
-    } catch (CompileError &) {}
+    } catch (CompileError &e) {
+        if (verbose) std::cerr << e.what() << "\n";
+    }
 
     try {
         // Can't store_with the output in cases where it would grow the bounds of the output.
@@ -410,7 +450,9 @@ int main(int argc, char **argv) {
         f.compute_root().store_with(g);
         g.realize(100);
         ASSERT_UNREACHABLE;
-    } catch (RuntimeError &) {}
+    } catch (RuntimeError &e) {
+        if (verbose) std::cerr << e.what() << "\n";
+    }
 
     try {
         // Don't clobber values we'll need later
@@ -423,7 +465,9 @@ int main(int argc, char **argv) {
         g.compute_root();
         h.compile_jit();
         ASSERT_UNREACHABLE;
-    } catch (CompileError &) {}
+    } catch (CompileError &e) {
+        if (verbose) std::cerr << e.what() << "\n";
+    }
 
     try {
         // Can't store multiple values at the same site
@@ -436,7 +480,9 @@ int main(int argc, char **argv) {
         g.compute_root().bound(x, 0, 100);
         h.compile_jit();
         ASSERT_UNREACHABLE;
-    } catch (CompileError &e) {}
+    } catch (CompileError &e) {
+        if (verbose) std::cerr << e.what() << "\n";
+    }
 
     try {
         // Can't create race conditions by storing with something
@@ -455,7 +501,9 @@ int main(int argc, char **argv) {
         h.bound(x, 0, 128);
         h.realize(128);
         ASSERT_UNREACHABLE;
-    } catch (CompileError &e) {}
+    } catch (CompileError &e) {
+        if (verbose) std::cerr << e.what() << "\n";
+    }
 
     try {
         // Redundant recompute on the same memory is problematic even
@@ -473,37 +521,108 @@ int main(int argc, char **argv) {
         g.bound(x, 0, 256);
         g.realize(256);
         ASSERT_UNREACHABLE;
-    } catch (CompileError &e) {}
+    } catch (CompileError &e) {
+        if (verbose) std::cerr << e.what() << "\n";
+    }
+
+    try {
+        // Can't store_with inline things
+        Func f, g, h;
+        Var x;
+        f(x) = x;
+        g(x) = f(x);
+        h(x) = g(x);
+
+        f.compute_root().store_with(g); // g is inlined!
+        h.realize(128);
+        ASSERT_UNREACHABLE;
+    } catch (CompileError &e) {
+        if (verbose) std::cerr << e.what() << "\n";
+    }
+
+    try {
+        // No transitive nonsense
+        Func f, g, h;
+        Var x;
+        f(x) = x;
+        g(x) = f(x);
+        h(x) = g(x);
+
+        f.compute_root().store_with(g);
+        g.compute_root().store_with(h);
+        h.realize(128);
+        ASSERT_UNREACHABLE;
+    } catch (CompileError &e) {
+        if (verbose) std::cerr << e.what() << "\n";
+    }
+
+    try {
+        // No storing with things not in the pipeline
+        Func f, g, h;
+        Var x;
+        f(x) = x;
+        g(x) = f(x);
+        h(x) = f(x);
+
+        f.compute_root().store_with(g);
+        g.compute_root();
+        // h has no dependence on g, so even though it's compute root,
+        // it won't have a realization.
+        h.realize(128);
+        ASSERT_UNREACHABLE;
+    } catch (CompileError &e) {
+        if (verbose) std::cerr << e.what() << "\n";
+    }
+
+    try {
+        // Can't currently mix tuple widths
+        Func f, g, h;
+        Var x;
+
+        f(x) = {cast<uint8_t>(x), cast<float>(x)};
+        g(x) = cast<uint32_t>(f(x)[0] + f(x)[1]);
+        f.compute_root().store_with(g);
+        g.realize(128);
+
+        ASSERT_UNREACHABLE;
+    } catch (CompileError &e) {
+        if (verbose) std::cerr << e.what() << "\n";
+    }
+
+    try {
+        // Can't currently mix bit widths
+        Func f, g, h;
+        Var x;
+
+        f(x) = x;
+        g(x) = cast<int64_t>(f(x));
+        f.compute_root().store_with(g);
+        g.realize(128);
+        ASSERT_UNREACHABLE;
+    } catch (CompileError &e) {
+        if (verbose) std::cerr << e.what() << "\n";
+    }
+
+    try {
+        // Dimensionality of placement site must match dimensionality of target Func
+        Func f, g;
+        Var x;
+
+        f(x) = x;
+        g(x) = f(x);
+        f.compute_root().store_with(g, {x, 4});
+        g.realize(128);
+        ASSERT_UNREACHABLE;
+    } catch (CompileError &e) {
+        if (verbose) std::cerr << e.what() << "\n";
+    }
+
+    // TODO: async
 
 #else
     printf("Not testing store_with failure cases because Halide was compiled without exceptions\n");
     return 0;
 #endif
-
-    if (1) {
-        // Tuples?
-    }
-
-    // TODO: type mismatches
-
-    if (0) {
-        // TODO: figure out how to test explicitly failing cases
-        Func f, g, h;
-        Var x;
-        f(x) = x;
-        g(x) = f(x) * f(x + 1);
-        h(x) = g(x) + 8;
-        f.compute_at(g, Var::outermost()).store_with(g);
-        g.compute_root().parallel(x);
-        h.compute_root();
-        Buffer<int> out = h.realize(100);
-        for (int i = 0; i < 100; i++) {
-            int correct = i*(i+1) + 8;
-            if (out(i) != correct) {
-                printf("out(%d) = %d instead of %d\n", i, out(i), correct);
-            }
-        }
-    }
 
     if (0) {
         // An entire in-place pipeline

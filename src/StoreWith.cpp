@@ -1146,14 +1146,35 @@ Stmt lower_store_with(const Stmt &s, const vector<Function> &outputs, const map<
             if (!stored_with.buffer.empty()) {
                 groups[stored_with.buffer].push_back(p.first);
 
+                // Some basic sanity checks
+                {
+                    auto it = env.find(stored_with.buffer);
+                    user_assert(it != env.end())
+                        << "Can't store " << p.first << " with "
+                        << stored_with.buffer << " because "
+                        << stored_with.buffer << " is not used in this pipeline\n";
+
+                    user_assert(!it->second.schedule().store_level().is_inlined())
+                        << "Can't store " << p.first << " with "
+                        << stored_with.buffer << " because "
+                        << stored_with.buffer << " is scheduled inline and thus has no storage\n";
+
+                    user_assert(it->second.schedule().store_with().buffer.empty())
+                        << "Can't store " << p.first << " with "
+                        << stored_with.buffer << " because "
+                        << stored_with.buffer << " is in turn stored with "
+                        << it->second.schedule().store_with().buffer
+                        << " and has no storage of its own\n";
+                }
+
                 // Check the coordinate mapping doesn't store distinct
                 // values at the same site.
 
                 // Try to find a set of distinct coords in the
                 // buffer's domain that are stored at the same
-                // site. WLOG assume that one of the sites is
-                // lexicographically before the other, so that we can
-                // use our constraint system machinery.
+                // site. Hopefully we will fail. WLOG assume that one
+                // of the sites is lexicographically before the other,
+                // so that we can use our constraint system machinery.
                 vector<Expr> disproofs;
                 map<string, Expr> remapping1, remapping2;
                 for (int i = 0; i < p.second.dimensions(); i++) {
@@ -1177,9 +1198,7 @@ Stmt lower_store_with(const Stmt &s, const vector<Function> &outputs, const map<
                          (substitute(remapping1, stored_with.where[i]) ==
                           substitute(remapping2, stored_with.where[i])));
                 }
-                debug(0) << "Same dst: " << same_dst << "\n";
                 for (auto &e : disproofs) {
-                    debug(0) << e << "\n";
                     const int beam_size = 32;
                     if (!can_disprove(e && same_dst, beam_size)) {
                         user_error << "Failed to prove that store_with mapping for " << p.first
@@ -1385,9 +1404,6 @@ Stmt lower_store_with(const Stmt &s, const vector<Function> &outputs, const map<
             internal_assert(it != env.end());
 
             const auto &stored_with = it->second.schedule().store_with();
-            // Assumes no transitive buggery
-
-            // TODO: assert stored_with in scope
 
             if (stored_with.buffer.empty()) {
                 return IRMutator::visit(op);
@@ -1399,7 +1415,10 @@ Stmt lower_store_with(const Stmt &s, const vector<Function> &outputs, const map<
             // TODO: handle store_with input params
             auto stored_with_it = env.find(stored_with.buffer);
             internal_assert(stored_with_it != env.end());
-            return Call::make(stored_with_it->second, op->args, op->value_index);
+            return Call::make(op->type, stored_with_it->second.name(), op->args,
+                              op->call_type,
+                              stored_with_it->second.get_contents(),
+                              op->value_index, Buffer<>(), Parameter());
         }
 
         const map<string, Function> &env;

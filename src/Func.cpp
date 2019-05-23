@@ -2461,11 +2461,42 @@ Func &Func::store_with(Func other) {
 
 Func &Func::store_with(Func other, const std::vector<Expr> &where) {
     invalidate_cache();
-    user_assert(output_types().size() == other.output_types().size()) << "TODO";
-    for (size_t i = 0; i < output_types().size(); i++) {
-        user_assert(output_types()[i].bits() == other.output_types()[i].bits()) << "TODO";
+    auto my_types = output_types();
+    auto other_types = other.output_types();
+    user_assert(my_types.size() == other_types.size())
+        << "Cannot store " << name()
+        << " with " << other.name()
+        << " because tuple sizes do not match "
+        << "(" << my_types.size()
+        << " vs " << other_types.size() << ")\n";
+    for (size_t i = 0; i < my_types.size(); i++) {
+        std::string suffix;
+        if (my_types.size() > 1) {
+            suffix = " in tuple element " + std::to_string(i);
+        }
+        user_assert(my_types[i].bits() == other_types[i].bits())
+            << "Cannot store " << name()
+            << " with " << other.name()
+            << " because type bit widths do not match"
+            << suffix
+            << "(" << my_types[i]
+            << " vs " << other_types[i] << ")\n";
     }
-    user_assert((int)where.size() == other.dimensions()) << "TODO";
+    if ((int)where.size() != other.dimensions()) {
+        std::ostringstream err;
+        err << "Cannot store " << name() << " at site (";
+        string prefix;
+        for (const auto &e : where) {
+            err << prefix << e;
+            prefix = ", ";
+        }
+        err << ") in " << other.name()
+            << " because " << other.name()
+            << " has dimensionality " << other.dimensions()
+            << " and the requested coordinate to store at has dimensionality "
+            << where.size() << "\n";
+        user_error << err.str();
+    }
     func.schedule().store_with() = {other.name(), where};
     return *this;
 }
