@@ -1,9 +1,22 @@
 HALIDE_DISTRIB_PATH ?= ../../distrib
 LDFLAGS ?=
-BIN ?= ./bin
 IMAGES ?= ../images
-HL_TARGET ?= host
 UNAME ?= $(shell uname)
+
+BIN_DIR ?= bin
+
+# Most build outputs go into $(BIN)/$(HL_TARGET)/$(HL_TARGET)/, so that you can vary the test
+# and/or benchmark output easily by changing HL_TARGET and not have to worry
+# about cleaning the output (e.g. to add different GPU or SIMD features).
+BIN ?= $(BIN_DIR)
+HL_TARGET ?= host
+
+
+# GENERATOR_BIN is used mainly for Generators, which are always built
+# (and executed) on the host, regardless of the final target; this saves a bit
+# of recompile time (and disk space). (It would still provide correct results
+# if we output them to $(BIN), it would just be inefficient.)
+GENERATOR_BIN ?= $(BIN)/host
 
 SANITIZER_FLAGS ?=
 
@@ -58,27 +71,33 @@ endif
 #$ build/tools/make-standalone-toolchain.sh --arch=arm64 --platform=android-21 --install-dir=$ANDROID_ARM64_TOOLCHAIN
 #$ build/tools/make-standalone-toolchain.sh --arch=arm --platform=android-21 --install-dir=$ANDROID_ARM_TOOLCHAIN
 CXX-host ?= $(CXX)
+CXX-host-opencl ?= $(CXX)
+CXX-host-opengl ?= $(CXX)
+CXX-host-cuda ?= $(CXX)
+CXX-host-metal ?= $(CXX)
 CXX-arm-64-android ?= $(ANDROID_ARM64_TOOLCHAIN)/bin/aarch64-linux-android-c++
 CXX-arm-32-android ?= $(ANDROID_ARM_TOOLCHAIN)/bin/arm-linux-androideabi-c++
 
 CXXFLAGS-host ?= $(CXXFLAGS)
+CXXFLAGS-host-opencl ?= $(CXXFLAGS)
+CXXFLAGS-host-opengl ?= $(CXXFLAGS)
+CXXFLAGS-host-cuda ?= $(CXXFLAGS)
+CXXFLAGS-host-metal ?= $(CXXFLAGS)
 CXXFLAGS-arm-64-android ?= $(CXXFLAGS)
 CXXFLAGS-arm-32-android ?= $(CXXFLAGS)
 
 LDFLAGS-host ?= $(LDFLAGS)
+LDFLAGS-host-opencl ?= $(LDFLAGS)
+LDFLAGS-host-opengl ?= $(LDFLAGS)
+LDFLAGS-host-cuda ?= $(LDFLAGS)
+LDFLAGS-host-metal ?= $(LDFLAGS)
 LDFLAGS-arm-64-android ?= -llog -fPIE -pie
 LDFLAGS-arm-32-android ?= -llog -fPIE -pie
 
-# For MinGW, we need libHalide.dll to be someplace that the app we build can find it,
-# since Windows has nothing like --rpath, so we'll make a "symlink" for libHalide.dll
-# from the app's bin/ folder to the distrib/ folder we are using, and depend on that.
 ifeq ($(OS), Windows_NT)
 
-$(BIN)/libHalide.dll: $(HALIDE_DISTRIB_PATH)/bin/libHalide.dll
-	@mkdir -p $(@D)
-	@ln $^ $@
-
-LIB_HALIDE = $(BIN)/libHalide.dll
+# TODO: copy libHalide.dll somewhere that windows can find it, and use it instead
+LIB_HALIDE = $(HALIDE_DISTRIB_PATH)/lib/libHalide.a
 
 else
 
@@ -130,22 +149,26 @@ endif
 $(BIN)/%.registration.cpp: $(BIN)/%.a
 	@echo $@ produced implicitly by $^
 
-$(BIN)/RunGenMain.o: $(HALIDE_DISTRIB_PATH)/tools/RunGenMain.cpp $(HALIDE_DISTRIB_PATH)/tools/RunGen.h
+$(BIN)/%/RunGenMain.o: $(HALIDE_DISTRIB_PATH)/tools/RunGenMain.cpp $(HALIDE_DISTRIB_PATH)/tools/RunGen.h
 	@mkdir -p $(@D)
-	@$(CXX) -c $< $(CXXFLAGS) $(IMAGE_IO_CXX_FLAGS) -I$(BIN) -o $@
+	$(CXX) -c $< $(CXXFLAGS) $(IMAGE_IO_CXX_FLAGS) -I$(BIN)/$* -o $@
 
 # Really, .SECONDARY is what we want, but it won't accept wildcards
 .PRECIOUS: $(BIN)/%.rungen
-$(BIN)/%.rungen: $(BIN)/RunGenMain.o $(BIN)/%.a $(BIN)/%.registration.cpp
+$(BIN)/%.rungen: $(BIN)/%/RunGenMain.o $(BIN)/%.a $(BIN)/%.registration.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS)
 
 RUNARGS ?=
 
 # Pseudo target that allows us to build-and-run in one step, e.g.
 #
-#     make foo.run RUNARGS='input=a output=baz'
+#     make bin/host/foo.run RUNARGS='input=a output=baz'
 #
 $(BIN)/%.run: $(BIN)/%.rungen
+	@$(CURDIR)/$< $(RUNARGS)
+
+# Also allow 'foo.run' as a shortcut to mean host
+%.run: $(BIN)/host/%.rungen
 	@$(CURDIR)/$< $(RUNARGS)
 
 # Utility to convert raw video -> h264. HL_AVCONV=ffmpeg will work too.
@@ -154,5 +177,5 @@ HL_AVCONV ?= avconv
 # Utility to show h264 video
 HL_VIDEOPLAYER ?= mplayer
 
-%.benchmark: $(BIN)/%.rungen
+%.benchmark: $(BIN)/$(HL_TARGET)/%.rungen
 	@$^ --benchmarks=all --default_input_buffers --default_input_scalars --output_extents=estimate --parsable_output

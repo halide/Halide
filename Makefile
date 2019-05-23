@@ -1928,7 +1928,8 @@ test_apps: distrib
 		echo Testing app $${APP}... ; \
 		make -C $(ROOT_DIR)/apps/$${APP} test \
 			HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
-			BIN=$(CURDIR)/$(BIN_DIR)/apps/$${APP}/bin \
+			BIN_DIR=$(CURDIR)/$(BIN_DIR)/apps/$${APP}/bin \
+			HL_TARGET=$(HL_TARGET) \
 			|| exit 1 ; \
 	done
 
@@ -1945,9 +1946,11 @@ benchmark_apps: distrib
 	@for APP in $(BENCHMARK_APPS); do \
 		echo Building $${APP}... ; \
 		$(MAKE) -C $(ROOT_DIR)/apps/$${APP} \
-		    $(CURDIR)/$(BIN_DIR)/apps/$${APP}/bin/$${APP}.rungen \
+		    $(CURDIR)/$(BIN_DIR)/apps/$${APP}/bin/$(HL_TARGET)/$${APP}.rungen \
 			HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
-			BIN=$(CURDIR)/$(BIN_DIR)/apps/$${APP}/bin > /dev/null \
+			BIN_DIR=$(CURDIR)/$(BIN_DIR)/apps/$${APP}/bin \
+			HL_TARGET=$(HL_TARGET) \
+			> /dev/null \
 			|| exit 1 ; \
 	done
 	@for APP in $(BENCHMARK_APPS); do \
@@ -1956,7 +1959,8 @@ benchmark_apps: distrib
 		make -C $(ROOT_DIR)/apps/$${APP} \
 			$${APP}.benchmark \
 			HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
-			BIN=$(CURDIR)/$(BIN_DIR)/apps/$${APP}/bin \
+			BIN_DIR=$(CURDIR)/$(BIN_DIR)/apps/$${APP}/bin \
+			HL_TARGET=$(HL_TARGET) \
 			|| exit 1 ; \
 	done
 
