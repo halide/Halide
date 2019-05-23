@@ -207,7 +207,7 @@ else
 	EMCC_SIMD_OPT=0
 endif
 
-ifeq ($(WASM_SHELL),node)
+ifneq (,$(findstring node,$(WASM_SHELL)))
 	EMCC_ENVIRONMENT=node
 else
 	EMCC_ENVIRONMENT=shell
