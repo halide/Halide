@@ -30,6 +30,14 @@ else
 LDFLAGS += -ldl -lpthread -lz
 endif
 
+# Add the Hexagon simulator to the rpath on Linux. (Not supported elsewhere, so no else cases.)
+ifeq ($(UNAME), Linux)
+ifneq (,$(HL_HEXAGON_TOOLS))
+LDFLAGS += -Wl,--rpath=$(HALIDE_DISTRIB_PATH)/../src/runtime/hexagon_remote/bin/host
+LDFLAGS += -Wl,--rpath=$(HL_HEXAGON_TOOLS)/lib/iss
+endif
+endif
+
 CXX ?= g++
 GXX ?= g++
 
