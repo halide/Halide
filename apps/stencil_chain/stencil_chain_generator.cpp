@@ -33,7 +33,10 @@ public:
 
         output(x, y) = stages.back()(x, y);
 
-        if (auto_schedule) {
+        /* ESTIMATES */
+        // (This can be useful in conjunction with RunGen and benchmarks as well
+        // as auto-schedule, so we do it in all cases.)
+        {
             const int width = 1536;
             const int height = 2560;
             // Provide estimates on the input image
@@ -41,7 +44,11 @@ public:
             input.dim(1).set_bounds_estimate(0, height);
             // Provide estimates on the pipeline output
             output.estimate(x, 0, width)
-                .estimate(y, 0, height);
+                  .estimate(y, 0, height);
+        }
+
+        if (auto_schedule) {
+            // nothing
         } else {
             // CPU schedule. No fusion.
             Var yi, yo, xo, xi, t;
