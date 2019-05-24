@@ -665,6 +665,8 @@ int main(int argc, char **argv) {
 
     // TODO: storage folding interaction
 
+    // TODO: compute_with interaction
+
 #else
     printf("Not testing store_with failure cases because Halide was compiled without exceptions\n");
     return 0;
