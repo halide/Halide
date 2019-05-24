@@ -1898,7 +1898,7 @@ string CodeGen_C::print_assignment(Type t, const std::string &rhs) {
     if (cached == cache.end()) {
         id = unique_name('_');
         do_indent();
-        stream << print_type(t, AppendSpace) << id << " = " << rhs << ";\n";
+        stream << print_type(t, AppendSpace) << (output_kind == CPlusPlusImplementation ? "const " : "") << id << " = " << rhs << ";\n";
         cache[rhs] = id;
     } else {
         id = cached->second;
