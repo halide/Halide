@@ -99,6 +99,15 @@ The `test_performance` benchmarks are misleading (and thus useless) for Wasm, as
     $ HL_TARGET=wasm-32-wasmrt-wasm_simd128 make benchmark_apps
 ```
 
+Also note that if you run the above on a typical desktop system, you'll find the `host` benchmarks 10x faster (or more) the wasm; this is largely because your desktop likely has multiple cores (and is making use of them), while our Wasm generation doesn't yet support threading. For a fairer comparison, you can limit the maximum number of threads used by Halide by setting the `HL_NUM_THREADS` env var, e.g.
+
+```
+    # benchmark for whatever HL_TARGET is already set to (probably 'host'),
+    # ensuring that we never use more than one thread at a time (regardless of
+    # the number of CPU cores on the host).
+    $ HL_NUM_THREADS=1 make benchmark_apps
+```
+
 # Known Limitations And Caveats
 - We have only tested with EMCC_WASM_BACKEND=1; using the fastcomp backend could possibly be made to work, but we haven't attempted to do so and aren't planning on doing so in the forseeable future. (Patches to enable this would be considered.)
 - Using the JIT requires that we link the `wasm-ld` tool into libHalide; with some work this need could possibly be eliminated.
