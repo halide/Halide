@@ -416,6 +416,34 @@ int main(int argc, char **argv) {
 
     }
 
+    if (1) {
+        // Async is OK if we're entirely inside it, or if we prove we
+        // can't clobber regardless of timing. First we test the case
+        // where we're nested inside another async thing:
+
+        Func f, g, h;
+        Var x;
+        f(x) = x;
+        g(x) = f(x) + 3;
+        h(x) = g(x) + 8;
+        f.compute_at(g, Var::outermost()).store_with(g);
+        g.compute_root().async();
+        h.realize(128);
+    }
+
+    if (1) {
+        // Then the case where there can't possible be a clobber anyway, so ordering doesn't matter.
+        Func f1, f2, g;
+        Var x;
+        f1(x) = x;
+        f2(x) = x;
+        g(x) = f1(x % 8) + f2(x % 8 + 8);
+
+        f1.compute_at(g, Var::outermost()).async().store_with(f2);
+        f2.store_root().compute_at(g, Var::outermost()).async();
+        g.realize(128);
+    }
+
     // TODO: desirable extensions to store with:
     // - accommodate type or tuple dimensionality mismatches by adding new inner dimensions (e.g. widening downsamples in-place)
     // - the ability to store_with input buffers to express entire in-place pipelines
@@ -425,7 +453,7 @@ int main(int argc, char **argv) {
 
 #define ASSERT_UNREACHABLE do {printf("There was supposed to be an error before line %d\n", __LINE__); return -1;} while (0)
 
-    const bool verbose = false;
+    const bool verbose = true;// false;
 
     try {
         // Can't do in-place with shiftinwards tail strategies.
@@ -616,7 +644,26 @@ int main(int argc, char **argv) {
         if (verbose) std::cerr << e.what() << "\n";
     }
 
+
+    try {
+        // Safe, but async prevents us from reasoning about ordering.
+        Func f, g, h;
+        Var x;
+        f(x) = x;
+        g(x) = f(x) + f(x+1);
+        h(x) = g(x);
+        // TODO: Why doesn't this create a misordered clock??? We need to know that g doesn't run ahead of f, and we don't have that sort of analysis
+        f.store_root().compute_at(g, x).store_with(g).async();
+        g.compute_root();
+        h.realize(128);
+        ASSERT_UNREACHABLE;
+    } catch (CompileError &e) {
+        if (verbose) std::cerr << e.what() << "\n";
+    }
+
     // TODO: async
+
+    // TODO: storage folding interaction
 
 #else
     printf("Not testing store_with failure cases because Halide was compiled without exceptions\n");

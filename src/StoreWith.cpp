@@ -907,7 +907,7 @@ struct Use {
 };
 
 // Scrape all uses of a given buffer from a Stmt.
-std::vector<Use> get_times_of_all_uses(const Stmt &s, string buf) {
+std::vector<Use> get_times_of_all_uses(const Stmt &s, string buf, const map<string, Function> &env) {
     class PolyhedralClock : public IRVisitor {
         using IRVisitor::visit;
 
@@ -1027,10 +1027,34 @@ std::vector<Use> get_times_of_all_uses(const Stmt &s, string buf) {
                 found_use(op->args, op->name, Stmt(), op);
             }
         }
+
+        void visit(const Realize *op) override {
+            auto it = env.find(op->name);
+            if (it != env.end() && it->second.schedule().async()) {
+
+                // Realizations of async things become fork nodes
+                // later in lowering. Everything inside the
+                // realization inside the produce node happens in one
+                // thread, and everything inside the realization
+                // outside the produce node happens in another. We'll
+                // conservatively pretend all of the events happen in
+                // both, and treat this as a parallel loop of size 2.
+                Expr v = Variable::make(Int(32), unique_name(op->name + ".fork"));
+                predicate.push_back(v >= 0 && v <= 1);
+                clock.emplace_back(v, ForType::Parallel);
+                IRVisitor::visit(op);
+                clock.pop_back();
+                predicate.pop_back();
+            } else {
+                IRVisitor::visit(op);
+            }
+        }
+
+        const std::map<string, Function> &env;
     public:
         vector<Use> uses;
-        PolyhedralClock(std::string &b) : buf(b) {}
-    } clock(buf);
+        PolyhedralClock(std::string &b, const std::map<string, Function> &env) : buf(b), env(env) {}
+    } clock(buf, env);
 
     s.accept(&clock);
 
@@ -1224,7 +1248,7 @@ Stmt lower_store_with(const Stmt &s, const vector<Function> &outputs, const map<
                     // update definitions appear to happen serially
                     // for each site.
 
-                    auto uses = get_times_of_all_uses(op->body, n);
+                    auto uses = get_times_of_all_uses(op->body, n, env);
                     for (size_t i = 0; i < uses.size(); i++) {
                         const auto &u1 = uses[i];
                         if (!u1.is_store()) continue;
@@ -1257,12 +1281,12 @@ Stmt lower_store_with(const Stmt &s, const vector<Function> &outputs, const map<
 
                 for (size_t i = 0; i < names.size(); i++) {
                     const string &n1 = names[i];
-                    auto uses_1 = get_times_of_all_uses(op->body, n1);
+                    auto uses_1 = get_times_of_all_uses(op->body, n1, env);
 
                     for (size_t j = i+1; j < names.size(); j++) {
                         const string &n2 = names[j];
 
-                        auto uses_2 = get_times_of_all_uses(op->body, n2);
+                        auto uses_2 = get_times_of_all_uses(op->body, n2, env);
 
                         // Check all uses of 1 are before all uses of 2
 
@@ -1326,16 +1350,18 @@ Stmt lower_store_with(const Stmt &s, const vector<Function> &outputs, const map<
 
             std::map<string, vector<string>> groups;
             std::map<string, string> parent;
+            const std::map<string, Function> &env;
 
         public:
-            CheckEachRealization(const std::map<string, vector<string>> &groups) : groups(groups) {
+            CheckEachRealization(const std::map<string, vector<string>> &groups,
+                                 const std::map<string, Function> &env) : groups(groups), env(env) {
                 for (const auto &p : groups)  {
                     for (const auto &c : p.second) {
                         parent[c] = p.first;
                     }
                 }
             }
-        } checker(groups);
+        } checker(groups, env);
 
         simpler.accept(&checker);
     }
