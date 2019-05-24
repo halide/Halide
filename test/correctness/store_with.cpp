@@ -420,28 +420,63 @@ int main(int argc, char **argv) {
         // Async is OK if we're entirely inside it, or if we prove we
         // can't clobber regardless of timing. First we test the case
         // where we're nested inside another async thing:
-
-        Func f, g, h;
+        Func f1, f2, g, h;
         Var x;
-        f(x) = x;
-        g(x) = f(x) + 3;
+        f1(x) = x;
+        f2(x) = f1(x);
+        g(x) = f2(x) + 3;
         h(x) = g(x) + 8;
-        f.compute_at(g, Var::outermost()).store_with(g);
+        f1.compute_at(f2, Var::outermost()).store_with(f2);
+        f2.compute_at(g, Var::outermost());
         g.compute_root().async();
         h.realize(128);
     }
 
     if (1) {
-        // Then the case where there can't possible be a clobber anyway, so ordering doesn't matter.
-        Func f1, f2, g;
+        // Then the case where we're stored inside one fork of the
+        // async but computed inside another, but there can't possible
+        // be a clobber anyway based on addresses alone, so ordering
+        // doesn't matter.
+        Func f1, f2, f3, g;
         Var x;
         f1(x) = x;
         f2(x) = x;
-        g(x) = f1(x % 8) + f2(x % 8 + 8);
+        f3(x) = f1(x);
+        g(x) = f2(x % 8) + f3(x % 8 + 8);
 
-        f1.compute_at(g, Var::outermost()).async().store_with(f2);
-        f2.store_root().compute_at(g, Var::outermost()).async();
+        f1.compute_at(f3, x).store_with(f2);
+        f3.compute_at(g, Var::outermost()).async();
+        f2.store_root().compute_at(g, Var::outermost());
         g.realize(128);
+    }
+
+    if (1) {
+        // store_with can be used for zero-copy reshape operations
+        Func f, g, h;
+        Var x, y;
+        f(x) = x;
+        g(x, y) = f(x + 4*y);
+        h(x) = g(x%4, x/4);
+
+        f.compute_root().store_with(h);
+        g.bound(x, 0, 4).compute_root().store_with(h, {x + 4*y});
+        h.realize(128);
+    }
+
+    if (1) {
+        // store_with + compute_with to get a single loop that writes
+        // an AoS layout. Assume f and g must be compute_root due to
+        // some other constraint, or we could just inline them.
+
+        Func f, g, h;
+        Var x, i;
+        f(x) = x + 3;
+        g(x) = x * 17;
+        h(i, x) = select(i == 0, f(x), g(x));
+        f.compute_root().store_with(h, {0, x});
+        g.compute_root().compute_with(f, {x}).store_with(h, {1, x});
+
+        h.bound(i, 0, 2).realize(2, 128);
     }
 
     // TODO: desirable extensions to store with:
@@ -644,15 +679,15 @@ int main(int argc, char **argv) {
         if (verbose) std::cerr << e.what() << "\n";
     }
 
-
     try {
-        // Safe, but async prevents us from reasoning about ordering.
+        // The meaning of async depends on the storage scope of a
+        // buffer, but a store_with Func doesn't really have one, so
+        // you can't apply store_with and async to the same Func.
         Func f, g, h;
         Var x;
         f(x) = x;
         g(x) = f(x) + f(x+1);
         h(x) = g(x);
-        // TODO: Why doesn't this create a misordered clock??? We need to know that g doesn't run ahead of f, and we don't have that sort of analysis
         f.store_root().compute_at(g, x).store_with(g).async();
         g.compute_root();
         h.realize(128);
@@ -661,7 +696,22 @@ int main(int argc, char **argv) {
         if (verbose) std::cerr << e.what() << "\n";
     }
 
-    // TODO: async
+    try {
+        // f1 is computed inside something async but stored with something outside the async
+        Func f1, f2, g, h;
+        Var x;
+        f1(x) = x;
+        f2(x) = f1(x);
+        g(x) = f2(x) + f2(x+1);
+        h(x) = g(x);
+        f1.store_at(g, Var::outermost()).compute_at(f2, Var::outermost()).store_with(g);
+        f2.store_at(g, Var::outermost()).compute_at(g, x).async();
+        g.compute_root();
+        h.realize(128);
+        ASSERT_UNREACHABLE;
+    } catch (CompileError &e) {
+        if (verbose) std::cerr << e.what() << "\n";
+    }
 
     // TODO: storage folding interaction
 

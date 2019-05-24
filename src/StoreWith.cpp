@@ -507,7 +507,7 @@ struct System {
                         remainder_bounds.min_defined &&
                         remainder_bounds.min > -std::abs(p.second)) {
                         // We have:
-                        // p.first == -rhs && 0 == rhs_remainder
+                        // p.first == rhs && 0 == rhs_remainder
                     } else {
                         // We don't have a substitution
                         continue;
@@ -530,6 +530,7 @@ struct System {
                     // every potential substitution. Avoid telling
                     // the simplifier that x == x.
                     if (!equal(p.first, rhs)) {
+                        debug(0) << "Teaching simplifier that " << (p.first == rhs) << "\n";
                         simplifier->learn_true(p.first == rhs);
                     }
 
@@ -550,14 +551,15 @@ struct System {
                         }
                     }
 
-                    // If the RHS is just a variable then we'll
-                    // just greedily perform this elimination -
-                    // there's no reason to need to backtrack on
-                    // it, so nuke all other candidate
-                    // children. There typically won't be any
-                    // because x == y will sort to the front of
-                    // the list of equalities.
-                    if (rhs.as<Variable>()) {
+                    // If the RHS is just a constant or variable then
+                    // we'll just greedily perform this elimination -
+                    // there's no reason to need to backtrack on it,
+                    // so nuke all other candidate children. There
+                    // typically won't be any because x == y will sort
+                    // to the front of the list of equalities.
+                    bool greedy = false;
+                    if (rhs.as<Variable>() || is_const(rhs)) {
+                        greedy = true;
                         result.clear();
                     }
 
@@ -590,7 +592,7 @@ struct System {
                     // No point considering further candidates if
                     // we're just doing a variable1 = variable2
                     // substitution.
-                    if (rhs.as<Variable>()) {
+                    if (greedy) {
                         return;
                     }
                 }
@@ -1171,6 +1173,11 @@ Stmt lower_store_with(const Stmt &s, const vector<Function> &outputs, const map<
                         << stored_with.buffer << " because "
                         << stored_with.buffer << " is scheduled inline and thus has no storage\n";
 
+                    user_assert(!it->second.schedule().async())
+                        << "Can't store " << p.first << " with "
+                        << stored_with.buffer << " because "
+                        << stored_with.buffer << " is scheduled async and cannot have multiple productions\n";
+
                     user_assert(it->second.schedule().store_with().buffer.empty())
                         << "Can't store " << p.first << " with "
                         << stored_with.buffer << " because "
@@ -1204,14 +1211,28 @@ Stmt lower_store_with(const Stmt &s, const vector<Function> &outputs, const map<
                     disproofs.push_back(v1 > v2);
                 }
                 Expr same_dst = const_true();
-                for (int i = 0; i < p.second.dimensions(); i++) {
+                for (size_t i = 0; i < stored_with.where.size(); i++) {
                     same_dst =
                         (same_dst &&
                          (substitute(remapping1, stored_with.where[i]) ==
                           substitute(remapping2, stored_with.where[i])));
                 }
+                // Exploit any explicit bounds on the vars
+                for (const auto &b : p.second.schedule().bounds()) {
+                    Expr v1 = remapping1[b.var];
+                    Expr v2 = remapping2[b.var];
+                    if (b.min.defined()) {
+                        same_dst = same_dst && (v1 >= b.min) && (v2 >= b.min);
+                        if (b.extent.defined()) {
+                            same_dst = same_dst && (v1 < b.min + b.extent) && (v2 < b.min + b.extent);
+                        }
+                    }
+                }
+
                 for (auto &e : disproofs) {
                     const int beam_size = 32;
+                    debug(0) << e << "\n";
+                    debug(0) << same_dst << "\n";
                     if (!can_disprove(e && same_dst, beam_size)) {
                         user_error << "Failed to prove that store_with mapping for " << p.first
                                    << " does not attempt place multiple values at the same site of "
@@ -1369,6 +1390,17 @@ Stmt lower_store_with(const Stmt &s, const vector<Function> &outputs, const map<
     // We now know that everything is legal. Remap the buffer names.
     class RemapNames : public IRMutator {
         using IRMutator::visit;
+
+        Stmt visit(const ProducerConsumer *op) override {
+            auto it = env.find(op->name);
+            if (it != env.end()) {
+                const string &stored_with = it->second.schedule().store_with().buffer;
+                if (!stored_with.empty()) {
+                    return ProducerConsumer::make(stored_with, op->is_producer, mutate(op->body));
+                }
+            }
+            return IRMutator::visit(op);
+        }
 
         Stmt visit(const Realize *op) override {
             auto it = env.find(op->name);

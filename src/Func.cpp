@@ -1993,6 +1993,10 @@ Func &Func::store_in(MemoryType t) {
 
 Func &Func::async() {
     invalidate_cache();
+    const auto &stored_with = func.schedule().store_with().buffer;
+    user_assert(stored_with.empty())
+        << "Func " << name()
+        << " cannot be both async and store_with " << stored_with << "\n";
     func.schedule().async() = true;
     return *this;
 }
@@ -2463,6 +2467,9 @@ Func &Func::store_with(Func other, const std::vector<Expr> &where) {
     invalidate_cache();
     auto my_types = output_types();
     auto other_types = other.output_types();
+    user_assert(!func.schedule().async())
+        << "Func " << name()
+        << " cannot be both async and store_with " << other.name() << "\n";
     user_assert(my_types.size() == other_types.size())
         << "Cannot store " << name()
         << " with " << other.name()
