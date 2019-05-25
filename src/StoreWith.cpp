@@ -750,7 +750,6 @@ struct Use {
         }
 
         predicate = substitute(renaming, predicate);
-        // dump();
     }
 
     Use() = default;
