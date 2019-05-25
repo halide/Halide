@@ -148,10 +148,6 @@ protected:
                             std::vector<uint32_t> words);
         void add_instruction(uint32_t opcode, std::vector<uint32_t> words);
         uint32_t map_type(const Type &type);
-        // This takes a regular type, but makes pointer to a local variable.
-        // TODO: remove the next two functions
-        uint32_t map_pointer_type_local(const Type &type);
-        uint32_t map_pointer_type_input(const Type &type);
         uint32_t map_pointer_type(const Type &type, const uint32_t storage_class);
         uint32_t map_type_to_pair(const Type &t);
         uint32_t emit_constant(const Type &t, const void *data);

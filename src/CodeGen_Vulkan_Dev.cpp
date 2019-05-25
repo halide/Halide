@@ -155,38 +155,6 @@ uint32_t CodeGen_Vulkan_Dev::SPIRVEmitter::map_pointer_type(const Type &type, co
     return ref;
 }
 
-// TODO: remove
-uint32_t CodeGen_Vulkan_Dev::SPIRVEmitter::map_pointer_type_local(const Type &type) {
-    return map_pointer_type(type, SpvStorageClassFunction);
-#if 0
-    uint32_t &ref = pointer_type_map_local[type];
-
-    if (ref == 0) {
-        uint32_t base_type_id = map_type(type);
-        ref = next_id++;
-        add_instruction(spir_v_types, SpvOpTypePointer, { ref, SpvStorageClassFunction, base_type_id });
-        pointer_type_map_local[type] = ref;
-    }
-    return ref;
-#endif
-}
-
-// TODO: remove
-uint32_t CodeGen_Vulkan_Dev::SPIRVEmitter::map_pointer_type_input(const Type &type) {
-    return map_pointer_type(type, SpvStorageClassInput);
-#if 0
-    uint32_t &ref = pointer_type_map_input[type];
-
-    if (ref == 0) {
-      uint32_t base_type_id = map_type(type);
-      ref = next_id++;
-      add_instruction(spir_v_types, SpvOpTypePointer, { ref, SpvStorageClassInput, base_type_id });
-      pointer_type_map_input[type] = ref;
-    }
-    return ref;
-#endif
-}
-
 void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Variable *var) {
     id = symbol_table.get(var->name);
 }
@@ -670,7 +638,7 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const For *op) {
 
         // TODO: Loop vars are alway int32_t right?
         uint32_t index_type_id = map_type(Int(32));
-        uint32_t index_var_type_id = map_pointer_type_local(Int(32));
+        uint32_t index_var_type_id = map_pointer_type(Int(32), SpvStorageClassFunction); 
 
         op->min.accept(this);
         uint32_t min_id = id;
@@ -915,7 +883,7 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::add_kernel(Stmt s,
         uint32_t intrinsic_id = next_id++;
         uint32_t intrinsic_loaded_id = next_id++;
         // The builtins are pointers to vec3
-        uint32_t intrinsic_type_id = map_pointer_type_input(Type(Type::UInt, 32, 3));
+        uint32_t intrinsic_type_id = map_pointer_type(Type(Type::UInt, 32, 3), SpvStorageClassInput);
 
         add_instruction(spir_v_types, SpvOpVariable, {intrinsic_type_id, intrinsic_id, SpvStorageClassInput});
         add_instruction(SpvOpLoad, {map_type(Type(Type::UInt, 32, 3)), intrinsic_loaded_id, intrinsic_id});
