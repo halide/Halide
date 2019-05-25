@@ -429,7 +429,15 @@ int main(int argc, char **argv) {
         f1.compute_at(f2, Var::outermost()).store_with(f2);
         f2.compute_at(g, Var::outermost());
         g.compute_root().async();
-        h.realize(128);
+        Buffer<int> buf = h.realize(128);
+
+        for (int i = 0; i < 128; i++) {
+            int correct = i + 11;
+            if (buf(i) != correct) {
+                printf("%d: buf(%d) = %d instead of %d\n", __LINE__, i, buf(i), correct);
+                return -1;
+            }
+        }
     }
 
     if (1) {
@@ -440,14 +448,22 @@ int main(int argc, char **argv) {
         Func f1, f2, f3, g;
         Var x;
         f1(x) = x;
-        f2(x) = x;
+        f2(x) = 3*x;
         f3(x) = f1(x);
         g(x) = f2(x % 8) + f3(x % 8 + 8);
 
         f1.compute_at(f3, x).store_with(f2);
         f3.compute_at(g, Var::outermost()).async();
         f2.store_root().compute_at(g, Var::outermost());
-        g.realize(128);
+        Buffer<int> buf = g.realize(128);
+
+        for (int i = 0; i < 128; i++) {
+            int correct = (i % 8)*3 + (i % 8) + 8;;
+            if (buf(i) != correct) {
+                printf("%d: buf(%d) = %d instead of %d\n", __LINE__, i, buf(i), correct);
+                return -1;
+            }
+        }
     }
 
     if (1) {
@@ -460,7 +476,15 @@ int main(int argc, char **argv) {
 
         f.compute_root().store_with(h);
         g.bound(x, 0, 4).compute_root().store_with(h, {x + 4*y});
-        h.realize(128);
+        Buffer<int> buf = h.realize(128);
+
+        for (int i = 0; i < 128; i++) {
+            int correct = i;
+            if (buf(i) != correct) {
+                printf("%d: buf(%d) = %d instead of %d\n", __LINE__, i, buf(i), correct);
+                return -1;
+            }
+        }
     }
 
     if (1) {
@@ -476,7 +500,154 @@ int main(int argc, char **argv) {
         f.compute_root().store_with(h, {0, x});
         g.compute_root().compute_with(f, {x}).store_with(h, {1, x});
 
-        h.bound(i, 0, 2).realize(2, 128);
+        Buffer<int> buf = h.bound(i, 0, 2).realize(2, 128);
+
+        for (int i = 0; i < 2; i++) {
+            for (int x = 0; x < 128; x++) {
+                int correct = i == 0 ? (x + 3) : (x * 17);
+                if (buf(i, x) != correct) {
+                    printf("%d: buf(%d, %d) = %d instead of %d\n", __LINE__, i, x, buf(i, x), correct);
+                    return -1;
+                }
+            }
+        }
+    }
+
+    if (1) {
+        // store_with + storage folding on the destination buffer
+
+        // We're going to jam two stencil footprints into the same
+        // circular buffer, rotating around each other. The combined
+        // buffer is one smaller (5) than the sum of the footprints
+        // (3+3), because we can do the leading edge as an in-place
+        // += operation.
+
+        Func f, g, h;
+        Var x;
+        f(x) = x;
+        g(x) = f(x+1) + f(x-1);
+        h(x) = g(x+1) + g(x-1);
+
+        f.store_root().compute_at(h, x);
+        g.store_root().compute_at(h, x);
+        f.store_with(g, {x+1});
+        g.fold_storage(x, 5);
+
+        Buffer<int> buf = h.realize(128);
+
+        for (int i = 0; i < 128; i++) {
+            int correct = 4*i;
+            if (buf(i) != correct) {
+                printf("%d: buf(%d) = %d instead of %d\n", __LINE__, i, buf(i), correct);
+                return -1;
+            }
+        }
+    }
+
+    if (get_jit_target_from_environment().has_gpu_feature()) {
+        // Store two GPU buffers together. Mostly this is to test
+        // that device copies happen sanely for store_with
+        // buffers. All of the GPU logic happens after store_with
+        // is lowered, so there's no particular reason to expect
+        // it to be strange.
+        Func f, g;
+        Var x, y;
+
+        f(x, y) = x + y;
+        f(x, y) += 5;
+        g(x, y) = f(x, y) + 6;
+        g(x, y) += 7;
+
+        // Place every other stage on the gpu
+        Var xi, yi;
+        f.compute_root().store_with(g).update().gpu_tile(x, y, xi, yi, 8, 8);
+        g.update().gpu_tile(x, y, xi, yi, 8, 8);
+
+        // We expect g to be copied to the host (in case the
+        // output buffer is dirty on device), written on the host
+        // for f's pure definition, then copied to gpu for f's
+        // update definition, then copied back to host for g's
+        // pure definition, then copied back to the device again
+        // for g's update. If any of these copies don't happen
+        // we'll get incorrect outputs.
+
+        Buffer<int> buf = g.realize(128, 128);
+
+        for (int y = 0; y < 128; y++) {
+            for (int x = 0; x < 128; x++) {
+                int correct = x + y + 5 + 6 + 7;
+                if (buf(x, y) != correct) {
+                    printf("%d: buf(%d, %d) = %d instead of %d\n", __LINE__, x, y, buf(x, y), correct);
+                    return -1;
+                }
+            }
+        }
+    }
+
+    if (1) {
+        // Avoid all allocations inside a pipeline by passing in a
+        // scratch buffer as a dummy output and setting up the layout
+        // of the intermediates within it explicitly using
+        // store_with. Bit of a hack, but lets you preallocate all
+        // storage everything without having to make everything an
+        // output (which would force them to be compute_root and not
+        // let them reuse the same memory). Maybe also a useful
+        // technique for preserving intermediates for debugging
+        // without having to reschedule? The downside is that you're
+        // required to provide enough storage to back all the
+        // intermediate Funcs as if they were compute_root.
+
+        Func f, g, h;
+        Var x;
+
+        f(x) = x;
+        g(x) = f(x-1) + f(x+1);
+        h(x) = g(x-1) + g(x+1);
+
+        Var xi;
+        h.split(x, x, xi, 8);
+        Func scratch;
+        scratch(x) = undef<int>();
+        f.compute_at(h, x).store_with(scratch);
+        // The split means that f's footprint might get shifted off
+        // the left edge of its minimum required realization, so we
+        // need to place f further away in memory from g than you
+        // might think for this to be correct for all possible
+        // output sizes.
+        g.compute_at(h, x).store_with(scratch, {x + h.output_buffer().dim(0).extent() + 10});
+
+        // Pick a size for h
+        Buffer<int> h_buf(128);
+
+        // We'll do an output bounds query to size the scratch buffer
+        // as needed for the given size of h.
+        Buffer<int> scratch_buf(nullptr, 0);
+
+        Pipeline p({h, scratch});
+        p.realize({h_buf, scratch_buf});
+
+        int correct_scratch_size = 2*h_buf.dim(0).extent() + 13;
+        if (scratch_buf.data() != nullptr ||
+            scratch_buf.dim(0).extent() != correct_scratch_size) {
+            printf("Scratch buf was supposed to be unallocated and of size %d. "
+                   "Instead it has host pointer %p and is of size %d\n",
+                   correct_scratch_size, (void *)scratch_buf.data(), scratch_buf.dim(0).extent());
+            return -1;
+        }
+
+        // Preallocate the space needed for the pipeline intermediates.
+        scratch_buf.allocate();
+
+        // Run the pipeline.
+        p.realize({h_buf, scratch_buf});
+
+        for (int i = 0; i < 128; i++) {
+            int correct = 4*i;
+            if (h_buf(i) != correct) {
+                printf("%d: h_buf(%d) = %d instead of %d\n", __LINE__, i, h_buf(i), correct);
+                return -1;
+            }
+        }
     }
 
     // TODO: desirable extensions to store with:
@@ -488,7 +659,7 @@ int main(int argc, char **argv) {
 
 #define ASSERT_UNREACHABLE do {printf("There was supposed to be an error before line %d\n", __LINE__); return -1;} while (0)
 
-    const bool verbose = true;// false;
+    const bool verbose = false;
 
     try {
         // Can't do in-place with shiftinwards tail strategies.
@@ -713,26 +884,81 @@ int main(int argc, char **argv) {
         if (verbose) std::cerr << e.what() << "\n";
     }
 
-    // TODO: storage folding interaction
+    try {
+        // Can't fold an allocation that doesn't exist.
+        Func f, g, h;
+        Var x;
+        f(x) = x;
+        g(x) = f(x+1) + f(x-1);
+        h(x) = g(0) + g(100);
+        g.compute_root();
+        // Use folded storage for f and place the ring buffer just
+        // after g in the same allocation. Doesn't work, because
+        // fold_storage doesn't just change coordinates, it also
+        // changes the allocation.
+        f.store_at(g, Var::outermost()).compute_at(g, x).store_with(g, {x + 101}).fold_storage(x, 4);
+        h.realize(1);
+        ASSERT_UNREACHABLE;
+    } catch (CompileError &e) {
+        if (verbose) std::cerr << e.what() << "\n";
+    }
 
-    // TODO: compute_with interaction
+    try {
+        // Can't align an allocation that doesn't exist.
+        Func f, g;
+        Var x;
+        f(x) = x;
+        g(x) = f(x);
+        g.compute_root();
+        // Use folded storage for f and place the ring buffer just
+        // after g in the same allocation. Doesn't work, because
+        // fold_storage doesn't just change coordinates, it also
+        // changes the allocation.
+        f.compute_at(g, Var::outermost()).align_storage(x, 8).store_with(g);
+        g.realize(100);
+        ASSERT_UNREACHABLE;
+    } catch (CompileError &e) {
+        if (verbose) std::cerr << e.what() << "\n";
+    }
+
+    {
+        // Forbid memoizing anything that shares storage with another
+        // Func. Theoretically we could make it work if they're both
+        // memoized and we concat the keys.
+
+        try {
+            // Memoized source.
+            Func f, g;
+            Var x;
+            f(x) = x;
+            g(x) = f(x);
+            g.compute_root();
+            f.compute_at(g, Var::outermost()).store_with(g).memoize();
+            g.realize(100);
+            ASSERT_UNREACHABLE;
+        } catch (CompileError &e) {
+            if (verbose) std::cerr << e.what() << "\n";
+        }
+
+        try {
+            // Memoized destination.
+            Func f, g;
+            Var x;
+            f(x) = x;
+            g(x) = f(x);
+            g.compute_root().memoize();
+            f.compute_at(g, Var::outermost()).store_with(g);
+            g.realize(100);
+            ASSERT_UNREACHABLE;
+        } catch (CompileError &e) {
+            if (verbose) std::cerr << e.what() << "\n";
+        }
+    }
 
 #else
     printf("Not testing store_with failure cases because Halide was compiled without exceptions\n");
     return 0;
 #endif
-
-    if (0) {
-        // An entire in-place pipeline
-        ImageParam im(Float(32), 2);
-        Func f;
-        Var x, y;
-        f(x, y) = im(x, y) + 17;
-
-        // TODO: Add imageparam overloads
-        f.store_with(im);
-        f.realize(128);
-    }
 
     printf("Success!\n");
 

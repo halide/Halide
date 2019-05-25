@@ -530,7 +530,6 @@ struct System {
                     // every potential substitution. Avoid telling
                     // the simplifier that x == x.
                     if (!equal(p.first, rhs)) {
-                        debug(0) << "Teaching simplifier that " << (p.first == rhs) << "\n";
                         simplifier->learn_true(p.first == rhs);
                     }
 
@@ -1001,9 +1000,6 @@ std::vector<Use> get_times_of_all_uses(const Stmt &s, string buf, const map<stri
 
         void visit(const Provide *op) override {
             {
-                // TODO: skip undef-checking if the buffer is an
-                // output - undef sites in outputs may have meaningful
-                // values we're supposed to not touch.
                 bool rhs_undef = true;
                 for (const auto &e : op->values) {
                     rhs_undef &= is_undef(e);
@@ -1160,31 +1156,54 @@ Stmt lower_store_with(const Stmt &s, const vector<Function> &outputs, const map<
             if (!stored_with.buffer.empty()) {
                 groups[stored_with.buffer].push_back(p.first);
 
-                // Some basic sanity checks
-                {
-                    auto it = env.find(stored_with.buffer);
-                    user_assert(it != env.end())
-                        << "Can't store " << p.first << " with "
-                        << stored_with.buffer << " because "
-                        << stored_with.buffer << " is not used in this pipeline\n";
+                // Some legality checks on the destination buffer
+                auto it = env.find(stored_with.buffer);
+                user_assert(it != env.end())
+                    << "Can't store " << p.first << " with "
+                    << stored_with.buffer << " because "
+                    << stored_with.buffer << " is not used in this pipeline\n";
 
-                    user_assert(!it->second.schedule().store_level().is_inlined())
-                        << "Can't store " << p.first << " with "
-                        << stored_with.buffer << " because "
-                        << stored_with.buffer << " is scheduled inline and thus has no storage\n";
+                user_assert(!it->second.schedule().store_level().is_inlined())
+                    << "Can't store " << p.first << " with "
+                    << stored_with.buffer << " because "
+                    << stored_with.buffer << " is scheduled inline and thus has no storage\n";
 
-                    user_assert(!it->second.schedule().async())
-                        << "Can't store " << p.first << " with "
-                        << stored_with.buffer << " because "
-                        << stored_with.buffer << " is scheduled async and cannot have multiple productions\n";
+                user_assert(!it->second.schedule().async())
+                    << "Can't store " << p.first << " with "
+                    << stored_with.buffer << " because "
+                    << stored_with.buffer << " is scheduled async and cannot have multiple productions\n";
 
-                    user_assert(it->second.schedule().store_with().buffer.empty())
-                        << "Can't store " << p.first << " with "
-                        << stored_with.buffer << " because "
-                        << stored_with.buffer << " is in turn stored with "
-                        << it->second.schedule().store_with().buffer
-                        << " and has no storage of its own\n";
+                user_assert(it->second.schedule().store_with().buffer.empty())
+                    << "Can't store " << p.first << " with "
+                    << stored_with.buffer << " because "
+                    << stored_with.buffer << " is in turn stored with "
+                    << it->second.schedule().store_with().buffer
+                    << " and has no storage of its own\n";
+
+                user_assert(!it->second.schedule().memoized())
+                    << "Can't store " << p.first << " with "
+                    << stored_with.buffer << " because "
+                    << stored_with.buffer << " is memoized\n";
+
+                // Some legality checks on the source Func
+                for (auto &d : p.second.schedule().storage_dims()) {
+                    user_assert(!d.alignment.defined())
+                        << "Can't align the storage of " << p.first
+                        << " in dimension " << d.var
+                        << " because it does not have storage of its own, "
+                        << "and is instead stored_with " << stored_with.buffer << "\n";
+
+                    user_assert(!d.fold_factor.defined())
+                        << "Can't fold the storage of " << p.first
+                        << " in dimension " << d.var
+                        << " because it does not have storage of its own, "
+                        << "and is instead stored_with " << stored_with.buffer << "\n";
                 }
+
+                user_assert(!p.second.schedule().memoized())
+                    << "Can't store " << p.first << " with "
+                    << stored_with.buffer << " because "
+                    << p.first << " is memoized\n";
 
                 // Check the coordinate mapping doesn't store distinct
                 // values at the same site.
@@ -1230,9 +1249,8 @@ Stmt lower_store_with(const Stmt &s, const vector<Function> &outputs, const map<
                 }
 
                 for (auto &e : disproofs) {
+                    // Beam size for the one-to-one proof
                     const int beam_size = 32;
-                    debug(0) << e << "\n";
-                    debug(0) << same_dst << "\n";
                     if (!can_disprove(e && same_dst, beam_size)) {
                         user_error << "Failed to prove that store_with mapping for " << p.first
                                    << " does not attempt place multiple values at the same site of "
@@ -1241,8 +1259,6 @@ Stmt lower_store_with(const Stmt &s, const vector<Function> &outputs, const map<
                 }
             }
         }
-
-        // TODO: assert that nothing is async
 
         class CheckEachRealization : public IRVisitor {
             using IRVisitor::visit;
@@ -1260,6 +1276,7 @@ Stmt lower_store_with(const Stmt &s, const vector<Function> &outputs, const map<
 
                 auto names = it->second;
 
+                // Beam size for the no-clobber proofs
                 const int beam_size = 32;
 
                 for (const string &n : names) {
