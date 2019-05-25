@@ -5,12 +5,15 @@ using namespace Halide;
 int main(int argc, char **argv) {
 
     if (1) {
-        // Pointwise parallel in-place
+        // Perform a pointwise operation in-place.
         Func f, g;
         Var x;
         f(x) = x;
         g(x) = f(x) + 3;
         f.compute_root().store_with(g);
+        // Order doesn't matter for pointwise in-place ops, so use
+        // parallelism. Recompute would be bad though, so we must
+        // round up.
         g.vectorize(x, 8, TailStrategy::RoundUp).parallel(x);
         f.vectorize(x, 4, TailStrategy::RoundUp).parallel(x);
         Buffer<int> buf = g.realize(128);
@@ -80,27 +83,6 @@ int main(int argc, char **argv) {
 
         for (int i = 0; i < 100; i++) {
             int correct = i + 8;
-            if (buf(i) != correct) {
-                printf("%d: buf(%d) = %d instead of %d\n", __LINE__, i, buf(i), correct);
-                return -1;
-            }
-        }
-    }
-
-    if (0) {
-        // Set the odd entries to be some function of the even entries. This can be done in-place.
-        Func f, g;
-        Var x;
-
-        f(x) = x;
-        g(x) = select(x % 2 == 0, undef<int>(), f((x - 1) % 100) + f((x + 1) % 100));
-
-        f.compute_root().store_with(g);
-
-        Buffer<int> buf = g.realize(100);
-
-        for (int i = 0; i < 100; i++) {
-            int correct = (i % 2 == 1) ? ((i + 99) % 100 + (i + 1) % 100) : i;
             if (buf(i) != correct) {
                 printf("%d: buf(%d) = %d instead of %d\n", __LINE__, i, buf(i), correct);
                 return -1;
