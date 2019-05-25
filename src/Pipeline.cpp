@@ -645,12 +645,37 @@ Realization Pipeline::realize(vector<int32_t> sizes, const Target &target,
         user_assert(out.has_pure_definition() || out.has_extern_definition()) <<
             "Can't realize Pipeline with undefined output Func: " << out.name() << ".\n";
         for (Type t : out.output_types()) {
-            bufs.emplace_back(t, sizes);
+            bufs.emplace_back(t, nullptr, sizes);
         }
     }
     Realization r(bufs);
-    realize(r, target, param_map);
+    // Do an output bounds query if we can. Otherwise just assume the
+    // output size is good.
+    if (!target.has_feature(Target::NoBoundsQuery)) {
+        realize(r, target, param_map);
+    }
     for (size_t i = 0; i < r.size(); i++) {
+        r[i].allocate();
+    }
+    // Do the actual computation
+    realize(r, target, param_map);
+
+    // Crop back to the requested size if necessary
+    bool needs_crop = false;
+    vector<std::pair<int32_t, int32_t>> crop;
+    if (!target.has_feature(Target::NoBoundsQuery)) {
+        crop.resize(sizes.size());
+        for (size_t d = 0; d < sizes.size(); d++) {
+            needs_crop |= ((r[0].dim(d).extent() != sizes[d]) ||
+                           (r[0].dim(d).min() != 0));
+            crop[d].first = 0;
+            crop[d].second = sizes[d];
+        }
+    }
+    for (size_t i = 0; i < r.size(); i++) {
+        if (needs_crop) {
+            r[i].crop(crop);
+        }
         r[i].copy_to_host();
     }
     return r;
@@ -973,24 +998,6 @@ void Pipeline::realize(RealizationArg outputs, const Target &t,
     user_assert(defined()) << "Can't realize an undefined Pipeline\n";
 
     debug(2) << "Realizing Pipeline for " << target << "\n";
-
-    if (outputs.r) {
-        for (size_t i = 0; i < outputs.r->size(); i++) {
-            user_assert((*outputs.r)[i].data() != nullptr || (*outputs.r)[i].has_device_allocation())
-                << "Buffer at " << &((*outputs.r)[i]) << " is unallocated. "
-                << "The Buffers in a Realization passed to realize must all be allocated\n";
-        }
-    } else if (outputs.buffer_list) {
-        for (const Buffer<> &buf : *outputs.buffer_list) {
-            user_assert(buf.data() != nullptr || buf.has_device_allocation())
-                << "Buffer at " << &buf << " is unallocated. "
-                << "The Buffers in a Realization passed to realize must all be allocated\n";
-        }
-    } else {
-        user_assert(outputs.buf && (outputs.buf->host || outputs.buf->device))
-            << "Buffer at " << (void *)outputs.buf << " is unallocated. "
-            << "The Buffers passed to realize must all be allocated\n";
-    }
 
     // If target is unspecified...
     if (target.os == Target::OSUnknown) {
