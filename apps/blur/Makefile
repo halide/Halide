@@ -26,6 +26,6 @@ $(BIN)/%/test: $(BIN)/%/halide_blur.a test.cpp
 clean:
 	rm -rf $(BIN)
 
-# Compile flags here only support 'host' at the moment
-test: $(BIN)/host/test
-	$(BIN)/host/test
+.PHONY: test
+test: $(BIN)/$(HL_TARGET)/test
+	$(BIN)/$(HL_TARGET)/test

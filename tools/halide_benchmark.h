@@ -43,11 +43,13 @@ inline double benchmark_duration_seconds(
 // Emscripten's std::chrono::steady_clock and/or high_resolution_clock
 // can throw an exception (!) if the runtime doesn't have a truly
 // steady clock available. Advice from emscripten-discuss suggested
-// that performance.now() is the best bet, as it is milliseconds-since-page-load
-// (but returned as a double, with microseconds in the fractional portion).
-EM_JS(double, benchmark_now, (void), {
-    return performance.now();
-});
+// that emscripten_get_now() is the best bet, as it is milliseconds
+// (but returned as a double, with microseconds in the fractional portion),
+// using either performance.now() or performance.hrtime() depending on the
+// environment.
+inline double benchmark_now() {
+    return emscripten_get_now();
+}
 
 inline double benchmark_duration_seconds(double start, double end) {
     return (end - start) / 1000.0;

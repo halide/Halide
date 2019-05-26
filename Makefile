@@ -158,6 +158,14 @@ else
 	EMCC_SIMD_OPT=0
 endif
 
+ifneq (,$(findstring node,$(WASM_SHELL)))
+	# If 'node' is anywhere in the string, assume Node
+	EMCC_ENVIRONMENT=node
+else
+	# assume d8
+	EMCC_ENVIRONMENT=shell
+endif
+
 # We slurp in the default ~/.emscripten config file and make an altered version
 # with LLVM_ROOT pointing to the LLVM we are using, so that we can build with
 # the 'correct' version (ie the one that the rest of Halide is using) whether
@@ -1568,9 +1576,10 @@ GEN_AOT_LD_FLAGS_WASM := $(filter-out -ldl,$(GEN_AOT_LD_FLAGS_WASM))
 GEN_AOT_LD_FLAGS_WASM := $(filter-out -lpthread,$(GEN_AOT_LD_FLAGS_WASM))
 
 $(BIN_DIR)/$(TARGET)/generator_aotwasm_%.js: $(ROOT_DIR)/test/generator/%_aottest.cpp $(FILTERS_DIR)/%.a $(FILTERS_DIR)/%.h $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
+	@[[ "$(TARGET)" == "wasm-32-wasmrt"* ]] || (echo "HL_TARGET must begin with wasm-32-wasmrt" && exit 1)
 	@mkdir -p $(@D)
 	@# --source-map-base is just to silence an irrelevant warning from Emscripten
-	EMCC_WASM_BACKEND=1 EM_CONFIG="$(EMCC_CONFIG)" $(EMCC) $(GEN_AOT_CXX_FLAGS_WASM) -s WASM=1 -s SIMD=$(EMCC_SIMD_OPT) -s EXIT_RUNTIME=1 -s ENVIRONMENT=shell --source-map-base . $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS_WASM) -o $@
+	EMCC_WASM_BACKEND=1 EM_CONFIG="$(EMCC_CONFIG)" $(EMCC) $(GEN_AOT_CXX_FLAGS_WASM) -s WASM=1 -s SIMD=$(EMCC_SIMD_OPT) -s EXIT_RUNTIME=1 -s ENVIRONMENT=$(EMCC_ENVIRONMENT) --source-map-base . $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS_WASM) -o $@
 
 $(BIN_DIR)/$(TARGET)/generator_aotwasm_%.wasm: $(BIN_DIR)/$(TARGET)/generator_aotwasm_%.js
 	@# nothing
@@ -1941,12 +1950,16 @@ BENCHMARK_APPS=\
 	nl_means \
 	stencil_chain
 
+# TODO: we deliberately leave out the `|| exit 1` (for now) when *running*
+# the benchmarks, as some will currently crash at runtime when running in
+# wasm + wasm_simd128 due to a known bug in V8 v7.5
 .PHONY: benchmark_apps
 benchmark_apps: distrib
+	$(eval SUFFIX=$(if $(findstring wasm-32-wasmrt,$(HL_TARGET)),_wasm,))
 	@for APP in $(BENCHMARK_APPS); do \
-		echo Building $${APP}... ; \
+		echo Building $${APP} for ${HL_TARGET}... ; \
 		$(MAKE) -C $(ROOT_DIR)/apps/$${APP} \
-		    $(CURDIR)/$(BIN_DIR)/apps/$${APP}/bin/$(HL_TARGET)/$${APP}.rungen \
+		    $(CURDIR)/$(BIN_DIR)/apps/$${APP}/bin/$(HL_TARGET)/$${APP}.rungen${SUFFIX} \
 			HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
 			BIN_DIR=$(CURDIR)/$(BIN_DIR)/apps/$${APP}/bin \
 			HL_TARGET=$(HL_TARGET) \
@@ -1955,13 +1968,12 @@ benchmark_apps: distrib
 	done
 	@for APP in $(BENCHMARK_APPS); do \
 		echo ;\
-		echo Benchmarking $${APP}... ; \
+		echo Benchmarking $${APP} for ${HL_TARGET}... ; \
 		make -C $(ROOT_DIR)/apps/$${APP} \
-			$${APP}.benchmark \
+			$${APP}.benchmark${SUFFIX} \
 			HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
 			BIN_DIR=$(CURDIR)/$(BIN_DIR)/apps/$${APP}/bin \
-			HL_TARGET=$(HL_TARGET) \
-			|| exit 1 ; \
+			HL_TARGET=$(HL_TARGET) ; \
 	done
 
 .PHONY: test_python2

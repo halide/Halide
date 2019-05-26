@@ -146,16 +146,29 @@ ifneq (, $(findstring metal,$(HL_TARGET)))
   LDFLAGS += -framework Metal -framework Foundation
 endif
 
+# Utility to convert raw video -> h264. HL_AVCONV=ffmpeg will work too.
+HL_AVCONV ?= avconv
+
+# Utility to show h264 video
+HL_VIDEOPLAYER ?= mplayer
+
+# ------- RunGen/Benchmark support
+
+# Really, .SECONDARY is what we want instead of .PRECIOUS (here and elsewhere),
+# but .SECONDARY doesn't accept wildcards
+.PRECIOUS: $(BIN)/%.registration.cpp
 $(BIN)/%.registration.cpp: $(BIN)/%.a
 	@echo $@ produced implicitly by $^
 
+.PRECIOUS: $(BIN)/%/RunGenMain.o
 $(BIN)/%/RunGenMain.o: $(HALIDE_DISTRIB_PATH)/tools/RunGenMain.cpp $(HALIDE_DISTRIB_PATH)/tools/RunGen.h
+	@[[ "$(HL_TARGET)" != "wasm-32-wasmrt"* ]] || (echo "HL_TARGET must NOT begin with wasm-32-wasmrt for target $@" && exit 1)
 	@mkdir -p $(@D)
-	$(CXX) -c $< $(CXXFLAGS) $(IMAGE_IO_CXX_FLAGS) -I$(BIN)/$* -o $@
+	$(CXX) -c $< $(CXXFLAGS) -fno-exceptions $(IMAGE_IO_CXX_FLAGS) -I$(BIN)/$* -o $@
 
-# Really, .SECONDARY is what we want, but it won't accept wildcards
 .PRECIOUS: $(BIN)/%.rungen
 $(BIN)/%.rungen: $(BIN)/%/RunGenMain.o $(BIN)/%.a $(BIN)/%.registration.cpp
+	@[[ "$(HL_TARGET)" != "wasm-32-wasmrt"* ]] || (echo "HL_TARGET must NOT begin with wasm-32-wasmrt for target $@" && exit 1)
 	$(CXX) $(CXXFLAGS) $^ -o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS)
 
 RUNARGS ?=
@@ -164,18 +177,83 @@ RUNARGS ?=
 #
 #     make bin/host/foo.run RUNARGS='input=a output=baz'
 #
+.PHONY: $(BIN)/%.run
 $(BIN)/%.run: $(BIN)/%.rungen
 	@$(CURDIR)/$< $(RUNARGS)
 
 # Also allow 'foo.run' as a shortcut to mean host
+.PHONY: %.run
 %.run: $(BIN)/host/%.rungen
 	@$(CURDIR)/$< $(RUNARGS)
 
-# Utility to convert raw video -> h264. HL_AVCONV=ffmpeg will work too.
-HL_AVCONV ?= avconv
-
-# Utility to show h264 video
-HL_VIDEOPLAYER ?= mplayer
-
+.PHONY: %.benchmark
 %.benchmark: $(BIN)/$(HL_TARGET)/%.rungen
+	@[[ "$(HL_TARGET)" != "wasm-32-wasmrt"* ]] || (echo "HL_TARGET must NOT begin with wasm-32-wasmrt for target $@" && exit 1)
 	@$^ --benchmarks=all --default_input_buffers --default_input_scalars --output_extents=estimate --parsable_output
+
+# ------- wasm support
+
+# EMCC is the tool that invokes Emscripten
+EMCC ?= emcc
+
+# WASM_SHELL is the shell tool used to run AOT-compiled WebAssembly.
+# (Node could be used instead.)
+WASM_SHELL ?= d8
+
+ifneq (,$(findstring wasm_simd128,$(HL_TARGET)))
+	EMCC_SIMD_OPT=1
+	WASM_SHELL += --experimental-wasm-simd
+else
+	EMCC_SIMD_OPT=0
+endif
+
+ifneq (,$(findstring node,$(WASM_SHELL)))
+	EMCC_ENVIRONMENT=node
+	WASM_SHELL_ARG_SEP=
+else
+	EMCC_ENVIRONMENT=shell
+	WASM_SHELL_ARG_SEP="--"
+endif
+
+# We slurp in the default ~/.emscripten config file and make an altered version
+# with LLVM_ROOT pointing to the LLVM we are using, so that we can build with
+# the 'correct' version (ie the one that the rest of Halide is using) whether
+# or not ~/.emscripten has been edited correctly.
+LLVM_CONFIG ?= llvm-config
+LLVM_BINDIR = $(shell $(LLVM_CONFIG) --bindir | sed -e 's/\\/\//g' -e 's/\([a-zA-Z]\):/\/\1/g')
+EMCC_CONFIG = $(shell cat $(HOME)/.emscripten | grep -v LLVM_ROOT | tr '\n' ';')LLVM_ROOT='$(LLVM_BINDIR)'
+
+# Note that USE_LIBJPEG requires Emscripten 1.38.31 or later
+EMCC_OPTS = \
+	--source-map-base . \
+	-s ALLOW_MEMORY_GROWTH=1 \
+	-s ASSERTIONS=1 \
+	-s ENVIRONMENT=$(EMCC_ENVIRONMENT) \
+	-s EXIT_RUNTIME=1 \
+	-s FORCE_FILESYSTEM=1 \
+	-s SIMD=$(EMCC_SIMD_OPT) \
+	-s USE_LIBPNG=1 \
+	-s USE_LIBJPEG=1 \
+	-s WASM=1
+
+CXX-WASM = EMCC_WASM_BACKEND=1 EM_CONFIG="$(EMCC_CONFIG)" $(EMCC) $(EMCC_OPTS)
+
+.PRECIOUS: $(BIN)/%/RunGenMainWasm.o
+$(BIN)/%/RunGenMainWasm.o: $(HALIDE_DISTRIB_PATH)/tools/RunGenMain.cpp $(HALIDE_DISTRIB_PATH)/tools/RunGen.h
+	@[[ "$(HL_TARGET)" == "wasm-32-wasmrt"* ]] || (echo "HL_TARGET must begin with wasm-32-wasmrt" && exit 1)
+	@mkdir -p $(@D)
+	$(CXX-WASM) -c $< $(CXXFLAGS) -fno-exceptions -I$(BIN)/$* -o $@
+
+.PRECIOUS: $(BIN)/%.rungen.js
+$(BIN)/%.rungen.js: $(BIN)/%/RunGenMainWasm.o $(BIN)/%.a $(BIN)/%.registration.cpp
+	@[[ "$(HL_TARGET)" == "wasm-32-wasmrt"* ]] || (echo "HL_TARGET must begin with wasm-32-wasmrt for target $@" && exit 1)
+	$(CXX-WASM) $(CXXFLAGS) -g $^ -o $@
+
+.PHONY: $(BIN)/%.rungen_wasm
+$(BIN)/%.rungen_wasm: $(BIN)/%.rungen.js
+	# nothing
+
+.PHONY: %.benchmark_wasm
+%.benchmark_wasm: $(BIN)/$(HL_TARGET)/%.rungen.js
+	@[[ "$(HL_TARGET)" == "wasm-32-wasmrt"* ]] || (echo "HL_TARGET must begin with wasm-32-wasmrt for target $@" && exit 1)
+	@cd $(<D); $(WASM_SHELL) $(<F) $(WASM_SHELL_ARG_SEP) --benchmarks=all --default_input_buffers --default_input_scalars --output_extents=estimate --parsable_output
