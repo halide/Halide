@@ -1754,12 +1754,28 @@ public:
     static Buffer<T, D> make_with_shape_of(Buffer<T2, D2> src,
                                            void *(*allocate_fn)(size_t) = nullptr,
                                            void (*deallocate_fn)(void *) = nullptr) {
+
+        const halide_type_t dst_type = T_is_void
+            ? src.type()
+            : halide_type_of<typename std::remove_cv<not_void_T>::type>();
+        return Buffer<>::make_with_shape_of_helper(dst_type, src.
+                                                   dimensions(), src.buf.dim,
+                                                   allocate_fn, deallocate_fn);
+    }
+
+private:
+
+    static Buffer<> make_with_shape_of_helper(halide_type_t dst_type,
+                                              int dimensions,
+                                              halide_dimension_t *shape,
+                                              void *(*allocate_fn)(size_t),
+                                              void (*deallocate_fn)(void *)) {
         // Reorder the dimensions of src to have strides in increasing order
         std::vector<int> swaps;
-        for (int i = src.dimensions()-1; i > 0; i--) {
+        for (int i = dimensions - 1; i > 0; i--) {
             for (int j = i; j > 0; j--) {
-                if (src.dim(j-1).stride() > src.dim(j).stride()) {
-                    src.transpose(j-1, j);
+                if (shape[j-1].stride > shape[j].stride) {
+                    std::swap(shape[j-1], shape[j]);
                     swaps.push_back(j);
                 }
             }
@@ -1767,8 +1783,7 @@ public:
 
         // Rewrite the strides to be dense (this messes up src, which
         // is why we took it by value).
-        halide_dimension_t *shape = src.buf.dim;
-        for (int i = 0; i < src.dimensions(); i++) {
+        for (int i = 0; i < dimensions; i++) {
             if (i == 0) {
                 shape[i].stride = 1;
             } else {
@@ -1785,16 +1800,11 @@ public:
 
         // Use an explicit runtime type, and make dst a Buffer<void>, to allow
         // using this method with Buffer<void> for either src or dst.
-        const halide_type_t dst_type = T_is_void
-            ? src.type()
-            : halide_type_of<typename std::remove_cv<not_void_T>::type>();
-        Buffer<> dst(dst_type, nullptr, src.dimensions(), shape);
+        Buffer<> dst(dst_type, nullptr, dimensions, shape);
         dst.allocate(allocate_fn, deallocate_fn);
 
         return dst;
     }
-
-private:
 
     template<typename ...Args>
     HALIDE_ALWAYS_INLINE
