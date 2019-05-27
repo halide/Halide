@@ -131,7 +131,6 @@ WITH_EXCEPTIONS ?=
 WITH_LLVM_INSIDE_SHARED_LIBHALIDE ?= not-empty
 
 WITH_V8 ?=
-WITH_SPIDERMONKEY ?=
 
 # If HL_TARGET or HL_JIT_TARGET aren't set, use host
 HL_TARGET ?= host
@@ -157,6 +156,14 @@ ifneq (,$(findstring wasm_simd128,$(HL_TARGET)))
 	WASM_SHELL += --experimental-wasm-simd
 else
 	EMCC_SIMD_OPT=0
+endif
+
+ifneq (,$(findstring node,$(WASM_SHELL)))
+	# If 'node' is anywhere in the string, assume Node
+	EMCC_ENVIRONMENT=node
+else
+	# assume d8
+	EMCC_ENVIRONMENT=shell
 endif
 
 # We slurp in the default ~/.emscripten config file and make an altered version
@@ -191,31 +198,19 @@ RISCV_CXX_FLAGS=$(if $(WITH_RISCV), -DWITH_RISCV=1, )
 RISCV_LLVM_CONFIG_LIB=$(if $(WITH_RISCV), riscv, )
 
 INTROSPECTION_CXX_FLAGS=$(if $(WITH_INTROSPECTION), -DWITH_INTROSPECTION, )
-EXCEPTIONS_CXX_FLAGS=$(if $(WITH_EXCEPTIONS), -DWITH_EXCEPTIONS, )
+EXCEPTIONS_CXX_FLAGS=$(if $(WITH_EXCEPTIONS), -DWITH_EXCEPTIONS -fexceptions, )
 
 HEXAGON_CXX_FLAGS=$(if $(WITH_HEXAGON), -DWITH_HEXAGON=1, )
 HEXAGON_LLVM_CONFIG_LIB=$(if $(WITH_HEXAGON), hexagon, )
 
-# These define paths to prebuilt instances of V8 and/or SpiderMonkey, for
-# use when JIT-testing WASM and/or JavaScript Halide output. Note that
-# you must also define WITH_V8 and/or WITH_SPIDERMONKEY to have
-# the relevant JavaScript VM linked in with support, so it's fine to declare
-# V8_LIB_PATH, etc permanently in your environment, even if
-# you don't always want them linked into libHalide.
+# These define paths to prebuilt instances of V8, for use when JIT-testing
+# WASM and/or JavaScript Halide output. Note that you must also define WITH_V8
+# to have the relevant JavaScript VM linked in with support, so it's fine to
+# declare V8_LIB_PATH, etc permanently in your environment, even if you don't
+# always want them linked into libHalide.
 
 V8_INCLUDE_PATH ?= /V8_INCLUDE_PATH/is/undefined/
 V8_LIB_PATH ?= /V8_LIB_PATH/is/undefined/libv8_monolith.a
-V8_CXX_FLAGS=$(if $(WITH_V8), -DWITH_V8 -I$(V8_INCLUDE_PATH))
-V8_LDFLAGS=$(if $(WITH_V8), $(V8_LIB_PATH))
-
-# TODO: We should support SpiderMonkey here too, in addition to V8
-SPIDERMONKEY_INLCUDE_PATH ?= /SPIDERMONKEY_INLCUDE_PATH/is/undefined/
-SPIDERMONKEY_LIB_PATH="/error/SpiderMonkey/embedding/is/not/yet/supported/libssm.a"
-SPIDERMONKEY_CXX_FLAGS=$(if $(WITH_SPIDERMONKEY), -DWITH_SPIDERMONKEY -I$(SPIDERMONKEY_INLCUDE_PATH)/include)
-SPIDERMONKEY_LDFLAGS=$(if $(WITH_SPIDERMONKEY), $(SPIDERMONKEY_LIB_PATH))
-
-JSVM_CXX_FLAGS=$(V8_CXX_FLAGS) $(SPIDERMONKEY_CXX_FLAGS)
-JSVM_LDFLAGS=$(V8_LDFLAGS) $(SPIDERMONKEY_LDFLAGS)
 
 LLVM_HAS_NO_RTTI = $(findstring -fno-rtti, $(LLVM_CXX_FLAGS))
 WITH_RTTI ?= $(if $(LLVM_HAS_NO_RTTI),, not-empty)
@@ -248,8 +243,10 @@ CXX_FLAGS += $(WEBASSEMBLY_CXX_FLAGS)
 CXX_FLAGS += $(INTROSPECTION_CXX_FLAGS)
 CXX_FLAGS += $(EXCEPTIONS_CXX_FLAGS)
 CXX_FLAGS += $(AMDGPU_CXX_FLAGS)
-CXX_FLAGS += $(JSVM_CXX_FLAGS)
 CXX_FLAGS += $(RISCV_CXX_FLAGS)
+ifneq ($(WITH_V8), )
+CXX_FLAGS += -DWITH_V8 -I$(V8_INCLUDE_PATH)
+endif
 
 # This is required on some hosts like powerpc64le-linux-gnu because we may build
 # everything with -fno-exceptions.  Without -funwind-tables, libHalide.so fails
@@ -916,6 +913,27 @@ endif
 endif
 endif
 
+V8_DEPS=
+ifneq ($(WITH_V8), )
+ifeq ($(suffix $(V8_LIB_PATH)), .a)
+
+# Note that this rule is only used if V8_LIB_PATH is a static library
+$(BIN_DIR)/libv8_halide.$(SHARED_EXT): $(V8_LIB_PATH)
+	@mkdir -p $(@D)
+	$(CXX) -shared $(call alwayslink,$(V8_LIB_PATH)) $(INSTALL_NAME_TOOL_LD_FLAGS) -o $@
+ifeq ($(UNAME), Darwin)
+	install_name_tool -id $(CURDIR)/$(BIN_DIR)/libv8_halide.$(SHARED_EXT) $(BIN_DIR)/libv8_halide.$(SHARED_EXT)
+endif
+
+V8_DEPS=$(BIN_DIR)/libv8_halide.$(SHARED_EXT)
+
+else
+
+V8_DEPS=$(V8_LIB_PATH)
+
+endif
+endif
+
 .PHONY: all
 all: distrib test_internal
 
@@ -940,7 +958,7 @@ $(BUILD_DIR)/llvm_objects/list: $(OBJECTS) $(INITIAL_MODULES)
 	mv list.new list; \
 	fi
 
-$(LIB_DIR)/libHalide.a: $(OBJECTS) $(INITIAL_MODULES) $(BUILD_DIR)/llvm_objects/list
+$(LIB_DIR)/libHalide.a: $(OBJECTS) $(INITIAL_MODULES) $(BUILD_DIR)/llvm_objects/list $(V8_DEPS)
 	# Archive together all the halide and llvm object files
 	@mkdir -p $(@D)
 	@rm -f $(LIB_DIR)/libHalide.a
@@ -948,9 +966,9 @@ $(LIB_DIR)/libHalide.a: $(OBJECTS) $(INITIAL_MODULES) $(BUILD_DIR)/llvm_objects/
 	echo $(OBJECTS) $(INITIAL_MODULES) $(BUILD_DIR)/llvm_objects/llvm_*.o* | xargs -n200 ar q $(LIB_DIR)/libHalide.a
 	ranlib $(LIB_DIR)/libHalide.a
 
-$(BIN_DIR)/libHalide.$(SHARED_EXT): $(OBJECTS) $(INITIAL_MODULES)
+$(BIN_DIR)/libHalide.$(SHARED_EXT): $(OBJECTS) $(INITIAL_MODULES) $(V8_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) -shared $(OBJECTS) $(INITIAL_MODULES) $(LLVM_LIBS_FOR_SHARED_LIBHALIDE) $(LLVM_SYSTEM_LIBS) $(COMMON_LD_FLAGS) $(JSVM_LDFLAGS) $(INSTALL_NAME_TOOL_LD_FLAGS) -o $(BIN_DIR)/libHalide.$(SHARED_EXT)
+	@$(CXX) -shared $(OBJECTS) $(INITIAL_MODULES) $(LLVM_LIBS_FOR_SHARED_LIBHALIDE) $(LLVM_SYSTEM_LIBS) $(COMMON_LD_FLAGS) $(V8_DEPS) $(INSTALL_NAME_TOOL_LD_FLAGS) -o $(BIN_DIR)/libHalide.$(SHARED_EXT)
 ifeq ($(UNAME), Darwin)
 	install_name_tool -id $(CURDIR)/$(BIN_DIR)/libHalide.$(SHARED_EXT) $(BIN_DIR)/libHalide.$(SHARED_EXT)
 endif
@@ -1239,8 +1257,6 @@ clean_generator:
 	rm -f $(BUILD_DIR)/RunGenMain.o
 
 time_compilation_tests: time_compilation_correctness time_compilation_performance time_compilation_generator
-
-LIBHALIDE_DEPS ?= $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h
 
 $(BUILD_DIR)/GenGen.o: $(ROOT_DIR)/tools/GenGen.cpp $(INCLUDE_DIR)/Halide.h
 	@mkdir -p $(@D)
@@ -1560,9 +1576,10 @@ GEN_AOT_LD_FLAGS_WASM := $(filter-out -ldl,$(GEN_AOT_LD_FLAGS_WASM))
 GEN_AOT_LD_FLAGS_WASM := $(filter-out -lpthread,$(GEN_AOT_LD_FLAGS_WASM))
 
 $(BIN_DIR)/$(TARGET)/generator_aotwasm_%.js: $(ROOT_DIR)/test/generator/%_aottest.cpp $(FILTERS_DIR)/%.a $(FILTERS_DIR)/%.h $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
+	@[[ "$(TARGET)" == "wasm-32-wasmrt"* ]] || (echo "HL_TARGET must begin with wasm-32-wasmrt" && exit 1)
 	@mkdir -p $(@D)
 	@# --source-map-base is just to silence an irrelevant warning from Emscripten
-	EMCC_WASM_BACKEND=1 EM_CONFIG="$(EMCC_CONFIG)" $(EMCC) $(GEN_AOT_CXX_FLAGS_WASM) -s WASM=1 -s SIMD=$(EMCC_SIMD_OPT) -s EXIT_RUNTIME=1 -s ENVIRONMENT=shell --source-map-base . $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS_WASM) -o $@
+	EMCC_WASM_BACKEND=1 EM_CONFIG="$(EMCC_CONFIG)" $(EMCC) $(GEN_AOT_CXX_FLAGS_WASM) -s WASM=1 -s SIMD=$(EMCC_SIMD_OPT) -s EXIT_RUNTIME=1 -s ENVIRONMENT=$(EMCC_ENVIRONMENT) --source-map-base . $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS_WASM) -o $@
 
 $(BIN_DIR)/$(TARGET)/generator_aotwasm_%.wasm: $(BIN_DIR)/$(TARGET)/generator_aotwasm_%.js
 	@# nothing
@@ -1920,7 +1937,8 @@ test_apps: distrib
 		echo Testing app $${APP}... ; \
 		make -C $(ROOT_DIR)/apps/$${APP} test \
 			HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
-			BIN=$(CURDIR)/$(BIN_DIR)/apps/$${APP}/bin \
+			BIN_DIR=$(CURDIR)/$(BIN_DIR)/apps/$${APP}/bin \
+			HL_TARGET=$(HL_TARGET) \
 			|| exit 1 ; \
 	done
 
@@ -1932,24 +1950,30 @@ BENCHMARK_APPS=\
 	nl_means \
 	stencil_chain
 
+# TODO: we deliberately leave out the `|| exit 1` (for now) when *running*
+# the benchmarks, as some will currently crash at runtime when running in
+# wasm + wasm_simd128 due to a known bug in V8 v7.5
 .PHONY: benchmark_apps
 benchmark_apps: distrib
+	$(eval SUFFIX=$(if $(findstring wasm-32-wasmrt,$(HL_TARGET)),_wasm,))
 	@for APP in $(BENCHMARK_APPS); do \
-		echo Building $${APP}... ; \
+		echo Building $${APP} for ${HL_TARGET}... ; \
 		$(MAKE) -C $(ROOT_DIR)/apps/$${APP} \
-		    $(CURDIR)/$(BIN_DIR)/apps/$${APP}/bin/$${APP}.rungen \
+		    $(CURDIR)/$(BIN_DIR)/apps/$${APP}/bin/$(HL_TARGET)/$${APP}.rungen${SUFFIX} \
 			HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
-			BIN=$(CURDIR)/$(BIN_DIR)/apps/$${APP}/bin > /dev/null \
+			BIN_DIR=$(CURDIR)/$(BIN_DIR)/apps/$${APP}/bin \
+			HL_TARGET=$(HL_TARGET) \
+			> /dev/null \
 			|| exit 1 ; \
 	done
 	@for APP in $(BENCHMARK_APPS); do \
 		echo ;\
-		echo Benchmarking $${APP}... ; \
+		echo Benchmarking $${APP} for ${HL_TARGET}... ; \
 		make -C $(ROOT_DIR)/apps/$${APP} \
-			$${APP}.benchmark \
+			$${APP}.benchmark${SUFFIX} \
 			HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
-			BIN=$(CURDIR)/$(BIN_DIR)/apps/$${APP}/bin \
-			|| exit 1 ; \
+			BIN_DIR=$(CURDIR)/$(BIN_DIR)/apps/$${APP}/bin \
+			HL_TARGET=$(HL_TARGET) ; \
 	done
 
 .PHONY: test_python2
