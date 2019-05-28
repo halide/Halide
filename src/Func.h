@@ -2087,7 +2087,7 @@ public:
      *
      * Halide will attempt to prove that for each site in the shared
      * memory, all use of that site for the purpose of backing this
-     * Func occurs earlier in time than all of use that site for the
+     * Func occurs earlier in time than all uses of that site for the
      * purpose of backing the argument Func. If this proof fails,
      * Halide will throw a compile-time error.
      *
