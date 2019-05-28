@@ -2041,6 +2041,7 @@ public:
     Func &compute_with(Stage s, VarOrRVar var, LoopAlignStrategy align = LoopAlignStrategy::Auto);
     Func &compute_with(LoopLevel loop_level, const std::vector<std::pair<VarOrRVar, LoopAlignStrategy>> &align);
     Func &compute_with(LoopLevel loop_level, LoopAlignStrategy align = LoopAlignStrategy::Auto);
+    // @}
 
     /** Compute all of this function once ahead of time. Reusing
      * the example in \ref Func::compute_at :
@@ -2160,10 +2161,12 @@ public:
      * two-dimensional reinterpretation of the same memory. The
      * store_with directive makes the definition of g a no-op.
      */
-    // @{
-    Func &store_with(Func f);
     Func &store_with(Func f, const std::vector<Expr> &where);
-    // @}
+
+    /** store_with using the same coordinates in this Func and the
+     * argument Func. `f.store_with(g)` is equivalent to
+     * `f.store_with(g, f.args())` */
+    Func &store_with(Func f);
 
     /** Use the halide_memoization_cache_... interface to store a
      *  computed version of this function across invocations of the
