@@ -2079,9 +2079,91 @@ public:
      */
     Func &compute_root();
 
-    // TODO: docs
+    /** Store this Func in the same piece of memory used to back some
+     * other Func given as an argument. This Func must be scheduled
+     * within the store_at level of the argument Func so that its
+     * realization is in scope.
+     *
+     * Halide will attempt to prove that for each site in the shared
+     * memory, all use of that site for the purpose of backing this
+     * Func occurs earlier in time than all of use that site for the
+     * purpose of backing the argument Func. If this proof fails,
+     * Halide will throw a compile-time error.
+     *
+     * By default each value of this Func is stored at the same
+     * coordinates of the argument Func. You can optionally specify an
+     * explicit coordinate mapping telling Halide where to store
+     * each value of the Func. This mapping must be one-to-one.
+     *
+     * This feature can be used to save memory by computing stages
+     * in-place. Consider:
+     \code
+     Func f, g;
+     Var x, y;
+     f(x) = ...;
+     g(x) = f(x) + 1;
+     f.compute_at(g, Var::outermost()).store_with(g);
+     g.compute_root();
+     \endcode
+     * The store_with directive instructs Halide to place f and g in
+     * the same piece of memory. This makes the definition of g an
+     * in-place increment. Halide is able to prove that this does not
+     * change the meaning of the algorithm. Note that f is scheduled
+     * to be within the storage level of g.
+     *
+     * Stencils can also be supported by scheduling things such that
+     * yet-to-be-consumed intermediate values of f are always stored
+     * in the yet-to-be-written region of g:
+     \code
+     Func f, g;
+     Var x, y;
+     f(x) = ...;
+     g(x) = f(x-1) + f(x+1);
+     f.compute_at(g, Var::outermost()).store_with(g, {x+1});
+     g.compute_root();
+     \endcode
+     *
+     * We used the optional second argument to store f(x) in the same
+     * site as g(x+1). This places f just ahead of g in the same
+     * buffer. Note that this will increase the size of g's
+     * allocation, which may mean g cannot be an output to the
+     * pipeline.
+     *
+     * This feature can also be used to elide copies. We can define a
+     * Func (h) that concatenates two other Funcs (f, g) without
+     * actually moving values around in memory by scheduling f and g
+     * such that they are already stored in the correct locations of
+     * h:
+     \code
+     Func f, g, h;
+     Var x, y;
+     f(x) = ...;
+     g(x) = ...;
+     h(x) = select(x < 100, f(x), g(x - 100));
+     f.compute_root().store_with(h);
+     g.compute_root().store_with(h, {x + 100});
+     \endcode
+     *
+     * With these store_with directions, the definition of h becomes a
+     * no-op. We can similarly express zero-copy reshape operations
+     * to change dimensionality:
+     \code
+     Func f, g, h;
+     Var x, y;
+     f(x) = x;
+     g(x, y) = f(x + 4*y);
+     f.compute_root().store_with(g, {x%4, x/4});
+     g.compute_root();
+     \endcode
+     *
+     * In this example, f is single-dimensional, and g is a
+     * two-dimensional reinterpretation of the same memory. The
+     * store_with directive makes the definition of g a no-op.
+     */
+    // @{
     Func &store_with(Func f);
     Func &store_with(Func f, const std::vector<Expr> &where);
+    // @}
 
     /** Use the halide_memoization_cache_... interface to store a
      *  computed version of this function across invocations of the
