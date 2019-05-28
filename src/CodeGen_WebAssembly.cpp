@@ -23,7 +23,7 @@ using std::vector;
 */
 
 CodeGen_WebAssembly::CodeGen_WebAssembly(Target t) : CodeGen_Posix(t) {
-    #if !(WITH_WEBASSEMBLY)
+    #if !defined(WITH_WEBASSEMBLY)
     user_error << "llvm build not configured with WebAssembly target enabled.\n";
     #endif
     user_assert(llvm_WebAssembly_enabled) << "llvm build not configured with WebAssembly target enabled.\n";

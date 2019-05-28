@@ -25,12 +25,12 @@ using namespace llvm;
 
 CodeGen_ARM::CodeGen_ARM(Target target) : CodeGen_Posix(target) {
     if (target.bits == 32) {
-        #if !(WITH_ARM)
+        #if !defined(WITH_ARM)
         user_error << "arm not enabled for this build of Halide.";
         #endif
         user_assert(llvm_ARM_enabled) << "llvm build not configured with ARM target enabled\n.";
     } else {
-        #if !(WITH_AARCH64)
+        #if !defined(WITH_AARCH64)
         user_error << "aarch64 not enabled for this build of Halide.";
         #endif
         user_assert(llvm_AArch64_enabled) << "llvm build not configured with AArch64 target enabled.\n";

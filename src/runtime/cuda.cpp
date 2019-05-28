@@ -1036,7 +1036,7 @@ WEAK int halide_cuda_wrap_device_ptr(void *user_context, struct halide_buffer_t 
     buf->device = device_ptr;
     buf->device_interface = &cuda_device_interface;
     buf->device_interface->impl->use_module();
-#if DEBUG_RUNTIME
+#ifdef DEBUG_RUNTIME
     if (!validate_device_pointer(user_context, buf)) {
         buf->device_interface->impl->release_module();
         buf->device = 0;
