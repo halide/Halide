@@ -1966,8 +1966,6 @@ private:
     HALIDE_NEVER_INLINE
     static void for_each_value_helper(Fn &&f, int d, bool innermost_strides_are_one,
                                       const for_each_value_task_dim<sizeof...(Ptrs)> *t, Ptrs... ptrs) {
-        // When we hit a low dimensionality, switch from runtime
-        // recursion to template recursion.
         if (d == -1) {
             f((*ptrs)...);
         } else if (d == 0) {
