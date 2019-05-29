@@ -153,7 +153,11 @@ protected:
         uint32_t emit_constant(const Type &t, const void *data);
         void scalarize(Expr e);
 
-        Scope<uint32_t> symbol_table;
+        // The scope contains both the symbol and its storage class
+        Scope<std::pair<uint32_t, uint32_t>> symbol_table;
+
+        // The workgroup size.  Must be the same for all kernels.
+        uint32_t workgroup_size[3];
 
         struct PhiNodeInputs {
             uint32_t ids[4];

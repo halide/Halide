@@ -156,7 +156,7 @@ uint32_t CodeGen_Vulkan_Dev::SPIRVEmitter::map_pointer_type(const Type &type, co
 }
 
 void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Variable *var) {
-    id = symbol_table.get(var->name);
+    id = symbol_table.get(var->name).first;
 }
 
 void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const IntImm *imm) {
@@ -499,7 +499,7 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Select *op) {
 }
 
 void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Load *op) {
-    debug(2) << "Vulkan codegen: Store: " << (Expr)op << "\n";
+    debug(2) << "Vulkan codegen: Load: " << (Expr)op << "\n";
     user_assert(is_one(op->predicate)) << "Predicated loads not supported by the Vulkan backend\n";
 
     // TODO: implement vector loads
@@ -509,11 +509,13 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Load *op) {
     internal_assert(op->param.defined() && op->param.is_buffer());
 
     // Construct the pointer to read from
-    uint32_t base_id = symbol_table.get(op->name);
+    auto id_and_storage_class = symbol_table.get(op->name);
+    uint32_t base_id = id_and_storage_class.first;
+    uint32_t storage_class = id_and_storage_class.second;
 
     op->index.accept(this);
     uint32_t index_id = id;
-    uint32_t ptr_type_id = map_pointer_type(op->type, SpvStorageClassUniform);
+    uint32_t ptr_type_id = map_pointer_type(op->type, storage_class);
     uint32_t access_chain_id = next_id++;
     auto zero = 0;
     add_instruction(SpvOpInBoundsAccessChain, {ptr_type_id, access_chain_id, base_id,
@@ -539,11 +541,13 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Store *op) {
     uint32_t value_id = id;
 
     // Construct the pointer to write to
-    uint32_t base_id = symbol_table.get(op->name);
+    auto id_and_storage_class = symbol_table.get(op->name);
+    uint32_t base_id = id_and_storage_class.first;
+    uint32_t storage_class = id_and_storage_class.second;
 
     op->index.accept(this);
     uint32_t index_id = id;
-    uint32_t ptr_type_id = map_pointer_type(op->value.type(), SpvStorageClassUniform);
+    uint32_t ptr_type_id = map_pointer_type(op->value.type(), storage_class);
     uint32_t access_chain_id = next_id++;
     auto zero = 0;
     add_instruction(SpvOpInBoundsAccessChain, {ptr_type_id, access_chain_id, base_id,
@@ -555,13 +559,13 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Store *op) {
 
 void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Let *let) {
     let->value.accept(this);
-    ScopedBinding<uint32_t> binding(symbol_table, let->name, id);
+    ScopedBinding<std::pair<uint32_t, uint32_t>> binding(symbol_table, let->name, {id, SpvStorageClassFunction});
     let->body.accept(this);
 }
 
 void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const LetStmt *let) {
     let->value.accept(this);
-    ScopedBinding<uint32_t> binding(symbol_table, let->name, id);
+    ScopedBinding<std::pair<uint32_t, uint32_t>> binding(symbol_table, let->name, {id, SpvStorageClassFunction});
     let->body.accept(this);
     // TODO: Figure out undef here?
     id = 0xffffffff;
@@ -607,6 +611,15 @@ std::pair<std::string, uint32_t> simt_intrinsic(const std::string &name) {
     internal_error << "simt_intrinsic called on bad variable name: " << name << "\n";
     return {"", -1};
 }
+int thread_loop_workgroup_index(const std::string &name) {
+    std::string ids[] = {".__thread_id_x",
+                         ".__thread_id_y",
+                         ".__thread_id_z"};
+    for (size_t i = 0; i < sizeof(ids) / sizeof(std::string); i++) {
+        if (ends_with(name, ids[i])) { return i; }
+    }
+    return -1;
+}
 } // anonymous namespace
 
 void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const For *op) {
@@ -618,17 +631,30 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const For *op) {
         // This should always be true at this point in codegen
         internal_assert(is_zero(op->min));
 
+        // Save & validate the workgroup size
+        int idx = thread_loop_workgroup_index(op->name);
+        if (idx >= 0) {
+            const IntImm *wsize = op->extent.as<IntImm>();
+            user_assert(wsize != nullptr) << "Vulkan requires statically-known workgroup size.\n";
+            uint32_t new_wsize = wsize->value;
+            user_assert(workgroup_size[idx] == 0 || workgroup_size[idx] == new_wsize) <<
+              "Vulkan requires all kernels have the same workgroup size, but two different ones "
+              "were encountered " << workgroup_size[idx] << " and " << new_wsize <<
+              " in dimension " << idx << "\n";
+            workgroup_size[idx] = new_wsize;
+        }
+
         auto intrinsic = simt_intrinsic(op->name);
 
 
         // Intrinsics are inserted when adding the kernel
         internal_assert(symbol_table.contains(intrinsic.first));
 
-        uint32_t intrinsic_id = symbol_table.get(intrinsic.first);
+        uint32_t intrinsic_id = symbol_table.get(intrinsic.first).first;
         uint32_t gpu_var_id = next_id++;
         add_instruction(SpvOpCompositeExtract, {map_type(UInt(32)), gpu_var_id, intrinsic_id, intrinsic.second});
         {
-            ScopedBinding<uint32_t> binding(symbol_table, op->name, gpu_var_id);
+            ScopedBinding<std::pair<uint32_t, uint32_t>> binding(symbol_table, op->name, {gpu_var_id, SpvStorageClassUniform});
             op->body.accept(this);
         }
 
@@ -675,7 +701,7 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const For *op) {
         add_instruction(SpvOpLabel, { body_label_id });
 
         {
-            ScopedBinding<uint32_t> binding(symbol_table, op->name, cur_index_id);
+            ScopedBinding<std::pair<uint32_t, uint32_t>> binding(symbol_table, op->name, {cur_index_id, SpvStorageClassFunction});
 
             op->body.accept(this);
         }
@@ -851,7 +877,11 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::add_kernel(Stmt s,
 
     // Add function definition
     // TODO: can we use one of the function control annotations?
-    // TODO: We may need to use decorations to define the localsize
+
+    // We'll discover the workgroup size as we traverse the kernel
+    workgroup_size[0] = 0;
+    workgroup_size[1] = 0;
+    workgroup_size[2] = 0;
 
     // Declare the function type.  TODO: should this be unique?
     uint32_t function_type_id = next_id++;
@@ -887,7 +917,7 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::add_kernel(Stmt s,
 
         add_instruction(spir_v_types, SpvOpVariable, {intrinsic_type_id, intrinsic_id, SpvStorageClassInput});
         add_instruction(SpvOpLoad, {map_type(Type(Type::UInt, 32, 3)), intrinsic_loaded_id, intrinsic_id});
-        symbol_table.push(intrinsic, intrinsic_loaded_id);
+        symbol_table.push(intrinsic, {intrinsic_loaded_id, SpvStorageClassInput});
 
         // Annotate that this is the specific builtin
         auto built_in_kind = starts_with(intrinsic, "Workgroup") ? SpvBuiltInWorkgroupId : SpvBuiltInLocalInvocationId;
@@ -931,7 +961,7 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::add_kernel(Stmt s,
                                                           param_ptr_id, SpvStorageClassUniform});
             add_instruction(SpvOpLoad, {map_type(args[i].type), param_id, param_ptr_id});
         }
-        symbol_table.push(args[i].name, param_id);
+        symbol_table.push(args[i].name, {param_id, SpvStorageClassUniform});
     }
 
 
@@ -945,6 +975,11 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::add_kernel(Stmt s,
     auto it = spir_v_kernels.begin() + index;
     spir_v_kernels.insert(it, spir_v_kernel_allocations.begin(), spir_v_kernel_allocations.end());
     spir_v_kernel_allocations.clear();
+
+    // Add workgroup size to execution mode
+    add_instruction(spir_v_execution_modes, SpvOpExecutionMode,
+                    {current_function_id, SpvExecutionModeLocalSize,
+                     workgroup_size[0], workgroup_size[1], workgroup_size[2]});
 
     // Pop scope
     for (auto arg: args) {
