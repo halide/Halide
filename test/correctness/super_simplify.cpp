@@ -316,6 +316,28 @@ void parse_model(char **cursor, char *end, map<string, Expr> *bindings) {
     expect(cursor, end, ")");
 }
 
+
+class FindVars : public IRVisitor {
+    Scope<> lets;
+
+    void visit(const Variable *op) override {
+        if (!lets.contains(op->name)) {
+            vars.insert(op->name);
+        }
+    }
+
+    void visit(const Let *op) override {
+        op->value.accept(this);
+        {
+            ScopedBinding<> bind(lets, op->name);
+            op->body.accept(this);
+        }
+    }
+public:
+    std::set<string> vars;
+};
+
+
 bool satisfy(Expr e, map<string, Expr> *bindings) {
 
     e = simplify(e);
@@ -331,25 +353,7 @@ bool satisfy(Expr e, map<string, Expr> *bindings) {
         abort();
     }
 
-    class FindVars : public IRVisitor {
-        Scope<> lets;
-
-        void visit(const Variable *op) override {
-            if (!lets.contains(op->name)) {
-                vars.insert(op->name);
-            }
-        }
-
-        void visit(const Let *op) override {
-            op->value.accept(this);
-            {
-                ScopedBinding<> bind(lets, op->name);
-                op->body.accept(this);
-            }
-        }
-    public:
-        std::set<string> vars;
-    } find_vars;
+    FindVars find_vars;
 
     e.accept(&find_vars);
 
@@ -409,7 +413,12 @@ Expr super_simplify(Expr e, int size) {
         e = select(e, 1, 0);
     }
 
-    vector<Expr> leaves = {v0, v1, v2, v3, v4, v5};
+    FindVars find_vars;
+    e.accept(&find_vars);
+    vector<Expr> leaves;
+    for (auto v : find_vars.vars) {
+        leaves.push_back(Variable::make(Int(32), v));
+    }
 
     vector<map<string, Expr>> counterexamples;
 
@@ -425,8 +434,8 @@ Expr super_simplify(Expr e, int size) {
     }
 
     map<string, Expr> all_vars_zero;
-    for (auto &e : leaves) {
-        all_vars_zero[e.as<Variable>()->name] = 0;
+    for (auto v : find_vars.vars) {
+        all_vars_zero[v] = 0;
     }
 
     Expr program = interpreter_expr(leaves, symbolic_opcodes);
