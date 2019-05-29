@@ -1968,7 +1968,6 @@ private:
                                       const for_each_value_task_dim<sizeof...(Ptrs)> *t, Ptrs... ptrs) {
         // When we hit a low dimensionality, switch from runtime
         // recursion to template recursion.
-        asm volatile ("# Hi");
         if (d == -1) {
             f((*ptrs)...);
         } else if (d == 0) {
