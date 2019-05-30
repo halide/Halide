@@ -417,92 +417,92 @@ public:
         result = -2048;
     }
 protected:
-  void visit(const IntImm *op) {
-    result = op->value;
-  }
-  void visit(const UIntImm *op) {
-    result = op->value;
-  }
-  void visit(const FloatImm *op) {
-    result = op->value;
-  }
-  void visit(const Variable* op) {
-    if (bindings.count(op->name))
-      result = interpret(bindings[op->name]);
-    else
-      std::cerr << "Unbound variable " << op->name << "!\n";
-  }
-  void visit(const Add* op) {
-    result = interpret(op->a) + interpret(op->b);
-  }
-  void visit(const Sub* op) {
-    result = interpret(op->a) - interpret(op->b);
-  }
-  void visit(const Mul* op) {
-    result = interpret(op->a) * interpret(op->b);
-  }
-  void visit(const Div* op) {
-    int denom = interpret(op->b);
-    if (denom == 0)
-      result = 0;
-    else
-      result = interpret(op->a) / denom; 
-  }
-  void visit(const Mod* op) {
-    result = interpret(op->a) % interpret(op->b);
-  }
-  void visit(const Min* op) {
-    int a = interpret(op->a);
-    int b = interpret(op->b);
-    if (a < b)
-      result = a;
-    else
-      result = b;
-  }
-  void visit(const Max* op) {
-    int a = interpret(op->a);
-    int b = interpret(op->b);
-    if (a > b)
-      result = a;
-    else
-      result = b;
-  }
-  void visit(const EQ* op) {
-    result = interpret(op->a) == interpret(op->b);
-  }
-  void visit(const NE* op) {
-    result = interpret(op->a) != interpret(op->b);
-  }
-  void visit(const LT* op) {
-    result = interpret(op->a) < interpret(op->b);
-  }
-  void visit(const LE* op) {
-    result = interpret(op->a) <= interpret(op->b);
-  }
-  void visit(const GT* op) {
-    result = interpret(op->a) > interpret(op->b);
-  }
-  void visit(const GE* op) {
-    result = interpret(op->a) >= interpret(op->b);
-  }
-  void visit(const And* op) {
-    result = interpret(op->a) && interpret(op->b);
-  }
-  void visit(const Or* op) {
-    result = interpret(op->a) || interpret(op->b);
-  }
-  void visit(const Select* op) {
-    if (interpret(op->condition) != 0) { // Not sure what the truthy value is
-      result = interpret(op->true_value);
-    } else {
-      result = interpret(op->false_value);
-    }
-  }
-  void visit(const Let* op) {
-    bindings[op->name] = interpret(op->value);
-    result = interpret(op->body);
-    bindings.erase(op->name);
-  }
+      void visit(const IntImm *op) {
+        result = op->value;
+      }
+      void visit(const UIntImm *op) {
+        result = op->value;
+      }
+      void visit(const FloatImm *op) {
+        result = op->value;
+      }
+      void visit(const Variable* op) {
+        if (bindings.count(op->name))
+            result = interpret(bindings[op->name]);
+        else
+            std::cerr << "Unbound variable " << op->name << "!\n";
+      }
+      void visit(const Add* op) {
+        result = interpret(op->a) + interpret(op->b);
+      }
+      void visit(const Sub* op) {
+        result = interpret(op->a) - interpret(op->b);
+      }
+      void visit(const Mul* op) {
+        result = interpret(op->a) * interpret(op->b);
+      }
+      void visit(const Div* op) {
+        int denom = interpret(op->b);
+        if (denom == 0)
+            result = 0;
+        else
+            result = interpret(op->a) / denom; 
+      }
+      void visit(const Mod* op) {
+        result = interpret(op->a) % interpret(op->b);
+      }
+      void visit(const Min* op) {
+        int a = interpret(op->a);
+        int b = interpret(op->b);
+        if (a < b)
+            result = a;
+        else
+            result = b;
+      }
+      void visit(const Max* op) {
+        int a = interpret(op->a);
+        int b = interpret(op->b);
+        if (a > b)
+            result = a;
+        else
+            result = b;
+      }
+      void visit(const EQ* op) {
+        result = interpret(op->a) == interpret(op->b);
+      }
+      void visit(const NE* op) {
+        result = interpret(op->a) != interpret(op->b);
+      }
+      void visit(const LT* op) {
+        result = interpret(op->a) < interpret(op->b);
+      }
+      void visit(const LE* op) {
+        result = interpret(op->a) <= interpret(op->b);
+      }
+      void visit(const GT* op) {
+        result = interpret(op->a) > interpret(op->b);
+      }
+      void visit(const GE* op) {
+        result = interpret(op->a) >= interpret(op->b);
+      }
+      void visit(const And* op) {
+        result = interpret(op->a) && interpret(op->b);
+      }
+      void visit(const Or* op) {
+        result = interpret(op->a) || interpret(op->b);
+      }
+      void visit(const Select* op) {
+        if (interpret(op->condition) != 0) { // Not sure what the truthy value is
+            result = interpret(op->true_value);
+        } else {
+            result = interpret(op->false_value);
+        }
+      }
+      void visit(const Let* op) {
+        bindings[op->name] = interpret(op->value);
+        result = interpret(op->body);
+        bindings.erase(op->name);
+      }
 };
 
 Var v0("v0"), v1("v1"), v2("v2"), v3("v3"), v4("v4"), v5("v5");
