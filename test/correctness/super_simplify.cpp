@@ -553,31 +553,14 @@ Expr super_simplify(Expr e, int size) {
         // First sythesize a counterexample to the current program.
         Expr current_program_works = substitute(current_program, program_works);
         map<string, Expr> counterexample = all_vars_zero;
-        if (!satisfy(!current_program_works, &counterexample)) {
-            // Woo!
-            Expr result = simplify(substitute(current_program, program));
-            if (was_bool) {
-                result = simplify(result == 1);
-            }
-            std::cout << "*** Success: " << orig << " -> " << result << "\n\n";
-            return result;
-        } else {
-            std::cout << "Counterexample: ";
-            const char *prefix = "";
-            for (auto it : counterexample) {
-                std::cout << prefix << it.first << " = " << it.second;
-                prefix = ", ";
-            }
-            std::cout << "\n";
-            counterexamples.push_back(counterexample);
-        }
 
-        // If we found a counterexample, lets do some random executions to get
-        // more
+        // Use concrete evaluations before trying to check if it's correct
+        bool all_true = true;
+        int num_found = 0;
         for (int i=0; i<5; i++) {
-            map<string, Expr> rand_binding = all_vars_zero;
-            for (auto it : rand_binding)
-              rand_binding[it.first] = random_int(rng);
+          map<string, Expr> rand_binding = all_vars_zero;
+          for (auto it : rand_binding)
+            rand_binding[it.first] = random_int(rng);
             // std::cout << "Using binding : "; 
             // const char* prefix = "";
             // for (auto it : rand_binding) {
@@ -587,10 +570,38 @@ Expr super_simplify(Expr e, int size) {
             // std::cout << "\n";
             interp.reset_with_bindings(rand_binding);
             int ret = interp.interpret(current_program_works);
-            // std::cout << "Execution yields: " << ret << "\n";
-            if (!ret)
-              counterexamples.push_back(rand_binding);
+            //std::cout << "Execution yields: " << ret << "\n";
+            if (!ret) {
+                counterexamples.push_back(rand_binding);
+                all_true = false;
+                // For small problems, we probably only want to add a couple
+                // counterexamples at a time
+                if (num_found >= 2)
+                    break;
+            }
         }
+
+        if (all_true) {
+            if (!satisfy(!current_program_works, &counterexample)) {
+                // Woo!
+                Expr result = simplify(substitute(current_program, program));
+                if (was_bool) {
+                    result = simplify(result == 1);
+                }
+                std::cout << "*** Success: " << orig << " -> " << result << "\n\n";
+                return result;
+            } else {
+                std::cout << "Counterexample: ";
+                const char *prefix = "";
+                for (auto it : counterexample) {
+                    std::cout << prefix << it.first << " = " << it.second;
+                    prefix = ", ";
+                }
+                std::cout << "\n";
+                counterexamples.push_back(counterexample);
+            }
+        }
+
 
         // Now synthesize a program that fits all the counterexamples
         Expr works_on_counterexamples = const_true();
