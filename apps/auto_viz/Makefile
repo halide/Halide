@@ -1,53 +1,68 @@
 include ../support/Makefile.inc
 
-VARIANTS = \
-naive_up naive_down \
-lessnaive_up lessnaive_down \
-complex_up complex_down
+VARIANTS = naive lessnaive complex
 
-LIBRARIES = $(foreach V,$(VARIANTS),$(BIN)/auto_viz_demo_$(V).a)
-OUTPUTS = $(foreach V,$(VARIANTS),$(BIN)/out_$(V).png)
-
-TRACE_TARGET=$(HL_TARGET)-trace_all
+OUTPUTS = $(foreach V,$(VARIANTS),$(BIN)/$(HL_TARGET)/out_$(V)_up.png $(BIN)/$(HL_TARGET)/out_$(V)_down.png)
 
 all: $(OUTPUTS)
 
-$(BIN)/auto_viz_demo.generator: auto_viz_demo_generator.cpp $(GENERATOR_DEPS)
+$(GENERATOR_BIN)/auto_viz_demo.generator: auto_viz_demo_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
-$(BIN)/auto_viz_demo_%.a: $(BIN)/auto_viz_demo.generator
-	@mkdir -p $(@D)
-	$^ -g auto_viz_demo -o $(BIN) -f auto_viz_demo_$* \
-	target=$(TRACE_TARGET)-no_runtime \
-	schedule_type=$$(echo $* | cut -d_ -f1) \
-	upsample=$$(echo $* | cut -d_ -f2 | sed 's/up/true/;s/down/false/')
+# Can't have multiple wildcards in Make, so we'll use a macro
+# to stamp out all the rules we need
+define GEN_RULES
+$$(BIN)/%/auto_viz_demo_$(1)_up.a: $$(GENERATOR_BIN)/auto_viz_demo.generator
+	@mkdir -p $$(@D)
+	$$^ -g auto_viz_demo -o $$(@D) -f auto_viz_demo_$(1)_up \
+		target=$$*-no_runtime-trace_all \
+		schedule_type=$$$$(echo $(1) | cut -d_ -f1) \
+		upsample=true
 
-$(BIN)/runtime.a: $(BIN)/auto_viz_demo.generator
-	@mkdir -p $(@D)
-	$^ -r runtime -o $(BIN) target=$(TRACE_TARGET)
+$$(BIN)/%/auto_viz_demo_$(1)_down.a: $$(GENERATOR_BIN)/auto_viz_demo.generator
+	@mkdir -p $$(@D)
+	$$^ -g auto_viz_demo -o $$(@D) -f auto_viz_demo_$(1)_down \
+		target=$$*-no_runtime-trace_all \
+		schedule_type=$$$$(echo $(1) | cut -d_ -f1) \
+		upsample=false
 
-$(BIN)/auto_viz_demo: auto_viz_demo.cpp $(LIBRARIES) $(BIN)/runtime.a
-	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -I $(BIN) $^ -o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS)
+$$(BIN)/%/out_$(1)_up.png: $$(BIN)/%/auto_viz_demo
+	@mkdir -p $$(@D)
+	@echo Creating out_$(1)_up.png...
+	@$$< \
+		$$(IMAGES)/rgb_small.png \
+		$$@ \
+		-s $$$$(echo $(1) | cut -d_ -f1) \
+		-f 4.0
 
-$(BIN)/out_%_up.png: $(BIN)/auto_viz_demo
-	@mkdir -p $(@D)
-	@echo Creating out_$*_up.png...
-	@$< \
-	$(IMAGES)/rgb_small.png \
-	$(BIN)/out_$*_up.png \
-	-s $$(echo $* | cut -d_ -f1) \
-	-f 4.0
+$$(BIN)/%/out_$(1)_down.png: $$(BIN)/%/auto_viz_demo
+	@mkdir -p $$(@D)
+	@echo Creating out_$(1)_down.png...
+	@$$< \
+		$$(IMAGES)/rgb.png \
+		$$@ \
+		-s $$$$(echo $(1) | cut -d_ -f1) \
+		-f 0.5
 
-$(BIN)/out_%_down.png: $(BIN)/auto_viz_demo
+$$(BIN)/%/viz_$(1).mp4: $$(BIN)/%/auto_viz_demo ../support/viz_auto.sh ../../bin/HalideTraceViz
+	@mkdir -p $$(@D)
+	HL_AVCONV=$$(HL_AVCONV) bash ../support/viz_auto.sh \
+		"$$< $$(IMAGES)/rgb_small.png /tmp/$(1).png -s $(1) -f 0.5 " \
+		"../../bin/HalideTraceViz --auto_layout" \
+		$$@
+endef
+
+$(foreach V,$(VARIANTS),$(eval $(call GEN_RULES,$(V))))
+
+$(BIN)/%/runtime.a: $(GENERATOR_BIN)/auto_viz_demo.generator
 	@mkdir -p $(@D)
-	@echo Creating out_$*_down.png...
-	@$< \
-	$(IMAGES)/rgb.png \
-	$(BIN)/out_$*_down.png \
-	-s $$(echo $* | cut -d_ -f1) \
-	-f 0.5
+	$^ -r runtime -o $(@D) target=$*
+
+LIBRARIES = $(foreach V,$(VARIANTS),$(BIN)/%/auto_viz_demo_$(V)_up.a $(BIN)/%/auto_viz_demo_$(V)_down.a)
+$(BIN)/%/auto_viz_demo: auto_viz_demo.cpp $(BIN)/%/runtime.a $(LIBRARIES)
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) -I$(BIN)/$* $^ -o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS)
 
 clean:
 	rm -rf $(BIN)
@@ -57,17 +72,10 @@ test: all
 ../../bin/HalideTraceViz: ../../util/HalideTraceViz.cpp
 	$(MAKE) -C ../../ bin/HalideTraceViz
 
-.SECONDARY:
-
-$(BIN)/viz_%.mp4: $(BIN)/auto_viz_demo ../support/viz_auto.sh ../../bin/HalideTraceViz
-	@mkdir -p $(@D)
-	HL_AVCONV=$(HL_AVCONV) bash ../support/viz_auto.sh \
-		"$< $(IMAGES)/rgb_small.png /tmp/$*.png -s $* -f 0.5 " \
-		"../../bin/HalideTraceViz --auto_layout" \
-		$@
-
 # make viz_naive
 # make viz_lessnaive
 # make viz_complex
-viz_%: $(BIN)/viz_%.mp4
+viz_%: $(BIN)/$(HL_TARGET)/viz_%.mp4
 	$(HL_VIDEOPLAYER) $^
+
+viz: viz_naive viz_lessnaive viz_complex

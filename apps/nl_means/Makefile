@@ -1,30 +1,29 @@
 include ../support/Makefile.inc
 
-BIN ?= bin
 
-all: $(BIN)/process
+all: $(BIN)/$(HL_TARGET)/process
 
-$(BIN)/nl_means.generator: nl_means_generator.cpp $(GENERATOR_DEPS)
-	@-mkdir -p $(BIN)
-	$(CXX) $(CXXFLAGS) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS)
+$(GENERATOR_BIN)/nl_means.generator: nl_means_generator.cpp $(GENERATOR_DEPS)
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS)
 
-$(BIN)/nl_means.a: $(BIN)/nl_means.generator
-	@-mkdir -p $(BIN)
-	$^ -g nl_means -o $(BIN) -f nl_means target=$(HL_TARGET) auto_schedule=false
+$(BIN)/%/nl_means.a: $(GENERATOR_BIN)/nl_means.generator
+	@mkdir -p $(@D)
+	$^ -g nl_means -o $(@D) -f nl_means target=$* auto_schedule=false
 
-$(BIN)/nl_means_auto_schedule.a: $(BIN)/nl_means.generator
-	@-mkdir -p $(BIN)
-	$^ -g nl_means -o $(BIN) -f nl_means_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true
+$(BIN)/%/nl_means_auto_schedule.a: $(GENERATOR_BIN)/nl_means.generator
+	@mkdir -p $(@D)
+	$^ -g nl_means -o $(@D) -f nl_means_auto_schedule target=$*-no_runtime auto_schedule=true
 
-$(BIN)/process: process.cpp $(BIN)/nl_means.a $(BIN)/nl_means_auto_schedule.a
-	@-mkdir -p $(BIN)
-	$(CXX) $(CXXFLAGS) -I$(BIN) -Wall -O3 $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS)
+$(BIN)/%/process: process.cpp $(BIN)/%/nl_means.a $(BIN)/%/nl_means_auto_schedule.a
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -Wall $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS)
 
-$(BIN)/out.png: $(BIN)/process
-	@-mkdir -p $(BIN)
-	$(BIN)/process $(IMAGES)/rgb.png 7 7 0.12 10 $(BIN)/out.png
+$(BIN)/%/out.png: $(BIN)/%/process
+	@mkdir -p $(@D)
+	$< $(IMAGES)/rgb.png 7 7 0.12 10 $@
 
 clean:
 	rm -rf $(BIN)
 
-test: $(BIN)/out.png
+test: $(BIN)/$(HL_TARGET)/out.png

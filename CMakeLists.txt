@@ -116,8 +116,8 @@ check_tool_exists(clang "${CLANG}")
 if (NOT "${LLVM_VERSION}" MATCHES "^[0-9][0-9]$")
   message(FATAL_ERROR "LLVM_VERSION not specified correctly. Must be <major><minor> E.g. LLVM 7.0 is \"70\"")
 endif()
-if (LLVM_VERSION LESS 60)
-  message(FATAL_ERROR "LLVM version must be 6.0 or newer")
+if (LLVM_VERSION LESS 70)
+  message(FATAL_ERROR "LLVM version must be 7.0 or newer")
 endif()
 
 function(check_llvm_target TARGET HAS_TARGET)
@@ -143,6 +143,7 @@ check_llvm_target(Hexagon WITH_HEXAGON 40)
 check_llvm_target(Mips WITH_MIPS)
 check_llvm_target(PowerPC WITH_POWERPC)
 check_llvm_target(NVPTX WITH_NVPTX)
+check_llvm_target(RISCV WITH_RISCV)
 # AMDGPU target is WIP
 check_llvm_target(AMDGPU WITH_AMDGPU)
 
@@ -156,6 +157,7 @@ option(TARGET_MIPS "Include MIPS target" ${WITH_MIPS})
 option(TARGET_POWERPC "Include POWERPC target" ${WITH_POWERPC})
 option(TARGET_PTX "Include PTX target" ${WITH_NVPTX})
 option(TARGET_AMDGPU "Include AMDGPU target" ${WITH_AMDGPU})
+option(TARGET_RISCV "Include RISCV target" ${WITH_RISCV})
 option(TARGET_OPENCL "Include OpenCL-C target" ON)
 option(TARGET_OPENGL "Include OpenGL/GLSL target" ON)
 option(TARGET_OPENGLCOMPUTE "Include OpenGLCompute target" ON)
@@ -173,6 +175,13 @@ endif()
 
 if (HALIDE_ENABLE_RTTI AND NOT LLVM_ENABLE_RTTI)
   message(FATAL_ERROR "Can't enable RTTI. LLVM was compiled without it")
+endif()
+
+# Needed for 'make distrib' to properly fill in the .tpl files
+if (HALIDE_ENABLE_RTTI)
+  set(HALIDE_RTTI_RAW 1)
+else()
+  set(HALIDE_RTTI_RAW 0)
 endif()
 
 function(halide_project name folder)
@@ -309,7 +318,7 @@ define_test_group(run_tests)
 # TODO(srj): add test_avx512 variant
 # TODO(srj): add test_python variant
 # TODO(srj): add test_apps variant
-function(add_test TARGET)
+function(add_halide_test TARGET)
   set(options EXPECT_FAILURE)
   set(oneValueArgs WORKING_DIRECTORY)
   set(multiValueArgs GROUPS)
@@ -342,12 +351,13 @@ function(add_test TARGET)
     # It's probably a custom target or a group: just depend on it.
     add_custom_target("${EXEC_NAME}" DEPENDS "${TARGET}")
   else()
-    message(FATAL_ERROR "add_test(): unsupported type ${TARGET_TYPE} for ${TARGET}")
+    message(FATAL_ERROR "add_halide_test(): unsupported type ${TARGET_TYPE} for ${TARGET}")
   endif()
   set_target_properties("${EXEC_NAME}" PROPERTIES EXCLUDE_FROM_ALL TRUE)
   foreach(GROUP ${args_GROUPS})
     add_dependencies("${GROUP}" "${EXEC_NAME}")
   endforeach()
+  add_test(NAME ${TARGET} COMMAND ${COMMAND})
 
 endfunction()
 
@@ -367,6 +377,7 @@ add_subdirectory(src)
 option(WITH_TESTS "Build tests" ON)
 if (WITH_TESTS)
   message(STATUS "Building tests enabled")
+  enable_testing()
   add_subdirectory(test)
 else()
   message(STATUS "Building tests disabled")
@@ -424,10 +435,11 @@ install(FILES
         )
 
 install(DIRECTORY tutorial
-        DESTINATION tutorial
+        DESTINATION .
         FILES_MATCHING
+        PATTERN "*.cpp"
         PATTERN "*.h"
-        PATTERN "*.sh"
+        PATTERN "lesson_*.sh"
         PATTERN "*.gif"
         PATTERN "*.jpg"
         PATTERN "*.mp4"

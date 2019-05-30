@@ -15,12 +15,14 @@ RegisteredFilter *registered_filters = nullptr;
 
 extern "C" void halide_register_argv_and_metadata(
     int (*filter_argv_call)(void **),
-    const struct halide_filter_metadata_t *filter_metadata) {
+    const struct halide_filter_metadata_t *filter_metadata,
+    const char * const *extra_key_value_pairs) {
 
     auto *rf = new RegisteredFilter();
     rf->next = registered_filters;
     rf->filter_argv_call = filter_argv_call;
     rf->filter_metadata = filter_metadata;
+    // RunGen ignores extra_key_value_pairs
     registered_filters = rf;
 }
 
@@ -49,7 +51,8 @@ Arguments:
         some_int=42 some_float=3.1415
 
     You can also use the text `default` or `estimate` to use the default or
-    estimate value of the given input.
+    estimate value of the given input, respectively. (You can join these by
+    commas to give default-then-estimate or estimate-then-default behaviors.)
 
     Buffer inputs and outputs are specified by pathname:
 
@@ -101,7 +104,7 @@ Arguments:
         the --output_extents flag.)
 
         In place of [NUM,NUM,...] for boundary, you may specify 'estimate';
-        this will use the esimated bounds specified in the code.
+        this will use the estimated bounds specified in the code.
 
 Flags:
 
@@ -151,11 +154,16 @@ Flags:
 
     --default_input_buffers=VALUE:
         Specify the value for all otherwise-unspecified buffer inputs, in the
-        same syntax in use above.
+        same syntax in use above. If you omit =VALUE, "zero:auto" will be used.
 
     --default_input_scalars=VALUE:
         Specify the value for all otherwise-unspecified scalar inputs, in the
-        same syntax in use above.
+        same syntax in use above. If you omit =VALUE, "estimate,default"
+        will be used.
+
+    --parsable_output:
+        Final output is emitted in an easy-to-parse output (one value per line),
+        rather than easy-for-humans.
 
 Known Issues:
 
@@ -396,6 +404,15 @@ int main(int argc, char **argv) {
                     fail() << "Invalid value for flag: " << flag_name;
                 }
                 r.set_quiet(quiet);
+            } else if (flag_name == "parsable_output") {
+                if (flag_value.empty()) {
+                    flag_value = "true";
+                }
+                bool parsable_output;
+                if (!parse_scalar(flag_value, &parsable_output)) {
+                    fail() << "Invalid value for flag: " << flag_name;
+                }
+                r.set_parsable_output(parsable_output);
             } else if (flag_name == "describe") {
                 if (flag_value.empty()) {
                     flag_value = "true";
@@ -435,7 +452,7 @@ int main(int argc, char **argv) {
             } else if (flag_name == "default_input_scalars") {
                 default_input_scalars = flag_value;
                 if (default_input_scalars.empty()) {
-                    default_input_scalars = "default";
+                    default_input_scalars = "estimate,default";
                 }
             } else if (flag_name == "output_extents") {
                 user_specified_output_shape = flag_value;

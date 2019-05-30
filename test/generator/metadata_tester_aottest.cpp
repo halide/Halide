@@ -326,6 +326,7 @@ void check_metadata(const halide_filter_metadata_t &md, bool expect_ucon_at_0) {
     // will contain "x86" or "arm".
     if (!strstr(md.target, "x86") &&
         !strstr(md.target, "powerpc") &&
+        !strstr(md.target, "wasm") &&
         !strstr(md.target, "arm")) {
         std::cerr << "Expected x86 or arm, Actual " << md.target << "\n";
         exit(-1);
@@ -939,6 +940,28 @@ void check_metadata(const halide_filter_metadata_t &md, bool expect_ucon_at_0) {
           nullptr,
         },
         {
+          "buffer_f16_typed",
+          halide_argument_kind_input_buffer,
+          1,
+          halide_type_t(halide_type_float, 16),
+          nullptr,
+          nullptr,
+          nullptr,
+          nullptr,
+          nullptr,
+        },
+        {
+          "buffer_f16_untyped",
+          halide_argument_kind_input_buffer,
+          1,
+          halide_type_t(halide_type_float, 16),
+          nullptr,
+          nullptr,
+          nullptr,
+          nullptr,
+          nullptr,
+        },
+        {
           "output.0",
           halide_argument_kind_output_buffer,
           3,
@@ -1289,6 +1312,9 @@ int main(int argc, char **argv) {
 
     Buffer<uint8_t> input = make_image<uint8_t>();
     Buffer<float> input_array[2] = {make_image<float>(), make_image<float>()};
+    // TODO: there is no runtime type for float16, so we'll declare this using a halide_type_t
+    const halide_type_t halide_type_float16 = halide_type_t(halide_type_float, 16, 1);
+    Buffer<> input_f16 = Buffer<>(halide_type_float16, kSize);
 
     Buffer<float> output0(kSize, kSize, 3);
     Buffer<float> output1(kSize, kSize, 3);
@@ -1347,6 +1373,8 @@ int main(int argc, char **argv) {
         input_array[0], input_array[1],  // Input<Buffer<float>[2]>
         input_array[0], input_array[1],  // Input<Buffer<float>[2]>
         input_array[0], input_array[1],  // Input<Buffer<float>[2]>
+        input_f16,         // Input<Buffer<float16>>
+        input_f16,         // Input<Buffer<float16>>
         output0, output1,  // Output<Tuple(Func, Func)>
         typed_output_buffer,    // Output<Buffer<float>>(3)
         type_only_output_buffer,    // Output<Buffer<float>>
@@ -1406,6 +1434,8 @@ int main(int argc, char **argv) {
         input_array[0], input_array[1],  // Input<Buffer<float>[2]>
         input_array[0], input_array[1],  // Input<Buffer<float>[2]>
         input_array[0], input_array[1],  // Input<Buffer<float>[2]>
+        input_f16,         // Input<Buffer<float16>>
+        input_f16,         // Input<Buffer<float16>>
         output0, output1,  // Output<Tuple(Func, Func)>
         typed_output_buffer,    // Output<Buffer<float>>(3)
         type_only_output_buffer,    // Output<Buffer<float>>

@@ -145,7 +145,7 @@ public:
     }
 
     void msan_annotate_is_initialized() {
-        halide_msan_annotate_memory_is_initialized(user_context, buf, dst - buf + 1);
+        (void) halide_msan_annotate_memory_is_initialized(user_context, buf, dst - buf + 1);
     }
 
     ~Printer() {

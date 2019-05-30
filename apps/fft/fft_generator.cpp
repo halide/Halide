@@ -90,6 +90,7 @@ public:
 
         desc.gain = gain;
         desc.vector_width = vector_width;
+        desc.parallel = parallel;
 
         // The logic below calls the specialized r2c or c2r version if
         // applicable to take advantage of better scheduling. It is

@@ -16,16 +16,11 @@ public:
     /** Create a Hexagon code generator for the given Hexagon target. */
     CodeGen_Hexagon(Target);
 
-    std::unique_ptr<llvm::Module> compile(const Module &module) override;
-
 protected:
     void compile_func(const LoweredFunc &f,
                       const std::string &simple_name, const std::string &extern_name) override;
 
     void init_module() override;
-
-    Expr mulhi_shr(Expr a, Expr b, int shr) override;
-    Expr sorted_avg(Expr a, Expr b) override;
 
     std::string mcpu() const override;
     std::string mattrs() const override;

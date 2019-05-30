@@ -276,6 +276,17 @@ int main(int argc, char **argv) {
     }
 
     for (int elements = 1; elements <= 5; elements++) {
+        const Target t = get_jit_target_from_environment();
+        if (t.arch == Target::WebAssembly &&
+            t.has_feature(Target::WasmSimd128) &&
+            elements == 5) {
+            // TODO: this bug is still active in v7.5; when it is fixed,
+            // find a way to re-enable this test iff we are using the appropriate
+            // version of v8.
+            printf("Skipping part of correctness_interleave test for WebAssembly+WasmSimd128 due to https://bugs.chromium.org/p/v8/issues/detail?id=9083.\n");
+            continue;
+        }
+
         // Make sure we don't interleave when the reordering would change the meaning.
         Realization* refs = nullptr;
         for (int i = 0; i < 2; i++) {

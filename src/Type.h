@@ -371,6 +371,10 @@ struct Type {
     HALIDE_ALWAYS_INLINE
     bool is_uint() const {return code() == UInt;}
 
+    /** Is this type an integer type of any sort? */
+    HALIDE_ALWAYS_INLINE
+    bool is_int_or_uint() const {return code() == Int || code() == UInt;}
+
     /** Is this type an opaque handle type (void *) */
     HALIDE_ALWAYS_INLINE
     bool is_handle() const {return code() == Handle;}

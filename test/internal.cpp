@@ -35,7 +35,6 @@ int main(int argc, const char **argv) {
     cplusplus_mangle_test();
     is_monotonic_test();
     split_predicate_test();
-    interval_test();
     associativity_test();
     generator_test();
     propagate_estimate_test();
