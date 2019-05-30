@@ -1093,7 +1093,7 @@ WEAK int halide_opencl_wrap_cl_mem(void *user_context, struct halide_buffer_t *b
     buf->device = (uint64_t)dev_handle;
     buf->device_interface = &opencl_device_interface;
     buf->device_interface->impl->use_module();
-#if DEBUG_RUNTIME
+#ifdef DEBUG_RUNTIME
     if (!validate_device_pointer(user_context, buf)) {
         free((device_handle *)buf->device);
         buf->device = 0;

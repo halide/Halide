@@ -44,7 +44,7 @@ using namespace llvm;
 #endif
 
 CodeGen_Hexagon::CodeGen_Hexagon(Target t) : CodeGen_Posix(t) {
-#if !(WITH_HEXAGON)
+#if !defined(WITH_HEXAGON)
     user_error << "hexagon not enabled for this build of Halide.\n";
 #endif
     user_assert(llvm_Hexagon_enabled) << "llvm build not configured with Hexagon target enabled.\n";

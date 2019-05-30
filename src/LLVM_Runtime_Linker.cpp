@@ -398,7 +398,7 @@ llvm::Triple get_triple_for_target(const Target &target) {
             }
         } else {
             user_assert(target.bits == 64) << "Target bits must be 32 or 64\n";
-            #if (WITH_AARCH64)
+            #ifdef WITH_AARCH64
             triple.setArch(llvm::Triple::aarch64);
             #else
             user_error << "AArch64 llvm target not enabled in this build of Halide\n";
@@ -435,7 +435,7 @@ llvm::Triple get_triple_for_target(const Target &target) {
             user_error << "No mips support for this OS\n";
         }
     } else if (target.arch == Target::POWERPC) {
-        #if (WITH_POWERPC)
+        #ifdef WITH_POWERPC
         // Only ppc*-unknown-linux-gnu are supported for the time being.
         user_assert(target.os == Target::Linux) << "PowerPC target is Linux-only.\n";
         triple.setVendor(llvm::Triple::UnknownVendor);
@@ -1027,7 +1027,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             }
             if (t.arch == Target::Hexagon) {
                 modules.push_back(get_initmod_hexagon_cpu_features(c, bits_64, debug));
-            }                
+            }
             if (t.arch == Target::RISCV) {
                 modules.push_back(get_initmod_riscv_cpu_features(c, bits_64, debug));
             }

@@ -43,7 +43,7 @@ Target complete_x86_target(Target t) {
 
 CodeGen_X86::CodeGen_X86(Target t) : CodeGen_Posix(complete_x86_target(t)) {
 
-    #if !(WITH_X86)
+    #if !defined(WITH_X86)
     user_error << "x86 not enabled for this build of Halide.\n";
     #endif
 

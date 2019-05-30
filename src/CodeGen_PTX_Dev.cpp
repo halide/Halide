@@ -30,7 +30,7 @@ using std::vector;
 using namespace llvm;
 
 CodeGen_PTX_Dev::CodeGen_PTX_Dev(Target host) : CodeGen_LLVM(host) {
-    #if !(WITH_PTX)
+    #if !defined(WITH_PTX)
     user_error << "ptx not enabled for this build of Halide.\n";
     #endif
     user_assert(llvm_NVPTX_enabled) << "llvm build not configured with nvptx target enabled\n.";

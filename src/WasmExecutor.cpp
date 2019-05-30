@@ -14,7 +14,7 @@
 #include <sstream>
 #include <vector>
 
-#if WITH_V8
+#ifdef WITH_V8
 #include "v8.h"
 #include "libplatform/libplatform.h"
 #endif
@@ -242,7 +242,7 @@ using JITExternMap = std::map<std::string, Halide::JITExtern>;
 
 }  // namespace
 
-#if WITH_V8
+#ifdef WITH_V8
 
 #define V8_API_VERSION ((V8_MAJOR_VERSION * 10) + V8_MINOR_VERSION)
 
@@ -1533,7 +1533,7 @@ void destroy<WasmModuleContents>(const WasmModuleContents *p) {
 
 /*static*/
 bool WasmModule::can_jit_target(const Target &target) {
-    #if WITH_V8 || WITH_SPIDERMONKEY
+    #if defined(WITH_V8) || defined(WITH_SPIDERMONKEY)
     if (target.arch == Target::WebAssembly) {
         return true;
     }
