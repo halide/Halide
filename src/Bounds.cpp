@@ -2039,8 +2039,19 @@ private:
     void visit(const IfThenElse *op) override {
         op->condition.accept(this);
         if (expr_uses_vars(op->condition, scope)) {
-            if (!op->else_case.defined() || is_no_op(op->else_case)) {
-                Expr c = op->condition;
+            // We need to simplify the condition to get it into a
+            // canonical form (e.g. (a < b) instead of !(a >= b))
+            vector<pair<Expr, Stmt>> cases;
+            {
+                Expr c = simplify(op->condition);
+                cases.emplace_back(c, op->then_case);
+                if (op->else_case.defined() && !is_no_op(op->else_case)) {
+                    cases.emplace_back(simplify(!c), op->else_case);
+                }
+            }
+            for (const auto &pair : cases) {
+                Expr c = pair.first;
+                Stmt body = pair.second;
                 const Call *call = c.as<Call>();
                 if (call && (call->is_intrinsic(Call::likely) ||
                              call->is_intrinsic(Call::likely_if_innermost) ||
@@ -2076,14 +2087,18 @@ private:
                     const GT *gt = solved.as<GT>();
                     const GE *ge = solved.as<GE>();
                     const EQ *eq = solved.as<EQ>();
-                    Expr rhs;
-                    if (lt) {rhs = lt->b;}
-                    if (le) {rhs = le->b;}
-                    if (gt) {rhs = gt->b;}
-                    if (ge) {rhs = ge->b;}
-                    if (eq) {rhs = eq->b;}
+                    Expr lhs, rhs;
+                    if (lt) {lhs = lt->a; rhs = lt->b;}
+                    else if (le) {lhs = le->a; rhs = le->b;}
+                    else if (gt) {lhs = gt->a; rhs = gt->b;}
+                    else if (ge) {lhs = ge->a; rhs = ge->b;}
+                    else if (eq) {lhs = eq->a; rhs = eq->b;}
 
                     if (!rhs.defined() || rhs.type() != Int(32)) {
+                        continue;
+                    }
+
+                    if (!equal(lhs, v)) {
                         continue;
                     }
 
@@ -2129,15 +2144,11 @@ private:
                 for (auto &p : to_pop) {
                     trim_scope_push(p.v->name, p.i, p.let_bounds);
                 }
-                op->then_case.accept(this);
+                body.accept(this);
                 while (!to_pop.empty()) {
                     trim_scope_pop(to_pop.back().v->name, to_pop.back().let_bounds);
                     to_pop.pop_back();
                 }
-            } else {
-                // Just take the union over the branches
-                op->then_case.accept(this);
-                op->else_case.accept(this);
             }
         } else {
             // If the condition is based purely on params, then we'll only
