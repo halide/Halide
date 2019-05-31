@@ -165,6 +165,8 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<int64_t> &s, const vec
         // set max thread count 64 for now in all dims
         int64_t max_threads_extent = 64, total_threads_limit = 1024; // less than 1024 to limit states
         int factor = 2;
+        int warp_width = 32;
+
         vector<vector<int64_t>> v;
         v = generate_gpu_tilings(s, max_s, d - 1, vector_dim, threads_inner);
 
@@ -192,7 +194,8 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<int64_t> &s, const vec
 
             //debug(0) << "max threads used: " << max_threads_used << "\n";
 
-            int64_t min_threads = ( (d == vector_dim) ? 32 : 1 );
+            // if the vector dimension has extent < warp_width we use 1 warp for it
+            int64_t min_threads = ( (d == vector_dim) ? std::min(warp_width, (int)s[d]) : 1 );
             //debug(0) << "vector_dim: " << vector_dim << "\n";
             for (int64_t threads_ext = min_threads; threads_ext <= s[d]; threads_ext *= factor) {
                 // reject if inner exceeds hardware thread limit
@@ -3479,7 +3482,6 @@ struct State {
                         LoopNest *parallel_root = new LoopNest;
                         parallel_root->copy_from(*root);
 
-                        vector<int64_t> max_size = parallel_root->get_union_thread_counts(node);
                         // step 1) parallelize all loop nests for this node into (parallel, serial) with given serial tiles
                         for (auto &c : parallel_root->children) {
                             if (c->node == node) { // c is a reference to a IntrusivePtr<const LoopNest>
@@ -3497,6 +3499,10 @@ struct State {
                                 }
                             }
                         }
+
+                        //vector<int64_t> max_size = parallel_root->get_union_thread_counts(node);
+                        // at root level sibling thread counts are in separate blocks, extents are irrelevant
+                        vector<int64_t> max_size((int)(parallel_size->size()), 0);
 
                         auto block_tilings =
                             generate_gpu_tilings(*parallel_size, max_size, node->dimensions-1,
