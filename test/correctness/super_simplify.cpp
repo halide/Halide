@@ -368,7 +368,7 @@ bool satisfy(Expr e, map<string, Expr> *bindings) {
               << "(assert " << expr_to_smt2(e) << ")\n"
               << "(check-sat)\n"
               << "(get-model)\n";
-    // std::cout << "z3 query:\n" << z3_source.str() << "\n";
+    std::cout << "z3 query:\n" << z3_source.str() << "\n";
 
     string src = z3_source.str();
 
@@ -484,6 +484,35 @@ Expr super_simplify(Expr e, int size) {
     }
 }
 
+// Enumerate all possible patterns that would match any portion of the
+// given expression.
+vector<Expr> all_possible_lhs_patterns(const Expr &e) {
+    // First enumerate all subexpressions and give each one a unique numeric id.
+    class AllSubexpressions : public IRMutator {
+        using IRMutator::mutate;
+
+        Expr mutate(const Expr &e) {
+            if (e.as<Variable>() || is_const(e)) return e;
+            int next_id = (int)id_for_expr.size();
+            auto it = id_for_expr.emplace(e, next_id).first;
+            expr_for_id.emplace(it->second, e);
+            return IRMutator::mutate(e);
+        }
+
+    public:
+        map<Expr, int, IRDeepCompare> id_for_expr;
+        map<int, Expr> expr_for_id;
+    } all_subexprs;
+    all_subexprs.mutate(e);
+
+    // For each subexpression, enumerate all possible ways to replace
+    // its inner non-leaf nodes with wildcards.
+
+
+    // Enumerate all possible ways to replace a penultimate inner node with a leaf node.
+    vector<Expr> all_subtrees
+}
+
 Expr super_simplify(Expr e) {
     for (int size = 1; size < 10; size++) {
         Expr r = super_simplify(e, size);
@@ -496,10 +525,13 @@ int main(int argc, char **argv) {
     // Give the variables aliases, to facilitate copy-pastes from elsewhere
     Expr x = v0, y = v1, z = v2, w = v3, u = v4, v = v5;
 
+    /*
     super_simplify((v0 + v1) + v2 <= v1);
     super_simplify(x + x*y);
     super_simplify(z + min(x, y - z));
     super_simplify((min(v0, -v1) + v2) + v1 <= v2);
     super_simplify((v0 + (v1 + v2)) - (v3 + (v4 + v2)));
+    */
+    super_simplify((x / max(1, y)) * max(1, y) + x % max(1, y));
     return 0;
 }
