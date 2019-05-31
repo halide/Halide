@@ -12,7 +12,7 @@ $(GENERATOR_BIN)/pipeline.generator: pipeline_generator.cpp $(GENERATOR_DEPS)
 
 $(BIN)/%/pipeline_native.a: $(GENERATOR_BIN)/pipeline.generator
 	@mkdir -p $(@D)
-	$^ -g pipeline -o $(@D) -f pipeline_native -e static_library,h target=$*
+	$^ -g pipeline -o $(@D) -f pipeline_native -e $(GENERATOR_OUTPUTS) target=$*
 
 $(BIN)/%/pipeline_c.cpp: $(GENERATOR_BIN)/pipeline.generator
 	@mkdir -p $(@D)
@@ -31,7 +31,7 @@ $(BIN)/%/pipeline_cpp_cpp.cpp: $(GENERATOR_BIN)/pipeline_cpp.generator
 
 $(BIN)/%/pipeline_cpp_native.a: $(GENERATOR_BIN)/pipeline_cpp.generator
 	@mkdir -p $(@D)
-	$^ -g pipeline_cpp -o $(@D) -f pipeline_cpp_native -e static_library,h target=host-c_plus_plus_name_mangling
+	$^ -g pipeline_cpp -o $(@D) -f pipeline_cpp_native -e $(GENERATOR_OUTPUTS) target=host-c_plus_plus_name_mangling
 
 $(BIN)/%/run_cpp: run_cpp.cpp $(BIN)/%/pipeline_cpp_cpp.cpp $(BIN)/%/pipeline_cpp_native.a
 	$(CXX) $(CXXFLAGS) -Wall -I$(BIN)/$* $(filter-out %.h,$^) -o $@  $(LDFLAGS)
