@@ -106,12 +106,12 @@ f2
     .compute_root()
     .reorder(ni, n);
 sum
-    .split(n, n, ni, 8, TailStrategy::RoundUp)
+    .split(n, n, ni, 8, TailStrategy::GuardWithIf)
     .vectorize(ni)
     .compute_at(f2, n)
     .reorder(ni, n);
 sum.update(0)
-    .split(n, n, ni, 8, TailStrategy::RoundUp)
+    .split(n, n, ni, 8, TailStrategy::GuardWithIf)
     .vectorize(ni)
     .reorder(ni, n, r34_x, r34_y);
 prediction_output
@@ -145,17 +145,17 @@ updated_bias1.update(3)
     .vectorize(v3031i)
     .reorder(v3031i, v3031);
 repeat_edge_23
-    .split(v360, v360, v360i, 8, TailStrategy::RoundUp)
+    .split(v360, v360, v360i, 8, TailStrategy::GuardWithIf)
     .vectorize(v360i)
     .compute_at(updated_bias1, v3031)
     .reorder(v360i, v360);
 bias1_im_0_d_def__
-    .split(v360, v360, v360i, 8, TailStrategy::RoundUp)
+    .split(v360, v360, v360i, 8, TailStrategy::GuardWithIf)
     .vectorize(v360i)
     .compute_at(updated_bias1, v3031)
     .reorder(v360i, v360);
 bias1_im_0_d_def__.update(0)
-    .split(v360, v360, v360i, 8, TailStrategy::RoundUp)
+    .split(v360, v360, v360i, 8, TailStrategy::GuardWithIf)
     .vectorize(v360i)
     .reorder(v360i, r1241_x, v360);
 updated_filter1
@@ -182,21 +182,21 @@ updated_filter1.update(3)
     .reorder(v3013i, v3013, v3014);
 constant_exterior_22
     .store_in(MemoryType::Stack)
-    .split(v364, v364, v364i, 8, TailStrategy::RoundUp)
+    .split(v364, v364, v364i, 8, TailStrategy::GuardWithIf)
     .vectorize(v364i)
     .compute_at(updated_filter1, v3014)
     .reorder(v364i, v364, v365);
 filter1_im_0_d_def__
-    .split(v364, v364, v364i, 8, TailStrategy::RoundUp)
+    .split(v364, v364, v364i, 8, TailStrategy::GuardWithIf)
     .vectorize(v364i)
     .compute_at(updated_filter1, v3013)
     .reorder(v364i, v364, v365);
 filter1_im_0_d_def__.update(0)
-    .split(v364, v364, v364i, 8, TailStrategy::RoundUp)
+    .split(v364, v364, v364i, 8, TailStrategy::GuardWithIf)
     .vectorize(v364i)
     .reorder(v364i, r1025_x, r1025_y, v364, r1025_z);
 filter1_im_0_d_def__.update(1)
-    .split(v364, v364, v364i, 8, TailStrategy::RoundUp)
+    .split(v364, v364, v364i, 8, TailStrategy::GuardWithIf)
     .vectorize(v364i)
     .reorder(v364i, r1222_x, v364, r1222_y);
 updated_head2_bias
@@ -225,18 +225,18 @@ updated_head2_bias.update(3)
     .vectorize(v3001i)
     .reorder(v3001i, v3001);
 repeat_edge_14
-    .split(v420, v420, v420i, 8, TailStrategy::RoundUp)
+    .split(v420, v420, v420i, 8, TailStrategy::GuardWithIf)
     .unroll(v420)
     .vectorize(v420i)
     .compute_root()
     .reorder(v420i, v420);
 head2_bias_im_0_d_def__
-    .split(v420, v420, v420i, 8, TailStrategy::RoundUp)
+    .split(v420, v420, v420i, 8, TailStrategy::GuardWithIf)
     .vectorize(v420i)
     .compute_at(repeat_edge_14, v420)
     .reorder(v420i, v420);
 head2_bias_im_0_d_def__.update(0)
-    .split(v420, v420, v420i, 8, TailStrategy::RoundUp)
+    .split(v420, v420, v420i, 8, TailStrategy::GuardWithIf)
     .vectorize(v420i)
     .reorder(v420i, r1129_x, r1129_y, v420);
 updated_head2_filter
@@ -263,17 +263,17 @@ updated_head2_filter.update(3)
     .reorder(v2983i, v2983, v2984);
 constant_exterior_13
     .store_in(MemoryType::Stack)
-    .split(v424, v424, v424i, 8, TailStrategy::RoundUp)
+    .split(v424, v424, v424i, 8, TailStrategy::GuardWithIf)
     .vectorize(v424i)
     .compute_at(updated_head2_filter, v2984)
     .reorder(v424i, v424, v425);
 head2_filter_im_0_d_def__
-    .split(v424, v424, v424i, 8, TailStrategy::RoundUp)
+    .split(v424, v424, v424i, 8, TailStrategy::GuardWithIf)
     .vectorize(v424i)
     .compute_at(updated_head2_filter, v2983)
     .reorder(v424i, v424, v425);
 head2_filter_im_0_d_def__.update(0)
-    .split(v424, v424, v424i, 8, TailStrategy::RoundUp)
+    .split(v424, v424, v424i, 8, TailStrategy::GuardWithIf)
     .vectorize(v424i)
     .reorder(v424i, r1110_x, r1110_y, v424, r1110_z);
 constant_exterior_10
@@ -284,25 +284,25 @@ constant_exterior_10
     .reorder(ci, c, wi, w, n);
 repeat_edge_10
     .store_in(MemoryType::Stack)
-    .split(c, c, ci, 8, TailStrategy::RoundUp)
+    .split(c, c, ci, 8, TailStrategy::GuardWithIf)
     .vectorize(ci)
     .compute_at(constant_exterior_10, wi)
     .reorder(ci, c, w, n);
 head2_conv_1_d_def__
     .store_in(MemoryType::Stack)
-    .split(c, c, ci, 8, TailStrategy::RoundUp)
+    .split(c, c, ci, 8, TailStrategy::GuardWithIf)
     .vectorize(ci)
     .compute_at(constant_exterior_10, wi)
     .store_at(constant_exterior_10, w)
     .reorder(ci, c, w, n);
 repeat_edge_9
     .store_in(MemoryType::Stack)
-    .split(c, c, ci, 8, TailStrategy::RoundUp)
+    .split(c, c, ci, 8, TailStrategy::GuardWithIf)
     .vectorize(ci)
     .compute_at(constant_exterior_10, wi)
     .reorder(ci, c, w, n);
 head2_relu_0_d_def__
-    .split(c, c, ci, 8, TailStrategy::RoundUp)
+    .split(c, c, ci, 8, TailStrategy::GuardWithIf)
     .vectorize(ci)
     .compute_at(constant_exterior_10, w)
     .reorder(ci, c, w, n);
@@ -330,12 +330,12 @@ updated_head1_bias.update(3)
     .vectorize(v2971i)
     .reorder(v2971i, v2971);
 head1_bias_im_0_d_def__
-    .split(v369, v369, v369i, 8, TailStrategy::RoundUp)
+    .split(v369, v369, v369i, 8, TailStrategy::GuardWithIf)
     .vectorize(v369i)
     .compute_root()
     .reorder(v369i, v369);
 head1_bias_im_0_d_def__.update(0)
-    .split(v369, v369, v369i, 8, TailStrategy::RoundUp)
+    .split(v369, v369, v369i, 8, TailStrategy::GuardWithIf)
     .vectorize(v369i)
     .reorder(v369i, r1322_x, v369);
 updated_head1_filter
@@ -362,7 +362,7 @@ updated_head1_filter.update(3)
     .reorder(v2947i, v2947, v2948, v2949);
 constant_exterior_19
     .store_in(MemoryType::Stack)
-    .split(v383, v383, v383i, 8, TailStrategy::RoundUp)
+    .split(v383, v383, v383i, 8, TailStrategy::GuardWithIf)
     .vectorize(v383i)
     .compute_at(updated_head1_filter, v2947)
     .store_at(updated_head1_filter, v2948)
@@ -374,23 +374,23 @@ head1_filter_im_0_d_def__
     .reorder(v383i, v383, v384, v385);
 constant_exterior_18
     .store_in(MemoryType::Stack)
-    .split(c, c, ci, 8, TailStrategy::RoundUp)
+    .split(c, c, ci, 8, TailStrategy::GuardWithIf)
     .vectorize(ci)
     .compute_at(head1_filter_im_0_d_def__, v383)
     .store_at(updated_head1_filter, v2948)
     .reorder(ci, c, s, n);
 squashed_head1_filter_0_d_def__
     .store_in(MemoryType::Stack)
-    .split(c, c, ci, 8, TailStrategy::RoundUp)
+    .split(c, c, ci, 8, TailStrategy::GuardWithIf)
     .vectorize(ci)
     .compute_at(head1_filter_im_0_d_def__, v383)
     .reorder(ci, c, s, n);
 squashed_head1_filter_0_d_def__.update(0)
-    .split(c, c, ci, 8, TailStrategy::RoundUp)
+    .split(c, c, ci, 8, TailStrategy::GuardWithIf)
     .vectorize(ci)
     .reorder(ci, r1341_x, c, s, n);
 squashed_head1_filter_broadcast_0_d_def__
-    .split(c, c, ci, 8, TailStrategy::RoundUp)
+    .split(c, c, ci, 8, TailStrategy::GuardWithIf)
     .vectorize(ci)
     .compute_root()
     .reorder(ci, c, w, s, n);
@@ -404,40 +404,40 @@ constant_exterior_16
     .compute_root()
     .reorder(ci, c, w);
 repeat_edge_16
-    .split(c, c, ci, 8, TailStrategy::RoundUp)
+    .split(c, c, ci, 8, TailStrategy::GuardWithIf)
     .vectorize(ci)
     .compute_at(constant_exterior_16, c)
     .reorder(ci, c, w);
 head1_conv_1_d_def__
-    .split(c, c, ci, 8, TailStrategy::RoundUp)
+    .split(c, c, ci, 8, TailStrategy::GuardWithIf)
     .vectorize(ci)
     .compute_at(constant_exterior_16, c)
     .reorder(ci, c, w);
 head1_conv_1_d_def__.update(0)
     .reorder(r1198_x, r1198_y, w);
 constant_exterior_15
-    .split(w, w, wi, 8, TailStrategy::RoundUp)
+    .split(w, w, wi, 8, TailStrategy::GuardWithIf)
     .vectorize(wi)
     .compute_root()
     .reorder(wi, w, c)
     .reorder_storage(w, c);
 repeat_edge_15
-    .split(w, w, wi, 8, TailStrategy::RoundUp)
+    .split(w, w, wi, 8, TailStrategy::GuardWithIf)
     .vectorize(wi)
     .compute_at(constant_exterior_15, w)
     .reorder(wi, w, c)
     .reorder_storage(w, c);
 conv1_stage1_1_d_def__
-    .split(c, c, ci, 8, TailStrategy::RoundUp)
+    .split(c, c, ci, 8, TailStrategy::GuardWithIf)
     .vectorize(ci)
     .compute_root()
     .reorder(ci, c, w);
 conv1_stage1_1_d_def__.update(0)
-    .split(c, c, ci, 8, TailStrategy::RoundUp)
+    .split(c, c, ci, 8, TailStrategy::GuardWithIf)
     .vectorize(ci)
     .reorder(ci, c, r1044_x, w);
 conv1_stage2_0_d_def___1
-    .split(c, c, ci, 8, TailStrategy::RoundUp)
+    .split(c, c, ci, 8, TailStrategy::GuardWithIf)
     .vectorize(ci)
     .compute_at(conv1_stage1_1_d_def__, r1044_x)
     .reorder(ci, c, w, n);
@@ -451,14 +451,14 @@ constant_exterior_8
     .reorder(cii, ci, c, w, ni, n);
 repeat_edge_8
     .store_in(MemoryType::Stack)
-    .split(c, c, ci, 8, TailStrategy::RoundUp)
+    .split(c, c, ci, 8, TailStrategy::GuardWithIf)
     .unroll(c)
     .vectorize(ci)
     .compute_at(constant_exterior_8, c)
     .reorder(ci, c, w, n);
 conv1_stage2_1_d_def__
     .store_in(MemoryType::Stack)
-    .split(w, w, wi, 8, TailStrategy::RoundUp)
+    .split(w, w, wi, 8, TailStrategy::GuardWithIf)
     .vectorize(wi)
     .compute_at(constant_exterior_8, ni)
     .reorder(wi, w, c, n)
@@ -466,33 +466,33 @@ conv1_stage2_1_d_def__
 conv1_stage2_1_d_def__.update(0)
     .reorder(r189_x, r189_y, n);
 conv1_stage2_1_d_def__.update(1)
-    .split(w, w, wi, 8, TailStrategy::RoundUp)
+    .split(w, w, wi, 8, TailStrategy::GuardWithIf)
     .vectorize(wi)
     .reorder(wi, w, c, n);
 relu1_0_d_def__
-    .split(w, w, wi, 8, TailStrategy::RoundUp)
+    .split(w, w, wi, 8, TailStrategy::GuardWithIf)
     .vectorize(wi)
     .compute_at(constant_exterior_8, n)
     .reorder(wi, w, c, n)
     .reorder_storage(w, c, n);
 relu1_0_d_def__.update(0)
-    .split(w, w, wi, 8, TailStrategy::RoundUp)
+    .split(w, w, wi, 8, TailStrategy::GuardWithIf)
     .vectorize(wi)
     .reorder(wi, w, n);
 relu1_0_d_def__.update(1)
-    .split(w, w, wi, 8, TailStrategy::RoundUp)
+    .split(w, w, wi, 8, TailStrategy::GuardWithIf)
     .vectorize(wi)
     .reorder(wi, w, n);
 relu1_0_d_def__.update(2)
-    .split(w, w, wi, 8, TailStrategy::RoundUp)
+    .split(w, w, wi, 8, TailStrategy::GuardWithIf)
     .vectorize(wi)
     .reorder(wi, w, n);
 relu1_0_d_def__.update(3)
-    .split(w, w, wi, 8, TailStrategy::RoundUp)
+    .split(w, w, wi, 8, TailStrategy::GuardWithIf)
     .vectorize(wi)
     .reorder(wi, w, n);
 relu1_0_d_def__.update(4)
-    .split(w, w, wi, 8, TailStrategy::RoundUp)
+    .split(w, w, wi, 8, TailStrategy::GuardWithIf)
     .vectorize(wi)
     .reorder(wi, w, n);
 relu1_0_d_def__.update(5)
@@ -604,14 +604,14 @@ relu1_0_d_def__.update(31)
     .vectorize(wi)
     .reorder(wi, w, n);
 constant_exterior_6
-    .split(w, w, wi, 8, TailStrategy::RoundUp)
+    .split(w, w, wi, 8, TailStrategy::GuardWithIf)
     .vectorize(wi)
     .compute_at(constant_exterior_8, n)
     .reorder(wi, w, n)
     .reorder_storage(w, n);
 f0_0_d_def__
     .store_in(MemoryType::Stack)
-    .split(w, w, wi, 8, TailStrategy::RoundUp)
+    .split(w, w, wi, 8, TailStrategy::GuardWithIf)
     .vectorize(wi)
     .compute_at(constant_exterior_6, n)
     .reorder(wi, w, n)
@@ -624,7 +624,7 @@ constant_exterior_5
     .compute_root()
     .reorder(ni, n);
 f1
-    .split(n, n, ni, 8, TailStrategy::RoundUp)
+    .split(n, n, ni, 8, TailStrategy::GuardWithIf)
     .vectorize(ni)
     .compute_root()
     .reorder(ni, n);
@@ -644,7 +644,7 @@ conv1_stage2.update(0)
     .vectorize(ci)
     .reorder(ci, r19_x, c, w, n);
 head2_relu
-    .split(n, n, ni, 8, TailStrategy::RoundUp)
+    .split(n, n, ni, 8, TailStrategy::GuardWithIf)
     .vectorize(ni)
     .compute_root()
     .reorder(ni, n, c, w)
@@ -687,12 +687,12 @@ squashed_head1_filter
     .compute_at(head1_conv, r4_x)
     .reorder(ci, c, s, n);
 constant_exterior_4
-    .split(n, n, ni, 8, TailStrategy::RoundUp)
+    .split(n, n, ni, 8, TailStrategy::GuardWithIf)
     .vectorize(ni)
     .compute_root()
     .reorder(ni, n);
 f2_0_d_def__
-    .split(n, n, ni, 8, TailStrategy::RoundUp)
+    .split(n, n, ni, 8, TailStrategy::GuardWithIf)
     .vectorize(ni)
     .compute_root()
     .reorder(ni, n);
