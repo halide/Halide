@@ -358,9 +358,9 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
     const vector<Specialization> &specializations = def.specializations();
     for (size_t i = specializations.size(); i > 0; i--) {
         const Specialization &s = specializations[i - 1];
-        Stmt then_case;
         if (s.failure_message.empty()) {
-            then_case = build_provide_loop_nest(env, prefix, func, s.definition, start_fuse, is_update);
+            Stmt then_case = build_provide_loop_nest(env, prefix, func, s.definition, start_fuse, is_update);
+            stmt = IfThenElse::make(s.condition, then_case, stmt);
         } else {
             internal_assert(equal(s.condition, const_true()));
             // specialize_fail() should only be possible on the final specialization
@@ -370,12 +370,10 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
                                      "halide_error_specialize_fail",
                                      {StringImm::make(s.failure_message)},
                                      Internal::Call::Extern);
-            then_case = AssertStmt::make(const_false(), specialize_fail_error);
             // Since this is the final specialization, we can make
-            // the else clause the same as this clause
-            stmt = then_case;
+            // this the else clause
+            stmt = AssertStmt::make(const_false(), specialize_fail_error);
         }
-        stmt = IfThenElse::make(s.condition, then_case, stmt);
     }
 
     return stmt;
