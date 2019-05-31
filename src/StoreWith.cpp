@@ -174,8 +174,8 @@ struct System {
     float c = 0;
 
     // unique IDs for each system for debugging and training a good heuristic
-    static int id_counter;
-    int id, parent_id;
+    static uint64_t id_counter;
+    uint64_t id, parent_id;
 
     System(Simplify *s, Expr subs, int pid) :
         simplifier(s), most_recent_substitution(subs),
@@ -600,7 +600,7 @@ struct System {
     }
 };
 
-int System::id_counter = 0;
+uint64_t System::id_counter = 0;
 
 // Attempt to disprove a boolean expr by constructing a constraint
 // system and performing a backtracking search over substitutions
