@@ -1,3 +1,5 @@
+#!/bin/bash
+
 # set -x
 
 # Install a watchdog to kill benchmarking processes that take too long
@@ -31,6 +33,21 @@ BATCH_SIZE=32
 
 HL_TARGET=x86-64-avx2-disable_llvm_loop_vectorize-disable_llvm_loop_unroll-cuda
 
+record_failed() {
+    BATCH=${1}
+    SAMPLE_ID=${2}
+    CMD=${3}
+    TXT=${4}
+    BATCH_DIR=${SAMPLES}/${BATCH}
+
+    echo $CMD > ${BATCH_DIR}/${SAMPLE_ID}/${TXT}.txt
+
+    if [[ -f ${BATCH_DIR}/${SAMPLE_ID}/sample.sample ]]; then
+        # Delete the .sample file so it doesn't get included in training
+        rm -f ${BATCH_DIR}/${SAMPLE_ID}/sample.sample
+    fi
+}
+
 # Build a single sample of the pipeline with a random schedule
 make_sample() {
     D=${1}
@@ -44,22 +61,51 @@ make_sample() {
         CMD="HL_MACHINE_PARAMS=80,1,1 HL_PERMIT_FAILED_UNROLL=1 HL_SEED=${2} HL_FEATURE_FILE=${D}/sample.sample HL_WEIGHTS_DIR=${PWD}/../autoscheduler/gpu_weights HL_RANDOM_DROPOUT=5 HL_BEAM_SIZE=1 HL_SHARED_MEMORY_LIMIT=48 ${GENERATOR} -g ${PIPELINE} -o ${D} -e static_library,h,stmt,assembly,registration target=${HL_TARGET} auto_schedule=true max_stages=5 seed=${3} -p ${PWD}/bin/libauto_schedule.so 2> ${D}/compile_log_stderr.txt > ${D}/compile_log_stdout.txt"
     fi
 
+    BATCH=${4}
+    SAMPLE_ID=${5}
+
     eval $CMD
     if [[ $? != 0 ]]; then
-        echo $CMD > ${D}/command.txt
+        echo "Autoschedule failed or timed out for ${D}"
+        record_failed $BATCH $SAMPLE_ID "$CMD" "autoschedule_command"
+        return
     fi
 
-    c++ -std=c++11 -I ../../include ../../tools/RunGenMain.cpp ${D}/*.registration.cpp ${D}/*.a -o ${D}/bench -ljpeg -ldl -lpthread -lz -lpng
+    CMD="c++ -std=c++11 -I ../../include ../../tools/RunGenMain.cpp ${D}/*.registration.cpp ${D}/*.a -o ${D}/bench -ljpeg -ldl -lpthread -lz -lpng"
+    eval $CMD
+    if [[ $? != 0 ]]; then
+        echo "Compilation failed for ${D}"
+        record_failed $BATCH $SAMPLE_ID "$CMD" "compilation_command"
+        return
+    fi
 }
 
 # Benchmark one of the random samples
 benchmark_sample() {
     D=${1}
-    HL_NUM_THREADS=32 ${D}/bench --output_extents=estimate --default_input_buffers=random:0:auto --default_input_scalars=estimate --benchmarks=all --benchmark_min_time=1 ${RUNGEN_ARGS} | tee ${D}/bench.txt
+    BATCH=${4}
+    SAMPLE_ID=${5}
+
+    if [[ ! -f ${D}/bench ]]; then
+        return
+    fi
+
+    CMD="HL_NUM_THREADS=32 ${D}/bench --output_extents=estimate --default_input_buffers=random:0:auto --default_input_scalars=estimate --benchmarks=all --benchmark_min_time=1 ${RUNGEN_ARGS}"
+
+    eval $CMD | tee ${D}/bench.txt
+    if [[ ! -s ${D}/bench.txt ]]; then
+        echo "Benchmarking failed or timed out for ${D}"
+        record_failed $BATCH $SAMPLE_ID "$CMD" "benchmark_command"
+        return
+    fi
 
     # Add the runtime, pipeline id, and schedule id to the feature file
     R=$(cat ${D}/bench.txt | grep 'Benchmark for' | cut -d' ' -f8)
-    ./bin/augment_sample ${D}/sample.sample $R $3 $2
+    CMD="./bin/augment_sample ${D}/sample.sample $R $3 $2"
+    if [[ $? != 0 ]]; then
+        echo "Augment sample failed for ${D}"
+        record_failed $BATCH $SAMPLE_ID "$CMD" "augment_command"
+    fi
 }
 
 # Don't clobber existing samples
@@ -75,7 +121,7 @@ for ((i=$((FIRST+1));i<1000000;i++)); do
 
     for ((b=0;b<${BATCH_SIZE};b++)); do
         S=$(printf "%d%02d" $i $b)
-        make_sample "${DIR}/${b}" $S $i &
+        make_sample "${DIR}/${b}" $S $i "batch_${i}" $b &
         pids[${b}]=$!
     done
 
@@ -87,14 +133,14 @@ for ((i=$((FIRST+1));i<1000000;i++)); do
     # Kill the ones with silly predicted costs that still slipped through because randomness
     grep -r 100000000000 ${DIR} | sed 's/compile_log.*/bench/' | sort | uniq | xargs rm
 
-    # benchmark them serially using rungen
+    ## benchmark them serially using rungen
     for ((b=0;b<${BATCH_SIZE};b++)); do
         echo Benchmarking sample $b
         S=$(printf "%d%02d" $i $b)
-        benchmark_sample "${DIR}/${b}" $S $i
+        benchmark_sample "${DIR}/${b}" $S $i "batch_${i}" $b
     done
 
-    # retrain model weights on all samples seen so far
+    ## retrain model weights on all samples seen so far
     echo Retraining model...
     find ${SAMPLES} | grep sample$ | HL_NUM_THREADS=32 HL_WEIGHTS_DIR=weights ./bin/train_cost_model 32
 
