@@ -65,3 +65,18 @@ $(BIN)/$(ID)/times_simple_autoschedule.txt: $(BIN)/$(ID)/test
 build: $(BIN)/$(ID)/test
 bench: $(BIN)/$(ID)/times.txt
 bench_simple_autoschedule: $(BIN)/$(ID)/times_simple_autoschedule.txt
+
+autotune_gpu: $(BIN)/random_pipeline.generator $(AUTOSCHED_BIN)/augment_sample $(AUTOSCHED_BIN)/train_cost_model $(AUTOSCHED_BIN)/libauto_schedule.so $(AUTOSCHED_SRC)/autotune_loop.sh
+	HL_TARGET=host-cuda \
+	HL_MACHINE_PARAMS=80,1,1 \
+	SAMPLES_DIR=autotuned_samples \
+	HL_SHARED_MEMORY_LIMIT=48 \
+	HL_DEBUG_CODEGEN=1 \
+	HL_WEIGHTS_DIR=$(PWD)/../autoscheduler/gpu_weights \
+	bash $(AUTOSCHED_SRC)/autotune_loop.sh \
+		$(BIN)/random_pipeline.generator \
+		random_pipeline \
+		host-cuda \
+		$(AUTOSCHED_SRC)/gpu_weights \
+		$(AUTOSCHED_BIN) \
+		"seed=$(PIPELINE_SEED);max_stages=$(PIPELINE_STAGES)"

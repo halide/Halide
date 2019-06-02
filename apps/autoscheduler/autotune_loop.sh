@@ -1,3 +1,5 @@
+#!/bin/bash
+
 # Build the generator to autotune. This script will be autotuning the
 # autoscheduler's cost model training pipeline, which is large enough
 # to be interesting.
@@ -46,7 +48,7 @@ if [ -z ${PIPELINE} ]; then
 PIPELINE=demo
 fi
 
-SAMPLES=${PWD}/samples
+SAMPLES=${PWD}/${SAMPLES_DIR}
 mkdir -p ${SAMPLES}
 
 WEIGHTS=${SAMPLES}/weights
@@ -82,12 +84,29 @@ if [ $(uname -s) = "Darwin" ] && ! which $TIMEOUT_CMD 2>&1 >/dev/null; then
     fi
 fi
 
+record_failed() {
+    BATCH=${1}
+    SAMPLE_ID=${2}
+    CMD=${3}
+    TXT=${4}
+    BATCH_DIR=${SAMPLES}/${BATCH}
+
+    echo $CMD > ${BATCH_DIR}/${SAMPLE_ID}/${TXT}.txt
+
+    if [[ -f ${BATCH_DIR}/${SAMPLE_ID}/sample.sample ]]; then
+        # Delete the .sample file so it doesn't get included in re-training
+        rm -f ${BATCH_DIR}/${SAMPLE_ID}/sample.sample
+    fi
+}
+
 # Build a single sample of the pipeline with a random schedule
 make_sample() {
     D=${1}
     SEED=${2}
     FNAME=${3}
     EXTRA_GENERATOR_ARGS=${4}
+    BATCH=${5}
+    SAMPLE_ID=${6}
     mkdir -p ${D}
     rm -f "${D}/sample.sample"
     if [[ $D == */0 ]]; then
@@ -99,14 +118,18 @@ make_sample() {
         dropout=5  # 5% chance of operating entirely greedily
         beam=1
     fi
-    HL_PERMIT_FAILED_UNROLL=1 \
+
+    echo "Compiling HL_SEED=${SEED} ${EXTRA_GENERATOR_ARGS}"
+
+    SUCCESS=1
+    CMD="HL_PERMIT_FAILED_UNROLL=1 \
         HL_SEED=${SEED} \
         HL_SCHEDULE_FILE=${D}/schedule.txt \
         HL_FEATURE_FILE=${D}/sample.sample \
         HL_WEIGHTS_DIR=${WEIGHTS} \
         HL_RANDOM_DROPOUT=${dropout} \
         HL_BEAM_SIZE=${beam} \
-        HL_MACHINE_PARAMS=32,1,1 \
+        HL_MACHINE_PARAMS=${HL_MACHINE_PARAMS} \
         ${TIMEOUT_CMD} -k ${COMPILATION_TIMEOUT} ${COMPILATION_TIMEOUT} \
         ${GENERATOR} \
         -g ${PIPELINE} \
@@ -116,37 +139,68 @@ make_sample() {
         target=${HL_TARGET} \
         auto_schedule=true \
         ${EXTRA_GENERATOR_ARGS} \
-        -p ${AUTOSCHED_BIN}/libauto_schedule.so \
-            2> ${D}/compile_log.txt || echo "Compilation failed or timed out for ${D}"
+        -p ${AUTOSCHED_BIN}/libauto_schedule.so 2> ${D}/compile_err.txt > ${D}/compile_log.txt"
 
-    c++ \
+    eval $CMD || SUCCESS=0
+    if [[ $SUCCESS -eq 0 ]]; then
+        echo "Autoschedule failed or timed out for ${D}"
+        record_failed $BATCH $SAMPLE_ID "$CMD" "autoschedule_command"
+        return
+    fi
+
+    CMD="c++ \
         -std=c++11 \
         -I ../../include \
         ../../tools/RunGenMain.cpp \
         ${D}/*.registration.cpp \
         ${D}/*.a \
         -o ${D}/bench \
-        -ljpeg -ldl -lpthread -lz -lpng
+        -ljpeg -ldl -lpthread -lz -lpng"
+
+    eval $CMD
+    if [[ $? != 0 ]]; then
+        echo "Compilation failed ${D}"
+        record_failed $BATCH $SAMPLE_ID "$CMD" "compile_command"
+        return
+    fi
 }
 
 # Benchmark one of the random samples
 benchmark_sample() {
-    sleep 1 # Give CPU clocks a chance to spin back up if we're thermally throttling
     D=${1}
-    HL_NUM_THREADS=32 \
+    BATCH=${3}
+    SAMPLE_ID=${4}
+
+    if [[ ! -f ${D}/bench ]]; then
+        return
+    fi
+
+    sleep 1 # Give CPU clocks a chance to spin back up if we're thermally throttling
+    CMD="HL_NUM_THREADS=32 \
         ${TIMEOUT_CMD} -k ${BENCHMARKING_TIMEOUT} ${BENCHMARKING_TIMEOUT} \
         ${D}/bench \
         --output_extents=estimate \
         --default_input_buffers=random:0:estimate_then_auto \
         --default_input_scalars=estimate \
-        --benchmarks=all \
-            | tee ${D}/bench.txt || echo "Benchmarking failed or timed out for ${D}"
+        --benchmarks=all"
+
+    eval $CMD | tee ${D}/bench.txt
+    if [[ ! -s ${D}/bench.txt ]]; then
+        echo "Benchmarking failed or timed out for ${D}"
+        record_failed $BATCH $SAMPLE_ID "$CMD" "benchmark_command"
+        return
+    fi
 
     # Add the runtime, pipeline id, and schedule id to the feature file
     R=$(cut -d' ' -f8 < ${D}/bench.txt)
     P=0
     S=$2
-    ${AUTOSCHED_BIN}/augment_sample ${D}/sample.sample $R $P $S || echo "Augment sample failed for ${D} (probably because benchmarking failed)"
+
+    CMD="${AUTOSCHED_BIN}/augment_sample ${D}/sample.sample $R $P $S"
+    if [[ $? != 0 ]]; then
+        echo "Augment sample failed for ${D}"
+        record_failed $BATCH $SAMPLE_ID "$CMD" "augment_command"
+    fi
 }
 
 # Don't clobber existing samples
@@ -168,7 +222,8 @@ for ((BATCH_ID=$((FIRST+1));BATCH_ID<$((FIRST+1+NUM_BATCHES));BATCH_ID++)); do
     for ((EXTRA_ARGS_IDX=0;EXTRA_ARGS_IDX<${#GENERATOR_ARGS_SETS_ARRAY[@]};EXTRA_ARGS_IDX++)); do
 
         # Compile a batch of samples using the generator in parallel
-        DIR=${SAMPLES}/batch_${BATCH_ID}_${EXTRA_ARGS_IDX}
+        BATCH=batch_${BATCH_ID}_${EXTRA_ARGS_IDX}
+        DIR=${SAMPLES}/${BATCH}
 
         # Copy the weights being used into the batch folder so that we can repro failures
         mkdir -p ${DIR}/weights_used/
@@ -196,21 +251,20 @@ for ((BATCH_ID=$((FIRST+1));BATCH_ID<$((FIRST+1+NUM_BATCHES));BATCH_ID++)); do
 
             S=$(printf "%d%02d" $BATCH_ID $SAMPLE_ID)
             FNAME=$(printf "%s_batch_%02d_sample_%02d" ${PIPELINE} $BATCH_ID $SAMPLE_ID)
-            make_sample "${DIR}/${SAMPLE_ID}" $S $FNAME "$EXTRA_GENERATOR_ARGS" &
+            make_sample "${DIR}/${SAMPLE_ID}" $S $FNAME "$EXTRA_GENERATOR_ARGS" $BATCH $SAMPLE_ID &
         done
         wait
 
         # benchmark them serially using rungen
         for ((SAMPLE_ID=0;SAMPLE_ID<${BATCH_SIZE};SAMPLE_ID++)); do
             S=$(printf "%d%02d" $BATCH_ID $SAMPLE_ID)
-            benchmark_sample "${DIR}/${SAMPLE_ID}" $S
+            benchmark_sample "${DIR}/${SAMPLE_ID}" $S $BATCH $SAMPLE_ID
         done
     done
 
     # retrain model weights on all samples seen so far
     echo Retraining model...
-    find ${SAMPLES} | grep sample$ | \
-        HL_NUM_THREADS=32 HL_WEIGHTS_DIR=${WEIGHTS} HL_BEST_SCHEDULE_FILE=${PWD}/samples/best.txt ${AUTOSCHED_BIN}/train_cost_model ${BATCH_SIZE} 0.0001
+    find ${SAMPLES} | grep sample$ | HL_NUM_THREADS=32 HL_WEIGHTS_DIR=${WEIGHTS} HL_BEST_SCHEDULE_FILE=${PWD}/${SAMPLES_DIR}/best.txt ${AUTOSCHED_BIN}/train_cost_model ${BATCH_SIZE} 0.0001
 
     echo Batch ${BATCH_ID} took ${SECONDS} seconds to compile, benchmark, and retrain
 done
