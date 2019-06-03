@@ -2,6 +2,7 @@ HALIDE_DISTRIB_PATH ?= ../../distrib
 LDFLAGS ?=
 IMAGES ?= ../images
 UNAME ?= $(shell uname)
+SHELL = bash
 
 BIN_DIR ?= bin
 
