@@ -6,6 +6,7 @@ using namespace Halide::Internal;
 using std::string;
 using std::vector;
 using std::map;
+using std::set;
 
 // Convert from a Halide Expr to SMT2 to pass to z3
 string expr_to_smt2(const Expr &e) {
@@ -310,7 +311,7 @@ void parse_model(char **cursor, char *end, map<string, Expr> *bindings) {
         }
         consume_whitespace(cursor, end);
         consume(cursor, end, ")");
-        consume_whitespace(cursor, end);
+         consume_whitespace(cursor, end);
     }
     consume_whitespace(cursor, end);
     expect(cursor, end, ")");
@@ -337,16 +338,18 @@ public:
     std::set<string> vars;
 };
 
-
-bool satisfy(Expr e, map<string, Expr> *bindings) {
+enum Z3Result {
+    Sat, Unsat, Unknown
+};
+Z3Result satisfy(Expr e, map<string, Expr> *bindings) {
 
     e = simplify(e);
 
     if (is_one(e)) {
-        return true;
+        return Sat;
     }
     if (is_zero(e)) {
-        return false;
+        return Unsat;
     }
     if (!e.type().is_bool()) {
         std::cout << "Cannot satisfy non-boolean expression " << e << "\n";
@@ -368,7 +371,9 @@ bool satisfy(Expr e, map<string, Expr> *bindings) {
               << "(assert " << expr_to_smt2(e) << ")\n"
               << "(check-sat)\n"
               << "(get-model)\n";
+    /*
     std::cout << "z3 query:\n" << z3_source.str() << "\n";
+    */
 
     string src = z3_source.str();
 
@@ -376,7 +381,7 @@ bool satisfy(Expr e, map<string, Expr> *bindings) {
     TemporaryFile z3_output("output", "txt");
     write_entire_file(z3_file.pathname(), &src[0], src.size());
 
-    std::string cmd = "z3 " + z3_file.pathname() + " > " + z3_output.pathname();
+    std::string cmd = "z3 -T:600 " + z3_file.pathname() + " > " + z3_output.pathname();
 
     int ret = system(cmd.c_str());
 
@@ -384,6 +389,10 @@ bool satisfy(Expr e, map<string, Expr> *bindings) {
     string result(result_vec.begin(), result_vec.end());
 
     // std::cout << "z3 produced: " << result << "\n";
+
+    if (starts_with(result, "unknown") || starts_with(result, "timeout")) {
+        return Unknown;
+    }
 
     if (ret && !starts_with(result, "unsat")) {
         std::cout << "** z3 query failed with exit code " << ret << "\n"
@@ -393,17 +402,19 @@ bool satisfy(Expr e, map<string, Expr> *bindings) {
     }
 
     if (starts_with(result, "unsat")) {
-        return false;
+        return Unsat;
     } else {
         char *cursor = &(result[0]);
         char *end = &(result[result.size()]);
         expect(&cursor, end, "sat");
         parse_model(&cursor, end, bindings);
-        return true;
+        return Sat;
     }
 }
 
-Var v0("v0"), v1("v1"), v2("v2"), v3("v3"), v4("v4"), v5("v5");
+Var v0("v0"), v1("v1"), v2("v2"), v3("v3"), v4("v4"), v5("v5"), v6("v6"), v7("v7"), v8("v8"), v9("v9");
+Var v10("v10"), v11("v11"), v12("v12"), v13("v13"), v14("v14"), v15("v15"), v16("v16"), v17("v17"), v18("v18"), v19("v19");
+Var v20("v20"), v21("v21"), v22("v22"), v23("v23"), v24("v24"), v25("v25"), v26("v26"), v27("v27"), v28("v28"), v29("v29");
 
 // Use CEGIS to optimally simplify an expression.
 Expr super_simplify(Expr e, int size) {
@@ -445,15 +456,17 @@ Expr super_simplify(Expr e, int size) {
         // First sythesize a counterexample to the current program.
         Expr current_program_works = substitute(current_program, program_works);
         map<string, Expr> counterexample = all_vars_zero;
-        if (!satisfy(!current_program_works, &counterexample)) {
+        auto result = satisfy(!current_program_works, &counterexample);
+        if (result == Unsat) {
             // Woo!
-            Expr result = simplify(substitute(current_program, program));
+            Expr result = simplify(substitute_in_all_lets(common_subexpression_elimination(substitute(current_program, program))));
             if (was_bool) {
-                result = simplify(result == 1);
+                result = simplify(substitute_in_all_lets(common_subexpression_elimination(result == 1)));
             }
-            std::cout << "*** Success: " << orig << " -> " << result << "\n\n";
+            // std::cout << "*** Success: " << orig << " -> " << result << "\n\n";
             return result;
-        } else {
+        } else if (result == Sat) {
+            /*
             std::cout << "Counterexample: ";
             const char *prefix = "";
             for (auto it : counterexample) {
@@ -461,7 +474,10 @@ Expr super_simplify(Expr e, int size) {
                 prefix = ", ";
             }
             std::cout << "\n";
+            */
             counterexamples.push_back(counterexample);
+        } else {
+            return Expr();
         }
 
         // Now synthesize a program that fits all the counterexamples
@@ -469,57 +485,170 @@ Expr super_simplify(Expr e, int size) {
         for (auto &c : counterexamples) {
             works_on_counterexamples = works_on_counterexamples && substitute(c, program_works);
         }
-        if (!satisfy(works_on_counterexamples, &current_program)) {
-            // There is no such program
-            std::cout << "Failed to find a program of size " << size << "\n";
+        result = satisfy(works_on_counterexamples, &current_program);
+        if (result != Sat) {
+            // Failed to synthesize a program
+            // std::cout << "Failed to find a program of size " << size << "\n";
             return Expr();
         }
         // We have a new program
 
+        /*
         std::cout << "Current program:";
         for (const auto &o : symbolic_opcodes) {
             std::cout << " " << current_program[o.as<Variable>()->name];
         }
         std::cout << "\n";
+        */
     }
 }
 
 // Enumerate all possible patterns that would match any portion of the
 // given expression.
 vector<Expr> all_possible_lhs_patterns(const Expr &e) {
-    // First enumerate all subexpressions and give each one a unique numeric id.
-    class AllSubexpressions : public IRMutator {
+    // Convert the expression to a DAG
+    class DAGConverter : public IRMutator {
+    public:
+
         using IRMutator::mutate;
 
-        Expr mutate(const Expr &e) {
-            if (e.as<Variable>() || is_const(e)) return e;
-            int next_id = (int)id_for_expr.size();
-            auto it = id_for_expr.emplace(e, next_id).first;
-            expr_for_id.emplace(it->second, e);
-            return IRMutator::mutate(e);
+        int current_parent = -1;
+
+        Expr mutate(const Expr &e) override {
+            if (building.empty()) {
+                int current_id = (int)id_for_expr.size();
+                auto it = id_for_expr.emplace(e, current_id);
+                bool unseen = it.second;
+                current_id = it.first->second;
+
+                if (unseen) {
+                    if (expr_for_id.size() < id_for_expr.size()) {
+                        expr_for_id.resize(id_for_expr.size());
+                        children.resize(id_for_expr.size());
+                        parents.resize(id_for_expr.size());
+                    }
+                    expr_for_id[current_id] = e;
+                    int old_parent = current_parent;
+                    current_parent = current_id;
+                    IRMutator::mutate(e);
+                    current_parent = old_parent;
+                }
+
+                parents[current_id].insert(current_parent);
+                if (current_parent != -1) {
+                    children[current_parent].insert(current_id);
+                }
+
+                return e;
+            } else {
+                // Building a subexpr
+                auto it = id_for_expr.find(e);
+                assert(it != id_for_expr.end());
+                if (building.count(it->second)) {
+                    return IRMutator::mutate(e);
+                } else {
+                    int new_id = (int)renumbering.size();
+                    new_id = renumbering.emplace(it->second, new_id).first->second;
+                    // We're after end
+                    return Variable::make(Int(32), "v" + std::to_string(new_id));
+                }
+            }
         }
 
-    public:
+        // Map between exprs and node ids
         map<Expr, int, IRDeepCompare> id_for_expr;
-        map<int, Expr> expr_for_id;
+        vector<Expr> expr_for_id;
+        // The DAG structure. Every node has outgoing edges (child
+        // nodes) and incoming edges (parent nodes).
+        vector<set<int>> children;
+        vector<set<int>> parents;
+
+        // The current expression being built
+        set<int> building;
+        map<int, int> renumbering;
+
+        vector<Expr> result;
+        void generate_subgraphs(const set<int> &rejected,
+                                const set<int> &current,
+                                const set<int> &frontier)  {
+            if (frontier.empty()) {
+                if (!current.empty()) {
+                    building = current;
+                    renumbering.clear();
+                    Expr pat = mutate(expr_for_id[*(building.begin())]);
+                    // Apply some rejection rules
+                    if (building.size() <= 1 || renumbering.size() > 6) {
+                        // Too few inner nodes or too many wildcards
+                    } else {
+                        result.push_back(pat);
+                    }
+                }
+                return;
+            }
+
+            // Pick an arbitrary frontier node to consider
+            int v = *(frontier.begin());
+
+            const set<int> &ch = children[v];
+
+            set<int> r = rejected, c = current, f = frontier;
+
+            f.erase(v);
+
+            // Generate all subgraphs with this frontier node not included.
+            // We're only going to replace ints with wildcards, so if
+            // it's some other type, we must include it.
+            if (expr_for_id[v].type() == Int(32)) {
+                r.insert(v);
+
+                // std::cout << "Excluding " << expr_for_id[v] << "\n";
+                generate_subgraphs(r, c, f);
+            }
+
+            // Generate all subgraphs with this frontier node included
+            c.insert(v);
+            for (auto n : ch) {
+                if (!rejected.count(n) && !current.count(n) && !children[n].empty()) {
+                    f.insert(n);
+                }
+            }
+            // std::cout << "Including " << expr_for_id[v] << "\n";
+            generate_subgraphs(rejected, c, f);
+        }
     } all_subexprs;
     all_subexprs.mutate(e);
 
-    // For each subexpression, enumerate all possible ways to replace
-    // its inner non-leaf nodes with wildcards.
+    // Enumerate all sub-dags
+    set<int> rejected, current, frontier;
+    frontier.insert(0);
+    for (int i = 0; i < (int)all_subexprs.children.size(); i++) {
+        // Don't consider leaves for roots
+        if (all_subexprs.children[i].empty()) continue;
+        frontier.insert(i);
+        all_subexprs.generate_subgraphs(rejected, current, frontier);
+        frontier.clear();
+    }
 
-
-    // Enumerate all possible ways to replace a penultimate inner node with a leaf node.
-    vector<Expr> all_subtrees
+    return all_subexprs.result;
 }
 
 Expr super_simplify(Expr e) {
-    for (int size = 1; size < 10; size++) {
+    for (int size = 1; size < 3; size++) {
         Expr r = super_simplify(e, size);
         if (r.defined()) return r;
     }
     return Expr();
 }
+
+/*
+Expr exprs[] = {
+#include "exprs.h"
+};
+*/
+
+Expr patterns[] = {
+#include "patterns.h"
+};
 
 int main(int argc, char **argv) {
     // Give the variables aliases, to facilitate copy-pastes from elsewhere
@@ -532,6 +661,67 @@ int main(int argc, char **argv) {
     super_simplify((min(v0, -v1) + v2) + v1 <= v2);
     super_simplify((v0 + (v1 + v2)) - (v3 + (v4 + v2)));
     */
-    super_simplify((x / max(1, y)) * max(1, y) + x % max(1, y));
+    // super_simplify((x / max(1, y)) * max(1, y) + x % max(1, y));
+
+    /*
+    set<Expr, IRDeepCompare> patterns;
+    for (auto &e : exprs) {
+        std::cout << patterns.size() << '\n';
+        e = simplify(e);
+        for (auto p : all_possible_lhs_patterns(e)) {
+            patterns.insert(p);
+        }
+    }
+
+    for (auto p : patterns) {
+        std::cout << p << "\n";
+    } */
+
+    class CountLeaves : public IRVisitor {
+        using IRVisitor::visit;
+        void visit(const Variable *op) override {
+            if (vars_used.count(op->name)) {
+                repeated_var = true;
+            } else {
+                vars_used.insert(op->name);
+            }
+            count++;
+        }
+        void visit(const Div *op) override {
+            has_division = true;
+        }
+    public:
+        int count = 0;
+        bool has_division = false;
+        bool repeated_var = false;
+        set<string> vars_used;
+    };
+
+    vector<std::future<void>> futures;
+    ThreadPool<void> pool;
+
+    for (int leaves = 2; leaves < 10; leaves++) {
+        std::cout << "\nConsidering patterns with " << leaves << " leaves ";
+        for (auto p : patterns) {
+            CountLeaves count_leaves;
+            p.accept(&count_leaves);
+            // For now we'll focus on patterns with no divides and
+            // with a repeated reuse of a LHS expression.
+            if (count_leaves.count != leaves || count_leaves.has_division || !count_leaves.repeated_var) continue;
+            futures.emplace_back(pool.async([=]() {
+                        int lhs_ops = leaves - 1;
+                        int max_rhs_ops = lhs_ops - 1;
+                        Expr e = super_simplify(p, max_rhs_ops);
+                        if (e.defined()) {
+                            std::cout << '\n' << p << " -> " << e << '\n';
+                        }
+                    }));
+        }
+    }
+
+    for (auto &f : futures) {
+        f.get();
+    }
+
     return 0;
 }
