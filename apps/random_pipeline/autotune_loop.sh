@@ -31,6 +31,8 @@ mkdir -p weights
 # benchmarked serially. Set to number of cores.
 BATCH_SIZE=32
 
+MAX_STAGES=5
+
 HL_TARGET=x86-64-avx2-disable_llvm_loop_vectorize-disable_llvm_loop_unroll-cuda
 
 record_failed() {
@@ -55,10 +57,10 @@ make_sample() {
     rm -f "${D}/sample.sample"
     if [[ $D == */0 ]]; then
         # Sample 0 in each batch is best effort beam search, with no randomness
-        CMD="HL_MACHINE_PARAMS=80,1,1 HL_PERMIT_FAILED_UNROLL=1 HL_SEED=${2} HL_FEATURE_FILE=${D}/sample.sample HL_WEIGHTS_DIR=${PWD}/../autoscheduler/gpu_weights HL_RANDOM_DROPOUT=100 HL_BEAM_SIZE=20 HL_SHARED_MEMORY_LIMIT=48 ${GENERATOR} -g ${PIPELINE} -o ${D} -e static_library,h,stmt,assembly,registration target=${HL_TARGET} auto_schedule=true max_stages=5 seed=${3} -p ${PWD}/bin/libauto_schedule.so 2> ${D}/compile_log_stderr.txt > ${D}/compile_log_stdout.txt"
+        CMD="HL_MACHINE_PARAMS=80,1,1 HL_PERMIT_FAILED_UNROLL=1 HL_SEED=${2} HL_FEATURE_FILE=${D}/sample.sample HL_WEIGHTS_DIR=${PWD}/../autoscheduler/gpu_weights HL_RANDOM_DROPOUT=100 HL_BEAM_SIZE=20 HL_SHARED_MEMORY_LIMIT=48 ${GENERATOR} -g ${PIPELINE} -o ${D} -e static_library,h,stmt,assembly,registration target=${HL_TARGET} auto_schedule=true max_stages=${MAX_STAGES} seed=${3} -p ${PWD}/bin/libauto_schedule.so 2> ${D}/compile_log_stderr.txt > ${D}/compile_log_stdout.txt"
     else
         # The other samples are random probes biased by the cost model
-        CMD="HL_MACHINE_PARAMS=80,1,1 HL_PERMIT_FAILED_UNROLL=1 HL_SEED=${2} HL_FEATURE_FILE=${D}/sample.sample HL_WEIGHTS_DIR=${PWD}/../autoscheduler/gpu_weights HL_RANDOM_DROPOUT=5 HL_BEAM_SIZE=1 HL_SHARED_MEMORY_LIMIT=48 ${GENERATOR} -g ${PIPELINE} -o ${D} -e static_library,h,stmt,assembly,registration target=${HL_TARGET} auto_schedule=true max_stages=5 seed=${3} -p ${PWD}/bin/libauto_schedule.so 2> ${D}/compile_log_stderr.txt > ${D}/compile_log_stdout.txt"
+        CMD="HL_MACHINE_PARAMS=80,1,1 HL_PERMIT_FAILED_UNROLL=1 HL_SEED=${2} HL_FEATURE_FILE=${D}/sample.sample HL_WEIGHTS_DIR=${PWD}/../autoscheduler/gpu_weights HL_RANDOM_DROPOUT=5 HL_BEAM_SIZE=1 HL_SHARED_MEMORY_LIMIT=48 ${GENERATOR} -g ${PIPELINE} -o ${D} -e static_library,h,stmt,assembly,registration target=${HL_TARGET} auto_schedule=true max_stages=${MAX_STAGES} seed=${3} -p ${PWD}/bin/libauto_schedule.so 2> ${D}/compile_log_stderr.txt > ${D}/compile_log_stdout.txt"
     fi
 
     BATCH=${4}
