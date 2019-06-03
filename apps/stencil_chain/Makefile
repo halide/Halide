@@ -9,11 +9,11 @@ $(GENERATOR_BIN)/stencil_chain.generator: stencil_chain_generator.cpp $(GENERATO
 
 $(BIN)/%/stencil_chain.a: $(GENERATOR_BIN)/stencil_chain.generator
 	@mkdir -p $(@D)
-	$^ -g stencil_chain -o $(@D) -f stencil_chain target=$* auto_schedule=false
+	$^ -g stencil_chain -e $(GENERATOR_OUTPUTS) -o $(@D) -f stencil_chain target=$* auto_schedule=false
 
 $(BIN)/%/stencil_chain_auto_schedule.a: $(GENERATOR_BIN)/stencil_chain.generator
 	@mkdir -p $(@D)
-	$^ -g stencil_chain -o $(@D) -f stencil_chain_auto_schedule target=$*-no_runtime auto_schedule=true
+	$^ -g stencil_chain -e $(GENERATOR_OUTPUTS) -o $(@D) -f stencil_chain_auto_schedule target=$*-no_runtime auto_schedule=true
 
 $(BIN)/%/process: process.cpp $(BIN)/%/stencil_chain.a $(BIN)/%/stencil_chain_auto_schedule.a
 	@mkdir -p $(@D)

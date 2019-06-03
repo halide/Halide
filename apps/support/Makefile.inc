@@ -21,6 +21,14 @@ GENERATOR_BIN ?= $(BIN)/host
 
 SANITIZER_FLAGS ?=
 
+# The outputs to produce when running a Generator (ie the args to the -e flag).
+# If -e is unspecified, Halide normally defaults to the equivalent of
+# `-e static_library,h,registration`; we add assembly and stmt to the 'default'
+# outputs for the apps, since it makes casual inspection of the Generator output
+# easier to inspect and experiment with. (Production build systems wouldn't
+# normally do this, as it would just waste cycles and storage.)
+GENERATOR_OUTPUTS ?= static_library,h,registration,stmt,assembly
+
 # This pulls in the definition of HALIDE_SYSTEM_LIBS and HALIDE_RTTI
 include $(HALIDE_DISTRIB_PATH)/halide_config.make
 

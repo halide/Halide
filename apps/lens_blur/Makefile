@@ -9,11 +9,11 @@ $(GENERATOR_BIN)/lens_blur.generator: lens_blur_generator.cpp $(GENERATOR_DEPS)
 
 $(BIN)/%/lens_blur.a: $(GENERATOR_BIN)/lens_blur.generator
 	@mkdir -p $(@D)
-	$^ -g lens_blur -o $(@D) -f lens_blur target=$* auto_schedule=false
+	$^ -g lens_blur -e $(GENERATOR_OUTPUTS) -o $(@D) -f lens_blur target=$* auto_schedule=false
 
 $(BIN)/%/lens_blur_auto_schedule.a: $(GENERATOR_BIN)/lens_blur.generator
 	@mkdir -p $(@D)
-	$^ -g lens_blur -o $(@D) -f lens_blur_auto_schedule target=$*-no_runtime auto_schedule=true
+	$^ -g lens_blur -e $(GENERATOR_OUTPUTS) -o $(@D) -f lens_blur_auto_schedule target=$*-no_runtime auto_schedule=true
 
 $(BIN)/%/process: process.cpp $(BIN)/%/lens_blur.a $(BIN)/%/lens_blur_auto_schedule.a
 	@mkdir -p $(@D)
