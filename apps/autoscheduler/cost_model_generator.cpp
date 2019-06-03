@@ -257,7 +257,7 @@ public:
                                     num_scalars * relu1(1, w, n)),
                                    (vector_size * num_vectors * relu1(2, w, n) +
                                     num_scalars * relu1(3, w, n)));
-        compute_cost += num_warps * relu1(31, w, n);
+        compute_cost += num_warps * relu1(4, w, n);
 
         Expr num_tasks = max(1, inner_parallelism * outer_parallelism);
         Expr tasks_per_core = num_tasks / num_cores;
