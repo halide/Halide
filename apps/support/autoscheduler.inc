@@ -78,6 +78,6 @@ $(AUTOSCHED_BIN)/augment_sample: $(AUTOSCHED_SRC)/augment_sample.cpp
 
 # This is the value that machine_params defaults to if no custom value is specified;
 # see MachineParams::generic()
-HL_MACHINE_PARAMS ?= 32,25165824,160
+HL_MACHINE_PARAMS ?= 80,25165824,160
 
 
