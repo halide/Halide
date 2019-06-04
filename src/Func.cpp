@@ -289,7 +289,8 @@ void Stage::set_dim_type(VarOrRVar var, ForType t) {
             // If it's an rvar and the for type is parallel, we need to
             // validate that this doesn't introduce a race condition.
             if (!dims[i].is_pure() && var.is_rvar && is_parallel(t)) {
-                user_assert(definition.schedule().allow_race_conditions())
+                user_assert(definition.schedule().allow_race_conditions() ||
+                            definition.schedule().atomic())
                     << "In schedule for " << name()
                     << ", marking var " << var.name()
                     << " as parallel or vectorized may introduce a race"
@@ -1404,6 +1405,11 @@ Stage &Stage::allow_race_conditions() {
     return *this;
 }
 
+Stage &Stage::atomic() {
+    definition.schedule().atomic() = true;
+    return *this;
+}
+
 Stage &Stage::serial(VarOrRVar var) {
     set_dim_type(var, ForType::Serial);
     return *this;
@@ -1976,6 +1982,11 @@ Func &Func::rename(VarOrRVar old_name, VarOrRVar new_name) {
 
 Func &Func::allow_race_conditions() {
     Stage(func, func.definition(), 0, args()).allow_race_conditions();
+    return *this;
+}
+
+Func &Func::atomic() {
+    Stage(func, func.definition(), 0, args()).atomic();
     return *this;
 }
 

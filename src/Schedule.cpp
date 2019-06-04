@@ -276,9 +276,10 @@ struct StageScheduleContents {
     std::vector<FusedPair> fused_pairs;
     bool touched;
     bool allow_race_conditions;
+    bool atomic;
 
     StageScheduleContents() : fuse_level(FuseLoopLevel()), touched(false),
-                              allow_race_conditions(false) {};
+                              allow_race_conditions(false), atomic(false) {};
 
     // Pass an IRMutator through to all Exprs referenced in the StageScheduleContents
     void mutate(IRMutator *mutator) {
@@ -476,6 +477,7 @@ StageSchedule StageSchedule::get_copy() const {
     copy.contents->fused_pairs = contents->fused_pairs;
     copy.contents->touched = contents->touched;
     copy.contents->allow_race_conditions = contents->allow_race_conditions;
+    copy.contents->atomic = contents->atomic;
     return copy;
 }
 
@@ -541,6 +543,14 @@ bool &StageSchedule::allow_race_conditions() {
 
 bool StageSchedule::allow_race_conditions() const {
     return contents->allow_race_conditions;
+}
+
+bool &StageSchedule::atomic() {
+    return contents->atomic;
+}
+
+bool StageSchedule::atomic() const {
+    return contents->atomic;
 }
 
 void StageSchedule::accept(IRVisitor *visitor) const {

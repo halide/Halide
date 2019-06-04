@@ -218,7 +218,7 @@ class RewriteAccessToVectorAlloc : public IRMutator {
 
     Stmt visit(const Store *op) override {
         return Store::make(op->name, mutate(op->value), mutate_index(op->name, op->index),
-                           op->param, mutate(op->predicate), mutate_alignment(op->name, op->alignment));
+                           op->param, mutate(op->predicate), mutate_alignment(op->name, op->alignment), op->is_atomic);
     }
 
 public:
@@ -339,7 +339,7 @@ class PredicateLoadStore : public IRMutator {
             return op;
         }
         vectorized = true;
-        return Store::make(op->name, value, index, op->param, predicate, op->alignment);
+        return Store::make(op->name, value, index, op->param, predicate, op->alignment, op->is_atomic);
     }
 
     Expr visit(const Call *op) override {
@@ -696,7 +696,7 @@ class VectorSubs : public IRMutator {
             for (size_t i = 0; i < new_values.size(); i++) {
                 new_values[i] = widen(new_values[i], max_lanes);
             }
-            return Provide::make(op->name, new_values, new_args);
+            return Provide::make(op->name, new_values, new_args, op->is_atomic);
         }
     }
 
@@ -710,7 +710,7 @@ class VectorSubs : public IRMutator {
         } else {
             int lanes = std::max(predicate.type().lanes(), std::max(value.type().lanes(), index.type().lanes()));
             return Store::make(op->name, widen(value, lanes), widen(index, lanes),
-                               op->param, widen(predicate, lanes), op->alignment);
+                               op->param, widen(predicate, lanes), op->alignment, op->is_atomic);
         }
     }
 

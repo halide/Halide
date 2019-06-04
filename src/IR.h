@@ -322,8 +322,11 @@ struct Store : public StmtNode<Store> {
     // the alignment of the first lane.
     ModulusRemainder alignment;
 
+    bool is_atomic;
+
     static Stmt make(const std::string &name, Expr value, Expr index,
-                     Parameter param, Expr predicate, ModulusRemainder alignment);
+                     Parameter param, Expr predicate, ModulusRemainder alignment,
+                     bool is_atomic);
 
     static const IRNodeType _node_type = IRNodeType::Store;
 };
@@ -338,7 +341,9 @@ struct Provide : public StmtNode<Provide> {
     std::vector<Expr> values;
     std::vector<Expr> args;
 
-    static Stmt make(const std::string &name, const std::vector<Expr> &values, const std::vector<Expr> &args);
+    bool is_atomic;
+
+    static Stmt make(const std::string &name, const std::vector<Expr> &values, const std::vector<Expr> &args, bool is_atomic);
 
     static const IRNodeType _node_type = IRNodeType::Provide;
 };

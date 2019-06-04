@@ -245,7 +245,7 @@ private:
             return Evaluate::make(store);
         } else {
             Expr idx = mutate(flatten_args(op->name, op->args, Buffer<>(), output_buf));
-            return Store::make(op->name, value, idx, output_buf, const_true(value.type().lanes()), ModulusRemainder());
+            return Store::make(op->name, value, idx, output_buf, const_true(value.type().lanes()), ModulusRemainder(), op->is_atomic);
         }
     }
 
@@ -395,7 +395,7 @@ class PromoteToMemoryType : public IRMutator {
         Type t = upgrade(op->value.type());
         if (t != op->value.type()) {
             return Store::make(op->name, Cast::make(t, mutate(op->value)), mutate(op->index),
-                               op->param, mutate(op->predicate), ModulusRemainder());
+                               op->param, mutate(op->predicate), ModulusRemainder(), op->is_atomic);
         } else {
             return IRMutator::visit(op);
         }

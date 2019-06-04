@@ -190,7 +190,7 @@ Stmt IRMutator::visit(const Store *op) {
     if (predicate.same_as(op->predicate) && value.same_as(op->value) && index.same_as(op->index)) {
         return op;
     }
-    return Store::make(op->name, std::move(value), std::move(index), op->param, std::move(predicate), op->alignment);
+    return Store::make(op->name, std::move(value), std::move(index), op->param, std::move(predicate), op->alignment, op->is_atomic);
 }
 
 Stmt IRMutator::visit(const Provide *op) {
@@ -216,7 +216,7 @@ Stmt IRMutator::visit(const Provide *op) {
     if (!changed) {
         return op;
     }
-    return Provide::make(op->name, new_values, new_args);
+    return Provide::make(op->name, new_values, new_args, op->is_atomic);
 }
 
 Stmt IRMutator::visit(const Allocate *op) {

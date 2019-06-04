@@ -963,7 +963,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
                 debug(1) << "Patching __shared buffer with zero-intialization...\n";
 
                 const Load* lop = uninitialized_load_expr;
-                Stmt initialization = Store::make(lop->name, Expr(0), lop->index, Parameter(), lop->predicate, ModulusRemainder());
+                Stmt initialization = Store::make(lop->name, Expr(0), lop->index, Parameter(), lop->predicate, ModulusRemainder(), false);
                 return Block::make({ initialization, op });
             }
             const Stmt *uninitialized_load_stmt = nullptr;

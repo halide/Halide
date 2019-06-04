@@ -1613,7 +1613,7 @@ class EliminateInterleaves : public IRMutator {
         if (predicate.same_as(op->predicate) && value.same_as(op->value) && index.same_as(op->index)) {
             return op;
         } else {
-            return Store::make(op->name, value, index, op->param, predicate, op->alignment);
+            return Store::make(op->name, value, index, op->param, predicate, op->alignment, op->is_atomic);
         }
     }
 

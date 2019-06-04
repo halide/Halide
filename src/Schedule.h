@@ -543,6 +543,12 @@ public:
     bool &allow_race_conditions();
     // @}
 
+    /** Issue atomic store? */
+    // @{
+    bool atomic() const;
+    bool &atomic();
+    // @}
+
     /** Pass an IRVisitor through to all Exprs referenced in the
      * Schedule. */
     void accept(IRVisitor *) const;

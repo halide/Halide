@@ -199,7 +199,7 @@ Stmt Simplify::visit(const Provide *op) {
     if (!changed) {
         return op;
     } else {
-        return Provide::make(op->name, new_values, new_args);
+        return Provide::make(op->name, new_values, new_args, op->is_atomic);
     }
 }
 
@@ -228,14 +228,14 @@ Stmt Simplify::visit(const Store *op) {
         return Evaluate::make(0);
     } else if (scalar_pred && !is_one(scalar_pred->value)) {
         return IfThenElse::make(scalar_pred->value,
-                                Store::make(op->name, value, index, op->param, const_true(value.type().lanes()), align));
+                                Store::make(op->name, value, index, op->param, const_true(value.type().lanes()), align, op->is_atomic));
     } else if (is_undef(value) || (load && load->name == op->name && equal(load->index, index))) {
         // foo[x] = foo[x] or foo[x] = undef is a no-op
         return Evaluate::make(0);
     } else if (predicate.same_as(op->predicate) && value.same_as(op->value) && index.same_as(op->index) && align == op->alignment) {
         return op;
     } else {
-        return Store::make(op->name, value, index, op->param, predicate, align);
+        return Store::make(op->name, value, index, op->param, predicate, align, op->is_atomic);
     }
 }
 

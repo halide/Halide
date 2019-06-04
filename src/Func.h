@@ -419,6 +419,7 @@ public:
                     DeviceAPI device_api = DeviceAPI::Default_GPU);
 
     Stage &allow_race_conditions();
+    Stage &atomic();
 
     Stage &hexagon(VarOrRVar x = Var::outermost());
     Stage &prefetch(const Func &f, VarOrRVar var, Expr offset = 1,
@@ -1531,6 +1532,9 @@ public:
      * may result in a non-deterministic routine that returns
      * different values at different times or on different machines. */
     Func &allow_race_conditions();
+
+    /** Issue atomic store for this Func. This allows parallelization on arbitrary RVars. */
+    Func &atomic();
 
 
     /** Specialize a Func. This creates a special-case version of the

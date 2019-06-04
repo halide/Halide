@@ -42,7 +42,8 @@ void define_param(py::module &m) {
         .def("__repr__", [](const Param<> &param) -> std::string {
             std::ostringstream o;
             o << "<halide.Param '" << param.name() << "'"
-              << " type " << halide_type_to_string(param.type()) << ">";
+              << " type " << halide_type_to_string(param.type())
+              << " value " << param.get<int>() << ">";
             return o.str();
         })
     ;

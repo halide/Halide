@@ -266,7 +266,7 @@ void CodeGen_PTX_Dev::visit(const Store *op) {
         if (align.modulus % 4 == 0 && align.remainder % 4 == 0) {
             Expr index = simplify(r->base / 4);
             Expr value = reinterpret(UInt(128), op->value);
-            Stmt equiv = Store::make(op->name, value, index, op->param, const_true(), align / 4);
+            Stmt equiv = Store::make(op->name, value, index, op->param, const_true(), align / 4, op->is_atomic);
             codegen(equiv);
             return;
         }
