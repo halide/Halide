@@ -1,5 +1,7 @@
 #include "Halide.h"
 
+#include <fstream>
+
 using namespace Halide;
 using namespace Halide::Internal;
 
@@ -286,6 +288,16 @@ string consume_token(char **cursor, char *end) {
     return result;
 }
 
+int consume_number(char **cursor, char *end) {
+    int n = 0;
+    while (*cursor < end && **cursor >= '0' && **cursor <= '9') {
+        n *= 10;
+        n += (**cursor - '0');
+        (*cursor)++;
+    }
+    return n;
+}
+
 void parse_model(char **cursor, char *end, map<string, Expr> *bindings) {
     consume_whitespace(cursor, end);
     expect(cursor, end, "(model");
@@ -526,16 +538,15 @@ vector<Expr> all_possible_lhs_patterns(const Expr &e) {
                     if (expr_for_id.size() < id_for_expr.size()) {
                         expr_for_id.resize(id_for_expr.size());
                         children.resize(id_for_expr.size());
-                        parents.resize(id_for_expr.size());
                     }
                     expr_for_id[current_id] = e;
+                    std::cout << current_id << ": " << e << "\n";
                     int old_parent = current_parent;
                     current_parent = current_id;
                     IRMutator::mutate(e);
                     current_parent = old_parent;
                 }
 
-                parents[current_id].insert(current_parent);
                 if (current_parent != -1) {
                     children[current_parent].insert(current_id);
                 }
@@ -551,7 +562,7 @@ vector<Expr> all_possible_lhs_patterns(const Expr &e) {
                     int new_id = (int)renumbering.size();
                     new_id = renumbering.emplace(it->second, new_id).first->second;
                     // We're after end
-                    return Variable::make(Int(32), "v" + std::to_string(new_id));
+                    return Variable::make(e.type(), "v" + std::to_string(new_id));
                 }
             }
         }
@@ -562,7 +573,6 @@ vector<Expr> all_possible_lhs_patterns(const Expr &e) {
         // The DAG structure. Every node has outgoing edges (child
         // nodes) and incoming edges (parent nodes).
         vector<set<int>> children;
-        vector<set<int>> parents;
 
         // The current expression being built
         set<int> building;
@@ -572,7 +582,16 @@ vector<Expr> all_possible_lhs_patterns(const Expr &e) {
         void generate_subgraphs(const set<int> &rejected,
                                 const set<int> &current,
                                 const set<int> &frontier)  {
-            if (frontier.empty()) {
+            // Pick an arbitrary frontier node to consider
+            int v = -1;
+            for (auto n : frontier) {
+                if (!rejected.count(n) && !current.count(n) && !children[n].empty()) {
+                    v = n;
+                    break;
+                }
+            }
+
+            if (v == -1) {
                 if (!current.empty()) {
                     building = current;
                     renumbering.clear();
@@ -586,9 +605,6 @@ vector<Expr> all_possible_lhs_patterns(const Expr &e) {
                 }
                 return;
             }
-
-            // Pick an arbitrary frontier node to consider
-            int v = *(frontier.begin());
 
             const set<int> &ch = children[v];
 
@@ -607,16 +623,21 @@ vector<Expr> all_possible_lhs_patterns(const Expr &e) {
             }
 
             // Generate all subgraphs with this frontier node included
-            c.insert(v);
-            for (auto n : ch) {
-                if (!rejected.count(n) && !current.count(n) && !children[n].empty()) {
-                    f.insert(n);
+            if (c.size() < 6) {
+                c.insert(v);
+                for (auto n : ch) {
+                    if (!rejected.count(n) && !current.count(n) && !children[n].empty()) {
+                        f.insert(n);
+                    }
                 }
             }
             // std::cout << "Including " << expr_for_id[v] << "\n";
             generate_subgraphs(rejected, c, f);
         }
     } all_subexprs;
+
+    std::cout << "Building DAG...\n";
+
     all_subexprs.mutate(e);
 
     // Enumerate all sub-dags
@@ -714,11 +735,14 @@ class CountLeaves : public IRVisitor {
         count++;
     }
     void visit(const Div *op) override {
-        has_division = true;
+        has_div_mod = true;
+    }
+    void visit(const Mod *op) override {
+        has_div_mod = true;
     }
 public:
     int count = 0;
-    bool has_division = false;
+    bool has_div_mod = false;
     bool repeated_var = false;
     set<string> vars_used;
 };
@@ -773,27 +797,162 @@ std::ostream &operator<<(std::ostream &s, IRNodeType t) {
     }
 };
 
+Expr parse_halide_expr(char **cursor, char *end) {
+    consume_whitespace(cursor, end);
+    if (consume(cursor, end, "min(")) {
+        Expr a = parse_halide_expr(cursor, end);
+        expect(cursor, end, ",");
+        Expr b = parse_halide_expr(cursor, end);
+        consume_whitespace(cursor, end);
+        expect(cursor, end, ")");
+        return min(a, b);
+    }
+    if (consume(cursor, end, "max(")) {
+        Expr a = parse_halide_expr(cursor, end);
+        expect(cursor, end, ",");
+        Expr b = parse_halide_expr(cursor, end);
+        consume_whitespace(cursor, end);
+        expect(cursor, end, ")");
+        return max(a, b);
+    }
+    if (consume(cursor, end, "select(")) {
+        Expr a = parse_halide_expr(cursor, end);
+        expect(cursor, end, ",");
+        Expr b = parse_halide_expr(cursor, end);
+        expect(cursor, end, ",");
+        Expr c = parse_halide_expr(cursor, end);
+        consume_whitespace(cursor, end);
+        expect(cursor, end, ")");
+        return select(a, b, c);
+    }
+    if (consume(cursor, end, "(")) {
+        Expr a = parse_halide_expr(cursor, end);
+        Expr result;
+        consume_whitespace(cursor, end);
+        if (consume(cursor, end, "+")) {
+            result = a + parse_halide_expr(cursor, end);
+        }
+        if (consume(cursor, end, "*")) {
+            result = a * parse_halide_expr(cursor, end);
+        }
+        if (consume(cursor, end, "-")) {
+            result = a - parse_halide_expr(cursor, end);
+        }
+        if (consume(cursor, end, "/")) {
+            result = a / parse_halide_expr(cursor, end);
+        }
+        if (consume(cursor, end, "%")) {
+            result = a % parse_halide_expr(cursor, end);
+        }
+        if (consume(cursor, end, "<=")) {
+            result = a <= parse_halide_expr(cursor, end);
+        }
+        if (consume(cursor, end, "<")) {
+            result = a < parse_halide_expr(cursor, end);
+        }
+        if (consume(cursor, end, ">=")) {
+            result = a >= parse_halide_expr(cursor, end);
+        }
+        if (consume(cursor, end, ">")) {
+            result = a > parse_halide_expr(cursor, end);
+        }
+        if (consume(cursor, end, "==")) {
+            result = a == parse_halide_expr(cursor, end);
+        }
+        if (consume(cursor, end, "!=")) {
+            result = a != parse_halide_expr(cursor, end);
+        }
+        if (consume(cursor, end, "&&")) {
+            result = a && parse_halide_expr(cursor, end);
+        }
+        if (consume(cursor, end, "||")) {
+            result = a || parse_halide_expr(cursor, end);
+        }
+        if (result.defined()) {
+            consume_whitespace(cursor, end);
+            expect(cursor, end, ")");
+            return result;
+        }
+    }
+    if (consume(cursor, end, "v")) {
+        return Variable::make(Int(32), "v" + std::to_string(consume_number(cursor, end)));
+    }
+    if (consume(cursor, end, "-")) {
+        return -consume_number(cursor, end);
+    }
+    if (**cursor >= '0' && **cursor <= '9') {
+        return consume_number(cursor, end);
+    }
+    if (consume(cursor, end, "true")) {
+        return const_true();
+    }
+    if (consume(cursor, end, "false")) {
+        return const_false();
+    }
+    if (consume(cursor, end, "!")) {
+        return !parse_halide_expr(cursor, end);
+    }
+    std::cerr << "Failed to parse Halide Expr starting at " << *cursor << "\n";
+    abort();
+    return Expr();
+}
+
 int main(int argc, char **argv) {
-    // Give the variables aliases, to facilitate copy-pastes from elsewhere
-    Expr x = v0, y = v1, z = v2, w = v3, u = v4, v = v5;
+    if (argc < 2) {
+        std::cout << "Usage: ./super_simplify halide_exprs.txt\n";
+        return 0;
+    }
 
     // Generate LHS patterns from raw exprs
+    vector<Expr> exprs;
+    std::cout << "Reading expressions from file\n";
+    std::ifstream input;
+    input.open(argv[1]);
+    for (string line; std::getline(input, line);) {
+        if (line.empty()) continue;
 
-    Expr exprs[] = {
-    #include "exprs3.h"
-    };
+        // There are some extraneous newlines in some of the files. Balance parentheses...
+        size_t open, close;
+        while (1) {
+            open = std::count(line.begin(), line.end(), '(');
+            close = std::count(line.begin(), line.end(), ')');
+            if (open == close) break;
+            string next;
+            assert(std::getline(input, next));
+            line += next;
+        }
+
+        std::cout << "Parsing expression: '" << line << "'\n";
+        char *start = &line[0];
+        char *end = &line[line.size()];
+        exprs.push_back(parse_halide_expr(&start, end));
+    }
 
     set<Expr, IRDeepCompare> patterns;
     size_t handled = 0, total = 0;
     for (auto &e : exprs) {
         std::cout << patterns.size() << '\n';
+        Expr orig = e;
         e = simplify(e);
+        Expr second = simplify(e);
+        while (!equal(e, second)) {
+            std::cerr << "Warning: Expression required multiple applications of the simplifier:\n"
+                      << e << " -> " << second << "\n";
+            e = second;
+            second = simplify(e);
+        }
         total++;
         if (is_one(e)) {
             handled++;
         } else {
             std::cout << "EXPR: " << e << "\n";
             for (auto p : all_possible_lhs_patterns(e)) {
+                // We prefer LT rules to LE rules. The LE simplifier just redirects to the LT simplifier.
+                /*
+                if (const LE *le = p.as<LE>()) {
+                    p = le->b < le->a;
+                }
+                */
                 patterns.insert(p);
             }
         }
@@ -807,13 +966,6 @@ int main(int argc, char **argv) {
 
 
     // Generate rules from patterns
-
-    /*
-    Expr patterns[] = {
-    #include "patterns.h"
-    };
-    */
-
     vector<std::future<void>> futures;
     ThreadPool<void> pool;
     std::mutex mutex;
@@ -825,7 +977,7 @@ int main(int argc, char **argv) {
             p.accept(&count_leaves);
             // For now we'll focus on patterns with no divides and
             // with a repeated reuse of a LHS expression.
-            if (count_leaves.count != leaves || count_leaves.has_division || !count_leaves.repeated_var) continue;
+            if (count_leaves.count != leaves || count_leaves.has_div_mod || !count_leaves.repeated_var) continue;
             futures.emplace_back(pool.async([=, &mutex, &rules]() {
                         int lhs_ops = leaves - 1;
                         int max_rhs_ops = lhs_ops - 1;
@@ -844,13 +996,6 @@ int main(int argc, char **argv) {
     }
 
     // Filter rules
-
-    /*
-    pair<Expr, Expr> rules[] = {
-#include "rules.h"
-    };
-    */
-
     vector<pair<Expr, Expr>> filtered;
 
     for (auto r1 : rules) {
