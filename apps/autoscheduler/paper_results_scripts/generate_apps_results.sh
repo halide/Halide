@@ -1,5 +1,30 @@
+#!/bin/bash
+
+if [ $# -ne 1 ]; then
+    echo "Usage: $0 mode [greedy|beam_search]"
+    exit
+fi
+
 HALIDE=$(dirname $0)/../../..
 echo "Using Halide in " $HALIDE
+
+MODE=${1}
+
+if [ $MODE == "greedy" ]; then
+    BEAM_SIZE=1
+    NUM_PASSES=1
+elif [ $MODE == "beam_search" ]; then
+    BEAM_SIZE=32
+    NUM_PASSES=5
+else
+    echo "Unknown mode: ${MODE}"
+    exit
+fi
+
+echo "Using ${MODE} mode with beam_size=${BEAM_SIZE} and num_passes=${NUM_PASSES}"
+
+export HL_BEAM_SIZE=${BEAM_SIZE}
+export HL_NUM_PASSES=${NUM_PASSES}
 
 export CXX="ccache ${CXX}"
 
@@ -14,13 +39,11 @@ export HL_TARGET=host-cuda
 # no random dropout
 export HL_RANDOM_DROPOUT=100
 
-# greedy
- export HL_BEAM_SIZE=1
- export HL_NUM_PASSES=1
 
-# beam search
-# export HL_BEAM_SIZE=32
-# export HL_NUM_PASSES=5
+RESULTS_DIR="results"/${MODE}
+
+mkdir -p ${RESULTS_DIR}
+rm -rf ${RESULTS_DIR}/*
 
 # ablation where we restrict to old space
 # export HL_NO_SUBTILING=1
@@ -38,9 +61,9 @@ for app in ${APPS}; do
     echo "Compile" $app
     # The apps sadly do not use consistent names for their test binary, but they're all either 'filter' or 'process'
     if [ -f ${HALIDE}/apps/${app}/filter.cpp ]; then
-        make -j32 -C ${HALIDE}/apps/${app} bin/filter 2>stderr_${app}.txt >stdout_${app}.txt &
+        make -j32 -C ${HALIDE}/apps/${app} bin/filter 2>${RESULTS_DIR}/stderr_${app}.txt >${RESULTS_DIR}/stdout_${app}.txt &
     else
-        make -j32 -C ${HALIDE}/apps/${app} bin/process 2>stderr_${app}.txt >stdout_${app}.txt &
+        make -j32 -C ${HALIDE}/apps/${app} bin/process 2>${RESULTS_DIR}/stderr_${app}.txt >${RESULTS_DIR}/stdout_${app}.txt &
     fi
 done
 make -C ${HALIDE}/apps/resnet_50_blockwise bin/pytorch_weights/ok > /dev/null 2> /dev/null
@@ -49,18 +72,22 @@ wait
 # benchmark everything
 for app in ${APPS}; do
     echo "Bench" $app
-    make -C ${HALIDE}/apps/${app} test > results_${app}.txt;
+    make -C ${HALIDE}/apps/${app} test > ${RESULTS_DIR}/results_${app}.txt;
 done
 
 # Report results
+echo "App, Manual (ms), Baseline (ms), Autoscheduler (ms)" >> ${RESULTS_DIR}/results.txt
 for app in ${APPS}; do
     if [ $app == "resnet_50_blockwise" ]; then
-        C=$(grep "schedule_type=classic_auto_schedule" results_resnet_50_blockwise.txt | cut -d" " -f 4)
-        A=$(grep "schedule_type=_auto_schedule" results_resnet_50_blockwise.txt | cut -d" " -f 4)
+        M="-1" # There's no manual schedule for resnet
+        C=$(grep "schedule_type=classic_auto_schedule"
+        ${RESULTS_DIR}/results_resnet_50_blockwise.txt | cut -d" " -f 4 | cut -dm -f 1)
+        A=$(grep "schedule_type=_auto_schedule" ${RESULTS_DIR}/results_resnet_50_blockwise.txt | cut -d" " -f 4)
     else
-        M=$(grep "Manual" results_${app}.txt -m 1 | cut -d" " -f3)
-        C=$(grep "Simple" results_${app}.txt -m 1 | cut -d" " -f4)
-        A=$(grep "Auto" results_${app}.txt -m 1 | cut -d" " -f3)
+        M=$(grep "Manual" ${RESULTS_DIR}/results_${app}.txt -m 1 | cut -d" " -f3 | cut -dm -f 1)
+        C=$(grep "Simple" ${RESULTS_DIR}/results_${app}.txt -m 1 | cut -d" " -f4 | cut -dm -f 1)
+        A=$(grep "Auto" ${RESULTS_DIR}/results_${app}.txt -m 1 | cut -d" " -f3 | cut -dm -f 1)
     fi
-    echo $app $M $C $A
+    echo "$app, $M, $C, $A" >> ${RESULTS_DIR}/results.txt
 done
+
