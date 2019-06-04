@@ -7,6 +7,7 @@ using std::string;
 using std::vector;
 using std::map;
 using std::set;
+using std::pair;
 
 // Convert from a Halide Expr to SMT2 to pass to z3
 string expr_to_smt2(const Expr &e) {
@@ -412,7 +413,7 @@ Z3Result satisfy(Expr e, map<string, Expr> *bindings) {
     }
 }
 
-Var v0("v0"), v1("v1"), v2("v2"), v3("v3"), v4("v4"), v5("v5"), v6("v6"), v7("v7"), v8("v8"), v9("v9");
+Var v0("x"), v1("y"), v2("z"), v3("w"), v4("u"), v5("v"), v6("v6"), v7("v7"), v8("v8"), v9("v9");
 Var v10("v10"), v11("v11"), v12("v12"), v13("v13"), v14("v14"), v15("v15"), v16("v16"), v17("v17"), v18("v18"), v19("v19");
 Var v20("v20"), v21("v21"), v22("v22"), v23("v23"), v24("v24"), v25("v25"), v26("v26"), v27("v27"), v28("v28"), v29("v29");
 
@@ -640,66 +641,183 @@ Expr super_simplify(Expr e) {
     return Expr();
 }
 
-/*
-Expr exprs[] = {
-#include "exprs.h"
-};
-*/
+bool more_general_than(const Expr &a, const Expr &b, map<string, Expr> &bindings);
 
-Expr patterns[] = {
-#include "patterns.h"
+template<typename Op>
+bool more_general_than(const Op *a, const Op *b, map<string, Expr> &bindings) {
+    assert(a && b);
+    return more_general_than(a->a, b->a, bindings) && more_general_than(a->b, b->b, bindings);
+}
+
+bool more_general_than(const Expr &a, const Expr &b, map<string, Expr> &bindings) {
+    if (const Variable *var = a.as<Variable>()) {
+        auto it = bindings.find(var->name);
+        if (it == bindings.end()) {
+            bindings[var->name] = b;
+            return true;
+        } else {
+            return equal(bindings[var->name], b);
+        }
+    }
+    if (a.node_type() != b.node_type()) return false;
+
+    if (const Min *op = a.as<Min>()) {
+        return more_general_than(op, b.as<Min>(), bindings);
+    }
+
+    if (const Max *op = a.as<Max>()) {
+        return more_general_than(op, b.as<Max>(), bindings);
+    }
+
+    if (const Add *op = a.as<Add>()) {
+        return more_general_than(op, b.as<Add>(), bindings);
+    }
+
+    if (const Sub *op = a.as<Sub>()) {
+        return more_general_than(op, b.as<Sub>(), bindings);
+    }
+
+    if (const Mul *op = a.as<Mul>()) {
+        return more_general_than(op, b.as<Mul>(), bindings);
+    }
+
+    if (const Div *op = a.as<Div>()) {
+        return more_general_than(op, b.as<Div>(), bindings);
+    }
+
+    if (const LE *op = a.as<LE>()) {
+        return more_general_than(op, b.as<LE>(), bindings);
+    }
+
+    if (const LT *op = a.as<LT>()) {
+        return more_general_than(op, b.as<LT>(), bindings);
+    }
+
+    if (const Select *op = a.as<Select>()) {
+        const Select *op_b = b.as<Select>();
+        return (more_general_than(op->condition, op_b->condition, bindings) &&
+                more_general_than(op->true_value, op_b->true_value, bindings) &&
+                more_general_than(op->false_value, op_b->false_value, bindings));
+    }
+
+    return false;
+}
+
+class CountLeaves : public IRVisitor {
+    using IRVisitor::visit;
+    void visit(const Variable *op) override {
+        if (vars_used.count(op->name)) {
+            repeated_var = true;
+        } else {
+            vars_used.insert(op->name);
+        }
+        count++;
+    }
+    void visit(const Div *op) override {
+        has_division = true;
+    }
+public:
+    int count = 0;
+    bool has_division = false;
+    bool repeated_var = false;
+    set<string> vars_used;
+};
+
+std::ostream &operator<<(std::ostream &s, IRNodeType t) {
+    switch(t) {
+    case IRNodeType::IntImm: return (s << "IntImm");
+    case IRNodeType::UIntImm: return (s << "UIntImm");
+    case IRNodeType::FloatImm: return (s << "FloatImm");
+    case IRNodeType::StringImm: return (s << "StringImm");
+    case IRNodeType::Broadcast: return (s << "Broadcast");
+    case IRNodeType::Cast: return (s << "Cast");
+    case IRNodeType::Variable: return (s << "Variable");
+    case IRNodeType::Add: return (s << "Add");
+    case IRNodeType::Sub: return (s << "Sub");
+    case IRNodeType::Mod: return (s << "Mod");
+    case IRNodeType::Mul: return (s << "Mul");
+    case IRNodeType::Div: return (s << "Div");
+    case IRNodeType::Min: return (s << "Min");
+    case IRNodeType::Max: return (s << "Max");
+    case IRNodeType::EQ: return (s << "EQ");
+    case IRNodeType::NE: return (s << "NE");
+    case IRNodeType::LT: return (s << "LT");
+    case IRNodeType::LE: return (s << "LE");
+    case IRNodeType::GT: return (s << "GT");
+    case IRNodeType::GE: return (s << "GE");
+    case IRNodeType::And: return (s << "And");
+    case IRNodeType::Or: return (s << "Or");
+    case IRNodeType::Not: return (s << "Not");
+    case IRNodeType::Select: return (s << "Select");
+    case IRNodeType::Load: return (s << "Load");
+    case IRNodeType::Ramp: return (s << "Ramp");
+    case IRNodeType::Call: return (s << "Call");
+    case IRNodeType::Let: return (s << "Let");
+    case IRNodeType::Shuffle: return (s << "Shuffle");
+    case IRNodeType::LetStmt: return (s << "LetStmt");
+    case IRNodeType::AssertStmt: return (s << "AssertStmt");
+    case IRNodeType::ProducerConsumer: return (s << "ProducerConsumer");
+    case IRNodeType::For: return (s << "For");
+    case IRNodeType::Acquire: return (s << "Acquire");
+    case IRNodeType::Store: return (s << "Store");
+    case IRNodeType::Provide: return (s << "Provide");
+    case IRNodeType::Allocate: return (s << "Allocate");
+    case IRNodeType::Free: return (s << "Free");
+    case IRNodeType::Realize: return (s << "Realize");
+    case IRNodeType::Block: return (s << "Block");
+    case IRNodeType::Fork: return (s << "Fork");
+    case IRNodeType::IfThenElse: return (s << "IfThenElse");
+    case IRNodeType::Evaluate: return (s << "Evaluate");
+    case IRNodeType::Prefetch: return (s << "Prefetch");
+    default: return s;
+    }
 };
 
 int main(int argc, char **argv) {
     // Give the variables aliases, to facilitate copy-pastes from elsewhere
     Expr x = v0, y = v1, z = v2, w = v3, u = v4, v = v5;
 
-    /*
-    super_simplify((v0 + v1) + v2 <= v1);
-    super_simplify(x + x*y);
-    super_simplify(z + min(x, y - z));
-    super_simplify((min(v0, -v1) + v2) + v1 <= v2);
-    super_simplify((v0 + (v1 + v2)) - (v3 + (v4 + v2)));
-    */
-    // super_simplify((x / max(1, y)) * max(1, y) + x % max(1, y));
+    // Generate LHS patterns from raw exprs
 
-    /*
+    Expr exprs[] = {
+    #include "exprs3.h"
+    };
+
     set<Expr, IRDeepCompare> patterns;
+    size_t handled = 0, total = 0;
     for (auto &e : exprs) {
         std::cout << patterns.size() << '\n';
         e = simplify(e);
-        for (auto p : all_possible_lhs_patterns(e)) {
-            patterns.insert(p);
+        total++;
+        if (is_one(e)) {
+            handled++;
+        } else {
+            std::cout << "EXPR: " << e << "\n";
+            for (auto p : all_possible_lhs_patterns(e)) {
+                patterns.insert(p);
+            }
         }
     }
 
-    for (auto p : patterns) {
-        std::cout << p << "\n";
-    } */
+    std::cout << handled << " / " << total << " rules already simplify to true\n";
 
-    class CountLeaves : public IRVisitor {
-        using IRVisitor::visit;
-        void visit(const Variable *op) override {
-            if (vars_used.count(op->name)) {
-                repeated_var = true;
-            } else {
-                vars_used.insert(op->name);
-            }
-            count++;
-        }
-        void visit(const Div *op) override {
-            has_division = true;
-        }
-    public:
-        int count = 0;
-        bool has_division = false;
-        bool repeated_var = false;
-        set<string> vars_used;
+    for (auto p : patterns) {
+        std::cout << "PATTERN: " << p << "\n";
+    }
+
+
+    // Generate rules from patterns
+
+    /*
+    Expr patterns[] = {
+    #include "patterns.h"
     };
+    */
 
     vector<std::future<void>> futures;
     ThreadPool<void> pool;
-
+    std::mutex mutex;
+    vector<pair<Expr, Expr>> rules;
     for (int leaves = 2; leaves < 10; leaves++) {
         std::cout << "\nConsidering patterns with " << leaves << " leaves ";
         for (auto p : patterns) {
@@ -708,12 +826,14 @@ int main(int argc, char **argv) {
             // For now we'll focus on patterns with no divides and
             // with a repeated reuse of a LHS expression.
             if (count_leaves.count != leaves || count_leaves.has_division || !count_leaves.repeated_var) continue;
-            futures.emplace_back(pool.async([=]() {
+            futures.emplace_back(pool.async([=, &mutex, &rules]() {
                         int lhs_ops = leaves - 1;
                         int max_rhs_ops = lhs_ops - 1;
                         Expr e = super_simplify(p, max_rhs_ops);
                         if (e.defined()) {
-                            std::cout << '\n' << p << " -> " << e << '\n';
+                            std::lock_guard<std::mutex> lock(mutex);
+                            rules.emplace_back(p, e);
+                            std::cout << "\n{" << p << ", " << e << "},\n";
                         }
                     }));
         }
@@ -721,6 +841,48 @@ int main(int argc, char **argv) {
 
     for (auto &f : futures) {
         f.get();
+    }
+
+    // Filter rules
+
+    /*
+    pair<Expr, Expr> rules[] = {
+#include "rules.h"
+    };
+    */
+
+    vector<pair<Expr, Expr>> filtered;
+
+    for (auto r1 : rules) {
+        bool duplicate = false;
+        pair<Expr, Expr> suppressed_by;
+        for (auto r2 : rules) {
+            map<string, Expr> bindings;
+            bool g = more_general_than(r2.first, r1.first, bindings) && !equal(r1.first, r2.first);
+            if (g) {
+                suppressed_by = r2;
+            }
+            duplicate |= g;
+        }
+        if (!duplicate) {
+            filtered.push_back(r1);
+        } else {
+            // std::cout << "This LHS: " << r1.first << " was suppressed by this LHS: " << suppressed_by.first << "\n";
+        }
+    }
+
+    std::sort(filtered.begin(), filtered.end(), [](const pair<Expr, Expr> &r1, const pair<Expr, Expr> &r2) {
+            return IRDeepCompare{}(r1.first, r2.first);
+        });
+
+    IRNodeType old;
+    for (auto r : filtered) {
+        IRNodeType t = r.first.node_type();
+        if (t != old) {
+            std::cout << t << ":\n";
+            old = t;
+        }
+        std::cout << "    rewrite(" << r.first << ", " << r.second << ") ||\n";
     }
 
     return 0;

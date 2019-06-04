@@ -202,7 +202,17 @@ Expr Simplify::visit(const Max *op, ExprInfo *bounds) {
 
                rewrite(max(select(x, y, z), select(x, w, u)), select(x, max(y, w), max(z, u))) ||
 
-               rewrite(max(c0 - x, c1), c0 - min(x, fold(c0 - c1))))))) {
+               rewrite(max(c0 - x, c1), c0 - min(x, fold(c0 - c1))))) ||
+             (no_overflow_int(op->type) &&
+              (
+
+               // Synthesized
+               #if USE_SYNTHESIZED_RULES
+               rewrite(max(x, (min((y - (z + w)), u) + z)), max(min((y - w), (z + u)), x)) ||
+               rewrite(max(min(x, (y + z)), (min(w, z) + y)), min(max((y + w), x), (y + z))) ||
+               #endif
+
+               false)))) {
 
             return mutate(std::move(rewrite.result), bounds);
         }

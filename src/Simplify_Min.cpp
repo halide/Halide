@@ -205,7 +205,22 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
 
                rewrite(min(select(x, y, z), select(x, w, u)), select(x, min(y, w), min(z, u))) ||
 
-               rewrite(min(c0 - x, c1), c0 - max(x, fold(c0 - c1))))))) {
+               rewrite(min(c0 - x, c1), c0 - max(x, fold(c0 - c1))))) ||
+              (no_overflow_int(op->type) &&
+               (
+
+               // Synthesized
+               #if USE_SYNTHESIZED_RULES
+               rewrite(min((x + (y + z)), ((z + w) + u)), (min((w + u), (x + y)) + z)) ||
+               rewrite(min(((x + (y*z)) - (w*z)), u), min((((y - w)*z) + x), u)) ||
+               rewrite(min((min(x, (y + z)) - (w + y)), u), min((min((x - y), z) - w), u)) ||
+               rewrite(min(min(x, ((y + z) + w)), (u + y)), min((min((z + w), u) + y), x)) ||
+               rewrite(min(min((x + (y + z)), w), (u + z)), min((min((x + y), u) + z), w)) ||
+               rewrite(min(min(select((x < y), max(x, z), w), w), x), min(x, w)) ||
+               rewrite(min(select((x < y), (z + w), w), w), (min((select((x < y), 1, 0)*z), 0) + w)) ||
+               #endif
+
+               false)))) {
 
             return mutate(std::move(rewrite.result), bounds);
         }

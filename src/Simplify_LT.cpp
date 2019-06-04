@@ -356,7 +356,14 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
                       broadcast(x * fold(c3/c0) < z, lanes),
                       c0 > 0 && (c3 % c0 == 0) &&
                       c1 * (lanes - 1) < c0 &&
-                      c1 * (lanes - 1) >= 0)))) {
+                      c1 * (lanes - 1) >= 0) ||
+
+              // Synthesized
+              #if USE_SYNTHESIZED_RULES
+              rewrite((x < ((x + y) + z)), (0 < (y + z))) ||
+              #endif
+
+              false))) {
             return mutate(std::move(rewrite.result), bounds);
         }
     }
@@ -383,7 +390,53 @@ Expr Simplify::visit(const LE *op, ExprInfo *bounds) {
 
     Expr mutated = mutate(!(op->b < op->a), bounds);
     if (const LE *le = mutated.as<LE>()) {
-        if (le->a.same_as(op->a) && le->b.same_as(op->b)) {
+        Expr a = le->a, b = le->b;
+
+        // Synthesized rules
+#if USE_SYNTHESIZED_RULES
+        if (no_overflow_int(a.type())) {
+
+            auto rewrite = IRMatcher::rewriter(IRMatcher::le(a, b), op->type, a.type());
+
+            if (rewrite((x <= max(max(y, x), z)), true) ||
+                rewrite((x <= max(max(x, y), z)), true) ||
+                rewrite((x <= select((y < z), w, x)), x <= w || z <= y) ||
+                rewrite(((x + y) <= min(z, (w + y))), (x <= min((z - y), w))) ||
+                rewrite(((x + y) <= min(z, (y + w))), (x <= min((z - y), w))) ||
+                rewrite(((x + y) <= min((y + z), w)), (x <= min((w - y), z))) ||
+                rewrite(((x + y) <= min((z + y), w)), (x <= min((w - y), z))) ||
+                rewrite(((x + y) <= max(z, (w + x))), (y <= max((z - x), w))) ||
+                rewrite(((x + y) <= max(z, (w + y))), (x <= max((z - y), w))) ||
+                rewrite(((x + y) <= max((z + y), w)), (x <= max((w - y), z))) ||
+                rewrite(((x + y) <= (max(z, (w + y)) + u)), (x <= (max((z - y), w) + u))) ||
+                rewrite(((x + (y*z)) <= (w*z)), (x <= ((w - y)*z))) ||
+                rewrite((((x + y) + z) <= y), ((x + z) <= 0)) ||
+                rewrite((min(x, y) <= min(x, z)), (min(x, y) <= z)) ||
+                rewrite((min(x, y) <= min(z, y)), (min(x, y) <= z)) ||
+                rewrite((min(x, (y + z)) <= (y + w)), (min((x - y), z) <= w)) ||
+                rewrite((min(x, (y + z)) <= (z + w)), (min((x - z), y) <= w)) ||
+                rewrite((min((x + y), z) <= (x + w)), (min((z - x), y) <= w)) ||
+                rewrite((min((x + y), z) <= (y + w)), (min((z - y), x) <= w)) ||
+                rewrite((min(min(x, y), z) <= x), true) ||
+                rewrite((min(min(x, y), z) <= y), true) ||
+                rewrite((max(x, y) <= max(z, y)), (x <= max(y, z))) ||
+                rewrite((select((x < y), z, w) <= w), z <= w || y <= x) ||
+
+                rewrite((min(x, (y + z)) <= (w + z)), (min((x - z), y) <= w)) ||
+                rewrite((min((x + y), z) <= (w + y)), (min((z - y), x) <= w)) ||
+                rewrite((min(min(x, y), z) <= min(w, y)), (min(min(x, y), z) <= w)) ||
+
+                rewrite(((min(x, y) + z) <= (max(w, z) + y)), const_true()) ||
+
+                rewrite(min(x, y) <= min(y, x), true) ||
+
+                false) {
+                return mutate(rewrite.result, bounds);
+            }
+        }
+#endif
+
+        if (a.same_as(op->a) && b.same_as(op->b)) {
             return op;
         }
     }

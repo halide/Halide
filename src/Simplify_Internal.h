@@ -18,6 +18,9 @@
 #define LOG_EXPR_MUTATIONS 0
 #define LOG_STMT_MUTATIONS 0
 
+// Include rules synthesized by the simplifier-automatic-rule-synthesis project
+#define USE_SYNTHESIZED_RULES 1
+
 // On old compilers, some visitors would use large stack frames,
 // because they use expression templates that generate large numbers
 // of temporary objects when they are built and matched against. If we

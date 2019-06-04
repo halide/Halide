@@ -249,7 +249,16 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
                rewrite(x/c0 - (x + y)/c0, ((fold(c0 - 1) - y) - (x % c0))/c0, c0 > 0) ||
                rewrite((x + y)/c0 - x/c0, ((x % c0) + y)/c0, c0 > 0) ||
                rewrite(x/c0 - (x - y)/c0, ((y + fold(c0 - 1)) - (x % c0))/c0, c0 > 0) ||
-               rewrite((x - y)/c0 - x/c0, ((x % c0) - y)/c0, c0 > 0))))) {
+               rewrite((x - y)/c0 - x/c0, ((x % c0) - y)/c0, c0 > 0) ||
+
+               // Synthesized
+               #if USE_SYNTHESIZED_RULES
+               rewrite(((x + (y*z)) - (w*z)), (x - ((w - y)*z))) ||
+               rewrite(((min((x - y), z) + (w + y)) - u), (min((y + z), x) + (w - u))) ||
+               rewrite((min(x, (y + z)) - (w + y)), (min((x - y), z) - w)) ||
+               #endif
+
+               false)))) {
             return mutate(std::move(rewrite.result), bounds);
         }
     }
