@@ -339,7 +339,6 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
                                   allocations.get(op->name).type == t);
 
         string id_index = print_expr(op->index);
-        string id_value = print_expr(op->value);
         do_indent();
 
         if (type_cast_needed) {
