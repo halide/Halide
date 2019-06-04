@@ -509,6 +509,8 @@ private:
     virtual void codegen_predicated_vector_load(const Load *op);
     virtual void codegen_predicated_vector_store(const Store *op);
 
+    void codegen_atomic_store(const Store *op);
+
     void init_codegen(const std::string &name, bool any_strict_float = false);
     std::unique_ptr<llvm::Module> finish_codegen();
 

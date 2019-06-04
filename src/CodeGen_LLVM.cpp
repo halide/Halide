@@ -2021,6 +2021,7 @@ void CodeGen_LLVM::scalarize(Expr e) {
 }
 
 void CodeGen_LLVM::codegen_predicated_vector_store(const Store *op) {
+    internal_assert(!op->is_atomic); // Doesn't support atomic vector store
     const Ramp *ramp = op->index.as<Ramp>();
     if (ramp && is_one(ramp->stride)) { // Dense vector store
         debug(4) << "Predicated dense vector store\n\t" << Stmt(op) << "\n";
@@ -2207,6 +2208,79 @@ void CodeGen_LLVM::codegen_predicated_vector_load(const Load *op) {
                                     {op->predicate, load_expr, make_zero(load_expr.type())},
                                     Internal::Call::Intrinsic);
         value = codegen(pred_load);
+    }
+}
+
+void CodeGen_LLVM::codegen_atomic_store(const Store *op) {
+    // Currently only support scalar atomics
+    internal_assert(op->value.type().is_scalar());
+
+    // Detect whether we can describe this as an atomic-read-modify-write, 
+    // otherwise fallback to a compare-and-swap loop.
+    // Current only test for atomicAdd
+    Expr val_expr = op->value;
+    Expr equiv_load = Load::make(op->value.type(), op->name, op->index, Buffer<>(), op->param, op->predicate, op->alignment);
+    Expr delta = simplify(common_subexpression_elimination(op->value - equiv_load));
+    bool is_atomic_add = val_expr.type().is_int_or_uint() && !expr_uses_var(delta, op->name);
+    if (is_atomic_add) {
+        Value *ptr = codegen_buffer_pointer(op->name, op->value.type(), op->index);
+        Value *val = codegen(delta);
+        // llvm 9 has FAdd which can be used for atomic floats,
+        // but currently Halide depends on llvm 7
+        builder->CreateAtomicRMW(AtomicRMWInst::Add, ptr, val, AtomicOrdering::Monotonic);
+    } else {
+        // We want to create the following CAS loop:
+        // entry:
+        //   %orig = load atomic op->name[op->index]
+        //   br label %casloop.start
+        // casloop.start:
+        //   %cmp = phi [%orig, %entry], [%value_loaded %casloop.start]
+        //   %val = ...
+        //   %val_success = cmpxchg %ptr, %cmp, %val, monotonic
+        //   %val_loaded = extractvalue %val_success, 0
+        //   %success = extractvalue %val_success, 1
+        //   br %success, label %casloop.end, label %casloop.start
+        // casloop.end:
+        LLVMContext &ctx = builder->getContext();
+        BasicBlock *bb = builder->GetInsertBlock();
+        llvm::Function *f = bb->getParent();
+        BasicBlock *loop_bb =
+            BasicBlock::Create(ctx, "casloop.start", f);
+        // Load the old value for compare and swap test
+        Halide::Type value_type = op->value.type();
+        Value *ptr = codegen_buffer_pointer(op->name, value_type, op->index);
+        LoadInst *orig = builder->CreateAlignedLoad(ptr, value_type.bytes());
+        // Explicit fall through from the current block to the cas loop body
+        builder->CreateBr(loop_bb);
+
+        // CAS loop body
+        builder->SetInsertPoint(loop_bb);
+        llvm::Type *ptr_type = ptr->getType();
+        PHINode *cmp = builder->CreatePHI(ptr_type->getPointerElementType(), 2, "loaded");
+        Value *cmp_val = cmp;
+        cmp->addIncoming(orig, bb);
+        Value *val = codegen(op->value);
+        llvm::Type *val_type = val->getType();
+        bool need_bit_cast = val_type->isFloatingPointTy();
+        if (need_bit_cast) {
+            IntegerType *int_type = builder->getIntNTy(val_type->getPrimitiveSizeInBits());
+            unsigned int addr_space = ptr_type->getPointerAddressSpace();
+            ptr = builder->CreateBitCast(ptr, int_type->getPointerTo(addr_space));
+            val = builder->CreateBitCast(val, int_type);
+            cmp_val = builder->CreateBitCast(cmp_val, int_type);
+        }
+        Value *cmpxchg_pair = builder->CreateAtomicCmpXchg(
+            ptr, cmp_val, val, AtomicOrdering::Monotonic, AtomicOrdering::Monotonic);
+        Value *val_loaded = builder->CreateExtractValue(cmpxchg_pair, 0, "val_loaded");
+        Value *success = builder->CreateExtractValue(cmpxchg_pair, 1, "success");
+        if (need_bit_cast) {
+            val_loaded = builder->CreateBitCast(val_loaded, val_type);
+        }
+        cmp->addIncoming(val_loaded, loop_bb);
+        BasicBlock *exit_bb =
+            BasicBlock::Create(ctx, "casloop.end", f);
+        builder->CreateCondBr(success, exit_bb, loop_bb);
+        builder->SetInsertPoint(exit_bb);
     }
 }
 
@@ -3623,59 +3697,9 @@ void CodeGen_LLVM::visit(const Store *op) {
         return;
     }
 
+    // Atomic store
     if (op->is_atomic) {
-        // We want to create the following CAS loop:
-        // entry:
-        //   %orig = load atomic op->name[op->index]
-        //   br label %casloop.start
-        // casloop.start:
-        //   %cmp = phi [%orig, %entry], [%value_loaded %casloop.start]
-        //   %val = ...
-        //   %val_success = cmpxchg %ptr, %cmp, %val, monotonic
-        //   %val_loaded = extractvalue %val_success, 0
-        //   %success = extractvalue %val_success, 1
-        //   br %success, label %casloop.end, label %casloop.start
-        // casloop.end:
-        LLVMContext &ctx = builder->getContext();
-        BasicBlock *bb = builder->GetInsertBlock();
-        llvm::Function *f = bb->getParent();
-        BasicBlock *loop_bb =
-            BasicBlock::Create(ctx, "casloop.start", f);
-        // Load the old value for compare and swap test
-        Halide::Type value_type = op->value.type();
-        Value *ptr = codegen_buffer_pointer(op->name, value_type, op->index);
-        LoadInst *orig = builder->CreateAlignedLoad(ptr, value_type.bytes());
-        // Explicit fall through from the current block to the cas loop body
-        builder->CreateBr(loop_bb);
-
-        // CAS loop body
-        builder->SetInsertPoint(loop_bb);
-        llvm::Type *ptr_type = ptr->getType();
-        PHINode *cmp = builder->CreatePHI(ptr_type->getPointerElementType(), 2, "loaded");
-        Value *cmp_val = cmp;
-        cmp->addIncoming(orig, bb);
-        Value *val = codegen(op->value);
-        llvm::Type *val_type = val->getType();
-        bool need_bit_cast = val_type->isFloatingPointTy();
-        if (need_bit_cast) {
-            IntegerType *int_type = builder->getIntNTy(val_type->getPrimitiveSizeInBits());
-            unsigned int addr_space = ptr_type->getPointerAddressSpace();
-            ptr = builder->CreateBitCast(ptr, int_type->getPointerTo(addr_space));
-            val = builder->CreateBitCast(val, int_type);
-            cmp_val = builder->CreateBitCast(cmp_val, int_type);
-        }
-        Value *cmpxchg_pair = builder->CreateAtomicCmpXchg(
-            ptr, cmp_val, val, AtomicOrdering::Monotonic, AtomicOrdering::Monotonic);
-        Value *val_loaded = builder->CreateExtractValue(cmpxchg_pair, 0, "val_loaded");
-        Value *success = builder->CreateExtractValue(cmpxchg_pair, 1, "success");
-        if (need_bit_cast) {
-            val_loaded = builder->CreateBitCast(val_loaded, val_type);
-        }
-        cmp->addIncoming(val_loaded, loop_bb);
-        BasicBlock *exit_bb =
-            BasicBlock::Create(ctx, "casloop.end", f);
-        builder->CreateCondBr(success, exit_bb, loop_bb);
-        builder->SetInsertPoint(exit_bb);
+        codegen_atomic_store(op);
         return;
     }
 
