@@ -5,12 +5,13 @@
  *  Automatic differentiation
  */
 
+#include "Expr.h"
+#include "Func.h"
+#include "Module.h"
+
 #include <map>
 #include <string>
 #include <vector>
-
-#include "Halide.h"
-#include "Errors.h"
 
 namespace Halide {
 
@@ -36,7 +37,7 @@ struct Derivative {
 
     Func operator()(const Buffer<> &buffer) const {
         auto it = adjoints.find(FuncKey{ buffer.name(), -1 });
-        assert(it != adjoints.end());
+        internal_assert(it != adjoints.end()) << "Could not find Buffer " << buffer.name() << "\n";
         return it->second;
     }
 
@@ -45,7 +46,7 @@ struct Derivative {
      * scheduling. */
     std::vector<Func> funcs(const Func &func) const {
         std::vector<Func> result;
-        FuncKey k {func.name(), -1};
+        FuncKey k{ func.name(), -1 };
         FuncKey k_unbounded = k;
         k_unbounded.first += "_unbounded";
         for (int i = func.num_update_definitions() - 1; i >= -1; i--) {
@@ -57,7 +58,7 @@ struct Derivative {
             if (it != adjoints.end()) {
                 result.push_back(it->second);
             }
-    }
+        }
         return result;
     }
 };

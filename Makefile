@@ -2,7 +2,7 @@
 # 'make run_tests' builds and runs all the end-to-end tests in the test subdirectory
 # 'make {error,performance}_foo' builds and runs test/{...}/foo.cpp for any
 #     cpp file in the corresponding subdirectory of the test folder
-# 'make test_foo' builds and runs test/correctness/foo.cpp for any
+# 'make correctness_foo' builds and runs test/correctness/foo.cpp for any
 #     cpp file in the correctness/ subdirectoy of the test folder
 # 'make test_apps' checks some of the apps build and run (but does not check their output)
 # 'make time_compilation_tests' records the compile time for each test module into a csv file.
@@ -44,8 +44,6 @@ define alwayslink
 	-Wl,--whole-archive $(1) -Wl,-no-whole-archive
 endef
 endif
-
-BAZEL ?= $(shell which bazel)
 
 SHELL = bash
 CXX ?= g++
@@ -358,6 +356,7 @@ HEXAGON_RUNTIME_LIBS = \
   $(HEXAGON_RUNTIME_LIBS_DIR)/v60/libhalide_hexagon_remote_skel.so \
   $(HEXAGON_RUNTIME_LIBS_DIR)/v60/signed_by_debug/libhalide_hexagon_remote_skel.so
 
+# Keep this list sorted in alphabetical order.
 SOURCE_FILES = \
   AddImageChecks.cpp \
   AddParameterChecks.cpp \
@@ -375,18 +374,19 @@ SOURCE_FILES = \
   BoundsInference.cpp \
   BoundSmallAllocations.cpp \
   Buffer.cpp \
+  CanonicalizeGPUVars.cpp \
   Closure.cpp \
   CodeGen_ARM.cpp \
   CodeGen_C.cpp \
+  CodeGen_D3D12Compute_Dev.cpp \
   CodeGen_GPU_Dev.cpp \
   CodeGen_GPU_Host.cpp \
   CodeGen_Hexagon.cpp \
   CodeGen_Internal.cpp \
   CodeGen_LLVM.cpp \
-  CodeGen_MIPS.cpp \
-  CodeGen_D3D12Compute_Dev.cpp \
-  CodeGen_OpenCL_Dev.cpp \
   CodeGen_Metal_Dev.cpp \
+  CodeGen_MIPS.cpp \
+  CodeGen_OpenCL_Dev.cpp \
   CodeGen_OpenGL_Dev.cpp \
   CodeGen_OpenGLCompute_Dev.cpp \
   CodeGen_Posix.cpp \
@@ -395,12 +395,13 @@ SOURCE_FILES = \
   CodeGen_X86.cpp \
   CPlusPlusMangle.cpp \
   CSE.cpp \
-  CanonicalizeGPUVars.cpp \
   Debug.cpp \
   DebugArguments.cpp \
   DebugToFile.cpp \
   Definition.cpp \
   Deinterleave.cpp \
+  Derivative.cpp \
+  DerivativeUtils.cpp \
   DeviceArgument.cpp \
   DeviceInterface.cpp \
   Dimension.cpp \
@@ -450,8 +451,8 @@ SOURCE_FILES = \
   ObjectInstanceRegistry.cpp \
   OutputImageParam.cpp \
   ParallelRVar.cpp \
-  ParamMap.cpp \
   Parameter.cpp \
+  ParamMap.cpp \
   PartitionLoops.cpp \
   Pipeline.cpp \
   Prefetch.cpp \
@@ -467,7 +468,6 @@ SOURCE_FILES = \
   RegionCosts.cpp \
   RemoveDeadAllocations.cpp \
   RemoveExternLoops.cpp \
-  RemoveTrivialForLoops.cpp \
   RemoveUndef.cpp \
   Schedule.cpp \
   ScheduleFunctions.cpp \
@@ -480,8 +480,8 @@ SOURCE_FILES = \
   Simplify_Div.cpp \
   Simplify_EQ.cpp \
   Simplify_Exprs.cpp \
-  Simplify_LT.cpp \
   Simplify_Let.cpp \
+  Simplify_LT.cpp \
   Simplify_Max.cpp \
   Simplify_Min.cpp \
   Simplify_Mod.cpp \
@@ -492,6 +492,7 @@ SOURCE_FILES = \
   Simplify_Shuffle.cpp \
   Simplify_Stmts.cpp \
   Simplify_Sub.cpp \
+  SimplifyCorrelatedDifferences.cpp \
   SimplifySpecializations.cpp \
   SkipStages.cpp \
   SlidingWindow.cpp \
@@ -519,7 +520,9 @@ SOURCE_FILES = \
   WrapCalls.cpp \
   WrapExternStages.cpp
 
-# The externally-visible header files that go into making Halide.h. Don't include anything here that includes llvm headers.
+# The externally-visible header files that go into making Halide.h.
+# Don't include anything here that includes llvm headers.
+# Keep this list sorted in alphabetical order.
 HEADER_FILES = \
   AddImageChecks.h \
   AddParameterChecks.h \
@@ -537,17 +540,18 @@ HEADER_FILES = \
   BoundsInference.h \
   BoundSmallAllocations.h \
   Buffer.h \
+  CanonicalizeGPUVars.h \
   Closure.h \
   CodeGen_ARM.h \
   CodeGen_C.h \
+  CodeGen_D3D12Compute_Dev.h \
   CodeGen_GPU_Dev.h \
   CodeGen_GPU_Host.h \
   CodeGen_Internal.h \
   CodeGen_LLVM.h \
-  CodeGen_MIPS.h \
-  CodeGen_D3D12Compute_Dev.h \
-  CodeGen_OpenCL_Dev.h \
   CodeGen_Metal_Dev.h \
+  CodeGen_MIPS.h \
+  CodeGen_OpenCL_Dev.h \
   CodeGen_OpenGL_Dev.h \
   CodeGen_OpenGLCompute_Dev.h \
   CodeGen_Posix.h \
@@ -557,12 +561,13 @@ HEADER_FILES = \
   ConciseCasts.h \
   CPlusPlusMangle.h \
   CSE.h \
-  CanonicalizeGPUVars.h \
   Debug.h \
   DebugArguments.h \
   DebugToFile.h \
   Definition.h \
   Deinterleave.h \
+  Derivative.h \
+  DerivativeUtils.h \
   DeviceArgument.h \
   DeviceInterface.h \
   Dimension.h \
@@ -584,8 +589,6 @@ HEADER_FILES = \
   Generator.h \
   HexagonOffload.h \
   HexagonOptimize.h \
-  runtime/HalideRuntime.h \
-  runtime/HalideBuffer.h \
   ImageParam.h \
   InferArguments.h \
   InjectHostDevBufferCopies.h \
@@ -596,8 +599,8 @@ HEADER_FILES = \
   Interval.h \
   Introspection.h \
   IntrusivePtr.h \
-  IREquality.h \
   IR.h \
+  IREquality.h \
   IRMatch.h \
   IRMutator.h \
   IROperator.h \
@@ -619,12 +622,12 @@ HEADER_FILES = \
   ModulusRemainder.h \
   Monotonic.h \
   ObjectInstanceRegistry.h \
-  Outputs.h \
   OutputImageParam.h \
+  Outputs.h \
   ParallelRVar.h \
   Param.h \
-  ParamMap.h \
   Parameter.h \
+  ParamMap.h \
   PartitionLoops.h \
   Pipeline.h \
   Prefetch.h \
@@ -633,19 +636,21 @@ HEADER_FILES = \
   PythonExtensionGen.h \
   Qualify.h \
   Random.h \
-  RealizationOrder.h \
   RDom.h \
+  RealizationOrder.h \
   Reduction.h \
   RegionCosts.h \
   RemoveDeadAllocations.h \
   RemoveExternLoops.h \
-  RemoveTrivialForLoops.h \
   RemoveUndef.h \
+  runtime/HalideBuffer.h \
+  runtime/HalideRuntime.h \
   Schedule.h \
   ScheduleFunctions.h \
   Scope.h \
   SelectGPUAPI.h \
   Simplify.h \
+  SimplifyCorrelatedDifferences.h \
   SimplifySpecializations.h \
   SkipStages.h \
   SlidingWindow.h \
@@ -686,7 +691,6 @@ RUNTIME_CPP_COMPONENTS = \
   android_host_cpu_count \
   android_io \
   android_opengl_context \
-  android_tempfile \
   arm_cpu_features \
   buffer_t \
   cache \
@@ -696,8 +700,12 @@ RUNTIME_CPP_COMPONENTS = \
   destructors \
   device_interface \
   errors \
+  fake_get_symbol \
   fake_thread_pool \
   float16_t \
+  fuchsia_clock \
+  fuchsia_host_cpu_count \
+  fuchsia_yield \
   gpu_device_selection \
   hexagon_cache_allocator \
   hexagon_cpu_features \
@@ -736,7 +744,6 @@ RUNTIME_CPP_COMPONENTS = \
   posix_get_symbol \
   posix_io \
   posix_print \
-  posix_tempfile \
   posix_threads \
   posix_threads_tsan \
   powerpc_cpu_features \
@@ -754,6 +761,7 @@ RUNTIME_CPP_COMPONENTS = \
   runtime_api \
   ssp \
   to_string \
+  trace_helper \
   tracing \
   windows_abort \
   windows_clock \
@@ -762,7 +770,6 @@ RUNTIME_CPP_COMPONENTS = \
   windows_io \
   windows_opencl \
   windows_profiler \
-  windows_tempfile \
   windows_threads \
   windows_threads_tsan \
   windows_yield \
@@ -1066,9 +1073,19 @@ GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/nested_externs.runge
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/old_buffer_t.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/tiled_blur.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/extern_output.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
-test_rungen: $(GENERATOR_BUILD_RUNGEN_TESTS) $(FILTERS_DIR)/multi_rungen $(FILTERS_DIR)/multi_rungen2
+GENERATOR_BUILD_RUNGEN_TESTS := $(GENERATOR_BUILD_RUNGEN_TESTS) \
+	$(FILTERS_DIR)/multi_rungen \
+	$(FILTERS_DIR)/multi_rungen2 \
+	$(FILTERS_DIR)/rungen_test \
+	$(FILTERS_DIR)/registration_test
+
+test_rungen: $(GENERATOR_BUILD_RUNGEN_TESTS)
+	$(FILTERS_DIR)/rungen_test
+	$(FILTERS_DIR)/registration_test
 
 test_generator: $(GENERATOR_AOT_TESTS) $(GENERATOR_AOTCPP_TESTS) $(GENERATOR_JIT_TESTS) $(GENERATOR_BUILD_RUNGEN_TESTS)
+	$(FILTERS_DIR)/rungen_test
+	$(FILTERS_DIR)/registration_test
 
 ALL_TESTS = test_internal test_correctness test_error test_tutorial test_warning test_generator
 
@@ -1297,6 +1314,7 @@ METADATA_TESTER_GENERATOR_ARGS=\
 	buffer_array_input8.size=2 \
 	buffer_array_input8.dim=3 \
 	buffer_array_input8.type=float32 \
+	buffer_f16_untyped.type=float16 \
 	array_outputs.size=2 \
 	array_outputs7.size=2 \
 	array_outputs8.size=2 \
@@ -1356,8 +1374,8 @@ endif
 $(BIN_DIR)/$(TARGET)/generator_aotcpp_cxx_mangling: $(FILTERS_DIR)/cxx_mangling_externs.o
 $(BIN_DIR)/$(TARGET)/generator_aotcpp_cxx_mangling_define_extern: $(FILTERS_DIR)/cxx_mangling.cpp $(FILTERS_DIR)/cxx_mangling_externs.o $(FILTERS_DIR)/cxx_mangling_define_extern_externs.o
 
-$(BUILD_DIR)/stubuser_generator.o: $(FILTERS_DIR)/stubtest.stub.h
-$(BIN_DIR)/stubuser.generator: $(BUILD_DIR)/stubtest_generator.o
+$(BUILD_DIR)/stubuser_generator.o: $(FILTERS_DIR)/stubtest.stub.h $(FILTERS_DIR)/configure.stub.h
+$(BIN_DIR)/stubuser.generator: $(BUILD_DIR)/stubtest_generator.o $(BUILD_DIR)/configure_generator.o
 
 # stubtest has input and output funcs with undefined types and array sizes; this is fine for stub
 # usage (the types can be inferred), but for AOT compilation, we must make the types
@@ -1484,7 +1502,7 @@ test_generator_nested_externs:
 
 $(BUILD_DIR)/RunGenMain.o: $(ROOT_DIR)/tools/RunGenMain.cpp $(RUNTIME_EXPORTED_INCLUDES) $(ROOT_DIR)/tools/RunGen.h
 	@mkdir -p $(@D)
-	$(CXX) -c $< $(TEST_CXX_FLAGS) $(IMAGE_IO_CXX_FLAGS) -I$(INCLUDE_DIR) -I $(SRC_DIR)/runtime -I$(ROOT_DIR)/tools -o $@
+	$(CXX) -c $< $(TEST_CXX_FLAGS) $(OPTIMIZE) $(IMAGE_IO_CXX_FLAGS) -I$(INCLUDE_DIR) -I $(SRC_DIR)/runtime -I$(ROOT_DIR)/tools -o $@
 
 $(FILTERS_DIR)/%.registration.o: $(FILTERS_DIR)/%.registration.cpp
 	@mkdir -p $(@D)
@@ -1504,6 +1522,43 @@ RUNARGS ?=
 $(FILTERS_DIR)/%.run: $(FILTERS_DIR)/%.rungen
 	$(CURDIR)/$< $(RUNARGS)
 	@-echo
+
+$(FILTERS_DIR)/%.registration_extra.o: $(FILTERS_DIR)/%.registration.cpp
+	@mkdir -p $(@D)
+	$(CXX) -c $< $(TEST_CXX_FLAGS) -DHALIDE_REGISTER_EXTRA_KEY_VALUE_PAIRS_FUNC=halide_register_extra_key_value_pairs_$* -o $@
+
+# Test the registration mechanism, independent of RunGen.
+# Note that this depends on the registration_extra.o (rather than registration.o)
+# because it compiles with HALIDE_REGISTER_EXTRA_KEY_VALUE_PAIRS_FUNC defined.
+$(FILTERS_DIR)/registration_test: $(ROOT_DIR)/test/generator/registration_test.cpp \
+														 $(BIN_DIR)/$(TARGET)/runtime.a \
+														 $(FILTERS_DIR)/blur2x2.registration_extra.o $(FILTERS_DIR)/blur2x2.a \
+														 $(FILTERS_DIR)/cxx_mangling.registration_extra.o $(FILTERS_DIR)/cxx_mangling.a \
+														 $(FILTERS_DIR)/pyramid.registration_extra.o $(FILTERS_DIR)/pyramid.a
+	@mkdir -p $(@D)
+	$(CXX) $(GEN_AOT_CXX_FLAGS) $(GEN_AOT_INCLUDES) \
+			$(ROOT_DIR)/test/generator/registration_test.cpp \
+			$(FILTERS_DIR)/blur2x2.registration_extra.o \
+			$(FILTERS_DIR)/cxx_mangling.registration_extra.o \
+			$(FILTERS_DIR)/pyramid.registration_extra.o \
+			$(FILTERS_DIR)/blur2x2.a \
+			$(FILTERS_DIR)/cxx_mangling.a \
+			$(FILTERS_DIR)/pyramid.a \
+      $(BIN_DIR)/$(TARGET)/runtime.a \
+			$(GEN_AOT_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@
+
+# Test RunGen itself
+$(FILTERS_DIR)/rungen_test: $(ROOT_DIR)/test/generator/rungen_test.cpp \
+							$(BIN_DIR)/$(TARGET)/runtime.a \
+							$(FILTERS_DIR)/example.registration.o \
+							$(FILTERS_DIR)/example.a
+	@mkdir -p $(@D)
+	$(CXX) $(GEN_AOT_CXX_FLAGS) $(IMAGE_IO_CXX_FLAGS) $(GEN_AOT_INCLUDES) \
+			$(ROOT_DIR)/test/generator/rungen_test.cpp \
+			$(BIN_DIR)/$(TARGET)/runtime.a \
+			$(call alwayslink,$(FILTERS_DIR)/example.registration.o) \
+			$(FILTERS_DIR)/example.a \
+			$(GEN_AOT_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@
 
 # Test linking multiple filters into a single RunGen instance
 $(FILTERS_DIR)/multi_rungen: $(BUILD_DIR)/RunGenMain.o $(BIN_DIR)/$(TARGET)/runtime.a \
@@ -1713,6 +1768,7 @@ TEST_APPS=\
 	stencil_chain \
 	unsharp \
 	wavelet \
+	resnet_50
 
 .PHONY: test_apps
 test_apps: distrib
@@ -1723,24 +1779,6 @@ test_apps: distrib
 			BIN=$(ROOT_DIR)/apps/$${APP}/bin \
 			|| exit 1 ; \
 	done
-
-# Bazel depends on the distrib archive being built
-.PHONY: test_bazel
-test_bazel: $(DISTRIB_DIR)/halide.tgz
-	# Only test bazeldemo if Bazel is installed
-	if [ -z "$(BAZEL)" ]; then echo "Bazel is not installed"; exit 1; fi
-	mkdir -p apps
-	# Make a local copy of the apps if we're building out-of-tree,
-	# because the app Makefiles are written to build in-tree
-	if [ "$(ROOT_DIR)" != "$(CURDIR)" ]; then \
-	  echo "Building out-of-tree, so making local copy of apps"; \
-	  cp -r $(ROOT_DIR)/apps/bazeldemo apps; \
-	  cp -r $(ROOT_DIR)/tools .; \
-	fi
-	cd apps/bazeldemo; \
-	CXX=`echo ${CXX} | sed 's/ccache //'` \
-	CC=`echo ${CC} | sed 's/ccache //'` \
-	bazel build --verbose_failures :all
 
 .PHONY: test_python2
 test_python2: distrib $(BIN_DIR)/host/runtime.a
@@ -1788,7 +1826,15 @@ ifneq (,$(findstring clang version 7.0,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
 
+ifneq (,$(findstring clang version 7.1,$(CLANG_VERSION)))
+CLANG_OK=yes
+endif
+
 ifneq (,$(findstring clang version 8.0,$(CLANG_VERSION)))
+CLANG_OK=yes
+endif
+
+ifneq (,$(findstring clang version 9.0,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
 
@@ -1812,7 +1858,7 @@ $(BUILD_DIR)/clang_ok:
 	@exit 1
 endif
 
-ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 60 70 80))
+ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 60 70 71 80 90))
 LLVM_OK=yes
 endif
 
@@ -1910,15 +1956,14 @@ $(BUILD_DIR)/halide_config.%: $(ROOT_DIR)/tools/halide_config.%.tpl
 	       | sed -e 's/@HALIDE_RTTI_RAW@/${HALIDE_RTTI_RAW}/g' > $@
 
 $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
-						   $(BIN_DIR)/libHalide.$(SHARED_EXT) \
-						   $(INCLUDE_DIR)/Halide.h \
-						   $(RUNTIME_EXPORTED_INCLUDES) \
-						   $(ROOT_DIR)/README*.md \
-						   $(ROOT_DIR)/bazel/* \
-						   $(BUILD_DIR)/halide_config.bzl \
-               $(BUILD_DIR)/halide_config.cmake \
-               $(BUILD_DIR)/halide_config.make \
-						   $(ROOT_DIR)/halide.cmake
+                           $(BIN_DIR)/libHalide.$(SHARED_EXT) \
+                           $(INCLUDE_DIR)/Halide.h \
+                           $(RUNTIME_EXPORTED_INCLUDES) \
+                           $(ROOT_DIR)/README*.md \
+                           $(BUILD_DIR)/halide_config.cmake \
+                           $(BUILD_DIR)/halide_config.make \
+                           $(ROOT_DIR)/halide.cmake
+	rm -rf $(DISTRIB_DIR)
 	mkdir -p $(DISTRIB_DIR)/include \
 	         $(DISTRIB_DIR)/bin \
 	         $(DISTRIB_DIR)/lib \
@@ -1949,33 +1994,20 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
 	cp $(ROOT_DIR)/tools/halide_malloc_trace.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_trace_config.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/README*.md $(DISTRIB_DIR)
-	cp $(ROOT_DIR)/bazel/BUILD $(DISTRIB_DIR)
-	cp $(ROOT_DIR)/bazel/halide.bzl $(DISTRIB_DIR)
-	cp $(ROOT_DIR)/bazel/README_bazel.md $(DISTRIB_DIR)
-	cp $(ROOT_DIR)/bazel/WORKSPACE $(DISTRIB_DIR)
 	cp $(BUILD_DIR)/halide_config.* $(DISTRIB_DIR)
 	cp $(ROOT_DIR)/halide.cmake $(DISTRIB_DIR)
 	ln -sf $(DISTRIB_DIR) halide
-	tar -czf $(DISTRIB_DIR)/halide.tgz \
+	tar -czf $(BUILD_DIR)/halide.tgz \
 		halide/bin \
 		halide/lib \
 		halide/include \
+		halide/tools \
 		halide/tutorial \
-		halide/BUILD \
 		halide/README*.md \
-		halide/README_bazel.md \
-		halide/WORKSPACE \
-		halide/*.bzl \
-		halide/*.cmake \
-		halide/tools/mex_halide.m \
-		halide/tools/*.cpp \
-		halide/tools/halide_benchmark.h \
-		halide/tools/halide_image.h \
-		halide/tools/halide_image_io.h \
-		halide/tools/halide_image_info.h \
-		halide/tools/halide_malloc_trace.h \
-		halide/tools/halide_trace_config.h
+		halide/halide_config.* \
+		halide/halide.*
 	rm -rf halide
+	mv $(BUILD_DIR)/halide.tgz $(DISTRIB_DIR)/halide.tgz
 
 .PHONY: distrib
 distrib: $(DISTRIB_DIR)/halide.tgz

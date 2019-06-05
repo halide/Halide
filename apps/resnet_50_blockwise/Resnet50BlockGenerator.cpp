@@ -32,7 +32,7 @@ public:
   GeneratorParam<int> block_id{"block_id", 0}; // 0 through 15 (1 - 16)
   GeneratorParam<bool> classic_auto_schedule_estimates{"classic_auto_schedule_estimates", false};
 
-  Input<Buffer<float>> input{"input", 3};
+  Input<Buffer<float>> input{"input", 4};
   /** parameter values for scaling layers **/
   Input<Buffer<float>> conv1_gamma{"conv1_gamma", 1};
   Input<Buffer<float>[4]> br1_gamma{"br1_gamma", 1};
@@ -67,8 +67,8 @@ public:
 
   Input<Buffer<float>> fc1000_weights{"fc1000_weights", 2};
   Input<Buffer<float>> fc1000_bias{"fc1000_bias", 1};
-  Output<Buffer<float>> block_output{"block_output", 3};
-  Output<Buffer<float>> final_output{"final_output", 1};
+  Output<Buffer<float>> block_output{"block_output", 4};
+  Output<Buffer<float>> final_output{"final_output", 2};
 
   const std::vector<std::vector<int>> block_dims{
     {256, 56, 56},
@@ -127,7 +127,7 @@ public:
                                    res4x_br2c_ws, res4x_br2c_ws, res4x_br2c_ws, res4x_br2c_ws, res4x_br2c_ws, res4x_br2c_ws,
                                    res5x_br2c_ws, res5x_br2c_ws, res5x_br2c_ws};
 
-  Var c, i, j;
+    Var c, i, j, n;
 
   void generate() {
 
@@ -235,25 +235,29 @@ public:
     // create residual unit
     resunit_sum[block_id] = sum_layer(resunit_sum_input, br2c_scaled[block_id], "block" + std::to_string(block_id) + "_res_sum");
     resunit_relu[block_id] = relu_layer(resunit_sum[block_id], "block" + std::to_string(block_id) + "_res_relu");
-    // output of each block is the residual unit
-    block_output(c, i, j) = resunit_relu[block_id].f(c, i, j);
 
     // create final 3 layers
     if (block_id == 15) {
+        block_output(c, i, j, n) = Halide::undef<float>();
         pool5 = avg_pool_layer(resunit_relu[block_id], pool5_ws, "pool5");
         fc1000 = fc_layer(pool5, fc1000_ws, fc1000_weights, fc1000_bias, "fc");
         final_output = softmax_layer(fc1000, 1000, "softmax");
     } else {
-      final_output(c) = Halide::undef<float>();
+        // output of each block is the residual unit
+        block_output(c, i, j, n) = resunit_relu[block_id].f(c, i, j, n);
+        final_output(c, n) = Halide::undef<float>();
     }
 
     // Estimates
     const std::vector<int> output_dim = block_dims[macro_block_id];
-
     final_output.bound(final_output.args()[0], 0, 1000);
+    final_output.bound(final_output.args()[1], 0, 1); // compile for statically-known batch-size 1 for now
+
     block_output.bound(block_output.args()[0], 0, output_dim[0]);
     block_output.bound(block_output.args()[1], 0, output_dim[1]);
     block_output.bound(block_output.args()[2], 0, output_dim[2]);
+    block_output.bound(block_output.args()[3], 0, 1); // compile for batch-size 1
+
     if (classic_auto_schedule_estimates) {
       // classic auto-scheduler requires explicit estimates for everything,
       // whether or not they can be inferred
@@ -289,7 +293,8 @@ private:
   void do_class_auto_schedule_estimate() {
       input.dim(0).set_bounds_estimate(0, 3)
         .dim(1).set_bounds_estimate(0, 224)
-        .dim(2).set_bounds_estimate(0, 224);
+        .dim(2).set_bounds_estimate(0, 224)
+        .dim(3).set_bounds_estimate(0, 1);
       conv1_gamma.dim(0).set_bounds_estimate(0, 64);
       br1_gamma[0].dim(0).set_bounds_estimate(0, 256);
       br1_gamma[1].dim(0).set_bounds_estimate(0, 512);
@@ -737,6 +742,11 @@ private:
   }
 
   Tensor conv2D(const Tensor& input, const WeightShape& weight_shape, const Func& weights, const std::string& name) {
+
+      if (weight_shape.stride == 1 && weight_shape.w == 3 && weight_shape.h == 3) {
+          return winograd_conv2D(input, weight_shape, weights, name);
+      }
+
       int p = weight_shape.pad;
       Func padded;
       // pad input
@@ -745,9 +755,17 @@ private:
       } else {
           padded = input.f;
       }
+
+      Func w("w");
+      Var ci, co;
+      w(co, i, j, ci) = weights(co, i, j, ci);
+
+      Func in("in");
+      in(c, i, j, n) = padded(c, i, j, n);
+
       RDom r(0, input.shape[0], 0, weight_shape.w, 0, weight_shape.h);
-      Func conv;
-      conv(c, i, j) += weights(c, r.y, r.z, r.x) * padded(r.x, weight_shape.stride * i + r.y - p, weight_shape.stride * j + r.z - p);
+      Func conv("conv2D");
+      conv(c, i, j, n) += w(c, r.y, r.z, r.x) * in(r.x, weight_shape.stride * i + r.y - p, weight_shape.stride * j + r.z - p, n);
 
       Tensor output;
       output.f = conv;
@@ -756,12 +774,126 @@ private:
       return output;
   }
 
+    Tensor winograd_conv2D(const Tensor& input,
+                           const WeightShape& weight_shape,
+                           const Func& weights,
+                           const std::string& name) {
+
+        int p = weight_shape.pad;
+        Func padded;
+        // pad input
+        if (p) {
+            padded = pad(input.f, input.shape[1], input.shape[2]);
+        } else {
+            padded = input.f;
+        }
+
+        static float BFilter[4][4] = {
+            {1, 0, -1, 0}, {0, 1, 1, 0}, {0, -1, 1, 0}, {0, 1, 0, -1}};
+        Halide::Buffer<float> B(4, 4);
+        memcpy(B.data(), &BFilter[0][0], B.size_in_bytes());
+
+        static float GFilter[3][4] = {
+            {1, 0.5, 0.5, 0}, {0, 0.5, -0.5, 0}, {0, 0.5, 0.5, 1}};
+        Halide::Buffer<float> G(4, 3);
+        memcpy(G.data(), &GFilter[0][0], G.size_in_bytes());
+
+        static float AFilter[2][4] = {{1, 1, 1, 0}, {0, 1, -1, -1}};
+        Halide::Buffer<float> A(4, 2);
+        memcpy(A.data(), &AFilter[0][0], A.size_in_bytes());
+
+        int num_channels = input.shape[0];
+        RDom dom1(0, num_channels);
+        Halide::RVar c_r = dom1;
+        const RDom dom2(0, 3, 0, 3);
+        Halide::RVar r1 = dom2[0];
+        Halide::RVar r2 = dom2[1];
+        const RDom dom3(0, 4, 0, 4);
+
+        Halide::RVar r3 = dom3[0];
+        Halide::RVar r4 = dom3[1];
+        const RDom dom4(0, 4, 0, 4);
+        Halide::RVar alpha_r = dom4[0];
+        Halide::RVar beta_r = dom4[1];
+
+        Var k, c, alpha, beta, b, x, y;
+        Func U("U");
+        U(k, c, alpha, beta) =
+            sum(G(alpha, r1) * weights(k, r1, r2, c) * G(beta, r2));
+
+        /*
+          // Brute-force transformation by B
+
+        Func V("V");
+        V(c, x, y, alpha, beta, n) = sum(B(r3, alpha) * padded(c, x*2 + r3 - p, y*2 + r4 - p, n) * B(r4, beta));
+
+        */
+
+        // Convert B to a sparse matrix for faster transformation:
+
+        // All the non-zero entries of B(r3, alpha) * B(r4, beta) are
+        // +/-1. For each alpha, beta, there are two positive ones and
+        // two negatives ones, except when alpha = beta = 1, in which
+        // case they're all positive. Here we encode a list of their
+        // indices to skip the zero entries (3/4 of them are zero).
+        Buffer<int> B_off_buffer(2, 4, 4, 4);
+        Buffer<float> B_coeff(4, 4);
+        for (int beta = 0; beta < 4; beta++) {
+            for (int alpha = 0; alpha < 4; alpha++) {
+                int pos_count = 0, neg_count = 0;
+                for (int r3 = 0; r3 < 4; r3++) {
+                    for (int r4 = 0; r4 < 4; r4++) {
+                        float coeff = B(r3, alpha) * B(r4, beta);
+                        if (coeff > 0.5f) {
+                            B_off_buffer(0, pos_count, alpha, beta) = r3;
+                            B_off_buffer(1, pos_count, alpha, beta) = r4;
+                            pos_count++;
+                        } else if (coeff < -0.5f) {
+                            B_off_buffer(0, 2 + neg_count, alpha, beta) = r3;
+                            B_off_buffer(1, 2 + neg_count, alpha, beta) = r4;
+                            neg_count++;
+                        }
+                    }
+                }
+                B_coeff(alpha, beta) = (neg_count > 0) ? -1.0f : 1.0f;
+            }
+        }
+
+        // Make sure Halide knows these offsets are at most 3.
+        Func B_off("B_off");
+        B_off(k, c, alpha, beta) = unsafe_promise_clamped(B_off_buffer(k, c, alpha, beta), 0, 3);
+
+        Func V("V");
+        V(c, x, y, alpha, beta, n) = (padded(c, 2*x + B_off(0, 0, alpha, beta) - p,
+                                               2*y + B_off(1, 0, alpha, beta) - p, n) +
+                                      padded(c, 2*x + B_off(0, 1, alpha, beta) - p,
+                                              2*y + B_off(1, 1, alpha, beta) - p, n) +
+                                      B_coeff(alpha, beta) *
+                                      (padded(c, 2*x + B_off(0, 2, alpha, beta) - p,
+                                               2*y + B_off(1, 2, alpha, beta) - p, n) +
+                                       padded(c, 2*x + B_off(0, 3, alpha, beta) - p,
+                                               2*y + B_off(1, 3, alpha, beta) - p, n)));
+
+        Func M("M");
+        M(k, x, y, alpha, beta, n) =
+            sum(U(k, c_r, alpha, beta) * V(c_r, x, y, alpha, beta, n));
+
+        Func winograd_conv("winograd_conv");
+        winograd_conv(k, x, y, n) = sum(A(alpha_r, x % 2) * M(k, (x / 2), (y / 2), alpha_r, beta_r, n) * A(beta_r, y % 2));
+
+        Tensor output;
+        output.f = winograd_conv;
+        output.name = name;
+        output.shape = compute_shape(input, weight_shape);
+        return output;
+    }
+
   // assumes input is 3D (c, w, h) where w and h = 1
   Tensor fc_layer(const Tensor& input, const WeightShape& weight_shape, const Func& weights, const Func& bias, const std::string& name) {
       RDom r(0, input.shape[0]);
-      Func fc;
-      fc(c) = bias(c);
-      fc(c) += weights(c, r.x) * input.f(r.x, 0, 0);
+      Func fc("fc");
+      fc(c, n) = bias(c);
+      fc(c, n) += weights(c, r.x) * input.f(r.x, 0, 0, n);
 
       Tensor output;
       output.f = fc;
@@ -772,8 +904,8 @@ private:
   }
 
   Tensor relu_layer(const Tensor& input, const std::string& name) {
-      Func relu;
-      relu(c, i, j) = max(0.0f, input.f(c, i, j));
+      Func relu("relu");
+      relu(c, i, j, n) = max(0.0f, input.f(c, i, j, n));
       Tensor output;
       output.f = relu;
       output.shape = input.shape;
@@ -789,9 +921,20 @@ private:
       } else {
           padded = input.f;
       }
-      RDom r(0, weight_shape.w, 0, weight_shape.h);
-      Func pool;
-      pool(c, i, j) = maximum(padded(c, weight_shape.stride * i + r.x - p, weight_shape.stride * j + r.y - p));
+      Expr e;
+      for (int ii = 0; ii < weight_shape.h; ii++) {
+          for (int jj = 0; jj < weight_shape.w; jj++) {
+              Expr next = padded(c, weight_shape.stride * i + ii - p, weight_shape.stride * j + jj - p, n);
+              if (e.defined()) {
+                  e = max(next, e);
+              } else {
+                  e = next;
+              }
+          }
+      }
+
+      Func pool("max_pool");
+      pool(c, i, j, n) = e;
       Tensor output;
       output.f = pool;
       output.name = name;
@@ -808,11 +951,17 @@ private:
       } else {
           padded = input.f;
       }
-      RDom r(0, weight_shape.w, 0, weight_shape.h);
+      Expr e = 0.0f;
+      for (int ii = 0; ii < weight_shape.h; ii++) {
+          for (int jj = 0; jj < weight_shape.w; jj++) {
+              e += padded(c, weight_shape.stride * i + ii - p, weight_shape.stride * j + jj - p, n);
+          }
+      }
       float scale = weight_shape.w * weight_shape.h;
-      Func pool;
-      float n = 1.0f/scale;
-      pool(c, i, j) +=  n * padded(c, weight_shape.stride * i + r.x - p, weight_shape.stride * j + r.y - p);
+      e *= (1.0f / scale);
+
+      Func pool("avg_pool");
+      pool(c, i, j, n) = e;
 
       Tensor output;
       output.f = pool;
@@ -823,30 +972,37 @@ private:
   }
 
   Tensor norm_layer(const Tensor& input, const Func& mu, const Func& sigma, const std::string& name) {
-      Func normed;
-      Expr e = input.f(c,i,j);
-      normed(c, i, j) = (input.f(c, i, j) - mu(c)) / (sqrt(sigma(c) + 1e-5f));
-      Tensor output;
-      output.f = normed;
-      output.shape = input.shape;
-      output.name = name;
-      return output;
+      // Assume folded into previous set of weights, as the tensforflow benchmark does
+      return input;
+      /*
+      Func scale("scale");
+      scale(c) = 1.0f / sqrt(sigma(c) + 1e-5f);
+
+      Func offset("offset");
+      offset(c) = -mu(c) * scale(c);
+
+      return scale_layer(input, scale, offset, name);
+      */
   }
 
   Tensor scale_layer(const Tensor& input, const Func& gamma, const Func& beta, const std::string& name) {
-      Func scaled;
-      scaled(c, i, j) = input.f(c, i, j) * gamma(c) + beta(c);
+      // Assume folded into previous set of weights, as the tensforflow benchmark does
+      return input;
+      /*
+      Func scaled("scaled");
+      scaled(c, i, j, n) = input.f(c, i, j, n) * gamma(c) + beta(c);
       Tensor output;
       output.f = scaled;
       output.shape = input.shape;
       output.name = name;
       return output;
+      */
   }
 
   Tensor sum_layer(const Tensor& t1, const Tensor& t2, const std::string& name) {
       assert(t1.shape == t2.shape);
-      Func summed;
-      summed(c, i, j) = t1.f(c, i, j) + t2.f(c, i, j);
+      Func summed("summed");
+      summed(c, i, j, n) = t1.f(c, i, j, n) + t2.f(c, i, j, n);
       Tensor output;
       output.f = summed;
       output.shape = t1.shape;
@@ -857,10 +1013,10 @@ private:
   Func softmax_layer(const Tensor& input, const int classes, const std::string& name) {
       assert(input.shape[0] == classes);
       RDom r(0, classes);
-      Func exp_vals;
-      exp_vals(c) = exp(input.f(c));
+      Func exp_vals("exp_vals");
+      exp_vals(c, n) = fast_exp(input.f(c, n));
       Func output("output");
-      output(c) = exp_vals(c) / sum(exp_vals(r.x));
+      output(c, n) = exp_vals(c, n) / sum(exp_vals(r.x, n));
       return output;
   }
 

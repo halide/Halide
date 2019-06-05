@@ -175,6 +175,13 @@ if (HALIDE_ENABLE_RTTI AND NOT LLVM_ENABLE_RTTI)
   message(FATAL_ERROR "Can't enable RTTI. LLVM was compiled without it")
 endif()
 
+# Needed for 'make distrib' to properly fill in the .tpl files
+if (HALIDE_ENABLE_RTTI)
+  set(HALIDE_RTTI_RAW 1)
+else()
+  set(HALIDE_RTTI_RAW 0)
+endif()
+
 function(halide_project name folder)
   add_executable("${name}" ${ARGN})
   if (MSVC)
@@ -307,7 +314,6 @@ define_test_group(run_tests)
 # TODO(srj): add test_aotcpp_generators support
 # TODO(srj): add test_valgrind variant
 # TODO(srj): add test_avx512 variant
-# TODO(srj): add test_bazel variant
 # TODO(srj): add test_python variant
 # TODO(srj): add test_apps variant
 function(add_test TARGET)
@@ -425,10 +431,11 @@ install(FILES
         )
 
 install(DIRECTORY tutorial
-        DESTINATION tutorial
+        DESTINATION .
         FILES_MATCHING
+        PATTERN "*.cpp"
         PATTERN "*.h"
-        PATTERN "*.sh"
+        PATTERN "lesson_*.sh"
         PATTERN "*.gif"
         PATTERN "*.jpg"
         PATTERN "*.mp4"
@@ -451,11 +458,6 @@ endforeach()
 
 # ---- README
 file(GLOB FILES "${HALIDE_BASE_DIR}/*.md")
-install(FILES ${FILES}
-        DESTINATION .)
-
-# ---- Bazel
-file(GLOB FILES "${HALIDE_BASE_DIR}/bazel/*")
 install(FILES ${FILES}
         DESTINATION .)
 

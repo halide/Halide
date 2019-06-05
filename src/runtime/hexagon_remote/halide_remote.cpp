@@ -174,6 +174,19 @@ int halide_hexagon_remote_set_performance(
     return 0;
 }
 
+HAP_dcvs_voltage_corner_t halide_power_mode_to_voltage_corner(int mode) {
+    switch (mode) {
+    case halide_hexagon_power_low: return HAP_DCVS_VCORNER_SVS;
+    case halide_hexagon_power_nominal: return HAP_DCVS_VCORNER_NOM;
+    case halide_hexagon_power_turbo: return HAP_DCVS_VCORNER_TURBO;
+    case halide_hexagon_power_default: return HAP_DCVS_VCORNER_DISABLE;
+    case halide_hexagon_power_low_plus: return HAP_DCVS_VCORNER_SVSPLUS;
+    case halide_hexagon_power_low_2: return HAP_DCVS_VCORNER_SVS2;
+    case halide_hexagon_power_nominal_plus: return HAP_DCVS_VCORNER_NOMPLUS;
+    default: return HAP_DCVS_VCORNER_DISABLE;
+    }
+}
+
 int halide_hexagon_remote_set_performance_mode(int mode) {
     int set_mips = 0;
     unsigned int mipsPerThread = 0;
@@ -189,21 +202,6 @@ int halide_hexagon_remote_set_performance_mode(int mode) {
     unsigned int max_mips = 0;
     uint64 max_bus_bw = 0;
     HAP_power_request_t request;
-
-    const HAP_dcvs_voltage_corner_t voltage_corner[] = {
-        HAP_DCVS_VCORNER_SVS,
-        HAP_DCVS_VCORNER_NOM,
-        HAP_DCVS_VCORNER_TURBO,
-        HAP_DCVS_VCORNER_DISABLE,
-        HAP_DCVS_VCORNER_SVSPLUS,
-        HAP_DCVS_VCORNER_SVS2,
-        HAP_DCVS_VCORNER_NOMPLUS
-    };
-
-    if (mode > 6) {
-        log_printf("Unknown power mode (%d)\n");
-        return -1;
-    }
 
     power_info.type = HAP_power_get_max_mips;
     int retval = HAP_power_get(NULL, &power_info);
@@ -293,7 +291,7 @@ int halide_hexagon_remote_set_performance_mode(int mode) {
     request.dcvs_v2.set_dcvs_params = TRUE;
     request.dcvs_v2.dcvs_params.min_corner = HAP_DCVS_VCORNER_DISABLE;
     request.dcvs_v2.dcvs_params.max_corner = HAP_DCVS_VCORNER_DISABLE;
-    request.dcvs_v2.dcvs_params.target_corner = voltage_corner[mode];
+    request.dcvs_v2.dcvs_params.target_corner = halide_power_mode_to_voltage_corner(mode);
     request.dcvs_v2.set_latency = set_latency;
     request.dcvs_v2.latency = latency;
     retval = HAP_power_set(NULL, &request);

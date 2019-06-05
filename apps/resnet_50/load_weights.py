@@ -1,5 +1,7 @@
+import argparse
 import numpy as np
-import torch.utils.model_zoo as model_zoo
+import numpy as np
+import torchvision.models.resnet as resnet
 import struct
 import os
 import sys
@@ -9,10 +11,10 @@ def load_weights(dir):
         print("Path %s is not a dir" % dir)
         sys.exit(1)
 
-    dic = model_zoo.load_url('https://download.pytorch.org/models/resnet50-19c8e357.pth')
     print("-----------loading weights------------")
-    print(dic.keys())
-
+    resnet50 = resnet.resnet50(pretrained=True)
+    resnet50.eval()
+    dic = resnet50.state_dict()
     # numpy stores weights in output channel, input channel, h, w order
     # we want to transpose to output channel, h, w, input channel order
     for k in dic.keys():

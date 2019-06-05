@@ -60,7 +60,7 @@ public:
     }
 };
 
-class InjectPrefetch : public IRMutator2 {
+class InjectPrefetch : public IRMutator {
 public:
     InjectPrefetch(const map<string, Function> &e, const map<string, Box> &buffers)
         : env(e), external_buffers(buffers) {}
@@ -71,7 +71,7 @@ private:
     Scope<Box> buffer_bounds;
 
 private:
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Box get_buffer_bounds(string name, int dims) {
         if (buffer_bounds.contains(name)) {
@@ -96,7 +96,7 @@ private:
             b.push_back(Interval(r.min, r.min + r.extent - 1));
         }
         ScopedBinding<Box> bind(buffer_bounds, op->name, b);
-        return IRMutator2::visit(op);
+        return IRMutator::visit(op);
     }
 
     Stmt visit(const Prefetch *op) override {
@@ -166,7 +166,7 @@ private:
     }
 };
 
-class InjectPlaceholderPrefetch : public IRMutator2 {
+class InjectPlaceholderPrefetch : public IRMutator {
 public:
     InjectPlaceholderPrefetch(const map<string, Function> &e, const string &prefix,
                               const vector<PrefetchDirective> &prefetches)
@@ -177,7 +177,7 @@ private:
     const string &prefix;
     const vector<PrefetchDirective> &prefetch_list;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Stmt add_placeholder_prefetch(const string &loop_var, PrefetchDirective p, Stmt body) {
         debug(5) << "...Injecting placeholder prefetch for " << loop_var << "\n";
@@ -222,13 +222,13 @@ private:
 
 // Reduce the prefetch dimension if bigger than 'max_dim'. It keeps the 'max_dim'
 // innermost dimensions and replaces the rests with for-loops.
-class ReducePrefetchDimension : public IRMutator2 {
-    using IRMutator2::visit;
+class ReducePrefetchDimension : public IRMutator {
+    using IRMutator::visit;
 
     size_t max_dim;
 
     Stmt visit(const Evaluate *op) override {
-        Stmt stmt = IRMutator2::visit(op);
+        Stmt stmt = IRMutator::visit(op);
         op = stmt.as<Evaluate>();
         internal_assert(op);
         const Call *call = op->value.as<Call>();
@@ -275,13 +275,13 @@ public:
 // If the prefetched data is larger than 'max_byte_size', we need to tile the
 // prefetch. This will split the prefetch call into multiple calls by adding
 // an outer for-loop around the prefetch.
-class SplitPrefetch : public IRMutator2 {
-    using IRMutator2::visit;
+class SplitPrefetch : public IRMutator {
+    using IRMutator::visit;
 
     Expr max_byte_size;
 
     Stmt visit(const Evaluate *op) override {
-        Stmt stmt = IRMutator2::visit(op);
+        Stmt stmt = IRMutator::visit(op);
         op = stmt.as<Evaluate>();
         internal_assert(op);
         const Call *call = op->value.as<Call>();

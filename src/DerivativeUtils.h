@@ -1,7 +1,14 @@
 #ifndef HALIDE_INTERNAL_DERIVATIVE_UTILS_H
 #define HALIDE_INTERNAL_DERIVATIVE_UTILS_H
 
-#include "Halide.h"
+#include <set>
+
+#include "Bounds.h"
+#include "Derivative.h"
+#include "Expr.h"
+#include "RDom.h"
+#include "Scope.h"
+#include "Var.h"
 
 namespace Halide {
 namespace Internal {
@@ -65,7 +72,7 @@ std::vector<std::string> vars_to_strings(const std::vector<Var> &vars);
 ReductionDomain extract_rdom(const Expr &expr);
 /**
  * expr is new_var == f(var), solve for var == g(new_var)
- * if multiple new_var correponds to same var, introduce a RDom
+ * if multiple new_var corresponds to same var, introduce a RDom
  */
 std::pair<bool, Expr> solve_inverse(Expr expr,
                                     const std::string &new_var,
@@ -83,7 +90,7 @@ std::map<std::string, BufferInfo> find_buffer_calls(const Func &func);
  */
 std::set<std::string> find_implicit_variables(Expr expr);
 /**
- * Substitute the variable. Also replace all occurence in rdom.where() predicates.
+ * Substitute the variable. Also replace all occurrences in rdom.where() predicates.
  */
 Expr substitute_rdom_predicate(
     const std::string &name, const Expr &replacement, const Expr &expr);

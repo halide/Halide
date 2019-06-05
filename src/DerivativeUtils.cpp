@@ -1,26 +1,35 @@
-#include "DerivativeUtils.h"
-
 #include <iterator>
 #include <map>
 #include <set>
 #include <string>
 #include <vector>
 
-#include "Halide.h"
-#include "Errors.h"
+#include "CSE.h"
+#include "DerivativeUtils.h"
+#include "ExprUsesVar.h"
+#include "FindCalls.h"
+#include "IREquality.h"
+#include "IRMutator.h"
+#include "IROperator.h"
+#include "IRVisitor.h"
+#include "Monotonic.h"
+#include "RealizationOrder.h"
+#include "Simplify.h"
+#include "Solve.h"
+#include "Substitute.h"
 
 namespace Halide {
 namespace Internal {
 
-using std::pair;
 using std::map;
+using std::pair;
 using std::set;
 using std::string;
 using std::vector;
 
-class StripLets : public IRMutator2 {
+class StripLets : public IRGraphMutator2 {
 public:
-    using IRMutator2::visit;
+    using IRGraphMutator2::visit;
     Expr visit(const Let *op) override {
         return mutate(op->body);
     }
@@ -41,7 +50,9 @@ vector<string> gather_variables(const Expr &expr,
             }
         }
 
-        GatherVariables(const vector<string> &f) : filter(f) {}
+        GatherVariables(const vector<string> &f)
+            : filter(f) {
+        }
 
         vector<string> variables;
         const vector<string> &filter;
@@ -109,8 +120,7 @@ Expr add_let_expression(const Expr &expr,
         changed = false;
         for (size_t i = 0; i < let_variables.size(); i++) {
             const auto &let_variable = let_variables[i];
-            if (!injected[i] &&
-                expr_uses_var(ret, let_variable)) {
+            if (!injected[i] && expr_uses_var(ret, let_variable)) {
                 auto value = let_var_mapping.find(let_variable)->second;
                 ret = Let::make(let_variable, value, ret);
                 injected[i] = true;
@@ -162,7 +172,7 @@ void ExpressionSorter::visit(const Call *op) {
 }
 
 void ExpressionSorter::visit(const Let *op) {
-    assert(let_var_mapping.find(op->name) == let_var_mapping.end());
+    internal_assert(let_var_mapping.find(op->name) == let_var_mapping.end());
     let_var_mapping[op->name] = op->value;
 
     include(op->body);
@@ -196,7 +206,7 @@ vector<Expr> sort_expressions(const Expr &expr) {
 
 map<string, Box> inference_bounds(const vector<Func> &funcs,
                                   const vector<Box> &output_bounds) {
-    assert(funcs.size() == output_bounds.size());
+    internal_assert(funcs.size() == output_bounds.size());
     // Obtain all dependencies
     vector<Function> functions;
     functions.reserve(funcs.size());
@@ -234,9 +244,9 @@ map<string, Box> inference_bounds(const vector<Func> &funcs,
     for (auto it = order.rbegin(); it != order.rend(); it++) {
         Func func = Func(env[*it]);
         // We should already have the bounds of this function
-        assert(bounds.find(*it) != bounds.end());
+        internal_assert(bounds.find(*it) != bounds.end());
         const Box &current_bounds = bounds[*it];
-        assert(func.args().size() == current_bounds.size());
+        internal_assert(func.args().size() == current_bounds.size());
         // We know the range for each argument of this function
         for (int i = 0; i < (int) current_bounds.size(); i++) {
             string arg = func.args()[i].name();
@@ -344,7 +354,7 @@ pair<bool, Expr> solve_inverse(Expr expr,
     expr = substitute_in_all_lets(simplify(expr));
     Interval interval = solve_for_outer_interval(expr, var);
     if (!interval.is_bounded()) {
-        return {false, Expr()};
+        return { false, Expr() };
     }
     Expr rmin = simplify(interval.min);
     Expr rmax = simplify(interval.max);
@@ -352,12 +362,12 @@ pair<bool, Expr> solve_inverse(Expr expr,
 
     const int64_t *extent_int = as_const_int(rextent);
     if (extent_int == nullptr) {
-        return {false, Expr()};
+        return { false, Expr() };
     }
 
     // For some reason interval.is_single_point() doesn't work
     if (extent_int != nullptr && *extent_int == 1) {
-        return {true, rmin};
+        return { true, rmin };
     }
 
     // Create a RDom to loop over the interval
@@ -365,7 +375,7 @@ pair<bool, Expr> solve_inverse(Expr expr,
     Expr cond = substitute(var, rmin + r.x, expr.as<EQ>()->b);
     cond = substitute(new_var, Var(var), cond) == Var(var);
     r.where(cond);
-    return {true, rmin + r.x};
+    return { true, rmin + r.x };
 }
 
 struct BufferDimensionsFinder : public IRGraphVisitor {
@@ -395,7 +405,7 @@ public:
                     op->type
                 };
             } else {
-                assert(op->param.defined());
+                internal_assert(op->param.defined());
                 buffer_calls[op->name] = BufferInfo{
                     op->param.dimensions(),
                     op->type

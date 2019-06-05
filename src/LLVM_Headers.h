@@ -1,7 +1,9 @@
 #ifndef HALIDE_LLVM_HEADERS_H
 #define HALIDE_LLVM_HEADERS_H
 
-#if LLVM_VERSION < 60
+#if LLVM_VERSION >= 60
+// We're good to go
+#else
 #error "Compiling Halide requires LLVM 6.0 or newer"
 #endif
 
@@ -44,6 +46,13 @@
 #include <llvm/Transforms/Utils/ModuleUtils.h>
 #include <llvm/Transforms/Utils/SymbolRewriter.h>
 #include <llvm/Transforms/Instrumentation.h>
+#if LLVM_VERSION >= 90
+#include "llvm/Transforms/Instrumentation/AddressSanitizer.h"
+#endif
+#if LLVM_VERSION >= 80
+#include <llvm/Transforms/Instrumentation/ThreadSanitizer.h>
+#include <llvm/IR/PassTimingInfo.h>
+#endif
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"

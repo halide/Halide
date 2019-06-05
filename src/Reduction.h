@@ -10,7 +10,7 @@
 namespace Halide {
 namespace Internal {
 
-class IRMutator2;
+class IRMutator;
 
 /** A single named dimension of a reduction domain */
 struct ReductionVariable {
@@ -96,9 +96,9 @@ public:
      * ReductionDomain. */
     void accept(IRVisitor *) const;
 
-    /** Pass an IRMutator2 through to all Exprs referenced in the
+    /** Pass an IRMutator through to all Exprs referenced in the
      * ReductionDomain. */
-    void mutate(IRMutator2 *);
+    void mutate(IRMutator *);
 };
 
 void split_predicate_test();

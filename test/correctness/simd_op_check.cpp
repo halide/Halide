@@ -48,9 +48,6 @@ size_t num_threads = Halide::Internal::ThreadPool<void>::num_processors_online()
 struct Test {
     bool use_avx2{false};
     bool use_avx512{false};
-    bool use_avx512_cannonlake{false};
-    bool use_avx512_knl{false};
-    bool use_avx512_skylake{false};
     bool use_avx{false};
     bool use_power_arch_2_07{false};
     bool use_sse41{false};
@@ -82,12 +79,16 @@ struct Test {
         target = get_target_from_environment()
             .with_feature(Target::NoBoundsQuery)
             .with_feature(Target::NoAsserts)
-            .with_feature(Target::NoRuntime);
-        use_avx512_knl = target.has_feature(Target::AVX512_KNL);
-        use_avx512_cannonlake = target.has_feature(Target::AVX512_Cannonlake);
-        use_avx512_skylake = use_avx512_cannonlake || target.has_feature(Target::AVX512_Skylake);
-        use_avx512 = use_avx512_knl || use_avx512_skylake || use_avx512_cannonlake || target.has_feature(Target::AVX512);
-        use_avx2 = use_avx512 || target.has_feature(Target::AVX2);
+            .with_feature(Target::NoRuntime)
+            .with_feature(Target::DisableLLVMLoopUnroll)
+            .with_feature(Target::DisableLLVMLoopVectorize);
+        // We only test the skylake variant of avx512 here
+        use_avx512 = (target.has_feature(Target::AVX512_Cannonlake) ||
+                      target.has_feature(Target::AVX512_Skylake));
+        if (target.has_feature(Target::AVX512) && !use_avx512) {
+            std::cerr << "Warning: This test is only configured for the skylake variant of avx512. Expect failures\n";
+        }
+        use_avx2 = use_avx512 || (target.has_feature(Target::AVX512) || target.has_feature(Target::AVX2));
         use_avx = use_avx2 || target.has_feature(Target::AVX);
         use_sse41 = use_avx || target.has_feature(Target::SSE41);
 
@@ -112,7 +113,7 @@ struct Test {
             p.dim(0).set_min(-PAD).set_extent(W + 2 * PAD);
             if (can_run) {
                 // Make a buffer filled with noise to use as a sample input.
-                Buffer<> b(p.type(), {W*4+H, H});
+                Buffer<> b(p.type(), W + 2 * PAD);
                 b.set_min(-PAD);
                 Expr r;
                 if (p.type().is_float()) {
@@ -123,7 +124,7 @@ struct Test {
                     // bit numbers.
                     r = cast(p.type(), random_int() / 4);
                 }
-                lambda(x, y, r).realize(b);
+                lambda(x, r).realize(b);
                 p.set(b);
             }
         }
@@ -252,6 +253,20 @@ struct Test {
             // accuracy differences between vectors and scalars.
             if (e > 0.001) {
                 error_msg << "The vector and scalar versions of " << name << " disagree. Maximum error: " << e << "\n";
+
+                string error_filename = output_directory + "error_" + name + ".s";
+                error.compile_to_assembly(error_filename, arg_types, target);
+
+                std::ifstream error_file;
+                error_file.open(error_filename);
+
+                error_msg << "Error assembly: \n";
+                string line;
+                while (getline(error_file, line)) {
+                    error_msg << line << "\n";
+                }
+
+                error_file.close();
             }
         }
 
@@ -307,18 +322,15 @@ struct Test {
             check("paddsb",  8*w, i8_sat(i16(i8_1) + i16(i8_2)));
             // Add a test with a constant as there was a bug on this.
             check("paddsb",  8*w, i8_sat(i16(i8_1) + i16(3)));
+
             check("psubsb",  8*w, i8_sat(i16(i8_1) - i16(i8_2)));
 
-            // TODO: Re-enable this after fixing #3281
-            //check("paddusb", 8*w, u8(min(u16(u8_1) + u16(u8_2), max_u8)));
-            // TODO: Re-enable this after fixing #3281
-            //check("psubusb", 8*w, u8(max(i16(u8_1) - i16(u8_2), 0)));
+            check("paddusb", 8*w, u8(min(u16(u8_1) + u16(u8_2), max_u8)));
+            check("psubusb", 8*w, u8(max(i16(u8_1) - i16(u8_2), 0)));
             check("paddsw",  4*w, i16_sat(i32(i16_1) + i32(i16_2)));
             check("psubsw",  4*w, i16_sat(i32(i16_1) - i32(i16_2)));
-            // TODO: Re-enable this after fixing #3281
-            //check("paddusw", 4*w, u16(min(u32(u16_1) + u32(u16_2), max_u16)));
-            // TODO: Re-enable this after fixing #3281
-            //check("psubusw", 4*w, u16(max(i32(u16_1) - i32(u16_2), 0)));
+            check("paddusw", 4*w, u16(min(u32(u16_1) + u32(u16_2), max_u16)));
+            check("psubusw", 4*w, u16(max(i32(u16_1) - i32(u16_2), 0)));
             check("pmulhw",  4*w, i16((i32(i16_1) * i32(i16_2)) / (256*256)));
             check("pmulhw",  4*w, i16((i32(i16_1) * i32(i16_2)) >> 16));
 
@@ -334,14 +346,14 @@ struct Test {
             check("pmulhuw", 4*w, i16_1 / 15);
 
 
-            // TODO: re-enable after LLVM bug https://bugs.llvm.org/show_bug.cgi?id=38916 is fixed.
-            std::cout << "Skipping tests for pcmp\n";
-            // check("pcmp*b", 8*w, select(u8_1 == u8_2, u8(1), u8(2)));
-            // check("pcmp*b", 8*w, select(u8_1 > u8_2, u8(1), u8(2)));
-            // check("pcmp*w", 4*w, select(u16_1 == u16_2, u16(1), u16(2)));
-            // check("pcmp*w", 4*w, select(u16_1 > u16_2, u16(1), u16(2)));
-            // check("pcmp*d", 2*w, select(u32_1 == u32_2, u32(1), u32(2)));
-            // check("pcmp*d", 2*w, select(u32_1 > u32_2, u32(1), u32(2)));
+            if (w > 1) { // LLVM does a lousy job at the comparisons for 64-bit types
+                check("pcmp*b", 8*w, select(u8_1 == u8_2, u8(1), u8(2)));
+                check("pcmp*b", 8*w, select(u8_1 > u8_2, u8(1), u8(2)));
+                check("pcmp*w", 4*w, select(u16_1 == u16_2, u16(1), u16(2)));
+                check("pcmp*w", 4*w, select(u16_1 > u16_2, u16(1), u16(2)));
+                check("pcmp*d", 2*w, select(u32_1 == u32_2, u32(1), u32(2)));
+                check("pcmp*d", 2*w, select(u32_1 > u32_2, u32(1), u32(2)));
+            }
 
             // SSE 1
             check("addps", 2*w, f32_1 + f32_2);
@@ -358,8 +370,8 @@ struct Test {
                 //check("divps", 2*w, f32_1 / f32_2);
             }
 
-            check(use_avx512_skylake ? "vrsqrt14ps" : "rsqrtps", 2*w, fast_inverse_sqrt(f32_1));
-            check(use_avx512_skylake ? "vrcp14ps" : "rcpps", 2*w, fast_inverse(f32_1));
+            check(use_avx512 ? "vrsqrt*ps" : "rsqrtps", 2*w, fast_inverse_sqrt(f32_1));
+            check(use_avx512 ? "vrcp*ps" : "rcpps", 2*w, fast_inverse(f32_1));
             check("sqrtps", 2*w, sqrt(f32_2));
             check("maxps", 2*w, max(f32_1, f32_2));
             check("minps", 2*w, min(f32_1, f32_2));
@@ -389,8 +401,8 @@ struct Test {
         // These guys get normalized to the integer versions for widths
         // other than 128-bits. Avx512 has mask-register versions.
         // check("andnps", 4, bool_1 & (~bool_2));
-        check(use_avx512_skylake ? "korw" : "orps", 4, bool_1 | bool_2);
-        check(use_avx512_skylake ? "kxorw" : "xorps", 4, bool_1 ^ bool_2);
+        check(use_avx512 ? "korw" : "orps", 4, bool_1 | bool_2);
+        check(use_avx512 ? "kxorw" : "xorps", 4, bool_1 ^ bool_2);
         if (!use_avx512) {
             // avx512 implicitly ands the predicates by masking the second
             // comparison using the result of the first. Clever!
@@ -433,11 +445,12 @@ struct Test {
 
             check("paddq", w, i64_1 + i64_2);
             check("psubq", w, i64_1 - i64_2);
-            check(use_avx512_skylake ? "vpmullq" : "pmuludq", w, u64_1 * u64_2);
+            check(use_avx512 ? "vpmullq" : "pmuludq", w, u64_1 * u64_2);
 
             const char *check_suffix = "";
-            if (use_avx2 && w > 3)
+            if (use_avx2 && w > 3) {
                 check_suffix = "*ymm";
+            }
             check(std::string("packssdw") + check_suffix, 4*w, i16_sat(i32_1));
             check(std::string("packsswb") + check_suffix, 8*w, i8_sat(i16_1));
             check(std::string("packuswb") + check_suffix, 8*w, u8_sat(i16_1));
@@ -475,11 +488,14 @@ struct Test {
                 }
                 check("pmulld", 2*w, i32_1 * i32_2);
 
-                check((use_avx512_skylake && w > 2) ? "vinsertf32x8" : "blend*ps", 2*w, select(f32_1 > 0.7f, f32_1, f32_2));
-                check((use_avx512 && w > 2) ? "vinsertf64x4" : "blend*pd", w, select(f64_1 > cast<double>(0.7f), f64_1, f64_2));
-                check("pblend*b", 8*w, select(u8_1 > 7, u8_1, u8_2));
-                check("pblend*b", 8*w, select(u8_1 == 7, u8_1, u8_2));
-                check("pblend*b", 8*w, select(u8_1 <= 7, i8_1, i8_2));
+                if (!use_avx512) {
+                    // avx512 uses a variety of predicated mov ops instead of blend
+                    check("blend*ps", 2*w, select(f32_1 > 0.7f, f32_1, f32_2));
+                    check("blend*pd", w, select(f64_1 > cast<double>(0.7f), f64_1, f64_2));
+                    check("pblend*b", 8*w, select(u8_1 > 7, u8_1, u8_2));
+                    check("pblend*b", 8*w, select(u8_1 == 7, u8_1, u8_2));
+                    check("pblend*b", 8*w, select(u8_1 <= 7, i8_1, i8_2));
+                }
 
                 check("pmaxsb", 8*w, max(i8_1, i8_2));
                 check("pminsb", 8*w, min(i8_1, i8_2));
@@ -511,8 +527,8 @@ struct Test {
         if (use_avx) {
             check("vsqrtps*ymm", 8, sqrt(f32_1));
             check("vsqrtpd*ymm", 4, sqrt(f64_1));
-            check(use_avx512_skylake ? "vrsqrt14ps" : "vrsqrtps*ymm", 8, fast_inverse_sqrt(f32_1));
-            check(use_avx512_skylake ? "vrcp14ps" : "vrcpps*ymm", 8, fast_inverse(f32_1));
+            check(use_avx512 ? "vrsqrt*ps" : "vrsqrtps*ymm", 8, fast_inverse_sqrt(f32_1));
+            check(use_avx512 ? "vrcp*ps" : "vrcpps*ymm", 8, fast_inverse(f32_1));
 
 #if 0
             // Not implemented in the front end.
@@ -547,16 +563,16 @@ struct Test {
             //check("vcmpleps", 8, select(f32_1 <= f32_2, 1.0f, 2.0f));
             check("vcmpltps*ymm", 8, select(f32_1 < f32_2, 1.0f, 2.0f));
 
-            // avx512 can do predicated insert ops instead of blends
-            check(use_avx512_skylake ? "vinsertf32x8" : "vblend*ps*ymm", 8, select(f32_1 > 0.7f, f32_1, f32_2));
-            check(use_avx512 ? "vinsertf64x4" : "vblend*pd*ymm", 4, select(f64_1 > cast<double>(0.7f), f64_1, f64_2));
+            // avx512 can do predicated mov ops instead of blends
+            check(use_avx512 ? "vmov*%k" : "vblend*ps*ymm", 8, select(f32_1 > 0.7f, f32_1, f32_2));
+            check(use_avx512 ? "vmov*%k" : "vblend*pd*ymm", 4, select(f64_1 > cast<double>(0.7f), f64_1, f64_2));
 
             check("vcvttps2dq*ymm", 8, i32(f32_1));
             check("vcvtdq2ps*ymm", 8, f32(i32_1));
-            check("vcvttpd2dqy", 8, i32(f64_1));
-            check("vcvtdq2pd*ymm", 8, f64(i32_1));
-            check("vcvtps2pd*ymm", 8, f64(f32_1));
-            check("vcvtpd2psy", 8, f32(f64_1));
+            check(use_avx512 ? "vcvttpd2dq*ymm" : "vcvttpd2dqy", 8, i32(f64_1));
+            check(use_avx512 ? "vcvtdq2pd*zmm" : "vcvtdq2pd*ymm", 8, f64(i32_1));
+            check(use_avx512 ? "vcvtps2pd*zmm" : "vcvtps2pd*ymm", 8, f64(f32_1));
+            check(use_avx512 ? "vcvtpd2ps*ymm" : "vcvtpd2psy", 8, f32(f64_1));
 
             // Newer llvms will just vpshufd straight from memory for reversed loads
             // check("vperm", 8, in_f32(100-x));
@@ -597,9 +613,9 @@ struct Test {
             check("vpmaxub*ymm", 32, max(u8_1, u8_2));
             check("vpminub*ymm", 32, min(u8_1, u8_2));
 
-            check("vpaddq*ymm", 8, i64_1 + i64_2);
-            check("vpsubq*ymm", 8, i64_1 - i64_2);
-            check(use_avx512_skylake ? "vpmullq" : "vpmuludq*ymm", 8, u64_1 * u64_2);
+            check(use_avx512 ? "vpaddq*zmm" : "vpaddq*ymm", 8, i64_1 + i64_2);
+            check(use_avx512 ? "vpsubq*zmm" : "vpsubq*ymm", 8, i64_1 - i64_2);
+            check(use_avx512 ? "vpmullq" : "vpmuludq*ymm", 8, u64_1 * u64_2);
 
             check("vpabsb*ymm", 32, abs(i8_1));
             check("vpabsw*ymm", 16, abs(i16_1));
@@ -613,14 +629,29 @@ struct Test {
             }
             check("vpmulld*ymm", 8, i32_1 * i32_2);
 
-            check("vpblend*b*ymm", 32, select(u8_1 > 7, u8_1, u8_2));
+            if (use_avx512) {
+                // avx512 does vector blends with a mov + predicate register
+                check("vmov*%k", 32, select(u8_1 > 7, u8_1, u8_2));
+            } else {
+                check("vpblend*b*ymm", 32, select(u8_1 > 7, u8_1, u8_2));
+            }
 
+            if (use_avx512) {
+                check("vpmaxsb*zmm", 64, max(i8_1, i8_2));
+                check("vpminsb*zmm", 64, min(i8_1, i8_2));
+                check("vpmaxuw*zmm", 32, max(u16_1, u16_2));
+                check("vpminuw*zmm", 32, min(u16_1, u16_2));
+                check("vpmaxud*zmm", 16, max(u32_1, u32_2));
+                check("vpminud*zmm", 16, min(u32_1, u32_2));
+                check("vpmaxsd*zmm", 16, max(i32_1, i32_2));
+                check("vpminsd*zmm", 16, min(i32_1, i32_2));
+            }
             check("vpmaxsb*ymm", 32, max(i8_1, i8_2));
             check("vpminsb*ymm", 32, min(i8_1, i8_2));
             check("vpmaxuw*ymm", 16, max(u16_1, u16_2));
             check("vpminuw*ymm", 16, min(u16_1, u16_2));
-            check("vpmaxud*ymm", 16, max(u32_1, u32_2));
-            check("vpminud*ymm", 16, min(u32_1, u32_2));
+            check("vpmaxud*ymm", 8, max(u32_1, u32_2));
+            check("vpminud*ymm", 8, min(u32_1, u32_2));
             check("vpmaxsd*ymm", 8, max(i32_1, i32_2));
             check("vpminsd*ymm", 8, min(i32_1, i32_2));
 
@@ -645,7 +676,7 @@ struct Test {
             check("vreducepd", 8, f64_1 - trunc(f64_1*8)/8);
 #endif
         }
-        if (use_avx512_skylake) {
+        if (use_avx512) {
             check("vpabsq", 8, abs(i64_1));
             check("vpmaxuq", 8, max(u64_1, u64_2));
             check("vpminuq", 8, min(u64_1, u64_2));
@@ -2148,6 +2179,9 @@ check("v*.w += vrmpy(v*.b,v*.b)", hvx_width, i32_1 + i32(i8_1)*i8_1 + i32(i8_2)*
 
 int main(int argc, char **argv) {
     Test test;
+
+    printf("host is:      %s\n", get_host_target().to_string().c_str());
+    printf("HL_TARGET is: %s\n", get_target_from_environment().to_string().c_str());
 
     if (argc > 1) {
         test.filter = argv[1];

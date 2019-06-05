@@ -18,7 +18,7 @@
 namespace Halide {
 namespace Internal {
 
-class IRMutator2;
+class IRMutator;
 class IRVisitor;
 
 /** All our IR node types get unique IDs for the purposes of RTTI */
@@ -118,14 +118,14 @@ inline void destroy<IRNode>(const IRNode *t) {delete t;}
    methods beyond base IR nodes for now. */
 struct BaseStmtNode : public IRNode {
     BaseStmtNode(IRNodeType t) : IRNode(t) {}
-    virtual Stmt mutate_stmt(IRMutator2 *v) const = 0;
+    virtual Stmt mutate_stmt(IRMutator *v) const = 0;
 };
 
 /** A base class for expression nodes. They all contain their types
  * (e.g. Int(32), Float(32)) */
 struct BaseExprNode : public IRNode {
     BaseExprNode(IRNodeType t) : IRNode(t) {}
-    virtual Expr mutate_expr(IRMutator2 *v) const = 0;
+    virtual Expr mutate_expr(IRMutator *v) const = 0;
     Type type;
 };
 
@@ -138,7 +138,7 @@ struct BaseExprNode : public IRNode {
 template<typename T>
 struct ExprNode : public BaseExprNode {
     void accept(IRVisitor *v) const override;
-    Expr mutate_expr(IRMutator2 *v) const override;
+    Expr mutate_expr(IRMutator *v) const override;
     ExprNode() : BaseExprNode(T::_node_type) {}
     virtual ~ExprNode() {}
 };
@@ -146,7 +146,7 @@ struct ExprNode : public BaseExprNode {
 template<typename T>
 struct StmtNode : public BaseStmtNode {
     void accept(IRVisitor *v) const override;
-    Stmt mutate_stmt(IRMutator2 *v) const override;
+    Stmt mutate_stmt(IRMutator *v) const override;
     StmtNode() : BaseStmtNode(T::_node_type) {}
     virtual ~StmtNode() {}
 };
@@ -422,6 +422,19 @@ enum class ForType {
     GPULane,
 };
 
+/** Check if for_type executes for loop iterations in parallel and unordered. */
+inline bool is_unordered_parallel(ForType for_type) {
+    return (for_type == ForType::Parallel ||
+            for_type == ForType::GPUBlock ||
+            for_type == ForType::GPUThread);
+}
+
+/** Returns true if for_type executes for loop iterations in parallel. */
+inline bool is_parallel(ForType for_type) {
+    return (is_unordered_parallel(for_type) ||
+            for_type == ForType::Vectorized ||
+            for_type == ForType::GPULane);
+}
 
 /** A reference-counted handle to a statement node. */
 struct Stmt : public IRHandle {

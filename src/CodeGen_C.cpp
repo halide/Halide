@@ -119,13 +119,36 @@ inline float float_from_bits(uint32_t bits) {
 }
 
 template<typename T>
-inline uint8_t halide_count_leading_zeros(T v) {
-    int bits = sizeof(v) * 8;
-    while (v) {
-        v >>= 1;
-        bits--;
+inline int halide_popcount(T a) {
+    int bits_set = 0;
+    while (a != 0) {
+        bits_set += a & 1;
+        a >>= 1;
     }
-    return bits;
+    return bits_set;
+}
+
+template<typename T>
+inline int halide_count_leading_zeros(T a) {
+    int leading_zeros = 0;
+    int bit = sizeof(a) * 8 - 1;
+    while (bit >= 0 && (a & (((T)1) << bit)) == 0) {
+        leading_zeros++;
+        bit--;
+    }
+    return leading_zeros;
+}
+
+template<typename T>
+inline int halide_count_trailing_zeros(T a) {
+    int trailing_zeros = 0;
+    constexpr int bits = sizeof(a) * 8;
+    int bit = 0;
+    while (bit < bits && (a & (((T)1) << bit)) == 0) {
+        trailing_zeros++;
+        bit++;
+    }
+    return trailing_zeros;
 }
 
 template<typename T>
@@ -617,6 +640,21 @@ public:
         return r;
     }
 
+    friend Vec operator&&(const Vec &a, const Vec &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = a[i] && b[i];
+        }
+        return r;
+    }
+    friend Vec operator||(const Vec &a, const Vec &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = a[i] || b[i];
+        }
+        return r;
+    }
+
     friend Vec operator+(const Vec &a, const ElementType &b) {
         Vec r(empty);
         for (size_t i = 0; i < Lanes; i++) {
@@ -677,6 +715,20 @@ public:
         Vec r(empty);
         for (size_t i = 0; i < Lanes; i++) {
             r.elements[i] = a[i] | b;
+        }
+        return r;
+    }
+    friend Vec operator&&(const Vec &a, const ElementType &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = a[i] && b;
+        }
+        return r;
+    }
+    friend Vec operator||(const Vec &a, const ElementType &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = a[i] || b;
         }
         return r;
     }
@@ -741,6 +793,20 @@ public:
         Vec r(empty);
         for (size_t i = 0; i < Lanes; i++) {
             r.elements[i] = a | b[i];
+        }
+        return r;
+    }
+    friend Vec operator&&(const ElementType &a, const Vec &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = a && b[i];
+        }
+        return r;
+    }
+    friend Vec operator||(const ElementType &a, const Vec &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.elements[i] = a || b[i];
         }
         return r;
     }
@@ -979,6 +1045,20 @@ public:
     friend Vec operator|(const Vec &a, const Vec &b) {
         return Vec(from_native_vector, a.native_vector | b.native_vector);
     }
+    friend Vec operator&&(const Vec &a, const Vec &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = a.native_vector[i] && b.native_vector[i];
+        }
+        return r;
+    }
+    friend Vec operator||(const Vec &a, const Vec &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = a.native_vector[i] || b.native_vector[i];
+        }
+        return r;
+    }
 
     friend Vec operator+(const Vec &a, const ElementType &b) {
         return Vec(from_native_vector, a.native_vector + b);
@@ -1007,6 +1087,20 @@ public:
     friend Vec operator|(const Vec &a, const ElementType &b) {
         return Vec(from_native_vector, a.native_vector | b);
     }
+    friend Vec operator&&(const Vec &a, const ElementType &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = a.native_vector[i] && b;
+        }
+        return r;
+    }
+    friend Vec operator||(const Vec &a, const ElementType &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = a.native_vector[i] || b;
+        }
+        return r;
+    }
 
     friend Vec operator+(const ElementType &a, const Vec &b) {
         return Vec(from_native_vector, a + b.native_vector);
@@ -1034,6 +1128,20 @@ public:
     }
     friend Vec operator|(const ElementType &a, const Vec &b) {
         return Vec(from_native_vector, a | b.native_vector);
+    }
+    friend Vec operator&&(const ElementType &a, const Vec &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = a && b.native_vector[i];
+        }
+        return r;
+    }
+    friend Vec operator||(const ElementType &a, const Vec &b) {
+        Vec r(empty);
+        for (size_t i = 0; i < Lanes; i++) {
+            r.native_vector[i] = a || b.native_vector[i];
+        }
+        return r;
     }
 
     // TODO: this should be improved by taking advantage of native operator support.
@@ -1956,10 +2064,16 @@ void CodeGen_C::visit(const Call *op) {
         string a0 = print_expr(op->args[0]);
         string a1 = print_expr(op->args[1]);
         rhs << a0 << " >> " << a1;
-    } else if (op->is_intrinsic(Call::count_leading_zeros)) {
+    } else if (op->is_intrinsic(Call::count_leading_zeros) ||
+               op->is_intrinsic(Call::count_trailing_zeros) ||
+               op->is_intrinsic(Call::popcount)) {
         internal_assert(op->args.size() == 1);
-        string a0 = print_expr(op->args[0]);
-        rhs << "halide_count_leading_zeros(" << a0 << ")";
+        if (op->args[0].type().is_vector()) {
+            rhs << print_scalarized_expr(op);
+        } else {
+            string a0 = print_expr(op->args[0]);
+            rhs << "halide_" << op->name << "(" << a0 << ")";
+        }
     } else if (op->is_intrinsic(Call::lerp)) {
         internal_assert(op->args.size() == 3);
         Expr e = lower_lerp(op->args[0], op->args[1], op->args[2]);
@@ -2699,7 +2813,7 @@ void CodeGen_C::test() {
     Param<float> alpha("alpha");
     Param<int> beta("beta");
     Expr e = Select::make(alpha > 4.0f, print_when(x < 1, 3), 2);
-    Stmt s = Store::make("buf", e, x, Parameter(), const_true());
+    Stmt s = Store::make("buf", e, x, Parameter(), const_true(), ModulusRemainder());
     s = LetStmt::make("x", beta+1, s);
     s = Block::make(s, Free::make("tmp.stack"));
     s = Allocate::make("tmp.stack", Int(32), MemoryType::Stack, {127}, const_true(), s);

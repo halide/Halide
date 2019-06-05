@@ -8,6 +8,8 @@
 namespace Halide {
 namespace Internal {
 
+// The algorithm-specific features. For legacy reasons these are
+// called PipelineFeatures in the code.
 struct PipelineFeatures {
     PipelineFeatures() {
         std::memset(this, 0, sizeof(PipelineFeatures));
@@ -21,6 +23,7 @@ struct PipelineFeatures {
         return 3;
     }
 
+    // Access them by index.
     int &operator[](int idx) {
         return ((int *)(this))[idx];
     }
@@ -28,10 +31,6 @@ struct PipelineFeatures {
     const int &operator[](int idx) const {
         return ((const int *)(this))[idx];
     }
-
-
-    // A featurization of the compute done by a Func, to
-    // feed the neural network.
 
     enum class OpType {
         Const,
@@ -42,26 +41,26 @@ struct PipelineFeatures {
         EQ, NE, LT, LE,
         And, Or, Not,
         Select,
-        ImageCall,
-        FuncCall,
+        ImageCall,  // Loads to an input buffer
+        FuncCall,   // Calls to another pipeline stage
         SelfCall,   // Recursive calls from a Func to itself
         ExternCall, // Math intrinsics, typically
-        Let,        // Depends on what CSE has decided to do, but a good indication of register pressure
+        Let,
         NumOpTypes,
     };
 
     enum class ScalarType {
         Bool,
-        UInt8,  // includes Int8
-        UInt16, // includes Int16
-        UInt32, // includes Int32 (TODO: is this a good idea? index math is a different sort of beast)
-        UInt64, // Includes Int64
+        UInt8,  // or Int8
+        UInt16, // or Int16
+        UInt32, // or Int32
+        UInt64, // or Int64
         Float,
         Double,
         NumScalarTypes
     };
 
-    // Not a super-useful feature, but helps avoid printing huge numbers of zeros while debugging things
+    // Not fed into the network, but helps avoid printing huge numbers of zeros while debugging things
     int types_in_use[(int)ScalarType::NumScalarTypes];
 
     int op_histogram[(int)OpType::NumOpTypes][(int)ScalarType::NumScalarTypes];
@@ -120,10 +119,26 @@ struct PipelineFeatures {
                       << "      ExternCall: " << op_histogram[(int)OpType::ExternCall][i] << '\n'
                       << "      Let:        " << op_histogram[(int)OpType::Let][i] << '\n'
                       << "     Memory access patterns. Columns are calls to other Funcs, self-calls, input image access, and stores\n"
-                      << "      Pointwise:      " << pointwise_accesses[0][i] << ' ' << pointwise_accesses[1][i] << ' ' << pointwise_accesses[2][i] << ' ' << pointwise_accesses[3][i] << '\n'
-                      << "      Transpose:      " << transpose_accesses[0][i] << ' ' << transpose_accesses[1][i] << ' ' << transpose_accesses[2][i] << ' ' << transpose_accesses[3][i] << '\n'
-                      << "      Broadcast:      " << broadcast_accesses[0][i] << ' ' << broadcast_accesses[1][i] << ' ' << broadcast_accesses[2][i] << ' ' << broadcast_accesses[3][i] << '\n'
-                      << "      Slice:          " << slice_accesses[0][i] << ' ' << slice_accesses[1][i] << ' ' << slice_accesses[2][i] << ' ' << slice_accesses[3][i] << '\n';
+                      << "      Pointwise:      "
+                      << pointwise_accesses[0][i] << ' '
+                      << pointwise_accesses[1][i] << ' '
+                      << pointwise_accesses[2][i] << ' '
+                      << pointwise_accesses[3][i] << '\n'
+                      << "      Transpose:      "
+                      << transpose_accesses[0][i] << ' '
+                      << transpose_accesses[1][i] << ' '
+                      << transpose_accesses[2][i] << ' '
+                      << transpose_accesses[3][i] << '\n'
+                      << "      Broadcast:      "
+                      << broadcast_accesses[0][i] << ' '
+                      << broadcast_accesses[1][i] << ' '
+                      << broadcast_accesses[2][i] << ' '
+                      << broadcast_accesses[3][i] << '\n'
+                      << "      Slice:          "
+                      << slice_accesses[0][i] << ' '
+                      << slice_accesses[1][i] << ' '
+                      << slice_accesses[2][i] << ' '
+                      << slice_accesses[3][i] << '\n';
         }
     }
 
@@ -148,61 +163,134 @@ struct ScheduleFeatures {
         return ((const double *)(this))[idx];
     }
 
-    double num_realizations = 0; // Product of outer loops at store_at site
-    double num_productions = 0;  // Product of outer loops at compute_at site
-    double points_computed_per_realization = 0; // Number of times the innermost stmt happens per store_at
-    double points_computed_per_production = 0;  // Number of times the innermost stmt happens per compute_at
-    double points_computed_total = 0;
-    // points_computed_total
+    // The number of times storage for this stage is allocated. The
+    // product of outer loops at store_at site
+    double num_realizations = 0;
+
+    // The number of times a tile of the stage is computed. The
+    // pProduct of outer loops at compute_at site. Always at least as
+    // large as num_realizations.
+    double num_productions = 0;
+
+    // Number of times the innermost loop happens per allocation.
+    double points_computed_per_realization = 0;
+
+    // Number of times the innermost stmt happens per tile computed.
+    double points_computed_per_production = 0;
+
+    // The total trip count of the innermost loop over the entire program.
     //  == num_realizations * points_computed_per_realization
     //  ~= num_productions * points_computed_per_production
     // Only approximately equal because of the simplifications made
     // regarding the modeling of sliding window
+    double points_computed_total = 0;
 
-    double points_computed_minimum = 0; // The minimum number of points that are actually required to be computed to produce a correct output.
+    // The minimum number of points that are actually required to be
+    // computed to produce a correct output. Not actually a function
+    // of the schedule, but a useful reference point to see if a
+    // schedule has gone off the rails.
+    double points_computed_minimum = 0;
 
-    double innermost_loop_extent = 0; // Trip count of innermost serial loop. Currently always equal to the next feature
-    double innermost_pure_loop_extent = 0; // Trip count of innermost loop over the innermost storage dimension
+    // Trip count of innermost loop nest.
+    double innermost_loop_extent = 0;
+
+    // Trip count of just the pure loops in the innermost loop
+    // (i.e. excludes loops representing reductions).
+    double innermost_pure_loop_extent = 0;
+
+    // If this is to be unrolled, what is the product of the unrolling
+    // factors.
     double unrolled_loop_extent = 0;
 
-    double inner_parallelism = 0; // The number of parallel jobs used in the production of this Func. 1 unless the Func is compute_root.
-    double outer_parallelism = 0; // The number of times this Func could be realized in parallel. 1 when the Func is compute_root.
+    // The number of parallel jobs launched in the production of this
+    // stage. Always 1 unless the Func is compute_root, because we
+    // place all parallelism at the outermost level.
+    double inner_parallelism = 0;
 
-    double bytes_at_realization = 0; // Size of the region computed at the store_at site, measured in bytes
-    double bytes_at_production = 0; // Size of the region computed at the compute_at site, measured in bytes
-    double bytes_at_root = 0; // The same at root, regardless of where it's actually scheduled
+    // The number of times this Func could be realized in parallel. 1
+    // when the Func is compute_root. Product of the containing
+    // parallel loops for other stages.
+    double outer_parallelism = 0;
+
+    // Size of the region computed at the store_at site, measured in
+    // bytes. Does not take storage-folding optimizations into account.
+    double bytes_at_realization = 0;
+
+    // Size of the region computed per tile (at the compute_at site),
+    // measured in bytes. This includes the effect of storage-folding,
+    // so it's a better number to look at to estimate memory usage.
+    double bytes_at_production = 0;
+
+    // If the stage were hypothetically scheduled at root, how much
+    // memory would it consumed. Doesn't vary w.r.t. the schedule, but
+    // a useful reference.
+    double bytes_at_root = 0;
+
+    // Same as the above, but only measuring the extent along the
+    // innermost dimension, so that we can reason about spatial
+    // locality, cache lines, prefetchers, etc.
     double innermost_bytes_at_realization = 0;
     double innermost_bytes_at_production = 0;
     double innermost_bytes_at_root = 0;
 
-    double inlined_calls = 0; // For inlined Funcs, how many calls are made to this Func total
+    // For inlined Funcs, how many calls are made to this Func total.
+    double inlined_calls = 0;
 
-    // Logically these features should be grouped earlier, but the convnet currently doesn't know about them
-    double unique_bytes_read_per_realization = 0; // Number of unique bytes loaded from all inputs per production
-    double unique_lines_read_per_realization = 0; // Number of unique contiguous segments of memory loaded from all inputs per production
-    double allocation_bytes_read_per_realization = 0; // The sum of the sizes of the allocations accessed. Gives a hint as to the likely locality of it.
+    // Number of unique bytes and unique continguous segments of
+    // memory loaded from all inputs over a single trip of the loop
+    // containing the allocation site.
+    double unique_bytes_read_per_realization = 0;
+    double unique_lines_read_per_realization = 0;
 
-    double working_set = 0; // The sum of the sizes of the allocations within the production of this Func. Probably a good thing if it fits in cache.
+    // The sum of the sizes of the allocations accessed at this
+    // site. Gives a hint as to the likely locality of it.
+    double allocation_bytes_read_per_realization = 0;
 
-    double vector_size = 0; // The vectorization factor (#simd lanes) to be used to compute this stage. Wasted work if it's smaller than the stage's native vector size (which is in the pipeline features).
+    // The sum of the sizes of the temporary allocations while
+    // computing one tile of this Func. Probably a good thing if it
+    // fits in cache.
+    double working_set = 0;
 
-    double native_vector_size = 0; // The native vector size for the narrowest type used.
+    // The vectorization factor (#simd lanes) to be used to compute
+    // this stage. Wasted work if it's smaller than the stage's native
+    // vector size.
+    double vector_size = 0;
 
-    double num_vectors = 0; // Number of vectors computed (Assuming sliding worked)
-    double num_scalars = 0; // Number of scalars computed (e.g. from tails of loops)
+    // The native vector size for the narrowest type used. Does not
+    // vary with the schedule, but a useful reference point.
+    double native_vector_size = 0;
+
+    // Number of SIMD vectors computed
+    double num_vectors = 0;
+
+    // Number of scalars computed (e.g. from tails of loops)
+    double num_scalars = 0;
+
+    // The number of loads done per vector or scalar computed. Vector
+    // gathers count as a batch of scalar loads. These get amortized
+    // across unrolled blocks if some loads can be reused across the
+    // unrolled dimension.
     double scalar_loads_per_vector = 0;
     double vector_loads_per_vector = 0;
     double scalar_loads_per_scalar = 0;
 
+    // The memory footprint written over one per parallel task. The
+    // union of the regions if the stage is computed at finer
+    // granularity that one parallel task of some consumer.
     double bytes_at_task = 0;
     double innermost_bytes_at_task = 0;
 
+    // The memory footprint accessed while computing a single vector.
     double unique_bytes_read_per_vector = 0;
     double unique_lines_read_per_vector = 0;
 
+    // The memory footprint accessed per parallel task. Only counts
+    // loads from things computed outside of that parallel task (to
+    // measure the amount of traffic coming from another core).
     double unique_bytes_read_per_task = 0;
     double unique_lines_read_per_task = 0;
 
+    // The sum of the sizes of all live allocations at various sites.
     double working_set_at_task = 0;
     double working_set_at_production = 0;
     double working_set_at_realization = 0;

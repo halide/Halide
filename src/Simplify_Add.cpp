@@ -3,8 +3,8 @@
 namespace Halide {
 namespace Internal {
 
-Expr Simplify::visit(const Add *op, ConstBounds *bounds) {
-    ConstBounds a_bounds, b_bounds;
+Expr Simplify::visit(const Add *op, ExprInfo *bounds) {
+    ExprInfo a_bounds, b_bounds;
     Expr a = mutate(op->a, &a_bounds);
     Expr b = mutate(op->b, &b_bounds);
 
@@ -13,6 +13,8 @@ Expr Simplify::visit(const Add *op, ConstBounds *bounds) {
         bounds->max_defined = a_bounds.max_defined && b_bounds.max_defined;
         bounds->min = a_bounds.min + b_bounds.min;
         bounds->max = a_bounds.max + b_bounds.max;
+        bounds->alignment = a_bounds.alignment + b_bounds.alignment;
+        bounds->trim_bounds_using_alignment();
     }
 
     if (may_simplify(op->type)) {

@@ -1,3 +1,7 @@
+/** This file defines the class FunctionDAG, which is our
+ * representation of a Halide pipeline, and contains methods to using
+ * Halide's bounds tools to query properties of it. */
+
 #ifndef FUNCTION_DAG_H
 #define FUNCTION_DAG_H
 
@@ -20,7 +24,9 @@ using std::map;
 using std::string;
 using std::unique_ptr;
 
-// An optional rational type used when analyzing memory dependencies
+// First we have various utility classes.
+
+// An optional rational type used when analyzing memory dependencies.
 struct OptionalRational {
     bool exists = false;
     int64_t numerator = 0, denominator = 0;
@@ -56,6 +62,10 @@ struct OptionalRational {
         return OptionalRational {e, num, den};
     }
 
+    // Because this type is optional (exists may be false), we don't
+    // have a total ordering. These methods all return false when the
+    // operators are not comparable, so a < b is not the same as !(a
+    // >= b).
     bool operator<(int x) const {
         if (!exists) return false;
         if (denominator > 0) {
@@ -93,8 +103,8 @@ struct OptionalRational {
     }
 };
 
-// Records the derivative of the coordinate accessed in some
-// producer w.r.t the loops of the consumer.
+// A LoadJacobian records the derivative of the coordinate accessed in
+// some producer w.r.t the loops of the consumer.
 class LoadJacobian {
     vector<vector<OptionalRational>> coeffs;
     int64_t c;
@@ -143,6 +153,8 @@ public:
         return true;
     }
 
+    // Multiply Jacobians, used to look at memory dependencies through
+    // inlined functions.
     LoadJacobian operator*(const LoadJacobian &other) const {
         vector<vector<OptionalRational>> matrix;
         internal_assert(consumer_loop_dims() == 0 || (consumer_loop_dims() == other.producer_storage_dims()));
@@ -183,37 +195,45 @@ public:
     }
 };
 
-// A concrete set of bounds for a Func. These are created and
-// destroyed very frequently while exploring scheduling options, so we
-// have a custom allocator and memory pool. Much like IR nodes, we
-// treat them as immutable once created and wrapped in a Bound object
-// so that they can be shared safely across scheduling alternatives.
+// Classes to represent a concrete set of bounds for a Func. A Span is
+// single-dimensional, and a Bound is a multi-dimensional box. For
+// each dimension we track the estimated size, and also whether or not
+// the size is known to be constant at compile-time. For each Func we
+// track three different types of bounds:
+
+// 1) The region required by consumers of the Func, which determines
+// 2) The region actually computed, which in turn determines
+// 3) The min and max of all loops in the loop next.
+
+// 3 in turn determines the region required of the inputs to a Func,
+// which determines their region computed, and hence their loop nest,
+// and so on back up the Function DAG from outputs back to inputs.
 
 class Span {
-    int64_t first, second; // TODO: rename to min/max
+    int64_t min_, max_;
     bool constant_extent_;
 public:
-    int64_t min() const {return first;}
-    int64_t max() const {return second;}
-    int64_t extent() const {return second - first + 1;}
+    int64_t min() const {return min_;}
+    int64_t max() const {return max_;}
+    int64_t extent() const {return max_ - min_ + 1;}
     bool constant_extent() const {return constant_extent_;}
 
     void union_with(const Span &other) {
-        first = std::min(first, other.min());
-        second = std::max(second, other.max());
+        min_ = std::min(min_, other.min());
+        max_ = std::max(max_, other.max());
         constant_extent_ = constant_extent_ && other.constant_extent();
     }
 
     void set_extent(int64_t e) {
-        second = first + e - 1;
+        max_ = min_ + e - 1;
     }
 
     void translate(int64_t x) {
-        first += x;
-        second += x;
+        min_ += x;
+        max_ += x;
     }
 
-    Span(int64_t a, int64_t b, bool c) : first(a), second(b), constant_extent_(c) {}
+    Span(int64_t a, int64_t b, bool c) : min_(a), max_(b), constant_extent_(c) {}
     Span() = default;
     Span(const Span &other) = default;
     static Span empty_span() {
@@ -221,6 +241,11 @@ public:
     }
 };
 
+// Bounds objects are created and destroyed very frequently while
+// exploring scheduling options, so we have a custom allocator and
+// memory pool. Much like IR nodes, we treat them as immutable once
+// created and wrapped in a Bound object so that they can be shared
+// safely across scheduling alternatives.
 struct BoundContents;
 using Bound = IntrusivePtr<const BoundContents>;
 struct BoundContents {
@@ -266,20 +291,18 @@ struct BoundContents {
     }
 
     void validate() const {
-        /*
         for (int i = 0; i < layout->total_size; i++) {
             auto p = data()[i];
-            if (p.second < p.first) {
+            if (p.max() < p.min()) {
                 debug(0) << "Bad bounds object:\n";
                 for (int j = 0; j < layout->total_size; j++) {
                     if (i == j) debug(0) << "=> ";
                     else debug(0) << "   ";
-                    debug(0) << j << ": " << data()[j].first << ", " << data()[j].second << "\n";
+                    debug(0) << j << ": " << data()[j].min() << ", " << data()[j].max() << "\n";
                 }
                 internal_error << "Aborting";
             }
         }
-        */
     }
 
     // We're frequently going to need to make these concrete bounds
@@ -323,15 +346,6 @@ struct BoundContents {
             const size_t bytes_to_allocate = std::max(size_of_one * number_per_block, (size_t)4096);
             unsigned char *mem = (unsigned char *)malloc(bytes_to_allocate);
 
-            // HACK
-            /*
-            // Mark the memory with something recognizable to make it easier to catch use of uninitialized memory
-            for (size_t i = 0; i < bytes_to_allocate / 16; i++) {
-                ((int64_t *)mem)[2*i] = 1234567;
-                ((int64_t *)mem)[2*i + 1] = -1234567;
-            }
-            */
-
             blocks.push_back(mem);
             static_assert((sizeof(BoundContents) & 7) == 0, "BoundContents header is not aligned");
             for (size_t i = 0; i < number_per_block; i++) {
@@ -350,13 +364,6 @@ struct BoundContents {
             }
             BoundContents *b = pool.back();
             pool.pop_back();
-            // HACK: make use-of-uninitialized on a recycled block of memory easier to find.
-            /*
-            for (int i = 0; i < total_size; i++) {
-                b->data()[i].first = 1010101;
-                b->data()[i].second = -1010101;
-            }
-            */
             return b;
         }
 
@@ -373,14 +380,18 @@ struct BoundContents {
 // the DAG, just iterate the nodes or edges in-order.
 struct FunctionDAG {
 
+    // An edge is a producer-consumer relationship
     struct Edge;
 
+    // A Node represents a single Func
     struct Node {
         // A pointer back to the owning DAG
         FunctionDAG *dag;
 
+        // The Halide Func this represents
         Function func;
 
+        // The number of bytes per point stored.
         double bytes_per_point;
 
         // The min/max variables used to denote a symbolic region of
@@ -398,7 +409,8 @@ struct FunctionDAG {
         // really ask for a single output pixel from something blurred
         // with an IIR without computing the others, for example.
         struct RegionComputedInfo {
-            // The min and max in their full symbolic glory
+            // The min and max in their full symbolic glory. We use
+            // these in the general case.
             Interval in;
 
             // Analysis used to accelerate common cases
@@ -414,6 +426,7 @@ struct FunctionDAG {
                                   Span *computed) const {
             map<string, Expr> required_map;
             if (!region_computed_all_common_cases) {
+                // Make a binding for the value of each symbolic variable
                 for (int i = 0; i < func.dimensions(); i++) {
                     required_map[region_required[i].min.as<Variable>()->name] = (int)required[i].min();
                     required_map[region_required[i].max.as<Variable>()->name] = (int)required[i].max();
@@ -438,6 +451,7 @@ struct FunctionDAG {
             }
         }
 
+        // Metadata about one symbolic loop in a Func's default loop nest.
         struct Loop {
             string var;
             bool pure, rvar;
@@ -446,7 +460,7 @@ struct FunctionDAG {
             // Which pure dimension does this loop correspond to? Invalid if it's an rvar
             int pure_dim;
 
-            // Common case optimizations:
+            // Precomputed metadata to accelerate common cases:
 
             // If true, the loop bounds are just the region computed in the given dimension
             bool equals_region_computed = false;
@@ -456,7 +470,9 @@ struct FunctionDAG {
             bool bounds_are_constant = false;
             int64_t c_min = 0, c_max = 0;
 
-            // A persistent fragment of source for getting this Var from its owner Func.
+            // A persistent fragment of source for getting this Var
+            // from its owner Func. Used for printing source code
+            // equivalent to a computed schedule.
             string accessor;
         };
 
@@ -464,7 +480,6 @@ struct FunctionDAG {
         void loop_nest_for_region(int stage_idx,
                                   const Span *computed,
                                   Span *loop) const {
-            // debug(0) << "Loop nest for region func " << func.name() << " stage " << stage_idx << "\n";
             const auto &s = stages[stage_idx];
             map<string, Expr> computed_map;
             if (!s.loop_nest_all_common_cases) {
@@ -488,7 +503,6 @@ struct FunctionDAG {
                     internal_assert(imin && imax) << min << ", " << max << '\n';
                     loop[i] = Span(*imin, *imax, false);
                 }
-                // debug(0) << i << ": " << loop[i].first << " " << loop[i].second << "\n";
             }
         }
 
@@ -550,13 +564,20 @@ struct FunctionDAG {
         // libHalide.
         int dimensions;
 
-        bool is_wrapper; // Is a single pointwise call to another Func
+        // Is a single pointwise call to another Func
+        bool is_wrapper;
 
-        bool is_output, is_input;
+        // We represent the input buffers as node, though we do not attempt to schedule them.
+        bool is_input;
 
-        bool is_pointwise; // Only uses pointwise calls
+        // Is one of the pipeline outputs
+        bool is_output;
 
-        bool is_boundary_condition; // Pointwise calls + clamping on all indices
+        // Only uses pointwise calls
+        bool is_pointwise;
+
+        // Only uses pointwise calls + clamping on all indices
+        bool is_boundary_condition;
 
         std::unique_ptr<BoundContents::Layout> bounds_memory_layout;
 
@@ -565,6 +586,7 @@ struct FunctionDAG {
         }
     };
 
+    // A representation of a producer-consumer relationship
     struct Edge {
         struct BoundInfo {
             // The symbolic expression for the bound in this dimension
@@ -581,7 +603,8 @@ struct FunctionDAG {
                 // that can be evaluated more cheaply. Currently this
                 // acceleration recognises affine expressions. In the
                 // future we may consider quasi-affine, or even
-                // piecewise-quasi-affine.
+                // piecewise-quasi-affine. If the bounds are
+                // non-affine, we use the symbolic expression.
                 const Add *add = expr.as<Add>();
                 const Mul *mul = add ? add->a.as<Mul>() : expr.as<Mul>();
                 const IntImm *coeff_imm = mul ? mul->b.as<IntImm>() : nullptr;
@@ -591,7 +614,11 @@ struct FunctionDAG {
                           expr);
                 const Variable *var = v.as<Variable>();
 
-                if (var && (!mul || coeff_imm) && (!add || constant_imm)) {
+                if (const IntImm *c = e.as<IntImm>()) {
+                    affine = true;
+                    coeff = 0;
+                    constant = c->value;
+                } else if (var && (!mul || coeff_imm) && (!add || constant_imm)) {
                     affine = true;
                     coeff = mul ? coeff_imm->value : 1;
                     constant = add ? constant_imm->value : 0;
@@ -616,6 +643,7 @@ struct FunctionDAG {
                 }
             }
         };
+        // Memory footprint on producer required by consumer.
         vector<pair<BoundInfo, BoundInfo>> bounds;
 
         FunctionDAG::Node *producer;
@@ -626,7 +654,6 @@ struct FunctionDAG {
         int calls;
 
         vector<LoadJacobian> load_jacobians;
-
         void add_load_jacobian(LoadJacobian j1) {
             for (auto &j2 : load_jacobians) {
                 if (j2.merge(j1)) return;
@@ -649,7 +676,6 @@ struct FunctionDAG {
                     const string &var = symbolic_loop[i].var;
                     s[consumer->node->func.name() + "." + var + ".min"] = (int)p.min();
                     s[consumer->node->func.name() + "." + var + ".max"] = (int)p.max();
-                    // debug(0) << consumer->func.name() << " " << var << " " << p.first << " " << p.second << "\n";
                 }
             }
             // Apply that map to the bounds relationship encoded
@@ -663,10 +689,14 @@ struct FunctionDAG {
                 auto eval_bound = [&](const BoundInfo &b) {
                     if (b.affine) {
                         // Common-case performance optimization
-                        const auto &src_pair = consumer_loop[b.consumer_dim];
-                        int64_t src = b.uses_max ? src_pair.max() : src_pair.min();
-                        bounds_are_constant &= src_pair.constant_extent();
-                        return src * b.coeff + b.constant;
+                        if (b.coeff == 0) {
+                            return b.constant;
+                        } else {
+                            const auto &src_pair = consumer_loop[b.consumer_dim];
+                            int64_t src = b.uses_max ? src_pair.max() : src_pair.min();
+                            bounds_are_constant &= src_pair.constant_extent();
+                            return src * b.coeff + b.constant;
+                        }
                     } else {
                         Expr substituted = substitute(s, b.expr);
                         Expr e = simplify(substituted);
@@ -703,8 +733,8 @@ struct FunctionDAG {
 
         // A mutator to apply parameter estimates to the expressions
         // we encounter while constructing the graph.
-        class ApplyParamEstimates : public IRMutator2 {
-            using IRMutator2::visit;
+        class ApplyParamEstimates : public IRMutator {
+            using IRMutator::visit;
 
             Expr visit(const Variable *op) override {
                 Expr expr;
@@ -774,7 +804,6 @@ struct FunctionDAG {
             for (int s = 0; s <= (int)consumer.updates().size(); s++) {
                 auto &stage = node.stages[s];
                 stage.node = &node;
-                // stage.name = "get_func(" + std::to_string(i - 1) + ")";
                 stage.name = consumer.name();
                 if (s > 0) {
                     stage.name += ".update(" + std::to_string(s - 1) + ")";
@@ -924,9 +953,6 @@ struct FunctionDAG {
                         check_type(op->type);
                         if (op->call_type == Call::Halide || op->call_type == Call::Image) {
                             is_pointwise &= op->args.size() == func.args().size();
-                            // TODO: actually sniff the coordinates
-                            // accessed, instead of only catching the
-                            // built-in boundary condition primitive.
                             if (is_pointwise) {
                                 for (size_t i = 0; i < op->args.size(); i++) {
                                     const Variable *v = op->args[i].as<Variable>();
@@ -994,20 +1020,18 @@ struct FunctionDAG {
                         int64_t i_extent = *as_const_int(b.extent);
 
                         if (false) {
-                            // HACK: Some methods we compare to
-                            // compile for statically known
-                            // input/output sizes. We don't need to -
-                            // we take estimates but the compiled code
-                            // doesn't enforce them. If you want to
-                            // make a comparison fair and target a
-                            // fixed size, use this branch of the
-                            // if. In practice I don't see a runtime
-                            // difference, so I left it disabled.  In
-                            // theory, Sizes being constant makes it
-                            // possible to do things like unroll
-                            // across color channels, so it affects
-                            // the scheduling space.  TODO: Make this
-                            // a documented env var
+                            // Some methods we compare to compile for
+                            // statically known input/output sizes. We
+                            // don't need to - we take estimates but
+                            // the compiled code doesn't enforce
+                            // them. If you want to make a comparison
+                            // fair and target a fixed size, use this
+                            // branch of the if. In practice we don't
+                            // see a runtime difference, so we left it
+                            // disabled. In theory, Sizes being
+                            // constant makes it possible to do things
+                            // like unroll across color channels, so
+                            // it affects the scheduling space.
                             Func(node.func).bound(b.var, b.min, b.extent);
                             estimates[b.var] = Span(i_min, i_min + i_extent - 1, true);
                         } else {
@@ -1096,7 +1120,6 @@ struct FunctionDAG {
             }
         }
 
-
         // Give all the stages unique ids to support perfect hashing of them
         {
             int i = 0;
@@ -1117,10 +1140,8 @@ struct FunctionDAG {
         // Compute transitive dependencies
         for (size_t i = nodes.size(); i > 0; i--) {
             auto &n = nodes[i-1];
-
             for (auto &s : n.stages) {
                 s.dependencies.resize(nodes.size(), false);
-
                 for (auto *e : s.incoming_edges) {
                     s.dependencies[e->producer->id] = true;
                     for (auto &s2 : e->producer->stages) {
@@ -1132,7 +1153,7 @@ struct FunctionDAG {
             }
         }
 
-        // Compute features for the neural net
+        // Compute the algorithm-specific features for the neural net
         featurize();
     }
 
@@ -1487,7 +1508,7 @@ struct FunctionDAG {
     }
 
 private:
-    // The auxiliary data structures use internal pointers, so we'll hide the copy constructor
+    // This class uses a lot of internal pointers, so we'll hide the copy constructor.
     FunctionDAG(const FunctionDAG &other) = delete;
     void operator=(const FunctionDAG &other) = delete;
 

@@ -349,6 +349,16 @@ Expr make_two(Type t) {
     return make_const(t, 2);
 }
 
+Expr make_indeterminate_expression(Type type) {
+    static std::atomic<int> counter;
+    return Call::make(type, Call::indeterminate_expression, {counter++}, Call::Intrinsic);
+}
+
+Expr make_signed_integer_overflow(Type type) {
+    static std::atomic<int> counter;
+    return Call::make(type, Call::signed_integer_overflow, {counter++}, Call::Intrinsic);
+}
+
 Expr const_true(int w) {
     return make_one(UInt(1, w));
 }
@@ -834,6 +844,10 @@ Expr fast_exp(Expr x_full) {
 }
 
 Expr stringify(const std::vector<Expr> &args) {
+    if (args.empty()) {
+        return Expr("");
+    }
+
     return Internal::Call::make(type_of<const char *>(), Internal::Call::stringify,
                                 args, Internal::Call::Intrinsic);
 }
@@ -876,19 +890,25 @@ Expr print_when(Expr condition, const std::vector<Expr> &args) {
                                 Internal::Call::PureIntrinsic);
 }
 
+namespace Internal {
+Expr requirement_failed_error(Expr condition, const std::vector<Expr> &args) {
+    return Internal::Call::make(Int(32),
+                                "halide_error_requirement_failed",
+                                {stringify({condition}), combine_strings(args)},
+                                Internal::Call::Extern);
+}
+}
+
 Expr require(Expr condition, const std::vector<Expr> &args) {
     user_assert(condition.defined()) << "Require of undefined condition.\n";
     user_assert(condition.type().is_bool()) << "Require condition must be a boolean type.\n";
     user_assert(args.at(0).defined()) << "Require of undefined value.\n";
 
-    Expr requirement_failed_error =
-        Internal::Call::make(Int(32),
-                             "halide_error_requirement_failed",
-                             {stringify({condition}), combine_strings(args)},
-                             Internal::Call::Extern);
+    Expr err = requirement_failed_error(condition, args);
+
     return Internal::Call::make(args[0].type(),
                                 Internal::Call::require,
-                                {likely(std::move(condition)), args[0], requirement_failed_error},
+                                {likely(std::move(condition)), args[0], std::move(err)},
                                 Internal::Call::PureIntrinsic);
 }
 

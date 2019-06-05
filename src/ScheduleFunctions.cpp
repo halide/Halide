@@ -754,7 +754,7 @@ bool function_is_already_realized_in_stmt(const Function &f, const Stmt &s) {
     return is_realized.result;
 }
 
-class InjectStmt : public IRMutator2 {
+class InjectStmt : public IRMutator {
 public:
     const Stmt &injected_stmt;
     bool found_level;
@@ -764,7 +764,7 @@ public:
         : injected_stmt(s), found_level(false), level(level) {}
 
 private:
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Stmt visit(const For *for_loop) override {
         Stmt body = mutate(for_loop->body);
@@ -829,13 +829,13 @@ private:
     }
 };
 
-class SubstituteFusedBounds : public IRMutator2 {
+class SubstituteFusedBounds : public IRMutator {
 public:
     const map<string, Expr> &replacements;
     explicit SubstituteFusedBounds(const map<string, Expr> &r) : replacements(r) {}
 
 private:
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Stmt visit(const For *op) override {
         const auto *min_var = op->min.as<Variable>();
@@ -855,7 +855,7 @@ private:
                 }
             }
             if (!min_val.defined()|| !extent_val.defined()) {
-                return IRMutator2::visit(op);
+                return IRMutator::visit(op);
             }
 
             Stmt body = mutate(op->body);
@@ -888,7 +888,7 @@ private:
             stmt = substitute(op->name, Variable::make(Int(32), new_var), stmt);
             return stmt;
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 };
@@ -905,13 +905,13 @@ Stmt substitute_fused_bounds(Stmt s, const map<string, Expr> &replacements) {
 }
 
 // Shift the iteration domain of a loop nest by some factor.
-class ShiftLoopNest : public IRMutator2 {
+class ShiftLoopNest : public IRMutator {
     const map<string, Expr> &shifts; // Add the shift factor to the old var
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Stmt visit(const For *op) override {
-        Stmt stmt = IRMutator2::visit(op);
+        Stmt stmt = IRMutator::visit(op);
         const auto &iter = shifts.find(op->name);
         if (iter != shifts.end()) {
             debug(5) << "...Shifting for loop \"" << op->name << "\" by " << iter->second << "\n";
@@ -948,7 +948,7 @@ struct PlaceholderPrefetch {
           prefetch(prefetch) {}
 };
 
-class InjectFunctionRealization : public IRMutator2 {
+class InjectFunctionRealization : public IRMutator {
 public:
     InjectFunctionRealization(const vector<Function> &funcs,
                               const vector<bool> &is_output_list,
@@ -968,7 +968,7 @@ protected:
     bool _found_compute_level{};
     bool _found_store_level{};
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Stmt visit(const For *for_loop) override {
         debug(3) << "Injecting " << funcs << " entering for-loop over " << for_loop->name << "\n";
@@ -1485,7 +1485,7 @@ private:
         // Since we are now in the lowering phase, we expect all LoopLevels to be locked;
         // thus any new ones we synthesize we must explicitly lock.
         loop_level.lock();
-        Site s = {f->is_parallel() || f->for_type == ForType::Vectorized, loop_level};
+        Site s = {f->is_parallel(), loop_level};
         sites.push_back(s);
         f->body.accept(this);
         sites.pop_back();
@@ -1999,8 +1999,8 @@ void validate_fused_groups_schedule(const vector<vector<string>> &fused_groups, 
     }
 }
 
-class RemoveLoopsOverOutermost : public IRMutator2 {
-    using IRMutator2::visit;
+class RemoveLoopsOverOutermost : public IRMutator {
+    using IRMutator::visit;
 
     Stmt visit(const For *op) override {
         if (ends_with(op->name, ".__outermost") &&
@@ -2008,7 +2008,7 @@ class RemoveLoopsOverOutermost : public IRMutator2 {
             op->device_api == DeviceAPI::None) {
             return mutate(substitute(op->name, op->min, op->body));
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
@@ -2018,7 +2018,7 @@ class RemoveLoopsOverOutermost : public IRMutator2 {
             ends_with(op->name, ".__outermost.loop_max")) {
             return mutate(substitute(op->name, simplify(op->value), op->body));
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 };
