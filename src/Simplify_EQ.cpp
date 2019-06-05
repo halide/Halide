@@ -94,6 +94,14 @@ Expr Simplify::visit(const EQ *op, ExprInfo *bounds) {
         return rewrite.result;
     }
 
+    #if USE_SYNTHESIZED_RULES
+    // From google list
+    if (rewrite(min(x, y) - max(x, y) == 0, x == y) ||
+        false) {
+        return mutate(std::move(rewrite.result), bounds);
+    }
+    #endif
+
     if (const Sub *s = delta.as<Sub>()) {
         if (s->a.same_as(op->a) && s->b.same_as(op->b)) {
             return op;

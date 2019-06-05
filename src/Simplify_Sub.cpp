@@ -256,6 +256,10 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
                rewrite(((x + (y*z)) - (w*z)), (x - ((w - y)*z))) ||
                rewrite(((min((x - y), z) + (w + y)) - u), (min((y + z), x) + (w - u))) ||
                rewrite((min(x, (y + z)) - (w + y)), (min((x - y), z) - w)) ||
+
+               rewrite((((x*y) + z) - (y*w)), (z - ((w - x)*y))) ||
+               rewrite((min((x + y), z) - (y + w)), (min((z - y), x) - w)) ||
+
                #endif
 
                false)))) {

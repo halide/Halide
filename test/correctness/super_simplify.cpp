@@ -10,6 +10,7 @@ using std::vector;
 using std::map;
 using std::set;
 using std::pair;
+using std::ostringstream;
 
 // Convert from a Halide Expr to SMT2 to pass to z3
 string expr_to_smt2(const Expr &e) {
@@ -284,20 +285,47 @@ bool check(char **cursor, char *end, const char *pattern) {
 
 string consume_token(char **cursor, char *end) {
     size_t sz = 0;
-    while (*cursor + sz < end && (*cursor)[sz] != ' ' && (*cursor)[sz] != ')') sz++;
+    while (*cursor + sz < end && (std::isalnum((*cursor)[sz]) || (*cursor)[sz] == '!')) sz++;
     string result{*cursor, sz};
     *cursor += sz;
     return result;
 }
 
-int consume_number(char **cursor, char *end) {
-    int n = 0;
+int64_t consume_int(char **cursor, char *end) {
+    bool negative = consume(cursor, end, "-");
+    int64_t n = 0;
     while (*cursor < end && **cursor >= '0' && **cursor <= '9') {
         n *= 10;
         n += (**cursor - '0');
         (*cursor)++;
     }
-    return n;
+    return negative ? -n : n;
+}
+
+Expr consume_float(char **cursor, char *end) {
+    bool negative = consume(cursor, end, "-");
+    int64_t integer_part = consume_int(cursor, end);
+    int64_t fractional_part = 0;
+    int64_t denom = 1;
+    if (consume(cursor, end, ".")) {
+        while (*cursor < end && **cursor >= '0' && **cursor <= '9') {
+            denom *= 10;
+            fractional_part *= 10;
+            fractional_part += (**cursor - '0');
+            (*cursor)++;
+        }
+    }
+    double d = integer_part + double(fractional_part) / denom;
+    if (negative) {
+        d = -d;
+    }
+    if (consume(cursor, end, "h")) {
+        return make_const(Float(16), d);
+    } else if (consume(cursor, end, "f")) {
+        return make_const(Float(32), d);
+    } else {
+        return make_const(Float(64), d);
+    }
 }
 
 void parse_model(char **cursor, char *end, map<string, Expr> *bindings) {
@@ -427,7 +455,7 @@ Z3Result satisfy(Expr e, map<string, Expr> *bindings) {
     }
 }
 
-Var v0("x"), v1("y"), v2("z"), v3("w"), v4("u"), v5("v"), v6("v6"), v7("v7"), v8("v8"), v9("v9");
+Var v0("x"), v1("y"), v2("z"), v3("w"), v4("u"), v5("v5"), v6("v6"), v7("v7"), v8("v8"), v9("v9");
 Var v10("v10"), v11("v11"), v12("v12"), v13("v13"), v14("v14"), v15("v15"), v16("v16"), v17("v17"), v18("v18"), v19("v19");
 Var v20("v20"), v21("v21"), v22("v22"), v23("v23"), v24("v24"), v25("v25"), v26("v26"), v27("v27"), v28("v28"), v29("v29");
 
@@ -482,32 +510,57 @@ Expr super_simplify(Expr e, int size) {
     Expr program = interpreter_expr(leaves, symbolic_opcodes);
     Expr program_works = (e == program);
 
+    std::mt19937 rng(0);
+    std::uniform_int_distribution<int> random_int(-3, 3);
+
     while (1) {
         // First sythesize a counterexample to the current program.
         Expr current_program_works = substitute(current_program, program_works);
         map<string, Expr> counterexample = all_vars_zero;
-        auto result = satisfy(!current_program_works, &counterexample);
-        if (result == Unsat) {
-            // Woo!
-            Expr result = simplify(substitute_in_all_lets(common_subexpression_elimination(substitute(current_program, program))));
-            if (was_bool) {
-                result = simplify(substitute_in_all_lets(common_subexpression_elimination(reboolify(result))));
+
+        // Start with just random fuzzing. If that fails, we'll ask Z3 for a counterexample.
+        int counterexamples_found_with_fuzzing = 0;
+        for (int i = 0; i < 5; i++) {
+            map<string, Expr> rand_binding = all_vars_zero;
+            for (auto &it : rand_binding) {
+                it.second = random_int(rng);
             }
-            // std::cout << "*** Success: " << orig << " -> " << result << "\n\n";
-            return result;
-        } else if (result == Sat) {
-            /*
-            std::cout << "Counterexample: ";
-            const char *prefix = "";
-            for (auto it : counterexample) {
-                std::cout << prefix << it.first << " = " << it.second;
-                prefix = ", ";
+            auto interpreted = simplify(substitute(rand_binding, current_program_works));
+            if (is_one(interpreted)) continue;
+
+            counterexamples.push_back(rand_binding);
+            // We probably only want to add a couple
+            // counterexamples at a time
+            counterexamples_found_with_fuzzing++;
+            if (counterexamples_found_with_fuzzing >= 2) {
+                break;
             }
-            std::cout << "\n";
-            */
-            counterexamples.push_back(counterexample);
-        } else {
-            return Expr();
+        }
+
+        if (counterexamples_found_with_fuzzing == 0) {
+            auto result = satisfy(!current_program_works, &counterexample);
+            if (result == Unsat) {
+                // Woo!
+                Expr e = simplify(substitute_in_all_lets(common_subexpression_elimination(substitute(current_program, program))));
+                if (was_bool) {
+                    e = simplify(substitute_in_all_lets(common_subexpression_elimination(reboolify(e))));
+                }
+                // std::cout << "*** Success: " << orig << " -> " << result << "\n\n";
+                return e;
+            } else if (result == Sat) {
+                /*
+                  std::cout << "Counterexample: ";
+                  const char *prefix = "";
+                  for (auto it : counterexample) {
+                  std::cout << prefix << it.first << " = " << it.second;
+                  prefix = ", ";
+                  }
+                  std::cout << "\n";
+                */
+                counterexamples.push_back(counterexample);
+            } else {
+                return Expr();
+            }
         }
 
         // Now synthesize a program that fits all the counterexamples
@@ -515,8 +568,7 @@ Expr super_simplify(Expr e, int size) {
         for (auto &c : counterexamples) {
             works_on_counterexamples = works_on_counterexamples && substitute(c, program_works);
         }
-        result = satisfy(works_on_counterexamples, &current_program);
-        if (result != Sat) {
+        if (satisfy(works_on_counterexamples, &current_program) != Sat) {
             // Failed to synthesize a program
             // std::cout << "Failed to find a program of size " << size << "\n";
             return Expr();
@@ -557,7 +609,6 @@ vector<Expr> all_possible_lhs_patterns(const Expr &e) {
                         children.resize(id_for_expr.size());
                     }
                     expr_for_id[current_id] = e;
-                    std::cout << current_id << ": " << e << "\n";
                     int old_parent = current_parent;
                     current_parent = current_id;
                     IRMutator::mutate(e);
@@ -579,11 +630,12 @@ vector<Expr> all_possible_lhs_patterns(const Expr &e) {
                     int new_id = (int)renumbering.size();
                     new_id = renumbering.emplace(it->second, new_id).first->second;
                     // We're after end
-                    if (e.type() != Int(32)) {
-                        std::cerr << "Introducing non-integer variable to replace: " << e << "\n";
-                        abort();
+                    const char *names[] = {"x", "y", "z", "w", "u", "v"};
+                    string name = "v" + std::to_string(new_id);
+                    if (new_id >= 0 && new_id < 6) {
+                        name = names[new_id];
                     }
-                    return Variable::make(e.type(), "v" + std::to_string(new_id));
+                    return Variable::make(e.type(), name);
                 }
             }
         }
@@ -606,7 +658,9 @@ vector<Expr> all_possible_lhs_patterns(const Expr &e) {
             // Pick an arbitrary frontier node to consider
             int v = -1;
             for (auto n : frontier) {
-                if (!rejected.count(n) && !current.count(n) && !children[n].empty()) {
+                if (!rejected.count(n) &&
+                    !current.count(n) &&
+                    !children[n].empty()) {
                     v = n;
                     break;
                 }
@@ -633,17 +687,15 @@ vector<Expr> all_possible_lhs_patterns(const Expr &e) {
 
             f.erase(v);
 
-            if (expr_for_id[v].type() == Int(32)) {
-                // Generate all subgraphs with this frontier node not
-                // included (replaced with a variable).
-                r.insert(v);
+            // Generate all subgraphs with this frontier node not
+            // included (replaced with a variable).
+            r.insert(v);
 
-                // std::cout << "Excluding " << expr_for_id[v] << "\n";
-                generate_subgraphs(r, c, f);
-            }
+            // std::cout << "Excluding " << expr_for_id[v] << "\n";
+            generate_subgraphs(r, c, f);
 
             // Generate all subgraphs with this frontier node included
-            if (c.size() < 6 || expr_for_id[v].type() != Int(32)) {
+            if (c.size() < 6) {
                 c.insert(v);
                 for (auto n : ch) {
                     if (!rejected.count(n) && !current.count(n) && !children[n].empty()) {
@@ -656,8 +708,6 @@ vector<Expr> all_possible_lhs_patterns(const Expr &e) {
         }
     } all_subexprs;
 
-    std::cout << "Building DAG...\n";
-
     all_subexprs.mutate(e);
 
     // Enumerate all sub-dags
@@ -667,7 +717,6 @@ vector<Expr> all_possible_lhs_patterns(const Expr &e) {
         // Don't consider leaves for roots
         if (all_subexprs.children[i].empty()) continue;
         frontier.insert(i);
-        std::cout << "Considering root: " << i << "\n";
         all_subexprs.generate_subgraphs(rejected, current, frontier);
         frontier.clear();
     }
@@ -687,10 +736,17 @@ bool more_general_than(const Expr &a, const Expr &b, map<string, Expr> &bindings
 
 template<typename Op>
 bool more_general_than(const Expr &a, const Op *b, map<string, Expr> &bindings) {
-    if (more_general_than(a, b->a, bindings) ||
-        more_general_than(a, b->b, bindings)) {
+    map<string, Expr> backup = bindings;
+    if (more_general_than(a, b->a, bindings)) {
         return true;
     }
+    bindings = backup;
+
+    if (more_general_than(a, b->b, bindings)) {
+        return true;
+    }
+    bindings = backup;
+
     if (const Op *op_a = a.as<Op>()) {
         return (more_general_than(op_a->a, b->a, bindings) &&
                 more_general_than(op_a->b, b->b, bindings));
@@ -746,15 +802,48 @@ bool more_general_than(const Expr &a, const Expr &b, map<string, Expr> &bindings
         return more_general_than(a, op, bindings);
     }
 
+    if (const EQ *op = b.as<EQ>()) {
+        return more_general_than(a, op, bindings);
+    }
+
+    if (const NE *op = b.as<NE>()) {
+        return more_general_than(a, op, bindings);
+    }
+
+    if (const Not *op = b.as<Not>()) {
+        map<string, Expr> backup = bindings;
+        if (more_general_than(a, op->a, bindings)) {
+            return true;
+        }
+        bindings = backup;
+
+        const Not *op_a = a.as<Not>();
+        return (op_a &&
+                more_general_than(op_a->a, op->a, bindings));
+    }
+
     if (const Select *op = b.as<Select>()) {
+        map<string, Expr> backup = bindings;
+        if (more_general_than(a, op->condition, bindings)) {
+            return true;
+        }
+        bindings = backup;
+
+        if (more_general_than(a, op->true_value, bindings)) {
+            return true;
+        }
+        bindings = backup;
+
+        if (more_general_than(a, op->false_value, bindings)) {
+            return true;
+        }
+        bindings = backup;
+
         const Select *op_a = a.as<Select>();
-        return (more_general_than(a, op->condition, bindings) ||
-                more_general_than(a, op->true_value, bindings) ||
-                more_general_than(a, op->false_value, bindings) ||
-                (op_a &&
-                 more_general_than(op_a->condition, op->condition, bindings) &&
-                 more_general_than(op_a->true_value, op->true_value, bindings) &&
-                 more_general_than(op_a->false_value, op->false_value, bindings)));
+        return (op_a &&
+                more_general_than(op_a->condition, op->condition, bindings) &&
+                more_general_than(op_a->true_value, op->true_value, bindings) &&
+                more_general_than(op_a->false_value, op->false_value, bindings));
     }
 
     return false;
@@ -765,25 +854,54 @@ bool more_general_than(const Expr &a, const Expr &b) {
     return more_general_than(a, b, bindings);
 }
 
-class CountLeaves : public IRVisitor {
-    using IRVisitor::visit;
+class CountOps : public IRGraphVisitor {
+    using IRGraphVisitor::visit;
+    using IRGraphVisitor::include;
+
     void visit(const Variable *op) override {
-        if (vars_used.count(op->name)) {
+        if (op->type != Int(32)) {
+            has_unsupported_ir = true;
+        } else if (vars_used.count(op->name)) {
             repeated_var = true;
         } else {
             vars_used.insert(op->name);
         }
-        count++;
     }
+
     void visit(const Div *op) override {
         has_div_mod = true;
     }
+
     void visit(const Mod *op) override {
         has_div_mod = true;
     }
+
+    void visit(const Call *op) override {
+        has_unsupported_ir = true;
+    }
+
+    void visit(const Cast *op) override {
+        has_unsupported_ir = true;
+    }
+
+    void visit(const Load *op) override {
+        has_unsupported_ir = true;
+    }
+
+    set<Expr, IRDeepCompare> unique_exprs;
+
+    void include(const Expr &e) override {
+        unique_exprs.insert(e);
+        IRGraphVisitor::include(e);
+    }
+
 public:
-    int count = 0;
+    int count() {
+        return unique_exprs.size() - (int)vars_used.size();
+    }
+
     bool has_div_mod = false;
+    bool has_unsupported_ir = false;
     bool repeated_var = false;
     set<string> vars_used;
 };
@@ -838,76 +956,168 @@ std::ostream &operator<<(std::ostream &s, IRNodeType t) {
     }
 };
 
-Expr parse_halide_expr(char **cursor, char *end) {
+Expr parse_halide_expr(char **cursor, char *end, Type expected_type) {
     consume_whitespace(cursor, end);
+
+    struct TypePattern {
+        const char *cast_prefix = nullptr;
+        const char *constant_prefix = nullptr;
+        Type type;
+        string cast_prefix_storage, constant_prefix_storage;
+        TypePattern(Type t) {
+            ostringstream cast_prefix_stream, constant_prefix_stream;
+            cast_prefix_stream << t << '(';
+            cast_prefix_storage = cast_prefix_stream.str();
+            cast_prefix = cast_prefix_storage.c_str();
+
+            constant_prefix_stream << '(' << t << ')';
+            constant_prefix_storage = constant_prefix_stream.str();
+            constant_prefix = constant_prefix_storage.c_str();
+            type = t;
+        }
+    };
+
+    static TypePattern typenames[] = {
+        {UInt(1)},
+        {Int(8)},
+        {UInt(8)},
+        {Int(16)},
+        {UInt(16)},
+        {Int(32)},
+        {UInt(32)},
+        {Int(64)},
+        {UInt(64)},
+        {Float(64)},
+        {Float(32)}};
+    for (auto t : typenames) {
+        if (consume(cursor, end, t.cast_prefix)) {
+            Expr a = cast(t.type, parse_halide_expr(cursor, end, Type{}));
+            expect(cursor, end, ")");
+            return a;
+        }
+        if (consume(cursor, end, t.constant_prefix)) {
+            return make_const(t.type, consume_int(cursor, end));
+        }
+    }
+    if (consume(cursor, end, "(let ")) {
+        string name = consume_token(cursor, end);
+        consume_whitespace(cursor, end);
+        expect(cursor, end, "=");
+        consume_whitespace(cursor, end);
+
+        Expr value = parse_halide_expr(cursor, end, Type{});
+
+        consume_whitespace(cursor, end);
+        expect(cursor, end, "in");
+        consume_whitespace(cursor, end);
+
+        Expr body = parse_halide_expr(cursor, end, expected_type);
+
+        Expr a = Let::make(name, value, body);
+        expect(cursor, end, ")");
+        return a;
+    }
     if (consume(cursor, end, "min(")) {
-        Expr a = parse_halide_expr(cursor, end);
+        Expr a = parse_halide_expr(cursor, end, expected_type);
         expect(cursor, end, ",");
-        Expr b = parse_halide_expr(cursor, end);
+        Expr b = parse_halide_expr(cursor, end, expected_type);
         consume_whitespace(cursor, end);
         expect(cursor, end, ")");
         return min(a, b);
     }
     if (consume(cursor, end, "max(")) {
-        Expr a = parse_halide_expr(cursor, end);
+        Expr a = parse_halide_expr(cursor, end, expected_type);
         expect(cursor, end, ",");
-        Expr b = parse_halide_expr(cursor, end);
+        Expr b = parse_halide_expr(cursor, end, expected_type);
         consume_whitespace(cursor, end);
         expect(cursor, end, ")");
         return max(a, b);
     }
     if (consume(cursor, end, "select(")) {
-        Expr a = parse_halide_expr(cursor, end);
+        Expr a = parse_halide_expr(cursor, end, Bool());
         expect(cursor, end, ",");
-        Expr b = parse_halide_expr(cursor, end);
+        Expr b = parse_halide_expr(cursor, end, expected_type);
         expect(cursor, end, ",");
-        Expr c = parse_halide_expr(cursor, end);
+        Expr c = parse_halide_expr(cursor, end, expected_type);
         consume_whitespace(cursor, end);
         expect(cursor, end, ")");
         return select(a, b, c);
     }
+    Call::ConstString binary_intrinsics[] =
+        {Call::bitwise_and,
+         Call::bitwise_or,
+         Call::shift_left,
+         Call::shift_right};
+    for (auto intrin : binary_intrinsics) {
+        if (consume(cursor, end, intrin)) {
+            expect(cursor, end, "(");
+            Expr a = parse_halide_expr(cursor, end, expected_type);
+            expect(cursor, end, ",");
+            Expr b = parse_halide_expr(cursor, end, expected_type);
+            consume_whitespace(cursor, end);
+            expect(cursor, end, ")");
+            return Call::make(a.type(), intrin, {a, b}, Call::PureIntrinsic);
+        }
+    }
+
+    if (consume(cursor, end, "round_f32(")) {
+        Expr a = parse_halide_expr(cursor, end, Float(32));
+        expect(cursor, end, ")");
+        return round(a);
+    }
+    if (consume(cursor, end, "ceil_f32(")) {
+        Expr a = parse_halide_expr(cursor, end, Float(32));
+        expect(cursor, end, ")");
+        return ceil(a);
+    }
+    if (consume(cursor, end, "floor_f32(")) {
+        Expr a = parse_halide_expr(cursor, end, Float(32));
+        expect(cursor, end, ")");
+        return floor(a);
+    }
+
     if (consume(cursor, end, "(")) {
-        Expr a = parse_halide_expr(cursor, end);
+        Expr a = parse_halide_expr(cursor, end, Type{});
         Expr result;
         consume_whitespace(cursor, end);
         if (consume(cursor, end, "+")) {
-            result = a + parse_halide_expr(cursor, end);
+            result = a + parse_halide_expr(cursor, end, expected_type);
         }
         if (consume(cursor, end, "*")) {
-            result = a * parse_halide_expr(cursor, end);
+            result = a * parse_halide_expr(cursor, end, expected_type);
         }
         if (consume(cursor, end, "-")) {
-            result = a - parse_halide_expr(cursor, end);
+            result = a - parse_halide_expr(cursor, end, expected_type);
         }
         if (consume(cursor, end, "/")) {
-            result = a / parse_halide_expr(cursor, end);
+            result = a / parse_halide_expr(cursor, end, expected_type);
         }
         if (consume(cursor, end, "%")) {
-            result = a % parse_halide_expr(cursor, end);
+            result = a % parse_halide_expr(cursor, end, expected_type);
         }
         if (consume(cursor, end, "<=")) {
-            result = a <= parse_halide_expr(cursor, end);
+            result = a <= parse_halide_expr(cursor, end, Type{});
         }
         if (consume(cursor, end, "<")) {
-            result = a < parse_halide_expr(cursor, end);
+            result = a < parse_halide_expr(cursor, end, Type{});
         }
         if (consume(cursor, end, ">=")) {
-            result = a >= parse_halide_expr(cursor, end);
+            result = a >= parse_halide_expr(cursor, end, Type{});
         }
         if (consume(cursor, end, ">")) {
-            result = a > parse_halide_expr(cursor, end);
+            result = a > parse_halide_expr(cursor, end, Type{});
         }
         if (consume(cursor, end, "==")) {
-            result = a == parse_halide_expr(cursor, end);
+            result = a == parse_halide_expr(cursor, end, Type{});
         }
         if (consume(cursor, end, "!=")) {
-            result = a != parse_halide_expr(cursor, end);
+            result = a != parse_halide_expr(cursor, end, Type{});
         }
         if (consume(cursor, end, "&&")) {
-            result = a && parse_halide_expr(cursor, end);
+            result = a && parse_halide_expr(cursor, end, Bool());
         }
         if (consume(cursor, end, "||")) {
-            result = a || parse_halide_expr(cursor, end);
+            result = a || parse_halide_expr(cursor, end, Bool());
         }
         if (result.defined()) {
             consume_whitespace(cursor, end);
@@ -916,13 +1126,20 @@ Expr parse_halide_expr(char **cursor, char *end) {
         }
     }
     if (consume(cursor, end, "v")) {
-        return Variable::make(Int(32), "v" + std::to_string(consume_number(cursor, end)));
+        if (expected_type == Type{}) {
+            expected_type = Int(32);
+        }
+        Expr a = Variable::make(expected_type, "v" + std::to_string(consume_int(cursor, end)));
+        std::cout << "Making variable " << a
+                  << " with type: " << expected_type << "\n";
+        return a;
     }
-    if (consume(cursor, end, "-")) {
-        return -consume_number(cursor, end);
-    }
-    if (**cursor >= '0' && **cursor <= '9') {
-        return consume_number(cursor, end);
+    if ((**cursor >= '0' && **cursor <= '9') || **cursor == '-') {
+        Expr e = make_const(Int(32), consume_int(cursor, end));
+        if (**cursor == '.') {
+            e += consume_float(cursor, end);
+        }
+        return e;
     }
     if (consume(cursor, end, "true")) {
         return const_true();
@@ -931,8 +1148,23 @@ Expr parse_halide_expr(char **cursor, char *end) {
         return const_false();
     }
     if (consume(cursor, end, "!")) {
-        return !parse_halide_expr(cursor, end);
+        return !parse_halide_expr(cursor, end, Bool());
     }
+
+    if (**cursor >= 'a' && **cursor <= 'z') {
+        char **tmp = cursor;
+        string name = consume_token(tmp, end);
+        if (consume(tmp, end, "[")) {
+            *cursor = *tmp;
+            Expr index = parse_halide_expr(cursor, end, Int(32));
+            expect(cursor, end, "]");
+            if (expected_type == Type{}) {
+                expected_type = Int(32);
+            }
+            return Load::make(expected_type, name, index, Buffer<>(), Parameter(), const_true(), ModulusRemainder());
+        }
+    }
+
     std::cerr << "Failed to parse Halide Expr starting at " << *cursor << "\n";
     abort();
     return Expr();
@@ -966,13 +1198,14 @@ int main(int argc, char **argv) {
         std::cout << "Parsing expression: '" << line << "'\n";
         char *start = &line[0];
         char *end = &line[line.size()];
-        exprs.push_back(parse_halide_expr(&start, end));
+        exprs.push_back(parse_halide_expr(&start, end, Type{}));
     }
 
     set<Expr, IRDeepCompare> patterns;
     size_t handled = 0, total = 0;
     for (auto &e : exprs) {
-        std::cout << patterns.size() << '\n';
+        std::cout << e << "\n";
+        e = substitute_in_all_lets(e);
         Expr orig = e;
         e = simplify(e);
         Expr second = simplify(e);
@@ -986,7 +1219,6 @@ int main(int argc, char **argv) {
         if (is_one(e)) {
             handled++;
         } else {
-            std::cout << "EXPR: " << e << "\n";
             for (auto p : all_possible_lhs_patterns(e)) {
                 // We prefer LT rules to LE rules. The LE simplifier just redirects to the LT simplifier.
                 /*
@@ -1001,52 +1233,61 @@ int main(int argc, char **argv) {
 
     std::cout << handled << " / " << total << " rules already simplify to true\n";
 
-    for (auto p : patterns) {
-        std::cout << "PATTERN: " << p << "\n";
-    }
-
-
     // Generate rules from patterns
     vector<std::future<void>> futures;
     ThreadPool<void> pool;
     std::mutex mutex;
     vector<pair<Expr, Expr>> rules;
-    for (int leaves = 2; leaves < 10; leaves++) {
-        for (auto p : patterns) {
-            CountLeaves count_leaves;
-            p.accept(&count_leaves);
-            // For now we'll focus on patterns  with no divides and
-            // with a repeated reuse of a LHS expression.
-            if (count_leaves.count != leaves || count_leaves.has_div_mod || !count_leaves.repeated_var) continue;
-            futures.emplace_back(pool.async([=, &mutex, &rules]() {
-                        int lhs_ops = leaves - 1;
-                        int max_rhs_ops = lhs_ops - 1;
-                        Expr e = super_simplify(p, max_rhs_ops);
-                        if (e.defined()) {
-                            std::lock_guard<std::mutex> lock(mutex);
-                            bool suppressed = false;
-                            for (auto &r : rules) {
-                                if (more_general_than(r.first, p)) {
-                                    std::cout << "Ignoring specialization of earlier rule\n";
-                                    suppressed = true;
-                                    break;
+    int done = 0;
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        for (int lhs_ops = 1; lhs_ops < 10; lhs_ops++) {
+            for (auto p : patterns) {
+                CountOps count_ops;
+                p.accept(&count_ops);
+                // For now we'll focus on patterns  with no divides and
+                // with a repeated reuse of a LHS expression.
+                if (count_ops.count() != lhs_ops ||
+                    count_ops.has_div_mod ||
+                    count_ops.has_unsupported_ir ||
+                    !count_ops.repeated_var) continue;
+
+                std::cout << "PATTERN " << lhs_ops << " : " << p << "\n";
+                futures.emplace_back(pool.async([=, &mutex, &rules, &futures, &done]() {
+                            int max_rhs_ops = lhs_ops - 1;
+                            Expr e = super_simplify(p, max_rhs_ops);
+                            {
+                                std::lock_guard<std::mutex> lock(mutex);
+                                if (e.defined()) {
+                                    bool suppressed = false;
+                                    for (auto &r : rules) {
+                                        if (more_general_than(r.first, p)) {
+                                            std::cout << "Ignoring specialization of earlier rule\n";
+                                            suppressed = true;
+                                            break;
+                                        }
+                                        if (more_general_than(p, r.first)) {
+                                            std::cout << "Replacing earlier rule with this more general form:\n"
+                                                      << "{" << p << ", " << e << "},\n";
+                                            r.first = p;
+                                            r.second = e;
+                                            suppressed = true;
+                                            break;
+                                        }
+                                    }
+                                    if (!suppressed) {
+                                        std::cout << "New rule:\n";
+                                        std::cout << "{" << p << ", " << e << "},\n";
+                                        rules.emplace_back(p, e);
+                                    }
                                 }
-                                if (more_general_than(p, r.first)) {
-                                    std::cout << "Replacing earlier rule with this more general form:\n"
-                                              << "{" << p << ", " << e << "},\n";
-                                    r.first = p;
-                                    r.second = e;
-                                    suppressed = true;
-                                    break;
+                                done++;
+                                if (done % 10 == 0) {
+                                    std::cout << done << " / " << futures.size() << "\n";
                                 }
                             }
-                            if (!suppressed) {
-                                std::cout << "New rule:\n";
-                                std::cout << "{" << p << ", " << e << "},\n";
-                                rules.emplace_back(p, e);
-                            }
-                        }
-                    }));
+                        }));
+            }
         }
     }
 
