@@ -1198,18 +1198,15 @@ void CodeGen_LLVM::optimize_module() {
     PipelineTuningOptions pto;
     pto.LoopInterleaving = !get_target().has_feature(Target::DisableLLVMLoopUnroll);
     pto.LoopVectorization = !get_target().has_feature(Target::DisableLLVMLoopVectorize);
-    // FIXME: uncomment after D61618
-    // pto.LoopUnroll = pto.LoopInterleaving;
+    pto.LoopUnroll = pto.LoopInterleaving;
     // Clear ScEv info for all loops. Certain Halide applications spend a very
     // long time compiling in forgetLoop, and prefer to forget everything
     // and rebuild SCEV (aka "Scalar Evolution") from scratch.
     // Sample difference in compile time reduction at the time of this change was
     // 21.04 -> 14.78 using current ToT release build. (See also https://reviews.llvm.org/rL358304)
-    // FIXME: uncomment after D61612
-    // pto.ForgetAllSCEVInLoopUnroll = true;
+    pto.ForgetAllSCEVInLoopUnroll = true;
 
-    // FIXME: to be tuned for halide needs after MemorySSA is turned on.
-    // Potentially target dependent.
+    // Tuning option, potentially target dependent. Set to halide needs after MemorySSA is turned on.
     // pto.LicmMssaOptCap = 50;
     // pto.LicmMssaNoAccForPromotionCap = 1;
 
@@ -1234,19 +1231,8 @@ void CodeGen_LLVM::optimize_module() {
     pb.crossRegisterProxies(lam, fam, cgam, mam);
     ModulePassManager mpm(debug_pass_manager);
 
-    //FIXME: How-to if additional passes wanted or a custom pipeline is used:
-    /*
-    std::string pipeline("inline");
-    if (auto err = pb.parsePassPipeline(mpm, pipeline, true, debug_pass_manager)) {
-      llvm::errs() << "Failed to parse pass pipeline: " << pipeline << ".Err: "
-          << llvm::toString(std::move(err)) << "\n";
-      exit(1);
-    }
-    */
-
     PassBuilder::OptimizationLevel level = PassBuilder::OptimizationLevel::O3;
 
-    // FIXME: Some bits in asan/tsan are different before 9.0
     if (get_target().has_feature(Target::ASAN)) {
         pb.registerPipelineStartEPCallback([&](ModulePassManager &mpm) {
             mpm.addPass(
@@ -1299,19 +1285,13 @@ void CodeGen_LLVM::optimize_module() {
     }
 
     mpm = pb.buildPerModuleDefaultPipeline(level, debug_pass_manager);
-
-    // Verify?
-    mpm.addPass(VerifierPass());
-
     mpm.run(*module, mam);
 
-    // Verify?
     if (llvm::verifyModule(*module, &errs()))
       report_fatal_error("Transformation resulted in an invalid module\n");
 
 #else
-    // FIXME: Perhaps best to keep the legacy pass manager for older LLVM versions?
-    // To clean ifdefs below if so.
+    // Keep the legacy pass manager for LLVM < 90
 
     // We override PassManager::add so that we have an opportunity to
     // blacklist problematic LLVM passes.
@@ -1344,14 +1324,6 @@ void CodeGen_LLVM::optimize_module() {
     b.LoopVectorize = !get_target().has_feature(Target::DisableLLVMLoopVectorize);
     b.DisableUnrollLoops = get_target().has_feature(Target::DisableLLVMLoopUnroll);
     b.SLPVectorize = true;  // Note: SLP vectorization has no analogue in the Halide scheduling model
-#if LLVM_VERSION >= 90
-    // Clear ScEv info for all loops. Certain Halide applications spend a very
-    // long time compiling in forgetLoop, and prefer to forget everything
-    // and rebuild SCEV (aka "Scalar Evolution") from scratch.
-    // Sample difference in compile time reduction at the time of this change was
-    // 21.04 -> 14.78 using current ToT release build. (See also https://reviews.llvm.org/rL358304)
-    b.ForgetAllSCEVInLoopUnroll = true;
-#endif
 
     if (tm) {
         tm->adjustPassManager(b);
@@ -1365,11 +1337,7 @@ void CodeGen_LLVM::optimize_module() {
             constexpr bool use_globals_gc = false;  // Should ASan use GC-friendly instrumentation for globals?
 
             pm.add(createAddressSanitizerFunctionPass(compile_kernel, recover, use_after_scope));
-#if LLVM_VERSION >= 90
-            pm.add(createModuleAddressSanitizerLegacyPassPass(compile_kernel, recover, use_globals_gc));
-#else
             pm.add(createAddressSanitizerModulePass(compile_kernel, recover, use_globals_gc));
-#endif
         };
         b.addExtension(PassManagerBuilder::EP_OptimizerLast, addAddressSanitizerPasses);
         b.addExtension(PassManagerBuilder::EP_EnabledOnOptLevel0, addAddressSanitizerPasses);
