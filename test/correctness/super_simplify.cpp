@@ -19,8 +19,6 @@ string expr_to_smt2(const Expr &e) {
 
     protected:
 
-        using IRVisitor::visit;
-
         void visit(const IntImm *imm) override {
             formula << imm->value;
         }
@@ -175,6 +173,10 @@ string expr_to_smt2(const Expr &e) {
             formula << " ";
             op->false_value.accept(this);
             formula << ")";
+        }
+
+        void visit(const Cast *op) override {
+            assert(false && "unhandled");
         }
 
         void visit(const Ramp *op) override {
@@ -429,6 +431,21 @@ Var v0("x"), v1("y"), v2("z"), v3("w"), v4("u"), v5("v"), v6("v6"), v7("v7"), v8
 Var v10("v10"), v11("v11"), v12("v12"), v13("v13"), v14("v14"), v15("v15"), v16("v16"), v17("v17"), v18("v18"), v19("v19");
 Var v20("v20"), v21("v21"), v22("v22"), v23("v23"), v24("v24"), v25("v25"), v26("v26"), v27("v27"), v28("v28"), v29("v29");
 
+Expr reboolify(const Expr &e) {
+    // e is an integer expression encoding a bool. We want to convert it back to the bool
+    if (const Min *op = e.as<Min>()) {
+        return reboolify(op->a) && reboolify(op->b);
+    } else if (const Max *op = e.as<Max>()) {
+        return reboolify(op->a) || reboolify(op->b);
+    } else if (const LE *op = e.as<LE>()) {
+        return !reboolify(op->a) || reboolify(op->b);
+    } else if (const LT *op = e.as<LT>()) {
+        return !reboolify(op->a) && reboolify(op->b);
+    } else {
+        return e == 1;
+    }
+}
+
 // Use CEGIS to optimally simplify an expression.
 Expr super_simplify(Expr e, int size) {
     bool was_bool = e.type().is_bool();
@@ -474,7 +491,7 @@ Expr super_simplify(Expr e, int size) {
             // Woo!
             Expr result = simplify(substitute_in_all_lets(common_subexpression_elimination(substitute(current_program, program))));
             if (was_bool) {
-                result = simplify(substitute_in_all_lets(common_subexpression_elimination(result == 1)));
+                result = simplify(substitute_in_all_lets(common_subexpression_elimination(reboolify(result))));
             }
             // std::cout << "*** Success: " << orig << " -> " << result << "\n\n";
             return result;
@@ -562,6 +579,10 @@ vector<Expr> all_possible_lhs_patterns(const Expr &e) {
                     int new_id = (int)renumbering.size();
                     new_id = renumbering.emplace(it->second, new_id).first->second;
                     // We're after end
+                    if (e.type() != Int(32)) {
+                        std::cerr << "Introducing non-integer variable to replace: " << e << "\n";
+                        abort();
+                    }
                     return Variable::make(e.type(), "v" + std::to_string(new_id));
                 }
             }
@@ -612,10 +633,9 @@ vector<Expr> all_possible_lhs_patterns(const Expr &e) {
 
             f.erase(v);
 
-            // Generate all subgraphs with this frontier node not included.
-            // We're only going to replace ints with wildcards, so if
-            // it's some other type, we must include it.
             if (expr_for_id[v].type() == Int(32)) {
+                // Generate all subgraphs with this frontier node not
+                // included (replaced with a variable).
                 r.insert(v);
 
                 // std::cout << "Excluding " << expr_for_id[v] << "\n";
@@ -623,7 +643,7 @@ vector<Expr> all_possible_lhs_patterns(const Expr &e) {
             }
 
             // Generate all subgraphs with this frontier node included
-            if (c.size() < 6) {
+            if (c.size() < 6 || expr_for_id[v].type() != Int(32)) {
                 c.insert(v);
                 for (auto n : ch) {
                     if (!rejected.count(n) && !current.count(n) && !children[n].empty()) {
@@ -647,6 +667,7 @@ vector<Expr> all_possible_lhs_patterns(const Expr &e) {
         // Don't consider leaves for roots
         if (all_subexprs.children[i].empty()) continue;
         frontier.insert(i);
+        std::cout << "Considering root: " << i << "\n";
         all_subexprs.generate_subgraphs(rejected, current, frontier);
         frontier.clear();
     }
@@ -665,9 +686,17 @@ Expr super_simplify(Expr e) {
 bool more_general_than(const Expr &a, const Expr &b, map<string, Expr> &bindings);
 
 template<typename Op>
-bool more_general_than(const Op *a, const Op *b, map<string, Expr> &bindings) {
-    assert(a && b);
-    return more_general_than(a->a, b->a, bindings) && more_general_than(a->b, b->b, bindings);
+bool more_general_than(const Expr &a, const Op *b, map<string, Expr> &bindings) {
+    if (more_general_than(a, b->a, bindings) ||
+        more_general_than(a, b->b, bindings)) {
+        return true;
+    }
+    if (const Op *op_a = a.as<Op>()) {
+        return (more_general_than(op_a->a, b->a, bindings) &&
+                more_general_than(op_a->b, b->b, bindings));
+    }
+    return false;
+
 }
 
 bool more_general_than(const Expr &a, const Expr &b, map<string, Expr> &bindings) {
@@ -680,48 +709,60 @@ bool more_general_than(const Expr &a, const Expr &b, map<string, Expr> &bindings
             return equal(bindings[var->name], b);
         }
     }
-    if (a.node_type() != b.node_type()) return false;
 
-    if (const Min *op = a.as<Min>()) {
-        return more_general_than(op, b.as<Min>(), bindings);
+    if (const Min *op = b.as<Min>()) {
+        return more_general_than(a, op, bindings);
     }
 
-    if (const Max *op = a.as<Max>()) {
-        return more_general_than(op, b.as<Max>(), bindings);
+    if (const Min *op = b.as<Min>()) {
+        return more_general_than(a, op, bindings);
     }
 
-    if (const Add *op = a.as<Add>()) {
-        return more_general_than(op, b.as<Add>(), bindings);
+    if (const Max *op = b.as<Max>()) {
+        return more_general_than(a, op, bindings);
     }
 
-    if (const Sub *op = a.as<Sub>()) {
-        return more_general_than(op, b.as<Sub>(), bindings);
+    if (const Add *op = b.as<Add>()) {
+        return more_general_than(a, op, bindings);
     }
 
-    if (const Mul *op = a.as<Mul>()) {
-        return more_general_than(op, b.as<Mul>(), bindings);
+    if (const Sub *op = b.as<Sub>()) {
+        return more_general_than(a, op, bindings);
     }
 
-    if (const Div *op = a.as<Div>()) {
-        return more_general_than(op, b.as<Div>(), bindings);
+    if (const Mul *op = b.as<Mul>()) {
+        return more_general_than(a, op, bindings);
     }
 
-    if (const LE *op = a.as<LE>()) {
-        return more_general_than(op, b.as<LE>(), bindings);
+    if (const Div *op = b.as<Div>()) {
+        return more_general_than(a, op, bindings);
     }
 
-    if (const LT *op = a.as<LT>()) {
-        return more_general_than(op, b.as<LT>(), bindings);
+    if (const LE *op = b.as<LE>()) {
+        return more_general_than(a, op, bindings);
     }
 
-    if (const Select *op = a.as<Select>()) {
-        const Select *op_b = b.as<Select>();
-        return (more_general_than(op->condition, op_b->condition, bindings) &&
-                more_general_than(op->true_value, op_b->true_value, bindings) &&
-                more_general_than(op->false_value, op_b->false_value, bindings));
+    if (const LT *op = b.as<LT>()) {
+        return more_general_than(a, op, bindings);
+    }
+
+    if (const Select *op = b.as<Select>()) {
+        const Select *op_a = a.as<Select>();
+        return (more_general_than(a, op->condition, bindings) ||
+                more_general_than(a, op->true_value, bindings) ||
+                more_general_than(a, op->false_value, bindings) ||
+                (op_a &&
+                 more_general_than(op_a->condition, op->condition, bindings) &&
+                 more_general_than(op_a->true_value, op->true_value, bindings) &&
+                 more_general_than(op_a->false_value, op->false_value, bindings)));
     }
 
     return false;
+}
+
+bool more_general_than(const Expr &a, const Expr &b) {
+    map<string, Expr> bindings;
+    return more_general_than(a, b, bindings);
 }
 
 class CountLeaves : public IRVisitor {
@@ -971,11 +1012,10 @@ int main(int argc, char **argv) {
     std::mutex mutex;
     vector<pair<Expr, Expr>> rules;
     for (int leaves = 2; leaves < 10; leaves++) {
-        std::cout << "\nConsidering patterns with " << leaves << " leaves ";
         for (auto p : patterns) {
             CountLeaves count_leaves;
             p.accept(&count_leaves);
-            // For now we'll focus on patterns with no divides and
+            // For now we'll focus on patterns  with no divides and
             // with a repeated reuse of a LHS expression.
             if (count_leaves.count != leaves || count_leaves.has_div_mod || !count_leaves.repeated_var) continue;
             futures.emplace_back(pool.async([=, &mutex, &rules]() {
@@ -984,8 +1024,27 @@ int main(int argc, char **argv) {
                         Expr e = super_simplify(p, max_rhs_ops);
                         if (e.defined()) {
                             std::lock_guard<std::mutex> lock(mutex);
-                            rules.emplace_back(p, e);
-                            std::cout << "\n{" << p << ", " << e << "},\n";
+                            bool suppressed = false;
+                            for (auto &r : rules) {
+                                if (more_general_than(r.first, p)) {
+                                    std::cout << "Ignoring specialization of earlier rule\n";
+                                    suppressed = true;
+                                    break;
+                                }
+                                if (more_general_than(p, r.first)) {
+                                    std::cout << "Replacing earlier rule with this more general form:\n"
+                                              << "{" << p << ", " << e << "},\n";
+                                    r.first = p;
+                                    r.second = e;
+                                    suppressed = true;
+                                    break;
+                                }
+                            }
+                            if (!suppressed) {
+                                std::cout << "New rule:\n";
+                                std::cout << "{" << p << ", " << e << "},\n";
+                                rules.emplace_back(p, e);
+                            }
                         }
                     }));
         }
@@ -995,15 +1054,14 @@ int main(int argc, char **argv) {
         f.get();
     }
 
-    // Filter rules
+    // Filter rules, though specialization should not have snuck through the filtering above
     vector<pair<Expr, Expr>> filtered;
 
     for (auto r1 : rules) {
         bool duplicate = false;
         pair<Expr, Expr> suppressed_by;
         for (auto r2 : rules) {
-            map<string, Expr> bindings;
-            bool g = more_general_than(r2.first, r1.first, bindings) && !equal(r1.first, r2.first);
+            bool g = more_general_than(r2.first, r1.first) && !equal(r1.first, r2.first);
             if (g) {
                 suppressed_by = r2;
             }
