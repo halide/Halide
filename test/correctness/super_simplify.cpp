@@ -207,7 +207,7 @@ string expr_to_smt2(const Expr &e) {
 }
 
 // Make an expression which can act as any other small integer expression in
-// the given leaf terms, depending on the values of the integer opcodes.
+// the given leaf terms, depending on the values of the idnteger opcodes.
 Expr interpreter_expr(vector<Expr> terms, vector<Expr> opcodes) {
     // Each opcode is an enum identifying the op, followed by the indices of the two args.
     assert(opcodes.size() % 3 == 0);
@@ -217,28 +217,32 @@ Expr interpreter_expr(vector<Expr> terms, vector<Expr> opcodes) {
         Expr arg1_idx = opcodes[i+1];
         Expr arg2_idx = opcodes[i+2];
 
-        // Get the args using a select tree
-        Expr arg1 = 0, arg2 = 0;
+        // Get the args using a select tree. args are either the index of an existing value, or some constant.
+        Expr arg1 = arg1_idx, arg2 = arg2_idx;
         for (size_t j = 0; j < terms.size(); j++) {
             arg1 = select(arg1_idx == (int)j, terms[j], arg1);
             arg2 = select(arg2_idx == (int)j, terms[j], arg2);
         }
+        int s = (int)terms.size();
+        arg1 = select(arg1_idx >= s, arg1_idx - s, arg1);
+        arg2 = select(arg2_idx >= s, arg2_idx - s, arg2);
 
         // Perform the op. TODO: mask off ops stronger than the strongest op in the input
-        Expr result = op; // By default it's just the integer constant corresponding to the op code
+        Expr result = arg1; // By default it's just equal to the first operand. This covers constants too.
         result = select(op == 0, arg1 + arg2, result);
         result = select(op == 1, arg1 - arg2, result);
-        result = select(op == 2, arg1 * arg2, result);
+        // result = select(op == 2, arg1 * arg2, result);
         //result = select(op == 3, arg1 / arg2, result); // Avoiding div because we synthesize intentional div-by-zero
-        result = select(op == 4, select(arg1 < arg2, 1, 0), result);
-        result = select(op == 5, select(arg1 <= arg2, 1, 0), result);
-        result = select(op == 6, select(arg1 == arg2, 1, 0), result);
-        result = select(op == 7, select(arg1 != arg2, 1, 0), result);
+        // result = select(op == 4, select(arg1 < arg2, 1, 0), result);
+        // result = select(op == 5, select(arg1 <= arg2, 1, 0), result);
+        // result = select(op == 6, select(arg1 == arg2, 1, 0), result);
+        // result = select(op == 7, select(arg1 != arg2, 1, 0), result);
         result = select(op == 8, min(arg1, arg2), result);
         result = select(op == 9, max(arg1, arg2), result);
-        result = select(op >= 10, op - 10, result); // Positive integer constants
 
         // TODO: in parallel compute the op histogram, or at least the leading op strength
+
+        // TODO: forbid constants in the opcode, just rely on the args
 
         terms.push_back(result);
     }
@@ -518,6 +522,11 @@ Expr super_simplify(Expr e, int size) {
         Expr current_program_works = substitute(current_program, program_works);
         map<string, Expr> counterexample = all_vars_zero;
 
+        /*
+        std::cout << "Candidate RHS:\n"
+                  << simplify(simplify(substitute_in_all_lets(substitute(current_program, program)))) << "\n";
+        */
+
         // Start with just random fuzzing. If that fails, we'll ask Z3 for a counterexample.
         int counterexamples_found_with_fuzzing = 0;
         for (int i = 0; i < 5; i++) {
@@ -562,6 +571,8 @@ Expr super_simplify(Expr e, int size) {
                 return Expr();
             }
         }
+
+        // std::cout << "Counterexample found...\n";
 
         // Now synthesize a program that fits all the counterexamples
         Expr works_on_counterexamples = const_true();
@@ -651,6 +662,13 @@ vector<Expr> all_possible_lhs_patterns(const Expr &e) {
         set<int> building;
         map<int, int> renumbering;
 
+        bool may_add_to_frontier(const set<int> &rejected, const set<int> &current, int n) {
+            if (rejected.count(n)) return false;
+            if (current.count(n)) return false;
+            if (expr_for_id[n].as<Variable>()) return false;
+            return true;
+        }
+
         vector<Expr> result;
         void generate_subgraphs(const set<int> &rejected,
                                 const set<int> &current,
@@ -658,9 +676,7 @@ vector<Expr> all_possible_lhs_patterns(const Expr &e) {
             // Pick an arbitrary frontier node to consider
             int v = -1;
             for (auto n : frontier) {
-                if (!rejected.count(n) &&
-                    !current.count(n) &&
-                    !children[n].empty()) {
+                if (may_add_to_frontier(rejected, current, n)) {
                     v = n;
                     break;
                 }
@@ -687,24 +703,28 @@ vector<Expr> all_possible_lhs_patterns(const Expr &e) {
 
             f.erase(v);
 
-            // Generate all subgraphs with this frontier node not
-            // included (replaced with a variable).
-            r.insert(v);
+            bool must_include = is_const(expr_for_id[v]);
 
-            // std::cout << "Excluding " << expr_for_id[v] << "\n";
-            generate_subgraphs(r, c, f);
+            if (!must_include) {
+                // Generate all subgraphs with this frontier node not
+                // included (replaced with a variable).
+                r.insert(v);
+
+                // std::cout << "Excluding " << expr_for_id[v] << "\n";
+                generate_subgraphs(r, c, f);
+            }
 
             // Generate all subgraphs with this frontier node included
-            if (c.size() < 6) {
+            if (must_include || c.size() < 10) { // Max out at 10 unique values, including constants
                 c.insert(v);
                 for (auto n : ch) {
-                    if (!rejected.count(n) && !current.count(n) && !children[n].empty()) {
+                    if (may_add_to_frontier(rejected, current, n)) {
                         f.insert(n);
                     }
                 }
+                // std::cout << "Including " << expr_for_id[v] << "\n";
+                generate_subgraphs(rejected, c, f);
             }
-            // std::cout << "Including " << expr_for_id[v] << "\n";
-            generate_subgraphs(rejected, c, f);
         }
     } all_subexprs;
 
@@ -862,7 +882,7 @@ class CountOps : public IRGraphVisitor {
         if (op->type != Int(32)) {
             has_unsupported_ir = true;
         } else if (vars_used.count(op->name)) {
-            repeated_var = true;
+            has_repeated_var = true;
         } else {
             vars_used.insert(op->name);
         }
@@ -890,19 +910,26 @@ class CountOps : public IRGraphVisitor {
 
     set<Expr, IRDeepCompare> unique_exprs;
 
+public:
+
     void include(const Expr &e) override {
-        unique_exprs.insert(e);
-        IRGraphVisitor::include(e);
+        if (is_const(e)) {
+            num_constants++;
+        } else {
+            unique_exprs.insert(e);
+            IRGraphVisitor::include(e);
+        }
     }
 
-public:
     int count() {
         return unique_exprs.size() - (int)vars_used.size();
     }
 
+    int num_constants = 0;
+
     bool has_div_mod = false;
     bool has_unsupported_ir = false;
-    bool repeated_var = false;
+    bool has_repeated_var = false;
     set<string> vars_used;
 };
 
@@ -1130,8 +1157,6 @@ Expr parse_halide_expr(char **cursor, char *end, Type expected_type) {
             expected_type = Int(32);
         }
         Expr a = Variable::make(expected_type, "v" + std::to_string(consume_int(cursor, end)));
-        std::cout << "Making variable " << a
-                  << " with type: " << expected_type << "\n";
         return a;
     }
     if ((**cursor >= '0' && **cursor <= '9') || **cursor == '-') {
@@ -1204,7 +1229,6 @@ int main(int argc, char **argv) {
     set<Expr, IRDeepCompare> patterns;
     size_t handled = 0, total = 0;
     for (auto &e : exprs) {
-        std::cout << e << "\n";
         e = substitute_in_all_lets(e);
         Expr orig = e;
         e = simplify(e);
@@ -1231,6 +1255,8 @@ int main(int argc, char **argv) {
         }
     }
 
+    std::cout << patterns.size() << " candidate lhs patterns generated \n";
+
     std::cout << handled << " / " << total << " rules already simplify to true\n";
 
     // Generate rules from patterns
@@ -1244,13 +1270,15 @@ int main(int argc, char **argv) {
         for (int lhs_ops = 1; lhs_ops < 10; lhs_ops++) {
             for (auto p : patterns) {
                 CountOps count_ops;
-                p.accept(&count_ops);
-                // For now we'll focus on patterns  with no divides and
-                // with a repeated reuse of a LHS expression.
+                count_ops.include(p);
+
                 if (count_ops.count() != lhs_ops ||
                     count_ops.has_div_mod ||
                     count_ops.has_unsupported_ir ||
-                    !count_ops.repeated_var) continue;
+                    !(count_ops.has_repeated_var ||
+                      count_ops.num_constants > 1)) {
+                    continue;
+                }
 
                 std::cout << "PATTERN " << lhs_ops << " : " << p << "\n";
                 futures.emplace_back(pool.async([=, &mutex, &rules, &futures, &done]() {
