@@ -447,6 +447,8 @@ Expr Simplify::visit(const LE *op, ExprInfo *bounds) {
                 rewrite((min(x, y) <= max(z, y)), true) ||
                 rewrite((max(x, y) <= max(x, z)), (y <= max(x, z))) ||
                 rewrite((min(x, y) <= min(z, x)), (min(x, y) <= z)) ||
+                rewrite(((min(x, y) + z) <= max(w, (z + y))), true) ||
+                rewrite((min(max(x, y), z) <= max(min(y, z), w)), (min(x, z) <= max(w, y))) ||
 
                 false) {
                 return mutate(rewrite.result, bounds);

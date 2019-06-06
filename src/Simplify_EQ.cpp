@@ -97,6 +97,7 @@ Expr Simplify::visit(const EQ *op, ExprInfo *bounds) {
     #if USE_SYNTHESIZED_RULES
     // From google list
     if (rewrite(min(x, y) - max(x, y) == 0, x == y) ||
+        rewrite((min(min(x, y), z) - max(max(x, y), z)) == 0, ((x == y) && (z == y))) ||
         false) {
         return mutate(std::move(rewrite.result), bounds);
     }
