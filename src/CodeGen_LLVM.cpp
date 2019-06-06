@@ -1198,7 +1198,7 @@ void CodeGen_LLVM::optimize_module() {
     PipelineTuningOptions pto;
     pto.LoopInterleaving = !get_target().has_feature(Target::DisableLLVMLoopUnroll);
     pto.LoopVectorization = !get_target().has_feature(Target::DisableLLVMLoopVectorize);
-    pto.LoopUnroll = pto.LoopInterleaving;
+    pto.LoopUnrolling = pto.LoopInterleaving;
     // Clear ScEv info for all loops. Certain Halide applications spend a very
     // long time compiling in forgetLoop, and prefer to forget everything
     // and rebuild SCEV (aka "Scalar Evolution") from scratch.
@@ -1206,15 +1206,11 @@ void CodeGen_LLVM::optimize_module() {
     // 21.04 -> 14.78 using current ToT release build. (See also https://reviews.llvm.org/rL358304)
     pto.ForgetAllSCEVInLoopUnroll = true;
 
-    // Tuning option, potentially target dependent. Set to halide needs after MemorySSA is turned on.
-    // pto.LicmMssaOptCap = 50;
-    // pto.LicmMssaNoAccForPromotionCap = 1;
-
     // Note: pto exists only for LLVM_VERSION >= 90
     llvm::PassBuilder pb(tm.get(), pto);
 
     bool debug_pass_manager = false;
-    //These analysis managers have to be declared in this order.
+    // These analysis managers have to be declared in this order.
     llvm::LoopAnalysisManager lam(debug_pass_manager);
     llvm::FunctionAnalysisManager fam(debug_pass_manager);
     llvm::CGSCCAnalysisManager cgam(debug_pass_manager);
