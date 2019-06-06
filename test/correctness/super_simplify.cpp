@@ -351,6 +351,147 @@ public:
     std::set<string> vars;
 };
 
+enum InferredType {
+    InferredBool, InferredInt, InferredUnknown
+};
+class FindTypedVars : public IRVisitor {
+
+    void visit(const Variable *op) override {
+        // if not known to be bool, guess int
+        if (current_type == InferredBool) {
+            bool_vars.insert(op->name);
+        } else {
+            int_vars.insert(op->name);
+        }
+    }
+    void visit(const Add *op) override {
+        InferredType old_type = current_type;
+        current_type = InferredInt;
+        op->a.accept(this);
+        op->b.accept(this);
+        current_type = old_type;
+    }
+    void visit(const Sub *op) override {
+        InferredType old_type = current_type;
+        current_type = InferredInt;
+        op->a.accept(this);
+        op->b.accept(this);
+        current_type = old_type;
+    }
+    void visit(const Mul *op) override {
+        InferredType old_type = current_type;
+        current_type = InferredInt;
+        op->a.accept(this);
+        op->b.accept(this);
+        current_type = old_type;
+    }
+    void visit(const Div *op) override {
+        InferredType old_type = current_type;
+        current_type = InferredInt;
+        op->a.accept(this);
+        op->b.accept(this);
+        current_type = old_type;
+    }
+    void visit(const Mod *op) override {
+        InferredType old_type = current_type;
+        current_type = InferredInt;
+        op->a.accept(this);
+        op->b.accept(this);
+        current_type = old_type;
+    }
+    void visit(const Min *op) override {
+        InferredType old_type = current_type;
+        current_type = InferredInt;
+        op->a.accept(this);
+        op->b.accept(this);
+        current_type = old_type;
+    }
+    void visit(const Max *op) override {
+        InferredType old_type = current_type;
+        current_type = InferredInt;
+        op->a.accept(this);
+        op->b.accept(this);
+        current_type = old_type;
+    }
+    void visit(const EQ *op) override {
+        InferredType old_type = current_type;
+        current_type = InferredInt;
+        op->a.accept(this);
+        op->b.accept(this);
+        current_type = old_type;
+    }
+    void visit(const NE *op) override {
+        InferredType old_type = current_type;
+        current_type = InferredInt;
+        op->a.accept(this);
+        op->b.accept(this);
+        current_type = old_type;
+    }
+    void visit(const LT *op) override {
+        InferredType old_type = current_type;
+        current_type = InferredInt;
+        op->a.accept(this);
+        op->b.accept(this);
+        current_type = old_type;
+    }
+    void visit(const LE *op) override {
+        InferredType old_type = current_type;
+        current_type = InferredInt;
+        op->a.accept(this);
+        op->b.accept(this);
+        current_type = old_type;
+    }
+    void visit(const GT *op) override {
+        InferredType old_type = current_type;
+        current_type = InferredInt;
+        op->a.accept(this);
+        op->b.accept(this);
+        current_type = old_type;
+    }
+    void visit(const GE *op) override {
+        InferredType old_type = current_type;
+        current_type = InferredInt;
+        op->a.accept(this);
+        op->b.accept(this);
+        current_type = old_type;
+    }
+    void visit(const And *op) override {
+        InferredType old_type = current_type;
+        current_type = InferredBool;
+        op->a.accept(this);
+        op->b.accept(this);
+        current_type = old_type;
+    }
+    void visit(const Or *op) override {
+        InferredType old_type = current_type;
+        current_type = InferredBool;
+        op->a.accept(this);
+        op->b.accept(this);
+        current_type = old_type;
+    }
+    void visit(const Not *op) override {
+        InferredType old_type = current_type;
+        current_type = InferredBool;
+        op->a.accept(this);
+        current_type = old_type;
+    }
+    // this could be wrong if the current_type was guessed wrong
+    void visit(const Select *op) override {
+        InferredType old_type = current_type;
+        current_type = InferredBool;
+        op->condition.accept(this);
+        current_type = old_type;
+        op->true_value.accept(this);
+        op->false_value.accept(this);
+        current_type = old_type;
+    }
+public:
+    InferredType current_type = InferredInt; // guess
+
+    std::set<string> int_vars;
+    std::set<string> bool_vars;
+};
+
 enum Z3Result {
     Sat, Unsat, Unknown
 };
@@ -369,14 +510,16 @@ Z3Result satisfy(Expr e, map<string, Expr> *bindings) {
         abort();
     }
 
-    FindVars find_vars;
-
-    e.accept(&find_vars);
+    FindTypedVars find_typed_vars;
+    e.accept(&find_typed_vars);
 
     std::ostringstream z3_source;
 
-    for (auto v : find_vars.vars) {
+    for (auto v : find_typed_vars.int_vars) {
         z3_source << "(declare-const " << v << " Int)\n";
+    }
+    for (auto v : find_typed_vars.bool_vars) {
+        z3_source << "(declare-const " << v << " Bool)\n";
     }
 
     z3_source << "(define-fun my_min ((x Int) (y Int)) Int (ite (< x y) x y))\n"
