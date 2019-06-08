@@ -80,6 +80,7 @@ struct Target {
         OpenCL = halide_target_feature_opencl,
         CLDoubles = halide_target_feature_cl_doubles,
         CLHalf = halide_target_feature_cl_half,
+        CLAtomics64 = halide_target_feature_cl_atomic64,
         OpenGL = halide_target_feature_opengl,
         OpenGLCompute = halide_target_feature_openglcompute,
         UserContext = halide_target_feature_user_context,

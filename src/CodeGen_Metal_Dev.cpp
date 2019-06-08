@@ -314,6 +314,9 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Load *op) {
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Store *op) {
     user_assert(is_one(op->predicate)) << "Predicated store is not supported inside Metal kernel.\n";
     user_assert(op->value.type().lanes() <= 4) << "Vectorization by widths greater than 4 is not supported by Metal -- type is " << op->value.type() << ".\n";
+    // It might be possible to support atomic but this is not trivial.
+    // Metal requires atomic data types to be wrapped in an atomic integer data type
+    user_assert(op->is_atomic) << "Atomic store is not supported inside Metal kernels";
 
     string id_value = print_expr(op->value);
     Type t = op->value.type();

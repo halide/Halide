@@ -1223,6 +1223,7 @@ typedef enum halide_target_feature_t {
 
     halide_target_feature_opencl,  ///< Enable the OpenCL runtime.
     halide_target_feature_cl_doubles,  ///< Enable double support on OpenCL targets
+    halide_target_feature_cl_atomic64, ///< Enable 64-bit atomics operations on OpenCL targets
 
     halide_target_feature_opengl,  ///< Enable the OpenGL runtime.
     halide_target_feature_openglcompute, ///< Enable OpenGL Compute runtime.

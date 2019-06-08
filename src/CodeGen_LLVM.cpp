@@ -2213,7 +2213,7 @@ void CodeGen_LLVM::codegen_predicated_vector_load(const Load *op) {
 
 void CodeGen_LLVM::codegen_atomic_store(const Store *op) {
     // Currently only support scalar atomics
-    internal_assert(op->value.type().is_scalar());
+    user_assert(op->value.type().is_scalar()) << "Atomic store does not support vectorization";
 
     // Detect whether we can describe this as an atomic-read-modify-write, 
     // otherwise fallback to a compare-and-swap loop.
@@ -2250,6 +2250,7 @@ void CodeGen_LLVM::codegen_atomic_store(const Store *op) {
         Halide::Type value_type = op->value.type();
         Value *ptr = codegen_buffer_pointer(op->name, value_type, op->index);
         LoadInst *orig = builder->CreateAlignedLoad(ptr, value_type.bytes());
+        orig->setOrdering(AtomicOrdering::Monotonic);
         // Explicit fall through from the current block to the cas loop body
         builder->CreateBr(loop_bb);
 
