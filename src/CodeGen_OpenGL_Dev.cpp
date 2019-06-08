@@ -603,6 +603,9 @@ void CodeGen_GLSL::visit(const Load *op) {
 
 void CodeGen_GLSL::visit(const Store *op) {
     user_assert(is_one(op->predicate)) << "GLSL: predicated store is not supported.\n";
+    // OpenGL supports atomics starting from 4.3, but Halide doesn't distinguish between
+    // OpenGL versions yet.
+    user_assert(!op->is_atomic) << "GLSL: atomics are not supported\n";
     if (scalar_vars.contains(op->name)) {
         internal_assert(is_zero(op->index));
         string val = print_expr(op->value);
