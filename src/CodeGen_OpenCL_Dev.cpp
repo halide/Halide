@@ -354,11 +354,14 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
             // union {unsigned int i; float f;} old_val;
             // union {unsigned int i; float f;} new_val;
             // do {
-            //   old_val.f = *x[id_index].i;
+            //   old_val.f = x[id_index];
             //   new_val.f = ...
-            // } while(atomic_cmpxchg((volatile address_space unsigned int*)x, old_val.i, new_val.i) != old_val.i);
+            // } while(atomic_cmpxchg((volatile address_space unsigned int*)&x[id_index], old_val.i, new_val.i) != old_val.i);
             string id_index = print_expr(op->index);
-            std::string int_type = t.bits() == 32 ? "unsigned int" : "unsigned long";
+            std::string int_type = t.bits() == 32 ? "int" : "long";
+            if (t.is_float() || t.is_uint()) {
+                int_type = "unsigned " + int_type;
+            }
             if (t.is_float()) {
                 do_indent();
                 stream << "union {" << int_type << " i; " << print_type(t) << " f;} old_val;\n";
