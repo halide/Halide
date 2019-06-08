@@ -222,73 +222,10 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Load *op) {
 
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Store *op) {
     user_assert(is_one(op->predicate)) << "GLSL: predicated store is not supported.\n";
-
-    if (op->is_atomic) {
-        // Currently only support scalar atomics
-        user_assert(op->value.type().is_scalar()) << "Atomic store does not support vectorization.\n";
-        user_assert(op->value.type().bits() == 32) << "GLSL: only support 32 bits atomics.\n";
-        // GLSL does have atomicCompSwap which means we can implement floating point
-        // atomics with it. However there is no way to convert a floating point buffer
-        // to an integer buffer in GLSL, making floating point atomics non-trivial.
-        user_assert(op->value.type().is_int_or_uint()) << "GLSL: only support integer atomics.\n";
-        // Detect whether we can describe this as an atomic-read-modify-write, 
-        // otherwise fallback to a compare-and-swap loop.
-        // Current only test for atomic_add
-        Expr val_expr = op->value;
-        Type t = val_expr.type();
-        Expr equiv_load = Load::make(t, op->name, op->index, Buffer<>(), op->param, op->predicate, op->alignment);
-        Expr delta = simplify(common_subexpression_elimination(op->value - equiv_load));
-        bool is_atomic_add = t.is_int_or_uint() && !expr_uses_var(delta, op->name);
-        auto print_store_var = [&]() {
-            stream << print_name(op->name);
-            if (!allocations.contains(op->name)) {
-                stream << ".data";
-            }
-        };
-        if (is_atomic_add) {
-            string id_index = print_expr(op->index);
-            string id_delta = print_expr(delta);
-            do_indent();
-            // atomicAdd(&x[i], delta);
-            stream << "atomicAdd(";
-            print_store_var();
-            stream << "[" << id_index << "]";
-            stream << "," << id_delta << ");\n";
-        } else {
-            // CmpXchg loop
-            // unsigned int old_val, new_val;
-            // do {
-            //   old_val = x[id_index];
-            //   new_val = ...
-            // } while(atomicCompSwap(x[id_index], old_val, new_val) != old_val);
-            string id_index = print_expr(op->index);
-            do_indent();
-            print_type(op->value.type());
-            stream << " old_val, new_val;\n";
-            do_indent();
-            stream << "do {\n";
-            indent += 2;
-            do_indent();
-            stream << "old_val = ";
-            print_store_var();
-            stream << "[" << id_index << "];\n";
-            string id_value = print_expr(op->value);
-            do_indent();
-            stream << "new_val = ";
-            stream << id_value;
-            stream << ";\n";
-            indent -= 2;
-            do_indent();
-            stream << "} while(atomicCompSwap(";
-            print_store_var();
-            stream << "[" << id_index << "], old_val, new_val) != old_val);\n";
-        }
-
-        // Need a cache clear on stores to avoid reusing stale loaded
-        // values from before the store.
-        cache.clear();
-        return;
-    }
+    // TODO: handle atomics. Floating point atomics can be tricky as there are no
+    //       floating point atomics operations, and GLSL does not allow converting a 
+    //       floating point buffer to an integer buffer.
+    user_assert(!op->is_atomic) << "GLSL: atomics are not supported.\n";
 
     // TODO: support vectors
     internal_assert(op->value.type().is_scalar());
