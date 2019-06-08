@@ -4,6 +4,12 @@
 
 using namespace Halide;
 
+enum class Backend {
+    CPU,
+    OpenCL,
+    CUDA
+};
+
 template<typename T,
          typename std::enable_if<std::is_floating_point<T>::value>::type* = nullptr>
 inline void check(int line_number, T x, T target, T threshold = T(1e-6)) {
@@ -23,7 +29,7 @@ inline void check(int line_number, T x, T target) {
 }
 
 template <typename T>
-void test_parallel_hist(const Target &target) {
+void test_parallel_hist(const Backend &backend) {
     int img_size = 10000;
     int hist_size = 7;
 
@@ -37,11 +43,22 @@ void test_parallel_hist(const Target &target) {
     hist(im(r)) += cast<T>(1);
 
     hist.compute_root();
-    if (!target.has_gpu_feature()) {
-        hist.update().atomic().parallel(r);
-    } else {
-        RVar ro, ri;
-        hist.update().atomic().split(r, ro, ri, 32).gpu_blocks(ro).gpu_threads(ri);
+    switch(backend) {
+        case CPU: {
+            hist.update().atomic().parallel(r);
+        } break;
+        case OpenCL: {
+            RVar ro, ri;
+            hist.update().atomic().split(r, ro, ri, 32)
+                .gpu_blocks(ro, DeviceAPI::OpenCL)
+                .gpu_threads(ri, DeviceAPI::OpenCL);
+        } break;
+        case CUDA: {
+            RVar ro, ri;
+            hist.update().atomic().split(r, ro, ri, 32)
+                .gpu_blocks(ro, DeviceAPI::CUDA)
+                .gpu_threads(ri, DeviceAPI::CUDA);
+        } break;
     }
 
     Buffer<T> correct(hist_size);
@@ -76,11 +93,22 @@ void test_parallel_cas_update(const Target &target) {
     hist(im(r)) = max(hist(im(r)) + cast<T>(1), cast<T>(100));
 
     hist.compute_root();
-    if (!target.has_gpu_feature()) {
-        hist.update().atomic().parallel(r);
-    } else {
-        RVar ro, ri;
-        hist.update().atomic().split(r, ro, ri, 32).gpu_blocks(ro).gpu_threads(ri);
+    switch(backend) {
+        case CPU: {
+            hist.update().atomic().parallel(r);
+        } break;
+        case OpenCL: {
+            RVar ro, ri;
+            hist.update().atomic().split(r, ro, ri, 32)
+                .gpu_blocks(ro, DeviceAPI::OpenCL)
+                .gpu_threads(ri, DeviceAPI::OpenCL);
+        } break;
+        case CUDA: {
+            RVar ro, ri;
+            hist.update().atomic().split(r, ro, ri, 32)
+                .gpu_blocks(ro, DeviceAPI::CUDA)
+                .gpu_threads(ri, DeviceAPI::CUDA);
+        } break;
     }
 
     Buffer<T> correct(hist_size);
@@ -103,26 +131,45 @@ void test_parallel_cas_update(const Target &target) {
 template <typename T>
 void test_all(const Target &target) {
     test_parallel_hist<T>(target);
-    // test_parallel_cas_update<T>(target);
+    test_parallel_cas_update<T>(target);
 }
 
 int main(int argc, char **argv) {
-    Target target = get_jit_target_from_environment();
-    if (!target.has_feature(Target::OpenCL)) {
-        // Skip 8-bit & 16-bit tests for OpenCL
-        test_all<uint8_t>(target);
-        test_all<int8_t>(target);
-        test_all<uint16_t>(target);
-        test_all<int16_t>(target);
-        test_all<float16_t>(target);
+    Target target = get_jit_target_from_environment();    
+    test_all<uint8_t>(Backend::CPU);
+    test_all<int8_t>(Backend::CPU);
+    test_all<uint16_t>(Backend::CPU);
+    test_all<int16_t>(Backend::CPU);
+    test_all<float16_t>(Backend::CPU);
+    test_all<uint32_t>(Backend::CPU);
+    test_all<int32_t>(Backend::CPU);
+    test_all<float>(Backend::CPU);
+    test_all<uint64_t>(Backend::CPU);
+    test_all<int64_t>(Backend::CPU);
+    test_all<double>(Backend::CPU);
+    if (target.has_feature(Target::OpenCL)) {
+        // No support for 8-bit & 16-bit atomics in OpenCL
+        test_all<uint32_t>(Backend::OpenCL);
+        test_all<int32_t>(Backend::OpenCL);
+        test_all<float>(Backend::OpenCL);
+        if (target.has_feature(Target::CLAtomics64)) {
+            test_all<uint64_t>(Backend::OpenCL);
+            test_all<int64_t>(Backend::OpenCL);
+            test_all<double>(Backend::OpenCL);
+        }
     }
-    test_all<uint32_t>(target);
-    test_all<int32_t>(target);
-    test_all<float>(target);
-    if (target.has_feature(Target::CLAtomics64)) {
-        test_all<uint64_t>(target);
-        test_all<int64_t>(target);
-        test_all<double>(target);
+    if (target.has_feature(Target::CUDA)) {
+        test_all<uint8_t>(Backend::CUDA);
+        test_all<int8_t>(Backend::CUDA);
+        test_all<uint16_t>(Backend::CUDA);
+        test_all<int16_t>(Backend::CUDA);
+        test_all<float16_t>(Backend::CUDA);
+        test_all<uint32_t>(Backend::CUDA);
+        test_all<int32_t>(Backend::CUDA);
+        test_all<float>(Backend::CUDA);
+        test_all<uint64_t>(Backend::CUDA);
+        test_all<int64_t>(Backend::CUDA);
+        test_all<double>(Backend::CUDA);
     }
     return 0;
 }
