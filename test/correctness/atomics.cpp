@@ -159,11 +159,6 @@ int main(int argc, char **argv) {
         }
     }
     if (target.has_feature(Target::CUDA)) {
-        test_all<uint8_t>(Backend::CUDA);
-        test_all<int8_t>(Backend::CUDA);
-        test_all<uint16_t>(Backend::CUDA);
-        test_all<int16_t>(Backend::CUDA);
-        test_all<float16_t>(Backend::CUDA);
         test_all<uint32_t>(Backend::CUDA);
         test_all<int32_t>(Backend::CUDA);
         test_all<float>(Backend::CUDA);
