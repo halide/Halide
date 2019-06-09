@@ -90,7 +90,7 @@ void test_parallel_cas_update(const Backend &backend) {
 
     hist(x) = cast<T>(0);
     // Can't do this with atomic rmw, need to generate a CAS loop
-    hist(im(r)) = max(hist(im(r)) + cast<T>(1), cast<T>(100));
+    hist(im(r)) = min(hist(im(r)) + cast<T>(1), cast<T>(100));
 
     hist.compute_root();
     switch(backend) {
@@ -116,7 +116,7 @@ void test_parallel_cas_update(const Backend &backend) {
     for (int i = 0; i < img_size; i++) {
         int idx = (i*i) % hist_size;
         T x = correct(idx) + T(1);
-        correct(idx) = x > T(100) ? x : T(100);
+        correct(idx) = x < T(100) ? x : T(100);
     }
 
     // Run 1000 times to make sure race condition do happen
