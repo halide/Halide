@@ -44,16 +44,16 @@ void test_parallel_hist(const Backend &backend) {
 
     hist.compute_root();
     switch(backend) {
-        case CPU: {
+        case Backend::CPU: {
             hist.update().atomic().parallel(r);
         } break;
-        case OpenCL: {
+        case Backend::OpenCL: {
             RVar ro, ri;
             hist.update().atomic().split(r, ro, ri, 32)
                 .gpu_blocks(ro, DeviceAPI::OpenCL)
                 .gpu_threads(ri, DeviceAPI::OpenCL);
         } break;
-        case CUDA: {
+        case Backend::CUDA: {
             RVar ro, ri;
             hist.update().atomic().split(r, ro, ri, 32)
                 .gpu_blocks(ro, DeviceAPI::CUDA)
@@ -70,7 +70,7 @@ void test_parallel_hist(const Backend &backend) {
 
     // Run 100 times to make sure race condition do happen
     for (int iter = 0; iter < 100; iter++) {
-        Buffer<T> out = hist.realize(hist_size, target);
+        Buffer<T> out = hist.realize(hist_size);
         for (int i = 0; i < hist_size; i++) {
             check(__LINE__, out(i), correct(i));
         }
@@ -78,7 +78,7 @@ void test_parallel_hist(const Backend &backend) {
 }
 
 template <typename T>
-void test_parallel_cas_update(const Target &target) {
+void test_parallel_cas_update(const Backend &backend) {
     int img_size = 1000;
     int hist_size = 13;
 
@@ -94,16 +94,16 @@ void test_parallel_cas_update(const Target &target) {
 
     hist.compute_root();
     switch(backend) {
-        case CPU: {
+        case Backend::CPU: {
             hist.update().atomic().parallel(r);
         } break;
-        case OpenCL: {
+        case Backend::OpenCL: {
             RVar ro, ri;
             hist.update().atomic().split(r, ro, ri, 32)
                 .gpu_blocks(ro, DeviceAPI::OpenCL)
                 .gpu_threads(ri, DeviceAPI::OpenCL);
         } break;
-        case CUDA: {
+        case Backend::CUDA: {
             RVar ro, ri;
             hist.update().atomic().split(r, ro, ri, 32)
                 .gpu_blocks(ro, DeviceAPI::CUDA)
@@ -121,7 +121,7 @@ void test_parallel_cas_update(const Target &target) {
 
     // Run 1000 times to make sure race condition do happen
     for (int iter = 0; iter < 1000; iter++) {
-        Buffer<T> out = hist.realize(hist_size, target);
+        Buffer<T> out = hist.realize(hist_size);
         for (int i = 0; i < hist_size; i++) {
             check(__LINE__, out(i), correct(i));
         }
@@ -129,9 +129,9 @@ void test_parallel_cas_update(const Target &target) {
 }
 
 template <typename T>
-void test_all(const Target &target) {
-    test_parallel_hist<T>(target);
-    test_parallel_cas_update<T>(target);
+void test_all(const Backend &backend) {
+    test_parallel_hist<T>(backend);
+    test_parallel_cas_update<T>(backend);
 }
 
 int main(int argc, char **argv) {
