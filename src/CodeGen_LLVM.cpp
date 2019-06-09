@@ -2213,7 +2213,7 @@ void CodeGen_LLVM::codegen_predicated_vector_load(const Load *op) {
 
 void CodeGen_LLVM::codegen_atomic_store(const Store *op) {
     // Currently only support scalar atomics
-    user_assert(op->value.type().is_scalar()) << "Atomic store does not support vectorization";
+    user_assert(op->value.type().is_scalar()) << "Atomic store does not support vectorization.\n";
 
     // Detect whether we can describe this as an atomic-read-modify-write, 
     // otherwise fallback to a compare-and-swap loop.

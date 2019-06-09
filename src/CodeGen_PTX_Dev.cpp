@@ -10,6 +10,7 @@
 #include "LLVM_Headers.h"
 #include "LLVM_Runtime_Linker.h"
 #include "Simplify.h"
+#include "CSE.h"
 #include "Solve.h"
 #include "Target.h"
 
@@ -257,6 +258,34 @@ void CodeGen_PTX_Dev::visit(const Load *op) {
 }
 
 void CodeGen_PTX_Dev::visit(const Store *op) {
+    if (op->is_atomic) {
+        // Currently only support scalar atomics
+        user_assert(op->value.type().is_scalar()) << "Atomic store does not support vectorization.\n";
+        user_assert(op->value.type().bits() >= 32) << "CUDA: 8-bit or 16-bit atomics are not supported.\n";
+        // Generate nnvm intrinsics for the atomics if this is an float atomicAdd.
+        // Otherwise refer to the llvm codegen
+        // half atomics are supported by compute capability 7.x or higher
+        if (op->value.type().is_float() && (op->value.type().bits() == 32 || (op->value.type().bits() == 64 && target.has_feature(Target::CUDACapability61)))) {
+            Expr val_expr = op->value;
+            Expr equiv_load = Load::make(op->value.type(), op->name, op->index, Buffer<>(), op->param, op->predicate, op->alignment);
+            Expr delta = simplify(common_subexpression_elimination(op->value - equiv_load));
+            bool is_atomic_add = !expr_uses_var(delta, op->name);
+            if (is_atomic_add) {
+                Value *ptr = codegen_buffer_pointer(op->name, op->value.type(), op->index);
+                Value *val = codegen(delta);
+                llvm::Function *intrin = nullptr;
+                if (op->value.type().bits() == 32) {
+                    intrin = module->getFunction("llvm.nvvm.atomic.load.add.f32.p0f32");
+                } else {
+                    internal_assert(op->value.type().bits() == 64);
+                    intrin = module->getFunction("llvm.nvvm.atomic.load.add.f64.p0f64");
+                }
+                internal_assert(intrin);
+                value = builder->CreateCall(intrin, {ptr, val});
+                return;
+            }
+        }
+    }
 
     // Do aligned 4-wide 32-bit stores as a single i128 store.
     const Ramp *r = op->index.as<Ramp>();
