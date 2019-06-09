@@ -668,8 +668,6 @@ void CodeGen_ARM::visit(const Store *op) {
         return;
     }
 
-    internal_assert(!op->is_atomic);
-
     // A dense store of an interleaving can be done using a vst2 intrinsic
     const Ramp *ramp = op->index.as<Ramp>();
 
