@@ -460,6 +460,8 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op)
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store *op)
 {
     user_assert(is_one(op->predicate)) << "Predicated store is not supported inside D3D12Compute kernel.\n";
+    // TODO: atomics
+    user_assert(!op->is_atomic) << "Atomics operations are not supported inside D3D12Compute kernel.\n";
 
     Type value_type = op->value.type();
 
