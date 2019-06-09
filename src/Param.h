@@ -251,47 +251,12 @@ public:
     }
     // @}
 
-    template <typename SOME_TYPE, typename T2 = T, typename std::enable_if<!std::is_void<T2>::value>::type * = nullptr>
-    HALIDE_NO_USER_CODE_INLINE void set_estimate(const SOME_TYPE &value) {
+    template<typename SOME_TYPE>
+    void set_estimate(const SOME_TYPE &value) {
         user_assert(Internal::IsRoundtrippable<T>::value(value))
             << "The value " << value << " cannot be losslessly converted to type " << type();
         param.set_estimate(Expr(value));
     }
-
-    // Specialized version for when T = void (thus the type is only known at runtime,
-    // not compiletime). Note that this actually works fine for all Params; we specialize
-    // it just to reduce code size for the common case of T != void.
-    template <typename SOME_TYPE, typename T2 = T, typename std::enable_if<std::is_void<T2>::value>::type * = nullptr>
-    HALIDE_NO_USER_CODE_INLINE void set_estimate(const SOME_TYPE &val) {
-    #define HALIDE_HANDLE_TYPE_DISPATCH(CODE, BITS, TYPE) \
-        case halide_type_code(CODE, BITS): \
-            user_assert(Internal::IsRoundtrippable<TYPE>::value(val)) \
-                << "The value " << val << " cannot be losslessly converted to type " << type; \
-            param.set_estimate(Expr(Internal::StaticCast<TYPE>::value(val))); \
-            break;
-
-        const Type type = param.type();
-        switch (halide_type_code(type.code(), type.bits())) {
-        HALIDE_HANDLE_TYPE_DISPATCH(halide_type_float, 32, float)
-        HALIDE_HANDLE_TYPE_DISPATCH(halide_type_float, 64, double)
-        HALIDE_HANDLE_TYPE_DISPATCH(halide_type_int, 8, int8_t)
-        HALIDE_HANDLE_TYPE_DISPATCH(halide_type_int, 16, int16_t)
-        HALIDE_HANDLE_TYPE_DISPATCH(halide_type_int, 32, int32_t)
-        HALIDE_HANDLE_TYPE_DISPATCH(halide_type_int, 64, int64_t)
-        HALIDE_HANDLE_TYPE_DISPATCH(halide_type_uint, 1, bool)
-        HALIDE_HANDLE_TYPE_DISPATCH(halide_type_uint, 8, uint8_t)
-        HALIDE_HANDLE_TYPE_DISPATCH(halide_type_uint, 16, uint16_t)
-        HALIDE_HANDLE_TYPE_DISPATCH(halide_type_uint, 32, uint32_t)
-        HALIDE_HANDLE_TYPE_DISPATCH(halide_type_uint, 64, uint64_t)
-        HALIDE_HANDLE_TYPE_DISPATCH(halide_type_handle, 64, uint64_t) // Handle types are always set via set_estimate<uint64_t>, not set_estimate<void*>
-        default:
-            internal_error << "Unsupported type in Param::set_estimate<" << type << ">\n";
-        }
-
-    #undef HALIDE_HANDLE_TYPE_DISPATCH
-
-    }
-    // @}
 
     /** You can use this parameter as an expression in a halide
      * function definition */
