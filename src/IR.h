@@ -545,7 +545,9 @@ struct Call : public ExprNode<Call> {
         quiet_div,
         quiet_mod,
         unsafe_promise_clamped,
-        gpu_thread_barrier;
+        gpu_thread_barrier,
+        mulhi_shr, // Compute high_half(arg[0] * arg[1]) >> arg[3]. Note that this is a shift in addition to taking the upper half of multiply result. arg[3] must be an unsigned integer immediate.
+        sorted_avg; // Compute (arg[0] + arg[1]) / 2, assuming arg[0] < arg[1].
 
     // We also declare some symbolic names for some of the runtime
     // functions that we want to construct Call nodes to here to avoid

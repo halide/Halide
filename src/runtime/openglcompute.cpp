@@ -396,7 +396,7 @@ WEAK int halide_openglcompute_copy_to_device(void *user_context, halide_buffer_t
     halide_buffer_t buf_copy = *buf;
     buf_copy.device = (uint64_t)device_data;
     device_copy dev_copy = make_host_to_device_copy(&buf_copy);
-    
+
     if (buf->type.code == halide_type_int) {
         if (buf->type.bits == 8) {
           converting_copy_memory_helper<int8_t, float>(dev_copy, MAX_COPY_DIMS-1, dev_copy.src_begin, 0);
@@ -481,7 +481,7 @@ WEAK int halide_openglcompute_copy_to_host(void *user_context, halide_buffer_t *
     halide_buffer_t buf_copy = *buf;
     buf_copy.device = (uint64_t)device_data;
     device_copy dev_copy = make_device_to_host_copy(&buf_copy);
-    
+
     if (buf->type.code == halide_type_int) {
         if (buf->type.bits == 8) {
             converting_copy_memory_helper<float, int8_t>(dev_copy, MAX_COPY_DIMS-1, 0, dev_copy.src_begin);
@@ -824,7 +824,7 @@ WEAK int halide_openglcompute_initialize_kernels(void *user_context, void **stat
         }
         kernel->program_id = program;
 
-#if DEBUG_RUNTIME
+#ifdef DEBUG_RUNTIME
         GLint i;
         GLint count;
 
@@ -834,7 +834,7 @@ WEAK int halide_openglcompute_initialize_kernels(void *user_context, void **stat
         const GLsizei bufSize = 64; // maximum name length
         GLchar name[bufSize]; // variable name in GLSL
         GLsizei length; // name length
-        
+
         global_state.GetProgramiv(program, GL_ACTIVE_UNIFORMS, &count);
         debug(user_context) << "Active Uniforms: " << count << "\n";
 
@@ -846,7 +846,7 @@ WEAK int halide_openglcompute_initialize_kernels(void *user_context, void **stat
 #endif
         src += src_len; // moving on to the next kernel
     }
- #ifdef DEBUG_RUNTIME
+#ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
     debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6
                         << " ms\n";

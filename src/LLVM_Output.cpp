@@ -175,7 +175,7 @@ void write_symbol_table(std::ostream &out,
 
             llvm::SmallString<128> symbols_buf;
             llvm::raw_svector_ostream symbols(symbols_buf);
-            std::error_code err = sym.printName(symbols);
+            auto err = sym.printName(symbols);
             internal_assert(!err);
             std::string name = symbols.str().str();
             if (name_to_member_index.find(name) != name_to_member_index.end()) {
@@ -315,11 +315,7 @@ std::unique_ptr<llvm::Module> clone_module(const llvm::Module &module_in) {
     // Write the module to a buffer.
     llvm::SmallVector<char, 16> clone_buffer;
     llvm::raw_svector_ostream clone_ostream(clone_buffer);
-#if LLVM_VERSION >= 70
     WriteBitcodeToFile(module_in, clone_ostream);
-#else
-    WriteBitcodeToFile(&module_in, clone_ostream);
-#endif
 
     // Read it back in.
     llvm::MemoryBufferRef buffer_ref(llvm::StringRef(clone_buffer.data(), clone_buffer.size()), "clone_buffer");
@@ -370,11 +366,7 @@ void emit_file(const llvm::Module &module_in, Internal::LLVMOStream& out, llvm::
     target_machine->Options.MCOptions.AsmVerbose = true;
 
     // Ask the target to add backend passes as necessary.
-#if LLVM_VERSION >= 70
     target_machine->addPassesToEmitFile(pass_manager, out, nullptr, file_type);
-#else
-    target_machine->addPassesToEmitFile(pass_manager, out, file_type);
-#endif
 
     pass_manager.run(*module);
     // If -time-passes is in HL_LLVM_ARGS, this will print llvm passes time statstics otherwise its no-op.
@@ -396,11 +388,7 @@ void compile_llvm_module_to_assembly(llvm::Module &module, Internal::LLVMOStream
 }
 
 void compile_llvm_module_to_llvm_bitcode(llvm::Module &module, Internal::LLVMOStream& out) {
-#if LLVM_VERSION >= 70
     WriteBitcodeToFile(module, out);
-#else
-    WriteBitcodeToFile(&module, out);
-#endif
 }
 
 void compile_llvm_module_to_llvm_assembly(llvm::Module &module, Internal::LLVMOStream& out) {
@@ -551,13 +539,8 @@ void create_static_library(const std::vector<std::string> &src_files_in, const T
     auto result = llvm::writeArchive(dst_file, new_members,
                        write_symtab, kind,
                        deterministic, thin, nullptr);
-#if LLVM_VERSION >= 60
     internal_assert(!result) << "Failed to write archive: " << dst_file
         << ", reason: " << llvm::toString(std::move(result)) << "\n";
-#else
-    internal_assert(!result.second) << "Failed to write archive: " << dst_file
-        << ", reason: " << result.second << "\n";
-#endif
 }
 
 }  // namespace Halide

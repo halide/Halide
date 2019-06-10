@@ -5,6 +5,11 @@ using namespace Halide;
 using namespace Halide::Tools;
 
 int main(int argc, char **argv) {
+    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
+        printf("Skipping test for WebAssembly as it does not support async() yet.\n");
+        return 0;
+    }
+
     Var x;
 
     const int num_stages = 64;

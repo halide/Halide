@@ -1047,7 +1047,7 @@ private:
                             }
                         } else if (is_const(b)) {
                             // We can normalize to multiplication
-                            Expr equiv = a * (1 << b);
+                            Expr equiv = a * (make_const(t, 1) << b);
                             equiv.accept(this);
                         }
                     } else if (op->is_intrinsic(Call::shift_right)) {
@@ -2039,8 +2039,19 @@ private:
     void visit(const IfThenElse *op) override {
         op->condition.accept(this);
         if (expr_uses_vars(op->condition, scope)) {
-            if (!op->else_case.defined() || is_no_op(op->else_case)) {
-                Expr c = op->condition;
+            // We need to simplify the condition to get it into a
+            // canonical form (e.g. (a < b) instead of !(a >= b))
+            vector<pair<Expr, Stmt>> cases;
+            {
+                Expr c = simplify(op->condition);
+                cases.emplace_back(c, op->then_case);
+                if (op->else_case.defined() && !is_no_op(op->else_case)) {
+                    cases.emplace_back(simplify(!c), op->else_case);
+                }
+            }
+            for (const auto &pair : cases) {
+                Expr c = pair.first;
+                Stmt body = pair.second;
                 const Call *call = c.as<Call>();
                 if (call && (call->is_intrinsic(Call::likely) ||
                              call->is_intrinsic(Call::likely_if_innermost) ||
@@ -2076,14 +2087,18 @@ private:
                     const GT *gt = solved.as<GT>();
                     const GE *ge = solved.as<GE>();
                     const EQ *eq = solved.as<EQ>();
-                    Expr rhs;
-                    if (lt) {rhs = lt->b;}
-                    if (le) {rhs = le->b;}
-                    if (gt) {rhs = gt->b;}
-                    if (ge) {rhs = ge->b;}
-                    if (eq) {rhs = eq->b;}
+                    Expr lhs, rhs;
+                    if (lt) {lhs = lt->a; rhs = lt->b;}
+                    else if (le) {lhs = le->a; rhs = le->b;}
+                    else if (gt) {lhs = gt->a; rhs = gt->b;}
+                    else if (ge) {lhs = ge->a; rhs = ge->b;}
+                    else if (eq) {lhs = eq->a; rhs = eq->b;}
 
                     if (!rhs.defined() || rhs.type() != Int(32)) {
+                        continue;
+                    }
+
+                    if (!equal(lhs, v)) {
                         continue;
                     }
 
@@ -2129,15 +2144,11 @@ private:
                 for (auto &p : to_pop) {
                     trim_scope_push(p.v->name, p.i, p.let_bounds);
                 }
-                op->then_case.accept(this);
+                body.accept(this);
                 while (!to_pop.empty()) {
                     trim_scope_pop(to_pop.back().v->name, to_pop.back().let_bounds);
                     to_pop.pop_back();
                 }
-            } else {
-                // Just take the union over the branches
-                op->then_case.accept(this);
-                op->else_case.accept(this);
             }
         } else {
             // If the condition is based purely on params, then we'll only
@@ -2443,26 +2454,21 @@ FuncValueBounds compute_function_value_bounds(const vector<string> &order,
 
             if (f.is_pure()) {
 
-                if (f.dimensions() == 0) {
-                    result = Interval::single_point(f.values()[j]);
-                } else {
+                // Make a scope that says the args could be anything.
+                Scope<Interval> arg_scope;
+                for (size_t k = 0; k < f.args().size(); k++) {
+                    arg_scope.push(f_args[k], Interval::everything());
+                }
 
-                    // Make a scope that says the args could be anything.
-                    Scope<Interval> arg_scope;
-                    for (size_t k = 0; k < f.args().size(); k++) {
-                        arg_scope.push(f_args[k], Interval::everything());
-                    }
+                result = compute_pure_function_definition_value_bounds(f.definition(), arg_scope, fb, j);
+                // These can expand combinatorially as we go down the
+                // pipeline if we don't run CSE on them.
+                if (result.has_lower_bound()) {
+                    result.min = simplify(common_subexpression_elimination(result.min));
+                }
 
-                    result = compute_pure_function_definition_value_bounds(f.definition(), arg_scope, fb, j);
-                    // These can expand combinatorially as we go down the
-                    // pipeline if we don't run CSE on them.
-                    if (result.has_lower_bound()) {
-                        result.min = simplify(common_subexpression_elimination(result.min));
-                    }
-
-                    if (result.has_upper_bound()) {
-                        result.max = simplify(common_subexpression_elimination(result.max));
-                    }
+                if (result.has_upper_bound()) {
+                    result.max = simplify(common_subexpression_elimination(result.max));
                 }
 
                 fb[key] = result;
@@ -2534,7 +2540,8 @@ void constant_bound_test() {
     using namespace ConciseCasts;
 
     {
-        Param<int16_t> a, b;
+        Param<int16_t> a;
+        Param<uint16_t> b;
         check_constant_bound(a >> b, i16(-32768), i16(32767));
     }
 
@@ -2792,7 +2799,8 @@ void bounds_test() {
     }
 
     {
-        Param<int16_t> x("x"), y("y");
+        Param<int16_t> x("x");
+        Param<uint16_t> y("y");
         x.set_range(i16(-32), i16(-16));
         y.set_range(i16(0), i16(4));
         check_constant_bound((x >> y), i16(-32), i16(-1));

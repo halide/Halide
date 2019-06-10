@@ -66,18 +66,23 @@ public:
         // Normalize
         bilateral_grid(x, y) = interpolated(x, y, 0)/interpolated(x, y, 1);
 
+        /* ESTIMATES */
+        // (This can be useful in conjunction with RunGen and benchmarks as well
+        // as auto-schedule, so we do it in all cases.)
+        // Provide estimates on the input image
+        input.dim(0).set_bounds_estimate(0, 1536);
+        input.dim(1).set_bounds_estimate(0, 2560);
+        // Provide estimates on the parameters
+        r_sigma.set_estimate(0.1f);
+        // TODO: Compute estimates from the parameter values
+        histogram.estimate(z, -2, 16);
+        blurz.estimate(z, 0, 12);
+        blurx.estimate(z, 0, 12);
+        blury.estimate(z, 0, 12);
+        bilateral_grid.estimate(x, 0, 1536).estimate(y, 0, 2560);
+
         if (auto_schedule) {
-            // Provide estimates on the input image
-            input.dim(0).set_bounds_estimate(0, 1536);
-            input.dim(1).set_bounds_estimate(0, 2560);
-            // Provide estimates on the parameters
-            r_sigma.set_estimate(0.1f);
-            // TODO: Compute estimates from the parameter values
-            histogram.estimate(z, -2, 16);
-            blurz.estimate(z, 0, 12);
-            blurx.estimate(z, 0, 12);
-            blury.estimate(z, 0, 12);
-            bilateral_grid.estimate(x, 0, 1536).estimate(y, 0, 2560);
+            // nothing
         } else if (get_target().has_gpu_feature()) {
             Var xi("xi"), yi("yi"), zi("zi");
 

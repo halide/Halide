@@ -14,11 +14,14 @@ Expr saturating_rounding_doubling_high_multiply(Expr a, Expr b) {
 }
 
 Expr rounding_shift_right(Expr x, Expr shift) {
+    Halide::Type t = x.type();
+    Halide::Type t_unsigned = t.with_code(halide_type_uint);
+    Halide::Expr ushift = cast(t_unsigned, shift);
     // Shift must satisfy 0 <= shift <= 31
-    Expr mask = ((1ll << shift) - 1);
+    Expr mask = ((cast(x.type(), 1) << ushift) - 1);
     Expr remainder = x & mask;
     Expr threshold = (mask >> 1) + select(x < 0, 1, 0);
-    return (x >> shift) + select(remainder > threshold, 1, 0);
+    return (x >> ushift) + select(remainder > threshold, 1, 0);
 }
 
 Expr multiply_quantized_multiplier(Expr x, Expr q, Expr shift) {
