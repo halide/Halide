@@ -192,9 +192,9 @@ class InjectFoldingCheck : public IRMutator {
                     Expr new_leading_edge_var = Variable::make(Int(32), new_leading_edge_var_name);
 
                     Stmt update_leading_edge =
-                        Store::make(head, new_leading_edge_var, 0, Parameter(), const_true(), ModulusRemainder(), false);
+                        Store::make(head, new_leading_edge_var, 0, Parameter(), const_true(), ModulusRemainder(), /*is_atomic*/ false);
                     Stmt update_next_leading_edge =
-                        Store::make(head + "_next", new_leading_edge_var, 0, Parameter(), const_true(), ModulusRemainder(), false);
+                        Store::make(head + "_next", new_leading_edge_var, 0, Parameter(), const_true(), ModulusRemainder(), /*is_atomic*/ false);
 
                     // Check the region being written to in this
                     // iteration lies within the range of coordinates
@@ -275,8 +275,8 @@ class InjectFoldingCheck : public IRMutator {
                         Expr release_producer =
                             Call::make(Int(32), "halide_semaphore_release", {sema_var, to_release}, Call::Extern);
                         // The consumer is going to get its own forked copy of the footprint, so it needs to update it too.
-                        Stmt update_leading_edge = Store::make(tail, new_leading_edge_var, 0, Parameter(), const_true(), ModulusRemainder(), false);
-                        update_leading_edge = Block::make(Store::make(tail + "_next", new_leading_edge_var, 0, Parameter(), const_true(), ModulusRemainder(), false),
+                        Stmt update_leading_edge = Store::make(tail, new_leading_edge_var, 0, Parameter(), const_true(), ModulusRemainder(), /*is_atomic*/ false);
+                        update_leading_edge = Block::make(Store::make(tail + "_next", new_leading_edge_var, 0, Parameter(), const_true(), ModulusRemainder(), /*is_atomic*/ false),
                                                           update_leading_edge);
                         update_leading_edge = Block::make(Evaluate::make(release_producer), update_leading_edge);
                         update_leading_edge = LetStmt::make(new_leading_edge_name, new_leading_edge, update_leading_edge);
@@ -324,7 +324,7 @@ class InjectFoldingCheck : public IRMutator {
                 }
 
                 Stmt update_leading_edge =
-                    Store::make(head, leading_edge, 0, Parameter(), const_true(), ModulusRemainder(), false);
+                    Store::make(head, leading_edge, 0, Parameter(), const_true(), ModulusRemainder(), /*is_atomic*/ false);
                 body = Block::make(update_leading_edge, body);
 
                 // We don't need to make sure the min is moving
@@ -359,7 +359,7 @@ class InjectFoldingCheck : public IRMutator {
                 }
 
                 Stmt update_leading_edge =
-                    Store::make(tail, leading_edge, 0, Parameter(), const_true(), ModulusRemainder(), false);
+                    Store::make(tail, leading_edge, 0, Parameter(), const_true(), ModulusRemainder(), /*is_atomic*/ false);
                 body = Block::make(update_leading_edge, body);
 
                 if (func.schedule().async()) {
@@ -797,8 +797,8 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             Expr head = Load::make(Int(32), dynamic_footprint + ".head", 0, Buffer<>(), Parameter(), const_true(), ModulusRemainder());
             Expr tail = Load::make(Int(32), dynamic_footprint + ".tail", 0, Buffer<>(), Parameter(), const_true(), ModulusRemainder());
             Expr step = Variable::make(Int(32), func.name() + ".extent." + std::to_string(dims_folded.back().dim)) + dims_folded.back().factor;
-            Stmt reset_head = Store::make(dynamic_footprint + ".head_next", head - step, 0, Parameter(), const_true(), ModulusRemainder(), false);
-            Stmt reset_tail = Store::make(dynamic_footprint + ".tail_next", tail - step, 0, Parameter(), const_true(), ModulusRemainder(), false);
+            Stmt reset_head = Store::make(dynamic_footprint + ".head_next", head - step, 0, Parameter(), const_true(), ModulusRemainder(), /*is_atomic*/ false);
+            Stmt reset_tail = Store::make(dynamic_footprint + ".tail_next", tail - step, 0, Parameter(), const_true(), ModulusRemainder(), /*is_atomic*/ false);
             stmt = Block::make({stmt, reset_head, reset_tail});
         }
         return stmt;
@@ -872,16 +872,16 @@ class StorageFolding : public IRMutator {
                     init = op->bounds[fold.dim].min + op->bounds[fold.dim].extent - 1;
                 }
                 if (!fold.head.empty()) {
-                    stmt = Block::make(Store::make(fold.head + "_next", init, 0, Parameter(), const_true(), ModulusRemainder(), false), stmt);
+                    stmt = Block::make(Store::make(fold.head + "_next", init, 0, Parameter(), const_true(), ModulusRemainder(), /*is_atomic*/ false), stmt);
                     stmt = Allocate::make(fold.head + "_next", Int(32), MemoryType::Stack, {}, const_true(), stmt);
-                    stmt = Block::make(Store::make(fold.head, init, 0, Parameter(), const_true(), ModulusRemainder(), false), stmt);
+                    stmt = Block::make(Store::make(fold.head, init, 0, Parameter(), const_true(), ModulusRemainder(), /*is_atomic*/ false), stmt);
                     stmt = Allocate::make(fold.head, Int(32), MemoryType::Stack, {}, const_true(), stmt);
                 }
                 if (!fold.tail.empty()) {
                     internal_assert(func.schedule().async()) << "Expected a single counter for synchronous folding";
-                    stmt = Block::make(Store::make(fold.tail + "_next", init, 0, Parameter(), const_true(), ModulusRemainder(), false), stmt);
+                    stmt = Block::make(Store::make(fold.tail + "_next", init, 0, Parameter(), const_true(), ModulusRemainder(), /*is_atomic*/ false), stmt);
                     stmt = Allocate::make(fold.tail + "_next", Int(32), MemoryType::Stack, {}, const_true(), stmt);
-                    stmt = Block::make(Store::make(fold.tail, init, 0, Parameter(), const_true(), ModulusRemainder(), false), stmt);
+                    stmt = Block::make(Store::make(fold.tail, init, 0, Parameter(), const_true(), ModulusRemainder(), /*is_atomic*/ false), stmt);
                     stmt = Allocate::make(fold.tail, Int(32), MemoryType::Stack, {}, const_true(), stmt);
                 }
             }

@@ -2659,7 +2659,7 @@ void boxes_touched_test() {
     Scope<Interval> scope;
     scope.push("y", Interval(Expr(0), Expr(10)));
 
-    Stmt stmt = Provide::make("f", {10}, {x, y, z, w}, false);
+    Stmt stmt = Provide::make("f", {10}, {x, y, z, w}, /*is_atomic*/ false);
     stmt = IfThenElse::make(y > 4, stmt, Stmt());
     stmt = IfThenElse::make(z > 18, stmt, Stmt());
     stmt = LetStmt::make("w", z + 3, stmt);

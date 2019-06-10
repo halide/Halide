@@ -176,11 +176,11 @@ void IRPrinter::test() {
     expr_source << (x + 3) * (y / 2 + 17);
     internal_assert(expr_source.str() == "((x + 3)*((y/2) + 17))");
 
-    Stmt store = Store::make("buf", (x * 17) / (x - 3), y - 1,  Parameter(), const_true(), ModulusRemainder(), false);
+    Stmt store = Store::make("buf", (x * 17) / (x - 3), y - 1,  Parameter(), const_true(), ModulusRemainder(), /*is_atomic*/ false);
     Stmt for_loop = For::make("x", -2, y + 2, ForType::Parallel, DeviceAPI::Host, store);
     vector<Expr> args(1); args[0] = x % 3;
     Expr call = Call::make(i32, "buf", args, Call::Extern);
-    Stmt store2 = Store::make("out", call + 1, x, Parameter(), const_true(), ModulusRemainder(3, 5), false);
+    Stmt store2 = Store::make("out", call + 1, x, Parameter(), const_true(), ModulusRemainder(3, 5), /*is_atomic*/ false);
     Stmt for_loop2 = For::make("x", 0, y, ForType::Vectorized , DeviceAPI::Host, store2);
 
     Stmt producer = ProducerConsumer::make_produce("buf", for_loop);
