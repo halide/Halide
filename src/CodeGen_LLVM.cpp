@@ -2251,6 +2251,7 @@ void CodeGen_LLVM::codegen_atomic_store(const Store *op) {
         Value *ptr = codegen_buffer_pointer(op->name, value_type, op->index);
         LoadInst *orig = builder->CreateAlignedLoad(ptr, value_type.bytes());
         orig->setOrdering(AtomicOrdering::Monotonic);
+        add_tbaa_metadata(orig, op->name, op->index);
         // Explicit fall through from the current block to the cas loop body
         builder->CreateBr(loop_bb);
 
