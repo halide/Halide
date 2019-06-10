@@ -459,6 +459,7 @@ function(_halide_runtime_target_name HALIDE_TARGET OUTVAR)
         opencl
         cl_doubles
         cl_half
+        cl_atomics64
         opengl
         openglcompute
         user_context
