@@ -213,6 +213,19 @@ Expr Simplify::visit(const Max *op, ExprInfo *bounds) {
 
                rewrite(max(((x - y) + z), (x + w)), (max((z - y), w) + x)) ||
 
+               rewrite(max(x, min(max(x, y), z)), max(min(y, z), x)) ||
+               rewrite(max((max(min((x + c0), y), z) + c1), x), max((z + c1), x), ((c0 + c1) == 0)) ||
+               rewrite(max(min(x, y), (x + c0)), (x + c0), (0 <= c0)) ||
+               rewrite(max(min(x, y), (y + c0)), (y + c0), (0 <= c0)) ||
+               rewrite(max(min((x + c0), y), (x + c1)), (x + c1), (c0 <= c1)) ||
+               rewrite(max(min((x + y), c0), (min(y, 0) + x)), min(max(x, c0), (x + y))) ||
+               rewrite(max(min((x + y), z), (min(y, 0) + x)), min(max(x, z), (x + y))) ||
+               rewrite(max(min((x + y), z), (max(x, w) + y)), (max(w, x) + y)) ||
+               rewrite(max(max(x, y), min(x, z)), max(x, y)) ||
+               rewrite(max(max(x, y), min(max(x, z), w)), max(max(min(w, z), x), y)) ||
+               rewrite(max(max((min(x, c0) + c1), y), c2), max(y, c2), (((c1 + -1) <= c2) && (c0 < 0))) ||
+               rewrite(max(max(min(x, y), z), y), max(y, z)) ||
+
                // From Google data
                rewrite(max((select((x < y), z, w)*x), (select((x < y), w, z)*x)), max((x*z), (w*x))) ||
                rewrite(max(max((x*x), (x*y)), (y*y)), max((y*y), (x*x))) ||

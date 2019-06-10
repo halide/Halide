@@ -226,6 +226,9 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
                rewrite(min(((x + y)*z), ((y*z) + w)), (min((x*z), w) + (y*z))) ||
                rewrite(min(min((x + y), z), ((x + w) + u)), min((min((w + u), y) + x), z)) ||
 
+               rewrite(min((x - y), ((z - y) + w)), (min((w + z), x) - y)) ||
+               rewrite(min(min(max(x, y), z), y), min(y, z)) ||
+
                // From Google data
                rewrite(min((x - (y + z)), ((x - (w + z)) + u)), ((x - z) - max((w - u), y))) ||
                rewrite(min((select((x < y), z, w)*x), (select((x < y), w, z)*x)), min((x*z), (w*x))) ||

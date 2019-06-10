@@ -254,138 +254,80 @@ pair<Expr, Expr> interpreter_expr(vector<Expr> terms, vector<Expr> opcodes) {
 }
 
 // Returns the value of the predicate, whether the opcodes are valid,
-// and whether or not the opcodes produce a predicate that's strictly
-// more general than some reference predicate. I.e. it must imply the
-// reference predicate but not be equal to it.
+// and whether or not the opcodes produce a predicate that's simpler
+// (preferable to) some reference predicate.
 tuple<Expr, Expr, Expr> predicate_expr(vector<Expr> lhs,
                                        vector<Expr> rhs,
                                        vector<Expr> opcodes,
-                                       vector<Expr> opcodes_ref) {
-    // return {select(opcodes[0] == 1, (lhs[1] < lhs[0]) && (rhs[0] == lhs[0]), const_true()), const_true()};
+                                       vector<Expr> opcodes_ref,
+                                       map<string, Expr> *binding) {
 
-    // For now we use explicit enumeration of combinations of plausible constraints.
+    // For now we use explicit enumeration of combinations of
+    // plausible constraints. We set up the list so that if A => B
+    // then B occurs before A in the list. General possible things
+    // come before specific things.
+
+    // The values vector is sorted by complexity of the expression.
+
     vector<Expr> values, constraints;
-    vector<pair<size_t, size_t>> constraint_lattice;
     constraints.push_back(const_true());
-    for (auto e1 : lhs) {
-        for (auto e2 : lhs) {
-            size_t equal = constraints.size();
-            constraints.push_back(e1 == e2);
 
-            // size_t sum_to_zero = constraints.size();
-            constraints.push_back(e1 + e2 == 0);
-
-            size_t one_less = constraints.size();
-            constraints.push_back(e1 == e2 - 1);
-
-            size_t one_more = constraints.size();
-            constraints.push_back(e1 == e2 + 1);
-
-            //            constraints.push_back(e1 % e2 == 0);
-            //            constraints.push_back(e1 % e2 != 0);
-
-            size_t at_most_two_less = constraints.size();
-            constraints.push_back(e1 < e2 - 1);
-
-            size_t at_most_one_less = constraints.size();
-            constraints.push_back(e1 < e2);
-
-            size_t at_most = constraints.size();
-            constraints.push_back(e1 <= e2);
-
-            size_t at_most_one_more = constraints.size();
-            constraints.push_back(e1 <= e2 + 1);
-
-            constraint_lattice.emplace_back(equal, at_most);
-            constraint_lattice.emplace_back(equal, at_most_one_more);
-            constraint_lattice.emplace_back(one_less, at_most_one_less);
-            constraint_lattice.emplace_back(one_less, at_most);
-            constraint_lattice.emplace_back(one_less, at_most_one_more);
-            constraint_lattice.emplace_back(one_more, at_most_one_more);
-            constraint_lattice.emplace_back(at_most_two_less, at_most_one_less);
-            constraint_lattice.emplace_back(at_most_two_less, at_most);
-            constraint_lattice.emplace_back(at_most_two_less, at_most_one_more);
-            constraint_lattice.emplace_back(at_most_one_less, at_most);
-            constraint_lattice.emplace_back(at_most_one_less, at_most_one_more);
-            constraint_lattice.emplace_back(at_most, at_most_one_more);
-
-            values.push_back(e1 + e2);
-            values.push_back(e1 - e2);
-            //            values.push_back(e1 % e2);
-            //            values.push_back(e1 / e2);
-        }
-
-        size_t equals_zero = constraints.size();
-        constraints.push_back(e1 == 0);
-
-        size_t non_zero = constraints.size();
-        constraints.push_back(e1 != 0);
-
-        size_t positive = constraints.size();
-        constraints.push_back(e1 > 0);
-
-        size_t non_negative = constraints.size();
-        constraints.push_back(e1 >= 0);
-
-        size_t negative = constraints.size();
-        constraints.push_back(e1 < 0);
-
-        size_t non_positive = constraints.size();
-        constraints.push_back(e1 <= 0);
-
-        constraint_lattice.emplace_back(equals_zero, non_negative);
-        constraint_lattice.emplace_back(equals_zero, non_positive);
-        constraint_lattice.emplace_back(positive, non_zero);
-        constraint_lattice.emplace_back(negative, non_zero);
-        constraint_lattice.emplace_back(positive, non_negative);
-        constraint_lattice.emplace_back(negative, non_positive);
-
-        values.push_back(e1);
-    }
-
-    // Flesh out the constraints lattice by encoding that everything
-    // implies true, and everything implies itself.
-
-    // Figure out which constraints imply which other constraints
-    for (size_t i = 0; i < constraints.size(); i++) {
-        constraint_lattice.emplace_back(i, 0);
-        constraint_lattice.emplace_back(i, i);
-    }
-
-    std::cout << "Constraints:\n";
-    for (size_t i = 0; i < constraints.size(); i++) {
-        std::cout << i << ": " << constraints[i] << "\n";
-    }
-
-    std::cout << "Implications:\n";
-    for (auto p : constraint_lattice) {
-        std::cout << p.first << " -> " << p.second << "      "
-                  << constraints[p.first] << " -> " << constraints[p.second] << "\n";
-    }
-
-    Expr more_general_constraints = const_true();
-    Expr same_constraints = const_true();
-    for (size_t i = rhs.size(); i < rhs.size() + lhs.size(); i++) {
-        same_constraints = same_constraints && (opcodes_ref[i] == opcodes[i]);
-        Expr implied = const_false();
-        for (auto p : constraint_lattice) {
-            implied = implied || (opcodes_ref[i] == (int)p.first && opcodes[i] == (int)p.second);
-        };
-        more_general_constraints = more_general_constraints && implied;
-    }
-    Expr strictly_more_general_constraints = !same_constraints && more_general_constraints;
-
-    Expr same_rhs = const_true();
-    for (size_t i = 0; i < rhs.size(); i++) {
-        same_rhs = same_rhs && (opcodes[i] == opcodes_ref[i]);
-    }
-    strictly_more_general_constraints = strictly_more_general_constraints && same_rhs;
-
-    constraints.push_back(const_true());
     values.push_back(-1);
     values.push_back(0);
     values.push_back(1);
     values.push_back(2);
+
+    for (auto e1 : lhs) {
+        values.push_back(e1);
+        constraints.push_back(e1 != 0);
+        constraints.push_back(e1 >= 0);
+        constraints.push_back(e1 <= 0);
+        constraints.push_back(e1 > 0);
+        constraints.push_back(e1 < 0);
+        constraints.push_back(e1 == 0);
+    }
+
+    for (auto e1 : lhs) {
+        bool commutative_ok = true;
+        for (auto e2 : lhs) {
+            if (e1.same_as(e2)) {
+                commutative_ok = false;
+                continue;
+            }
+            constraints.push_back(e1 <= e2 + 1);
+            constraints.push_back(e1 <= e2);
+            constraints.push_back(e1 < e2);
+            constraints.push_back(e1 < e2 - 1);
+
+            constraints.push_back(e1 == e2);
+            constraints.push_back(e1 == e2 - 1);
+            constraints.push_back(e1 == e2 + 1);
+            if (commutative_ok) {
+                constraints.push_back(e1 + e2 == 0);
+                values.push_back(e1 + e2);
+                values.push_back(min(e1, e2));
+                values.push_back(max(e1, e2));
+            }
+            values.push_back(e1 - e2);
+        }
+    }
+
+    for (auto e1 : lhs) {
+        for (auto e2 : lhs) {
+            for (auto e3 : lhs) {
+                if (e2.same_as(e2)) break;
+                constraints.push_back(e1 == e2 + e3);
+            }
+        }
+    }
+
+    Expr more_general_constraints = const_true();
+    Expr same_constraints = const_true();
+    for (size_t i = 0; i < rhs.size() + lhs.size(); i++) {
+        same_constraints = same_constraints && (opcodes[i] == opcodes_ref[i]);
+        more_general_constraints = more_general_constraints && (opcodes[i] <= opcodes_ref[i]);
+    }
+    Expr strictly_more_general_constraints = !same_constraints && more_general_constraints;
 
     // Each rhs expr should equal some simple function of the lhs exprs
     Expr result = const_true();
@@ -402,6 +344,9 @@ tuple<Expr, Expr, Expr> predicate_expr(vector<Expr> lhs,
         }
         result = result && (r == v);
         valid = valid && (op >= 0) && (op < (int)values.size());
+        if (const Variable *var = r.as<Variable>()) {
+            (*binding)[var->name] = v;
+        }
     }
 
     // We have constraint per LHS expr. If we don't need that many,
@@ -802,7 +747,8 @@ Expr super_simplify(Expr e, int size) {
 // argument. The condition must be true on at least the list of
 // example cases given.
 Expr synthesize_sufficient_condition(Expr lhs, Expr rhs, int size,
-                                     vector<map<string, Expr>> positive_examples) {
+                                     vector<map<string, Expr>> positive_examples,
+                                     map<string, Expr> *binding) {
     Expr orig = lhs == rhs;
     Expr e = select(lhs == rhs, 1, 0);
 
@@ -846,7 +792,7 @@ Expr synthesize_sufficient_condition(Expr lhs, Expr rhs, int size,
         current_predicate[op.name()] = 0;
     }
 
-    auto p = predicate_expr(lhs_leaves, rhs_leaves, symbolic_opcodes, symbolic_opcodes_ref);
+    auto p = predicate_expr(lhs_leaves, rhs_leaves, symbolic_opcodes, symbolic_opcodes_ref, binding);
     Expr predicate = std::get<0>(p);
     Expr predicate_valid = std::get<1>(p);
     Expr strictly_more_general_than_ref = std::get<2>(p);
@@ -866,8 +812,10 @@ Expr synthesize_sufficient_condition(Expr lhs, Expr rhs, int size,
     std::uniform_int_distribution<int> random_int(-256, 256);
 
     Expr most_general_predicate_found;
+    map<string, Expr> most_general_predicate_opcodes;
 
-    while (1) {
+    while (negative_examples.size() < 50) {
+
         // First sythesize a false positive for the current
         // predicate. This is a set of constants for which the
         // predicate is true, but the expression is false.
@@ -883,8 +831,10 @@ Expr synthesize_sufficient_condition(Expr lhs, Expr rhs, int size,
         Expr false_negative_for_current_predicate = simplify(substitute(current_predicate, false_negative));
         map<string, Expr> negative_example = all_vars_zero;
 
+        /*
         std::cout << "Candidate predicate:\n"
                   << simplify(simplify(substitute_in_all_lets(substitute(current_predicate, predicate)))) << "\n";
+        */
 
         // Start with just random fuzzing. If that fails, we'll ask Z3 for a negative example.
         int negative_examples_found_with_fuzzing = 0;
@@ -916,24 +866,26 @@ Expr synthesize_sufficient_condition(Expr lhs, Expr rhs, int size,
         // value?
 
         if (negative_examples_found_with_fuzzing == 0) {
-            std::cout << "Satisfying: " << false_positive_for_current_predicate << "\n";
+            // std::cout << "Satisfying: " << false_positive_for_current_predicate << "\n";
             auto result = satisfy(false_positive_for_current_predicate, &negative_example);
             if (result == Unsat) {
                 // Woo!
-                std::cout << false_positive_for_current_predicate << "\n";
                 Expr e = simplify(substitute_in_all_lets(common_subexpression_elimination(substitute(current_predicate, predicate))));
-                std::cout << "No false positives found\n";
+                // std::cout << "No false positives found\n";
                 most_general_predicate_found = e;
-                std::cout << "Best predicate so far: " << e << "\n";
+                most_general_predicate_opcodes = current_predicate;
+                // std::cout << "Best predicate so far: " << e << "\n";
             } else if (result == Sat) {
-                std::cout << "Found a new false positive:\n";
+                // std::cout << "Found a new false positive\n";
                 negative_examples.push_back(negative_example);
+                /*
                 for (auto it : negative_example) {
                     std::cout << it.first << " = " << it.second << "\n";
                 }
+                */
             } else {
-                std::cout << "Search for false positives was inconclusive.\n";
-                return most_general_predicate_found;
+                // std::cout << "Search for false positives was inconclusive.\n";
+                break;
             }
         }
 
@@ -952,20 +904,24 @@ Expr synthesize_sufficient_condition(Expr lhs, Expr rhs, int size,
         for (const auto &m : positive_examples) {
             true_on_positive_examples = true_on_positive_examples && substitute(m, predicate);
         }
+        /*
         std::cout << "Synthesizing new predicate using "
                   << positive_examples.size() << " positive examples and "
                   << negative_examples.size() << " negative examples\n";
+        */
         Expr cond = false_on_negative_examples && true_on_positive_examples && predicate_valid;
         if (satisfy(cond, &current_predicate) != Sat) {
             // Failed to synthesize a better predicate
-            std::cout << "Failed to find a predicate that fits all the examples\n";
-            return most_general_predicate_found;
+            // std::cout << "Failed to find a predicate that fits all the examples\n";
+            break;
         }
 
         // Generalize it
         while (1) {
-            std::cout << "Candidate predicate:\n"
+            /*
+            std::cout << "Candidate predicate: "
                       << simplify(simplify(substitute_in_all_lets(substitute(current_predicate, predicate)))) << "\n";
+            */
             map<string, Expr> reference_predicate;
             for (auto it : current_predicate) {
                 reference_predicate[it.first + "_ref"] = it.second;
@@ -973,84 +929,41 @@ Expr synthesize_sufficient_condition(Expr lhs, Expr rhs, int size,
             Expr more_general = simplify(common_subexpression_elimination(simplify(substitute(reference_predicate, strictly_more_general_than_ref))));
             auto r = satisfy(cond && more_general, &current_predicate);
             if (r == Sat) {
-                std::cout << "Successfully generalized the predicate...\n";
                 continue;
             } else {
-                std::cout << "Failed to generalize current predicate\n";
                 // Hunt for new false positives.
                 break;
             }
         }
 
-        if (most_general_predicate_found.defined()) {
-            Expr current = simplify(simplify(substitute_in_all_lets(substitute(current_predicate, predicate))));
-            if (can_prove(most_general_predicate_found == current)) return current;
-        }
-    }
-}
-
-Expr synthesize_predicate(Expr cond) {
-    FindVars find_vars;
-    cond.accept(&find_vars);
-
-    int num_constants = 0;
-    for (auto v : find_vars.vars) {
-        if (v[0] == 'c') {
-            num_constants++;
-        }
-    }
-
-    map<string, Expr> rand_binding;
-
-    std::mt19937 rng(0);
-    std::uniform_int_distribution<int> random_int(-256, 256);
-
-    Expr necessary_cond = const_true();
-    for (int i = 0; i < 1; i++) {
-        for (auto v : find_vars.vars) {
-            if (v[0] != 'c') {
-                rand_binding[v] = random_int(rng);
+        // Sanity check - does the predicate indeed fit all the
+        // positive examples and none of the negative ones.
+        {
+            Expr p = substitute(current_predicate, predicate);
+            for (auto &c : negative_examples) {
+                assert(is_zero(simplify(substitute(c, p))));
+            }
+            for (const auto &c : positive_examples) {
+                assert(is_one(simplify(substitute(c, p))));
             }
         }
-        necessary_cond = necessary_cond && substitute(rand_binding, cond);
-    }
 
-    while (1) {
-        necessary_cond = simplify(simplify(common_subexpression_elimination(necessary_cond)));
-        std::cout << "Necessary predicate: " << necessary_cond << "\n";
-
-        // We are permitted two ops per constant
-        for (int i = 0; i <= num_constants * 2; i++) {
-            Expr c = super_simplify(necessary_cond, i);
-            if (c.defined()) {
-                necessary_cond = c;
+        if (most_general_predicate_found.defined()) {
+            Expr current = simplify(simplify(substitute_in_all_lets(substitute(current_predicate, predicate))));
+            if (can_prove(most_general_predicate_found == current)) {
                 break;
             }
         }
-
-        std::cout << "Simplified necessary predicate: " << necessary_cond << "\n";
-
-        if (!necessary_cond.defined()) {
-            return Expr();
-        }
-
-        // See if this condition is also sufficient
-        map<string, Expr> counterexample;
-        auto r = satisfy(!necessary_cond || cond, &counterexample);
-        if (r == Unsat) {
-            // Hooray
-            std::cout << "Exact predicate: " << necessary_cond << "\n";
-            return necessary_cond;
-        } else if (r == Sat) {
-            necessary_cond = necessary_cond && substitute(counterexample, cond);
-        } else {
-            // Dang
-            return Expr();
-        }
     }
 
-}
+    for (auto &it : *binding) {
+        it.second = simplify(common_subexpression_elimination(substitute(most_general_predicate_opcodes, it.second)));
+    }
 
+    return most_general_predicate_found;
+
+
+}
 
 // Enumerate all possible patterns that would match any portion of the
 // given expression.
@@ -1159,7 +1072,7 @@ vector<Expr> all_possible_lhs_patterns(const Expr &e) {
 
             f.erase(v);
 
-            bool must_include = is_const(expr_for_id[v]);
+            bool must_include = false; //is_const(expr_for_id[v]);
 
             if (!must_include) {
                 // Generate all subgraphs with this frontier node not
@@ -1233,12 +1146,21 @@ bool more_general_than(const Expr &a, const Op *b, map<string, Expr> &bindings) 
 
 bool more_general_than(const Expr &a, const Expr &b, map<string, Expr> &bindings) {
     if (const Variable *var = a.as<Variable>()) {
+        const Variable *var_b = b.as<Variable>();
         auto it = bindings.find(var->name);
-        if (it == bindings.end()) {
-            bindings[var->name] = b;
-            return true;
+        if (it != bindings.end()) {
+            return equal(it->second, b);
         } else {
-            return equal(bindings[var->name], b);
+            bool const_wild = var->name[0] == 'c';
+            bool b_const_wild = var_b && (var_b->name[0] == 'c');
+            bool b_const = is_const(b);
+            bool may_bind = !const_wild || (const_wild && (b_const_wild || b_const));
+            if (may_bind) {
+                bindings[var->name] = b;
+                return true;
+            } else {
+                return false;
+            }
         }
     }
 
@@ -1731,7 +1653,7 @@ int main(int argc, char **argv) {
     int done = 0;
     {
         std::lock_guard<std::mutex> lock(mutex);
-        for (int lhs_ops = 1; lhs_ops < 10; lhs_ops++) {
+        for (int lhs_ops = 1; lhs_ops < 6; lhs_ops++) {
             for (auto p : patterns) {
                 CountOps count_ops;
                 count_ops.include(p);
@@ -1768,13 +1690,12 @@ int main(int argc, char **argv) {
                                         }
                                     }
                                     if (!suppressed) {
-                                        std::cout << "New rule:\n";
-                                        std::cout << "{" << p << ", " << e << "},\n";
+                                        std::cout << "RULE: " << p << " = " << e << "\n";
                                         rules.emplace_back(p, e);
                                     }
                                 }
                                 done++;
-                                if (done % 10 == 0) {
+                                if (done % 100 == 0) {
                                     std::cout << done << " / " << futures.size() << "\n";
                                 }
                             }
@@ -1811,20 +1732,10 @@ int main(int argc, char **argv) {
             return IRDeepCompare{}(r1.first, r2.first);
         });
 
-    IRNodeType old;
-    for (auto r : filtered) {
-        IRNodeType t = r.first.node_type();
-        if (t != old) {
-            std::cout << t << ":\n";
-            old = t;
-        }
-        std::cout << "    rewrite(" << r.first << ", " << r.second << ") ||\n";
-    }
-
     // Now try to generalize rules involving constants by replacing constants with wildcards and synthesizing a predicate.
     class ReplaceConstants : public IRMutator {
         using IRMutator::visit;
-        Expr visit(const IntImm *op) {
+        Expr visit(const IntImm *op) override {
             string name = "c" + std::to_string(counter++);
             binding[name] = op;
             return Variable::make(op->type, name);
@@ -1840,19 +1751,147 @@ int main(int argc, char **argv) {
         set<string> free_vars;
     };
 
+    vector<tuple<Expr, Expr, Expr>> predicated_rules;
+
+    // Abstract away the constants and cluster the rules by LHS structure
+    map<Expr, vector<map<string, Expr>>, IRDeepCompare> generalized;
+
     for (auto r : filtered) {
         std::cout << "Trying to generalize " << r.first << " -> " << r.second << "\n";
         ReplaceConstants replacer;
         r.first = replacer.mutate(r.first);
         r.second = replacer.mutate(r.second);
-        if (replacer.counter == 0) continue; // No constants
-        std::cout << "General form: " << r.first << " -> " << r.second << "\n";
-
-        Expr predicate = synthesize_sufficient_condition(r.first, r.second, 0, {replacer.binding});
-
-        std::cout << predicate << " => " << r.first << " = " << r.second << "\n";
-
+        std::cout << "Generalized LHS: " << r.first << "\n";
+        if (replacer.counter == 0) {
+            // No need to generalize this one
+            predicated_rules.emplace_back(r.first, r.second, const_true());
+        } else {
+            generalized[r.first == r.second].emplace_back(std::move(replacer.binding));
+        }
     }
+
+    futures.clear();
+
+    for (auto it : generalized) {
+        futures.emplace_back(pool.async([=, &mutex, &predicated_rules]() {
+                    const EQ *eq = it.first.as<EQ>();
+                    assert(eq);
+                    map<string, Expr> binding;
+                    Expr predicate = synthesize_sufficient_condition(eq->a, eq->b, 0, it.second, &binding);
+                    if (!predicate.defined()) {
+                        return;
+                    }
+
+                    // Mine the predicate for LHS var == constant/var and move
+                    // those constraints into the binding instead
+
+                    vector<Expr> pending = {predicate};
+                    while (!pending.empty()) {
+                        Expr next = pending.back();
+                        pending.pop_back();
+                        if (const And *a = next.as<And>()) {
+                            pending.push_back(a->a);
+                            pending.push_back(a->b);
+                        } else if (const EQ *e = next.as<EQ>()) {
+                            if (const Variable *v = e->a.as<Variable>()) {
+                                if (is_const(e->b) || e->b.as<Variable>()) {
+                                    for (auto &it : binding) {
+                                        it.second = substitute(v->name, e->b, it.second);
+                                    }
+                                    binding[v->name] = e->b;
+                                }
+                            }
+                        }
+                    }
+
+                    predicate = simplify(substitute(binding, predicate));
+                    Expr lhs = substitute(binding, eq->a);
+
+                    // In the RHS, we want to wrap fold() around computed combinations of the constants
+                    for (auto &it : binding) {
+                        if (!is_const(it.second) && !it.second.as<Variable>()) {
+                            it.second = Call::make(it.second.type(), "fold", {it.second}, Call::PureExtern);
+                        }
+                    }
+
+                    Expr rhs = substitute(binding, eq->b);
+
+                    // After doing the substitution we might be able
+                    // to statically fold (e.g. we may get c0 + 0).
+                    class SimplifyFolds : public IRMutator {
+                        using IRMutator::visit;
+
+                        Expr visit(const Call *op) override {
+                            if (op->name == "fold") {
+                                Expr e = simplify(op->args[0]);
+                                if (is_const(e) || e.as<Variable>()) {
+                                    return e;
+                                } else {
+                                    return Call::make(op->type, "fold", {e}, Call::PureExtern);
+                                }
+                            } else {
+                                return IRMutator::visit(op);
+                            }
+                        }
+                    } simplify_folds;
+                    rhs = simplify_folds.mutate(rhs);
+
+                    {
+                        std::lock_guard<std::mutex> lock(mutex);
+                        predicated_rules.emplace_back(lhs, rhs, predicate);
+                        std::cout << "PREDICATED RULE: " << predicate << " => " << lhs << " = " << rhs << "\n";
+                    }
+                }));
+    }
+
+    for (auto &f : futures) {
+        f.get();
+    }
+
+    // Filter again, now that constants are gone.
+    vector<tuple<Expr, Expr, Expr>> predicated_filtered;
+
+    for (auto r1 : predicated_rules) {
+        bool duplicate = false;
+        tuple<Expr, Expr, Expr> suppressed_by;
+        Expr lhs1 = std::get<0>(r1);
+        for (auto r2 : predicated_rules) {
+            Expr lhs2 = std::get<0>(r2);
+            bool g = more_general_than(lhs2, lhs1) && !equal(lhs1, lhs2);
+            if (g) {
+                suppressed_by = r2;
+            }
+            duplicate |= g;
+        }
+        if (!duplicate) {
+            predicated_filtered.push_back(r1);
+        } else {
+            // std::cout << "This LHS: " << r1.first << " was suppressed by this LHS: " << suppressed_by.first << "\n";
+        }
+    }
+
+    std::sort(predicated_filtered.begin(), predicated_filtered.end(),
+              [](const tuple<Expr, Expr, Expr> &r1, const tuple<Expr, Expr, Expr> &r2) {
+                  return IRDeepCompare{}(std::get<0>(r1), std::get<0>(r2));
+              });
+
+    IRNodeType old = IRNodeType::IntImm;
+    for (auto r : predicated_filtered) {
+        Expr lhs = std::get<0>(r);
+        Expr rhs = std::get<1>(r);
+        Expr predicate = std::get<2>(r);
+        IRNodeType t = lhs.node_type();
+        if (t != old) {
+            std::cout << t << ":\n";
+            old = t;
+        }
+        if (is_one(predicate)) {
+            std::cout << "    rewrite(" << lhs << ", " << rhs << ") ||\n";
+        } else {
+            std::cout << "    rewrite(" << lhs << ", " << rhs << ", " << predicate << ") ||\n";
+        }
+    }
+
 
     return 0;
 }

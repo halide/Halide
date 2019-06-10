@@ -260,6 +260,18 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
                rewrite((((x*y) + z) - (y*w)), (z - ((w - x)*y))) ||
                rewrite((min((x + y), z) - (y + w)), (min((z - y), x) - w)) ||
 
+               rewrite((0 - (x*c1)), (x*fold((0 - c1)))) ||
+               rewrite(((x + y) - min((z + y), w)), (x - min((w - y), z))) ||
+               rewrite((((x*y) + z) - (w*y)), (z - ((w - x)*y))) ||
+               rewrite((((x*y) + z) - (x*w)), (z - ((w - y)*x))) ||
+               rewrite(((x*y) - ((z*y) + w)), (((x - z)*y) - w)) ||
+               rewrite((min(((x + y) + z), w) - x), min((w - x), (y + z))) ||
+               rewrite((min(((x + y) + z), w) - y), min((w - y), (x + z))) ||
+               rewrite((min((min(x, c0) + c1), y) - x), min((min(y, fold((c0 + c1))) - x), c1)) ||
+               rewrite((max(((x + y) + z), w) - x), max((w - x), (y + z))) ||
+               rewrite((max(((x + y) + z), w) - y), max((w - y), (x + z))) ||
+               rewrite((max(max((x + y), z), w) - x), max((max(w, z) - x), y)) ||
+
                #endif
 
                false)))) {
