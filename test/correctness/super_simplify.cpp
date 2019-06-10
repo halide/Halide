@@ -11,6 +11,7 @@ using std::map;
 using std::set;
 using std::pair;
 using std::ostringstream;
+using std::tuple;
 
 // Convert from a Halide Expr to SMT2 to pass to z3
 string expr_to_smt2(const Expr &e) {
@@ -207,10 +208,12 @@ string expr_to_smt2(const Expr &e) {
 }
 
 // Make an expression which can act as any other small integer expression in
-// the given leaf terms, depending on the values of the idnteger opcodes.
-Expr interpreter_expr(vector<Expr> terms, vector<Expr> opcodes) {
+// the given leaf terms, depending on the values of the integer opcodes. Not all possible programs are valid (e.g. due to type errors), so also returns an Expr on the inputs opcodes that encodes whether or not the program is well-formed.
+pair<Expr, Expr> interpreter_expr(vector<Expr> terms, vector<Expr> opcodes) {
     // Each opcode is an enum identifying the op, followed by the indices of the two args.
     assert(opcodes.size() % 3 == 0);
+
+    Expr program_is_valid = const_true();
 
     for (size_t i = 0; i < opcodes.size(); i += 3) {
         Expr op = opcodes[i];
@@ -227,27 +230,193 @@ Expr interpreter_expr(vector<Expr> terms, vector<Expr> opcodes) {
         arg1 = select(arg1_idx >= s, arg1_idx - s, arg1);
         arg2 = select(arg2_idx >= s, arg2_idx - s, arg2);
 
-        // Perform the op. TODO: mask off ops stronger than the strongest op in the input
+        // Perform the op.
         Expr result = arg1; // By default it's just equal to the first operand. This covers constants too.
-        result = select(op == 0, arg1 + arg2, result);
-        result = select(op == 1, arg1 - arg2, result);
-        // result = select(op == 2, arg1 * arg2, result);
-        //result = select(op == 3, arg1 / arg2, result); // Avoiding div because we synthesize intentional div-by-zero
-        // result = select(op == 4, select(arg1 < arg2, 1, 0), result);
-        // result = select(op == 5, select(arg1 <= arg2, 1, 0), result);
-        // result = select(op == 6, select(arg1 == arg2, 1, 0), result);
-        // result = select(op == 7, select(arg1 != arg2, 1, 0), result);
+        result = select(op == 1, arg1 + arg2, result);
+        result = select(op == 2, arg1 - arg2, result);
+        result = select(op == 3, arg1 * arg2, result);
+        result = select(op == 4, select(arg1 < arg2, 1, 0), result);
+        result = select(op == 5, select(arg1 <= arg2, 1, 0), result);
+        result = select(op == 6, select(arg1 == arg2, 1, 0), result);
+        result = select(op == 7, select(arg1 != arg2, 1, 0), result);
         result = select(op == 8, min(arg1, arg2), result);
         result = select(op == 9, max(arg1, arg2), result);
 
-        // TODO: in parallel compute the op histogram, or at least the leading op strength
+        // Type-check it
+        program_is_valid = program_is_valid && op < 10 && op >= 0;
 
-        // TODO: forbid constants in the opcode, just rely on the args
+        // TODO: in parallel compute the op histogram, or at least the leading op strength
 
         terms.push_back(result);
     }
 
-    return simplify(common_subexpression_elimination(terms.back()));
+    return {terms.back(), program_is_valid};
+}
+
+// Returns the value of the predicate, whether the opcodes are valid,
+// and whether or not the opcodes produce a predicate that's strictly
+// more general than some reference predicate. I.e. it must imply the
+// reference predicate but not be equal to it.
+tuple<Expr, Expr, Expr> predicate_expr(vector<Expr> lhs,
+                                       vector<Expr> rhs,
+                                       vector<Expr> opcodes,
+                                       vector<Expr> opcodes_ref) {
+    // return {select(opcodes[0] == 1, (lhs[1] < lhs[0]) && (rhs[0] == lhs[0]), const_true()), const_true()};
+
+    // For now we use explicit enumeration of combinations of plausible constraints.
+    vector<Expr> values, constraints;
+    vector<pair<size_t, size_t>> constraint_lattice;
+    constraints.push_back(const_true());
+    for (auto e1 : lhs) {
+        for (auto e2 : lhs) {
+            size_t equal = constraints.size();
+            constraints.push_back(e1 == e2);
+
+            // size_t sum_to_zero = constraints.size();
+            constraints.push_back(e1 + e2 == 0);
+
+            size_t one_less = constraints.size();
+            constraints.push_back(e1 == e2 - 1);
+
+            size_t one_more = constraints.size();
+            constraints.push_back(e1 == e2 + 1);
+
+            //            constraints.push_back(e1 % e2 == 0);
+            //            constraints.push_back(e1 % e2 != 0);
+
+            size_t at_most_two_less = constraints.size();
+            constraints.push_back(e1 < e2 - 1);
+
+            size_t at_most_one_less = constraints.size();
+            constraints.push_back(e1 < e2);
+
+            size_t at_most = constraints.size();
+            constraints.push_back(e1 <= e2);
+
+            size_t at_most_one_more = constraints.size();
+            constraints.push_back(e1 <= e2 + 1);
+
+            constraint_lattice.emplace_back(equal, at_most);
+            constraint_lattice.emplace_back(equal, at_most_one_more);
+            constraint_lattice.emplace_back(one_less, at_most_one_less);
+            constraint_lattice.emplace_back(one_less, at_most);
+            constraint_lattice.emplace_back(one_less, at_most_one_more);
+            constraint_lattice.emplace_back(one_more, at_most_one_more);
+            constraint_lattice.emplace_back(at_most_two_less, at_most_one_less);
+            constraint_lattice.emplace_back(at_most_two_less, at_most);
+            constraint_lattice.emplace_back(at_most_two_less, at_most_one_more);
+            constraint_lattice.emplace_back(at_most_one_less, at_most);
+            constraint_lattice.emplace_back(at_most_one_less, at_most_one_more);
+            constraint_lattice.emplace_back(at_most, at_most_one_more);
+
+            values.push_back(e1 + e2);
+            values.push_back(e1 - e2);
+            //            values.push_back(e1 % e2);
+            //            values.push_back(e1 / e2);
+        }
+
+        size_t equals_zero = constraints.size();
+        constraints.push_back(e1 == 0);
+
+        size_t non_zero = constraints.size();
+        constraints.push_back(e1 != 0);
+
+        size_t positive = constraints.size();
+        constraints.push_back(e1 > 0);
+
+        size_t non_negative = constraints.size();
+        constraints.push_back(e1 >= 0);
+
+        size_t negative = constraints.size();
+        constraints.push_back(e1 < 0);
+
+        size_t non_positive = constraints.size();
+        constraints.push_back(e1 <= 0);
+
+        constraint_lattice.emplace_back(equals_zero, non_negative);
+        constraint_lattice.emplace_back(equals_zero, non_positive);
+        constraint_lattice.emplace_back(positive, non_zero);
+        constraint_lattice.emplace_back(negative, non_zero);
+        constraint_lattice.emplace_back(positive, non_negative);
+        constraint_lattice.emplace_back(negative, non_positive);
+
+        values.push_back(e1);
+    }
+
+    // Flesh out the constraints lattice by encoding that everything
+    // implies true, and everything implies itself.
+
+    // Figure out which constraints imply which other constraints
+    for (size_t i = 0; i < constraints.size(); i++) {
+        constraint_lattice.emplace_back(i, 0);
+        constraint_lattice.emplace_back(i, i);
+    }
+
+    std::cout << "Constraints:\n";
+    for (size_t i = 0; i < constraints.size(); i++) {
+        std::cout << i << ": " << constraints[i] << "\n";
+    }
+
+    std::cout << "Implications:\n";
+    for (auto p : constraint_lattice) {
+        std::cout << p.first << " -> " << p.second << "      "
+                  << constraints[p.first] << " -> " << constraints[p.second] << "\n";
+    }
+
+    Expr more_general_constraints = const_true();
+    Expr same_constraints = const_true();
+    for (size_t i = rhs.size(); i < rhs.size() + lhs.size(); i++) {
+        same_constraints = same_constraints && (opcodes_ref[i] == opcodes[i]);
+        Expr implied = const_false();
+        for (auto p : constraint_lattice) {
+            implied = implied || (opcodes_ref[i] == (int)p.first && opcodes[i] == (int)p.second);
+        };
+        more_general_constraints = more_general_constraints && implied;
+    }
+    Expr strictly_more_general_constraints = !same_constraints && more_general_constraints;
+
+    Expr same_rhs = const_true();
+    for (size_t i = 0; i < rhs.size(); i++) {
+        same_rhs = same_rhs && (opcodes[i] == opcodes_ref[i]);
+    }
+    strictly_more_general_constraints = strictly_more_general_constraints && same_rhs;
+
+    constraints.push_back(const_true());
+    values.push_back(-1);
+    values.push_back(0);
+    values.push_back(1);
+    values.push_back(2);
+
+    // Each rhs expr should equal some simple function of the lhs exprs
+    Expr result = const_true();
+    Expr valid = const_true();
+
+    assert(opcodes.size() == lhs.size() + rhs.size());
+
+    for (size_t i = 0; i < rhs.size(); i++) {
+        Expr r = rhs[i];
+        Expr v = values[0];
+        Expr op = opcodes[i];
+        for (int j = 1; j < (int)values.size(); j++) {
+            v = select(op == j, values[j], v);
+        }
+        result = result && (r == v);
+        valid = valid && (op >= 0) && (op < (int)values.size());
+    }
+
+    // We have constraint per LHS expr. If we don't need that many,
+    // one of the constraints in the list is "true".
+    for (size_t i = 0; i < lhs.size(); i++) {
+        Expr c = constraints[0];
+        Expr op = opcodes[i + rhs.size()];
+        for (int j = 1; j < (int)constraints.size(); j++) {
+            c = select(op == j, constraints[j], c);
+        }
+        result = result && c;
+        valid = valid && (op >= 0) && (op < (int)constraints.size());
+    }
+
+    return {result, valid, strictly_more_general_constraints};
 }
 
 bool is_whitespace(char c) {
@@ -289,7 +458,12 @@ bool check(char **cursor, char *end, const char *pattern) {
 
 string consume_token(char **cursor, char *end) {
     size_t sz = 0;
-    while (*cursor + sz < end && (std::isalnum((*cursor)[sz]) || (*cursor)[sz] == '!')) sz++;
+    while (*cursor + sz < end &&
+           (std::isalnum((*cursor)[sz]) ||
+            (*cursor)[sz] == '!' ||
+            (*cursor)[sz] == '.' ||
+            (*cursor)[sz] == '$' ||
+            (*cursor)[sz] == '_')) sz++;
     string result{*cursor, sz};
     *cursor += sz;
     return result;
@@ -342,23 +516,32 @@ void parse_model(char **cursor, char *end, map<string, Expr> *bindings) {
         consume_whitespace(cursor, end);
         expect(cursor, end, "()");
         consume_whitespace(cursor, end);
-        expect(cursor, end, "Int");
-        consume_whitespace(cursor, end);
-        if (consume(cursor, end, "(- ")) {
-            string val = consume_token(cursor, end);
-            if (!starts_with(name, "z3name!")) {
-                (*bindings)[name] = -std::atoi(val.c_str());
+        if (consume(cursor, end, "Bool")) {
+            // Don't care about this var
+            consume_whitespace(cursor, end);
+            if (!consume(cursor, end, "true)")) {
+                expect(cursor, end, "false)");
             }
-            consume(cursor, end, ")");
+            consume_whitespace(cursor, end);
         } else {
-            string val = consume_token(cursor, end);
-            if (!starts_with(name, "z3name!")) {
-                (*bindings)[name] = std::atoi(val.c_str());
+            expect(cursor, end, "Int");
+            consume_whitespace(cursor, end);
+            if (consume(cursor, end, "(- ")) {
+                string val = consume_token(cursor, end);
+                if (!starts_with(name, "z3name!")) {
+                    (*bindings)[name] = -std::atoi(val.c_str());
+                }
+                consume(cursor, end, ")");
+            } else {
+                string val = consume_token(cursor, end);
+                if (!starts_with(name, "z3name!")) {
+                    (*bindings)[name] = std::atoi(val.c_str());
+                }
             }
+            consume_whitespace(cursor, end);
+            consume(cursor, end, ")");
+            consume_whitespace(cursor, end);
         }
-        consume_whitespace(cursor, end);
-        consume(cursor, end, ")");
-         consume_whitespace(cursor, end);
     }
     consume_whitespace(cursor, end);
     expect(cursor, end, ")");
@@ -390,7 +573,7 @@ enum Z3Result {
 };
 Z3Result satisfy(Expr e, map<string, Expr> *bindings) {
 
-    e = simplify(e);
+    e = simplify(common_subexpression_elimination(e));
 
     if (is_one(e)) {
         return Sat;
@@ -414,8 +597,22 @@ Z3Result satisfy(Expr e, map<string, Expr> *bindings) {
     }
 
     z3_source << "(define-fun my_min ((x Int) (y Int)) Int (ite (< x y) x y))\n"
-              << "(define-fun my_max ((x Int) (y Int)) Int (ite (< x y) y x))\n"
-              << "(assert " << expr_to_smt2(e) << ")\n"
+              << "(define-fun my_max ((x Int) (y Int)) Int (ite (< x y) y x))\n";
+
+    Expr orig = e;
+    while (const Let *l = e.as<Let>()) {
+        if (l->value.type().is_int() && l->value.type().bits() >= 32) {
+            z3_source << "(declare-const " << l->name << " Int)\n";
+        } else if (l->value.type().is_bool()) {
+            z3_source << "(declare-const " << l->name << " Bool)\n";
+        } else {
+            break;
+        }
+        z3_source << "(assert (= " << l->name << " " << expr_to_smt2(l->value) << "))\n";
+        e = l->body;
+    }
+
+    z3_source << "(assert " << expr_to_smt2(e) << ")\n"
               << "(check-sat)\n"
               << "(get-model)\n";
     /*
@@ -428,7 +625,7 @@ Z3Result satisfy(Expr e, map<string, Expr> *bindings) {
     TemporaryFile z3_output("output", "txt");
     write_entire_file(z3_file.pathname(), &src[0], src.size());
 
-    std::string cmd = "z3 -T:600 " + z3_file.pathname() + " > " + z3_output.pathname();
+    std::string cmd = "z3 -T:20 " + z3_file.pathname() + " > " + z3_output.pathname();
 
     int ret = system(cmd.c_str());
 
@@ -464,6 +661,7 @@ Var v10("v10"), v11("v11"), v12("v12"), v13("v13"), v14("v14"), v15("v15"), v16(
 Var v20("v20"), v21("v21"), v22("v22"), v23("v23"), v24("v24"), v25("v25"), v26("v26"), v27("v27"), v28("v28"), v29("v29");
 
 Expr reboolify(const Expr &e) {
+    if (e.type().is_bool()) return e;
     // e is an integer expression encoding a bool. We want to convert it back to the bool
     if (const Min *op = e.as<Min>()) {
         return reboolify(op->a) && reboolify(op->b);
@@ -478,7 +676,7 @@ Expr reboolify(const Expr &e) {
     }
 }
 
-// Use CEGIS to optimally simplify an expression.
+// Use CEGIS to construct an equivalent expression to the input of the given size.
 Expr super_simplify(Expr e, int size) {
     bool was_bool = e.type().is_bool();
     Expr orig = e;
@@ -511,8 +709,11 @@ Expr super_simplify(Expr e, int size) {
         all_vars_zero[v] = 0;
     }
 
-    Expr program = interpreter_expr(leaves, symbolic_opcodes);
-    Expr program_works = (e == program);
+    auto p = interpreter_expr(leaves, symbolic_opcodes);
+    Expr program = p.first;
+    Expr program_works = (e == program) && p.second;
+    program = simplify(common_subexpression_elimination(program));
+    program_works = simplify(common_subexpression_elimination(program_works));
 
     std::mt19937 rng(0);
     std::uniform_int_distribution<int> random_int(-3, 3);
@@ -595,6 +796,261 @@ Expr super_simplify(Expr e, int size) {
         */
     }
 }
+
+
+// Use CEGIS to construct a sufficient condition for the given boolean
+// argument. The condition must be true on at least the list of
+// example cases given.
+Expr synthesize_sufficient_condition(Expr lhs, Expr rhs, int size,
+                                     vector<map<string, Expr>> positive_examples) {
+    Expr orig = lhs == rhs;
+    Expr e = select(lhs == rhs, 1, 0);
+
+    vector<Expr> lhs_leaves, rhs_leaves;
+
+    // Get the vars we're allowed to use in the predicate. Just use
+    // the vars in the first positive example
+    map<string, Expr> all_vars_zero;
+    assert(!positive_examples.empty());
+    for (auto it : positive_examples[0]) {
+        if (expr_uses_var(lhs, it.first)) {
+            lhs_leaves.push_back(Variable::make(it.second.type(), it.first));
+        } else {
+            rhs_leaves.push_back(Variable::make(it.second.type(), it.first));
+        }
+        all_vars_zero[it.first] = make_zero(it.second.type());
+    }
+
+    // A binding for the vars that cannot show up in the predicate.
+    map<string, Expr> secondary_vars_are_zero;
+    FindVars find_vars;
+    orig.accept(&find_vars);
+    for (auto v : find_vars.vars) {
+        if (all_vars_zero.find(v) == all_vars_zero.end()) {
+            secondary_vars_are_zero[v] = 0;
+        }
+    }
+
+    vector<map<string, Expr>> negative_examples;
+
+    map<string, Expr> current_predicate;
+
+    vector<Expr> symbolic_opcodes, symbolic_opcodes_ref;
+    for (size_t i = 0; i < lhs_leaves.size() + rhs_leaves.size(); i++) {
+        Var op("op_" + std::to_string(i));
+        symbolic_opcodes.push_back(op);
+        Var op_ref("op_" + std::to_string(i) + "_ref");
+        symbolic_opcodes_ref.push_back(op_ref);
+
+        // The initial predicate is some garbage
+        current_predicate[op.name()] = 0;
+    }
+
+    auto p = predicate_expr(lhs_leaves, rhs_leaves, symbolic_opcodes, symbolic_opcodes_ref);
+    Expr predicate = std::get<0>(p);
+    Expr predicate_valid = std::get<1>(p);
+    Expr strictly_more_general_than_ref = std::get<2>(p);
+    Expr false_positive = (predicate && lhs != rhs) && predicate_valid;
+    Expr false_negative = (!predicate && lhs == rhs) && predicate_valid;
+    Expr predicate_works = (!predicate || lhs == rhs) && predicate_valid;
+    predicate = simplify(common_subexpression_elimination(predicate));
+    predicate_valid = simplify(common_subexpression_elimination(predicate_valid));
+    false_positive = simplify(common_subexpression_elimination(false_positive));
+    false_negative = simplify(common_subexpression_elimination(false_negative));
+    predicate_works = simplify(common_subexpression_elimination(predicate_works));
+    strictly_more_general_than_ref = simplify(common_subexpression_elimination(strictly_more_general_than_ref));
+
+    Expr subspace = const_true();
+
+    std::mt19937 rng(0);
+    std::uniform_int_distribution<int> random_int(-256, 256);
+
+    Expr most_general_predicate_found;
+
+    while (1) {
+        // First sythesize a false positive for the current
+        // predicate. This is a set of constants for which the
+        // predicate is true, but the expression is false.
+        Expr current_predicate_valid = simplify(substitute(current_predicate, predicate_valid));
+        // The validity of the program should not depend on the args,
+        // and we should only be synthesizing valid programs.
+        if (!is_one(current_predicate_valid)) {
+            std::cout << "Current predicate malformed: " << current_predicate_valid << "\n";
+            abort();
+        }
+
+        Expr false_positive_for_current_predicate = simplify(substitute(current_predicate, false_positive));
+        Expr false_negative_for_current_predicate = simplify(substitute(current_predicate, false_negative));
+        map<string, Expr> negative_example = all_vars_zero;
+
+        std::cout << "Candidate predicate:\n"
+                  << simplify(simplify(substitute_in_all_lets(substitute(current_predicate, predicate)))) << "\n";
+
+        // Start with just random fuzzing. If that fails, we'll ask Z3 for a negative example.
+        int negative_examples_found_with_fuzzing = 0;
+        /*
+        for (int i = 0; i < 5; i++) {
+            map<string, Expr> rand_binding = all_vars_zero;
+            for (auto &it : rand_binding) {
+                it.second = random_int(rng);
+            }
+            auto interpreted = simplify(substitute(rand_binding, current_predicate_works));
+            if (is_one(interpreted)) continue;
+
+            negative_examples.push_back(rand_binding);
+            // We probably only want to add a couple
+            // negative_examples at a time
+            negative_examples_found_with_fuzzing++;
+            if (negative_examples_found_with_fuzzing >= 2) {
+                break;
+            }
+        }
+        */
+
+        // TODO: There's nothing here that prevents the constants on
+        // the RHS from appearing in implicit conditions that aren't
+        // solvable. Maybe constrain the interpreter so that they can
+        // only show up on the LHS of == in conjunction with the rest
+        // of the program? Synthesize one program for the truth value,
+        // and a separate program per RHS constant to compute their
+        // value?
+
+        if (negative_examples_found_with_fuzzing == 0) {
+            std::cout << "Satisfying: " << false_positive_for_current_predicate << "\n";
+            auto result = satisfy(false_positive_for_current_predicate, &negative_example);
+            if (result == Unsat) {
+                // Woo!
+                std::cout << false_positive_for_current_predicate << "\n";
+                Expr e = simplify(substitute_in_all_lets(common_subexpression_elimination(substitute(current_predicate, predicate))));
+                std::cout << "No false positives found\n";
+                most_general_predicate_found = e;
+                std::cout << "Best predicate so far: " << e << "\n";
+            } else if (result == Sat) {
+                std::cout << "Found a new false positive:\n";
+                negative_examples.push_back(negative_example);
+                for (auto it : negative_example) {
+                    std::cout << it.first << " = " << it.second << "\n";
+                }
+            } else {
+                std::cout << "Search for false positives was inconclusive.\n";
+                return most_general_predicate_found;
+            }
+        }
+
+        // std::cout << "Negative_Example found...\n";
+
+        // Now synthesize the most general predicate that's false on
+        // the negative examples and true on the positive
+        // examples. We'll do it by synthesizing any old predicate,
+        // then iteratively trying to synthesize a strictly more
+        // general one.
+        Expr false_on_negative_examples = const_true();
+        for (auto &c : negative_examples) {
+            false_on_negative_examples = false_on_negative_examples && substitute(c, !predicate);
+        }
+        Expr true_on_positive_examples = const_true();
+        for (const auto &m : positive_examples) {
+            true_on_positive_examples = true_on_positive_examples && substitute(m, predicate);
+        }
+        std::cout << "Synthesizing new predicate using "
+                  << positive_examples.size() << " positive examples and "
+                  << negative_examples.size() << " negative examples\n";
+        Expr cond = false_on_negative_examples && true_on_positive_examples && predicate_valid;
+        if (satisfy(cond, &current_predicate) != Sat) {
+            // Failed to synthesize a better predicate
+            std::cout << "Failed to find a predicate that fits all the examples\n";
+            return most_general_predicate_found;
+        }
+
+        // Generalize it
+        while (1) {
+            std::cout << "Candidate predicate:\n"
+                      << simplify(simplify(substitute_in_all_lets(substitute(current_predicate, predicate)))) << "\n";
+            map<string, Expr> reference_predicate;
+            for (auto it : current_predicate) {
+                reference_predicate[it.first + "_ref"] = it.second;
+            }
+            Expr more_general = simplify(common_subexpression_elimination(simplify(substitute(reference_predicate, strictly_more_general_than_ref))));
+            auto r = satisfy(cond && more_general, &current_predicate);
+            if (r == Sat) {
+                std::cout << "Successfully generalized the predicate...\n";
+                continue;
+            } else {
+                std::cout << "Failed to generalize current predicate\n";
+                // Hunt for new false positives.
+                break;
+            }
+        }
+
+        if (most_general_predicate_found.defined()) {
+            Expr current = simplify(simplify(substitute_in_all_lets(substitute(current_predicate, predicate))));
+            if (can_prove(most_general_predicate_found == current)) return current;
+        }
+    }
+}
+
+Expr synthesize_predicate(Expr cond) {
+    FindVars find_vars;
+    cond.accept(&find_vars);
+
+    int num_constants = 0;
+    for (auto v : find_vars.vars) {
+        if (v[0] == 'c') {
+            num_constants++;
+        }
+    }
+
+    map<string, Expr> rand_binding;
+
+    std::mt19937 rng(0);
+    std::uniform_int_distribution<int> random_int(-256, 256);
+
+    Expr necessary_cond = const_true();
+    for (int i = 0; i < 1; i++) {
+        for (auto v : find_vars.vars) {
+            if (v[0] != 'c') {
+                rand_binding[v] = random_int(rng);
+            }
+        }
+        necessary_cond = necessary_cond && substitute(rand_binding, cond);
+    }
+
+    while (1) {
+        necessary_cond = simplify(simplify(common_subexpression_elimination(necessary_cond)));
+        std::cout << "Necessary predicate: " << necessary_cond << "\n";
+
+        // We are permitted two ops per constant
+        for (int i = 0; i <= num_constants * 2; i++) {
+            Expr c = super_simplify(necessary_cond, i);
+            if (c.defined()) {
+                necessary_cond = c;
+                break;
+            }
+        }
+
+        std::cout << "Simplified necessary predicate: " << necessary_cond << "\n";
+
+        if (!necessary_cond.defined()) {
+            return Expr();
+        }
+
+        // See if this condition is also sufficient
+        map<string, Expr> counterexample;
+        auto r = satisfy(!necessary_cond || cond, &counterexample);
+        if (r == Unsat) {
+            // Hooray
+            std::cout << "Exact predicate: " << necessary_cond << "\n";
+            return necessary_cond;
+        } else if (r == Sat) {
+            necessary_cond = necessary_cond && substitute(counterexample, cond);
+        } else {
+            // Dang
+            return Expr();
+        }
+    }
+
+}
+
 
 // Enumerate all possible patterns that would match any portion of the
 // given expression.
@@ -715,7 +1171,7 @@ vector<Expr> all_possible_lhs_patterns(const Expr &e) {
             }
 
             // Generate all subgraphs with this frontier node included
-            if (must_include || c.size() < 10) { // Max out at 10 unique values, including constants
+            if (must_include || c.size() < 10) { // Max out some number of unique nodes
                 c.insert(v);
                 for (auto n : ch) {
                     if (may_add_to_frontier(rejected, current, n)) {
@@ -1176,7 +1632,7 @@ Expr parse_halide_expr(char **cursor, char *end, Type expected_type) {
         return !parse_halide_expr(cursor, end, Bool());
     }
 
-    if (**cursor >= 'a' && **cursor <= 'z') {
+    if ((**cursor >= 'a' && **cursor <= 'z') || **cursor == '.') {
         char **tmp = cursor;
         string name = consume_token(tmp, end);
         if (consume(tmp, end, "[")) {
@@ -1187,6 +1643,11 @@ Expr parse_halide_expr(char **cursor, char *end, Type expected_type) {
                 expected_type = Int(32);
             }
             return Load::make(expected_type, name, index, Buffer<>(), Parameter(), const_true(), ModulusRemainder());
+        } else {
+            if (expected_type == Type{}) {
+                expected_type = Int(32);
+            }
+            return Variable::make(expected_type, name);
         }
     }
 
@@ -1208,6 +1669,8 @@ int main(int argc, char **argv) {
     input.open(argv[1]);
     for (string line; std::getline(input, line);) {
         if (line.empty()) continue;
+        // It's possible to comment out lines for debugging
+        if (line[0] == '#') continue;
 
         // There are some extraneous newlines in some of the files. Balance parentheses...
         size_t open, close;
@@ -1239,6 +1702,7 @@ int main(int argc, char **argv) {
             e = second;
             second = simplify(e);
         }
+        std::cout << "Simplified: " << e << "\n";
         total++;
         if (is_one(e)) {
             handled++;
@@ -1276,7 +1740,7 @@ int main(int argc, char **argv) {
                     count_ops.has_div_mod ||
                     count_ops.has_unsupported_ir ||
                     !(count_ops.has_repeated_var ||
-                      count_ops.num_constants > 1)) {
+                      count_ops.num_constants > 0)) {
                     continue;
                 }
 
@@ -1355,6 +1819,39 @@ int main(int argc, char **argv) {
             old = t;
         }
         std::cout << "    rewrite(" << r.first << ", " << r.second << ") ||\n";
+    }
+
+    // Now try to generalize rules involving constants by replacing constants with wildcards and synthesizing a predicate.
+    class ReplaceConstants : public IRMutator {
+        using IRMutator::visit;
+        Expr visit(const IntImm *op) {
+            string name = "c" + std::to_string(counter++);
+            binding[name] = op;
+            return Variable::make(op->type, name);
+        }
+        Expr visit(const Variable *op) override {
+            free_vars.insert(op->name);
+            return op;
+        }
+        // TODO: float constants
+    public:
+        int counter = 0;
+        map<string, Expr> binding;
+        set<string> free_vars;
+    };
+
+    for (auto r : filtered) {
+        std::cout << "Trying to generalize " << r.first << " -> " << r.second << "\n";
+        ReplaceConstants replacer;
+        r.first = replacer.mutate(r.first);
+        r.second = replacer.mutate(r.second);
+        if (replacer.counter == 0) continue; // No constants
+        std::cout << "General form: " << r.first << " -> " << r.second << "\n";
+
+        Expr predicate = synthesize_sufficient_condition(r.first, r.second, 0, {replacer.binding});
+
+        std::cout << predicate << " => " << r.first << " = " << r.second << "\n";
+
     }
 
     return 0;

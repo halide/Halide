@@ -361,6 +361,9 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
               // Synthesized
               #if USE_SYNTHESIZED_RULES
               rewrite((x < ((x + y) + z)), (0 < (y + z))) ||
+
+              // From Google list
+              rewrite((x < (y + 1)), (x <= y)) ||
               #endif
 
               false))) {
@@ -449,6 +452,8 @@ Expr Simplify::visit(const LE *op, ExprInfo *bounds) {
                 rewrite((min(x, y) <= min(z, x)), (min(x, y) <= z)) ||
                 rewrite(((min(x, y) + z) <= max(w, (z + y))), true) ||
                 rewrite((min(max(x, y), z) <= max(min(y, z), w)), (min(x, z) <= max(w, y))) ||
+
+                rewrite(((x + 1) <= y), (x < y)) ||
 
                 false) {
                 return mutate(rewrite.result, bounds);
