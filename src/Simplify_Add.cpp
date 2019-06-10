@@ -136,7 +136,17 @@ Expr Simplify::visit(const Add *op, ExprInfo *bounds) {
                rewrite((min(min(x, ((y - z) + w)), u) + z), min((min(x, u) + z), (y + w))) ||
                rewrite((min(min(x, (y - z)), w) + z), min((min(x, w) + z), y)) ||
                rewrite((min(x, ((y - z) + w)) + z), min((y + w), (x + z))) ||
-#endif
+
+               rewrite(((x - y) + (y + z)), (x + z)) ||
+               rewrite(((x - (min((y + z), w) + u)) + z), ((x - u) - min((w - z), y))) ||
+               rewrite(((x*y) + ((y*z) + w)), (((x + z)*y) + w)) ||
+               rewrite(((x*y) + ((z*y) + w)), (((x + z)*y) + w)) ||
+               rewrite((min(x, y) + (max(min(x, z), y) + w)), (min(max(y, z), x) + (y + w))) ||
+               rewrite((min(x, y) + min((min(x, y) + z), w)), (min((min(x, y) + z), w) + min(x, y))) ||
+               rewrite((min((x - (y + z)), w) + (z + u)), (min((x - y), (z + w)) + u)) ||
+               rewrite((min(min((x - y), z), w) + y), min((min(z, w) + y), x)) ||
+               rewrite((max(x, y) + (min(x, y) + z)), ((x + y) + z)) ||
+               #endif
 
                false)))) {
             return mutate(std::move(rewrite.result), bounds);

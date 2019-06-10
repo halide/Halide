@@ -109,6 +109,14 @@ Expr Simplify::visit(const And *op, ExprInfo *bounds) {
         return mutate(std::move(rewrite.result), bounds);
     }
 
+    #if USE_SYNTHESIZED_RULES
+    // From google list
+    if (rewrite((x <= y) && (y <= x), (y == x)) ||
+        false) {
+        return mutate(std::move(rewrite.result), bounds);
+    }
+    #endif
+
     if (a.same_as(op->a) &&
         b.same_as(op->b)) {
         return op;

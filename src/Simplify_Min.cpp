@@ -218,6 +218,18 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
                rewrite(min(min((x + (y + z)), w), (u + z)), min((min((x + y), u) + z), w)) ||
                rewrite(min(min(select((x < y), max(x, z), w), w), x), min(x, w)) ||
                rewrite(min(select((x < y), (z + w), w), w), (min((select((x < y), 1, 0)*z), 0) + w)) ||
+
+               rewrite(min((x + (y + z)), (z + w)), (min((x + y), w) + z)) ||
+               rewrite(min(((x + y) + z), ((y + w) + u)), (min((w + u), (x + z)) + y)) ||
+               rewrite(min((((x + y) + z) + w), (y + u)), (min(((x + z) + w), u) + y)) ||
+               rewrite(min((((x + y) - z) + w), (y + u)), (min(((w - z) + x), u) + y)) ||
+               rewrite(min(((x + y)*z), ((y*z) + w)), (min((x*z), w) + (y*z))) ||
+               rewrite(min(min((x + y), z), ((x + w) + u)), min((min((w + u), y) + x), z)) ||
+
+               // From Google data
+               rewrite(min((x - (y + z)), ((x - (w + z)) + u)), ((x - z) - max((w - u), y))) ||
+               rewrite(min((select((x < y), z, w)*x), (select((x < y), w, z)*x)), min((x*z), (w*x))) ||
+
                #endif
 
                false)))) {

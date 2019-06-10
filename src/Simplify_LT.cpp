@@ -361,6 +361,9 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
               // Synthesized
               #if USE_SYNTHESIZED_RULES
               rewrite((x < ((x + y) + z)), (0 < (y + z))) ||
+
+              // From Google list
+              rewrite((x < (y + 1)), (x <= y)) ||
               #endif
 
               false))) {
@@ -429,6 +432,28 @@ Expr Simplify::visit(const LE *op, ExprInfo *bounds) {
                 rewrite(((min(x, y) + z) <= (max(w, z) + y)), const_true()) ||
 
                 rewrite(min(x, y) <= min(y, x), true) ||
+
+                rewrite((x <= select((y < z), x, w)), ((x <= w) || (y < z))) ||
+                rewrite((((x + y) + z) <= min((y + w), u)), ((x + z) <= min((u - y), w))) ||
+                rewrite((((x + y) + z) <= max((y + w), u)), ((x + z) <= max((u - y), w))) ||
+                rewrite(((((x + y) + z) + w) <= (y + u)), (((x + w) + z) <= u)) ||
+                rewrite(((min(x, y) + z) <= (min(z, w) + x)), (z <= (max((x - y), 0) + w))) ||
+                rewrite(((x*y) <= ((y*z) + w)), (((x - z)*y) <= w)) ||
+                rewrite((min(x, y) <= min(y, z)), (min(x, y) <= z)) ||
+                rewrite((min(x, y) <= min(min(x, z), w)), (min(x, y) <= min(z, w))) ||
+                rewrite((min(x, y) <= max(x, y)), true) ||
+                rewrite((min((x + y), z) <= ((x + y) + w)), (min((x + y), z) <= ((x + y) + w))) ||
+                rewrite((min(min(x, y), z) <= min(x, w)), (min(min(x, z), y) <= w)) ||
+                rewrite((min(max(x, y), z) <= max(x, w)), (min(y, z) <= max(x, w))) ||
+
+                // From google list
+                rewrite((min(x, y) <= max(z, y)), true) ||
+                rewrite((max(x, y) <= max(x, z)), (y <= max(x, z))) ||
+                rewrite((min(x, y) <= min(z, x)), (min(x, y) <= z)) ||
+                rewrite(((min(x, y) + z) <= max(w, (z + y))), true) ||
+                rewrite((min(max(x, y), z) <= max(min(y, z), w)), (min(x, z) <= max(w, y))) ||
+
+                rewrite(((x + 1) <= y), (x < y)) ||
 
                 false) {
                 return mutate(rewrite.result, bounds);

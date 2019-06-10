@@ -112,6 +112,12 @@ Expr Simplify::visit(const Or *op, ExprInfo *bounds) {
         return mutate(std::move(rewrite.result), bounds);
     }
 
+    #if USE_SYNTHESIZED_RULES
+    if (rewrite((((x + y) <= z) || ((y + z) <= x)), (y <= intrin(Call::absd, x, z)), is_no_overflow_int(x)) ||
+        false) {
+    }
+    #endif
+
     if (a.same_as(op->a) &&
         b.same_as(op->b)) {
         return op;

@@ -210,6 +210,13 @@ Expr Simplify::visit(const Max *op, ExprInfo *bounds) {
                #if USE_SYNTHESIZED_RULES
                rewrite(max(x, (min((y - (z + w)), u) + z)), max(min((y - w), (z + u)), x)) ||
                rewrite(max(min(x, (y + z)), (min(w, z) + y)), min(max((y + w), x), (y + z))) ||
+
+               rewrite(max(((x - y) + z), (x + w)), (max((z - y), w) + x)) ||
+
+               // From Google data
+               rewrite(max((select((x < y), z, w)*x), (select((x < y), w, z)*x)), max((x*z), (w*x))) ||
+               rewrite(max(max((x*x), (x*y)), (y*y)), max((y*y), (x*x))) ||
+
                #endif
 
                false)))) {

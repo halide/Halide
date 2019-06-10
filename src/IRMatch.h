@@ -2010,6 +2010,38 @@ std::ostream &operator<<(std::ostream &s, const IsFloat<A> &op) {
     return s;
 }
 
+template<typename A>
+struct IsNoOverflowInt {
+    struct pattern_tag {};
+    A a;
+
+    constexpr static uint32_t binds = bindings<A>::mask;
+
+    constexpr static bool foldable = true;
+
+    HALIDE_ALWAYS_INLINE
+    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const {
+        // a is almost certainly a very simple pattern (e.g. a wild), so just inline the make method.
+        Type t = a.make(state, {}).type();
+        val.u.u64 = t.is_int() && t.bits() >= 32;
+        ty.code = halide_type_uint;
+        ty.bits = 1;
+        ty.lanes = t.lanes();
+    };
+};
+
+template<typename A>
+HALIDE_ALWAYS_INLINE
+auto is_no_overflow_int(A a) noexcept -> IsNoOverflowInt<decltype(pattern_arg(a))> {
+    return {pattern_arg(a)};
+}
+
+template<typename A>
+std::ostream &operator<<(std::ostream &s, const IsNoOverflowInt<A> &op) {
+    s << "is_no_overflow_int(" << op.a << ")";
+    return s;
+}
+
 // Verify properties of each rewrite rule. Currently just fuzz tests them.
 template<typename Before,
          typename After,
