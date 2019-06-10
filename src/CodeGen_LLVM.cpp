@@ -2021,7 +2021,7 @@ void CodeGen_LLVM::scalarize(Expr e) {
 }
 
 void CodeGen_LLVM::codegen_predicated_vector_store(const Store *op) {
-    internal_assert(!op->is_atomic); // Doesn't support atomic vector store
+    user_assert(!op->is_atomic) << "Atomic store does not support vectorization.\n";
     const Ramp *ramp = op->index.as<Ramp>();
     if (ramp && is_one(ramp->stride)) { // Dense vector store
         debug(4) << "Predicated dense vector store\n\t" << Stmt(op) << "\n";
