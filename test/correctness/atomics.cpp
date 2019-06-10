@@ -135,12 +135,14 @@ void test_all(const Backend &backend) {
 }
 
 int main(int argc, char **argv) {
-    Target target = get_jit_target_from_environment();    
+    Target target = get_jit_target_from_environment();
     test_all<uint8_t>(Backend::CPU);
     test_all<int8_t>(Backend::CPU);
     test_all<uint16_t>(Backend::CPU);
     test_all<int16_t>(Backend::CPU);
-    test_all<float16_t>(Backend::CPU);
+    if (target.has_feature(Target::F16C)) {
+        test_all<float16_t>(Backend::CPU);
+    }
     test_all<uint32_t>(Backend::CPU);
     test_all<int32_t>(Backend::CPU);
     test_all<float>(Backend::CPU);
