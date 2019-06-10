@@ -33,6 +33,8 @@ struct VarOrRVar {
     VarOrRVar(const Var &v) : var(v), is_rvar(false) {}
     VarOrRVar(const RVar &r) : rvar(r), is_rvar(true) {}
     VarOrRVar(const RDom &r) : rvar(RVar(r)), is_rvar(true) {}
+    template<int N>
+    VarOrRVar(const ImplicitVar<N> &u) : var(u), is_rvar(false) {}
 
     const std::string &name() const {
         if (is_rvar) return rvar.name();
@@ -755,6 +757,16 @@ public:
      Target t = get_jit_target_from_environment();
      Buffer<int32_t> result = f.realize(10, 10, t, { { p, 17 }, { img, arg_img } });
      \endcode
+     *
+     * If the Func cannot be realized into a buffer of the given size
+     * due to scheduling constraints on scattering update definitions,
+     * it will be realized into a larger buffer of the minimum size
+     * possible, and a cropped view at the requested size will be
+     * returned. It is thus not safe to assume the returned buffers
+     * are contiguous in memory. This behavior can be disabled with
+     * the NoBoundsQuery target flag, in which case an error about
+     * writing out of bounds on the output buffer will trigger
+     * instead.
      *
      */
     // @{

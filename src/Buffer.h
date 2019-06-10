@@ -487,7 +487,7 @@ public:
     }
 
     Buffer<T> copy() const {
-        return Buffer<T>(std::move(contents->buf.copy()));
+        return Buffer<T>(std::move(contents->buf.as<T>().copy()));
     }
 
     template<typename T2>

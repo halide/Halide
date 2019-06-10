@@ -37,26 +37,27 @@ Building Halide
 
 #### TL;DR
 
-Have llvm-6.0 or greater installed and run `make` in the root
+Have llvm-7.0 (or greater) installed and run `make` in the root
 directory of the repository (where this README is).
 
 #### Acquiring LLVM
 
-Building Halide requires at least LLVM 6.0, along with the matching
-version of Clang. `llvm-config` and `clang` must be somewhere in the
-path. If your OS does not have packages for llvm-6.0, you can find
-binaries for it at http://llvm.org/releases/download.html. Download an
-appropriate package and then either install it, or at least put the
+Building Halide requires at least LLVM 7.0, along with the matching
+version of Clang; we recommend using the most recent stable version of LLVM for
+most users (LLVM 8.0 at the time of this writing). `llvm-config` and `clang`
+must be somewhere in the path. If your OS does not have packages for llvm-7.0
+(or newer), you can find binaries for it at http://llvm.org/releases/download.html.
+Download an appropriate package and then either install it, or at least put the
 `bin` subdirectory in your path. (This works well on OS X and Ubuntu.)
 
-If you want to build it yourself, first check it out from subversion:
+If you want to build it yourself, first check it out from subversion.
 
-    % svn co https://llvm.org/svn/llvm-project/llvm/branches/release_60 llvm6.0
-    % svn co https://llvm.org/svn/llvm-project/cfe/branches/release_60 llvm6.0/tools/clang
+    % svn co https://llvm.org/svn/llvm-project/llvm/branches/release_80 llvm8.0
+    % svn co https://llvm.org/svn/llvm-project/cfe/branches/release_80 llvm8.0/tools/clang
 
 Then build it like so:
 
-    % cd llvm6.0
+    % cd llvm8.0
     % mkdir build
     % cd build
     % cmake -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX;AArch64;Mips;PowerPC" -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=Release ..
@@ -65,15 +66,13 @@ Then build it like so:
 then to point Halide to it:
 
     export LLVM_CONFIG=<path to llvm>/build/bin/llvm-config
-    export CLANG=<path to llvm>/build/bin/clang
 
 #### Building Halide with make
 
-With `LLVM_CONFIG` and `CLANG` set (or `llvm-config` and `clang` in your
-path), you should be able to just run `make` in the root directory of
-the Halide source tree. `make run_tests` will run the JIT test suite,
-and `make test_apps` will make sure all the apps compile and run (but
-won't check their output).
+With `LLVM_CONFIG` set (or `llvm-config` in your path), you should be
+able to just run `make` in the root directory of the Halide source tree.
+`make run_tests` will run the JIT test suite, and `make test_apps` will
+make sure all the apps compile and run (but won't check their output).
 
 There is no `make install` yet. If you want to make an install
 package, run `make distrib`.
@@ -152,8 +151,11 @@ Some useful environment variables
 `HL_DEBUG_CODEGEN=1` will print out pseudocode for what Halide is
 compiling. Higher numbers will print more detail.
 
-`HL_NUM_THREADS=...` specifies the size of the thread pool. This has no
-effect on OS X or iOS, where we just use grand central dispatch.
+`HL_NUM_THREADS=...` specifies the number of threads to create for the
+thread pool. When the async scheduling directive is used, more threads
+than this number may be required and thus allocated. A maximum of 256
+threads is allowed. (By default, the number of cores on the host is
+used.)
 
 `HL_TRACE_FILE=...` specifies a binary target file to dump tracing data
 into (ignored unless at least one `trace_` feature is enabled in `HL_TARGET` or
@@ -353,7 +355,6 @@ Clang/LLVM instead of 5.0.
     cmake -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX;AArch64;Mips;PowerPC;Hexagon" -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=Release ..
     make -j8
     export LLVM_CONFIG=<path to llvm>/build/bin/llvm-config
-    export CLANG=<path to llvm>/build/bin/clang
 
 #### 2. Download and install the Hexagon SDK and version 8.0 Hexagon Tools
 Go to https://developer.qualcomm.com/software/hexagon-dsp-sdk/tools

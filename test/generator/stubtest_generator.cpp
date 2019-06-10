@@ -21,6 +21,7 @@ class StubTest : public Halide::Generator<StubTest> {
 public:
     GeneratorParam<Type> untyped_buffer_output_type{ "untyped_buffer_output_type", Float(32) };
     GeneratorParam<float> float_param{ "float_param", 3.1415926535f };
+    GeneratorParam<std::string> str_param{ "str_param", "" };
     GeneratorParam<BagType> bag_type{ "bag_type",
                                       BagType::Paper,
                                       { { "paper", BagType::Paper },

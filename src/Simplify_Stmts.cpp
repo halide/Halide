@@ -352,8 +352,12 @@ Stmt Simplify::visit(const Block *op) {
     // Check if both halves start with a let statement.
     const LetStmt *let_first = first.as<LetStmt>();
     const LetStmt *let_rest = rest.as<LetStmt>();
+    const Block *block_rest = rest.as<Block>();
     const IfThenElse *if_first = first.as<IfThenElse>();
-    const IfThenElse *if_rest = rest.as<IfThenElse>();
+    const IfThenElse *if_next =
+        rest.as<IfThenElse>() ? rest.as<IfThenElse>()
+                              : (block_rest ? block_rest->first.as<IfThenElse>() : nullptr);
+    Stmt if_rest = block_rest ? block_rest->rest : Stmt();
 
     if (is_no_op(first) &&
         is_no_op(rest)) {
@@ -379,34 +383,42 @@ Stmt Simplify::visit(const Block *op) {
 
         return LetStmt::make(var_name, let_first->value, new_block);
     } else if (if_first &&
-               if_rest &&
-               equal(if_first->condition, if_rest->condition) &&
+               if_next &&
+               equal(if_first->condition, if_next->condition) &&
                is_pure(if_first->condition)) {
         // Two ifs with matching conditions
-        Stmt then_case = mutate(Block::make(if_first->then_case, if_rest->then_case));
+        Stmt then_case = mutate(Block::make(if_first->then_case, if_next->then_case));
         Stmt else_case;
-        if (if_first->else_case.defined() && if_rest->else_case.defined()) {
-            else_case = mutate(Block::make(if_first->else_case, if_rest->else_case));
+        if (if_first->else_case.defined() && if_next->else_case.defined()) {
+            else_case = mutate(Block::make(if_first->else_case, if_next->else_case));
         } else if (if_first->else_case.defined()) {
             // We already simplified the body of the ifs.
             else_case = if_first->else_case;
         } else {
-            else_case = if_rest->else_case;
+            else_case = if_next->else_case;
         }
-        return IfThenElse::make(if_first->condition, then_case, else_case);
+        Stmt result = IfThenElse::make(if_first->condition, then_case, else_case);
+        if (if_rest.defined()) {
+            result = Block::make(result, if_rest);
+        }
+        return result;
     } else if (if_first &&
-               if_rest &&
-               !if_rest->else_case.defined() &&
+               if_next &&
+               !if_next->else_case.defined() &&
                is_pure(if_first->condition) &&
-               is_pure(if_rest->condition) &&
-               is_one(mutate((if_first->condition && if_rest->condition) == if_rest->condition, nullptr))) {
+               is_pure(if_next->condition) &&
+               is_one(mutate((if_first->condition && if_next->condition) == if_next->condition, nullptr))) {
         // Two ifs where the second condition is tighter than
         // the first condition.  The second if can be nested
         // inside the first one, because if it's true the
         // first one must also be true.
-        Stmt then_case = mutate(Block::make(if_first->then_case, if_rest));
+        Stmt then_case = mutate(Block::make(if_first->then_case, if_next));
         Stmt else_case = mutate(if_first->else_case);
-        return IfThenElse::make(if_first->condition, then_case, else_case);
+        Stmt result = IfThenElse::make(if_first->condition, then_case, else_case);
+        if (if_rest.defined()) {
+            result = Block::make(result, if_rest);
+        }
+        return result;
     } else if (op->first.same_as(first) &&
                op->rest.same_as(rest)) {
         return op;

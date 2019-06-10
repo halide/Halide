@@ -554,10 +554,22 @@ void check_vectors() {
         int lanes = 4;
         std::vector<Expr> loads;
         for (int i = 0; i < lanes; i++) {
-            loads.push_back(Load::make(Float(32), "buf", x+i, Buffer<>(), Parameter(), const_true(), ModulusRemainder()));
+            loads.push_back(Load::make(Float(32), "buf", 4*x+i, Buffer<>(), Parameter(), const_true(), ModulusRemainder()));
         }
 
-        check(concat_vectors(loads), Load::make(Float(32, lanes), "buf", ramp(x, 1, lanes), Buffer<>(), Parameter(), const_true(lanes), ModulusRemainder()));
+        check(concat_vectors(loads), Load::make(Float(32, lanes), "buf", ramp(x*4, 1, lanes), Buffer<>(), Parameter(), const_true(lanes), ModulusRemainder(4, 0)));
+    }
+
+    // Check that concatenated loads of adjacent vectors collapse into a vector load, with appropriate alignment.
+    {
+        int lanes = 4;
+        int vectors = 4;
+        std::vector<Expr> loads;
+        for (int i = 0; i < vectors; i++) {
+          loads.push_back(Load::make(Float(32, lanes), "buf", ramp(i*lanes, 1, lanes), Buffer<>(), Parameter(), const_true(lanes), ModulusRemainder(4, 0)));
+        }
+
+        check(concat_vectors(loads), Load::make(Float(32, lanes*vectors), "buf", ramp(0, 1, lanes*vectors), Buffer<>(), Parameter(), const_true(vectors*lanes), ModulusRemainder(0, 0)));
     }
 
     {
@@ -585,6 +597,46 @@ void check_bounds() {
     check(min(min(x, y), y), min(x, y));
     check(min(x, min(x, y)), min(x, y));
     check(min(y, min(x, y)), min(x, y));
+
+    check(min(min(x, y) + 1, x), min(y + 1, x));
+    check(min(min(x, y) - (-1), x), min(y + 1, x));
+    check(min(min(x, y) + (-1), x), min(x, y) + (-1));
+    check(min(min(x, y) - 1, x), min(x, y) + (-1));
+
+    check(min(min(y, x) + 1, x), min(y + 1, x));
+    check(min(min(y, x) - (-1), x), min(y + 1, x));
+    check(min(min(y, x) + (-1), x), min(x, y) + (-1));
+    check(min(min(y, x) - 1, x), min(x, y) + (-1));
+
+    check(max(max(x, y) - 1, x), max(y + (-1), x));
+    check(max(max(x, y) + (-1), x), max(y + (-1), x));
+    check(max(max(x, y) + 1, x), max(x, y) + 1);
+    check(max(max(x, y) - (-1), x), max(x, y) + 1);
+
+    check(max(max(y, x) - 1, x), max(y + (-1), x));
+    check(max(max(y, x) + (-1), x), max(y + (-1), x));
+    check(max(max(y, x) + 1, x), max(x, y) + 1);
+    check(max(max(y, x) - (-1), x), max(x, y) + 1);
+
+    check(min(x, min(x, y) + 1), min(y + 1, x));
+    check(min(x, min(x, y) - (-1)), min(y + 1, x));
+    check(min(x, min(x, y) + (-1)), min(x, y) + (-1));
+    check(min(x, min(x, y) - 1), min(x, y) + (-1));
+
+    check(min(x, min(y, x) + 1), min(y + 1, x));
+    check(min(x, min(y, x) - (-1)), min(y + 1, x));
+    check(min(x, min(y, x) + (-1)), min(x, y) + (-1));
+    check(min(x, min(y, x) - 1), min(x, y) + (-1));
+
+    check(max(x, max(x, y) - 1), max(y + (-1), x));
+    check(max(x, max(x, y) + (-1)), max(y + (-1), x));
+    check(max(x, max(x, y) + 1), max(x, y) + 1);
+    check(max(x, max(x, y) - (-1)), max(x, y) + 1);
+
+    check(max(x, max(y, x) - 1), max(y + (-1), x));
+    check(max(x, max(y, x) + (-1)), max(y + (-1), x));
+    check(max(x, max(y, x) + 1), max(x, y) + 1);
+    check(max(x, max(y, x) - (-1)), max(x, y) + 1);
 
     check(max(Expr(7), 3), 7);
     check(max(Expr(4.25f), 1.25f), 4.25f);
@@ -1059,6 +1111,14 @@ void check_boolean() {
     check(x < 20 && x > 18, x < 20 && 18 < x);
     check(x > 18 && x < 20, 18 < x && x < 20);
 
+    check(x < y + 1 && x < y + 2 && x < y, x < y);
+    check(x < y + 1 && x < y - 2 && x < y, x < y + (-2));
+    check(x < y + 1 && x < y + z && x < y, x < min(z, 0) + y);
+
+    check(x < y + 1 || x < y + 2 || x < y, x < y + 2);
+    check(x < y + 1 || x < y - 2 || x < y, x < y + 1);
+    check(x < y + 1 || x < y + z || x < y, x < max(z, 1) + y);
+
     check(x <= 20 || x > 19, t);
     check(x > 19 || x <= 20, t);
     check(x <= 18 || x > 20, x <= 18 || 20 < x);
@@ -1085,6 +1145,12 @@ void check_boolean() {
     check(x >= 19 && x <= 18, f);
     check(x <= 20 && x >= 20, x <= 20 && 20 <= x);
     check(x >= 20 && x <= 20, 20 <= x && x <= 20);
+
+    check(min(x, 20) < min(x, 19), const_false());
+    check(min(x, 23) < min(x, 18) + 3, const_false());
+
+    check(max(x, 19) > max(x, 20), const_false());
+    check(max(x, 19) > max(x, 18) + 3, const_false());
 
     // check for substitution patterns
     check((b1 == t) && (b1 && b2), b1 && b2);
@@ -1198,6 +1264,27 @@ void check_boolean() {
                       IfThenElse::make(x < y, Evaluate::make(x+2))),
           IfThenElse::make(x < y, Block::make(Evaluate::make(x+1), Evaluate::make(x+2))));
 
+    check(Block::make({IfThenElse::make(x < y, Evaluate::make(x+1), Evaluate::make(x+2)),
+                       IfThenElse::make(x < y, Evaluate::make(x+3), Evaluate::make(x+4)),
+                       Evaluate::make(x+5)}),
+          Block::make(IfThenElse::make(x < y,
+                                       Block::make(Evaluate::make(x+1), Evaluate::make(x+3)),
+                                       Block::make(Evaluate::make(x+2), Evaluate::make(x+4))),
+                      Evaluate::make(x+5)));
+
+    check(Block::make({IfThenElse::make(x < y, Evaluate::make(x+1)),
+                       IfThenElse::make(x < y, Evaluate::make(x+2)),
+                       IfThenElse::make(x < y, Evaluate::make(x+3)),
+                       Evaluate::make(x+4)}),
+          Block::make(IfThenElse::make(x < y, Block::make({Evaluate::make(x+1), Evaluate::make(x+2), Evaluate::make(x+3)})),
+                      Evaluate::make(x+4)));
+
+    check(Block::make({IfThenElse::make(x < y, Evaluate::make(x+1)),
+                       IfThenElse::make(x < y, Evaluate::make(x+2)),
+                       Evaluate::make(x+3)}),
+          Block::make(IfThenElse::make(x < y, Block::make(Evaluate::make(x+1), Evaluate::make(x+2))),
+                      Evaluate::make(x+3)));
+
     check(Block::make(IfThenElse::make(x < y, Evaluate::make(x+1), Evaluate::make(x+2)),
                       IfThenElse::make(x < y, Evaluate::make(x+3))),
           IfThenElse::make(x < y,
@@ -1297,6 +1384,8 @@ void check_boolean() {
     check(select(cond, y+x, x-z), select(cond, y, 0-z) + x);
     check(select(cond, x-z, x+y), select(cond, 0-z, y) + x);
     check(select(cond, x-z, y+x), select(cond, 0-z, y) + x);
+    check(select(cond, x/y, z/y), select(cond, x, z) / y);
+    check(select(cond, x%y, z%y), select(cond, x, z) % y);
 
 
     {
@@ -1725,6 +1814,9 @@ int main(int argc, char **argv) {
         check(a << 63, u64(0));
         check(b << 63, Expr((uint64_t) 0x8000000000000000ULL));
     }
+
+    // Check a bounds-related fuzz tester failure found in issue https://github.com/halide/Halide/issues/3764
+    check(Let::make("b", 105, 336 / max(cast<int32_t>(cast<int16_t>(Variable::make(Int(32), "b"))), 38) + 29), 32);
 
     printf("Success!\n");
 
