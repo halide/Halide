@@ -12,7 +12,7 @@ template <typename value_t>
 bool relatively_equal(value_t a, value_t b, Target target) {
     if (a == b) {
         return true;
-    } else if (std::isnan<value_t>(a) && std::isnan<value_t>(b)) {
+    } else if (::isnan(a) && ::isnan(b)) {
         return true;
     } else if (!std::numeric_limits<value_t>::is_integer) {
         double da = (double)a, db = (double)b;
