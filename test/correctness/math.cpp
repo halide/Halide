@@ -8,11 +8,23 @@ using namespace Halide;
 
 static int num_errors = 0;
 
-template <typename value_t>
-bool relatively_equal(value_t a, value_t b, Target target) {
-    if (a == b) {
+template<typename T, typename std::enable_if<std::is_floating_point<T>::value>::type * = nullptr>
+bool is_equal(T a, T b) {
+    if (std::isnan(a) && std::isnan(b)) {
         return true;
-    } else if (::isnan(a) && ::isnan(b)) {
+    } else {
+        return a == b;
+    }
+}
+
+template<typename T, typename std::enable_if<!std::is_floating_point<T>::value>::type * = nullptr>
+bool is_equal(T a, T b) {
+    return a == b;
+}
+
+template<typename value_t>
+bool relatively_equal(value_t a, value_t b, Target target) {
+    if (is_equal(a, b)) {
         return true;
     } else if (!std::numeric_limits<value_t>::is_integer) {
         double da = (double)a, db = (double)b;
