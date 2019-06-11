@@ -3711,7 +3711,7 @@ struct State {
             }
 
             Var new_outer(v.var.name() + "_serial_outer");
-            stage.split(v.var, new_outer, v.var, (int)v.extent);
+            stage.split(v.var, new_outer, v.var, (int)v.extent, TailStrategy::GuardWithIf);
             stage.gpu_threads(v.var);
             state->schedule_source << "\n    .split(" << v.var.name() << ", " << new_outer.name() << ", " << v.var.name() << ", " << v.extent << ")";
             state->schedule_source << "\n    .gpu_threads(" << v.var.name() << ")";
