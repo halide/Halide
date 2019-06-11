@@ -2219,6 +2219,9 @@ void CodeGen_LLVM::codegen_atomic_store(const Store *op) {
     // otherwise fallback to a compare-and-swap loop.
     // Current only test for atomicAdd
     Expr val_expr = op->value;
+    // For atomicAdd, we check if op->value - store[index] is independent of store.
+    // For llvm version < 9, the atomicRMW operations only support integers so
+    // we also check that.
     Expr equiv_load = Load::make(op->value.type(), op->name, op->index, Buffer<>(), op->param, op->predicate, op->alignment);
     Expr delta = simplify(common_subexpression_elimination(op->value - equiv_load));
     bool is_atomic_add = val_expr.type().is_int_or_uint() && !expr_uses_var(delta, op->name);
