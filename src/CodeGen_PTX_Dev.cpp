@@ -269,6 +269,7 @@ void CodeGen_PTX_Dev::visit(const Store *op) {
             Expr val_expr = op->value;
             Expr equiv_load = Load::make(op->value.type(), op->name, op->index, Buffer<>(), op->param, op->predicate, op->alignment);
             Expr delta = simplify(common_subexpression_elimination(op->value - equiv_load));
+            // For atomicAdd, we check if op->value - store[index] is independent of store.
             bool is_atomic_add = !expr_uses_var(delta, op->name);
             if (is_atomic_add) {
                 Value *ptr = codegen_buffer_pointer(op->name, op->value.type(), op->index);

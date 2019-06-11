@@ -320,6 +320,8 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
         Type t = val_expr.type();
         Expr equiv_load = Load::make(t, op->name, op->index, Buffer<>(), op->param, op->predicate, op->alignment);
         Expr delta = simplify(common_subexpression_elimination(op->value - equiv_load));
+        // For atomicAdd, we check if op->value - store[index] is independent of store.
+        // The atomicAdd operations in OpenCL only supports integers so we also check that.
         bool is_atomic_add = t.is_int_or_uint() && !expr_uses_var(delta, op->name);
         bool type_cast_needed = !(allocations.contains(op->name) &&
                                   allocations.get(op->name).type == t);
