@@ -450,6 +450,11 @@ int halide_hexagon_remote_release_library(handle_t module_ptr) {
 }
 
 int halide_hexagon_remote_poll_profiler_state(int *func, int *threads) {
+    // Increase the current thread priority to match working threads priorities,
+    // so profiler can access the remote state without extra latency.
+    qurt_thread_t current_thread_id = qurt_thread_get_id();
+    qurt_thread_set_priority(current_thread_id, 100);
+
     *func = halide_profiler_get_state()->current_func;
     *threads = halide_profiler_get_state()->active_threads;
     return 0;
