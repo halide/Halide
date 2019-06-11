@@ -1,5 +1,6 @@
 #include "CodeGen_PTX_Dev.h"
 #include "CodeGen_Internal.h"
+#include "CSE.h"
 #include "Debug.h"
 #include "ExprUsesVar.h"
 #include "IREquality.h"
@@ -10,7 +11,6 @@
 #include "LLVM_Headers.h"
 #include "LLVM_Runtime_Linker.h"
 #include "Simplify.h"
-#include "CSE.h"
 #include "Solve.h"
 #include "Target.h"
 
