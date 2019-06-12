@@ -2950,6 +2950,7 @@ void CodeGen_LLVM::visit(const Call *op) {
                         y != iy, nan_expr,  // negative x to a non-integer power
                         iy % 2 == 0, abs_x_pow_y,  // negative x to an even power
                         -abs_x_pow_y);  // negative x to an odd power
+        e = common_subexpression_elimination(e);
         e.accept(this);
     } else if (op->call_type == Call::PureExtern && op->name == "log_f32") {
         internal_assert(op->args.size() == 1);
