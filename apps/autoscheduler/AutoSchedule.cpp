@@ -2596,6 +2596,12 @@ struct LoopNest {
 
             if (!size.empty()) {
                 if (innermost) {
+                    // In case the threads loop is innermost
+                    for (size_t i = 0; i < symbolic_loop.size(); i++) {
+                        StageScheduleState::FuncVar &v = state.vars[i];
+                        v.gpu_threads = gpu_label == thread && symbolic_loop[i].pure;
+                    }
+
                     if (vectorized_loop_index >= 0) {
                         size_t i = 0;
                         while (!state.vars[i].innermost_pure_dim) i++;
@@ -2662,6 +2668,7 @@ struct LoopNest {
                             // Not split in this dimension
                             v = parent;
                             v.parallel = false;
+                            v.gpu_threads = false;
 
                             parent.exists = false;
                             parent.extent = 1;
