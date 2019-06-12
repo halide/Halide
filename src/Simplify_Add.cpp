@@ -45,7 +45,7 @@ Expr Simplify::visit(const Add *op, ExprInfo *bounds) {
              rewrite(broadcast(x) + broadcast(y), broadcast(x + y, lanes)) ||
              rewrite(select(x, y, z) + select(x, w, u), select(x, y + w, z + u)) ||
              rewrite(select(x, c0, c1) + c2, select(x, fold(c0 + c2), fold(c1 + c2))) ||
-             rewrite(select(x, y, c1) + c2, select(x, y + c2, fold(c1 + c2))) ||
+             //             rewrite(select(x, y, c1) + c2, select(x, y + c2, fold(c1 + c2))) ||
              rewrite(select(x, c0, y) + c2, select(x, fold(c0 + c2), y + c2)) ||
 
              rewrite((select(x, y, z) + w) + select(x, u, v), select(x, y + u, z + v) + w) ||
@@ -150,6 +150,15 @@ Expr Simplify::visit(const Add *op, ExprInfo *bounds) {
                rewrite(((min((x + c0), y) + z) + c1), (min((y + c1), x) + z), ((c0 + c1) == 0)) ||
                rewrite(((x*y) + (z - (y*w))), (((x - w)*y) + z)) ||
                rewrite((((x*y)*z) + (x*w)), (((y*z) + w)*x)) ||
+
+               rewrite(((min(x, (y + c0)) + z) + c1), (min((x + c1), y) + z), ((c0 + c1) == 0)) ||
+               rewrite(((min((x - y), z) + w) + y), (min((y + z), x) + w)) ||
+               rewrite(((x - y) + (z + y)), (x + z)) ||
+               rewrite(((x*y) + ((z*y) - w)), (((x + z)*y) - w)) ||
+               rewrite((min(x, (y - z)) + (z + w)), (min((x + z), y) + w)) ||
+               rewrite((min(min(x, (y + c0)), z) + c1), min((min(x, z) + c1), y), ((c0 + c1) == 0)) ||
+               rewrite((min(min((x + c0), y), z) + c1), min((min(y, z) + c1), x), ((c0 + c1) == 0)) ||
+               rewrite(((min(min(x, (y + c1)), c1) + z) + c2), (min(min((x + c2), y), 0) + z), ((c1 + c2) == 0)) ||
 
                #endif
 

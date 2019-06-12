@@ -272,11 +272,6 @@ tuple<Expr, Expr, Expr> predicate_expr(vector<Expr> lhs,
     vector<Expr> values, constraints;
     constraints.push_back(const_true());
 
-    values.push_back(-1);
-    values.push_back(0);
-    values.push_back(1);
-    values.push_back(2);
-
     for (auto e1 : lhs) {
         values.push_back(e1);
         constraints.push_back(e1 != 0);
@@ -299,18 +294,34 @@ tuple<Expr, Expr, Expr> predicate_expr(vector<Expr> lhs,
             constraints.push_back(e1 < e2);
             constraints.push_back(e1 < e2 - 1);
 
-            constraints.push_back(e1 == e2);
+            constraints.push_back(e1 % e2 == 0 && e2 != 0);
+            constraints.push_back(e1 / e2 == 0 && e2 != 0);
             constraints.push_back(e1 == e2 - 1);
             constraints.push_back(e1 == e2 + 1);
+
+            constraints.push_back(e1 == e2);
+
             if (commutative_ok) {
+                constraints.push_back(e1 + e2 <= 0);
+                constraints.push_back(e1 + e2 >= 0);
+                constraints.push_back(e1 + e2 < 0);
+                constraints.push_back(e1 + e2 > 0);
                 constraints.push_back(e1 + e2 == 0);
                 values.push_back(e1 + e2);
                 values.push_back(min(e1, e2));
                 values.push_back(max(e1, e2));
             }
             values.push_back(e1 - e2);
+            values.push_back(e1 / e2);
+            values.push_back((e1 + e2 - 1) / e2);
+            values.push_back(e1 % e2);
         }
     }
+
+    values.push_back(-1);
+    values.push_back(0);
+    values.push_back(1);
+    values.push_back(2);
 
     for (auto e1 : lhs) {
         for (auto e2 : lhs) {
@@ -337,15 +348,48 @@ tuple<Expr, Expr, Expr> predicate_expr(vector<Expr> lhs,
 
     for (size_t i = 0; i < rhs.size(); i++) {
         Expr r = rhs[i];
-        Expr v = values[0];
+        Expr val = values[0];
+        Expr cond = values[0];
         Expr op = opcodes[i];
+        vector<pair<Expr, Expr>> divs, mods;
         for (int j = 1; j < (int)values.size(); j++) {
-            v = select(op == j, values[j], v);
+            Expr c = (op == j);
+            val = select(c, values[j], val);
+            if (values[j].as<Div>()) {
+                divs.emplace_back(c, values[j]);
+            } else if (values[j].as<Mod>()) {
+                mods.emplace_back(c, values[j]);
+            } else {
+                cond = select(c, values[j], cond);
+            }
         }
-        result = result && (r == v);
+        cond = (r == cond);
+        // Handle the divs and mods with implicit conditions instead.
+        for (auto p : divs) {
+            const Div *d = p.second.as<Div>();
+            Expr numerator = d->a;
+            Expr denominator = d->b;
+            assert(d);
+            // We have r == d->a / d->b
+            // Or r * d->b + residual == d->a, for some bounded residual
+            Expr residual = numerator - r * denominator;
+            // Only handle positive divisors for now
+            cond = cond || (p.first && (d->b > 0) && residual >= 0 && residual < denominator);
+        }
+        for (auto p : mods) {
+            const Mod *m = p.second.as<Mod>();
+            assert(m);
+            // We have r == m->a % m->b
+            // Or in other words, r + t * m->b == m->a, for some unknown quotient
+            Var t(unique_name('t'));
+
+            cond = cond || (p.first && (m->b > 0) && (r + t * m->b == m->a) && (r >= 0) && (r < m->b));
+        }
+
+        result = result && cond;
         valid = valid && (op >= 0) && (op < (int)values.size());
         if (const Variable *var = r.as<Variable>()) {
-            (*binding)[var->name] = v;
+            (*binding)[var->name] = val;
         }
     }
 
@@ -390,7 +434,7 @@ bool consume(char **cursor, char *end, const char *expected) {
 
 void expect(char **cursor, char *end, const char *pattern) {
     if (!consume(cursor, end, pattern)) {
-        printf("Parsing z3 result failed. Expected %s, got %s\n",
+        printf("Parsing failed. Expected %s, got %s\n",
                pattern, *cursor);
         abort();
     }
@@ -451,25 +495,25 @@ Expr consume_float(char **cursor, char *end) {
     }
 }
 
-void parse_model(char **cursor, char *end, map<string, Expr> *bindings) {
+bool parse_model(char **cursor, char *end, map<string, Expr> *bindings) {
     consume_whitespace(cursor, end);
-    expect(cursor, end, "(model");
+    if (!consume(cursor, end, "(model")) return false;
     consume_whitespace(cursor, end);
     while (consume(cursor, end, "(define-fun")) {
         consume_whitespace(cursor, end);
         string name = consume_token(cursor, end);
         consume_whitespace(cursor, end);
-        expect(cursor, end, "()");
+        if (!consume(cursor, end, "()")) return false;
         consume_whitespace(cursor, end);
         if (consume(cursor, end, "Bool")) {
             // Don't care about this var
             consume_whitespace(cursor, end);
             if (!consume(cursor, end, "true)")) {
-                expect(cursor, end, "false)");
+                if (!consume(cursor, end, "false)")) return false;
             }
             consume_whitespace(cursor, end);
         } else {
-            expect(cursor, end, "Int");
+            if (!consume(cursor, end, "Int")) return false;
             consume_whitespace(cursor, end);
             if (consume(cursor, end, "(- ")) {
                 string val = consume_token(cursor, end);
@@ -489,7 +533,8 @@ void parse_model(char **cursor, char *end, map<string, Expr> *bindings) {
         }
     }
     consume_whitespace(cursor, end);
-    expect(cursor, end, ")");
+    if (!consume(cursor, end, ")")) return false;
+    return true;
 }
 
 
@@ -570,16 +615,15 @@ Z3Result satisfy(Expr e, map<string, Expr> *bindings) {
     TemporaryFile z3_output("output", "txt");
     write_entire_file(z3_file.pathname(), &src[0], src.size());
 
-    std::string cmd = "z3 -T:20 " + z3_file.pathname() + " > " + z3_output.pathname();
+    std::string cmd = "z3 -T:600 " + z3_file.pathname() + " > " + z3_output.pathname();
 
     int ret = system(cmd.c_str());
 
     auto result_vec = read_entire_file(z3_output.pathname());
     string result(result_vec.begin(), result_vec.end());
 
-    // std::cout << "z3 produced: " << result << "\n";
-
     if (starts_with(result, "unknown") || starts_with(result, "timeout")) {
+        std::cout << "z3 produced: " << result << "\n";
         return Unknown;
     }
 
@@ -587,7 +631,7 @@ Z3Result satisfy(Expr e, map<string, Expr> *bindings) {
         std::cout << "** z3 query failed with exit code " << ret << "\n"
                   << "** query was:\n" << src << "\n"
                   << "** output was:\n" << result << "\n";
-        abort();
+        return Unknown;
     }
 
     if (starts_with(result, "unsat")) {
@@ -595,7 +639,9 @@ Z3Result satisfy(Expr e, map<string, Expr> *bindings) {
     } else {
         char *cursor = &(result[0]);
         char *end = &(result[result.size()]);
-        expect(&cursor, end, "sat");
+        if (!consume(&cursor, end, "sat")) {
+            return Unknown;
+        }
         parse_model(&cursor, end, bindings);
         return Sat;
     }
@@ -819,6 +865,8 @@ Expr synthesize_sufficient_condition(Expr lhs, Expr rhs, int size,
         // First sythesize a false positive for the current
         // predicate. This is a set of constants for which the
         // predicate is true, but the expression is false.
+
+        /*
         Expr current_predicate_valid = simplify(substitute(current_predicate, predicate_valid));
         // The validity of the program should not depend on the args,
         // and we should only be synthesizing valid programs.
@@ -826,36 +874,34 @@ Expr synthesize_sufficient_condition(Expr lhs, Expr rhs, int size,
             std::cout << "Current predicate malformed: " << current_predicate_valid << "\n";
             abort();
         }
+        */
 
         Expr false_positive_for_current_predicate = simplify(substitute(current_predicate, false_positive));
         Expr false_negative_for_current_predicate = simplify(substitute(current_predicate, false_negative));
         map<string, Expr> negative_example = all_vars_zero;
 
-        /*
         std::cout << "Candidate predicate:\n"
                   << simplify(simplify(substitute_in_all_lets(substitute(current_predicate, predicate)))) << "\n";
-        */
 
         // Start with just random fuzzing. If that fails, we'll ask Z3 for a negative example.
         int negative_examples_found_with_fuzzing = 0;
-        /*
         for (int i = 0; i < 5; i++) {
             map<string, Expr> rand_binding = all_vars_zero;
             for (auto &it : rand_binding) {
                 it.second = random_int(rng);
             }
-            auto interpreted = simplify(substitute(rand_binding, current_predicate_works));
-            if (is_one(interpreted)) continue;
+            auto interpreted = simplify(substitute(rand_binding, false_positive_for_current_predicate));
+
+            if (!is_one(interpreted)) continue;
+
+            for (auto it : rand_binding) {
+                std::cout << it.first << " = " << it.second << "\n";
+            }
 
             negative_examples.push_back(rand_binding);
-            // We probably only want to add a couple
-            // negative_examples at a time
             negative_examples_found_with_fuzzing++;
-            if (negative_examples_found_with_fuzzing >= 2) {
-                break;
-            }
+            break;
         }
-        */
 
         // TODO: There's nothing here that prevents the constants on
         // the RHS from appearing in implicit conditions that aren't
@@ -870,21 +916,19 @@ Expr synthesize_sufficient_condition(Expr lhs, Expr rhs, int size,
             auto result = satisfy(false_positive_for_current_predicate, &negative_example);
             if (result == Unsat) {
                 // Woo!
-                Expr e = simplify(substitute_in_all_lets(common_subexpression_elimination(substitute(current_predicate, predicate))));
-                // std::cout << "No false positives found\n";
-                most_general_predicate_found = e;
+                most_general_predicate_found =
+                    simplify(substitute_in_all_lets(common_subexpression_elimination(substitute(current_predicate, predicate))));
+                std::cout << "No false positives found\n";
                 most_general_predicate_opcodes = current_predicate;
                 // std::cout << "Best predicate so far: " << e << "\n";
             } else if (result == Sat) {
-                // std::cout << "Found a new false positive\n";
+                std::cout << "Found a new false positive\n";
                 negative_examples.push_back(negative_example);
-                /*
                 for (auto it : negative_example) {
                     std::cout << it.first << " = " << it.second << "\n";
                 }
-                */
             } else {
-                // std::cout << "Search for false positives was inconclusive.\n";
+                std::cout << "Search for false positives was inconclusive.\n";
                 break;
             }
         }
@@ -904,11 +948,11 @@ Expr synthesize_sufficient_condition(Expr lhs, Expr rhs, int size,
         for (const auto &m : positive_examples) {
             true_on_positive_examples = true_on_positive_examples && substitute(m, predicate);
         }
-        /*
+
         std::cout << "Synthesizing new predicate using "
                   << positive_examples.size() << " positive examples and "
                   << negative_examples.size() << " negative examples\n";
-        */
+
         Expr cond = false_on_negative_examples && true_on_positive_examples && predicate_valid;
         if (satisfy(cond, &current_predicate) != Sat) {
             // Failed to synthesize a better predicate
@@ -918,10 +962,10 @@ Expr synthesize_sufficient_condition(Expr lhs, Expr rhs, int size,
 
         // Generalize it
         while (1) {
-            /*
+
             std::cout << "Candidate predicate: "
                       << simplify(simplify(substitute_in_all_lets(substitute(current_predicate, predicate)))) << "\n";
-            */
+
             map<string, Expr> reference_predicate;
             for (auto it : current_predicate) {
                 reference_predicate[it.first + "_ref"] = it.second;
@@ -941,10 +985,18 @@ Expr synthesize_sufficient_condition(Expr lhs, Expr rhs, int size,
         {
             Expr p = substitute(current_predicate, predicate);
             for (auto &c : negative_examples) {
-                assert(is_zero(simplify(substitute(c, p))));
+                Expr e = substitute(c, p);
+                if (!is_zero(simplify(e))) {
+                    std::cout << "Predicate was supposed to be false on negative example: " << e << "\n" << simplify(e) << "\n";
+                    abort();
+                }
             }
             for (const auto &c : positive_examples) {
-                assert(is_one(simplify(substitute(c, p))));
+                Expr e = substitute(c, p);
+                if (!is_one(simplify(e))) {
+                    std::cout << "Predicate was supposed to be true on positive example: " << e << "\n" << simplify(e) << "\n";
+                    abort();
+                }
             }
         }
 
@@ -1611,6 +1663,23 @@ int main(int argc, char **argv) {
         exprs.push_back(parse_halide_expr(&start, end, Type{}));
     }
 
+    // Try to load a blacklist of patterns to skip over that are known
+    // to fail. Delete the blacklist whenever you make a change that
+    // might make things work for more expressions.
+    set<Expr, IRDeepCompare> blacklist;
+    if (file_exists("blacklist.txt")) {
+        std::cout << "Loading pattern blacklist\n";
+        std::ifstream b;
+        b.open("blacklist.txt");
+        for (string line; std::getline(b, line);) {
+            char *start = &line[0];
+            char *end = &line[line.size()];
+            blacklist.insert(parse_halide_expr(&start, end, Type{}));
+        }
+    }
+
+    std::cout << blacklist.size() << " blacklisted patterns\n";
+
     set<Expr, IRDeepCompare> patterns;
     size_t handled = 0, total = 0;
     for (auto &e : exprs) {
@@ -1636,7 +1705,9 @@ int main(int argc, char **argv) {
                     p = le->b < le->a;
                 }
                 */
-                patterns.insert(p);
+                if (!blacklist.count(p)) {
+                    patterns.insert(p);
+                }
             }
         }
     }
@@ -1651,6 +1722,8 @@ int main(int argc, char **argv) {
     std::mutex mutex;
     vector<pair<Expr, Expr>> rules;
     int done = 0;
+
+    int skip = 0; // 12000 + 15600;// Skip the first N for debugging
     {
         std::lock_guard<std::mutex> lock(mutex);
         for (int lhs_ops = 1; lhs_ops < 6; lhs_ops++) {
@@ -1666,10 +1739,16 @@ int main(int argc, char **argv) {
                     continue;
                 }
 
+                if (skip > 0) {
+                    skip--;
+                    continue;
+                }
+
                 std::cout << "PATTERN " << lhs_ops << " : " << p << "\n";
                 futures.emplace_back(pool.async([=, &mutex, &rules, &futures, &done]() {
                             int max_rhs_ops = lhs_ops - 1;
                             Expr e = super_simplify(p, max_rhs_ops);
+                            bool success = false;
                             {
                                 std::lock_guard<std::mutex> lock(mutex);
                                 if (e.defined()) {
@@ -1692,11 +1771,23 @@ int main(int argc, char **argv) {
                                     if (!suppressed) {
                                         std::cout << "RULE: " << p << " = " << e << "\n";
                                         rules.emplace_back(p, e);
+                                        success = true;
                                     }
                                 }
                                 done++;
                                 if (done % 100 == 0) {
                                     std::cout << done << " / " << futures.size() << "\n";
+                                }
+                                if (!success) {
+                                    // Add it to the blacklist so we
+                                    // don't waste time on this
+                                    // pattern again. Delete the
+                                    // blacklist whenever you make a
+                                    // change that might make things
+                                    // work for new patterns.
+                                    std::ofstream b;
+                                    b.open("blacklist.txt", std::ofstream::out | std::ofstream::app);
+                                    b << p << "\n";
                                 }
                             }
                         }));

@@ -271,6 +271,7 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
                rewrite((max(((x + y) + z), w) - x), max((w - x), (y + z))) ||
                rewrite((max(((x + y) + z), w) - y), max((w - y), (x + z))) ||
                rewrite((max(max((x + y), z), w) - x), max((max(w, z) - x), y)) ||
+               rewrite(((x + (y + (z + w))) - w), ((y + z) + x)) ||
 
                #endif
 

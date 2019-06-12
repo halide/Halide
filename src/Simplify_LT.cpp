@@ -362,6 +362,11 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
               #if USE_SYNTHESIZED_RULES
               rewrite((x < ((x + y) + z)), (0 < (y + z))) ||
 
+              rewrite((x < max(y, (max(z, x) + c0))), true, (0 < c0)) ||
+              rewrite((x < max((max(y, x) + c0), z)), true, (0 < c0)) ||
+              rewrite((min(x, y) < min(z, (x + c0))), (min(x, y) < z), (0 < c0)) ||
+              rewrite((max(x, c0) < max(y, 0)), (x < max(y, 0)), (c0 < 0)) ||
+
               // From Google list
               rewrite((x < (y + 1)), (x <= y)) ||
               #endif
@@ -442,9 +447,22 @@ Expr Simplify::visit(const LE *op, ExprInfo *bounds) {
                 rewrite((min(x, y) <= min(y, z)), (min(x, y) <= z)) ||
                 rewrite((min(x, y) <= min(min(x, z), w)), (min(x, y) <= min(z, w))) ||
                 rewrite((min(x, y) <= max(x, y)), true) ||
-                rewrite((min((x + y), z) <= ((x + y) + w)), (min((x + y), z) <= ((x + y) + w))) ||
+                //rewrite((min((x + y), z) <= ((x + y) + w)), (min((x + y), z) <= ((x + y) + w))) ||
                 rewrite((min(min(x, y), z) <= min(x, w)), (min(min(x, z), y) <= w)) ||
                 rewrite((min(max(x, y), z) <= max(x, w)), (min(y, z) <= max(x, w))) ||
+
+                rewrite((((x + (y + z)) + c0) <= (w + z)), (((x + y) + c0) <= w)) ||
+                rewrite(((min((min(x, c0) + y), z) + c1) <= y), true, ((c0 + c1) == 0)) ||
+                rewrite((((x + y)*c1) <= (z + (x*c1))), ((y*c1) <= z)) ||
+                rewrite((((x + y)*z) <= (w + (y*z))), ((x*z) <= w)) ||
+                rewrite((min(x, y) <= max(y, x)), true) ||
+                rewrite((min((x*y), c0) <= (min(x, c1)*y)), true, ((0 <= c1) && (c0 <= 0))) ||
+                rewrite((max(x, c0) <= max(y, 0)), (x <= max(y, 0)), (c0 <= 0)) ||
+                rewrite((select((x < y), max(z, w), z) <= max(z, w)), true) ||
+
+                rewrite((min((min(x, y)*c1), z) <= (x*c1)), true, (0 <= c1)) ||
+                rewrite((min(min((min(x, c0) + y), z), w) <= y), true, (c0 <= 0)) ||
+                rewrite(((min((min(x, y) + c0), z) + c1) <= y), true, ((c0 + c1) <= 0)) ||
 
                 // From google list
                 rewrite((min(x, y) <= max(z, y)), true) ||

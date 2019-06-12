@@ -110,8 +110,11 @@ Expr Simplify::visit(const And *op, ExprInfo *bounds) {
     }
 
     #if USE_SYNTHESIZED_RULES
-    // From google list
-    if (rewrite((x <= y) && (y <= x), (y == x)) ||
+    if (rewrite((x <= y) && (y <= x), (y == x)) ||     // From google list
+        rewrite(((x < y) && (y < (x + c0))), false, (c0 <= 0) && is_no_overflow_int(x)) ||
+        rewrite(((x <= y) && (y < (x + c0))), false, (c0 <= 0) && is_no_overflow_int(x)) ||
+        rewrite(((x < (y + c0)) && (y < (x + c1))), false, ((c0 + c1) <= 0) && is_no_overflow_int(x)) ||
+
         false) {
         return mutate(std::move(rewrite.result), bounds);
     }

@@ -1361,6 +1361,12 @@ struct Intrin {
 
     HALIDE_ALWAYS_INLINE
     Expr make(MatcherState &state, halide_type_t type_hint) const {
+        return make(state, type_hint, Args{}...);
+    }
+
+    template<typename T>
+    HALIDE_ALWAYS_INLINE
+    Expr make(MatcherState &state, halide_type_t type_hint, const T &) const {
         if (intrin == Call::likely) {
             return likely(std::get<0>(args).make(state, type_hint));
         } else if (intrin == Call::likely_if_innermost) {
@@ -1369,6 +1375,18 @@ struct Intrin {
         internal_error << "Unhandled intrinsic in IRMatcher: " << intrin;
         return Expr();
     }
+
+    template<typename T1, typename T2>
+    HALIDE_ALWAYS_INLINE
+    Expr make(MatcherState &state, halide_type_t type_hint, const T1 &, const T2 &) const {
+        if (intrin == Call::absd) {
+            return absd(std::get<0>(args).make(state, type_hint),
+                        std::get<1>(args).make(state, type_hint));
+        }
+        internal_error << "Unhandled intrinsic in IRMatcher: " << intrin;
+        return Expr();
+    }
+
 
     constexpr static bool foldable = false;
 
