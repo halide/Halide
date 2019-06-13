@@ -42,22 +42,48 @@ void test_parallel_hist(const Backend &backend) {
     hist(x) = cast<T>(0);
     hist(im(r)) += cast<T>(1);
 
+    Type t = cast<T>(0).type();
+    bool is_float_16 = t.is_float() && t.bits() == 16;
+
     hist.compute_root();
     switch(backend) {
         case Backend::CPU: {
-            hist.update().atomic().parallel(r);
+            if (is_float_16) {
+                // Associativity prover doesn't support float16,
+                // use allow_race_conditions to remove to check.
+                hist.update().allow_race_conditions().atomic().parallel(r);
+            } else {
+                hist.update().atomic().parallel(r);
+            }
         } break;
         case Backend::OpenCL: {
             RVar ro, ri;
-            hist.update().atomic().split(r, ro, ri, 32)
-                .gpu_blocks(ro, DeviceAPI::OpenCL)
-                .gpu_threads(ri, DeviceAPI::OpenCL);
+            if (is_float_16) {
+                // Associativity prover doesn't support float16
+                // use allow_race_conditions to remove to check.
+                hist.update().allow_race_conditions().atomic().split(r, ro, ri, 32)
+                    .gpu_blocks(ro, DeviceAPI::OpenCL)
+                    .gpu_threads(ri, DeviceAPI::OpenCL);
+            } else {
+                hist.update().atomic().split(r, ro, ri, 32)
+                    .gpu_blocks(ro, DeviceAPI::OpenCL)
+                    .gpu_threads(ri, DeviceAPI::OpenCL);
+            }
         } break;
         case Backend::CUDA: {
-            RVar ro, ri;
-            hist.update().atomic().split(r, ro, ri, 32)
-                .gpu_blocks(ro, DeviceAPI::CUDA)
-                .gpu_threads(ri, DeviceAPI::CUDA);
+            if (is_float_16) {
+                RVar ro, ri;
+                // Associativity prover doesn't support float16
+                // use allow_race_conditions to remove to check.
+                hist.update().allow_race_conditions().atomic().split(r, ro, ri, 32)
+                    .gpu_blocks(ro, DeviceAPI::CUDA)
+                    .gpu_threads(ri, DeviceAPI::CUDA);
+            } else {
+                RVar ro, ri;
+                hist.update().atomic().split(r, ro, ri, 32)
+                    .gpu_blocks(ro, DeviceAPI::CUDA)
+                    .gpu_threads(ri, DeviceAPI::CUDA);
+            }
         } break;
     }
 
@@ -95,17 +121,20 @@ void test_parallel_cas_update(const Backend &backend) {
     hist.compute_root();
     switch(backend) {
         case Backend::CPU: {
-            hist.update().atomic().parallel(r);
+            // Halide cannot prove that this is associative. We override it using allow_race_conditions.
+            hist.update().allow_race_conditions().atomic().parallel(r);
         } break;
         case Backend::OpenCL: {
             RVar ro, ri;
-            hist.update().atomic().split(r, ro, ri, 32)
+            // Halide cannot prove that this is associative. We override it using allow_race_conditions.
+            hist.update().allow_race_conditions().atomic().split(r, ro, ri, 32)
                 .gpu_blocks(ro, DeviceAPI::OpenCL)
                 .gpu_threads(ri, DeviceAPI::OpenCL);
         } break;
         case Backend::CUDA: {
             RVar ro, ri;
-            hist.update().atomic().split(r, ro, ri, 32)
+            // Halide cannot prove that this is associative. We override it using allow_race_conditions.
+            hist.update().allow_race_conditions().atomic().split(r, ro, ri, 32)
                 .gpu_blocks(ro, DeviceAPI::CUDA)
                 .gpu_threads(ri, DeviceAPI::CUDA);
         } break;
