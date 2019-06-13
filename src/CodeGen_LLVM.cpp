@@ -2940,7 +2940,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         Expr x = op->args[0];
         Expr y = op->args[1];
         Halide::Expr abs_x_pow_y = Internal::halide_exp(Internal::halide_log(abs(x)) * y);
-        Halide::Expr nan_expr = make_const(x.type(), nan(""));
+        Halide::Expr nan_expr = Call::make(x.type(), "nan_f32", {}, Call::PureExtern);
         Expr iy = floor(y);
         Expr one = make_one(x.type());
         Expr zero = make_zero(x.type());
