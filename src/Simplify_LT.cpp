@@ -367,6 +367,8 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
               rewrite((min(x, y) < min(z, (x + c0))), (min(x, y) < z), (0 < c0)) ||
               rewrite((max(x, c0) < max(y, 0)), (x < max(y, 0)), (c0 < 0)) ||
 
+              rewrite(((min(x, c0) + y) < min(z, y)), ((min(x, c0) + y) < z), (c0 < 0)) ||
+
               // From Google list
               rewrite((x < (y + 1)), (x <= y)) ||
               #endif
@@ -463,6 +465,18 @@ Expr Simplify::visit(const LE *op, ExprInfo *bounds) {
                 rewrite((min((min(x, y)*c1), z) <= (x*c1)), true, (0 <= c1)) ||
                 rewrite((min(min((min(x, c0) + y), z), w) <= y), true, (c0 <= 0)) ||
                 rewrite(((min((min(x, y) + c0), z) + c1) <= y), true, ((c0 + c1) <= 0)) ||
+
+                rewrite((x <= (max(y, c0) + min(x, z))), (x <= (max(y, c0) + z)), (0 <= c0)) ||
+                rewrite(((x + c0) <= (min(x, c1) + y)), ((max(x, c1) + fold((c0 - c1))) <= y)) ||
+                // c0 unbound. Shouldn't have eq constraints
+                // rewrite((((max(x, 0) + y) + c1) <= x), (y < (min(x, c0) + 2)), ((c0 == 0) && (c1 == -1))) ||
+                rewrite((((max(x, 0) + y) + z) <= x), ((y + z) <= min(x, 0))) ||
+                rewrite(((max(x, c0) + c1) <= max(y, c2)), ((x + c1) <= max(y, c2)), (((c0 != 0) && ((c1/c0) == 0)) && ((c0 <= 0) && (0 <= c2)))) || // weird one
+                rewrite(((x*c1) <= ((y*c1) + z)), (((x - y)*c1) <= z)) ||
+                rewrite((min(x, y) <= min(min(y, z), c0)), (min(x, y) <= min(z, c0))) ||
+                rewrite((min((x + y), z) <= (w + x)), (min((z - x), y) <= w)) ||
+                rewrite((min(((x*c0) + y), z) <= y), ((z <= y) || (x < 1)), (0 < c0)) ||
+                rewrite((min(((x*c0) + y), z) <= y), (select((y < z), 1, 0) <= select((0 < x), 0, 1)), (0 < c0)) || // crappy form
 
                 // From google list
                 rewrite((min(x, y) <= max(z, y)), true) ||
