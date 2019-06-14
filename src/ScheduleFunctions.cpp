@@ -1381,12 +1381,21 @@ private:
                                                                   replacements, add_lets);
                 producer = inject_stmt(producer, produceDef, f.definition().schedule().fuse_level().level);
             }
+        }
 
-            for (size_t j = 0; j < f.updates().size(); ++j) {
-                string defPrefix = f.name() + ".s" + std::to_string(j + 1) + ".";
-                const Definition &def = f.updates()[j];
-                const Stmt &updateDef = build_produce_definition(f, defPrefix, def, true, replacements, add_lets);
-                producer = inject_stmt(producer, updateDef, def.schedule().fuse_level().level);
+        bool some_updated = false;
+        for (size_t j = 0; j == 0 || some_updated; j++) {
+            some_updated = false;
+            for (auto iter = funcs.rbegin(); iter != funcs.rend(); iter++) {
+                const auto &f = *iter;
+
+                if (j < f.updates().size()) {
+                    string defPrefix = f.name() + ".s" + std::to_string(j + 1) + ".";
+                    const Definition &def = f.updates()[j];
+                    const Stmt &updateDef = build_produce_definition(f, defPrefix, def, true, replacements, add_lets);
+                    producer = inject_stmt(producer, updateDef, def.schedule().fuse_level().level);
+                    some_updated = true;
+                }
             }
         }
 
