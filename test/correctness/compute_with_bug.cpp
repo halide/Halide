@@ -1,3 +1,4 @@
+#include <iostream>
 #include <cstdlib>
 #include "Halide.h"
 
@@ -30,5 +31,11 @@ int main(int argc, char **argv) {
     Buffer<float> result = cost.realize();
     const float expected_result = 9900.f; // 2 * sum(0..99)
 
-    return result(0) == expected_result ? EXIT_SUCCESS : EXIT_FAILURE;
+    if (result(0) == expected_result) {
+        std::cout << "Success!\n";
+        return EXIT_SUCCESS;
+    }
+
+    std::cerr << "Error! Expected " << expected_result << " but pipeline returned " << result(0) << "\n";
+    return EXIT_FAILURE;
 }

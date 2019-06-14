@@ -1383,8 +1383,8 @@ private:
             }
         }
 
-        bool some_updated = false;
-        for (size_t j = 0; j == 0 || some_updated; j++) {
+        bool some_updated = true;
+        for (size_t j = 0; some_updated; j++) {
             some_updated = false;
             for (auto iter = funcs.rbegin(); iter != funcs.rend(); iter++) {
                 const auto &f = *iter;
