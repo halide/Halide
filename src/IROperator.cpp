@@ -884,7 +884,6 @@ Expr fast_sin_cos(Expr x_full, bool is_sin) {
     return select(flip_sign, -tri_func, tri_func);
 }
 
-
 Expr fast_sin(Expr x_full) {
     return fast_sin_cos(x_full, true);
 }
