@@ -2939,7 +2939,18 @@ void CodeGen_LLVM::visit(const Call *op) {
         internal_assert(op->args.size() == 2);
         Expr x = op->args[0];
         Expr y = op->args[1];
-        Expr e = Internal::halide_exp(Internal::halide_log(x) * y);
+        Halide::Expr abs_x_pow_y = Internal::halide_exp(Internal::halide_log(abs(x)) * y);
+        Halide::Expr nan_expr = Call::make(x.type(), "nan_f32", {}, Call::PureExtern);
+        Expr iy = floor(y);
+        Expr one = make_one(x.type());
+        Expr zero = make_zero(x.type());
+        Expr e = select(x > 0, abs_x_pow_y,  // Strictly positive x
+                        y == 0.0f, one,  // x^0 == 1
+                        x == 0.0f, zero, // 0^y == 0
+                        y != iy, nan_expr,  // negative x to a non-integer power
+                        iy % 2 == 0, abs_x_pow_y,  // negative x to an even power
+                        -abs_x_pow_y);  // negative x to an odd power
+        e = common_subexpression_elimination(e);
         e.accept(this);
     } else if (op->call_type == Call::PureExtern && op->name == "log_f32") {
         internal_assert(op->args.size() == 1);

@@ -23,7 +23,7 @@ declare  i32 @llvm.nvvm.read.ptx.sreg.warpsize()
 ;declare void @llvm.ptx.red.shared.add.s32(i32 addrspace(4)*, i32)
 
 define weak_odr float @nan_f32() nounwind uwtable readnone alwaysinline {
-       ret float 0xFFF0000000000000;
+       ret float 0x7FF8000000000000;
 }
 
 define weak_odr float @neg_inf_f32() nounwind uwtable readnone alwaysinline {
