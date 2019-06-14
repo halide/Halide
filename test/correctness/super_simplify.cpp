@@ -370,7 +370,13 @@ tuple<Expr, Expr, Expr> predicate_expr(vector<Expr> lhs,
     for (auto e1 : lhs) {
         for (auto e2 : lhs) {
             for (auto e3 : lhs) {
-                if (e2.same_as(e2)) break;
+                if (e2.same_as(e3)) break;
+                constraints.push_back(e1 <= e2 + e3 + 1);
+                constraints.push_back(e1 <= e2 + e3);
+                constraints.push_back(e1 < e2 + e3);
+                constraints.push_back(e1 >= e2 + e3 - 1);
+                constraints.push_back(e1 >= e2 + e3);
+                constraints.push_back(e1 > e2 + e3);
                 constraints.push_back(e1 == e2 + e3);
             }
         }
@@ -720,6 +726,24 @@ Expr super_simplify(Expr e, int size) {
         e = select(e, 1, 0);
     }
 
+    // We may assume there's no undefined behavior in the existing
+    // left-hand-side.
+    class CheckForUB : public IRVisitor {
+        using IRVisitor::visit;
+        void visit(const Mod *op) override {
+            safe = safe && (op->b != 0);
+        }
+        void visit(const Div *op) override {
+            safe = safe && (op->b != 0);
+        }
+        void visit(const Let *op) override {
+            assert(false && "CheckForUB not written to handle Lets");
+        }
+    public:
+        Expr safe = const_true();
+    } ub_checker;
+    e.accept(&ub_checker);
+
     FindVars find_vars;
     e.accept(&find_vars);
     vector<Expr> leaves, use_counts;
@@ -772,20 +796,20 @@ Expr super_simplify(Expr e, int size) {
             for (auto &it : rand_binding) {
                 it.second = random_int(rng);
             }
-            auto interpreted = simplify(substitute(rand_binding, current_program_works));
-            if (is_one(interpreted)) continue;
-
-            counterexamples.push_back(rand_binding);
-            // We probably only want to add a couple
-            // counterexamples at a time
-            counterexamples_found_with_fuzzing++;
-            if (counterexamples_found_with_fuzzing >= 2) {
-                break;
+            auto interpreted = simplify(substitute(rand_binding, ub_checker.safe && !current_program_works));
+            if (is_one(interpreted)) {
+                counterexamples.push_back(rand_binding);
+                // We probably only want to add a couple
+                // counterexamples at a time
+                counterexamples_found_with_fuzzing++;
+                if (counterexamples_found_with_fuzzing >= 2) {
+                    break;
+                }
             }
         }
 
         if (counterexamples_found_with_fuzzing == 0) {
-            auto result = satisfy(!current_program_works, &counterexample);
+            auto result = satisfy(ub_checker.safe && !current_program_works, &counterexample);
             if (result == Unsat) {
                 // Woo!
                 Expr e = simplify(substitute_in_all_lets(common_subexpression_elimination(substitute(current_program, program))));
@@ -829,6 +853,29 @@ Expr super_simplify(Expr e, int size) {
             return Expr();
         }
         // We have a new program
+
+        // If we start to have many many counterexamples, we should
+        // double-check things are working as intended.
+        if (counterexamples.size() > 100) {
+            Expr sanity_check = simplify(substitute(current_program, works_on_counterexamples));
+            if (!is_one(sanity_check)) {
+                Expr p = simplify(substitute_in_all_lets(common_subexpression_elimination(substitute(current_program, program))));
+                std::cout << "Synthesized program doesn't actually work on counterexamples!\n"
+                          << "Original expr: " << e << "\n"
+                          << "Program: " << p << "\n"
+                          << "Check: " << sanity_check << "\n"
+                          << "Counterexamples: \n";
+                for (auto c : counterexamples) {
+                    const char *prefix = "";
+                    for (auto it : c) {
+                        std::cout << prefix << it.first << " = " << it.second;
+                        prefix = ", ";
+                    }
+                    std::cout << "\n";
+                }
+                abort();
+            }
+        }
 
         /*
         std::cout << "Current program:";
@@ -930,7 +977,7 @@ Expr synthesize_sufficient_condition(Expr lhs, Expr rhs, int size,
     Expr most_general_predicate_found;
     map<string, Expr> most_general_predicate_opcodes;
 
-    while (negative_examples.size() < 50) {
+    while (negative_examples.size() < 100) {
 
         // First sythesize a false positive for the current
         // predicate. This is a set of constants for which the

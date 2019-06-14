@@ -369,6 +369,9 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
 
               rewrite(((min(x, c0) + y) < min(z, y)), ((min(x, c0) + y) < z), (c0 < 0)) ||
 
+              rewrite((((c0 - x)/c1) < y), ((y*fold((0 - c1))) < x), (((0 < c1) && (c1 < 16)) && (c0 == 0))) || // < 16
+              rewrite(((((c0 - x)/c1)*c2) < x), true, (((c0 == (c1 + 1)) && ((c1 + c2) == 0)) && ((0 < c1) && (c1 < 16)))) || // Predicate too specific
+
               // From Google list
               rewrite((x < (y + 1)), (x <= y)) ||
               #endif
@@ -477,6 +480,17 @@ Expr Simplify::visit(const LE *op, ExprInfo *bounds) {
                 rewrite((min((x + y), z) <= (w + x)), (min((z - x), y) <= w)) ||
                 rewrite((min(((x*c0) + y), z) <= y), ((z <= y) || (x < 1)), (0 < c0)) ||
                 rewrite((min(((x*c0) + y), z) <= y), (select((y < z), 1, 0) <= select((0 < x), 0, 1)), (0 < c0)) || // crappy form
+
+                rewrite(((x + (y*z)) <= ((w + z)*y)), (x <= (w*y))) ||
+                rewrite(((max(x, 0) + min(y, 1)) <= y), (x < max(y, 1))) || // Too specific?
+
+                rewrite((((x + c0)/c1) <= y), (x <= (y*c1)), (((0 < c1) && (c1 < 16)) && (c0 == (c1 + -1)))) ||
+                rewrite((((c0 - x)/c3) <= ((c2 - x)/c3)), true, (((0 < c3) && (c3 < 16)) && (c0 <= c2))) ||
+                rewrite(((min(x, y)/c0) <= (y/c1)), true, ((((c1 != 0) && ((c0 % c1) == 0)) && (c0 <= c1)) && ((((0 < c0) && (c0 < 16)) && (0 < c1)) && (c1 < 16)))) || // Crazy predicate. c0 % c1 == 0 && c0 <= c1 should just be c0 == c1. TODO: throw all the predicates into the system too
+                rewrite((min(x, y) <= max(x, z)), true) ||
+                rewrite((min(x, y) <= max(y, z)), true) ||
+                rewrite((min((min(x, c0) + y), z) <= y), true, (c0 <= 0)) ||
+                rewrite((min((x*y), c0) <= (min(x, c1)*y)), true, ((c0 <= c1) && (0 <= c0))) ||
 
                 // From google list
                 rewrite((min(x, y) <= max(z, y)), true) ||
