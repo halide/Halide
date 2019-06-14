@@ -18,7 +18,7 @@ COMMAND=${3}
 if [ $COMMAND == "a" ]; then
     COMMAND="autoschedule"
 elif [ $COMMAND == "c" ]; then
-    COMMAND="compilation"
+    COMMAND="compile"
 elif [ $COMMAND == "b" ]; then
     COMMAND="benchmark"
 elif [ $COMMAND == "au" ]; then
@@ -41,4 +41,5 @@ if [[ ! -f $COMMAND_FILE ]]; then
     exit
 fi
 
+cat ${COMMAND_FILE}
 bash ${COMMAND_FILE}

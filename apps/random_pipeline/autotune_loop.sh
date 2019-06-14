@@ -79,7 +79,7 @@ make_sample() {
     eval $CMD
     if [[ $? != 0 ]]; then
         echo "Compilation failed for ${D}"
-        record_failed $BATCH $SAMPLE_ID "$CMD" "compilation_command"
+        record_failed $BATCH $SAMPLE_ID "$CMD" "compile_command"
         return
     fi
 }
