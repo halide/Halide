@@ -1257,7 +1257,8 @@ inline Expr erf(Expr x) {
     return Internal::halide_erf(std::move(x));
 }
 
-// Fast approximation to some trigonometric functions for Float(32)
+/** Fast approximation to some trigonometric functions for Float(32).
+ * Absolute approximation error is less than 1e-5. */
 Expr fast_sin(Expr x);
 Expr fast_cos(Expr x);
 

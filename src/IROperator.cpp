@@ -853,9 +853,9 @@ Expr fast_sin_cos(Expr x_full, bool is_sin) {
     Expr scaled = x_full * two_over_pi;
     Expr k_real = floor(scaled);
     Expr k = cast<int>(k_real);
-    Expr k_mod4 = k & 3;
-    Expr sin_usecos = is_sin ? ((k_mod4 == 1) | (k_mod4 == 3)) : ((k_mod4 == 0) | (k_mod4 == 2));
-    Expr flip_sign = is_sin ? (k_mod4 > 1) : ((k_mod4 == 1) | (k_mod4 == 2));
+    Expr k_mod4 = k % 4;
+    Expr sin_usecos = is_sin ? ((k_mod4 == 1) || (k_mod4 == 3)) : ((k_mod4 == 0) || (k_mod4 == 2));
+    Expr flip_sign = is_sin ? (k_mod4 > 1) : ((k_mod4 == 1) || (k_mod4 == 2));
 
     // Reduce ranged angle.
     Expr x = x_full - k_real * pi_over_two;
