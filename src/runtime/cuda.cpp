@@ -385,7 +385,9 @@ WEAK CUresult create_cuda_context(void *user_context, CUcontext *ctx) {
         int threads_per_core = (cc_major == 1 ? 8 :
                                 cc_major == 2 ? (cc_minor == 0 ? 32 : 48) :
                                 cc_major == 3 ? 192 :
-                                cc_major == 5 ? 128 : 0);
+                                cc_major == 5 ? 128 :
+                                cc_major == 6 ? (cc_minor == 0 ? 64 : 128) :
+                                cc_major == 7 ? 64 : 0);
 
         debug(user_context)
             << "      max threads per block: " << max_threads_per_block << "\n"
@@ -397,7 +399,8 @@ WEAK CUresult create_cuda_context(void *user_context, CUcontext *ctx) {
             << "      max shared memory per block: " << max_shared_mem << "\n"
             << "      max constant memory per block: " << max_constant_mem << "\n"
             << "      compute capability " << cc_major << "." << cc_minor << "\n"
-            << "      cuda cores: " << num_cores << " x " << threads_per_core << " = " << threads_per_core << "\n";
+            << "      cuda cores: " << num_cores << " x " << threads_per_core
+            << " = " << num_cores * threads_per_core << "\n";
     }
     #endif
 
@@ -1033,7 +1036,7 @@ WEAK int halide_cuda_wrap_device_ptr(void *user_context, struct halide_buffer_t 
     buf->device = device_ptr;
     buf->device_interface = &cuda_device_interface;
     buf->device_interface->impl->use_module();
-#if DEBUG_RUNTIME
+#ifdef DEBUG_RUNTIME
     if (!validate_device_pointer(user_context, buf)) {
         buf->device_interface->impl->release_module();
         buf->device = 0;

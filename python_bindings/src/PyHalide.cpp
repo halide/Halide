@@ -23,6 +23,7 @@
 #include "PyTuple.h"
 #include "PyType.h"
 #include "PyVar.h"
+#include "PyDerivative.h"
 
 #ifndef HALIDE_PYBIND_MODULE_NAME
   #define HALIDE_PYBIND_MODULE_NAME halide
@@ -57,4 +58,5 @@ PYBIND11_MODULE(HALIDE_PYBIND_MODULE_NAME, m) {
     define_param(m);
     define_image_param(m);
     define_type(m);
+    define_derivative(m);
 }

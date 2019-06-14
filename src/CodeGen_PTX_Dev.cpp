@@ -30,7 +30,7 @@ using std::vector;
 using namespace llvm;
 
 CodeGen_PTX_Dev::CodeGen_PTX_Dev(Target host) : CodeGen_LLVM(host) {
-    #if !(WITH_PTX)
+    #if !defined(WITH_PTX)
     user_error << "ptx not enabled for this build of Halide.\n";
     #endif
     user_assert(llvm_NVPTX_enabled) << "llvm build not configured with nvptx target enabled\n.";
@@ -409,15 +409,9 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     // Output string stream
 
     // Ask the target to add backend passes as necessary.
-#if LLVM_VERSION >= 70
     bool fail = target_machine->addPassesToEmitFile(module_pass_manager, ostream, nullptr,
                                                     TargetMachine::CGFT_AssemblyFile,
                                                     true);
-#else
-    bool fail = target_machine->addPassesToEmitFile(module_pass_manager, ostream,
-                                                    TargetMachine::CGFT_AssemblyFile,
-                                                    true);
-#endif
     if (fail) {
         internal_error << "Failed to set up passes to emit PTX source\n";
     }

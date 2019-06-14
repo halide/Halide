@@ -29,6 +29,10 @@ HalideExtern_3(std::list<int> *, list_maybe_insert, std::list<int> *, bool, int)
 
 
 int main(int argc, char **argv) {
+    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
+        printf("Skipping test for WebAssembly as the wasm JIT cannot support passing arbitrary pointers to/from HalideExtern code.\n");
+        return 0;
+    }
 
     // Compute the list of factors of all numbers < 100
     Func factors;

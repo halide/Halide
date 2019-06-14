@@ -22,9 +22,6 @@ protected:
 
     void init_module() override;
 
-    Expr mulhi_shr(Expr a, Expr b, int shr) override;
-    Expr sorted_avg(Expr a, Expr b) override;
-
     std::string mcpu() const override;
     std::string mattrs() const override;
     int isa_version;

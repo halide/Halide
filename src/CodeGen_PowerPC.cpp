@@ -15,7 +15,7 @@ using namespace Halide::ConciseCasts;
 using namespace llvm;
 
 CodeGen_PowerPC::CodeGen_PowerPC(Target t) : CodeGen_Posix(t) {
-    #if !(WITH_POWERPC)
+    #if !defined(WITH_POWERPC)
     user_error << "llvm build not configured with PowerPC target enabled.\n";
     #endif
     user_assert(llvm_PowerPC_enabled) << "llvm build not configured with PowerPC target enabled.\n";

@@ -1,3 +1,5 @@
+#include <fstream>
+
 #include "Halide.h"
 #include "halide_image_io.h"
 #include "test/common/halide_test_dirs.h"
@@ -224,8 +226,38 @@ void do_test() {
     }
 }
 
+void test_mat_header() {
+    // Test if the .mat file header writes the correct file size
+    std::ostringstream o;
+    Buffer<uint8_t> buf(15, 15);
+    buf.fill(42);
+    o << Internal::get_test_tmp_dir() << "test_mat_header.mat";
+    std::string filename = o.str();
+    Tools::save_image(buf, filename);
+    std::ifstream fs(filename.c_str(), std::ifstream::binary);
+    if (!fs) {
+        std::cout << "Cannot read " << filename << std::endl;
+        abort();
+    }
+    fs.seekg(0, fs.end);
+    // .mat file begins with a 128 bytes header and a 8 bytes 
+    // matrix tag, the second byte of the matrix describe
+    // the size of the rest of the file
+    uint32_t file_size = uint32_t((int)fs.tellg() - 128 - 8);
+    fs.seekg(128 + 4, fs.beg);
+    uint32_t stored_file_size = 0;
+    fs.read((char*)&stored_file_size, 4);
+    fs.close();
+    if (file_size != stored_file_size) {
+        std::cout << "Wrong file size written for " << filename << ". Expected " <<
+            file_size << ", got" << stored_file_size << std::endl;
+        abort();
+    } 
+}
+
 int main(int argc, char **argv) {
     do_test<uint8_t>();
     do_test<uint16_t>();
+    test_mat_header();
     return 0;
 }

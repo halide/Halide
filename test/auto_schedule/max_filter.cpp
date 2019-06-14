@@ -36,7 +36,7 @@ double run_test(bool auto_schedule) {
     vert_log(x, y, c, t) = input(x, y, c);
     RDom r(-radius, in.height() + radius, 1, slices-1);
     vert_log(x, r.x, c, r.y) = max(vert_log(x, r.x, c, r.y - 1),
-                                   vert_log(x, r.x + clamp((1<<(r.y-1)), 0, radius*2), c, r.y - 1));
+                                   vert_log(x, r.x + clamp((1 << cast<uint32_t>(r.y-1)), 0, radius*2), c, r.y - 1));
 
     // We're going to take a max filter of arbitrary diameter
     // by maxing two samples from its floor log 2 (e.g. maxing two
@@ -50,7 +50,7 @@ double run_test(bool auto_schedule) {
     // t is the blur radius
     Expr slice = clamp(slice_for_radius(t), 0, slices);
     Expr first_sample = vert_log(x, y - t, c, slice);
-    Expr second_sample = vert_log(x, y + t + 1 - clamp(1 << slice, 0, 2*radius), c, slice);
+    Expr second_sample = vert_log(x, y + t + 1 - clamp(1 << cast<uint32_t>(slice), 0, 2*radius), c, slice);
     vert(x, y, c, t) = max(first_sample, second_sample);
 
     Func filter_height;

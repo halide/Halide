@@ -1,5 +1,4 @@
-#include <hexagon_standalone.h>
-#include "log.h"
+#include "hexagon_standalone.h"
 #include <stdlib.h>
 
 bool vtcm_ready = false;
