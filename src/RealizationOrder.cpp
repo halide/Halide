@@ -18,14 +18,14 @@ using std::vector;
 
 namespace {
 
-void find_fused_groups_dfs(string current,
+void find_fused_groups_dfs(const string& current,
                            const map<string, set<string>> &fuse_adjacency_list,
                            set<string> &visited,
                            vector<string> &group) {
     visited.insert(current);
     group.push_back(current);
 
-    map<string, set<string>>::const_iterator iter = fuse_adjacency_list.find(current);
+    auto iter = fuse_adjacency_list.find(current);
     internal_assert(iter != fuse_adjacency_list.end());
 
     for (const string &fn : iter->second) {
@@ -59,7 +59,7 @@ find_fused_groups(const map<string, Function> &env,
     return {fused_groups, group_name};
 }
 
-void realization_order_dfs(string current,
+void realization_order_dfs(const string& current,
                            const map<string, vector<string>> &graph,
                            set<string> &visited,
                            set<string> &result_set,
@@ -210,7 +210,7 @@ pair<vector<string>, vector<vector<string>>> realization_order(
 
     // Collect all indirect calls made by all the functions in "env".
     map<string, map<string, Function>> indirect_calls;
-    for (const pair<string, Function> &caller : env) {
+    for (const pair<const string, Function> &caller : env) {
         map<string, Function> more_funcs = find_transitive_calls(caller.second);
         indirect_calls.emplace(caller.first, more_funcs);
     }
@@ -225,7 +225,7 @@ pair<vector<string>, vector<vector<string>>> realization_order(
     map<string, vector<FusedPair>> fused_pairs_graph;
     map<string, set<string>> fuse_adjacency_list;
 
-    for (const pair<string, Function> &caller : env) {
+    for (const pair<const string, Function> &caller : env) {
         // Find all compute_with (fused) pairs. We have to look at the update
         // definitions as well since compute_with is defined per definition (stage).
         vector<FusedPair> &func_fused_pairs = fused_pairs_graph[caller.first];
@@ -256,7 +256,7 @@ pair<vector<string>, vector<vector<string>>> realization_order(
     std::tie(fused_groups, group_name) = find_fused_groups(env, fuse_adjacency_list);
 
     // Compute the DAG representing the pipeline
-    for (const pair<string, Function> &caller : env) {
+    for (const pair<const string, Function> &caller : env) {
         const string &caller_rename = group_name.at(caller.first);
         // Create a dummy node representing the fused group and add input edge
         // dependencies from the nodes representing member of the fused group
@@ -265,7 +265,7 @@ pair<vector<string>, vector<vector<string>>> realization_order(
         // Direct the calls to calls from the dummy node. This forces all the
         // functions called by members of the fused group to be realized first.
         vector<string> &s = graph[caller_rename];
-        for (const pair<string, Function> &callee : find_direct_calls(caller.second)) {
+        for (const pair<const string, Function> &callee : find_direct_calls(caller.second)) {
             if ((callee.first != caller.first) && // Skip calls to itself (i.e. update stages)
                 (std::find(s.begin(), s.end(), callee.first) == s.end())) {
                 s.push_back(callee.first);
@@ -278,7 +278,7 @@ pair<vector<string>, vector<vector<string>>> realization_order(
     vector<string> temp;
     set<string> result_set;
     set<string> visited;
-    for (Function f : outputs) {
+    for (const Function& f : outputs) {
         if (visited.find(f.name()) == visited.end()) {
             realization_order_dfs(f.name(), graph, visited, result_set, temp);
         }
@@ -323,9 +323,9 @@ vector<string> topological_order(const vector<Function> &outputs,
     // set describing its inputs.
     map<string, vector<string>> graph;
 
-    for (const pair<string, Function> &caller : env) {
+    for (const pair<const string, Function> &caller : env) {
         vector<string> s;
-        for (const pair<string, Function> &callee : find_direct_calls(caller.second)) {
+        for (const pair<const string, Function> &callee : find_direct_calls(caller.second)) {
             if ((callee.first != caller.first) && // Skip calls to itself (i.e. update stages)
                 (std::find(s.begin(), s.end(), callee.first) == s.end())) {
                 s.push_back(callee.first);
@@ -337,7 +337,7 @@ vector<string> topological_order(const vector<Function> &outputs,
     vector<string> order;
     set<string> result_set;
     set<string> visited;
-    for (Function f : outputs) {
+    for (const Function& f : outputs) {
         if (visited.find(f.name()) == visited.end()) {
             realization_order_dfs(f.name(), graph, visited, result_set, order);
         }
