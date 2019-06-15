@@ -77,13 +77,8 @@ bool contains_impure_call(const Expr &expr) {
 }
 
 // Build a loop nest about a provide node using a schedule
-Stmt build_loop_nest(
-        const Stmt &body,
-        const string &prefix,
-        int start_fuse,
-        const Function &func,
-        const Definition &def,
-        bool is_update) {
+Stmt
+build_loop_nest(const Stmt &body, const string &prefix, int start_fuse, const Function &func, const Definition &def) {
     const auto& dims = func.args();
     const auto& func_s = func.schedule();
     const auto& stage_s = def.schedule();
@@ -117,7 +112,7 @@ Stmt build_loop_nest(
 
     // Define the function args in terms of the loop variables using the splits
     for (const Split &split : splits) {
-        vector<ApplySplitResult> splits_result = apply_split(split, is_update, prefix, dim_extent_alignment);
+        vector<ApplySplitResult> splits_result = apply_split(split, prefix, dim_extent_alignment);
 
         for (const auto &res : splits_result) {
             if (res.is_substitution()) {
@@ -324,11 +319,7 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
                              const string &prefix,
                              const Function &func,
                              const Definition &def,
-                             int start_fuse,
-                             bool is_update) {
-
-    internal_assert(!is_update == def.is_init());
-
+                             int start_fuse) {
     // Default stored values
     vector<Expr> site(def.args().size());
     vector<Expr> values(def.values().size());
@@ -351,7 +342,7 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
     Stmt body = Provide::make(func.name(), values, site);
 
     // Default schedule/values if there is no specialization
-    Stmt stmt = build_loop_nest(body, prefix, start_fuse, func, def, is_update);
+    Stmt stmt = build_loop_nest(body, prefix, start_fuse, func, def);
     stmt = inject_placeholder_prefetch(stmt, env, prefix, def.schedule().prefetches());
 
     // Make any specialized copies
@@ -359,7 +350,7 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
     for (size_t i = specializations.size(); i > 0; i--) {
         const Specialization &s = specializations[i - 1];
         if (s.failure_message.empty()) {
-            Stmt then_case = build_provide_loop_nest(env, prefix, func, s.definition, start_fuse, is_update);
+            Stmt then_case = build_provide_loop_nest(env, prefix, func, s.definition, start_fuse);
             stmt = IfThenElse::make(s.condition, then_case, stmt);
         } else {
             internal_assert(equal(s.condition, const_true()));
@@ -664,7 +655,7 @@ Stmt build_extern_produce(const map<string, Function> &env, Function f, const Ta
 
     Definition f_def_no_pred = f.definition().get_copy();
     f_def_no_pred.predicate() = const_true();
-    return build_loop_nest(check, f.name() + ".s0.", -1, f, f_def_no_pred, false);
+    return build_loop_nest(check, f.name() + ".s0.", -1, f, f_def_no_pred);
 }
 
 // A schedule may include explicit bounds on some dimension. This
@@ -1183,8 +1174,11 @@ private:
         }
     }
 
-    Stmt build_produce_definition(const Function &f, const string &prefix, const Definition &def, bool is_update,
-        map<string, Expr> &replacements, vector<pair<string, Expr>> &add_lets) {
+    Stmt build_produce_definition(const Function &f,
+                                  const string &prefix,
+                                  const Definition &def,
+                                  map <string, Expr> &replacements,
+                                  vector <pair<string, Expr>> &add_lets) {
         const vector<Dim> &dims = def.schedule().dims(); // From inner to outer
         const LoopLevel &fuse_level = def.schedule().fuse_level().level;
 
@@ -1227,7 +1221,7 @@ private:
             }
         }
 
-        Stmt produce = build_provide_loop_nest(env, prefix, f, def, (int)(start_fuse), is_update);
+        Stmt produce = build_provide_loop_nest(env, prefix, f, def, (int)(start_fuse));
 
         // Strip off the containing lets. The bounds of the parent fused loop
         // (i.e. the union bounds) might refer to them, so we need to move them
@@ -1377,9 +1371,10 @@ private:
                 const Stmt &produceDef = Internal::build_extern_produce(env, f, target);
                 producer = inject_stmt(producer, produceDef, LoopLevel::inlined().lock());
             } else {
-                const Stmt &produceDef = build_produce_definition(f, f.name() + ".s0.", f.definition(), false,
-                                                                  replacements, add_lets);
-                producer = inject_stmt(producer, produceDef, f.definition().schedule().fuse_level().level);
+                std::string defPrefix = f.name() + ".s0.";
+                const Definition &def = f.definition();
+                const Stmt &produceDef = build_produce_definition(f, defPrefix, def, replacements, add_lets);
+                producer = inject_stmt(producer, produceDef, def.schedule().fuse_level().level);
             }
         }
 
@@ -1392,8 +1387,9 @@ private:
                 if (j < f.updates().size()) {
                     string defPrefix = f.name() + ".s" + std::to_string(j + 1) + ".";
                     const Definition &def = f.updates()[j];
-                    const Stmt &updateDef = build_produce_definition(f, defPrefix, def, true, replacements, add_lets);
-                    producer = inject_stmt(producer, updateDef, def.schedule().fuse_level().level);
+                    const Stmt &produceDef = build_produce_definition(f, defPrefix, def, replacements, add_lets);
+                    producer = inject_stmt(producer, produceDef, def.schedule().fuse_level().level);
+
                     some_updated = true;
                 }
             }
@@ -1422,6 +1418,7 @@ private:
                 compute_shift_factor(func, prefix, func.updates()[j], bounds, shifts);
             }
         }
+
         // Shift the loops.
         producer = ShiftLoopNest::apply_shift(shifts, producer);
 

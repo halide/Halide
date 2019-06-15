@@ -453,7 +453,7 @@ bool apply_split(const Split &s, vector<ReductionVariable> &rvars,
 
         rvars.insert(it + 1, {s.outer, 0, simplify((old_extent - 1 + s.factor)/s.factor)});
 
-        vector<ApplySplitResult> splits_result = apply_split(s, true, "", dim_extent_alignment);
+        vector<ApplySplitResult> splits_result = apply_split(s, "", dim_extent_alignment);
         vector<pair<string, Expr>> bounds_let_stmts = compute_loop_bounds_after_split(s, "");
         apply_split_result(bounds_let_stmts, splits_result, predicates, args, values);
 
@@ -488,7 +488,7 @@ bool apply_fuse(const Split &s, vector<ReductionVariable> &rvars,
         iter_outer->extent = extent;
         rvars.erase(iter_inner);
 
-        vector<ApplySplitResult> splits_result = apply_split(s, true, "", dim_extent_alignment);
+        vector<ApplySplitResult> splits_result = apply_split(s, "", dim_extent_alignment);
         vector<pair<string, Expr>> bounds_let_stmts = compute_loop_bounds_after_split(s, "");
         apply_split_result(bounds_let_stmts, splits_result, predicates, args, values);
 
@@ -512,7 +512,7 @@ bool apply_purify(const Split &s, vector<ReductionVariable> &rvars,
                  << ", deleting it from the rvars list\n";
         rvars.erase(iter);
 
-        vector<ApplySplitResult> splits_result = apply_split(s, true, "", dim_extent_alignment);
+        vector<ApplySplitResult> splits_result = apply_split(s, "", dim_extent_alignment);
         vector<pair<string, Expr>> bounds_let_stmts = compute_loop_bounds_after_split(s, "");
         apply_split_result(bounds_let_stmts, splits_result, predicates, args, values);
 
@@ -532,7 +532,7 @@ bool apply_rename(const Split &s, vector<ReductionVariable> &rvars,
         debug(4) << "  Renaming " << iter->var << " into " << s.outer << "\n";
         iter->var = s.outer;
 
-        vector<ApplySplitResult> splits_result = apply_split(s, true, "", dim_extent_alignment);
+        vector<ApplySplitResult> splits_result = apply_split(s, "", dim_extent_alignment);
         vector<pair<string, Expr>> bounds_let_stmts = compute_loop_bounds_after_split(s, "");
         apply_split_result(bounds_let_stmts, splits_result, predicates, args, values);
 
