@@ -781,18 +781,29 @@ private:
 
 // Inject 'injected' into 'root' at 'level'.
 Stmt inject_stmt(Stmt root, Stmt injected, const LoopLevel &level) {
+    debug(3) << "[ROOT]\n" << root
+             << "[INJECTED]\n" << injected
+             << "[FUSE_LEVEL]\n" << level.to_string()
+             << " is_inlined=" << level.is_inlined()
+             << " is_root=" << level.is_root()
+             << "\n";
     if (!root.defined()) {
+        debug(3) << "[RESULT 0]\n" << injected << "\n\n";
         return injected;
     }
     if (!injected.defined()) {
+        debug(3) << "[RESULT 1]\n" << root << "\n\n";
         return root;
     }
     if (level.is_inlined() || level.is_root()) {
-        return Block::make(root, injected);
+        const Stmt &stmt = Block::make(root, injected);
+        debug(3) << "[RESULT 2]\n" << stmt << "\n\n";
+        return stmt;
     }
     InjectStmt injector(injected, level);
     root = injector.mutate(root);
     internal_assert(injector.found_level);
+    debug(3) << "[RESULT 3]\n" << root << "\n\n";
     return root;
 }
 
