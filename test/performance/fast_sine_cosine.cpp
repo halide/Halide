@@ -33,13 +33,13 @@ int main(int argc, char **argv) {
            "fast_cosine: %f ns per pixel\n",
            t1, t3, t2, t4);
 
-    if (t1 > 0.5f * t3) {
-        printf("fast_sin is not 2x faster than sin\n");
+    if (t3 < 1.5f * t1) {
+        printf("fast_sin is not 1.5x faster than sin\n");
         return -1;
     }
 
-    if (t2 > 0.5f * t4) {
-        printf("fast_cos is not 2x faster than cos\n");
+    if (t4 < 1.5f * t2) {
+        printf("fast_cos is not 1.5x faster than cos\n");
         return -1;
     }
 
