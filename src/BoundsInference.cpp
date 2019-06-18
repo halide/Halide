@@ -49,6 +49,7 @@ class DependsOnBoundsInference : public IRVisitor {
 
 public:
     bool result;
+
     DependsOnBoundsInference() : result(false) {}
 };
 
@@ -72,6 +73,7 @@ bool depends_on_bounds_inference(const Expr &e) {
 class BoundsOfInnerVar : public IRVisitor {
 public:
     Interval result;
+
     BoundsOfInnerVar(string v) : var(std::move(v)) {}
 
 private:
@@ -149,7 +151,7 @@ public:
         // of an init definition should have the same LHS.
         // This also pushes all the reduction domains it encounters into the 'rvars'
         // set for later use.
-        vector<vector<CondValue>> compute_exprs_helper(const Definition& def, bool is_update) {
+        vector<vector<CondValue>> compute_exprs_helper(const Definition &def, bool is_update) {
             vector<vector<CondValue>> result(2); // <args, values>
 
             if (!def.defined()) {
@@ -190,8 +192,8 @@ public:
 
             const vector<Specialization> &specializations = def.specializations();
             for (size_t i = specializations.size(); i > 0; i--) {
-                Expr s_cond = specializations[i-1].condition;
-                const Definition &s_def = specializations[i-1].definition;
+                Expr s_cond = specializations[i - 1].condition;
+                const Definition &s_def = specializations[i - 1].definition;
 
                 // Else case (i.e. specialization condition is false)
                 for (auto &vec : result) {
@@ -270,12 +272,13 @@ public:
             // to if_then_elses to get tighter bounds.
             class SelectToIfThenElse : public IRMutator {
                 using IRMutator::visit;
+
                 Expr visit(const Select *op) override {
                     if (is_pure(op->condition)) {
                         return Call::make(op->type, Call::if_then_else,
                                           {mutate(op->condition),
-                                                  mutate(op->true_value),
-                                                  mutate(op->false_value)},
+                                           mutate(op->true_value),
+                                           mutate(op->false_value)},
                                           Call::PureIntrinsic);
                     } else {
                         return IRMutator::visit(op);
@@ -319,25 +322,27 @@ public:
             // Find the fused group this producing stage belongs to.
             size_t index;
             {
-                const auto &iter = std::find_if(fused_groups.begin(), fused_groups.end(),
+                const auto &iter = std::find_if(
+                    fused_groups.begin(),
+                    fused_groups.end(),
                     [&producing_func](const vector<Function> &group) {
                         return std::any_of(group.begin(), group.end(),
-                                    [&producing_func](const Function &f) {
-                                        return (f.name() == producing_func.name());
-                                    });
+                                           [&producing_func](const Function &f) {
+                                               return (f.name() == producing_func.name());
+                                           });
                     });
                 internal_assert(iter != fused_groups.end());
                 index = iter - fused_groups.begin();
             }
 
             const vector<Dim> &dims = (producing_stage_index == 0) ?
-                producing_func.definition().schedule().dims() :
-                producing_func.update(producing_stage_index-1).schedule().dims();
+                                      producing_func.definition().schedule().dims() :
+                                      producing_func.update(producing_stage_index - 1).schedule().dims();
 
             size_t var_index;
             {
-                const auto &iter = std::find_if(dims.begin(), dims.end(),
-                    [&var](const Dim &d) { return var_name_match(d.var, var); });
+                const auto &iter = std::find_if(
+                    dims.begin(), dims.end(), [&var](const Dim &d) { return var_name_match(d.var, var); });
                 internal_assert(iter != dims.end());
                 var_index = iter - dims.begin();
             }
@@ -347,7 +352,8 @@ public:
             for (const auto &pair : fused_pairs_in_groups[index]) {
                 if (((pair.func_1 == consumer_name) && ((int)pair.stage_1 == consumer_stage)) ||
                     ((pair.func_2 == consumer_name) && ((int)pair.stage_2 == consumer_stage))) {
-                    const auto &iter = std::find_if(dims.begin(), dims.end(),
+                    const auto &iter = std::find_if(
+                        dims.begin(), dims.end(),
                         [&pair](const Dim &d) { return var_name_match(d.var, pair.var_name); });
                     internal_assert(iter != dims.end());
                     size_t idx = iter - dims.begin();
@@ -478,7 +484,8 @@ public:
 
                     // 1)
                     s = LetStmt::make(func.name() + ".outer_bounds_query",
-                                      Variable::make(type_of<struct halide_buffer_t *>(), func.name() + ".o0.bounds_query"), s);
+                                      Variable::make(type_of<struct halide_buffer_t *>(),
+                                                     func.name() + ".o0.bounds_query"), s);
                 } else {
                     // If we're at the outermost loop, there is no
                     // bounds query result from one level up, but we
@@ -727,7 +734,7 @@ public:
                 for (const ReductionVariable &rv : rvars) {
                     string arg = name + ".s" + std::to_string(stage) + "." + rv.var;
                     result.push(rv.var, Interval(Variable::make(Int(32), arg + ".min"),
-                                                   Variable::make(Int(32), arg + ".max")));
+                                                 Variable::make(Int(32), arg + ".max")));
                 }
             }
 
@@ -739,6 +746,7 @@ public:
         }
 
     };
+
     vector<Stage> stages;
 
     BoundsInference(const vector<Function> &f,
@@ -777,7 +785,7 @@ public:
             stages.push_back(s);
 
             for (size_t j = 0; j < f[i].updates().size(); j++) {
-                s.stage = (int)(j+1);
+                s.stage = (int)(j + 1);
                 s.stage_prefix = s.name + ".s" + std::to_string(s.stage) + ".";
                 s.compute_exprs();
                 stages.push_back(s);
@@ -880,7 +888,7 @@ public:
                             if (consumer.stage == 0) {
                                 err << "The pure definition ";
                             } else {
-                                err << "Update definition number " << (consumer.stage-1);
+                                err << "Update definition number " << (consumer.stage - 1);
                             }
                             err << " of Function " << consumer.name
                                 << " calls function " << producer.name
@@ -902,7 +910,7 @@ public:
                     */
 
 
-                    producer.bounds[{ consumer.name, consumer.stage }] = b;
+                    producer.bounds[{consumer.name, consumer.stage}] = b;
                     producer.consumers.push_back((int)i);
                 }
             }
@@ -1057,7 +1065,7 @@ public:
                         vars.push_back(rv.var);
                     }
                 }
-                for (const string& i : vars) {
+                for (const string &i : vars) {
                     string var = s.stage_prefix + i;
                     Interval in = bounds_of_inner_var(var, body);
                     if (in.is_bounded()) {
@@ -1089,7 +1097,7 @@ public:
 
         // Rewrap the let statements
         for (size_t i = lets.size(); i > 0; i--) {
-            body = LetStmt::make(lets[i-1].first, lets[i-1].second, body);
+            body = LetStmt::make(lets[i - 1].first, lets[i - 1].second, body);
         }
 
         return For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
@@ -1104,7 +1112,6 @@ public:
     }
 
 };
-
 
 
 Stmt bounds_inference(Stmt s,
