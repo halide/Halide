@@ -175,10 +175,10 @@ public:
                                                    Internal::Call::if_then_else,
                                                    {likely(predicates[0]), val, make_zero(val.type())},
                                                    Internal::Call::PureIntrinsic);
-                        for (size_t i = 1; i < predicates.size(); ++i) {
+                        for (size_t j = 1; j < predicates.size(); ++j) {
                             cond_val = Call::make(cond_val.type(),
                                                   Internal::Call::if_then_else,
-                                                  {likely(predicates[i]), cond_val, make_zero(cond_val.type())},
+                                                  {likely(predicates[j]), cond_val, make_zero(cond_val.type())},
                                                   Internal::Call::PureIntrinsic);
                         }
                         result[i].push_back(CondValue(const_true(), cond_val));
@@ -207,8 +207,8 @@ public:
                         cval.cond = simplify(s_cond && cval.cond);
                     }
                 }
-                for (size_t i = 0; i < result.size(); i++) {
-                    result[i].insert(result[i].end(), s_result[i].begin(), s_result[i].end());
+                for (size_t j = 0; j < result.size(); j++) {
+                    result[j].insert(result[j].end(), s_result[j].begin(), s_result[j].end());
                 }
             }
 
@@ -290,7 +290,7 @@ public:
 
         // Check if the dimension at index 'dim_idx' is always pure (i.e. equal to 'dim')
         // in the definition (including in its specializations)
-        bool is_dim_always_pure(const Definition &def, const string &dim, int dim_idx) {
+        static bool is_dim_always_pure(const Definition &def, const string &dim, int dim_idx) {
             const auto *var = def.args()[dim_idx].as<Variable>();
             if ((!var) || (var->name != dim)) {
                 return false;
@@ -838,11 +838,11 @@ public:
                 // use. We just need to extract those values.
                 for (const auto &arg : args) {
                     if (arg.is_func()) {
-                        Function f(arg.func);
-                        string stage_name = f.name() + ".s" + std::to_string(f.updates().size());
-                        Box b(f.dimensions());
-                        for (int d = 0; d < f.dimensions(); d++) {
-                            string buf_name = f.name() + ".o0.bounds_query." + consumer.name;
+                        Function fn(arg.func);
+                        string stage_name = fn.name() + ".s" + std::to_string(fn.updates().size());
+                        Box b(fn.dimensions());
+                        for (int d = 0; d < fn.dimensions(); d++) {
+                            string buf_name = fn.name() + ".o0.bounds_query." + consumer.name;
                             Expr buf = Variable::make(type_of<struct halide_buffer_t *>(), buf_name);
                             Expr min = Call::make(Int(32), Call::buffer_get_min,
                                                   {buf, d}, Call::Extern);
@@ -850,18 +850,18 @@ public:
                                                   {buf, d}, Call::Extern);
                             b[d] = Interval(min, max);
                         }
-                        merge_boxes(boxes[f.name()], b);
+                        merge_boxes(boxes[fn.name()], b);
                     }
                 }
             } else {
                 for (const auto &cval : consumer.exprs) {
                     map<string, Box> new_boxes;
                     new_boxes = boxes_required(cval.value, scope, func_bounds);
-                    for (auto &i : new_boxes) {
+                    for (auto &new_box : new_boxes) {
                         // Add the condition on which this value is evaluated to the box before merging
-                        Box &box = i.second;
+                        Box &box = new_box.second;
                         box.used = cval.cond;
-                        merge_boxes(boxes[i.first], box);
+                        merge_boxes(boxes[new_box.first], box);
                     }
                 }
             }
@@ -1125,6 +1125,7 @@ Stmt bounds_inference(Stmt s,
     vector<vector<Function>> fused_func_groups;
     for (const vector<string> &group : fused_groups) {
         vector<Function> fs;
+        fs.reserve(group.size());
         for (const string &fname : group) {
             fs.push_back(env.find(fname)->second);
         }
