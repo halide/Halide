@@ -2577,7 +2577,8 @@ struct LoopNest {
 
             // Pick a tail strategy for any splits of pure vars. RVars always use guardwithif
             auto pure_var_tail_strategy = TailStrategy::Auto;
-            if (!compute_site->accesses_input_buffer() && !node->is_output) {
+            const bool might_access_gpu_shared = true; // Conservatively always true for now
+            if (!might_access_gpu_shared && !compute_site->accesses_input_buffer() && !node->is_output) {
                 // Roundup is lowest overhead, provided it doesn't
                 // expand the bounds read on the input or written on
                 // the output. However, you can only really use it on
