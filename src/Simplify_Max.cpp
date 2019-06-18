@@ -231,6 +231,9 @@ Expr Simplify::visit(const Max *op, ExprInfo *bounds) {
                rewrite(max(max(x, y), (max(y, z) + c0)), max((max(y, z) + c0), x), (0 <= c0)) ||
                rewrite(max(max(x, (y + c0)), y), max((y + c0), x), (0 <= c0)) ||
 
+               rewrite(max((x + y), ((z + (w + y)) + c0)), (max(((w + z) + c0), x) + y)) || // constant needn't be
+               rewrite(max(max((x*c0), y), (z*c0)), max((max(x, z)*c0), y), (0 <= c0)) ||
+
                // From Google data
                rewrite(max((select((x < y), z, w)*x), (select((x < y), w, z)*x)), max((x*z), (w*x))) ||
                rewrite(max(max((x*x), (x*y)), (y*y)), max((y*y), (x*x))) ||

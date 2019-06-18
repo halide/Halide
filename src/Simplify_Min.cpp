@@ -245,6 +245,7 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
                rewrite(min((((x + c0)/c2)*c2), (x + c3)), (x + c3), (((0 < c2) && (c2 < 16)) && (((c2 + c3) + -1) <= c0))) ||
 
                rewrite(min(((x + y)*c0), ((y*c0) - z)), ((y*c0) - max((x*fold((0 - c0))), z))) ||
+               rewrite(min(((x + (y + z)) + w), (u + z)), (min(((x + y) + w), u) + z)) ||
 
                // From Google data
                rewrite(min((x - (y + z)), ((x - (w + z)) + u)), ((x - z) - max((w - u), y))) ||

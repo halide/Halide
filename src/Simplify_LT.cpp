@@ -373,6 +373,7 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
               rewrite(((((c0 - x)/c1)*c2) < x), true, (((c0 == (c1 + 1)) && ((c1 + c2) == 0)) && ((0 < c1) && (c1 < 16)))) || // Predicate too specific
               rewrite(((x*c0) < ((y*c1) + c2)), ((x*fold((c0/c1))) < y), (((((c1 < 16) && (0 < c1)) && ((c1 != 0) && ((c0 % c1) == 0))) && (c2 <= 0)) && (0 < (c1 + c2)))) || // < 16. Some unnecessary constraints.
 
+              rewrite((max(min((x + c0), y), z) < x), (max(y, z) < x), (0 <= c0)) ||
 
               // From Google list
               rewrite((x < (y + 1)), (x <= y)) ||

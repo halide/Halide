@@ -253,18 +253,21 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
 
                // Synthesized
                #if USE_SYNTHESIZED_RULES
-               rewrite(((x + (y*z)) - (w*z)), (x - ((w - y)*z))) ||
-               rewrite(((min((x - y), z) + (w + y)) - u), (min((y + z), x) + (w - u))) ||
-               rewrite((min(x, (y + z)) - (w + y)), (min((x - y), z) - w)) ||
+               rewrite(((x + (y*z)) - (w*z)), (x - ((w - y)*z))) || // A RHS with adds would be better
+               rewrite((((x*y) + z) - (y*w)), (z - ((w - x)*y))) || // A RHS with adds would be better
+               rewrite((((x*y) + z) - (w*y)), (z - ((w - x)*y))) || // A RHS with adds would be better
+               rewrite((((x*y) + z) - (x*w)), (z - ((w - y)*x))) || // A RHS with adds would be better
+               rewrite(((x*y) - ((z*y) + w)), (((x - z)*y) - w)) ||
+               rewrite(((x - (y*z)) - (w*z)), (x - ((w + y)*z))) ||
 
-               rewrite((((x*y) + z) - (y*w)), (z - ((w - x)*y))) ||
+               rewrite(((min((x - y), z) + (w + y)) - u), (min((y + z), x) + (w - u))) ||
+
+               rewrite((min(x, (y + z)) - (w + y)), (min((x - y), z) - w)) ||
                rewrite((min((x + y), z) - (y + w)), (min((z - y), x) - w)) ||
 
                rewrite((0 - (x*c1)), (x*fold((0 - c1)))) ||
                rewrite(((x + y) - min((z + y), w)), (x - min((w - y), z))) ||
-               rewrite((((x*y) + z) - (w*y)), (z - ((w - x)*y))) ||
-               rewrite((((x*y) + z) - (x*w)), (z - ((w - y)*x))) ||
-               rewrite(((x*y) - ((z*y) + w)), (((x - z)*y) - w)) ||
+
                rewrite((min(((x + y) + z), w) - x), min((w - x), (y + z))) ||
                rewrite((min(((x + y) + z), w) - y), min((w - y), (x + z))) ||
                rewrite((min((min(x, c0) + c1), y) - x), min((min(y, fold((c0 + c1))) - x), c1)) ||
@@ -272,6 +275,11 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
                rewrite((max(((x + y) + z), w) - y), max((w - y), (x + z))) ||
                rewrite((max(max((x + y), z), w) - x), max((max(w, z) - x), y)) ||
                rewrite(((x + (y + (z + w))) - w), ((y + z) + x)) ||
+
+               rewrite((((x + y) - z) - y), (x - z)) ||
+               rewrite((((max(x, (y + c0)) + z) - w) - z), (max((y + c0), x) - w)) ||
+               rewrite((max(x, ((y + z) + c0)) - z), max((x - z), (y + c0))) ||
+               rewrite((max((x + y), z) - (w + y)), (max((z - y), x) - w)) ||
 
                #endif
 
