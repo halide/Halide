@@ -20,6 +20,7 @@ int main(int argc, char **argv) {
         f.hexagon(y);
     } else {
         printf("No gpu or hexagon target enabled. Skipping test.\n");
+        return 0;
     }
     f.parallel(z);
 
