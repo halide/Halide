@@ -371,6 +371,8 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
 
               rewrite((((c0 - x)/c1) < y), ((y*fold((0 - c1))) < x), (((0 < c1) && (c1 < 16)) && (c0 == 0))) || // < 16
               rewrite(((((c0 - x)/c1)*c2) < x), true, (((c0 == (c1 + 1)) && ((c1 + c2) == 0)) && ((0 < c1) && (c1 < 16)))) || // Predicate too specific
+              rewrite(((x*c0) < ((y*c1) + c2)), ((x*fold((c0/c1))) < y), (((((c1 < 16) && (0 < c1)) && ((c1 != 0) && ((c0 % c1) == 0))) && (c2 <= 0)) && (0 < (c1 + c2)))) || // < 16. Some unnecessary constraints.
+
 
               // From Google list
               rewrite((x < (y + 1)), (x <= y)) ||
@@ -491,6 +493,13 @@ Expr Simplify::visit(const LE *op, ExprInfo *bounds) {
                 rewrite((min(x, y) <= max(y, z)), true) ||
                 rewrite((min((min(x, c0) + y), z) <= y), true, (c0 <= 0)) ||
                 rewrite((min((x*y), c0) <= (min(x, c1)*y)), true, ((c0 <= c1) && (0 <= c0))) ||
+
+                rewrite((x <= ((y + c0)/c1)), ((x*c1) < y), (((-1 <= c0) && (c0 < 0)) && ((0 < c1) && (c1 < 16)))) || // Predicate implies c0 == 1
+                rewrite(((x*c1) <= max((y*c1), c2)), (x <= max(y, fold((c2/c1)))), ((c1 < 16) && (0 < c1))) || // < 16
+                rewrite((min((x*c2), c1) <= (y*c2)), (min(x, fold((((c1 + -1)/c2) + 1))) <= y), ((c2 < 16) && (0 < c2))) || // < 16
+
+                rewrite(((min(x, c0) + c1) <= min(y, 0)), (min(x, c0) < (y + fold((c0 - c1)))), ((c1 < 0) && (c0 == 1))) || // Should have subs'd in c0
+                rewrite(((max(x, c0) + c1) <= max(y, c0)), ((x + c1) <= max(y, c0)), (c1 <= 0)) ||
 
                 // From google list
                 rewrite((min(x, y) <= max(z, y)), true) ||
