@@ -21,7 +21,7 @@ using std::vector;
 
 namespace {
 
-bool var_name_match(string candidate, string var) {
+bool var_name_match(const string &candidate, const string &var) {
     internal_assert(var.find('.') == string::npos)
         << "var_name_match expects unqualified names for the second argument. "
         << "Name passed: " << var << "\n";
@@ -52,7 +52,7 @@ public:
     DependsOnBoundsInference() : result(false) {}
 };
 
-bool depends_on_bounds_inference(Expr e) {
+bool depends_on_bounds_inference(const Expr &e) {
     DependsOnBoundsInference d;
     e.accept(&d);
     return d.result;
@@ -72,7 +72,7 @@ bool depends_on_bounds_inference(Expr e) {
 class BoundsOfInnerVar : public IRVisitor {
 public:
     Interval result;
-    BoundsOfInnerVar(const string &v) : var(v) {}
+    BoundsOfInnerVar(string v) : var(std::move(v)) {}
 
 private:
     string var;
@@ -105,7 +105,7 @@ private:
     }
 };
 
-Interval bounds_of_inner_var(string var, Stmt s) {
+Interval bounds_of_inner_var(const string &var, const Stmt &s) {
     BoundsOfInnerVar b(var);
     s.accept(&b);
     return b.result;
@@ -130,7 +130,7 @@ public:
         Expr cond; // Condition on params only (can't depend on loop variable)
         Expr value;
 
-        CondValue(const Expr &c, const Expr &v) : cond(c), value(v) {}
+        CondValue(Expr c, Expr v) : cond(std::move(c)), value(std::move(v)) {}
     };
 
     struct Stage {
@@ -231,7 +231,7 @@ public:
                                  << "(" << val << ") are equal, combine them together\n";
                         internal_assert(val.defined());
                         vec.clear();
-                        vec.push_back(CondValue(const_true(), val));
+                        vec.emplace_back(const_true(), val);
                     }
                 }
             }
@@ -259,7 +259,7 @@ public:
             exprs = result[0];
 
             if (func.extern_definition_proxy_expr().defined()) {
-                exprs.push_back(CondValue(const_true(), func.extern_definition_proxy_expr()));
+                exprs.emplace_back(const_true(), func.extern_definition_proxy_expr());
             }
 
             exprs.insert(exprs.end(), result[1].begin(), result[1].end());
@@ -290,8 +290,8 @@ public:
 
         // Check if the dimension at index 'dim_idx' is always pure (i.e. equal to 'dim')
         // in the definition (including in its specializations)
-        bool is_dim_always_pure(const Definition &def, const string& dim, int dim_idx) {
-            const Variable *var = def.args()[dim_idx].as<Variable>();
+        bool is_dim_always_pure(const Definition &def, const string &dim, int dim_idx) {
+            const auto *var = def.args()[dim_idx].as<Variable>();
             if ((!var) || (var->name != dim)) {
                 return false;
             }
@@ -379,7 +379,7 @@ public:
             size_t last_dot = loop_level.rfind('.');
             string var = loop_level.substr(last_dot + 1);
 
-            for (const pair<pair<string, int>, Box> &i : bounds) {
+            for (const pair<const pair<string, int>, Box> &i : bounds) {
                 string func_name = i.first.first;
                 int func_stage_index = i.first.second;
                 string stage_name = func_name + ".s" + std::to_string(func_stage_index);
@@ -513,8 +513,7 @@ public:
                 LoopLevel compute_at = func.schedule().compute_level();
                 LoopLevel store_at = func.schedule().store_level();
 
-                for (size_t i = 0; i < func.schedule().bounds().size(); i++) {
-                    Bound bound = func.schedule().bounds()[i];
+                for (auto bound : func.schedule().bounds()) {
                     string min_var = prefix + bound.var + ".min";
                     string max_var = prefix + bound.var + ".max";
                     Expr min_required = Variable::make(Int(32), min_var);
@@ -597,11 +596,11 @@ public:
             Expr null_handle = make_zero(Handle());
 
             vector<Expr> buffers_to_annotate;
-            for (size_t j = 0; j < args.size(); j++) {
-                if (args[j].is_expr()) {
-                    bounds_inference_args.push_back(args[j].expr);
-                } else if (args[j].is_func()) {
-                    Function input(args[j].func);
+            for (const auto &arg : args) {
+                if (arg.is_expr()) {
+                    bounds_inference_args.push_back(arg.expr);
+                } else if (arg.is_func()) {
+                    Function input(arg.func);
                     for (int k = 0; k < input.outputs(); k++) {
                         string name = input.name() + ".o" + std::to_string(k) + ".bounds_query." + func.name();
 
@@ -610,15 +609,15 @@ public:
                         builder.dimensions = input.dimensions();
                         Expr buf = builder.build();
 
-                        lets.push_back({ name, buf });
+                        lets.emplace_back(name, buf);
                         bounds_inference_args.push_back(Variable::make(type_of<struct halide_buffer_t *>(), name));
                         buffers_to_annotate.push_back(bounds_inference_args.back());
                     }
-                } else if (args[j].is_image_param() || args[j].is_buffer()) {
-                    Parameter p = args[j].image_param;
-                    Buffer<> b = args[j].buffer;
-                    string name = args[j].is_image_param() ? p.name() : b.name();
-                    int dims = args[j].is_image_param() ? p.dimensions() : b.dimensions();
+                } else if (arg.is_image_param() || arg.is_buffer()) {
+                    Parameter p = arg.image_param;
+                    Buffer<> b = arg.buffer;
+                    string name = arg.is_image_param() ? p.name() : b.name();
+                    int dims = arg.is_image_param() ? p.dimensions() : b.dimensions();
 
                     Expr in_buf = Variable::make(type_of<struct halide_buffer_t *>(), name + ".buffer");
 
@@ -633,7 +632,7 @@ public:
                     query_buf = Call::make(type_of<struct halide_buffer_t *>(), Call::buffer_init_from_buffer,
                                            {query_buf, query_shape, in_buf}, Call::Extern);
 
-                    lets.push_back({ query_name, query_buf });
+                    lets.emplace_back(query_name, query_buf);
                     Expr buf = Variable::make(type_of<struct halide_buffer_t *>(), query_name, b, p, ReductionDomain());
                     bounds_inference_args.push_back(buf);
                     // Although we expect ImageParams to be properly initialized and sanitized by the caller,
@@ -650,13 +649,13 @@ public:
                 BufferBuilder builder;
                 builder.type = func.output_types()[j];
                 builder.dimensions = func.dimensions();
-                for (const string arg : func.args()) {
+                for (const string &arg : func.args()) {
                     string prefix = func.name() + ".s" + std::to_string(stage) + "." + arg;
                     Expr min = Variable::make(Int(32), prefix + ".min");
                     Expr max = Variable::make(Int(32), prefix + ".max");
                     builder.mins.push_back(min);
                     builder.extents.push_back(max + 1 - min);
-                    builder.strides.push_back(0);
+                    builder.strides.emplace_back(0);
                 }
                 Expr output_buffer_t = builder.build();
 
@@ -665,7 +664,7 @@ public:
                 // Since this is a temporary, internal-only buffer used for bounds inference,
                 // we need to mark it
                 buffers_to_annotate.push_back(bounds_inference_args.back());
-                lets.push_back({ buf_name, output_buffer_t });
+                lets.emplace_back(buf_name, output_buffer_t);
             }
 
             Stmt annotate;
@@ -707,8 +706,8 @@ public:
             s = Block::make(check, s);
 
             // Wrap in let stmts defining the args
-            for (size_t i = 0; i < lets.size(); i++) {
-                s = LetStmt::make(lets[i].first, lets[i].second, s);
+            for (auto &let : lets) {
+                s = LetStmt::make(let.first, let.second, s);
             }
 
             return s;
@@ -718,7 +717,7 @@ public:
         // We need to take into account specializations which may refer to
         // different reduction variables as well.
         void populate_scope(Scope<Interval> &result) {
-            for (const string farg : func.args()) {
+            for (const string &farg : func.args()) {
                 string arg = name + ".s" + std::to_string(stage) + "." + farg;
                 result.push(farg,
                             Interval(Variable::make(Int(32), arg + ".min"),
@@ -757,13 +756,9 @@ public:
         // Figure out which functions will be inlined away
         vector<bool> inlined(f.size());
         for (size_t i = 0; i < inlined.size(); i++) {
-            if (i < f.size() - 1 &&
-                f[i].schedule().compute_level().is_inlined() &&
-                f[i].can_be_inlined()) {
-                inlined[i] = true;
-            } else {
-                inlined[i] = false;
-            }
+            inlined[i] = i < f.size() - 1 &&
+                         f[i].schedule().compute_level().is_inlined() &&
+                         f[i].can_be_inlined();
         }
 
         // First lay out all the stages in their realization order.
@@ -792,12 +787,10 @@ public:
 
         // Do any pure inlining (TODO: This is currently slow)
         for (size_t i = f.size(); i > 0; i--) {
-            Function func = f[i-1];
-            if (inlined[i-1]) {
-                for (size_t j = 0; j < stages.size(); j++) {
-                    Stage &s = stages[j];
-                    for (size_t k = 0; k < s.exprs.size(); k++) {
-                        CondValue &cond_val = s.exprs[k];
+            Function func = f[i - 1];
+            if (inlined[i - 1]) {
+                for (auto &s : stages) {
+                    for (auto &cond_val : s.exprs) {
                         internal_assert(cond_val.value.defined());
                         cond_val.value = inline_function(cond_val.value, func);
                     }
@@ -807,10 +800,10 @@ public:
 
         // Remove the inlined stages
         vector<Stage> new_stages;
-        for (size_t i = 0; i < stages.size(); i++) {
-            if (!stages[i].func.schedule().compute_level().is_inlined() ||
-                !stages[i].func.can_be_inlined()) {
-                new_stages.push_back(stages[i]);
+        for (auto &stage : stages) {
+            if (!stage.func.schedule().compute_level().is_inlined() ||
+                !stage.func.can_be_inlined()) {
+                new_stages.push_back(stage);
             }
         }
         new_stages.swap(stages);
@@ -843,9 +836,9 @@ public:
                 // Stage::define_bounds is going to compute a query
                 // buffer_t per producer for bounds inference to
                 // use. We just need to extract those values.
-                for (size_t j = 0; j < args.size(); j++) {
-                    if (args[j].is_func()) {
-                        Function f(args[j].func);
+                for (const auto &arg : args) {
+                    if (arg.is_func()) {
+                        Function f(arg.func);
                         string stage_name = f.name() + ".s" + std::to_string(f.updates().size());
                         Box b(f.dimensions());
                         for (int d = 0; d < f.dimensions(); d++) {
@@ -916,7 +909,7 @@ public:
         }
 
         // The region required of the each output is expanded to include the size of the output buffer.
-        for (Function output : outputs) {
+        for (const Function &output : outputs) {
             Box output_box;
             string buffer_name = output.name();
             if (output.outputs() > 1) {
@@ -941,10 +934,9 @@ public:
 
                 output_box.push_back(Interval(min, (min + extent) - 1));
             }
-            for (size_t i = 0; i < stages.size(); i++) {
-                Stage &s = stages[i];
+            for (auto &s : stages) {
                 if (!s.func.same_as(output)) continue;
-                s.bounds[{ s.name, s.stage }] = output_box;
+                s.bounds[{s.name, s.stage}] = output_box;
             }
         }
     }
@@ -967,13 +959,13 @@ public:
         // bounds inference results so that we don't needlessly
         // complicate our bounds expressions.
         vector<pair<string, Expr>> lets;
-        while (const LetStmt *let = body.as<LetStmt>()) {
+        while (const auto *let = body.as<LetStmt>()) {
             if (depends_on_bounds_inference(let->value)) {
                 break;
             }
 
             body = let->body;
-            lets.push_back({ let->name, let->value });
+            lets.emplace_back(let->name, let->value);
         }
 
         // If there are no pipelines at this loop level, we can skip
@@ -1025,8 +1017,8 @@ public:
                 }
 
                 if (bounds_needed[i]) {
-                    for (size_t j = 0; j < stages[i].consumers.size(); j++) {
-                        bounds_needed[stages[i].consumers[j]] = true;
+                    for (int consumer : stages[i].consumers) {
+                        bounds_needed[consumer] = true;
                     }
                     body = stages[i].define_bounds(
                         body, f, stage_name, stage_index, op->name, fused_groups,
@@ -1037,7 +1029,7 @@ public:
             // Finally, define the production bounds for the thing
             // we're producing.
             if (producing >= 0 && !inner_productions.empty()) {
-                const vector<string> f_args = f.args();
+                const vector<string> &f_args = f.args();
                 for (size_t i = 0; i < box.size(); i++) {
                     internal_assert(box[i].is_bounded());
                     string var = stage_name + "." + f_args[i];
@@ -1150,9 +1142,9 @@ Stmt bounds_inference(Stmt s,
                           f.definition().schedule().fused_pairs().end(),
                           std::inserter(pairs, pairs.end()));
 
-                for (size_t i = 0; i < f.updates().size(); ++i) {
-                    std::copy(f.updates()[i].schedule().fused_pairs().begin(),
-                              f.updates()[i].schedule().fused_pairs().end(),
+                for (const auto &i : f.updates()) {
+                    std::copy(i.schedule().fused_pairs().begin(),
+                              i.schedule().fused_pairs().end(),
                               std::inserter(pairs, pairs.end()));
                 }
             }
