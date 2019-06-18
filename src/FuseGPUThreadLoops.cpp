@@ -499,8 +499,10 @@ class ExtractSharedAllocations : public IRMutator {
         } else if (else_preamble.defined()) {
             host_side_preamble = IfThenElse::make(!condition, else_preamble);
         }
-        if (before_preamble.defined()) {
+        if (before_preamble.defined() && host_side_preamble.defined()) {
             host_side_preamble = Block::make(before_preamble, host_side_preamble);
+        } else if (before_preamble.defined()) {
+            host_side_preamble = before_preamble;
         }
         return IfThenElse::make(condition, then_case, else_case);
     }
