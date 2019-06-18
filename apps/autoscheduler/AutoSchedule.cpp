@@ -3842,7 +3842,7 @@ struct State {
                     // Outermost, and next outermost. Preserve the inner
                     // name to not invalidate any compute_ats.
                     p.second->schedule_source << "\n    .fuse(" << parallel_vars[i].name()
-                                              << ", " << parabllel_vars[i-1].name()
+                                              << ", " << parallel_vars[i-1].name()
                                               << ", " << parallel_vars[i].name() << ")";
                     stage.fuse(parallel_vars[i], parallel_vars[i-1], parallel_vars[i]);
                 }
