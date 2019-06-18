@@ -18,6 +18,9 @@
 #define LOG_EXPR_MUTATIONS 0
 #define LOG_STMT_MUTATIONS 0
 
+// Include rules synthesized by the simplifier-automatic-rule-synthesis project
+#define USE_SYNTHESIZED_RULES 1
+
 // On old compilers, some visitors would use large stack frames,
 // because they use expression templates that generate large numbers
 // of temporary objects when they are built and matched against. If we
@@ -111,6 +114,14 @@ public:
 #else
     HALIDE_ALWAYS_INLINE
     Expr mutate(const Expr &e, ExprInfo *b) {
+
+        int stack_marker = 0;
+        ptrdiff_t depth = (ptrdiff_t)((intptr_t)this - (intptr_t)(&stack_marker));
+        if (depth > 6 * 1024 * 1024) {
+            debug(0) << "Exceeded 6MB of stack in a single simplifier instance on Expr:\n"
+                     << e << "\n";
+        }
+
         Expr new_e = Super::dispatch(e, b);
         internal_assert(new_e.type() == e.type()) << e << " -> " << new_e << "\n";
         return new_e;

@@ -115,7 +115,17 @@ Expr Simplify::visit(const Max *op, ExprInfo *bounds) {
              rewrite(max(max(x, c0), c1), max(x, fold(max(c0, c1)))) ||
 
              (no_overflow(op->type) &&
-              (rewrite(max(x + c0, c1), max(x, fold(c1 - c0)) + c0) ||
+              (rewrite(max(max(x, y) + c0, x), max(x, y + c0), c0 < 0) ||
+               rewrite(max(max(x, y) + c0, x), max(x, y) + c0, c0 > 0) ||
+               rewrite(max(max(y, x) + c0, x), max(y + c0, x), c0 < 0) ||
+               rewrite(max(max(y, x) + c0, x), max(y, x) + c0, c0 > 0) ||
+
+               rewrite(max(x, max(x, y) + c0), max(x, y + c0), c0 < 0) ||
+               rewrite(max(x, max(x, y) + c0), max(x, y) + c0, c0 > 0) ||
+               rewrite(max(x, max(y, x) + c0), max(x, y + c0), c0 < 0) ||
+               rewrite(max(x, max(y, x) + c0), max(x, y) + c0, c0 > 0) ||
+
+               rewrite(max(x + c0, c1), max(x, fold(c1 - c0)) + c0) ||
 
                rewrite(max(x + c0, y + c1), max(x, y + fold(c1 - c0)) + c0, c1 > c0) ||
                rewrite(max(x + c0, y + c1), max(x + fold(c0 - c1), y) + c1, c0 > c1) ||
@@ -192,7 +202,45 @@ Expr Simplify::visit(const Max *op, ExprInfo *bounds) {
 
                rewrite(max(select(x, y, z), select(x, w, u)), select(x, max(y, w), max(z, u))) ||
 
-               rewrite(max(c0 - x, c1), c0 - min(x, fold(c0 - c1))))))) {
+               rewrite(max(c0 - x, c1), c0 - min(x, fold(c0 - c1))))) ||
+             (no_overflow_int(op->type) &&
+              (
+
+               // Synthesized
+               #if USE_SYNTHESIZED_RULES
+               rewrite(max(x, (min((y - (z + w)), u) + z)), max(min((y - w), (z + u)), x)) ||
+               rewrite(max(min(x, (y + z)), (min(w, z) + y)), min(max((y + w), x), (y + z))) ||
+
+               rewrite(max(((x - y) + z), (x + w)), (max((z - y), w) + x)) ||
+
+               rewrite(max(x, min(max(x, y), z)), max(min(y, z), x)) ||
+               rewrite(max((max(min((x + c0), y), z) + c1), x), max((z + c1), x), ((c0 + c1) == 0)) ||
+               rewrite(max(min(x, y), (x + c0)), (x + c0), (0 <= c0)) ||
+               rewrite(max(min(x, y), (y + c0)), (y + c0), (0 <= c0)) ||
+               rewrite(max(min((x + c0), y), (x + c1)), (x + c1), (c0 <= c1)) ||
+               rewrite(max(min((x + y), c0), (min(y, 0) + x)), min(max(x, c0), (x + y))) ||
+               rewrite(max(min((x + y), z), (min(y, 0) + x)), min(max(x, z), (x + y))) ||
+               rewrite(max(min((x + y), z), (max(x, w) + y)), (max(w, x) + y)) ||
+               rewrite(max(max(x, y), min(x, z)), max(x, y)) ||
+               rewrite(max(max(x, y), min(max(x, z), w)), max(max(min(w, z), x), y)) ||
+               rewrite(max(max((min(x, c0) + c1), y), c2), max(y, c2), (((c1 + -1) <= c2) && (c0 < 0))) ||
+               rewrite(max(max(min(x, y), z), y), max(y, z)) ||
+
+               rewrite(max((x - y), (z + (w - y))), (max((w + z), x) - y)) ||
+               rewrite(max(((min(x, y) + z) - y), z), z) ||
+               rewrite(max(max(x, y), (max(y, z) + c0)), max((max(y, z) + c0), x), (0 <= c0)) ||
+               rewrite(max(max(x, (y + c0)), y), max((y + c0), x), (0 <= c0)) ||
+
+               rewrite(max((x + y), ((z + (w + y)) + c0)), (max(((w + z) + c0), x) + y)) || // constant needn't be
+               rewrite(max(max((x*c0), y), (z*c0)), max((max(x, z)*c0), y), (0 <= c0)) ||
+
+               // From Google data
+               rewrite(max((select((x < y), z, w)*x), (select((x < y), w, z)*x)), max((x*z), (w*x))) ||
+               rewrite(max(max((x*x), (x*y)), (y*y)), max((y*y), (x*x))) ||
+
+               #endif
+
+               false)))) {
 
             return mutate(std::move(rewrite.result), bounds);
         }

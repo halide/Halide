@@ -99,10 +99,26 @@ Expr Simplify::visit(const And *op, ExprInfo *bounds) {
         rewrite((x || y) && (x || z), x || (y && z)) ||
         rewrite((x || y) && (z || x), x || (y && z)) ||
         rewrite((y || x) && (x || z), x || (y && z)) ||
-        rewrite((y || x) && (z || x), x || (y && z))) {
+        rewrite((y || x) && (z || x), x || (y && z)) ||
+
+        rewrite(x < y && x < z, x < min(y, z)) ||
+        rewrite(y < x && z < x, max(y, z) < x) ||
+        rewrite(x <= y && x <= z, x <= min(y, z)) ||
+        rewrite(y <= x && z <= x, max(y, z) <= x)) {
 
         return mutate(std::move(rewrite.result), bounds);
     }
+
+    #if USE_SYNTHESIZED_RULES
+    if (rewrite((x <= y) && (y <= x), (y == x)) ||     // From google list
+        rewrite(((x < y) && (y < (x + c0))), false, (c0 <= 0) && is_no_overflow_int(x)) ||
+        rewrite(((x <= y) && (y < (x + c0))), false, (c0 <= 0) && is_no_overflow_int(x)) ||
+        rewrite(((x < (y + c0)) && (y < (x + c1))), false, ((c0 + c1) <= 0) && is_no_overflow_int(x)) ||
+
+        false) {
+        return mutate(std::move(rewrite.result), bounds);
+    }
+    #endif
 
     if (a.same_as(op->a) &&
         b.same_as(op->b)) {

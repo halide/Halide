@@ -106,7 +106,11 @@ class ExtractBlockSize : public IRVisitor {
             if (block_extent[i].defined() &&
                 expr_uses_var(block_extent[i], op->name)) {
                 block_extent[i] = simplify(common_subexpression_elimination(block_extent[i]));
-                debug(0) << "BLOCK EXTENT: " << block_extent[i] << "\n";
+                if (is_monotonic(block_extent[i], op->name) == Monotonic::Unknown) {
+                    user_warning << "Thread id " << i
+                                 << " has a size that is non-monontonic in the gpu block variable " << op->name
+                                 << ": " << block_extent[i] << "\n";
+                }
                 block_extent[i] = simplify(bounds_of_expr_in_scope(block_extent[i], scope).max);
             }
         }
@@ -249,7 +253,7 @@ class ExtractSharedAllocations : public IRMutator {
         Type type;
         Expr size;
         IntInterval liveness; // Start and end of the barrier stage at which this allocation is used.
-        Stmt host_side_preamble; // Host-side code that needs to run to compute the shared size
+        bool size_computed_on_host = false;
     };
 
     struct AllocGroup {
@@ -285,6 +289,8 @@ class ExtractSharedAllocations : public IRMutator {
 
     const DeviceAPI device_api;
 
+    Stmt host_side_preamble;
+
     Stmt visit(const For *op) override {
         if (CodeGen_GPU_Dev::is_gpu_thread_var(op->name)) {
             bool old = in_threads;
@@ -296,6 +302,8 @@ class ExtractSharedAllocations : public IRMutator {
             // Set aside the allocations we've found so far.
             vector<SharedAllocation> old;
             old.swap(allocations);
+            Stmt old_preamble = host_side_preamble;
+            host_side_preamble = Stmt();
 
             // Find allocations inside the loop body
             Stmt body = mutate(op->body);
@@ -306,35 +314,30 @@ class ExtractSharedAllocations : public IRMutator {
 
             // Expand the inner allocations using the loop bounds.
             for (SharedAllocation &s : allocations) {
-                if (expr_uses_var(s.size, op->name)) {
-                    if (!s.host_side_preamble.defined()) {
-                        s.size = simplify(common_subexpression_elimination(s.size));
-                        // It's worth working extra hard to remove any
-                        // repeated dependence on the block var
-                        s.size = solve_expression(s.size, op->name).result;
-                        s.size = simplify(common_subexpression_elimination(s.size));
-                        auto result = is_monotonic(s.size, op->name);
-                        if (result == Monotonic::Unknown) {
-                            user_warning << "Shared allocation for " << s.name
-                                         << " has a size that is non-monontonic in the gpu block variable " << op->name
-                                         << ": " << s.size << "\n";
-                            Expr val = Load::make(Int(32), s.name + ".shared_size", 0,
-                                                  Buffer<>{}, Parameter{}, const_true(), ModulusRemainder{});
-                            s.host_side_preamble = Store::make(s.name + ".shared_size", max(s.size, val), 0,
-                                                               Parameter{}, const_true(), ModulusRemainder{});
+                if (expr_uses_var(s.size, op->name) && !s.size_computed_on_host) {
+                    s.size = simplify(common_subexpression_elimination(s.size));
+                    // It's worth working extra hard to remove any
+                    // repeated dependence on the block var
+                    s.size = solve_expression(s.size, op->name).result;
+                    s.size = simplify(common_subexpression_elimination(s.size));
+                    auto result = is_monotonic(s.size, op->name);
+                    if (result == Monotonic::Unknown) {
+                        user_warning << "Shared allocation for " << s.name
+                                     << " has a size that is non-monontonic in the gpu block variable " << op->name
+                                     << ": " << s.size << "\n";
+                        s.size_computed_on_host = true;
+                        Expr val = Load::make(Int(32), s.name + ".shared_size", 0,
+                                              Buffer<>{}, Parameter{}, const_true(), ModulusRemainder{});
+                        Stmt update_size = Store::make(s.name + ".shared_size", max(s.size, val), 0,
+                                                       Parameter{}, const_true(), ModulusRemainder{});
+
+                        if (host_side_preamble.defined()) {
+                            host_side_preamble = Block::make(host_side_preamble, update_size);
                         } else {
-                            s.size = bounds_of_expr_in_scope(s.size, scope).max;
+                            host_side_preamble = update_size;
                         }
-                    }
-                    if (s.host_side_preamble.defined()) {
-                        // We're computing the size of this shared allocation on host
-                        string n = unique_name('t');
-                        Expr v = Variable::make(Int(32), n);
-                        s.host_side_preamble = substitute(op->name, v, s.host_side_preamble);
-                        s.size = substitute(op->name, v, s.size);
-                        s.host_side_preamble =
-                            For::make(n, op->min, op->extent,
-                                      ForType::Serial, DeviceAPI::Host, s.host_side_preamble);
+                    } else {
+                        s.size = bounds_of_expr_in_scope(s.size, scope).max;
                     }
                 }
             }
@@ -346,7 +349,23 @@ class ExtractSharedAllocations : public IRMutator {
                 allocations.swap(old);
             }
 
-            return For::make(op->name, mutate(op->min), mutate(op->extent), op->for_type, op->device_api, body);
+            Expr new_min = mutate(op->min);
+            Expr new_extent = mutate(op->extent);
+
+            if (host_side_preamble.defined()) {
+                string loop_name = unique_name('t');
+                Expr v = Variable::make(Int(32), loop_name);
+                host_side_preamble = substitute(op->name, v, host_side_preamble);
+                host_side_preamble = For::make(loop_name, new_min, new_extent,
+                                               ForType::Serial, DeviceAPI::None, host_side_preamble);
+                if (old_preamble.defined()) {
+                    host_side_preamble = Block::make(old_preamble, host_side_preamble);
+                }
+            } else {
+                host_side_preamble = old_preamble;
+            }
+
+            return For::make(op->name, new_min, new_extent, op->for_type, op->device_api, body);
         }
     }
 
@@ -448,13 +467,14 @@ class ExtractSharedAllocations : public IRMutator {
         Stmt body = mutate(op->body);
 
         for (SharedAllocation &s : allocations) {
-            if (expr_uses_var(s.size, op->name)) {
+            if (expr_uses_var(s.size, op->name) && !s.size_computed_on_host) {
                 s.size = simplify(Let::make(op->name, op->value, s.size));
             }
-            if (s.host_side_preamble.defined() &&
-                stmt_uses_var(s.host_side_preamble, op->name)) {
-                s.host_side_preamble = LetStmt::make(op->name, op->value, s.host_side_preamble);
-            }
+        }
+
+        if (host_side_preamble.defined() &&
+            stmt_uses_var(host_side_preamble, op->name)) {
+            host_side_preamble = LetStmt::make(op->name, op->value, host_side_preamble);
         }
 
         if (op->body.same_as(body) && value.same_as(op->value)) {
@@ -462,6 +482,27 @@ class ExtractSharedAllocations : public IRMutator {
         } else {
             return LetStmt::make(op->name, value, body);
         }
+    }
+
+    Stmt visit(const IfThenElse *op) override {
+        Expr condition = mutate(op->condition);
+        Stmt before_preamble = host_side_preamble;
+        host_side_preamble = Stmt();
+        Stmt then_case = mutate(op->then_case);
+        Stmt then_preamble = host_side_preamble;
+        host_side_preamble = Stmt();
+        Stmt else_case = mutate(op->else_case);
+        Stmt else_preamble = host_side_preamble;
+
+        if (then_preamble.defined()) {
+            host_side_preamble = IfThenElse::make(condition, then_preamble, else_preamble);
+        } else if (else_preamble.defined()) {
+            host_side_preamble = IfThenElse::make(!condition, else_preamble);
+        }
+        if (before_preamble.defined()) {
+            host_side_preamble = Block::make(before_preamble, host_side_preamble);
+        }
+        return IfThenElse::make(condition, then_case, else_case);
     }
 
     // Return index to free_spaces where 'alloc' should be coalesced. Return -1
@@ -634,22 +675,34 @@ public:
     }
 
     Stmt compute_shared_memory_sizes_on_host(Stmt result) {
+        if (!host_side_preamble.defined()) return result;
+
+        // Make all the let stmts that define the size vars
         for (auto &alloc : allocations) {
-            if (alloc.host_side_preamble.defined()) {
+            if (alloc.size_computed_on_host) {
                 string alloc_name = alloc.name + ".shared_size";
                 string var_name = alloc.name + ".shared_size_var";
-                Stmt init = Store::make(alloc_name, 0, 0,
-                                        Parameter{}, const_true(), ModulusRemainder{});
-
                 Expr val = Load::make(Int(32), alloc_name, 0,
                                       Buffer<>{}, Parameter{}, const_true(), ModulusRemainder{});
-
                 result = LetStmt::make(var_name, val, result);
-                result = Block::make({init, alloc.host_side_preamble, result});
-                result = Allocate::make(alloc_name, Int(32), MemoryType::Stack, {1}, const_true(), result);
                 alloc.size = Variable::make(Int(32), var_name);
             }
         }
+
+        // Prefix the preamble
+        result = Block::make(host_side_preamble, result);
+
+        // Wrap the preamble in all the allocation nodes
+        for (auto &alloc : allocations) {
+            if (alloc.size_computed_on_host) {
+                string alloc_name = alloc.name + ".shared_size";
+                Stmt init = Store::make(alloc_name, 0, 0,
+                                        Parameter{}, const_true(), ModulusRemainder{});
+                result = Block::make(init, result);
+                result = Allocate::make(alloc_name, Int(32), MemoryType::Stack, {1}, const_true(), result);
+            }
+        }
+
         return result;
     }
 
@@ -707,7 +760,12 @@ class ExtractRegisterAllocations : public IRMutator {
             // Expand the inner allocations using the loop bounds.
             for (RegisterAllocation &s : allocations) {
                 if (expr_uses_var(s.size, op->name)) {
-                    debug(0) << "REGISTER ALLOC: " << s.size << "\n";
+                    s.size = simplify(common_subexpression_elimination(s.size));
+                    if (is_monotonic(s.size, op->name) == Monotonic::Unknown) {
+                        user_warning << "Register allocation for " << s.name
+                                     << " has a size that is non-monontonic in the gpu block variable " << op->name
+                                     << ": " << s.size << "\n";
+                    }
                     s.size = bounds_of_expr_in_scope(s.size, scope).max;
                 }
             }
@@ -903,8 +961,6 @@ class FuseGPUThreadLoops : public IRMutator {
             Stmt loop = Stmt(op);
             loop.accept(&block_size);
 
-            debug(0) << loop << "\n";
-
             ExtractSharedAllocations shared_mem(op->device_api);
             loop = shared_mem.mutate(loop);
 
@@ -912,7 +968,7 @@ class FuseGPUThreadLoops : public IRMutator {
             // that need host-side computation.
             loop = shared_mem.compute_shared_memory_sizes_on_host(loop);
 
-            debug(0) << "Pulled out shared allocations:\n" << loop << "\n\n";
+            debug(3) << "Pulled out shared allocations:\n" << loop << "\n\n";
 
             // Mutate the inside of the kernel
             loop = FuseGPUThreadLoopsSingleKernel(block_size, shared_mem).mutate(loop);

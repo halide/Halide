@@ -128,36 +128,27 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         const bool shift_left = op->is_intrinsic(Call::shift_left);
         const Type t = op->type;
 
-        int64_t ib = 0;
         uint64_t ub = 0;
-        if (const_int(b, &ib)) {
+        if (const_uint(b, &ub)) {
             // LLVM shl and shr instructions produce poison for negative shifts,
             // or for shifts >= typesize, so we will follow suit in our simplifier.
-            user_assert(ib >= 0) << "bitshift by a constant negative amount is not legal in Halide.";
-            user_assert(ib < t.bits()) << "bitshift by a constant amount >= the type size is not legal in Halide.";
-            if (ib < t.bits() - 1) {
-                b = make_const(t, ((int64_t) 1LL) << ib);
+            user_assert(ub < (uint64_t)t.bits()) << "bitshift by a constant amount >= the type size is not legal in Halide.";
+            if (a.type().is_uint() || ub < (uint64_t)t.bits() - 1) {
+                b = make_const(t, ((int64_t) 1LL) << ub);
                 if (shift_left) {
                     return mutate(Mul::make(a, b), bounds);
                 } else {
                     return mutate(Div::make(a, b), bounds);
                 }
             } else {
-                // (1 << ib) will overflow into the sign bit, making decomposition into mul or div
-                // probelmatic, so just special-case them here.
+                // For signed types, (1 << ub) will overflow into the sign bit while
+                // (-32768 >> ub) propagates the sign bit, making decomposition
+                // into mul or div probelmatic, so just special-case them here.
                 if (shift_left) {
-                    return mutate(select((a & 1) != 0, make_const(t, ((int64_t) 1LL) << ib), make_zero(t)), bounds);
+                    return mutate(select((a & 1) != 0, make_const(t, ((int64_t) 1LL) << ub), make_zero(t)), bounds);
                 } else {
                     return mutate(select(a < 0, make_const(t, -1), make_zero(t)), bounds);
                 }
-            }
-        } else if (const_uint(b, &ub)) {
-            user_assert(ub < (uint64_t) t.bits()) << "bitshift by a constant amount >= the type size is not legal in Halide.";
-            b = make_const(t, ((uint64_t) 1ULL) << ub);
-            if (shift_left) {
-                return mutate(Mul::make(a, b), bounds);
-            } else {
-                return mutate(Div::make(a, b), bounds);
             }
         }
 

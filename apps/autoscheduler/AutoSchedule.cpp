@@ -3836,13 +3836,13 @@ struct State {
 
             // Halide doesn't let you fuse an RVar with a Var, even if
             // they are both pure.
-            bool can_fuse = !(any_parallel_vars && any_parallel_rvars) && (!target.has_gpu_feature() || can_fuse_gpu(parallel_extents));
+            bool can_fuse = !(any_parallel_vars && any_parallel_rvars) && (!target.has_gpu_feature() || false /*can_fuse_gpu(parallel_extents)*/ );
             if (can_fuse && (!target.has_gpu_feature() || can_fuse_gpu(parallel_extents))) {
                 for (size_t i = 1; i < parallel_vars.size(); i++) {
                     // Outermost, and next outermost. Preserve the inner
                     // name to not invalidate any compute_ats.
                     p.second->schedule_source << "\n    .fuse(" << parallel_vars[i].name()
-                                              << ", " << parallel_vars[i-1].name()
+                                              << ", " << parabllel_vars[i-1].name()
                                               << ", " << parallel_vars[i].name() << ")";
                     stage.fuse(parallel_vars[i], parallel_vars[i-1], parallel_vars[i]);
                 }
