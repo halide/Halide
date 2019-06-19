@@ -2,6 +2,15 @@
 
 # set -x
 
+# mode => debug | train
+# debug mode only generates data, uses -debug on HL_TARGET, and collects shared
+# memory errors
+# train mode generates data without -debug and trains the model
+if [ $# -ne 1 ]; then
+  echo "Usage: $0 mode [debug|train]"
+  exit
+fi
+
 # Install a watchdog to kill benchmarking processes that take too long
 bash ./watchdog_bench.sh &
 WATCHDOG_PID=$!
@@ -9,6 +18,17 @@ function finish {
     kill $WATCHDOG_PID
 }
 trap finish EXIT
+
+if [ ${1} == "debug" ]; then
+    DEBUG_MODE=1
+    echo "Running in debug mode"
+elif [ ${1} == "train" ]; then
+    DEBUG_MODE=0
+    echo "Running in train mode"
+else
+    echo "Unknown mode"
+    exit
+fi
 
 # Build the generator to autotune.
 GENERATOR=./bin/random_pipeline.generator
@@ -36,6 +56,10 @@ mkdir -p ${WEIGHTS_DIR}
 MAX_STAGES=5
 
 HL_TARGET=x86-64-avx2-disable_llvm_loop_vectorize-disable_llvm_loop_unroll-cuda
+
+if [ $DEBUG_MODE == 1 ]; then
+    HL_TARGET=${HL_TARGET}-debug
+fi
 
 record_failed() {
     BATCH=${1}
@@ -79,7 +103,7 @@ make_sample() {
     eval $CMD
     if [[ $? != 0 ]]; then
         echo "Compilation failed for ${D}"
-        record_failed $BATCH $SAMPLE_ID "$CMD" "compilation_command"
+        record_failed $BATCH $SAMPLE_ID "$CMD" "compile_command"
         return
     fi
 }
@@ -96,8 +120,8 @@ benchmark_sample() {
 
     CMD="HL_NUM_THREADS=32 ${D}/bench --output_extents=estimate --default_input_buffers=random:0:auto --default_input_scalars=estimate --benchmarks=all --benchmark_min_time=1 ${RUNGEN_ARGS}"
 
-    eval $CMD | tee ${D}/bench.txt
-    if [[ ! -s ${D}/bench.txt ]]; then
+    eval $CMD > ${D}/bench.txt 2>&1
+    if [[ $? != 0 ]]; then
         echo "Benchmarking failed or timed out for ${D}"
         record_failed $BATCH $SAMPLE_ID "$CMD" "benchmark_command"
         return
@@ -145,7 +169,12 @@ for ((i=$((FIRST+1));i<1000000;i++)); do
     done
 
     ## retrain model weights on all samples seen so far
-    echo Retraining model...
-    find ${SAMPLES} | grep sample$ | HL_NUM_THREADS=32 HL_WEIGHTS_DIR=${WEIGHTS_DIR} ./bin/train_cost_model 32
+    if [ $DEBUG_MODE != 1 ]; then
+        echo Retraining model...
+        find ${SAMPLES} | grep sample$ | HL_NUM_THREADS=32 HL_WEIGHTS_DIR=${WEIGHTS_DIR} ./bin/train_cost_model 32
+    else
+        echo "Shared memory errors:"
+        bash find_shmem_errors.sh
+    fi
 
 done

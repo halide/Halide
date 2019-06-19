@@ -73,6 +73,8 @@ Expr Simplify::visit(const Select *op, ExprInfo *bounds) {
              rewrite(select(x, y * z, w * y), y * select(x, z, w)) ||
              rewrite(select(x, z * y, y * w), y * select(x, z, w)) ||
              rewrite(select(x, z * y, w * y), select(x, z, w) * y) ||
+             rewrite(select(x, z / y, w / y), select(x, z, w) / y) ||
+             rewrite(select(x, z % y, w % y), select(x, z, w) % y) ||
 
              rewrite(select(x < y, x, y), min(x, y)) ||
              rewrite(select(x < y, y, x), max(x, y)) ||
@@ -90,7 +92,17 @@ Expr Simplify::visit(const Select *op, ExprInfo *bounds) {
                rewrite(select(c0 < x, x, c1), max(x, c1), c1 == c0 + 1) ||
                rewrite(select(x < c0, c1, x), max(x, c1), c1 + 1 == c0) ||
                rewrite(select(c0 < x, c1, x), min(x, c1), c1 == c0 + 1) ||
-               rewrite(select(x < c0, x, c1), min(x, c1), c1 + 1 == c0))) ||
+               rewrite(select(x < c0, x, c1), min(x, c1), c1 + 1 == c0) ||
+
+               // Synthesized
+               #if USE_SYNTHESIZED_RULES
+               rewrite(select((x < y), (z + w), w), (select((x < y), z, 0) + w)) || // Could be more general
+
+               rewrite(select((c0 < x), min(x, c1), c1), c1, ((0 <= c0) && (c1 <= 0))) || // Could be more general
+               rewrite(select((x < (y + c0)), min(y, x), x), x, (c0 <= 0)) ||
+               #endif
+
+               false)) ||
 
              (op->type.is_bool() &&
               (rewrite(select(x, true, false), cast(op->type, x)) ||

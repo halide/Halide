@@ -71,11 +71,11 @@ class BoundSmallAllocations : public IRMutator {
         Expr bound = find_constant_bound(total_extent, Direction::Upper, scope);
         user_assert(bound.defined() ||
                     op->memory_type != MemoryType::Register)
-            << "Allocation " << op->name << " has a dynamic size. "
+            << "Allocation " << op->name << " has a dynamic size: " << total_extent << "\n"
             << "Only fixed-size allocations can be stored in registers. "
             << "Try storing on the heap or stack instead.";
         user_assert(!in_thread_loop || bound.defined())
-            << "Allocation " << op->name << " has a dynamic size. "
+            << "Allocation " << op->name << " has a dynamic size: " << total_extent << "\n"
             << "Only fixed-size allocations are supported on the gpu. "
             << "Try storing into shared memory instead.";
 

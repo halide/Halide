@@ -356,7 +356,30 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
                       broadcast(x * fold(c3/c0) < z, lanes),
                       c0 > 0 && (c3 % c0 == 0) &&
                       c1 * (lanes - 1) < c0 &&
-                      c1 * (lanes - 1) >= 0)))) {
+                      c1 * (lanes - 1) >= 0) ||
+
+              // Synthesized
+              #if USE_SYNTHESIZED_RULES
+              rewrite((x < ((x + y) + z)), (0 < (y + z))) ||
+
+              rewrite((x < max(y, (max(z, x) + c0))), true, (0 < c0)) ||
+              rewrite((x < max((max(y, x) + c0), z)), true, (0 < c0)) ||
+              rewrite((min(x, y) < min(z, (x + c0))), (min(x, y) < z), (0 < c0)) ||
+              rewrite((max(x, c0) < max(y, 0)), (x < max(y, 0)), (c0 < 0)) ||
+
+              rewrite(((min(x, c0) + y) < min(z, y)), ((min(x, c0) + y) < z), (c0 < 0)) ||
+
+              rewrite((((c0 - x)/c1) < y), ((y*fold((0 - c1))) < x), (((0 < c1) && (c1 < 16)) && (c0 == 0))) || // < 16
+              rewrite(((((c0 - x)/c1)*c2) < x), true, (((c0 == (c1 + 1)) && ((c1 + c2) == 0)) && ((0 < c1) && (c1 < 16)))) || // Predicate too specific
+              rewrite(((x*c0) < ((y*c1) + c2)), ((x*fold((c0/c1))) < y), (((((c1 < 16) && (0 < c1)) && ((c1 != 0) && ((c0 % c1) == 0))) && (c2 <= 0)) && (0 < (c1 + c2)))) || // < 16. Some unnecessary constraints.
+
+              rewrite((max(min((x + c0), y), z) < x), (max(y, z) < x), (0 <= c0)) ||
+
+              // From Google list
+              rewrite((x < (y + 1)), (x <= y)) ||
+              #endif
+
+              false))) {
             return mutate(std::move(rewrite.result), bounds);
         }
     }
@@ -383,7 +406,118 @@ Expr Simplify::visit(const LE *op, ExprInfo *bounds) {
 
     Expr mutated = mutate(!(op->b < op->a), bounds);
     if (const LE *le = mutated.as<LE>()) {
-        if (le->a.same_as(op->a) && le->b.same_as(op->b)) {
+        Expr a = le->a, b = le->b;
+
+        // Synthesized rules
+#if USE_SYNTHESIZED_RULES
+        if (no_overflow_int(a.type())) {
+
+            auto rewrite = IRMatcher::rewriter(IRMatcher::le(a, b), op->type, a.type());
+
+            if (rewrite((x <= max(max(y, x), z)), true) ||
+                rewrite((x <= max(max(x, y), z)), true) ||
+                rewrite((x <= select((y < z), w, x)), x <= w || z <= y) ||
+                rewrite(((x + y) <= min(z, (w + y))), (x <= min((z - y), w))) ||
+                rewrite(((x + y) <= min(z, (y + w))), (x <= min((z - y), w))) ||
+                rewrite(((x + y) <= min((y + z), w)), (x <= min((w - y), z))) ||
+                rewrite(((x + y) <= min((z + y), w)), (x <= min((w - y), z))) ||
+                rewrite(((x + y) <= max(z, (w + x))), (y <= max((z - x), w))) ||
+                rewrite(((x + y) <= max(z, (w + y))), (x <= max((z - y), w))) ||
+                rewrite(((x + y) <= max((z + y), w)), (x <= max((w - y), z))) ||
+                rewrite(((x + y) <= (max(z, (w + y)) + u)), (x <= (max((z - y), w) + u))) ||
+                rewrite(((x + (y*z)) <= (w*z)), (x <= ((w - y)*z))) ||
+                rewrite((((x + y) + z) <= y), ((x + z) <= 0)) ||
+                rewrite((min(x, y) <= min(x, z)), (min(x, y) <= z)) ||
+                rewrite((min(x, y) <= min(z, y)), (min(x, y) <= z)) ||
+                rewrite((min(x, (y + z)) <= (y + w)), (min((x - y), z) <= w)) ||
+                rewrite((min(x, (y + z)) <= (z + w)), (min((x - z), y) <= w)) ||
+                rewrite((min((x + y), z) <= (x + w)), (min((z - x), y) <= w)) ||
+                rewrite((min((x + y), z) <= (y + w)), (min((z - y), x) <= w)) ||
+                rewrite((min(min(x, y), z) <= x), true) ||
+                rewrite((min(min(x, y), z) <= y), true) ||
+                rewrite((max(x, y) <= max(z, y)), (x <= max(y, z))) ||
+                rewrite((select((x < y), z, w) <= w), z <= w || y <= x) ||
+
+                rewrite((min(x, (y + z)) <= (w + z)), (min((x - z), y) <= w)) ||
+                rewrite((min((x + y), z) <= (w + y)), (min((z - y), x) <= w)) ||
+                rewrite((min(min(x, y), z) <= min(w, y)), (min(min(x, y), z) <= w)) ||
+
+                rewrite(((min(x, y) + z) <= (max(w, z) + y)), const_true()) ||
+
+                rewrite(min(x, y) <= min(y, x), true) ||
+
+                rewrite((x <= select((y < z), x, w)), ((x <= w) || (y < z))) ||
+                rewrite((((x + y) + z) <= min((y + w), u)), ((x + z) <= min((u - y), w))) ||
+                rewrite((((x + y) + z) <= max((y + w), u)), ((x + z) <= max((u - y), w))) ||
+                rewrite(((((x + y) + z) + w) <= (y + u)), (((x + w) + z) <= u)) ||
+                rewrite(((min(x, y) + z) <= (min(z, w) + x)), (z <= (max((x - y), 0) + w))) ||
+                rewrite(((x*y) <= ((y*z) + w)), (((x - z)*y) <= w)) ||
+                rewrite((min(x, y) <= min(y, z)), (min(x, y) <= z)) ||
+                rewrite((min(x, y) <= min(min(x, z), w)), (min(x, y) <= min(z, w))) ||
+                rewrite((min(x, y) <= max(x, y)), true) ||
+                //rewrite((min((x + y), z) <= ((x + y) + w)), (min((x + y), z) <= ((x + y) + w))) ||
+                rewrite((min(min(x, y), z) <= min(x, w)), (min(min(x, z), y) <= w)) ||
+                rewrite((min(max(x, y), z) <= max(x, w)), (min(y, z) <= max(x, w))) ||
+
+                rewrite((((x + (y + z)) + c0) <= (w + z)), (((x + y) + c0) <= w)) ||
+                rewrite(((min((min(x, c0) + y), z) + c1) <= y), true, ((c0 + c1) == 0)) ||
+                rewrite((((x + y)*c1) <= (z + (x*c1))), ((y*c1) <= z)) ||
+                rewrite((((x + y)*z) <= (w + (y*z))), ((x*z) <= w)) ||
+                rewrite((min(x, y) <= max(y, x)), true) ||
+                rewrite((min((x*y), c0) <= (min(x, c1)*y)), true, ((0 <= c1) && (c0 <= 0))) ||
+                rewrite((max(x, c0) <= max(y, 0)), (x <= max(y, 0)), (c0 <= 0)) ||
+                rewrite((select((x < y), max(z, w), z) <= max(z, w)), true) ||
+
+                rewrite((min((min(x, y)*c1), z) <= (x*c1)), true, (0 <= c1)) ||
+                rewrite((min(min((min(x, c0) + y), z), w) <= y), true, (c0 <= 0)) ||
+                rewrite(((min((min(x, y) + c0), z) + c1) <= y), true, ((c0 + c1) <= 0)) ||
+
+                rewrite((x <= (max(y, c0) + min(x, z))), (x <= (max(y, c0) + z)), (0 <= c0)) ||
+                rewrite(((x + c0) <= (min(x, c1) + y)), ((max(x, c1) + fold((c0 - c1))) <= y)) ||
+                // c0 unbound. Shouldn't have eq constraints
+                // rewrite((((max(x, 0) + y) + c1) <= x), (y < (min(x, c0) + 2)), ((c0 == 0) && (c1 == -1))) ||
+                rewrite((((max(x, 0) + y) + z) <= x), ((y + z) <= min(x, 0))) ||
+                rewrite(((max(x, c0) + c1) <= max(y, c2)), ((x + c1) <= max(y, c2)), (((c0 != 0) && ((c1/c0) == 0)) && ((c0 <= 0) && (0 <= c2)))) || // weird one
+                rewrite(((x*c1) <= ((y*c1) + z)), (((x - y)*c1) <= z)) ||
+                rewrite((min(x, y) <= min(min(y, z), c0)), (min(x, y) <= min(z, c0))) ||
+                rewrite((min((x + y), z) <= (w + x)), (min((z - x), y) <= w)) ||
+                rewrite((min(((x*c0) + y), z) <= y), ((z <= y) || (x < 1)), (0 < c0)) ||
+                rewrite((min(((x*c0) + y), z) <= y), (select((y < z), 1, 0) <= select((0 < x), 0, 1)), (0 < c0)) || // crappy form
+
+                rewrite(((x + (y*z)) <= ((w + z)*y)), (x <= (w*y))) ||
+                rewrite(((max(x, 0) + min(y, 1)) <= y), (x < max(y, 1))) || // Too specific?
+
+                rewrite((((x + c0)/c1) <= y), (x <= (y*c1)), (((0 < c1) && (c1 < 16)) && (c0 == (c1 + -1)))) ||
+                rewrite((((c0 - x)/c3) <= ((c2 - x)/c3)), true, (((0 < c3) && (c3 < 16)) && (c0 <= c2))) ||
+                rewrite(((min(x, y)/c0) <= (y/c1)), true, ((((c1 != 0) && ((c0 % c1) == 0)) && (c0 <= c1)) && ((((0 < c0) && (c0 < 16)) && (0 < c1)) && (c1 < 16)))) || // Crazy predicate. c0 % c1 == 0 && c0 <= c1 should just be c0 == c1. TODO: throw all the predicates into the system too
+                rewrite((min(x, y) <= max(x, z)), true) ||
+                rewrite((min(x, y) <= max(y, z)), true) ||
+                rewrite((min((min(x, c0) + y), z) <= y), true, (c0 <= 0)) ||
+                rewrite((min((x*y), c0) <= (min(x, c1)*y)), true, ((c0 <= c1) && (0 <= c0))) ||
+
+                rewrite((x <= ((y + c0)/c1)), ((x*c1) < y), (((-1 <= c0) && (c0 < 0)) && ((0 < c1) && (c1 < 16)))) || // Predicate implies c0 == 1
+                rewrite(((x*c1) <= max((y*c1), c2)), (x <= max(y, fold((c2/c1)))), ((c1 < 16) && (0 < c1))) || // < 16
+                rewrite((min((x*c2), c1) <= (y*c2)), (min(x, fold((((c1 + -1)/c2) + 1))) <= y), ((c2 < 16) && (0 < c2))) || // < 16
+
+                rewrite(((min(x, c0) + c1) <= min(y, 0)), (min(x, c0) < (y + fold((c0 - c1)))), ((c1 < 0) && (c0 == 1))) || // Should have subs'd in c0
+                rewrite(((max(x, c0) + c1) <= max(y, c0)), ((x + c1) <= max(y, c0)), (c1 <= 0)) ||
+
+                // From google list
+                rewrite((min(x, y) <= max(z, y)), true) ||
+                rewrite((max(x, y) <= max(x, z)), (y <= max(x, z))) ||
+                rewrite((min(x, y) <= min(z, x)), (min(x, y) <= z)) ||
+                rewrite(((min(x, y) + z) <= max(w, (z + y))), true) ||
+                rewrite((min(max(x, y), z) <= max(min(y, z), w)), (min(x, z) <= max(w, y))) ||
+
+                rewrite(((x + 1) <= y), (x < y)) ||
+
+                false) {
+                return mutate(rewrite.result, bounds);
+            }
+        }
+#endif
+
+        if (a.same_as(op->a) && b.same_as(op->b)) {
             return op;
         }
     }

@@ -118,7 +118,17 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
              rewrite(min(max(x, c0), c1), max(min(x, c1), c0), c0 <= c1) ||
 
              (no_overflow(op->type) &&
-              (rewrite(min(x + c0, c1), min(x, fold(c1 - c0)) + c0) ||
+              (rewrite(min(min(x, y) + c0, x), min(x, y + c0), c0 > 0) ||
+               rewrite(min(min(x, y) + c0, x), min(x, y) + c0, c0 < 0) ||
+               rewrite(min(min(y, x) + c0, x), min(y + c0, x), c0 > 0) ||
+               rewrite(min(min(y, x) + c0, x), min(y, x) + c0, c0 < 0) ||
+
+               rewrite(min(x, min(x, y) + c0), min(x, y + c0), c0 > 0) ||
+               rewrite(min(x, min(x, y) + c0), min(x, y) + c0, c0 < 0) ||
+               rewrite(min(x, min(y, x) + c0), min(x, y + c0), c0 > 0) ||
+               rewrite(min(x, min(y, x) + c0), min(x, y) + c0, c0 < 0) ||
+
+               rewrite(min(x + c0, c1), min(x, fold(c1 - c0)) + c0) ||
 
                rewrite(min(x + c0, y + c1), min(x, y + fold(c1 - c0)) + c0, c1 > c0) ||
                rewrite(min(x + c0, y + c1), min(x + fold(c0 - c1), y) + c1, c0 > c1) ||
@@ -195,7 +205,55 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
 
                rewrite(min(select(x, y, z), select(x, w, u)), select(x, min(y, w), min(z, u))) ||
 
-               rewrite(min(c0 - x, c1), c0 - max(x, fold(c0 - c1))))))) {
+               rewrite(min(c0 - x, c1), c0 - max(x, fold(c0 - c1))))) ||
+              (no_overflow_int(op->type) &&
+               (
+
+               // Synthesized
+               #if USE_SYNTHESIZED_RULES
+               rewrite(min((x + (y + z)), ((z + w) + u)), (min((w + u), (x + y)) + z)) ||
+               rewrite(min(((x + (y*z)) - (w*z)), u), min((((y - w)*z) + x), u)) ||
+               rewrite(min((min(x, (y + z)) - (w + y)), u), min((min((x - y), z) - w), u)) ||
+               rewrite(min(min(x, ((y + z) + w)), (u + y)), min((min((z + w), u) + y), x)) ||
+               rewrite(min(min((x + (y + z)), w), (u + z)), min((min((x + y), u) + z), w)) ||
+               rewrite(min(min(select((x < y), max(x, z), w), w), x), min(x, w)) ||
+               rewrite(min(select((x < y), (z + w), w), w), (min(select((x < y), z, 0), 0) + w)) ||
+
+               rewrite(min((x + (y + z)), (z + w)), (min((x + y), w) + z)) ||
+               rewrite(min(((x + y) + z), ((y + w) + u)), (min((w + u), (x + z)) + y)) ||
+               rewrite(min((((x + y) + z) + w), (y + u)), (min(((x + z) + w), u) + y)) ||
+               rewrite(min((((x + y) - z) + w), (y + u)), (min(((w - z) + x), u) + y)) ||
+               rewrite(min(((x + y)*z), ((y*z) + w)), (min((x*z), w) + (y*z))) ||
+               rewrite(min(min((x + y), z), ((x + w) + u)), min((min((w + u), y) + x), z)) ||
+
+               rewrite(min((x - y), ((z - y) + w)), (min((w + z), x) - y)) ||
+               rewrite(min(min(max(x, y), z), y), min(y, z)) ||
+
+               rewrite(min(x, (max(y, c0) + min(x, z))), min((max(y, c0) + z), x), (0 <= c0)) ||
+               rewrite(min((x + (y + z)), (w + z)), (min((x + y), w) + z)) ||
+               rewrite(min(min(x, (y + c0)), y), min(x, y), (0 <= c0)) ||
+               rewrite(min(min(x, (y + c0)), (min(z, y) + c1)), min((min(y, z) + c1), x), (c1 <= c0)) ||
+               rewrite(min(x, (min((x + c0), y) + c1)), min((y + c1), x), (0 <= (c0 + c1))) ||
+
+               rewrite(min((x + y), (((z + y) + w) + u)), (min(((u + z) + w), x) + y)) ||
+               rewrite(min(((x + y) + z), ((w + y) + u)), (min((x + z), (u + w)) + y)) ||
+               rewrite(min((((x + y) + z) + w), (u + y)), (min(((x + z) + w), u) + y)) ||
+               rewrite(min((((x + y) - z) + c0), (w + y)), (min(((x - z) + c0), w) + y)) || // Could be more general
+               rewrite(min(min((x + y), z), ((w + x) + u)), min((min((u + w), y) + x), z)) ||
+               rewrite(min(min((x + y), z), ((w + y) + c0)), min((min((w + c0), x) + y), z)) || // Could be more general
+
+               rewrite(min((((x + c0)/c2)*c2), (x + c3)), (x + c3), (((0 < c2) && (c2 < 16)) && (((c2 + c3) + -1) <= c0))) ||
+
+               rewrite(min(((x + y)*c0), ((y*c0) - z)), ((y*c0) - max((x*fold((0 - c0))), z))) ||
+               rewrite(min(((x + (y + z)) + w), (u + z)), (min(((x + y) + w), u) + z)) ||
+
+               // From Google data
+               rewrite(min((x - (y + z)), ((x - (w + z)) + u)), ((x - z) - max((w - u), y))) ||
+               rewrite(min((select((x < y), z, w)*x), (select((x < y), w, z)*x)), min((x*z), (w*x))) ||
+
+               #endif
+
+               false)))) {
 
             return mutate(std::move(rewrite.result), bounds);
         }

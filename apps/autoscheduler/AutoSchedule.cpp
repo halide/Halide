@@ -2606,7 +2606,8 @@ struct LoopNest {
 
             // Pick a tail strategy for any splits of pure vars. RVars always use guardwithif
             auto pure_var_tail_strategy = TailStrategy::Auto;
-            if (!compute_site->accesses_input_buffer() && !node->is_output) {
+            const bool might_access_gpu_shared = true; // Conservatively always true for now
+            if (!might_access_gpu_shared && !compute_site->accesses_input_buffer() && !node->is_output) {
                 // Roundup is lowest overhead, provided it doesn't
                 // expand the bounds read on the input or written on
                 // the output. However, you can only really use it on
@@ -3738,7 +3739,7 @@ struct State {
         int max_threads[3] = {1024, 1024, 64};
 
         for (const auto& v : state->vars) {
-            if (!v.exists || !v.gpu_threads)  {
+            if (!v.exists || !v.gpu_threads || v.extent == 1)  {
                 continue;
             }
 
@@ -3865,7 +3866,7 @@ struct State {
 
             // Halide doesn't let you fuse an RVar with a Var, even if
             // they are both pure.
-            bool can_fuse = !(any_parallel_vars && any_parallel_rvars) && (!target.has_gpu_feature() || can_fuse_gpu(parallel_extents));
+            bool can_fuse = !(any_parallel_vars && any_parallel_rvars) && (!target.has_gpu_feature() || false /*can_fuse_gpu(parallel_extents)*/ );
             if (can_fuse && (!target.has_gpu_feature() || can_fuse_gpu(parallel_extents))) {
                 for (size_t i = 1; i < parallel_vars.size(); i++) {
                     // Outermost, and next outermost. Preserve the inner

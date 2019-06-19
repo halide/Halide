@@ -30,7 +30,7 @@ Expr Simplify::visit(const EQ *op, ExprInfo *bounds) {
         } else if (rewrite(x == 0, !x)) {
             return mutate(std::move(rewrite.result), bounds);
         } else if (rewrite(x == x, const_true(lanes))) {
-	    return rewrite.result;
+            return rewrite.result;
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             return op;
         } else {
@@ -93,6 +93,15 @@ Expr Simplify::visit(const EQ *op, ExprInfo *bounds) {
         rewrite(c0 - x == 0, x == c0)) {
         return rewrite.result;
     }
+
+    #if USE_SYNTHESIZED_RULES
+    // From google list
+    if (rewrite(min(x, y) - max(x, y) == 0, x == y) ||
+        rewrite((min(min(x, y), z) - max(max(x, y), z)) == 0, ((x == y) && (z == y))) ||
+        false) {
+        return mutate(std::move(rewrite.result), bounds);
+    }
+    #endif
 
     if (const Sub *s = delta.as<Sub>()) {
         if (s->a.same_as(op->a) && s->b.same_as(op->b)) {
