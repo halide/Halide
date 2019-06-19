@@ -360,19 +360,17 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
 
               // Synthesized
               #if USE_SYNTHESIZED_RULES
-              rewrite((x < ((x + y) + z)), (0 < (y + z))) ||
 
-              rewrite((x < max(y, (max(z, x) + c0))), true, (0 < c0)) ||
-              rewrite((x < max((max(y, x) + c0), z)), true, (0 < c0)) ||
-              rewrite((min(x, y) < min(z, (x + c0))), (min(x, y) < z), (0 < c0)) ||
-              rewrite((max(x, c0) < max(y, 0)), (x < max(y, 0)), (c0 < 0)) ||
-
-              rewrite(((min(x, c0) + y) < min(z, y)), ((min(x, c0) + y) < z), (c0 < 0)) ||
-
-              rewrite((((c0 - x)/c1) < y), ((y*fold((0 - c1))) < x), (((0 < c1) && (c1 < 16)) && (c0 == 0))) || // < 16
               rewrite(((((c0 - x)/c1)*c2) < x), true, (((c0 == (c1 + 1)) && ((c1 + c2) == 0)) && ((0 < c1) && (c1 < 16)))) || // Predicate too specific
+              rewrite((((c0 - x)/c1) < y), ((y*fold((0 - c1))) < x), (((0 < c1) && (c1 < 16)) && (c0 == 0))) || // < 16
+              rewrite(((min(x, c0) + y) < min(z, y)), ((min(x, c0) + y) < z), (c0 < 0)) ||
               rewrite(((x*c0) < ((y*c1) + c2)), ((x*fold((c0/c1))) < y), (((((c1 < 16) && (0 < c1)) && ((c1 != 0) && ((c0 % c1) == 0))) && (c2 <= 0)) && (0 < (c1 + c2)))) || // < 16. Some unnecessary constraints.
-
+              rewrite((max(x, c0) < max(y, 0)), (x < max(y, 0)), (c0 < 0)) ||
+              rewrite((min(min(x, y), z) < x), (min(y, z) < x)) ||
+              rewrite((min(x, y) < min(z, (x + c0))), (min(x, y) < z), (0 < c0)) ||
+              rewrite((x < ((x + y) + z)), (0 < (y + z))) ||
+              rewrite((x < max((max(y, x) + c0), z)), true, (0 < c0)) ||
+              rewrite((x < max(y, (max(z, x) + c0))), true, (0 < c0)) ||
               rewrite((max(min((x + c0), y), z) < x), (max(y, z) < x), (0 <= c0)) ||
 
               // From Google list

@@ -211,41 +211,45 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
 
                // Synthesized
                #if USE_SYNTHESIZED_RULES
-               rewrite(min((x + (y + z)), ((z + w) + u)), (min((w + u), (x + y)) + z)) ||
-               rewrite(min(((x + (y*z)) - (w*z)), u), min((((y - w)*z) + x), u)) ||
-               rewrite(min((min(x, (y + z)) - (w + y)), u), min((min((x - y), z) - w), u)) ||
-               rewrite(min(min(x, ((y + z) + w)), (u + y)), min((min((z + w), u) + y), x)) ||
-               rewrite(min(min((x + (y + z)), w), (u + z)), min((min((x + y), u) + z), w)) ||
-               rewrite(min(min(select((x < y), max(x, z), w), w), x), min(x, w)) ||
-               rewrite(min(select((x < y), (z + w), w), w), (min(select((x < y), z, 0), 0) + w)) ||
-
-               rewrite(min((x + (y + z)), (z + w)), (min((x + y), w) + z)) ||
-               rewrite(min(((x + y) + z), ((y + w) + u)), (min((w + u), (x + z)) + y)) ||
-               rewrite(min((((x + y) + z) + w), (y + u)), (min(((x + z) + w), u) + y)) ||
-               rewrite(min((((x + y) - z) + w), (y + u)), (min(((w - z) + x), u) + y)) ||
-               rewrite(min(((x + y)*z), ((y*z) + w)), (min((x*z), w) + (y*z))) ||
-               rewrite(min(min((x + y), z), ((x + w) + u)), min((min((w + u), y) + x), z)) ||
-
-               rewrite(min((x - y), ((z - y) + w)), (min((w + z), x) - y)) ||
-               rewrite(min(min(max(x, y), z), y), min(y, z)) ||
-
-               rewrite(min(x, (max(y, c0) + min(x, z))), min((max(y, c0) + z), x), (0 <= c0)) ||
-               rewrite(min((x + (y + z)), (w + z)), (min((x + y), w) + z)) ||
-               rewrite(min(min(x, (y + c0)), y), min(x, y), (0 <= c0)) ||
-               rewrite(min(min(x, (y + c0)), (min(z, y) + c1)), min((min(y, z) + c1), x), (c1 <= c0)) ||
-               rewrite(min(x, (min((x + c0), y) + c1)), min((y + c1), x), (0 <= (c0 + c1))) ||
-
-               rewrite(min((x + y), (((z + y) + w) + u)), (min(((u + z) + w), x) + y)) ||
-               rewrite(min(((x + y) + z), ((w + y) + u)), (min((x + z), (u + w)) + y)) ||
-               rewrite(min((((x + y) + z) + w), (u + y)), (min(((x + z) + w), u) + y)) ||
-               rewrite(min((((x + y) - z) + c0), (w + y)), (min(((x - z) + c0), w) + y)) || // Could be more general
-               rewrite(min(min((x + y), z), ((w + x) + u)), min((min((u + w), y) + x), z)) ||
-               rewrite(min(min((x + y), z), ((w + y) + c0)), min((min((w + c0), x) + y), z)) || // Could be more general
 
                rewrite(min((((x + c0)/c2)*c2), (x + c3)), (x + c3), (((0 < c2) && (c2 < 16)) && (((c2 + c3) + -1) <= c0))) ||
-
-               rewrite(min(((x + y)*c0), ((y*c0) - z)), ((y*c0) - max((x*fold((0 - c0))), z))) ||
+               rewrite(min((((x + y) + z) + w), (u + y)), (min(((x + z) + w), u) + y)) ||
+               rewrite(min((((x + y) + z) + w), (y + u)), (min(((x + z) + w), u) + y)) ||
+               rewrite(min((((x + y) - z) + c0), (w + y)), (min(((x - z) + c0), w) + y)) || // Could be more general
+               rewrite(min((((x + y) - z) + w), (y + u)), (min(((w - z) + x), u) + y)) ||
                rewrite(min(((x + (y + z)) + w), (u + z)), (min(((x + y) + w), u) + z)) ||
+               rewrite(min(((x + (y*z)) - (w*z)), u), min((((y - w)*z) + x), u)) ||
+               rewrite(min(((x + y) + z), ((w + y) + u)), (min((x + z), (u + w)) + y)) ||
+               rewrite(min(((x + y) + z), ((y + w) + u)), (min((w + u), (x + z)) + y)) ||
+               rewrite(min(((x + y)*c0), ((y*c0) - z)), ((y*c0) - max((x*fold((0 - c0))), z))) ||
+               rewrite(min(((x + y)*z), ((y*z) + w)), (min((x*z), w) + (y*z))) ||
+               rewrite(min((min(x, (y + z)) - (w + y)), u), min((min((x - y), z) - w), u)) ||
+               rewrite(min((x + (y + z)), ((z + w) + u)), (min((w + u), (x + y)) + z)) ||
+               rewrite(min((x + (y + z)), (w + y)), (min((x + z), w) + y)) ||
+               rewrite(min((x + (y + z)), (w + z)), (min((x + y), w) + z)) ||
+               rewrite(min((x + (y + z)), (z + w)), (min((x + y), w) + z)) ||
+               rewrite(min((x + y), (((z + y) + w) + u)), (min(((u + z) + w), x) + y)) ||
+               rewrite(min((x + y), (z + (w + x))), (min((w + z), y) + x)) ||
+               rewrite(min((x - y), ((z - y) + w)), (min((w + z), x) - y)) ||
+               rewrite(min(max(x, y), min(max(z, y), w)), min(max(min(x, z), y), w)) ||
+               rewrite(min(max(x, y), min(z, max(w, y))), min(max(min(w, x), y), z)) ||
+               rewrite(min(min((x + (y + z)), w), (u + z)), min((min((x + y), u) + z), w)) ||
+               rewrite(min(min((x + y), z), ((w + x) + u)), min((min((u + w), y) + x), z)) ||
+               rewrite(min(min((x + y), z), ((w + y) + c0)), min((min((w + c0), x) + y), z)) || // Could be more general
+               rewrite(min(min((x + y), z), ((x + w) + u)), min((min((w + u), y) + x), z)) ||
+               rewrite(min(min(max(x, y), z), y), min(y, z)) ||
+               rewrite(min(min(select((x < y), max(x, z), w), w), x), min(x, w)) ||
+               rewrite(min(min(x, ((y + z) + w)), (u + y)), min((min((z + w), u) + y), x)) ||
+               rewrite(min(min(x, ((y + z) + w)), (u + z)), min((min((w + y), u) + z), x)) ||
+               rewrite(min(min(x, (y + c0)), (min(z, y) + c1)), min((min(y, z) + c1), x), (c1 <= c0)) ||
+               rewrite(min(min(x, (y + c0)), y), min(x, y), (0 <= c0)) ||
+               rewrite(min(min(x, min(y, z)), y), min(min(x, z), y)) ||
+               rewrite(min(min(x, min(y, z)), z), min(min(y, z), x)) ||
+               rewrite(min(select((x < y), (z + w), w), w), (min(select((x < y), z, 0), 0) + w)) ||
+               rewrite(min(x, (max(y, c0) + min(x, z))), min((max(y, c0) + z), x), (0 <= c0)) ||
+               rewrite(min(x, (min((x + c0), y) + c1)), min((y + c1), x), (0 <= (c0 + c1))) ||
+               rewrite(min(x, min(x, y)), min(x, y)) ||
+               rewrite(min(x, min(y, x)), min(x, y)) ||
 
                // From Google data
                rewrite(min((x - (y + z)), ((x - (w + z)) + u)), ((x - z) - max((w - u), y))) ||
