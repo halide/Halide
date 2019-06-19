@@ -2166,12 +2166,10 @@ struct LoopNest {
         // HACK (when true)
         const bool force_only_output_compute_root = false;
 
-        bool dynamic_allocation = requires_dynamic_allocation(f, target, in_threads_loop);
-
         if ((!is_root() || f->is_output || !force_only_output_compute_root) &&
             !innermost &&
             (!in_realization || size.empty() || vector_dim == -1 || size[vector_dim] == 1) &&
-            !dynamic_allocation) {
+            (in_realization || gpu_label == block || is_root())) {
 
             // Place the computation inside this loop
             std::unique_ptr<LoopNest> r{new LoopNest};
@@ -2279,9 +2277,9 @@ struct LoopNest {
                     outer->set_bounds(node, b);
                 }
 
-                bool dynamic_allocation = outer->requires_dynamic_allocation(f, target, in_threads_loop);
+                bool allocate_here = !target.has_gpu_feature() || (gpu_label == block || is_root());
 
-                if (!in_realization && !dynamic_allocation) {
+                if (!in_realization && allocate_here) {
                     outer->store_at.insert(f);
                 }
 
@@ -2339,7 +2337,10 @@ struct LoopNest {
 
                             // create (threads, serial) option
 
-                            if (!dynamic_allocation) {
+                            // Only allow allocations at the root or block level i.e.
+                            // only compute here if f was already allocated at
+                            // an outer level
+                            if (in_realization) {
                                 internal_assert(in_threads_loop); // threads loop can't be inside threads loop
                                 outer->gpu_label = thread;
                                 inner->gpu_label = serial;
@@ -2352,25 +2353,33 @@ struct LoopNest {
                         }
 
                         case block: {
-                            internal_assert(!in_threads_loop);
-                            outer->gpu_label = block;
-                            inner->gpu_label = serial;
+                            // Only allow allocations at the root or block level i.e.
+                            // disallow this split if the inner loop (which will become
+                            // serial) contains allocations
+                            if (inner->store_at.size() == 0) {
+                                internal_assert(!in_threads_loop);
+                                outer->gpu_label = block;
+                                inner->gpu_label = serial;
 
-                            outer->children.emplace_back(inner);
-                            outer->compute_here(f, true, v, false, target);
+                                outer->children.emplace_back(inner);
+                                outer->compute_here(f, true, v, false, target);
 
-                            bool made_child = outer->add_gpu_thread_tilings(f, params, target, v, result);
+                                bool made_child = outer->add_gpu_thread_tilings(f, params, target, v, result);
 
-                            if (made_child)
-                                delete outer;
-                            else {// no good thread tilings, just add the untiled thread loop
-                                result.emplace_back(outer);
+                                if (made_child)
+                                    delete outer;
+                                else {// no good thread tilings, just add the untiled thread loop
+                                    result.emplace_back(outer);
+                                }
                             }
                             break;
                         }
 
                         case serial: {
-                            if (!dynamic_allocation) {
+                            // Only allow allocations at the root or block level i.e.
+                            // only compute here if f was already allocated at
+                            // an outer level
+                            if (in_realization) {
                                 outer->gpu_label = serial;
                                 inner->gpu_label = serial;
 
@@ -2440,6 +2449,7 @@ struct LoopNest {
                     // level, so this would constrain parallelism.
                     continue;
                 }
+
                 if (is_root() && num_ones == (int)c->size.size() && params.parallelism > 1) {
                     // Don't fuse into serial loops, or we could never parallelize this Func.
                     continue;
