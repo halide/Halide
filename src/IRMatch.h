@@ -864,7 +864,7 @@ int64_t constant_fold_bin_op<Add>(halide_type_t &t, int64_t a, int64_t b) noexce
     t.lanes |= ((t.bits >= 32) && add_would_overflow(t.bits, a, b)) ? MatcherState::signed_integer_overflow : 0;
     int dead_bits = 64 - t.bits;
     // Drop the high bits then sign-extend them back
-    return int64_t(uint64_t(a + b) << dead_bits) >> dead_bits;
+    return int64_t((uint64_t(a) + uint64_t(b)) << dead_bits) >> dead_bits;
 }
 
 template<>
@@ -896,7 +896,7 @@ int64_t constant_fold_bin_op<Sub>(halide_type_t &t, int64_t a, int64_t b) noexce
     t.lanes |= ((t.bits >= 32) && sub_would_overflow(t.bits, a, b)) ? MatcherState::signed_integer_overflow : 0;
     // Drop the high bits then sign-extend them back
     int dead_bits = 64 - t.bits;
-    return int64_t(uint64_t(a - b) << dead_bits) >> dead_bits;
+    return int64_t((uint64_t(a) - uint64_t(b)) << dead_bits) >> dead_bits;
 }
 
 template<>
@@ -929,7 +929,7 @@ int64_t constant_fold_bin_op<Mul>(halide_type_t &t, int64_t a, int64_t b) noexce
     t.lanes |= ((t.bits >= 32) && mul_would_overflow(t.bits, a, b)) ? MatcherState::signed_integer_overflow : 0;
     int dead_bits = 64 - t.bits;
     // Drop the high bits then sign-extend them back
-    return int64_t(uint64_t(a * b) << dead_bits) >> dead_bits;
+    return int64_t((uint64_t(a) * uint64_t(b)) << dead_bits) >> dead_bits;
 }
 
 template<>
@@ -1361,6 +1361,12 @@ struct Intrin {
 
     HALIDE_ALWAYS_INLINE
     Expr make(MatcherState &state, halide_type_t type_hint) const {
+        return make(state, type_hint, Args{}...);
+    }
+
+    template<typename T>
+    HALIDE_ALWAYS_INLINE
+    Expr make(MatcherState &state, halide_type_t type_hint, const T &) const {
         if (intrin == Call::likely) {
             return likely(std::get<0>(args).make(state, type_hint));
         } else if (intrin == Call::likely_if_innermost) {
@@ -1369,6 +1375,18 @@ struct Intrin {
         internal_error << "Unhandled intrinsic in IRMatcher: " << intrin;
         return Expr();
     }
+
+    template<typename T1, typename T2>
+    HALIDE_ALWAYS_INLINE
+    Expr make(MatcherState &state, halide_type_t type_hint, const T1 &, const T2 &) const {
+        if (intrin == Call::absd) {
+            return absd(std::get<0>(args).make(state, type_hint),
+                        std::get<1>(args).make(state, type_hint));
+        }
+        internal_error << "Unhandled intrinsic in IRMatcher: " << intrin;
+        return Expr();
+    }
+
 
     constexpr static bool foldable = false;
 
@@ -2007,6 +2025,38 @@ auto is_float(A a) noexcept -> IsFloat<decltype(pattern_arg(a))> {
 template<typename A>
 std::ostream &operator<<(std::ostream &s, const IsFloat<A> &op) {
     s << "is_float(" << op.a << ")";
+    return s;
+}
+
+template<typename A>
+struct IsNoOverflowInt {
+    struct pattern_tag {};
+    A a;
+
+    constexpr static uint32_t binds = bindings<A>::mask;
+
+    constexpr static bool foldable = true;
+
+    HALIDE_ALWAYS_INLINE
+    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const {
+        // a is almost certainly a very simple pattern (e.g. a wild), so just inline the make method.
+        Type t = a.make(state, {}).type();
+        val.u.u64 = t.is_int() && t.bits() >= 32;
+        ty.code = halide_type_uint;
+        ty.bits = 1;
+        ty.lanes = t.lanes();
+    };
+};
+
+template<typename A>
+HALIDE_ALWAYS_INLINE
+auto is_no_overflow_int(A a) noexcept -> IsNoOverflowInt<decltype(pattern_arg(a))> {
+    return {pattern_arg(a)};
+}
+
+template<typename A>
+std::ostream &operator<<(std::ostream &s, const IsNoOverflowInt<A> &op) {
+    s << "is_no_overflow_int(" << op.a << ")";
     return s;
 }
 
