@@ -3709,7 +3709,7 @@ struct State {
         int max_threads[3] = {1024, 1024, 64};
 
         for (const auto& v : state->vars) {
-            if (!v.exists || !v.gpu_threads)  {
+            if (!v.exists || !v.gpu_threads || v.extent == 1)  {
                 continue;
             }
 
