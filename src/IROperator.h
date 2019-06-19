@@ -1259,8 +1259,10 @@ inline Expr erf(Expr x) {
 
 /** Fast vectorizable approximation to some trigonometric functions for Float(32).
  * Absolute approximation error is less than 1e-5. */
+// @{
 Expr fast_sin(Expr x);
 Expr fast_cos(Expr x);
+// @}
 
 /** Fast approximate cleanly vectorizable log for Float(32). Returns
  * nonsense for x <= 0.0f. Accurate up to the last 5 bits of the

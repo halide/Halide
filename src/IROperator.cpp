@@ -857,7 +857,7 @@ Expr fast_sin_cos(Expr x_full, bool is_sin) {
     Expr sin_usecos = is_sin ? ((k_mod4 == 1) || (k_mod4 == 3)) : ((k_mod4 == 0) || (k_mod4 == 2));
     Expr flip_sign = is_sin ? (k_mod4 > 1) : ((k_mod4 == 1) || (k_mod4 == 2));
 
-    // Reduce ranged angle.
+    // Reduce the angle modulo pi/2.
     Expr x = x_full - k_real * pi_over_two;
 
     const float sin_c2 = -0.16666667163372039794921875f;
