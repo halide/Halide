@@ -536,6 +536,13 @@ public:
     // @{
     const std::vector<FusedPair> &fused_pairs() const;
     std::vector<FusedPair> &fused_pairs();
+    // @}
+
+    /** Determines whether this stage is fused with another stage at a given var.
+     * Returns false even if there is no fusion relationship between this stage
+     * and the other.
+     */
+    bool is_fused_with(const Function &other, size_t stage_index, const std::string &var) const;
 
     /** Are race conditions permitted? */
     // @{

@@ -162,7 +162,7 @@ Module lower(const vector<Function> &output_funcs,
     // can't simplify statements from here until we fix them up. (We
     // can still simplify Exprs).
     debug(1) << "Performing computation bounds inference...\n";
-    s = bounds_inference(s, outputs, order, fused_groups, env, func_bounds, t);
+    s = bounds_inference(s, outputs, order, env, func_bounds, t);
     debug(2) << "Lowering after computation bounds inference:\n" << s << '\n';
 
     debug(1) << "Removing extern loops...\n";

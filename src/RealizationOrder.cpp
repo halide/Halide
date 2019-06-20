@@ -192,8 +192,8 @@ void check_no_cyclic_compute_with(const map<string, vector<FusedPair>> &fused_pa
 
 } // anonymous namespace
 
-pair<vector<string>, vector<vector<string>>> realization_order(
-        const vector<Function> &outputs, map<string, Function> &env) {
+pair<vector<string>, vector<vector<string>>>
+realization_order(const vector<Function> &outputs, map<string, Function> &env) {
 
     // Populate the fused_pairs list of each function definition (i.e. list of
     // all function definitions that are to be computed with that function).

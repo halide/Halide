@@ -535,6 +535,11 @@ const std::vector<FusedPair> &StageSchedule::fused_pairs() const {
     return contents->fused_pairs;
 }
 
+bool StageSchedule::is_fused_with(const Function &other, size_t stage_index, const std::string &var) const {
+    // TODO: implement
+    return true;
+}
+
 bool &StageSchedule::allow_race_conditions() {
     return contents->allow_race_conditions;
 }
