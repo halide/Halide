@@ -90,34 +90,34 @@ void validate_fused_pair(const string &fn, size_t stage_index,
                          const map<string, map<string, Function>> &indirect_calls,
                          const FusedPair &p,
                          const vector<FusedPair> &func_fused_pairs) {
-    internal_assert((p.func_1 == fn) && (p.stage_1 == stage_index));
+    internal_assert((p.parent_func == fn) && (p.parent_stage == stage_index));
 
-    user_assert(env.count(p.func_2))
-        << "Illegal compute_with: \"" << p.func_2 << "\" is scheduled to be computed with \""
-        << p.func_1 << "\" but \"" << p.func_2 << "\" is not used anywhere.\n";
+    user_assert(env.count(p.child_func))
+    << "Illegal compute_with: \"" << p.child_func << "\" is scheduled to be computed with \""
+    << p.parent_func << "\" but \"" << p.child_func << "\" is not used anywhere.\n";
 
     // Assert no compute_with of updates of the same Func and no duplicates
     // (These technically should not have been possible from the front-end).
     {
-        internal_assert(p.func_1 != p.func_2);
+        internal_assert(p.parent_func != p.child_func);
         const auto &iter = std::find(func_fused_pairs.begin(), func_fused_pairs.end(), p);
         internal_assert(iter == func_fused_pairs.end())
-             << "Found duplicates of fused pair (" << p.func_1 << ".s" << p.stage_1 << ", "
-             << p.func_2 << ".s" << p.stage_2 << ", " << p.var_name << ")\n";
+        << "Found duplicates of fused pair (" << p.parent_func << ".s" << p.parent_stage << ", "
+        << p.child_func << ".s" << p.child_stage << ", " << p.var_name << ")\n";
     }
 
     // Assert no dependencies among the functions that are computed_with.
-    const auto &callees_1 = indirect_calls.find(p.func_1);
+    const auto &callees_1 = indirect_calls.find(p.parent_func);
     if (callees_1 != indirect_calls.end()) {
-        user_assert(callees_1->second.find(p.func_2) == callees_1->second.end())
-            << "Invalid compute_with: there is dependency between "
-            << p.func_1 << " and " << p.func_2 << "\n";
+        user_assert(callees_1->second.find(p.child_func) == callees_1->second.end())
+        << "Invalid compute_with: there is dependency between "
+        << p.parent_func << " and " << p.child_func << "\n";
     }
-    const auto &callees_2 = indirect_calls.find(p.func_2);
+    const auto &callees_2 = indirect_calls.find(p.child_func);
     if (callees_2 != indirect_calls.end()) {
-        user_assert(callees_2->second.find(p.func_1) == callees_2->second.end())
-            << "Invalid compute_with: there is dependency between "
-            << p.func_1 << " and " << p.func_2 << "\n";
+        user_assert(callees_2->second.find(p.parent_func) == callees_2->second.end())
+        << "Invalid compute_with: there is dependency between "
+        << p.parent_func << " and " << p.child_func << "\n";
     }
 }
 
@@ -128,15 +128,15 @@ void collect_fused_pairs(const FusedPair &p,
                          vector<FusedPair> &func_fused_pairs,
                          map<string, vector<string>> &graph,
                          map<string, set<string>> &fuse_adjacency_list) {
-    fuse_adjacency_list[p.func_1].insert(p.func_2);
-    fuse_adjacency_list[p.func_2].insert(p.func_1);
+    fuse_adjacency_list[p.parent_func].insert(p.child_func);
+    fuse_adjacency_list[p.child_func].insert(p.parent_func);
 
     func_fused_pairs.push_back(p);
 
     // If there is a compute_with dependency between two functions, we need
     // to update the pipeline DAG so that the computed realization order
     // respects this dependency.
-    graph[p.func_1].push_back(p.func_2);
+    graph[p.parent_func].push_back(p.child_func);
 }
 
 // Populate the 'fused_pairs' list in Schedule of each function stage.
@@ -174,18 +174,18 @@ void populate_fused_pairs_list(const string &func, const Definition &def,
 void check_no_cyclic_compute_with(const map<string, vector<FusedPair>> &fused_pairs_graph) {
     for (const auto &iter : fused_pairs_graph) {
         for (const auto &pair : iter.second) {
-            internal_assert(pair.func_1 != pair.func_2);
-            const auto &o_iter = fused_pairs_graph.find(pair.func_2);
+            internal_assert(pair.parent_func != pair.child_func);
+            const auto &o_iter = fused_pairs_graph.find(pair.child_func);
             if (o_iter == fused_pairs_graph.end()) {
                 continue;
             }
             const auto &it = std::find_if(o_iter->second.begin(), o_iter->second.end(),
                 [&pair](const FusedPair &other) {
-                    return (pair.func_1 == other.func_2) && (pair.func_2 == other.func_1);
+                    return (pair.parent_func == other.child_func) && (pair.child_func == other.parent_func);
                 });
             user_assert(it == o_iter->second.end())
-                << "Found cyclic dependencies between compute_with of "
-                << pair.func_1 << " and " << pair.func_2 << "\n";
+            << "Found cyclic dependencies between compute_with of "
+            << pair.parent_func << " and " << pair.child_func << "\n";
         }
     }
 }
@@ -292,6 +292,7 @@ realization_order(const vector<Function> &outputs, map<string, Function> &env) {
             group_order.push_back(iter->second);
         }
     }
+
     // Sort the functions within a fused group based on the compute_with
     // dependencies (i.e. parent of the fused loop should be realized after its
     // children).

@@ -319,36 +319,40 @@ struct StorageDim {
  * computation from stage_1 of func_1 occurs first.
  */
 struct FusedPair {
-    std::string func_1;
-    std::string func_2;
-    size_t stage_1;
-    size_t stage_2;
+    std::string parent_func;
+    std::string child_func;
+    size_t parent_stage{};
+    size_t child_stage{};
     std::string var_name;
 
-    FusedPair() {}
-    FusedPair(const std::string &f1, size_t s1, const std::string &f2,
-              size_t s2, const std::string &var)
-        : func_1(f1), func_2(f2), stage_1(s1), stage_2(s2), var_name(var) {}
+    FusedPair() = default;
+
+    FusedPair(std::string f1, size_t s1, std::string f2, size_t s2, std::string var)
+        : parent_func(std::move(f1)),
+          child_func(std::move(f2)),
+          parent_stage(s1),
+          child_stage(s2),
+          var_name(std::move(var)) {}
 
     bool operator==(const FusedPair &other) const {
-        return (func_1 == other.func_1) && (func_2 == other.func_2) &&
-               (stage_1 == other.stage_1) && (stage_2 == other.stage_2) &&
+        return (parent_func == other.parent_func) && (child_func == other.child_func) &&
+               (parent_stage == other.parent_stage) && (child_stage == other.child_stage) &&
                (var_name == other.var_name);
     }
     bool operator<(const FusedPair &other) const {
-        if (func_1 != other.func_1) {
-            return func_1 < other.func_1;
+        if (parent_func != other.parent_func) {
+            return parent_func < other.parent_func;
         }
-        if (func_2 != other.func_2) {
-            return func_2 < other.func_2;
+        if (child_func != other.child_func) {
+            return child_func < other.child_func;
         }
         if (var_name != other.var_name) {
             return var_name < other.var_name;
         }
-        if (stage_1 != other.stage_1) {
-            return stage_1 < other.stage_1;
+        if (parent_stage != other.parent_stage) {
+            return parent_stage < other.parent_stage;
         }
-        return stage_2 < other.stage_2;
+        return child_stage < other.child_stage;
     }
 };
 

@@ -1207,11 +1207,11 @@ private:
         // parent fused loop. Here, we are only collecting the ones we should
         // replace. The actual replacement is done later.
         for (const FusedPair &pair : def.schedule().fused_pairs()) {
-            const auto &f2_it = env.find(pair.func_2);
+            const auto &f2_it = env.find(pair.child_func);
             internal_assert(f2_it != env.end());
             const vector<Dim> &dims_2 =
-                    (pair.stage_2 == 0) ? f2_it->second.definition().schedule().dims() :
-                    f2_it->second.update((int)(pair.stage_2 - 1)).schedule().dims();
+                (pair.child_stage == 0) ? f2_it->second.definition().schedule().dims() :
+                f2_it->second.update((int)(pair.child_stage - 1)).schedule().dims();
 
             const auto &iter = std::find_if(dims.begin(), dims.end(),
                                             [&pair](const Dim &d) { return var_name_match(d.var, pair.var_name); });
@@ -1219,12 +1219,12 @@ private:
             start_fuse = std::min(start_fuse, (size_t)(iter - dims.begin()));
             // Should ignore the __outermost dummy dimension.
             for (size_t i = (size_t)(iter - dims.begin()); i < dims.size() - 1; ++i) {
-                string var_orig = pair.func_1 + ".s" + std::to_string(pair.stage_1) + "." + dims[i].var;
+                string var_orig = pair.parent_func + ".s" + std::to_string(pair.parent_stage) + "." + dims[i].var;
                 Expr val = Variable::make(Int(32), var_orig);
 
                 int dim2_idx = (int)(dims_2.size() - (dims.size() - i));
                 internal_assert(dim2_idx < (int)dims_2.size());
-                string var = pair.func_2 + ".s" + std::to_string(pair.stage_2) + "." + dims_2[dim2_idx].var;
+                string var = pair.child_func + ".s" + std::to_string(pair.child_stage) + "." + dims_2[dim2_idx].var;
 
                 replacements.emplace(var + ".loop_extent", make_const(Int(32), 1));
                 replacements.emplace(var + ".loop_min", val);
@@ -1249,12 +1249,13 @@ private:
         visited.insert(prefix);
         dependence.push_back(p);
         for (const FusedPair &pair : def.schedule().fused_pairs()) {
-            const auto &iter = env.find(pair.func_2);
+            const auto &iter = env.find(pair.child_func);
             internal_assert(iter != env.end());
             const Function &f = iter->second;
-            string prefix_2 = pair.func_2 + ".s" + std::to_string(pair.stage_2) + "." + pair.var_name;
+            string prefix_2 = pair.child_func + ".s" + std::to_string(pair.child_stage) + "." + pair.var_name;
             if (visited.find(prefix_2) == visited.end()) {
-                const Definition &def_2 = (pair.stage_2 == 0) ? f.definition() : f.update((int)(pair.stage_2 - 1));
+                const Definition &def_2 = (pair.child_stage == 0) ? f.definition() : f.update(
+                    (int)(pair.child_stage - 1));
                 collect_all_dependence_helper(prefix_2, def_2, pair, dependence, visited);
             }
         }
@@ -1266,12 +1267,13 @@ private:
         vector<FusedPair> dependence;
 
         for (const FusedPair &pair : def.schedule().fused_pairs()) {
-            const auto &iter = env.find(pair.func_2);
+            const auto &iter = env.find(pair.child_func);
             internal_assert(iter != env.end());
             const Function &f = iter->second;
-            string prefix = pair.func_2 + ".s" + std::to_string(pair.stage_2) + "." + pair.var_name;
+            string prefix = pair.child_func + ".s" + std::to_string(pair.child_stage) + "." + pair.var_name;
             if (visited.find(prefix) == visited.end()) {
-                const Definition &def_2 = (pair.stage_2 == 0) ? f.definition() : f.update((int)(pair.stage_2 - 1));
+                const Definition &def_2 = (pair.child_stage == 0) ? f.definition() : f.update(
+                    (int)(pair.child_stage - 1));
                 collect_all_dependence_helper(prefix, def_2, pair, dependence, visited);
             }
         }
@@ -1296,12 +1298,12 @@ private:
 
         // Compute the union of the bounds of the fused loops.
         for (const FusedPair &pair : dependence) {
-            const auto &f2_it = env.find(pair.func_2);
+            const auto &f2_it = env.find(pair.child_func);
             internal_assert(f2_it != env.end());
             const vector<Dim> &dims_2 =
-                pair.stage_2 == 0 ?
+                pair.child_stage == 0 ?
                 f2_it->second.definition().schedule().dims() :
-                f2_it->second.update((int)(pair.stage_2 - 1)).schedule().dims();
+                f2_it->second.update((int)(pair.child_stage - 1)).schedule().dims();
 
             const auto &iter = std::find_if(dims.begin(), dims.end(),
                                             [&pair](const Dim &d) { return var_name_match(d.var, pair.var_name); });
@@ -1314,7 +1316,7 @@ private:
                 int dim2_idx = (int)(dims_2.size() - (dims.size() - i));
                 internal_assert(dim2_idx < (int)dims_2.size());
 
-                string var_2 = pair.func_2 + ".s" + std::to_string(pair.stage_2) +
+                string var_2 = pair.child_func + ".s" + std::to_string(pair.child_stage) +
                                "." + dims_2[dim2_idx].var;
                 internal_assert(bounds.count(var_2 + ".loop_min"));
                 internal_assert(bounds.count(var_2 + ".loop_max"));
@@ -1918,15 +1920,15 @@ void validate_fused_group_schedule_helper(const string &fn,
                                           const map<string, Function> &env) {
     internal_assert(def_1.defined());
     for (const auto &p : def_1.schedule().fused_pairs()) {
-        internal_assert((fn == p.func_1) && (stage_index == p.stage_1));
+        internal_assert((fn == p.parent_func) && (stage_index == p.parent_stage));
 
-        const auto &iter1 = env.find(p.func_1);
-        const auto &iter2 = env.find(p.func_2);
+        const auto &iter1 = env.find(p.parent_func);
+        const auto &iter2 = env.find(p.child_func);
         internal_assert((iter1 != env.end()) && (iter2 != env.end()));
 
         const Function &func_1 = iter1->second;
         const Function &func_2 = iter2->second;
-        const Definition &def_2 = (p.stage_2 == 0) ? func_2.definition() : func_2.update((int)(p.stage_2 - 1));
+        const Definition &def_2 = (p.child_stage == 0) ? func_2.definition() : func_2.update((int)(p.child_stage - 1));
         internal_assert(def_2.defined());
 
         // f2.compute_with(f1, var) is allowed only if f2 has no specializations.
@@ -1936,26 +1938,26 @@ void validate_fused_group_schedule_helper(const string &fn,
 
         // Verify that the functions being computed with are not scheduled inline.
         user_assert(!func_1.schedule().compute_level().is_inlined())
-            << "Invalid compute_with: " << p.func_1 << ".s" << p.stage_1
-            << " is scheduled inline.\n";
+        << "Invalid compute_with: " << p.parent_func << ".s" << p.parent_stage
+        << " is scheduled inline.\n";
         user_assert(!func_2.schedule().compute_level().is_inlined())
-            << "Invalid compute_with: " << p.func_2 << ".s" << p.stage_2
-            << " is scheduled inline.\n";
+        << "Invalid compute_with: " << p.child_func << ".s" << p.child_stage
+        << " is scheduled inline.\n";
 
         // Verify that the functions being computed with does not have extern definitions.
         user_assert(!func_1.has_extern_definition())
-            << "Invalid compute_with: " << p.func_1 << ".s" << p.stage_1
-            << " has extern definition.\n";
+        << "Invalid compute_with: " << p.parent_func << ".s" << p.parent_stage
+        << " has extern definition.\n";
         user_assert(!func_2.has_extern_definition())
-            << "Invalid compute_with: " << p.func_2 << ".s" << p.stage_2
-            << " has extern definition.\n";
+        << "Invalid compute_with: " << p.child_func << ".s" << p.child_stage
+        << " has extern definition.\n";
 
         // Verify that they are computed at the same loop level.
         user_assert(func_1.schedule().compute_level() == func_2.schedule().compute_level())
-            << "Invalid compute_with: the compute levels of " << p.func_1 << ".s" << p.stage_1
-            << " (computed at " << func_1.schedule().compute_level().to_string()
-            << ") and " << p.func_2 << ".s" << p.stage_2 << " ("
-            << func_2.schedule().compute_level().to_string() << ") do not match.\n";
+        << "Invalid compute_with: the compute levels of " << p.parent_func << ".s" << p.parent_stage
+        << " (computed at " << func_1.schedule().compute_level().to_string()
+        << ") and " << p.child_func << ".s" << p.child_stage << " ("
+        << func_2.schedule().compute_level().to_string() << ") do not match.\n";
 
         const vector<Dim> &dims_1 = def_1.schedule().dims();
         const vector<Dim> &dims_2 = def_2.schedule().dims();
@@ -1964,14 +1966,14 @@ void validate_fused_group_schedule_helper(const string &fn,
         const auto &iter_1 = std::find_if(dims_1.begin(), dims_1.end(),
             [&p](const Dim &d) { return var_name_match(d.var, p.var_name); });
         user_assert(iter_1 != dims_1.end())
-            << "Invalid compute_with: cannot find " << p.var_name << " in "
-            << p.func_1 << ".s" << p.stage_1 << "\n";
+        << "Invalid compute_with: cannot find " << p.var_name << " in "
+        << p.parent_func << ".s" << p.parent_stage << "\n";
 
         const auto &iter_2 = std::find_if(dims_2.begin(), dims_2.end(),
             [&p](const Dim &d) { return var_name_match(d.var, p.var_name); });
         user_assert(iter_2 != dims_2.end())
-            << "Invalid compute_with: cannot find " << p.var_name << " in "
-            << p.func_2 << ".s" << p.stage_2 << "\n";
+        << "Invalid compute_with: cannot find " << p.var_name << " in "
+        << p.child_func << ".s" << p.child_stage << "\n";
 
         // Verify that their dimensions up to "var_name" are the same.
         size_t start_fuse_1 = (size_t)(iter_1 - dims_1.begin());
@@ -1979,8 +1981,8 @@ void validate_fused_group_schedule_helper(const string &fn,
 
         int n_fused = (int)(dims_1.size() - start_fuse_1 - 1); // Ignore __outermost
         user_assert(n_fused == (int)(dims_2.size() - start_fuse_2 - 1))
-            << "Invalid compute_with: # of fused dims of " << p.func_1 << ".s"
-            << p.stage_1 << " and " << p.func_2 << ".s" << p.stage_2 << " do not match.\n";
+        << "Invalid compute_with: # of fused dims of " << p.parent_func << ".s"
+        << p.parent_stage << " and " << p.child_func << ".s" << p.child_stage << " do not match.\n";
 
         for (int i = 0; i < n_fused; ++i) {
             const Dim &d1 = dims_1[start_fuse_1 + i];
@@ -1990,9 +1992,9 @@ void validate_fused_group_schedule_helper(const string &fn,
                          (d1.device_api == d2.device_api) &&
                          (d1.dim_type == d2.dim_type);
             if (!equal) {
-                user_error << "Invalid compute_with: dims " << i << " of " << p.func_1 << ".s"
-                           << p.stage_1 << "(" << dims_1[start_fuse_1 + i].var << ") and " << p.func_2
-                           << ".s" << p.stage_2 << "(" << dims_2[start_fuse_2 + i].var << ") do not match.\n";
+                user_error << "Invalid compute_with: dims " << i << " of " << p.parent_func << ".s"
+                           << p.parent_stage << "(" << dims_1[start_fuse_1 + i].var << ") and " << p.child_func
+                           << ".s" << p.child_stage << "(" << dims_2[start_fuse_2 + i].var << ") do not match.\n";
             }
         }
     }
