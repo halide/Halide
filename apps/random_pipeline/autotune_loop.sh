@@ -2,22 +2,18 @@
 
 # set -x
 
-# mode => debug | train
+# mode => debug | train | build
 # debug mode only generates data, uses -debug on HL_TARGET, and collects shared
 # memory errors
 # train mode generates data without -debug and trains the model
+# build mode just builds the necessary tools/generators
 if [ $# -ne 1 ]; then
-  echo "Usage: $0 mode [debug|train]"
+  echo "Usage: $0 mode [debug|train|build]"
   exit
 fi
 
-# Install a watchdog to kill benchmarking processes that take too long
-bash ./watchdog_bench.sh &
-WATCHDOG_PID=$!
-function finish {
-    kill $WATCHDOG_PID
-}
-trap finish EXIT
+DEBUG_MODE=0
+BUILD_MODE=0
 
 if [ ${1} == "debug" ]; then
     DEBUG_MODE=1
@@ -25,6 +21,9 @@ if [ ${1} == "debug" ]; then
 elif [ ${1} == "train" ]; then
     DEBUG_MODE=0
     echo "Running in train mode"
+elif [ ${1} == "build" ]; then
+    BUILD_MODE=1
+    echo "Running in build mode"
 else
     echo "Unknown mode"
     exit
@@ -43,6 +42,18 @@ make -C ../autoscheduler ../autoscheduler/bin/augment_sample
 make -C ../autoscheduler ../autoscheduler/bin/train_cost_model
 make -C ../autoscheduler ../autoscheduler/bin/libauto_schedule.so
 cp ../autoscheduler/bin/augment_sample ../autoscheduler/bin/train_cost_model  ../autoscheduler/bin/libauto_schedule.so bin/
+
+if [ $BUILD_MODE == 1 ]; then
+  exit
+fi
+
+# Install a watchdog to kill benchmarking processes that take too long
+bash ./watchdog_bench.sh &
+WATCHDOG_PID=$!
+function finish {
+    kill $WATCHDOG_PID
+}
+trap finish EXIT
 
 mkdir -p ${SAMPLES}
 
@@ -173,8 +184,8 @@ for ((i=$((FIRST+1));i<1000000;i++)); do
         echo Retraining model...
         find ${SAMPLES} | grep sample$ | HL_NUM_THREADS=32 HL_WEIGHTS_DIR=${WEIGHTS_DIR} ./bin/train_cost_model 32
     else
-        echo "Shared memory errors:"
         bash find_shmem_errors.sh
+        bash find_inner_allocations.sh
     fi
 
 done
