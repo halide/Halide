@@ -537,6 +537,7 @@ const std::vector<FusedPair> &StageSchedule::fused_pairs() const {
 
 bool StageSchedule::is_fused_with(const Function &other, size_t stage_index, const std::string &var) const {
     // TODO: implement
+    internal_assert(false) << "is_fused_with not implemented!";
     return true;
 }
 
