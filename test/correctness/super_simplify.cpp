@@ -325,12 +325,13 @@ tuple<Expr, Expr, Expr> predicate_expr(vector<Expr> lhs,
 
     // The values vector is sorted by complexity of the expression.
 
-    vector<Expr> values, constraints;
+    vector<Expr> constraints;
+    vector<pair<Expr, Expr>> values;
     constraints.push_back(const_true());
 
     for (auto e1 : lhs) {
-        values.push_back(e1);
-        values.push_back(-e1);
+        values.emplace_back(e1, const_true());
+        values.emplace_back(-e1, const_true());
         constraints.push_back(e1 != 0);
         constraints.push_back(e1 >= 0);
         constraints.push_back(e1 <= 0);
@@ -346,16 +347,15 @@ tuple<Expr, Expr, Expr> predicate_expr(vector<Expr> lhs,
                 commutative_ok = false;
                 continue;
             }
+            (void)commutative_ok;
             constraints.push_back(e1 <= e2 + 1);
             constraints.push_back(e1 <= e2);
             constraints.push_back(e1 < e2);
             constraints.push_back(e1 < e2 - 1);
-
-            constraints.push_back(e1 % e2 == 0 && e2 > 0 && e2 < 16);
+            //constraints.push_back(e1 % e2 == 0 && e2 > 0 && e2 < 4);
             constraints.push_back(e1 / e2 == 0 && e2 > 0 && e2 < 16);
             constraints.push_back(e1 == e2 - 1);
             constraints.push_back(e1 == e2 + 1);
-
             constraints.push_back(e1 == e2);
 
             if (commutative_ok) {
@@ -364,21 +364,21 @@ tuple<Expr, Expr, Expr> predicate_expr(vector<Expr> lhs,
                 constraints.push_back(e1 + e2 < 0);
                 constraints.push_back(e1 + e2 > 0);
                 constraints.push_back(e1 + e2 == 0);
-                values.push_back(e1 + e2);
-                values.push_back(min(e1, e2));
-                values.push_back(max(e1, e2));
+                values.emplace_back(e1 + e2, const_true());
+                values.emplace_back(min(e1, e2), const_true());
+                values.emplace_back(max(e1, e2), const_true());
             }
-            values.push_back(e1 - e2);
-            values.push_back(e1 / e2);
-            values.push_back((e1 + e2 - 1) / e2);
-            values.push_back(e1 % e2);
+            values.emplace_back(e1 - e2, const_true());
+            values.emplace_back(e1 / e2, e2 > 0 && e2 < 16); // Division rounding down
+            values.emplace_back((e1 - 1) / e2 + 1, e2 > 0 && e2 < 4); // Division rounding up
+            values.emplace_back(e1 / e2, e2 > 0 && e2 < 4 && e1 % e2 == 0); // Exact division
+            values.emplace_back(e1 % e2, e2 > 0 && e2 < 16);
         }
     }
-
-    values.push_back(-1);
-    values.push_back(0);
-    values.push_back(1);
-    values.push_back(2);
+    values.emplace_back(-1, const_true());
+    values.emplace_back(0, const_true());
+    values.emplace_back(1, const_true());
+    values.emplace_back(2, const_true());
 
     for (auto e1 : lhs) {
         for (auto e2 : lhs) {
@@ -413,46 +413,13 @@ tuple<Expr, Expr, Expr> predicate_expr(vector<Expr> lhs,
 
     for (size_t i = 0; i < rhs.size(); i++) {
         Expr r = rhs[i];
-        Expr val = values[0];
-        Expr cond = values[0];
+        Expr val = values[0].first;
+        Expr cond = values[0].second;
         Expr op = opcodes[i];
-        vector<pair<Expr, Expr>> divs, mods;
         for (int j = 1; j < (int)values.size(); j++) {
             Expr c = (op == j);
-            val = select(c, values[j], val);
-            if (values[j].as<Div>()) {
-                divs.emplace_back(c, values[j]);
-            } else if (values[j].as<Mod>()) {
-                mods.emplace_back(c, values[j]);
-            } else {
-                cond = select(c, values[j], cond);
-            }
-        }
-        cond = (r == cond);
-        // Handle the divs and mods with implicit conditions instead.
-        for (auto p : divs) {
-            const Div *d = p.second.as<Div>();
-            /*
-            Expr numerator = d->a;
-            Expr denominator = d->b;
-            assert(d);
-            // We have r == d->a / d->b
-            // Or r * d->b + residual == d->a, for some bounded residual
-            Expr residual = numerator - r * denominator;
-            // Only handle small positive divisors for now. We'll try
-            // to remove the bound on the denominator in a post-pass.
-            cond = select(p.first, (d->b > 0) && (d->b < 16) && residual >= 0 && residual < denominator, cond);
-            */
-            cond = select(p.first, (d->b > 0) && (d->b < 16) && (r == d->a / d->b), cond);
-        }
-        for (auto p : mods) {
-            const Mod *m = p.second.as<Mod>();
-            assert(m);
-            // We have r == m->a % m->b
-            // Or in other words, r + t * m->b == m->a, for some unknown quotient
-            //Var t(unique_name('t'));
-            //cond = select(p.first, p.first && (m->b > 0) && (m->b < 16) && (r + t * m->b == m->a) && (r >= 0) && (r < m->b), cond);
-            cond = select(p.first, (m->b > 0) && (m->b < 16) && (r == m->a % m->b), cond);
+            val = select(c, values[j].first, val);
+            cond = select(c, (r == values[j].first) && values[j].second, cond);
         }
 
         result = result && cond;
@@ -994,9 +961,9 @@ Expr synthesize_sufficient_condition(Expr lhs, Expr rhs, int size,
 
     Expr most_general_predicate_found;
     map<string, Expr> most_general_predicate_opcodes;
+    bool toggle = false;
 
     while (negative_examples.size() < 30) {
-
         // First synthesize a false positive for the current
         // predicate. This is a set of constants for which the
         // predicate is true, but the expression is false.
@@ -1040,7 +1007,30 @@ Expr synthesize_sufficient_condition(Expr lhs, Expr rhs, int size,
 
         if (negative_examples_found_with_fuzzing == 0) {
             // std::cout << "Satisfying: " << false_positive_for_current_predicate << "\n";
-            auto result = satisfy(false_positive_for_current_predicate, &negative_example);
+
+            Z3Result result = Unsat;
+            if (lhs.type().is_bool()) {
+                // For boolean lhs/rhs, we get a better sampling of the
+                // space of false positives if we try for cases where the
+                // lhs is false and the rhs is true as often as cases
+                // where the lhs is true and the rhs is false.
+                if (toggle) {
+                    result = satisfy(false_positive_for_current_predicate && !rhs, &negative_example);
+                } else {
+                    result = satisfy(false_positive_for_current_predicate && rhs, &negative_example);
+                }
+            } else {
+                if (toggle) {
+                    result = satisfy(false_positive_for_current_predicate && lhs < rhs, &negative_example);
+                } else {
+                    result = satisfy(false_positive_for_current_predicate && rhs < lhs , &negative_example);
+                }
+            }
+            toggle = !toggle;
+            if (result == Unsat) {
+                result = satisfy(false_positive_for_current_predicate, &negative_example);
+            }
+
             if (result == Unsat) {
                 // Z3 says there are no false positives, which means
                 // this predicate is good. Make a note of it and start
@@ -1056,6 +1046,9 @@ Expr synthesize_sufficient_condition(Expr lhs, Expr rhs, int size,
                     std::cout << it.first << " = " << it.second << "\n";
                 }
                 */
+                std::cout << "Under this false positive, lhs = " << simplify(substitute(negative_example, lhs))
+                          << " rhs = " << simplify(substitute(negative_example, rhs))
+                          << "\n";
             } else {
                 std::cout << "Search for false positives was inconclusive.\n";
                 break;
@@ -1256,7 +1249,7 @@ vector<Expr> all_possible_lhs_patterns(const Expr &e) {
             f.erase(v);
 
             bool must_include = false; //is_const(expr_for_id[v]);
-
+            bool may_include = true; //!is_const(expr_for_id[v]);
             if (!must_include) {
                 // Generate all subgraphs with this frontier node not
                 // included (replaced with a variable).
@@ -1267,7 +1260,7 @@ vector<Expr> all_possible_lhs_patterns(const Expr &e) {
             }
 
             // Generate all subgraphs with this frontier node included
-            if (must_include || c.size() < 10) { // Max out at some number of unique nodes
+            if (may_include && (must_include || c.size() < 10)) { // Max out at some number of unique nodes
                 c.insert(v);
                 for (auto n : ch) {
                     if (may_add_to_frontier(rejected, current, n)) {
@@ -1616,6 +1609,16 @@ Expr parse_halide_expr(char **cursor, char *end, Type expected_type) {
         Expr a = parse_halide_expr(cursor, end, Float(32));
         expect(cursor, end, ")");
         return floor(a);
+    }
+    if (consume(cursor, end, "likely(")) {
+        Expr a = parse_halide_expr(cursor, end, expected_type);
+        expect(cursor, end, ")");
+        return likely(a);
+    }
+    if (consume(cursor, end, "likely_if_innermost(")) {
+        Expr a = parse_halide_expr(cursor, end, expected_type);
+        expect(cursor, end, ")");
+        return likely(a);
     }
 
     if (consume(cursor, end, "(")) {
@@ -1978,16 +1981,22 @@ int main(int argc, char **argv) {
                         return;
                     }
 
-                    // Mine the predicate for LHS var == constant/other LHS var and move
-                    // those constraints into the binding instead
+                    // Mine the predicate for LHS var ==
+                    // constant/other LHS var and move those
+                    // constraints into the binding instead. Also
+                    // de-dup terms in the predicate.
                     vector<Expr> pending = {simplify(predicate)};
+                    set<Expr, IRDeepCompare> simpler_predicate;
                     while (!pending.empty()) {
                         Expr next = pending.back();
                         pending.pop_back();
                         if (const And *a = next.as<And>()) {
                             pending.push_back(a->a);
                             pending.push_back(a->b);
-                        } else if (const EQ *e = next.as<EQ>()) {
+                            continue;
+                        }
+
+                        if (const EQ *e = next.as<EQ>()) {
                             Expr a = e->a, b = e->b;
                             const Variable *var_a = a.as<Variable>();
                             const Variable *var_b = b.as<Variable>();
@@ -2013,8 +2022,16 @@ int main(int argc, char **argv) {
                                     it.second = substitute(var_a->name, b, it.second);
                                 }
                                 binding[var_a->name] = b;
+                                continue;
                             }
                         }
+
+                        simpler_predicate.insert(next);
+                    }
+
+                    predicate = const_true();
+                    for (auto &t : simpler_predicate) {
+                        predicate = predicate && t;
                     }
 
                     predicate = simplify(substitute(binding, predicate));
