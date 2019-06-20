@@ -113,8 +113,16 @@ Expr Simplify::visit(const Or *op, ExprInfo *bounds) {
     }
 
     #if USE_SYNTHESIZED_RULES
-    if (rewrite((((x + y) <= z) || ((y + z) <= x)), (y <= intrin(Call::absd, x, z)), is_no_overflow_int(x)) ||
+    if (rewrite((((x + y) <= z) || ((y + z) <= x)), (y <= max(x - z, z - x)), is_no_overflow_int(x)) ||
+        rewrite(((x <= y) || ((y + c0) <= x)), true, (c0 <= 0) && is_no_overflow_int(x)) ||
+        rewrite(((x <= (y + z)) || (((y + z) + c0) <= x)), true, (c0 <= 0) && is_no_overflow_int(x)) ||
+        rewrite((((x + c0) <= y) || (y < x)), true, (c0 <= 0) && is_no_overflow_int(x)) ||
+        rewrite(((x <= y) || ((y + c0) <= x)), true, (c0 <= 0) && is_no_overflow_int(x)) ||
+
+        rewrite((((x + c0) <= y) || ((y + c1) <= x)), true, ((c0 + c1) <= 0) && is_no_overflow_int(x)) ||
+
         false) {
+        return mutate(std::move(rewrite.result), bounds);
     }
     #endif
 

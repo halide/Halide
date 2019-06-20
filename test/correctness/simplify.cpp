@@ -407,7 +407,7 @@ void check_algebra() {
 
     // Test case with most negative 32-bit number, as constant to check that it is not negated.
     check(((x * (int32_t)0x80000000) + (z * (int32_t)0x80000000 + y)),
-          ((x * (int32_t)0x80000000) + (z * (int32_t)0x80000000 + y)));
+          (((x + z) * (int32_t)0x80000000) + y));
 
     // Use a require with no error message to test chains of reasoning
     auto require = [](Expr cond, Expr val) {

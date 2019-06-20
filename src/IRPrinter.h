@@ -51,6 +51,10 @@ std::ostream &operator<<(std::ostream &stream, const Target &);
 
 namespace Internal {
 
+/** Emit an IR node type (e.g. Add, Sub, Mul) in human-readable
+ * form */
+std::ostream &operator<<(std::ostream &stream, const IRNodeType &);
+
 struct AssociativePattern;
 struct AssociativeOp;
 
