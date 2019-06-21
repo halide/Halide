@@ -221,7 +221,6 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Load *op) {
 
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Store *op) {
     user_assert(is_one(op->predicate)) << "GLSL: predicated store is not supported.\n";
-
     // TODO: support vectors
     internal_assert(op->value.type().is_scalar());
     string id_index = print_expr(op->index);
