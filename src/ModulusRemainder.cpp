@@ -70,6 +70,7 @@ public:
     void visit(const Evaluate *) override;
     void visit(const Shuffle *) override;
     void visit(const Prefetch *) override;
+    void visit(const Atomic *) override;
 };
 
 ModulusRemainder modulus_remainder(Expr e) {
@@ -534,6 +535,10 @@ void ComputeModulusRemainder::visit(const Evaluate *) {
 }
 
 void ComputeModulusRemainder::visit(const Prefetch *) {
+    internal_assert(false) << "modulus_remainder of statement\n";
+}
+
+void ComputeModulusRemainder::visit(const Atomic *) {
     internal_assert(false) << "modulus_remainder of statement\n";
 }
 
