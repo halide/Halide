@@ -131,6 +131,9 @@ protected:
     void visit(const Acquire *op) override {
         internal_assert(false) << "Encounter unexpected statement \"Acquire\" when differentiating.";
     }
+    void visit(const Atomic *op) override {
+        internal_assert(false) << "Encounter unexpected statement \"Atomic\" when differentiating.";
+    }
 
 private:
     void accumulate(const Expr &stub, Expr adjoint);
