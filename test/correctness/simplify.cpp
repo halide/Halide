@@ -577,7 +577,7 @@ void check_vectors() {
         Expr pred = ramp(x*y + x*z, 2, 8) > 2;
         Expr index = ramp(x + y, 1, 8);
         Expr value = Load::make(index.type(), "f", index, Buffer<>(), Parameter(), const_true(index.type().lanes()), ModulusRemainder());
-        Stmt stmt = Store::make("f", value, index, Parameter(), pred, ModulusRemainder(), /*is_atomic*/ false);
+        Stmt stmt = Store::make("f", value, index, Parameter(), pred, ModulusRemainder());
         check(stmt, Evaluate::make(0));
     }
 }
