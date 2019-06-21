@@ -2212,8 +2212,8 @@ void CodeGen_LLVM::codegen_predicated_vector_load(const Load *op) {
 }
 
 void CodeGen_LLVM::codegen_atomic_store(const Store *op) {
-    // TODO: predicate store
-    user_assert(is_one(op->predicate)) << "Atomic predicated store is not supported yet.\n";
+    // TODO: predicated store
+    user_assert(is_one(op->predicate)) << "Atomic predicated store is not supported.\n";
 
     // Detect whether we can describe this as an atomic-read-modify-write, 
     // otherwise fallback to a compare-and-swap loop.
@@ -2225,14 +2225,26 @@ void CodeGen_LLVM::codegen_atomic_store(const Store *op) {
     // we also check that.
     Expr equiv_load = Load::make(value_type, op->name, op->index, Buffer<>(), op->param, op->predicate, op->alignment);
     Expr delta = simplify(common_subexpression_elimination(op->value - equiv_load));
+#if LLVM_VERSION >= 90
+    bool is_atomic_add = !expr_uses_var(delta, op->name);
+#else
     bool is_atomic_add = value_type.is_int_or_uint() && !expr_uses_var(delta, op->name);
+#endif
     if (is_atomic_add) {
         Value *val = codegen(delta);
         if (value_type.is_scalar()) {
             Value *ptr = codegen_buffer_pointer(op->name, op->value.type(), op->index);
             // llvm 9 has FAdd which can be used for atomic floats,
             // but currently Halide depends on llvm 7
+#if LLVM_VERSION >= 90
+            if (value_type.is_float()) {
+                builder->CreateAtomicRMW(AtomicRMWInst::FAdd, ptr, val, AtomicOrdering::Monotonic);
+            } else {
+                builder->CreateAtomicRMW(AtomicRMWInst::Add, ptr, val, AtomicOrdering::Monotonic);
+            }
+#else
             builder->CreateAtomicRMW(AtomicRMWInst::Add, ptr, val, AtomicOrdering::Monotonic);
+#endif
         } else {
             Value *index = codegen(op->index);
             // Scalarize vector store
@@ -2278,7 +2290,7 @@ void CodeGen_LLVM::codegen_atomic_store(const Store *op) {
                 ptr = codegen_buffer_pointer(op->name, value_type.element_of(), idx);
             }
             LoadInst *orig = builder->CreateAlignedLoad(ptr, value_type.bytes());
-            orig->setOrdering(AtomicOrdering::Monotonic);
+            orig->setOrdering(AtomicOrdering::Unordered);
             add_tbaa_metadata(orig, op->name, op->index);
             // Explicit fall through from the current block to the cas loop body
             builder->CreateBr(loop_bb);
