@@ -460,8 +460,6 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op)
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store *op)
 {
     user_assert(is_one(op->predicate)) << "Predicated store is not supported inside D3D12Compute kernel.\n";
-    // TODO: atomics
-    user_assert(!op->is_atomic) << "Atomics operations are not supported inside D3D12Compute kernel.\n";
 
     Type value_type = op->value.type();
 
@@ -796,6 +794,12 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Cast *op)
     print_assignment(target_type, cast_expr);
 }
 
+void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Atomic *op)
+{
+    // TODO: atomics
+    user_assert(false) << "Atomics operations are not supported inside D3D12Compute kernel.\n";
+}
+
 void CodeGen_D3D12Compute_Dev::add_kernel(Stmt s,
                                    const string &name,
                                    const vector<DeviceArgument> &args) {
@@ -965,7 +969,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
                 debug(1) << "Patching __shared buffer with zero-intialization...\n";
 
                 const Load* lop = uninitialized_load_expr;
-                Stmt initialization = Store::make(lop->name, Expr(0), lop->index, Parameter(), lop->predicate, ModulusRemainder(), /*is_atomic*/ false);
+                Stmt initialization = Store::make(lop->name, Expr(0), lop->index, Parameter(), lop->predicate, ModulusRemainder());
                 return Block::make({ initialization, op });
             }
             const Stmt *uninitialized_load_stmt = nullptr;

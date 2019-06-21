@@ -203,6 +203,7 @@ protected:
     void visit(const Prefetch *) override;
     void visit(const Fork *) override;
     void visit(const Acquire *) override;
+    void visit(const Atomic *) override;
 
     void visit_binop(Type t, Expr a, Expr b, const char *op);
 
@@ -222,6 +223,11 @@ protected:
     static std::string with_commas(const std::vector<T> &v) {
         return with_sep<T>(v, ", ");
     }
+
+private:
+
+    /** Emit atomic operations if we encounter a store node. */
+    bool emit_atomic_stores;
 };
 
 }  // namespace Internal

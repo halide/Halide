@@ -173,7 +173,7 @@ class SplitTuples : public IRMutator {
                 lets.push_back({ var_name, val });
                 val = Variable::make(val.type(), var_name);
             }
-            provides.push_back(Provide::make(name, {val}, args, op->is_atomic));
+            provides.push_back(Provide::make(name, {val}, args));
         }
 
         Stmt result = Block::make(provides);

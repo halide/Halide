@@ -322,11 +322,8 @@ struct Store : public StmtNode<Store> {
     // the alignment of the first lane.
     ModulusRemainder alignment;
 
-    bool is_atomic;
-
     static Stmt make(const std::string &name, Expr value, Expr index,
-                     Parameter param, Expr predicate, ModulusRemainder alignment,
-                     bool is_atomic);
+                     Parameter param, Expr predicate, ModulusRemainder alignment);
 
     static const IRNodeType _node_type = IRNodeType::Store;
 };
@@ -341,9 +338,7 @@ struct Provide : public StmtNode<Provide> {
     std::vector<Expr> values;
     std::vector<Expr> args;
 
-    bool is_atomic;
-
-    static Stmt make(const std::string &name, const std::vector<Expr> &values, const std::vector<Expr> &args, bool is_atomic);
+    static Stmt make(const std::string &name, const std::vector<Expr> &values, const std::vector<Expr> &args);
 
     static const IRNodeType _node_type = IRNodeType::Provide;
 };
@@ -429,7 +424,6 @@ struct Realize : public StmtNode<Realize> {
     static Stmt make(const std::string &name, const std::vector<Type> &types, MemoryType memory_type, const Region &bounds, Expr condition, Stmt body);
 
     static const IRNodeType _node_type = IRNodeType::Realize;
-
 };
 
 /** A sequence of statements to be executed in-order. 'rest' may be
@@ -791,6 +785,22 @@ struct Prefetch : public StmtNode<Prefetch> {
                      Expr condition, Stmt body);
 
     static const IRNodeType _node_type = IRNodeType::Prefetch;
+};
+
+/** Lock all the Store nodes in the body statement.
+    Typically the lock is implemented by an atomic operation
+    (e.g. atomic add or atomic compare-and-swap).
+    However, if necessary, the node can access a mutex buffer through
+    mutex_name and mutex_args, by lowering this node into
+    calls to acquire and release the lock. */
+struct Atomic : public StmtNode<Atomic> {
+    std::string mutex_name; // empty string if not using mutex
+    std::vector<Expr> mutex_indices;
+    Stmt body;
+
+    static Stmt make(const std::string &mutex_name, const std::vector<Expr> &mutex_indices, Stmt body);
+
+    static const IRNodeType _node_type = IRNodeType::Atomic;
 };
 
 }  // namespace Internal

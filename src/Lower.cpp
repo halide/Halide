@@ -57,6 +57,7 @@
 #include "StorageFolding.h"
 #include "StrictifyFloat.h"
 #include "Substitute.h"
+#include "SubstituteLetInAtomics.h"
 #include "Tracing.h"
 #include "TrimNoOps.h"
 #include "UnifyDuplicateLets.h"
@@ -374,6 +375,10 @@ Module lower(const vector<Function> &output_funcs,
     } else {
         debug(1) << "Skipping Hexagon offload...\n";
     }
+
+    debug(1) << "Substituting let variables in atomic nodes...\n";
+    s = substitute_let_in_atomics(s);
+    debug(2) << "Lowering after substituting let variables in atomic nodes:\n" << s << '\n';
 
     if (!custom_passes.empty()) {
         for (size_t i = 0; i < custom_passes.size(); i++) {

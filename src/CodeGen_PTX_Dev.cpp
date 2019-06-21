@@ -30,7 +30,7 @@ using std::vector;
 
 using namespace llvm;
 
-CodeGen_PTX_Dev::CodeGen_PTX_Dev(Target host) : CodeGen_LLVM(host) {
+CodeGen_PTX_Dev::CodeGen_PTX_Dev(Target host) : CodeGen_LLVM(host), emit_atomic_stores(false) {
     #if !defined(WITH_PTX)
     user_error << "ptx not enabled for this build of Halide.\n";
     #endif
@@ -258,9 +258,9 @@ void CodeGen_PTX_Dev::visit(const Load *op) {
 }
 
 void CodeGen_PTX_Dev::visit(const Store *op) {
-    if (op->is_atomic) {
-        // Currently only support scalar atomics
-        user_assert(op->value.type().is_scalar()) << "Atomic store does not support vectorization.\n";
+    if (emit_atomic_stores) {
+        // TODO: vectorization
+        user_assert(op->value.type().is_scalar()) << "Atomic update does not support vectorization.\n";
         user_assert(op->value.type().bits() >= 32) << "CUDA: 8-bit or 16-bit atomics are not supported.\n";
         // Generate nnvm intrinsics for the atomics if this is an float atomicAdd.
         // Otherwise refer to the llvm codegen
@@ -296,13 +296,24 @@ void CodeGen_PTX_Dev::visit(const Store *op) {
         if (align.modulus % 4 == 0 && align.remainder % 4 == 0) {
             Expr index = simplify(r->base / 4);
             Expr value = reinterpret(UInt(128), op->value);
-            Stmt equiv = Store::make(op->name, value, index, op->param, const_true(), align / 4, op->is_atomic);
+            Stmt equiv = Store::make(op->name, value, index, op->param, const_true(), align / 4);
             codegen(equiv);
             return;
         }
     }
 
     CodeGen_LLVM::visit(op);
+}
+
+void CodeGen_PTX_Dev::visit(const Atomic *op) {
+    // CUDA requires all the threads in a warp to perform the same operations,
+    // which means our mutex will lead to deadlock.
+    user_assert(op->mutex_name == "" && op->mutex_indices.size() == 0) <<
+        "The atomic update requires a mutex lock, which is not supported in CUDA.\n";
+
+    emit_atomic_stores = true;
+    IRVisitor::visit(op);
+    emit_atomic_stores = false;
 }
 
 string CodeGen_PTX_Dev::march() const {

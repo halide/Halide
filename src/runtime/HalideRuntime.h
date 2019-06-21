@@ -110,7 +110,6 @@ extern void halide_mutex_lock(struct halide_mutex *mutex);
 extern void halide_mutex_unlock(struct halide_mutex *mutex);
 extern void halide_cond_signal(struct halide_cond *cond);
 extern void halide_cond_broadcast(struct halide_cond *cond);
-extern void halide_cond_signal(struct halide_cond *cond);
 extern void halide_cond_wait(struct halide_cond *cond, struct halide_mutex *mutex);
 //@}
 

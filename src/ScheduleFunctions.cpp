@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <utility>
 #include <memory>
+#include <set>
 
 #include "ScheduleFunctions.h"
 #include "ApplySplit.h"
@@ -319,13 +320,57 @@ Stmt build_loop_nest(
     return stmt;
 }
 
+// Do we need a mutex buffer for the Atomic node?
+// We only need mutex buffers if we are storing to more than one buffer within a loop nest
+bool atomic_need_mutex(const Function &func,
+                       const vector<Expr> &rhs) {
+    // If there is no tuple, we do not need mutex.
+    if (rhs.size() <= 1) {
+        return false;
+    }
+    // If there is a tuple, and if for tuple index i the call only reference to index i,
+    // we do not need mutex.
+    class CheckCallTupleIndex : public IRGraphVisitor {
+        using IRGraphVisitor::visit;
+        void visit(const Call *op) override {
+            if (op->func.defined()) {
+                if (op->func.same_as(func_ptr) && op->value_index != current_index) {
+                    call_different_index = true;
+                }
+            }
+            for (size_t i = 0; i < op->args.size(); i++) {
+                include(op->args[i]);
+            }
+        }
+    public:
+        CheckCallTupleIndex(int current_index, const FunctionPtr &func_ptr) :
+            current_index(current_index), func_ptr(func_ptr), call_different_index(false) {}
+        int current_index;
+        FunctionPtr func_ptr;
+        bool call_different_index;
+    };
+    for (size_t i = 0; i < rhs.size(); i++) {
+        CheckCallTupleIndex check((int)i, func.get_contents());
+        rhs[i].accept(&check);
+        if (check.call_different_index) {
+            return true;
+        }
+    }
+    return false;
+}
+
+std::string get_mutex_name(const std::string func_name) {
+    return func_name + ".mutex";
+}
+
 // Build a loop nest about a provide node using a schedule
 Stmt build_provide_loop_nest(const map<string, Function> &env,
                              const string &prefix,
                              const Function &func,
                              const Definition &def,
                              int start_fuse,
-                             bool is_update) {
+                             bool is_update,
+                             bool &need_alloc_mutex) {
 
     internal_assert(!is_update == def.is_init());
 
@@ -348,7 +393,18 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
     }
 
     // Make the (multi-dimensional multi-valued) store node.
-    Stmt body = Provide::make(func.name(), values, site, def.schedule().atomic());
+    Stmt body = Provide::make(func.name(), values, site);
+    need_alloc_mutex = false;
+    if (def.schedule().atomic()) {
+        // Do we need to allocate a mutex buffer?
+        if (atomic_need_mutex(func, values)) {
+            // We will allocate a mutex buffer called get_mutex_name(func.name())
+            body = Atomic::make(get_mutex_name(func.name()), site, body);
+            need_alloc_mutex = true;
+        } else {
+            body = Atomic::make("", {}, body);
+        }
+    }
 
     // Default schedule/values if there is no specialization
     Stmt stmt = build_loop_nest(body, prefix, start_fuse, func, def, is_update);
@@ -359,7 +415,8 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
     for (size_t i = specializations.size(); i > 0; i--) {
         const Specialization &s = specializations[i - 1];
         if (s.failure_message.empty()) {
-            Stmt then_case = build_provide_loop_nest(env, prefix, func, s.definition, start_fuse, is_update);
+            bool need_alloc_mutex = false;
+            Stmt then_case = build_provide_loop_nest(env, prefix, func, s.definition, start_fuse, is_update, need_alloc_mutex);
             stmt = IfThenElse::make(s.condition, then_case, stmt);
         } else {
             internal_assert(equal(s.condition, const_true()));
@@ -953,12 +1010,12 @@ class InjectFunctionRealization : public IRMutator {
 public:
     InjectFunctionRealization(const vector<Function> &funcs,
                               const vector<bool> &is_output_list,
-                              const Target &target,
-                              const map<string, Function> &env)
+                              const map<string, Function> &env,
+                              const Target &target)
         : funcs(funcs),
           is_output_list(is_output_list),
-          target(target),
           env(env),
+          target(target),
           compute_level(funcs[0].schedule().compute_level()),
           store_level(funcs[0].schedule().store_level()) {}
 
@@ -968,6 +1025,7 @@ public:
 protected:
     bool _found_compute_level{};
     bool _found_store_level{};
+    std::set<Function, Function::Compare> _funcs_need_alloc_mutex;
 
     using IRMutator::visit;
 
@@ -1077,15 +1135,15 @@ protected:
 private:
     const vector<Function> &funcs;
     const vector<bool> &is_output_list;
-    const Target &target;
     const map<string, Function> &env;
+    const Target &target;
     const LoopLevel &compute_level;
     const LoopLevel &store_level;
 
     Stmt build_realize(Stmt s, const Function &func, bool is_output) {
+        const string &name = func.name();
         if (!is_output) {
             Region bounds;
-            const string &name = func.name();
             const vector<string> &func_args = func.args();
             for (int i = 0; i < func.dimensions(); i++) {
                 const string &arg = func_args[i];
@@ -1093,8 +1151,45 @@ private:
                 Expr extent = Variable::make(Int(32), name + "." + arg + ".extent_realized");
                 bounds.emplace_back(min, extent);
             }
-
+            
             s = Realize::make(name, func.output_types(), func.schedule().memory_type(), bounds, const_true(), s);
+        }
+
+        if (_funcs_need_alloc_mutex.find(func) != _funcs_need_alloc_mutex.end()) {
+            // Place an Allocate node here and a call to initialization to
+            // create a mutex buffer
+            debug(1) << "Injecting allocation of mutex buffer for " << func.name() << '\n';
+            Type mutex_type = target.bits == 64 ? UInt(64) : UInt(32);
+            Expr buffer_size = Expr(1);
+            std::vector<Expr> extents(func.dimensions());
+            const char *extent_field = func.values().size() == 1 ? ".extent." : ".0.extent.";
+            const char *min_field = func.values().size() == 1 ? ".min." : ".0.min.";
+            const char *stride_field = func.values().size() == 1 ? ".stride." : ".0.stride.";
+            for (int i = 0; i < func.dimensions(); i++) {
+                extents[i] = Variable::make(Int(32), name + extent_field + std::to_string(i));
+                buffer_size *= extents[i];
+            }
+            std::string mutex_name = get_mutex_name(name);
+            std::vector<Expr> memset_args(3);
+            memset_args[0] = Variable::make(Handle(), mutex_name);
+            memset_args[1] = Expr(0);
+            memset_args[2] = target.bits == 64 ? 8 * buffer_size : 4 * buffer_size;
+            s = Allocate::make(mutex_name,
+                               mutex_type,
+                               func.schedule().memory_type(),
+                               extents,
+                               const_true(),
+                               Block::make(
+                Evaluate::make(Call::make(type_of<void *>(), "memset", memset_args, Call::Extern)), s));
+            // Insert Let statements for the buffer's min and stride for storage flattening.
+            for (int i = 0; i < func.dimensions(); i++) {
+                s = LetStmt::make(mutex_name + ".min." + std::to_string(i),
+                                  Variable::make(Int(32), name + min_field + std::to_string(i)),
+                                  s);
+                s = LetStmt::make(mutex_name + ".stride." + std::to_string(i),
+                                  Variable::make(Int(32), name + stride_field + std::to_string(i)),
+                                  s);
+            }
         }
 
         // This is also the point at which we inject explicit bounds
@@ -1184,7 +1279,7 @@ private:
     }
 
     Stmt build_produce_definition(const Function &f, const string &prefix, const Definition &def, bool is_update,
-        map<string, Expr> &replacements, vector<pair<string, Expr>> &add_lets) {
+        map<string, Expr> &replacements, vector<pair<string, Expr>> &add_lets, bool &need_alloc_mutex) {
         const vector<Dim> &dims = def.schedule().dims(); // From inner to outer
         const LoopLevel &fuse_level = def.schedule().fuse_level().level;
 
@@ -1227,7 +1322,7 @@ private:
             }
         }
 
-        Stmt produce = build_provide_loop_nest(env, prefix, f, def, (int)(start_fuse), is_update);
+        Stmt produce = build_provide_loop_nest(env, prefix, f, def, (int)(start_fuse), is_update, need_alloc_mutex);
 
         // Strip off the containing lets. The bounds of the parent fused loop
         // (i.e. the union bounds) might refer to them, so we need to move them
@@ -1373,20 +1468,30 @@ private:
         for (auto iter = funcs.rbegin(); iter != funcs.rend(); iter++) {
             const auto &f = *iter;
 
+            bool need_alloc_mutex = false;
             if (f.has_extern_definition()) {
                 const Stmt &produceDef = Internal::build_extern_produce(env, f, target);
                 producer = inject_stmt(producer, produceDef, LoopLevel::inlined().lock());
             } else {
+                bool need_alloc_mutex_ = false;
                 const Stmt &produceDef = build_produce_definition(f, f.name() + ".s0.", f.definition(), false,
-                                                                  replacements, add_lets);
+                                                                  replacements, add_lets, need_alloc_mutex_);
+                need_alloc_mutex = need_alloc_mutex || need_alloc_mutex_;
                 producer = inject_stmt(producer, produceDef, f.definition().schedule().fuse_level().level);
             }
 
             for (size_t j = 0; j < f.updates().size(); ++j) {
                 string defPrefix = f.name() + ".s" + std::to_string(j + 1) + ".";
                 const Definition &def = f.updates()[j];
-                const Stmt &updateDef = build_produce_definition(f, defPrefix, def, true, replacements, add_lets);
+                bool need_alloc_mutex_ = false;
+                const Stmt &updateDef = build_produce_definition(f, defPrefix, def, true,
+                                                                 replacements, add_lets, need_alloc_mutex_);
+                need_alloc_mutex = need_alloc_mutex || need_alloc_mutex_;
                 producer = inject_stmt(producer, updateDef, def.schedule().fuse_level().level);
+            }
+
+            if (need_alloc_mutex) {
+                _funcs_need_alloc_mutex.insert(f);
             }
         }
 
@@ -2090,7 +2195,7 @@ Stmt schedule_functions(const vector<Function> &outputs,
             s = inline_function(s, funcs[0]);
         } else {
             debug(1) << "Injecting realization of " << funcs << '\n';
-            InjectFunctionRealization injector(funcs, is_output_list, target, env);
+            InjectFunctionRealization injector(funcs, is_output_list, env, target);
             s = injector.mutate(s);
             internal_assert(injector.found_store_level() && injector.found_compute_level());
         }

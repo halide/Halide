@@ -397,10 +397,10 @@ class ExtractSharedAllocations : public IRMutator {
             Expr value = mutate(op->value);
             if (device_api == DeviceAPI::OpenGLCompute) {
                 return Store::make(shared_mem_name + "_" + op->name, value, index,
-                                   op->param, predicate, op->alignment, op->is_atomic);
+                                   op->param, predicate, op->alignment);
             } else {
                 Expr base = Variable::make(Int(32), op->name + ".shared_offset");
-                return Store::make(shared_mem_name, value, base + index, op->param, predicate, ModulusRemainder(), op->is_atomic);
+                return Store::make(shared_mem_name, value, base + index, op->param, predicate, ModulusRemainder());
             }
         } else {
             return IRMutator::visit(op);

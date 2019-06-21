@@ -292,7 +292,7 @@ public:
 };
 
 CodeGen_C::CodeGen_C(ostream &s, Target t, OutputKind output_kind, const std::string &guard) :
-    IRPrinter(s), id("$$ BAD ID $$"), target(t), output_kind(output_kind), extern_c_open(false) {
+    IRPrinter(s), id("$$ BAD ID $$"), target(t), output_kind(output_kind), extern_c_open(false), emit_atomic_stores(false) {
 
     if (is_header()) {
         // If it's a header, emit an include guard.
@@ -2465,6 +2465,9 @@ void CodeGen_C::visit(const Load *op) {
 
 void CodeGen_C::visit(const Store *op) {
     user_assert(is_one(op->predicate)) << "Predicated store is not supported by C backend.\n";
+    if (emit_atomic_stores) {
+        stream << "#pragma omp atomic\n";
+    }
 
     Type t = op->value.type();
     string id_value = print_expr(op->value);
@@ -2646,6 +2649,21 @@ void CodeGen_C::visit(const Acquire *op) {
     close_scope("");
     op->body.accept(this);
     close_scope("");
+}
+
+void CodeGen_C::visit(const Atomic *op) {
+    if (op->mutex_name != "") {
+        internal_assert(op->mutex_indices.size() == 1) << "Atomic mutex access index should be flattened.";
+        do_indent();
+        stream << "halide_mutex_lock(&" << op->mutex_name << "[" << op->mutex_indices[0] << "]);\n";
+        op->body.accept(this);
+        do_indent();
+        stream << "halide_mutex_unlock(&" << op->mutex_name << "[" << op->mutex_indices[0] << "]);\n";
+    } else {
+        emit_atomic_stores = true;
+        op->body.accept(this);
+        emit_atomic_stores = false;
+    }
 }
 
 void CodeGen_C::visit(const For *op) {
@@ -2907,7 +2925,7 @@ void CodeGen_C::test() {
     Param<float> alpha("alpha");
     Param<int> beta("beta");
     Expr e = Select::make(alpha > 4.0f, print_when(x < 1, 3), 2);
-    Stmt s = Store::make("buf", e, x, Parameter(), const_true(), ModulusRemainder(), /*is_atomic*/ false);
+    Stmt s = Store::make("buf", e, x, Parameter(), const_true(), ModulusRemainder());
     s = LetStmt::make("x", beta+1, s);
     s = Block::make(s, Free::make("tmp.stack"));
     s = Allocate::make("tmp.stack", Int(32), MemoryType::Stack, {127}, const_true(), s);

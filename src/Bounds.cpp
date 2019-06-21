@@ -2659,7 +2659,7 @@ void boxes_touched_test() {
     Scope<Interval> scope;
     scope.push("y", Interval(Expr(0), Expr(10)));
 
-    Stmt stmt = Provide::make("f", {10}, {x, y, z, w}, /*is_atomic*/ false);
+    Stmt stmt = Provide::make("f", {10}, {x, y, z, w});
     stmt = IfThenElse::make(y > 4, stmt, Stmt());
     stmt = IfThenElse::make(z > 18, stmt, Stmt());
     stmt = LetStmt::make("w", z + 3, stmt);
@@ -2841,8 +2841,7 @@ void bounds_test() {
                           Provide::make("output",
                                         {Add::make(Call::make(in, input_site_1),
                                                    Call::make(in, input_site_2))},
-                                        output_site,
-                                        false));
+                                        output_site));
 
     map<string, Box> r;
     r = boxes_required(loop);

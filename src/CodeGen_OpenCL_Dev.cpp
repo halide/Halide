@@ -305,7 +305,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Load *op) {
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
     user_assert(is_one(op->predicate)) << "Predicated store is not supported inside OpenCL kernel.\n";
 
-    if (op->is_atomic) {
+    if (emit_atomic_stores) {
         // Currently only support scalar atomics
         user_assert(op->value.type().is_scalar()) << "Atomic store does not support vectorization.\n";
         user_assert(op->value.type().bits() >= 32) << "OpenCL only support 32 and 64 bit atomics.\n";
@@ -622,6 +622,17 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Max *op) {
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Min *op) {
     print_expr(Call::make(op->type, "min", {op->a, op->b}, Call::Extern));
+}
+
+void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Atomic *op) {
+    // Most GPUs require all the threads in a warp to perform the same operations,
+    // which means our mutex will lead to deadlock.
+    user_assert(op->mutex_name == "" && op->mutex_indices.size() == 0) <<
+        "The atomic update requires a mutex lock, which is not supported in OpenCL.\n";
+
+    emit_atomic_stores = true;
+    IRVisitor::visit(op);
+    emit_atomic_stores = false;
 }
 
 void CodeGen_OpenCL_Dev::add_kernel(Stmt s,

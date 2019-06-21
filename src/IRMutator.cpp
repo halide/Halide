@@ -190,7 +190,7 @@ Stmt IRMutator::visit(const Store *op) {
     if (predicate.same_as(op->predicate) && value.same_as(op->value) && index.same_as(op->index)) {
         return op;
     }
-    return Store::make(op->name, std::move(value), std::move(index), op->param, std::move(predicate), op->alignment, op->is_atomic);
+    return Store::make(op->name, std::move(value), std::move(index), op->param, std::move(predicate), op->alignment);
 }
 
 Stmt IRMutator::visit(const Provide *op) {
@@ -216,7 +216,7 @@ Stmt IRMutator::visit(const Provide *op) {
     if (!changed) {
         return op;
     }
-    return Provide::make(op->name, new_values, new_args, op->is_atomic);
+    return Provide::make(op->name, new_values, new_args);
 }
 
 Stmt IRMutator::visit(const Allocate *op) {
@@ -352,6 +352,27 @@ Stmt IRMutator::visit(const Acquire *op) {
         return op;
     } else {
         return Acquire::make(std::move(sema), std::move(count), std::move(body));
+    }
+}
+
+Stmt IRMutator::visit(const Atomic *op) {
+    vector<Expr> new_mutex_indices(op->mutex_indices.size());
+    bool changed = false;
+    for (size_t i = 0; i < op->mutex_indices.size(); i++) {
+        Expr old_index = op->mutex_indices[i];
+        Expr new_index = mutate(old_index);
+        if (!new_index.same_as(old_index)) changed = true;
+        new_mutex_indices[i] = new_index;
+    }
+
+    Stmt body = mutate(op->body);
+    if (!body.same_as(op->body)) {
+        changed = true;
+    }
+    if (!changed) {
+        return op;
+    } else {
+        return Atomic::make(op->mutex_name, new_mutex_indices, std::move(body));
     }
 }
 

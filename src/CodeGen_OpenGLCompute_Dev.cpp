@@ -221,10 +221,6 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Load *op) {
 
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Store *op) {
     user_assert(is_one(op->predicate)) << "GLSL: predicated store is not supported.\n";
-    // TODO: handle atomics. Floating point atomics can be tricky as there are no
-    //       floating point atomics operations, and GLSL does not allow converting a 
-    //       floating point buffer to an integer buffer.
-    user_assert(!op->is_atomic) << "GLSL: atomics are not supported.\n";
 
     // TODO: support vectors
     internal_assert(op->value.type().is_scalar());

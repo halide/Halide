@@ -199,7 +199,7 @@ Stmt Simplify::visit(const Provide *op) {
     if (!changed) {
         return op;
     } else {
-        return Provide::make(op->name, new_values, new_args, op->is_atomic);
+        return Provide::make(op->name, new_values, new_args);
     }
 }
 
@@ -228,14 +228,14 @@ Stmt Simplify::visit(const Store *op) {
         return Evaluate::make(0);
     } else if (scalar_pred && !is_one(scalar_pred->value)) {
         return IfThenElse::make(scalar_pred->value,
-                                Store::make(op->name, value, index, op->param, const_true(value.type().lanes()), align, op->is_atomic));
+                                Store::make(op->name, value, index, op->param, const_true(value.type().lanes()), align));
     } else if (is_undef(value) || (load && load->name == op->name && equal(load->index, index))) {
         // foo[x] = foo[x] or foo[x] = undef is a no-op
         return Evaluate::make(0);
     } else if (predicate.same_as(op->predicate) && value.same_as(op->value) && index.same_as(op->index) && align == op->alignment) {
         return op;
     } else {
-        return Store::make(op->name, value, index, op->param, predicate, align, op->is_atomic);
+        return Store::make(op->name, value, index, op->param, predicate, align);
     }
 }
 
@@ -498,6 +498,43 @@ Stmt Simplify::visit(const Fork *op) {
         return op;
     } else {
         return Fork::make(first, rest);
+    }
+}
+
+Stmt Simplify::visit(const Atomic *op) {
+    if (op->mutex_name == "") {
+        internal_assert(op->mutex_indices.size() == 0);
+        Stmt body = mutate(op->body);
+        if (is_no_op(body)) {
+            return Evaluate::make(0);
+        } else if (body.same_as(op->body)) {
+            return op;
+        } else {
+            return Atomic::make(op->mutex_name, op->mutex_indices, body);
+        }
+    }
+
+    vector<Expr> new_mutex_indices(op->mutex_indices.size());
+    bool changed = false;
+
+    // Mutate mutex_indices
+    for (size_t i = 0; i < op->mutex_indices.size(); i++) {
+        const Expr &old_index = op->mutex_indices[i];
+        Expr new_index = mutate(old_index, nullptr);
+        if (!new_index.same_as(old_index)) changed = true;
+        new_mutex_indices[i] = new_index;
+    }
+
+    Stmt body = mutate(op->body);
+    if (!body.same_as(op->body)) {
+        changed = true;
+    }
+    if (is_no_op(body)) {
+        return Evaluate::make(0);
+    } else if (!changed) {
+        return op;
+    } else {
+        return Atomic::make(op->mutex_name, new_mutex_indices, body);
     }
 }
 

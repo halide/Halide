@@ -208,7 +208,7 @@ private:
                 }
             }
 
-            stmt = Provide::make(op->name, traces, args, op->is_atomic);
+            stmt = Provide::make(op->name, traces, args);
             for (const auto &p : lets) {
                 stmt = LetStmt::make(p.first, p.second, stmt);
             }

@@ -158,6 +158,7 @@ protected:
     void visit(const Evaluate *) override;
     void visit(const Shuffle *) override;
     void visit(const Prefetch *) override;
+    void visit(const Atomic *) override;
 };
 }  // namespace Internal
 }  // namespace Halide

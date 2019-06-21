@@ -245,7 +245,7 @@ private:
             return Evaluate::make(store);
         } else {
             Expr idx = mutate(flatten_args(op->name, op->args, Buffer<>(), output_buf));
-            return Store::make(op->name, value, idx, output_buf, const_true(value.type().lanes()), ModulusRemainder(), op->is_atomic);
+            return Store::make(op->name, value, idx, output_buf, const_true(value.type().lanes()), ModulusRemainder());
         }
     }
 
@@ -369,6 +369,14 @@ private:
         return stmt;
     }
 
+    Stmt visit(const Atomic *op) override {
+        if (op->mutex_indices.size() > 0) {
+            Expr flatten_arg = flatten_args(op->mutex_name, op->mutex_indices, Buffer<>(), Parameter());
+            return Atomic::make(op->mutex_name, {flatten_arg}, mutate(op->body));
+        } else {
+            return IRMutator::visit(op);
+        }
+    }
 };
 
 // Realizations, stores, and loads must all be on types that are
@@ -395,7 +403,7 @@ class PromoteToMemoryType : public IRMutator {
         Type t = upgrade(op->value.type());
         if (t != op->value.type()) {
             return Store::make(op->name, Cast::make(t, mutate(op->value)), mutate(op->index),
-                               op->param, mutate(op->predicate), ModulusRemainder(), op->is_atomic);
+                               op->param, mutate(op->predicate), ModulusRemainder());
         } else {
             return IRMutator::visit(op);
         }

@@ -400,6 +400,7 @@ bool equal_helper(const BaseExprNode &a, const BaseExprNode &b) noexcept {
     case IRNodeType::IfThenElse:
     case IRNodeType::Evaluate:
     case IRNodeType::Prefetch:
+    case IRNodeType::Atomic:
         ;
     }
     return false;

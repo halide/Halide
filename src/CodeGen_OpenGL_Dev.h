@@ -114,6 +114,7 @@ protected:
     void visit(const Broadcast *) override;
 
     void visit(const Evaluate *) override;
+    void visit(const Atomic *) override;
 
 private:
     std::string get_vector_suffix(Expr e);

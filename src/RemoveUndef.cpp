@@ -282,7 +282,7 @@ private:
 
         if (predicate.defined()) {
             // This becomes a conditional store
-            Stmt stmt = IfThenElse::make(predicate, Store::make(op->name, value, index, op->param, pred, op->alignment, op->is_atomic));
+            Stmt stmt = IfThenElse::make(predicate, Store::make(op->name, value, index, op->param, pred, op->alignment));
             predicate = Expr();
             return stmt;
         } else if (pred.same_as(op->predicate) &&
@@ -290,7 +290,7 @@ private:
                    index.same_as(op->index)) {
             return op;
         } else {
-            return Store::make(op->name, value, index, op->param, pred, op->alignment, op->is_atomic);
+            return Store::make(op->name, value, index, op->param, pred, op->alignment);
         }
     }
 
@@ -350,13 +350,13 @@ private:
         }
 
         if (predicate.defined()) {
-            Stmt stmt = IfThenElse::make(predicate, Provide::make(op->name, new_values, new_args, op->is_atomic));
+            Stmt stmt = IfThenElse::make(predicate, Provide::make(op->name, new_values, new_args));
             predicate = Expr();
             return stmt;
         } else if (!changed) {
             return op;
         } else {
-            return Provide::make(op->name, new_values, new_args, op->is_atomic);
+            return Provide::make(op->name, new_values, new_args);
         }
     }
 

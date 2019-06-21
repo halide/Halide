@@ -355,7 +355,7 @@ Stmt Acquire::make(Expr semaphore, Expr count, Stmt body) {
     return node;
 }
 
-Stmt Store::make(const std::string &name, Expr value, Expr index, Parameter param, Expr predicate, ModulusRemainder alignment, bool is_atomic) {
+Stmt Store::make(const std::string &name, Expr value, Expr index, Parameter param, Expr predicate, ModulusRemainder alignment) {
     internal_assert(predicate.defined()) << "Store with undefined predicate\n";
     internal_assert(value.defined()) << "Store of undefined\n";
     internal_assert(index.defined()) << "Store of undefined\n";
@@ -370,11 +370,10 @@ Stmt Store::make(const std::string &name, Expr value, Expr index, Parameter para
     node->index = std::move(index);
     node->param = std::move(param);
     node->alignment = alignment;
-    node->is_atomic = is_atomic;
     return node;
 }
 
-Stmt Provide::make(const std::string &name, const std::vector<Expr> &values, const std::vector<Expr> &args, bool is_atomic) {
+Stmt Provide::make(const std::string &name, const std::vector<Expr> &values, const std::vector<Expr> &args) {
     internal_assert(!values.empty()) << "Provide of no values\n";
     for (size_t i = 0; i < values.size(); i++) {
         internal_assert(values[i].defined()) << "Provide of undefined value\n";
@@ -387,7 +386,6 @@ Stmt Provide::make(const std::string &name, const std::vector<Expr> &values, con
     node->name = name;
     node->values = values;
     node->args = args;
-    node->is_atomic = is_atomic;
     return node;
 }
 
@@ -737,6 +735,17 @@ bool Shuffle::is_interleave() const {
     return true;
 }
 
+Stmt Atomic::make(const std::string &mutex_name, const std::vector<Expr> &mutex_indices, Stmt body) {
+    if (mutex_name == "") {
+        internal_assert(mutex_indices.size() == 0) << "The atomic node does not specify a mutex buffer but contains its indices.";
+    }
+    Atomic *node = new Atomic;
+    node->mutex_name = mutex_name;
+    node->mutex_indices = mutex_indices;
+    node->body = std::move(body);
+    return node;
+}
+
 namespace {
 
 // Helper function to determine if a sequence of indices is a
@@ -822,6 +831,7 @@ template<> void StmtNode<Evaluate>::accept(IRVisitor *v) const { v->visit((const
 template<> void StmtNode<Prefetch>::accept(IRVisitor *v) const { v->visit((const Prefetch *)this); }
 template<> void StmtNode<Acquire>::accept(IRVisitor *v) const { v->visit((const Acquire *)this); }
 template<> void StmtNode<Fork>::accept(IRVisitor *v) const { v->visit((const Fork *)this); }
+template<> void StmtNode<Atomic>::accept(IRVisitor *v) const { v->visit((const Atomic *)this); }
 
 template<> Expr ExprNode<IntImm>::mutate_expr(IRMutator *v) const { return v->visit((const IntImm *)this); }
 template<> Expr ExprNode<UIntImm>::mutate_expr(IRMutator *v) const { return v->visit((const UIntImm *)this); }
@@ -868,6 +878,7 @@ template<> Stmt StmtNode<Evaluate>::mutate_stmt(IRMutator *v) const { return v->
 template<> Stmt StmtNode<Prefetch>::mutate_stmt(IRMutator *v) const { return v->visit((const Prefetch *)this); }
 template<> Stmt StmtNode<Acquire>::mutate_stmt(IRMutator *v) const { return v->visit((const Acquire *)this); }
 template<> Stmt StmtNode<Fork>::mutate_stmt(IRMutator *v) const { return v->visit((const Fork *)this); }
+template<> Stmt StmtNode<Atomic>::mutate_stmt(IRMutator *v) const { return v->visit((const Atomic *)this); }
 
 Call::ConstString Call::debug_to_file = "debug_to_file";
 Call::ConstString Call::reinterpret = "reinterpret";

@@ -256,6 +256,13 @@ void IRVisitor::visit(const Shuffle *op) {
     }
 }
 
+void IRVisitor::visit(const Atomic *op) {
+    for (size_t i = 0; i < op->mutex_indices.size(); i++) {
+        op->mutex_indices[i].accept(this);
+    }
+    op->body.accept(this);
+}
+
 void IRGraphVisitor::include(const Expr &e) {
     auto r = visited.insert(e.get());
     if (r.second) {
@@ -500,6 +507,13 @@ void IRGraphVisitor::visit(const Shuffle *op) {
     for (Expr i : op->vectors) {
         include(i);
     }
+}
+
+void IRGraphVisitor::visit(const Atomic *op) {
+    for (Expr i : op->mutex_indices) {
+        include(i);
+    }
+    include(op->body);
 }
 
 }  // namespace Internal

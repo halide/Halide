@@ -403,7 +403,7 @@ class LoopCarryOverLoop : public IRMutator {
 
                 if (i == c.size() - 1) {
                     Stmt store_to_scratch = Store::make(scratch, orig_load, scratch_idx,
-                                                        Parameter(), const_true(orig_load->type.lanes()), ModulusRemainder(), /*is_atomic*/ false);
+                                                        Parameter(), const_true(orig_load->type.lanes()), ModulusRemainder());
                     not_first_iteration_scratch_stores.push_back(store_to_scratch);
                 } else {
                     initial_scratch_values.push_back(orig_load);
@@ -411,7 +411,7 @@ class LoopCarryOverLoop : public IRMutator {
                 if (i > 0) {
                     Stmt shuffle = Store::make(scratch, load_from_scratch,
                                                scratch_index(i-1, orig_load->type),
-                                               Parameter(), const_true(orig_load->type.lanes()), ModulusRemainder(), /*is_atomic*/ false);
+                                               Parameter(), const_true(orig_load->type.lanes()), ModulusRemainder());
                     scratch_shuffles.push_back(shuffle);
                 }
 
@@ -441,8 +441,7 @@ class LoopCarryOverLoop : public IRMutator {
                 Stmt store_to_scratch = Store::make(scratch, initial_scratch_values[i],
                                                     scratch_idx, Parameter(),
                                                     const_true(scratch_idx.type().lanes()),
-                                                    ModulusRemainder(),
-                                                    false);
+                                                    ModulusRemainder());
                 initial_scratch_stores.push_back(store_to_scratch);
             }
 

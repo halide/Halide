@@ -459,7 +459,7 @@ class UnpredicateLoadsStores : public IRMutator {
         Expr index = mutate(op->index);
 
         if (const Broadcast *scalar_pred = predicate.as<Broadcast>()) {
-            Stmt unpredicated_store = Store::make(op->name, value, index, op->param, const_true(value.type().lanes()), op->alignment, op->is_atomic);
+            Stmt unpredicated_store = Store::make(op->name, value, index, op->param, const_true(value.type().lanes()), op->alignment);
             return IfThenElse::make(scalar_pred->value, unpredicated_store);
         } else {
             string value_name = "scalarized_store_value";
@@ -474,7 +474,7 @@ class UnpredicateLoadsStores : public IRMutator {
                 Expr pred_i = Shuffle::make({predicate_var}, {i});
                 Expr value_i = Shuffle::make({value_var}, {i});
                 Expr index_i = Shuffle::make({index_var}, {i});
-                Stmt lane = IfThenElse::make(pred_i, Store::make(op->name, value_i, index_i, op->param, const_true(), ModulusRemainder(), op->is_atomic));
+                Stmt lane = IfThenElse::make(pred_i, Store::make(op->name, value_i, index_i, op->param, const_true(), ModulusRemainder()));
                 lanes.push_back(lane);
             }
             Stmt stmt = Block::make(lanes);

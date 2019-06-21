@@ -603,9 +603,6 @@ void CodeGen_GLSL::visit(const Load *op) {
 
 void CodeGen_GLSL::visit(const Store *op) {
     user_assert(is_one(op->predicate)) << "GLSL: predicated store is not supported.\n";
-    // OpenGL supports atomics starting from 4.3, but Halide doesn't distinguish between
-    // OpenGL versions yet.
-    user_assert(!op->is_atomic) << "GLSL: atomics are not supported\n";
     if (scalar_vars.contains(op->name)) {
         internal_assert(is_zero(op->index));
         string val = print_expr(op->value);
@@ -835,6 +832,15 @@ void CodeGen_GLSL::visit(const Broadcast *op) {
     ostringstream rhs;
     rhs << print_type(op->type) << "(" << print_expr(op->value) << ")";
     print_assignment(op->type, rhs.str());
+}
+
+void CodeGen_GLSL::visit(const Atomic *op) {
+    // Floating point atomics can be tricky as there are no
+    // floating point atomics operations, and GLSL does not allow converting a 
+    // floating point buffer to an integer buffer.
+    // Plus, OpenGL supports atomics starting from 4.3, but Halide doesn't distinguish between
+    // OpenGL versions yet.
+    user_assert(false) << "GLSL: atomics are not supported.\n";
 }
 
 void CodeGen_GLSL::add_kernel(Stmt stmt, string name,

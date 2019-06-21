@@ -79,6 +79,7 @@ protected:
         void visit(const Allocate *op) override;
         void visit(const Free *op) override;
         void visit(const Cast *op) override;
+        void visit(const Atomic *op) override;
     };
 
     std::ostringstream src_stream;

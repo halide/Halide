@@ -275,7 +275,8 @@ CodeGen_LLVM::CodeGen_LLVM(Target t) :
     min_f64(Float(64).min()),
     max_f64(Float(64).max()),
     destructor_block(nullptr),
-    strict_float(t.has_feature(Target::StrictFloat)) {
+    strict_float(t.has_feature(Target::StrictFloat)),
+    emit_atomic_stores(false) {
     initialize_llvm();
 }
 
@@ -2021,7 +2022,6 @@ void CodeGen_LLVM::scalarize(Expr e) {
 }
 
 void CodeGen_LLVM::codegen_predicated_vector_store(const Store *op) {
-    user_assert(!op->is_atomic) << "Atomic store does not support vectorization.\n";
     const Ramp *ramp = op->index.as<Ramp>();
     if (ramp && is_one(ramp->stride)) { // Dense vector store
         debug(4) << "Predicated dense vector store\n\t" << Stmt(op) << "\n";
@@ -3723,12 +3723,12 @@ void CodeGen_LLVM::visit(const Store *op) {
     // memory, so convert stores of handles to stores of uint64_ts.
     if (op->value.type().is_handle()) {
         Expr v = reinterpret(UInt(64, op->value.type().lanes()), op->value);
-        codegen(Store::make(op->name, v, op->index, op->param, op->predicate, op->alignment, op->is_atomic));
+        codegen(Store::make(op->name, v, op->index, op->param, op->predicate, op->alignment));
         return;
     }
 
     // Atomic store
-    if (op->is_atomic) {
+    if (emit_atomic_stores) {
         codegen_atomic_store(op);
         return;
     }
@@ -3748,7 +3748,7 @@ void CodeGen_LLVM::visit(const Store *op) {
         StoreInst *store = builder->CreateAlignedStore(val, ptr, value_type.bytes());
         add_tbaa_metadata(store, op->name, op->index);
     } else if (const Let *let = op->index.as<Let>()) {
-        Stmt s = Store::make(op->name, op->value, let->body, op->param, op->predicate, op->alignment, op->is_atomic);
+        Stmt s = Store::make(op->name, op->value, let->body, op->param, op->predicate, op->alignment);
         codegen(LetStmt::make(let->name, let->value, s));
     } else {
         int alignment = value_type.bytes();
@@ -3943,6 +3943,44 @@ void CodeGen_LLVM::visit(const Shuffle *op) {
 
     if (op->type.is_scalar()) {
         value = builder->CreateExtractElement(value, ConstantInt::get(i32_t, 0));
+    }
+}
+
+void CodeGen_LLVM::visit(const Atomic *op) {
+    if (op->mutex_name != "") {
+        internal_assert(op->mutex_indices.size() <= 1) << "Atomic mutex access index should be flattened.";
+        // Acquire mutex
+        Type mutex_type = target.bits == 64 ? UInt(64) : UInt(32);
+        Expr index = op->mutex_indices.size() == 1 ? op->mutex_indices[0] : Expr(0);
+        user_assert(index.type().is_scalar()) << "The vectorized atomic operation in " <<
+            op->mutex_name.substr(0, op->mutex_name.length() - strlen(".mutex")) <<
+            " is lowered into a mutex lock, which does not support vectorization.\n";
+        Value *ptr = codegen_buffer_pointer(op->mutex_name, mutex_type, index);
+        llvm::Function *mutex_lock = module->getFunction("halide_mutex_lock");
+        internal_assert(mutex_lock) << "Did not find halide_mutex_lock in initial module.\n";
+        // There is a bug in LLVM where it would errorneously merge
+        // two structurally identical structs when they are both
+        // presented in the source and destination modules.
+        // (see https://reviews.llvm.org/D18683)
+        // Current this causes the halide_mutex type being merged with halide_cond.
+        // Since we are converting the pointer to the function
+        // argument, we are fine here, but keep this in mind when debugging.
+        internal_assert(mutex_lock->arg_begin() != mutex_lock->arg_end()) << "halide_mutex_lock has no arguments.\n";
+        llvm::Argument *arg = mutex_lock->arg_begin();
+        ptr = builder->CreatePointerCast(ptr, arg->getType());
+        llvm::raw_os_ostream raw_os(std::cerr);
+        builder->CreateCall(mutex_lock, {ptr});
+
+        codegen(op->body);
+
+        // Release mutex
+        llvm::Function *mutex_unlock = module->getFunction("halide_mutex_unlock");
+        internal_assert(mutex_unlock);
+        builder->CreateCall(mutex_unlock, {ptr});
+    } else {
+        emit_atomic_stores = true;
+        codegen(op->body);
+        emit_atomic_stores = false;
     }
 }
 

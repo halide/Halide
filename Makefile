@@ -586,6 +586,7 @@ SOURCE_FILES = \
   StorageFolding.cpp \
   StrictifyFloat.cpp \
   Substitute.cpp \
+  SubstituteLetInAtomics.cpp \
   Target.cpp \
   Tracing.cpp \
   TrimNoOps.cpp \
@@ -748,6 +749,7 @@ HEADER_FILES = \
   StorageFolding.h \
   StrictifyFloat.h \
   Substitute.h \
+  SubstituteLetInAtomics.h \
   Target.h \
   ThreadPool.h \
   Tracing.h \

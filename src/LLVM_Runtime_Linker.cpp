@@ -9,7 +9,6 @@ using std::vector;
 namespace {
 
 std::unique_ptr<llvm::Module> parse_bitcode_file(llvm::StringRef buf, llvm::LLVMContext *context, const char *id) {
-
     llvm::MemoryBufferRef bitcode_buffer = llvm::MemoryBufferRef(buf, id);
 
     auto ret_val = llvm::expectedToErrorOr(
