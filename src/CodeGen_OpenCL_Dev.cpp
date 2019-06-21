@@ -353,12 +353,17 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
             stream << "," << id_delta << ");\n";
         } else {
             // CmpXchg loop
-            // union {unsigned int i; float f;} old_val;
-            // union {unsigned int i; float f;} new_val;
-            // do {
-            //   old_val.f = x[id_index];
-            //   new_val.f = ...
-            // } while(atomic_cmpxchg((volatile address_space unsigned int*)&x[id_index], old_val.i, new_val.i) != old_val.i);
+            // {
+            //   union {unsigned int i; float f;} old_val;
+            //   union {unsigned int i; float f;} new_val;
+            //   do {
+            //     old_val.f = x[id_index];
+            //     new_val.f = ...
+            //   } while(atomic_cmpxchg((volatile address_space unsigned int*)&x[id_index], old_val.i, new_val.i) != old_val.i);
+            // }
+            do_indent();
+            stream << "{\n";
+            indent += 2;
             string id_index = print_expr(op->index);
             std::string int_type = t.bits() == 32 ? "int" : "long";
             if (t.is_float() || t.is_uint()) {
@@ -402,6 +407,9 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
                 get_memory_space(op->name) << " " << int_type << "*)&" <<
                 print_name(op->name) << "[" << id_index << "], " << 
                 old_val << ", " << new_val << ") != " << old_val << ");\n";
+            do_indent();
+            stream << "}\n";
+            indent -= 2;
         }
         cache.clear();
         return;
