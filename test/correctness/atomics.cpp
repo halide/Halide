@@ -314,7 +314,7 @@ void test_predicated_hist(const Backend &backend) {
         switch(backend) {
             case Backend::CPU: {
                 // Can't prove associativity
-                hist.update().allow_race_conditions().atomic().parallel(r);
+                hist.update(update_id).allow_race_conditions().atomic().parallel(r);
             } break;
             case Backend::CPUVectorize: {
                 // Doesn't support predicated store yet.
@@ -323,14 +323,14 @@ void test_predicated_hist(const Backend &backend) {
             case Backend::OpenCL: {
                 // Can't prove associativity
                 RVar ro, ri;
-                hist.update().allow_race_conditions().atomic().split(r, ro, ri, 32)
+                hist.update(update_id).allow_race_conditions().atomic().split(r, ro, ri, 32)
                     .gpu_blocks(ro, DeviceAPI::OpenCL)
                     .gpu_threads(ri, DeviceAPI::OpenCL);
             } break;
             case Backend::CUDA: {
                 // Can't prove associativity
                 RVar ro, ri;
-                hist.update().allow_race_conditions().atomic().split(r, ro, ri, 32)
+                hist.update(update_id).allow_race_conditions().atomic().split(r, ro, ri, 32)
                     .gpu_blocks(ro, DeviceAPI::CUDA)
                     .gpu_threads(ri, DeviceAPI::CUDA);
             } break;
