@@ -288,6 +288,93 @@ void test_parallel_hist_tuple(const Backend &backend) {
 }
 
 template <typename T>
+void test_predicated_hist(const Backend &backend) {
+    int img_size = 1000;
+    int hist_size = 13;
+
+    Func im, hist;
+    Var x;
+    RDom r(0, img_size);
+    r.where(r % 2 == 0);
+
+    im(x) = (x*x) % hist_size;
+
+    hist(x) = cast<T>(0);
+    hist(im(r)) += cast<T>(1); // atomic add
+    hist(im(r)) -= cast<T>(1); // atomic add
+    hist(im(r)) = min(hist(im(r)) + cast<T>(1), cast<T>(100)); // cas loop
+
+    RDom r2(0, img_size);
+    r2.where(hist(im(r2)) > cast<T>(0) && hist(im(r2)) < cast<T>(90));
+    hist(im(r2)) -= cast<T>(1); // atomic add
+    hist(im(r2)) = min(hist(im(r2)) + cast<T>(1), cast<T>(100)); // cas loop
+
+    hist.compute_root();
+    for (int update_id = 0; update_id < 3; update_id++) {
+        switch(backend) {
+            case Backend::CPU: {
+                // Can't prove associativity
+                hist.update().allow_race_conditions().atomic().parallel(r);
+            } break;
+            case Backend::CPUVectorize: {
+                // Doesn't support predicated store yet.
+                _halide_user_assert(false) << "Unsupported backend.\n";
+            } break;
+            case Backend::OpenCL: {
+                // Can't prove associativity
+                RVar ro, ri;
+                hist.update().allow_race_conditions().atomic().split(r, ro, ri, 32)
+                    .gpu_blocks(ro, DeviceAPI::OpenCL)
+                    .gpu_threads(ri, DeviceAPI::OpenCL);
+            } break;
+            case Backend::CUDA: {
+                // Can't prove associativity
+                RVar ro, ri;
+                hist.update().allow_race_conditions().atomic().split(r, ro, ri, 32)
+                    .gpu_blocks(ro, DeviceAPI::CUDA)
+                    .gpu_threads(ri, DeviceAPI::CUDA);
+            } break;
+        }
+    }
+
+    Buffer<T> correct(hist_size);
+    correct.fill(T(0));
+    for (int i = 0; i < img_size; i++) {
+        if (i % 2 != 0) {
+            continue;
+        }
+        int idx = (i*i) % hist_size;
+        correct(idx) = correct(idx) + T(1);
+        correct(idx) = correct(idx) - T(1);
+        T x = correct(idx) + T(1);
+        correct(idx) = x < T(100) ? x : T(100);
+    }
+    for (int i = 0; i < img_size; i++) {
+        int idx = (i*i) % hist_size;
+        if (correct(idx) <= T(0) || correct(idx) >= T(90)) {
+            continue;
+        }
+        correct(idx) = correct(idx) - T(1);
+    }
+    for (int i = 0; i < img_size; i++) {
+        int idx = (i*i) % hist_size;
+        if (correct(idx) <= T(0) || correct(idx) >= T(90)) {
+            continue;
+        }
+        T x = correct(idx) + T(1);
+        correct(idx) = x < T(100) ? x : T(100);
+    }
+
+    // Run 100 times to make sure race condition do happen
+    for (int iter = 0; iter < 100; iter++) {
+        Buffer<T> out = hist.realize(hist_size);
+        for (int i = 0; i < hist_size; i++) {
+            check(__LINE__, out(i), correct(i));
+        }
+    }
+}
+
+template <typename T>
 void test_parallel_hist_tuple2(const Backend &backend) {
     int img_size = 10000;
     int hist_size = 7;
@@ -386,6 +473,10 @@ void test_all(const Backend &backend) {
     test_parallel_hist<T>(backend);
     test_parallel_cas_update<T>(backend);
     test_parallel_hist_tuple<T>(backend);
+    if (backend != Backend::CPUVectorize) {
+        // Doesn't support vectorized predicated store yet.
+        test_predicated_hist<T>(backend);
+    }
     if (backend == Backend::CPU) {
         // These require mutex locking which does not support vectorization and GPU
         test_parallel_hist_tuple2<T>(backend);
