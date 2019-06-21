@@ -307,7 +307,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
 
     if (emit_atomic_stores) {
         // Currently only support scalar atomics
-        user_assert(op->value.type().is_scalar()) << "Atomic store does not support vectorization.\n";
+        user_assert(op->value.type().is_scalar()) << "OpenCL atomic store does not support vectorization.\n";
         user_assert(op->value.type().bits() >= 32) << "OpenCL only support 32 and 64 bit atomics.\n";
         if (op->value.type().bits() == 64) {
             user_assert(target.has_feature(Target::CLAtomics64)) <<
