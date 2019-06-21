@@ -2067,7 +2067,7 @@ $(BUILD_DIR)/llvm_ok: $(BUILD_DIR)/rtti_ok
 	touch $(BUILD_DIR)/llvm_ok
 else
 $(BUILD_DIR)/llvm_ok:
-	@echo "Can't find llvm or version of llvm too old (we need 6.0 or greater):"
+	@echo "Can't find llvm or version of llvm too old (we need 7.0 or greater):"
 	@echo "You can override this check by setting LLVM_OK=y"
 	$(LLVM_CONFIG) --version
 	@exit 1
