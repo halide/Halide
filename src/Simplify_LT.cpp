@@ -361,17 +361,20 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
               // Synthesized
               #if USE_SYNTHESIZED_RULES
 
+
               rewrite(((((c0 - x)/c1)*c2) < x), true, (((c0 == (c1 + 1)) && ((c1 + c2) == 0)) && ((0 < c1) && (c1 < 16)))) || // Predicate too specific
               rewrite((((c0 - x)/c1) < y), ((y*fold((0 - c1))) < x), (((0 < c1) && (c1 < 16)) && (c0 == 0))) || // < 16
+              rewrite((((x + y)*z) < ((y*z) + w)), ((x*z) < w)) ||
               rewrite(((min(x, c0) + y) < min(z, y)), ((min(x, c0) + y) < z), (c0 < 0)) ||
+              rewrite(((x*c0) < ((y*c0) + z)), (((x - y)*c0) < z)) || // Unnecessary constant
               rewrite(((x*c0) < ((y*c1) + c2)), ((x*fold((c0/c1))) < y), (((((c1 < 16) && (0 < c1)) && ((c1 != 0) && ((c0 % c1) == 0))) && (c2 <= 0)) && (0 < (c1 + c2)))) || // < 16. Some unnecessary constraints.
+              rewrite((max(min((x + c0), y), z) < x), (max(y, z) < x), (0 <= c0)) ||
               rewrite((max(x, c0) < max(y, 0)), (x < max(y, 0)), (c0 < 0)) ||
               rewrite((min(min(x, y), z) < x), (min(y, z) < x)) ||
               rewrite((min(x, y) < min(z, (x + c0))), (min(x, y) < z), (0 < c0)) ||
               rewrite((x < ((x + y) + z)), (0 < (y + z))) ||
               rewrite((x < max((max(y, x) + c0), z)), true, (0 < c0)) ||
               rewrite((x < max(y, (max(z, x) + c0))), true, (0 < c0)) ||
-              rewrite((max(min((x + c0), y), z) < x), (max(y, z) < x), (0 <= c0)) ||
 
               // From Google list
               rewrite((x < (y + 1)), (x <= y)) ||
@@ -499,6 +502,7 @@ Expr Simplify::visit(const LE *op, ExprInfo *bounds) {
 
                 rewrite(((min(x, c0) + c1) <= min(y, 0)), (min(x, c0) < (y + fold((c0 - c1)))), ((c1 < 0) && (c0 == 1))) || // Should have subs'd in c0
                 rewrite(((max(x, c0) + c1) <= max(y, c0)), ((x + c1) <= max(y, c0)), (c1 <= 0)) ||
+                rewrite((x <= (min(((x + c0)/c1), y)*c2)), (x <= (y*c1)), ((((c0 == (c1 + -1)) && (c0 == (c2 + -1))) && (0 < c1)) && (c1 < 16))) || // < 16, predicate implies c1 == c2 indirectly (super simplify the predicate!)
 
                 // From google list
                 rewrite((min(x, y) <= max(z, y)), true) ||
