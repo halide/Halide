@@ -274,9 +274,10 @@ CodeGen_LLVM::CodeGen_LLVM(Target t) :
 
     min_f64(Float(64).min()),
     max_f64(Float(64).max()),
+
+    emit_atomic_stores(false),
     destructor_block(nullptr),
-    strict_float(t.has_feature(Target::StrictFloat)),
-    emit_atomic_stores(false) {
+    strict_float(t.has_feature(Target::StrictFloat)) {
     initialize_llvm();
 }
 

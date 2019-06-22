@@ -472,6 +472,9 @@ protected:
      */
     std::pair<llvm::Function *, int> find_vector_runtime_function(const std::string &name, int lanes);
 
+    /** Emit atomic operations if we encounter a store node. */
+    bool emit_atomic_stores;
+
 private:
 
     /** All the values in scope at the current code location during
@@ -489,9 +492,6 @@ private:
 
     /** Turn off all unsafe math flags in scopes while this is set. */
     bool strict_float;
-
-    /** Emit atomic operations if we encounter a store node. */
-    bool emit_atomic_stores;
 
     /** Embed an instance of halide_filter_metadata_t in the code, using
      * the given name (by convention, this should be ${FUNCTIONNAME}_metadata)

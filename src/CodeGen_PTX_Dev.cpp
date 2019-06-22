@@ -30,7 +30,7 @@ using std::vector;
 
 using namespace llvm;
 
-CodeGen_PTX_Dev::CodeGen_PTX_Dev(Target host) : CodeGen_LLVM(host), emit_atomic_stores(false) {
+CodeGen_PTX_Dev::CodeGen_PTX_Dev(Target host) : CodeGen_LLVM(host) {
     #if !defined(WITH_PTX)
     user_error << "ptx not enabled for this build of Halide.\n";
     #endif

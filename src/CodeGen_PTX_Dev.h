@@ -53,9 +53,6 @@ protected:
      * function in order to inject allocas */
     llvm::BasicBlock *entry_block;
 
-    /** Emit atomic operations if we encounter a store node. */
-    bool emit_atomic_stores;
-
     /** Nodes for which we need to override default behavior for the GPU runtime */
     // @{
     virtual void visit(const Call *) override;
