@@ -475,6 +475,9 @@ protected:
     /** Emit atomic operations if we encounter a store node. */
     bool emit_atomic_stores;
 
+    /** Are we generating an atomic store for PTX backend now? For different handling of atomic operations. */
+    bool is_ptx_atomic_store;
+
 private:
 
     /** All the values in scope at the current code location during

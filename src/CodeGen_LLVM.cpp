@@ -276,6 +276,7 @@ CodeGen_LLVM::CodeGen_LLVM(Target t) :
     max_f64(Float(64).max()),
 
     emit_atomic_stores(false),
+    is_ptx_atomic_store(false),
     destructor_block(nullptr),
     strict_float(t.has_feature(Target::StrictFloat)) {
     initialize_llvm();
@@ -2228,6 +2229,13 @@ void CodeGen_LLVM::codegen_atomic_store(const Store *op) {
     Expr delta = simplify(common_subexpression_elimination(op->value - equiv_load));
 #if LLVM_VERSION >= 90
     bool is_atomic_add = !expr_uses_var(delta, op->name);
+    if (is_ptx_atomic_store) {
+        if (value_type.is_float() && value_type.bits() == 64 && !target.has_feature(Target::CUDACapability61)) {
+            // AtomicRMW complains when the GPU backend doesn't support the corresponding atomic add
+            // operation.
+            is_atomic_add = false;
+        }
+    }
 #else
     bool is_atomic_add = value_type.is_int_or_uint() && !expr_uses_var(delta, op->name);
 #endif

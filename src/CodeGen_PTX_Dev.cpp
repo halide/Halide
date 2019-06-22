@@ -260,6 +260,7 @@ void CodeGen_PTX_Dev::visit(const Load *op) {
 void CodeGen_PTX_Dev::visit(const Store *op) {
     if (emit_atomic_stores) {
         user_assert(op->value.type().is_scalar()) << "CUDA atomic update does not support vectorization.\n";
+        user_assert(is_one(op->predicate)) << "Atomic update does not support predicated store.\n";
         user_assert(op->value.type().bits() >= 32) << "CUDA: 8-bit or 16-bit atomics are not supported.\n";
         // Generate nnvm intrinsics for the atomics if this is an float atomicAdd.
         // Otherwise refer to the llvm codegen
@@ -285,6 +286,7 @@ void CodeGen_PTX_Dev::visit(const Store *op) {
                 return;
             }
         }
+        is_ptx_atomic_store = true;
     }
 
     // Do aligned 4-wide 32-bit stores as a single i128 store.
@@ -302,6 +304,7 @@ void CodeGen_PTX_Dev::visit(const Store *op) {
     }
 
     CodeGen_LLVM::visit(op);
+    is_ptx_atomic_store = false;
 }
 
 void CodeGen_PTX_Dev::visit(const Atomic *op) {
