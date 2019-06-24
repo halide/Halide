@@ -1194,7 +1194,9 @@ void CodeGen_LLVM::optimize_module() {
 
     std::unique_ptr<TargetMachine> tm = make_target_machine(*module);
 
-#if LLVM_VERSION >= 90
+// Temporarily disabled, see https://github.com/halide/Halide/issues/3957
+// #if LLVM_VERSION >= 90
+#if 0
     PipelineTuningOptions pto;
     pto.LoopInterleaving = !get_target().has_feature(Target::DisableLLVMLoopUnroll);
     pto.LoopVectorization = !get_target().has_feature(Target::DisableLLVMLoopVectorize);
@@ -2474,7 +2476,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         }
     } else if (op->is_intrinsic(Call::mulhi_shr)) {
         internal_assert(op->args.size() == 3);
-        
+
         Type ty = op->type;
         Type wide_ty = ty.with_bits(ty.bits() * 2);
 
