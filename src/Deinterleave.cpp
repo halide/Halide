@@ -18,7 +18,7 @@ using std::pair;
 
 namespace {
 
-class StoreCollector : public IRMutator2 {
+class StoreCollector : public IRMutator {
 public:
     const std::string store_name;
     const int store_stride, max_stores;
@@ -32,7 +32,7 @@ public:
     }
 
 private:
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     // Don't enter any inner constructs for which it's not safe to pull out stores.
     Stmt visit(const For *op) override {
@@ -74,7 +74,7 @@ private:
             collecting = false;
             return op;
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
@@ -94,7 +94,7 @@ private:
 
         // Make sure this Store doesn't do anything that causes us to
         // stop collecting.
-        stmt = IRMutator2::visit(op);
+        stmt = IRMutator::visit(op);
         if (!collecting) {
             return stmt;
         }
@@ -130,7 +130,7 @@ private:
             collecting = false;
             return op;
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
@@ -138,11 +138,17 @@ private:
         if (!collecting) {
             return op;
         }
-        Stmt stmt = IRMutator2::visit(op);
 
-        // If we're still collecting, we need to save the let as a potential let.
+        // Walk inside the let chain
+        Stmt stmt = IRMutator::visit(op);
+
+        // If we're still collecting, we need to save the entire let chain as potential lets.
         if (collecting) {
-            potential_lets.push_back(op);
+            Stmt body;
+            do {
+                potential_lets.push_back(op);
+                body = op->body;
+            } while ((op = body.as<LetStmt>()));
         }
         return stmt;
     }
@@ -186,7 +192,7 @@ private:
     // lets for which we have even and odd lane specializations
     const Scope<> &external_lets;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Expr visit(const Broadcast *op) override {
         if (new_lanes == 1) {
@@ -200,7 +206,12 @@ private:
             return op;
         } else {
             Type t = op->type.with_lanes(new_lanes);
-            return Load::make(t, op->name, mutate(op->index), op->image, op->param, mutate(op->predicate));
+            ModulusRemainder align = op->alignment;
+            // TODO: Figure out the alignment of every nth lane
+            if (starting_lane != 0) {
+                align = ModulusRemainder();
+            }
+            return Load::make(t, op->name, mutate(op->index), op->image, op->param, mutate(op->predicate), align);
         }
     }
 
@@ -366,12 +377,10 @@ Expr extract_lane(Expr e, int lane) {
 
 namespace {
 
-class Interleaver : public IRMutator2 {
-    Scope<ModulusRemainder> alignment_info;
-
+class Interleaver : public IRMutator {
     Scope<> vector_lets;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     bool should_deinterleave;
     int num_lanes;
@@ -404,40 +413,43 @@ class Interleaver : public IRMutator2 {
     }
 
     template<typename T, typename Body>
-    Body visit_let(const T *op) {
-        Expr value = mutate(op->value);
-        if (value.type() == Int(32)) {
-            alignment_info.push(op->name, modulus_remainder(value, alignment_info));
-        }
-
-        if (value.type().is_vector()) {
-            vector_lets.push(op->name);
-        }
-        Body body = mutate(op->body);
-        if (value.type().is_vector()) {
-            vector_lets.pop(op->name);
-        }
-        if (value.type() == Int(32)) {
-            alignment_info.pop(op->name);
-        }
-
+    Body visit_lets(const T *op) {
+        // Visit an entire chain of lets in a single method to conserve stack space.
+        struct Frame {
+            const T *op;
+            Expr new_value;
+            ScopedBinding<> binding;
+            Frame(const T *op, Expr v, Scope<void> &scope) :
+                op(op),
+                new_value(std::move(v)),
+                binding(new_value.type().is_vector(), scope, op->name) {}
+        };
+        std::vector<Frame> frames;
         Body result;
-        if (value.same_as(op->value) && body.same_as(op->body)) {
-            result = op;
-        } else {
-            result = T::make(op->name, value, body);
-        }
 
-        // For vector lets, we may additionally need a let defining the even and odd lanes only
-        if (value.type().is_vector()) {
-            if (value.type().lanes() % 2 == 0) {
-                result = T::make(op->name + ".even_lanes", extract_even_lanes(value, vector_lets), result);
-                result = T::make(op->name + ".odd_lanes", extract_odd_lanes(value, vector_lets), result);
-            }
-            if (value.type().lanes() % 3 == 0) {
-                result = T::make(op->name + ".lanes_0_of_3", extract_mod3_lanes(value, 0, vector_lets), result);
-                result = T::make(op->name + ".lanes_1_of_3", extract_mod3_lanes(value, 1, vector_lets), result);
-                result = T::make(op->name + ".lanes_2_of_3", extract_mod3_lanes(value, 2, vector_lets), result);
+        do {
+            result = op->body;
+            frames.emplace_back(op, mutate(op->value), vector_lets);
+        } while ((op = result.template as<T>()));
+
+        result = mutate(result);
+
+        for (auto it = frames.rbegin(); it != frames.rend(); it++) {
+            Expr value = std::move(it->new_value);
+
+            result = T::make(it->op->name, value, result);
+
+            // For vector lets, we may additionally need a let defining the even and odd lanes only
+            if (value.type().is_vector()) {
+                if (value.type().lanes() % 2 == 0) {
+                    result = T::make(it->op->name + ".even_lanes", extract_even_lanes(value, vector_lets), result);
+                    result = T::make(it->op->name + ".odd_lanes", extract_odd_lanes(value, vector_lets), result);
+                }
+                if (value.type().lanes() % 3 == 0) {
+                    result = T::make(it->op->name + ".lanes_0_of_3", extract_mod3_lanes(value, 0, vector_lets), result);
+                    result = T::make(it->op->name + ".lanes_1_of_3", extract_mod3_lanes(value, 1, vector_lets), result);
+                    result = T::make(it->op->name + ".lanes_2_of_3", extract_mod3_lanes(value, 2, vector_lets), result);
+                }
             }
         }
 
@@ -445,11 +457,11 @@ class Interleaver : public IRMutator2 {
     }
 
     Expr visit(const Let *op) override {
-        return visit_let<Let, Expr>(op);
+        return visit_lets<Let, Expr>(op);
     }
 
     Stmt visit(const LetStmt *op) override {
-        return visit_let<LetStmt, Stmt>(op);
+        return visit_lets<LetStmt, Stmt>(op);
     }
 
     Expr visit(const Mod *op) override {
@@ -463,7 +475,7 @@ class Interleaver : public IRMutator2 {
                 break;
             }
         }
-        return IRMutator2::visit(op);
+        return IRMutator::visit(op);
     }
 
     Expr visit(const Div *op) override {
@@ -477,7 +489,7 @@ class Interleaver : public IRMutator2 {
                 break;
             }
         }
-        return IRMutator2::visit(op);
+        return IRMutator::visit(op);
     }
 
     Expr visit(const Call *op) override {
@@ -485,7 +497,7 @@ class Interleaver : public IRMutator2 {
             // deinterleaving potentially changes the order of execution.
             should_deinterleave = false;
         }
-        return IRMutator2::visit(op);
+        return IRMutator::visit(op);
     }
 
     Expr visit(const Load *op) override {
@@ -505,20 +517,20 @@ class Interleaver : public IRMutator2 {
             // If we want to deinterleave both the index and predicate
             // (or the predicate is one), then deinterleave the
             // resulting load.
-            expr = Load::make(op->type, op->name, idx, op->image, op->param, predicate);
+            expr = Load::make(op->type, op->name, idx, op->image, op->param, predicate, op->alignment);
             expr = deinterleave_expr(expr);
         } else if (should_deinterleave_idx) {
             // If we only want to deinterleave the index and not the
             // predicate, deinterleave the index prior to the load.
             idx = deinterleave_expr(idx);
-            expr = Load::make(op->type, op->name, idx, op->image, op->param, predicate);
+            expr = Load::make(op->type, op->name, idx, op->image, op->param, predicate, op->alignment);
         } else if (should_deinterleave_predicate) {
             // Similarly, deinterleave the predicate prior to the load
             // if we don't want to deinterleave the index.
             predicate = deinterleave_expr(predicate);
-            expr = Load::make(op->type, op->name, idx, op->image, op->param, predicate);
+            expr = Load::make(op->type, op->name, idx, op->image, op->param, predicate, op->alignment);
         } else if (!idx.same_as(op->index) || !predicate.same_as(op->index)) {
-            expr = Load::make(op->type, op->name, idx, op->image, op->param, predicate);
+            expr = Load::make(op->type, op->name, idx, op->image, op->param, predicate, op->alignment);
         } else {
             expr = op;
         }
@@ -550,7 +562,7 @@ class Interleaver : public IRMutator2 {
             predicate = deinterleave_expr(predicate);
         }
 
-        Stmt stmt = Store::make(op->name, value, idx, op->param, predicate);
+        Stmt stmt = Store::make(op->name, value, idx, op->param, predicate, op->alignment);
 
         should_deinterleave = old_should_deinterleave;
         num_lanes = old_num_lanes;
@@ -558,168 +570,173 @@ class Interleaver : public IRMutator2 {
         return stmt;
     }
 
-    Stmt visit(const Block *op) override {
+    HALIDE_NEVER_INLINE Stmt gather_stores(const Block *op) {
         const LetStmt *let = op->first.as<LetStmt>();
         const Store *store = op->first.as<Store>();
 
-        {
-            // This isn't really a true block, so there can't be multiple
-            // stores to collapse.
-            if (!op->rest.defined()) goto fail;
-
-            // Gather all the let stmts surrounding the first.
-            std::vector<Stmt> let_stmts;
-            while (let) {
-                let_stmts.push_back(let);
-                store = let->body.as<Store>();
-                let = let->body.as<LetStmt>();
-            }
-
-            // There was no inner store.
-            if (!store) goto fail;
-
-            const Ramp *r0 = store->index.as<Ramp>();
-
-            // It's not a store of a ramp index.
-            if (!r0) goto fail;
-
-            const int64_t *stride_ptr = as_const_int(r0->stride);
-
-            // The stride isn't a constant or is <= 0
-            if (!stride_ptr || *stride_ptr < 1) goto fail;
-
-            const int64_t stride = *stride_ptr;
-            const int lanes = r0->lanes;
-            const int64_t expected_stores = stride == 1 ? lanes : stride;
-
-            // Collect the rest of the stores.
-            std::vector<Stmt> stores;
-            stores.push_back(store);
-            Stmt rest = collect_strided_stores(op->rest, store->name,
-                                               stride, expected_stores,
-                                               let_stmts, stores);
-
-            // Check the store collector didn't collect too many
-            // stores (that would be a bug).
-            internal_assert(stores.size() <= (size_t) expected_stores);
-
-            // Not enough stores collected.
-            if (stores.size() != (size_t) expected_stores) goto fail;
-
-            Type t = store->value.type();
-            Expr base;
-            std::vector<Expr> args(stores.size());
-            std::vector<Expr> predicates(stores.size());
-
-            int min_offset = 0;
-            std::vector<int> offsets(stores.size());
-
-            std::string load_name;
-            Buffer<> load_image;
-            Parameter load_param;
-            for (size_t i = 0; i < stores.size(); ++i) {
-                const Ramp *ri = stores[i].as<Store>()->index.as<Ramp>();
-                internal_assert(ri);
-
-                // Mismatched store vector laness.
-                if (ri->lanes != lanes) goto fail;
-
-                Expr diff = simplify(ri->base - r0->base);
-                const int64_t *offs = as_const_int(diff);
-
-                // Difference between bases is not constant.
-                if (!offs) goto fail;
-
-                offsets[i] = *offs;
-                if (*offs < min_offset) {
-                    min_offset = *offs;
-                }
-
-                if (stride == 1) {
-                    // Difference between bases is not a multiple of the lanes.
-                    if (*offs % lanes != 0) goto fail;
-
-                    // This case only triggers if we have an immediate load of the correct stride on the RHS.
-                    // TODO: Could we consider mutating the RHS so that we can handle more complex Expr's than just loads?
-                    const Load *load = stores[i].as<Store>()->value.as<Load>();
-                    if (!load) goto fail;
-                    // TODO(psuriana): Predicated load is not currently handled.
-                    if (!is_one(load->predicate)) goto fail;
-
-                    const Ramp *ramp = load->index.as<Ramp>();
-                    if (!ramp) goto fail;
-
-                    // Load stride or lanes is not equal to the store lanes.
-                    if (!is_const(ramp->stride, lanes) || ramp->lanes != lanes) goto fail;
-
-                    if (i == 0) {
-                        load_name = load->name;
-                        load_image = load->image;
-                        load_param = load->param;
-                    } else {
-                        if (load->name != load_name) goto fail;
-                    }
-                }
-            }
-
-            // Gather the args for interleaving.
-            for (size_t i = 0; i < stores.size(); ++i) {
-                int j = offsets[i] - min_offset;
-                if (stride == 1) {
-                    j /= stores.size();
-                }
-
-                if (j == 0) {
-                    base = stores[i].as<Store>()->index.as<Ramp>()->base;
-                }
-
-                // The offset is not between zero and the stride.
-                if (j < 0 || (size_t) j >= stores.size()) goto fail;
-
-                // We already have a store for this offset.
-                if (args[j].defined()) goto fail;
-
-                if (stride == 1) {
-                    // Convert multiple dense vector stores of strided vector loads
-                    // into one dense vector store of interleaving dense vector loads.
-                    args[j] = Load::make(t, load_name, stores[i].as<Store>()->index,
-                                         load_image, load_param, const_true(t.lanes()));
-                } else {
-                    args[j] = stores[i].as<Store>()->value;
-                }
-                predicates[j] = stores[i].as<Store>()->predicate;
-            }
-
-            // One of the stores should have had the minimum offset.
-            internal_assert(base.defined());
-
-            // Generate a single interleaving store.
-            t = t.with_lanes(lanes * stores.size());
-            Expr index = Ramp::make(base, make_one(base.type()), t.lanes());
-            Expr value = Shuffle::make_interleave(args);
-            Expr predicate = Shuffle::make_interleave(predicates);
-            Stmt new_store = Store::make(store->name, value, index, store->param, predicate);
-
-            // Continue recursively into the stuff that
-            // collect_strided_stores didn't collect.
-            Stmt stmt = Block::make(new_store, mutate(rest));
-
-            // Rewrap the let statements we pulled off.
-            while (!let_stmts.empty()) {
-                const LetStmt *let = let_stmts.back().as<LetStmt>();
-                stmt = LetStmt::make(let->name, let->value, stmt);
-                let_stmts.pop_back();
-            }
-
-            // Success!
-            return stmt;
+        // Gather all the let stmts surrounding the first.
+        std::vector<Stmt> let_stmts;
+        while (let) {
+            let_stmts.push_back(let);
+            store = let->body.as<Store>();
+            let = let->body.as<LetStmt>();
         }
 
-    fail:
-        // We didn't pass one of the tests. But maybe there are more
-        // opportunities within. Continue recursively.
-        return Block::make(mutate(op->first), mutate(op->rest));
+        // There was no inner store.
+        if (!store) return Stmt();
+
+        const Ramp *r0 = store->index.as<Ramp>();
+
+        // It's not a store of a ramp index.
+        if (!r0) return Stmt();
+
+        const int64_t *stride_ptr = as_const_int(r0->stride);
+
+        // The stride isn't a constant or is <= 0
+        if (!stride_ptr || *stride_ptr < 1) return Stmt();
+
+        const int64_t stride = *stride_ptr;
+        const int lanes = r0->lanes;
+        const int64_t expected_stores = stride == 1 ? lanes : stride;
+
+        // Collect the rest of the stores.
+        std::vector<Stmt> stores;
+        stores.push_back(store);
+        Stmt rest = collect_strided_stores(op->rest, store->name,
+                                           stride, expected_stores,
+                                           let_stmts, stores);
+
+        // Check the store collector didn't collect too many
+        // stores (that would be a bug).
+        internal_assert(stores.size() <= (size_t) expected_stores);
+
+        // Not enough stores collected.
+        if (stores.size() != (size_t) expected_stores) return Stmt();
+
+        Type t = store->value.type();
+        Expr base;
+        std::vector<Expr> args(stores.size());
+        std::vector<Expr> predicates(stores.size());
+
+        int min_offset = 0;
+        std::vector<int> offsets(stores.size());
+
+        std::string load_name;
+        Buffer<> load_image;
+        Parameter load_param;
+        for (size_t i = 0; i < stores.size(); ++i) {
+            const Ramp *ri = stores[i].as<Store>()->index.as<Ramp>();
+            internal_assert(ri);
+
+            // Mismatched store vector laness.
+            if (ri->lanes != lanes) return Stmt();
+
+            Expr diff = simplify(ri->base - r0->base);
+            const int64_t *offs = as_const_int(diff);
+
+            // Difference between bases is not constant.
+            if (!offs) return Stmt();
+
+            offsets[i] = *offs;
+            if (*offs < min_offset) {
+                min_offset = *offs;
+            }
+
+            if (stride == 1) {
+                // Difference between bases is not a multiple of the lanes.
+                if (*offs % lanes != 0) return Stmt();
+
+                // This case only triggers if we have an immediate load of the correct stride on the RHS.
+                // TODO: Could we consider mutating the RHS so that we can handle more complex Expr's than just loads?
+                const Load *load = stores[i].as<Store>()->value.as<Load>();
+                if (!load) return Stmt();
+                // TODO(psuriana): Predicated load is not currently handled.
+                if (!is_one(load->predicate)) return Stmt();
+
+                const Ramp *ramp = load->index.as<Ramp>();
+                if (!ramp) return Stmt();
+
+                // Load stride or lanes is not equal to the store lanes.
+                if (!is_const(ramp->stride, lanes) || ramp->lanes != lanes) return Stmt();
+
+                if (i == 0) {
+                    load_name = load->name;
+                    load_image = load->image;
+                    load_param = load->param;
+                } else {
+                    if (load->name != load_name) return Stmt();
+                }
+            }
+        }
+
+        // Gather the args for interleaving.
+        for (size_t i = 0; i < stores.size(); ++i) {
+            int j = offsets[i] - min_offset;
+            if (stride == 1) {
+                j /= stores.size();
+            }
+
+            if (j == 0) {
+                base = stores[i].as<Store>()->index.as<Ramp>()->base;
+            }
+
+            // The offset is not between zero and the stride.
+            if (j < 0 || (size_t) j >= stores.size()) return Stmt();
+
+            // We already have a store for this offset.
+            if (args[j].defined()) return Stmt();
+
+            if (stride == 1) {
+                // Convert multiple dense vector stores of strided vector loads
+                // into one dense vector store of interleaving dense vector loads.
+                args[j] = Load::make(t, load_name, stores[i].as<Store>()->index,
+                                     load_image, load_param, const_true(t.lanes()), ModulusRemainder());
+            } else {
+                args[j] = stores[i].as<Store>()->value;
+            }
+            predicates[j] = stores[i].as<Store>()->predicate;
+        }
+
+        // One of the stores should have had the minimum offset.
+        internal_assert(base.defined());
+
+        // Generate a single interleaving store.
+        t = t.with_lanes(lanes * stores.size());
+        Expr index = Ramp::make(base, make_one(base.type()), t.lanes());
+        Expr value = Shuffle::make_interleave(args);
+        Expr predicate = Shuffle::make_interleave(predicates);
+        Stmt new_store = Store::make(store->name, value, index, store->param, predicate, ModulusRemainder());
+
+        // Continue recursively into the stuff that
+        // collect_strided_stores didn't collect.
+        Stmt stmt = Block::make(new_store, mutate(rest));
+
+        // Rewrap the let statements we pulled off.
+        while (!let_stmts.empty()) {
+            const LetStmt *let = let_stmts.back().as<LetStmt>();
+            stmt = LetStmt::make(let->name, let->value, stmt);
+            let_stmts.pop_back();
+        }
+
+        // Success!
+        return stmt;
     }
+
+    Stmt visit(const Block *op) override {
+        Stmt s = gather_stores(op);
+        if (s.defined()) {
+            return s;
+        } else {
+            Stmt first = mutate(op->first);
+            Stmt rest = mutate(op->rest);
+            if (first.same_as(op->first) && rest.same_as(op->rest)) {
+                return op;
+            } else {
+                return Block::make(first, rest);
+            }
+        }
+    }
+
 
 public:
     Interleaver() : should_deinterleave(false) {}
@@ -758,9 +775,9 @@ void deinterleave_vector_test() {
     check(ramp, ramp_a, ramp_b);
     check(broadcast, broadcast_a, broadcast_b);
 
-    check(Load::make(ramp.type(), "buf", ramp, Buffer<>(), Parameter(), const_true(ramp.type().lanes())),
-          Load::make(ramp_a.type(), "buf", ramp_a, Buffer<>(), Parameter(), const_true(ramp_a.type().lanes())),
-          Load::make(ramp_b.type(), "buf", ramp_b, Buffer<>(), Parameter(), const_true(ramp_b.type().lanes())));
+    check(Load::make(ramp.type(), "buf", ramp, Buffer<>(), Parameter(), const_true(ramp.type().lanes()), ModulusRemainder()),
+          Load::make(ramp_a.type(), "buf", ramp_a, Buffer<>(), Parameter(), const_true(ramp_a.type().lanes()), ModulusRemainder()),
+          Load::make(ramp_b.type(), "buf", ramp_b, Buffer<>(), Parameter(), const_true(ramp_b.type().lanes()), ModulusRemainder()));
 
     std::cout << "deinterleave_vector test passed" << std::endl;
 }

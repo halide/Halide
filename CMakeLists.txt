@@ -33,10 +33,6 @@ else()
   endif()
 endif()
 
-if("${LLVM_VERSION_MAJOR}${LLVM_VERSION_MINOR}" STREQUAL "40")
-  message(WARNING "*** Warning: LLVM 4.x is no longer actively tested with Halide; consider using a newer LLVM version. ***")
-endif()
-
 # Notify the user what paths and LLVM version we are using
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
@@ -118,10 +114,10 @@ check_tool_exists(clang "${CLANG}")
 
 # Check reported LLVM version
 if (NOT "${LLVM_VERSION}" MATCHES "^[0-9][0-9]$")
-  message(FATAL_ERROR "LLVM_VERSION not specified correctly. Must be <major><minor> E.g. LLVM 4.0 is \"40\"")
+  message(FATAL_ERROR "LLVM_VERSION not specified correctly. Must be <major><minor> E.g. LLVM 7.0 is \"70\"")
 endif()
-if (LLVM_VERSION LESS 40)
-  message(FATAL_ERROR "LLVM version must be 4.0 or newer")
+if (LLVM_VERSION LESS 70)
+  message(FATAL_ERROR "LLVM version must be 7.0 or newer")
 endif()
 
 function(check_llvm_target TARGET HAS_TARGET)
@@ -147,6 +143,7 @@ check_llvm_target(Hexagon WITH_HEXAGON 40)
 check_llvm_target(Mips WITH_MIPS)
 check_llvm_target(PowerPC WITH_POWERPC)
 check_llvm_target(NVPTX WITH_NVPTX)
+check_llvm_target(RISCV WITH_RISCV)
 # AMDGPU target is WIP
 check_llvm_target(AMDGPU WITH_AMDGPU)
 
@@ -160,12 +157,15 @@ option(TARGET_MIPS "Include MIPS target" ${WITH_MIPS})
 option(TARGET_POWERPC "Include POWERPC target" ${WITH_POWERPC})
 option(TARGET_PTX "Include PTX target" ${WITH_NVPTX})
 option(TARGET_AMDGPU "Include AMDGPU target" ${WITH_AMDGPU})
+option(TARGET_RISCV "Include RISCV target" ${WITH_RISCV})
 option(TARGET_OPENCL "Include OpenCL-C target" ON)
 option(TARGET_OPENGL "Include OpenGL/GLSL target" ON)
 option(TARGET_OPENGLCOMPUTE "Include OpenGLCompute target" ON)
 option(TARGET_D3D12COMPUTE "Include Direct3D 12 Compute target" ON)
 option(HALIDE_SHARED_LIBRARY "Build as a shared library" ON)
 option(HALIDE_ENABLE_RTTI "Enable RTTI" ${LLVM_ENABLE_RTTI})
+option(HALIDE_ENABLE_EXCEPTIONS "Enable exceptions" ${LLVM_ENABLE_EH})
+option(HALIDE_USE_CODEMODEL_LARGE "Use the Large LLVM codemodel" OFF)
 
 if (HALIDE_SHARED_LIBRARY)
   set(HALIDE_LIBRARY_TYPE SHARED)
@@ -175,6 +175,13 @@ endif()
 
 if (HALIDE_ENABLE_RTTI AND NOT LLVM_ENABLE_RTTI)
   message(FATAL_ERROR "Can't enable RTTI. LLVM was compiled without it")
+endif()
+
+# Needed for 'make distrib' to properly fill in the .tpl files
+if (HALIDE_ENABLE_RTTI)
+  set(HALIDE_RTTI_RAW 1)
+else()
+  set(HALIDE_RTTI_RAW 0)
 endif()
 
 function(halide_project name folder)
@@ -217,6 +224,12 @@ if (NOT MSVC)
   if (WARNINGS_AS_ERRORS)
     add_compile_options(-Werror)
   endif()
+  if (HALIDE_ENABLE_EXCEPTIONS)
+    add_compile_options(-DWITH_EXCEPTIONS)
+  endif()
+  if (HALIDE_USE_CODEMODEL_LARGE)
+    add_compile_options(-DHALIDE_USE_CODEMODEL_LARGE)
+  endif()
 else()
   add_compile_options(/W3)
   add_compile_options(/wd4018)  # disable "signed/unsigned mismatch"
@@ -225,6 +238,12 @@ else()
   add_compile_options(/wd4800)  # forcing value to bool 'true' or 'false' (performance warning)
   if (WARNINGS_AS_ERRORS)
     add_compile_options(/WX)
+  endif()
+  if (HALIDE_ENABLE_EXCEPTIONS)
+    add_compile_options(/DWITH_EXCEPTIONS)
+  endif()
+  if (HALIDE_USE_CODEMODEL_LARGE)
+    add_compile_options(/DHALIDE_USE_CODEMODEL_LARGE)
   endif()
 endif()
 
@@ -297,10 +316,9 @@ define_test_group(run_tests)
 # TODO(srj): add test_aotcpp_generators support
 # TODO(srj): add test_valgrind variant
 # TODO(srj): add test_avx512 variant
-# TODO(srj): add test_bazel variant
 # TODO(srj): add test_python variant
 # TODO(srj): add test_apps variant
-function(add_test TARGET)
+function(add_halide_test TARGET)
   set(options EXPECT_FAILURE)
   set(oneValueArgs WORKING_DIRECTORY)
   set(multiValueArgs GROUPS)
@@ -333,12 +351,13 @@ function(add_test TARGET)
     # It's probably a custom target or a group: just depend on it.
     add_custom_target("${EXEC_NAME}" DEPENDS "${TARGET}")
   else()
-    message(FATAL_ERROR "add_test(): unsupported type ${TARGET_TYPE} for ${TARGET}")
+    message(FATAL_ERROR "add_halide_test(): unsupported type ${TARGET_TYPE} for ${TARGET}")
   endif()
   set_target_properties("${EXEC_NAME}" PROPERTIES EXCLUDE_FROM_ALL TRUE)
   foreach(GROUP ${args_GROUPS})
     add_dependencies("${GROUP}" "${EXEC_NAME}")
   endforeach()
+  add_test(NAME ${TARGET} COMMAND ${COMMAND})
 
 endfunction()
 
@@ -358,6 +377,7 @@ add_subdirectory(src)
 option(WITH_TESTS "Build tests" ON)
 if (WITH_TESTS)
   message(STATUS "Building tests enabled")
+  enable_testing()
   add_subdirectory(test)
 else()
   message(STATUS "Building tests disabled")
@@ -415,10 +435,11 @@ install(FILES
         )
 
 install(DIRECTORY tutorial
-        DESTINATION tutorial
+        DESTINATION .
         FILES_MATCHING
+        PATTERN "*.cpp"
         PATTERN "*.h"
-        PATTERN "*.sh"
+        PATTERN "lesson_*.sh"
         PATTERN "*.gif"
         PATTERN "*.jpg"
         PATTERN "*.mp4"
@@ -429,7 +450,6 @@ foreach(F mex_halide.m
           GenGen.cpp
           RunGen.h
           RunGenMain.cpp
-          RunGenStubs.cpp
           halide_benchmark.h
           halide_image.h
           halide_image_io.h
@@ -442,11 +462,6 @@ endforeach()
 
 # ---- README
 file(GLOB FILES "${HALIDE_BASE_DIR}/*.md")
-install(FILES ${FILES}
-        DESTINATION .)
-
-# ---- Bazel
-file(GLOB FILES "${HALIDE_BASE_DIR}/bazel/*")
 install(FILES ${FILES}
         DESTINATION .)
 

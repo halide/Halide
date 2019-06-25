@@ -151,24 +151,29 @@ public:
         // Normalize
         final(x, y, c) = output(x, y, c) / output(x, y, 3);
 
+        /* ESTIMATES */
+        // (This can be useful in conjunction with RunGen and benchmarks as well
+        // as auto-schedule, so we do it in all cases.)
+        // Provide estimates on the input image
+        left_im.dim(0).set_bounds_estimate(0, 1536);
+        left_im.dim(1).set_bounds_estimate(0, 2560);
+        left_im.dim(2).set_bounds_estimate(0, 3);
+        right_im.dim(0).set_bounds_estimate(0, 1536);
+        right_im.dim(1).set_bounds_estimate(0, 2560);
+        right_im.dim(2).set_bounds_estimate(0, 3);
+        // Provide estimates on the parameters
+        slices.set_estimate(32);
+        focus_depth.set_estimate(13);
+        blur_radius_scale.set_estimate(0.5f);
+        aperture_samples.set_estimate(32);
+        // Provide estimates on the pipeline output
+        final.estimate(x, 0, 1536)
+            .estimate(y, 0, 2560)
+            .estimate(c, 0, 3);
+
         /* THE SCHEDULE */
         if (auto_schedule) {
-            // Provide estimates on the input image
-            left_im.dim(0).set_bounds_estimate(0, 1536);
-            left_im.dim(1).set_bounds_estimate(0, 2560);
-            left_im.dim(2).set_bounds_estimate(0, 3);
-            right_im.dim(0).set_bounds_estimate(0, 1536);
-            right_im.dim(1).set_bounds_estimate(0, 2560);
-            right_im.dim(2).set_bounds_estimate(0, 3);
-            // Provide estimates on the parameters
-            slices.set_estimate(32);
-            focus_depth.set_estimate(13);
-            blur_radius_scale.set_estimate(0.5f);
-            aperture_samples.set_estimate(32);
-            // Provide estimates on the pipeline output
-            final.estimate(x, 0, 1536)
-                .estimate(y, 0, 2560)
-                .estimate(c, 0, 3);
+            // nothing
         } else if (get_target().has_gpu_feature()) {
             // Manual GPU schedule
             Var xi("xi"), yi("yi"), zi("zi");

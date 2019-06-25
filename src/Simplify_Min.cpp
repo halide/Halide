@@ -3,8 +3,8 @@
 namespace Halide {
 namespace Internal {
 
-Expr Simplify::visit(const Min *op, ConstBounds *bounds) {
-    ConstBounds a_bounds, b_bounds;
+Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
+    ExprInfo a_bounds, b_bounds;
     Expr a = mutate(op->a, &a_bounds);
     Expr b = mutate(op->b, &b_bounds);
 
@@ -19,6 +19,8 @@ Expr Simplify::visit(const Min *op, ConstBounds *bounds) {
         } else {
             bounds->max = b_bounds.max;
         }
+        bounds->alignment = ModulusRemainder::unify(a_bounds.alignment, b_bounds.alignment);
+        bounds->trim_bounds_using_alignment();
     }
 
     // Early out when the bounds tells us one side or the other is smaller
@@ -116,7 +118,17 @@ Expr Simplify::visit(const Min *op, ConstBounds *bounds) {
              rewrite(min(max(x, c0), c1), max(min(x, c1), c0), c0 <= c1) ||
 
              (no_overflow(op->type) &&
-              (rewrite(min(x + c0, c1), min(x, fold(c1 - c0)) + c0) ||
+              (rewrite(min(min(x, y) + c0, x), min(x, y + c0), c0 > 0) ||
+               rewrite(min(min(x, y) + c0, x), min(x, y) + c0, c0 < 0) ||
+               rewrite(min(min(y, x) + c0, x), min(y + c0, x), c0 > 0) ||
+               rewrite(min(min(y, x) + c0, x), min(y, x) + c0, c0 < 0) ||
+
+               rewrite(min(x, min(x, y) + c0), min(x, y + c0), c0 > 0) ||
+               rewrite(min(x, min(x, y) + c0), min(x, y) + c0, c0 < 0) ||
+               rewrite(min(x, min(y, x) + c0), min(x, y + c0), c0 > 0) ||
+               rewrite(min(x, min(y, x) + c0), min(x, y) + c0, c0 < 0) ||
+
+               rewrite(min(x + c0, c1), min(x, fold(c1 - c0)) + c0) ||
 
                rewrite(min(x + c0, y + c1), min(x, y + fold(c1 - c0)) + c0, c1 > c0) ||
                rewrite(min(x + c0, y + c1), min(x + fold(c0 - c1), y) + c1, c0 > c1) ||

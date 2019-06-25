@@ -140,7 +140,7 @@ double run_test_3(bool auto_schedule) {
 }
 
 int main(int argc, char **argv) {
-    const double slowdown_factor = 5.0;
+    const double slowdown_factor = 6.0;
 
     {
         std::cout << "Test 1:" << std::endl;

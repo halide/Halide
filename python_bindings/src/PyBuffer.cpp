@@ -152,6 +152,12 @@ Type format_descriptor_to_type(const std::string &fd) {
 
     #undef HANDLE_BUFFER_TYPE
 
+    // The string 'l' corresponds to np.int_, which is essentially
+    // a C 'long'; return a 32 or 64 bit int as appropriate.
+    if (fd == "l") {
+      return sizeof(long) == 8 ? type_of<int64_t>() : type_of<int32_t>();
+    }
+
     throw py::value_error("Unsupported Buffer<> type.");
     return Type();
 }
@@ -225,7 +231,9 @@ class PyBuffer : public Buffer<> {
         std::vector<halide_dimension_t> dims;
         dims.reserve(info.ndim);
         for (int i = 0; i < info.ndim; i++) {
-            // TODO: check for ssize_t -> int32_t overflow
+            if (INT_MAX < info.shape[i] || INT_MAX < (info.strides[i] / t.bytes())) {
+                throw py::value_error("Out of range arguments to make_dim_vec.");
+            }
             dims.push_back({0, (int32_t) info.shape[i], (int32_t) (info.strides[i] / t.bytes())});
         }
         return dims;

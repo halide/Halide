@@ -446,7 +446,7 @@ int main(int argc, char **argv) {
         // - Temporary memory allocated: 10 floats
         // - Loads: 48
         // - Stores: 56
-        // - Calls to sin: 40
+        // - Calls to sin: 25
     }
 
     // So what's the catch? Why not always do

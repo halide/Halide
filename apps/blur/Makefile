@@ -1,14 +1,14 @@
 include ../support/Makefile.inc
 
-all: $(BIN)/test
+all: $(BIN)/$(HL_TARGET)/test
 
-$(BIN)/halide_blur.generator: halide_blur_generator.cpp $(GENERATOR_DEPS)
+$(GENERATOR_BIN)/halide_blur.generator: halide_blur_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
-$(BIN)/%/halide_blur.a: $(BIN)/halide_blur.generator
+$(BIN)/%/halide_blur.a: $(GENERATOR_BIN)/halide_blur.generator
 	@mkdir -p $(@D)
-	$^ -g halide_blur -o $(BIN)/$* target=$(HL_TARGET)
+	$^ -g halide_blur -e $(GENERATOR_OUTPUTS) -o $(@D) target=$*
 
 # g++ on OS X might actually be system clang without openmp
 CXX_VERSION=$(shell $(CXX) --version)
@@ -26,5 +26,6 @@ $(BIN)/%/test: $(BIN)/%/halide_blur.a test.cpp
 clean:
 	rm -rf $(BIN)
 
-test: $(BIN)/host/test
-	$(BIN)/host/test
+.PHONY: test
+test: $(BIN)/$(HL_TARGET)/test
+	$(BIN)/$(HL_TARGET)/test

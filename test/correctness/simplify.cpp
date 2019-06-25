@@ -5,6 +5,19 @@ using namespace Halide::Internal;
 
 #define internal_assert _halide_user_assert
 
+void check_is_sio(const Expr &e) {
+    Expr simpler = simplify(e);
+    const Call *call = simpler.as<Call>();
+    if (!(call && call->is_intrinsic(Call::signed_integer_overflow))) {
+        std::cerr
+            << "\nSimplification failure:\n"
+            << "Input: " << e << '\n'
+            << "Output: " << simpler << '\n'
+            << "Expected output: signed_integer_overflow(n)\n";
+        abort();
+    }
+}
+
 void check(const Expr &a, const Expr &b) {
     Expr simpler = simplify(a);
     if (!equal(simpler, b)) {
@@ -22,9 +35,9 @@ void check(const Stmt &a, const Stmt &b) {
     if (!equal(simpler, b)) {
         std::cerr
             << "\nSimplification failure:\n"
-            << "Input: " << a << '\n'
-            << "Output: " << simpler << '\n'
-            << "Expected output: " << b << '\n';
+            << "Input:\n" << a << '\n'
+            << "Output:\n" << simpler << '\n'
+            << "Expected output:\n" << b << '\n';
         abort();
     }
 }
@@ -395,6 +408,33 @@ void check_algebra() {
     // Test case with most negative 32-bit number, as constant to check that it is not negated.
     check(((x * (int32_t)0x80000000) + (z * (int32_t)0x80000000 + y)),
           ((x * (int32_t)0x80000000) + (z * (int32_t)0x80000000 + y)));
+
+    // Use a require with no error message to test chains of reasoning
+    auto require = [](Expr cond, Expr val) {
+        return Internal::Call::make(val.type(),
+                                    Internal::Call::require,
+                                    {cond, val, 0},
+                                    Internal::Call::PureIntrinsic);
+    };
+
+    check(require(2 < x && x < 4, x),
+          require(2 < x && x < 4, 3));
+
+    check(require(2 < x && x < 5 && x % 4 == 0, x),
+          require(2 < x && x < 5 && x % 4 == 0, 4));
+
+    check(require(x % 4 == 3, x % 2),
+          require(x % 4 == 3, 1));
+
+    // Check modulo of expressions that are not-obviously a multiple of something
+    check(max(min(x*8, 32), y*16) % 4 == 0, const_true());
+    check(select(x > 4, x*9 + 1, y*6 - 2) % 3 == 1, const_true());
+    check(max(32, x*4) % 16 < 13, const_true()); // After the %16 the max value is 12, not 15, due to alignment
+
+    Expr complex_cond = ((10 < y) && (y % 17 == 4) && (y < 30) && (x == y*16 + 3));
+    // The condition is enough to imply that y == 21, x == 339
+    check(require(complex_cond, select(x % 2 == 0, 1237, y)),
+          require(complex_cond, 21));
 }
 
 void check_vectors() {
@@ -494,9 +534,9 @@ void check_vectors() {
 
     // Now check that an interleave of some collapsible loads collapses into a single dense load
     {
-        Expr load1 = Load::make(Float(32, 4), "buf", ramp(x, 2, 4), Buffer<>(), Parameter(), const_true(4));
-        Expr load2 = Load::make(Float(32, 4), "buf", ramp(x+1, 2, 4), Buffer<>(), Parameter(), const_true(4));
-        Expr load12 = Load::make(Float(32, 8), "buf", ramp(x, 1, 8), Buffer<>(), Parameter(), const_true(8));
+        Expr load1 = Load::make(Float(32, 4), "buf", ramp(x, 2, 4), Buffer<>(), Parameter(), const_true(4), ModulusRemainder());
+        Expr load2 = Load::make(Float(32, 4), "buf", ramp(x+1, 2, 4), Buffer<>(), Parameter(), const_true(4), ModulusRemainder());
+        Expr load12 = Load::make(Float(32, 8), "buf", ramp(x, 1, 8), Buffer<>(), Parameter(), const_true(8), ModulusRemainder());
         check(interleave_vectors({load1, load2}), load12);
 
         // They don't collapse in the other order
@@ -504,7 +544,7 @@ void check_vectors() {
         check(e, e);
 
         // Or if the buffers are different
-        Expr load3 = Load::make(Float(32, 4), "buf2", ramp(x+1, 2, 4), Buffer<>(), Parameter(), const_true(4));
+        Expr load3 = Load::make(Float(32, 4), "buf2", ramp(x+1, 2, 4), Buffer<>(), Parameter(), const_true(4), ModulusRemainder());
         e = interleave_vectors({load1, load3});
         check(e, e);
     }
@@ -514,18 +554,30 @@ void check_vectors() {
         int lanes = 4;
         std::vector<Expr> loads;
         for (int i = 0; i < lanes; i++) {
-            loads.push_back(Load::make(Float(32), "buf", x+i, Buffer<>(), Parameter(), const_true()));
+            loads.push_back(Load::make(Float(32), "buf", 4*x+i, Buffer<>(), Parameter(), const_true(), ModulusRemainder()));
         }
 
-        check(concat_vectors(loads), Load::make(Float(32, lanes), "buf", ramp(x, 1, lanes), Buffer<>(), Parameter(), const_true(lanes)));
+        check(concat_vectors(loads), Load::make(Float(32, lanes), "buf", ramp(x*4, 1, lanes), Buffer<>(), Parameter(), const_true(lanes), ModulusRemainder(4, 0)));
+    }
+
+    // Check that concatenated loads of adjacent vectors collapse into a vector load, with appropriate alignment.
+    {
+        int lanes = 4;
+        int vectors = 4;
+        std::vector<Expr> loads;
+        for (int i = 0; i < vectors; i++) {
+          loads.push_back(Load::make(Float(32, lanes), "buf", ramp(i*lanes, 1, lanes), Buffer<>(), Parameter(), const_true(lanes), ModulusRemainder(4, 0)));
+        }
+
+        check(concat_vectors(loads), Load::make(Float(32, lanes*vectors), "buf", ramp(0, 1, lanes*vectors), Buffer<>(), Parameter(), const_true(vectors*lanes), ModulusRemainder(0, 0)));
     }
 
     {
         // A predicated store with a provably-false predicate.
         Expr pred = ramp(x*y + x*z, 2, 8) > 2;
         Expr index = ramp(x + y, 1, 8);
-        Expr value = Load::make(index.type(), "f", index, Buffer<>(), Parameter(), const_true(index.type().lanes()));
-        Stmt stmt = Store::make("f", value, index, Parameter(), pred);
+        Expr value = Load::make(index.type(), "f", index, Buffer<>(), Parameter(), const_true(index.type().lanes()), ModulusRemainder());
+        Stmt stmt = Store::make("f", value, index, Parameter(), pred, ModulusRemainder());
         check(stmt, Evaluate::make(0));
     }
 }
@@ -545,6 +597,46 @@ void check_bounds() {
     check(min(min(x, y), y), min(x, y));
     check(min(x, min(x, y)), min(x, y));
     check(min(y, min(x, y)), min(x, y));
+
+    check(min(min(x, y) + 1, x), min(y + 1, x));
+    check(min(min(x, y) - (-1), x), min(y + 1, x));
+    check(min(min(x, y) + (-1), x), min(x, y) + (-1));
+    check(min(min(x, y) - 1, x), min(x, y) + (-1));
+
+    check(min(min(y, x) + 1, x), min(y + 1, x));
+    check(min(min(y, x) - (-1), x), min(y + 1, x));
+    check(min(min(y, x) + (-1), x), min(x, y) + (-1));
+    check(min(min(y, x) - 1, x), min(x, y) + (-1));
+
+    check(max(max(x, y) - 1, x), max(y + (-1), x));
+    check(max(max(x, y) + (-1), x), max(y + (-1), x));
+    check(max(max(x, y) + 1, x), max(x, y) + 1);
+    check(max(max(x, y) - (-1), x), max(x, y) + 1);
+
+    check(max(max(y, x) - 1, x), max(y + (-1), x));
+    check(max(max(y, x) + (-1), x), max(y + (-1), x));
+    check(max(max(y, x) + 1, x), max(x, y) + 1);
+    check(max(max(y, x) - (-1), x), max(x, y) + 1);
+
+    check(min(x, min(x, y) + 1), min(y + 1, x));
+    check(min(x, min(x, y) - (-1)), min(y + 1, x));
+    check(min(x, min(x, y) + (-1)), min(x, y) + (-1));
+    check(min(x, min(x, y) - 1), min(x, y) + (-1));
+
+    check(min(x, min(y, x) + 1), min(y + 1, x));
+    check(min(x, min(y, x) - (-1)), min(y + 1, x));
+    check(min(x, min(y, x) + (-1)), min(x, y) + (-1));
+    check(min(x, min(y, x) - 1), min(x, y) + (-1));
+
+    check(max(x, max(x, y) - 1), max(y + (-1), x));
+    check(max(x, max(x, y) + (-1)), max(y + (-1), x));
+    check(max(x, max(x, y) + 1), max(x, y) + 1);
+    check(max(x, max(x, y) - (-1)), max(x, y) + 1);
+
+    check(max(x, max(y, x) - 1), max(y + (-1), x));
+    check(max(x, max(y, x) + (-1)), max(y + (-1), x));
+    check(max(x, max(y, x) + 1), max(x, y) + 1);
+    check(max(x, max(y, x) - (-1)), max(x, y) + 1);
 
     check(max(Expr(7), 3), 7);
     check(max(Expr(4.25f), 1.25f), 4.25f);
@@ -935,7 +1027,7 @@ void check_boolean() {
 
     check(x == x, t);
     check(x == (x+1), f);
-    check(x-2 == y+3, (x-y) == 5);
+    check(x-2 == y+3, x == y + 5);
     check(x+y == y+z, x == z);
     check(y+x == y+z, x == z);
     check(x+y == z+y, x == z);
@@ -944,7 +1036,7 @@ void check_boolean() {
     check(x*0 == y*0, t);
     check(x == x+y, y == 0);
     check(x+y == x, y == 0);
-    check(100 - x == 99 - y, (y-x) == -1);
+    check(100 - x == 99 - y, y == x + (-1));
 
     check(x < x, f);
     check(x < (x+1), t);
@@ -1019,6 +1111,14 @@ void check_boolean() {
     check(x < 20 && x > 18, x < 20 && 18 < x);
     check(x > 18 && x < 20, 18 < x && x < 20);
 
+    check(x < y + 1 && x < y + 2 && x < y, x < y);
+    check(x < y + 1 && x < y - 2 && x < y, x < y + (-2));
+    check(x < y + 1 && x < y + z && x < y, x < min(z, 0) + y);
+
+    check(x < y + 1 || x < y + 2 || x < y, x < y + 2);
+    check(x < y + 1 || x < y - 2 || x < y, x < y + 1);
+    check(x < y + 1 || x < y + z || x < y, x < max(z, 1) + y);
+
     check(x <= 20 || x > 19, t);
     check(x > 19 || x <= 20, t);
     check(x <= 18 || x > 20, x <= 18 || 20 < x);
@@ -1045,6 +1145,12 @@ void check_boolean() {
     check(x >= 19 && x <= 18, f);
     check(x <= 20 && x >= 20, x <= 20 && 20 <= x);
     check(x >= 20 && x <= 20, 20 <= x && x <= 20);
+
+    check(min(x, 20) < min(x, 19), const_false());
+    check(min(x, 23) < min(x, 18) + 3, const_false());
+
+    check(max(x, 19) > max(x, 20), const_false());
+    check(max(x, 19) > max(x, 18) + 3, const_false());
 
     // check for substitution patterns
     check((b1 == t) && (b1 && b2), b1 && b2);
@@ -1158,6 +1264,27 @@ void check_boolean() {
                       IfThenElse::make(x < y, Evaluate::make(x+2))),
           IfThenElse::make(x < y, Block::make(Evaluate::make(x+1), Evaluate::make(x+2))));
 
+    check(Block::make({IfThenElse::make(x < y, Evaluate::make(x+1), Evaluate::make(x+2)),
+                       IfThenElse::make(x < y, Evaluate::make(x+3), Evaluate::make(x+4)),
+                       Evaluate::make(x+5)}),
+          Block::make(IfThenElse::make(x < y,
+                                       Block::make(Evaluate::make(x+1), Evaluate::make(x+3)),
+                                       Block::make(Evaluate::make(x+2), Evaluate::make(x+4))),
+                      Evaluate::make(x+5)));
+
+    check(Block::make({IfThenElse::make(x < y, Evaluate::make(x+1)),
+                       IfThenElse::make(x < y, Evaluate::make(x+2)),
+                       IfThenElse::make(x < y, Evaluate::make(x+3)),
+                       Evaluate::make(x+4)}),
+          Block::make(IfThenElse::make(x < y, Block::make({Evaluate::make(x+1), Evaluate::make(x+2), Evaluate::make(x+3)})),
+                      Evaluate::make(x+4)));
+
+    check(Block::make({IfThenElse::make(x < y, Evaluate::make(x+1)),
+                       IfThenElse::make(x < y, Evaluate::make(x+2)),
+                       Evaluate::make(x+3)}),
+          Block::make(IfThenElse::make(x < y, Block::make(Evaluate::make(x+1), Evaluate::make(x+2))),
+                      Evaluate::make(x+3)));
+
     check(Block::make(IfThenElse::make(x < y, Evaluate::make(x+1), Evaluate::make(x+2)),
                       IfThenElse::make(x < y, Evaluate::make(x+3))),
           IfThenElse::make(x < y,
@@ -1177,6 +1304,47 @@ void check_boolean() {
     Stmt else_clause = AssertStmt::make(b2, Expr(33));
     check(IfThenElse::make(b1 == b2, then_clause, else_clause),
           IfThenElse::make(b1 == b2, then_clause, else_clause));
+
+    // Check common statements are pulled out of ifs.
+    check(IfThenElse::make(x < y, Evaluate::make(x+1), Evaluate::make(x+1)),
+          Evaluate::make(x+1));
+
+    check(IfThenElse::make(x < y,
+                           Block::make(Evaluate::make(x+1), Evaluate::make(x+2)),
+                           Block::make(Evaluate::make(x+1), Evaluate::make(x+3))),
+          Block::make(Evaluate::make(x+1),
+                      IfThenElse::make(x < y, Evaluate::make(x+2), Evaluate::make(x+3))));
+
+    check(IfThenElse::make(x < y,
+                           Block::make(Evaluate::make(x+1), Evaluate::make(x+2)),
+                           Block::make(Evaluate::make(x+3), Evaluate::make(x+2))),
+          Block::make(IfThenElse::make(x < y, Evaluate::make(x+1), Evaluate::make(x+3)),
+                      Evaluate::make(x+2)));
+
+
+    check(IfThenElse::make(x < y,
+                           Block::make(Evaluate::make(x+1), Evaluate::make(x+2)),
+                           Evaluate::make(x+2)),
+          Block::make(IfThenElse::make(x < y, Evaluate::make(x+1)),
+                      Evaluate::make(x+2)));
+
+    check(IfThenElse::make(x < y,
+                           Block::make(Evaluate::make(x+1), Evaluate::make(x+2)),
+                           Evaluate::make(x+1)),
+          Block::make(Evaluate::make(x+1),
+                      IfThenElse::make(x < y, Evaluate::make(x+2))));
+
+    check(IfThenElse::make(x < y,
+                           Evaluate::make(x+1),
+                           Block::make(Evaluate::make(x+1), Evaluate::make(x+2))),
+          Block::make(Evaluate::make(x+1),
+                      IfThenElse::make(x < y, Evaluate::make(0), Evaluate::make(x+2))));
+
+    check(IfThenElse::make(x < y,
+                           Evaluate::make(x+2),
+                           Block::make(Evaluate::make(x+1), Evaluate::make(x+2))),
+          Block::make(IfThenElse::make(x < y, Evaluate::make(0), Evaluate::make(x+1)),
+                      Evaluate::make(x+2)));
 
     // Simplifications of selects
     check(select(x == 3, 5, 7) + 7, select(x == 3, 12, 14));
@@ -1216,6 +1384,8 @@ void check_boolean() {
     check(select(cond, y+x, x-z), select(cond, y, 0-z) + x);
     check(select(cond, x-z, x+y), select(cond, 0-z, y) + x);
     check(select(cond, x-z, y+x), select(cond, 0-z, y) + x);
+    check(select(cond, x/y, z/y), select(cond, x, z) / y);
+    check(select(cond, x%y, z%y), select(cond, x, z) % y);
 
 
     {
@@ -1338,15 +1508,38 @@ void check_overflow() {
     }
 }
 
+template<typename T>
+void check_clz(uint64_t value, uint64_t result) {
+    Expr x = Variable::make(halide_type_of<T>(), "x");
+    check(Let::make("x", cast<T>(Expr(value)), count_leading_zeros(x)), cast<T>(Expr(result)));
+}
+
+template<typename T>
+void check_ctz(uint64_t value, uint64_t result) {
+    Expr x = Variable::make(halide_type_of<T>(), "x");
+    check(Let::make("x", cast<T>(Expr(value)), count_trailing_zeros(x)), cast<T>(Expr(result)));
+}
+
+template<typename T>
+void check_popcount(uint64_t value, uint64_t result) {
+    Expr x = Variable::make(halide_type_of<T>(), "x");
+    check(Let::make("x", cast<T>(Expr(value)), popcount(x)), cast<T>(Expr(result)));
+}
+
 void check_bitwise() {
     Expr x = Var("x");
 
     // Check bitshift operations
     check(cast(Int(16), x) << 10, cast(Int(16), x) * 1024);
     check(cast(Int(16), x) >> 10, cast(Int(16), x) / 1024);
-    check(cast(Int(16), x) << -10, cast(Int(16), x) / 1024);
-    // Correctly triggers a warning:
-    //check(cast(Int(16), x) << 20, cast(Int(16), x) << 20);
+
+    // Correctly triggers an error (shift by negative amount).
+    // check(cast(Int(16), x) << -10, 0);
+    // check(cast(Int(16), x) >> -10, 0);
+
+    // Correctly triggers an error (shift by >= type size).
+    // check(cast(Int(16), x) << 20, 0);
+    // check(cast(Int(16), x) >> 20, 0);
 
     // Check bitwise_and. (Added as result of a bug.)
     // TODO: more coverage of bitwise_and and bitwise_or.
@@ -1354,13 +1547,44 @@ void check_bitwise() {
           cast(UInt(32), x) & Expr((uint32_t)0xaaaaaaaa));
 
     // Check constant-folding of bitwise ops (and indirectly, reinterpret)
-    check(Let::make(x.as<Variable>()->name, 5, ((~x) & 3) | 16), (~5 & 3) | 16);
-    check(Let::make(x.as<Variable>()->name, 5, ((~cast<uint8_t>(x)) & 3) | 16), make_const(UInt(8), (~5 & 3) | 16));
+    check(Let::make(x.as<Variable>()->name, 5, (((~x) & 3) | 16) ^ 33), ((~5 & 3) | 16) ^ 33);
+    check(Let::make(x.as<Variable>()->name, 5, (((~cast<uint8_t>(x)) & 3) | 16) ^ 33), make_const(UInt(8), ((~5 & 3) | 16) ^ 33));
+
+    check_clz<int8_t>(10, 4);
+    check_clz<int16_t>(10, 12);
+    check_clz<int32_t>(10, 28);
+    check_clz<int64_t>(10, 60);
+    check_clz<uint8_t>(10, 4);
+    check_clz<uint16_t>(10, 12);
+    check_clz<uint32_t>(10, 28);
+    check_clz<uint64_t>(10, 60);
+    check_clz<uint64_t>(10ULL << 32, 28);
+
+    check_ctz<int8_t>(64, 6);
+    check_ctz<int16_t>(64, 6);
+    check_ctz<int32_t>(64, 6);
+    check_ctz<int64_t>(64, 6);
+    check_ctz<uint8_t>(64, 6);
+    check_ctz<uint16_t>(64, 6);
+    check_ctz<uint32_t>(64, 6);
+    check_ctz<uint64_t>(64, 6);
+    check_ctz<uint64_t>(64ULL << 32, 38);
+
+    check_popcount<int8_t>(0xa5, 4);
+    check_popcount<int16_t>(0xa5a5, 8);
+    check_popcount<int32_t>(0xa5a5a5a5, 16);
+    check_popcount<int64_t>(0xa5a5a5a5a5a5a5a5, 32);
+    check_popcount<uint8_t>(0xa5, 4);
+    check_popcount<uint16_t>(0xa5a5, 8);
+    check_popcount<uint32_t>(0xa5a5a5a5, 16);
+    check_popcount<uint64_t>(0xa5a5a5a5a5a5a5a5, 32);
 }
 
 void check_lets() {
     Expr x = Var("x"), y = Var("y");
     Expr v = Variable::make(Int(32, 4), "v");
+    Expr a = Variable::make(Int(32), "a");
+    Expr b = Variable::make(Int(32), "b");
     // Check constants get pushed inwards
     check(Let::make("x", 3, x+4), 7);
 
@@ -1374,6 +1598,10 @@ void check_lets() {
 
     // Check that dead lets get stripped
     check(Let::make("x", 3*y*y*y, 4), 4);
+    check(Let::make("a", 3*y*y*y, Let::make("b", 4*a*a*a, b - b)), 0);
+    check(Let::make("a", b/2, a - a), 0);
+    check(Let::make("a", b/2 + (x + y)*64, a - a), 0);
+    check(Let::make("x", 3*y*y*y, x - x), 0);
     check(Let::make("x", 0, 0), 0);
 
     // Check that lets inside an evaluate node get lifted
@@ -1432,6 +1660,7 @@ int main(int argc, char **argv) {
     check_boolean();
     check_overflow();
     check_bitwise();
+    check_lets();
 
     // Miscellaneous cases that don't fit into one of the categories above.
     Expr x = Var("x"), y = Var("y");
@@ -1507,6 +1736,87 @@ int main(int argc, char **argv) {
         check(require(Expr(1) > Expr(0), result, "error"), result);
         check(require(x == x, result, "error"), result);
     }
+
+    // Check that is_nan() returns a boolean result for constant inputs
+    {
+        check(Halide::is_nan(cast<float16_t>(Expr(0.f))), const_false());
+        check(Halide::is_nan(Expr(0.f)), const_false());
+        check(Halide::is_nan(Expr(0.0)), const_false());
+
+        check(Halide::is_nan(Expr(cast<float16_t>(std::nanf("1")))), const_true());
+        check(Halide::is_nan(Expr(std::nanf("1"))), const_true());
+        check(Halide::is_nan(Expr(std::nan("1"))), const_true());
+    }
+
+    {
+        using ConciseCasts::i32;
+
+        // Wrap all in i32() to ensure C++ won't optimize our multiplies away at compiletime
+        Expr e = max(max(max(i32(-1074233344) * i32(-32767), i32(-32783) * i32(32783)), i32(32767) * i32(-32767)), i32(1074200561) * i32(32783)) / i32(64);
+        Expr e2 = e / i32(2);
+        check_is_sio(e2);
+    }
+
+    {
+        using ConciseCasts::i16;
+
+        const Expr a = Expr(std::numeric_limits<int16_t>::lowest());
+        const Expr b = Expr(std::numeric_limits<int16_t>::max());
+
+        check(a >> 14,  i16(-2));
+        check(a << 14,  i16(0));
+        check(a >> 15,  i16(-1));
+        check(a << 15,  i16(0));
+
+        check(b >> 14,  i16(1));
+        check(b << 14,  i16(-16384));
+        check(b >> 15,  i16(0));
+        check(b << 15,  i16(-32768));
+    }
+
+    {
+        using ConciseCasts::u16;
+
+        const Expr a = Expr(std::numeric_limits<uint16_t>::lowest());
+        const Expr b = Expr(std::numeric_limits<uint16_t>::max());
+
+        check(a >> 15, u16(0));
+        check(b >> 15, u16(1));
+        check(a << 15, u16(0));
+        check(b << 15, Expr((uint16_t) 0x8000));
+    }
+
+    {
+        using ConciseCasts::i64;
+
+        const Expr a = Expr(std::numeric_limits<int64_t>::lowest());
+        const Expr b = Expr(std::numeric_limits<int64_t>::max());
+
+        check(a >> 62,  i64(-2));
+        check_is_sio(a << 62);
+        check(a >> 63,  i64(-1));
+        check(a << 63,  i64(0));
+
+        check(b >> 62,  i64(1));
+        check_is_sio(b << 62);
+        check(b >> 63,  i64(0));
+        check(b << 63,  Expr(std::numeric_limits<int64_t>::lowest()));
+    }
+
+    {
+        using ConciseCasts::u64;
+
+        const Expr a = Expr(std::numeric_limits<uint64_t>::lowest());
+        const Expr b = Expr(std::numeric_limits<uint64_t>::max());
+
+        check(a >> 63, u64(0));
+        check(b >> 63, u64(1));
+        check(a << 63, u64(0));
+        check(b << 63, Expr((uint64_t) 0x8000000000000000ULL));
+    }
+
+    // Check a bounds-related fuzz tester failure found in issue https://github.com/halide/Halide/issues/3764
+    check(Let::make("b", 105, 336 / max(cast<int32_t>(cast<int16_t>(Variable::make(Int(32), "b"))), 38) + 29), 32);
 
     printf("Success!\n");
 

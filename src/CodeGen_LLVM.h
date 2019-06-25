@@ -11,6 +11,7 @@ namespace llvm {
 class Value;
 class Module;
 class Function;
+class FunctionType;
 class IRBuilderDefaultInserter;
 class ConstantFolder;
 template<typename, typename> class IRBuilder;
@@ -42,6 +43,10 @@ class GlobalVariable;
 #include "Target.h"
 
 namespace Halide {
+struct ExternSignature;
+}  // namespace Halide
+
+namespace Halide {
 namespace Internal {
 
 /** A code generator abstract base class. Actual code generators
@@ -69,6 +74,12 @@ public:
 
     /** Initialize internal llvm state for the enabled targets. */
     static void initialize_llvm();
+
+    static std::unique_ptr<llvm::Module> compile_trampolines(
+        const Target &target,
+        llvm::LLVMContext &context,
+        const std::string &suffix,
+        const std::vector<std::pair<std::string, ExternSignature>> &externs);
 
 protected:
     CodeGen_LLVM(Target t);
@@ -98,6 +109,7 @@ protected:
     virtual std::string mcpu() const = 0;
     virtual std::string mattrs() const = 0;
     virtual bool use_soft_float_abi() const = 0;
+    virtual bool use_pic() const;
     // @}
 
     /** Should indexing math be promoted to 64-bit on platforms with
@@ -111,7 +123,6 @@ protected:
      * current module, function, context, builder, and most recently
      * generated llvm value. */
     //@{
-    static bool llvm_initialized;
     static bool llvm_X86_enabled;
     static bool llvm_ARM_enabled;
     static bool llvm_Hexagon_enabled;
@@ -120,8 +131,9 @@ protected:
     static bool llvm_Mips_enabled;
     static bool llvm_PowerPC_enabled;
     static bool llvm_AMDGPU_enabled;
+    static bool llvm_WebAssembly_enabled;
+    static bool llvm_RISCV_enabled;
 
-    const Module *input_module;
     std::unique_ptr<llvm::Module> module;
     llvm::Function *function;
     llvm::LLVMContext *context;
@@ -166,6 +178,9 @@ protected:
 
     /** Test if an item exists in the symbol table. */
     bool sym_exists(const std::string &name) const;
+
+    /** Given a Halide ExternSignature, return the equivalent llvm::FunctionType. */
+    llvm::FunctionType *signature_to_type(const ExternSignature &signature);
 
     /** Some useful llvm types */
     // @{
@@ -261,6 +276,9 @@ protected:
     void create_assertion(llvm::Value *condition, Expr message, llvm::Value *error_code = nullptr);
     // @}
 
+    /** Codegen a block of asserts with pure conditions */
+    void codegen_asserts(const std::vector<const AssertStmt *> &asserts);
+
     /** Codegen a call to do_parallel_tasks */
     struct ParallelTask {
         Stmt body;
@@ -314,17 +332,6 @@ protected:
      * allocate node uses. Used so that alias analysis understands
      * when multiple Allocate nodes shared the same memory. */
     virtual std::string get_allocation_name(const std::string &n) {return n;}
-
-    /** Helpers for implementing fast integer division. */
-    // @{
-    // Compute high_half(a*b) >> shr. Note that this is a shift in
-    // addition to the implicit shift due to taking the upper half of
-    // the multiply result.
-    virtual Expr mulhi_shr(Expr a, Expr b, int shr);
-    // Compute (a+b)/2, assuming a < b.
-    virtual Expr sorted_avg(Expr a, Expr b);
-    // @}
-
 
     using IRVisitor::visit;
 
@@ -464,12 +471,6 @@ protected:
      */
     std::pair<llvm::Function *, int> find_vector_runtime_function(const std::string &name, int lanes);
 
-    /** Get the result of modulus-remainder analysis for a given expr. */
-    ModulusRemainder get_alignment_info(Expr e);
-
-    /** Alignment info for Int(32) variables in scope. */
-    Scope<ModulusRemainder> alignment_info;
-
 private:
 
     /** All the values in scope at the current code location during
@@ -498,14 +499,19 @@ private:
         const std::map<std::string, std::string> &metadata_name_map);
 
     /** Embed a constant expression as a global variable. */
-    llvm::Constant *embed_constant_expr(Expr e);
+    llvm::Constant *embed_constant_expr(Expr e, llvm::Type *t);
+    llvm::Constant *embed_constant_scalar_value_t(Expr e);
 
-    llvm::Function *add_argv_wrapper(const std::string &name);
+    llvm::Function *add_argv_wrapper(llvm::Function *fn, const std::string &name, bool result_in_argv = false);
 
     llvm::Value *codegen_dense_vector_load(const Load *load, llvm::Value *vpred = nullptr);
 
     virtual void codegen_predicated_vector_load(const Load *op);
     virtual void codegen_predicated_vector_store(const Store *op);
+
+    void init_codegen(const std::string &name, bool any_strict_float = false);
+    std::unique_ptr<llvm::Module> finish_codegen();
+
 };
 
 }  // namespace Internal

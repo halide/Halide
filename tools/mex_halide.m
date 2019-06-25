@@ -59,8 +59,12 @@ function mex_halide( generator_filename, varargin )
         setenv('HALIDE_DISTRIB_PATH', halide_distrib_path);
     end
     halide_distrib_path = getenv('HALIDE_DISTRIB_PATH');
-
-    libhalide = fullfile(halide_distrib_path, 'bin', 'libHalide.so');
+    
+    if ismac
+        libhalide = fullfile(halide_distrib_path, 'bin', 'libHalide.dylib');
+    else
+        libhalide = fullfile(halide_distrib_path, 'bin', 'libHalide.so');
+    end
     halide_include = fullfile(halide_distrib_path, 'include');
 
     if isempty(getenv('HALIDE_CXX'))

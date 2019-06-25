@@ -22,7 +22,9 @@ DECL_SOT(float);
 DECL_SOT(double);
 
 template<typename A>
-bool test(int vec_width) {
+bool test() {
+    const Target target = get_jit_target_from_environment();
+    const int vec_width = target.natural_vector_size<A>();
 
     int W = vec_width*1;
     int H = 10000;
@@ -95,15 +97,14 @@ int main(int argc, char **argv) {
     bool ok = true;
 
     // Only native vector widths for now
-    ok = ok && test<float>(4);
-    ok = ok && test<float>(8);
-    ok = ok && test<double>(2);
-    ok = ok && test<uint8_t>(16);
-    ok = ok && test<int8_t>(16);
-    ok = ok && test<uint16_t>(8);
-    ok = ok && test<int16_t>(8);
-    ok = ok && test<uint32_t>(4);
-    ok = ok && test<int32_t>(4);
+    ok = ok && test<float>();
+    ok = ok && test<double>();
+    ok = ok && test<uint8_t>();
+    ok = ok && test<int8_t>();
+    ok = ok && test<uint16_t>();
+    ok = ok && test<int16_t>();
+    ok = ok && test<uint32_t>();
+    ok = ok && test<int32_t>();
 
     if (!ok) return -1;
     printf("Success!\n");

@@ -87,21 +87,24 @@ public:
         // Convert back to 16-bit
         output(x, y, c) = cast<uint16_t>(clamp(color(x, y, c), 0.0f, 1.0f) * 65535.0f);
 
-        /* THE SCHEDULE */
+        /* ESTIMATES */
+        // (This can be useful in conjunction with RunGen and benchmarks as well
+        // as auto-schedule, so we do it in all cases.)
+        input.dim(0).set_bounds_estimate(0, 1536);
+        input.dim(1).set_bounds_estimate(0, 2560);
+        input.dim(2).set_bounds_estimate(0, 3);
+        // Provide estimates on the parameters
+        levels.set_estimate(8);
+        alpha.set_estimate(1);
+        beta.set_estimate(1);
+        // Provide estimates on the pipeline output
+        output.estimate(x, 0, 1536)
+              .estimate(y, 0, 2560)
+              .estimate(c, 0, 3);
 
+        /* THE SCHEDULE */
         if (auto_schedule) {
-            // Provide estimates on the input image
-            input.dim(0).set_bounds_estimate(0, 1536);
-            input.dim(1).set_bounds_estimate(0, 2560);
-            input.dim(2).set_bounds_estimate(0, 3);
-            // Provide estimates on the parameters
-            levels.set_estimate(8);
-            alpha.set_estimate(1);
-            beta.set_estimate(1);
-            // Provide estimates on the pipeline output
-            output.estimate(x, 0, 1536)
-                .estimate(y, 0, 2560)
-                .estimate(c, 0, 3);
+            // Nothing.
         } else if (get_target().has_gpu_feature()) {
             // gpu schedule
             remap.compute_root();

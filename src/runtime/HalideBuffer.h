@@ -636,17 +636,24 @@ public:
     /** Give Buffers access to the members of Buffers of different dimensionalities and types. */
     template<typename T2, int D2> friend class Buffer;
 
-    /** Determine if if an Buffer<T, D> can be constructed from some other Buffer type.
-     * If this can be determined at compile time, fail with a static assert; otherwise
-     * return a boolean based on runtime typing. */
+private:
     template<typename T2, int D2>
-    static bool can_convert_from(const Buffer<T2, D2> &other) {
+    static void static_assert_can_convert_from() {
         static_assert((!std::is_const<T2>::value || std::is_const<T>::value),
                       "Can't convert from a Buffer<const T> to a Buffer<T>");
         static_assert(std::is_same<typename std::remove_const<T>::type,
                                    typename std::remove_const<T2>::type>::value ||
                       T_is_void || Buffer<T2, D2>::T_is_void,
                       "type mismatch constructing Buffer");
+    }
+
+public:
+    /** Determine if if an Buffer<T, D> can be constructed from some other Buffer type.
+     * If this can be determined at compile time, fail with a static assert; otherwise
+     * return a boolean based on runtime typing. */
+    template<typename T2, int D2>
+    static bool can_convert_from(const Buffer<T2, D2> &other) {
+        static_assert_can_convert_from<T2, D2>();
         if (Buffer<T2, D2>::T_is_void && !T_is_void) {
             return other.type() == static_halide_type();
         }
@@ -657,6 +664,10 @@ public:
      * cannot be constructed from some other Buffer type. */
     template<typename T2, int D2>
     static void assert_can_convert_from(const Buffer<T2, D2> &other) {
+        // Explicitly call static_assert_can_convert_from() here so
+        // that we always get compile-time checking, even if compiling with
+        // assertions disabled.
+        static_assert_can_convert_from<T2, D2>();
         assert(can_convert_from(other));
     }
 
@@ -903,13 +914,13 @@ public:
     }
 
     /** Allocate a new image of known type using a vector of ints as the size. */
-    explicit Buffer(const std::vector<int> &sizes) : Buffer(halide_type_of<T>(), sizes) {}
+    explicit Buffer(const std::vector<int> &sizes) : Buffer(static_halide_type(), sizes) {}
 
 private:
     // Create a copy of the sizes vector, ordered as specified by order.
     static std::vector<int> make_ordered_sizes(const std::vector<int> &sizes, const std::vector<int> &order) {
         assert(order.size() == sizes.size());
-        std::vector<int32_t> ordered_sizes(sizes.size());
+        std::vector<int> ordered_sizes(sizes.size());
         for (size_t i = 0; i < sizes.size(); ++i) {
             ordered_sizes[i] = sizes.at(order[i]);
         }
@@ -927,7 +938,7 @@ public:
     }
 
     Buffer(const std::vector<int> &sizes, const std::vector<int> &storage_order)
-        : Buffer(halide_type_of<T>(), sizes, storage_order) {}
+        : Buffer(static_halide_type(), sizes, storage_order) {}
 
     /** Make an Buffer that refers to a statically sized array. Does not
      * take ownership of the data, and does not set the host_dirty flag. */
@@ -1024,7 +1035,7 @@ public:
      * an array describing the shape.  Does not take ownership of the
      * data and does not set the host_dirty flag. */
     explicit Buffer(T *data, int d, const halide_dimension_t *shape) {
-        buf.type = halide_type_of<typename std::remove_cv<T>::type>();
+        buf.type = static_halide_type();
         buf.dimensions = d;
         buf.host = (uint8_t *) const_cast<typename std::remove_const<T>::type *>(data);
         make_shape_storage();
@@ -1705,7 +1716,7 @@ public:
      * generator has been compiled with support for interleaved (also
      * known as packed or chunky) memory layouts. */
     static Buffer<T, D> make_interleaved(int width, int height, int channels) {
-        return make_interleaved(halide_type_of<T>(), width, height, channels);
+        return make_interleaved(static_halide_type(), width, height, channels);
     }
 
     /** Wrap an existing interleaved image. */
@@ -1719,7 +1730,7 @@ public:
 
     /** Wrap an existing interleaved image. */
     static Buffer<T, D> make_interleaved(T *data, int width, int height, int channels) {
-        return make_interleaved(halide_type_of<T>(), data, width, height, channels);
+        return make_interleaved(static_halide_type(), data, width, height, channels);
     }
 
     /** Make a zero-dimensional Buffer */
@@ -1749,12 +1760,28 @@ public:
     static Buffer<T, D> make_with_shape_of(Buffer<T2, D2> src,
                                            void *(*allocate_fn)(size_t) = nullptr,
                                            void (*deallocate_fn)(void *) = nullptr) {
+
+        const halide_type_t dst_type = T_is_void
+            ? src.type()
+            : halide_type_of<typename std::remove_cv<not_void_T>::type>();
+        return Buffer<>::make_with_shape_of_helper(dst_type, src.
+                                                   dimensions(), src.buf.dim,
+                                                   allocate_fn, deallocate_fn);
+    }
+
+private:
+
+    static Buffer<> make_with_shape_of_helper(halide_type_t dst_type,
+                                              int dimensions,
+                                              halide_dimension_t *shape,
+                                              void *(*allocate_fn)(size_t),
+                                              void (*deallocate_fn)(void *)) {
         // Reorder the dimensions of src to have strides in increasing order
         std::vector<int> swaps;
-        for (int i = src.dimensions()-1; i > 0; i--) {
+        for (int i = dimensions - 1; i > 0; i--) {
             for (int j = i; j > 0; j--) {
-                if (src.dim(j-1).stride() > src.dim(j).stride()) {
-                    src.transpose(j-1, j);
+                if (shape[j-1].stride > shape[j].stride) {
+                    std::swap(shape[j-1], shape[j]);
                     swaps.push_back(j);
                 }
             }
@@ -1762,8 +1789,7 @@ public:
 
         // Rewrite the strides to be dense (this messes up src, which
         // is why we took it by value).
-        halide_dimension_t *shape = src.buf.dim;
-        for (int i = 0; i < src.dimensions(); i++) {
+        for (int i = 0; i < dimensions; i++) {
             if (i == 0) {
                 shape[i].stride = 1;
             } else {
@@ -1780,16 +1806,11 @@ public:
 
         // Use an explicit runtime type, and make dst a Buffer<void>, to allow
         // using this method with Buffer<void> for either src or dst.
-        const halide_type_t dst_type = T_is_void
-            ? src.type()
-            : halide_type_of<typename std::remove_cv<not_void_T>::type>();
-        Buffer<> dst(dst_type, nullptr, src.dimensions(), shape);
+        Buffer<> dst(dst_type, nullptr, dimensions, shape);
         dst.allocate(allocate_fn, deallocate_fn);
 
         return dst;
     }
-
-private:
 
     template<typename ...Args>
     HALIDE_ALWAYS_INLINE
@@ -1833,15 +1854,9 @@ private:
 public:
 
     /** Get a pointer to the address of the min coordinate. */
-    // @{
-    T *data() {
+    T *data() const {
         return (T *)(this->buf.host);
     }
-
-    const T *data() const {
-        return (const T *)(this->buf.host);
-    }
-    // @}
 
     /** Access elements. Use im(...) to get a reference to an element,
      * and use &im(...) to get the address of an element. If you pass
@@ -1933,89 +1948,69 @@ private:
     // (all of different types), advance the pointers using the
     // strides.
     template<typename Ptr, typename ...Ptrs>
+    HALIDE_ALWAYS_INLINE
     static void advance_ptrs(const int *stride, Ptr *ptr, Ptrs... ptrs) {
         (*ptr) += *stride;
         advance_ptrs(stride + 1, ptrs...);
     }
 
+    HALIDE_ALWAYS_INLINE
     static void advance_ptrs(const int *) {}
 
     // Same as the above, but just increments the pointers.
     template<typename Ptr, typename ...Ptrs>
+    HALIDE_ALWAYS_INLINE
     static void increment_ptrs(Ptr *ptr, Ptrs... ptrs) {
         (*ptr)++;
         increment_ptrs(ptrs...);
     }
 
+    HALIDE_ALWAYS_INLINE
     static void increment_ptrs() {}
 
-    // Given a bunch of pointers to buffers of different types, read
-    // out their strides in the d'th dimension, and assert that their
-    // sizes match in that dimension.
-    template<typename T2, int D2, typename ...Args>
-    void extract_strides(int d, int *strides, const Buffer<T2, D2> &first, Args&&... rest) const {
-        assert(first.dimensions() == dimensions());
-        assert(first.dim(d).min() == dim(d).min() &&
-               first.dim(d).max() == dim(d).max());
-        *strides++ = first.dim(d).stride();
-        extract_strides(d, strides, std::forward<Args>(rest)...);
-    }
-
-    void extract_strides(int d, int *strides) const {}
-
-    // The template function that constructs the loop nest for for_each_value
-    template<int d, bool innermost_strides_are_one, typename Fn, typename... Ptrs>
-    static void for_each_value_helper(Fn &&f, const for_each_value_task_dim<sizeof...(Ptrs)> *t, Ptrs... ptrs) {
+    template<typename Fn, typename... Ptrs>
+    HALIDE_NEVER_INLINE
+    static void for_each_value_helper(Fn &&f, int d, bool innermost_strides_are_one,
+                                      const for_each_value_task_dim<sizeof...(Ptrs)> *t, Ptrs... ptrs) {
         if (d == -1) {
             f((*ptrs)...);
-        } else {
-            for (int i = t[d].extent; i != 0; i--) {
-                for_each_value_helper<(d >= 0 ? d - 1 : -1), innermost_strides_are_one>(f, t, ptrs...);
-                if (d == 0 && innermost_strides_are_one) {
-                    // It helps with auto-vectorization to statically
-                    // know the addresses are one apart in memory.
+        } else if (d == 0) {
+            if (innermost_strides_are_one) {
+                for (int i = t[0].extent; i != 0; i--) {
+                    f((*ptrs)...);
                     increment_ptrs((&ptrs)...);
-                } else {
-                    advance_ptrs(t[d].stride, (&ptrs)...);
+                }
+            } else {
+                for (int i = t[0].extent; i != 0; i--) {
+                    f((*ptrs)...);
+                    advance_ptrs(t[0].stride, (&ptrs)...);
                 }
             }
-        }
-    }
-
-    template<bool innermost_strides_are_one, typename Fn, typename... Ptrs>
-    static void for_each_value_helper(Fn &&f, int d, const for_each_value_task_dim<sizeof...(Ptrs)> *t, Ptrs... ptrs) {
-        // When we hit a low dimensionality, switch from runtime
-        // recursion to template recursion.
-        if (d == -1) {
-            for_each_value_helper<-1, innermost_strides_are_one>(f, t, ptrs...);
-        } else if (d == 0) {
-            for_each_value_helper<0, innermost_strides_are_one>(f, t, ptrs...);
-        } else if (d == 1) {
-            for_each_value_helper<1, innermost_strides_are_one>(f, t, ptrs...);
-        } else if (d == 2) {
-            for_each_value_helper<2, innermost_strides_are_one>(f, t, ptrs...);
         } else {
             for (int i = t[d].extent; i != 0; i--) {
-                for_each_value_helper<innermost_strides_are_one>(f, d-1, t, ptrs...);
+                for_each_value_helper(f, d-1, innermost_strides_are_one, t, ptrs...);
                 advance_ptrs(t[d].stride, (&ptrs)...);
             }
         }
     }
 
-    template<typename Fn, typename ...Args, int N = sizeof...(Args) + 1>
-    void for_each_value_impl(Fn &&f, Args&&... other_buffers) const {
-        for_each_value_task_dim<N> *t =
-            (for_each_value_task_dim<N> *)HALIDE_ALLOCA((dimensions()+1) * sizeof(for_each_value_task_dim<N>));
-        for (int i = 0; i <= dimensions(); i++) {
-            for (int j = 0; j < N; j++) {
-                t[i].stride[j] = 0;
-            }
-            t[i].extent = 1;
-        }
+    template<int N>
+    HALIDE_NEVER_INLINE
+    static bool for_each_value_prep(for_each_value_task_dim<N> *t,
+                                    const halide_buffer_t **buffers) {
+        const int dimensions = buffers[0]->dimensions;
 
-        for (int i = 0; i < dimensions(); i++) {
-            extract_strides(i, t[i].stride, *this, std::forward<Args>(other_buffers)...);
-            t[i].extent = dim(i).extent();
+        // Extract the strides in all the dimensions
+        for (int i = 0; i < dimensions; i++) {
+            for (int j = 0; j < N; j++) {
+                assert(buffers[j]->dimensions == dimensions);
+                assert(buffers[j]->dim[i].extent == buffers[0]->dim[i].extent &&
+                       buffers[j]->dim[i].min == buffers[0]->dim[i].min);
+                const int s = buffers[j]->dim[i].stride;
+                t[i].stride[j] = s;
+            }
+            t[i].extent = buffers[0]->dim[i].extent;
+
             // Order the dimensions by stride, so that the traversal is cache-coherent.
             for (int j = i; j > 0 && t[j].stride[0] < t[j-1].stride[0]; j--) {
                 std::swap(t[j], t[j-1]);
@@ -2024,7 +2019,7 @@ private:
 
         // flatten dimensions where possible to make a larger inner
         // loop for autovectorization.
-        int d = dimensions();
+        int d = dimensions;
         for (int i = 1; i < d; i++) {
             bool flat = true;
             for (int j = 0; j < N; j++) {
@@ -2032,27 +2027,38 @@ private:
             }
             if (flat) {
                 t[i-1].extent *= t[i].extent;
-                for (int j = i; j < dimensions(); j++) {
+                for (int j = i; j < d; j++) {
                     t[j] = t[j+1];
                 }
                 i--;
                 d--;
+                t[d].extent = 1;
             }
         }
 
-        bool innermost_strides_are_one = false;
-        if (dimensions() > 0) {
-            innermost_strides_are_one = true;
-            for (int j = 0; j < N; j++) {
-                innermost_strides_are_one &= t[0].stride[j] == 1;
+        bool innermost_strides_are_one = true;
+        if (dimensions > 0) {
+            for (int i = 0; i < N; i++) {
+                innermost_strides_are_one &= (t[0].stride[i] == 1);
             }
         }
 
-        if (innermost_strides_are_one) {
-            for_each_value_helper<true>(f, dimensions() - 1, t, begin(), (other_buffers.begin())...);
-        } else {
-            for_each_value_helper<false>(f, dimensions() - 1, t, begin(), (other_buffers.begin())...);
-        }
+        return innermost_strides_are_one;
+    }
+
+    template<typename Fn, typename ...Args, int N = sizeof...(Args) + 1>
+    void for_each_value_impl(Fn &&f, Args&&... other_buffers) const {
+        Buffer<>::for_each_value_task_dim<N> *t =
+        (Buffer<>::for_each_value_task_dim<N> *)HALIDE_ALLOCA((dimensions()+1) * sizeof(for_each_value_task_dim<N>));
+        // Move the preparatory code into a non-templated helper to
+        // save code size.
+        const halide_buffer_t *buffers[] = {&buf, (&other_buffers.buf)...};
+        bool innermost_strides_are_one = Buffer<>::for_each_value_prep(t, buffers);
+
+        Buffer<>::for_each_value_helper(f, dimensions() - 1,
+                                        innermost_strides_are_one,
+                                        t,
+                                        data(), (other_buffers.data())...);
     }
     // @}
 

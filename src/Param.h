@@ -275,7 +275,7 @@ public:
      * statically compiling halide pipelines. */
     operator Argument() const {
         return Argument(name(), Argument::InputScalar, type(), 0,
-            param.scalar_expr(), param.min_value(), param.max_value());
+            param.get_argument_estimates());
     }
 
     const Internal::Parameter &parameter() const {

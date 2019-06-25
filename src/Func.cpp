@@ -162,15 +162,13 @@ void Func::define_extern(const std::string &function_name,
                          const std::vector<ExternFuncArgument> &args,
                          const std::vector<Type> &types,
                          const std::vector<Var> &arguments,
-                         NameMangling mangling,
-                         DeviceAPI device_api,
-                         bool uses_old_buffer_t) {
-    vector<string> dim_names(arguments.size());
-    for (size_t i = 0; i < arguments.size(); i++) {
-        dim_names[i] = arguments[i].name();
-    }
-    func.define_extern(function_name, args, types, dim_names,
-                       mangling, device_api, uses_old_buffer_t);
+                         NameMangling mangling, DeviceAPI device_api) {
+  vector<string> dim_names(arguments.size());
+  for (size_t i = 0; i < arguments.size(); i++) {
+    dim_names[i] = arguments[i].name();
+  }
+  func.define_extern(function_name, args, types, dim_names, mangling,
+                     device_api);
 }
 
 /** Get the types of the buffers returned by an extern definition. */
@@ -240,7 +238,7 @@ std::pair<int, int> Func::add_implicit_vars(vector<Expr> &args) const {
     std::vector<Expr>::iterator iter = args.begin();
     while (iter != args.end()) {
         const Variable *var = iter->as<Variable>();
-        if (var && var->name == _.name())
+        if (var && var->name == Var(_).name())
             break;
         iter++;
     }
@@ -290,10 +288,7 @@ void Stage::set_dim_type(VarOrRVar var, ForType t) {
 
             // If it's an rvar and the for type is parallel, we need to
             // validate that this doesn't introduce a race condition.
-            if (!dims[i].is_pure() && var.is_rvar &&
-                (t == ForType::Vectorized || t == ForType::Parallel ||
-                 t == ForType::GPUBlock || t == ForType::GPUThread ||
-                 t == ForType::GPULane)) {
+            if (!dims[i].is_pure() && var.is_rvar && is_parallel(t)) {
                 user_assert(definition.schedule().allow_race_conditions())
                     << "In schedule for " << name()
                     << ", marking var " << var.name()
@@ -358,15 +353,15 @@ std::string Stage::dump_argument_list() const {
 
 namespace {
 
-class SubstituteSelfReference : public IRMutator2 {
-    using IRMutator2::visit;
+class SubstituteSelfReference : public IRMutator {
+    using IRMutator::visit;
 
     const string func;
     const Function substitute;
     const vector<Var> new_args;
 
     Expr visit(const Call *c) override {
-        Expr expr = IRMutator2::visit(c);
+        Expr expr = IRMutator::visit(c);
         c = expr.as<Call>();
         internal_assert(c);
 
@@ -1945,7 +1940,7 @@ Func Func::copy_to_device(DeviceAPI d) {
     ExternFuncArgument device_interface = make_device_interface_call(d);
     func.define_extern("halide_buffer_copy", {buffer, device_interface},
                        {call->type}, func.args(), // Reuse the existing dimension names
-                       NameMangling::C, d, false);
+                       NameMangling::C, d);
     return *this;
 }
 
@@ -2074,6 +2069,12 @@ Func &Func::bound(Var var, Expr min, Expr extent) {
 
     Bound b = {var.name(), min, extent, Expr(), Expr()};
     func.schedule().bounds().push_back(b);
+
+    // Propagate constant bounds into estimates as well.
+    if (!is_const(min)) min = Expr();
+    if (!is_const(extent)) extent = Expr();
+    estimate(var, min, extent);
+
     return *this;
 }
 
@@ -2088,6 +2089,26 @@ Func &Func::estimate(Var var, Expr min, Expr extent) {
 
     Bound b = {var.name(), min, extent, Expr(), Expr()};
     func.schedule().estimates().push_back(b);
+
+    // Propagate the estimate into the Parameter as well, so that
+    // the values in the metadata will be correct.
+    const auto &arg_names = func.args();
+    int dim = -1;
+    for (size_t i = 0; i < arg_names.size(); ++i) {
+        if (arg_names[i] == var.name()) {
+            dim = i;
+            break;
+        }
+    }
+    internal_assert(dim >= 0);
+    for (auto param : func.output_buffers()) {
+        if (min.defined()) {
+            param.set_min_constraint_estimate(dim, min);
+        }
+        if (extent.defined()) {
+            param.set_extent_constraint_estimate(dim, extent);
+        }
+    }
     return *this;
 }
 
@@ -2880,21 +2901,13 @@ void Func::infer_input_bounds(int x_size, int y_size, int z_size, int w_size,
                               const ParamMap &param_map) {
     user_assert(defined()) << "Can't infer input bounds on an undefined Func.\n";
     vector<Buffer<>> outputs(func.outputs());
-    int sizes[] = {x_size, y_size, z_size, w_size};
+    vector<int> sizes;
+    if (x_size) sizes.push_back(x_size);
+    if (y_size) sizes.push_back(y_size);
+    if (z_size) sizes.push_back(z_size);
+    if (w_size) sizes.push_back(w_size);
     for (size_t i = 0; i < outputs.size(); i++) {
-        // We're not actually going to read from these outputs, so
-        // make the allocation tiny, then "expand" them by directly manipulating
-        // the halide_buffer_t fields. (We can't use crop because it explicitly
-        // disallows expanding the fields in this unsafe manner.)
-        Buffer<> im = Buffer<>::make_scalar(func.output_types()[i]);
-        for (int s : sizes) {
-            if (!s) break;
-            im.add_dimension();
-            // buf.host is going to be wrong no matter what, so don't
-            // bother adjusting it.
-            im.raw_buffer()->dim[im.dimensions()-1].min = 0;
-            im.raw_buffer()->dim[im.dimensions()-1].extent = s;
-        }
+        Buffer<> im(func.output_types()[i], nullptr, sizes);
         outputs[i] = std::move(im);
     }
     Realization r(outputs);
@@ -3064,7 +3077,7 @@ void Func::set_custom_print(void (*cust_print)(void *, const char *)) {
     pipeline().set_custom_print(cust_print);
 }
 
-void Func::add_custom_lowering_pass(IRMutator2 *pass, std::function<void()> deleter) {
+void Func::add_custom_lowering_pass(IRMutator *pass, std::function<void()> deleter) {
     pipeline().add_custom_lowering_pass(pass, deleter);
 }
 
@@ -3090,12 +3103,8 @@ void Func::infer_input_bounds(Pipeline::RealizationArg outputs,
     pipeline().infer_input_bounds(std::move(outputs), param_map);
 }
 
-void *Func::compile_jit(const Target &target) {
-    return pipeline().compile_jit(target);
+void Func::compile_jit(const Target &target) {
+    pipeline().compile_jit(target);
 }
-
-Var _("_");
-Var _0("_0"), _1("_1"), _2("_2"), _3("_3"), _4("_4"),
-           _5("_5"), _6("_6"), _7("_7"), _8("_8"), _9("_9");
 
 }  // namespace Halide

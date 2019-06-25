@@ -1,3 +1,4 @@
+#include "Halide.h"
 
 // This test demonstrates using tracing to give you something like a
 // stack trace in case of a crash (due to a compiler bug, or a bug in
@@ -6,7 +7,6 @@
 
 #if defined(__linux__) || defined(__APPLE__) || defined(__unix) || defined(__posix)
 
-#include "Halide.h"
 #include <stdio.h>
 #include <signal.h>
 #include <stack>

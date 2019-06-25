@@ -15,6 +15,7 @@
 #include "IntrusivePtr.h"
 #include "Parameter.h"
 #include "Type.h"
+#include "ModulusRemainder.h"
 #include "Util.h"
 #include "runtime/HalideBuffer.h"
 
@@ -207,9 +208,15 @@ struct Load : public ExprNode<Load> {
     // If it's a load from an image parameter, this points to that
     Parameter param;
 
+    // The alignment of the index. If the index is a vector, this is
+    // the alignment of the first lane.
+    ModulusRemainder alignment;
+
     static Expr make(Type type, const std::string &name,
                      Expr index, Buffer<> image,
-                     Parameter param, Expr predicate);
+                     Parameter param,
+                     Expr predicate,
+                     ModulusRemainder alignment);
 
     static const IRNodeType _node_type = IRNodeType::Load;
 };
@@ -311,8 +318,12 @@ struct Store : public StmtNode<Store> {
     // If it's a store to an output buffer, then this parameter points to it.
     Parameter param;
 
+    // The alignment of the index. If the index is a vector, this is
+    // the alignment of the first lane.
+    ModulusRemainder alignment;
+
     static Stmt make(const std::string &name, Expr value, Expr index,
-                     Parameter param, Expr predicate);
+                     Parameter param, Expr predicate, ModulusRemainder alignment);
 
     static const IRNodeType _node_type = IRNodeType::Store;
 };
@@ -504,6 +515,7 @@ struct Call : public ExprNode<Call> {
         undef,
         return_second,
         if_then_else,
+        if_then_else_mask,
         glsl_texture_load,
         glsl_texture_store,
         glsl_varying,
@@ -527,12 +539,15 @@ struct Call : public ExprNode<Call> {
         select_mask,
         extract_mask_element,
         require,
+        require_mask,
         size_of_halide_buffer_t,
         strict_float,
         quiet_div,
         quiet_mod,
         unsafe_promise_clamped,
-        gpu_thread_barrier;
+        gpu_thread_barrier,
+        mulhi_shr, // Compute high_half(arg[0] * arg[1]) >> arg[3]. Note that this is a shift in addition to taking the upper half of multiply result. arg[3] must be an unsigned integer immediate.
+        sorted_avg; // Compute (arg[0] + arg[1]) / 2, assuming arg[0] < arg[1].
 
     // We also declare some symbolic names for some of the runtime
     // functions that we want to construct Call nodes to here to avoid
@@ -549,9 +564,7 @@ struct Call : public ExprNode<Call> {
         buffer_get_shape,
         buffer_get_host_dirty,
         buffer_get_device_dirty,
-        buffer_get_type_code,
-        buffer_get_type_bits,
-        buffer_get_type_lanes,
+        buffer_get_type,
         buffer_set_host_dirty,
         buffer_set_device_dirty,
         buffer_is_bounds_query,
@@ -683,10 +696,11 @@ struct For : public StmtNode<For> {
 
     static Stmt make(const std::string &name, Expr min, Expr extent, ForType for_type, DeviceAPI device_api, Stmt body);
 
+    bool is_unordered_parallel() const {
+        return Halide::Internal::is_unordered_parallel(for_type);
+    }
     bool is_parallel() const {
-        return (for_type == ForType::Parallel ||
-                for_type == ForType::GPUBlock ||
-                for_type == ForType::GPUThread);
+        return Halide::Internal::is_parallel(for_type);
     }
 
     static const IRNodeType _node_type = IRNodeType::For;

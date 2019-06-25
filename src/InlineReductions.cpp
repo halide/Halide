@@ -14,7 +14,7 @@ using std::vector;
 
 namespace Internal {
 
-class FindFreeVars : public IRMutator2 {
+class FindFreeVars : public IRMutator {
 public:
     vector<Var> free_vars;
     vector<Expr> call_args;
@@ -30,7 +30,7 @@ private:
 
     Scope<> internal;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Expr visit(const Let *op) override {
         Expr value = mutate(op->value);

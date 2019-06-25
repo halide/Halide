@@ -72,7 +72,8 @@ void define_enums(py::module &m) {
         .value("Android", Target::OS::Android)
         .value("IOS", Target::OS::IOS)
         .value("QuRT", Target::OS::QuRT)
-        .value("NoOS", Target::OS::NoOS);
+        .value("NoOS", Target::OS::NoOS)
+        .value("wasmrt", Target::OS::WebAssemblyRuntime);
 
     py::enum_<Target::Arch>(m, "TargetArch")
         .value("ArchUnknown", Target::Arch::ArchUnknown)
@@ -80,7 +81,8 @@ void define_enums(py::module &m) {
         .value("ARM", Target::Arch::ARM)
         .value("MIPS", Target::Arch::MIPS)
         .value("Hexagon", Target::Arch::Hexagon)
-        .value("POWERPC", Target::Arch::POWERPC);
+        .value("POWERPC", Target::Arch::POWERPC)
+        .value("WebAssembly", Target::Arch::WebAssembly);
 
     py::enum_<Target::Feature>(m, "TargetFeature")
         .value("JIT", Target::Feature::JIT)
@@ -140,6 +142,10 @@ void define_enums(py::module &m) {
         .value("CheckUnsafePromises", Target::Feature::CheckUnsafePromises)
         .value("HexagonDma", Target::Feature::HexagonDma)
         .value("EmbedBitcode", Target::Feature::EmbedBitcode)
+        .value("DisableLLVMLoopVectorize", Target::Feature::DisableLLVMLoopVectorize)
+        .value("DisableLLVMLoopUnroll", Target::Feature::DisableLLVMLoopUnroll)
+        .value("WasmSimd128", Target::Feature::WasmSimd128)
+        .value("WasmSignExt", Target::Feature::WasmSignExt)
         .value("FeatureEnd", Target::Feature::FeatureEnd);
 
     py::enum_<halide_type_code_t>(m, "TypeCode")

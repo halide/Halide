@@ -92,7 +92,7 @@ protected:
 
 private:
     /** The nodes visited so far */
-    std::set<const IRNode *> visited;
+    std::set<IRHandle> visited;
 
 protected:
     /** These methods should call 'include' on the children to only

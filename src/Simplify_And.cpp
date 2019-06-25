@@ -3,7 +3,7 @@
 namespace Halide {
 namespace Internal {
 
-Expr Simplify::visit(const And *op, ConstBounds *bounds) {
+Expr Simplify::visit(const And *op, ExprInfo *bounds) {
     if (falsehoods.count(op)) {
         return const_false(op->type.lanes());
     }
@@ -99,7 +99,12 @@ Expr Simplify::visit(const And *op, ConstBounds *bounds) {
         rewrite((x || y) && (x || z), x || (y && z)) ||
         rewrite((x || y) && (z || x), x || (y && z)) ||
         rewrite((y || x) && (x || z), x || (y && z)) ||
-        rewrite((y || x) && (z || x), x || (y && z))) {
+        rewrite((y || x) && (z || x), x || (y && z)) ||
+
+        rewrite(x < y && x < z, x < min(y, z)) ||
+        rewrite(y < x && z < x, max(y, z) < x) ||
+        rewrite(x <= y && x <= z, x <= min(y, z)) ||
+        rewrite(y <= x && z <= x, max(y, z) <= x)) {
 
         return mutate(std::move(rewrite.result), bounds);
     }

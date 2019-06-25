@@ -113,7 +113,7 @@ Interval bounds_of_inner_var(string var, Stmt s) {
 
 }
 
-class BoundsInference : public IRMutator2 {
+class BoundsInference : public IRMutator {
 public:
     const vector<Function> &funcs;
     // Each element in the list indicates a group of functions which loops
@@ -263,6 +263,29 @@ public:
             }
 
             exprs.insert(exprs.end(), result[1].begin(), result[1].end());
+
+            // For the purposes of computation bounds inference, we
+            // don't care what sites are loaded, just what sites need
+            // to have the correct value in them. So remap all selects
+            // to if_then_elses to get tighter bounds.
+            class SelectToIfThenElse : public IRMutator {
+                using IRMutator::visit;
+                Expr visit(const Select *op) override {
+                    if (is_pure(op->condition)) {
+                        return Call::make(op->type, Call::if_then_else,
+                                          {mutate(op->condition),
+                                                  mutate(op->true_value),
+                                                  mutate(op->false_value)},
+                                          Call::PureIntrinsic);
+                    } else {
+                        return IRMutator::visit(op);
+                    }
+                }
+            } select_to_if_then_else;
+
+            for (auto &e : exprs) {
+                e.value = select_to_if_then_else.mutate(e.value);
+            }
         }
 
         // Check if the dimension at index 'dim_idx' is always pure (i.e. equal to 'dim')
@@ -926,7 +949,7 @@ public:
         }
     }
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Stmt visit(const For *op) override {
         // Don't recurse inside loops marked 'Extern', they will be
@@ -1082,7 +1105,7 @@ public:
 
     Stmt visit(const ProducerConsumer *p) override {
         in_pipeline.insert(p->name);
-        Stmt stmt = IRMutator2::visit(p);
+        Stmt stmt = IRMutator::visit(p);
         in_pipeline.erase(p->name);
         inner_productions.insert(p->name);
         return stmt;

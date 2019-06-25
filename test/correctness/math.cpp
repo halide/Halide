@@ -1,14 +1,30 @@
+#include "Halide.h"
 #include <stdio.h>
 #include <math.h>
-#include "Halide.h"
 #include <iostream>
 #include <limits>
 
 using namespace Halide;
 
-template <typename value_t>
+static int num_errors = 0;
+
+template<typename T, typename std::enable_if<std::is_floating_point<T>::value>::type * = nullptr>
+bool is_equal(T a, T b) {
+    if (std::isnan(a) && std::isnan(b)) {
+        return true;
+    } else {
+        return a == b;
+    }
+}
+
+template<typename T, typename std::enable_if<!std::is_floating_point<T>::value>::type * = nullptr>
+bool is_equal(T a, T b) {
+    return a == b;
+}
+
+template<typename value_t>
 bool relatively_equal(value_t a, value_t b, Target target) {
-    if (a == b) {
+    if (is_equal(a, b)) {
         return true;
     } else if (!std::numeric_limits<value_t>::is_integer) {
         double da = (double)a, db = (double)b;
@@ -89,14 +105,14 @@ uint32_t absd(uint32_t a, uint32_t b) { return a < b ? b - a : a - b; }
         Buffer<type_ret> result = test_##name.realize(in.extent(0), target); \
         for (int i = 0; i < in.extent(0); i++) {                        \
             type_ret c_result = c_name(in(i));                          \
-            if (!relatively_equal(c_result, result(i), target))         \
-                printf("For " #name "(%.20f) == %.20f from cpu and %.20f from GPU.\n", (double)in(i), (double)c_result, (double)result(i)); \
-            assert(relatively_equal(c_result, result(i), target) &&     \
-                   "Failure on function " #name);                       \
+            if (!relatively_equal(c_result, result(i), target)) {       \
+                fprintf(stderr, "For " #name "(%.20f) == %.20f from C and %.20f from %s.\n", (double)in(i), (double)c_result, (double)result(i), target.to_string().c_str()); \
+                num_errors++;                                           \
+            }                                                           \
         }                                                               \
     }
 
-// Version for a one argument function
+// Version for a two argument function
 #define fun_2(type_ret, type, name, c_name)                                         \
     void test_##type##_##name(Buffer<type> in) {                                    \
         Target target = get_jit_target_from_environment();                          \
@@ -117,8 +133,10 @@ uint32_t absd(uint32_t a, uint32_t b) { return a < b ? b - a : a - b; }
         Buffer<type_ret> result = test_##name.realize(in.height(), target);         \
         for (int i = 0; i < in.height(); i++) {                                     \
             type_ret c_result = c_name(in(0, i), in(1, i));                         \
-            assert(relatively_equal(c_result, result(i), target) &&                 \
-                   "Failure on function " #name);                                   \
+            if (!relatively_equal(c_result, result(i), target)) {       \
+                fprintf(stderr, "For " #name "(%.20f, %.20f) == %.20f from C and %.20f from %s.\n", (double)in(0, i), (double)in(1, i), (double)c_result, (double)result(i), target.to_string().c_str()); \
+                num_errors++;                                           \
+            }                                                           \
         }                                                                           \
     }
 
@@ -253,7 +271,7 @@ int main(int argc, char **argv) {
     call_1_float_types(floor, 256, -25, 25);
     call_1_float_types(ceil, 256, -25, 25);
     call_1_float_types(trunc, 256, -25, 25);
-    call_2_float_types(pow, 256, .1f, 20, .1f, 2);
+    call_2_float_types(pow, 256, -10.0, 10.0, -4.0f, 4.0f);
 
     const int8_t int8_min = std::numeric_limits<int8_t>::min();
     const int16_t int16_min = std::numeric_limits<int16_t>::min();
@@ -283,6 +301,11 @@ int main(int argc, char **argv) {
     call_2(uint32_t, absd, 256, uint32_min, uint32_max, uint32_min, uint32_max);
     // TODO: int64 isn't tested because the testing mechanism relies
     // on integer types being representable with doubles.
+
+    if (num_errors) {
+        fprintf(stderr, "Failed with %d total errors\n", num_errors);
+        exit(1);
+    }
 
     printf("Success!\n");
     return 0;

@@ -15,10 +15,11 @@ public:
 
         output(x, y) = input(x, y);
         output.bound(x, 0, f_explicit_bound);
+
+        add_requirement(input.dim(1).extent() == 123);
     }
 };
 
 }  // namespace
 
 HALIDE_REGISTER_GENERATOR(ErrorCodes, error_codes)
-

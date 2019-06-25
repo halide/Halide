@@ -297,13 +297,6 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                       }
                   });
 
-        // Propagate anything known about alignment into the kernel via the closure
-        for (size_t i = 0; i < closure_args.size(); i++) {
-            if (alignment_info.contains(closure_args[i].name)) {
-                closure_args[i].alignment = alignment_info.get(closure_args[i].name);
-            }
-        }
-
         // Halide allows passing of scalar float and integer arguments. For
         // OpenGL, pack these into vec4 uniforms and varying attributes
         if (loop->device_api == DeviceAPI::GLSL) {
@@ -585,6 +578,14 @@ template class CodeGen_GPU_Host<CodeGen_MIPS>;
 
 #ifdef WITH_POWERPC
 template class CodeGen_GPU_Host<CodeGen_PowerPC>;
+#endif
+
+#ifdef WITH_WEBASSEMBLY
+template class CodeGen_GPU_Host<CodeGen_WebAssembly>;
+#endif
+
+#ifdef WITH_RISCV
+template class CodeGen_GPU_Host<CodeGen_RISCV>;
 #endif
 
 }  // namespace Internal

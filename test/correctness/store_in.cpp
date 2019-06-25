@@ -30,13 +30,13 @@ void check(MemoryType t1, MemoryType t2, MemoryType t3) {
 
     Func f;
     Param<bool> p;
-    f(x) = (f1(0) + f1(1)) + f2(select(p, 0, 2)) + f2(0) + f3(x % 32000);
+    f(x) = (f1(0) + f1(1)) + f2(select(p, 0, 2)) + f2(0) + f3(x % 1000);
 
     p.set(true);
 
     int expected_mallocs = ((t1 == MemoryType::Heap ? 1 : 0) +
                             (t2 == MemoryType::Heap ? 1 : 0) +
-                            ((t3 == MemoryType::Heap || t3 == MemoryType::Auto) ? 1 : 0));
+                            (t3 == MemoryType::Heap ? 1 : 0));
 
     mallocs = 0;
     f.set_custom_allocator(my_malloc, my_free);
@@ -50,6 +50,10 @@ void check(MemoryType t1, MemoryType t2, MemoryType t3) {
 }
 
 int main(int argc, char **argv) {
+    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
+        printf("Skipping test for WebAssembly as the wasm JIT cannot support set_custom_allocator.\n");
+        return 0;
+    }
 
     MemoryType types[] = {MemoryType::Auto, MemoryType::Stack, MemoryType::Heap};
 

@@ -4,15 +4,22 @@
 #include "IRPrinter.h"
 #include "Simplify.h"
 
-// This file is largely a port of parts of src/analysis.ml
 namespace Halide {
 namespace Internal {
+
+namespace {
+// Mod, with mod by zero defined to be the identity for the convenience of the operators below.
+int64_t mod(int64_t a, int64_t m) {
+    if (m == 0) return a;
+    return mod_imp(a, m);
+}
+}
 
 class ComputeModulusRemainder : public IRVisitor {
 public:
     ModulusRemainder analyze(Expr e);
 
-    int modulus, remainder;
+    ModulusRemainder result;
     Scope<ModulusRemainder> scope;
 
     ComputeModulusRemainder(const Scope<ModulusRemainder> *s) {
@@ -75,7 +82,7 @@ ModulusRemainder modulus_remainder(Expr e, const Scope<ModulusRemainder> &scope)
     return mr.analyze(e);
 }
 
-bool reduce_expr_modulo(Expr expr, int modulus, int *remainder) {
+bool reduce_expr_modulo(Expr expr, int64_t modulus, int64_t *remainder) {
     ModulusRemainder result = modulus_remainder(expr);
 
     /* As an example: If we asked for expr mod 8, and the analysis
@@ -85,18 +92,18 @@ bool reduce_expr_modulo(Expr expr, int modulus, int *remainder) {
      * return false.
      */
 
-    if (result.modulus % modulus == 0) {
-        *remainder = result.remainder % modulus;
+    if (mod(result.modulus, modulus) == 0) {
+        *remainder = mod(result.remainder, modulus);
         return true;
     } else {
         return false;
     }
 }
-bool reduce_expr_modulo(Expr expr, int modulus, int *remainder, const Scope<ModulusRemainder> &scope) {
+bool reduce_expr_modulo(Expr expr, int64_t modulus, int64_t *remainder, const Scope<ModulusRemainder> &scope) {
     ModulusRemainder result = modulus_remainder(expr, scope);
 
-    if (result.modulus % modulus == 0) {
-        *remainder = result.remainder % modulus;
+    if (mod(result.modulus, modulus) == 0) {
+        *remainder = mod(result.remainder, modulus);
         return true;
     } else {
         return false;
@@ -105,11 +112,11 @@ bool reduce_expr_modulo(Expr expr, int modulus, int *remainder, const Scope<Modu
 
 ModulusRemainder ComputeModulusRemainder::analyze(Expr e) {
     e.accept(this);
-    return ModulusRemainder(modulus, remainder);
+    return result;
 }
 
 namespace {
-void check(Expr e, int m, int r) {
+void check(Expr e, int64_t m, int64_t r) {
     ModulusRemainder result = modulus_remainder(e);
     if (result.modulus != m || result.remainder != r) {
         std::cerr << "Test failed for modulus_remainder:\n";
@@ -134,6 +141,8 @@ void modulus_remainder_test() {
     check(10*x - 35*y, 5, 0);
     check(123, 0, 123);
     check(Let::make("y", x*3 + 4, y*3 + 4), 9, 7);
+    // Check overflow
+    check((5045320*x + 4) * (405713 * y + 3) * (8000123 * x + 4354), 1, 0);
 
     std::cout << "modulus_remainder test passed\n";
 }
@@ -143,8 +152,7 @@ void ComputeModulusRemainder::visit(const IntImm *op) {
     // Equal to op->value modulo anything. We'll use zero as the
     // modulus to mark this special case. We'd better be able to
     // handle zero in the rest of the code...
-    remainder = op->value;
-    modulus = 0;
+    result = {0, op->value};
 }
 
 void ComputeModulusRemainder::visit(const UIntImm *op) {
@@ -160,18 +168,16 @@ void ComputeModulusRemainder::visit(const StringImm *) {
 }
 
 void ComputeModulusRemainder::visit(const Cast *) {
-    modulus = 1;
-    remainder = 0;
+    // TODO: Could probably do something reasonable for integer
+    // upcasts and downcasts where the modulus is a power of two.
+    result = ModulusRemainder{};
 }
 
 void ComputeModulusRemainder::visit(const Variable *op) {
     if (scope.contains(op->name)) {
-        ModulusRemainder mod_rem = scope.get(op->name);
-        modulus = mod_rem.modulus;
-        remainder = mod_rem.remainder;
+        result = scope.get(op->name);
     } else {
-        modulus = 1;
-        remainder = 0;
+        result = ModulusRemainder{};
     }
 }
 
@@ -186,95 +192,111 @@ int64_t gcd(int64_t a, int64_t b) {
 }
 
 int64_t lcm(int64_t a, int64_t b) {
-    return (a*b)/gcd(a, b);
-}
+    // Remove all of the common factors from one of the operands
+    b /= gcd(a, b);
 
-int64_t mod(int64_t a, int64_t m) {
-    if (m == 0) return a;
-    return mod_imp(a, m);
+    // Then multiply
+    if (mul_would_overflow(64, a, b)) {
+        return 0;
+    } else {
+        return a * b;
+    }
 }
 
 void ComputeModulusRemainder::visit(const Add *op) {
-    ModulusRemainder a = analyze(op->a);
-    ModulusRemainder b = analyze(op->b);
-    if (add_would_overflow(32, a.remainder, b.remainder)) {
-        modulus = 0;
-        remainder = 1;
+    result = analyze(op->a) + analyze(op->b);
+}
+
+ModulusRemainder operator+(const ModulusRemainder &a, const ModulusRemainder &b) {
+    if (add_would_overflow(64, a.remainder, b.remainder)) {
+        return {1, 0};
     } else {
-        modulus = gcd(a.modulus, b.modulus);
-        remainder = mod(a.remainder + b.remainder, modulus);
+        int64_t modulus = gcd(a.modulus, b.modulus);
+        int64_t remainder = mod(a.remainder + b.remainder, modulus);
+        return {modulus, remainder};
     }
 }
 
 void ComputeModulusRemainder::visit(const Sub *op) {
-    ModulusRemainder a = analyze(op->a);
-    ModulusRemainder b = analyze(op->b);
-    if (sub_would_overflow(32, a.remainder, b.remainder)) {
-        modulus = 0;
-        remainder = 1;
+    result = analyze(op->a) - analyze(op->b);
+}
+
+ModulusRemainder operator-(const ModulusRemainder &a, const ModulusRemainder &b) {
+    if (sub_would_overflow(64, a.remainder, b.remainder)) {
+        return {1, 0};
     } else {
-        modulus = gcd(a.modulus, b.modulus);
-        remainder = mod(a.remainder - b.remainder, modulus);
+        int64_t modulus = gcd(a.modulus, b.modulus);
+        int64_t remainder = mod(a.remainder - b.remainder, modulus);
+        return {modulus, remainder};
     }
 }
 
 void ComputeModulusRemainder::visit(const Mul *op) {
-    ModulusRemainder a = analyze(op->a);
-    ModulusRemainder b = analyze(op->b);
+    result = analyze(op->a) * analyze(op->b);
+}
 
-    // Assume the nothing-interesting result until we are sure we don't have overflow
-    modulus = 0;
-    remainder = 1;
-
+ModulusRemainder operator*(const ModulusRemainder &a, const ModulusRemainder &b) {
     if (a.modulus == 0) {
         // a is constant
-        if (!mul_would_overflow(32, a.remainder, b.modulus) && !mul_would_overflow(32, a.remainder, b.remainder)) {
-            modulus = a.remainder * b.modulus;
-            remainder = a.remainder * b.remainder;
+        if (!mul_would_overflow(64, a.remainder, b.modulus) && !mul_would_overflow(64, a.remainder, b.remainder)) {
+            return {a.remainder * b.modulus, a.remainder * b.remainder};
         }
     } else if (b.modulus == 0) {
         // b is constant
-        if (!mul_would_overflow(32, b.remainder, a.modulus) && !mul_would_overflow(32, a.remainder, b.remainder)) {
-            modulus = b.remainder * a.modulus;
-            remainder = a.remainder * b.remainder;
+        if (!mul_would_overflow(64, b.remainder, a.modulus) && !mul_would_overflow(64, a.remainder, b.remainder)) {
+            return {b.remainder * a.modulus, a.remainder * b.remainder};
         }
     } else if (a.remainder == 0 && b.remainder == 0) {
         // multiple times multiple
-        if (!mul_would_overflow(32, a.modulus, b.modulus)) {
-            modulus = a.modulus * b.modulus;
-            remainder = 0;
+        if (!mul_would_overflow(64, a.modulus, b.modulus)) {
+            return {a.modulus * b.modulus, 0};
         }
     } else if (a.remainder == 0) {
-        int g = gcd(b.modulus, b.remainder);
-        if (!mul_would_overflow(32, a.modulus, g)) {
-            modulus = a.modulus * g;
-            remainder = 0;
+        int64_t g = gcd(b.modulus, b.remainder);
+        if (!mul_would_overflow(64, a.modulus, g)) {
+            return {a.modulus * g, 0};
         }
     } else if (b.remainder == 0) {
-        int g = gcd(a.modulus, a.remainder);
-        if (!mul_would_overflow(32, b.modulus, g)) {
-            modulus = b.modulus * g;
-            remainder = 0;
+        int64_t g = gcd(a.modulus, a.remainder);
+        if (!mul_would_overflow(64, b.modulus, g)) {
+            return {b.modulus * g, 0};
         }
     } else {
-        // All our tricks failed. Convert them to the same modulus and multiply
-        if (!mul_would_overflow(32, a.remainder, b.remainder)) {
-            modulus = gcd(a.modulus, b.modulus);
-            remainder = mod(a.remainder * b.remainder, modulus);
+        // Convert them to the same modulus and multiply
+        if (!mul_would_overflow(64, a.remainder, b.remainder)) {
+            int64_t modulus = gcd(a.modulus, b.modulus);
+            int64_t remainder = mod(a.remainder * b.remainder, modulus);
+            return {modulus, remainder};
         }
     }
+
+    return ModulusRemainder{};
 }
 
-void ComputeModulusRemainder::visit(const Div *) {
-    // We might be able to say something about this if the numerator
-    // modulus is provably a multiple of a constant denominator, but
-    // in this case we should have simplified away the division.
-    remainder = 0;
-    modulus = 1;
+void ComputeModulusRemainder::visit(const Div *op) {
+    result = analyze(op->a) / analyze(op->b);
 }
 
-namespace {
-ModulusRemainder unify_alternatives(ModulusRemainder a, ModulusRemainder b) {
+ModulusRemainder operator/(const ModulusRemainder &a, const ModulusRemainder &b) {
+    // What can we say about:
+    // floor((m1 * x + r1) / (m2 * y + r2))
+
+    // If m2 is zero and m1 is a multiple of r2, then we can pull the
+    // varying term out of the floor div and the expression simplifies
+    // to:
+    // (m1 / r2) * x + floor(r1 / r2)
+    // E.g. (8x + 3) / 2 -> (4x + 1)
+
+    if (b.modulus == 0 && b.remainder != 0) {
+        if (mod(a.modulus, b.remainder) == 0) {
+            return {a.modulus / b.remainder, div_imp(a.remainder, b.remainder)};
+        }
+    }
+
+    return ModulusRemainder{};
+}
+
+ModulusRemainder ModulusRemainder::unify(const ModulusRemainder &a, const ModulusRemainder &b) {
     // We don't know if we're going to get a or b, so we'd better find
     // a single modulus remainder that works for both.
 
@@ -284,17 +306,23 @@ ModulusRemainder unify_alternatives(ModulusRemainder a, ModulusRemainder b) {
     // max(2*_ + 1, 2*_ + 1) ->
     // 2*_ + 1
 
-    // Reduce them to the same modulus and the same remainder
-    int modulus = gcd(a.modulus, b.modulus);
-    int64_t diff = (int64_t)a.remainder - (int64_t)b.remainder;
-    if (!Int(32).can_represent(diff)) {
-        // The difference overflows.
-        return ModulusRemainder(0, 1);
+    if (b.remainder > a.remainder) {
+        return unify(b, a);
     }
-    if (diff < 0) diff = -diff;
-    modulus = gcd((int)diff, modulus);
 
-    int ra = mod(a.remainder, modulus);
+    // Reduce them to the same modulus and the same remainder
+    int64_t modulus = gcd(a.modulus, b.modulus);
+
+    if (sub_would_overflow(64, a.remainder, b.remainder)) {
+        // The modulus is not representable as an int64.
+        return {0, 1};
+    }
+
+    int64_t diff = a.remainder - b.remainder;
+
+    modulus = gcd(diff, modulus);
+
+    int64_t ra = mod(a.remainder, modulus);
 
     internal_assert(ra == mod(b.remainder, modulus))
         << "There's a bug inside ModulusRemainder in unify_alternatives:\n"
@@ -306,11 +334,32 @@ ModulusRemainder unify_alternatives(ModulusRemainder a, ModulusRemainder b) {
         << "unified modulus   = " << modulus << "\n"
         << "unified remainder = " << ra << "\n";
 
-    return ModulusRemainder(modulus, ra);
+    return {modulus, ra};
 }
-}  // namespace
+
+ModulusRemainder ModulusRemainder::intersect(const ModulusRemainder &a, const ModulusRemainder &b) {
+    // We have x == ma * y + ra == mb * z + rb
+
+    // We want to synthesize these two facts into one modulus
+    // remainder relationship. We are permitted to be
+    // conservatively-large, so it's OK if some elements of the result
+    // only satisfy one of the two constraints.
+
+    // For coprime ma and mb you want to use the Chinese remainder
+    // theorem. In our case, the moduli will almost always be
+    // powers of two, so we should just return the smaller of the two
+    // sets (usually the one with the larger modulus).
+    if (a.modulus == 0) return a;
+    if (b.modulus == 0) return b;
+    if (a.modulus > b.modulus) return a;
+    return b;
+}
 
 void ComputeModulusRemainder::visit(const Mod *op) {
+    result = analyze(op->a) % analyze(op->b);
+}
+
+ModulusRemainder operator%(const ModulusRemainder &a, const ModulusRemainder &b) {
     // We can treat x mod y as x + z*y, where we know nothing about z.
     // (ax + b) + z (cx + d) ->
     // ax + b + zcx + dz ->
@@ -322,23 +371,38 @@ void ComputeModulusRemainder::visit(const Mod *op) {
     // (8x + 6zx + 2x) + 5 ->
     // 2(4x + 3zx + x) + 5 ->
     // 2w + 1
-    ModulusRemainder a = analyze(op->a);
-    ModulusRemainder b = analyze(op->b);
-    modulus = gcd(a.modulus, b.modulus);
+    int64_t modulus = gcd(a.modulus, b.modulus);
     modulus = gcd(modulus, b.remainder);
-    remainder = mod(a.remainder, modulus);
+    int64_t remainder = mod(a.remainder, modulus);
+    return {modulus, remainder};
+}
+
+ModulusRemainder operator+(const ModulusRemainder &a, int64_t b) {
+    return a + ModulusRemainder(0, b);
+}
+
+ModulusRemainder operator-(const ModulusRemainder &a, int64_t b) {
+    return a - ModulusRemainder(0, b);
+}
+
+ModulusRemainder operator*(const ModulusRemainder &a, int64_t b) {
+    return a * ModulusRemainder(0, b);
+}
+
+ModulusRemainder operator/(const ModulusRemainder &a, int64_t b) {
+    return a / ModulusRemainder(0, b);
+}
+
+ModulusRemainder operator%(const ModulusRemainder &a, int64_t b) {
+    return a % ModulusRemainder(0, b);
 }
 
 void ComputeModulusRemainder::visit(const Min *op) {
-    ModulusRemainder r = unify_alternatives(analyze(op->a), analyze(op->b));
-    modulus = r.modulus;
-    remainder = r.remainder;
+    result = ModulusRemainder::unify(analyze(op->a), analyze(op->b));
 }
 
 void ComputeModulusRemainder::visit(const Max *op) {
-    ModulusRemainder r = unify_alternatives(analyze(op->a), analyze(op->b));
-    modulus = r.modulus;
-    remainder = r.remainder;
+    result = ModulusRemainder::unify(analyze(op->a), analyze(op->b));
 }
 
 void ComputeModulusRemainder::visit(const EQ *) {
@@ -378,15 +442,12 @@ void ComputeModulusRemainder::visit(const Not *) {
 }
 
 void ComputeModulusRemainder::visit(const Select *op) {
-    ModulusRemainder r = unify_alternatives(analyze(op->true_value),
-                                            analyze(op->false_value));
-    modulus = r.modulus;
-    remainder = r.remainder;
+    result = ModulusRemainder::unify(analyze(op->true_value),
+                                     analyze(op->false_value));
 }
 
 void ComputeModulusRemainder::visit(const Load *) {
-    modulus = 1;
-    remainder = 0;
+    result = ModulusRemainder{};
 }
 
 void ComputeModulusRemainder::visit(const Ramp *) {
@@ -398,30 +459,22 @@ void ComputeModulusRemainder::visit(const Broadcast *) {
 }
 
 void ComputeModulusRemainder::visit(const Call *) {
-    modulus = 1;
-    remainder = 0;
+    result = ModulusRemainder{};
 }
 
 void ComputeModulusRemainder::visit(const Let *op) {
-    bool value_interesting = op->value.type().is_int();
-
-    if (value_interesting) {
-        ModulusRemainder val = analyze(op->value);
-        scope.push(op->name, val);
+    if (op->value.type().is_int()) {
+        ScopedBinding<ModulusRemainder> bind(scope, op->name, analyze(op->value));
+        result = analyze(op->body);
+    } else {
+        result = analyze(op->body);
     }
-    ModulusRemainder val = analyze(op->body);
-    if (value_interesting) {
-        scope.pop(op->name);
-    }
-    modulus = val.modulus;
-    remainder = val.remainder;
 }
 
 void ComputeModulusRemainder::visit(const Shuffle *op) {
     // It's possible that scalar expressions are extracting a lane of a vector - don't fail in this case, but stop
     internal_assert(op->indices.size() == 1) << "modulus_remainder of vector\n";
-    modulus = 1;
-    remainder = 0;
+    result = ModulusRemainder{};
 }
 
 void ComputeModulusRemainder::visit(const LetStmt *) {

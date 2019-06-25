@@ -30,7 +30,7 @@ using std::vector;
 using namespace llvm;
 
 CodeGen_PTX_Dev::CodeGen_PTX_Dev(Target host) : CodeGen_LLVM(host) {
-    #if !(WITH_PTX)
+    #if !defined(WITH_PTX)
     user_error << "ptx not enabled for this build of Halide.\n";
     #endif
     user_assert(llvm_NVPTX_enabled) << "llvm build not configured with nvptx target enabled\n.";
@@ -73,18 +73,7 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
     // Mark the buffer args as no alias
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer) {
-            #if LLVM_VERSION < 50
-            function->setDoesNotAlias(i+1);
-            #else
             function->addParamAttr(i, Attribute::NoAlias);
-            #endif
-        }
-    }
-
-    // Get the alignment of the integer arguments
-    for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].alignment.modulus) {
-            alignment_info.push(args[i].name, args[i].alignment);
         }
     }
 
@@ -253,11 +242,11 @@ void CodeGen_PTX_Dev::visit(const Load *op) {
     const Ramp *r = op->index.as<Ramp>();
     // TODO: lanes >= 4, not lanes == 4
     if (is_one(op->predicate) && r && is_one(r->stride) && r->lanes == 4 && op->type.bits() == 32) {
-        ModulusRemainder align = modulus_remainder(r->base, alignment_info);
+        ModulusRemainder align = op->alignment;
         if (align.modulus % 4 == 0 && align.remainder % 4 == 0) {
             Expr index = simplify(r->base / 4);
             Expr equiv = Load::make(UInt(128), op->name, index,
-                                    op->image, op->param, const_true());
+                                    op->image, op->param, const_true(), align / 4);
             equiv = reinterpret(op->type, equiv);
             codegen(equiv);
             return;
@@ -273,11 +262,11 @@ void CodeGen_PTX_Dev::visit(const Store *op) {
     const Ramp *r = op->index.as<Ramp>();
     // TODO: lanes >= 4, not lanes == 4
     if (is_one(op->predicate) && r && is_one(r->stride) && r->lanes == 4 && op->value.type().bits() == 32) {
-        ModulusRemainder align = modulus_remainder(r->base, alignment_info);
+        ModulusRemainder align = op->alignment;
         if (align.modulus % 4 == 0 && align.remainder % 4 == 0) {
             Expr index = simplify(r->base / 4);
             Expr value = reinterpret(UInt(128), op->value);
-            Stmt equiv = Store::make(op->name, value, index, op->param, const_true());
+            Stmt equiv = Store::make(op->name, value, index, op->param, const_true(), align / 4);
             codegen(equiv);
             return;
         }
@@ -344,9 +333,6 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     internal_assert(target) << err_str << "\n";
 
     TargetOptions options;
-    #if LLVM_VERSION < 50
-    options.LessPreciseFPMADOption = true;
-    #endif
     options.PrintMachineCode = false;
     options.AllowFPOpFusion = FPOpFusion::Fast;
     options.UnsafeFPMath = true;
@@ -361,18 +347,12 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
         target_machine(target->createTargetMachine(triple.str(),
                                                    mcpu(), mattrs(), options,
                                                    llvm::Reloc::PIC_,
-#if LLVM_VERSION < 60
-                                                   llvm::CodeModel::Default,
-#else
                                                    llvm::CodeModel::Small,
-#endif
                                                    CodeGenOpt::Aggressive));
 
     internal_assert(target_machine.get()) << "Could not allocate target machine!";
 
-    #if LLVM_VERSION >= 60
     module->setDataLayout(target_machine->createDataLayout());
-    #endif
 
     // Set up passes
     llvm::SmallString<8> outstr;
@@ -402,11 +382,6 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     #define kDefaultDenorms 0
     #define kFTZDenorms     1
 
-    #if LLVM_VERSION <= 40
-    StringMap<int> reflect_mapping;
-    reflect_mapping[StringRef("__CUDA_FTZ")] = kFTZDenorms;
-    module_pass_manager.add(createNVVMReflectPass(reflect_mapping));
-    #else
     // Insert a module flag for the FTZ handling.
     module->addModuleFlag(llvm::Module::Override, "nvvm-reflect-ftz",
                           kFTZDenorms);
@@ -416,21 +391,14 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
             fn.addFnAttr("nvptx-f32ftz", "true");
         }
     }
-    #endif
 
     PassManagerBuilder b;
     b.OptLevel = 3;
-#if LLVM_VERSION >= 50
     b.Inliner = createFunctionInliningPass(b.OptLevel, 0, false);
-#else
-    b.Inliner = createFunctionInliningPass(b.OptLevel, 0);
-#endif
     b.LoopVectorize = true;
     b.SLPVectorize = true;
 
-    #if LLVM_VERSION > 40
     target_machine->adjustPassManager(b);
-    #endif
 
     b.populateFunctionPassManager(function_pass_manager);
     b.populateModulePassManager(module_pass_manager);
@@ -441,15 +409,9 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     // Output string stream
 
     // Ask the target to add backend passes as necessary.
-#if LLVM_VERSION < 70
-    bool fail = target_machine->addPassesToEmitFile(module_pass_manager, ostream,
-                                                    TargetMachine::CGFT_AssemblyFile,
-                                                    true);
-#else
     bool fail = target_machine->addPassesToEmitFile(module_pass_manager, ostream, nullptr,
                                                     TargetMachine::CGFT_AssemblyFile,
                                                     true);
-#endif
     if (fail) {
         internal_error << "Failed to set up passes to emit PTX source\n";
     }
@@ -523,11 +485,7 @@ string CodeGen_PTX_Dev::get_current_kernel_name() {
 }
 
 void CodeGen_PTX_Dev::dump() {
-    #if LLVM_VERSION >= 50
     module->print(dbgs(), nullptr, false, true);
-    #else
-    module->dump();
-    #endif
 }
 
 std::string CodeGen_PTX_Dev::print_gpu_name(const std::string &name) {
