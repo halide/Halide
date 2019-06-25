@@ -1,3 +1,5 @@
+#include <utility>
+
 #include "FindCalls.h"
 #include "IRVisitor.h"
 
@@ -17,14 +19,14 @@ public:
 
     using IRVisitor::visit;
 
-    void include_function(Function f) {
-        map<string, Function>::iterator iter = calls.find(f.name());
+    void include_function(const Function &f) {
+        auto iter = calls.find(f.name());
         if (iter == calls.end()) {
             calls[f.name()] = f;
         } else {
             user_assert(iter->second.same_as(f))
-                << "Can't compile a pipeline using multiple functions with same name: "
-                << f.name() << "\n";
+            << "Can't compile a pipeline using multiple functions with same name: "
+            << f.name() << "\n";
         }
     }
 
@@ -43,15 +45,15 @@ void populate_environment_helper(Function f, map<string, Function> &env,
     map<string, Function>::const_iterator iter = env.find(f.name());
     if (iter != env.end()) {
         user_assert(iter->second.same_as(f))
-            << "Can't compile a pipeline using multiple functions with same name: "
-            << f.name() << "\n";
+        << "Can't compile a pipeline using multiple functions with same name: "
+        << f.name() << "\n";
         return;
     }
 
     FindCalls calls;
     f.accept(&calls);
     if (f.has_extern_definition()) {
-        for (ExternFuncArgument arg : f.extern_arguments()) {
+        for (const ExternFuncArgument &arg : f.extern_arguments()) {
             if (arg.is_func()) {
                 Function g(arg.func);
                 calls.calls[g.name()] = g;
@@ -60,7 +62,7 @@ void populate_environment_helper(Function f, map<string, Function> &env,
     }
 
     if (include_wrappers) {
-        for (auto it : f.schedule().wrappers()) {
+        for (const auto &it : f.schedule().wrappers()) {
             Function g(it.second);
             calls.calls[g.name()] = g;
         }
@@ -80,18 +82,18 @@ void populate_environment_helper(Function f, map<string, Function> &env,
 }  // namespace
 
 void populate_environment(Function f, map<string, Function> &env) {
-    populate_environment_helper(f, env, true, true);
+    populate_environment_helper(std::move(f), env, true, true);
 }
 
 map<string, Function> find_transitive_calls(Function f) {
     map<string, Function> res;
-    populate_environment_helper(f, res, true, false);
+    populate_environment_helper(std::move(f), res, true, false);
     return res;
 }
 
 map<string, Function> find_direct_calls(Function f) {
     map<string, Function> res;
-    populate_environment_helper(f, res, false, false);
+    populate_environment_helper(std::move(f), res, false, false);
     return res;
 }
 
