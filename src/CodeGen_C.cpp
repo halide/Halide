@@ -301,9 +301,6 @@ CodeGen_C::CodeGen_C(ostream &s, Target t, OutputKind output_kind, const std::st
                << "\n"
                << "#include <assert.h>\n"
                << "#include <stdint.h>\n"
-               << "#if __cplusplus >= 201103L\n"
-               << "#include <type_traits>\n"
-               << "#endif  // __cplusplus >= 201103L\n"
                << "\n"
                << "// Forward declarations of the types used in the interface\n"
                << "// to the Halide pipeline.\n"
@@ -1867,7 +1864,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
             if (a.arg.is_buffer()) {
                 o << "halide_buffer_t_accessor<"
                   << (a.arg.is_input() ? "const " : "") << a.c_type
-                  << ", typename std::remove_cv<typename std::remove_reference<decltype(" << a.escaped_name << ")>::type>::type"
+                  << ", T_" << a.escaped_name
                   << ">(" << a.escaped_name << ")";
             } else {
                 o << a.escaped_name;

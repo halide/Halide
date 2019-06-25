@@ -49,14 +49,51 @@ int main(int argc, char **argv) {
         verify(result, output);
     }
 
+    // Same, but with refs
+    {
+        auto &i1_ref = input1;
+        auto &i2_ref = input2;
+        auto &o1_ref = output;
+        result = constinput(i1_ref, i2_ref, 0, o1_ref);
+        verify(result, output);
+    }
+
     // Test calls into the wrappers that accept mutable-ref for buffers,
     // with Buffer<const T> for inputs
     {
-        Buffer<const int32_t> i1 = Buffer<const int32_t>(input1);
-        Buffer<const int32_t> i2 = Buffer<const int32_t>(input2);
+        Buffer<const int32_t> i1 = input1;
+        Buffer<const int32_t> i2 = input2;
         result = constinput(i1, i2, 0, output);
         verify(result, output);
     }
+
+    // Same, but with refs
+    {
+        Buffer<const int32_t> i1 = input1;
+        Buffer<const int32_t> i2 = input2;
+        auto &i1_ref = i1;
+        auto &i2_ref = i2;
+        auto &o1_ref = output;
+        result = constinput(i1_ref, i2_ref, 0, o1_ref);
+        verify(result, output);
+    }
+
+    // This should fail to compile (output cannot be const)
+    // {
+    //     Buffer<const int32_t> o1 = output;
+    //     result = constinput(input1, input2, 0, o1);
+    //     verify(result, output);
+    // }
+
+    // Same, but with refs
+    // {
+    //     Buffer<const int32_t> o1 = output;
+    //     auto &i1_ref = input1;
+    //     auto &i2_ref = input2;
+    //     auto &o1_ref = o1;
+    //     result = constinput(i1_ref, i2_ref, 0, o1_ref);
+    //     verify(result, output);
+    // }
 
     printf("Success!\n");
     return 0;
