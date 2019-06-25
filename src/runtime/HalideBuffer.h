@@ -2359,4 +2359,42 @@ public:
 
 #undef HALIDE_ALLOCA
 
-#endif  // HALIDE_RUNTIME_IMAGE_H
+#if defined(HALIDE_RUNTIME_BUFFER_WRAPPERS)
+
+// halide_buffer_t_accessor should work for any Buffer-shaped class that
+// provides .as<>() and .raw_buffer() methods, but you can make your own
+// partially-specialized variant that should work for arbitrary image classes,
+// even if you need to synthesize a temporary halide_buffer_t, e.g.
+//
+//     struct MyImageClass {
+//         template<typename T>
+//         halide_buffer_t check_type_and_synthesize_buffer() { return ...; }
+//     };
+//
+//     template<typename RequiredCompatibilityType>
+//     struct halide_buffer_t_accessor<RequiredCompatibilityType, MyImageClass> {
+//       halide_buffer_t b;
+//
+//       explicit halide_buffer_t_accessor(MyImageClass &i) :
+//         b(i.template check_type_and_synthesize_buffer<RequiredCompatibilityType>()) {}
+//
+//       operator halide_buffer_t* () {
+//         return &b;
+//       }
+//     };
+//
+template<typename RequiredCompatibilityType, typename ActualBufferType>
+struct halide_buffer_t_accessor {
+  halide_buffer_t * const p;
+
+  HALIDE_ALWAYS_INLINE explicit halide_buffer_t_accessor(ActualBufferType &b) :
+    p(b.template as<RequiredCompatibilityType>().raw_buffer()) {}
+
+  HALIDE_ALWAYS_INLINE operator halide_buffer_t* () {
+    return p;
+  }
+};
+
+#endif  // HALIDE_RUNTIME_BUFFER_WRAPPERS
+
+#endif  // HALIDE_RUNTIME_BUFFER_H

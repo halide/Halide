@@ -1,3 +1,5 @@
+#define HALIDE_RUNTIME_BUFFER_WRAPPERS
+
 #include<iostream>
 // Don't include Halide.h: it is not necessary for this test.
 #include "HalideBuffer.h"
@@ -75,7 +77,89 @@ void test_copy(Buffer<float> a, Buffer<float> b) {
     check_equal(a_window, b_window);
 }
 
+// Fake "buffer" class that is shaped enough like Halide::Runtime::Buffer
+// to use the default halide_buffer_t_accessor. Note that we don't do
+// a real type check here.
+template<typename T>
+struct BufferShapedImageClass {
+    halide_buffer_t expected;
+
+    template<typename T2>
+    BufferShapedImageClass<T2> &as() {
+        return *((BufferShapedImageClass<T2> *)this);
+    }
+
+    halide_buffer_t *raw_buffer() {
+        return &expected;
+    }
+};
+
+// Fake "buffer" class that requires a partial specialization of halide_buffer_t_accessor,
+// and synthesizes a temporary halide_buffer_t. Note that we don't do a real type check here.
+struct FakeImageClass {
+    uint64_t expected_device;
+
+    FakeImageClass(uint64_t device) : expected_device(device) {}
+
+    template<typename T>
+    halide_buffer_t check_type_and_synthesize_buffer() {
+        halide_buffer_t expected;
+        memset(&expected, 0, sizeof(expected));
+        expected.device = expected_device;
+        return expected;
+    }
+};
+
+template<typename RequiredCompatibilityType>
+struct halide_buffer_t_accessor<RequiredCompatibilityType, FakeImageClass> {
+  halide_buffer_t b;
+
+  explicit halide_buffer_t_accessor(FakeImageClass &i) :
+    b(i.template check_type_and_synthesize_buffer<RequiredCompatibilityType>()) {}
+
+  operator halide_buffer_t* () {
+    return &b;
+  }
+};
+
+
 int main(int argc, char **argv) {
+
+    // Test default halide_buffer_t_accessor with Buffer
+    {
+        Buffer<int16_t> in(1);
+        halide_buffer_t *b = halide_buffer_t_accessor<const int16_t, std::remove_cv<std::remove_reference<decltype(in)>::type>::type>(in);
+        assert(b == in.raw_buffer());
+
+        auto &in_ref = in;
+        b = halide_buffer_t_accessor<const int16_t, std::remove_cv<std::remove_reference<decltype(in_ref)>::type>::type>(in_ref);
+        assert(b == in.raw_buffer());
+    }
+
+    // Test default halide_buffer_t_accessor with BufferShapedImageClass
+    {
+        BufferShapedImageClass<int16_t> in;
+        halide_buffer_t *b = halide_buffer_t_accessor<const int16_t, std::remove_cv<std::remove_reference<decltype(in)>::type>::type>(in);
+        assert(b == &in.expected);
+
+        auto &in_ref = in;
+        b = halide_buffer_t_accessor<const int16_t, std::remove_cv<std::remove_reference<decltype(in_ref)>::type>::type>(in_ref);
+        assert(b == &in.expected);
+    }
+
+    // Test FakeImageClass and specialization
+    {
+        constexpr uint64_t expected_device = 0xdeadbeeff00dcafe;
+
+        FakeImageClass in(expected_device);
+        halide_buffer_t *b = halide_buffer_t_accessor<const int16_t, std::remove_cv<std::remove_reference<decltype(in)>::type>::type>(in);
+        assert(b->device == expected_device);
+
+        auto &in_ref = in;
+        b = halide_buffer_t_accessor<const int16_t, std::remove_cv<std::remove_reference<decltype(in_ref)>::type>::type>(in_ref);
+        assert(b->device == expected_device);
+    }
+
     {
         // Check copying a buffer
         Buffer<float> a(100, 3, 80), b(120, 80, 3);

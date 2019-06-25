@@ -1,10 +1,11 @@
+#define HALIDE_RUNTIME_BUFFER_WRAPPERS
+
 #include "HalideRuntime.h"
 #include "HalideBuffer.h"
 
 #include <math.h>
 #include <stdio.h>
 
-#define HALIDE_RUNTIME_BUFFER_WRAPPERS
 #include "constinput.h"
 
 using namespace Halide::Runtime;

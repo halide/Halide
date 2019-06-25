@@ -298,12 +298,12 @@ CodeGen_C::CodeGen_C(ostream &s, Target t, OutputKind output_kind, const std::st
         // If it's a header, emit an include guard.
         stream << "#ifndef HALIDE_" << print_name(guard) << '\n'
                << "#define HALIDE_" << print_name(guard) << '\n'
-               << "#include <stdint.h>\n"
-               << "#if defined(HALIDE_RUNTIME_BUFFER_WRAPPERS)\n"
+               << "\n"
                << "#include <assert.h>\n"
-               << "#include \"HalideRuntime.h\"\n"
-               << "#include \"HalideBuffer.h\"\n"
-               << "#endif  // defined(HALIDE_RUNTIME_BUFFER_WRAPPERS)\n"
+               << "#include <stdint.h>\n"
+               << "#if __cplusplus >= 201103L\n"
+               << "#include <type_traits>\n"
+               << "#endif  // __cplusplus >= 201103L\n"
                << "\n"
                << "// Forward declarations of the types used in the interface\n"
                << "// to the Halide pipeline.\n"
@@ -1755,7 +1755,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
             // Model Buffer<float16_t> as Buffer<void> for our wrappers
             c_type = "void";
         } else {
-            c_type = type_to_c_type(arg.type, !arg.is_buffer());
+            c_type = type_to_c_type(arg.type, /*include_space*/ false);
         }
         arg_info.push_back({arg, c_type, escaped_name(arg.name)});
         if (arg.is_buffer()) {
@@ -1781,7 +1781,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         if (a.arg.is_buffer()) {
             o << "struct halide_buffer_t *";
         } else {
-            o << a.c_type;
+            o << a.c_type << " ";
         }
         o << a.escaped_name;
     });
@@ -1834,40 +1834,49 @@ void CodeGen_C::compile(const LoweredFunc &f) {
 
         set_name_mangling_mode(NameMangling::CPlusPlus);
 
-        stream << "\n// C++ wrappers to accept Halide::Runtime::Buffers of the appropriate types\n";
+        stream << "\n// C++ wrappers to accept Halide::Runtime::Buffers (or similar classes) of the appropriate types,\n";
+        stream << "// assuming that a suitable variant of halide_buffer_t_accessor is available.\n";
         stream << "#if defined(HALIDE_RUNTIME_BUFFER_WRAPPERS)\n";
-        stream << "#ifdef __cplusplus\n";
+        stream << "#if __cplusplus >= 201103L\n";
 
         stream << "template<";
         emit_args([](std::ostream &o, const ArgInfo &a) {
-            // The typenames for scalar args are unused, but that's ok
-            o << "\n  typename T_" << a.escaped_name;
+            if (a.arg.is_buffer()) {
+                o << "\n  typename T_" << a.escaped_name;
+            } else {
+                // The typenames for scalar args are unused, but that's ok,
+                // and it's easier to just include them
+                o << "\n  typename T_" << a.escaped_name << " = " << a.c_type;
+            }
         });
         stream << ">\n";
         stream << "inline int " << simple_name << "(";
         emit_args([](std::ostream &o, const ArgInfo &a) {
             o << "\n  ";
             if (a.arg.is_buffer()) {
-                o << "::Halide::Runtime::Buffer<T_" << a.escaped_name << "> &";
+                o << "T_" << a.escaped_name << " &";
             } else {
-                o << a.c_type;
+                o << a.c_type << " ";
             }
             o << a.escaped_name;
         });
         stream << ") HALIDE_FUNCTION_ATTRS {\n";
         stream << "    return " << simple_name << "(";
         emit_args([](std::ostream &o, const ArgInfo &a) {
-            o << "\n        " << a.escaped_name;
+            o << "\n        ";
             if (a.arg.is_buffer()) {
-                o << ".template as<"
+                o << "halide_buffer_t_accessor<"
                   << (a.arg.is_input() ? "const " : "") << a.c_type
-                  << ">().raw_buffer()";
+                  << ", typename std::remove_cv<typename std::remove_reference<decltype(" << a.escaped_name << ")>::type>::type"
+                  << ">(" << a.escaped_name << ")";
+            } else {
+                o << a.escaped_name;
             }
         });
         stream << ");\n";
         stream << "}\n";
 
-        stream << "#endif  // #ifdef __cplusplus\n";
+        stream << "#endif  // #if __cplusplus >= 201103L\n";
         stream << "#endif  // #if defined(HALIDE_RUNTIME_BUFFER_WRAPPERS)\n";
 
         set_name_mangling_mode(name_mangling);
