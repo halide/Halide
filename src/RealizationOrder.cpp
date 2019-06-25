@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <set>
+#include <unordered_map>
 
 #include "FindCalls.h"
 #include "Func.h"
@@ -11,12 +12,133 @@ namespace Halide {
 namespace Internal {
 
 using std::map;
+using std::unordered_map;
 using std::pair;
 using std::set;
 using std::string;
 using std::vector;
 
-namespace {
+template<class T>
+class UnionFind {
+    map<T, T> parents;
+    map<T, int> sizes;
+
+public:
+    UnionFind() = default;
+
+    const T &find(const T &element) {
+        auto it = parents.find(element);
+
+        if (it == parents.end()) {
+            // add if not in maps
+            parents[element] = element;
+            sizes[element] = 1;
+            return element;
+        }
+
+        while (it->first != it->second) {
+            // path halving
+            const auto grandparent = parents[it->second];
+            it->second = grandparent;
+            it = parents.find(grandparent);
+        }
+
+        return it->second;
+    }
+
+    void join(const T &x, const T &y) {
+        const T &x_root = find(x);
+        const T &y_root = find(y);
+
+        if (x_root == y_root) {
+            return;
+        }
+
+        // union by size
+        int x_size = sizes[x_root];
+        int y_size = sizes[y_root];
+
+        // smaller tree gets fused into the larger tree
+        const T &smaller = x_size < y_size ? x_root : y_root;
+        const T &larger = x_size < y_size ? y_root : x_root;
+
+        parents[smaller] = larger;
+        sizes[larger] = x_size + y_size;
+        sizes.erase(smaller);
+    }
+};
+
+template<class T>
+class DAG {
+    unordered_map<T, vector<const T &>> edges;
+
+public:
+    DAG() = default;
+
+    void add_vertex(const T &vertex) {
+        edges[vertex]; // ensure vertex exists in map.
+    }
+
+    void add_edge(const T &src, const T &dst) {
+        edges[src].push_back(dst);
+    }
+};
+
+
+template<class T, class U>
+class LabeledTree {
+
+public:
+    bool operator==(const LabeledTree<T, U> &other) {
+        return true;
+    }
+};
+
+class FusedStage {
+    LabeledTree<Stage, Var> tree;
+
+public:
+    bool operator==(const FusedStage &other) {
+        return tree == other.tree;
+    }
+};
+
+class FusedGroup {
+//    DAG<FusedStage> group;
+    vector<Function> members;
+
+public:
+    void add_stage(const FusedStage &stage) {
+
+    }
+
+    void add_function(const Function &function) {
+        members.push_back(function);
+    }
+
+    bool operator==(const FusedGroup &other) {
+        if (members.size() != other.members.size()) {
+            return false;
+        }
+        for (size_t i = 0; i < members.size(); ++i) {
+            if (!members[i].same_as(other.members[i])) {
+                return false;
+            }
+        }
+        return true;
+    }
+};
+
+class PipelineGraph {
+//    DAG<FusedGroup> graph;
+
+public:
+    PipelineGraph() = default;
+
+    void add_fused_group(const FusedGroup &group) {
+//        graph.add_vertex(group);
+    }
+};
 
 void find_fused_groups_dfs(const string &current,
                            const map<string, set<string>> &fuse_adjacency_list,
@@ -75,8 +197,8 @@ void realization_order_dfs(const string &current,
             realization_order_dfs(fn, graph, visited, result_set, order);
         } else {
             internal_assert(result_set.find(fn) != result_set.end())
-                << "Stuck in a loop computing a realization order. "
-                << "Perhaps this pipeline has a loop involving " << current << "?\n";
+            << "Stuck in a loop computing a realization order. "
+            << "Perhaps this pipeline has a loop involving " << current << "?\n";
         }
     }
 
@@ -151,13 +273,13 @@ void populate_fused_pairs_list(const string &func, const Definition &def,
 
     auto iter = env.find(fuse_level.func());
     user_assert(iter != env.end())
-        << "Illegal compute_with: \"" << func << "\" is scheduled to be computed with \""
-        << fuse_level.func() << "\" which is not used anywhere.\n";
+    << "Illegal compute_with: \"" << func << "\" is scheduled to be computed with \""
+    << fuse_level.func() << "\" which is not used anywhere.\n";
 
     Function &parent = iter->second;
     user_assert(!parent.has_extern_definition())
-        << "Illegal compute_with: Func \"" << func << "\" is scheduled to be "
-        << "computed with extern Func \"" << parent.name() << "\"\n";
+    << "Illegal compute_with: Func \"" << func << "\" is scheduled to be "
+    << "computed with extern Func \"" << parent.name() << "\"\n";
 
     FusedPair pair(fuse_level.func(), fuse_level.stage_index(),
                    func, stage_index, fuse_level.var().name());
@@ -165,7 +287,7 @@ void populate_fused_pairs_list(const string &func, const Definition &def,
         parent.definition().schedule().fused_pairs().push_back(pair);
     } else {
         internal_assert(fuse_level.stage_index() > 0);
-        parent.update(fuse_level.stage_index()-1).schedule().fused_pairs().push_back(pair);
+        parent.update(fuse_level.stage_index() - 1).schedule().fused_pairs().push_back(pair);
     }
 }
 
@@ -180,9 +302,10 @@ void check_no_cyclic_compute_with(const map<string, vector<FusedPair>> &fused_pa
                 continue;
             }
             const auto &it = std::find_if(o_iter->second.begin(), o_iter->second.end(),
-                [&pair](const FusedPair &other) {
-                    return (pair.parent_func == other.child_func) && (pair.child_func == other.parent_func);
-                });
+                                          [&pair](const FusedPair &other) {
+                                              return (pair.parent_func == other.child_func) &&
+                                                     (pair.child_func == other.parent_func);
+                                          });
             user_assert(it == o_iter->second.end())
             << "Found cyclic dependencies between compute_with of "
             << pair.parent_func << " and " << pair.child_func << "\n";
@@ -190,7 +313,60 @@ void check_no_cyclic_compute_with(const map<string, vector<FusedPair>> &fused_pa
     }
 }
 
-} // anonymous namespace
+void fuse_funcs(UnionFind<string> &fused_groups_set,
+                const Function &function,
+                const LoopLevel &fuse_level,
+                map<string, Function> &env) {
+    if (fuse_level.is_inlined() || fuse_level.is_root()) {
+        return;
+    }
+
+    const auto iter = env.find(fuse_level.func());
+    user_assert(iter != env.end())
+    << "Illegal compute_with: \"" << function.name() << "\" is scheduled to be computed with \""
+    << fuse_level.func() << "\" which is not used anywhere.\n";
+
+    const Function &parent = iter->second;
+    user_assert(!parent.has_extern_definition())
+    << "Illegal compute_with: Func \"" << function.name() << "\" is scheduled to be "
+    << "computed with extern Func \"" << parent.name() << "\"\n";
+
+    fused_groups_set.join(function.name(), parent.name());
+}
+
+void dump_pipeline_graph(const vector<Function> &outputs, map<string, Function> &env) {
+    UnionFind<string> fused_groups_set;
+
+    // Identify fused groups
+    for (auto &it : env) {
+        const auto &func = it.second;
+
+        const auto &init_fuse = func.definition().schedule().fuse_level().level;
+        fuse_funcs(fused_groups_set, func, init_fuse, env);
+
+        for (const auto &update : func.updates()) {
+            const auto &update_fuse = update.schedule().fuse_level().level;
+            fuse_funcs(fused_groups_set, func, update_fuse, env);
+        }
+    }
+
+    PipelineGraph graph{};
+    map<string, FusedGroup> representatives;
+
+    // Collect fused groups into objects
+    for (auto &it : env) {
+        const auto &func = it.second;
+        const string &group = fused_groups_set.find(func.name());
+        representatives[group].add_function(func);
+    }
+
+    //
+    for (auto &it : representatives) {
+        graph.add_fused_group(it.second);
+    }
+
+
+}
 
 pair<vector<string>, vector<vector<string>>>
 realization_order(const vector<Function> &outputs, map<string, Function> &env) {
@@ -225,20 +401,20 @@ realization_order(const vector<Function> &outputs, map<string, Function> &env) {
     map<string, vector<FusedPair>> fused_pairs_graph;
     map<string, set<string>> fuse_adjacency_list;
 
-    for (const pair<const string, Function> &caller : env) {
+    for (const pair<const string, Function> &func : env) {
         // Find all compute_with (fused) pairs. We have to look at the update
         // definitions as well since compute_with is defined per definition (stage).
-        vector<FusedPair> &func_fused_pairs = fused_pairs_graph[caller.first];
-        fuse_adjacency_list[caller.first]; // Make sure every Func in 'env' is allocated a slot
-        if (!caller.second.has_extern_definition()) {
-            for (auto &p : caller.second.definition().schedule().fused_pairs()) {
-                validate_fused_pair(caller.first, 0, env, indirect_calls,
+        vector<FusedPair> &func_fused_pairs = fused_pairs_graph[func.first];
+        fuse_adjacency_list[func.first]; // Make sure every Func in 'env' is allocated a slot
+        if (!func.second.has_extern_definition()) {
+            for (auto &p : func.second.definition().schedule().fused_pairs()) {
+                validate_fused_pair(func.first, 0, env, indirect_calls,
                                     p, func_fused_pairs);
                 collect_fused_pairs(p, func_fused_pairs, graph, fuse_adjacency_list);
             }
-            for (size_t i = 0; i < caller.second.updates().size(); ++i) {
-                for (auto &p : caller.second.updates()[i].schedule().fused_pairs()) {
-                    validate_fused_pair(caller.first, i + 1, env, indirect_calls,
+            for (size_t i = 0; i < func.second.updates().size(); ++i) {
+                for (auto &p : func.second.updates()[i].schedule().fused_pairs()) {
+                    validate_fused_pair(func.first, i + 1, env, indirect_calls,
                                         p, func_fused_pairs);
                     collect_fused_pairs(p, func_fused_pairs, graph, fuse_adjacency_list);
                 }
@@ -298,11 +474,11 @@ realization_order(const vector<Function> &outputs, map<string, Function> &env) {
     // children).
     for (auto &group : group_order) {
         std::sort(group.begin(), group.end(),
-            [&](const string &lhs, const string &rhs){
-                const auto &iter_lhs = std::find(temp.begin(), temp.end(), lhs);
-                const auto &iter_rhs = std::find(temp.begin(), temp.end(), rhs);
-                return iter_lhs < iter_rhs;
-            }
+                  [&](const string &lhs, const string &rhs) {
+                      const auto &iter_lhs = std::find(temp.begin(), temp.end(), lhs);
+                      const auto &iter_rhs = std::find(temp.begin(), temp.end(), rhs);
+                      return iter_lhs < iter_rhs;
+                  }
         );
     }
 
