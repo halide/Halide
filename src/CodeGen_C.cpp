@@ -1831,42 +1831,46 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         stream << "const struct halide_filter_metadata_t *" << simple_name << "_metadata() HALIDE_FUNCTION_ATTRS;\n";
 
         // Emit overload(s) that accept Halide::Runtime::Buffers instead of halide_buffer_t
-        // (but only if the function is being emitted in NameMangling::CPlusPlus mode)
-        if (name_mangling == NameMangling::CPlusPlus) {
-            stream << "\n// C++ wrappers to accept Halide::Runtime::Buffers of the appropriate types\n";
-            stream << "#if defined(HALIDE_RUNTIME_BUFFER_WRAPPERS)\n";
 
-            stream << "template<";
-            emit_args([](std::ostream &o, const ArgInfo &a) {
-                // The typenames for scalar args are unused, but that's ok
-                o << "\n  typename T_" << a.escaped_name;
-            });
-            stream << ">\n";
-            stream << "inline int " << simple_name << "(";
-            emit_args([](std::ostream &o, const ArgInfo &a) {
-                o << "\n  ";
-                if (a.arg.is_buffer()) {
-                    o << "::Halide::Runtime::Buffer<T_" << a.escaped_name << "> &";
-                } else {
-                    o << a.c_type;
-                }
-                o << a.escaped_name;
-            });
-            stream << ") HALIDE_FUNCTION_ATTRS {\n";
-            stream << "    return " << simple_name << "(";
-            emit_args([](std::ostream &o, const ArgInfo &a) {
-                o << "\n        " << a.escaped_name;
-                if (a.arg.is_buffer()) {
-                    o << ".template as<"
-                      << (a.arg.is_input() ? "const " : "") << a.c_type
-                      << ">().raw_buffer()";
-                }
-            });
-            stream << ");\n";
-            stream << "}\n";
+        set_name_mangling_mode(NameMangling::CPlusPlus);
 
-            stream << "#endif  // defined(HALIDE_RUNTIME_BUFFER_WRAPPERS)\n";
-        }
+        stream << "\n// C++ wrappers to accept Halide::Runtime::Buffers of the appropriate types\n";
+        stream << "#if defined(HALIDE_RUNTIME_BUFFER_WRAPPERS)\n";
+        stream << "#ifdef __cplusplus\n";
+
+        stream << "template<";
+        emit_args([](std::ostream &o, const ArgInfo &a) {
+            // The typenames for scalar args are unused, but that's ok
+            o << "\n  typename T_" << a.escaped_name;
+        });
+        stream << ">\n";
+        stream << "inline int " << simple_name << "(";
+        emit_args([](std::ostream &o, const ArgInfo &a) {
+            o << "\n  ";
+            if (a.arg.is_buffer()) {
+                o << "::Halide::Runtime::Buffer<T_" << a.escaped_name << "> &";
+            } else {
+                o << a.c_type;
+            }
+            o << a.escaped_name;
+        });
+        stream << ") HALIDE_FUNCTION_ATTRS {\n";
+        stream << "    return " << simple_name << "(";
+        emit_args([](std::ostream &o, const ArgInfo &a) {
+            o << "\n        " << a.escaped_name;
+            if (a.arg.is_buffer()) {
+                o << ".template as<"
+                  << (a.arg.is_input() ? "const " : "") << a.c_type
+                  << ">().raw_buffer()";
+            }
+        });
+        stream << ");\n";
+        stream << "}\n";
+
+        stream << "#endif  // #ifdef __cplusplus\n";
+        stream << "#endif  // #if defined(HALIDE_RUNTIME_BUFFER_WRAPPERS)\n";
+
+        set_name_mangling_mode(name_mangling);
     }
 
     if (!namespaces.empty()) {
