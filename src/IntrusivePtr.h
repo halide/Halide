@@ -118,7 +118,7 @@ public:
     }
 
     HALIDE_ALWAYS_INLINE
-    IntrusivePtr(IntrusivePtr<T> &&other) : ptr(other.ptr) {
+    IntrusivePtr(IntrusivePtr<T> &&other) noexcept: ptr(other.ptr) {
         other.ptr = nullptr;
     }
 
@@ -134,7 +134,7 @@ public:
         return *this;
     }
 
-    IntrusivePtr<T> &operator=(IntrusivePtr<T> &&other) {
+    IntrusivePtr<T> &operator=(IntrusivePtr<T> &&other) noexcept {
         std::swap(ptr, other.ptr);
         return *this;
     }
