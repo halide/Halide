@@ -44,7 +44,7 @@ int main(int argc, char **argv) {
 
     // Test calls into the wrappers that accept mutable-ref for buffers
     {
-        result = constinput(input1, input2, output);
+        result = constinput(input1, input2, 0, output);
         verify(result, output);
     }
 
@@ -53,22 +53,7 @@ int main(int argc, char **argv) {
     {
         Buffer<const int32_t> i1 = Buffer<const int32_t>(input1);
         Buffer<const int32_t> i2 = Buffer<const int32_t>(input2);
-        result = constinput(i1, i2, output);
-        verify(result, output);
-    }
-
-    // Test calls into the wrappers that accept mutable-ptr for buffers
-    {
-        result = constinput(&input1, &input2, &output);
-        verify(result, output);
-    }
-
-    // Test calls into the wrappers that accept mutable-ptr for buffers,
-    // with Buffer<const T> for inputs
-    {
-        Buffer<const int32_t> i1 = Buffer<const int32_t>(input1);
-        Buffer<const int32_t> i2 = Buffer<const int32_t>(input2);
-        result = constinput(&i1, &i2, &output);
+        result = constinput(i1, i2, 0, output);
         verify(result, output);
     }
 

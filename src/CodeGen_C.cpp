@@ -1699,44 +1699,6 @@ void CodeGen_C::compile(const Module &input) {
     }
 }
 
-namespace {
-
-struct ArgInfo {
-    Argument arg;
-    std::string c_type;
-    std::string escaped_name;
-};
-
-enum BufferDeclType {
-    ByRef,
-    ByPtr
-};
-
-template<BufferDeclType t>
-void DeclFnArg(std::ostream &o, const ArgInfo &a) {
-    o << "\n  ";
-    if (a.arg.is_buffer()) {
-        o << "::Halide::Runtime::Buffer<T_" << a.escaped_name << "> "
-          << ((t == ByRef) ? "&" : "*");
-    } else {
-        o << a.c_type;
-    }
-    o << a.escaped_name;
-}
-
-template<BufferDeclType t>
-void PassFnArg(std::ostream &o, const ArgInfo &a) {
-    o << "\n        " << a.escaped_name;
-    if (a.arg.is_buffer()) {
-        o << ((t == ByRef) ? "." : "->")
-          << "template as<"
-          << (a.arg.is_input() ? "const " : "") << a.c_type
-          << ">().raw_buffer()";
-    }
-}
-
-}  // namespace
-
 void CodeGen_C::compile(const LoweredFunc &f) {
     // Don't put non-external function declarations in headers.
     if (is_header() && f.linkage == LinkageType::Internal) {
@@ -1779,10 +1741,23 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         stream << "static ";
     }
 
+    struct ArgInfo {
+        Argument arg;
+        std::string c_type;
+        std::string escaped_name;
+    };
+
     std::vector<ArgInfo> arg_info;
     int input_buffers = 0, output_buffers = 0;
     for (const auto &arg : args) {
-        arg_info.push_back({arg, type_to_c_type(arg.type, !arg.is_buffer()), escaped_name(arg.name)});
+        std::string c_type;
+        if (arg.type == Float(16) && arg.is_buffer()) {
+            // Model Buffer<float16_t> as Buffer<void> for our wrappers
+            c_type = "void";
+        } else {
+            c_type = type_to_c_type(arg.type, !arg.is_buffer());
+        }
+        arg_info.push_back({arg, c_type, escaped_name(arg.name)});
         if (arg.is_buffer()) {
             arg_info.back().escaped_name += "_buffer";
             if (arg.is_input()) {
@@ -1861,25 +1836,34 @@ void CodeGen_C::compile(const LoweredFunc &f) {
             stream << "\n// C++ wrappers to accept Halide::Runtime::Buffers of the appropriate types\n";
             stream << "#if defined(HALIDE_RUNTIME_BUFFER_WRAPPERS)\n";
 
-            const auto emit_fn_wrapper = [this, &simple_name, &emit_args](EmitArgFn decl_fn_arg, EmitArgFn pass_fn_arg) {
-                stream << "template<";
-                emit_args([](std::ostream &o, const ArgInfo &a) {
-                    if (a.arg.is_buffer()) {
-                        o << "\n  typename T_" << a.escaped_name;
-                    }
-                });
-                stream << ">\n";
-                stream << "inline int " << simple_name << "(";
-                emit_args(decl_fn_arg);
-                stream << ") HALIDE_FUNCTION_ATTRS {\n";
-                stream << "    return " << simple_name << "(";
-                emit_args(pass_fn_arg);
-                stream << ");\n";
-                stream << "}\n";
-            };
-
-            emit_fn_wrapper(DeclFnArg<ByRef>, PassFnArg<ByRef>);
-            emit_fn_wrapper(DeclFnArg<ByPtr>, PassFnArg<ByPtr>);
+            stream << "template<";
+            emit_args([](std::ostream &o, const ArgInfo &a) {
+                // The typenames for scalar args are unused, but that's ok
+                o << "\n  typename T_" << a.escaped_name;
+            });
+            stream << ">\n";
+            stream << "inline int " << simple_name << "(";
+            emit_args([](std::ostream &o, const ArgInfo &a) {
+                o << "\n  ";
+                if (a.arg.is_buffer()) {
+                    o << "::Halide::Runtime::Buffer<T_" << a.escaped_name << "> &";
+                } else {
+                    o << a.c_type;
+                }
+                o << a.escaped_name;
+            });
+            stream << ") HALIDE_FUNCTION_ATTRS {\n";
+            stream << "    return " << simple_name << "(";
+            emit_args([](std::ostream &o, const ArgInfo &a) {
+                o << "\n        " << a.escaped_name;
+                if (a.arg.is_buffer()) {
+                    o << ".template as<"
+                      << (a.arg.is_input() ? "const " : "") << a.c_type
+                      << ">().raw_buffer()";
+                }
+            });
+            stream << ");\n";
+            stream << "}\n";
 
             stream << "#endif  // defined(HALIDE_RUNTIME_BUFFER_WRAPPERS)\n";
         }
