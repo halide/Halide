@@ -1835,7 +1835,10 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         stream << "// assuming that a suitable variant of halide_buffer_t_accessor is available.\n";
         stream << "#if defined(HALIDE_RUNTIME_BUFFER_WRAPPERS)\n";
         stream << "#if __cplusplus >= 201103L\n";
-
+        stream << "\n";
+        stream << "template<typename RequiredCompatibilityType, typename ActualBufferType>\n"
+               << "struct halide_buffer_t_accessor;\n";
+        stream << "\n";
         stream << "template<";
         emit_args([](std::ostream &o, const ArgInfo &a) {
             if (a.arg.is_buffer()) {
