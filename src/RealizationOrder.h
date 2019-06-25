@@ -16,6 +16,35 @@ namespace Halide {
 namespace Internal {
 
 class Function;
+struct FusedStageContents;
+struct FusedGroupContents;
+
+class FusedStage {
+    IntrusivePtr<FusedStageContents> contents;
+
+public:
+    FusedStage();
+    FusedStage(const FusedStage &other) : contents(other.contents) {}
+    FusedStage(IntrusivePtr<FusedStageContents> ptr) : contents(std::move(ptr)) {}
+
+    friend struct std::hash<Halide::Internal::FusedStage>;
+
+    bool operator==(const FusedStage &other) const;
+};
+
+class FusedGroup {
+    IntrusivePtr<FusedGroupContents> contents;
+
+public:
+    FusedGroup();
+    FusedGroup(const FusedGroup &other) : contents(other.contents) {}
+    FusedGroup(IntrusivePtr<FusedGroupContents> ptr) : contents(std::move(ptr)) {}
+
+    friend struct std::hash<Halide::Internal::FusedGroup>;
+
+    bool operator==(const FusedGroup &other) const;
+    void add_stage(const FusedStage &stage);
+};
 
 /** Given a bunch of functions that call each other, determine an
  * order in which to do the scheduling. This in turn influences the
@@ -40,5 +69,10 @@ std::vector<std::string> topological_order(
 
 }  // namespace Internal
 }  // namespace Halide
+
+namespace std {
+template <> struct hash<Halide::Internal::FusedStage>;
+template <> struct hash<Halide::Internal::FusedGroup>;
+}
 
 #endif

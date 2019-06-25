@@ -8,15 +8,34 @@
 #include "IRVisitor.h"
 #include "RealizationOrder.h"
 
-namespace Halide {
-namespace Internal {
-
 using std::map;
 using std::unordered_map;
 using std::pair;
 using std::set;
 using std::string;
 using std::vector;
+
+namespace std {
+
+template<>
+struct hash<Halide::Internal::FusedStage> {
+    std::size_t operator()(const Halide::Internal::FusedStage &k) const
+    {
+        return hash<Halide::Internal::FusedStageContents *>()(k.contents.get());
+    }
+};
+
+template<>
+struct hash<Halide::Internal::FusedGroup> {
+    std::size_t operator()(const Halide::Internal::FusedGroup &k) const
+    {
+        return hash<Halide::Internal::FusedGroupContents *>()(k.contents.get());
+    }
+};
+
+}
+
+namespace {
 
 template<class T>
 class UnionFind {
@@ -26,7 +45,8 @@ class UnionFind {
 public:
     UnionFind() = default;
 
-    const T &find(const T &element) {
+    const T &find(const T &element)
+    {
         auto it = parents.find(element);
 
         if (it == parents.end()) {
@@ -46,7 +66,8 @@ public:
         return it->second;
     }
 
-    void join(const T &x, const T &y) {
+    void join(const T &x, const T &y)
+    {
         const T &x_root = find(x);
         const T &y_root = find(y);
 
@@ -70,80 +91,138 @@ public:
 
 template<class T>
 class DAG {
-    unordered_map<T, vector<const T &>> edges;
+    unordered_map<T, vector<T>> edges{};
 
 public:
-    DAG() = default;
+    DAG() {}
 
-    void add_vertex(const T &vertex) {
+    void add_vertex(const T &vertex)
+    {
         edges[vertex]; // ensure vertex exists in map.
     }
 
-    void add_edge(const T &src, const T &dst) {
+    void add_edge(const T &src, const T &dst)
+    {
         edges[src].push_back(dst);
     }
-};
 
+    vector<T> topological_sort()
+    {
+        return vector<T>{};
+    }
+};
 
 template<class T, class U>
 class LabeledTree {
-
-public:
-    bool operator==(const LabeledTree<T, U> &other) {
-        return true;
-    }
 };
 
-class FusedStage {
+}
+
+namespace Halide {
+namespace Internal {
+
+
+struct FusedStageContents {
+    mutable RefCount ref_count;
+
     LabeledTree<Stage, Var> tree;
-
-public:
-    bool operator==(const FusedStage &other) {
-        return tree == other.tree;
-    }
 };
 
-class FusedGroup {
-//    DAG<FusedStage> group;
-    vector<Function> members;
+template<>
+RefCount &ref_count<FusedStageContents>(const FusedStageContents *p)
+{
+    return p->ref_count;
+}
 
-public:
-    void add_stage(const FusedStage &stage) {
+template<>
+void destroy<FusedStageContents>(const FusedStageContents *p)
+{
+    delete p;
+}
 
-    }
+FusedStage::FusedStage() : contents(new FusedStageContents) {}
 
-    void add_function(const Function &function) {
-        members.push_back(function);
-    }
+bool FusedStage::operator==(const FusedStage &other) const
+{
+    return contents.same_as(other.contents);
+}
 
-    bool operator==(const FusedGroup &other) {
-        if (members.size() != other.members.size()) {
-            return false;
-        }
-        for (size_t i = 0; i < members.size(); ++i) {
-            if (!members[i].same_as(other.members[i])) {
-                return false;
-            }
-        }
-        return true;
-    }
+struct FusedGroupContents {
+    mutable RefCount ref_count;
+
+    DAG<FusedStage> group;
+    vector<Function> funcs;
 };
+
+template<>
+RefCount &ref_count<FusedGroupContents>(const FusedGroupContents *p)
+{
+    return p->ref_count;
+}
+
+template<>
+void destroy<FusedGroupContents>(const FusedGroupContents *p)
+{
+    delete p;
+}
+
+FusedGroup::FusedGroup() : contents(new FusedGroupContents) {}
+
+bool FusedGroup::operator==(const FusedGroup &other) const
+{
+    return contents.same_as(other.contents);
+}
+
+void FusedGroup::add_stage(const FusedStage &stage)
+{
+
+}
+
+struct PipelineGraphContents {
+    mutable RefCount ref_count;
+
+    DAG<FusedGroup> graph;
+};
+
+
+template<>
+RefCount &ref_count<PipelineGraphContents>(const PipelineGraphContents *p)
+{
+    return p->ref_count;
+}
+
+template<>
+void destroy<PipelineGraphContents>(const PipelineGraphContents *p)
+{
+    delete p;
+}
 
 class PipelineGraph {
-//    DAG<FusedGroup> graph;
+    IntrusivePtr<PipelineGraphContents> contents;
 
 public:
-    PipelineGraph() = default;
+    PipelineGraph() : contents(new PipelineGraphContents) {}
 
-    void add_fused_group(const FusedGroup &group) {
-//        graph.add_vertex(group);
+    PipelineGraph(const PipelineGraph &other) : contents(other.contents) {}
+
+    PipelineGraph(IntrusivePtr<PipelineGraphContents> ptr) : contents(std::move(ptr)) {}
+
+    bool operator==(const PipelineGraph &other)
+    {
+        return contents.same_as(other.contents);
+    }
+
+    void add_fused_group(const FusedGroup &group)
+    {
+        contents->graph.add_vertex(group);
     }
 };
 
 void find_fused_groups_dfs(const string &current,
                            const map<string, set<string>> &fuse_adjacency_list,
                            set<string> &visited,
-                           vector<string> &group) {
+                           vector<string> &group)
+{
     visited.insert(current);
     group.push_back(current);
 
@@ -159,7 +238,8 @@ void find_fused_groups_dfs(const string &current,
 
 pair<map<string, vector<string>>, map<string, string>>
 find_fused_groups(const map<string, Function> &env,
-                  const map<string, set<string>> &fuse_adjacency_list) {
+                  const map<string, set<string>> &fuse_adjacency_list)
+{
     set<string> visited;
     map<string, vector<string>> fused_groups;
     map<string, string> group_name;
@@ -185,7 +265,8 @@ void realization_order_dfs(const string &current,
                            const map<string, vector<string>> &graph,
                            set<string> &visited,
                            set<string> &result_set,
-                           vector<string> &order) {
+                           vector<string> &order)
+{
     visited.insert(current);
 
     const auto &iter = graph.find(current);
@@ -211,7 +292,8 @@ void validate_fused_pair(const string &fn, size_t stage_index,
                          const map<string, Function> &env,
                          const map<string, map<string, Function>> &indirect_calls,
                          const FusedPair &p,
-                         const vector<FusedPair> &func_fused_pairs) {
+                         const vector<FusedPair> &func_fused_pairs)
+{
     internal_assert((p.parent_func == fn) && (p.parent_stage == stage_index));
 
     user_assert(env.count(p.child_func))
@@ -249,7 +331,8 @@ void validate_fused_pair(const string &fn, size_t stage_index,
 void collect_fused_pairs(const FusedPair &p,
                          vector<FusedPair> &func_fused_pairs,
                          map<string, vector<string>> &graph,
-                         map<string, set<string>> &fuse_adjacency_list) {
+                         map<string, set<string>> &fuse_adjacency_list)
+{
     fuse_adjacency_list[p.parent_func].insert(p.child_func);
     fuse_adjacency_list[p.child_func].insert(p.parent_func);
 
@@ -263,7 +346,8 @@ void collect_fused_pairs(const FusedPair &p,
 
 // Populate the 'fused_pairs' list in Schedule of each function stage.
 void populate_fused_pairs_list(const string &func, const Definition &def,
-                               size_t stage_index, map<string, Function> &env) {
+                               size_t stage_index, map<string, Function> &env)
+{
     internal_assert(def.defined());
     const LoopLevel &fuse_level = def.schedule().fuse_level().level;
     if (fuse_level.is_inlined() || fuse_level.is_root()) {
@@ -293,7 +377,8 @@ void populate_fused_pairs_list(const string &func, const Definition &def,
 
 // Make sure we don't have cyclic compute_with: if Func 'f' is computed after
 // Func 'g', Func 'g' should not be computed after Func 'f'.
-void check_no_cyclic_compute_with(const map<string, vector<FusedPair>> &fused_pairs_graph) {
+void check_no_cyclic_compute_with(const map<string, vector<FusedPair>> &fused_pairs_graph)
+{
     for (const auto &iter : fused_pairs_graph) {
         for (const auto &pair : iter.second) {
             internal_assert(pair.parent_func != pair.child_func);
@@ -316,7 +401,8 @@ void check_no_cyclic_compute_with(const map<string, vector<FusedPair>> &fused_pa
 void fuse_funcs(UnionFind<string> &fused_groups_set,
                 const Function &function,
                 const LoopLevel &fuse_level,
-                map<string, Function> &env) {
+                map<string, Function> &env)
+{
     if (fuse_level.is_inlined() || fuse_level.is_root()) {
         return;
     }
@@ -334,7 +420,13 @@ void fuse_funcs(UnionFind<string> &fused_groups_set,
     fused_groups_set.join(function.name(), parent.name());
 }
 
-void dump_pipeline_graph(const vector<Function> &outputs, map<string, Function> &env) {
+FusedGroup create_fused_group(map<string, Function> &env, const vector<Function> &group)
+{
+    return FusedGroup{};
+}
+
+PipelineGraph create_pipeline_graph(const vector<Function> &outputs, map<string, Function> &env)
+{
     UnionFind<string> fused_groups_set;
 
     // Identify fused groups
@@ -351,26 +443,26 @@ void dump_pipeline_graph(const vector<Function> &outputs, map<string, Function> 
     }
 
     PipelineGraph graph{};
-    map<string, FusedGroup> representatives;
+    unordered_map<string, vector<Function>> fused_funcs;
 
     // Collect fused groups into objects
     for (auto &it : env) {
         const auto &func = it.second;
         const string &group = fused_groups_set.find(func.name());
-        representatives[group].add_function(func);
+        fused_funcs[group].push_back(func);
     }
 
-    //
-    for (auto &it : representatives) {
-        graph.add_fused_group(it.second);
+    // Build fused groups from the fused funcs
+    for (auto &it : fused_funcs) {
+        graph.add_fused_group(create_fused_group(env, it.second));
     }
 
-
+    return graph;
 }
 
 pair<vector<string>, vector<vector<string>>>
-realization_order(const vector<Function> &outputs, map<string, Function> &env) {
-
+realization_order(const vector<Function> &outputs, map<string, Function> &env)
+{
     // Populate the fused_pairs list of each function definition (i.e. list of
     // all function definitions that are to be computed with that function).
     for (auto &iter : env) {
@@ -494,7 +586,8 @@ realization_order(const vector<Function> &outputs, map<string, Function> &env) {
 }
 
 vector<string> topological_order(const vector<Function> &outputs,
-                                 const map<string, Function> &env) {
+                                 const map<string, Function> &env)
+{
 
     // Make a DAG representing the pipeline. Each function maps to the
     // set describing its inputs.
