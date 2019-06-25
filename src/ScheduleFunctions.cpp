@@ -1262,7 +1262,7 @@ private:
     }
 
     // Collect all fused pairs that directly/indirectly related to 'def'
-    vector<FusedPair> collect_all_dependence(const Definition &def) {
+    vector<FusedPair> collect_all_dependencies(const Definition &def) {
         set<string> visited;
         vector<FusedPair> dependence;
 
@@ -1294,10 +1294,10 @@ private:
 
         map<string, Expr> replacements;
 
-        vector<FusedPair> dependence = collect_all_dependence(def);
+        vector<FusedPair> dependencies = collect_all_dependencies(def);
 
         // Compute the union of the bounds of the fused loops.
-        for (const FusedPair &pair : dependence) {
+        for (const FusedPair &pair : dependencies) {
             const auto &f2_it = env.find(pair.child_func);
             internal_assert(f2_it != env.end());
             const vector<Dim> &dims_2 =
