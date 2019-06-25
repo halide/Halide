@@ -118,7 +118,7 @@ public:
     }
 
     HALIDE_ALWAYS_INLINE
-    IntrusivePtr(IntrusivePtr<T> &&other) noexcept: ptr(other.ptr) {
+    IntrusivePtr(IntrusivePtr<T> &&other) noexcept : ptr(other.ptr) {
         other.ptr = nullptr;
     }
 
