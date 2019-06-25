@@ -313,7 +313,7 @@ private:
 
     /** Initialize the shape from a vector of extents */
     void initialize_shape(const std::vector<int> &sizes) {
-        assert(sizes.size() <= std::numeric_limits<int>::max());
+        assert(sizes.size() <= (size_t)std::numeric_limits<int>::max());
         int limit = (int)sizes.size();
         assert(limit <= dimensions());
         for (int i = 0; i < limit; i++) {
@@ -399,7 +399,7 @@ private:
 
     /** Crop as many dimensions as are in rect, without handling device allocation. */
     void crop_host(const std::vector<std::pair<int, int>> &rect) {
-        assert(rect.size() <= std::numeric_limits<int>::max());
+        assert(rect.size() <= (size_t)std::numeric_limits<int>::max());
         int limit = (int)rect.size();
         assert(limit <= dimensions());
         for (int i = 0; i < limit; i++) {
@@ -1350,7 +1350,7 @@ public:
     /** Translate an image along the first N dimensions */
     void translate(const std::vector<int> &delta) {
         device_deallocate();
-        assert(delta.size() <= std::numeric_limits<int>::max());
+        assert(delta.size() <= (size_t)std::numeric_limits<int>::max());
         int limit = (int)delta.size();
         assert(limit <= dimensions());
         for (int i = 0; i < limit; i++) {
