@@ -20,8 +20,8 @@ using std::vector;
 
 template<class T>
 class UnionFind {
-    map<T, T> parents;
-    map<T, int> sizes;
+    unordered_map<T, T> parents;
+    unordered_map<T, int> sizes;
 
 public:
     UnionFind() = default;
