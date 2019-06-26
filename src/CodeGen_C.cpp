@@ -1833,7 +1833,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         stream << "\n// C++ wrappers to accept Halide::Runtime::Buffers (or similar classes) of the appropriate types,\n";
         stream << "// assuming that the class can implicitly return a halide_typed_buffer_t<> of the correct type.\n";
         stream << "#if defined(HALIDE_RUNTIME_BUFFER_WRAPPERS)\n";
-        stream << "#if __cplusplus >= 201103L\n";
+        stream << "#ifdef __cplusplus\n";
         stream << "\n";
         stream << "template<typename T>\n"
                << "struct halide_typed_buffer_t;\n";
@@ -1875,7 +1875,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         stream << ");\n";
         stream << "}\n";
 
-        stream << "#endif  // #if __cplusplus >= 201103L\n";
+        stream << "#endif  // #ifdef __cplusplus\n";
         stream << "#endif  // #if defined(HALIDE_RUNTIME_BUFFER_WRAPPERS)\n";
         stream << "\n";
 
