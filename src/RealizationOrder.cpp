@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <set>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "FindCalls.h"
 #include "Func.h"
@@ -10,6 +11,7 @@
 
 using std::map;
 using std::unordered_map;
+using std::unordered_set;
 using std::pair;
 using std::set;
 using std::string;
@@ -39,6 +41,8 @@ namespace {
 
 template<class T>
 class UnionFind {
+    static_assert(std::is_nothrow_move_constructible<T>::value, "T should be noexcept MoveConstructible");
+
     unordered_map<T, T> parents;
     unordered_map<T, int> sizes;
 
@@ -91,10 +95,10 @@ public:
 
 template<class T>
 class DAG {
-    unordered_map<T, vector<T>> edges{};
+    unordered_map<T, unordered_set<T>> edges{};
 
 public:
-    DAG() {}
+    DAG() = default;
 
     void add_vertex(const T &vertex)
     {
@@ -103,12 +107,20 @@ public:
 
     void add_edge(const T &src, const T &dst)
     {
-        edges[src].push_back(dst);
+        edges[src].insert(dst);
     }
 
     vector<T> topological_sort()
     {
         return vector<T>{};
+    }
+
+    vector<T> vertex_set() const {
+        vector<T> vs;
+        for (const auto &it : edges) {
+            vs.push_back(it.first);
+        }
+        return vs;
     }
 };
 
@@ -141,6 +153,10 @@ void destroy<FusedStageContents>(const FusedStageContents *p)
 }
 
 FusedStage::FusedStage() : contents(new FusedStageContents) {}
+
+FusedStage::FusedStage(const FusedStage &other) = default;
+
+FusedStage::FusedStage(FusedStage &&other) noexcept = default;
 
 bool FusedStage::operator==(const FusedStage &other) const
 {
@@ -178,6 +194,26 @@ void FusedGroup::add_stage(const FusedStage &stage)
 
 }
 
+void FusedGroup::add_function(const Function &function) {
+    contents->funcs.push_back(function);
+}
+
+const std::vector<Function> &FusedGroup::functions() const {
+    return contents->funcs;
+}
+
+std::string FusedGroup::repr() const {
+    string rep = "[";
+    string sep;
+    for (const auto &fn : contents->funcs) {
+        rep += sep;
+        rep += fn.name();
+        sep = "|";
+    }
+    rep += "]";
+    return rep;
+}
+
 struct PipelineGraphContents {
     mutable RefCount ref_count;
 
@@ -197,26 +233,23 @@ void destroy<PipelineGraphContents>(const PipelineGraphContents *p)
     delete p;
 }
 
-class PipelineGraph {
-    IntrusivePtr<PipelineGraphContents> contents;
+PipelineGraph::PipelineGraph() : contents(new PipelineGraphContents) {}
 
-public:
-    PipelineGraph() : contents(new PipelineGraphContents) {}
+bool PipelineGraph::operator==(const PipelineGraph &other) {
+    return contents.same_as(other.contents);
+}
 
-    PipelineGraph(const PipelineGraph &other) : contents(other.contents) {}
+void PipelineGraph::add_fused_group(const FusedGroup &group) {
+    contents->graph.add_vertex(group);
+}
 
-    PipelineGraph(IntrusivePtr<PipelineGraphContents> ptr) : contents(std::move(ptr)) {}
+vector<FusedGroup> PipelineGraph::get_fused_groups() const {
+    return contents->graph.vertex_set();
+}
 
-    bool operator==(const PipelineGraph &other)
-    {
-        return contents.same_as(other.contents);
-    }
-
-    void add_fused_group(const FusedGroup &group)
-    {
-        contents->graph.add_vertex(group);
-    }
-};
+void PipelineGraph::add_edge(const FusedGroup &src, const FusedGroup &dst) {
+    contents->graph.add_edge(src, dst);
+}
 
 void find_fused_groups_dfs(const string &current,
                            const map<string, set<string>> &fuse_adjacency_list,
@@ -420,9 +453,13 @@ void fuse_funcs(UnionFind<string> &fused_groups_set,
     fused_groups_set.join(function.name(), parent.name());
 }
 
-FusedGroup create_fused_group(map<string, Function> &env, const vector<Function> &group)
-{
-    return FusedGroup{};
+FusedGroup create_fused_group(map<string, Function> &env, const vector<Function> &group_members) {
+    FusedGroup group;
+    for (const auto &member : group_members) {
+        group.add_function(member);
+    }
+
+    return group;
 }
 
 PipelineGraph create_pipeline_graph(const vector<Function> &outputs, map<string, Function> &env)
@@ -453,8 +490,26 @@ PipelineGraph create_pipeline_graph(const vector<Function> &outputs, map<string,
     }
 
     // Build fused groups from the fused funcs
+    unordered_map<string, FusedGroup> func_to_group;
     for (auto &it : fused_funcs) {
-        graph.add_fused_group(create_fused_group(env, it.second));
+        vector<Function> &group_members = it.second;
+        const FusedGroup &group = create_fused_group(env, group_members);
+        for (auto &fn : group_members) {
+            func_to_group[fn.name()] = group;
+        }
+        graph.add_fused_group(group);
+    }
+
+    // Draw edges between the fused groups:
+    for (const auto &src : graph.get_fused_groups()) {
+        for (const auto &fn : src.functions()) {
+            const map<string, Function> &calls = find_direct_calls(fn);
+            for (const auto &it : calls) {
+                const auto &dst_fn = it.second;
+                const auto &dst = func_to_group[fused_groups_set.find(dst_fn.name())];
+                graph.add_edge(src, dst);
+            }
+        }
     }
 
     return graph;

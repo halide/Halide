@@ -18,14 +18,19 @@ namespace Internal {
 class Function;
 struct FusedStageContents;
 struct FusedGroupContents;
+struct PipelineGraphContents;
 
 class FusedStage {
     IntrusivePtr<FusedStageContents> contents;
 
 public:
     FusedStage();
-    FusedStage(const FusedStage &other) : contents(other.contents) {}
-    FusedStage(IntrusivePtr<FusedStageContents> ptr) : contents(std::move(ptr)) {}
+
+    FusedStage(const FusedStage &other);
+
+    FusedStage(FusedStage &&other) noexcept;
+
+    explicit FusedStage(IntrusivePtr <FusedStageContents> ptr) : contents(std::move(ptr)) {}
 
     friend struct std::hash<Halide::Internal::FusedStage>;
 
@@ -37,13 +42,46 @@ class FusedGroup {
 
 public:
     FusedGroup();
-    FusedGroup(const FusedGroup &other) : contents(other.contents) {}
-    FusedGroup(IntrusivePtr<FusedGroupContents> ptr) : contents(std::move(ptr)) {}
+
+    FusedGroup(const FusedGroup &other) = default;
+
+    FusedGroup(FusedGroup &&other) noexcept = default;
+
+    explicit FusedGroup(IntrusivePtr <FusedGroupContents> ptr) : contents(std::move(ptr)) {}
 
     friend struct std::hash<Halide::Internal::FusedGroup>;
 
+    FusedGroup &operator=(const FusedGroup &other) = default;
     bool operator==(const FusedGroup &other) const;
+
     void add_stage(const FusedStage &stage);
+
+    void add_function(const Function &function);
+
+    const std::vector<Function> &functions() const;
+
+    std::string repr() const;
+};
+
+class PipelineGraph {
+    IntrusivePtr <PipelineGraphContents> contents;
+
+public:
+    PipelineGraph();
+
+    PipelineGraph(const PipelineGraph &other) = default;
+
+    PipelineGraph(PipelineGraph &&other) noexcept = default;
+
+    PipelineGraph(IntrusivePtr <PipelineGraphContents> ptr) : contents(std::move(ptr)) {}
+
+    bool operator==(const PipelineGraph &other);
+
+    void add_fused_group(const FusedGroup &group);
+
+    std::vector<FusedGroup> get_fused_groups() const;
+
+    void add_edge(const FusedGroup &src, const FusedGroup &dst);
 };
 
 /** Given a bunch of functions that call each other, determine an
