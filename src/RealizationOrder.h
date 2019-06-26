@@ -77,11 +77,13 @@ public:
 
     bool operator==(const PipelineGraph &other);
 
-    std::vector<FusedGroup> get_fused_groups() const;
+    std::vector<FusedGroup> fused_groups() const;
 
     void add_edge(const FusedGroup &src, const FusedGroup &dst);
 
     void set_outputs(const std::vector<Function> &vector);
+
+    void debug_dump() const;
 };
 
 /** Given a bunch of functions that call each other, determine an
@@ -104,6 +106,12 @@ std::pair<std::vector<std::string>, std::vector<std::vector<std::string>>> reali
  * will come before its consumers in that order */
 std::vector<std::string> topological_order(
         const std::vector<Function> &outputs, const std::map<std::string, Function> &env);
+
+/** Given a bunch of functions that call each other, create a full
+ * pipeline graph that can be used to determine realization order,
+ * visualize the pipeline, and correctly honors fused groups and stages.
+ */
+PipelineGraph create_pipeline_graph(const std::vector<Function> &outputs, std::map<std::string, Function> &env);
 
 }  // namespace Internal
 }  // namespace Halide

@@ -92,7 +92,7 @@ Module lower(const vector<Function> &output_funcs,
 
     // Compute an environment
     map<string, Function> env;
-    for (Function f : output_funcs) {
+    for (const Function &f : output_funcs) {
         populate_environment(f, env);
     }
 
@@ -104,7 +104,7 @@ Module lower(const vector<Function> &output_funcs,
     result_module.set_any_strict_float(any_strict_float);
 
     // Output functions should all be computed and stored at root.
-    for (Function f: outputs) {
+    for (const Function &f: outputs) {
         Func(f).compute_root().store_root();
     }
 
@@ -121,6 +121,9 @@ Module lower(const vector<Function> &output_funcs,
     vector<string> order;
     vector<vector<string>> fused_groups;
     std::tie(order, fused_groups) = realization_order(outputs, env);
+
+    const auto graph = create_pipeline_graph(outputs, env);
+    graph.debug_dump();
 
     // Try to simplify the RHS/LHS of a function definition by propagating its
     // specializations' conditions
@@ -385,10 +388,10 @@ Module lower(const vector<Function> &output_funcs,
 
     vector<Argument> public_args = args;
     for (const auto &out : outputs) {
-        for (Parameter buf : out.output_buffers()) {
-            public_args.push_back(Argument(buf.name(),
-                                           Argument::OutputBuffer,
-                                           buf.type(), buf.dimensions(), buf.get_argument_estimates()));
+        for (const Parameter &buf : out.output_buffers()) {
+            public_args.emplace_back(buf.name(),
+                                     Argument::OutputBuffer,
+                                     buf.type(), buf.dimensions(), buf.get_argument_estimates());
         }
     }
 
@@ -403,7 +406,7 @@ Module lower(const vector<Function> &output_funcs,
         internal_assert(arg.arg.is_input()) << "Expected only input Arguments here";
 
         bool found = false;
-        for (Argument a : args) {
+        for (const Argument &a : args) {
             found |= (a.name == arg.arg.name);
         }
 
@@ -422,8 +425,8 @@ Module lower(const vector<Function> &output_funcs,
                 << ", which was not found in the argument list.\n";
 
             err << "\nArgument list specified: ";
-            for (size_t i = 0; i < args.size(); i++) {
-                err << args[i].name << " ";
+            for (const auto &arg : args) {
+                err << arg.name << " ";
             }
             err << "\n\nParameters referenced in generated code: ";
             for (const InferredArgument &ia : inferred_args) {
