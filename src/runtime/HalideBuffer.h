@@ -34,6 +34,27 @@
 #pragma GCC diagnostic ignored "-Warray-bounds"
 #endif
 
+#if defined(HALIDE_RUNTIME_BUFFER_WRAPPERS)
+
+template<typename T>
+struct halide_typed_buffer_t {
+  HALIDE_ALWAYS_INLINE explicit halide_typed_buffer_t(halide_buffer_t *p) : ptr(p) {
+    using not_const_T = typename std::remove_const<T>::type;
+    constexpr bool T_is_void = std::is_same<not_const_T, void>::value;
+    static_assert(!T_is_void, "Cannot create halide_typed_buffer_t<void>");
+    using not_void_T = typename std::conditional<T_is_void, uint8_t, not_const_T>::type;
+    assert(p->type == halide_type_of<not_void_T>());
+  }
+
+  HALIDE_ALWAYS_INLINE halide_buffer_t *raw_buffer() { return ptr; }
+
+private:
+  halide_buffer_t * const ptr;
+};
+
+#endif  // HALIDE_RUNTIME_BUFFER_WRAPPERS
+
+
 namespace Halide {
 namespace Runtime {
 
@@ -1069,11 +1090,25 @@ public:
     }
     // @}
 
+#if defined(HALIDE_RUNTIME_BUFFER_WRAPPERS)
+    // All Buffer<T> can produce halide_typed_buffer_t<const T>
+    operator halide_typed_buffer_t<typename std::add_const<T>::type> () {
+        return halide_typed_buffer_t<typename std::add_const<T>::type>(raw_buffer());
+    }
+
+    // Only Buffer<non-const-T> can produce halide_typed_buffer_t<non-const-T>
+    operator halide_typed_buffer_t<typename std::remove_const<T>::type> () {
+        static_assert(!std::is_const<T>::value, "Can't convert from a Buffer<const T> to a Buffer<T>");
+        return halide_typed_buffer_t<typename std::remove_const<T>::type>(raw_buffer());
+    }
+
+#else
     /** Provide a cast operator to halide_buffer_t *, so that
      * instances can be passed directly to Halide filters. */
     operator halide_buffer_t *() {
         return &buf;
     }
+#endif
 
     /** Return a typed reference to this Buffer. Useful for converting
      * a reference to a Buffer<void> to a reference to, for example, a
@@ -2353,4 +2388,4 @@ public:
 
 #undef HALIDE_ALLOCA
 
-#endif  // HALIDE_RUNTIME_IMAGE_H
+#endif  // HALIDE_RUNTIME_BUFFER_H

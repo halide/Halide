@@ -1427,6 +1427,10 @@ $(FILTERS_DIR)/alias_with_offset_42.a: $(BIN_DIR)/alias.generator
 	@mkdir -p $(@D)
 	$(CURDIR)/$< -g alias_with_offset_42 -f alias_with_offset_42 $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime
 
+$(FILTERS_DIR)/constinput.a: $(BIN_DIR)/constinput.generator
+	@mkdir -p $(@D)
+	$(CURDIR)/$< -g constinput -f constinput $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-c_plus_plus_name_mangling
+
 METADATA_TESTER_GENERATOR_ARGS=\
 	input.type=uint8 input.dim=3 \
 	dim_only_input_buffer.type=uint8 \

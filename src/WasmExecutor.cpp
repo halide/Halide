@@ -1044,7 +1044,7 @@ void v8_extern_wrapper(const v8::FunctionCallbackInfo<v8::Value>& args) {
     for (size_t i = 0; i < arg_types_len; ++i) {
         if (arg_types[i].is_buffer) {
             const wasm32_ptr_t buf_ptr = args[i]->Int32Value(context).ToChecked();
-            copy_hostbuf_to_existing_wasmbuf(context, buffers[i], buf_ptr);
+            copy_hostbuf_to_existing_wasmbuf(context, buffers[i].raw_buffer(), buf_ptr);
         }
     }
 }
