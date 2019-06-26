@@ -1838,22 +1838,38 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         stream << "template<typename T>\n"
                << "struct halide_typed_buffer_t;\n";
         stream << "\n";
+        stream << "template<typename T>\n"
+               << "halide_buffer_t *halide_typed_buffer_t_to_halide_buffer_t(const halide_typed_buffer_t<T> &);\n";
+        stream << "\n";
         stream << "inline int " << simple_name << "(";
         emit_args([](std::ostream &o, const ArgInfo &a) {
             o << "\n  ";
             if (a.arg.is_buffer()) {
-                o << "halide_typed_buffer_t<" << (a.arg.is_input() ? "const " : "") << a.c_type << ">";
+                o << "const halide_typed_buffer_t<" << (a.arg.is_input() ? "const " : "") << a.c_type << "> &";
             } else {
                 o << a.c_type;
             }
             o << " " << a.escaped_name;
         });
         stream << ") HALIDE_FUNCTION_ATTRS {\n";
-        stream << "    return " << simple_name << "(";
+
+        // We make a local function ptr to ensure that the
+        stream << "    using " << simple_name << "FuncType__ = int (*)(";
         emit_args([](std::ostream &o, const ArgInfo &a) {
-            o << "\n        " << a.escaped_name;
             if (a.arg.is_buffer()) {
-                o << ".raw_buffer()";
+                o << "struct halide_buffer_t *";
+            } else {
+                o << a.c_type;
+            }
+        });
+        stream << ");\n";
+
+        stream << "    return static_cast<" << simple_name << "FuncType__>(" << simple_name << ")(";
+        emit_args([](std::ostream &o, const ArgInfo &a) {
+            if (a.arg.is_buffer()) {
+                o << "\n        halide_typed_buffer_t_to_halide_buffer_t(" << a.escaped_name << ")";
+            } else {
+                o << "\n        " << a.escaped_name;
             }
         });
         stream << ");\n";
@@ -1861,6 +1877,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
 
         stream << "#endif  // #if __cplusplus >= 201103L\n";
         stream << "#endif  // #if defined(HALIDE_RUNTIME_BUFFER_WRAPPERS)\n";
+        stream << "\n";
 
         set_name_mangling_mode(name_mangling);
     }

@@ -46,11 +46,12 @@ struct halide_typed_buffer_t {
     assert(p->type == halide_type_of<not_void_T>());
   }
 
-  HALIDE_ALWAYS_INLINE halide_buffer_t *raw_buffer() { return ptr; }
-
-private:
   halide_buffer_t * const ptr;
 };
+
+template<typename T>
+HALIDE_ALWAYS_INLINE
+halide_buffer_t *halide_typed_buffer_t_to_halide_buffer_t(const halide_typed_buffer_t<T> &t) { return t.ptr; }
 
 #endif  // HALIDE_RUNTIME_BUFFER_WRAPPERS
 
