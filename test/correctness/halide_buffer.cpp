@@ -78,7 +78,6 @@ void test_copy(Buffer<float> a, Buffer<float> b) {
 }
 
 int main(int argc, char **argv) {
-
     {
         // Check copying a buffer
         Buffer<float> a(100, 3, 80), b(120, 80, 3);
