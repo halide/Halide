@@ -239,16 +239,16 @@ bool PipelineGraph::operator==(const PipelineGraph &other) {
     return contents.same_as(other.contents);
 }
 
-void PipelineGraph::add_fused_group(const FusedGroup &group) {
-    contents->graph.add_vertex(group);
-}
-
 vector<FusedGroup> PipelineGraph::get_fused_groups() const {
     return contents->graph.vertex_set();
 }
 
 void PipelineGraph::add_edge(const FusedGroup &src, const FusedGroup &dst) {
     contents->graph.add_edge(src, dst);
+}
+
+void PipelineGraph::set_outputs(const std::vector<Function> &vector) {
+
 }
 
 void find_fused_groups_dfs(const string &current,
@@ -479,25 +479,14 @@ PipelineGraph create_pipeline_graph(const vector<Function> &outputs, map<string,
         }
     }
 
-    PipelineGraph graph{};
-    unordered_map<string, vector<Function>> fused_funcs;
+    PipelineGraph graph;
 
     // Collect fused groups into objects
+    unordered_map<string, FusedGroup> fused_funcs;
     for (auto &it : env) {
         const auto &func = it.second;
         const string &group = fused_groups_set.find(func.name());
-        fused_funcs[group].push_back(func);
-    }
-
-    // Build fused groups from the fused funcs
-    unordered_map<string, FusedGroup> func_to_group;
-    for (auto &it : fused_funcs) {
-        vector<Function> &group_members = it.second;
-        const FusedGroup &group = create_fused_group(env, group_members);
-        for (auto &fn : group_members) {
-            func_to_group[fn.name()] = group;
-        }
-        graph.add_fused_group(group);
+        fused_funcs[group].add_function(func);
     }
 
     // Draw edges between the fused groups:
@@ -506,11 +495,14 @@ PipelineGraph create_pipeline_graph(const vector<Function> &outputs, map<string,
             const map<string, Function> &calls = find_direct_calls(fn);
             for (const auto &it : calls) {
                 const auto &dst_fn = it.second;
-                const auto &dst = func_to_group[fused_groups_set.find(dst_fn.name())];
+                const auto &dst = fused_funcs[fused_groups_set.find(dst_fn.name())];
                 graph.add_edge(src, dst);
             }
         }
     }
+
+    // Drop vertices and edges that are unreachable from any output
+    graph.set_outputs(outputs);
 
     return graph;
 }

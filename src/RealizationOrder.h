@@ -77,11 +77,11 @@ public:
 
     bool operator==(const PipelineGraph &other);
 
-    void add_fused_group(const FusedGroup &group);
-
     std::vector<FusedGroup> get_fused_groups() const;
 
     void add_edge(const FusedGroup &src, const FusedGroup &dst);
+
+    void set_outputs(const std::vector<Function> &vector);
 };
 
 /** Given a bunch of functions that call each other, determine an
