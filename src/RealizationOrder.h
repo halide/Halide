@@ -79,11 +79,17 @@ public:
 
     std::vector<FusedGroup> fused_groups() const;
 
+    std::vector<FusedGroup> topological_order() const;
+
+    std::vector<FusedGroup> topological_order(const std::vector<Function> &outputs) const;
+
     void add_edge(const FusedGroup &src, const FusedGroup &dst);
 
     void set_outputs(const std::vector<Function> &vector);
 
     void debug_dump() const;
+
+    void add_group(const FusedGroup &group);
 };
 
 /** Given a bunch of functions that call each other, determine an
@@ -111,7 +117,7 @@ std::vector<std::string> topological_order(
  * pipeline graph that can be used to determine realization order,
  * visualize the pipeline, and correctly honors fused groups and stages.
  */
-PipelineGraph create_pipeline_graph(const std::vector<Function> &outputs, std::map<std::string, Function> &env);
+PipelineGraph create_pipeline_graph(const std::vector<Function> &outputs, const std::map<std::string, Function> &env);
 
 }  // namespace Internal
 }  // namespace Halide

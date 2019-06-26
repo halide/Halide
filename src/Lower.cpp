@@ -122,9 +122,6 @@ Module lower(const vector<Function> &output_funcs,
     vector<vector<string>> fused_groups;
     std::tie(order, fused_groups) = realization_order(outputs, env);
 
-    const auto graph = create_pipeline_graph(outputs, env);
-    graph.debug_dump();
-
     // Try to simplify the RHS/LHS of a function definition by propagating its
     // specializations' conditions
     simplify_specializations(env);
