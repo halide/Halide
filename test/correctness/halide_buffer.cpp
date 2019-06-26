@@ -1,5 +1,3 @@
-#define HALIDE_RUNTIME_BUFFER_WRAPPERS
-
 #include<iostream>
 // Don't include Halide.h: it is not necessary for this test.
 #include "HalideBuffer.h"
