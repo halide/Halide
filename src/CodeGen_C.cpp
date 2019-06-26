@@ -3034,7 +3034,7 @@ void CodeGen_C::test() {
 extern "C" {
 #endif
 
-int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void const *__user_context) HALIDE_FUNCTION_ATTRS {
+int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void const * __user_context) HALIDE_FUNCTION_ATTRS {
  void * const _ucon = const_cast<void *>(__user_context);
  void *_0 = _halide_buffer_get_host(_buf_buffer);
  void * _buf = _0;
