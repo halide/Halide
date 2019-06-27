@@ -328,6 +328,19 @@ CodeGen_C::CodeGen_C(ostream &s, Target t, OutputKind output_kind, const std::st
                    << "\n";
             forward_declared.insert(type_of<buffer_t *>().handle_type);
         }
+
+        stream << "#if defined(HALIDE_RUNTIME_BUFFER_WRAPPERS)\n"
+               << "#ifdef __cplusplus\n"
+               << "\n"
+               << "template<typename T>\n"
+               << "struct halide_typed_buffer_t;\n"
+               << "\n"
+               << "template<typename T>\n"
+               << "halide_buffer_t *halide_typed_buffer_t_to_halide_buffer_t(const halide_typed_buffer_t<T> &);\n"
+               << "\n"
+               << "#endif  // #ifdef __cplusplus\n"
+               << "#endif  // #if defined(HALIDE_RUNTIME_BUFFER_WRAPPERS)\n";
+
     } else {
         // Include declarations of everything generated C source might want
         stream
@@ -1836,12 +1849,6 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         stream << "// assuming that the class can implicitly return a halide_typed_buffer_t<> of the correct type.\n";
         stream << "#if defined(HALIDE_RUNTIME_BUFFER_WRAPPERS)\n";
         stream << "#ifdef __cplusplus\n";
-        stream << "\n";
-        stream << "template<typename T>\n"
-               << "struct halide_typed_buffer_t;\n";
-        stream << "\n";
-        stream << "template<typename T>\n"
-               << "halide_buffer_t *halide_typed_buffer_t_to_halide_buffer_t(const halide_typed_buffer_t<T> &);\n";
         stream << "\n";
         stream << "inline int " << simple_name << "(";
         emit_args([](std::ostream &o, const ArgInfo &a) {
