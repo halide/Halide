@@ -172,10 +172,6 @@ libc++ instead of libstdc++. You may need to adjust compiler options
 accordingly if you're using an older XCode which does not default to
 libc++.
 
-For parallelism, Halide automatically uses Apple's Grand Central
-Dispatch, so it is not possible to control the number of threads used
-without overriding the parallel runtime entirely.
-
 
 Halide OpenGL/GLSL backend
 ==========================

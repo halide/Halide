@@ -26,7 +26,7 @@ declare float @llvm.nvvm.atomic.load.add.f32.p0f32(float *, float)
 declare float @llvm.nvvm.atomic.load.add.f64.p0f64(double *, double)
 
 define weak_odr float @nan_f32() nounwind uwtable readnone alwaysinline {
-       ret float 0xFFF0000000000000;
+       ret float 0x7FF8000000000000;
 }
 
 define weak_odr float @neg_inf_f32() nounwind uwtable readnone alwaysinline {

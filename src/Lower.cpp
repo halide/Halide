@@ -466,7 +466,7 @@ Module lower(const vector<Function> &output_funcs,
 
     // If we're in debug mode, add code that prints the args.
     if (t.has_feature(Target::Debug)) {
-        debug_arguments(&main_func);
+        debug_arguments(&main_func, t);
     }
 
     result_module.append(main_func);

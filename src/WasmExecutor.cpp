@@ -1147,6 +1147,8 @@ std::vector<char> compile_to_wasm(const Module &module, const std::string &fn_na
         // "--verbose",
         // "-error-limit=0",
         // "--print-gc-sections",
+        "--export=__data_end",
+        "--export=__heap_base",
         "--allow-undefined",
         obj_file.pathname(),
         "--entry=" + fn_name,

@@ -1195,6 +1195,105 @@ void CodeGen_LLVM::optimize_module() {
         module->print(dbgs(), nullptr, false, true);
     }
 
+    std::unique_ptr<TargetMachine> tm = make_target_machine(*module);
+
+// Temporarily disabled, see https://github.com/halide/Halide/issues/3957
+// #if LLVM_VERSION >= 90
+#if 0
+    PipelineTuningOptions pto;
+    pto.LoopInterleaving = !get_target().has_feature(Target::DisableLLVMLoopUnroll);
+    pto.LoopVectorization = !get_target().has_feature(Target::DisableLLVMLoopVectorize);
+    pto.LoopUnrolling = pto.LoopInterleaving;
+    // Clear ScEv info for all loops. Certain Halide applications spend a very
+    // long time compiling in forgetLoop, and prefer to forget everything
+    // and rebuild SCEV (aka "Scalar Evolution") from scratch.
+    // Sample difference in compile time reduction at the time of this change was
+    // 21.04 -> 14.78 using current ToT release build. (See also https://reviews.llvm.org/rL358304)
+    pto.ForgetAllSCEVInLoopUnroll = true;
+
+    // Note: pto exists only for LLVM_VERSION >= 90
+    llvm::PassBuilder pb(tm.get(), pto);
+
+    bool debug_pass_manager = false;
+    // These analysis managers have to be declared in this order.
+    llvm::LoopAnalysisManager lam(debug_pass_manager);
+    llvm::FunctionAnalysisManager fam(debug_pass_manager);
+    llvm::CGSCCAnalysisManager cgam(debug_pass_manager);
+    llvm::ModuleAnalysisManager mam(debug_pass_manager);
+
+    llvm::AAManager aa = pb.buildDefaultAAPipeline();
+    fam.registerPass([&] { return std::move(aa); });
+
+    // Register all the basic analyses with the managers.
+    pb.registerModuleAnalyses(mam);
+    pb.registerCGSCCAnalyses(cgam);
+    pb.registerFunctionAnalyses(fam);
+    pb.registerLoopAnalyses(lam);
+    pb.crossRegisterProxies(lam, fam, cgam, mam);
+    ModulePassManager mpm(debug_pass_manager);
+
+    PassBuilder::OptimizationLevel level = PassBuilder::OptimizationLevel::O3;
+
+    if (get_target().has_feature(Target::ASAN)) {
+        pb.registerPipelineStartEPCallback([&](ModulePassManager &mpm) {
+            mpm.addPass(
+                RequireAnalysisPass<ASanGlobalsMetadataAnalysis, llvm::Module>());
+        });
+        bool recover = true;
+        bool use_after_scope = true;
+        pb.registerOptimizerLastEPCallback(
+            [recover, use_after_scope](FunctionPassManager &fpm,
+                                     PassBuilder::OptimizationLevel level) {
+                fpm.addPass(AddressSanitizerPass(
+                    /*CompileKernel=*/false, recover, use_after_scope));
+            });
+        bool module_use_after_scope = false;
+        bool use_odr_indicator = true;
+        pb.registerPipelineStartEPCallback(
+            [recover, module_use_after_scope,
+             use_odr_indicator](ModulePassManager &mpm) {
+                mpm.addPass(ModuleAddressSanitizerPass(
+                    /*CompileKernel=*/false, recover, module_use_after_scope,
+                    use_odr_indicator));
+            });
+    }
+
+    if (get_target().has_feature(Target::TSAN)) {
+        pb.registerOptimizerLastEPCallback(
+            [](FunctionPassManager &fpm, PassBuilder::OptimizationLevel level) {
+                fpm.addPass(ThreadSanitizerPass());
+            });
+    }
+
+    for (llvm::Module::iterator i = module->begin(); i != module->end(); i++) {
+        if (get_target().has_feature(Target::ASAN)) {
+            i->addFnAttr(Attribute::SanitizeAddress);
+        }
+        if (get_target().has_feature(Target::TSAN)) {
+            // Do not annotate any of Halide's low-level synchronization code as it has
+            // tsan interface calls to mark its behavior and is much faster if
+            // it is not analyzed instruction by instruction.
+            if (!(i->getName().startswith("_ZN6Halide7Runtime8Internal15Synchronization") ||
+                  // TODO: this is a benign data race that re-initializes the detected features;
+                  // we should really fix it properly inside the implementation, rather than disabling
+                  // it here as a band-aid.
+                  i->getName().startswith("halide_default_can_use_target_features") ||
+                  i->getName().startswith("halide_mutex_") ||
+                  i->getName().startswith("halide_cond_"))) {
+                i->addFnAttr(Attribute::SanitizeThread);
+            }
+        }
+    }
+
+    mpm = pb.buildPerModuleDefaultPipeline(level, debug_pass_manager);
+    mpm.run(*module, mam);
+
+    if (llvm::verifyModule(*module, &errs()))
+      report_fatal_error("Transformation resulted in an invalid module\n");
+
+#else
+    // Keep the legacy pass manager for LLVM < 90
+
     // We override PassManager::add so that we have an opportunity to
     // blacklist problematic LLVM passes.
     class MyFunctionPassManager : public legacy::FunctionPassManager {
@@ -1217,9 +1316,8 @@ void CodeGen_LLVM::optimize_module() {
     MyFunctionPassManager function_pass_manager(module.get());
     MyModulePassManager module_pass_manager;
 
-    std::unique_ptr<TargetMachine> TM = make_target_machine(*module);
-    module_pass_manager.add(createTargetTransformInfoWrapperPass(TM ? TM->getTargetIRAnalysis() : TargetIRAnalysis()));
-    function_pass_manager.add(createTargetTransformInfoWrapperPass(TM ? TM->getTargetIRAnalysis() : TargetIRAnalysis()));
+    module_pass_manager.add(createTargetTransformInfoWrapperPass(tm ? tm->getTargetIRAnalysis() : TargetIRAnalysis()));
+    function_pass_manager.add(createTargetTransformInfoWrapperPass(tm ? tm->getTargetIRAnalysis() : TargetIRAnalysis()));
 
     PassManagerBuilder b;
     b.OptLevel = 3;
@@ -1236,8 +1334,8 @@ void CodeGen_LLVM::optimize_module() {
     b.ForgetAllSCEVInLoopUnroll = true;
 #endif
 
-    if (TM) {
-        TM->adjustPassManager(b);
+    if (tm) {
+        tm->adjustPassManager(b);
     }
 
     if (get_target().has_feature(Target::ASAN)) {
@@ -1297,6 +1395,7 @@ void CodeGen_LLVM::optimize_module() {
     }
     function_pass_manager.doFinalization();
     module_pass_manager.run(*module);
+#endif
 
     debug(3) << "After LLVM optimizations:\n";
     if (debug::debug_level() >= 2) {
@@ -2528,7 +2627,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         }
     } else if (op->is_intrinsic(Call::mulhi_shr)) {
         internal_assert(op->args.size() == 3);
-        
+
         Type ty = op->type;
         Type wide_ty = ty.with_bits(ty.bits() * 2);
 
@@ -2993,7 +3092,18 @@ void CodeGen_LLVM::visit(const Call *op) {
         internal_assert(op->args.size() == 2);
         Expr x = op->args[0];
         Expr y = op->args[1];
-        Expr e = Internal::halide_exp(Internal::halide_log(x) * y);
+        Halide::Expr abs_x_pow_y = Internal::halide_exp(Internal::halide_log(abs(x)) * y);
+        Halide::Expr nan_expr = Call::make(x.type(), "nan_f32", {}, Call::PureExtern);
+        Expr iy = floor(y);
+        Expr one = make_one(x.type());
+        Expr zero = make_zero(x.type());
+        Expr e = select(x > 0, abs_x_pow_y,  // Strictly positive x
+                        y == 0.0f, one,  // x^0 == 1
+                        x == 0.0f, zero, // 0^y == 0
+                        y != iy, nan_expr,  // negative x to a non-integer power
+                        iy % 2 == 0, abs_x_pow_y,  // negative x to an even power
+                        -abs_x_pow_y);  // negative x to an odd power
+        e = common_subexpression_elimination(e);
         e.accept(this);
     } else if (op->call_type == Call::PureExtern && op->name == "log_f32") {
         internal_assert(op->args.size() == 1);
