@@ -98,7 +98,7 @@ int main(int argc, char **argv) {
         // Verify that the multitarget wrapper code propagates nonzero error
         // results back to the caller properly.
         Buffer<uint8_t> bad_type(W, H);
-        int result = HalideTest::multitarget(bad_type);
+        int result = HalideTest::multitarget(bad_type.raw_buffer());
         if (result != halide_error_code_bad_type) {
             printf("Error: expected to fail with halide_error_code_bad_type (%d) but actually got %d!\n", (int) halide_error_code_bad_type, result);
             return -1;

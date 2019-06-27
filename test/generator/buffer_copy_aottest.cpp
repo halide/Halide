@@ -16,7 +16,7 @@ int main(int argc, char **argv) {
         Buffer<int> out(64, 64);
         out.set_min(32, 32);
 
-        halide_buffer_copy(nullptr, input, nullptr, out);
+        halide_buffer_copy(nullptr, input.raw_buffer(), nullptr, out.raw_buffer());
 
         Buffer<int> in_crop = input.cropped(0, 32, 64).cropped(1, 32, 64);
         out.for_each_value([&](int a, int b) {
@@ -26,7 +26,7 @@ int main(int argc, char **argv) {
             }
         }, in_crop);
     }
-    
+
 #if (defined(TEST_CUDA) || defined(TEST_OPENCL))
     const halide_device_interface_t *dev = nullptr;
 #ifdef TEST_CUDA
