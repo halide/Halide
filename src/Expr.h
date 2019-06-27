@@ -139,7 +139,7 @@ template<typename T>
 struct ExprNode : public BaseExprNode {
     void accept(IRVisitor *v) const override;
     Expr mutate_expr(IRMutator *v) const override;
-    ExprNode() noexcept : BaseExprNode(T::_node_type) {}
+    ExprNode() : BaseExprNode(T::_node_type) {}
     virtual ~ExprNode() = default;
 };
 
@@ -147,7 +147,7 @@ template<typename T>
 struct StmtNode : public BaseStmtNode {
     void accept(IRVisitor *v) const override;
     Stmt mutate_stmt(IRMutator *v) const override;
-    StmtNode() noexcept : BaseStmtNode(T::_node_type) {}
+    StmtNode() : BaseStmtNode(T::_node_type) {}
     virtual ~StmtNode() = default;
 };
 
@@ -289,6 +289,7 @@ struct StringImm : public ExprNode<StringImm> {
  * can treat it as a value type. */
 struct Expr : public Internal::IRHandle {
     /** Make an undefined expression */
+    HALIDE_ALWAYS_INLINE
     Expr() = default;
 
     /** Make an expression from a concrete expression node pointer (e.g. Add) */
