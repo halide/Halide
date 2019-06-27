@@ -263,8 +263,7 @@ if (WITH_TEST_GENERATOR)
                          FUNCTION_NAME HalideTest::AnotherNamespace::cxx_mangling
                          FILTER_DEPS cxx_mangling_externs)
 
-  halide_define_aot_test(constinput
-                         HALIDE_TARGET_FEATURES c_plus_plus_name_mangling)
+  halide_define_aot_test(constinput)
 
   if (TARGET_PTX)
     halide_library_from_generator(cxx_mangling_gpu
