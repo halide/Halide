@@ -82,8 +82,8 @@ private:
     std::mutex mutex;
     std::map<uintptr_t, InstanceInfo> instances;
 
-    ObjectInstanceRegistry() {}
-    ObjectInstanceRegistry(ObjectInstanceRegistry &rhs);  // unimplemented
+    ObjectInstanceRegistry() = default;
+    ObjectInstanceRegistry(ObjectInstanceRegistry &rhs) = delete;
 };
 
 }  // namespace Internal

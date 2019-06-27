@@ -1533,7 +1533,7 @@ private:
 }
 
 template<>
-RefCount &ref_count<Autoscheduler::BoundContents>(const Autoscheduler::BoundContents *t) {return t->ref_count;}
+RefCount &ref_count<Autoscheduler::BoundContents>(const Autoscheduler::BoundContents *t) noexcept {return t->ref_count;}
 
 template<>
 void destroy<Autoscheduler::BoundContents>(const Autoscheduler::BoundContents *t) {

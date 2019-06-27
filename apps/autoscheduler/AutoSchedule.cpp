@@ -3288,13 +3288,13 @@ void find_and_apply_schedule(FunctionDAG& dag,
 
 // Intrusive shared ptr helpers.
 template<>
-RefCount &ref_count<Autoscheduler::LoopNest>(const Autoscheduler::LoopNest *t) {return t->ref_count;}
+RefCount &ref_count<Autoscheduler::LoopNest>(const Autoscheduler::LoopNest *t) noexcept {return t->ref_count;}
 
 template<>
 void destroy<Autoscheduler::LoopNest>(const Autoscheduler::LoopNest *t) {delete t;}
 
 template<>
-RefCount &ref_count<Autoscheduler::State>(const Autoscheduler::State *t) {return t->ref_count;}
+RefCount &ref_count<Autoscheduler::State>(const Autoscheduler::State *t) noexcept {return t->ref_count;}
 
 template<>
 void destroy<Autoscheduler::State>(const Autoscheduler::State *t) {delete t;}
