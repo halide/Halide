@@ -38,15 +38,19 @@
 
 template<typename T>
 struct halide_typed_buffer_t {
-  HALIDE_ALWAYS_INLINE explicit halide_typed_buffer_t(halide_buffer_t *p) : ptr(p) {
-    using not_const_T = typename std::remove_const<T>::type;
-    constexpr bool T_is_void = std::is_same<not_const_T, void>::value;
-    static_assert(!T_is_void, "Cannot create halide_typed_buffer_t<void>");
-    using not_void_T = typename std::conditional<T_is_void, uint8_t, not_const_T>::type;
-    assert(p->type == halide_type_of<not_void_T>());
-  }
+    HALIDE_ALWAYS_INLINE explicit halide_typed_buffer_t(halide_buffer_t *p) : ptr(p) {
+        using not_const_T = typename std::remove_const<T>::type;
+        constexpr bool T_is_void = std::is_same<not_const_T, void>::value;
+        // If T is void, don't bother checking here, just defer to the runtime check.
+        // (This should normally only happen for float16, which doesn't have an
+        // overload for halide_type_of<>(); see https://github.com/halide/Halide/issues/3967)
+        if (!T_is_void) {
+            using not_void_T = typename std::conditional<T_is_void, uint8_t, not_const_T>::type;
+            assert(p->type == halide_type_of<not_void_T>());
+        }
+    }
 
-  halide_buffer_t * const ptr;
+    halide_buffer_t * const ptr;
 };
 
 template<typename T>

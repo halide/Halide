@@ -1748,7 +1748,9 @@ void CodeGen_C::compile(const LoweredFunc &f) {
     for (const auto &arg : args) {
         std::string c_type;
         if (arg.type == Float(16) && arg.is_buffer()) {
-            // Model Buffer<float16_t> as Buffer<void> for our wrappers
+            // There is no way to declare Buffer<float16_t> (see https://github.com/halide/Halide/issues/3967),
+            // so model that as Buffer<void> for our wrappers; that will allow you to pass any buffer
+            // for these args (but checking will still be done in the runtime code).
             c_type = "void";
         } else {
             c_type = type_to_c_type(arg.type, /*include_space*/ false);
