@@ -53,7 +53,7 @@ int main(int argc, char **argv) {
   Buffer<uint8_t> input = make_image<uint8_t>();
   Buffer<uint8_t> calculated_output(kSize, kSize, 3);
   Buffer<float> float32_buffer_output(kSize, kSize, 3);
-  Buffer<> int32_buffer_output(halide_type_t(halide_type_int, 32), kSize, kSize, 3);
+  Buffer<int32_t> int32_buffer_output(halide_type_t(halide_type_int, 32), kSize, kSize, 3);
   Buffer<uint8_t> array_test_output(kSize, kSize, 3);
   Buffer<float> tupled_output0(kSize, kSize, 3);
   Buffer<int32_t> tupled_output1(kSize, kSize, 3);

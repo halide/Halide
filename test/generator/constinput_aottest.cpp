@@ -1,4 +1,6 @@
+#ifndef HALIDE_RUNTIME_BUFFER_WRAPPERS
 #define HALIDE_RUNTIME_BUFFER_WRAPPERS
+#endif
 
 #include "HalideRuntime.h"
 #include "HalideBuffer.h"
