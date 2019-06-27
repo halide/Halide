@@ -39,8 +39,11 @@ int main(int argc, char **argv) {
 
         Halide::Runtime::Buffer<int32_t> cpu_buf(128, 128);
         cpu_buf.fill(0);
-        assert(gpu_buf.raw_buffer()->device_interface->buffer_copy(nullptr, cpu_buf, gpu_buf.raw_buffer()->device_interface, gpu_buf) == 0);
-        
+        assert(gpu_buf.raw_buffer()->device_interface->buffer_copy(
+                nullptr, cpu_buf.raw_buffer(),
+                gpu_buf.raw_buffer()->device_interface,
+                gpu_buf.raw_buffer()) == 0);
+
         gpu_buf.copy_to_host();
         for (int i = 0; i < 128; i++) {
             for (int j = 0; j < 128; j++) {
@@ -55,8 +58,12 @@ int main(int argc, char **argv) {
         assert(gpu_buf.raw_buffer()->device_interface != nullptr);
 
         Halide::Runtime::Buffer<int32_t> cpu_buf(128, 128);
-        assert(gpu_buf.raw_buffer()->device_interface->buffer_copy(nullptr, gpu_buf, nullptr, cpu_buf) == 0);
-        
+        assert(gpu_buf.raw_buffer()->device_interface->buffer_copy(
+                nullptr,
+                gpu_buf.raw_buffer(),
+                nullptr,
+                cpu_buf.raw_buffer()) == 0);
+
         for (int i = 0; i < 128; i++) {
             for (int j = 0; j < 128; j++) {
                 assert(cpu_buf(i, j) == (i + j * 256));
@@ -71,7 +78,11 @@ int main(int argc, char **argv) {
         Halide::Runtime::Buffer<int32_t> gpu_buf2 = make_gpu_buffer(hexagon_rpc, 256000);
         assert(gpu_buf2.raw_buffer()->device_interface != nullptr);
 
-        assert(gpu_buf1.raw_buffer()->device_interface->buffer_copy(nullptr, gpu_buf2, gpu_buf1.raw_buffer()->device_interface, gpu_buf1) == 0);
+        assert(gpu_buf1.raw_buffer()->device_interface->buffer_copy(
+                nullptr,
+                gpu_buf2.raw_buffer(),
+                gpu_buf1.raw_buffer()->device_interface,
+                gpu_buf1.raw_buffer()) == 0);
         gpu_buf1.copy_to_host();
 
         for (int i = 0; i < 128; i++) {
@@ -92,7 +103,11 @@ int main(int argc, char **argv) {
         Halide::Runtime::Buffer<int32_t> gpu_buf2 = gpu_buf1.cropped({ {32, 64} , {32, 64} });
         assert(gpu_buf2.raw_buffer()->device_interface != nullptr);
 
-        assert(gpu_buf1.raw_buffer()->device_interface->buffer_copy(nullptr, cpu_buf, gpu_buf2.raw_buffer()->device_interface, gpu_buf2) == 0);
+        assert(gpu_buf1.raw_buffer()->device_interface->buffer_copy(
+                nullptr,
+                cpu_buf.raw_buffer(),
+                gpu_buf2.raw_buffer()->device_interface,
+                gpu_buf2.raw_buffer()) == 0);
         gpu_buf1.set_device_dirty();
         gpu_buf1.copy_to_host();
 
@@ -112,11 +127,15 @@ int main(int argc, char **argv) {
         Halide::Runtime::Buffer<int32_t> cpu_buf(128, 128);
         cpu_buf.fill(0);
         Halide::Runtime::Buffer<int32_t> cpu_buf1 = cpu_buf.cropped({ {32, 64} , {32, 64} });
-        
+
         Halide::Runtime::Buffer<int32_t> gpu_buf = make_gpu_buffer(hexagon_rpc);
         assert(gpu_buf.raw_buffer()->device_interface != nullptr);
 
-        assert(gpu_buf.raw_buffer()->device_interface->buffer_copy(nullptr, gpu_buf, nullptr, cpu_buf1) == 0);
+        assert(gpu_buf.raw_buffer()->device_interface->buffer_copy(
+                nullptr,
+                gpu_buf.raw_buffer(),
+                nullptr,
+                cpu_buf1.raw_buffer()) == 0);
 
         for (int i = 0; i < 128; i++) {
             for (int j = 0; j < 128; j++) {
@@ -165,7 +184,7 @@ int main(int argc, char **argv) {
 
         Halide::Runtime::Buffer<int32_t> cpu_buf(128, 128);
         assert(gpu_buf.raw_buffer()->device_interface->buffer_copy(nullptr, &no_host_src, nullptr, cpu_buf) == 0);
-        
+
         for (int i = 0; i < 128; i++) {
             for (int j = 0; j < 128; j++) {
                 assert(cpu_buf(i, j) == (i + j * 256));
@@ -358,7 +377,7 @@ int main(int argc, char **argv) {
             assert(gpu_buf1.raw_buffer()->device_interface->buffer_copy(nullptr, gpu_buf1, nullptr, &no_host_dst) == halide_error_code_host_is_null);
         }
     }
-    
+
     printf("Success!\n");
 
     return 0;
