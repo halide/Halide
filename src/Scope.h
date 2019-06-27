@@ -279,7 +279,7 @@ struct ScopedBinding {
 
     // allow move but not copy
     ScopedBinding(const ScopedBinding &that) = delete;
-    ScopedBinding(ScopedBinding &&that) :
+    ScopedBinding(ScopedBinding &&that) noexcept :
         scope(that.scope),
         name(std::move(that.name)) {
         // The move constructor must null out scope, so we don't try to pop it
@@ -311,7 +311,7 @@ struct ScopedBinding<void> {
 
     // allow move but not copy
     ScopedBinding(const ScopedBinding &that) = delete;
-    ScopedBinding(ScopedBinding &&that) :
+    ScopedBinding(ScopedBinding &&that) noexcept :
         scope(that.scope),
         name(std::move(that.name)) {
         // The move constructor must null out scope, so we don't try to pop it

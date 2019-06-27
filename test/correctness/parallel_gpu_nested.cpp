@@ -4,10 +4,6 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    if (!get_jit_target_from_environment().has_gpu_feature()) {
-        printf("No gpu target enabled. Skipping test.\n");
-        return 0;
-    }
 
     Var x, y, z;
     Func f;
@@ -17,8 +13,15 @@ int main(int argc, char **argv) {
 
     f(x, y, z) = x*y+z*k+1;
 
-    Var xi, yi;
-    f.gpu_tile(x, y, xi, yi, 16, 16);
+    if (get_jit_target_from_environment().has_gpu_feature()) {
+        Var xi, yi;
+        f.gpu_tile(x, y, xi, yi, 16, 16);
+    } else if (get_jit_target_from_environment().features_any_of({Target::HVX_64, Target::HVX_128})) {
+        f.hexagon(y);
+    } else {
+        printf("No gpu or hexagon target enabled. Skipping test.\n");
+        return 0;
+    }
     f.parallel(z);
 
     Buffer<int> im = f.realize(64, 64, 64);

@@ -1194,7 +1194,9 @@ void CodeGen_LLVM::optimize_module() {
 
     std::unique_ptr<TargetMachine> tm = make_target_machine(*module);
 
-#if LLVM_VERSION >= 90
+// Temporarily disabled, see https://github.com/halide/Halide/issues/3957
+// #if LLVM_VERSION >= 90
+#if 0
     PipelineTuningOptions pto;
     pto.LoopInterleaving = !get_target().has_feature(Target::DisableLLVMLoopUnroll);
     pto.LoopVectorization = !get_target().has_feature(Target::DisableLLVMLoopVectorize);
@@ -1320,6 +1322,14 @@ void CodeGen_LLVM::optimize_module() {
     b.LoopVectorize = !get_target().has_feature(Target::DisableLLVMLoopVectorize);
     b.DisableUnrollLoops = get_target().has_feature(Target::DisableLLVMLoopUnroll);
     b.SLPVectorize = true;  // Note: SLP vectorization has no analogue in the Halide scheduling model
+#if LLVM_VERSION >= 90
+    // Clear ScEv info for all loops. Certain Halide applications spend a very
+    // long time compiling in forgetLoop, and prefer to forget everything
+    // and rebuild SCEV (aka "Scalar Evolution") from scratch.
+    // Sample difference in compile time reduction at the time of this change was
+    // 21.04 -> 14.78 using current ToT release build. (See also https://reviews.llvm.org/rL358304)
+    b.ForgetAllSCEVInLoopUnroll = true;
+#endif
 
     if (tm) {
         tm->adjustPassManager(b);
@@ -1333,7 +1343,11 @@ void CodeGen_LLVM::optimize_module() {
             constexpr bool use_globals_gc = false;  // Should ASan use GC-friendly instrumentation for globals?
 
             pm.add(createAddressSanitizerFunctionPass(compile_kernel, recover, use_after_scope));
+#if LLVM_VERSION >= 90
+            pm.add(createModuleAddressSanitizerLegacyPassPass(compile_kernel, recover, use_globals_gc));
+#else
             pm.add(createAddressSanitizerModulePass(compile_kernel, recover, use_globals_gc));
+#endif
         };
         b.addExtension(PassManagerBuilder::EP_OptimizerLast, addAddressSanitizerPasses);
         b.addExtension(PassManagerBuilder::EP_EnabledOnOptLevel0, addAddressSanitizerPasses);
@@ -2474,7 +2488,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         }
     } else if (op->is_intrinsic(Call::mulhi_shr)) {
         internal_assert(op->args.size() == 3);
-        
+
         Type ty = op->type;
         Type wide_ty = ty.with_bits(ty.bits() * 2);
 
@@ -2939,7 +2953,18 @@ void CodeGen_LLVM::visit(const Call *op) {
         internal_assert(op->args.size() == 2);
         Expr x = op->args[0];
         Expr y = op->args[1];
-        Expr e = Internal::halide_exp(Internal::halide_log(x) * y);
+        Halide::Expr abs_x_pow_y = Internal::halide_exp(Internal::halide_log(abs(x)) * y);
+        Halide::Expr nan_expr = Call::make(x.type(), "nan_f32", {}, Call::PureExtern);
+        Expr iy = floor(y);
+        Expr one = make_one(x.type());
+        Expr zero = make_zero(x.type());
+        Expr e = select(x > 0, abs_x_pow_y,  // Strictly positive x
+                        y == 0.0f, one,  // x^0 == 1
+                        x == 0.0f, zero, // 0^y == 0
+                        y != iy, nan_expr,  // negative x to a non-integer power
+                        iy % 2 == 0, abs_x_pow_y,  // negative x to an even power
+                        -abs_x_pow_y);  // negative x to an odd power
+        e = common_subexpression_elimination(e);
         e.accept(this);
     } else if (op->call_type == Call::PureExtern && op->name == "log_f32") {
         internal_assert(op->args.size() == 1);
