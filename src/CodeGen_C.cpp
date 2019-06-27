@@ -2712,6 +2712,8 @@ void CodeGen_C::visit(const Allocate *op) {
     bool on_stack = false;
     int32_t constant_size;
     string size_id;
+    Type size_id_type;
+
     if (op->new_expr.defined()) {
         Allocation alloc;
         alloc.type = op->type;
@@ -2727,7 +2729,9 @@ void CodeGen_C::visit(const Allocate *op) {
                 user_error << "Total size for allocation "
                            << op->name << " is constant but exceeds 2^31 - 1.\n";
             } else {
-                size_id = print_expr(Expr(static_cast<int32_t>(constant_size)));
+                size_id_type = Int(32);
+                size_id = print_expr(make_const(size_id_type, constant_size));
+
                 if (op->memory_type == MemoryType::Stack ||
                     (op->memory_type == MemoryType::Auto &&
                      can_allocation_fit_on_stack(stack_bytes))) {
@@ -2740,6 +2744,7 @@ void CodeGen_C::visit(const Allocate *op) {
             internal_assert(op->extents.size() > 0);
 
             size_id = print_assignment(Int(64), print_expr(op->extents[0]));
+            size_id_type = Int(64);
 
             for (size_t i = 1; i < op->extents.size(); i++) {
                 // Make the code a little less cluttered for two-dimensional case
@@ -2772,8 +2777,8 @@ void CodeGen_C::visit(const Allocate *op) {
         // will be generated).
         if (!on_stack || is_zero(op->condition)) {
             Expr conditional_size = Select::make(op->condition,
-                                                 Var(size_id),
-                                                 Expr(static_cast<int32_t>(0)));
+                                                 Variable::make(size_id_type, size_id),
+                                                 make_const(size_id_type, 0));
             conditional_size = simplify(conditional_size);
             size_id = print_assignment(Int(64), print_expr(conditional_size));
         }
