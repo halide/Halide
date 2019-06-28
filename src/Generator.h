@@ -1184,7 +1184,7 @@ class StubInputBuffer {
     }
 
 public:
-    StubInputBuffer() {}
+    StubInputBuffer() = default;
 
     // *not* explicit -- this ctor should only be used when you want
     // to pass a literal Buffer<> for a Stub Input; this Buffer<> will be
@@ -1203,7 +1203,7 @@ protected:
     Target get_target() const;
 
     explicit StubOutputBufferBase(const Func &f, std::shared_ptr<GeneratorBase> generator) : f(f), generator(generator) {}
-    StubOutputBufferBase() {}
+    StubOutputBufferBase() = default;
 
 public:
     Realization realize(std::vector<int32_t> sizes) {
@@ -1242,7 +1242,7 @@ class StubOutputBuffer : public StubOutputBufferBase {
     friend class GeneratorStub;
     explicit StubOutputBuffer(const Func &f, std::shared_ptr<GeneratorBase> generator) : StubOutputBufferBase(f, generator) {}
 public:
-    StubOutputBuffer() {}
+    StubOutputBuffer() = default;
 };
 
 // This is a union-like class that allows for convenient initialization of Stub Inputs
@@ -3259,7 +3259,7 @@ private:
 
     static GeneratorRegistry &get_registry();
 
-    GeneratorRegistry() {}
+    GeneratorRegistry() = default;
     GeneratorRegistry(const GeneratorRegistry &) = delete;
     void operator=(const GeneratorRegistry &) = delete;
 };

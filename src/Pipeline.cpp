@@ -120,7 +120,7 @@ struct PipelineContents {
 
 namespace Internal {
 template<>
-RefCount &ref_count<PipelineContents>(const PipelineContents *p) {
+RefCount &ref_count<PipelineContents>(const PipelineContents *p) noexcept {
     return p->ref_count;
 }
 

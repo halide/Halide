@@ -25,7 +25,7 @@ struct Cost {
 
     Cost(int64_t arith, int64_t memory) : arith(arith), memory(memory) {}
     Cost(Expr arith, Expr memory) : arith(std::move(arith)), memory(std::move(memory)) {}
-    Cost() {}
+    Cost() = default;
 
     inline bool defined() const { return arith.defined() && memory.defined(); }
     void simplify();
