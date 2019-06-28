@@ -53,6 +53,10 @@ function(halide_generator NAME)
   add_executable("${NAME}_binary" "${HALIDE_TOOLS_DIR}/GenGen.cpp")
   _halide_set_cxx_options("${NAME}_binary")
   target_include_directories("${NAME}_binary" PRIVATE "${HALIDE_TOOLS_DIR}")
+  target_link_libraries("${NAME}_binary" PRIVATE ${HALIDE_SYSTEM_LIBS} ${CMAKE_DL_LIBS} ${CMAKE_THREAD_LIBS_INIT})
+  if (MSVC)
+    target_link_libraries("${NAME}_binary" PRIVATE Kernel32)
+  endif()
 
   list(LENGTH args_SRCS SRCSLEN)
   # Don't create an empty object-library: that can cause quiet failures in MSVC builds.
@@ -71,11 +75,6 @@ function(halide_generator NAME)
     # Ensure that Halide.h is built prior to any Generator
     add_dependencies("${GENLIB}" ${HALIDE_COMPILER_LIB})
     _halide_force_link_library("${NAME}_binary" "${GENLIB}")
-  endif()
-
-  target_link_libraries("${NAME}_binary" PRIVATE ${HALIDE_SYSTEM_LIBS} ${CMAKE_DL_LIBS} ${CMAKE_THREAD_LIBS_INIT})
-  if (MSVC)
-    target_link_libraries("${NAME}_binary" PRIVATE Kernel32)
   endif()
 
   if ("${HALIDE_LIBRARY_TYPE}" STREQUAL "STATIC")
