@@ -375,6 +375,11 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
               rewrite((x < ((x + y) + z)), (0 < (y + z))) ||
               rewrite((x < max((max(y, x) + c0), z)), true, (0 < c0)) ||
               rewrite((x < max(y, (max(z, x) + c0))), true, (0 < c0)) ||
+              rewrite(((((((x - y) + c0)/z)*z) + y) < x), true, (c0 < 0)) ||
+              rewrite(((min(((x + c0)/y), z)*y) < (x + y)), (c0 < (select((x < z), 0, c0) + y))) ||
+
+              rewrite((((x + ((y + c0)/c1))*c1) < y), (x <= 1), ((((0 < c1) && (c1 < 16)) && ((c0 + c1) < 0)) && (-1 <= (c0 + c1)))) || // Predicate is goofy way to say c0 + c1 == -1. RHS feels like it could be more general too
+
 
               // From Google list
               rewrite((x < (y + 1)), (x <= y)) ||
@@ -503,7 +508,36 @@ Expr Simplify::visit(const LE *op, ExprInfo *bounds) {
                 rewrite(((min(x, c0) + c1) <= min(y, 0)), (min(x, c0) < (y + fold((c0 - c1)))), ((c1 < 0) && (c0 == 1))) || // Should have subs'd in c0
                 rewrite(((max(x, c0) + c1) <= max(y, c0)), ((x + c1) <= max(y, c0)), (c1 <= 0)) ||
                 rewrite((x <= (min(((x + c0)/c1), y)*c2)), (x <= (y*c1)), ((((c0 == (c1 + -1)) && (c0 == (c2 + -1))) && (0 < c1)) && (c1 < 16))) || // < 16, predicate implies c1 == c2 indirectly (super simplify the predicate!)
+                rewrite((x <= (y + ((((x - y) + c0)/c1)*c1))), true, (((0 < c1) && (c0 == (c1 + -1))) && (c1 < 16))) ||
+                rewrite((x <= (((((x - y) + c0)/c1)*c1) + y)), true, (((0 < c1) && (c0 == (c1 + -1))) && (c1 < 16))) ||
+                rewrite(((((((x - y)/z)*z) + y) + c0) <= x), true, (c0 <= 0)) ||
+                rewrite((((x*c0) + c1) <= min((y*c0), c2)), ((x + c2) <= min(y, 0)), (((c2 == -1) || (c0 == 0)) && ((c1 < (c2 + -1)) && (c2 == (c0 + c1))))) || // c0 can't be zero, but subtrees are already simplified. With that removed, rest of predicate becomes fishy
+                rewrite((((x*c0) + y) <= (((x*c1) + z)*c2)), (y <= (z*c2)), (c0 == (c1*c2))) ||
+                rewrite(((((x + y)*c0) + z) <= ((y*c0) + w)), (((x*c0) + z) <= w)) ||
+                rewrite(((((((x - y) + c0)/z)*z) + y) <= x), true, (c0 <= 0)) ||
+                rewrite(((min((x + c0), y) + c1) <= max((x + c2), z)), true, ((c0 + c1) <= c2)) ||
+                rewrite(((x*c0) <= (min((x*c0), c1) + (y*c0))), (max(x, fold(c1/c0)) < y), (((((0 < c0) && (c0 < 16)) && (c1 < 0)) && (0 <= (c0 + c1))))) || // Fishy last clause
+                rewrite((((x + y)/c0) <= ((max(x, z) + y)/c0)), true, ((0 < c0) && (c0 < 16))) ||
+                rewrite((((min(x, y) + z)/c0) <= ((x + z)/c0)), true, ((0 < c0) && (c0 < 16))) ||
+                rewrite((((min(x, y) + z)/c0) <= ((y + z)/c0)), true, ((0 < c0) && (c0 < 16))) ||
+                rewrite((min(((x + y) + z), w) <= ((x + z) + y)), true) ||
+                rewrite((min(((x + y) + z), w) <= ((z + x) + y)), true) ||
+                // rewrite((min((((x*c0) + y) + c1), z) <= y), (select((y < z), 1, fold((c0 + c1))) <= select((x < 2), 1, fold((c0 + c1)))), ((0 < c0) && ((c0 + c1) == 0))) || // Not sure what to make of this one
+                rewrite((min((((x*c0) + y) + c1), z) <= y), (z <= y) || (x < 2), ((0 < c0) && ((c0 + c1) == 0))) || // Hand-simplified form of commented-out rule
+                rewrite((min(min((min(x, y) + z), w), u) <= (y + z)), true) ||
 
+                rewrite((x <= (min(x, c0) + (((max(x, c0) + c1)/c0)*c0))), true, (((0 < c0) && (c0 < 16)) && (-1 <= c1))) ||
+                rewrite(((x + c0) <= (((((x - y) + c1)/c2)*c2) + y)), true, (((0 < c2) && (c2 < 16)) && (((c0 + c2) + -1) <= c1))) ||
+                rewrite(((min(x, y) + c0) <= min(x, c1)), (min(x, y) <= fold((c1 - c0))), (c0 <= 0)) ||
+                rewrite(((max(x, c0) + c1) <= max(y, c2)), ((x + c1) <= max(y, c2)), ((0 <= c2) && ((c0 + c1) <= 0))) ||
+                rewrite(((x + c0) <= ((((x - y)/c1)*c1) + y)), true, (((0 < c1) && (c1 < 16)) && ((c0 + c1) <= 1))) ||
+                rewrite(((((x + y) + z) + w) <= x), (((y + z) + w) < 1)) ||
+                rewrite(((((x + y) + z) + w) <= y), (((x + z) + w) < 1)) ||
+
+                rewrite((x <= (min(x, c0) + (((max(x, c0) + c1)/c2)*c2))), true, ((c2 + -1) <= (c0 + c1))) ||
+                rewrite(((x + c0) <= (y + (((x - y)/c1)*c1))), true, (((0 < c1) && (c1 < 16)) && ((c0 + c1) <= 1))) ||
+                rewrite((((x*c0) + c1) <= min((y*c0), c1)), (x <= min(y, fold((((c1 + -1)/c0) + 1)))), (((0 < (min(c1, 0) + c0)) && (c0 < 16)) && (c1 <= 0))) ||
+                rewrite(((((x/c0)*c0) + c1) <= ((x/c2)*c2)), true, ((c1 + c2) < 2)) ||
                 // From google list
                 rewrite((min(x, y) <= max(z, y)), true) ||
                 rewrite((max(x, y) <= max(x, z)), (y <= max(x, z))) ||
