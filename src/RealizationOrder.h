@@ -25,11 +25,8 @@ class FusedStage {
 
 public:
     FusedStage();
-
     FusedStage(const FusedStage &other);
-
     FusedStage(FusedStage &&other) noexcept;
-
     explicit FusedStage(IntrusivePtr <FusedStageContents> ptr) : contents(std::move(ptr)) {}
 
     friend struct std::hash<Halide::Internal::FusedStage>;
@@ -42,9 +39,7 @@ class FusedGroup {
 
 public:
     FusedGroup();
-
     FusedGroup(const FusedGroup &other) = default;
-
     FusedGroup(FusedGroup &&other) noexcept = default;
 
     explicit FusedGroup(IntrusivePtr <FusedGroupContents> ptr) : contents(std::move(ptr)) {}
@@ -55,12 +50,8 @@ public:
     bool operator==(const FusedGroup &other) const;
 
     void add_stage(const FusedStage &stage);
-
     void add_function(const Function &function);
-
     const std::vector<Function> &functions() const;
-
-    std::string repr() const;
 };
 
 class PipelineGraph {
@@ -68,28 +59,23 @@ class PipelineGraph {
 
 public:
     PipelineGraph();
-
     PipelineGraph(const PipelineGraph &other) = default;
-
     PipelineGraph(PipelineGraph &&other) noexcept = default;
-
     PipelineGraph(IntrusivePtr <PipelineGraphContents> ptr) : contents(std::move(ptr)) {}
 
     bool operator==(const PipelineGraph &other);
 
     std::vector<FusedGroup> fused_groups() const;
 
-    std::vector<FusedGroup> topological_order() const;
+    void add_group(const FusedGroup &group);
 
-    std::vector<FusedGroup> topological_order(const std::vector<Function> &outputs) const;
-
-    void add_edge(const FusedGroup &src, const FusedGroup &dst);
+    void add_dependency(const FusedGroup &src, const FusedGroup &dst);
 
     void set_outputs(const std::vector<Function> &vector);
 
-    void debug_dump() const;
+    std::vector<FusedGroup> topological_order() const;
 
-    void add_group(const FusedGroup &group);
+    std::vector<FusedGroup> topological_order(const std::vector<Function> &outputs) const;
 };
 
 /** Given a bunch of functions that call each other, determine an

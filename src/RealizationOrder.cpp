@@ -242,18 +242,6 @@ const std::vector<Function> &FusedGroup::functions() const {
     return contents->funcs;
 }
 
-std::string FusedGroup::repr() const {
-    string rep = "[";
-    string sep;
-    for (const auto &fn : contents->funcs) {
-        rep += sep;
-        rep += fn.name();
-        sep = "|";
-    }
-    rep += "]";
-    return rep;
-}
-
 struct PipelineGraphContents {
     mutable RefCount ref_count;
 
@@ -282,6 +270,26 @@ vector<FusedGroup> PipelineGraph::fused_groups() const {
     return contents->graph.vertex_set();
 }
 
+void PipelineGraph::add_group(const FusedGroup &group) {
+    if (!contents->graph.has_vertex(group)) {
+        for (const auto &fn : group.functions()) {
+            contents->func_to_group[fn.name()] = group;
+        }
+    }
+    contents->graph.add_vertex(group);
+}
+
+void PipelineGraph::add_dependency(const FusedGroup &src, const FusedGroup &dst) {
+    internal_assert(contents->graph.has_vertex(src));
+    internal_assert(contents->graph.has_vertex(dst));
+
+    contents->graph.add_edge(src, dst);
+}
+
+void PipelineGraph::set_outputs(const std::vector<Function> &vector) {
+
+}
+
 vector<FusedGroup> PipelineGraph::topological_order() const {
     return contents->graph.topological_sort();
 }
@@ -292,51 +300,6 @@ vector<FusedGroup> PipelineGraph::topological_order(const std::vector<Function> 
         start.insert(contents->func_to_group[fn.name()]);
     }
     return contents->graph.topological_sort(start);
-}
-
-void PipelineGraph::add_edge(const FusedGroup &src, const FusedGroup &dst) {
-    if (!contents->graph.has_vertex(src)) {
-        for (const auto &fn : src.functions()) {
-            contents->func_to_group[fn.name()] = src;
-        }
-    }
-
-    if (!contents->graph.has_vertex(dst)) {
-        for (const auto &fn : dst.functions()) {
-            contents->func_to_group[fn.name()] = dst;
-        }
-    }
-
-    contents->graph.add_edge(src, dst);
-}
-
-void PipelineGraph::set_outputs(const std::vector<Function> &vector) {
-
-}
-
-void PipelineGraph::debug_dump() const {
-    debug(0) << "-----------\n";
-    for (const auto &fg : contents->graph.vertex_set()) {
-        debug(0) << fg.repr() << " --> {";
-        for (const auto &dep : contents->graph.get_neighbors(fg)) {
-            debug(0) << " " << dep.repr();
-        }
-        debug(0) << " }\n";
-    }
-    debug(0) << "---\n";
-    for (const auto &fg : contents->graph.topological_sort()) {
-        debug(0) << fg.repr() << " ";
-    }
-    debug(0) << "\n";
-}
-
-void PipelineGraph::add_group(const FusedGroup &group) {
-    if (!contents->graph.has_vertex(group)) {
-        for (const auto &fn : group.functions()) {
-            contents->func_to_group[fn.name()] = group;
-        }
-    }
-    contents->graph.add_vertex(group);
 }
 
 
@@ -534,7 +497,7 @@ void fuse_funcs(UnionFind<string> &fused_groups_set,
     fused_groups_set.join(function.name(), parent.name());
 }
 
-PipelineGraph create_pipeline_graph(const vector<Function> &outputs, const map<string, Function> &env) {
+UnionFind<string> find_fused_groups(const map<string, Function> &env) {
     UnionFind<string> fused_groups_set;
 
     // Identify fused groups
@@ -550,10 +513,14 @@ PipelineGraph create_pipeline_graph(const vector<Function> &outputs, const map<s
         }
     }
 
-    // Create the pipeline graph
+    return fused_groups_set;
+}
+
+PipelineGraph create_pipeline_graph(const vector<Function> &outputs, const map<string, Function> &env) {
     PipelineGraph graph;
 
     // Collect fused groups into objects
+    UnionFind<string> fused_groups_set = find_fused_groups(env);
     unordered_map<string, FusedGroup> rep_to_fg;
     for (auto &it : env) {
         const auto &func = it.second;
@@ -577,7 +544,7 @@ PipelineGraph create_pipeline_graph(const vector<Function> &outputs, const map<s
                     continue;
                 }
                 const auto &dst = rep_to_fg[fused_groups_set.find(dst_fn.name())];
-                graph.add_edge(src, dst);
+                graph.add_dependency(src, dst);
             }
         }
     }
@@ -586,22 +553,6 @@ PipelineGraph create_pipeline_graph(const vector<Function> &outputs, const map<s
     graph.set_outputs(outputs);
 
     return graph;
-}
-
-pair<vector<string>, vector<vector<string>>>
-realization_order_p(const vector<Function> &outputs, map<string, Function> &env) {
-    PipelineGraph graph = create_pipeline_graph(outputs, env);
-    vector<string> flat;
-    vector<vector<string>> groups;
-    for (const auto &fg : graph.topological_order(outputs)) {
-        vector<string> group;
-        for (const auto &fn : fg.functions()) {
-            flat.push_back(fn.name());
-            group.push_back(fn.name());
-        }
-        groups.push_back(group);
-    }
-    return {flat, groups};
 }
 
 pair<vector<string>, vector<vector<string>>>
@@ -741,7 +692,7 @@ realization_order(const vector<Function> &outputs, map<string, Function> &env) {
 //        for (const pair<const string, Function> &callee : find_direct_calls(caller.second)) {
 //            if ((callee.first != caller.first) && // Skip calls to itself (i.e. update stages)
 //                (std::find(s.begin(), s.end(), callee.first) == s.end())) {
-//                graph.add_edge(caller.first, callee.first);
+//                graph.add_dependency(caller.first, callee.first);
 //            }
 //        }
 //    }
