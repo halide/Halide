@@ -352,14 +352,16 @@ tuple<Expr, Expr, Expr> predicate_expr(vector<Expr> lhs,
             constraints.push_back(e1 <= e2);
             constraints.push_back(e1 < e2);
             constraints.push_back(e1 < e2 - 1);
-            //constraints.push_back(e1 % e2 == 0 && e2 > 0 && e2 < 4);
+            constraints.push_back(e1 % e2 == 0 && e2 > 0 && e2 < 16);
             constraints.push_back(e1 / e2 == 0 && e2 > 0 && e2 < 16);
             constraints.push_back(e1 == e2 - 1);
             constraints.push_back(e1 == e2 + 1);
             constraints.push_back(e1 == e2);
 
             if (commutative_ok) {
+                constraints.push_back(e1 + e2 <= 1);
                 constraints.push_back(e1 + e2 <= 0);
+                constraints.push_back(e1 + e2 >= -1);
                 constraints.push_back(e1 + e2 >= 0);
                 constraints.push_back(e1 + e2 < 0);
                 constraints.push_back(e1 + e2 > 0);
@@ -370,8 +372,8 @@ tuple<Expr, Expr, Expr> predicate_expr(vector<Expr> lhs,
             }
             values.emplace_back(e1 - e2, const_true());
             values.emplace_back(e1 / e2, e2 > 0 && e2 < 16); // Division rounding down
-            values.emplace_back((e1 - 1) / e2 + 1, e2 > 0 && e2 < 4); // Division rounding up
-            values.emplace_back(e1 / e2, e2 > 0 && e2 < 4 && e1 % e2 == 0); // Exact division
+            values.emplace_back((e1 - 1) / e2 + 1, e2 > 0 && e2 < 16); // Division rounding up
+            values.emplace_back(e1 / e2, e2 > 0 && e2 < 16 && e1 % e2 == 0); // Exact division
             values.emplace_back(e1 % e2, e2 > 0 && e2 < 16);
         }
     }
@@ -651,9 +653,10 @@ Z3Result satisfy(Expr e, map<string, Expr> *bindings) {
     TemporaryFile z3_output("output", "txt");
     write_entire_file(z3_file.pathname(), &src[0], src.size());
 
-    std::string cmd = "z3 -T:60 " + z3_file.pathname() + " > " + z3_output.pathname();
+    std::string cmd = "z3 -T:6 " + z3_file.pathname() + " > " + z3_output.pathname();
 
-    int ret = system(cmd.c_str());
+    //int ret = system(cmd.c_str());
+    int ret = pclose(popen(cmd.c_str(), "r"));
 
     auto result_vec = read_entire_file(z3_output.pathname());
     string result(result_vec.begin(), result_vec.end());
@@ -843,8 +846,9 @@ Expr super_simplify(Expr e, int size) {
         // double-check things are working as intended.
         if (counterexamples.size() > 30) {
             Expr sanity_check = simplify(substitute(current_program, works_on_counterexamples));
-            if (!is_one(sanity_check)) {
-                Expr p = simplify(substitute_in_all_lets(common_subexpression_elimination(substitute(current_program, program))));
+            // Might fail to be the constant true due to overflow, so just make sure it's not the constant false
+            if (is_zero(sanity_check)) {
+                Expr p = simplify(common_subexpression_elimination(substitute(current_program, program)));
                 std::cout << "Synthesized program doesn't actually work on counterexamples!\n"
                           << "Original expr: " << e << "\n"
                           << "Program: " << p << "\n"
@@ -921,6 +925,25 @@ Expr synthesize_sufficient_condition(Expr lhs, Expr rhs, int size,
     for (auto v : find_vars.vars) {
         if (all_vars_zero.find(v.first) == all_vars_zero.end()) {
             secondary_vars_are_zero[v.first] = 0;
+        }
+    }
+
+    // Maybe we'll get lucky and can just cancel all the secondary
+    // vars to get an exact predicate. If that's the case we don't
+    // need to synthesize anything.
+    {
+        Expr e = orig;
+        for (auto it : secondary_vars_are_zero) {
+            e = simplify(solve_expression(e, it.first).result);
+        }
+        bool eliminated = true;
+        for (auto it : secondary_vars_are_zero) {
+            if (expr_uses_var(e, it.first)) {
+                eliminated = false;
+            }
+        }
+        if (eliminated) {
+            return e;
         }
     }
 
@@ -1722,20 +1745,139 @@ Expr parse_halide_expr(char **cursor, char *end, Type expected_type) {
 class ReplaceConstants : public IRMutator {
     using IRMutator::visit;
     Expr visit(const IntImm *op) override {
-        string name = "c" + std::to_string(counter++);
-        binding[name] = op;
-        return Variable::make(op->type, name);
+        auto it = bound_values.find(op->value);
+        // Assume repeated instance of the same var is the same
+        // wildcard var. If we have rules where that isn't true we'll
+        // need to see examples where the values differ.
+        if (it == bound_values.end()) {
+            string name = "c" + std::to_string(counter++);
+            binding[name] = op;
+            Expr v = Variable::make(op->type, name);
+            bound_values[op->value] = v;
+            return v;
+        } else {
+            return it->second;
+        }
     }
     Expr visit(const Variable *op) override {
         free_vars.insert(op->name);
         return op;
     }
+
+    map<int64_t, Expr> bound_values;
     // TODO: float constants
+
 public:
     int counter = 0;
     map<string, Expr> binding;
     set<string> free_vars;
 };
+
+enum class Dir {Up, Down};
+Dir flip(Dir d) {
+    if (d == Dir::Up) {
+        return Dir::Down;
+    } else {
+        return Dir::Up;
+    }
+}
+
+// Try to remove divisions from an expression, possibly by making it
+// larger or smaller by a small amount, depending on the direction
+// argument.
+Expr simplify_with_slop(Expr e, Dir d) {
+    if (const LE *le = e.as<LE>()) {
+        Expr a = le->a, b = le->b;
+        const Div *div = a.as<Div>();
+        if (!div) div = b.as<Div>();
+        if (div && is_one(simplify(div->b > 0))) {
+            a *= div->b;
+            b *= div->b;
+        }
+        a = simplify(a);
+        b = simplify(b);
+        return simplify_with_slop(a, flip(d)) <= simplify_with_slop(b, d);
+    }
+    if (const LT *lt = e.as<LT>()) {
+        Expr a = lt->a, b = lt->b;
+        const Div *div = a.as<Div>();
+        if (!div) div = b.as<Div>();
+        if (div && is_one(simplify(div->b > 0))) {
+            a *= div->b;
+            b *= div->b;
+        }
+        a = simplify(a);
+        b = simplify(b);
+        return simplify_with_slop(a, flip(d)) < simplify_with_slop(b, d);
+    }
+    if (const And *a = e.as<And>()) {
+        return simplify_with_slop(a->a, d) && simplify_with_slop(a->b, d);
+    }
+    if (const Or *o = e.as<Or>()) {
+        return simplify_with_slop(o->a, d) || simplify_with_slop(o->b, d);
+    }
+    if (const Select *s = e.as<Select>()) {
+        return select(s->condition, simplify_with_slop(s->true_value, d), simplify_with_slop(s->false_value, d));
+    }
+    if (const Min *m = e.as<Min>()) {
+        return min(simplify_with_slop(m->a, d), simplify_with_slop(m->b, d));
+    }
+    if (const Max *m = e.as<Max>()) {
+        return max(simplify_with_slop(m->a, d), simplify_with_slop(m->b, d));
+    }
+    if (const Min *m = e.as<Min>()) {
+        return min(simplify_with_slop(m->a, d), simplify_with_slop(m->b, d));
+    }
+    if (const Add *a = e.as<Add>()) {
+        return simplify_with_slop(a->a, d) + simplify_with_slop(a->b, d);
+    }
+    if (const Sub *s = e.as<Sub>()) {
+        return simplify_with_slop(s->a, d) - simplify_with_slop(s->b, flip(d));
+    }
+    if (const Mul *m = e.as<Mul>()) {
+        if (is_const(m->b)) {
+            if (const Div *div = m->a.as<Div>()) {
+                if (is_zero(simplify(m->b % div->b))) {
+                    // (x / 3) * 6
+                    // -> ((x / 3) * 3) * 2
+                    // -> (x + 2) * 2 or x * 2 depending on direction
+                    // This is currently the only place slop is injected
+                    Expr num = div->a;
+                    if (d == Dir::Down) {
+                        num -= div->b - 1;
+                    }
+                    return num * (m->b / div->b);
+                }
+            }
+
+            if (can_prove(m->b > 0)) {
+                return simplify_with_slop(m->a, d) * m->b;
+            } else {
+                return simplify_with_slop(m->a, flip(d)) * m->b;
+            }
+        }
+        if (const Div *div = m->a.as<Div>()) {
+            if (equal(div->b, m->b)) {
+                // (x / y) * y
+                Expr num = div->a;
+                if (d == Dir::Down) {
+                    num -= div->b - 1;
+                }
+                return num * (m->b / div->b);
+            }
+        }
+    }
+    if (const Div *div = e.as<Div>()) {
+        if (is_const(div->b)) {
+            if (can_prove(div->b > 0)) {
+                return simplify_with_slop(div->a, d) / div->b;
+            } else {
+                return simplify_with_slop(div->a, flip(d)) / div->b;
+            }
+        }
+    }
+    return e;
+}
 
 int main(int argc, char **argv) {
     if (argc < 2) {
@@ -1851,7 +1993,7 @@ int main(int argc, char **argv) {
 
     {
         std::lock_guard<std::mutex> lock(mutex);
-        for (int lhs_ops = 1; lhs_ops < 6; lhs_ops++) {
+        for (int lhs_ops = 1; lhs_ops < 8; lhs_ops++) {
             for (auto p : patterns) {
                 CountOps count_ops;
                 count_ops.include(p);
@@ -1954,6 +2096,7 @@ int main(int argc, char **argv) {
 
     for (auto r : filtered) {
         std::cout << "Trying to generalize " << r.first << " -> " << r.second << "\n";
+        Expr orig = r.first == r.second;
         ReplaceConstants replacer;
         r.first = replacer.mutate(r.first);
         r.second = replacer.mutate(r.second);
@@ -1975,6 +2118,25 @@ int main(int argc, char **argv) {
                     Expr lhs = eq->a, rhs = eq->b;
                     map<string, Expr> binding;
                     Expr predicate = synthesize_sufficient_condition(lhs, rhs, 0, it.second, &binding);
+                    if (!predicate.defined()) {
+                        // Attempt to simplify lhs == rhs in a way
+                        // that makes it less frequently true and deduce a
+                        // predicate for that instead.
+                        Expr new_lhs;
+                        if (lhs.type().is_bool()) {
+                            if (is_one(rhs)) {
+                                new_lhs = simplify(simplify_with_slop(lhs, Dir::Down));
+                            } else if (is_zero(rhs)) {
+                                new_lhs = simplify(simplify_with_slop(lhs, Dir::Up));
+                            }
+                        }
+                        if (new_lhs.defined() && !is_zero(new_lhs) && !equal(new_lhs, simplify(lhs))) {
+                            std::cout << "Lossily simplified lhs: " << lhs << " -> " << new_lhs << "\n";
+                            // Try again
+                            predicate = synthesize_sufficient_condition(new_lhs, rhs, 0, it.second, &binding);
+                        }
+                    }
+
                     if (!predicate.defined()) {
                         std::lock_guard<std::mutex> lock(mutex);
                         failed_predicated_rules.emplace_back(lhs, rhs);
@@ -2035,6 +2197,7 @@ int main(int argc, char **argv) {
                     }
 
                     predicate = simplify(substitute(binding, predicate));
+                    predicate = simplify(substitute_in_all_lets(predicate));
                     lhs = substitute(binding, lhs);
 
                     // In the RHS, we want to wrap fold() around computed combinations of the constants
@@ -2079,7 +2242,14 @@ int main(int argc, char **argv) {
     }
 
     for (auto r : failed_predicated_rules) {
-        std::cout << "Failed to synthesize a predicate for rule: " << r.first << " -> " << r.second << "\n";
+        std::cout << "Failed to synthesize a predicate for rule: "
+                  << r.first << " -> " << r.second
+                  << " from these instances:\n";
+        Expr eq = r.first == r.second;
+        const vector<map<string, Expr>> &examples = generalized[eq];
+        for (const auto &e : examples) {
+            std::cout << "FAILED: " << substitute(e, eq) << "\n";
+        }
     }
 
     // Filter again, now that constants are gone.
