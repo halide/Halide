@@ -213,7 +213,7 @@ struct ModuleContents {
 };
 
 template<>
-RefCount &ref_count<ModuleContents>(const ModuleContents *t) {
+RefCount &ref_count<ModuleContents>(const ModuleContents *t) noexcept {
     return t->ref_count;
 }
 

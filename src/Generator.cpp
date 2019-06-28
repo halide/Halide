@@ -800,7 +800,7 @@ std::string halide_type_to_c_type(const Type &t) {
     return m.at(encode(t));
 }
 
-int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
+int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
     const char kUsage[] =
         "gengen \n"
         "  [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR] [-r RUNTIME_NAME]\n"
@@ -1062,6 +1062,21 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
 
     return 0;
 }
+
+#ifdef WITH_EXCEPTIONS
+int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
+    try {
+        return generate_filter_main_inner(argc, argv, cerr);
+    } catch (std::runtime_error &err) {
+        cerr << "Unhandled exception: " << err.what() << "\n";
+        return -1;
+    }
+}
+#else
+int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
+    return generate_filter_main_inner(argc, argv, cerr);
+}
+#endif
 
 GeneratorParamBase::GeneratorParamBase(const std::string &name) : name(name) {
     ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::GeneratorParam,

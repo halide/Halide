@@ -7,7 +7,7 @@ namespace Halide {
 namespace Internal {
 
 template<>
-RefCount &ref_count<BufferContents>(const BufferContents *c) {
+RefCount &ref_count<BufferContents>(const BufferContents *c) noexcept {
     return c->ref_count;
 }
 
