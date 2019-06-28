@@ -1,15 +1,15 @@
 #include "UnpackBuffers.h"
-#include "IRVisitor.h"
 #include "IROperator.h"
+#include "IRVisitor.h"
 
 namespace Halide {
 namespace Internal {
 
 using std::map;
-using std::string;
 using std::pair;
-using std::vector;
 using std::set;
+using std::string;
+using std::vector;
 
 namespace {
 
@@ -23,7 +23,6 @@ class FindBufferSymbols : public IRVisitor {
 
     void visit_param(const string &ref_name, const Parameter &param) {
         if (param.defined() && param.is_buffer()) {
-            symbols.insert(ref_name);
             string name = param.name();
             buffers[name] =
                 BufferInfo {Variable::make(type_of<buffer_t *>(), name + ".buffer", param),
@@ -33,7 +32,6 @@ class FindBufferSymbols : public IRVisitor {
 
     void visit_buffer(const string &ref_name, const Buffer<> &buffer) {
         if (buffer.defined()) {
-            symbols.insert(ref_name);
             string name = buffer.name();
             buffers[name] =
                 BufferInfo {Variable::make(type_of<buffer_t *>(), name + ".buffer", buffer),
@@ -41,19 +39,22 @@ class FindBufferSymbols : public IRVisitor {
         }
     }
 
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         visit_param(op->name, op->param);
         visit_buffer(op->name, op->image);
+        symbols.insert(op->name);
     }
 
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         visit_param(op->name, op->param);
         visit_buffer(op->name, op->image);
+        symbols.insert(op->name);
         IRVisitor::visit(op);
     }
 
-    void visit(const Store *op) {
+    void visit(const Store *op) override {
         visit_param(op->name, op->param);
+        symbols.insert(op->name);
         IRVisitor::visit(op);
     }
 
@@ -62,7 +63,7 @@ public:
     map<string, BufferInfo> buffers;
 };
 
-}
+}  // namespace
 
 Stmt unpack_buffers(Stmt s) {
     FindBufferSymbols finder;
@@ -88,17 +89,9 @@ Stmt unpack_buffers(Stmt s) {
                                             Call::buffer_get_device_interface, args, Call::Extern);
         lets.push_back({dev_interface_var, dev_interface_val});
 
-        string type_code_var = name + ".type.code";
-        Expr type_code_val = Call::make(UInt(8), Call::buffer_get_type_code, args, Call::Extern);
+        string type_code_var = name + ".type";
+        Expr type_code_val = Call::make(UInt(32), Call::buffer_get_type, args, Call::Extern);
         lets.push_back({type_code_var, type_code_val});
-
-        string type_bits_var = name + ".type.bits";
-        Expr type_bits_val = Call::make(UInt(8), Call::buffer_get_type_bits, args, Call::Extern);
-        lets.push_back({type_bits_var, type_bits_val});
-
-        string type_lanes_var = name + ".type.lanes";
-        Expr type_lanes_val = Call::make(UInt(16), Call::buffer_get_type_lanes, args, Call::Extern);
-        lets.push_back({type_lanes_var, type_lanes_val});
 
         string host_dirty_var = name + ".host_dirty";
         Expr host_dirty_val = Call::make(Bool(), Call::buffer_get_host_dirty, args, Call::Extern);
@@ -107,6 +100,10 @@ Stmt unpack_buffers(Stmt s) {
         string dev_dirty_var = name + ".device_dirty";
         Expr dev_dirty_val = Call::make(Bool(), Call::buffer_get_device_dirty, args, Call::Extern);
         lets.push_back({dev_dirty_var, dev_dirty_val});
+
+        string dimensions_var = name + ".dimensions";
+        Expr dimensions_val = Call::make(Int(32), Call::buffer_get_dimensions, args, Call::Extern);
+        lets.push_back({dimensions_var, dimensions_val});
 
         for (int i = 0; i < info.dimensions; i++) {
             vector<Expr> args = {info.handle, i};
@@ -146,5 +143,5 @@ Stmt unpack_buffers(Stmt s) {
     return s;
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

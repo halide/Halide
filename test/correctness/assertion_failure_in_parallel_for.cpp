@@ -1,9 +1,11 @@
 #include "Halide.h"
 #include <stdio.h>
+#include <atomic>
 
 using namespace Halide;
 
-int error_occurred = false;
+std::atomic<bool> error_occurred(false);
+
 void halide_error(void *ctx, const char *msg) {
     printf("Expected: %s\n", msg);
     error_occurred = true;

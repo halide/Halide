@@ -1,4 +1,11 @@
 # Generators
+if (WIN32)
+    # TODO: Provide a version of halide_opengl_create_context for Windows
+    return()
+endif()
+# Use vendor libraries even when legacy libs are also available
+# see: https://cmake.org/cmake/help/git-stage/policy/CMP0072.html
+set(OpenGL_GL_PREFERENCE GLVND)
 find_package(OpenGL)
 if (OpenGL_FOUND)
 

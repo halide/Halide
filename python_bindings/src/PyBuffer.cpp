@@ -39,10 +39,32 @@ std::vector<halide_dimension_t> get_buffer_shape(const Buffer<> &b) {
     return s;
 }
 
+// PyBind11 doesn't have baked-in support for float16, so add just
+// enough special-case wrapping to support it.
+template<typename T>
+inline T value_cast(py::object value) {
+    return value.cast<T>();
+}
+
+template<>
+inline float16_t value_cast<float16_t>(py::object value) {
+    return float16_t(value.cast<double>());
+}
+
+template<typename T>
+inline std::string format_descriptor() {
+    return py::format_descriptor<T>::format();
+}
+
+template<>
+inline std::string format_descriptor<float16_t>() {
+    return "e";
+}
+
 void call_fill(Buffer<> &b, py::object value) {
 
     #define HANDLE_BUFFER_TYPE(TYPE) \
-        if (b.type() == type_of<TYPE>()) { b.as<TYPE>().fill(value.cast<TYPE>()); return; }
+        if (b.type() == type_of<TYPE>()) { b.as<TYPE>().fill(value_cast<TYPE>(value)); return; }
 
     HANDLE_BUFFER_TYPE(bool)
     HANDLE_BUFFER_TYPE(uint8_t)
@@ -53,6 +75,7 @@ void call_fill(Buffer<> &b, py::object value) {
     HANDLE_BUFFER_TYPE(int16_t)
     HANDLE_BUFFER_TYPE(int32_t)
     HANDLE_BUFFER_TYPE(int64_t)
+    HANDLE_BUFFER_TYPE(float16_t)
     HANDLE_BUFFER_TYPE(float)
     HANDLE_BUFFER_TYPE(double)
 
@@ -64,7 +87,7 @@ void call_fill(Buffer<> &b, py::object value) {
 bool call_all_equal(Buffer<> &b, py::object value) {
 
     #define HANDLE_BUFFER_TYPE(TYPE) \
-        if (b.type() == type_of<TYPE>()) { return b.as<TYPE>().all_equal(value.cast<TYPE>()); }
+        if (b.type() == type_of<TYPE>()) { return b.as<TYPE>().all_equal(value_cast<TYPE>(value)); }
 
     HANDLE_BUFFER_TYPE(bool)
     HANDLE_BUFFER_TYPE(uint8_t)
@@ -75,6 +98,7 @@ bool call_all_equal(Buffer<> &b, py::object value) {
     HANDLE_BUFFER_TYPE(int16_t)
     HANDLE_BUFFER_TYPE(int32_t)
     HANDLE_BUFFER_TYPE(int64_t)
+    HANDLE_BUFFER_TYPE(float16_t)
     HANDLE_BUFFER_TYPE(float)
     HANDLE_BUFFER_TYPE(double)
 
@@ -87,7 +111,7 @@ bool call_all_equal(Buffer<> &b, py::object value) {
 std::string type_to_format_descriptor(const Type &type) {
 
     #define HANDLE_BUFFER_TYPE(TYPE) \
-        if (type == type_of<TYPE>()) return py::format_descriptor<TYPE>::format();
+        if (type == type_of<TYPE>()) return format_descriptor<TYPE>();
 
     HANDLE_BUFFER_TYPE(bool)
     HANDLE_BUFFER_TYPE(uint8_t)
@@ -98,6 +122,7 @@ std::string type_to_format_descriptor(const Type &type) {
     HANDLE_BUFFER_TYPE(int16_t)
     HANDLE_BUFFER_TYPE(int32_t)
     HANDLE_BUFFER_TYPE(int64_t)
+    HANDLE_BUFFER_TYPE(float16_t)
     HANDLE_BUFFER_TYPE(float)
     HANDLE_BUFFER_TYPE(double)
 
@@ -110,7 +135,7 @@ std::string type_to_format_descriptor(const Type &type) {
 Type format_descriptor_to_type(const std::string &fd) {
 
     #define HANDLE_BUFFER_TYPE(TYPE) \
-        if (fd == py::format_descriptor<TYPE>::format()) return type_of<TYPE>();
+        if (fd == format_descriptor<TYPE>()) return type_of<TYPE>();
 
     HANDLE_BUFFER_TYPE(bool)
     HANDLE_BUFFER_TYPE(uint8_t)
@@ -121,10 +146,17 @@ Type format_descriptor_to_type(const std::string &fd) {
     HANDLE_BUFFER_TYPE(int16_t)
     HANDLE_BUFFER_TYPE(int32_t)
     HANDLE_BUFFER_TYPE(int64_t)
+    HANDLE_BUFFER_TYPE(float16_t)
     HANDLE_BUFFER_TYPE(float)
     HANDLE_BUFFER_TYPE(double)
 
     #undef HANDLE_BUFFER_TYPE
+
+    // The string 'l' corresponds to np.int_, which is essentially
+    // a C 'long'; return a 32 or 64 bit int as appropriate.
+    if (fd == "l") {
+      return sizeof(long) == 8 ? type_of<int64_t>() : type_of<int32_t>();
+    }
 
     throw py::value_error("Unsupported Buffer<> type.");
     return Type();
@@ -150,6 +182,7 @@ py::object buffer_getitem_operator(Buffer<> &buf, const std::vector<int> &pos) {
     HANDLE_BUFFER_TYPE(int16_t)
     HANDLE_BUFFER_TYPE(int32_t)
     HANDLE_BUFFER_TYPE(int64_t)
+    HANDLE_BUFFER_TYPE(float16_t)
     HANDLE_BUFFER_TYPE(float)
     HANDLE_BUFFER_TYPE(double)
 
@@ -166,7 +199,7 @@ py::object buffer_setitem_operator(Buffer<> &buf, const std::vector<int> &pos, p
     // TODO: add bounds checking?
     #define HANDLE_BUFFER_TYPE(TYPE) \
         if (buf.type() == type_of<TYPE>()) \
-            return py::cast(buf.as<TYPE>()(pos.data()) = value.cast<TYPE>());
+            return py::cast(buf.as<TYPE>()(pos.data()) = value_cast<TYPE>(value));
 
     HANDLE_BUFFER_TYPE(bool)
     HANDLE_BUFFER_TYPE(uint8_t)
@@ -177,6 +210,7 @@ py::object buffer_setitem_operator(Buffer<> &buf, const std::vector<int> &pos, p
     HANDLE_BUFFER_TYPE(int16_t)
     HANDLE_BUFFER_TYPE(int32_t)
     HANDLE_BUFFER_TYPE(int64_t)
+    HANDLE_BUFFER_TYPE(float16_t)
     HANDLE_BUFFER_TYPE(float)
     HANDLE_BUFFER_TYPE(double)
 
@@ -197,7 +231,9 @@ class PyBuffer : public Buffer<> {
         std::vector<halide_dimension_t> dims;
         dims.reserve(info.ndim);
         for (int i = 0; i < info.ndim; i++) {
-            // TODO: check for ssize_t -> int32_t overflow
+            if (INT_MAX < info.shape[i] || INT_MAX < (info.strides[i] / t.bytes())) {
+                throw py::value_error("Out of range arguments to make_dim_vec.");
+            }
             dims.push_back({0, (int32_t) info.shape[i], (int32_t) (info.strides[i] / t.bytes())});
         }
         return dims;
@@ -245,6 +281,10 @@ void define_buffer(py::module &m) {
         // Note that this allows us to convert a Buffer<> to any buffer-like object in Python;
         // most notably, we can convert to an ndarray by calling numpy.array()
        .def_buffer([](Buffer<> &b) -> py::buffer_info {
+            if (b.data() == nullptr) {
+                throw py::value_error("Cannot convert a Buffer<> with null host ptr to a Python buffer.");
+            }
+
             const int d = b.dimensions();
             const int bytes = b.type().bytes();
             std::vector<ssize_t> shape, strides;
@@ -271,6 +311,16 @@ void define_buffer(py::module &m) {
         .def(py::init([](Type type, const std::vector<int> &sizes, const std::string &name) -> Buffer<> {
             return Buffer<>(type, sizes, name);
         }), py::arg("type"), py::arg("sizes"), py::arg("name") = "")
+
+        .def(py::init([](Type type, const std::vector<int> &sizes, const std::vector<int> &storage_order, const std::string &name) -> Buffer<> {
+            return Buffer<>(type, sizes, storage_order, name);
+        }), py::arg("type"), py::arg("sizes"), py::arg("storage_order"), py::arg("name") = "")
+
+        // Note that this exists solely to allow you to create a Buffer with a null host ptr;
+        // this is necessary for some bounds-query operations (e.g. Func::infer_input_bounds).
+        .def_static("make_bounds_query", [](Type type, const std::vector<int> &sizes, const std::string &name) -> Buffer<> {
+            return Buffer<>(type, nullptr, sizes, name);
+        }, py::arg("type"), py::arg("sizes"), py::arg("name") = "")
 
         .def_static("make_scalar", (Buffer<> (*)(Type, const std::string &)) Buffer<>::make_scalar,
             py::arg("type"), py::arg("name") = "")
@@ -341,12 +391,26 @@ void define_buffer(py::module &m) {
             return b.embedded(d, pos);
         }, py::arg("dimension"), py::arg("pos"))
 
+        .def("embed", [](Buffer<> &b, int d) -> void {
+            b.embed(d);
+        }, py::arg("dimension"))
+        .def("embedded", [](Buffer<> &b, int d) -> Buffer<> {
+            return b.embedded(d);
+        }, py::arg("dimension"))
+
         .def("slice", [](Buffer<> &b, int d, int pos) -> void {
             b.slice(d, pos);
         }, py::arg("dimension"), py::arg("pos"))
         .def("sliced", [](Buffer<> &b, int d, int pos) -> Buffer<> {
             return b.sliced(d, pos);
         }, py::arg("dimension"), py::arg("pos"))
+
+        .def("slice", [](Buffer<> &b, int d) -> void {
+            b.slice(d);
+        }, py::arg("dimension"))
+        .def("sliced", [](Buffer<> &b, int d) -> Buffer<> {
+            return b.sliced(d);
+        }, py::arg("dimension"))
 
         .def("translate", [](Buffer<> &b, int d, int dx) -> void {
             b.translate(d, dx);
@@ -367,10 +431,17 @@ void define_buffer(py::module &m) {
             b.transpose(d1, d2);
         }, py::arg("d1"), py::arg("d2"))
 
-        // Present in Runtime::Buffer but not Buffer
-        // .def("transposed", [](Buffer<> &b, int d1, int d2) -> Buffer<> {
-        //     return b.transposed(d1, d2);
-        // }, py::arg("d1"), py::arg("d2"))
+        .def("transposed", [](Buffer<> &b, int d1, int d2) -> Buffer<> {
+            return b.transposed(d1, d2);
+        }, py::arg("d1"), py::arg("d2"))
+
+        .def("transpose", [](Buffer<> &b, const std::vector<int> &order) -> void {
+            b.transpose(order);
+        }, py::arg("order"))
+
+        .def("transposed", [](Buffer<> &b, const std::vector<int> &order) -> Buffer<> {
+            return b.transposed(order);
+        }, py::arg("order"))
 
         .def("dim", [](Buffer<> &b, int dimension) -> BufferDimension {
             return b.dim(dimension);

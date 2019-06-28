@@ -9,7 +9,7 @@
 // - 2/3-D only
 // - Readable by the most tools
 // mat:
-// - Abitrary dimensionality, type
+// - Arbitrary dimensionality, type
 // - Readable by matlab, ImageStack, and many other tools
 // tmp:
 // - Dirt simple, easy to roll your own parser
@@ -123,6 +123,11 @@ struct ScopedFile {
 WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *filename,
                                              int32_t type_code, struct halide_buffer_t *buf) {
 
+    if (buf->is_bounds_query()) {
+        halide_error(user_context, "Bounds query buffer passed to halide_debug_to_file");
+        return -1;
+    }
+
     if (buf->dimensions > 4) {
         halide_error(user_context, "Can't debug_to_file a Func with more than four dimensions\n");
         return -1;
@@ -216,7 +221,7 @@ WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *fil
                 }
                 offset += shape[0].extent * shape[1].extent * depth * bytes_per_element;
             }
-            int32_t count = shape[0].extent * shape[1].extent * depth;
+            int32_t count = shape[0].extent * shape[1].extent * depth * bytes_per_element;
             for (int32_t i = 0; i < channels; i++) {
                 if (!f.write((void*)(&count), 4)) {
                     return -5;

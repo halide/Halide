@@ -12,29 +12,37 @@ set(RUNTIME_CPP
   aarch64_cpu_features
   alignment_128
   alignment_32
+  alignment_64
   android_clock
   android_host_cpu_count
   android_io
   android_opengl_context
-  android_tempfile
   arm_cpu_features
   buffer_t
   cache
   can_use_target
   cuda
+  d3d12compute
   destructors
   device_interface
   errors
+  fake_get_symbol
   fake_thread_pool
   float16_t
-  gcd_thread_pool
+  fuchsia_clock
+  fuchsia_host_cpu_count
+  fuchsia_yield
   gpu_device_selection
+  hexagon_cache_allocator
   hexagon_cpu_features
+  hexagon_dma
+  hexagon_dma_pool
   hexagon_host
   ios_io
   linux_clock
   linux_host_cpu_count
   linux_opengl_context
+  linux_yield
   matlab
   metadata
   metal
@@ -54,34 +62,45 @@ set(RUNTIME_CPP
   osx_get_symbol
   osx_host_cpu_count
   osx_opengl_context
+  osx_yield
+  posix_abort
   posix_allocator
   posix_clock
   posix_error_handler
   posix_get_symbol
   posix_io
   posix_print
-  posix_tempfile
   posix_threads
+  posix_threads_tsan
   powerpc_cpu_features
   prefetch
   profiler
   profiler_inlined
+  pseudostack
   qurt_allocator
   qurt_hvx
+  qurt_hvx_vtcm
   qurt_init_fini
-  qurt_thread_pool
+  qurt_threads
+  qurt_threads_tsan
+  qurt_yield
+  riscv_cpu_features
   runtime_api
   ssp
-  thread_pool
   to_string
+  trace_helper
   tracing
+  wasm_cpu_features
+  windows_abort
   windows_clock
   windows_cuda
   windows_get_symbol
   windows_io
   windows_opencl
-  windows_tempfile
+  windows_profiler
   windows_threads
+  windows_threads_tsan
+  windows_yield
   write_debug_image
   x86_cpu_features
 )
@@ -96,11 +115,13 @@ set (RUNTIME_LL
   posix_math
   powerpc
   ptx_dev
+  wasm_math
   win32_math
   x86
   x86_avx
   x86_avx2
   x86_sse41
+  d3d12_abi_patch_64
 )
 
 set (RUNTIME_BC
@@ -148,9 +169,11 @@ function(add_runtime_modules TARGET_RUNTIME_FILES TARGET_RUNTIME_DIR)
       set(INITMOD_D "${INITMOD_PREFIX}${i}_${j}_debug.cpp")
       set(INITMOD "${INITMOD_PREFIX}${i}_${j}.cpp")
 
+      # -std=gnu++98 is deliberate; we do NOT want c++11 here,
+      # as we don't want static locals to get thread synchronization stuff.
       add_custom_command(OUTPUT "${LL_D}"
                          DEPENDS "${SOURCE}"
-                         COMMAND ${CLANG} ${CXX_WARNING_FLAGS} ${RUNTIME_DEBUG_FLAG} -DDEBUG_RUNTIME -O3 -fno-ms-compatibility -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -m${j} -target "${TARGET}" "-I${TARGET_RUNTIME_DIR}" -DCOMPILING_HALIDE_RUNTIME "-DLLVM_VERSION=${LLVM_VERSION}" -DBITS_${j} -emit-llvm -S "${SOURCE}" -o "${LL_D}"
+                         COMMAND ${CLANG} ${CXX_WARNING_FLAGS} ${RUNTIME_DEBUG_FLAG} -DDEBUG_RUNTIME -O3 -fno-ms-compatibility -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -std=gnu++98 -m${j} -target "${TARGET}" "-I${TARGET_RUNTIME_DIR}" -DCOMPILING_HALIDE_RUNTIME "-DLLVM_VERSION=${LLVM_VERSION}" -DBITS_${j} -emit-llvm -S "${SOURCE}" -o "${LL_D}"
                          COMMENT "${SOURCE} -> ${LL_D}"
                          # Make sure that the output of this command also depends
                          # on the header files that ${SOURCE} uses
@@ -159,7 +182,7 @@ function(add_runtime_modules TARGET_RUNTIME_FILES TARGET_RUNTIME_DIR)
                         )
       add_custom_command(OUTPUT "${LL}"
                          DEPENDS "${SOURCE}"
-                         COMMAND ${CLANG} ${CXX_WARNING_FLAGS} -O3 -fno-ms-compatibility -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -m${j} -target "${TARGET}" "-I${TARGET_RUNTIME_DIR}" -DCOMPILING_HALIDE_RUNTIME "-DLLVM_VERSION=${LLVM_VERSION}" -DBITS_${j} -emit-llvm -S "${SOURCE}" -o "${LL}"
+                         COMMAND ${CLANG} ${CXX_WARNING_FLAGS} -O3 -fno-ms-compatibility -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -std=gnu++98 -m${j} -target "${TARGET}" "-I${TARGET_RUNTIME_DIR}" -DCOMPILING_HALIDE_RUNTIME "-DLLVM_VERSION=${LLVM_VERSION}" -DBITS_${j} -emit-llvm -S "${SOURCE}" -o "${LL}"
                          COMMENT "${SOURCE} -> ${LL}")
 
       add_custom_command(OUTPUT "${BC_D}"
@@ -222,11 +245,13 @@ list(APPEND INITIAL_MODULES "${INITMOD_PREFIX}inlined_c.cpp")
 set(RUNTIME_HEADER_FILES
   HalideRuntime.h
   HalideRuntimeCuda.h
+  HalideRuntimeHexagonDma.h
   HalideRuntimeHexagonHost.h
   HalideRuntimeOpenCL.h
   HalideRuntimeMetal.h
   HalideRuntimeOpenGL.h
   HalideRuntimeOpenGLCompute.h
+  HalideRuntimeD3D12Compute.h
   HalideRuntimeQurt.h
   HalideBuffer.h
 )
@@ -242,6 +267,7 @@ endforeach()
 
 # The externally-visible header files that go into making Halide.h.
 # Don't include anything here that includes llvm headers.
+# Keep this list sorted in alphabetical order.
 set(HEADER_FILES
   AddImageChecks.h
   AddParameterChecks.h
@@ -251,6 +277,7 @@ set(HEADER_FILES
   Argument.h
   AssociativeOpsTable.h
   Associativity.h
+  AsyncProducers.h
   AutoSchedule.h
   AutoScheduleUtils.h
   BoundaryConditions.h
@@ -258,30 +285,36 @@ set(HEADER_FILES
   BoundsInference.h
   BoundSmallAllocations.h
   Buffer.h
+  CanonicalizeGPUVars.h
   Closure.h
   CodeGen_ARM.h
   CodeGen_C.h
+  CodeGen_D3D12Compute_Dev.h
   CodeGen_GPU_Dev.h
   CodeGen_GPU_Host.h
+  CodeGen_Internal.h
   CodeGen_LLVM.h
+  CodeGen_Metal_Dev.h
   CodeGen_MIPS.h
   CodeGen_OpenCL_Dev.h
-  CodeGen_Metal_Dev.h
   CodeGen_OpenGL_Dev.h
   CodeGen_OpenGLCompute_Dev.h
   CodeGen_Posix.h
   CodeGen_PowerPC.h
   CodeGen_PTX_Dev.h
+  CodeGen_RISCV.h
+  CodeGen_WebAssembly.h
   CodeGen_X86.h
   ConciseCasts.h
   CPlusPlusMangle.h
   CSE.h
-  CanonicalizeGPUVars.h
   Debug.h
   DebugArguments.h
   DebugToFile.h
   Definition.h
   Deinterleave.h
+  Derivative.h
+  DerivativeUtils.h
   DeviceArgument.h
   DeviceInterface.h
   Dimension.h
@@ -303,8 +336,6 @@ set(HEADER_FILES
   Generator.h
   HexagonOffload.h
   HexagonOptimize.h
-  runtime/HalideRuntime.h
-  runtime/HalideBuffer.h
   ImageParam.h
   InferArguments.h
   InjectHostDevBufferCopies.h
@@ -315,8 +346,8 @@ set(HEADER_FILES
   Interval.h
   Introspection.h
   IntrusivePtr.h
-  IREquality.h
   IR.h
+  IREquality.h
   IRMatch.h
   IRMutator.h
   IROperator.h
@@ -330,6 +361,7 @@ set(HEADER_FILES
   LLVM_Runtime_Linker.h
   LoopCarry.h
   Lower.h
+  LowerWarpShuffles.h
   MainPage.h
   MatlabWrapper.h
   Memoization.h
@@ -337,30 +369,35 @@ set(HEADER_FILES
   ModulusRemainder.h
   Monotonic.h
   ObjectInstanceRegistry.h
-  Outputs.h
   OutputImageParam.h
+  Outputs.h
   ParallelRVar.h
   Param.h
-  ParamMap.h
   Parameter.h
+  ParamMap.h
   PartitionLoops.h
   Pipeline.h
   Prefetch.h
   Profiling.h
+  PurifyIndexMath.h
+  PythonExtensionGen.h
   Qualify.h
   Random.h
-  RealizationOrder.h
   RDom.h
+  RealizationOrder.h
   Reduction.h
   RegionCosts.h
   RemoveDeadAllocations.h
-  RemoveTrivialForLoops.h
+  RemoveExternLoops.h
   RemoveUndef.h
+  runtime/HalideBuffer.h
+  runtime/HalideRuntime.h
   Schedule.h
   ScheduleFunctions.h
   Scope.h
   SelectGPUAPI.h
   Simplify.h
+  SimplifyCorrelatedDifferences.h
   SimplifySpecializations.h
   SkipStages.h
   SlidingWindow.h
@@ -369,6 +406,7 @@ set(HEADER_FILES
   StmtToHtml.h
   StorageFlattening.h
   StorageFolding.h
+  StrictifyFloat.h
   Substitute.h
   Target.h
   ThreadPool.h
@@ -380,10 +418,12 @@ set(HEADER_FILES
   UniquifyVariableNames.h
   UnpackBuffers.h
   UnrollLoops.h
+  UnsafePromises.h
   Util.h
   Var.h
   VaryingAttributes.h
   VectorizeLoops.h
+  WasmExecutor.h
   WrapCalls.h
   WrapExternStages.h
 )
@@ -391,25 +431,29 @@ set(HEADER_FILES
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include")
 file(TO_NATIVE_PATH "${CMAKE_BINARY_DIR}/include/" NATIVE_INCLUDE_PATH)
 add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/include/Halide.h"
-  COMMAND build_halide_h ${HEADER_FILES} HalideFooter.h > "${NATIVE_INCLUDE_PATH}Halide.h"
+  COMMAND build_halide_h "${CMAKE_CURRENT_SOURCE_DIR}/../LICENSE.txt" ${HEADER_FILES} > "${NATIVE_INCLUDE_PATH}Halide.h"
   WORKING_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}"
-  DEPENDS build_halide_h ${HEADER_FILES})
+  DEPENDS build_halide_h "${CMAKE_CURRENT_SOURCE_DIR}/../LICENSE.txt" ${HEADER_FILES})
 add_custom_target(
     HalideIncludes
+    ALL
     DEPENDS "${CMAKE_BINARY_DIR}/include/Halide.h")
 
 foreach (i ${RUNTIME_HEADER_FILES})
   configure_file(runtime/${i} "${CMAKE_BINARY_DIR}/include" COPYONLY)
 endforeach()
 
+# Keep this list sorted in alphabetical order.
 add_library(Halide ${HALIDE_LIBRARY_TYPE}
   AddImageChecks.cpp
   AddParameterChecks.cpp
   AlignLoads.cpp
   AllocationBoundsInference.cpp
   ApplySplit.cpp
+  Argument.cpp
   AssociativeOpsTable.cpp
   Associativity.cpp
+  AsyncProducers.cpp
   AutoSchedule.cpp
   AutoScheduleUtils.cpp
   BoundaryConditions.cpp
@@ -417,31 +461,36 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   BoundsInference.cpp
   BoundSmallAllocations.cpp
   Buffer.cpp
+  CanonicalizeGPUVars.cpp
   Closure.cpp
   CodeGen_ARM.cpp
   CodeGen_C.cpp
+  CodeGen_D3D12Compute_Dev.cpp
   CodeGen_GPU_Dev.cpp
   CodeGen_GPU_Host.cpp
   CodeGen_Hexagon.cpp
   CodeGen_Internal.cpp
   CodeGen_LLVM.cpp
+  CodeGen_Metal_Dev.cpp
   CodeGen_MIPS.cpp
   CodeGen_OpenCL_Dev.cpp
-  CodeGen_Metal_Dev.cpp
   CodeGen_OpenGL_Dev.cpp
   CodeGen_OpenGLCompute_Dev.cpp
+  CodeGen_Posix.cpp
   CodeGen_PowerPC.cpp
   CodeGen_PTX_Dev.cpp
-  CodeGen_Posix.cpp
+  CodeGen_RISCV.cpp
+  CodeGen_WebAssembly.cpp
   CodeGen_X86.cpp
   CPlusPlusMangle.cpp
   CSE.cpp
-  CanonicalizeGPUVars.cpp
   Debug.cpp
   DebugArguments.cpp
   DebugToFile.cpp
   Definition.cpp
   Deinterleave.cpp
+  Derivative.cpp
+  DerivativeUtils.cpp
   DeviceArgument.cpp
   DeviceInterface.cpp
   Dimension.cpp
@@ -459,6 +508,15 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Generator.cpp
   HexagonOffload.cpp
   HexagonOptimize.cpp
+  ImageParam.cpp
+  InferArguments.cpp
+  InjectHostDevBufferCopies.cpp
+  InjectOpenGLIntrinsics.cpp
+  Inline.cpp
+  InlineReductions.cpp
+  IntegerDivisionTable.cpp
+  Interval.cpp
+  Introspection.cpp
   IR.cpp
   IREquality.cpp
   IRMatch.cpp
@@ -466,22 +524,14 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   IROperator.cpp
   IRPrinter.cpp
   IRVisitor.cpp
-  ImageParam.cpp
-  InferArguments.cpp
-  Interval.cpp
-  InjectHostDevBufferCopies.cpp
-  InjectOpenGLIntrinsics.cpp
-  Inline.cpp
-  InlineReductions.cpp
-  IntegerDivisionTable.cpp
-  Introspection.cpp
   JITModule.cpp
-  LLVM_Output.cpp
-  LLVM_Runtime_Linker.cpp
   Lerp.cpp
   LICM.cpp
+  LLVM_Output.cpp
+  LLVM_Runtime_Linker.cpp
   LoopCarry.cpp
   Lower.cpp
+  LowerWarpShuffles.cpp
   MatlabWrapper.cpp
   Memoization.cpp
   Module.cpp
@@ -490,26 +540,48 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   ObjectInstanceRegistry.cpp
   OutputImageParam.cpp
   ParallelRVar.cpp
-  ParamMap.cpp
   Parameter.cpp
+  ParamMap.cpp
   PartitionLoops.cpp
   Pipeline.cpp
-  PrintLoopNest.cpp
   Prefetch.cpp
+  PrintLoopNest.cpp
   Profiling.cpp
+  PurifyIndexMath.cpp
+  PythonExtensionGen.cpp
   Qualify.cpp
-  RDom.cpp
   Random.cpp
+  RDom.cpp
   RealizationOrder.cpp
   Reduction.cpp
   RegionCosts.cpp
   RemoveDeadAllocations.cpp
-  RemoveTrivialForLoops.cpp
+  RemoveExternLoops.cpp
   RemoveUndef.cpp
   Schedule.cpp
   ScheduleFunctions.cpp
   SelectGPUAPI.cpp
   Simplify.cpp
+  Simplify_Add.cpp
+  Simplify_And.cpp
+  Simplify_Call.cpp
+  Simplify_Cast.cpp
+  Simplify_Div.cpp
+  Simplify_EQ.cpp
+  Simplify_Exprs.cpp
+  Simplify_Let.cpp
+  Simplify_LT.cpp
+  Simplify_Max.cpp
+  Simplify_Min.cpp
+  Simplify_Mod.cpp
+  Simplify_Mul.cpp
+  Simplify_Not.cpp
+  Simplify_Or.cpp
+  Simplify_Select.cpp
+  Simplify_Shuffle.cpp
+  Simplify_Stmts.cpp
+  Simplify_Sub.cpp
+  SimplifyCorrelatedDifferences.cpp
   SimplifySpecializations.cpp
   SkipStages.cpp
   SlidingWindow.cpp
@@ -518,6 +590,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   StmtToHtml.cpp
   StorageFlattening.cpp
   StorageFolding.cpp
+  StrictifyFloat.cpp
   Substitute.cpp
   Target.cpp
   Tracing.cpp
@@ -528,19 +601,30 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   UniquifyVariableNames.cpp
   UnpackBuffers.cpp
   UnrollLoops.cpp
+  UnsafePromises.cpp
   Util.cpp
   Var.cpp
   VaryingAttributes.cpp
   VectorizeLoops.cpp
+  WasmExecutor.cpp
   WrapCalls.cpp
   WrapExternStages.cpp
   ${HEADER_FILES}
   ${INITIAL_MODULES}
 )
+
+# We could expose the /MP flag to all targets, but that might end up saturating the build
+# since multiple MSBuild projects might get built in parallel, each of which compiling their
+# source files in parallel; the Halide library itself is a "knot" point of the build graph,
+# so compiling its files in parallel should not oversubscribe the system
+target_compile_options(Halide PUBLIC $<$<CXX_COMPILER_ID:MSVC>:/MP>)
+
 # Define Halide_SHARED or Halide_STATIC depending on library type
 target_compile_definitions(Halide PRIVATE "-DHalide_${HALIDE_LIBRARY_TYPE}")
+
 # Default to not exporting symbols from libHalide
 set_target_properties(Halide PROPERTIES CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN 1)
+
 # Ensure that these tools are build first
 add_dependencies(Halide
   binary2cpp
@@ -564,50 +648,69 @@ target_include_directories(Halide INTERFACE "${CMAKE_BINARY_DIR}/include")
 # TODO: For targets we can link against even fewer libraries by specifying
 # only the components we **REALLY** need (e.g. x86asmprinter;x86codegen rather than x86)
 if (TARGET_X86)
-  target_compile_definitions(Halide PRIVATE "-DWITH_X86=1")
+  target_compile_definitions(Halide PRIVATE "-DWITH_X86")
   list(APPEND LLVM_COMPONENTS X86)
 endif()
 
 if (TARGET_ARM)
-  target_compile_definitions(Halide PRIVATE "-DWITH_ARM=1")
+  target_compile_definitions(Halide PRIVATE "-DWITH_ARM")
   list(APPEND LLVM_COMPONENTS ARM)
 endif()
 
 if (TARGET_AARCH64)
-  target_compile_definitions(Halide PRIVATE "-DWITH_AARCH64=1")
+  target_compile_definitions(Halide PRIVATE "-DWITH_AARCH64")
   list(APPEND LLVM_COMPONENTS AArch64)
 endif()
 
 if (TARGET_HEXAGON)
-  target_compile_definitions(Halide PRIVATE "-DWITH_HEXAGON=1")
+  target_compile_definitions(Halide PRIVATE "-DWITH_HEXAGON")
   list(APPEND LLVM_COMPONENTS Hexagon)
 endif()
 
 if (TARGET_MIPS)
-  target_compile_definitions(Halide PRIVATE "-DWITH_MIPS=1")
+  target_compile_definitions(Halide PRIVATE "-DWITH_MIPS")
   list(APPEND LLVM_COMPONENTS Mips)
 endif()
 
 if (TARGET_POWERPC)
-  target_compile_definitions(Halide PRIVATE "-DWITH_POWERPC=1")
+  target_compile_definitions(Halide PRIVATE "-DWITH_POWERPC")
   list(APPEND LLVM_COMPONENTS PowerPC)
 endif()
 
+if (TARGET_WEBASSEMBLY)
+  target_compile_definitions(Halide PRIVATE "-DWITH_WEBASSEMBLY")
+  list(APPEND LLVM_COMPONENTS WebAssembly)
+endif()
+
 if (TARGET_PTX)
-  target_compile_definitions(Halide PRIVATE "-DWITH_PTX=1")
+  target_compile_definitions(Halide PRIVATE "-DWITH_PTX")
   list(APPEND LLVM_COMPONENTS NVPTX)
 endif()
 
+if (TARGET_AMDGPU)
+  target_compile_definitions(Halide PRIVATE "-DWITH_AMDGPU")
+  list(APPEND LLVM_COMPONENTS AMDGPU)
+endif()
+
+if (TARGET_RISCV)
+  target_compile_definitions(Halide PRIVATE "-DWITH_RISCV")
+  list(APPEND LLVM_COMPONENTS RISCV)
+endif()
+
 if (TARGET_OPENCL)
-  target_compile_definitions(Halide PRIVATE "-DWITH_OPENCL=1")
+  target_compile_definitions(Halide PRIVATE "-DWITH_OPENCL")
 endif()
 
 if (TARGET_OPENGL)
-  target_compile_definitions(Halide PRIVATE "-DWITH_OPENGL=1")
+  target_compile_definitions(Halide PRIVATE "-DWITH_OPENGL")
 endif()
 
 if (TARGET_METAL)
-  target_compile_definitions(Halide PRIVATE "-DWITH_METAL=1")
+  target_compile_definitions(Halide PRIVATE "-DWITH_METAL")
+endif()
+
+if (TARGET_D3D12COMPUTE)
+  target_compile_definitions(Halide PRIVATE "-DWITH_D3D12")
 endif()
 
 target_compile_definitions(Halide PRIVATE "-DLLVM_VERSION=${LLVM_VERSION}")
@@ -639,7 +742,13 @@ if (MSVC)
     target_compile_options(Halide PRIVATE "/Zc:sizedDealloc-")
   endif()
 else()
-  target_compile_options(Halide PUBLIC "-fno-rtti")
+  if (NOT HALIDE_ENABLE_RTTI)
+    if (NOT MSVC)
+      target_compile_options(Halide PUBLIC "-fno-rtti")
+    else()
+      target_compile_options(Halide PUBLIC "/GR-")
+    endif()
+  endif()
 endif()
 
 # Get the LLVM libraries we need
@@ -661,3 +770,8 @@ if (NOT MSVC)
   string(REPLACE " " "" EXTRA_LIBS "${EXTRA_LIBS}")
   target_link_libraries(Halide PUBLIC ${EXTRA_LIBS})
 endif()
+
+install(TARGETS Halide
+        RUNTIME DESTINATION bin
+        LIBRARY DESTINATION bin
+        ARCHIVE DESTINATION lib)

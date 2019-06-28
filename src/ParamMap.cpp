@@ -3,7 +3,7 @@
 
 namespace Halide {
 
-EXPORT ParamMap::ParamMap(const std::initializer_list<ParamMapping> &init) {
+ParamMap::ParamMap(const std::initializer_list<ParamMapping> &init) {
     for (const auto &pm : init) {
         if (pm.parameter != nullptr) {
             mapping[*pm.parameter] = ParamArg(pm);
@@ -17,8 +17,8 @@ EXPORT ParamMap::ParamMap(const std::initializer_list<ParamMapping> &init) {
     }
 }
 
-EXPORT void ParamMap::set(const ImageParam &p, Buffer<> &buf, Buffer<> *buf_out_param) {
-    Internal::Parameter v(p.type(), true, p.dimensions(), p.name(), p.is_explicit_name(), false);
+void ParamMap::set(const ImageParam &p, Buffer<> &buf, Buffer<> *buf_out_param) {
+    Internal::Parameter v(p.type(), true, p.dimensions(), p.name());
     v.set_buffer(buf);
     ParamArg pa;
     pa.mapped_param = v;
@@ -26,7 +26,7 @@ EXPORT void ParamMap::set(const ImageParam &p, Buffer<> &buf, Buffer<> *buf_out_
     mapping[p.parameter()] = pa;
 };
 
-EXPORT const Internal::Parameter &ParamMap::map(const Internal::Parameter &p, Buffer<> *&buf_out_param) const {
+const Internal::Parameter &ParamMap::map(const Internal::Parameter &p, Buffer<> *&buf_out_param) const {
     auto iter = mapping.find(p);
     if (iter != mapping.end()) {
         buf_out_param = iter->second.buf_out_param;
@@ -37,7 +37,7 @@ EXPORT const Internal::Parameter &ParamMap::map(const Internal::Parameter &p, Bu
     }
 }
 
-EXPORT Internal::Parameter &ParamMap::map(Internal::Parameter &p, Buffer<> *&buf_out_param) const {
+Internal::Parameter &ParamMap::map(Internal::Parameter &p, Buffer<> *&buf_out_param) const {
     auto iter = mapping.find(p);
     if (iter != mapping.end()) {
         buf_out_param = iter->second.buf_out_param;
@@ -48,4 +48,4 @@ EXPORT Internal::Parameter &ParamMap::map(Internal::Parameter &p, Buffer<> *&buf
     }
 }
 
-}
+}  // namespace Halide

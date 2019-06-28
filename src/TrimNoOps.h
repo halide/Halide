@@ -13,9 +13,9 @@ namespace Internal {
 
 /** Truncate loop bounds to the region over which they actually do
  * something. For examples see test/correctness/trim_no_ops.cpp */
-EXPORT Stmt trim_no_ops(Stmt s);
+Stmt trim_no_ops(Stmt s);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

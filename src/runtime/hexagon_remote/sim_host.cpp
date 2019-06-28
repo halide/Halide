@@ -1,11 +1,9 @@
 #include <vector>
-#include <sstream>
 #include <cassert>
 #include <memory>
 #include <mutex>
 
-#include <HalideRuntime.h>
-#include <HexagonWrapper.h>
+#include "HexagonWrapper.h"
 
 #include "sim_protocol.h"
 
@@ -25,7 +23,7 @@ bool use_dlopenbuf = true;
 int init_sim() {
     if (sim) return 0;
 
-    sim = std::unique_ptr<HexagonWrapper>(new HexagonWrapper(HEX_CPU_V60));
+    sim = std::unique_ptr<HexagonWrapper>(new HexagonWrapper(HEX_CPU_V65));
 
     HEXAPI_Status status = HEX_STAT_SUCCESS;
 
@@ -402,9 +400,9 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
     }
 
     // Copy the pointer arguments to the simulator.
-    remote_buffer remote_input_buffersPtrs(&remote_input_buffers[0], input_buffersLen * sizeof(remote_buffer));
-    remote_buffer remote_output_buffersPtrs(&remote_output_buffers[0], output_buffersLen * sizeof(remote_buffer));
-    remote_buffer remote_input_scalarsPtrs(&remote_input_scalars[0], input_scalarsLen * sizeof(remote_buffer));
+    remote_buffer remote_input_buffersPtrs(input_buffersLen ? remote_input_buffers.data() : nullptr, input_buffersLen * sizeof(remote_buffer));
+    remote_buffer remote_output_buffersPtrs(output_buffersLen ? remote_output_buffers.data() : nullptr, output_buffersLen * sizeof(remote_buffer));
+    remote_buffer remote_input_scalarsPtrs(input_scalarsLen ? remote_input_scalars.data() : nullptr, input_scalarsLen * sizeof(remote_buffer));
 
     HEX_8u_t cycles_begin = 0;
     sim->GetSimulatedCycleCount(&cycles_begin);
@@ -494,5 +492,9 @@ int halide_hexagon_remote_poll_profiler_state(int *func, int *threads) {
     *threads = 1;
     return 0;
 }
-
+DLLEXPORT
+int halide_hexagon_remote_profiler_set_current_func(int current_func) {
+    profiler_current_func = current_func;
+    return 0;
+}
 }  // extern "C"

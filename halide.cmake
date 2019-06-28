@@ -77,8 +77,9 @@ function(halide_generator NAME)
   if (MSVC)
     target_link_libraries("${NAME}_binary" PRIVATE Kernel32)
   endif()
+
   if ("${HALIDE_LIBRARY_TYPE}" STREQUAL "STATIC")
-    # Getting link order for static libraries is nearly impossible in CMake;
+    # Getting link order correct for static libraries is nearly impossible in CMake;
     # to avoid flakiness, always link libHalide via --whole-archive
     # when in static-library mode.
     _halide_force_link_library("${NAME}_binary" "${HALIDE_COMPILER_LIB}")
@@ -156,7 +157,7 @@ function(halide_library_from_generator BASENAME)
     endif()
   endforeach()
 
-  set(OUTPUTS static_library h)
+  set(OUTPUTS static_library h registration)
   foreach(E ${args_EXTRA_OUTPUTS})
     if("${E}" STREQUAL "cpp")
       message(FATAL_ERROR "halide_library('${BASENAME}') doesn't support 'cpp' in EXTRA_OUTPUTS; please depend on '${BASENAME}_cc' instead.")
@@ -217,6 +218,8 @@ function(halide_library_from_generator BASENAME)
       list(APPEND OUTPUT_FILES "${GENFILES_DIR}/${BASENAME}.schedule")
     elseif ("${OUTPUT}" STREQUAL "html")
       list(APPEND OUTPUT_FILES "${GENFILES_DIR}/${BASENAME}.html")
+    elseif ("${OUTPUT}" STREQUAL "registration")
+      list(APPEND OUTPUT_FILES "${GENFILES_DIR}/${BASENAME}.registration.cpp")
     endif()
   endforeach()
 
@@ -259,8 +262,7 @@ function(halide_library_from_generator BASENAME)
 
   # Code to build the BASENAME.rungen target
   set(RUNGEN "${BASENAME}.rungen")
-  add_executable("${RUNGEN}" "${HALIDE_TOOLS_DIR}/RunGenStubs.cpp")
-  target_compile_definitions("${RUNGEN}" PRIVATE "-DHL_RUNGEN_FILTER_HEADER=\"${BASENAME}.h\"")
+  add_executable("${RUNGEN}" "${GENFILES_DIR}/${BASENAME}.registration.cpp")
   target_link_libraries("${RUNGEN}" PRIVATE _halide_library_from_generator_rungen "${BASENAME}")
   # Not all Generators will build properly with RunGen (e.g., missing
   # external dependencies), so exclude them from the "ALL" targets
@@ -443,14 +445,69 @@ function(_halide_runtime_target_name HALIDE_TARGET OUTVAR)
 
     # Halide Target Features we know about. (This need not be exact, but should
     # be close for best compression.)
-    list(APPEND KNOWN_FEATURES armv7s avx avx2 avx512 avx512_cannonlake avx512_knl
-         avx512_skylake c_plus_plus_name_mangling cl_doubles cuda cuda_capability_30
-         cuda_capability_32 cuda_capability_35 cuda_capability_50 cuda_capability_61
-         debug f16c fma fma4 fuzz_float_stores hvx_128 hvx_64 hvx_shared_object
-         hvx_v62 hvx_v65 hvx_v66 jit large_buffers matlab metal mingw msan no_asserts
-         no_bounds_query no_neon no_runtime opencl opengl openglcompute
-         power_arch_2_07 profile soft_float_abi sse41 trace_loads trace_realizations
-         trace_stores user_context vsx)
+    list(APPEND KNOWN_FEATURES
+        jit
+        debug
+        no_asserts
+        no_bounds_query
+        sse41
+        avx
+        avx2
+        fma
+        fma4
+        f16c
+        armv7s
+        no_neon
+        vsx
+        power_arch_2_07
+        cuda
+        cuda_capability_30
+        cuda_capability_32
+        cuda_capability_35
+        cuda_capability_50
+        cuda_capability_61
+        opencl
+        cl_doubles
+        cl_half
+        opengl
+        openglcompute
+        user_context
+        matlab
+        profile
+        no_runtime
+        metal
+        mingw
+        c_plus_plus_name_mangling
+        large_buffers
+        hvx_64
+        hvx_128
+        hvx_v62
+        hvx_v65
+        hvx_v66
+        hvx_shared_object
+        fuzz_float_stores
+        soft_float_abi
+        msan
+        avx512
+        avx512_knl
+        avx512_skylake
+        avx512_cannonlake
+        trace_loads
+        trace_stores
+        trace_realizations
+        d3d12compute
+        strict_float
+        legacy_buffer_wrappers
+        tsan
+        asan
+        check_unsafe_promises
+        hexagon_dma
+        embed_bitcode
+        disable_llvm_loop_vectorize
+        disable_llvm_loop_unroll
+        wasm_simd128
+        wasm_signext
+      )
     # Synthesize a one-or-two-char abbreviation based on the feature's position
     # in the KNOWN_FEATURES list.
     set(I 0)
@@ -563,40 +620,57 @@ function(_halide_add_exec_generator_target EXEC_TARGET)
 
   add_custom_target(${EXEC_TARGET} DEPENDS ${args_OUTPUTS})
 
-  # As of CMake 3.x, add_custom_command() recognizes executable target names in its COMMAND.
-  add_custom_command(
-    OUTPUT ${args_OUTPUTS}
-    DEPENDS ${args_GENERATOR_BINARY}
-    COMMAND ${args_GENERATOR_BINARY} ${args_GENERATOR_ARGS}
-    COMMENT "${EXTRA_OUTPUTS_COMMENT}"
-  )
+  # LLVM may leak memory during generator execution. If projects are built with address sanitizer enabled,
+  # this may cause generators to fail, making it hard to use Halide and address sanitizer at the same time.
+  # To work around this, we execute generators with an environment setting to disable leak checking.
+  set(RUN_WITHOUT_LEAKCHECK ${CMAKE_COMMAND} -E env "ASAN_OPTIONS=detect_leaks=0")
+
+  if(NOT WIN32)
+    add_custom_command(
+      OUTPUT ${args_OUTPUTS}
+      DEPENDS ${args_GENERATOR_BINARY}
+      COMMAND ${CMAKE_COMMAND} -E echo Running $<TARGET_FILE:${args_GENERATOR_BINARY}> ${args_GENERATOR_ARGS}
+      COMMAND ${RUN_WITHOUT_LEAKCHECK} $<TARGET_FILE:${args_GENERATOR_BINARY}> ${args_GENERATOR_ARGS}
+      COMMENT "${EXTRA_OUTPUTS_COMMENT}"
+    )
+  else()
+    add_custom_command(
+      OUTPUT ${args_OUTPUTS}
+      DEPENDS ${args_GENERATOR_BINARY}
+      COMMAND ${CMAKE_COMMAND} -E echo copying $<TARGET_FILE:${HALIDE_COMPILER_LIB}> to "$<TARGET_FILE_DIR:${args_GENERATOR_BINARY}>"
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:${HALIDE_COMPILER_LIB}> "$<TARGET_FILE_DIR:${args_GENERATOR_BINARY}>"
+      COMMAND ${CMAKE_COMMAND} -E echo Running $<TARGET_FILE:${args_GENERATOR_BINARY}> ${args_GENERATOR_ARGS}
+      COMMAND ${RUN_WITHOUT_LEAKCHECK} $<TARGET_FILE:${args_GENERATOR_BINARY}> ${args_GENERATOR_ARGS}
+      COMMENT "${EXTRA_OUTPUTS_COMMENT}"
+    )
+  endif()
   foreach(OUT ${args_OUTPUTS})
     set_source_files_properties(${OUT} PROPERTIES GENERATED TRUE)
   endforeach()
 endfunction()
 
-function(_halide_force_link_library EXECUTABLE LIBRARY)
-  # We need to ensure that some libraries are linked in with --whole-archive
+function(_halide_force_link_library NAME LIB)
+  # We need to ensure that the libraries are linked in with --whole-archive
   # (or the equivalent), to ensure that the Generator-registration code
   # isn't omitted. Sadly, there's no portable way to do this, so we do some
   # special-casing here:
   if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
-    _halide_get_static_library_actual_path("${LIBRARY}" LIBRARY_ACTUAL_PATH)
-    target_link_libraries("${EXECUTABLE}" PRIVATE "${LIBRARY}")
+    _halide_get_static_library_actual_path("${LIB}" LIB_ACTUAL_PATH)
+    target_link_libraries("${NAME}" PRIVATE "${LIB}")
     # Append to LINK_FLAGS, since we may call this multiple times
-    get_property(flags TARGET "${EXECUTABLE}" PROPERTY LINK_FLAGS)
-    set(flags "${flags} -Wl,-force_load,${LIBRARY_ACTUAL_PATH}")
-    set_target_properties("${EXECUTABLE}" PROPERTIES LINK_FLAGS ${flags})
+    get_property(flags TARGET "${NAME}" PROPERTY LINK_FLAGS)
+    set(flags "${flags} -Wl,-force_load,${LIB_ACTUAL_PATH}")
+    set_target_properties("${NAME}" PROPERTIES LINK_FLAGS ${flags})
   elseif(MSVC)
     # Note that this requires VS2015 R2+
-    target_link_libraries("${EXECUTABLE}" PRIVATE "${LIBRARY}")
+    target_link_libraries("${NAME}" PRIVATE "${LIB}")
     # Append to LINK_FLAGS, since we may call this multiple times
-    get_property(flags TARGET "${EXECUTABLE}" PROPERTY LINK_FLAGS)
-    set(flags "${flags} /WHOLEARCHIVE:${LIBRARY}.lib")
-    set_target_properties("${EXECUTABLE}" PROPERTIES LINK_FLAGS ${flags})
+    get_property(flags TARGET "${NAME}" PROPERTY LINK_FLAGS)
+    set(flags "${flags} /WHOLEARCHIVE:${LIB}.lib")
+    set_target_properties("${NAME}" PROPERTIES LINK_FLAGS ${flags})
   else()
     # Assume Linux or similar
-    target_link_libraries("${EXECUTABLE}" PRIVATE -Wl,--whole-archive "${LIBRARY}" -Wl,-no-whole-archive)
+    target_link_libraries("${NAME}" PRIVATE -Wl,--whole-archive "${LIB}" -Wl,-no-whole-archive)
   endif()
 endfunction()
 
@@ -614,18 +688,22 @@ if("${HALIDE_TOOLS_DIR}" STREQUAL "" OR
   set(HALIDE_INCLUDE_DIR "${HALIDE_DISTRIB_DIR}/include")
   set(HALIDE_TOOLS_DIR "${HALIDE_DISTRIB_DIR}/tools")
   if(${HALIDE_DISTRIB_USE_STATIC_LIBRARY})
-    message(STATUS "Using ${HALIDE_DISTRIB_DIR}/lib/libHalide${CMAKE_STATIC_LIBRARY_SUFFIX}")
+    message(STATUS "Using ${HALIDE_DISTRIB_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}Halide${CMAKE_STATIC_LIBRARY_SUFFIX}")
     add_library(_halide_compiler_lib STATIC IMPORTED)
     set_target_properties(_halide_compiler_lib PROPERTIES
-      IMPORTED_LOCATION "${HALIDE_DISTRIB_DIR}/lib/libHalide${CMAKE_STATIC_LIBRARY_SUFFIX}"
+      IMPORTED_LOCATION "${HALIDE_DISTRIB_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}Halide${CMAKE_STATIC_LIBRARY_SUFFIX}"
       INTERFACE_INCLUDE_DIRECTORIES ${HALIDE_INCLUDE_DIR})
     set(HALIDE_COMPILER_LIB _halide_compiler_lib)
   else()
-    message(STATUS "Using ${HALIDE_DISTRIB_DIR}/bin/libHalide${CMAKE_SHARED_LIBRARY_SUFFIX}")
+    message(STATUS "Using ${HALIDE_DISTRIB_DIR}/bin/${CMAKE_SHARED_LIBRARY_PREFIX}Halide${CMAKE_SHARED_LIBRARY_SUFFIX}")
     add_library(_halide_compiler_lib SHARED IMPORTED)
     set_target_properties(_halide_compiler_lib PROPERTIES
-      IMPORTED_LOCATION "${HALIDE_DISTRIB_DIR}/bin/libHalide${CMAKE_SHARED_LIBRARY_SUFFIX}"
+      IMPORTED_LOCATION "${HALIDE_DISTRIB_DIR}/bin/${CMAKE_SHARED_LIBRARY_PREFIX}Halide${CMAKE_SHARED_LIBRARY_SUFFIX}"
       INTERFACE_INCLUDE_DIRECTORIES ${HALIDE_INCLUDE_DIR})
+    if(WIN32)
+      set_target_properties(_halide_compiler_lib PROPERTIES
+        IMPORTED_IMPLIB "${HALIDE_DISTRIB_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}Halide${CMAKE_STATIC_LIBRARY_SUFFIX}")
+    endif()
     set(HALIDE_COMPILER_LIB _halide_compiler_lib)
   endif()
 endif()
@@ -645,8 +723,8 @@ define_property(TARGET PROPERTY _HALIDE_GENERATOR_NAME
                 BRIEF_DOCS "Internal use by Halide build rules: do not use externally"
                 FULL_DOCS "Internal use by Halide build rules: do not use externally")
 
-add_library(_halide_library_from_generator_rungen "${HALIDE_TOOLS_DIR}/RunGen.cpp")
-target_include_directories(_halide_library_from_generator_rungen PRIVATE "${HALIDE_INCLUDE_DIR}")
+add_library(_halide_library_from_generator_rungen "${HALIDE_TOOLS_DIR}/RunGenMain.cpp")
+target_include_directories(_halide_library_from_generator_rungen PRIVATE "${HALIDE_INCLUDE_DIR}" "${HALIDE_TOOLS_DIR}")
 halide_use_image_io(_halide_library_from_generator_rungen)
 _halide_set_cxx_options(_halide_library_from_generator_rungen)
 set_target_properties(_halide_library_from_generator_rungen PROPERTIES EXCLUDE_FROM_ALL TRUE)

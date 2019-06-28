@@ -6,8 +6,8 @@
 #include "ExprUsesVar.h"
 #include "FindCalls.h"
 #include "Func.h"
-#include "Inline.h"
 #include "IREquality.h"
+#include "Inline.h"
 #include "ParallelRVar.h"
 #include "RealizationOrder.h"
 #include "RegionCosts.h"
@@ -18,22 +18,30 @@
 namespace Halide {
 namespace Internal {
 
+using std::deque;
+using std::make_pair;
+using std::map;
+using std::pair;
+using std::set;
 using std::string;
 using std::vector;
-using std::map;
-using std::set;
-using std::deque;
-using std::pair;
-using std::make_pair;
 
 namespace {
 
-int string_to_int(const std::string &s) {
-    std::istringstream iss(s);
-    int i;
-    iss >> i;
-    user_assert(!iss.fail() && iss.get() == EOF) << "Unable to parse: " << s;
-    return i;
+// Substitute parameter estimates into the exprs describing the box bounds.
+void substitute_estimates_box(Box &box) {
+    box.used = subsitute_var_estimates(box.used);
+    for (auto &b : box.bounds) {
+        b.min = subsitute_var_estimates(b.min);
+        b.max = subsitute_var_estimates(b.max);
+    }
+}
+
+// Substitute parameter estimates into the boxes in 'region'.
+void substitute_estimates_region(map<string, Box> &region) {
+    for (auto &iter : region) {
+        substitute_estimates_box(iter.second);
+    }
 }
 
 // Return true if any of the box dimension is unbounded.
@@ -130,7 +138,7 @@ void check_estimates_on_outputs(const vector<Function> &outputs) {
             }
             user_assert(found && est.min.type().is_int() && est.extent.type().is_int())
                 << "Please provide a valid estimate for dimension "
-                << est.var << " of output \"" << out.name() << "\"\n";
+                << arg << " of output \"" << out.name() << "\"\n";
         }
     }
 }
@@ -451,8 +459,9 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
                         } else if (arg.is_expr()) {
                             // Find the boxes required for the expression and add the regions
                             // to the queue.
-                            Expr subs_arg = SubstituteVarEstimates().mutate(arg.expr);
+                            Expr subs_arg = subsitute_var_estimates(arg.expr);
                             map<string, Box> arg_regions = boxes_required(subs_arg, curr_scope, func_val_bounds);
+                            substitute_estimates_region(arg_regions);
                             merge_and_queue_regions(fs_bounds, regions, arg_regions, prods, env,
                                                     only_regions_computed, s.func.name(), visited);
                         } else if (arg.is_image_param() || arg.is_buffer()) {
@@ -479,13 +488,10 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
                     // Substitute parameter estimates into the bounds and add them to the
                     // current scope.
                     for (int d = 0; d < (int)dims.size() - 1; d++) {
-                        string var_name = dims[d].var;
-                        internal_assert(curr_bounds.find(var_name) != curr_bounds.end());
-
-                        Expr lower = SubstituteVarEstimates().mutate(get_element(curr_bounds, dims[d].var).min);
-                        Expr upper = SubstituteVarEstimates().mutate(get_element(curr_bounds, dims[d].var).max);
-                        Interval simple_bounds = Interval(simplify(lower), simplify(upper));
-                        curr_scope.push(var_name, simple_bounds);
+                        Interval simple_bounds = get_element(curr_bounds, dims[d].var);
+                        simple_bounds.min = subsitute_var_estimates(simple_bounds.min);
+                        simple_bounds.max = subsitute_var_estimates(simple_bounds.max);
+                        curr_scope.push(dims[d].var, simple_bounds);
                     }
 
                     // Find the regions required for each value of the current function stage,
@@ -493,16 +499,18 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
                     for (const auto &val : def.values()) {
                         // Substitute the parameter estimates into the expression and get
                         // the regions required for the expression.
-                        Expr subs_val = SubstituteVarEstimates().mutate(val);
+                        Expr subs_val = subsitute_var_estimates(val);
                         map<string, Box> curr_regions = boxes_required(subs_val, curr_scope, func_val_bounds);
+                        substitute_estimates_region(curr_regions);
 
                         // Arguments to the definition may require regions of functions.
                         // For example, update definitions in histograms where the bin is
                         // based on the value of a function.
                         Box left_reg;
                         for (const Expr &arg : def.args()) {
-                            Expr subs_arg = SubstituteVarEstimates().mutate(arg);
+                            Expr subs_arg = subsitute_var_estimates(arg);
                             map<string, Box> arg_regions = boxes_required(subs_arg, curr_scope, func_val_bounds);
+                            substitute_estimates_region(arg_regions);
 
                             // Merge the regions with the regions found while looking at
                             // the values.
@@ -547,12 +555,13 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
             auto iter = env.find(f_reg.first);
             bool in_env = (iter != env.end());
 
+
             if (!lower.as<IntImm>() && in_env) {
                 const Function &curr_f = iter->second;
                 for (const auto &b : curr_f.schedule().estimates()) {
                     size_t num_pure_args = curr_f.args().size();
                     if ((i < num_pure_args) && (b.var == curr_f.args()[i])) {
-                        lower = Expr(b.min.as<IntImm>()->value);
+                        lower = b.min;
                     }
                 }
             }
@@ -564,7 +573,7 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
                     if ((i < num_pure_args) && (b.var == curr_f.args()[i])) {
                         const IntImm *bmin = b.min.as<IntImm>();
                         const IntImm *bextent = b.extent.as<IntImm>();
-                        upper = Expr(bmin->value + bextent->value - 1);
+                        upper = IntImm::make(Int(32), bmin->value + bextent->value - 1);
                     }
                 }
             }
@@ -687,9 +696,9 @@ map<string, Box> get_pipeline_bounds(DependenceAnalysis &analysis,
             for (i = estimates.size() - 1; i >= 0; --i) {
                 const auto &est = estimates[i];
                 if ((est.var == arg) && est.min.defined() && est.extent.defined()) {
-                    Interval I = Interval(est.min, simplify(est.min + est.extent - 1));
-                    pure_bounds.emplace(arg, I);
-                    out_box.push_back(I);
+                    Interval in = Interval(est.min, simplify(est.min + est.extent - 1));
+                    pure_bounds.emplace(arg, in);
+                    out_box.push_back(in);
                     break;
                 }
             }
@@ -730,8 +739,8 @@ struct AutoSchedule {
 
     const map<string, Function> &env;
 
-    // Contain maps from function name to realization order.
-    map<string, size_t> realization_order;
+    // Contain maps from function name to the topological order of the pipeline.
+    map<string, size_t> topological_order;
 
     // Cache for storing all internal vars/rvars that have been declared during
     // the course of schedule generation, to ensure that we don't introduce any
@@ -748,7 +757,7 @@ struct AutoSchedule {
 
     AutoSchedule(const map<string, Function> &env, const vector<string> &order) : env(env) {
         for (size_t i = 0; i < order.size(); ++i) {
-            realization_order.emplace(order[i], i);
+            topological_order.emplace(order[i], i);
         }
         // Allocate a slot in 'used_vars' for each function stages in the pipeline
         for (const auto &iter : env) {
@@ -761,11 +770,14 @@ struct AutoSchedule {
     // Given a function name, return a string representation of getting the
     // function handle
     string get_func_handle(const string &name) const {
-        size_t index = get_element(realization_order, name);
+        size_t index = get_element(topological_order, name);
         return "pipeline.get_func(" + std::to_string(index) + ")";
     }
 
     friend std::ostream& operator<<(std::ostream &stream, const AutoSchedule &sched) {
+        stream << "// Delete this line if not using Generator\n";
+        stream << "Pipeline pipeline = get_pipeline();\n\n";
+
         for (const auto &iter : sched.internal_vars) {
             if (iter.second.is_rvar) {
                 stream << "RVar ";
@@ -798,7 +810,7 @@ struct AutoSchedule {
             set<string> declared_rvars;
             for (size_t i = 0; i < func.updates().size(); ++i) {
                 const vector<ReductionVariable> &rvars = func.updates()[i].schedule().rvars();
-                const set<string> &var_list = sched.used_vars.at(func.name()).at(i);
+                const set<string> &var_list = sched.used_vars.at(func.name()).at(i+1);
                 for (size_t j = 0; j < rvars.size(); ++j) {
                     if ((var_list.find(rvars[j].var) == var_list.end()) ||
                         (declared_rvars.find(rvars[j].var) != declared_rvars.end())) {
@@ -1300,6 +1312,14 @@ Partitioner::Partitioner(const map<string, Box> &_pipeline_bounds,
     // Place each stage of a function in its own group. Each stage is
     // a node in the pipeline graph.
     for (const auto &f : dep_analysis.env) {
+        if (!pipeline_bounds.count(f.first)) {
+            // If a function does not have a pipeline bound (i.e. it can be
+            // statically proven that no one ever uses it), we should not
+            // consider it during the grouping.
+            debug(5) << "Creating partitioner: ignore function \"" << f.first
+                     << "\" since it has empty pipeline bounds\n";
+            continue;
+        }
         int num_stages = f.second.updates().size() + 1;
         for (int s = 0; s < num_stages; s++) {
             FStage stg(f.second, s);
@@ -1937,7 +1957,7 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g, bool show_
     bool model_reuse = false;
 
     // Linear dropoff
-    Expr load_slope = cast<float>(arch_params.balance) / arch_params.last_level_cache_size;
+    float load_slope = arch_params.balance / arch_params.last_level_cache_size;
     for (const auto &f_load : group_load_costs) {
         internal_assert(g.inlined.find(f_load.first) == g.inlined.end())
             << "Intermediates of inlined pure fuction \"" << f_load.first
@@ -2366,28 +2386,13 @@ pair<VarOrRVar, VarOrRVar> Partitioner::split_dim(
     // care for the nested loops. If it is the update definition of the group output
     // however, we'd better make sure that no other member of the groups accesses
     // the inputs or outputs.
+
     TailStrategy strategy = TailStrategy::Auto;
     if ((stage_num > 0) && !v.is_rvar) {
-        if (!is_group_output) {
-            if (access_inputs_or_outputs(def, v, costs.inputs, outputs)) {
-                strategy = TailStrategy::GuardWithIf;
-            }
-        } else {
-            bool any_access_inputs_outputs = false;
-            for (const FStage &mem : g.members) {
-                if (mem.func.name() == f_handle.name()) {
-                    continue;
-                }
-                Definition mem_def = get_stage_definition(mem.func, mem.stage_num);
-                if (access_inputs_or_outputs(mem_def, v, costs.inputs, outputs)) {
-                    any_access_inputs_outputs = true;
-                    break;
-                }
-            }
-            if (any_access_inputs_outputs) {
-                strategy = TailStrategy::GuardWithIf;
-            }
-        }
+        // TODO: It's safe to use RoundUp here if we know there are no
+        // loads from any input, but at this point we've lost track of
+        // loads from inputs that happen inside inlined Funcs.
+        strategy = TailStrategy::GuardWithIf;
     }
 
     f_handle.split(v, outer, inner, factor, strategy);
@@ -2508,7 +2513,7 @@ void Partitioner::reorder_dims(Stage f_handle, int stage_num, Definition def,
                                map<string, Expr> strides, AutoSchedule &sched) {
     vector<Dim> &dims = def.schedule().dims();
     internal_assert(dims.size() > 1);
-    vector<pair<string, bool>> order;
+    vector<pair<string, int>> order;
 
     for (int d = 0; d < (int)dims.size() - 1; d++) {
         internal_assert(strides.find(dims[d].var) != strides.end());
@@ -2592,7 +2597,7 @@ void Partitioner::reorder_dims(Stage f_handle, int stage_num, Definition def,
     }
 
     internal_assert(!ordering.empty());
-    set<string> var_list;
+    set<string> var_list = {ordering[0].name()};
     string var_order = ordering[0].name();
     for (size_t o = 1; o < ordering.size(); o++) {
         var_order += ", " + ordering[o].name();
@@ -2609,7 +2614,7 @@ void Partitioner::reorder_dims(Stage f_handle, int stage_num, Definition def,
 class FindVarsUsingVar : public IRVisitor {
     using IRVisitor::visit;
 
-    void visit(const Let *let) {
+    void visit(const Let *let) override {
         if (expr_uses_vars(let->value, vars)) {
             vars.push(let->name);
         }
@@ -2979,10 +2984,10 @@ Partitioner::analyze_spatial_locality(const FStage &stg,
     Definition def = get_stage_definition(stg.func, stg.stage_num);
     // Perform inlining on the all the values and the args in the stage.
     for (auto &val : def.values()) {
-        val = perform_inline(val, dep_analysis.env, inlines);
+        val = perform_inline(val, dep_analysis.env, inlines, dep_analysis.order);
     }
     for (auto &arg : def.args()) {
-        arg = perform_inline(arg, dep_analysis.env, inlines);
+        arg = perform_inline(arg, dep_analysis.env, inlines, dep_analysis.order);
     }
     def.accept(&find);
 
@@ -3274,6 +3279,11 @@ set<string> get_unbounded_functions(const map<string, Box> &pipeline_bounds,
                                     const map<string, Function> &env) {
     set<string> unbounded;
     for (const auto &iter : env) {
+        if (!pipeline_bounds.count(iter.first)) {
+            debug(5) << "...Skip checking function \"" << iter.first
+                     << "\" since it does not have pipeline bounds\n";
+            continue;
+        }
         const Function &f = iter.second;
         if (!f.can_be_inlined() || used_by_extern_func(env, f)) {
             continue;
@@ -3300,7 +3310,7 @@ bool inline_unbounded(const vector<Function> &outputs,
         }
         inlined = true;
         debug(4) << "Function \"" << order[i] << "\" is unbounded\n";
-        for (int j = i + 1; j < (int)order.size() - (int)outputs.size(); ++j) {
+        for (int j = i + 1; j < (int)order.size(); ++j) {
             internal_assert(order[i] != order[j]);
             Function f2 = env.at(order[j]);
             debug(5) << "Inline unbounded function \"" << f1.name()
@@ -3311,7 +3321,7 @@ bool inline_unbounded(const vector<Function> &outputs,
     return inlined;
 }
 
-} // anonymous namespace
+}  // anonymous namespace
 
 // Generate schedules for all functions in the pipeline required to compute the
 // outputs. This applies the schedules and returns a string representation of
@@ -3330,12 +3340,12 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
         iter.second.lock_loop_levels();
     }
 
-    // Compute the realization order, before any trivial inlining (i.e. before
-    // we remove any functions from 'env'). We need the full realization
+    // Compute the topological order, before any trivial inlining (i.e. before
+    // we remove any functions from 'env'). We need the full topological
     // order to pass to get_func() when generating the string representation
     // of the schedule.
-    debug(2) << "Computing full realization order...\n";
-    vector<string> full_order = realization_order(outputs, env).first;
+    debug(2) << "Computing topological order...\n";
+    vector<string> top_order = topological_order(outputs, env);
 
     // Validate that none of the functions in the pipeline have partial schedules.
     debug(2) << "Validating no partial schedules...\n";
@@ -3353,7 +3363,7 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
     // computing a Func is about the same as calling that Func, we should
     // just inline it).
     debug(2) << "Inlining all trivial functions...\n";
-    if (inline_all_trivial_functions(outputs, full_order, env)) {
+    if (inline_all_trivial_functions(outputs, top_order, env)) {
         // If any of the Funcs is inlined, we need to recompute 'env', since some
         // of the Funcs are no longer used and need to be removed from 'env'.
         //
@@ -3408,7 +3418,7 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
     // Initialize the cost model.
     // Compute the expression costs for each function in the pipeline.
     debug(2) << "Initializing region costs...\n";
-    RegionCosts costs(env);
+    RegionCosts costs(env, order);
     if (debug::debug_level() >= 3) {
         costs.disp_func_costs();
     }
@@ -3443,7 +3453,7 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
         debug(2) << "Re-computing function value bounds...\n";
         func_val_bounds = compute_function_value_bounds(order, env);
         debug(2) << "Re-initializing region costs...\n";
-        RegionCosts costs(env);
+        RegionCosts costs(env, order);
         debug(2) << "Re-initializing dependence analysis...\n";
         dep_analysis = DependenceAnalysis(env, order, func_val_bounds);
         debug(2) << "Re-computing pipeline bounds...\n";
@@ -3499,7 +3509,7 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
     }
 
     debug(2) << "Initializing AutoSchedule...\n";
-    AutoSchedule sched(env, full_order);
+    AutoSchedule sched(env, top_order);
     debug(2) << "Generating CPU schedule...\n";
     part.generate_cpu_schedule(target, sched);
 
@@ -3520,16 +3530,18 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
     return sched_string;
 }
 
-}
+}  // namespace Internal
 
 MachineParams MachineParams::generic() {
-  return MachineParams(16, 16 * 1024 * 1024, 40);
+    std::string params = Internal::get_env_variable("HL_MACHINE_PARAMS");
+    if (params.empty()) {
+        return MachineParams(16, 16 * 1024 * 1024, 40);
+    } else {
+        return MachineParams(params);
+    }
 }
 
 std::string MachineParams::to_string() const {
-    internal_assert(parallelism.type().is_int() &&
-                    last_level_cache_size.type().is_int() &&
-                    balance.type().is_int());
     std::ostringstream o;
     o << parallelism << "," << last_level_cache_size << "," << balance;
     return o.str();
@@ -3538,9 +3550,9 @@ std::string MachineParams::to_string() const {
 MachineParams::MachineParams(const std::string &s) {
     std::vector<std::string> v = Internal::split_string(s, ",");
     user_assert(v.size() == 3) << "Unable to parse MachineParams: " << s;
-    parallelism = Internal::string_to_int(v[0]);
-    last_level_cache_size = Internal::string_to_int(v[1]);
-    balance = Internal::string_to_int(v[2]);
+    parallelism = std::atoi(v[0].c_str());
+    last_level_cache_size = std::atoll(v[1].c_str());
+    balance = std::atof(v[2].c_str());
 }
 
-}
+}  // namespace Halide

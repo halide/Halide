@@ -17,7 +17,7 @@ namespace Internal {
  * inject ifs that guard the production. */
 Stmt skip_stages(Stmt s, const std::vector<std::string> &order);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

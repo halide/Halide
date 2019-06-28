@@ -231,6 +231,12 @@ WEAK bool validate_device_pointer(void *user_context, halide_buffer_t* buf, size
         return true;
     }
 
+    // We may call this in situations where we haven't loaded the
+    // OpenCL API yet.
+    if (!clGetMemObjectInfo) {
+        load_libopencl(user_context);
+    }
+
     cl_mem dev_ptr = ((device_handle *)buf->device)->mem;
     uint64_t offset = ((device_handle *)buf->device)->offset;
 
@@ -779,10 +785,10 @@ WEAK int halide_opencl_device_malloc(void *user_context, halide_buffer_t* buf) {
 }
 
 namespace {
-WEAK int do_multidimensional_copy(void *user_context, ClContext &ctx,
-                                  const device_copy &c,
-                                  int64_t src_idx, int64_t dst_idx,
-                                  int d, bool from_host, bool to_host) {
+WEAK int opencl_do_multidimensional_copy(void *user_context, ClContext &ctx,
+                                         const device_copy &c,
+                                         int64_t src_idx, int64_t dst_idx,
+                                         int d, bool from_host, bool to_host) {
     if (d > MAX_COPY_DIMS) {
         error(user_context) << "Buffer has too many dimensions to copy to/from GPU\n";
         return -1;
@@ -806,11 +812,11 @@ WEAK int do_multidimensional_copy(void *user_context, ClContext &ctx,
             err = clEnqueueCopyBuffer(ctx.cmd_queue, ((device_handle *)c.src)->mem, ((device_handle *)c.dst)->mem,
                                       src_idx + ((device_handle *)c.src)->offset, dst_idx  + ((device_handle *)c.dst)->offset,
                                       c.chunk_size, 0, NULL, NULL);
-        } else if (c.dst != c.src) {
+        } else if ((c.dst + dst_idx) != (c.src + src_idx)) {
             // Could reach here if a user called directly into the
             // opencl API for a device->host copy on a source buffer
             // with device_dirty = false.
-            memcpy((void *)c.dst, (void *)c.src, c.chunk_size);
+            memcpy((void *)(c.dst + dst_idx), (void *)(c.src + src_idx), c.chunk_size);
         }
 
         if (err) {
@@ -820,7 +826,7 @@ WEAK int do_multidimensional_copy(void *user_context, ClContext &ctx,
     } else {
         ssize_t src_off = 0, dst_off = 0;
         for (int i = 0; i < (int)c.extent[d-1]; i++) {
-            int err = do_multidimensional_copy(user_context, ctx, c,
+            int err = opencl_do_multidimensional_copy(user_context, ctx, c,
                                                src_idx + src_off, dst_idx + dst_off,
                                                d - 1, from_host, to_host);
             dst_off += c.dst_stride_bytes[d-1];
@@ -841,18 +847,16 @@ WEAK int halide_opencl_buffer_copy(void *user_context, struct halide_buffer_t *s
     halide_assert(user_context, dst_device_interface == NULL ||
                   dst_device_interface == &opencl_device_interface);
 
-    if (src->device_dirty() &&
+    if ((src->device_dirty() || src->host == NULL) &&
         src->device_interface != &opencl_device_interface) {
         halide_assert(user_context, dst_device_interface == &opencl_device_interface);
-        // If the source is not opencl or host memory, ask the source
-        // device interface to copy to dst host memory first.
-        int err = src->device_interface->impl->buffer_copy(user_context, src, NULL, dst);
-        if (err) return err;
-        // Now just copy from src to host
-        src = dst;
+        // This is handled at the higher level.
+        return halide_error_code_incompatible_device_interface;
     }
 
-    bool from_host = !src->device_dirty() && src->host;
+    bool from_host = (src->device_interface != &opencl_device_interface) ||
+                     (src->device == 0) ||
+                     (src->host_dirty() && src->host != NULL);
     bool to_host = !dst_device_interface;
 
     halide_assert(user_context, from_host || src->device);
@@ -881,7 +885,7 @@ WEAK int halide_opencl_buffer_copy(void *user_context, struct halide_buffer_t *s
         }
         #endif
 
-        err = do_multidimensional_copy(user_context, ctx, c, c.src_begin, 0, dst->dimensions, from_host, to_host);
+        err = opencl_do_multidimensional_copy(user_context, ctx, c, c.src_begin, 0, dst->dimensions, from_host, to_host);
 
         // The reads/writes above are all non-blocking, so empty the command
         // queue before we proceed so that other host code won't write
@@ -1095,7 +1099,7 @@ WEAK int halide_opencl_wrap_cl_mem(void *user_context, struct halide_buffer_t *b
     buf->device = (uint64_t)dev_handle;
     buf->device_interface = &opencl_device_interface;
     buf->device_interface->impl->use_module();
-#if DEBUG_RUNTIME
+#ifdef DEBUG_RUNTIME
     if (!validate_device_pointer(user_context, buf)) {
         free((device_handle *)buf->device);
         buf->device = 0;
@@ -1135,20 +1139,19 @@ WEAK uint64_t halide_opencl_get_crop_offset(void *user_context, halide_buffer_t 
     return ((device_handle *)buf->device)->offset;
 }
 
-WEAK int halide_opencl_device_crop(void *user_context,
-                                    const struct halide_buffer_t *src,
-                                    struct halide_buffer_t *dst) {
+namespace {
+
+WEAK int opencl_device_crop_from_offset(void *user_context,
+                                        const struct halide_buffer_t *src,
+                                        int64_t offset,
+                                        struct halide_buffer_t *dst) {
     ClContext ctx(user_context);
     if (ctx.error != CL_SUCCESS) {
         return ctx.error;
     }
 
     dst->device_interface = src->device_interface;
-    int64_t offset = 0;
-    for (int i = 0; i < src->dimensions; i++) {
-        offset += (dst->dim[i].min - src->dim[i].min) * src->dim[i].stride;
-    }
-    offset *= src->type.bytes();
+
     device_handle *new_dev_handle = (device_handle *)malloc(sizeof(device_handle));
     if (new_dev_handle == NULL) {
         error(user_context) << "CL: malloc failed making device handle for crop.\n";
@@ -1161,6 +1164,24 @@ WEAK int halide_opencl_device_crop(void *user_context,
     dst->device = (uint64_t)new_dev_handle;
 
     return 0;
+}
+
+}  // namespace
+
+WEAK int halide_opencl_device_crop(void *user_context,
+                                    const struct halide_buffer_t *src,
+                                    struct halide_buffer_t *dst) {
+    const int64_t offset = calc_device_crop_byte_offset(src, dst);
+    return opencl_device_crop_from_offset(user_context, src, offset, dst);
+}
+
+WEAK int halide_opencl_device_slice(void *user_context,
+                                    const struct halide_buffer_t *src,
+                                    int slice_dim,
+                                    int slice_pos,
+                                    struct halide_buffer_t *dst) {
+    const int64_t offset = calc_device_slice_byte_offset(src, slice_dim, slice_pos);
+    return opencl_device_crop_from_offset(user_context, src, offset, dst);
 }
 
 WEAK int halide_opencl_device_release_crop(void *user_context,
@@ -1294,6 +1315,7 @@ WEAK halide_device_interface_impl_t opencl_device_interface_impl = {
     halide_opencl_device_and_host_free,
     halide_opencl_buffer_copy,
     halide_opencl_device_crop,
+    halide_opencl_device_slice,
     halide_opencl_device_release_crop,
     halide_opencl_wrap_cl_mem,
     halide_opencl_detach_cl_mem,
@@ -1310,9 +1332,11 @@ WEAK halide_device_interface_t opencl_device_interface = {
     halide_device_and_host_free,
     halide_buffer_copy,
     halide_device_crop,
+    halide_device_slice,
     halide_device_release_crop,
     halide_device_wrap_native,
     halide_device_detach_native,
+    NULL,
     &opencl_device_interface_impl
 };
 

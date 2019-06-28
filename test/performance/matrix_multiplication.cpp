@@ -20,34 +20,46 @@ void simple_version(float* A, float *B, float *C, int width, int stride) {
 
 
 int main(int argc, char **argv) {
-    const int matrix_size = 992, block_size = 32;
+    const int matrix_size = 992;
 
     ImageParam A(type_of<float>(), 2);
     ImageParam B(type_of<float>(), 2);
 
-    Var x("x"), xi("xi"), xo("xo"), y("y"), yo("yo"), yi("yo"), yii("yii"), xii("xii");
+    Var x("x"), xi("xi"), xo("xo"), y("y"), yo("yo"), yi("yi"), yii("yii"), xii("xii");
     Func matrix_mul("matrix_mul");
 
     RDom k(0, matrix_size);
     RVar ki;
 
-    matrix_mul(x, y) = 0.0f;
     matrix_mul(x, y) += A(k, y) * B(x, k);
 
-    matrix_mul.vectorize(x, 8);
+    Func out;
+    out(x, y) = matrix_mul(x, y);
+
+    Var xy;
+
+    out.tile(x, y, xi, yi, 24, 32)
+        .fuse(x, y, xy).parallel(xy)
+        .split(yi, yi, yii, 4)
+        .vectorize(xi, 8)
+        .unroll(xi)
+        .unroll(yii);
+
+    matrix_mul.compute_at(out, yi)
+        .vectorize(x, 8).unroll(y);
 
     matrix_mul.update(0)
-        .split(x, x, xi, block_size).split(xi, xi, xii, 8)
-        .split(y, y, yi, block_size).split(yi, yi, yii, 4)
-        .split(k, k, ki, block_size)
-        .reorder(xii, yii, xi, ki, yi, k, x, y)
-        .parallel(y).vectorize(xii).unroll(xi).unroll(yii);
+        .reorder(x, y, k)
+        .vectorize(x, 8)
+        .unroll(x)
+        .unroll(y)
+        .unroll(k, 2);
 
-    matrix_mul
+    out
         .bound(x, 0, matrix_size)
         .bound(y, 0, matrix_size);
 
-    matrix_mul.compile_jit();
+    out.compile_jit();
 
     Buffer<float> mat_A(matrix_size, matrix_size);
     Buffer<float> mat_B(matrix_size, matrix_size);
@@ -64,10 +76,10 @@ int main(int argc, char **argv) {
     A.set(mat_A);
     B.set(mat_B);
 
-    matrix_mul.realize(output);
+    out.realize(output);
 
     double t = benchmark([&]() {
-        matrix_mul.realize(output);
+        out.realize(output);
     });
 
     // check results
@@ -75,7 +87,7 @@ int main(int argc, char **argv) {
     Buffer<float> output_halide(matrix_size, matrix_size);
 
     simple_version(mat_A.data(), mat_B.data(), output_ref.data(), mat_A.width(), mat_A.stride(1));
-    matrix_mul.realize(output_halide);
+    out.realize(output_halide);
 
     bool halide_correct = true;
     for (int iy = 0; iy < matrix_size && halide_correct; iy++) {
@@ -94,13 +106,12 @@ int main(int argc, char **argv) {
     // Uncomment to see the generated assembly.
     /*
     {
-        Target t = get_jit_target_from_environment();
-        t.set_feature(Target::NoAsserts);
-        matrix_mul.compile_to_assembly("/dev/stdout", matrix_mul.infer_arguments(), t);
+        Target t("host-no_asserts-no_runtime-no_bounds_query");
+        out.compile_to_assembly("/dev/stdout", matrix_mul.infer_arguments(), t);
     }
     */
 
-    float gflops = 2.0f * matrix_size * matrix_size * matrix_size / 1e6f;
+    float gflops = 2.0f * matrix_size * matrix_size * matrix_size / 1e9f;
 
     printf("Halide: %fms, %f GFLOP/s\n\n", t * 1e3, (gflops / t));
 

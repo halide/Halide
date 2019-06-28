@@ -1,10 +1,30 @@
 #include "Error.h"
 
+#include <signal.h>
+
 namespace Halide {
 
 namespace {
 
 CompileTimeErrorReporter* custom_error_reporter = nullptr;
+
+void error_abort() {
+#ifdef _MSC_VER
+    const std::string s = Internal::get_env_variable("HL_DISABLE_WINDOWS_ABORT_DIALOG");
+    const int disable = !s.empty() ? atoi(s.c_str()) : 0;
+    if (disable) {
+        // Debug variants of the MSVC runtime will present an "Abort, Retry, Ignore"
+        // dialog in response to a call to abort(); we want to be able to disable this
+        // for (e.g.) buildbots, where we never want that behavior. This is a close approximation
+        // that will kill the process in a similar way.
+        // (Note that 3 is the exit code for the "abort" button.)
+        raise(SIGABRT);
+        exit(1);
+    }
+#endif
+
+    abort();
+}
 
 }  // namespace
 
@@ -40,7 +60,7 @@ namespace {
 CompileError _compile_error("");
 RuntimeError _runtime_error("");
 InternalError _internal_error("");
-}
+}  // namespace
 
 ErrorReport::ErrorReport(const char *file, int line, const char *condition_string, int flags) : flags(flags) {
 
@@ -99,7 +119,7 @@ ErrorReport::~ErrorReport()
             custom_error_reporter->error(msg.str().c_str());
             // error() should not have returned to us, but just in case
             // it does, make sure we don't continue.
-            abort();
+            error_abort();
         }
     }
 
@@ -128,9 +148,9 @@ ErrorReport::~ErrorReport()
     }
 #else
     std::cerr << msg.str();
-    abort();
+    error_abort();
 #endif
 }
-}
+}  // namespace Internal
 
-}
+}  // namespace Halide

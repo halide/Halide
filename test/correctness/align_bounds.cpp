@@ -5,7 +5,7 @@ using namespace Halide::Internal;
 
 class CheckForSelects : public IRVisitor {
     using IRVisitor::visit;
-    void visit(const Select *op) {
+    void visit(const Select *op) override {
         result = true;
     }
 public:

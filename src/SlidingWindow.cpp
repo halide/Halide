@@ -1,19 +1,19 @@
 #include "SlidingWindow.h"
+#include "Bounds.h"
+#include "Debug.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "Scope.h"
-#include "Debug.h"
-#include "Substitute.h"
 #include "IRPrinter.h"
-#include "Simplify.h"
 #include "Monotonic.h"
-#include "Bounds.h"
+#include "Scope.h"
+#include "Simplify.h"
+#include "Substitute.h"
 
 namespace Halide {
 namespace Internal {
 
-using std::string;
 using std::map;
+using std::string;
 
 namespace {
 
@@ -21,11 +21,11 @@ namespace {
 class ExprDependsOnVar : public IRVisitor {
     using IRVisitor::visit;
 
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         if (op->name == var) result = true;
     }
 
-    void visit(const Let *op) {
+    void visit(const Let *op) override {
         op->value.accept(this);
         // The name might be hidden within the body of the let, in
         // which case there's no point descending.
@@ -49,8 +49,8 @@ bool expr_depends_on_var(Expr e, string v) {
 }
 
 
-class ExpandExpr : public IRMutator2 {
-    using IRMutator2::visit;
+class ExpandExpr : public IRMutator {
+    using IRMutator::visit;
     const Scope<Expr> &scope;
 
     Expr visit(const Variable *var) override {
@@ -80,7 +80,7 @@ Expr expand_expr(Expr e, const Scope<Expr> &scope) {
 
 // Perform sliding window optimization for a function over a
 // particular serial for loop
-class SlidingWindowOnFunctionAndLoop : public IRMutator2 {
+class SlidingWindowOnFunctionAndLoop : public IRMutator {
     Function func;
     string loop_var;
     Expr loop_min;
@@ -88,7 +88,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator2 {
 
     map<string, Expr> replacements;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     // Check if the dimension at index 'dim_idx' is always pure (i.e. equal to 'dim')
     // in the definition (including in its specializations)
@@ -109,7 +109,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator2 {
 
     Stmt visit(const ProducerConsumer *op) override {
         if (!op->is_producer || (op->name != func.name())) {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         } else {
             Stmt stmt = op;
 
@@ -304,7 +304,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator2 {
                      << min << ", " << extent << "\n";
             return op;
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
@@ -332,10 +332,10 @@ public:
 };
 
 // Perform sliding window optimization for a particular function
-class SlidingWindowOnFunction : public IRMutator2 {
+class SlidingWindowOnFunction : public IRMutator {
     Function func;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Stmt visit(const For *op) override {
         debug(3) << " Doing sliding window analysis over loop: " << op->name << "\n";
@@ -361,10 +361,10 @@ public:
 };
 
 // Perform sliding window optimization for all functions
-class SlidingWindow : public IRMutator2 {
+class SlidingWindow : public IRMutator {
     const map<string, Function> &env;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Stmt visit(const Realize *op) override {
         // Find the args for this function
@@ -373,14 +373,14 @@ class SlidingWindow : public IRMutator2 {
         // If it's not in the environment it's some anonymous
         // realization that we should skip (e.g. an inlined reduction)
         if (iter == env.end()) {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
 
         // If the Function in question has the same compute_at level
         // as its store_at level, skip it.
         const FuncSchedule &sched = iter->second.schedule();
         if (sched.compute_level() == sched.store_level()) {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
 
         Stmt new_body = op->body;
@@ -394,7 +394,8 @@ class SlidingWindow : public IRMutator2 {
         if (new_body.same_as(op->body)) {
             return op;
         } else {
-            return Realize::make(op->name, op->types, op->bounds, op->condition, new_body);
+            return Realize::make(op->name, op->types, op->memory_type,
+                                 op->bounds, op->condition, new_body);
         }
     }
 public:
@@ -406,5 +407,5 @@ Stmt sliding_window(Stmt s, const map<string, Function> &env) {
     return SlidingWindow(env).mutate(s);
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

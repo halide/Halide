@@ -1,12 +1,12 @@
 #include "Random.h"
-#include "IROperator.h"
 #include "IRMutator.h"
+#include "IROperator.h"
 
 namespace Halide {
 namespace Internal {
 
-using std::vector;
 using std::string;
+using std::vector;
 
 namespace {
 
@@ -60,7 +60,6 @@ Expr rng32(Expr x) {
 
     return (((C2 * x) + C1) * x) + C0;
 }
-
 }
 
 Expr random_int(const vector<Expr> &e) {
@@ -93,8 +92,8 @@ Expr random_float(const vector<Expr> &e) {
     return clamp(reinterpret(Float(32), result) - 1.0f, 0.0f, 1.0f);
 }
 
-class LowerRandom : public IRMutator2 {
-    using IRMutator2::visit;
+class LowerRandom : public IRMutator {
+    using IRMutator::visit;
 
     Expr visit(const Call *op) override {
         if (op->is_intrinsic(Call::random)) {
@@ -111,11 +110,12 @@ class LowerRandom : public IRMutator2 {
                 return Expr();
             }
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
     vector<Expr> extra_args;
+
 public:
     LowerRandom(const vector<string> &free_vars, int tag) {
         extra_args.push_back(tag);
@@ -131,5 +131,5 @@ Expr lower_random(Expr e, const vector<string> &free_vars, int tag) {
     return r.mutate(e);
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

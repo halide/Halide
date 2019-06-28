@@ -1,4 +1,5 @@
 #include "Halide.h"
+#include "halide_trace_config.h"
 
 namespace {
 
@@ -86,21 +87,24 @@ public:
         // Convert back to 16-bit
         output(x, y, c) = cast<uint16_t>(clamp(color(x, y, c), 0.0f, 1.0f) * 65535.0f);
 
-        /* THE SCHEDULE */
+        /* ESTIMATES */
+        // (This can be useful in conjunction with RunGen and benchmarks as well
+        // as auto-schedule, so we do it in all cases.)
+        input.dim(0).set_bounds_estimate(0, 1536);
+        input.dim(1).set_bounds_estimate(0, 2560);
+        input.dim(2).set_bounds_estimate(0, 3);
+        // Provide estimates on the parameters
+        levels.set_estimate(8);
+        alpha.set_estimate(1);
+        beta.set_estimate(1);
+        // Provide estimates on the pipeline output
+        output.estimate(x, 0, 1536)
+              .estimate(y, 0, 2560)
+              .estimate(c, 0, 3);
 
+        /* THE SCHEDULE */
         if (auto_schedule) {
-            // Provide estimates on the input image
-            input.dim(0).set_bounds_estimate(0, 1536);
-            input.dim(1).set_bounds_estimate(0, 2560);
-            input.dim(2).set_bounds_estimate(0, 3);
-            // Provide estimates on the parameters
-            levels.set_estimate(8);
-            alpha.set_estimate(1);
-            beta.set_estimate(1);
-            // Provide estimates on the pipeline output
-            output.estimate(x, 0, 1536)
-                .estimate(y, 0, 2560)
-                .estimate(c, 0, 3);
+            // Nothing.
         } else if (get_target().has_gpu_feature()) {
             // gpu schedule
             remap.compute_root();
@@ -139,6 +143,67 @@ public:
                 inGPyramid[j].compute_root();
                 gPyramid[j].compute_root().parallel(k);
                 outGPyramid[j].compute_root();
+            }
+        }
+
+        /* Optional tags to specify layout for HalideTraceViz */
+        {
+            Halide::Trace::FuncConfig cfg;
+            cfg.color_dim = 2;
+            cfg.max = 65535;
+            cfg.pos.x = 30;
+            cfg.pos.y = 100;
+            input.add_trace_tag(cfg.to_trace_tag());
+
+            cfg.pos.x = 1700;
+            output.add_trace_tag(cfg.to_trace_tag());
+        }
+
+        {
+            Halide::Trace::FuncConfig cfg;
+            cfg.store_cost = 5;
+            cfg.pos.x = 370;
+            cfg.pos.y = 100;
+            cfg.labels = { { "input pyramid", {-90, -68} } };
+            gray.add_trace_tag(cfg.to_trace_tag());
+        }
+
+        for (int i = 0; i < pyramid_levels; ++i) {
+            int y = 100;
+            for (int j = 0; j < i; ++j) {
+                y += 500 >> j;
+            }
+            {
+                int x = 370;
+                int store_cost = 1 << (i + 1);
+                Halide::Trace::FuncConfig cfg;
+                cfg.pos = {x, y};
+                cfg.store_cost = store_cost;
+                inGPyramid[i].add_trace_tag(cfg.to_trace_tag());
+            }
+            {
+                int x = 720;
+                int store_cost = 1 << i;
+                Halide::Trace::FuncConfig cfg;
+                cfg.strides = {{1, 0}, {0, 1}, {200, 0}};
+                cfg.pos = {x, y};
+                cfg.store_cost = store_cost;
+                if (i == 1) {
+                    cfg.labels = { { "differently curved intermediate pyramids" } };
+                }
+                gPyramid[i].add_trace_tag(cfg.to_trace_tag());
+            }
+            {
+                int x = 1500;
+                int store_cost = (1 << i) * 10;
+                Halide::Trace::FuncConfig cfg;
+                cfg.pos = {x, y};
+                cfg.store_cost = store_cost;
+                if (i == 0) {
+                    cfg.labels = { { "output pyramids" } };
+                    cfg.pos = {x, 100};
+                }
+                outGPyramid[i].add_trace_tag(cfg.to_trace_tag());
             }
         }
     }

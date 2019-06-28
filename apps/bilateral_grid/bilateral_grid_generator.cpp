@@ -1,4 +1,5 @@
 #include "Halide.h"
+#include "halide_trace_config.h"
 
 namespace {
 
@@ -65,18 +66,23 @@ public:
         // Normalize
         bilateral_grid(x, y) = interpolated(x, y, 0)/interpolated(x, y, 1);
 
+        /* ESTIMATES */
+        // (This can be useful in conjunction with RunGen and benchmarks as well
+        // as auto-schedule, so we do it in all cases.)
+        // Provide estimates on the input image
+        input.dim(0).set_bounds_estimate(0, 1536);
+        input.dim(1).set_bounds_estimate(0, 2560);
+        // Provide estimates on the parameters
+        r_sigma.set_estimate(0.1f);
+        // TODO: Compute estimates from the parameter values
+        histogram.estimate(z, -2, 16);
+        blurz.estimate(z, 0, 12);
+        blurx.estimate(z, 0, 12);
+        blury.estimate(z, 0, 12);
+        bilateral_grid.estimate(x, 0, 1536).estimate(y, 0, 2560);
+
         if (auto_schedule) {
-            // Provide estimates on the input image
-            input.dim(0).set_bounds_estimate(0, 1536);
-            input.dim(1).set_bounds_estimate(0, 2560);
-            // Provide estimates on the parameters
-            r_sigma.set_estimate(0.1f);
-            // TODO: Compute estimates from the parameter values
-            histogram.estimate(z, -2, 16);
-            blurz.estimate(z, 0, 12);
-            blurx.estimate(z, 0, 12);
-            blury.estimate(z, 0, 12);
-            bilateral_grid.estimate(x, 0, 1536).estimate(y, 0, 2560);
+            // nothing
         } else if (get_target().has_gpu_feature()) {
             Var xi("xi"), yi("yi"), zi("zi");
 
@@ -113,6 +119,53 @@ public:
             blurx.compute_root().reorder(c, x, y, z).parallel(z).vectorize(x, 8).unroll(c);
             blury.compute_root().reorder(c, x, y, z).parallel(z).vectorize(x, 8).unroll(c);
             bilateral_grid.compute_root().parallel(y).vectorize(x, 8);
+        }
+
+        /* Optional tags to specify layout for HalideTraceViz */
+        {
+            Halide::Trace::FuncConfig cfg;
+            cfg.pos.x = 100;
+            cfg.pos.y = 300;
+            input.add_trace_tag(cfg.to_trace_tag());
+
+            cfg.pos.x = 1564;
+            bilateral_grid.add_trace_tag(cfg.to_trace_tag());
+        }
+        {
+            Halide::Trace::FuncConfig cfg;
+            cfg.strides = {{1, 0}, {0, 1}, {40, 0}};
+            cfg.zoom = 3;
+
+            cfg.max = 32;
+            cfg.pos.x = 550;
+            cfg.pos.y = 100;
+            histogram.add_trace_tag(cfg.to_trace_tag());
+
+            cfg.max = 512;
+            cfg.pos.y = 300;
+            blurz.add_trace_tag(cfg.to_trace_tag());
+
+            cfg.max = 8192;
+            cfg.pos.y = 500;
+            blurx.add_trace_tag(cfg.to_trace_tag());
+
+            cfg.max = 131072;
+            cfg.pos.y = 700;
+            blury.add_trace_tag(cfg.to_trace_tag());
+        }
+        {
+            // GlobalConfig applies to the entire visualization pipeline;
+            // you can set this tag on any Func that is realized, but only
+            // the last one seen will be used. (Since the tags are emitted in
+            // an arbitrary order, emitting only one such tag is the best practice).
+            // Note also that since the global settings are often context-dependent
+            // (eg the output size and timestep may vary depending on the
+            // input data), it's often more useful to specify these on the
+            // command line.
+            Halide::Trace::GlobalConfig global_cfg;
+            global_cfg.timestep = 1000;
+
+            bilateral_grid.add_trace_tag(global_cfg.to_trace_tag());
         }
     }
 };

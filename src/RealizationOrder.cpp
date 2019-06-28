@@ -1,20 +1,20 @@
 #include <algorithm>
 #include <set>
 
-#include "RealizationOrder.h"
 #include "FindCalls.h"
 #include "Func.h"
-#include "IRVisitor.h"
 #include "IREquality.h"
+#include "IRVisitor.h"
+#include "RealizationOrder.h"
 
 namespace Halide {
 namespace Internal {
 
-using std::string;
 using std::map;
-using std::set;
-using std::vector;
 using std::pair;
+using std::set;
+using std::string;
+using std::vector;
 
 namespace {
 
@@ -35,45 +35,48 @@ void find_fused_groups_dfs(string current,
     }
 }
 
-vector<vector<string>> find_fused_groups(const vector<string> &order,
-                                         const map<string, set<string>> &fuse_adjacency_list) {
+pair<map<string, vector<string>>, map<string, string>>
+find_fused_groups(const map<string, Function> &env,
+                  const map<string, set<string>> &fuse_adjacency_list) {
     set<string> visited;
-    vector<vector<string>> result;
+    map<string, vector<string>> fused_groups;
+    map<string, string> group_name;
 
-    // Iterate starting from the last function to be realized. This way,
-    // if any of the functions in the fused group refers to other functions
-    // that were scheduled inline, those inlined function will come first
-    // (first to be realized) before the fused group in the fuse_adjacency_list.
-    for (int i = (int)order.size() - 1; i >= 0; --i) {
-        const string &fn = order[i];
+    for (const auto &iter : env) {
+        const string &fn = iter.first;
         if (visited.find(fn) == visited.end()) {
             vector<string> group;
             find_fused_groups_dfs(fn, fuse_adjacency_list, visited, group);
-            result.push_back(group);
+
+            // Create a unique name for the fused group.
+            string rename = unique_name("_fg");
+            fused_groups.emplace(rename, group);
+            for (const auto &m : group) {
+                group_name.emplace(m, rename);
+            }
         }
     }
-    std::reverse(result.begin(), result.end());
-    return result;
+    return {fused_groups, group_name};
 }
 
 void realization_order_dfs(string current,
-                           const vector<pair<string, vector<string>>> &graph,
+                           const map<string, vector<string>> &graph,
                            set<string> &visited,
                            set<string> &result_set,
                            vector<string> &order) {
     visited.insert(current);
 
-    const auto &iter = std::find_if(graph.begin(), graph.end(),
-        [&current](const pair<string, vector<string>> &p) { return (p.first == current); });
+    const auto &iter = graph.find(current);
     internal_assert(iter != graph.end());
 
     for (const string &fn : iter->second) {
+        internal_assert(fn != current);
         if (visited.find(fn) == visited.end()) {
             realization_order_dfs(fn, graph, visited, result_set, order);
-        } else if (fn != current) { // Self-loops are allowed in update stages
+        } else {
             internal_assert(result_set.find(fn) != result_set.end())
                 << "Stuck in a loop computing a realization order. "
-                << "Perhaps this pipeline has a loop?\n";
+                << "Perhaps this pipeline has a loop involving " << current << "?\n";
         }
     }
 
@@ -123,7 +126,7 @@ void validate_fused_pair(const string &fn, size_t stage_index,
 // functions.
 void collect_fused_pairs(const FusedPair &p,
                          vector<FusedPair> &func_fused_pairs,
-                         vector<pair<string, vector<string>>> &graph,
+                         map<string, vector<string>> &graph,
                          map<string, set<string>> &fuse_adjacency_list) {
     fuse_adjacency_list[p.func_1].insert(p.func_2);
     fuse_adjacency_list[p.func_2].insert(p.func_1);
@@ -133,10 +136,7 @@ void collect_fused_pairs(const FusedPair &p,
     // If there is a compute_with dependency between two functions, we need
     // to update the pipeline DAG so that the computed realization order
     // respects this dependency.
-    auto iter = std::find_if(graph.begin(), graph.end(),
-        [&p](const pair<string, vector<string>> &s) { return (s.first == p.func_1); });
-    internal_assert(iter != graph.end());
-    iter->second.push_back(p.func_2);
+    graph[p.func_1].push_back(p.func_2);
 }
 
 // Populate the 'fused_pairs' list in Schedule of each function stage.
@@ -199,7 +199,7 @@ pair<vector<string>, vector<vector<string>>> realization_order(
     // all function definitions that are to be computed with that function).
     for (auto &iter : env) {
         if (iter.second.has_extern_definition()) {
-            // Extern function should not be fused
+            // Extern function should not be fused.
             continue;
         }
         populate_fused_pairs_list(iter.first, iter.second.definition(), 0, env);
@@ -215,9 +215,9 @@ pair<vector<string>, vector<vector<string>>> realization_order(
         indirect_calls.emplace(caller.first, more_funcs);
     }
 
-    // Make a DAG representing the pipeline. Each function maps to the
+    // 'graph' is a DAG representing the pipeline. Each function maps to the
     // set describing its inputs.
-    vector<pair<string, vector<string>>> graph;
+    map<string, vector<string>> graph;
 
     // Make a directed and non-directed graph representing the compute_with
     // dependencies between functions. Each function maps to the list of
@@ -226,14 +226,6 @@ pair<vector<string>, vector<vector<string>>> realization_order(
     map<string, set<string>> fuse_adjacency_list;
 
     for (const pair<string, Function> &caller : env) {
-        vector<string> s;
-        for (const pair<string, Function> &callee : find_direct_calls(caller.second)) {
-            if (std::find(s.begin(), s.end(), callee.first) == s.end()) {
-                s.push_back(callee.first);
-            }
-        }
-        graph.push_back({caller.first, s});
-
         // Find all compute_with (fused) pairs. We have to look at the update
         // definitions as well since compute_with is defined per definition (stage).
         vector<FusedPair> &func_fused_pairs = fused_pairs_graph[caller.first];
@@ -256,33 +248,103 @@ pair<vector<string>, vector<vector<string>>> realization_order(
 
     check_no_cyclic_compute_with(fused_pairs_graph);
 
-    // Compute the realization order.
+    // Determine groups of functions which loops are to be fused together.
+    // 'fused_groups' maps a fused group to its members.
+    // 'group_name' maps a function to the name of the fused group it belongs to.
+    map<string, vector<string>> fused_groups;
+    map<string, string> group_name;
+    std::tie(fused_groups, group_name) = find_fused_groups(env, fuse_adjacency_list);
+
+    // Compute the DAG representing the pipeline
+    for (const pair<string, Function> &caller : env) {
+        const string &caller_rename = group_name.at(caller.first);
+        // Create a dummy node representing the fused group and add input edge
+        // dependencies from the nodes representing member of the fused group
+        // to this dummy node.
+        graph[caller.first].push_back(caller_rename);
+        // Direct the calls to calls from the dummy node. This forces all the
+        // functions called by members of the fused group to be realized first.
+        vector<string> &s = graph[caller_rename];
+        for (const pair<string, Function> &callee : find_direct_calls(caller.second)) {
+            if ((callee.first != caller.first) && // Skip calls to itself (i.e. update stages)
+                (std::find(s.begin(), s.end(), callee.first) == s.end())) {
+                s.push_back(callee.first);
+            }
+        }
+    }
+
+    // Compute the realization order of the fused groups (i.e. the dummy nodes)
+    // and also the realization order of the functions within a fused group.
+    vector<string> temp;
+    set<string> result_set;
+    set<string> visited;
+    for (Function f : outputs) {
+        if (visited.find(f.name()) == visited.end()) {
+            realization_order_dfs(f.name(), graph, visited, result_set, temp);
+        }
+    }
+
+    // Collect the realization order of the fused groups.
+    vector<vector<string>> group_order;
+    for (const auto &fn : temp) {
+        const auto &iter = fused_groups.find(fn);
+        if (iter != fused_groups.end()) {
+            group_order.push_back(iter->second);
+        }
+    }
+    // Sort the functions within a fused group based on the compute_with
+    // dependencies (i.e. parent of the fused loop should be realized after its
+    // children).
+    for (auto &group : group_order) {
+        std::sort(group.begin(), group.end(),
+            [&](const string &lhs, const string &rhs){
+                const auto &iter_lhs = std::find(temp.begin(), temp.end(), lhs);
+                const auto &iter_rhs = std::find(temp.begin(), temp.end(), rhs);
+                return iter_lhs < iter_rhs;
+            }
+        );
+    }
+
+    // Collect the realization order of all functions within the pipeline.
+    vector<string> order;
+    for (const auto &group : group_order) {
+        for (const auto &f : group) {
+            order.push_back(f);
+        }
+    }
+
+    return {order, group_order};
+}
+
+vector<string> topological_order(const vector<Function> &outputs,
+                                 const map<string, Function> &env) {
+
+    // Make a DAG representing the pipeline. Each function maps to the
+    // set describing its inputs.
+    map<string, vector<string>> graph;
+
+    for (const pair<string, Function> &caller : env) {
+        vector<string> s;
+        for (const pair<string, Function> &callee : find_direct_calls(caller.second)) {
+            if ((callee.first != caller.first) && // Skip calls to itself (i.e. update stages)
+                (std::find(s.begin(), s.end(), callee.first) == s.end())) {
+                s.push_back(callee.first);
+            }
+        }
+        graph.emplace(caller.first, s);
+    }
+
     vector<string> order;
     set<string> result_set;
     set<string> visited;
-
     for (Function f : outputs) {
         if (visited.find(f.name()) == visited.end()) {
             realization_order_dfs(f.name(), graph, visited, result_set, order);
         }
     }
 
-    // Determine group of functions which loops are to be fused together.
-    vector<vector<string>> fused_groups = find_fused_groups(order, fuse_adjacency_list);
-
-    // Sort the functions within a fused group based on the realization order
-    for (auto &group : fused_groups) {
-        std::sort(group.begin(), group.end(),
-            [&](const string &lhs, const string &rhs){
-                const auto &iter_lhs = std::find(order.begin(), order.end(), lhs);
-                const auto &iter_rhs = std::find(order.begin(), order.end(), rhs);
-                return iter_lhs < iter_rhs;
-            }
-        );
-    }
-
-    return {order, fused_groups};
+    return order;
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

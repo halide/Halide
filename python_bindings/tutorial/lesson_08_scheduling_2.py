@@ -316,7 +316,7 @@ def main():
 
                 # Skip over rows of producer that we've already
                 # computed in a previous iteration.
-                if y > 0 and py == yy:
+                if yy > 0 and py == yy:
                     continue
 
                 for px in range(5):
@@ -362,7 +362,7 @@ def main():
             for yy in range(4):
                 for py in range(yy, yy + 2):
 
-                    if y > 0 and py == yy:
+                    if yy > 0 and py == yy:
                         continue
 
                     for px in range(5):

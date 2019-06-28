@@ -18,17 +18,20 @@ void dump_header(std::string header) {
 
     FILE *f = fopen(header.c_str(), "r");
 
-    if (f == NULL) {
+    if (f == nullptr) {
       fprintf(stderr, "Could not open header %s.\n", header.c_str());
       exit(1);
     }
 
     char line[1024];
+    const int line_len = sizeof(line);
+    const char include_str[] = "#include \"";
+    const int include_str_len = sizeof(include_str) - 1; // remove null terminator
 
-    while (fgets(line, 1024, f)) {
-        if (strncmp(line, "#include \"", 10) == 0) {
-            char *sub_header = line + 10;
-            for (int i = 0; i < 1014; i++) {
+    while (fgets(line, line_len, f)) {
+        if (strncmp(line, include_str, include_str_len) == 0) {
+            char *sub_header = line + include_str_len;
+            for (int i = 0; i < line_len - include_str_len; i++) {
                 if (sub_header[i] == '"') sub_header[i] = 0;
             }
             size_t slash_pos = header.rfind('/');
@@ -44,18 +47,56 @@ void dump_header(std::string header) {
     fclose(f);
 }
 
-int main(int argc, char **headers) {
+int main(int argc, char **files) {
+
+    if (argc < 3) {
+        fprintf(stderr, "Usage: %s LICENSE.txt [headers...]\n", files[0]);
+        exit(1);
+    }
+
+    fprintf(stdout, "/* Halide.h -- interface for the 'Halide' library.\n\n");
+
+    {
+        FILE *f = fopen(files[1], "r");
+        if (f == nullptr) {
+            fprintf(stderr, "Could not open %s.\n", files[1]);
+            exit(1);
+        }
+
+        char line[1024];
+        while (fgets(line, sizeof(line), f)) {
+            fprintf(stdout, "   %s", line);
+        }
+
+        fclose(f);
+    }
+
+    fprintf(stdout, "\n*/\n\n");
+    fprintf(stdout, "#ifndef HALIDE_H\n");
+    fprintf(stdout, "#define HALIDE_H\n\n");
 
     // If we're building on visual studio and Halide_SHARED is defined, we'd better
     // also define it for clients so that dllimport gets used.
     #if defined(_MSC_VER) && defined(Halide_SHARED)
-    printf("#define Halide_SHARED\n");
+    fprintf(stdout, "#define Halide_SHARED\n");
     #endif
 
-    for (int i = 1; i < argc; i++) {
-        dump_header(headers[i]);
+    for (int i = 2; i < argc; i++) {
+        dump_header(files[i]);
     }
 
+    fprintf(stdout, "\n");
+    fprintf(stdout,
+        "// Clean up macros used inside Halide headers\n"
+        "#undef user_assert\n"
+        "#undef user_error\n"
+        "#undef user_warning\n"
+        "#undef internal_error\n"
+        "#undef internal_assert\n"
+        "#undef halide_runtime_error\n"
+        "#undef HALIDE_EXPORT\n\n"
+        "#endif  // HALIDE_H\n"
+    );
 
     return 0;
 }

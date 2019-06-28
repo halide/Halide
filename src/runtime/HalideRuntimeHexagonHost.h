@@ -59,10 +59,13 @@ extern void halide_hexagon_power_hvx_off_as_destructor(void *user_context, void 
 
 /** Power modes for Hexagon. */
 typedef enum halide_hexagon_power_mode_t {
-    halide_hexagon_power_low     = 0,
-    halide_hexagon_power_nominal = 1,
-    halide_hexagon_power_turbo   = 2,
-    halide_hexagon_power_default = 3, /// Resets power to its default state.
+    halide_hexagon_power_low          = 0,
+    halide_hexagon_power_nominal      = 1,
+    halide_hexagon_power_turbo        = 2,
+    halide_hexagon_power_default      = 3, /// Resets power to its default state.
+    halide_hexagon_power_low_plus     = 4,
+    halide_hexagon_power_low_2        = 5,
+    halide_hexagon_power_nominal_plus = 6,
 
     // These are deprecated.
     halide_hvx_power_low     = halide_hexagon_power_low,
@@ -108,6 +111,17 @@ typedef halide_hexagon_power_t halide_hvx_power_perf_t;
 // @{
 extern int halide_hexagon_set_performance_mode(void *user_context, halide_hexagon_power_mode_t mode);
 extern int halide_hexagon_set_performance(void *user_context, halide_hexagon_power_t *perf);
+// @}
+
+/** Set the default priority for Halide Hexagon user threads:
+ *   - Valid priority values range from 1 to 255
+ *   - Smaller number for higher priority
+ *   - The highest priority for a user thread is 1
+ *   - Priority 0 is reserved for OS usage
+ * If this routine is not called, the priority will default to 100.
+ * This is intended to be called before dispatching any pipeline. */
+// @{
+extern int halide_hexagon_set_thread_priority(void *user_context, int priority);
 // @}
 
 /** These are forward declared here to allow clients to override the

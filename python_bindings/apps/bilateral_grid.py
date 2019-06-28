@@ -11,9 +11,6 @@ import numpy as np
 from scipy.misc import imread, imsave
 import os.path
 
-int_t = hl.Int(32)
-float_t = hl.Float(32)
-
 def get_bilateral_grid(input, r_sigma, s_sigma):
     x = hl.Var('x')
     y = hl.Var('y')
@@ -24,14 +21,14 @@ def get_bilateral_grid(input, r_sigma, s_sigma):
     zi = hl.Var("zi")
 
     # Add a boundary condition
-    clamped = hl.repeat_edge(input)
+    clamped = hl.BoundaryConditions.repeat_edge(input)
 
     # Construct the bilateral grid
     r = hl.RDom([(0, s_sigma), (0, s_sigma)], 'r')
     val = clamped[x * s_sigma + r.x - s_sigma // 2, y * s_sigma + r.y - s_sigma // 2]
     val = hl.clamp(val, 0.0, 1.0)
 
-    zi = hl.cast(int_t, val / r_sigma + 0.5)
+    zi = hl.i32(val / r_sigma + 0.5)
 
     histogram = hl.Func('histogram')
     histogram[x, y, z, c] = 0.0
@@ -46,10 +43,10 @@ def get_bilateral_grid(input, r_sigma, s_sigma):
     # Take trilinear samples to compute the output
     val = hl.clamp(clamped[x, y], 0.0, 1.0)
     zv = val / r_sigma
-    zi = hl.cast(int_t, zv)
+    zi = hl.i32(zv)
     zf = zv - zi
-    xf = hl.cast(float_t, x % s_sigma) / s_sigma
-    yf = hl.cast(float_t, y % s_sigma) / s_sigma
+    xf = hl.f32(x % s_sigma) / s_sigma
+    yf = hl.f32(y % s_sigma) / s_sigma
     xi = x / s_sigma
     yi = y / s_sigma
     interpolated = hl.Func('interpolated')
@@ -144,8 +141,8 @@ def filter_test_image(bilateral_grid, input):
 
 
 def main():
-    input = hl.ImageParam(float_t, 2, 'input')
-    r_sigma = hl.Param(float_t, 'r_sigma', 0.1) # Value needed if not generating an executable
+    input = hl.ImageParam(hl.Float(32), 2, 'input')
+    r_sigma = hl.Param(hl.Float(32), 'r_sigma', 0.1) # Value needed if not generating an executable
     s_sigma = 8 # This is passed during code generation in the C++ version
 
     bilateral_grid = get_bilateral_grid(input, r_sigma, s_sigma)

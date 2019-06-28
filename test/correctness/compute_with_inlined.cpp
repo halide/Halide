@@ -46,5 +46,6 @@ int main(int argc, char **argv) {
 
     three.realize(1024, 1024);
 
+    printf("Success!\n");
     return 0;
 }

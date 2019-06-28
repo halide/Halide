@@ -113,8 +113,8 @@ public:
         unnormalized_kernel_x(x, k) = info.kernel((k + beginx - sourcex) * kernel_scaling);
         unnormalized_kernel_y(y, k) = info.kernel((k + beginy - sourcey) * kernel_scaling);
 
-        kernel_sum_x(x) = sum(unnormalized_kernel_x(x, r));
-        kernel_sum_y(y) = sum(unnormalized_kernel_y(y, r));
+        kernel_sum_x(x) = sum(unnormalized_kernel_x(x, r), "kernel_sum_x");
+        kernel_sum_y(y) = sum(unnormalized_kernel_y(y, r), "kernel_sum_y");
 
         kernel_x(x, k) = unnormalized_kernel_x(x, k) / kernel_sum_x(x);
         kernel_y(y, k) = unnormalized_kernel_y(y, k) / kernel_sum_y(y);
@@ -124,12 +124,12 @@ public:
         // upsampling, and do it second if we're downsampling.
         Func resized;
         if (upsample) {
-            resized_x(x, y, c) = sum(kernel_x(x, r) * as_float(r + beginx, y, c));
-            resized_y(x, y, c) = sum(kernel_y(y, r) * resized_x(x, r + beginy, c));
+            resized_x(x, y, c) = sum(kernel_x(x, r) * as_float(r + beginx, y, c), "resized_x");
+            resized_y(x, y, c) = sum(kernel_y(y, r) * resized_x(x, r + beginy, c), "resized_y");
             resized = resized_y;
         } else {
-            resized_y(x, y, c) = sum(kernel_y(y, r) * as_float(x, r + beginy, c));
-            resized_x(x, y, c) = sum(kernel_x(x, r) * resized_y(r + beginx, y, c));
+            resized_y(x, y, c) = sum(kernel_y(y, r) * as_float(x, r + beginy, c), "resized_y");
+            resized_x(x, y, c) = sum(kernel_x(x, r) * resized_y(r + beginx, y, c), "resized_x");
             resized = resized_x;
         }
 

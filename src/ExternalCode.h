@@ -124,7 +124,7 @@ public:
     const std::string &name() const { return nametag; }
 };
 
-}
+}  // namespace Halide
 
 #endif
 

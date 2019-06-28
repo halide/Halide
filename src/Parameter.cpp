@@ -1,3 +1,4 @@
+#include "Argument.h"
 #include "IR.h"
 #include "IROperator.h"
 #include "ObjectInstanceRegistry.h"
@@ -7,50 +8,40 @@
 namespace Halide {
 namespace Internal {
 
+struct BufferConstraint {
+    Expr min, extent, stride;
+    Expr min_estimate, extent_estimate;
+};
+
 struct ParameterContents {
     mutable RefCount ref_count;
     const Type type;
     const int dimensions;
     const std::string name;
-    const std::string handle_type;
     Buffer<> buffer;
     uint64_t data;
     int host_alignment;
-    std::vector<Expr> min_constraint;
-    std::vector<Expr> extent_constraint;
-    std::vector<Expr> stride_constraint;
-    std::vector<Expr> min_constraint_estimate;
-    std::vector<Expr> extent_constraint_estimate;
-    Expr min_value, max_value;
-    Expr estimate;
-
+    std::vector<BufferConstraint> buffer_constraints;
+    Expr scalar_min, scalar_max, scalar_estimate;
     const bool is_buffer;
-    const bool is_explicit_name;
-    const bool is_registered;
-    ParameterContents(Type t, bool b, int d, const std::string &n, bool e, bool r)
+
+    ParameterContents(Type t, bool b, int d, const std::string &n)
         : type(t), dimensions(d), name(n), buffer(Buffer<>()), data(0),
-          host_alignment(t.bytes()), is_buffer(b), is_explicit_name(e), is_registered(r) {
-
-        min_constraint.resize(dimensions);
-        extent_constraint.resize(dimensions);
-        stride_constraint.resize(dimensions);
-        min_constraint_estimate.resize(dimensions);
-        extent_constraint_estimate.resize(dimensions);
-
+          host_alignment(t.bytes()), buffer_constraints(dimensions), is_buffer(b) {
         // stride_constraint[0] defaults to 1. This is important for
         // dense vectorization. You can unset it by setting it to a
         // null expression. (param.set_stride(0, Expr());)
         if (dimensions > 0) {
-            stride_constraint[0] = 1;
+            buffer_constraints[0].stride = 1;
         }
     }
 };
 
 template<>
-EXPORT RefCount &ref_count<Halide::Internal::ParameterContents>(const ParameterContents *p) {return p->ref_count;}
+RefCount &ref_count<Halide::Internal::ParameterContents>(const ParameterContents *p) {return p->ref_count;}
 
 template<>
-EXPORT void destroy<Halide::Internal::ParameterContents>(const ParameterContents *p) {delete p;}
+void destroy<Halide::Internal::ParameterContents>(const ParameterContents *p) {delete p;}
 
 void Parameter::check_defined() const {
     user_assert(defined()) << "Parameter is undefined\n";
@@ -71,55 +62,14 @@ void Parameter::check_dim_ok(int dim) const {
         << "Dimension " << dim << " is not in the range [0, " << dimensions() - 1 << "]\n";
 }
 
-Parameter::Parameter() : contents(nullptr) {
-    // Undefined Parameters are never registered.
-}
-
 Parameter::Parameter(Type t, bool is_buffer, int d) :
-    contents(new ParameterContents(t, is_buffer, d, unique_name('p'), false, true)) {
+    contents(new ParameterContents(t, is_buffer, d, unique_name('p'))) {
     internal_assert(is_buffer || d == 0) << "Scalar parameters should be zero-dimensional";
-    // Note that is_registered is always true here; this is just using a parallel code structure for clarity.
-    if (contents.defined() && contents->is_registered) {
-        ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this, nullptr);
-    }
 }
 
-Parameter::Parameter(Type t, bool is_buffer, int d, const std::string &name, bool is_explicit_name, bool register_instance) :
-    contents(new ParameterContents(t, is_buffer, d, name, is_explicit_name, register_instance)) {
+Parameter::Parameter(Type t, bool is_buffer, int d, const std::string &name) :
+    contents(new ParameterContents(t, is_buffer, d, name)) {
     internal_assert(is_buffer || d == 0) << "Scalar parameters should be zero-dimensional";
-    if (contents.defined() && contents->is_registered) {
-        ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this, nullptr);
-    }
-}
-
-Parameter::Parameter(const Parameter& that) : contents(that.contents) {
-    if (contents.defined() && contents->is_registered) {
-        ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this, nullptr);
-    }
-}
-
-Parameter& Parameter::operator=(const Parameter& that) {
-    bool was_registered = contents.defined() && contents->is_registered;
-    contents = that.contents;
-    bool should_be_registered = contents.defined() && contents->is_registered;
-    if (should_be_registered && !was_registered) {
-        // This can happen if you do:
-        // Parameter p; // undefined
-        // p = make_interesting_parameter();
-        ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this, nullptr);
-    } else if (!should_be_registered && was_registered) {
-        // This can happen if you do:
-        // Parameter p = make_interesting_parameter();
-        // p = Parameter();
-        ObjectInstanceRegistry::unregister_instance(this);
-    }
-    return *this;
-}
-
-Parameter::~Parameter() {
-    if (contents.defined() && contents->is_registered) {
-        ObjectInstanceRegistry::unregister_instance(this);
-    }
 }
 
 Type Parameter::type() const {
@@ -135,11 +85,6 @@ int Parameter::dimensions() const {
 const std::string &Parameter::name() const {
     check_defined();
     return contents->name;
-}
-
-bool Parameter::is_explicit_name() const {
-    check_defined();
-    return contents->is_explicit_name;
 }
 
 bool Parameter::is_buffer() const {
@@ -186,6 +131,11 @@ Buffer<> Parameter::buffer() const {
     return contents->buffer;
 }
 
+const halide_buffer_t *Parameter::raw_buffer() const {
+    if (!is_buffer()) return nullptr;
+    return contents->buffer.raw_buffer();
+}
+
 void Parameter::set_buffer(Buffer<> b) {
     check_is_buffer();
     if (b.defined()) {
@@ -216,31 +166,31 @@ bool Parameter::defined() const {
 void Parameter::set_min_constraint(int dim, Expr e) {
     check_is_buffer();
     check_dim_ok(dim);
-    contents->min_constraint[dim] = e;
+    contents->buffer_constraints[dim].min = e;
 }
 
 void Parameter::set_extent_constraint(int dim, Expr e) {
     check_is_buffer();
     check_dim_ok(dim);
-    contents->extent_constraint[dim] = e;
+    contents->buffer_constraints[dim].extent = e;
 }
 
 void Parameter::set_stride_constraint(int dim, Expr e) {
     check_is_buffer();
     check_dim_ok(dim);
-    contents->stride_constraint[dim] = e;
+    contents->buffer_constraints[dim].stride = e;
 }
 
 void Parameter::set_min_constraint_estimate(int dim, Expr min) {
     check_is_buffer();
     check_dim_ok(dim);
-    contents->min_constraint_estimate[dim] = min;
+    contents->buffer_constraints[dim].min_estimate = min;
 }
 
 void Parameter::set_extent_constraint_estimate(int dim, Expr extent) {
     check_is_buffer();
     check_dim_ok(dim);
-    contents->extent_constraint_estimate[dim] = extent;
+    contents->buffer_constraints[dim].extent_estimate = extent;
 }
 
 void Parameter::set_host_alignment(int bytes) {
@@ -251,31 +201,31 @@ void Parameter::set_host_alignment(int bytes) {
 Expr Parameter::min_constraint(int dim) const {
     check_is_buffer();
     check_dim_ok(dim);
-    return contents->min_constraint[dim];
+    return contents->buffer_constraints[dim].min;
 }
 
 Expr Parameter::extent_constraint(int dim) const {
     check_is_buffer();
     check_dim_ok(dim);
-    return contents->extent_constraint[dim];
+    return contents->buffer_constraints[dim].extent;
 }
 
 Expr Parameter::stride_constraint(int dim) const {
     check_is_buffer();
     check_dim_ok(dim);
-    return contents->stride_constraint[dim];
+    return contents->buffer_constraints[dim].stride;
 }
 
 Expr Parameter::min_constraint_estimate(int dim) const {
     check_is_buffer();
     check_dim_ok(dim);
-    return contents->min_constraint_estimate[dim];
+    return contents->buffer_constraints[dim].min_estimate;
 }
 
 Expr Parameter::extent_constraint_estimate(int dim) const {
     check_is_buffer();
     check_dim_ok(dim);
-    return contents->extent_constraint_estimate[dim];
+    return contents->buffer_constraints[dim].extent_estimate;
 }
 
 int Parameter::host_alignment() const {
@@ -290,13 +240,17 @@ void Parameter::set_min_value(Expr e) {
             << " of type " << contents->type
             << " to have min value " << e
             << " of type " << e.type() << "\n";
+
+        user_assert(is_const(e))
+            << "Min value for parameter " << name()
+            << " must be constant: " << e << "\n";
     }
-    contents->min_value = e;
+    contents->scalar_min = e;
 }
 
 Expr Parameter::min_value() const {
     check_is_scalar();
-    return contents->min_value;
+    return contents->scalar_min;
 }
 
 void Parameter::set_max_value(Expr e) {
@@ -307,24 +261,46 @@ void Parameter::set_max_value(Expr e) {
             << " of type " << contents->type
             << " to have max value " << e
             << " of type " << e.type() << "\n";
+
+        user_assert(is_const(e))
+            << "Max value for parameter " << name()
+            << " must be constant: " << e << "\n";
     }
-    contents->max_value = e;
+    contents->scalar_max = e;
 }
 
 Expr Parameter::max_value() const {
     check_is_scalar();
-    return contents->max_value;
+    return contents->scalar_max;
 }
 
 void Parameter::set_estimate(Expr e) {
     check_is_scalar();
-    contents->estimate = e;
+    contents->scalar_estimate = e;
 }
 
 Expr Parameter::estimate() const {
     check_is_scalar();
-    return contents->estimate;
+    return contents->scalar_estimate;
 }
+
+ArgumentEstimates Parameter::get_argument_estimates() const {
+    ArgumentEstimates argument_estimates;
+    if (!is_buffer()) {
+        argument_estimates.scalar_def = scalar_expr();
+        argument_estimates.scalar_min = min_value();
+        argument_estimates.scalar_max = max_value();
+        argument_estimates.scalar_estimate = estimate();
+    } else {
+        argument_estimates.buffer_estimates.resize(dimensions());
+        for (int i = 0; i < dimensions(); i++) {
+            argument_estimates.buffer_estimates[i].min = min_constraint_estimate(i);
+            argument_estimates.buffer_estimates[i].extent = extent_constraint_estimate(i);
+        }
+    }
+    return argument_estimates;
+}
+
 
 void check_call_arg_types(const std::string &name, std::vector<Expr> *args, int dims) {
     user_assert(args->size() == (size_t)dims)
@@ -346,7 +322,5 @@ void check_call_arg_types(const std::string &name, std::vector<Expr> *args, int 
     }
 }
 
-
-
-}
-}
+}  // namespace Internal
+}  // namespace Halide

@@ -1,11 +1,11 @@
 #ifndef HALIDE_BUFFER_H
 #define HALIDE_BUFFER_H
 
-#include "runtime/HalideBuffer.h"
-#include "IntrusivePtr.h"
-#include "Expr.h"
-#include "Util.h"
 #include "DeviceInterface.h"
+#include "Expr.h"
+#include "IntrusivePtr.h"
+#include "Util.h"
+#include "runtime/HalideBuffer.h"
 
 namespace Halide {
 
@@ -19,7 +19,7 @@ struct BufferContents {
     Runtime::Buffer<> buf;
 };
 
-EXPORT Expr buffer_accessor(const Buffer<> &buf, const std::vector<Expr> &args);
+Expr buffer_accessor(const Buffer<> &buf, const std::vector<Expr> &args);
 
 template<typename ...Args>
 struct all_ints_and_optional_name : std::false_type {};
@@ -97,7 +97,18 @@ class Buffer {
 
     template<typename T2>
     static void assert_can_convert_from(const Buffer<T2> &other) {
-        Runtime::Buffer<T>::assert_can_convert_from(*(other.get()));
+        if (!other.defined()) {
+            // Avoid UB of deferencing offset of a null contents ptr
+            static_assert((!std::is_const<T2>::value || std::is_const<T>::value),
+                        "Can't convert from a Buffer<const T> to a Buffer<T>");
+            static_assert(std::is_same<typename std::remove_const<T>::type,
+                                     typename std::remove_const<T2>::type>::value ||
+                        std::is_void<T>::value ||
+                        std::is_void<T2>::value,
+                        "type mismatch constructing Buffer");
+        } else {
+            Runtime::Buffer<T>::assert_can_convert_from(*(other.get()));
+        }
     }
 
 public:
@@ -106,10 +117,16 @@ public:
 
     // This class isn't final (and is subclassed from the Python binding
     // code, at least) so it needs a virtual dtor.
-    virtual ~Buffer() {}
+    virtual ~Buffer() = default;
 
     /** Make a null Buffer, which points to no Runtime::Buffer */
-    Buffer() {}
+    Buffer() = default;
+
+     /** Trivial copy constructor. */
+    Buffer(const Buffer &that) = default;
+
+     /** Trivial copy assignment operator. */
+    Buffer &operator=(const Buffer &that) = default;
 
     /** Make a Buffer from a Buffer of a different type */
     template<typename T2>
@@ -131,7 +148,7 @@ public:
         contents(new Internal::BufferContents) {
         contents->buf = std::move(buf);
         if (name.empty()) {
-            contents->name = Internal::make_entity_name(this, "Halide::Buffer<?", 'b');
+            contents->name = Internal::make_entity_name(this, "Halide:.*:Buffer<.*>", 'b');
         } else {
             contents->name = name;
         }
@@ -168,9 +185,20 @@ public:
                     const std::string &name = "") :
         Buffer(Runtime::Buffer<T>(t, sizes), name) {}
 
+    explicit Buffer(Type t,
+                    const std::vector<int> &sizes,
+                    const std::vector<int> &storage_order,
+                    const std::string &name = "") :
+        Buffer(Runtime::Buffer<T>(t, sizes, storage_order), name) {}
+
     explicit Buffer(const std::vector<int> &sizes,
                     const std::string &name = "") :
         Buffer(Runtime::Buffer<T>(sizes), name) {}
+
+    explicit Buffer(const std::vector<int> &sizes,
+                    const std::vector<int> &storage_order,
+                    const std::string &name = "") :
+        Buffer(Runtime::Buffer<T>(sizes, storage_order), name) {}
 
     template<typename Array, size_t N>
     explicit Buffer(Array (&vals)[N],
@@ -184,6 +212,14 @@ public:
                     int first, Args&&... rest) :
         Buffer(Runtime::Buffer<T>(t, data, Internal::get_shape_from_start_of_parameter_pack(first, rest...)),
                Internal::get_name_from_end_of_parameter_pack(rest...)) {}
+
+    template<typename ...Args,
+             typename = typename std::enable_if<Internal::all_ints_and_optional_name<Args...>::value>::type>
+    explicit Buffer(Type t,
+                    Internal::add_const_if_T_is_const<T, void> *data,
+                    const std::vector<int> &sizes,
+                    const std::string &name = "") :
+        Buffer(Runtime::Buffer<T>(t, data, sizes, name)) {}
 
     template<typename ...Args,
              typename = typename std::enable_if<Internal::all_ints_and_optional_name<Args...>::value>::type>
@@ -223,6 +259,10 @@ public:
 
     static Buffer<> make_scalar(Type t, const std::string &name = "") {
         return Buffer<>(Runtime::Buffer<>::make_scalar(t), name);
+    }
+
+    static Buffer<T> make_scalar(T *data, const std::string &name = "") {
+        return Buffer<T>(Runtime::Buffer<T>::make_scalar(data), name);
     }
 
     static Buffer<T> make_interleaved(int width, int height, int channels, const std::string &name = "") {
@@ -370,6 +410,7 @@ public:
     HALIDE_BUFFER_FORWARD(translate)
     HALIDE_BUFFER_FORWARD_INITIALIZER_LIST(translate, std::vector<int>)
     HALIDE_BUFFER_FORWARD(transpose)
+    HALIDE_BUFFER_FORWARD(transposed)
     HALIDE_BUFFER_FORWARD(add_dimension)
     HALIDE_BUFFER_FORWARD(copy_to_host)
     HALIDE_BUFFER_FORWARD(copy_to_device)
@@ -387,15 +428,38 @@ public:
     HALIDE_BUFFER_FORWARD(device_deallocate)
     HALIDE_BUFFER_FORWARD(device_free)
     HALIDE_BUFFER_FORWARD_CONST(all_equal)
-    HALIDE_BUFFER_FORWARD(fill)
-    HALIDE_BUFFER_FORWARD_CONST(for_each_element)
 
 #undef HALIDE_BUFFER_FORWARD
 #undef HALIDE_BUFFER_FORWARD_CONST
 
     template<typename Fn, typename ...Args>
-    void for_each_value(Fn &&f, Args... other_buffers) {
-        return get()->for_each_value(std::forward<Fn>(f), (*std::forward<Args>(other_buffers).get())...);
+    Buffer<T> &for_each_value(Fn &&f, Args... other_buffers) {
+        get()->for_each_value(std::forward<Fn>(f), (*std::forward<Args>(other_buffers).get())...);
+        return *this;
+    }
+
+    template<typename Fn, typename ...Args>
+    const Buffer<T> &for_each_value(Fn &&f, Args... other_buffers) const {
+        get()->for_each_value(std::forward<Fn>(f), (*std::forward<Args>(other_buffers).get())...);
+        return *this;
+    }
+
+    template<typename Fn>
+    Buffer<T> &for_each_element(Fn &&f) {
+        get()->for_each_element(std::forward<Fn>(f));
+        return *this;
+    }
+
+    template<typename Fn>
+    const Buffer<T> &for_each_element(Fn &&f) const {
+        get()->for_each_element(std::forward<Fn>(f));
+        return *this;
+    }
+
+    template<typename FnOrValue>
+    Buffer<T> &fill(FnOrValue &&f) {
+        get()->fill(std::forward<FnOrValue>(f));
+        return *this;
     }
 
     static constexpr bool has_static_halide_type = Runtime::Buffer<T>::has_static_halide_type;
@@ -423,7 +487,7 @@ public:
     }
 
     Buffer<T> copy() const {
-        return Buffer<T>(std::move(contents->buf.copy()));
+        return Buffer<T>(std::move(contents->buf.as<T>().copy()));
     }
 
     template<typename T2>
@@ -478,7 +542,6 @@ public:
     };
     // @}
 
-
     /** Copy to the GPU, using the device API that is the default for the given Target. */
     int copy_to_device(const Target &t = get_jit_target_from_environment()) {
         return copy_to_device(DeviceAPI::Default_GPU, t);
@@ -507,9 +570,8 @@ public:
     int device_wrap_native(const DeviceAPI &d, uint64_t handle, const Target &t = get_jit_target_from_environment()) {
         return contents->buf.device_wrap_native(get_device_interface_for_device_api(d, t, "Buffer::device_wrap_native"), handle);
     }
-
 };
 
-}
+}  // namespace Halide
 
 #endif

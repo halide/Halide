@@ -32,9 +32,11 @@ typedef int (*remote_run_fn)(halide_hexagon_handle_t, int,
 typedef int (*remote_release_library_fn)(halide_hexagon_handle_t);
 typedef int (*remote_poll_log_fn)(char *, int, int *);
 typedef void (*remote_poll_profiler_state_fn)(int *, int *);
+typedef int (*remote_profiler_set_current_func_fn)(int);
 typedef int (*remote_power_fn)();
 typedef int (*remote_power_mode_fn)(int);
 typedef int (*remote_power_perf_fn)(int, unsigned int, unsigned int, int, unsigned int, unsigned int, int, int);
+typedef int (*remote_thread_priority_fn)(int);
 
 typedef void (*host_malloc_init_fn)();
 typedef void *(*host_malloc_fn)(size_t);
@@ -46,10 +48,12 @@ WEAK remote_run_fn remote_run = NULL;
 WEAK remote_release_library_fn remote_release_library = NULL;
 WEAK remote_poll_log_fn remote_poll_log = NULL;
 WEAK remote_poll_profiler_state_fn remote_poll_profiler_state = NULL;
+WEAK remote_profiler_set_current_func_fn remote_profiler_set_current_func = NULL;
 WEAK remote_power_fn remote_power_hvx_on = NULL;
 WEAK remote_power_fn remote_power_hvx_off = NULL;
 WEAK remote_power_perf_fn remote_set_performance = NULL;
 WEAK remote_power_mode_fn remote_set_performance_mode = NULL;
+WEAK remote_thread_priority_fn remote_set_thread_priority = NULL;
 
 WEAK host_malloc_init_fn host_malloc_init = NULL;
 WEAK host_malloc_init_fn host_malloc_deinit = NULL;
@@ -142,12 +146,14 @@ WEAK int init_hexagon_runtime(void *user_context) {
     // These symbols are optional.
     get_symbol(user_context, host_lib, "halide_hexagon_remote_poll_log", remote_poll_log, /* required */ false);
     get_symbol(user_context, host_lib, "halide_hexagon_remote_poll_profiler_state", remote_poll_profiler_state, /* required */ false);
+    get_symbol(user_context, host_lib, "halide_hexagon_remote_profiler_set_current_func", remote_profiler_set_current_func, /* required */ false);
 
     // If these are unavailable, then the runtime always powers HVX on and so these are not necessary.
     get_symbol(user_context, host_lib, "halide_hexagon_remote_power_hvx_on", remote_power_hvx_on, /* required */ false);
     get_symbol(user_context, host_lib, "halide_hexagon_remote_power_hvx_off", remote_power_hvx_off, /* required */ false);
     get_symbol(user_context, host_lib, "halide_hexagon_remote_set_performance", remote_set_performance, /* required */ false);
     get_symbol(user_context, host_lib, "halide_hexagon_remote_set_performance_mode", remote_set_performance_mode, /* required */ false);
+    get_symbol(user_context, host_lib, "halide_hexagon_remote_set_thread_priority", remote_set_thread_priority, /* required */ false);
 
     host_malloc_init();
 
@@ -164,6 +170,26 @@ struct module_state {
 };
 WEAK module_state *state_list = NULL;
 WEAK halide_hexagon_handle_t shared_runtime = 0;
+
+#ifdef DEBUG_RUNTIME
+
+// In debug builds, we write shared objects to the current directory (without
+// failing on errors).
+WEAK void write_shared_object(void *user_context, const char* path,
+                              const uint8_t* code, uint64_t code_size) {
+    void *f = fopen(path, "wb");
+    if (!f) {
+        debug(user_context) << "    failed to write shared object to '" << path << "'\n";
+        return;
+    }
+    size_t written = fwrite(code, 1, code_size, f);
+    if (written != code_size) {
+        debug(user_context) << "    bad write of shared object to '" << path << "'\n";
+    }
+    fclose(f);
+}
+
+#endif
 
 }}}}  // namespace Halide::Runtime::Internal::Hexagon
 
@@ -207,11 +233,15 @@ WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
     if (!shared_runtime) {
         debug(user_context) << "    Initializing shared runtime\n";
         const char soname[] = "libhalide_shared_runtime.so";
+        #ifdef DEBUG_RUNTIME
+        debug(user_context) << "    Writing shared object '" << soname << "'\n";
+        write_shared_object(user_context, soname, runtime, runtime_size);
+        #endif
         debug(user_context) << "    halide_remote_load_library(" << soname << ") -> ";
         result = remote_load_library(soname, sizeof(soname), runtime, runtime_size, &shared_runtime);
         poll_log(user_context);
         if (result == 0) {
-            debug(user_context) << "        " << shared_runtime << "\n";
+            debug(user_context) << "        " << (void *)(size_t)shared_runtime << "\n";
             halide_assert(user_context, shared_runtime != 0);
         } else {
             debug(user_context) << "        " << result << "\n";
@@ -219,7 +249,7 @@ WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
             shared_runtime = 0;
         }
     } else {
-        debug(user_context) << "    re-using existing shared runtime " << shared_runtime << "\n";
+        debug(user_context) << "    re-using existing shared runtime " << (void *)(size_t)shared_runtime << "\n";
     }
 
     if (result != 0) {
@@ -241,19 +271,23 @@ WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
         static int unique_id = 0;
         stringstream soname(user_context);
         soname << "libhalide_kernels" << unique_id++ << ".so";
+        #ifdef DEBUG_RUNTIME
+        debug(user_context) << "    Writing shared object '" << soname.str() << "'\n";
+        write_shared_object(user_context, soname.str(), code, code_size);
+        #endif
         debug(user_context) << "    halide_remote_load_library(" << soname.str() << ") -> ";
         halide_hexagon_handle_t module = 0;
         result = remote_load_library(soname.str(), soname.size() + 1, code, code_size, &module);
         poll_log(user_context);
         if (result == 0) {
-            debug(user_context) << "        " << module << "\n";
+            debug(user_context) << "        " << (void *)(size_t)module << "\n";
             (*state)->module = module;
         } else {
             debug(user_context) << "        " << result << "\n";
             error(user_context) << "Initialization of Hexagon kernels failed\n";
         }
     } else {
-        debug(user_context) << "    re-using existing module " << (*state)->module << "\n";
+        debug(user_context) << "    re-using existing module " << (void *)(size_t)(*state)->module << "\n";
     }
 
     #ifdef DEBUG_RUNTIME
@@ -263,6 +297,7 @@ WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
 
     return result != 0 ? -1 : 0;
 }
+
 namespace {
 
 // Prepare an array of remote_buffer arguments, mapping buffers if
@@ -277,14 +312,19 @@ WEAK int map_arguments(void *user_context, int arg_count,
         if ((arg_flags[i] & flag_mask) != flag_value) continue;
         remote_buffer &mapped_arg = mapped_args[mapped_count++];
         if (arg_flags[i] != 0) {
-            // This is a buffer, map it and put the mapped buffer into
-            // the result.
-            halide_assert(user_context, arg_sizes[i] == sizeof(uint64_t));
-            uint64_t device_handle = ((halide_buffer_t *)args[i])->device;
-            ion_device_handle *ion_handle = reinterpret<ion_device_handle *>(device_handle);
-            debug(user_context) << i << ", " << device_handle << "\n";
-            mapped_arg.data = reinterpret_cast<uint8_t*>(ion_handle->buffer);
-            mapped_arg.dataLen = ion_handle->size;
+            uint64_t device = *(uint64_t *)args[i];
+            uint8_t* host = *(uint8_t **)((uint8_t *)args[i] + sizeof(uint64_t));
+            if (device) {
+                // This argument has a device handle.
+                ion_device_handle *ion_handle = reinterpret<ion_device_handle *>(device);
+                debug(user_context) << i << ", " << device << "\n";
+                mapped_arg.data = reinterpret_cast<uint8_t*>(ion_handle->buffer);
+                mapped_arg.dataLen = ion_handle->size;
+            } else {
+                // This is just a host buffer, and the size is passed in as the arg size.
+                mapped_arg.data = host;
+                mapped_arg.dataLen = arg_sizes[i];
+            }
         } else {
             // This is a scalar, just put the pointer/size in the result.
             mapped_arg.data = (uint8_t*)args[i];
@@ -364,6 +404,9 @@ WEAK int halide_hexagon_run(void *user_context,
     // will be billed to the calling Func.
     if (remote_poll_profiler_state) {
         halide_profiler_get_state()->get_remote_profiler_state = get_remote_profiler_state;
+        if (remote_profiler_set_current_func) {
+            remote_profiler_set_current_func(halide_profiler_get_state()->current_func);
+        }
     }
 
     // Call the pipeline on the device side.
@@ -669,29 +712,86 @@ WEAK int halide_hexagon_device_and_host_free(void *user_context, struct halide_b
     return 0;
 }
 
-WEAK int halide_hexagon_device_crop(void *user_context, const struct halide_buffer_t *src,
-                                    struct halide_buffer_t *dst) {
-    debug(user_context) << "halide_hexagon_device_crop called.\n";
+WEAK int halide_hexagon_buffer_copy(void *user_context, struct halide_buffer_t *src,
+                                 const struct halide_device_interface_t *dst_device_interface,
+                                 struct halide_buffer_t *dst) {
+    // We only handle copies to hexagon buffers or to host
+    halide_assert(user_context, dst_device_interface == NULL ||
+                  dst_device_interface == &hexagon_device_interface);
 
-    // Pointer arithmetic works fine.
-    int64_t offset = 0;
-    for (int i = 0; i < src->dimensions; i++) {
-        offset += (dst->dim[i].min - src->dim[i].min) * src->dim[i].stride;
+    if ((src->device_dirty() || src->host == NULL) &&
+        src->device_interface != &hexagon_device_interface) {
+        halide_assert(user_context, dst_device_interface == &hexagon_device_interface);
+        // This is handled at the higher level.
+        return halide_error_code_incompatible_device_interface;
     }
-    offset *= src->type.bytes();
 
+    bool from_host = (src->device_interface != &hexagon_device_interface) ||
+                     (src->device == 0) ||
+                     (src->host_dirty() && src->host != NULL);
+    bool to_host = !dst_device_interface;
+
+    halide_assert(user_context, from_host || src->device);
+    halide_assert(user_context, to_host || dst->device);
+
+    #ifdef DEBUG_RUNTIME
+    uint64_t t_before = halide_current_time_ns(user_context);
+    #endif
+
+    device_copy c = make_buffer_copy(src, from_host, dst, to_host);
+
+    int err = 0;
+
+    // Get the descriptor associated with the ion buffer.
+    if (!from_host) {
+        c.src = reinterpret<uintptr_t>(halide_hexagon_get_device_handle(user_context, src));
+    }
+    if (!to_host) {
+        c.dst = reinterpret<uintptr_t>(halide_hexagon_get_device_handle(user_context, dst));
+    }
+    copy_memory(c, user_context);
+
+    #ifdef DEBUG_RUNTIME
+    uint64_t t_after = halide_current_time_ns(user_context);
+    debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
+    #endif
+
+    return err;
+}
+
+namespace {
+
+WEAK int hexagon_device_crop_from_offset(const struct halide_buffer_t *src, int64_t offset, struct halide_buffer_t *dst) {
     ion_device_handle *src_handle = (ion_device_handle *)src->device;
     ion_device_handle *dst_handle = (ion_device_handle *)malloc(sizeof(ion_device_handle));
     if (!dst_handle) {
         return halide_error_code_out_of_memory;
     }
-    
+
     dst_handle->buffer = (uint8_t *)src_handle->buffer + offset;
     dst_handle->size = src_handle->size - offset;
     dst->device = reinterpret<uint64_t>(dst_handle);
     dst->device_interface = src->device_interface;
     dst->set_device_dirty(src->device_dirty());
     return 0;
+}
+
+}  // namespace
+
+WEAK int halide_hexagon_device_crop(void *user_context, const struct halide_buffer_t *src,
+                                    struct halide_buffer_t *dst) {
+    debug(user_context) << "halide_hexagon_device_crop called.\n";
+
+    const int64_t offset = calc_device_crop_byte_offset(src, dst);
+    return hexagon_device_crop_from_offset(src, offset, dst);
+}
+
+WEAK int halide_hexagon_device_slice(void *user_context, const struct halide_buffer_t *src,
+                                     int slice_dim, int slice_pos, struct halide_buffer_t *dst) {
+    debug(user_context) << "halide_hexagon_device_slice called.\n";
+
+    const int64_t offset = calc_device_slice_byte_offset(src, slice_dim, slice_pos);
+    return hexagon_device_crop_from_offset(src, offset, dst);
 }
 
 WEAK int halide_hexagon_device_release_crop(void *user_context, struct halide_buffer_t *dst) {
@@ -816,6 +916,27 @@ WEAK int halide_hexagon_set_performance(void *user_context, halide_hexagon_power
     return 0;
 }
 
+WEAK int halide_hexagon_set_thread_priority(void *user_context, int priority) {
+    int result = init_hexagon_runtime(user_context);
+    if (result != 0) return result;
+
+    debug(user_context) << "halide_hexagon_set_thread_priority\n";
+    if (!remote_set_thread_priority) {
+        // This runtime doesn't support changing the thread priority.
+        return 0;
+    }
+
+    debug(user_context) << "    remote_set_thread_priority -> ";
+    result = remote_set_thread_priority(priority);
+    debug(user_context) << "        " << result << "\n";
+    if (result != 0) {
+        error(user_context) << "remote_set_thread_priority failed.\n";
+        return result;
+    }
+
+    return 0;
+}
+
 WEAK const halide_device_interface_t *halide_hexagon_device_interface() {
     return &hexagon_device_interface;
 }
@@ -842,8 +963,9 @@ WEAK halide_device_interface_impl_t hexagon_device_interface_impl = {
     halide_hexagon_copy_to_device,
     halide_hexagon_device_and_host_malloc,
     halide_hexagon_device_and_host_free,
-    halide_default_buffer_copy,
+    halide_hexagon_buffer_copy,
     halide_hexagon_device_crop,
+    halide_hexagon_device_slice,
     halide_hexagon_device_release_crop,
     halide_default_device_wrap_native,
     halide_default_device_detach_native,
@@ -860,9 +982,11 @@ WEAK halide_device_interface_t hexagon_device_interface = {
     halide_device_and_host_free,
     halide_buffer_copy,
     halide_device_crop,
+    halide_device_slice,
     halide_device_release_crop,
     halide_device_wrap_native,
     halide_device_detach_native,
+    NULL,
     &hexagon_device_interface_impl
 };
 

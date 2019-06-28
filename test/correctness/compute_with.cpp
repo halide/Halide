@@ -4,6 +4,8 @@
 #include <stdio.h>
 #include <map>
 
+namespace {
+
 using std::map;
 using std::string;
 
@@ -30,6 +32,11 @@ struct Bound {
 };
 
 map<string, Bound> stores, loads;
+// These mutexes (mutices?) are only needed for accessing stores/loads
+// from the my_trace callback (which can be called by multiple threads);
+// the ordinary code that initializes stores/loads is single-threaded
+// and has no contention.
+std::mutex stores_mutex, loads_mutex;
 
 // Return true if the coordinate values in 'coordinates' are within the bound 'b'
 bool check_coordinates(const Bound &b, const int32_t *coordinates, int32_t dims, int32_t lanes,
@@ -50,6 +57,7 @@ bool check_coordinates(const Bound &b, const int32_t *coordinates, int32_t dims,
 int my_trace(void *user_context, const halide_trace_event_t *e) {
     string fname = std::string(e->func);
     if (e->event == halide_trace_store) {
+        std::lock_guard<std::mutex> lock(stores_mutex);
         const auto &iter = stores.find(fname);
         if (iter != stores.end()) {
             const Bound &b = iter->second;
@@ -58,6 +66,7 @@ int my_trace(void *user_context, const halide_trace_event_t *e) {
             }
         }
     } else if (e->event == halide_trace_load) {
+        std::lock_guard<std::mutex> lock(loads_mutex);
         const auto &iter = loads.find(fname);
         if (iter != loads.end()) {
             const Bound &b = iter->second;
@@ -629,6 +638,7 @@ int vectorize_test() {
     return 0;
 }
 
+/*
 int some_are_skipped_test() {
     Buffer<int> im_ref, im;
     {
@@ -689,6 +699,7 @@ int some_are_skipped_test() {
     }
     return 0;
 }
+*/
 
 int multiple_outputs_on_gpu_test() {
     Target target = get_jit_target_from_environment();
@@ -1162,6 +1173,8 @@ int nested_compute_with_test() {
     return 0;
 }
 
+}  // namespace
+
 int main(int argc, char **argv) {
     printf("Running split reorder test\n");
     if (split_test() != 0) {
@@ -1193,10 +1206,15 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    printf("Running some are skipped test\n");
-    if (some_are_skipped_test() != 0) {
-        return -1;
-    }
+    /*
+     * Note: we are deprecating skipping parts of a fused group in favor of
+     *       cloning funcs in particular stages via a new (clone_)in overload.
+     * TODO: remove this code when the new clone_in is implemented.
+     */
+//    printf("Running some are skipped test\n");
+//    if (some_are_skipped_test() != 0) {
+//        return -1;
+//    }
 
     printf("Running rgb to yuv420 test\n");
     if (rgb_yuv420_test() != 0) {

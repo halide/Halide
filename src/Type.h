@@ -171,6 +171,8 @@ HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_buffer_t);
 HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_dimension_t);
 HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_device_interface_t);
 HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_filter_metadata_t);
+HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_semaphore_t);
+HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_parallel_task_t);
 
 // You can make arbitrary user-defined types be "Known" using the
 // macro above. This is useful for making Param<> arguments for
@@ -295,23 +297,31 @@ struct Type {
     /** Trivial copy constructor. */
     Type(const Type &that) = default;
 
+    /** Trivial copy assignment operator. */
+    Type &operator=(const Type &that) = default;
+
     /** Type is a wrapper around halide_type_t with more methods for use
      * inside the compiler. This simply constructs the wrapper around
      * the runtime value. */
+    HALIDE_ALWAYS_INLINE
     Type(const halide_type_t &that, const halide_handle_cplusplus_type *handle_type = nullptr)
          : type(that), handle_type(handle_type) {}
 
     /** Unwrap the runtime halide_type_t for use in runtime calls, etc.
      * Representation is exactly equivalent. */
+    HALIDE_ALWAYS_INLINE
     operator halide_type_t() const { return type; }
 
     /** Return the underlying data type of an element as an enum value. */
+    HALIDE_ALWAYS_INLINE
     halide_type_code_t code() const { return (halide_type_code_t)type.code; }
 
     /** Return the bit size of a single element of this type. */
+    HALIDE_ALWAYS_INLINE
     int bits() const { return type.bits; }
 
     /** Return the number of vector elements in this type. */
+    HALIDE_ALWAYS_INLINE
     int lanes() const { return type.lanes; }
 
     /** Return Type with same number of bits and lanes, but new_code for a type code. */
@@ -336,49 +346,57 @@ struct Type {
     const halide_handle_cplusplus_type *handle_type;
 
     /** Is this type boolean (represented as UInt(1))? */
+    HALIDE_ALWAYS_INLINE
     bool is_bool() const {return code() == UInt && bits() == 1;}
 
     /** Is this type a vector type? (lanes() != 1).
      * TODO(abadams): Decide what to do for lanes() == 0. */
+    HALIDE_ALWAYS_INLINE
     bool is_vector() const {return lanes() != 1;}
 
     /** Is this type a scalar type? (lanes() == 1).
      * TODO(abadams): Decide what to do for lanes() == 0. */
+    HALIDE_ALWAYS_INLINE
     bool is_scalar() const {return lanes() == 1;}
 
     /** Is this type a floating point type (float or double). */
+    HALIDE_ALWAYS_INLINE
     bool is_float() const {return code() == Float;}
 
     /** Is this type a signed integer type? */
+    HALIDE_ALWAYS_INLINE
     bool is_int() const {return code() == Int;}
 
     /** Is this type an unsigned integer type? */
+    HALIDE_ALWAYS_INLINE
     bool is_uint() const {return code() == UInt;}
 
+    /** Is this type an integer type of any sort? */
+    HALIDE_ALWAYS_INLINE
+    bool is_int_or_uint() const {return code() == Int || code() == UInt;}
+
     /** Is this type an opaque handle type (void *) */
+    HALIDE_ALWAYS_INLINE
     bool is_handle() const {return code() == Handle;}
 
     /** Check that the type name of two handles matches. */
-    EXPORT bool same_handle_type(const Type &other) const;
+    bool same_handle_type(const Type &other) const;
 
     /** Compare two types for equality */
     bool operator==(const Type &other) const {
-        return code() == other.code() && bits() == other.bits() && lanes() == other.lanes() &&
-            (code() != Handle || same_handle_type(other));
+        return type == other.type && (code() != Handle || same_handle_type(other));
     }
 
     /** Compare two types for inequality */
     bool operator!=(const Type &other) const {
-        return code() != other.code() || bits() != other.bits() || lanes() != other.lanes() ||
-            (code() == Handle && !same_handle_type(other));
+        return type != other.type || (code() == Handle && !same_handle_type(other));
     }
 
     /** Compare ordering of two types so they can be used in certain containers and algorithms */
     bool operator<(const Type &other) const {
-        return code() < other.code() || (code() == other.code() &&
-              (bits() < other.bits() || (bits() == other.bits() &&
-              (lanes() < other.lanes() || (lanes() == other.lanes() &&
-              (code() == Handle && handle_type < other.handle_type))))));
+        if (type < other.type) return true;
+        if (code() == Handle) return handle_type < other.handle_type;
+        return false;
     }
 
     /** Produce the scalar type (that of a single element) of this vector type */
@@ -387,31 +405,31 @@ struct Type {
     }
 
     /** Can this type represent all values of another type? */
-    EXPORT bool can_represent(Type other) const;
+    bool can_represent(Type other) const;
 
     /** Can this type represent a particular constant? */
     // @{
-    EXPORT bool can_represent(double x) const;
-    EXPORT bool can_represent(int64_t x) const;
-    EXPORT bool can_represent(uint64_t x) const;
+    bool can_represent(double x) const;
+    bool can_represent(int64_t x) const;
+    bool can_represent(uint64_t x) const;
     // @}
 
     /** Check if an integer constant value is the maximum or minimum
      * representable value for this type. */
     // @{
-    EXPORT bool is_max(uint64_t) const;
-    EXPORT bool is_max(int64_t) const;
-    EXPORT bool is_min(uint64_t) const;
-    EXPORT bool is_min(int64_t) const;
+    bool is_max(uint64_t) const;
+    bool is_max(int64_t) const;
+    bool is_min(uint64_t) const;
+    bool is_min(int64_t) const;
     // @}
 
     /** Return an expression which is the maximum value of this type.
      * Returns infinity for types which can represent it. */
-    EXPORT Expr max() const;
+    Expr max() const;
 
     /** Return an expression which is the minimum value of this type.
      * Returns -infinity for types which can represent it. */
-    EXPORT Expr min() const;
+    Expr min() const;
 };
 
 /** Constructing a signed integer type */

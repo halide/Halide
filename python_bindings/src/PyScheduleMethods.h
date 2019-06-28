@@ -8,7 +8,7 @@ namespace PythonBindings {
 
 // Methods that are defined on both Func and Stage.
 template <typename PythonClass>
-NO_INLINE void add_schedule_methods(PythonClass &class_instance) {
+HALIDE_NEVER_INLINE void add_schedule_methods(PythonClass &class_instance) {
     using T = typename PythonClass::type;
 
     class_instance
@@ -75,10 +75,7 @@ NO_INLINE void add_schedule_methods(PythonClass &class_instance) {
     .def("gpu_single_thread", (T &(T::*)(DeviceAPI)) &T::gpu_single_thread,
         py::arg("device_api") = DeviceAPI::Default_GPU)
 
-    .def("gpu_tile", (T &(T::*)(VarOrRVar, VarOrRVar, Var, Expr, TailStrategy, DeviceAPI)) &T::gpu_tile,
-        py::arg("x"), py::arg("bx"), py::arg("tx"), py::arg("x_size"),
-        py::arg("tail") = TailStrategy::Auto, py::arg("device_api") = DeviceAPI::Default_GPU)
-    .def("gpu_tile", (T &(T::*)(VarOrRVar, VarOrRVar, RVar, Expr, TailStrategy, DeviceAPI)) &T::gpu_tile,
+    .def("gpu_tile", (T &(T::*)(VarOrRVar, VarOrRVar, VarOrRVar, Expr, TailStrategy, DeviceAPI)) &T::gpu_tile,
         py::arg("x"), py::arg("bx"), py::arg("tx"), py::arg("x_size"),
         py::arg("tail") = TailStrategy::Auto, py::arg("device_api") = DeviceAPI::Default_GPU)
 
@@ -90,10 +87,7 @@ NO_INLINE void add_schedule_methods(PythonClass &class_instance) {
         py::arg("x"), py::arg("y"), py::arg("bx"), py::arg("by"), py::arg("tx"), py::arg("ty"), py::arg("x_size"), py::arg("y_size"),
         py::arg("tail") = TailStrategy::Auto, py::arg("device_api") = DeviceAPI::Default_GPU)
 
-    .def("gpu_tile", (T &(T::*)(VarOrRVar, VarOrRVar, VarOrRVar, Var, Expr, Expr, TailStrategy, DeviceAPI)) &T::gpu_tile,
-        py::arg("x"), py::arg("y"), py::arg("tx"), py::arg("ty"), py::arg("x_size"), py::arg("y_size"),
-        py::arg("tail") = TailStrategy::Auto, py::arg("device_api") = DeviceAPI::Default_GPU)
-    .def("gpu_tile", (T &(T::*)(VarOrRVar, VarOrRVar, VarOrRVar, RVar, Expr, Expr, TailStrategy, DeviceAPI)) &T::gpu_tile,
+    .def("gpu_tile", (T &(T::*)(VarOrRVar, VarOrRVar, VarOrRVar, VarOrRVar, Expr, Expr, TailStrategy, DeviceAPI)) &T::gpu_tile,
         py::arg("x"), py::arg("y"), py::arg("tx"), py::arg("ty"), py::arg("x_size"), py::arg("y_size"),
         py::arg("tail") = TailStrategy::Auto, py::arg("device_api") = DeviceAPI::Default_GPU)
 

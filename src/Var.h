@@ -18,10 +18,10 @@ class Var {
     std::string _name;
 public:
     /** Construct a Var with the given name */
-    EXPORT Var(const std::string &n);
+    Var(const std::string &n);
 
     /** Construct a Var with an automatically-generated unique name. */
-    EXPORT Var();
+    Var();
 
     /** Get the name of a Var */
     const std::string &name() const {return _name;}
@@ -107,7 +107,7 @@ public:
      * anonymous functions (e.g. Func(_0 + _1)) this is considered
      * poor style. Instead use \ref lambda.
      */
-    EXPORT static Var implicit(int n);
+    static Var implicit(int n);
 
     /** Return whether a variable name is of the form for an implicit argument.
      * TODO: This is almost guaranteed to incorrectly fire on user
@@ -115,7 +115,7 @@ public:
      * user Var declarations from making names of this form.
      */
     //{
-    EXPORT static bool is_implicit(const std::string &name);
+    static bool is_implicit(const std::string &name);
     bool is_implicit() const {
         return is_implicit(name());
     }
@@ -149,41 +149,55 @@ public:
         return Internal::Variable::make(Int(32), name());
     }
 
-    /** Vars to use for scheduling producer/consumer pairs on the gpu. Deprecated. */
-    // @{
-    HALIDE_ATTRIBUTE_DEPRECATED("Var::gpu_blocks() is deprecated.")
-    static Var gpu_blocks() {
-        return Var("__deprecated_block_id_x");
-    }
-    HALIDE_ATTRIBUTE_DEPRECATED("Var::gpu_threads() is deprecated.")
-    static Var gpu_threads() {
-        return Var("__deprecated_thread_id_x");
-    }
-    // @}
-
     /** A Var that represents the location outside the outermost loop. */
     static Var outermost() {
         return Var("__outermost");
     }
-
 };
 
-/** A placeholder variable for infered arguments. See \ref Var::implicit */
-EXPORT extern Var _;
+template<int N = -1>
+struct ImplicitVar {
+    Var to_var() const {
+        if (N >= 0) {
+            return Var::implicit(N);
+        } else {
+            return Var("_");
+        }
+    }
+
+    operator Var() const {
+        return to_var();
+    }
+    operator Expr() const {
+        return to_var();
+    }
+};
+
+/** A placeholder variable for inferred arguments. See \ref Var::implicit */
+static constexpr ImplicitVar<> _;
 
 /** The first ten implicit Vars for use in scheduling. See \ref Var::implicit */
 // @{
-EXPORT extern Var _0, _1, _2, _3, _4, _5, _6, _7, _8, _9;
+static constexpr ImplicitVar<0> _0;
+static constexpr ImplicitVar<1> _1;
+static constexpr ImplicitVar<2> _2;
+static constexpr ImplicitVar<3> _3;
+static constexpr ImplicitVar<4> _4;
+static constexpr ImplicitVar<5> _5;
+static constexpr ImplicitVar<6> _6;
+static constexpr ImplicitVar<7> _7;
+static constexpr ImplicitVar<8> _8;
+static constexpr ImplicitVar<9> _9;
 // @}
 
 namespace Internal {
 
 /** Make a list of unique arguments for definitions with unnamed
     arguments. */
-EXPORT std::vector<Var> make_argument_list(int dimensionality);
+std::vector<Var> make_argument_list(int dimensionality);
 
-}
+}  // namespace Internal
 
-}
+}  // namespace Halide
 
 #endif

@@ -1,14 +1,14 @@
+#include <algorithm>
+#include <cmath>
 #include <iostream>
 #include <sstream>
-#include <cmath>
-#include <algorithm>
 
+#include "CSE.h"
+#include "Debug.h"
+#include "IREquality.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
-#include "IREquality.h"
 #include "Var.h"
-#include "Debug.h"
-#include "CSE.h"
 
 namespace Halide {
 
@@ -46,7 +46,8 @@ Expr evaluate_polynomial(const Expr &x, float *coeff, int n) {
         return odd_terms * std::move(x) + even_terms;
     }
 }
-}
+
+}  // namespace
 
 namespace Internal {
 
@@ -92,7 +93,7 @@ bool is_no_op(const Stmt &s) {
 class ExprIsPure : public IRVisitor {
     using IRVisitor::visit;
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         if (!op->is_pure()) {
             result = false;
         } else {
@@ -100,7 +101,25 @@ class ExprIsPure : public IRVisitor {
         }
     }
 
-    void visit(const Load *op) {
+    void visit(const Div *op) override {
+        if (!op->type.is_float() && (!is_const(op->b) || is_zero(op->b))) {
+            // Division by zero is a side-effect
+            result = false;
+        } else {
+            IRVisitor::visit(op);
+        }
+    }
+
+    void visit(const Mod *op) override {
+        if (!op->type.is_float() && (!is_const(op->b) || is_zero(op->b))) {
+            // Mod by zero is a side-effect
+            result = false;
+        } else {
+            IRVisitor::visit(op);
+        }
+    }
+
+    void visit(const Load *op) override {
         if (!op->image.defined() && !op->param.defined()) {
             // It's a load from an internal buffer, which could
             // mutate.
@@ -296,7 +315,7 @@ Expr make_const_helper(Type t, T val) {
         return Expr();
     }
 }
-}
+}  // namespace
 
 Expr make_const(Type t, int64_t val) {
     return make_const_helper(t, val);
@@ -329,6 +348,16 @@ Expr make_one(Type t) {
 
 Expr make_two(Type t) {
     return make_const(t, 2);
+}
+
+Expr make_indeterminate_expression(Type type) {
+    static std::atomic<int> counter;
+    return Call::make(type, Call::indeterminate_expression, {counter++}, Call::Intrinsic);
+}
+
+Expr make_signed_integer_overflow(Type type) {
+    static std::atomic<int> counter;
+    return Call::make(type, Call::signed_integer_overflow, {counter++}, Call::Intrinsic);
 }
 
 Expr const_true(int w) {
@@ -413,7 +442,7 @@ void match_types(Expr &a, Expr &b) {
         << "Can't do arithmetic on opaque pointer types: "
         << a << ", " << b << "\n";
 
-    // First widen to match
+    // Broadcast scalar to match vector
     if (a.type().is_scalar() && b.type().is_vector()) {
         a = Broadcast::make(std::move(a), b.type().lanes());
     } else if (a.type().is_vector() && b.type().is_scalar()) {
@@ -424,7 +453,7 @@ void match_types(Expr &a, Expr &b) {
 
     Type ta = a.type(), tb = b.type();
 
-    // If type widening has made the types match no additional casts are needed
+    // If type broadcasting has made the types match no additional casts are needed
     if (ta == tb) return;
 
     if (!ta.is_float() && tb.is_float()) {
@@ -449,6 +478,36 @@ void match_types(Expr &a, Expr &b) {
         b = cast(Int(bits, lanes), std::move(b));
     } else {
         internal_error << "Could not match types: " << ta << ", " << tb << "\n";
+    }
+}
+
+void match_types_bitwise(Expr &x, Expr &y, const char *op_name) {
+    user_assert(x.defined() && y.defined()) << op_name << " of undefined Expr\n";
+    user_assert(x.type().is_int() || x.type().is_uint())
+      << "The first argument to " << op_name << " must be an integer or unsigned integer";
+    user_assert(y.type().is_int() || y.type().is_uint())
+      << "The second argument to " << op_name << " must be an integer or unsigned integer";
+    user_assert(y.type().is_int() == x.type().is_int())
+      << "Arguments to " << op_name
+      << " must be both be signed or both be unsigned.\n"
+      << "LHS type: " << x.type() << " RHS type: " << y.type() << "\n"
+      << "LHS value: " << x << " RHS value: " << y << "\n";
+
+    // Broadcast scalar to match vector
+    if (x.type().is_scalar() && y.type().is_vector()) {
+        x = Broadcast::make(std::move(x), y.type().lanes());
+    } else if (x.type().is_vector() && y.type().is_scalar()) {
+        y = Broadcast::make(std::move(y), x.type().lanes());
+    } else {
+        internal_assert(x.type().lanes() == y.type().lanes()) << "Can't match types of differing widths";
+    }
+
+    // Cast to the wider type of the two. Already guaranteed to leave
+    // signed/unsigned on number of lanes unchanged.
+    if (x.type().bits() < y.type().bits()) {
+        x = cast(y.type(), x);
+    } else if (y.type().bits() < x.type().bits()) {
+        y = cast(x.type(), y);
     }
 }
 
@@ -760,7 +819,7 @@ Expr strided_ramp_base(Expr e, int stride) {
     return Expr();
 }
 
-} // namespace Internal
+}  // namespace Internal
 
 Expr fast_log(Expr x) {
     user_assert(x.type() == Float(32)) << "fast_log only works for Float(32)";
@@ -784,6 +843,53 @@ Expr fast_log(Expr x) {
     result = result + cast<float>(exponent) * logf(2);
     result = common_subexpression_elimination(result);
     return result;
+}
+
+// A vectorizable sine and cosine implementation. Based on syrah fast vector math
+// https://github.com/boulos/syrah/blob/master/src/include/syrah/FixedVectorMath.h#L55
+Expr fast_sin_cos(Expr x_full, bool is_sin) {
+    const float two_over_pi = 0.636619746685028076171875f;
+    const float pi_over_two = 1.57079637050628662109375f;
+    Expr scaled = x_full * two_over_pi;
+    Expr k_real = floor(scaled);
+    Expr k = cast<int>(k_real);
+    Expr k_mod4 = k % 4;
+    Expr sin_usecos = is_sin ? ((k_mod4 == 1) || (k_mod4 == 3)) : ((k_mod4 == 0) || (k_mod4 == 2));
+    Expr flip_sign = is_sin ? (k_mod4 > 1) : ((k_mod4 == 1) || (k_mod4 == 2));
+
+    // Reduce the angle modulo pi/2.
+    Expr x = x_full - k_real * pi_over_two;
+
+    const float sin_c2 = -0.16666667163372039794921875f;
+    const float sin_c4 = 8.333347737789154052734375e-3;
+    const float sin_c6 = -1.9842604524455964565277099609375e-4;
+    const float sin_c8 = 2.760012648650445044040679931640625e-6;
+    const float sin_c10 = -2.50293279435709337121807038784027099609375e-8;
+
+    const float cos_c2 = -0.5f;
+    const float cos_c4 = 4.166664183139801025390625e-2;
+    const float cos_c6 = -1.388833043165504932403564453125e-3;
+    const float cos_c8 = 2.47562347794882953166961669921875e-5;
+    const float cos_c10 = -2.59630184018533327616751194000244140625e-7;
+
+    Expr outside = select(sin_usecos, 1, x);
+    Expr c2 = select(sin_usecos, cos_c2, sin_c2);
+    Expr c4 = select(sin_usecos, cos_c4, sin_c4);
+    Expr c6 = select(sin_usecos, cos_c6, sin_c6);
+    Expr c8 = select(sin_usecos, cos_c8, sin_c8);
+    Expr c10 = select(sin_usecos, cos_c10, sin_c10);
+
+    Expr x2 = x * x;
+    Expr tri_func = outside * (x2 * (x2 * (x2 * (x2 * (x2 * c10 + c8) + c6) + c4) + c2) + 1);
+    return select(flip_sign, -tri_func, tri_func);
+}
+
+Expr fast_sin(Expr x_full) {
+    return fast_sin_cos(x_full, true);
+}
+
+Expr fast_cos(Expr x_full) {
+    return fast_sin_cos(x_full, false);
 }
 
 Expr fast_exp(Expr x_full) {
@@ -814,7 +920,12 @@ Expr fast_exp(Expr x_full) {
     result = common_subexpression_elimination(result);
     return result;
 }
+
 Expr stringify(const std::vector<Expr> &args) {
+    if (args.empty()) {
+        return Expr("");
+    }
+
     return Internal::Call::make(type_of<const char *>(), Internal::Call::stringify,
                                 args, Internal::Call::Intrinsic);
 }
@@ -857,19 +968,25 @@ Expr print_when(Expr condition, const std::vector<Expr> &args) {
                                 Internal::Call::PureIntrinsic);
 }
 
-Expr require(Expr condition, const std::vector<Expr> &args) {
-    user_assert(condition.defined()) << "Require of undefined condition\n";
-    user_assert(condition.type().is_bool()) << "Require condition must be a boolean type\n";
-    user_assert(args.at(0).defined()) << "Require of undefined value\n";
+namespace Internal {
+Expr requirement_failed_error(Expr condition, const std::vector<Expr> &args) {
+    return Internal::Call::make(Int(32),
+                                "halide_error_requirement_failed",
+                                {stringify({condition}), combine_strings(args)},
+                                Internal::Call::Extern);
+}
+}
 
-    Expr requirement_failed_error =
-        Internal::Call::make(Int(32),
-                             "halide_error_requirement_failed",
-                             {stringify({condition}), combine_strings(args)},
-                             Internal::Call::Extern);
+Expr require(Expr condition, const std::vector<Expr> &args) {
+    user_assert(condition.defined()) << "Require of undefined condition.\n";
+    user_assert(condition.type().is_bool()) << "Require condition must be a boolean type.\n";
+    user_assert(args.at(0).defined()) << "Require of undefined value.\n";
+
+    Expr err = requirement_failed_error(condition, args);
+
     return Internal::Call::make(args[0].type(),
                                 Internal::Call::require,
-                                {likely(std::move(condition)), args[0], requirement_failed_error},
+                                {likely(std::move(condition)), args[0], std::move(err)},
                                 Internal::Call::PureIntrinsic);
 }
 
@@ -923,4 +1040,64 @@ Expr saturating_cast(Type t, Expr e) {
     return e;
 }
 
+Expr select(Expr condition, Expr true_value, Expr false_value) {
+
+    if (as_const_int(condition)) {
+        // Why are you doing this? We'll preserve the select node until constant folding for you.
+        condition = cast(Bool(), std::move(condition));
+    }
+
+    // Coerce int literals to the type of the other argument
+    if (as_const_int(true_value)) {
+        true_value = cast(false_value.type(), std::move(true_value));
+    }
+    if (as_const_int(false_value)) {
+        false_value = cast(true_value.type(), std::move(false_value));
+    }
+
+    user_assert(condition.type().is_bool())
+        << "The first argument to a select must be a boolean:\n"
+        << "  " << condition << " has type " << condition.type() << "\n";
+
+    user_assert(true_value.type() == false_value.type())
+        << "The second and third arguments to a select do not have a matching type:\n"
+        << "  " << true_value << " has type " << true_value.type() << "\n"
+        << "  " << false_value << " has type " << false_value.type() << "\n";
+
+    return Internal::Select::make(std::move(condition), std::move(true_value), std::move(false_value));
 }
+
+Tuple tuple_select(const Tuple &condition, const Tuple &true_value, const Tuple &false_value) {
+    user_assert(condition.size() == true_value.size() && true_value.size() == false_value.size())
+        << "tuple_select() requires all Tuples to have identical sizes.";
+    Tuple result(std::vector<Expr>(condition.size()));
+    for (size_t i = 0; i < result.size(); i++) {
+        result[i] = select(condition[i], true_value[i], false_value[i]);
+    }
+    return result;
+}
+
+Tuple tuple_select(const Expr &condition, const Tuple &true_value, const Tuple &false_value) {
+    user_assert(true_value.size() == false_value.size())
+        << "tuple_select() requires all Tuples to have identical sizes.";
+    Tuple result(std::vector<Expr>(true_value.size()));
+    for (size_t i = 0; i < result.size(); i++) {
+        result[i] = select(condition, true_value[i], false_value[i]);
+    }
+    return result;
+}
+
+Expr unsafe_promise_clamped(Expr value, Expr min, Expr max) {
+    user_assert(value.defined()) << "unsafe_promise_clamped with undefined value.\n";
+    Expr n_min_val = min.defined() ? lossless_cast(value.type(), min) : value.type().min();
+    Expr n_max_val = max.defined() ? lossless_cast(value.type(), max) : value.type().max();
+
+    // Min and max are allowed to be undefined with the meaning of no bound on that side.
+
+    return Internal::Call::make(value.type(),
+                                Internal::Call::unsafe_promise_clamped,
+                                {value, n_min_val, n_max_val},
+                                Internal::Call::Intrinsic);
+}
+
+}  // namespace Halide

@@ -17,7 +17,7 @@ mkdir -p tmp
 rm lesson_17_*.mp4
 
 # Grab a trace
-HL_JIT_TARGET=host-trace_loads-trace_stores-trace_realizations \
+HL_JIT_TARGET=host-trace_all \
 HL_TRACE_FILE=$(pwd)/tmp/trace.bin \
 make -C ../.. tutorial_lesson_17_predicated_rdom
 ls tmp/trace.bin

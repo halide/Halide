@@ -16,7 +16,7 @@ namespace Internal {
  * intrinsics. Should only be run when the OpenGL target is active. */
 Stmt inject_opengl_intrinsics(Stmt s);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

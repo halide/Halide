@@ -40,8 +40,8 @@ public:
  * template<> void destroy<MyClass>(const MyClass *c) {delete c;}
  */
 // @{
-template<typename T> EXPORT RefCount &ref_count(const T *t);
-template<typename T> EXPORT void destroy(const T *t);
+template<typename T> RefCount &ref_count(const T *t);
+template<typename T> void destroy(const T *t);
 // @}
 
 /** Intrusive shared pointers have a reference count (a
@@ -103,18 +103,22 @@ public:
         decref(ptr);
     }
 
+    HALIDE_ALWAYS_INLINE
     IntrusivePtr() : ptr(nullptr) {
     }
 
+    HALIDE_ALWAYS_INLINE
     IntrusivePtr(T *p) : ptr(p) {
         incref(ptr);
     }
 
+    HALIDE_ALWAYS_INLINE
     IntrusivePtr(const IntrusivePtr<T> &other) : ptr(other.ptr) {
         incref(ptr);
     }
 
-    IntrusivePtr(IntrusivePtr<T> &&other) : ptr(other.ptr) {
+    HALIDE_ALWAYS_INLINE
+    IntrusivePtr(IntrusivePtr<T> &&other) noexcept : ptr(other.ptr) {
         other.ptr = nullptr;
     }
 
@@ -130,29 +134,31 @@ public:
         return *this;
     }
 
-    IntrusivePtr<T> &operator=(IntrusivePtr<T> &&other) {
+    IntrusivePtr<T> &operator=(IntrusivePtr<T> &&other) noexcept {
         std::swap(ptr, other.ptr);
         return *this;
     }
 
     /* Handles can be null. This checks that. */
+    HALIDE_ALWAYS_INLINE
     bool defined() const {
         return ptr != nullptr;
     }
 
     /* Check if two handles point to the same ptr. This is
      * equality of reference, not equality of value. */
+    HALIDE_ALWAYS_INLINE
     bool same_as(const IntrusivePtr &other) const {
         return ptr == other.ptr;
     }
 
+    HALIDE_ALWAYS_INLINE
     bool operator<(const IntrusivePtr<T> &other) const {
         return ptr < other.ptr;
     }
-
 };
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

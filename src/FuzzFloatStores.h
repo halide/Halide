@@ -19,7 +19,7 @@ namespace Internal {
  * that expect exact floating point equality across platforms. */
 Stmt fuzz_float_stores(Stmt s);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

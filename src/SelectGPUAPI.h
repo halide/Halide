@@ -17,8 +17,7 @@ namespace Internal {
  * first of the following: opencl, cuda, openglcompute, opengl */
 Stmt select_gpu_api(Stmt s, Target t);
 
-}
-}
-
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

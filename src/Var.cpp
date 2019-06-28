@@ -6,7 +6,7 @@ namespace Halide {
 Var::Var(const std::string &n) : _name(n) {
 }
 
-Var::Var() : _name(Internal::make_entity_name(this, "Halide::Var", 'v')) {
+Var::Var() : _name(Internal::make_entity_name(this, "Halide:.*:Var", 'v')) {
 }
 
 Var Var::implicit(int n) {
@@ -28,6 +28,6 @@ std::vector<Var> make_argument_list(int dimensionality) {
     return args;
 }
 
-}
+}  // namespace Internal
 
-}
+}  // namespace Halide

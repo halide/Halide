@@ -10,12 +10,48 @@
 namespace Halide {
 namespace Internal {
 
-/** The result of modulus_remainder analysis */
+/** The result of modulus_remainder analysis. These represent strided
+ * subsets of the integers. A ModulusRemainder object m represents all
+ * integers x such that there exists y such that x == m.modulus * y +
+ * m.remainder. Note that under this definition a set containing a
+ * single integer (a constant) is represented using a modulus of
+ * zero. These sets can be combined with several mathematical
+ * operators in the obvious way. E.g. m1 + m2 contains (at least) all
+ * integers x1 + x2 such that x1 belongs to m1 and x2 belongs to
+ * m2. These combinations are conservative. If some internal math
+ * would overflow, it defaults to all of the integers (modulus == 1,
+ * remainder == 0). */
+
 struct ModulusRemainder {
-    ModulusRemainder() : modulus(0), remainder(0) {}
-    ModulusRemainder(int m, int r) : modulus(m), remainder(r) {}
-    int modulus, remainder;
+    ModulusRemainder() : modulus(1), remainder(0) {}
+    ModulusRemainder(int64_t m, int64_t r) : modulus(m), remainder(r) {}
+
+    int64_t modulus, remainder;
+
+    // Take a conservatively-large union of two sets. Contains all
+    // elements from both sets, and maybe some more stuff.
+    static ModulusRemainder unify(const ModulusRemainder &a, const ModulusRemainder &b);
+
+    // Take a conservatively-large intersection. Everything in the
+    // result is in at least one of the two sets, but not always both.
+    static ModulusRemainder intersect(const ModulusRemainder &a, const ModulusRemainder &b);
+
+    bool operator==(const ModulusRemainder &other) const {
+        return (modulus == other.modulus) && (remainder == other.remainder);
+    }
 };
+
+ModulusRemainder operator+(const ModulusRemainder &a, const ModulusRemainder &b);
+ModulusRemainder operator-(const ModulusRemainder &a, const ModulusRemainder &b);
+ModulusRemainder operator*(const ModulusRemainder &a, const ModulusRemainder &b);
+ModulusRemainder operator/(const ModulusRemainder &a, const ModulusRemainder &b);
+ModulusRemainder operator%(const ModulusRemainder &a, const ModulusRemainder &b);
+
+ModulusRemainder operator+(const ModulusRemainder &a, int64_t b);
+ModulusRemainder operator-(const ModulusRemainder &a, int64_t b);
+ModulusRemainder operator*(const ModulusRemainder &a, int64_t b);
+ModulusRemainder operator/(const ModulusRemainder &a, int64_t b);
+ModulusRemainder operator%(const ModulusRemainder &a, int64_t b);
 
 /** For things like alignment analysis, often it's helpful to know
  * if an integer expression is some multiple of a constant plus
@@ -29,29 +65,29 @@ struct ModulusRemainder {
  * aligned load. If all else fails, we can just say that an integer is
  * congruent to zero modulo one.
  */
-EXPORT ModulusRemainder modulus_remainder(Expr e);
+ModulusRemainder modulus_remainder(Expr e);
 
 /** If we have alignment information about external variables, we can
  * let the analysis know about that using this version of
  * modulus_remainder: */
-EXPORT ModulusRemainder modulus_remainder(Expr e, const Scope<ModulusRemainder> &scope);
+ModulusRemainder modulus_remainder(Expr e, const Scope<ModulusRemainder> &scope);
 
 /** Reduce an expression modulo some integer. Returns true and assigns
  * to remainder if an answer could be found. */
 ///@{
-EXPORT bool reduce_expr_modulo(Expr e, int modulus, int *remainder);
-EXPORT bool reduce_expr_modulo(Expr e, int modulus, int *remainder, const Scope<ModulusRemainder> &scope);
+bool reduce_expr_modulo(Expr e, int64_t modulus, int64_t *remainder);
+bool reduce_expr_modulo(Expr e, int64_t modulus, int64_t *remainder, const Scope<ModulusRemainder> &scope);
 ///@}
 
-EXPORT void modulus_remainder_test();
+void modulus_remainder_test();
 
 /** The greatest common divisor of two integers */
-EXPORT int gcd(int, int);
+int64_t gcd(int64_t, int64_t);
 
 /** The least common multiple of two integers */
-EXPORT int lcm(int, int);
+int64_t lcm(int64_t, int64_t);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

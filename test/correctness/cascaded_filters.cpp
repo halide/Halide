@@ -13,14 +13,14 @@ Func blur(Func in, std::string n) {
 }
 
 int main(int argc, char **argv) {
-    Buffer<float> input = lambda(x, sin(x) + 1.0f).realize(1000);
+    Buffer<float> input = lambda(x, sin(10*x) + 1.0f).realize(1000);
 
     std::vector<Func> stages;
     Func first("S0");
     first(x) = input(x);
 
     stages.push_back(first);
-    for (size_t i = 0; i < 100; i++) {
+    for (size_t i = 0; i < 30; i++) {
         stages.push_back(blur(stages.back(), "S" + std::to_string(i+1)));
     }
 
@@ -40,8 +40,8 @@ int main(int argc, char **argv) {
     // After all the averaging, the result should be a flat 1.0f
     float err = evaluate_may_gpu<float>(sum(abs(result(RDom(result)) - 1.0f)));
 
-    if (err > 0.001f) {
-        printf("Error too large!\n");
+    if (err > 0.01f) {
+        printf("Error too large: %f!\n", err);
         return -1;
     }
 

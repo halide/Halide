@@ -7,8 +7,14 @@
 #include <functional>
 #include <limits>
 
+#if defined(__EMSCRIPTEN__)
+#include <emscripten.h>
+#endif
+
 namespace Halide {
 namespace Tools {
+
+#if !defined(__EMSCRIPTEN__)
 
 // Prefer high_resolution_clock, but only if it's steady...
 template <bool HighResIsSteady = std::chrono::high_resolution_clock::is_steady>
@@ -21,6 +27,35 @@ template <>
 struct SteadyClock<false> {
     using type = std::chrono::steady_clock;
 };
+
+inline SteadyClock<>::type::time_point benchmark_now() {
+    return SteadyClock<>::type::now();
+}
+
+inline double benchmark_duration_seconds(
+        SteadyClock<>::type::time_point start,
+        SteadyClock<>::type::time_point end) {
+    return std::chrono::duration_cast<std::chrono::duration<double>>(end - start).count();
+}
+
+#else  // __EMSCRIPTEN__
+
+// Emscripten's std::chrono::steady_clock and/or high_resolution_clock
+// can throw an exception (!) if the runtime doesn't have a truly
+// steady clock available. Advice from emscripten-discuss suggested
+// that emscripten_get_now() is the best bet, as it is milliseconds
+// (but returned as a double, with microseconds in the fractional portion),
+// using either performance.now() or performance.hrtime() depending on the
+// environment.
+inline double benchmark_now() {
+    return emscripten_get_now();
+}
+
+inline double benchmark_duration_seconds(double start, double end) {
+    return (end - start) / 1000.0;
+}
+
+#endif
 
 // Benchmark the operation 'op'. The number of iterations refers to
 // how many times the operation is run for each time measurement, the
@@ -39,17 +74,15 @@ struct SteadyClock<false> {
 // for real-world use. For now, callers using this to benchmark GPU
 // code should measure with extreme caution.
 
-inline double benchmark(int samples, int iterations, std::function<void()> op) {
-    using BenchmarkClock = SteadyClock<>::type;
+inline double benchmark(uint64_t samples, uint64_t iterations, std::function<void()> op) {
     double best = std::numeric_limits<double>::infinity();
-    for (int i = 0; i < samples; i++) {
-        auto start = BenchmarkClock::now();
-        for (int j = 0; j < iterations; j++) {
+    for (uint64_t i = 0; i < samples; i++) {
+        auto start = benchmark_now();
+        for (uint64_t j = 0; j < iterations; j++) {
             op();
         }
-        auto end = BenchmarkClock::now();
-        double elapsed_seconds =
-                std::chrono::duration_cast<std::chrono::duration<double>>(end - start).count();
+        auto end = benchmark_now();
+        double elapsed_seconds = benchmark_duration_seconds(start, end);
         best = std::min(best, elapsed_seconds);
     }
     return best / iterations;

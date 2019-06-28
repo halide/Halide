@@ -8,8 +8,17 @@ namespace Halide {
 namespace PythonBindings {
 
 void define_expr(py::module &m) {
+    auto to_bool = [](const Expr &e) -> bool {
+        std::ostringstream o;
+        o << e;
+        throw py::value_error("The halide.Expr (" + o.str() + ") cannot be converted to a bool. "
+            "If this error occurs using the 'and'/'or' keywords, consider using the '&'/'|' operators instead.");
+        return false;
+    };
+
     auto expr_class =
         py::class_<Expr>(m, "Expr")
+            .def(py::init<>())
             // PyBind11 searches in declared order,
             // int should be tried before float conversion
             .def(py::init<int>())
@@ -24,6 +33,9 @@ void define_expr(py::module &m) {
             .def(py::init([](const RDom &r) -> Expr { return r; }))
             .def(py::init([](const RVar &r) -> Expr { return r; }))
             .def(py::init([](const Var &v) -> Expr { return v; }))
+
+            .def("__bool__", to_bool)
+            .def("__nonzero__", to_bool)
 
             .def("type", &Expr::type)
             .def("__repr__", [](const Expr &e) -> std::string {

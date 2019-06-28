@@ -17,7 +17,7 @@ namespace Internal {
  */
 Stmt remove_dead_allocations(Stmt s);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

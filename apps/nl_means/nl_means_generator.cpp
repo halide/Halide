@@ -37,7 +37,7 @@ public:
         d(x, y, dx, dy) = sum(dc(x, y, dx, dy, channels));
 
         // Find the patch differences by blurring the difference images
-        RDom patch_dom(-patch_size/2, patch_size);
+        RDom patch_dom(-(patch_size/2), patch_size);
         Func blur_d_y("blur_d_y");
         blur_d_y(x, y, dx, dy) = sum(d(x, y + patch_dom, dx, dy));
 
@@ -56,7 +56,7 @@ public:
                                              1.0f);
 
         // Define a reduction domain for the search area
-        RDom s_dom(-search_area/2, search_area, -search_area/2, search_area);
+        RDom s_dom(-(search_area/2), search_area, -(search_area/2), search_area);
 
         // Compute the sum of the pixels in the search area
         Func non_local_means_sum("non_local_means_sum");
@@ -72,19 +72,24 @@ public:
 
         Var tx("tx"), ty("ty"), xi("xi"), yi("yi");
 
+        /* ESTIMATES */
+        // (This can be useful in conjunction with RunGen and benchmarks as well
+        // as auto-schedule, so we do it in all cases.)
+        // Provide estimates on the input image
+        input.dim(0).set_bounds_estimate(0, 614);
+        input.dim(1).set_bounds_estimate(0, 1024);
+        input.dim(2).set_bounds_estimate(0, 3);
+        // Provide estimates on the parameters
+        patch_size.set_estimate(7);
+        search_area.set_estimate(7);
+        sigma.set_estimate(0.12f);
+        // Provide estimates on the output pipeline
+        non_local_means.estimate(x, 0, 614)
+            .estimate(y, 0, 1024)
+            .estimate(c, 0, 3);
+
         if (auto_schedule) {
-            // Provide estimates on the input image
-            input.dim(0).set_bounds_estimate(0, 614);
-            input.dim(1).set_bounds_estimate(0, 1024);
-            input.dim(2).set_bounds_estimate(0, 3);
-            // Provide estimates on the parameters
-            patch_size.set_estimate(7);
-            search_area.set_estimate(7);
-            sigma.set_estimate(0.12f);
-            // Provide estimates on the output pipeline
-            non_local_means.estimate(x, 0, 614)
-                .estimate(y, 0, 1024)
-                .estimate(c, 0, 3);
+            // nothing
         } /*else if (get_target().has_gpu_feature()) {
             // TODO: the GPU schedule is currently using to much shared memory
             // because the simplifier can't simplify the expr (it can't cancel

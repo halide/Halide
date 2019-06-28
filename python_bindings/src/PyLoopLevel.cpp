@@ -14,6 +14,11 @@ void define_loop_level(py::module &m) {
         .def("set", &LoopLevel::set)
         .def_static("inlined", &LoopLevel::inlined)
         .def_static("root", &LoopLevel::root)
+        .def("__repr__", [](const LoopLevel &b) -> std::string {
+            std::ostringstream o;
+            o << "<halide.LoopLevel " << (b.defined() ? b.to_string() : "UNDEF") << ">";
+            return o.str();
+        })
     ;
 }
 

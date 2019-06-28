@@ -1,3 +1,63 @@
+; 256-bit native instructions for the following 6 instructions only
+; come in with AVX2, but LLVM gets deeply confused if you slice up a
+; 256-bit vector into 128-bit vectors, apply the narrower
+; instructions, then reassemble. It prefers that you generate code at
+; the AVX register width, and would rather handle the instruction
+; legalization itself.
+
+; Note that this is only used for LLVM 8.0+
+define weak_odr <32 x i8> @paddusbx32(<32 x i8> %a0, <32 x i8> %a1) nounwind alwaysinline {
+  %1 = add <32 x i8> %a0, %a1
+  %2 = icmp ugt <32 x i8> %a0, %1
+  %3 = select <32 x i1> %2, <32 x i8> <i8 -1, i8 -1, i8 -1, i8 -1, i8 -1, i8 -1, i8 -1, i8 -1, i8 -1, i8 -1, i8 -1, i8 -1, i8 -1, i8 -1, i8 -1, i8 -1, i8 -1, i8 -1, i8 -1, i8 -1, i8 -1, i8 -1, i8 -1, i8 -1, i8 -1, i8 -1, i8 -1, i8 -1, i8 -1, i8 -1, i8 -1, i8 -1>, <32 x i8> %1
+  ret <32 x i8> %3
+}
+
+; Note that this is only used for LLVM 8.0+
+define weak_odr <16 x i16> @padduswx16(<16 x i16> %a0, <16 x i16> %a1) nounwind alwaysinline {
+  %1 = add <16 x i16> %a0, %a1
+  %2 = icmp ugt <16 x i16> %a0, %1
+  %3 = select <16 x i1> %2, <16 x i16> <i16 -1, i16 -1, i16 -1, i16 -1, i16 -1, i16 -1, i16 -1, i16 -1, i16 -1, i16 -1, i16 -1, i16 -1, i16 -1, i16 -1, i16 -1, i16 -1>, <16 x i16> %1
+  ret <16 x i16> %3
+}
+
+; Note that this is only used for LLVM 8.0+
+define weak_odr <32 x i8> @psubusbx32(<32 x i8> %a0, <32 x i8> %a1) nounwind alwaysinline {
+  %1 = icmp ugt <32 x i8> %a0, %a1
+  %2 = select <32 x i1> %1, <32 x i8> %a0, <32 x i8> %a1
+  %3 = sub <32 x i8> %2, %a1
+  ret <32 x i8> %3
+}
+
+; Note that this is only used for LLVM 8.0+
+define weak_odr <16 x i16> @psubuswx16(<16 x i16> %a0, <16 x i16> %a1) nounwind alwaysinline {
+  %1 = icmp ugt <16 x i16> %a0, %a1
+  %2 = select <16 x i1> %1, <16 x i16> %a0, <16 x i16> %a1
+  %3 = sub <16 x i16> %2, %a1
+  ret <16 x i16> %3
+}
+
+; Note that this is only used for LLVM 6.0+
+define weak_odr <32 x i8>  @pavgbx32(<32 x i8> %a, <32 x i8> %b) nounwind alwaysinline {
+  %1 = zext <32 x i8> %a to <32 x i32>
+  %2 = zext <32 x i8> %b to <32 x i32>
+  %3 = add nuw nsw <32 x i32> %1, <i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1>
+  %4 = add nuw nsw <32 x i32> %3, %2
+  %5 = lshr <32 x i32> %4, <i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1>
+  %6 = trunc <32 x i32> %5 to <32 x i8>
+  ret <32 x i8> %6
+}
+
+; Note that this is only used for LLVM 6.0+
+define weak_odr <16 x i16>  @pavgwx16(<16 x i16> %a, <16 x i16> %b) nounwind alwaysinline {
+  %1 = zext <16 x i16> %a to <16 x i32>
+  %2 = zext <16 x i16> %b to <16 x i32>
+  %3 = add nuw nsw <16 x i32> %1, <i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1>
+  %4 = add nuw nsw <16 x i32> %3, %2
+  %5 = lshr <16 x i32> %4, <i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1>
+  %6 = trunc <16 x i32> %5 to <16 x i16>
+  ret <16 x i16> %6
+}
 
 declare <8 x float> @llvm.x86.avx.sqrt.ps.256(<8 x float>) nounwind readnone
 declare <4 x double> @llvm.x86.avx.sqrt.pd.256(<4 x double>) nounwind readnone

@@ -50,7 +50,7 @@ Then, using a Generator can be as simple as
     add_executable(my_app my_app.cpp)
     target_link_libraries(my_app PUBLIC coolness)
 
-For an example of "standalone" use of the CMake rules, see apps/wavelet.
+For an example of "standalone" use of the CMake rules, see [apps/wavelet](apps/wavelet).
 
 ## Build Rules
 

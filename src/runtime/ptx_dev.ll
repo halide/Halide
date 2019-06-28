@@ -23,7 +23,7 @@ declare  i32 @llvm.nvvm.read.ptx.sreg.warpsize()
 ;declare void @llvm.ptx.red.shared.add.s32(i32 addrspace(4)*, i32)
 
 define weak_odr float @nan_f32() nounwind uwtable readnone alwaysinline {
-       ret float 0xFFF0000000000000;
+       ret float 0x7FF8000000000000;
 }
 
 define weak_odr float @neg_inf_f32() nounwind uwtable readnone alwaysinline {
@@ -332,11 +332,6 @@ define weak_odr float @atanh_f32(float %x) nounwind uwtable readnone alwaysinlin
 define weak_odr double @atanh_f64(double %x) nounwind uwtable readnone alwaysinline {
        %y = tail call double @__nv_atanh(double %x) nounwind readnone
        ret double %y
-}
-
-define weak_odr i32 @halide_gpu_thread_barrier() nounwind uwtable alwaysinline {
-       call void @llvm.nvvm.barrier0() nounwind
-       ret i32 0
 }
 
 define weak_odr i32 @halide_ptx_trap() nounwind uwtable alwaysinline {

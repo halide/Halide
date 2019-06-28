@@ -1,5 +1,5 @@
 #include "HalideRuntime.h"
-
+#include "cpu_features.h"
 
 namespace Halide { namespace Runtime { namespace Internal {
 
@@ -11,17 +11,16 @@ static inline void cpuid(int32_t fn_id, int32_t *info) {
 }
 
 WEAK CpuFeatures halide_get_cpu_features() {
-    const uint64_t known = ((1ULL << halide_target_feature_sse41) |
-                            (1ULL << halide_target_feature_avx) |
-                            (1ULL << halide_target_feature_f16c) |
-                            (1ULL << halide_target_feature_fma) |
-                            (1ULL << halide_target_feature_avx2) |
-                            (1ULL << halide_target_feature_avx512) |
-                            (1ULL << halide_target_feature_avx512_knl) |
-                            (1ULL << halide_target_feature_avx512_skylake) |
-                            (1ULL << halide_target_feature_avx512_cannonlake));
-
-    uint64_t available = 0;
+    CpuFeatures features;
+    features.set_known(halide_target_feature_sse41);
+    features.set_known(halide_target_feature_avx);
+    features.set_known(halide_target_feature_f16c);
+    features.set_known(halide_target_feature_fma);
+    features.set_known(halide_target_feature_avx2);
+    features.set_known(halide_target_feature_avx512);
+    features.set_known(halide_target_feature_avx512_knl);
+    features.set_known(halide_target_feature_avx512_skylake);
+    features.set_known(halide_target_feature_avx512_cannonlake);
 
     int32_t info[4];
     cpuid(1, info);
@@ -32,16 +31,16 @@ WEAK CpuFeatures halide_get_cpu_features() {
     const bool have_rdrand = (info[2] & (1 << 30)) != 0;
     const bool have_fma    = (info[2] & (1 << 12)) != 0;
     if (have_sse41) {
-        available |= (1ULL << halide_target_feature_sse41);
+        features.set_available(halide_target_feature_sse41);
     }
     if (have_avx) {
-        available |= (1ULL << halide_target_feature_avx);
+        features.set_available(halide_target_feature_avx);
     }
     if (have_f16c) {
-        available |= (1ULL << halide_target_feature_f16c);
+        features.set_available(halide_target_feature_f16c);
     }
     if (have_fma) {
-        available |= (1ULL << halide_target_feature_fma);
+        features.set_available(halide_target_feature_fma);
     }
 
     const bool use_64_bits = (sizeof(size_t) == 8);
@@ -62,22 +61,21 @@ WEAK CpuFeatures halide_get_cpu_features() {
         const uint32_t avx512_skylake = avx512 | avx512vl | avx512bw | avx512dq;
         const uint32_t avx512_cannonlake = avx512_skylake | avx512ifma; // Assume ifma => vbmi
         if ((info2[1] & avx2) == avx2) {
-            available |= 1ULL << halide_target_feature_avx2;
+            features.set_available(halide_target_feature_avx2);
         }
         if ((info2[1] & avx512) == avx512) {
-            available |= 1ULL << halide_target_feature_avx512;
+            features.set_available(halide_target_feature_avx512);
             if ((info2[1] & avx512_knl) == avx512_knl) {
-                available |= 1ULL << halide_target_feature_avx512_knl;
+                features.set_available(halide_target_feature_avx512_knl);
             }
             if ((info2[1] & avx512_skylake) == avx512_skylake) {
-                available |= 1ULL << halide_target_feature_avx512_skylake;
+                features.set_available(halide_target_feature_avx512_skylake);
             }
             if ((info2[1] & avx512_cannonlake) == avx512_cannonlake) {
-                available |= 1ULL << halide_target_feature_avx512_cannonlake;
+                features.set_available(halide_target_feature_avx512_cannonlake);
             }
         }
     }
-    CpuFeatures features = {known, available};
     return features;
 }
 

@@ -8,8 +8,10 @@
  */
 
 #include <atomic>
+#include <cmath>
 
 #include "IR.h"
+#include "Tuple.h"
 #include "Util.h"
 
 namespace Halide {
@@ -18,36 +20,36 @@ namespace Internal {
 /** Is the expression either an IntImm, a FloatImm, a StringImm, or a
  * Cast of the same, or a Ramp or Broadcast of the same. Doesn't do
  * any constant folding. */
-EXPORT bool is_const(const Expr &e);
+bool is_const(const Expr &e);
 
 /** Is the expression an IntImm, FloatImm of a particular value, or a
  * Cast, or Broadcast of the same. */
-EXPORT bool is_const(const Expr &e, int64_t v);
+bool is_const(const Expr &e, int64_t v);
 
 /** If an expression is an IntImm or a Broadcast of an IntImm, return
  * a pointer to its value. Otherwise returns nullptr. */
-EXPORT const int64_t *as_const_int(const Expr &e);
+const int64_t *as_const_int(const Expr &e);
 
 /** If an expression is a UIntImm or a Broadcast of a UIntImm, return
  * a pointer to its value. Otherwise returns nullptr. */
-EXPORT const uint64_t *as_const_uint(const Expr &e);
+const uint64_t *as_const_uint(const Expr &e);
 
 /** If an expression is a FloatImm or a Broadcast of a FloatImm,
  * return a pointer to its value. Otherwise returns nullptr. */
-EXPORT const double *as_const_float(const Expr &e);
+const double *as_const_float(const Expr &e);
 
 /** Is the expression a constant integer power of two. Also returns
  * log base two of the expression if it is. Only returns true for
  * integer types. */
-EXPORT bool is_const_power_of_two_integer(const Expr &e, int *bits);
+bool is_const_power_of_two_integer(const Expr &e, int *bits);
 
 /** Is the expression a const (as defined by is_const), and also
  * strictly greater than zero (in all lanes, if a vector expression) */
-EXPORT bool is_positive_const(const Expr &e);
+bool is_positive_const(const Expr &e);
 
 /** Is the expression a const (as defined by is_const), and also
  * strictly less than zero (in all lanes, if a vector expression) */
-EXPORT bool is_negative_const(const Expr &e);
+bool is_negative_const(const Expr &e);
 
 /** Is the expression a const (as defined by is_const), and also
  * strictly less than zero (in all lanes, if a vector expression) and
@@ -55,26 +57,26 @@ EXPORT bool is_negative_const(const Expr &e);
  * negative value of the Expr's type from inclusion. Intended to be
  * used when the value will be negated as part of simplification.)
  */
-EXPORT bool is_negative_negatable_const(const Expr &e);
+bool is_negative_negatable_const(const Expr &e);
 
 /** Is the expression an undef */
-EXPORT bool is_undef(const Expr &e);
+bool is_undef(const Expr &e);
 
 /** Is the expression a const (as defined by is_const), and also equal
  * to zero (in all lanes, if a vector expression) */
-EXPORT bool is_zero(const Expr &e);
+bool is_zero(const Expr &e);
 
 /** Is the expression a const (as defined by is_const), and also equal
  * to one (in all lanes, if a vector expression) */
-EXPORT bool is_one(const Expr &e);
+bool is_one(const Expr &e);
 
 /** Is the expression a const (as defined by is_const), and also equal
  * to two (in all lanes, if a vector expression) */
-EXPORT bool is_two(const Expr &e);
+bool is_two(const Expr &e);
 
 /** Is the statement a no-op (which we represent as either an
  * undefined Stmt, or as an Evaluate node of a constant) */
-EXPORT bool is_no_op(const Stmt &s);
+bool is_no_op(const Stmt &s);
 
 /** Does the expression
  * 1) Take on the same value no matter where it appears in a Stmt, and
@@ -84,9 +86,9 @@ bool is_pure(const Expr &e);
 
 /** Construct an immediate of the given type from any numeric C++ type. */
 // @{
-EXPORT Expr make_const(Type t, int64_t val);
-EXPORT Expr make_const(Type t, uint64_t val);
-EXPORT Expr make_const(Type t, double val);
+Expr make_const(Type t, int64_t val);
+Expr make_const(Type t, uint64_t val);
+Expr make_const(Type t, double val);
 inline Expr make_const(Type t, int32_t val)   {return make_const(t, (int64_t)val);}
 inline Expr make_const(Type t, uint32_t val)  {return make_const(t, (uint64_t)val);}
 inline Expr make_const(Type t, int16_t val)   {return make_const(t, (int64_t)val);}
@@ -98,8 +100,14 @@ inline Expr make_const(Type t, float val)     {return make_const(t, (double)val)
 inline Expr make_const(Type t, float16_t val) {return make_const(t, (double)val);}
 // @}
 
+/** Construct a unique indeterminate_expression Expr */
+Expr make_indeterminate_expression(Type type);
+
+/** Construct a unique signed_integer_overflow Expr */
+Expr make_signed_integer_overflow(Type type);
+
 /** Check if a constant value can be correctly represented as the given type. */
-EXPORT void check_representable(Type t, int64_t val);
+void check_representable(Type t, int64_t val);
 
 /** Construct a boolean constant from a C++ boolean value.
  * May also be a vector if width is given.
@@ -109,29 +117,29 @@ EXPORT void check_representable(Type t, int64_t val);
  * is that C++ does not have a real bool type - it is in fact
  * close enough to char that C++ does not know how to distinguish them.
  * make_bool is the explicit coercion. */
-EXPORT Expr make_bool(bool val, int lanes = 1);
+Expr make_bool(bool val, int lanes = 1);
 
 /** Construct the representation of zero in the given type */
-EXPORT Expr make_zero(Type t);
+Expr make_zero(Type t);
 
 /** Construct the representation of one in the given type */
-EXPORT Expr make_one(Type t);
+Expr make_one(Type t);
 
 /** Construct the representation of two in the given type */
-EXPORT Expr make_two(Type t);
+Expr make_two(Type t);
 
 /** Construct the constant boolean true. May also be a vector of
  * trues, if a lanes argument is given. */
-EXPORT Expr const_true(int lanes = 1);
+Expr const_true(int lanes = 1);
 
 /** Construct the constant boolean false. May also be a vector of
  * falses, if a lanes argument is given. */
-EXPORT Expr const_false(int lanes = 1);
+Expr const_false(int lanes = 1);
 
 /** Attempt to cast an expression to a smaller type while provably not
  * losing information. If it can't be done, return an undefined
  * Expr. */
-EXPORT Expr lossless_cast(Type t, Expr e);
+Expr lossless_cast(Type t, Expr e);
 
 /** Coerce the two expressions to have the same type, using C-style
  * casting rules. For the purposes of casting, a boolean type is
@@ -157,22 +165,29 @@ EXPORT Expr lossless_cast(Type t, Expr e);
  * in an Int(16).
  *
  */
-EXPORT void match_types(Expr &a, Expr &b);
+void match_types(Expr &a, Expr &b);
+
+/** Asserts that both expressions are integer types and are either
+ * both signed or both unsigned. If one argument is scalar and the
+ * other a vector, the scalar is broadcasted to have the same number
+ * of lanes as the vector. If one expression is of narrower type than
+ * the other, it is widened to the bit width of the wider. */
+void match_types_bitwise(Expr &a, Expr &b, const char *op_name);
 
 /** Halide's vectorizable transcendentals. */
 // @{
-EXPORT Expr halide_log(Expr a);
-EXPORT Expr halide_exp(Expr a);
-EXPORT Expr halide_erf(Expr a);
+Expr halide_log(Expr a);
+Expr halide_exp(Expr a);
+Expr halide_erf(Expr a);
 // @}
 
 /** Raise an expression to an integer power by repeatedly multiplying
  * it by itself. */
-EXPORT Expr raise_to_integer_power(Expr a, int64_t b);
+Expr raise_to_integer_power(Expr a, int64_t b);
 
 /** Split a boolean condition into vector of ANDs. If 'cond' is undefined,
  * return an empty vector. */
-EXPORT void split_into_ands(const Expr &cond, std::vector<Expr> &result);
+void split_into_ands(const Expr &cond, std::vector<Expr> &result);
 
 /** A builder to help create Exprs representing halide_buffer_t
  * structs (e.g. foo.buffer) via calls to halide_buffer_init. Fill out
@@ -191,12 +206,69 @@ struct BufferBuilder {
     int dimensions = 0;
     std::vector<Expr> mins, extents, strides;
     Expr host_dirty, device_dirty;
-    EXPORT Expr build() const;
+    Expr build() const;
 };
 
 /** If e is a ramp expression with stride, default 1, return the base,
  * otherwise undefined. */
 Expr strided_ramp_base(Expr e, int stride = 1);
+
+/** Implementations of division and mod that are specific to Halide.
+ * Use these implementations; do not use native C division or mod to
+ * simplify Halide expressions. Halide division and modulo satisify
+ * the Euclidean definition of division for integers a and b:
+ *
+ /code
+ (a/b)*b + a%b = a
+ 0 <= a%b < |b|
+ /endcode
+ *
+ */
+// @{
+template<typename T>
+inline T mod_imp(T a, T b) {
+    Type t = type_of<T>();
+    if (t.is_int()) {
+        T r = a % b;
+        r = r + (r < 0 ? (T)std::abs((int64_t)b) : 0);
+        return r;
+    } else {
+        return a % b;
+    }
+}
+
+template<typename T>
+inline T div_imp(T a, T b) {
+    Type t = type_of<T>();
+    if (t.is_int()) {
+        int64_t q = a / b;
+        int64_t r = a - q * b;
+        int64_t bs = b >> (t.bits() - 1);
+        int64_t rs = r >> (t.bits() - 1);
+        return (T) (q - (rs & bs) + (rs & ~bs));
+    } else {
+        return a / b;
+    }
+}
+// @}
+
+// Special cases for float, double.
+template<> inline float mod_imp<float>(float a, float b) {
+    float f = a - b * (floorf(a / b));
+    // The remainder has the same sign as b.
+    return f;
+}
+template<> inline double mod_imp<double>(double a, double b) {
+    double f = a - b * (std::floor(a / b));
+    return f;
+}
+
+template<> inline float div_imp<float>(float a, float b) {
+    return a/b;
+}
+template<> inline double div_imp<double>(double a, double b) {
+    return a/b;
+}
 
 } // namespace Internal
 
@@ -869,32 +941,7 @@ inline Expr absd(Expr a, Expr b) {
  * that it always evaluates all arguments. If the first argument is
  * true, then return the second, else return the third. Typically
  * vectorizes cleanly, but benefits from SSE41 or newer on x86. */
-inline Expr select(Expr condition, Expr true_value, Expr false_value) {
-
-    if (as_const_int(condition)) {
-        // Why are you doing this? We'll preserve the select node until constant folding for you.
-        condition = cast(Bool(), std::move(condition));
-    }
-
-    // Coerce int literals to the type of the other argument
-    if (as_const_int(true_value)) {
-        true_value = cast(false_value.type(), std::move(true_value));
-    }
-    if (as_const_int(false_value)) {
-        false_value = cast(true_value.type(), std::move(false_value));
-    }
-
-    user_assert(condition.type().is_bool())
-        << "The first argument to a select must be a boolean:\n"
-        << "  " << condition << " has type " << condition.type() << "\n";
-
-    user_assert(true_value.type() == false_value.type())
-        << "The second and third arguments to a select do not have a matching type:\n"
-        << "  " << true_value << " has type " << true_value.type() << "\n"
-        << "  " << false_value << " has type " << false_value.type() << "\n";
-
-    return Internal::Select::make(std::move(condition), std::move(true_value), std::move(false_value));
-}
+Expr select(Expr condition, Expr true_value, Expr false_value);
 
 /** A multi-way variant of select similar to a switch statement in C,
  * which can accept multiple conditions and values in pairs. Evaluates
@@ -905,6 +952,28 @@ template<typename... Args,
 inline Expr select(Expr c0, Expr v0, Expr c1, Expr v1, Args&&... args) {
     return select(std::move(c0), std::move(v0), select(std::move(c1), std::move(v1), std::forward<Args>(args)...));
 }
+
+/** Equivalent of ternary select(), but taking/returning tuples. If the condition is
+ * a Tuple, it must match the size of the true and false Tuples. */
+// @{
+Tuple tuple_select(const Tuple &condition, const Tuple &true_value, const Tuple &false_value);
+Tuple tuple_select(const Expr &condition, const Tuple &true_value, const Tuple &false_value);
+// @}
+
+/** Equivalent of multiway select(), but taking/returning tuples. If the condition is
+ * a Tuple, it must match the size of the true and false Tuples. */
+// @{
+template<typename... Args>
+inline Tuple tuple_select(const Tuple &c0, const Tuple &v0, const Tuple &c1, const Tuple &v1, Args&&... args) {
+    return tuple_select(c0, v0, tuple_select(c1, v1, std::forward<Args>(args)...));
+}
+
+template<typename... Args>
+inline Tuple tuple_select(const Expr &c0, const Tuple &v0, const Expr &c1, const Tuple &v1, Args&&... args) {
+    return tuple_select(c0, v0, tuple_select(c1, v1, std::forward<Args>(args)...));
+}
+// @}
+
 
 // TODO: Implement support for *_f16 external functions in various backends.
 // No backend supports these yet.
@@ -1188,16 +1257,23 @@ inline Expr erf(Expr x) {
     return Internal::halide_erf(std::move(x));
 }
 
+/** Fast vectorizable approximation to some trigonometric functions for Float(32).
+ * Absolute approximation error is less than 1e-5. */
+// @{
+Expr fast_sin(Expr x);
+Expr fast_cos(Expr x);
+// @}
+
 /** Fast approximate cleanly vectorizable log for Float(32). Returns
  * nonsense for x <= 0.0f. Accurate up to the last 5 bits of the
  * mantissa. Vectorizes cleanly. */
-EXPORT Expr fast_log(Expr x);
+Expr fast_log(Expr x);
 
 /** Fast approximate cleanly vectorizable exp for Float(32). Returns
  * nonsense for inputs that would overflow or underflow. Typically
  * accurate up to the last 5 bits of the mantissa. Gets worse when
  * approaching overflow. Vectorizes cleanly. */
-EXPORT Expr fast_exp(Expr x);
+Expr fast_exp(Expr x);
 
 /** Fast approximate cleanly vectorizable pow for Float(32). Returns
  * nonsense for x < 0.0f. Accurate up to the last 5 bits of the
@@ -1215,7 +1291,9 @@ inline Expr fast_pow(Expr x, Expr y) {
 
 /** Fast approximate inverse for Float(32). Corresponds to the rcpps
  * instruction on x86, and the vrecpe instruction on ARM. Vectorizes
- * cleanly. */
+ * cleanly. Note that this can produce slightly different results
+ * across different implementations of the same architecture (e.g. AMD vs Intel),
+ * even when strict_float is enabled. */
 inline Expr fast_inverse(Expr x) {
     user_assert(x.type() == Float(32)) << "fast_inverse only takes float arguments\n";
     Type t = x.type();
@@ -1224,7 +1302,9 @@ inline Expr fast_inverse(Expr x) {
 
 /** Fast approximate inverse square root for Float(32). Corresponds to
  * the rsqrtps instruction on x86, and the vrsqrte instruction on
- * ARM. Vectorizes cleanly. */
+ * ARM. Vectorizes cleanly. Note that this can produce slightly different results
+ * across different implementations of the same architecture (e.g. AMD vs Intel),
+ * even when strict_float is enabled. */
 inline Expr fast_inverse_sqrt(Expr x) {
     user_assert(x.type() == Float(32)) << "fast_inverse_sqrt only takes float arguments\n";
     Type t = x.type();
@@ -1243,8 +1323,13 @@ inline Expr floor(Expr x) {
     } else if (t.element_of() == Float(16)) {
         return Internal::Call::make(t, "floor_f16", {std::move(x)}, Internal::Call::PureExtern);
     } else {
-        t = t.with_code(Type::Float);
-        return Internal::Call::make(t, "floor_f32", {cast(t, std::move(x))}, Internal::Call::PureExtern);
+        t = Float(32, t.lanes());
+        if (t.is_int() || t.is_uint()) {
+            // Already an integer
+            return cast(t, std::move(x));
+        } else {
+            return Internal::Call::make(t, "floor_f32", {cast(t, std::move(x))}, Internal::Call::PureExtern);
+        }
     }
 }
 
@@ -1260,8 +1345,13 @@ inline Expr ceil(Expr x) {
     } else if (x.type().element_of() == Float(16)) {
         return Internal::Call::make(t, "ceil_f16", {std::move(x)}, Internal::Call::PureExtern);
     } else {
-        t = t.with_code(Type::Float);
-        return Internal::Call::make(t, "ceil_f32", {cast(t, std::move(x))}, Internal::Call::PureExtern);
+        t = Float(32, t.lanes());
+        if (t.is_int() || t.is_uint()) {
+            // Already an integer
+            return cast(t, std::move(x));
+        } else {
+            return Internal::Call::make(t, "ceil_f32", {cast(t, std::move(x))}, Internal::Call::PureExtern);
+        }
     }
 }
 
@@ -1278,8 +1368,13 @@ inline Expr round(Expr x) {
     } else if (t.element_of() == Float(16)) {
         return Internal::Call::make(t, "round_f16", {std::move(x)}, Internal::Call::PureExtern);
     } else {
-        t = t.with_code(Type::Float);
-        return Internal::Call::make(t, "round_f32", {cast(t, std::move(x))}, Internal::Call::PureExtern);
+        t = Float(32, t.lanes());
+        if (t.is_int() || t.is_uint()) {
+            // Already an integer
+            return cast(t, std::move(x));
+        } else {
+            return Internal::Call::make(t, "round_f32", {cast(t, std::move(x))}, Internal::Call::PureExtern);
+        }
     }
 }
 
@@ -1294,8 +1389,13 @@ inline Expr trunc(Expr x) {
     } else if (t.element_of() == Float(16)) {
         return Internal::Call::make(t, "trunc_f16", {std::move(x)}, Internal::Call::PureExtern);
     } else {
-        t = t.with_code(Type::Float);
-        return Internal::Call::make(t, "trunc_f32", {cast(t, std::move(x))}, Internal::Call::PureExtern);
+        t = Float(32, t.lanes());
+        if (t.is_int() || t.is_uint()) {
+            // Already an integer
+            return cast(t, std::move(x));
+        } else {
+            return Internal::Call::make(t, "trunc_f32", {cast(t, std::move(x))}, Internal::Call::PureExtern);
+        }
     }
 }
 
@@ -1310,7 +1410,7 @@ inline Expr is_nan(Expr x) {
     } else if (x.type().element_of() == Float(16)) {
         return Internal::Call::make(t, "is_nan_f16", {std::move(x)}, Internal::Call::PureExtern);
     } else {
-        Type ft = x.type().with_code(Type::Float);
+        Type ft = Float(32, t.lanes());
         return Internal::Call::make(t, "is_nan_f32", {cast(ft, std::move(x))}, Internal::Call::PureExtern);
     }
 }
@@ -1342,64 +1442,82 @@ inline Expr reinterpret(Expr e) {
 }
 
 /** Return the bitwise and of two expressions (which need not have the
- * same type). The type of the result is the type of the first
- * argument. */
+ * same type).  The result type is the wider of the two expressions.
+ * Only integral types are allowed and both expressions must be signed
+ * or both must be unsigned. */
 inline Expr operator&(Expr x, Expr y) {
-    user_assert(x.defined() && y.defined()) << "bitwise and of undefined Expr\n";
-    user_assert(x.type().is_int() || x.type().is_uint())
-        << "The first argument to bitwise and must be an integer or unsigned integer";
-    user_assert(y.type().is_int() || y.type().is_uint())
-        << "The second argument to bitwise and must be an integer or unsigned integer";
-    // First widen or narrow, then bitcast.
-    if (y.type().bits() != x.type().bits()) {
-        y = cast(y.type().with_bits(x.type().bits()), y);
-    }
-    if (y.type() != x.type()) {
-        y = reinterpret(x.type(), y);
-    }
+    match_types_bitwise(x, y, "bitwise and");
     Type t = x.type();
     return Internal::Call::make(t, Internal::Call::bitwise_and, {std::move(x), std::move(y)}, Internal::Call::PureIntrinsic);
 }
 
+/** Return the bitwise and of an expression and an integer. The type
+ * of the result is the type of the expression argument. */
+// @{
+inline Expr operator&(Expr x, int y) {
+    Type t = x.type();
+    Internal::check_representable(t, y);
+    return Internal::Call::make(t, Internal::Call::bitwise_and, {std::move(x), Internal::make_const(t, y)}, Internal::Call::PureIntrinsic);
+}
+
+ inline Expr operator&(int x, Expr y) {
+    Type t = y.type();
+    Internal::check_representable(t, x);
+    return Internal::Call::make(t, Internal::Call::bitwise_and, {Internal::make_const(t, x), std::move(y)}, Internal::Call::PureIntrinsic);
+}
+// @}
+
 /** Return the bitwise or of two expressions (which need not have the
- * same type). The type of the result is the type of the first
- * argument. */
+ * same type).  The result type is the wider of the two expressions.
+ * Only integral types are allowed and both expressions must be signed
+ * or both must be unsigned. */
 inline Expr operator|(Expr x, Expr y) {
-    user_assert(x.defined() && y.defined()) << "bitwise or of undefined Expr\n";
-    user_assert(x.type().is_int() || x.type().is_uint())
-        << "The first argument to bitwise or must be an integer or unsigned integer";
-    user_assert(y.type().is_int() || y.type().is_uint())
-        << "The second argument to bitwise or must be an integer or unsigned integer";
-    // First widen or narrow, then bitcast.
-    if (y.type().bits() != x.type().bits()) {
-        y = cast(y.type().with_bits(x.type().bits()), y);
-    }
-    if (y.type() != x.type()) {
-        y = reinterpret(x.type(), y);
-    }
+    match_types_bitwise(x, y, "bitwise or");
     Type t = x.type();
     return Internal::Call::make(t, Internal::Call::bitwise_or, {std::move(x), std::move(y)}, Internal::Call::PureIntrinsic);
 }
 
-/** Return the bitwise exclusive or of two expressions (which need not
- * have the same type). The type of the result is the type of the
- * first argument. */
+/** Return the bitwise or of an expression and an integer. The type of
+ * the result is the type of the expression argument. */
+// @{
+inline Expr operator|(Expr x, int y) {
+    Type t = x.type();
+    Internal::check_representable(t, y);
+    return Internal::Call::make(t, Internal::Call::bitwise_or, {std::move(x), Internal::make_const(t, y)}, Internal::Call::PureIntrinsic);
+}
+
+inline Expr operator|(int x, Expr y) {
+    Type t = y.type();
+    Internal::check_representable(t, x);
+    return Internal::Call::make(t, Internal::Call::bitwise_or, {Internal::make_const(t, x), std::move(y)}, Internal::Call::PureIntrinsic);
+}
+// @}
+
+/** Return the bitwise xor of two expressions (which need not have the
+ * same type).  The result type is the wider of the two expressions.
+ * Only integral types are allowed and both expressions must be signed
+ * or both must be unsigned. */
 inline Expr operator^(Expr x, Expr y) {
-    user_assert(x.defined() && y.defined()) << "bitwise xor of undefined Expr\n";
-    user_assert(x.type().is_int() || x.type().is_uint())
-        << "The first argument to bitwise xor must be an integer or unsigned integer";
-    user_assert(y.type().is_int() || y.type().is_uint())
-        << "The second argument to bitwise xor must be an integer or unsigned integer";
-    // First widen or narrow, then bitcast.
-    if (y.type().bits() != x.type().bits()) {
-        y = cast(y.type().with_bits(x.type().bits()), y);
-    }
-    if (y.type() != x.type()) {
-        y = reinterpret(x.type(), y);
-    }
+    match_types_bitwise(x, y, "bitwise xor");
     Type t = x.type();
     return Internal::Call::make(t, Internal::Call::bitwise_xor, {std::move(x), std::move(y)}, Internal::Call::PureIntrinsic);
 }
+
+/** Return the bitwise xor of an expression and an integer. The type
+ * of the result is the type of the expression argument. */
+// @{
+inline Expr operator^(Expr x, int y) {
+    Type t = x.type();
+    Internal::check_representable(t, y);
+    return Internal::Call::make(t, Internal::Call::bitwise_xor, {std::move(x), Internal::make_const(t, y)}, Internal::Call::PureIntrinsic);
+}
+
+inline Expr operator^(int x, Expr y) {
+    Type t = y.type();
+    Internal::check_representable(t, x);
+    return Internal::Call::make(t, Internal::Call::bitwise_xor, {Internal::make_const(t, x), std::move(y)}, Internal::Call::PureIntrinsic);
+}
+// @}
 
 /** Return the bitwise not of an expression. */
 inline Expr operator~(Expr x) {
@@ -1419,22 +1537,19 @@ inline Expr operator~(Expr x) {
  * arguments must have integer type. */
 // @{
 inline Expr operator<<(Expr x, Expr y) {
-    user_assert(x.defined() && y.defined()) << "shift left of undefined Expr\n";
-    user_assert(!x.type().is_float()) << "First argument to shift left is a float: " << x << "\n";
-    user_assert(!y.type().is_float()) << "Second argument to shift left is a float: " << y << "\n";
-    Internal::match_types(x, y);
+    Expr unsigned_amount = lossless_cast(UInt(x.type().bits(), y.type().lanes()), y);
+    user_assert(unsigned_amount.defined())
+        << "In shift left expression:\n"
+        << "   (" << x << ") << (" << y << ")\n"
+        << "   with types " << x.type() << " << " << y.type() << "\n"
+        << "the RHS must be unsigned and losslessly castable to the same size as the LHS.\n";
     Type t = x.type();
-    return Internal::Call::make(t, Internal::Call::shift_left, {std::move(x), std::move(y)}, Internal::Call::PureIntrinsic);
+    return Internal::Call::make(t, Internal::Call::shift_left, {std::move(x), std::move(unsigned_amount)}, Internal::Call::PureIntrinsic);
 }
 inline Expr operator<<(Expr x, int y) {
-    Type t = x.type();
+    Type t = UInt(x.type().bits(), x.type().lanes());
     Internal::check_representable(t, y);
     return std::move(x) << Internal::make_const(t, y);
-}
-inline Expr operator<<(int x, Expr y) {
-    Type t = y.type();
-    Internal::check_representable(t, x);
-    return Internal::make_const(t, x) << std::move(y);
 }
 // @}
 
@@ -1448,22 +1563,19 @@ inline Expr operator<<(int x, Expr y) {
  * type. */
 // @{
 inline Expr operator>>(Expr x, Expr y) {
-    user_assert(x.defined() && y.defined()) << "shift right of undefined Expr\n";
-    user_assert(!x.type().is_float()) << "First argument to shift right is a float: " << x << "\n";
-    user_assert(!y.type().is_float()) << "Second argument to shift right is a float: " << y << "\n";
-    Internal::match_types(x, y);
+    Expr unsigned_amount = lossless_cast(UInt(x.type().bits(), y.type().lanes()), y);
+    user_assert(unsigned_amount.defined())
+        << "In shift right expression:\n"
+        << "   (" << x << ") >> (" << y << ")\n"
+        << "   with types " << x.type() << " >> " << y.type() << "\n"
+        << "the RHS must be unsigned and losslessly castable to the same size as the LHS.\n";
     Type t = x.type();
-    return Internal::Call::make(t, Internal::Call::shift_right, {std::move(x), std::move(y)}, Internal::Call::PureIntrinsic);
+    return Internal::Call::make(t, Internal::Call::shift_right, {std::move(x), std::move(unsigned_amount)}, Internal::Call::PureIntrinsic);
 }
 inline Expr operator>>(Expr x, int y) {
-    Type t = x.type();
+    Type t = UInt(x.type().bits(), x.type().lanes());
     Internal::check_representable(t, y);
     return std::move(x) >> Internal::make_const(t, y);
-}
-inline Expr operator>>(int x, Expr y) {
-    Type t = y.type();
-    Internal::check_representable(t, x);
-    return Internal::make_const(t, x) >> std::move(y);
 }
 // @}
 
@@ -1585,8 +1697,8 @@ inline Expr popcount(Expr x) {
                                 {std::move(x)}, Internal::Call::PureIntrinsic);
 }
 
-/** Count the number of leading zero bits in an expression. The result is
- *  undefined if the value of the expression is zero. */
+/** Count the number of leading zero bits in an expression. If the expression is
+ * zero, the result is the number of bits in the type. */
 inline Expr count_leading_zeros(Expr x) {
     user_assert(x.defined()) << "count leading zeros of undefined Expr\n";
     Type t = x.type();
@@ -1596,8 +1708,8 @@ inline Expr count_leading_zeros(Expr x) {
                                 {std::move(x)}, Internal::Call::PureIntrinsic);
 }
 
-/** Count the number of trailing zero bits in an expression. The result is
- *  undefined if the value of the expression is zero. */
+/** Count the number of trailing zero bits in an expression. If the expression is
+ * zero, the result is the number of bits in the type. */
 inline Expr count_trailing_zeros(Expr x) {
     user_assert(x.defined()) << "count trailing zeros of undefined Expr\n";
     Type t = x.type();
@@ -1723,17 +1835,17 @@ inline Expr random_int(Expr seed = Expr()) {
 
 // Secondary args to print can be Exprs or const char *
 namespace Internal {
-inline NO_INLINE void collect_print_args(std::vector<Expr> &args) {
+inline HALIDE_NO_USER_CODE_INLINE void collect_print_args(std::vector<Expr> &args) {
 }
 
 template<typename ...Args>
-inline NO_INLINE void collect_print_args(std::vector<Expr> &args, const char *arg, Args&&... more_args) {
+inline HALIDE_NO_USER_CODE_INLINE void collect_print_args(std::vector<Expr> &args, const char *arg, Args&&... more_args) {
     args.push_back(Expr(std::string(arg)));
     collect_print_args(args, std::forward<Args>(more_args)...);
 }
 
 template<typename ...Args>
-inline NO_INLINE void collect_print_args(std::vector<Expr> &args, Expr arg, Args&&... more_args) {
+inline HALIDE_NO_USER_CODE_INLINE void collect_print_args(std::vector<Expr> &args, Expr arg, Args&&... more_args) {
     args.push_back(std::move(arg));
     collect_print_args(args, std::forward<Args>(more_args)...);
 }
@@ -1744,10 +1856,10 @@ inline NO_INLINE void collect_print_args(std::vector<Expr> &args, Expr arg, Args
  * evaluated. It also prints out everything else in the arguments
  * list, separated by spaces. This can include string literals. */
 //@{
-EXPORT Expr print(const std::vector<Expr> &values);
+Expr print(const std::vector<Expr> &values);
 
 template <typename... Args>
-inline NO_INLINE Expr print(Expr a, Args&&... args) {
+inline HALIDE_NO_USER_CODE_INLINE Expr print(Expr a, Args&&... args) {
     std::vector<Expr> collected_args = {std::move(a)};
     Internal::collect_print_args(collected_args, std::forward<Args>(args)...);
     return print(collected_args);
@@ -1757,10 +1869,10 @@ inline NO_INLINE Expr print(Expr a, Args&&... args) {
 /** Create an Expr that prints whenever it is evaluated, provided that
  * the condition is true. */
 // @{
-EXPORT Expr print_when(Expr condition, const std::vector<Expr> &values);
+Expr print_when(Expr condition, const std::vector<Expr> &values);
 
 template<typename ...Args>
-inline NO_INLINE Expr print_when(Expr condition, Expr a, Args&&... args) {
+inline HALIDE_NO_USER_CODE_INLINE Expr print_when(Expr condition, Expr a, Args&&... args) {
     std::vector<Expr> collected_args = {std::move(a)};
     Internal::collect_print_args(collected_args, std::forward<Args>(args)...);
     return print_when(std::move(condition), collected_args);
@@ -1790,17 +1902,20 @@ inline NO_INLINE Expr print_when(Expr condition, Expr a, Args&&... args) {
  * will allow the optimizer to assume positive, nonzero values for y.
  */
 // @{
-EXPORT Expr require(Expr condition, const std::vector<Expr> &values);
+Expr require(Expr condition, const std::vector<Expr> &values);
 
 template<typename ...Args>
-inline NO_INLINE Expr require(Expr condition, Expr value, Args&&... args) {
+inline HALIDE_NO_USER_CODE_INLINE Expr require(Expr condition, Expr value, Args&&... args) {
     std::vector<Expr> collected_args = {std::move(value)};
     Internal::collect_print_args(collected_args, std::forward<Args>(args)...);
     return require(std::move(condition), collected_args);
 }
 
-// @}
+namespace Internal {
+Expr requirement_failed_error(Expr condition, const std::vector<Expr> &args);
+}
 
+// @}
 
 /** Return an undef value of the given type. Halide skips stores that
  * depend on undef values, so you can use this to mean "do not modify
@@ -1832,7 +1947,7 @@ inline Expr undef() {
 }
 
 namespace Internal {
-EXPORT Expr memoize_tag_helper(Expr result, const std::vector<Expr> &cache_key_values);
+Expr memoize_tag_helper(Expr result, const std::vector<Expr> &cache_key_values);
 }  // namespace Internal
 
 /** Control the values used in the memoization cache key for memoize.
@@ -1863,7 +1978,7 @@ EXPORT Expr memoize_tag_helper(Expr result, const std::vector<Expr> &cache_key_v
  * on the digest. */
 // @{
 template<typename ...Args>
-inline NO_INLINE Expr memoize_tag(Expr result, Args&&... args) {
+inline HALIDE_NO_USER_CODE_INLINE Expr memoize_tag(Expr result, Args&&... args) {
     std::vector<Expr> collected_args{std::forward<Args>(args)...};
     return Internal::memoize_tag_helper(std::move(result), collected_args);
 }
@@ -1896,10 +2011,9 @@ inline Expr likely_if_innermost(Expr e) {
                                 {std::move(e)}, Internal::Call::PureIntrinsic);
 }
 
-
 /** Cast an expression to the halide type corresponding to the C++
- * type T clamping to the minimum and maximum values of the result
- * type. */
+ * type T. As part of the cast, clamp to the minimum and maximum
+ * values of the result type. */
 template <typename T>
 Expr saturating_cast(Expr e) {
     return saturating_cast(type_of<T>(), std::move(e));
@@ -1907,8 +2021,39 @@ Expr saturating_cast(Expr e) {
 
 /** Cast an expression to a new type, clamping to the minimum and
  * maximum values of the result type. */
-EXPORT Expr saturating_cast(Type t, Expr e);
+Expr saturating_cast(Type t, Expr e);
 
+/** Makes a best effort attempt to preserve IEEE floating-point
+ * semantics in evaluating an expression. May not be implemented for
+ * all backends. (E.g. it is difficult to do this for C++ code
+ * generation as it depends on the compiler flags used to compile the
+ * generated code. */
+inline Expr strict_float(Expr e) {
+    Type t = e.type();
+    return Internal::Call::make(t, Internal::Call::strict_float,
+                                {std::move(e)}, Internal::Call::PureIntrinsic);
 }
+
+/** Create an Expr that that promises another Expr is clamped but do
+ * not generate code to check the assertion or modify the value. No
+ * attempt is made to prove the bound at compile time. (If it is
+ * proved false as a result of something else, an error might be
+ * generated, but it is also possible the compiler will crash.) The
+ * promised bound is used in bounds inference so it will allow
+ * satisfying bounds checks as well as possibly aiding optimization.
+ *
+ * unsafe_promise_clamped returns its first argument, the Expr 'value'
+ *
+ * This is a very easy way to make Halide generate erroneous code if
+ * the bound promises is not kept. Use sparingly when there is no
+ * other way to convey the information to the compiler and it is
+ * required for a valuable optimization.
+ *
+ * Unsafe promises can be checked by turning on
+ * Target::CheckUnsafePromises. This is intended for debugging only.
+ */
+Expr unsafe_promise_clamped(Expr value, Expr min, Expr max);
+
+}  // namespace Halide
 
 #endif

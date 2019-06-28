@@ -1,20 +1,20 @@
-#include <sstream>
 #include <algorithm>
+#include <sstream>
 
-#include "CodeGen_OpenCL_Dev.h"
 #include "CodeGen_Internal.h"
+#include "CodeGen_OpenCL_Dev.h"
 #include "Debug.h"
-#include "IROperator.h"
-#include "IRMutator.h"
 #include "EliminateBoolVectors.h"
+#include "IRMutator.h"
+#include "IROperator.h"
 
 namespace Halide {
 namespace Internal {
 
 using std::ostringstream;
+using std::sort;
 using std::string;
 using std::vector;
-using std::sort;
 
 CodeGen_OpenCL_Dev::CodeGen_OpenCL_Dev(Target t) :
     clc(src_stream, t) {
@@ -109,7 +109,7 @@ string simt_intrinsic(const string &name) {
     internal_error << "simt_intrinsic called on bad variable name: " << name << "\n";
     return "";
 }
-}
+}  // namespace
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const For *loop) {
     if (is_gpu_var(loop->name)) {
@@ -153,10 +153,9 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Broadcast *op) {
 
 namespace {
 // Mapping of integer vector indices to OpenCL ".s" syntax.
-const char * vector_elements = "0123456789ABCDEF";
+const char *vector_elements = "0123456789ABCDEF";
 
-}
-
+}  // namespace
 
 string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::get_memory_space(const string &buf) {
     return "__address_space_" + print_name(buf);
@@ -204,6 +203,20 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Call *op) {
         ostringstream rhs;
         rhs << "abs_diff(" << print_expr(op->args[0]) << ", " << print_expr(op->args[1]) << ")";
         print_assignment(op->type, rhs.str());
+    } else if (op->is_intrinsic(Call::gpu_thread_barrier)) {
+        do_indent();
+        stream << "barrier(CLK_LOCAL_MEM_FENCE);\n";
+        print_assignment(op->type, "0");
+    } else if (op->is_intrinsic(Call::shift_left) || op->is_intrinsic(Call::shift_right)) {
+        // Some OpenCL implementations forbid mixing signed-and-unsigned shift values;
+        // we enforce RHS as unsigned, so quietly cast it back to int if the LHS is int
+        if (op->args[0].type().is_int() && op->args[1].type().is_uint()) {
+            Type t = op->args[0].type().with_code(halide_type_int);
+            Expr e = Call::make(op->type, op->name, {op->args[0], cast(t, op->args[1])}, op->call_type);
+            e.accept(this);
+        } else {
+            CodeGen_C::visit(op);
+        }
     } else {
         CodeGen_C::visit(op);
     }
@@ -326,7 +339,6 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
                                   allocations.get(op->name).type == t);
 
         string id_index = print_expr(op->index);
-        string id_value = print_expr(op->value);
         do_indent();
 
         if (type_cast_needed) {
@@ -529,7 +541,7 @@ struct BufferSize {
         return size < r.size;
     }
 };
-}
+}  // namespace
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
                                                       const string &name,
@@ -682,11 +694,7 @@ void CodeGen_OpenCL_Dev::init_module() {
                << "#define tanh_f32 tanh \n"
                << "#define atanh_f32 atanh \n"
                << "#define fast_inverse_f32 native_recip \n"
-               << "#define fast_inverse_sqrt_f32 native_rsqrt \n"
-               << "inline int halide_gpu_thread_barrier() {\n"
-               << "  barrier(CLK_LOCAL_MEM_FENCE);\n" // Halide only ever needs local memory fences.
-               << "  return 0;\n"
-               << "}\n";
+               << "#define fast_inverse_sqrt_f32 native_rsqrt \n";
 
     // __shared always has address space __local.
     src_stream << "#define __address_space___shared __local\n";
@@ -778,4 +786,5 @@ std::string CodeGen_OpenCL_Dev::print_gpu_name(const std::string &name) {
     return name;
 }
 
-}}
+}  // namespace Internal
+}  // namespace Halide

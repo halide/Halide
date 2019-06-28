@@ -1,18 +1,16 @@
 #include <iostream>
-#include <fstream>
 #include <memory>
 
-#include "HexagonOffload.h"
 #include "Closure.h"
-#include "InjectHostDevBufferCopies.h"
+#include "Elf.h"
+#include "HexagonOffload.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "LLVM_Output.h"
+#include "InjectHostDevBufferCopies.h"
 #include "LLVM_Headers.h"
+#include "LLVM_Output.h"
 #include "Param.h"
-#include "RemoveTrivialForLoops.h"
 #include "Substitute.h"
-#include "Elf.h"
 
 namespace Halide {
 namespace Internal {
@@ -218,7 +216,7 @@ std::string print_sections(const Object &obj) {
         oss << "No sections in object\n";
         return oss.str();
     }
-    for (const Section &s: obj.sections()) {
+    for (const Section &s : obj.sections()) {
         oss << s.get_name() << ", Type = " << section_type_string(s.get_type()) << ", Size = " << hex(s.get_size()) << ", Alignment = " << s.get_alignment() << "\n";
     }
     return oss.str();
@@ -635,18 +633,18 @@ const std::string pipeline_module_name = "halide_hexagon_code";
 
 // Replace the parameter objects of loads/stores with a new parameter
 // object.
-class ReplaceParams : public IRMutator2 {
+class ReplaceParams : public IRMutator {
     const std::map<std::string, Parameter> &replacements;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Expr visit(const Load *op) override {
         auto i = replacements.find(op->name);
         if (i != replacements.end()) {
             return Load::make(op->type, op->name, mutate(op->index), op->image,
-                              i->second, mutate(op->predicate));
+                              i->second, mutate(op->predicate), op->alignment);
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
@@ -654,9 +652,9 @@ class ReplaceParams : public IRMutator2 {
         auto i = replacements.find(op->name);
         if (i != replacements.end()) {
             return Store::make(op->name, mutate(op->value), mutate(op->index),
-                               i->second, mutate(op->predicate));
+                               i->second, mutate(op->predicate), op->alignment);
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
@@ -669,19 +667,15 @@ Stmt replace_params(Stmt s, const std::map<std::string, Parameter> &replacements
     return ReplaceParams(replacements).mutate(s);
 }
 
-class InjectHexagonRpc : public IRMutator2 {
+class InjectHexagonRpc : public IRMutator {
     std::map<std::string, Expr> state_bufs;
 
     Module &device_code;
 
-    // Alignment info for Int(32) variables in scope, so we don't lose
-    // the information when creating Hexagon kernels.
-    Scope<ModulusRemainder> alignment_info;
-
     Expr state_var(const std::string& name, Type type) {
         return Let::make(name, state_var_ptr(name, type),
                          Load::make(type_of<void*>(), name, 0,
-                                    Buffer<>(), Parameter(), const_true()));
+                                    Buffer<>(), Parameter(), const_true(), ModulusRemainder()));
     }
 
     Expr state_var_ptr(const std::string& name, Type type) {
@@ -711,11 +705,11 @@ class InjectHexagonRpc : public IRMutator2 {
         return Call::make(Handle(), Call::buffer_get_host, {buf}, Call::Extern);
     }
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Stmt visit(const For *loop) override {
         if (loop->device_api != DeviceAPI::Hexagon) {
-            return IRMutator2::visit(loop);
+            return IRMutator::visit(loop);
         }
 
         // Unrolling or loop partitioning might generate multiple
@@ -728,14 +722,52 @@ class InjectHexagonRpc : public IRMutator2 {
 
         // After moving this to Hexagon, it doesn't need to be marked
         // Hexagon anymore.
-        Stmt body = For::make(loop->name, loop->min, loop->extent, loop->for_type,
-                              DeviceAPI::None, loop->body);
-        body = remove_trivial_for_loops(body);
+        Stmt body;
+        if (is_one(loop->extent)) {
+            body = LetStmt::make(loop->name, loop->min, loop->body);
+        } else {
+            body = For::make(loop->name, loop->min, loop->extent, loop->for_type,
+                             DeviceAPI::None, loop->body);
+        }
 
         // Build a closure for the device code.
         // TODO: Should this move the body of the loop to Hexagon,
         // or the loop itself? Currently, this moves the loop itself.
         Closure c(body);
+
+        // A buffer parameter potentially generates 3 scalar parameters (min,
+        // extent, stride) per dimension. Pipelines with many buffers may
+        // generate extreme numbers of scalar parameters, which can cause
+        // problems for LLVM. This logic moves scalar parameters of the type
+        // matching the type of these scalars to a single buffer.
+        // TODO(dsharlet): Maybe this is Int(64) in some cases?
+        Type scalars_buffer_type = Int(32);
+        std::string scalars_buffer_name = "scalar_indices";
+        std::vector<Stmt> scalars_buffer_init;
+        for (auto i = c.vars.begin(); i != c.vars.end();) {
+            if (i->second == scalars_buffer_type) {
+                int index = scalars_buffer_init.size();
+                scalars_buffer_init.push_back(Store::make(scalars_buffer_name, Variable::make(scalars_buffer_type, i->first),
+                                                          index, Parameter(), const_true(), ModulusRemainder()));
+                Expr replacement = Load::make(scalars_buffer_type, scalars_buffer_name, index, Buffer<>(),
+                                              Parameter(), const_true(), ModulusRemainder());
+                body = LetStmt::make(i->first, replacement, body);
+
+                i = c.vars.erase(i);
+            } else {
+                ++i;
+            }
+        }
+        if (!scalars_buffer_init.empty()) {
+            // If we put some scalars in the scalars buffer, add it to the closure.
+            Closure::Buffer scalars_buffer;
+            scalars_buffer.type = scalars_buffer_type;
+            scalars_buffer.dimensions = 1;
+            scalars_buffer.read = true;
+            scalars_buffer.write = false;
+            c.buffers[scalars_buffer_name] = scalars_buffer;
+        }
+        int scalars_buffer_extent = scalars_buffer_init.size();
 
         // Make an argument list, and generate a function in the
         // device_code module. The hexagon runtime code expects
@@ -748,10 +780,10 @@ class InjectHexagonRpc : public IRMutator2 {
         for (const auto& i : c.buffers) {
             if (i.second.write) {
                 Argument::Kind kind = Argument::OutputBuffer;
-                output_buffers.push_back(LoweredArgument(i.first, kind, i.second.type, i.second.dimensions));
+                output_buffers.push_back(LoweredArgument(i.first, kind, i.second.type, i.second.dimensions, ArgumentEstimates{}));
             } else {
                 Argument::Kind kind = Argument::InputBuffer;
-                input_buffers.push_back(LoweredArgument(i.first, kind, i.second.type, i.second.dimensions));
+                input_buffers.push_back(LoweredArgument(i.first, kind, i.second.type, i.second.dimensions, ArgumentEstimates{}));
             }
 
             // Build a parameter to replace.
@@ -765,8 +797,10 @@ class InjectHexagonRpc : public IRMutator2 {
             // alignment.
             replacement_params[i.first] = p;
 
-            // Add an assert to the body that validates the
-            // alignment of the buffer.
+            // Add an assert to the body that validates the alignment of the
+            // buffer. These buffers are either allocated by FastRPC or
+            // halide_hexagon_device_interface buffers, either should be aligned
+            // to 128 bytes.
             if (!device_code.target().has_feature(Target::NoAsserts)) {
                 Expr host_ptr = reinterpret<uint64_t>(Variable::make(Handle(), i.first));
                 Expr error = Call::make(Int(32), "halide_error_unaligned_host_ptr",
@@ -788,13 +822,10 @@ class InjectHexagonRpc : public IRMutator2 {
         args.insert(args.end(), input_buffers.begin(), input_buffers.end());
         args.insert(args.end(), output_buffers.begin(), output_buffers.end());
         for (const auto& i : c.vars) {
-            LoweredArgument arg(i.first, Argument::InputScalar, i.second, 0);
-            if (alignment_info.contains(i.first)) {
-                arg.alignment = alignment_info.get(i.first);
-            }
+            LoweredArgument arg(i.first, Argument::InputScalar, i.second, 0, ArgumentEstimates{});
             args.push_back(arg);
         }
-        device_code.append(LoweredFunc(hex_name, args, body, LoweredFunc::ExternalPlusMetadata));
+        device_code.append(LoweredFunc(hex_name, args, body, LinkageType::ExternalPlusMetadata));
 
         // Generate a call to hexagon_device_run.
         std::vector<Expr> arg_sizes;
@@ -802,16 +833,28 @@ class InjectHexagonRpc : public IRMutator2 {
         std::vector<Expr> arg_flags;
 
         for (const auto& i : c.buffers) {
-            // The Hexagon runtime expects buffer args to be
-            // passed as just the device and host
-            // field. CodeGen_Hexagon knows how to unpack buffers
-            // passed this way.
-            Expr buf = Variable::make(type_of<halide_buffer_t *>(), i.first + ".buffer");
-            Expr device = Call::make(UInt(64), Call::buffer_get_device, {buf}, Call::Extern);
-            Expr host = Call::make(Handle(), Call::buffer_get_host, {buf}, Call::Extern);
-            Expr pseudo_buffer = Call::make(Handle(), Call::make_struct, {device, host}, Call::Intrinsic);
-            arg_ptrs.push_back(pseudo_buffer);
-            arg_sizes.push_back(Expr((uint64_t)(pseudo_buffer.type().bytes())));
+            // Buffers are passed to the hexagon host runtime as just device
+            // handles (uint64) and host (uint8*) fields.
+            if (i.first != scalars_buffer_name) {
+                // If this isn't the scalars buffer, assume it has a '.buffer'
+                // description in the IR.
+                Expr buf = Variable::make(type_of<halide_buffer_t *>(), i.first + ".buffer");
+                Expr device = Call::make(UInt(64), Call::buffer_get_device, {buf}, Call::Extern);
+                Expr host = Call::make(Handle(), Call::buffer_get_host, {buf}, Call::Extern);
+                Expr pseudo_buffer = Call::make(Handle(), Call::make_struct, {device, host}, Call::Intrinsic);
+                arg_ptrs.push_back(pseudo_buffer);
+                arg_sizes.push_back(Expr((uint64_t)(pseudo_buffer.type().bytes())));
+            } else {
+                // If this is the scalars buffer, it doesn't have a .buffer
+                // field. Rather than make one, It's easier to just skip the
+                // buffer_get_host call and reference the allocation directly.
+                // TODO: This is a bit of an ugly hack, it would be nice to find
+                // a better way to identify buffers without a '.buffer' description.
+                Expr host = Variable::make(Handle(), i.first);
+                Expr pseudo_buffer = Call::make(Handle(), Call::make_struct, {make_zero(UInt(64)), host}, Call::Intrinsic);
+                arg_ptrs.push_back(pseudo_buffer);
+                arg_sizes.push_back(Expr((uint64_t)scalars_buffer_extent * scalars_buffer_type.bytes()));
+            }
 
             // In the flags parameter, bit 0 set indicates the
             // buffer is read, bit 1 set indicates the buffer is
@@ -837,37 +880,17 @@ class InjectHexagonRpc : public IRMutator2 {
         params.push_back(module_state());
         params.push_back(pipeline_name);
         params.push_back(state_var_ptr(hex_name, type_of<int>()));
-        params.push_back(Call::make(type_of<size_t*>(), Call::make_struct, arg_sizes, Call::Intrinsic));
+        params.push_back(Call::make(type_of<uint64_t*>(), Call::make_struct, arg_sizes, Call::Intrinsic));
         params.push_back(Call::make(type_of<void**>(), Call::make_struct, arg_ptrs, Call::Intrinsic));
         params.push_back(Call::make(type_of<int*>(), Call::make_struct, arg_flags, Call::Intrinsic));
 
-        return call_extern_and_assert("halide_hexagon_run", params);
-    }
-
-    Expr visit(const Let *op) override {
-        if (op->value.type() == Int(32)) {
-            alignment_info.push(op->name, modulus_remainder(op->value, alignment_info));
+        Stmt offload_call = call_extern_and_assert("halide_hexagon_run", params);
+        if (!scalars_buffer_init.empty()) {
+            offload_call = Block::make(Block::make(scalars_buffer_init), offload_call);
         }
-
-        Expr expr = IRMutator2::visit(op);
-
-        if (op->value.type() == Int(32)) {
-            alignment_info.pop(op->name);
-        }
-        return expr;
-    }
-
-    Stmt visit(const LetStmt *op) override {
-        if (op->value.type() == Int(32)) {
-            alignment_info.push(op->name, modulus_remainder(op->value, alignment_info));
-        }
-
-        Stmt stmt = IRMutator2::visit(op);
-
-        if (op->value.type() == Int(32)) {
-            alignment_info.pop(op->name);
-        }
-        return stmt;
+        offload_call = Allocate::make(scalars_buffer_name, scalars_buffer_type, MemoryType::Auto,
+                                      {Expr(scalars_buffer_extent)}, const_true(), offload_call);
+        return offload_call;
     }
 
 public:
@@ -1031,13 +1054,7 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
 
         debug(1) << "Signing Hexagon code: " << input.pathname() << " -> " << output.pathname() << "\n";
 
-        {
-            std::ofstream f(input.pathname());
-            f.write(shared_object.data(), shared_object.size());
-            f.flush();
-            internal_assert(f.good());
-            f.close();
-        }
+        write_entire_file(input.pathname(), shared_object);
 
         debug(1) << "Signing tool: (" << signer << ")\n";
         std::string cmd = signer + " " + input.pathname() + " " + output.pathname();
@@ -1046,16 +1063,7 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
             << "HL_HEXAGON_CODE_SIGNER failed: result = " << result
             << " for cmd (" << cmd << ")";
 
-        {
-            std::ifstream f(output.pathname());
-            f.seekg(0, std::ifstream::end);
-            size_t signed_size = f.tellg();
-            shared_object.resize(signed_size);
-            f.seekg(0, std::ifstream::beg);
-            f.read(shared_object.data(), shared_object.size());
-            internal_assert(f.good());
-            f.close();
-        }
+        shared_object = read_entire_file(output.pathname());
     }
 
     Halide::Buffer<uint8_t> result_buf(shared_object.size(), device_code.name());
