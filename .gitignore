@@ -9,6 +9,8 @@ build-64/*
 build-ios/*
 build-osx/*
 cmake_build/*
+cmake_build_shared/*
+cmake_build_static/*
 */build/*
 tmp/*
 doc/*
