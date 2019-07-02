@@ -2,7 +2,7 @@
 #include <cstring>
 #include <string>
 #include <assert.h>
-#include <math.h>
+#include <cmath>
 #include <stdio.h>
 
 #include "HalideRuntime.h"
