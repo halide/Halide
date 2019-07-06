@@ -197,6 +197,7 @@ benchmark_sample() {
     S=$2
 
     CMD="${AUTOSCHED_BIN}/augment_sample ${D}/sample.sample $R $P $S"
+    eval $CMD
     if [[ $? != 0 ]]; then
         echo "Augment sample failed for ${D}"
         record_failed $BATCH $SAMPLE_ID "$CMD" "augment_command"
