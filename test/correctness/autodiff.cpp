@@ -1251,7 +1251,7 @@ void test_param() {
     f() = 2.f * param * param;
     Derivative d = propagate_adjoints(f);
     Func d_param = d(param);
-    Buffer<float> d_param_buf = d_param.realize(1);
+    Buffer<float> d_param_buf = d_param.realize();
     check(__LINE__, d_param_buf(), 8.f);
 }
 
