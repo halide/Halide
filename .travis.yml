@@ -5,9 +5,10 @@ compiler:
   - gcc
 env:
   global:
-    # The Travis Ubuntu Xenial environment we run in currently promises 2 cores,
-    # so running lengthy make steps with -j2 is almost certainly a win.
-    - MAKEFLAGS=-j2
+    # The Travis Ubuntu Xenial environment we run in currently promises 2 cores.
+    # We'll run at -j4 on the assumption that there's enough I/O bound work
+    # for that to be profitable.
+    - MAKEFLAGS=-j4
   matrix:
     # Configurations
     #
