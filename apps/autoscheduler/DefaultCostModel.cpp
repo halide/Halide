@@ -49,6 +49,13 @@ Runtime::Buffer<float> buffer_from_file(const std::string &filename, const std::
     i.read((char *)(buf.data()), buf.size_in_bytes());
     i.close();
 
+    buf.for_each_value([&filename](float &f) {
+        if (std::isnan(f)) {
+            std::cerr << "NaN found in weights: " << filename << "\n";
+            abort();
+        }
+    });
+
     if (i.fail()) {
         auto seed = time(NULL);
         std::mt19937 rng((uint32_t) seed);
