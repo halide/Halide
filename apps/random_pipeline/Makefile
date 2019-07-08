@@ -66,6 +66,7 @@ build: $(BIN)/$(ID)/test
 bench: $(BIN)/$(ID)/times.txt
 bench_simple_autoschedule: $(BIN)/$(ID)/times_simple_autoschedule.txt
 
+BATCH_ID ?= 0
 autotune_gpu: $(BIN)/random_pipeline.generator $(AUTOSCHED_BIN)/augment_sample $(AUTOSCHED_BIN)/train_cost_model $(AUTOSCHED_BIN)/libauto_schedule.so $(AUTOSCHED_SRC)/autotune_loop.sh
 	HL_TARGET=host-cuda \
 	HL_MACHINE_PARAMS=80,1,1 \
@@ -79,4 +80,5 @@ autotune_gpu: $(BIN)/random_pipeline.generator $(AUTOSCHED_BIN)/augment_sample $
 		host-cuda \
 		$(AUTOSCHED_SRC)/gpu_weights \
 		$(AUTOSCHED_BIN) \
+		$(BATCH_ID) \
 		"seed=$(PIPELINE_SEED);max_stages=$(PIPELINE_STAGES)"

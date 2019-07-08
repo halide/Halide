@@ -141,6 +141,7 @@ benchmark_sample() {
     # Add the runtime, pipeline id, and schedule id to the feature file
     R=$(cat ${D}/bench.txt | grep 'Benchmark for' | cut -d' ' -f8)
     CMD="./bin/augment_sample ${D}/sample.sample $R $3 $2"
+    eval $CMD
     if [[ $? != 0 ]]; then
         echo "Augment sample failed for ${D}"
         record_failed $BATCH $SAMPLE_ID "$CMD" "augment_command"
