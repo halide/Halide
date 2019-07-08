@@ -163,7 +163,7 @@ FunctionContents *FunctionPtr::get() const {
 }
 
 template<>
-RefCount &ref_count<FunctionGroup>(const FunctionGroup *f) {
+RefCount &ref_count<FunctionGroup>(const FunctionGroup *f) noexcept {
     return f->ref_count;
 }
 

@@ -601,7 +601,9 @@ function(_halide_add_exec_generator_target EXEC_TARGET)
 
   set(EXTRA_OUTPUTS_COMMENT )
   foreach(OUTPUT ${args_OUTPUTS})
-    if((${OUTPUT} MATCHES "^.*\\.h$") OR (${OUTPUT} MATCHES "^.*${CMAKE_STATIC_LIBRARY_SUFFIX}$"))
+    if((${OUTPUT} MATCHES "^.*\\.h$")
+       OR (${OUTPUT} MATCHES "^.*${CMAKE_STATIC_LIBRARY_SUFFIX}$")
+       OR (${OUTPUT} MATCHES "^.*\\.registration\\.cpp$"))
       # Ignore
     else()
       set(EXTRA_OUTPUTS_COMMENT "${EXTRA_OUTPUTS_COMMENT}\nEmitting extra Halide output: ${OUTPUT}")

@@ -1620,7 +1620,7 @@ private:
         string var;
         int instance;
         VarInstance(const string &v, int i) : var(v), instance(i) {}
-        VarInstance() {};
+        VarInstance() = default;
 
         bool operator==(const VarInstance &other) const {
             return (var == other.var) && (instance == other.instance);

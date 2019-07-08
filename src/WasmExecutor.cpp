@@ -1524,7 +1524,7 @@ WasmModuleContents::~WasmModuleContents() {
 
 
 template<>
-RefCount &ref_count<WasmModuleContents>(const WasmModuleContents *p) {
+RefCount &ref_count<WasmModuleContents>(const WasmModuleContents *p) noexcept {
     return p->ref_count;
 }
 
