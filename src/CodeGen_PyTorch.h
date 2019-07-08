@@ -51,12 +51,6 @@ protected:
     OutputKind output_kind;
 
     std::string cpp_header;
-
-
-    // bool is_header() {
-    //     return output_kind == PyTorchHeader;
-    // }
-
 };
 
 }

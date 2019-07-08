@@ -153,7 +153,11 @@ CodeGen_PyTorch::CodeGen_PyTorch(ostream &s, Target t, OutputKind output_kind,
     // stream << "#undef HL_PT_CUDA\n";
   }
 
-  stream << "\n#include \"" << cpp_header << "\"\n\n";
+  std::vector<std::string> header_path = split_string(cpp_header, "/");
+  std::string header = header_path.back();
+  
+
+  stream << "\n#include \"" << header << "\"\n\n";
   stream << "using Halide::Runtime::Buffer;\n\n";
 }
 
