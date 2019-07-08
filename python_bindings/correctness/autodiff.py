@@ -3,13 +3,14 @@ import halide as hl
 def test_autodiff():
     x = hl.Var('x')
     b = hl.Buffer(hl.Float(32), [3])
+    p = hl.Param(hl.Float(32), 'p', 1)
     b[0] = 1.0
     b[1] = 2.0
     b[2] = 3.0
     f, g, h = hl.Func('f'), hl.Func('g'), hl.Func('h')
     f[x] = b[x]
     f[0] = 4.0
-    g[x] = f[x] * 5.0
+    g[x] = f[x] * 5.0 * p
     r = hl.RDom([(0, 3)])
     h[()] = 0.0
     h[()] += g[r.x]
@@ -74,6 +75,15 @@ def test_autodiff():
     assert(d_b_buf[0] == 0.0)
     assert(d_b_buf[1] == 5.0)
     assert(d_b_buf[2] == 5.0)
+
+    # gradient w.r.t. the param
+    d_p = d[p]
+    d_p_buf = d_p.realize(1)
+    # 5 * (4 + 2 + 3)
+    assert(abs(d_p_buf[()] - 45.0) < 1e-6)
+    d_p = d.get(p)
+    d_p_buf = d_p.realize(1)
+    assert(abs(d_p_buf[()] - 45.0) < 1e-6)
 
 if __name__ == "__main__":
     test_autodiff()

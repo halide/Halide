@@ -506,13 +506,13 @@ void ReverseAccumulationVisitor::propagate_adjoints(
         }
     }
     // Also create stubs for buffers referenced by the functions
-    map<string, BufferInfo> called_buffers;
+    map<string, BufferInfo> called_buffers_or_param;
     for (int func_id = 0; func_id < (int) funcs.size(); func_id++) {
         const Func &func = funcs[func_id];
-        map<string, BufferInfo> buffers = find_buffer_calls(func);
-        called_buffers.insert(buffers.begin(), buffers.end());
+        map<string, BufferInfo> buffers = find_buffer_param_calls(func);
+        called_buffers_or_param.insert(buffers.begin(), buffers.end());
     }
-    for (const auto &it : called_buffers) {
+    for (const auto &it : called_buffers_or_param) {
         Func adjoint_func(it.first + "_d__");
         vector<Var> args;
         for (int i = 0; i < it.second.dimension; i++) {
@@ -521,7 +521,7 @@ void ReverseAccumulationVisitor::propagate_adjoints(
         adjoint_func(args) = make_const(it.second.type, 0.0);
         FuncKey func_key{ it.first, -1 };
         if (adjoint_funcs.find(func_key) != adjoint_funcs.end()) {
-            user_error << "Naming conflict between buffer and function:" << it.first << "\n";
+            user_error << "Naming conflict between buffer/parameters and function:" << it.first << "\n";
         }
         adjoint_funcs[func_key] = adjoint_func;
     }
@@ -846,6 +846,15 @@ void ReverseAccumulationVisitor::visit(const Cast *op) {
 void ReverseAccumulationVisitor::visit(const Variable *op) {
     internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
     Expr adjoint = expr_adjoints[op];
+
+    if (op->param.defined()) {
+        // This is a reference to a Parameter.
+        // Create a call expression to that parameter and propagate the call expression.
+        Expr call = Call::make(op->param, {});
+        expr_adjoints[call.get()] = adjoint;
+        call.accept(this);
+        return;
+    }
 
     // If the variable is a let variable, accumulates adjoints into the content
     auto it = let_var_mapping.find(op->name);
