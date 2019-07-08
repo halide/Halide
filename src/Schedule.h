@@ -325,7 +325,7 @@ struct FusedPair {
     size_t stage_2;
     std::string var_name;
 
-    FusedPair() {}
+    FusedPair() = default;
     FusedPair(const std::string &f1, size_t s1, const std::string &f2,
               size_t s2, const std::string &var)
         : func_1(f1), func_2(f2), stage_1(s1), stage_2(s2), var_name(var) {}

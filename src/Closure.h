@@ -62,7 +62,7 @@ protected:
                           bool read, bool written, Halide::Buffer<> image);
 
 public:
-    Closure() {}
+    Closure() = default;
 
     /** Traverse a statement and find all references to external
      * symbols.

@@ -130,7 +130,7 @@ struct ReductionDomainContents {
 };
 
 template<>
-RefCount &ref_count<Halide::Internal::ReductionDomainContents>(const ReductionDomainContents *p) {return p->ref_count;}
+RefCount &ref_count<Halide::Internal::ReductionDomainContents>(const ReductionDomainContents *p) noexcept {return p->ref_count;}
 
 template<>
 void destroy<Halide::Internal::ReductionDomainContents>(const ReductionDomainContents *p) {delete p;}

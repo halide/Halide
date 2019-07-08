@@ -65,7 +65,7 @@ struct AssociativeOp {
         std::string var;
         Expr expr;
 
-        Replacement() {}
+        Replacement() = default;
         Replacement(const std::string &var, Expr expr) : var(var), expr(expr) {}
 
         bool operator==(const Replacement &other) const {

@@ -25,10 +25,10 @@ class SmallStack {
 private:
     T _top;
     std::vector<T> _rest;
-    bool _empty;
+    bool _empty = true;
 
 public:
-    SmallStack() : _empty(true) {}
+    SmallStack() = default;
 
     void pop() {
         if (_rest.empty()) {

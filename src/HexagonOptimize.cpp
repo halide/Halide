@@ -149,7 +149,7 @@ struct Pattern {
     Expr pattern;         // The pattern to match against
     int flags;
 
-    Pattern() {}
+    Pattern() = default;
     Pattern(const string &intrin, Expr p, int flags = 0)
         : intrin(intrin), pattern(p), flags(flags) {}
 };

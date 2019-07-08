@@ -330,7 +330,7 @@ public:
         containing_loops.push_back({v, i});
     }
 
-    SimplifyUsingBounds() {}
+    SimplifyUsingBounds() = default;
 };
 
 class TrimNoOps : public IRMutator {

@@ -81,7 +81,7 @@ struct IRNode {
      */
     virtual void accept(IRVisitor *v) const = 0;
     IRNode(IRNodeType t) : node_type(t) {}
-    virtual ~IRNode() {}
+    virtual ~IRNode() = default;
 
     /** These classes are all managed with intrusive reference
      * counting, so we also track a reference count. It's mutable
@@ -104,7 +104,7 @@ struct IRNode {
 };
 
 template<>
-inline RefCount &ref_count<IRNode>(const IRNode *t) {return t->ref_count;}
+inline RefCount &ref_count<IRNode>(const IRNode *t) noexcept {return t->ref_count;}
 
 template<>
 inline void destroy<IRNode>(const IRNode *t) {delete t;}
@@ -141,7 +141,7 @@ struct ExprNode : public BaseExprNode {
     void accept(IRVisitor *v) const override;
     Expr mutate_expr(IRMutator *v) const override;
     ExprNode() : BaseExprNode(T::_node_type) {}
-    virtual ~ExprNode() {}
+    virtual ~ExprNode() = default;
 };
 
 template<typename T>
@@ -149,7 +149,7 @@ struct StmtNode : public BaseStmtNode {
     void accept(IRVisitor *v) const override;
     Stmt mutate_stmt(IRMutator *v) const override;
     StmtNode() : BaseStmtNode(T::_node_type) {}
-    virtual ~StmtNode() {}
+    virtual ~StmtNode() = default;
 };
 
 /** IR nodes are passed around opaque handles to them. This is a
@@ -157,7 +157,7 @@ struct StmtNode : public BaseStmtNode {
    and dispatches visitors. */
 struct IRHandle : public IntrusivePtr<const IRNode> {
     HALIDE_ALWAYS_INLINE
-    IRHandle() : IntrusivePtr<const IRNode>() {}
+    IRHandle() = default;
 
     HALIDE_ALWAYS_INLINE
     IRHandle(const IRNode *p) : IntrusivePtr<const IRNode>(p) {}
@@ -291,7 +291,7 @@ struct StringImm : public ExprNode<StringImm> {
 struct Expr : public Internal::IRHandle {
     /** Make an undefined expression */
     HALIDE_ALWAYS_INLINE
-    Expr() : Internal::IRHandle() {}
+    Expr() = default;
 
     /** Make an expression from a concrete expression node pointer (e.g. Add) */
     HALIDE_ALWAYS_INLINE
@@ -439,7 +439,7 @@ inline bool is_parallel(ForType for_type) {
 
 /** A reference-counted handle to a statement node. */
 struct Stmt : public IRHandle {
-    Stmt() : IRHandle() {}
+    Stmt() = default;
     Stmt(const BaseStmtNode *n) : IRHandle(n) {}
 
     /** Override get() to return a BaseStmtNode * instead of an IRNode * */

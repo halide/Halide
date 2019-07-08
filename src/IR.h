@@ -398,7 +398,7 @@ struct Free : public StmtNode<Free> {
  * (min + extent - 1) */
 struct Range {
     Expr min, extent;
-    Range() {}
+    Range() = default;
     Range(Expr min, Expr extent) : min(min), extent(extent) {
         internal_assert(min.type() == extent.type()) << "Region min and extent must have same type\n";
     }
