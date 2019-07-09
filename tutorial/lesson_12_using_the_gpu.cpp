@@ -309,7 +309,19 @@ Target find_gpu_target() {
         target.set_feature(Target::Metal);
     }
 #else
-    if (dlopen("libOpenCL.so", RTLD_LAZY) != NULL) {
+    if (void *handle = dlopen("libcuda.so", RTLD_LAZY)) {
+        int numDevices = 0;
+        int (*cuInit)(int) = (int (*)(int)) dlsym(handle, "cuInit");
+        int (*cuDeviceGetCount)(int *) =
+            (int (*)(int *)) dlsym(handle, "cuDeviceGetCount");
+        if (!dlerror()) {
+            (*cuInit)(0);
+            (*cuDeviceGetCount)(&numDevices);
+            if (numDevices) {
+                target.set_feature(Target::CUDA);
+            }
+        }
+    } else if (dlopen("libOpenCL.so", RTLD_LAZY) != NULL) {
         target.set_feature(Target::OpenCL);
     }
 #endif
