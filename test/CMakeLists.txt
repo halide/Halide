@@ -10,6 +10,7 @@ option(WITH_TEST_AUTO_SCHEDULE "Build auto_schedule tests" ON)
 if (WITH_TEST_INTERNAL)
   message(STATUS "Internal tests enabled")
   halide_project(test_internal internal internal.cpp)
+  target_include_directories(test_internal PRIVATE "${CMAKE_SOURCE_DIR}/src")
   add_halide_test(test_internal
            GROUPS run_tests)
 else()
