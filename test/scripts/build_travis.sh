@@ -41,7 +41,7 @@ if [ ${BUILD_SYSTEM} = 'CMAKE' ]; then
     make ${MAKEFLAGS} test_correctness
     make ${MAKEFLAGS} test_generator
     make doc
-  endif()
+  fi
 
 elif [ ${BUILD_SYSTEM} = 'MAKE' ]; then
   export LLVM_CONFIG=/usr/local/llvm/bin/llvm-config
