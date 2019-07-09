@@ -4,6 +4,12 @@
 
 using namespace Halide;
 
+#ifdef _WIN32
+#define DLLEXPORT __declspec(dllexport)
+#else
+#define DLLEXPORT
+#endif
+
 enum class Backend {
     CPU,
     CPUVectorize,
@@ -484,6 +490,119 @@ void test_all(const Backend &backend) {
     }
 }
 
+extern "C" DLLEXPORT int extern_func(int x) {
+    return x + 1;
+}
+HalideExtern_1(int, extern_func, int);
+
+void test_extern_func(const Backend &backend) {
+    int img_size = 10000;
+    int hist_size = 7;
+
+    Func im, hist;
+    Var x;
+    RDom r(0, img_size);
+
+    im(x) = (x*x) % hist_size;
+
+    hist(x) = 0;
+    hist(im(r)) = extern_func(hist(im(r)));
+
+    hist.compute_root();
+    switch(backend) {
+        case Backend::CPU: {
+            hist.update().allow_race_conditions().atomic().parallel(r);
+        } break;
+        case Backend::CPUVectorize: {
+            RVar ro, ri;
+            hist.update()
+                .allow_race_conditions()
+                .atomic()
+                .split(r, ro, ri, 8)
+                .parallel(ro)
+                .vectorize(ri);
+        } break;
+        default: {
+            _halide_user_assert(false) << "Unsupported backend.\n";
+        } break;
+    }
+
+    Buffer<int> correct(hist_size);
+    correct.fill(0);
+    for (int i = 0; i < img_size; i++) {
+        int idx = (i*i) % hist_size;
+        correct(idx) = correct(idx) + 1;
+    }
+
+    // Run 100 times to make sure race condition do happen
+    for (int iter = 0; iter < 100; iter++) {
+        Buffer<int> out = hist.realize(hist_size);
+        for (int i = 0; i < hist_size; i++) {
+            check(__LINE__, out(i), correct(i));
+        }
+    }
+}
+
+extern "C" DLLEXPORT int expensive(int x) {
+    float f = 3.0f;
+    for (int i = 0; i < (1 << 10); i++) {
+        f = sqrtf(sinf(cosf(f)));
+    }
+    if (f < 0) return 3;
+    return x + 1;
+}
+HalideExtern_1(int, expensive, int);
+
+void test_async(const Backend &backend) {
+    int img_size = 10000;
+    int hist_size = 7;
+
+    Func producer, consumer;
+    Var x;
+    RDom r(0, img_size);
+
+    producer(x) = (x*x) % hist_size;
+
+    consumer(x) = 0;
+    consumer(producer(r)) = extern_func(consumer(producer(r)));
+
+    consumer.compute_root();
+    switch(backend) {
+        case Backend::CPU: {
+            producer.compute_root().async();
+            consumer.update().allow_race_conditions().atomic().parallel(r);
+        } break;
+        case Backend::CPUVectorize: {
+            producer.compute_root().async();
+            RVar ro, ri;
+            consumer.update()
+                    .allow_race_conditions()
+                    .atomic()
+                    .split(r, ro, ri, 8)
+                    .parallel(ro)
+                    .vectorize(ri);
+        } break;
+        default: {
+            _halide_user_assert(false) << "Unsupported backend.\n";
+        } break;
+    }
+
+    Buffer<int> correct(hist_size);
+    correct.fill(0);
+    for (int i = 0; i < img_size; i++) {
+        int idx = (i*i) % hist_size;
+        correct(idx) = correct(idx) + 1;
+    }
+
+    // Run 100 times to make sure race condition do happen
+    for (int iter = 0; iter < 100; iter++) {
+        Buffer<int> out = consumer.realize(hist_size);
+        for (int i = 0; i < hist_size; i++) {
+            check(__LINE__, out(i), correct(i));
+        }
+    }
+}
+
 int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
     test_all<uint8_t>(Backend::CPU);
@@ -529,5 +648,9 @@ int main(int argc, char **argv) {
         test_all<int64_t>(Backend::CUDA);
         test_all<double>(Backend::CUDA);
     }
+    test_extern_func(Backend::CPU);
+    test_extern_func(Backend::CPUVectorize);
+    test_async(Backend::CPU);
+    test_async(Backend::CPUVectorize);
     return 0;
 }
