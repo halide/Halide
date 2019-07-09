@@ -31,21 +31,33 @@ if [ ${BUILD_SYSTEM} = 'CMAKE' ]; then
         -G "Unix Makefiles" \
         ../
 
+  make ${MAKEFLAGS} distrib
+  make ${MAKEFLAGS} test_internal
+
+  if [ ${HALIDE_SHARED_LIBRARY} = 'ON' ]; then
+    # Building with static library is slower, and can run
+    # over the time limit; since we just want a reality
+    # check, do the full test suite only for shared.
+    make ${MAKEFLAGS} test_correctness
+    make ${MAKEFLAGS} test_generator
+    make doc
+  endif()
+
 elif [ ${BUILD_SYSTEM} = 'MAKE' ]; then
   export LLVM_CONFIG=/usr/local/llvm/bin/llvm-config
   ${LLVM_CONFIG} --cxxflags --libdir --bindir
+
+  # Build and run internal tests
+  make ${MAKEFLAGS} distrib
+  make ${MAKEFLAGS} test_internal
+
+  # Build the docs and run the tests
+  make doc
+  make ${MAKEFLAGS} test_correctness
+  make ${MAKEFLAGS} test_generator
 
 else
   echo "Unexpected BUILD_SYSTEM: \"${BUILD_SYSTEM}\""
   exit 1
 fi
-
-# Build and run internal tests
-make ${MAKEFLAGS} distrib
-make ${MAKEFLAGS} test_internal
-
-# Build the docs and run the tests
-make doc
-make ${MAKEFLAGS} test_correctness
-make ${MAKEFLAGS} test_generator
 
