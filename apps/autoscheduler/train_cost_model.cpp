@@ -71,6 +71,7 @@ map<int, PipelineSample> load_samples(bool verbose_mode) {
     string best_path;
 
     int truncated_samples = 0;
+    int empty_samples = 0;
 
     std::cout << "Loading samples...\n";
 
@@ -85,6 +86,7 @@ map<int, PipelineSample> load_samples(bool verbose_mode) {
             std::cout << "Skipping file: " << s << "\n";
             continue;
         }
+
         std::ifstream file(s);
         file.read((char *)(scratch.data()), scratch.size() * sizeof(float));
         const size_t floats_read = file.gcount() / sizeof(float);
@@ -108,6 +110,15 @@ map<int, PipelineSample> load_samples(bool verbose_mode) {
             ++truncated_samples;
             continue;
         }
+
+        if (num_features <= 0) {
+            if (verbose_mode) {
+                std::cout << "Empty sample: " << s << " " << floats_read << "\n";
+            }
+            ++empty_samples;
+            continue;
+        }
+
         const size_t num_stages = num_features / features_per_stage;
 
         const float runtime = scratch[num_features];
@@ -215,11 +226,11 @@ map<int, PipelineSample> load_samples(bool verbose_mode) {
         num_read++;
 
         if (num_read % 10000 == 0) {
-            std::cout << "Samples loaded: " << num_read << " valid (" << num_unique << " unique); " << truncated_samples << " truncated\n";
+            std::cout << "Samples loaded: " << num_read << " valid (" << num_unique << " unique); " << truncated_samples << " truncated; " << empty_samples << " empty\n";
         }
     }
 
-    std::cout << "Samples loaded: " << num_read << " valid (" << num_unique << " unique); " << truncated_samples << " truncated\n";
+    std::cout << "Samples loaded: " << num_read << " valid (" << num_unique << " unique); " << truncated_samples << " truncated; " << empty_samples << " empty\n";
 
     // Check the noise level
     for (const auto &pipe : result) {
