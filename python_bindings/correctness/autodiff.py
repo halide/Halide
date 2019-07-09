@@ -78,11 +78,11 @@ def test_autodiff():
 
     # gradient w.r.t. the param
     d_p = d[p]
-    d_p_buf = d_p.realize(1)
+    d_p_buf = d_p.realize()
     # 5 * (4 + 2 + 3)
     assert(abs(d_p_buf[()] - 45.0) < 1e-6)
     d_p = d.get(p)
-    d_p_buf = d_p.realize(1)
+    d_p_buf = d_p.realize()
     assert(abs(d_p_buf[()] - 45.0) < 1e-6)
 
 if __name__ == "__main__":
