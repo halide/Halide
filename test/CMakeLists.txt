@@ -11,8 +11,7 @@ if (WITH_TEST_INTERNAL)
   message(STATUS "Internal tests enabled")
   halide_project(test_internal internal internal.cpp)
   target_include_directories(test_internal PRIVATE "${CMAKE_SOURCE_DIR}/src")
-  add_halide_test(test_internal
-           GROUPS run_tests)
+  add_halide_test(test_internal GROUPS run_tests)
 else()
   message(WARNING "Internal tests disabled")
 endif()
@@ -45,8 +44,9 @@ function(tests folder)
     endif()
 
     set(GROUPS "test_${folder}")
-    if("${folder}" STREQUAL "performance" OR "${folder}" STREQUAL "auto_schedule")
+    if("${folder}" STREQUAL "performance" OR "${folder}" STREQUAL "auto_schedule" OR "${folder}" STREQUAL "opengl")
       # These shouldn't be part of run_tests, since they must be run with -j for timing purposes
+      # Exception: opengl is excluded because Makefile excludes it too. Why?
     else()
       list(APPEND GROUPS run_tests)
     endif()
