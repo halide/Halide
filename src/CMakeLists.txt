@@ -735,12 +735,14 @@ set(OBJECT_FILES )
 foreach (MOD ${INITIAL_MODULES})
   set(OBJ "${MOD}_o")
   add_library(${OBJ} OBJECT ${MOD})
+  set_property(TARGET ${OBJ} PROPERTY POSITION_INDEPENDENT_CODE ON)
   list(APPEND OBJECT_FILES "$<TARGET_OBJECTS:${OBJ}>")
 endforeach()
 
 foreach (SRC ${SOURCE_FILES})
   set(OBJ "${SRC}_o")
   add_library(${OBJ} OBJECT ${SRC} ${HEADER_FILES})
+  set_property(TARGET ${OBJ} PROPERTY POSITION_INDEPENDENT_CODE ON)
 
   # Note when PUBLIC or INTERFACE scope is used in target_compile_* then targets
   # that link against the Halide library inherit those options and definitions
