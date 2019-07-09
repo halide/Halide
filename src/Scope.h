@@ -25,10 +25,10 @@ class SmallStack {
 private:
     T _top;
     std::vector<T> _rest;
-    bool _empty;
+    bool _empty = true;
 
 public:
-    SmallStack() : _empty(true) {}
+    SmallStack() = default;
 
     void pop() {
         if (_rest.empty()) {
@@ -250,18 +250,27 @@ std::ostream &operator<<(std::ostream &stream, const Scope<T>& s) {
  * a name within the scope of this helper's lifetime. */
 template<typename T = void>
 struct ScopedBinding {
-    Scope<T> *scope;
+    Scope<T> *scope = nullptr;
     std::string name;
+
+    ScopedBinding() = default;
+
     ScopedBinding(Scope<T> &s, const std::string &n, const T &value) :
         scope(&s), name(n) {
         scope->push(name, value);
     }
+
     ScopedBinding(bool condition, Scope<T> &s, const std::string &n, const T &value) :
         scope(condition ? &s : nullptr), name(n) {
         if (condition) {
             scope->push(name, value);
         }
     }
+
+    bool bound() const {
+        return scope != nullptr;
+    }
+
     ~ScopedBinding() {
         if (scope) {
             scope->pop(name);
@@ -269,8 +278,16 @@ struct ScopedBinding {
     }
 
     // allow move but not copy
-    ScopedBinding(const ScopedBinding& that) = delete;
-    ScopedBinding(ScopedBinding&& that) = default;
+    ScopedBinding(const ScopedBinding &that) = delete;
+    ScopedBinding(ScopedBinding &&that) noexcept :
+        scope(that.scope),
+        name(std::move(that.name)) {
+        // The move constructor must null out scope, so we don't try to pop it
+        that.scope = nullptr;
+    }
+
+    void operator=(const ScopedBinding &that) = delete;
+    void operator=(ScopedBinding &&that) = delete;
 };
 
 template<>
@@ -293,8 +310,16 @@ struct ScopedBinding<void> {
     }
 
     // allow move but not copy
-    ScopedBinding(const ScopedBinding& that) = delete;
-    ScopedBinding(ScopedBinding&& that) = default;
+    ScopedBinding(const ScopedBinding &that) = delete;
+    ScopedBinding(ScopedBinding &&that) noexcept :
+        scope(that.scope),
+        name(std::move(that.name)) {
+        // The move constructor must null out scope, so we don't try to pop it
+        that.scope = nullptr;
+    }
+
+    void operator=(const ScopedBinding &that) = delete;
+    void operator=(ScopedBinding &&that) = delete;
 };
 
 }  // namespace Internal

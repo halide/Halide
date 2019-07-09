@@ -191,7 +191,7 @@ class RDom {
 
 public:
     /** Construct an undefined reduction domain. */
-    RDom() {}
+    RDom() = default;
 
     /** Construct a multi-dimensional reduction domain with the given name. If the name
      * is left blank, a unique one is auto-generated. */

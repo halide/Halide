@@ -293,10 +293,11 @@ struct Dim {
 
     bool is_pure() const {return (dim_type == PureVar) || (dim_type == PureRVar);}
     bool is_rvar() const {return (dim_type == PureRVar) || (dim_type == ImpureRVar);}
+    bool is_unordered_parallel() const {
+        return Halide::Internal::is_unordered_parallel(for_type);
+    }
     bool is_parallel() const {
-        return (for_type == ForType::Parallel ||
-                for_type == ForType::GPUBlock ||
-                for_type == ForType::GPUThread);
+        return Halide::Internal::is_parallel(for_type);
     }
 };
 
@@ -324,7 +325,7 @@ struct FusedPair {
     size_t stage_2;
     std::string var_name;
 
-    FusedPair() {}
+    FusedPair() = default;
     FusedPair(const std::string &f1, size_t s1, const std::string &f2,
               size_t s2, const std::string &var)
         : func_1(f1), func_2(f2), stage_1(s1), stage_2(s2), var_name(var) {}

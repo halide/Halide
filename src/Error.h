@@ -47,7 +47,7 @@ struct InternalError : public Error {
  */
 class CompileTimeErrorReporter {
 public:
-    virtual ~CompileTimeErrorReporter() {}
+    virtual ~CompileTimeErrorReporter() = default;
     virtual void warning(const char* msg) = 0;
     virtual void error(const char* msg) = 0;
 };
@@ -105,7 +105,7 @@ struct ErrorReport {
 // expression to void (to match the condition-is-false case).
 class Voidifier {
  public:
-  HALIDE_ALWAYS_INLINE Voidifier() {}
+  HALIDE_ALWAYS_INLINE Voidifier() = default;
   // This has to be an operator with a precedence lower than << but
   // higher than ?:
   HALIDE_ALWAYS_INLINE void operator&(ErrorReport&) {}

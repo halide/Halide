@@ -330,8 +330,8 @@ Stmt ProducerConsumer::make_consume(const std::string &name, Stmt body) {
 Stmt For::make(const std::string &name, Expr min, Expr extent, ForType for_type, DeviceAPI device_api, Stmt body) {
     internal_assert(min.defined()) << "For of undefined\n";
     internal_assert(extent.defined()) << "For of undefined\n";
-    internal_assert(min.type().is_scalar()) << "For with vector min\n";
-    internal_assert(extent.type().is_scalar()) << "For with vector extent\n";
+    internal_assert(min.type() == Int(32)) << "For with non-integer min\n";
+    internal_assert(extent.type() == Int(32)) << "For with non-integer extent\n";
     internal_assert(body.defined()) << "For of undefined\n";
 
     For *node = new For;
@@ -885,6 +885,7 @@ Call::ConstString Call::count_trailing_zeros = "count_trailing_zeros";
 Call::ConstString Call::undef = "undef";
 Call::ConstString Call::return_second = "return_second";
 Call::ConstString Call::if_then_else = "if_then_else";
+Call::ConstString Call::if_then_else_mask = "if_then_else_mask";
 Call::ConstString Call::glsl_texture_load = "glsl_texture_load";
 Call::ConstString Call::glsl_texture_store = "glsl_texture_store";
 Call::ConstString Call::glsl_varying = "glsl_varying";
@@ -908,12 +909,15 @@ Call::ConstString Call::cast_mask = "cast_mask";
 Call::ConstString Call::select_mask = "select_mask";
 Call::ConstString Call::extract_mask_element = "extract_mask_element";
 Call::ConstString Call::require = "require";
+Call::ConstString Call::require_mask = "require_mask";
 Call::ConstString Call::size_of_halide_buffer_t = "size_of_halide_buffer_t";
 Call::ConstString Call::strict_float = "strict_float";
 Call::ConstString Call::quiet_div = "quiet_div";
 Call::ConstString Call::quiet_mod = "quiet_mod";
 Call::ConstString Call::unsafe_promise_clamped = "unsafe_promise_clamped";
 Call::ConstString Call::gpu_thread_barrier = "gpu_thread_barrier";
+Call::ConstString Call::mulhi_shr = "mulhi_shr";
+Call::ConstString Call::sorted_avg = "sorted_avg";
 
 Call::ConstString Call::buffer_get_dimensions = "_halide_buffer_get_dimensions";
 Call::ConstString Call::buffer_get_min = "_halide_buffer_get_min";

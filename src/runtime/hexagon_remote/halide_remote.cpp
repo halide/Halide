@@ -1,6 +1,6 @@
-#include "bin/src/halide_hexagon_remote.h"
-#include <HalideRuntime.h>
-#include <HalideRuntimeHexagonHost.h>
+#include "halide_hexagon_remote.h"
+#include "HalideRuntime.h"
+#include "HalideRuntimeHexagonHost.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -43,6 +43,12 @@ void halide_error(void *user_context, const char *str) {
     }
 }
 
+__attribute__((weak)) void* dlopenbuf(const char*filename, const char* data, int size, int perms);
+
+static bool use_dlopenbuf() {
+    return dlopenbuf != NULL;
+}
+
 void *halide_get_symbol(const char *name) {
     // Try dlsym first. We need to try both RTLD_SELF and
     // RTLD_DEFAULT. Sometimes, RTLD_SELF finds a symbol when
@@ -56,6 +62,13 @@ void *halide_get_symbol(const char *name) {
     def = dlsym(RTLD_DEFAULT, name);
     if (def) {
         return def;
+    }
+    if (!use_dlopenbuf()) {
+        // If we aren't using dlopenbuf, also try mmap_dlsym
+        def = mmap_dlsym(RTLD_DEFAULT, name);
+        if (def) {
+            return def;
+        }
     }
 
     // dlsym has some very unpredictable behavior that makes
@@ -72,12 +85,6 @@ void *halide_get_library_symbol(void *lib, const char *name) {
 }
 
 PipelineContext run_context(stack_alignment, stack_size);
-
-__attribute__((weak)) void* dlopenbuf(const char*filename, const char* data, int size, int perms);
-
-static bool use_dlopenbuf() {
-    return dlopenbuf != NULL;
-}
 
 int halide_hexagon_remote_load_library(const char *soname, int sonameLen,
                                        const unsigned char *code, int codeLen,
@@ -174,6 +181,19 @@ int halide_hexagon_remote_set_performance(
     return 0;
 }
 
+HAP_dcvs_voltage_corner_t halide_power_mode_to_voltage_corner(int mode) {
+    switch (mode) {
+    case halide_hexagon_power_low: return HAP_DCVS_VCORNER_SVS;
+    case halide_hexagon_power_nominal: return HAP_DCVS_VCORNER_NOM;
+    case halide_hexagon_power_turbo: return HAP_DCVS_VCORNER_TURBO;
+    case halide_hexagon_power_default: return HAP_DCVS_VCORNER_DISABLE;
+    case halide_hexagon_power_low_plus: return HAP_DCVS_VCORNER_SVSPLUS;
+    case halide_hexagon_power_low_2: return HAP_DCVS_VCORNER_SVS2;
+    case halide_hexagon_power_nominal_plus: return HAP_DCVS_VCORNER_NOMPLUS;
+    default: return HAP_DCVS_VCORNER_DISABLE;
+    }
+}
+
 int halide_hexagon_remote_set_performance_mode(int mode) {
     int set_mips = 0;
     unsigned int mipsPerThread = 0;
@@ -189,21 +209,6 @@ int halide_hexagon_remote_set_performance_mode(int mode) {
     unsigned int max_mips = 0;
     uint64 max_bus_bw = 0;
     HAP_power_request_t request;
-
-    const HAP_dcvs_voltage_corner_t voltage_corner[] = {
-        HAP_DCVS_VCORNER_SVS,
-        HAP_DCVS_VCORNER_NOM,
-        HAP_DCVS_VCORNER_TURBO,
-        HAP_DCVS_VCORNER_DISABLE,
-        HAP_DCVS_VCORNER_SVSPLUS,
-        HAP_DCVS_VCORNER_SVS2,
-        HAP_DCVS_VCORNER_NOMPLUS
-    };
-
-    if (mode > 6) {
-        log_printf("Unknown power mode (%d)\n");
-        return -1;
-    }
 
     power_info.type = HAP_power_get_max_mips;
     int retval = HAP_power_get(NULL, &power_info);
@@ -293,7 +298,7 @@ int halide_hexagon_remote_set_performance_mode(int mode) {
     request.dcvs_v2.set_dcvs_params = TRUE;
     request.dcvs_v2.dcvs_params.min_corner = HAP_DCVS_VCORNER_DISABLE;
     request.dcvs_v2.dcvs_params.max_corner = HAP_DCVS_VCORNER_DISABLE;
-    request.dcvs_v2.dcvs_params.target_corner = voltage_corner[mode];
+    request.dcvs_v2.dcvs_params.target_corner = halide_power_mode_to_voltage_corner(mode);
     request.dcvs_v2.set_latency = set_latency;
     request.dcvs_v2.latency = latency;
     retval = HAP_power_set(NULL, &request);
@@ -320,10 +325,48 @@ int halide_hexagon_remote_get_symbol_v4(handle_t module_ptr, const char* name, i
     return *sym_ptr != 0 ? 0 : -1;
 }
 
+// Thread priority for QURT threads
+// Negative: use the current default (don't explicitly reset it)
+// Positive: the priority needs to be set once the shared runtime is loaded
+int saved_thread_priority = -1;
+
+int halide_hexagon_remote_set_thread_priority(int priority) {
+    // Just save requested priority for now.  The priority can't actually
+    // be set in qurt_thread_pool until the shared runtime has been loaded.
+    saved_thread_priority = priority;
+    return 0;
+}
+
+int halide_hexagon_runtime_set_thread_priority(int priority) {
+    if (priority < 0) {
+        return 0;
+    }
+
+    // Find the halide_set_default_thread_priority function in the shared runtime,
+    // which we loaded with RTLD_GLOBAL.
+    void (*set_priority)(int) = (void (*)(int)) halide_get_symbol("halide_set_default_thread_priority");
+
+    if (set_priority) {
+        set_priority(priority);
+    } else {
+        // This code being run is old, doesn't have set priority feature, do nothing.
+    }
+
+    return 0;
+}
+
 int halide_hexagon_remote_run_v2(handle_t module_ptr, handle_t function,
                                  const buffer *input_buffersPtrs, int input_buffersLen,
                                  buffer *output_buffersPtrs, int output_buffersLen,
                                  const scalar_t *scalars, int scalarsLen) {
+    if (saved_thread_priority > 0) {
+        // Existing thread
+        run_context.set_priority(saved_thread_priority);
+        // Future threads
+        halide_hexagon_runtime_set_thread_priority(saved_thread_priority);
+        saved_thread_priority = -1;   // Only do this once
+    }
+
     // Get a pointer to the argv version of the pipeline.
     pipeline_argv_t pipeline = reinterpret_cast<pipeline_argv_t>(function);
 
@@ -407,6 +450,11 @@ int halide_hexagon_remote_release_library(handle_t module_ptr) {
 }
 
 int halide_hexagon_remote_poll_profiler_state(int *func, int *threads) {
+    // Increase the current thread priority to match working threads priorities,
+    // so profiler can access the remote state without extra latency.
+    qurt_thread_t current_thread_id = qurt_thread_get_id();
+    qurt_thread_set_priority(current_thread_id, 100);
+
     *func = halide_profiler_get_state()->current_func;
     *threads = halide_profiler_get_state()->active_threads;
     return 0;

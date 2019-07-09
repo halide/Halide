@@ -42,7 +42,6 @@ if [ ${BUILD_SYSTEM} = 'CMAKE' ]; then
 
 elif [ ${BUILD_SYSTEM} = 'MAKE' ]; then
   export LLVM_CONFIG=/usr/local/llvm/bin/llvm-config
-  export CLANG=/usr/local/llvm/bin/clang
   ${LLVM_CONFIG} --cxxflags --libdir --bindir
 
   # Build and run internal tests

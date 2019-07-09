@@ -78,7 +78,7 @@ private:
     Visibility visibility = STV_DEFAULT;
 
 public:
-    Symbol() {}
+    Symbol() = default;
     Symbol(const std::string &name) : name(name) {}
 
     /** Accesses the name of this symbol. */
@@ -138,7 +138,7 @@ class Relocation {
     const Symbol *symbol = nullptr;
 
 public:
-    Relocation() {}
+    Relocation() = default;
     Relocation(uint32_t type, uint64_t offset, int64_t addend, const Symbol *symbol)
         : type(type), offset(offset), addend(addend), symbol(symbol) {}
 
@@ -224,7 +224,7 @@ private:
     RelocationList relocs;
 
 public:
-    Section() {}
+    Section() = default;
     Section(const std::string &name, Type type) : name(name), type(type) {}
 
     Section &set_name(const std::string &name) {
@@ -345,7 +345,7 @@ public:
  * specific aspects of linking. */
 class Linker {
 public:
-    virtual ~Linker() {}
+    virtual ~Linker() = default;
 
     virtual uint16_t get_machine() = 0;
     virtual uint32_t get_flags() = 0;
@@ -411,7 +411,7 @@ private:
     void operator = (const Object &);
 
 public:
-    Object() {}
+    Object() = default;
 
     Type get_type() const { return type; }
     uint16_t get_machine() const { return machine; }

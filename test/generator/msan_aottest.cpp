@@ -81,7 +81,7 @@ void reset_state(const void* base) {
     expect_error = false;
 }
 
-extern "C" void halide_msan_annotate_memory_is_initialized(void *user_context, const void *ptr, uint64_t len) {
+extern "C" int halide_msan_annotate_memory_is_initialized(void *user_context, const void *ptr, uint64_t len) {
     printf("%d:%p:%08x\n", (int)annotate_stage, ptr, (unsigned int) len);
     if (annotate_stage == expect_bounds_inference_buffer) {
         if (output_previous != nullptr || len != sizeof(halide_buffer_t)) {
@@ -98,7 +98,7 @@ extern "C" void halide_msan_annotate_memory_is_initialized(void *user_context, c
                 fprintf(stderr, "Failure: Expected error message of len=87, saw %d bytes\n", (unsigned int) len);
                 exit(-1);
             }
-            return;  // stay in this state
+            return 0;  // stay in this state
         }
         if (output_previous != nullptr || len != sizeof(halide_buffer_t)) {
             fprintf(stderr, "Failure: Expected sizeof(halide_buffer_t), saw %d\n", (unsigned int) len);
@@ -145,6 +145,7 @@ extern "C" void halide_msan_annotate_memory_is_initialized(void *user_context, c
         fprintf(stderr, "Failure: bad enum\n");
         exit(-1);
     }
+    return 0;
 }
 
 template<typename T>

@@ -9,6 +9,11 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
+    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
+        printf("Skipping test for WebAssembly as it does not support ExternalCode::bitcode_wrapper().\n");
+        return 0;
+    }
+
     Var x("x"), y("y");
     Func f("f");
 

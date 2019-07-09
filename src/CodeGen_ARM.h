@@ -18,8 +18,6 @@ public:
 
 protected:
 
-    Expr sorted_avg(Expr a, Expr b) override;
-
     using CodeGen_Posix::visit;
 
     /** Nodes for which we want to emit specific neon intrinsics */
@@ -48,13 +46,13 @@ protected:
                           NarrowArgs  ///< Match the pattern if the args can be losslessly narrowed
         };
         PatternType type;
-        Pattern() {}
+        Pattern() = default;
         Pattern(const std::string &i32, const std::string &i64, int l, Expr p, PatternType t = Simple) :
             intrin32("llvm.arm.neon." + i32),
             intrin64("llvm.aarch64.neon." + i64),
             intrin_lanes(l), pattern(p), type(t) {}
     };
-    std::vector<Pattern> casts, left_shifts, averagings, negations;
+    std::vector<Pattern> casts, averagings, negations, multiplies;
 
     // Call an intrinsic as defined by a pattern. Dispatches to the
     // 32- or 64-bit name depending on the target's bit width.

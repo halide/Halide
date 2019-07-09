@@ -249,7 +249,7 @@ class ExtractSharedAllocations : public IRMutator {
     };
 
     struct AllocGroup {
-        AllocGroup() {}
+        AllocGroup() = default;
         AllocGroup(const SharedAllocation &alloc) : max_type_bytes(alloc.type.bytes()) {
             max_size_bytes = simplify(alloc.type.bytes() * alloc.size);
             group.push_back(alloc);

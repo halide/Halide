@@ -252,7 +252,7 @@ private:
         // threads outside the loop, and increment it inside the
         // body.
         bool update_active_threads = (op->device_api == DeviceAPI::Hexagon ||
-                                      op->is_parallel());
+                                      op->is_unordered_parallel());
 
         if (update_active_threads) {
             body = Block::make({incr_active_threads(), body, decr_active_threads()});
