@@ -218,8 +218,8 @@ void CodeGen_PyTorch::compile(const LoweredFunc &f, bool isCuda) {
   indent += 2;
 
   do_indent();
-  stream << "// Setup CUDA\n";
   if (isCuda) {
+    stream << "// Setup CUDA\n";
     do_indent();
     stream << "int device_id = at::cuda::current_device();\n";
     do_indent();
@@ -238,20 +238,20 @@ void CodeGen_PyTorch::compile(const LoweredFunc &f, bool isCuda) {
   }
 
   do_indent();
-  stream << "// Check tensors have contiguous memory\n";
+  stream << "// Check tensors have contiguous memory and are on the correct device\n";
   for (size_t i = 0; i < buffer_args.size(); i++) {
     do_indent();
     stream
       << "HLPT_CHECK_CONTIGUOUS("
       << print_name(buffer_args[i].name) 
       << ");\n";
-    // if(isCuda) {
-    //   do_indent();
-    //   stream
-    //     << "HLPT_CHECK_DEVICE("
-    //     << print_name(buffer_args[i].name) 
-    //     << ", device_id);\n";
-    // }
+    if(isCuda) {
+      do_indent();
+      stream
+        << "HLPT_CHECK_DEVICE("
+        << print_name(buffer_args[i].name) 
+        << ", device_id);\n";
+    }
   }
   stream << "\n";
 
