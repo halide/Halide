@@ -702,7 +702,8 @@ bool test(int lanes, int seed) {
 
         for (int y = 0; y < H; y++) {
             for (int x = 0; x < W; x++) {
-                typename with_unsigned<A>::type correct = absd((double)input(x, y), (double)input(x+1, y));
+                using T = typename with_unsigned<A>::type;
+                T correct { absd((double)input(x, y), (double)input(x+1, y)) };
                 if (im22(x, y) != correct) {
                     printf("im22(%d, %d) = %f instead of %f\n", x, y, (double)(im22(x, y)), (double)(correct));
                     return false;
@@ -722,7 +723,6 @@ int main(int argc, char **argv) {
     // Only native vector widths - llvm doesn't handle others well
     Halide::Internal::ThreadPool<bool> pool;
     std::vector<std::future<bool>> futures;
-    /*
     futures.push_back(pool.async(test<float>, 4, seed));
     futures.push_back(pool.async(test<float>, 8, seed));
     futures.push_back(pool.async(test<double>, 2, seed));
@@ -735,7 +735,6 @@ int main(int argc, char **argv) {
     futures.push_back(pool.async(test<bfloat16_t>, 8, seed));
     futures.push_back(pool.async(test<bfloat16_t>, 16, seed));
     futures.push_back(pool.async(test<float16_t>, 8, seed));
-    */
     futures.push_back(pool.async(test<float16_t>, 16, seed));
     bool ok = true;
     for (auto &f : futures) {
