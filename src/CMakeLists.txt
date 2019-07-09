@@ -172,36 +172,41 @@ function(add_runtime_modules TARGET_RUNTIME_FILES TARGET_RUNTIME_DIR)
       # -std=gnu++98 is deliberate; we do NOT want c++11 here,
       # as we don't want static locals to get thread synchronization stuff.
       add_custom_command(OUTPUT "${LL_D}"
+                         # COMMENT "${SOURCE} -> ${LL_D}"
                          DEPENDS "${SOURCE}"
                          COMMAND ${CLANG} ${CXX_WARNING_FLAGS} ${RUNTIME_DEBUG_FLAG} -DDEBUG_RUNTIME -O3 -fno-ms-compatibility -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -std=gnu++98 -m${j} -target "${TARGET}" "-I${TARGET_RUNTIME_DIR}" -DCOMPILING_HALIDE_RUNTIME "-DLLVM_VERSION=${LLVM_VERSION}" -DBITS_${j} -emit-llvm -S "${SOURCE}" -o "${LL_D}"
-                         COMMENT "${SOURCE} -> ${LL_D}"
                          # Make sure that the output of this command also depends
                          # on the header files that ${SOURCE} uses
                          # FIXME: Only works for makefile generator
                          IMPLICIT_DEPENDS CXX "${SOURCE}"
                         )
       add_custom_command(OUTPUT "${LL}"
+                         # COMMENT "${SOURCE} -> ${LL}"
                          DEPENDS "${SOURCE}"
                          COMMAND ${CLANG} ${CXX_WARNING_FLAGS} -O3 -fno-ms-compatibility -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -std=gnu++98 -m${j} -target "${TARGET}" "-I${TARGET_RUNTIME_DIR}" -DCOMPILING_HALIDE_RUNTIME "-DLLVM_VERSION=${LLVM_VERSION}" -DBITS_${j} -emit-llvm -S "${SOURCE}" -o "${LL}"
-                         COMMENT "${SOURCE} -> ${LL}")
+                         )
 
       add_custom_command(OUTPUT "${BC_D}"
+                         # COMMENT "${LL_D} -> ${BC_D}"
                          DEPENDS "${LL_D}"
                          COMMAND "${LLVM_AS}" "${LL_D}" -o "${BC_D}"
-                         COMMENT "${LL_D} -> ${BC_D}")
+                         )
       add_custom_command(OUTPUT "${BC}"
+                         # COMMENT "${LL} -> ${BC}"
                          DEPENDS "${LL}"
                          COMMAND "${LLVM_AS}" "${LL}" -o "${BC}"
-                         COMMENT "${LL} -> ${BC}")
+                         )
 
       add_custom_command(OUTPUT "${INITMOD_D}"
+                         # COMMENT "${BC_D} -> ${INITMOD_D}"
                          DEPENDS "${BC_D}" binary2cpp
                          COMMAND binary2cpp "halide_internal_initmod_${i}_${j}_debug" < "${BC_D}" > "${INITMOD_D}"
-                         COMMENT "${BC_D} -> ${INITMOD_D}")
+                         )
       add_custom_command(OUTPUT "${INITMOD}"
+                         # COMMENT "${BC} -> ${INITMOD}"
                          DEPENDS "${BC}" binary2cpp
                          COMMAND binary2cpp "halide_internal_initmod_${i}_${j}" < "${BC}" > "${INITMOD}"
-                         COMMENT "${BC} -> ${INITMOD}")
+                         )
       list(APPEND INITIAL_MODULES ${INITMOD})
       list(APPEND INITIAL_MODULES ${INITMOD_D})
     endforeach()
