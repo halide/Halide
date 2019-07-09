@@ -739,36 +739,23 @@ else()
   endif()
 endif()
 
-set(OBJECT_FILES )
+function(add_halide_library HALIDE_LIBRARY_NAME HALIDE_LIBRARY_TYPE)
 
-foreach (MOD ${INITIAL_MODULES})
-  set(OBJ "${MOD}_o")
-  add_library(${OBJ} OBJECT ${MOD})
-  set_property(TARGET ${OBJ} PROPERTY POSITION_INDEPENDENT_CODE ON)
-  list(APPEND OBJECT_FILES "$<TARGET_OBJECTS:${OBJ}>")
-endforeach()
+  add_library(${HALIDE_LIBRARY_NAME} ${HALIDE_LIBRARY_TYPE}
+    ${HEADER_FILES}
+    ${SOURCE_FILES}
+    ${INITIAL_MODULES}
+  )
+  set_target_properties(${HALIDE_LIBRARY_NAME} PROPERTIES OUTPUT_NAME "Halide")
+  add_dependencies(${HALIDE_LIBRARY_NAME} HalideIncludes)
 
-foreach (SRC ${SOURCE_FILES})
-  set(OBJ "${SRC}_o")
-  add_library(${OBJ} OBJECT ${SRC} ${HEADER_FILES})
-  set_property(TARGET ${OBJ} PROPERTY POSITION_INDEPENDENT_CODE ON)
+  target_compile_definitions(${HALIDE_LIBRARY_NAME} PRIVATE ${HALIDE_COMPILE_DEFINITIONS} ${LLVM_DEFINITIONS})
+  target_compile_options(${HALIDE_LIBRARY_NAME} PRIVATE ${HALIDE_COMPILE_OPTIONS})
 
   # Note when PUBLIC or INTERFACE scope is used in target_compile_* then targets
   # that link against the Halide library inherit those options and definitions
-  target_include_directories(${OBJ} PRIVATE ${LLVM_INCLUDE_DIRS})
-  target_include_directories(${OBJ} INTERFACE "${CMAKE_BINARY_DIR}/include")
-
-  target_compile_definitions(${OBJ} PRIVATE ${HALIDE_COMPILE_DEFINITIONS} ${LLVM_DEFINITIONS})
-  target_compile_options(${OBJ} PUBLIC ${HALIDE_COMPILE_OPTIONS})
-
-  list(APPEND OBJECT_FILES "$<TARGET_OBJECTS:${OBJ}>")
-endforeach()
-
-function(add_halide_library HALIDE_LIBRARY_NAME HALIDE_LIBRARY_TYPE)
-
-  add_library(${HALIDE_LIBRARY_NAME} ${HALIDE_LIBRARY_TYPE} ${HEADER_FILES} ${OBJECT_FILES})
-  set_target_properties(${HALIDE_LIBRARY_NAME} PROPERTIES OUTPUT_NAME "Halide")
-  add_dependencies(${HALIDE_LIBRARY_NAME} HalideIncludes)
+  target_include_directories(${HALIDE_LIBRARY_NAME} PRIVATE ${LLVM_INCLUDE_DIRS})
+  target_include_directories(${HALIDE_LIBRARY_NAME} INTERFACE "${CMAKE_BINARY_DIR}/include")
 
   # We could expose the /MP flag to all targets, but that might end up saturating the build
   # since multiple MSBuild projects might get built in parallel, each of which compiling their
