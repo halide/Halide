@@ -290,6 +290,11 @@ int main(int argc, char **argv) {
 
     auto samples = load_samples(verbose_mode);
 
+    if (samples.empty()) {
+        std::cout << "No samples found. Exiting.\n";
+        return 0;
+    }
+
     string randomize_weights_str = getenv_safe("HL_RANDOMIZE_WEIGHTS");
     bool randomize_weights = randomize_weights_str == "1";
     string weights_in_dir = getenv_safe("HL_WEIGHTS_DIR");
@@ -316,23 +321,38 @@ int main(int argc, char **argv) {
 
     std::cout << "Iterating over " << samples.size() << " pipelines using seed = " << seed << "\n";
     decltype(samples) validation_set;
-    if (samples.size() > 1) {
-        for (auto p : samples) {
-            // Whether or not a pipeline is part of the validation set
-            // can't be a call to rand. It must be a fixed property of a
-            // hash of some aspect of it.  This way you don't accidentally
-            // do a training run where a validation set member was in the
-            // training set of a previous run. The id of the fastest
-            // schedule will do as a hash.
-            if ((p.second.pipeline_hash & 7) == 0) {
-                validation_set.insert(p);
-            }
-        }
-
-        for (auto p : validation_set) {
-            samples.erase(p.first);
+    int64_t num_training_set_pipelines = 0;
+    int64_t num_training_set_schedules = 0;
+    int64_t num_val_set_schedules = 0;
+    for (auto p : samples) {
+        // Whether or not a pipeline is part of the validation set
+        // can't be a call to rand. It must be a fixed property of a
+        // hash of some aspect of it.  This way you don't accidentally
+        // do a training run where a validation set member was in the
+        // training set of a previous run. The id of the fastest
+        // schedule will do as a hash.
+        if (samples.size() > 1 && (p.second.pipeline_hash & 7) == 0) {
+            validation_set.insert(p);
+            num_val_set_schedules += p.second.schedules.size();
+        } else {
+            ++num_training_set_pipelines;
+            num_training_set_schedules += p.second.schedules.size();
         }
     }
+
+    for (auto p : validation_set) {
+        samples.erase(p.first);
+    }
+
+    std::cout << "Training set: "
+        << num_training_set_pipelines
+        << " pipelines, "
+        << num_training_set_schedules
+        << " schedules. Validation set: "
+        << validation_set.size()
+        << " pipelines, "
+        << num_val_set_schedules
+        << " schedules.\n";
 
     std::vector<float> rates;
     if (argc == 2) {
