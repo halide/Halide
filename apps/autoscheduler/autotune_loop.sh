@@ -3,8 +3,8 @@
 # Build the generator to autotune. This script will be autotuning the
 # autoscheduler's cost model training pipeline, which is large enough
 # to be interesting.
-if [ $# -lt 6 -o $# -gt 7 ]; then
-  echo "Usage: $0 /path/to/some.generator generatorname halide_target weights_dir autoschedule_bin_dir batch_id [generator_args_sets]"
+if [ $# -lt 7 -o $# -gt 8 ]; then
+  echo "Usage: $0 /path/to/some.generator generatorname halide_target weights_dir autoschedule_bin_dir batch_id train_only [generator_args_sets]"
   exit
 fi
 
@@ -19,12 +19,13 @@ HL_TARGET=${3}
 START_WEIGHTS_DIR=${4}
 AUTOSCHED_BIN=${5}
 BATCH_ID=${6}
+TRAIN_ONLY=${7}
 
 # Read the generator-arg sets into an array. Each set is delimited
 # by space; multiple values within each set are are delimited with ;
 # e.g. "set1arg1=1;set1arg2=foo set2=bar set3arg1=3.14;set4arg2=42"
-if [ $# -ge 7 ]; then
-    IFS=' ' read -r -a GENERATOR_ARGS_SETS_ARRAY <<< "${7}"
+if [ $# -ge 8 ]; then
+    IFS=' ' read -r -a GENERATOR_ARGS_SETS_ARRAY <<< "${8}"
 else
     declare -a GENERATOR_ARGS_SETS_ARRAY=
 fi
@@ -75,14 +76,16 @@ done
 # benchmarked serially.
 BATCH_SIZE=32
 
-TIMEOUT_CMD="timeout"
-if [ $(uname -s) = "Darwin" ] && ! which $TIMEOUT_CMD 2>&1 >/dev/null; then
-    # OSX doesn't have timeout; gtimeout is equivalent and available via Homebrew
-    TIMEOUT_CMD="gtimeout"
-    if ! which $TIMEOUT_CMD 2>&1 >/dev/null; then
-        echo "Can't find the command 'gtimeout'. Run 'brew install coreutils' to install it."
-        exit 1
-    fi
+if [[ $TRAIN_ONLY != 1 ]]; then
+  TIMEOUT_CMD="timeout"
+  if [ $(uname -s) = "Darwin" ] && ! which $TIMEOUT_CMD 2>&1 >/dev/null; then
+      # OSX doesn't have timeout; gtimeout is equivalent and available via Homebrew
+      TIMEOUT_CMD="gtimeout"
+      if ! which $TIMEOUT_CMD 2>&1 >/dev/null; then
+          echo "Can't find the command 'gtimeout'. Run 'brew install coreutils' to install it."
+          exit 1
+      fi
+  fi
 fi
 
 record_failed() {
@@ -222,55 +225,60 @@ echo Local number of cores detected as ${LOCAL_CORES}
 NUM_BATCHES=1
 
 for ((BATCH_ID=$((FIRST+1));BATCH_ID<$((FIRST+1+NUM_BATCHES));BATCH_ID++)); do
-
     SECONDS=0
-    
-    for ((EXTRA_ARGS_IDX=0;EXTRA_ARGS_IDX<${#GENERATOR_ARGS_SETS_ARRAY[@]};EXTRA_ARGS_IDX++)); do
 
-        # Compile a batch of samples using the generator in parallel
-        BATCH=batch_${BATCH_ID}_${EXTRA_ARGS_IDX}
-        DIR=${SAMPLES}/${BATCH}
+    if [[ $TRAIN_ONLY != 1 ]]; then
+      for ((EXTRA_ARGS_IDX=0;EXTRA_ARGS_IDX<${#GENERATOR_ARGS_SETS_ARRAY[@]};EXTRA_ARGS_IDX++)); do
 
-        # Copy the weights being used into the batch folder so that we can repro failures
-        mkdir -p ${DIR}/weights_used/
-        cp ${WEIGHTS}/* ${DIR}/weights_used/
+          # Compile a batch of samples using the generator in parallel
+          BATCH=batch_${BATCH_ID}_${EXTRA_ARGS_IDX}
+          DIR=${SAMPLES}/${BATCH}
 
-        EXTRA_GENERATOR_ARGS=${GENERATOR_ARGS_SETS_ARRAY[EXTRA_ARGS_IDX]/;/ }
-        if [ ! -z "${EXTRA_GENERATOR_ARGS}" ]; then
-            echo "Adding extra generator args (${EXTRA_GENERATOR_ARGS}) for batch_${BATCH_ID}"
-        fi
+          # Copy the weights being used into the batch folder so that we can repro failures
+          mkdir -p ${DIR}/weights_used/
+          cp ${WEIGHTS}/* ${DIR}/weights_used/
 
-        echo ${EXTRA_GENERATOR_ARGS} > ${DIR}/extra_generator_args.txt
-    
-        # Do parallel compilation in batches, so that machines with fewer than BATCH_SIZE cores
-        # don't get swamped and timeout unnecessarily
-        echo Compiling samples
-        for ((SAMPLE_ID=0;SAMPLE_ID<${BATCH_SIZE};SAMPLE_ID++)); do
-            while [[ 1 ]]; do
-                RUNNING=$(jobs -r | wc -l)
-                if [[ RUNNING -ge LOCAL_CORES ]]; then
-                    sleep 1
-                else
-                    break
-                fi
-            done
+          EXTRA_GENERATOR_ARGS=${GENERATOR_ARGS_SETS_ARRAY[EXTRA_ARGS_IDX]/;/ }
+          if [ ! -z "${EXTRA_GENERATOR_ARGS}" ]; then
+              echo "Adding extra generator args (${EXTRA_GENERATOR_ARGS}) for batch_${BATCH_ID}"
+          fi
 
-            S=$(printf "%d%02d" $BATCH_ID $SAMPLE_ID)
-            FNAME=$(printf "%s_batch_%02d_sample_%02d" ${PIPELINE} $BATCH_ID $SAMPLE_ID)
-            make_sample "${DIR}/${SAMPLE_ID}" $S $FNAME "$EXTRA_GENERATOR_ARGS" $BATCH $SAMPLE_ID &
-        done
-        wait
+          echo ${EXTRA_GENERATOR_ARGS} > ${DIR}/extra_generator_args.txt
 
-        # benchmark them serially using rungen
-        for ((SAMPLE_ID=0;SAMPLE_ID<${BATCH_SIZE};SAMPLE_ID++)); do
-            S=$(printf "%d%02d" $BATCH_ID $SAMPLE_ID)
-            benchmark_sample "${DIR}/${SAMPLE_ID}" $S $BATCH $SAMPLE_ID
-        done
-    done
+          # Do parallel compilation in batches, so that machines with fewer than BATCH_SIZE cores
+          # don't get swamped and timeout unnecessarily
+          echo Compiling samples
+          for ((SAMPLE_ID=0;SAMPLE_ID<${BATCH_SIZE};SAMPLE_ID++)); do
+              while [[ 1 ]]; do
+                  RUNNING=$(jobs -r | wc -l)
+                  if [[ RUNNING -ge LOCAL_CORES ]]; then
+                      sleep 1
+                  else
+                      break
+                  fi
+              done
+
+              S=$(printf "%d%02d" $BATCH_ID $SAMPLE_ID)
+              FNAME=$(printf "%s_batch_%02d_sample_%02d" ${PIPELINE} $BATCH_ID $SAMPLE_ID)
+              make_sample "${DIR}/${SAMPLE_ID}" $S $FNAME "$EXTRA_GENERATOR_ARGS" $BATCH $SAMPLE_ID &
+          done
+          wait
+
+          # benchmark them serially using rungen
+          for ((SAMPLE_ID=0;SAMPLE_ID<${BATCH_SIZE};SAMPLE_ID++)); do
+              S=$(printf "%d%02d" $BATCH_ID $SAMPLE_ID)
+              benchmark_sample "${DIR}/${SAMPLE_ID}" $S $BATCH $SAMPLE_ID
+          done
+      done
+    fi
 
     # retrain model weights on all samples seen so far
     echo Retraining model...
     find ${SAMPLES} | grep sample$ | HL_NUM_THREADS=32 HL_WEIGHTS_DIR=${WEIGHTS} HL_BEST_SCHEDULE_FILE=${PWD}/${SAMPLES_DIR}/best.txt ${AUTOSCHED_BIN}/train_cost_model ${BATCH_SIZE} 0.0001
 
-    echo Batch ${BATCH_ID} took ${SECONDS} seconds to compile, benchmark, and retrain
+    if [[ $TRAIN_ONLY == 1 ]]; then
+      echo Batch ${BATCH_ID} took ${SECONDS} seconds to retrain
+    else
+      echo Batch ${BATCH_ID} took ${SECONDS} seconds to compile, benchmark, and retrain
+    fi
 done
