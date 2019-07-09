@@ -1543,6 +1543,11 @@ inline Expr operator<<(Expr x, Expr y) {
         << "   (" << x << ") << (" << y << ")\n"
         << "   with types " << x.type() << " << " << y.type() << "\n"
         << "the RHS must be unsigned and losslessly castable to the same size as the LHS.\n";
+
+    if (y.type().is_vector() && !x.type().is_vector()) {
+        x = Internal::Broadcast::make(x, y.type().lanes());
+    }
+
     Type t = x.type();
     return Internal::Call::make(t, Internal::Call::shift_left, {std::move(x), std::move(unsigned_amount)}, Internal::Call::PureIntrinsic);
 }
@@ -1569,6 +1574,9 @@ inline Expr operator>>(Expr x, Expr y) {
         << "   (" << x << ") >> (" << y << ")\n"
         << "   with types " << x.type() << " >> " << y.type() << "\n"
         << "the RHS must be unsigned and losslessly castable to the same size as the LHS.\n";
+    if (y.type().is_vector() && !x.type().is_vector()) {
+        x = Internal::Broadcast::make(x, y.type().lanes());
+    }
     Type t = x.type();
     return Internal::Call::make(t, Internal::Call::shift_right, {std::move(x), std::move(unsigned_amount)}, Internal::Call::PureIntrinsic);
 }
