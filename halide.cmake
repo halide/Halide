@@ -77,13 +77,14 @@ function(halide_generator NAME)
     _halide_force_link_library("${NAME}_binary" "${GENLIB}")
   endif()
 
-  if ("${HALIDE_LIBRARY_TYPE}" STREQUAL "STATIC")
+  get_target_property(TARGET_TYPE "${HALIDE_COMPILER_LIB}" TYPE)
+  if("${TARGET_TYPE}" STREQUAL "STATIC_LIBRARY")
     # Getting link order correct for static libraries is nearly impossible in CMake;
     # to avoid flakiness, always link libHalide via --whole-archive
     # when in static-library mode.
     _halide_force_link_library("${NAME}_binary" "${HALIDE_COMPILER_LIB}")
   else()
-    target_link_libraries("${NAME}_binary" PRIVATE ${HALIDE_COMPILER_LIB})
+    target_link_libraries("${NAME}_binary" PRIVATE "${HALIDE_COMPILER_LIB}")
   endif()
 
   _halide_genfiles_dir(${BASENAME} GENFILES_DIR)
