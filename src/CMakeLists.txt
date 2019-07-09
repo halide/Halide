@@ -223,29 +223,32 @@ foreach (i ${RUNTIME_LL} )
   set(BC "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build/${NATIVE_INT_DIR}initmod.${i}.bc")
   set(INITMOD "${INITMOD_PREFIX}${i}.cpp")
   add_custom_command(OUTPUT "${BC}"
+                     # COMMENT "${LL} -> ${BC}"
                      DEPENDS "${LL}"
                      COMMAND "${LLVM_AS}" "${LL}" -o "${BC}"
-                     COMMENT "${LL} -> ${BC}")
+                     )
   add_custom_command(OUTPUT "${INITMOD}"
+                     # COMMENT "${BC} -> ${INITMOD}"
                      DEPENDS "${BC}" binary2cpp
                      COMMAND binary2cpp "halide_internal_initmod_${i}_ll" < "${BC}" > "${INITMOD}"
-                     COMMENT "${BC} -> ${INITMOD}")
+                     )
   list(APPEND INITIAL_MODULES "${INITMOD}")
 endforeach()
 foreach (i ${RUNTIME_BC} )
   set(INITMOD "${INITMOD_PREFIX}ptx_${i}.cpp")
   add_custom_command(OUTPUT "${INITMOD}"
+                     # COMMENT "Building initial module ptx_${i}..."
                      DEPENDS binary2cpp
                      COMMAND binary2cpp "halide_internal_initmod_ptx_${i}_ll" < "${NATIVE_RUNTIME_DIR}nvidia_libdevice_bitcode/libdevice.${i}.10.bc" > "${INITMOD}"
-                     COMMENT "Building initial module ptx_${i}..."
                      VERBATIM)
   list(APPEND INITIAL_MODULES "${INITMOD}")
 endforeach()
 
 add_custom_command(OUTPUT "${INITMOD_PREFIX}inlined_c.cpp"
+  # COMMENT "buffer_t.cpp -> ${INITMOD_PREFIX}inlined_c.cpp"
   DEPENDS "${NATIVE_RUNTIME_DIR}buffer_t.cpp" binary2cpp
   COMMAND binary2cpp "halide_internal_initmod_inlined_c" < "${NATIVE_RUNTIME_DIR}buffer_t.cpp" > "${INITMOD_PREFIX}inlined_c.cpp"
-  COMMENT "buffer_t.cpp -> ${INITMOD_PREFIX}inlined_c.cpp")
+  )
 list(APPEND INITIAL_MODULES "${INITMOD_PREFIX}inlined_c.cpp")
 
 set(RUNTIME_HEADER_FILES
@@ -265,9 +268,10 @@ set(RUNTIME_HEADER_FILES
 foreach (i ${RUNTIME_HEADER_FILES})
   string(REPLACE "." "_" SYM_NAME "${i}")
   add_custom_command(OUTPUT "${INITMOD_PREFIX}${SYM_NAME}.cpp"
+    # COMMENT "${i} -> ${INITMOD_PREFIX}${SYM_NAME}.cpp"
     DEPENDS "${NATIVE_RUNTIME_DIR}${i}" binary2cpp
     COMMAND binary2cpp "halide_internal_runtime_header_${SYM_NAME}" < "${NATIVE_RUNTIME_DIR}${i}" > "${INITMOD_PREFIX}${SYM_NAME}.cpp"
-    COMMENT "${i} -> ${INITMOD_PREFIX}${SYM_NAME}.cpp")
+    )
   list(APPEND INITIAL_MODULES "${INITMOD_PREFIX}${SYM_NAME}.cpp")
 endforeach()
 
