@@ -24,7 +24,6 @@ test: .wrapper
 	@PYTHONPATH=lib:${PYTHONPATH} python test.py
 
 # Build the python pytorch extension that links against the Halide operators
-# TODO: do not rebuild
 .PHONY: wrapper
 .wrapper: $(OPS) $(CUDA_OPS)
 	@mkdir -p lib

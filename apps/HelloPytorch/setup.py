@@ -28,11 +28,13 @@ def generate_pybind_wrapper(path, headers, has_cuda):
 
 
 if __name__ == "__main__":
-  abs_path = os.path.dirname(os.path.realpath(__file__))
+  # This is where the generate Halide ops headers live. We also generate the .cpp
+  # wrapper in this directory
   build_dir = os.getenv("BIN")
   if build_dir is None or not os.path.exists(build_dir):
     raise ValueError("Bin directory {} is invalid".format(build_dir))
 
+  # Path to a distribution of Halide
   halide_dir = os.getenv("HALIDE_DISTRIB_PATH")
   if halide_dir is None or not os.path.exists(halide_dir):
     raise ValueError("Halide directory {} is invalid".format(halide_dir))
@@ -52,14 +54,11 @@ if __name__ == "__main__":
   hl_srcs = [f for f in os.listdir(build_dir) if re_cc.match(f)]
 
   ext_name = "halide_ops"
-  hl_sources = []
-  hl_libs = []
-  hl_headers = []
-
+  hl_libs = []  # Halide op libraries to link to
+  hl_headers = []  # Halide op headers to include in the wrapper
   for f in hl_srcs:
     # Add all Halide generated torch wrapper
     hl_src = os.path.join(build_dir, f)
-    hl_sources.append(hl_src)
 
     # Add all Halide-generated libraries
     hl_lib = hl_src.split(".")[0] + ".a"
@@ -68,6 +67,8 @@ if __name__ == "__main__":
     hl_header = hl_src.split(".")[0] + ".h"
     hl_headers.append(os.path.basename(hl_header))
 
+  # C++ wrapper code that includes so that we get all the Halide ops in a
+  # single python extension
   wrapper_path = os.path.join(build_dir, "pybind_wrapper.cpp")
   sources = [wrapper_path]
 
@@ -87,8 +88,7 @@ if __name__ == "__main__":
                              extra_objects=hl_libs,
                              extra_compile_args=compile_args)
 
-  # TODO: import all extensions in root lib
-
+  # Build the Python extension module
   setup(name=ext_name,
         verbose=True,
         url="",
