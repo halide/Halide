@@ -1,18 +1,60 @@
 """Verifies the Halide operator functions properly."""
 
+import os
+import unittest
+
 import torch as th
-import halide_ops as ops
+import modules
+
+
+class TestAdd(unittest.TestCase):
+  def setUp(self):
+    self.a = th.ones(1, 2, 8, 8)
+    self.b = th.ones(1, 2, 8, 8)*3
+    self.gt = th.ones(1, 2, 8, 8)*4
+
+    # TODO: CPU, GPU, int, float, double, others? size of buffer?
+
+  def test_cpu_single(self):
+    self._test_add(is_double=False)
+
+  def test_cpu_double(self):
+    self._test_add(is_double=True)
+
+  def test_gpu_single(self):
+    if not th.cuda.is_available():
+      return
+    self._test_add(is_cuda=True, is_double=False)
+
+  def test_gpu_double(self):
+    if not th.cuda.is_available():
+      return
+    self._test_add(is_cuda=True, is_double=True)
+
+  def _test_add(self, is_cuda=False, is_double=False):
+    if is_double:
+      self.a = self.a.double()
+      self.b = self.b.double()
+      self.gt = self.gt.double()
+    if is_cuda:
+      print("Testing Halide Pytorch CUDA operator...")
+      self.a = self.a.cuda()
+      self.b = self.b.cuda()
+      self.gt = self.gt.cuda()
+    else:
+      print("Testing Halide Pytorch CPU operator...")
+
+    output = modules.Add()(self.a, self.b)
+
+    if is_double:
+      print("  Double-precision mode")
+    else:
+      print("  Single-precision mode")
+
+    diff = (output-self.gt).sum().item()
+    assert diff == 0.0, "Test failed: sum should be 4, got %f" % diff
+    print("  Test ran successfully: difference is", diff)
+
 
 if __name__ == "__main__":
-  a = th.ones(1, 2, 8, 8)
-  b = th.ones(1, 2, 8, 8)*3
-  output = th.zeros(1, 2, 8, 8)
-  gt = th.ones(1, 2, 8, 8)*4
-
-  ops.add(a, b, output)
-
-  diff = (output-gt).sum().item()
-  assert diff == 0.0, "Test failed: sum should be 4"
-  print("Test ran successfully: difference is", diff)
-
-  # TODO: CPU, GPU, int, float, double, others? size of buffer?
+  unittest.main()

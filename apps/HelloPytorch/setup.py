@@ -6,6 +6,7 @@ from setuptools import setup, find_packages
 from torch.utils.cpp_extension import BuildExtension
 import torch as th
 
+
 def generate_pybind_wrapper(path, headers, has_cuda):
   s = "#include <torch/extension.h>\n\n"
   if has_cuda:
@@ -14,9 +15,9 @@ def generate_pybind_wrapper(path, headers, has_cuda):
   for h in headers:
     s += "#include \"{}\"\n".format(os.path.splitext(h)[0]+".pytorch.h")
   if has_cuda:
-    s += "#undef HL_PT_CUDA\n\n"
+    s += "#undef HL_PT_CUDA\n"
 
-  s += "PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {\n"
+  s += "\nPYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {\n"
   for h in headers:
     name = os.path.splitext(h)[0]
     s += "  m.def(\"{}\", &{}_th_, \"Pytorch wrapper of the Halide pipeline {}\");\n".format(
@@ -36,15 +37,19 @@ if __name__ == "__main__":
   if halide_dir is None or not os.path.exists(halide_dir):
     raise ValueError("Halide directory {} is invalid".format(halide_dir))
 
-  include_dirs = [build_dir, os.path.join(halide_dir, "include"), "."]
-  print("includes", include_dirs)
+  has_cuda = os.getenv("HAS_CUDA")
+  if has_cuda is None or has_cuda == "0":
+    has_cuda = False
+  else:
+    has_cuda = True
+
+  include_dirs = [build_dir, os.path.join(halide_dir, "include")]
   compile_args = ["-std=c++11", "-g"]
   if platform.system() == "Darwin":
     compile_args += ["-stdlib=libc++"]  # on osx libstdc++ causes trouble
 
   re_cc = re.compile(r".*\.pytorch\.h")
   hl_srcs = [f for f in os.listdir(build_dir) if re_cc.match(f)]
-  print("sources", hl_srcs)
 
   ext_name = "halide_ops"
   hl_sources = []
@@ -63,17 +68,11 @@ if __name__ == "__main__":
     hl_header = hl_src.split(".")[0] + ".h"
     hl_headers.append(os.path.basename(hl_header))
 
-#   # TODO: add cuda hl lib
-  print(hl_libs, "libs")
-#
   wrapper_path = os.path.join(build_dir, "pybind_wrapper.cpp")
   sources = [wrapper_path]
 
-  # sources = hl_sources + [wrapper_path]
-
-
-  if False: # th.cuda.is_available():
-    print("Generating CUDA version")
+  if has_cuda:
+    print("Generating CUDA wrapper")
     generate_pybind_wrapper(wrapper_path, hl_headers, True)
     from torch.utils.cpp_extension import CUDAExtension
     extension = CUDAExtension(ext_name, sources,
@@ -81,7 +80,7 @@ if __name__ == "__main__":
                               libraries=["cuda"],  # Halide ops need the full cuda lib, not just the RT library
                               extra_compile_args=compile_args)
   else:
-    print("Generating CPU version")
+    print("Generating CPU wrapper")
     generate_pybind_wrapper(wrapper_path, hl_headers, False)
     from torch.utils.cpp_extension import CppExtension
     extension = CppExtension(ext_name, sources,
