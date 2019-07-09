@@ -62,13 +62,17 @@ bool ends_with(const string &str, const string &suffix) {
 }
 
 // Load all the samples, reading filenames from stdin
-map<int, PipelineSample> load_samples() {
+map<int, PipelineSample> load_samples(bool verbose_mode) {
     map<int, PipelineSample> result;
     vector<float> scratch(10 * 1024 * 1024);
 
     int best = -1;
     float best_runtime = 1e20f;
     string best_path;
+
+    int truncated_samples = 0;
+
+    std::cout << "Loading samples...\n";
 
     size_t num_read = 0, num_unique = 0;
     while (!std::cin.eof()) {
@@ -98,7 +102,10 @@ map<int, PipelineSample> load_samples() {
             continue;
         }
         if (num_features % features_per_stage != 0) {
-            std::cout << "Truncated sample: " << s << " " << floats_read << "\n";
+            if (verbose_mode) {
+                std::cout << "Truncated sample: " << s << " " << floats_read << "\n";
+            }
+            ++truncated_samples;
             continue;
         }
         const size_t num_stages = num_features / features_per_stage;
@@ -208,9 +215,11 @@ map<int, PipelineSample> load_samples() {
         num_read++;
 
         if (num_read % 10000 == 0) {
-            std::cout << "Samples loaded: " << num_read << " (" << num_unique << " unique)\n";
+            std::cout << "Samples loaded: " << num_read << " valid (" << num_unique << " unique); " << truncated_samples << " truncated\n";
         }
     }
+
+    std::cout << "Samples loaded: " << num_read << " valid (" << num_unique << " unique); " << truncated_samples << " truncated\n";
 
     // Check the noise level
     for (const auto &pipe : result) {
@@ -222,7 +231,9 @@ map<int, PipelineSample> load_samples() {
                 std::cerr << "Empty runtimes for schedule: " << p.first << "\n";
                 abort();
             }
-            std::cout << "Unique sample: " << p.second.filename << " : " << p.second.runtimes[0] << "\n";
+            if (verbose_mode) {
+                std::cout << "Unique sample: " << p.second.filename << " : " << p.second.runtimes[0] << "\n";
+            }
             if (p.second.runtimes.size() > 1) {
                 // Compute variance from samples
                 double mean = 0;
@@ -274,7 +285,10 @@ int main(int argc, char **argv) {
 
     using std::string;
 
-    auto samples = load_samples();
+    string verbose_mode_str = getenv_safe("VERBOSE");
+    bool verbose_mode = verbose_mode_str == "1";
+
+    auto samples = load_samples(verbose_mode);
 
     string randomize_weights_str = getenv_safe("HL_RANDOMIZE_WEIGHTS");
     bool randomize_weights = randomize_weights_str == "1";
@@ -300,12 +314,10 @@ int main(int argc, char **argv) {
     auto seed = time(NULL);
     std::mt19937 rng((uint32_t) seed);
 
-    std::cout << "Iterating over " << samples.size() << " samples using seed = " << seed << "\n";
+    std::cout << "Iterating over " << samples.size() << " pipelines using seed = " << seed << "\n";
     decltype(samples) validation_set;
-    uint64_t unique_schedules = 0;
     if (samples.size() > 1) {
         for (auto p : samples) {
-            unique_schedules += p.second.schedules.size();
             // Whether or not a pipeline is part of the validation set
             // can't be a call to rand. It must be a fixed property of a
             // hash of some aspect of it.  This way you don't accidentally
@@ -321,8 +333,6 @@ int main(int argc, char **argv) {
             samples.erase(p.first);
         }
     }
-
-    std::cout << "Number of unique schedules: " << unique_schedules << "\n";
 
     std::vector<float> rates;
     if (argc == 2) {
