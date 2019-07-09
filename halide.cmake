@@ -1,6 +1,9 @@
 include(CMakeParseArguments)
 
-cmake_minimum_required(VERSION 3.1.3)
+cmake_minimum_required(VERSION 3.3)
+
+# Allow VISIBILITY_INLINES_HIDDEN to work for static libraries as well as shared. Requires CMake 3.3+.
+cmake_policy(SET CMP0063 NEW)
 
 # ----------------------- Public Functions.
 # These are all documented in README_cmake.md.
@@ -49,8 +52,8 @@ function(halide_generator NAME)
   # at least one source file, and this is the cheapest one we're going to have.
   add_executable("${NAME}_binary" "${HALIDE_TOOLS_DIR}/GenGen.cpp")
   _halide_set_cxx_options("${NAME}_binary")
-  target_include_directories("${NAME}_binary" PRIVATE "${HALIDE_TOOLS_DIR}")
-  target_link_libraries("${NAME}_binary" PRIVATE ${HALIDE_COMPILER_LIB} ${HALIDE_SYSTEM_LIBS} ${CMAKE_DL_LIBS} ${CMAKE_THREAD_LIBS_INIT})
+  target_include_directories("${NAME}_binary" PRIVATE "${HALIDE_INCLUDE_DIR}" "${HALIDE_TOOLS_DIR}")
+  target_link_libraries("${NAME}_binary" PRIVATE ${HALIDE_SYSTEM_LIBS} ${CMAKE_DL_LIBS} ${CMAKE_THREAD_LIBS_INIT})
   if (MSVC)
     target_link_libraries("${NAME}_binary" PRIVATE Kernel32)
   endif()
@@ -71,9 +74,16 @@ function(halide_generator NAME)
     endforeach()
     # Ensure that Halide.h is built prior to any Generator
     add_dependencies("${GENLIB}" ${HALIDE_COMPILER_LIB})
-
-    _halide_get_static_library_actual_path(${GENLIB} GENLIB_ACTUAL_PATH)
     _halide_force_link_library("${NAME}_binary" "${GENLIB}")
+  endif()
+
+  if ("${HALIDE_LIBRARY_TYPE}" STREQUAL "STATIC")
+    # Getting link order correct for static libraries is nearly impossible in CMake;
+    # to avoid flakiness, always link libHalide via --whole-archive
+    # when in static-library mode.
+    _halide_force_link_library("${NAME}_binary" "${HALIDE_COMPILER_LIB}")
+  else()
+    target_link_libraries("${NAME}_binary" PRIVATE ${HALIDE_COMPILER_LIB})
   endif()
 
   _halide_genfiles_dir(${BASENAME} GENFILES_DIR)
@@ -89,15 +99,14 @@ function(halide_generator NAME)
   set_property(TARGET "${NAME}_stub_gen" PROPERTY _HALIDE_GENERATOR_NAME "${args_GENERATOR_NAME}")
 
   if("${SRCSLEN}" GREATER 0)
+    _halide_get_static_library_actual_path(${GENLIB} GENLIB_ACTUAL_PATH)
     add_library("${NAME}" STATIC IMPORTED)
-    set_target_properties("${NAME}" PROPERTIES
-      IMPORTED_LOCATION "${GENLIB_ACTUAL_PATH}")
+    set_target_properties("${NAME}" PROPERTIES IMPORTED_LOCATION "${GENLIB_ACTUAL_PATH}")
   else()
     add_library("${NAME}" INTERFACE)
   endif()
   add_dependencies("${NAME}" "${NAME}_stub_gen")
-  set_target_properties("${NAME}" PROPERTIES
-    INTERFACE_INCLUDE_DIRECTORIES "${GENFILES_DIR}")
+  set_target_properties("${NAME}" PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${GENFILES_DIR}")
 endfunction()
 
 # Use a Generator target to emit a code library.
@@ -621,7 +630,8 @@ function(_halide_add_exec_generator_target EXEC_TARGET)
     add_custom_command(
       OUTPUT ${args_OUTPUTS}
       DEPENDS ${args_GENERATOR_BINARY}
-      COMMAND ${CMAKE_COMMAND} -E echo Running $<TARGET_FILE:${args_GENERATOR_BINARY}> ${args_GENERATOR_ARGS}
+      # Reduce noise during build; uncomment for debugging
+      # COMMAND ${CMAKE_COMMAND} -E echo Running $<TARGET_FILE:${args_GENERATOR_BINARY}> ${args_GENERATOR_ARGS}
       COMMAND ${RUN_WITHOUT_LEAKCHECK} $<TARGET_FILE:${args_GENERATOR_BINARY}> ${args_GENERATOR_ARGS}
       COMMENT "${EXTRA_OUTPUTS_COMMENT}"
     )
@@ -629,9 +639,11 @@ function(_halide_add_exec_generator_target EXEC_TARGET)
     add_custom_command(
       OUTPUT ${args_OUTPUTS}
       DEPENDS ${args_GENERATOR_BINARY}
-      COMMAND ${CMAKE_COMMAND} -E echo copying $<TARGET_FILE:${HALIDE_COMPILER_LIB}> to "$<TARGET_FILE_DIR:${args_GENERATOR_BINARY}>"
+      # Reduce noise during build; uncomment for debugging
+      # COMMAND ${CMAKE_COMMAND} -E echo copying $<TARGET_FILE:${HALIDE_COMPILER_LIB}> to "$<TARGET_FILE_DIR:${args_GENERATOR_BINARY}>"
       COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:${HALIDE_COMPILER_LIB}> "$<TARGET_FILE_DIR:${args_GENERATOR_BINARY}>"
-      COMMAND ${CMAKE_COMMAND} -E echo Running $<TARGET_FILE:${args_GENERATOR_BINARY}> ${args_GENERATOR_ARGS}
+      # Reduce noise during build; uncomment for debugging
+      # COMMAND ${CMAKE_COMMAND} -E echo Running $<TARGET_FILE:${args_GENERATOR_BINARY}> ${args_GENERATOR_ARGS}
       COMMAND ${RUN_WITHOUT_LEAKCHECK} $<TARGET_FILE:${args_GENERATOR_BINARY}> ${args_GENERATOR_ARGS}
       COMMENT "${EXTRA_OUTPUTS_COMMENT}"
     )
@@ -646,14 +658,20 @@ function(_halide_force_link_library NAME LIB)
   # (or the equivalent), to ensure that the Generator-registration code
   # isn't omitted. Sadly, there's no portable way to do this, so we do some
   # special-casing here:
-  _halide_get_static_library_actual_path(${LIB} LIB_ACTUAL_PATH)
   if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
+    _halide_get_static_library_actual_path("${LIB}" LIB_ACTUAL_PATH)
     target_link_libraries("${NAME}" PRIVATE "${LIB}")
-    set_target_properties("${NAME}" PROPERTIES LINK_FLAGS -Wl,-force_load,${GENLIB_ACTUAL_PATH})
+    # Append to LINK_FLAGS, since we may call this multiple times
+    get_property(flags TARGET "${NAME}" PROPERTY LINK_FLAGS)
+    set(flags "${flags} -Wl,-force_load,${LIB_ACTUAL_PATH}")
+    set_target_properties("${NAME}" PROPERTIES LINK_FLAGS ${flags})
   elseif(MSVC)
     # Note that this requires VS2015 R2+
     target_link_libraries("${NAME}" PRIVATE "${LIB}")
-    set_target_properties("${NAME}" PROPERTIES LINK_FLAGS "/WHOLEARCHIVE:${LIB}.lib")
+    # Append to LINK_FLAGS, since we may call this multiple times
+    get_property(flags TARGET "${NAME}" PROPERTY LINK_FLAGS)
+    set(flags "${flags} /WHOLEARCHIVE:${LIB}.lib")
+    set_target_properties("${NAME}" PROPERTIES LINK_FLAGS ${flags})
   else()
     # Assume Linux or similar
     target_link_libraries("${NAME}" PRIVATE -Wl,--whole-archive "${LIB}" -Wl,-no-whole-archive)

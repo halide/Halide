@@ -5,9 +5,10 @@ compiler:
   - gcc
 env:
   global:
-    # The Travis Ubuntu Xenial environment we run in currently promises 2 cores,
-    # so running lengthy make steps with -j2 is almost certainly a win.
-    - MAKEFLAGS=-j2
+    # The Travis Ubuntu Xenial environment we run in currently promises 2 cores.
+    # We'll run at -j4 on the assumption that there's enough I/O bound work
+    # for that to be profitable.
+    - MAKEFLAGS=-j4
   matrix:
     # Configurations
     #
@@ -20,6 +21,7 @@ env:
     # Note that gcc5.4 is the default install on Travis Xenial, so we'll just use that.
     - LLVM_VERSION=8.0.0 BUILD_SYSTEM=MAKE
     - LLVM_VERSION=8.0.0 BUILD_SYSTEM=CMAKE HALIDE_SHARED_LIBRARY=1
+    - LLVM_VERSION=8.0.0 BUILD_SYSTEM=CMAKE HALIDE_SHARED_LIBRARY=0
     #
     # llvm7 prebuilts are cranky on Travis and give flaky failures; we just skipped them
     # in Trusty and continue to skip them in Xenial.

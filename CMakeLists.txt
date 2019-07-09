@@ -1,6 +1,6 @@
 
 project(Halide)
-cmake_minimum_required(VERSION 3.2)
+cmake_minimum_required(VERSION 3.3)
 
 set(HALIDE_BASE_DIR   "${CMAKE_CURRENT_SOURCE_DIR}")
 
@@ -162,15 +162,15 @@ option(TARGET_OPENCL "Include OpenCL-C target" ON)
 option(TARGET_OPENGL "Include OpenGL/GLSL target" ON)
 option(TARGET_OPENGLCOMPUTE "Include OpenGLCompute target" ON)
 option(TARGET_D3D12COMPUTE "Include Direct3D 12 Compute target" ON)
-option(HALIDE_SHARED_LIBRARY "Build as a shared library" ON)
+option(HALIDE_SHARED_LIBRARY "Build tests+apps using shared library (vs static)" ON)
 option(HALIDE_ENABLE_RTTI "Enable RTTI" ${LLVM_ENABLE_RTTI})
 option(HALIDE_ENABLE_EXCEPTIONS "Enable exceptions" ${LLVM_ENABLE_EH})
 option(HALIDE_USE_CODEMODEL_LARGE "Use the Large LLVM codemodel" OFF)
 
 if (HALIDE_SHARED_LIBRARY)
-  set(HALIDE_LIBRARY_TYPE SHARED)
+  message(STATUS "Build tests+apps using Halide shared library")
 else()
-  set(HALIDE_LIBRARY_TYPE STATIC)
+  message(STATUS "Build tests+apps using Halide static library")
 endif()
 
 if (HALIDE_ENABLE_RTTI AND NOT LLVM_ENABLE_RTTI)
@@ -195,9 +195,8 @@ function(halide_project name folder)
       target_compile_options("${name}" PUBLIC "-fno-rtti")
     endif()
   endif()
-  target_link_libraries("${name}" PRIVATE Halide ${CMAKE_DL_LIBS} ${CMAKE_THREAD_LIBS_INIT})
-  target_include_directories("${name}" PRIVATE "${HALIDE_BASE_DIR}/src")
-  target_include_directories("${name}" PRIVATE "${HALIDE_BASE_DIR}/tools")
+  target_link_libraries("${name}" PRIVATE ${HALIDE_COMPILER_LIB} ${CMAKE_DL_LIBS} ${CMAKE_THREAD_LIBS_INIT})
+  target_include_directories("${name}" PRIVATE "${HALIDE_INCLUDE_DIR}" "${HALIDE_TOOLS_DIR}")
   set_target_properties("${name}" PROPERTIES FOLDER "${folder}")
   if (MSVC)
     target_link_libraries("${name}" PRIVATE Kernel32)
@@ -267,7 +266,11 @@ endif()
 # to specific values, rather than relying on HALIDE_DISTRIB_DIR to be set correctly.
 set(HALIDE_INCLUDE_DIR "${CMAKE_BINARY_DIR}/include")
 set(HALIDE_TOOLS_DIR "${HALIDE_BASE_DIR}/tools")
-set(HALIDE_COMPILER_LIB Halide)
+if (HALIDE_SHARED_LIBRARY)
+  set(HALIDE_COMPILER_LIB HalideShared)
+else()
+  set(HALIDE_COMPILER_LIB HalideStatic)
+endif()
 set(HALIDE_DISTRIB_DIR "/bad-path")
 include(halide.cmake)
 
@@ -330,7 +333,6 @@ function(add_halide_test TARGET)
   endforeach()
 
   set(BUILD_NAME "${TARGET}")
-  # add_custom_target("${BUILD_NAME}" DEPENDS "${TARGET}")
   set_target_properties("${BUILD_NAME}" PROPERTIES EXCLUDE_FROM_ALL TRUE)
   add_dependencies(build_tests "${BUILD_NAME}")
 
@@ -431,8 +433,7 @@ install(FILES
         "${CMAKE_BINARY_DIR}/include/Halide.h"
         "${CMAKE_BINARY_DIR}/include/HalideBuffer.h"
         ${FILES}
-        DESTINATION include
-        )
+        DESTINATION include)
 
 install(DIRECTORY tutorial
         DESTINATION .
@@ -465,7 +466,7 @@ file(GLOB FILES "${HALIDE_BASE_DIR}/*.md")
 install(FILES ${FILES}
         DESTINATION .)
 
-# ---- CMake
+# ---- halide.cmake
 file(GLOB FILES "${HALIDE_BASE_DIR}/*.cmake")
 install(FILES ${FILES}
         DESTINATION .)

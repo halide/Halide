@@ -8,7 +8,7 @@ python_bindings/bin/*
 build-64/*
 build-ios/*
 build-osx/*
-cmake_build/*
+cmake_build*/*
 */build/*
 tmp/*
 doc/*
