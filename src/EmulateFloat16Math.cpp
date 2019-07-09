@@ -127,15 +127,15 @@ class LowerBFloatConversions : public IRMutator {
 class LowerFloat16Conversions : public IRMutator {
     using IRMutator::visit;
 
-    // Taken from the branchless implementation by Phernost here,
-    // which they kindly placed in the public domain:
+    // float -> float16 was taken from the branchless implementation
+    // by Phernost here, which they kindly placed in the public
+    // domain:
     // https://stackoverflow.com/questions/1659440/32-bit-to-16-bit-floating-point-conversion
 
-    // That code was modified to round to nearest with ties to even on
-    // float -> float16 conversion. The original just rounded down.
+    // That code was modified to round to nearest with ties to
+    // even. The original just rounded down.
 
     static constexpr int shift = 13;
-    static constexpr int shiftSign = 16;
 
     static constexpr int32_t infN = 0x7F800000; // flt32 infinity
     static constexpr int32_t maxN = 0x477FE000; // max flt16 normal as a flt32
@@ -146,13 +146,10 @@ class LowerFloat16Conversions : public IRMutator {
     static constexpr int32_t nanN = (infC + 1) << shift; // minimum flt16 nan as a flt32
     static constexpr int32_t maxC = maxN >> shift;
     static constexpr int32_t minC = minN >> shift;
-    static constexpr int32_t signC = signN >> shiftSign; // flt16 sign bit
 
     static constexpr int32_t mulN = 0x52000000; // (1 << 23) / minN
-    static constexpr int32_t mulC = 0x33800000; // minN / (1 << (23 - shift))
 
     static constexpr int32_t subC = 0x003FF; // max flt32 subnormal down shifted
-    static constexpr int32_t norC = 0x00400; // min flt32 normal down shifted
 
     static constexpr int32_t maxD = infC - maxC - 1;
     static constexpr int32_t minD = minC - subC - 1;
@@ -225,30 +222,26 @@ class LowerFloat16Conversions : public IRMutator {
         return v;
     }
 
-    Expr float16_to_float(Expr value) {
-        Expr h = to_i32(as_u16(value));
-        Expr f = as_f32(((h&0x8000)<<16) | (((h&0x7c00)+0x1C000)<<13) | ((h&0x03FF)<<13));
-        debug(0) << f << "\n";
-        return f;
+    Expr float16_to_float(Expr f16) {
+        Expr f16_bits = to_u32(as_u16(f16));
 
-        /*
-        //return cast(Float(32, value.type().lanes()), reinterpret(Float(16, value.type().lanes()), value));
-        Expr v = to_i32(as_u16(value));
-        Expr sign = v & cast(v.type(), signC);
-        v = v ^ sign;
-        sign = sign << 16;
-        v = v ^ (((v + minD) ^ v) & bool_to_mask(v > subC));
-        v = v ^ (((v + maxD) ^ v) & bool_to_mask(v > maxC));
-        Expr s = cast(v.type(), mulC);
-        s = as_i32(as_f32(s) * v);
-        Expr mask = bool_to_mask(norC > v);
-        v = v << shift;
-        v = v ^ ((s ^ v) & mask);
-        v = v | sign;
-        v = as_f32(v);
-        v = common_subexpression_elimination(v);
-        return v;
-        */
+        Expr magnitude = f16_bits & 0x7fff;
+        Expr sign = f16_bits & 0x8000;
+        Expr exponent_mantissa = magnitude;
+
+        // Fix denorms
+        Expr denorm_bits = count_leading_zeros(magnitude) - 21;
+        Expr correction = (denorm_bits << 10) - magnitude * ((1 << denorm_bits) - 1);
+        correction = select(as_i32(denorm_bits) <= 0, 0, correction);
+        exponent_mantissa -= correction;
+
+        // Fix extreme values
+        exponent_mantissa = select(magnitude == 0, 0, // Map zero to zero
+                                   magnitude >= 0x7c00, exponent_mantissa | 0x3f800, // Map infinity to infinity
+                                   exponent_mantissa + 0x1c000); // Fix the exponent bias otherwise
+
+        Expr f32 = as_f32((sign << 16) | (exponent_mantissa << 13));
+        return common_subexpression_elimination(f32);
     }
 
     Expr visit(const Cast *op) override {
