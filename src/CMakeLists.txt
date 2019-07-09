@@ -746,7 +746,19 @@ function(add_halide_library HALIDE_LIBRARY_NAME HALIDE_LIBRARY_TYPE)
     ${SOURCE_FILES}
     ${INITIAL_MODULES}
   )
-  set_target_properties(${HALIDE_LIBRARY_NAME} PROPERTIES OUTPUT_NAME "Halide")
+
+  if (NOT MSVC)
+    # HalideShared -> libHalide.so (or libHalide.dylib)
+    # HalideStatic -> libHalide.a
+    set_target_properties(${HALIDE_LIBRARY_NAME} PROPERTIES OUTPUT_NAME "Halide")
+  else()
+    # HalideShared -> Halide.dll and Halide.lib
+    # HalideStatic -> HalideStatic.lib
+    if("${HALIDE_LIBRARY_TYPE}" STREQUAL "SHARED")
+      set_target_properties(${HALIDE_LIBRARY_NAME} PROPERTIES OUTPUT_NAME "Halide")
+    endif()
+  endif()
+
   add_dependencies(${HALIDE_LIBRARY_NAME} HalideIncludes)
 
   target_compile_definitions(${HALIDE_LIBRARY_NAME} PRIVATE ${HALIDE_COMPILE_DEFINITIONS} ${LLVM_DEFINITIONS})
