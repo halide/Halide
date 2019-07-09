@@ -11,8 +11,6 @@ namespace Internal {
 
 Expr lower_lerp(Expr zero_val, Expr one_val, Expr weight) {
 
-    debug(0) << "Lower lerp:\n" << zero_val << "\n" << one_val << "\n\n";
-
     Expr result;
 
     internal_assert(zero_val.type() == one_val.type());
@@ -134,10 +132,6 @@ Expr lower_lerp(Expr zero_val, Expr one_val, Expr weight) {
         if (computation_type.is_float()) {
             result = zero_val * inverse_typed_weight +
                 one_val * typed_weight;
-            debug(0) << "zero_val: " << zero_val << "\n\n";
-            debug(0) << "one_val: " << one_val << "\n\n";
-            debug(0) << "inverse_typed_weight: " << inverse_typed_weight << "\n\n";
-            debug(0) << "typed_weight: " << typed_weight << "\n\n";
         } else {
             int32_t bits = computation_type.bits();
             switch (bits) {

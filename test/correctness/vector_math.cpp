@@ -177,8 +177,6 @@ bool test(int lanes, int seed) {
     }
     Var x, y;
 
-    #if 0
-
     // Add
     {
         if (verbose) printf("Add\n");
@@ -486,7 +484,7 @@ bool test(int lanes, int seed) {
             for (int y = 0; y < H; y++) {
                 for (int x = 0; x < W; x++) {
                     A correct = input(x, y);
-                    if (correct <= 0) correct = -correct;
+                    if (correct <= A(0)) correct = -correct;
                     if (im14(x, y) != correct) {
                         printf("im14(%d, %d) = %f instead of %f\n", x, y, (double)(im14(x, y)), (double)(correct));
                     }
@@ -508,8 +506,8 @@ bool test(int lanes, int seed) {
             Buffer<int32_t> im16 = f16.realize(W, H);
             for (int y = 0; y < H; y++) {
                 for (int x = 0; x < W; x++) {
-                    int correct15 = input(x, y)*input(x, y+2) + input(x, y+1)*input(x, y+3);
-                    int correct16 = input(x, y)*input(x, y+2) - input(x, y+1)*input(x, y+3);
+                    int correct15 = int(input(x, y)*input(x, y+2) + input(x, y+1)*input(x, y+3));
+                    int correct16 = int(input(x, y)*input(x, y+2) - input(x, y+1)*input(x, y+3));
                     if (im15(x, y) != correct15) {
                         printf("im15(%d, %d) = %d instead of %d\n", x, y, im15(x, y), correct15);
                     }
@@ -649,8 +647,6 @@ bool test(int lanes, int seed) {
         */
     }
 
-    #endif
-
     // Lerp (where the weight is the same type as the values)
     {
         if (verbose) printf("Lerp\n");
@@ -703,7 +699,7 @@ bool test(int lanes, int seed) {
         for (int y = 0; y < H; y++) {
             for (int x = 0; x < W; x++) {
                 using T = typename with_unsigned<A>::type;
-                T correct { absd((double)input(x, y), (double)input(x+1, y)) };
+                T correct = T(absd((double)input(x, y), (double)input(x+1, y)));
                 if (im22(x, y) != correct) {
                     printf("im22(%d, %d) = %f instead of %f\n", x, y, (double)(im22(x, y)), (double)(correct));
                     return false;
