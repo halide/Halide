@@ -10,7 +10,6 @@ public:
     Input<Func> input_b{"input_b", 4};
     Output<Func> output{"output", 4};
 
-
     void generate() {
         Var x("x"), y("y"), c("c"), n("n");
         output(x, y, c, n) = input_a(x, y, c, n) + input_b(x, y, c, n);
@@ -36,6 +35,7 @@ public:
     }
 
 };
+
 
 class AddGradGenerator : public Generator<AddGradGenerator> {
 public:

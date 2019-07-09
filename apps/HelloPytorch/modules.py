@@ -4,17 +4,39 @@
 import torch as th
 import halide_ops as ops
 
-def _dispatch(op, optype=th.float32, cuda=False):
-  opname = op
+def _dispatch(opname, optype=th.float32, cuda=False):
+  """
+  Helper function that matches an opname and type to the Halide backend.
+
+  This is based on the naming convention we use in this example. Functions are 
+  named: <opname>[_cuda]_<optype>.
+
+  Args:
+    opname(str): name of the base Halide function.
+    optype(torch.dtype): pytorch's tensor datatype.
+    cuda(bool): whether the operator should use cuda.
+
+  Returns:
+    op: a python function wrapping the requested Halide operator.
+  """
+
+  assert type(opname) == str, "opname should be a string"
+  assert type(optype) == th.dtype, "optype should be a tensor datatype (torch.dtype)"
+
   if cuda:
     opname += "_cuda"
 
-  if optype == th.float64:
-    opname += "_double"
-  fn_ = getattr(ops, opname)
+  if optype == th.float32:
+    opname += "_float32"
+  elif optype == th.float64:
+    opname += "_float64"
+  else:
+    raise ValueError("Optype %s not recognized %s" % optype)  
+  op = getattr(ops, opname)
   if not hasattr(ops, opname):
     raise ValueError("Module has no operator %s" % opname)  
-  return fn_
+  return op
+
 
 # Register our ops with autograd so we can backprop through it
 class AddFunction(th.autograd.Function):
@@ -48,7 +70,7 @@ class AddFunction(th.autograd.Function):
     d_input_b = d_out.new()
     d_input_a.resize_(d_out.shape)
     d_input_b.resize_(d_out.shape)
-    ops.add_grad(d_out.contiguous(), d_input_a, d_input_b)
+    fn_(d_out.contiguous(), d_input_a, d_input_b)
     return d_input_a, d_input_b
 
 
