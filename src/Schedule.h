@@ -543,10 +543,19 @@ public:
     bool &allow_race_conditions();
     // @}
 
-    /** Issue atomic store? */
+    /** Use atomic update? */
     // @{
     bool atomic() const;
     bool &atomic();
+    // @}
+
+    /** Atomic updates are only allowed on associative reduction.
+     *  We try to prove the associativity, but the user can override
+     *  the associativity test and supress compiler error if the prover
+     *  fails to recognize the associativity or the user does not care. */
+    // @{
+    bool override_atomic_associativity_test() const;
+    bool &override_atomic_associativity_test();
     // @}
 
     /** Pass an IRVisitor through to all Exprs referenced in the

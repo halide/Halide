@@ -292,19 +292,21 @@ void Stage::set_dim_type(VarOrRVar var, ForType t) {
             if (!dims[i].is_pure() && var.is_rvar && is_parallel(t)) {
                 if (!definition.schedule().allow_race_conditions() &&
                         definition.schedule().atomic()) {
-                    // We only allow allow associative atomic operations
-                    const string &func_name = function.name();
-                    vector<Expr> &args = definition.args();
-                    vector<Expr> &values = definition.values();
+                    if (!definition.schedule().override_atomic_associativity_test()) {
+                        // We only allow allow associative atomic operations
+                        const string &func_name = function.name();
+                        vector<Expr> &args = definition.args();
+                        vector<Expr> &values = definition.values();
 
-                    // Check whether the operator is associative and determine the operator and
-                    // its identity for each value in the definition if it is a Tuple
-                    const auto &prover_result = prove_associativity(func_name, args, values);
+                        // Check whether the operator is associative and determine the operator and
+                        // its identity for each value in the definition if it is a Tuple
+                        const auto &prover_result = prove_associativity(func_name, args, values);
 
-                    user_assert(prover_result.associative())
-                        << "Failed to call atomic() on " << name()
-                        << " since it can't prove associativity of the operator.\n";
-                    internal_assert(prover_result.size() == values.size());
+                        user_assert(prover_result.associative())
+                            << "Failed to call atomic() on " << name()
+                            << " since it can't prove associativity of the operator.\n";
+                        internal_assert(prover_result.size() == values.size());
+                    }
                 }
                 user_assert(definition.schedule().allow_race_conditions() ||
                             definition.schedule().atomic())
@@ -1423,8 +1425,9 @@ Stage &Stage::allow_race_conditions() {
     return *this;
 }
 
-Stage &Stage::atomic() {
+Stage &Stage::atomic(bool override_associativity_test) {
     definition.schedule().atomic() = true;
+    definition.schedule().override_atomic_associativity_test() = override_associativity_test;
     return *this;
 }
 
@@ -2003,8 +2006,8 @@ Func &Func::allow_race_conditions() {
     return *this;
 }
 
-Func &Func::atomic() {
-    Stage(func, func.definition(), 0, args()).atomic();
+Func &Func::atomic(bool override_associativity_test) {
+    Stage(func, func.definition(), 0, args()).atomic(override_associativity_test);
     return *this;
 }
 

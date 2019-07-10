@@ -419,7 +419,7 @@ public:
                     DeviceAPI device_api = DeviceAPI::Default_GPU);
 
     Stage &allow_race_conditions();
-    Stage &atomic();
+    Stage &atomic(bool override_associativity_test = false);
 
     Stage &hexagon(VarOrRVar x = Var::outermost());
     Stage &prefetch(const Func &f, VarOrRVar var, Expr offset = 1,
@@ -1534,7 +1534,7 @@ public:
     Func &allow_race_conditions();
 
     /** Issue atomic store for this Func. This allows parallelization on arbitrary RVars. */
-    Func &atomic();
+    Func &atomic(bool override_associativity_test = false);
 
 
     /** Specialize a Func. This creates a special-case version of the

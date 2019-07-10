@@ -56,9 +56,9 @@ void test_parallel_hist(const Backend &backend) {
     switch(backend) {
         case Backend::CPU: {
             if (is_float_16) {
-                // Associativity prover doesn't support float16,
-                // use allow_race_conditions to remove the check.
-                hist.update().allow_race_conditions().atomic().parallel(r);
+                // Associativity prover doesn't support float16.
+                // Set override_associativity_test to true to remove the check.
+                hist.update().atomic(true /*override_associativity_test*/).parallel(r);
             } else {
                 hist.update().atomic().parallel(r);
             }
@@ -66,11 +66,10 @@ void test_parallel_hist(const Backend &backend) {
         case Backend::CPUVectorize: {
             RVar ro, ri;
             if (is_float_16) {
-                // Associativity prover doesn't support float16,
-                // use allow_race_conditions to remove the check.
+                // Associativity prover doesn't support float16.
+                // Set override_associativity_test to true to remove the check.
                 hist.update()
-                    .allow_race_conditions()
-                    .atomic()
+                    .atomic(true /*override_associativity_test*/)
                     .split(r, ro, ri, 8)
                     .parallel(ro)
                     .vectorize(ri);
@@ -85,9 +84,9 @@ void test_parallel_hist(const Backend &backend) {
         case Backend::OpenCL: {
             RVar ro, ri;
             if (is_float_16) {
-                // Associativity prover doesn't support float16
-                // use allow_race_conditions to remove the check.
-                hist.update().allow_race_conditions().atomic().split(r, ro, ri, 32)
+                // Associativity prover doesn't support float16.
+                // Set override_associativity_test to true to remove the check.
+                hist.update().atomic(true /*override_associativity_test*/).split(r, ro, ri, 32)
                     .gpu_blocks(ro, DeviceAPI::OpenCL)
                     .gpu_threads(ri, DeviceAPI::OpenCL);
             } else {
@@ -99,9 +98,9 @@ void test_parallel_hist(const Backend &backend) {
         case Backend::CUDA: {
             if (is_float_16) {
                 RVar ro, ri;
-                // Associativity prover doesn't support float16
-                // use allow_race_conditions to remove the check.
-                hist.update().allow_race_conditions().atomic().split(r, ro, ri, 32)
+                // Associativity prover doesn't support float16.
+                // Set override_associativity_test to true to remove the check.
+                hist.update().atomic(true /*override_associativity_test*/).split(r, ro, ri, 32)
                     .gpu_blocks(ro, DeviceAPI::CUDA)
                     .gpu_threads(ri, DeviceAPI::CUDA);
             } else {
@@ -147,30 +146,33 @@ void test_parallel_cas_update(const Backend &backend) {
     hist.compute_root();
     switch(backend) {
         case Backend::CPU: {
-            // Halide cannot prove that this is associative. We override it using allow_race_conditions.
-            hist.update().allow_race_conditions().atomic().parallel(r);
+            // Halide cannot prove that this is associative.
+            // Set override_associativity_test to true to remove the check.
+            hist.update().atomic(true /*override_associativity_test*/).parallel(r);
         } break;
         case Backend::CPUVectorize: {
             RVar ro, ri;
-            // Halide cannot prove that this is associative. We override it using allow_race_conditions.
+            // Halide cannot prove that this is associative.
+            // Set override_associativity_test to true to remove the check.
             hist.update()
-                .allow_race_conditions()
-                .atomic()
+                .atomic(true /*override_associativity_test*/)
                 .split(r, ro, ri, 8)
                 .parallel(ro)
                 .vectorize(ri);
         } break;
         case Backend::OpenCL: {
             RVar ro, ri;
-            // Halide cannot prove that this is associative. We override it using allow_race_conditions.
-            hist.update().allow_race_conditions().atomic().split(r, ro, ri, 32)
+            // Halide cannot prove that this is associative.
+            // Set override_associativity_test to true to remove the check.
+            hist.update().atomic(true /*override_associativity_test*/).split(r, ro, ri, 32)
                 .gpu_blocks(ro, DeviceAPI::OpenCL)
                 .gpu_threads(ri, DeviceAPI::OpenCL);
         } break;
         case Backend::CUDA: {
             RVar ro, ri;
-            // Halide cannot prove that this is associative. We override it using allow_race_conditions.
-            hist.update().allow_race_conditions().atomic().split(r, ro, ri, 32)
+            // Halide cannot prove that this is associative. 
+            // Set override_associativity_test to true to remove the check.
+            hist.update().atomic(true /*override_associativity_test*/).split(r, ro, ri, 32)
                 .gpu_blocks(ro, DeviceAPI::CUDA)
                 .gpu_threads(ri, DeviceAPI::CUDA);
         } break;
@@ -215,8 +217,8 @@ void test_parallel_hist_tuple(const Backend &backend) {
         case Backend::CPU: {
             if (is_float_16) {
                 // Associativity prover doesn't support float16,
-                // use allow_race_conditions to remove the check.
-                hist.update().allow_race_conditions().atomic().parallel(r);
+                // Set override_associativity_test to true to remove the check.
+                hist.update().atomic(true /*override_associativity_test*/).parallel(r);
             } else {
                 hist.update().atomic().parallel(r);
             }
@@ -225,10 +227,9 @@ void test_parallel_hist_tuple(const Backend &backend) {
             RVar ro, ri;
             if (is_float_16) {
                 // Associativity prover doesn't support float16,
-                // use allow_race_conditions to remove the check.
+                // Set override_associativity_test to true to remove the check.
                 hist.update()
-                    .allow_race_conditions()
-                    .atomic()
+                    .atomic(true /*override_associativity_test*/)
                     .split(r, ro, ri, 8)
                     .parallel(ro)
                     .vectorize(ri);
@@ -243,9 +244,9 @@ void test_parallel_hist_tuple(const Backend &backend) {
         case Backend::OpenCL: {
             RVar ro, ri;
             if (is_float_16) {
-                // Associativity prover doesn't support float16
-                // use allow_race_conditions to remove the check.
-                hist.update().allow_race_conditions().atomic().split(r, ro, ri, 32)
+                // Associativity prover doesn't support float16.
+                // Set override_associativity_test to true to remove the check.
+                hist.update().atomic(true /*override_associativity_test*/).split(r, ro, ri, 32)
                     .gpu_blocks(ro, DeviceAPI::OpenCL)
                     .gpu_threads(ri, DeviceAPI::OpenCL);
             } else {
@@ -257,9 +258,9 @@ void test_parallel_hist_tuple(const Backend &backend) {
         case Backend::CUDA: {
             if (is_float_16) {
                 RVar ro, ri;
-                // Associativity prover doesn't support float16
-                // use allow_race_conditions to remove the check.
-                hist.update().allow_race_conditions().atomic().split(r, ro, ri, 32)
+                // Associativity prover doesn't support float16.
+                // Set override_associativity_test to true to remove the check.
+                hist.update().atomic(true /*override_associativity_test*/).split(r, ro, ri, 32)
                     .gpu_blocks(ro, DeviceAPI::CUDA)
                     .gpu_threads(ri, DeviceAPI::CUDA);
             } else {
@@ -319,24 +320,27 @@ void test_predicated_hist(const Backend &backend) {
     for (int update_id = 0; update_id < 3; update_id++) {
         switch(backend) {
             case Backend::CPU: {
-                // Can't prove associativity
-                hist.update(update_id).allow_race_conditions().atomic().parallel(r);
+                // Can't prove associativity.
+                // Set override_associativity_test to true to remove the check.
+                hist.update(update_id).atomic(true /*override_associativity_test*/).parallel(r);
             } break;
             case Backend::CPUVectorize: {
                 // Doesn't support predicated store yet.
                 _halide_user_assert(false) << "Unsupported backend.\n";
             } break;
             case Backend::OpenCL: {
-                // Can't prove associativity
+                // Can't prove associativity.
+                // Set override_associativity_test to true to remove the check.
                 RVar ro, ri;
-                hist.update(update_id).allow_race_conditions().atomic().split(r, ro, ri, 32)
+                hist.update(update_id).atomic(true /*override_associativity_test*/).split(r, ro, ri, 32)
                     .gpu_blocks(ro, DeviceAPI::OpenCL)
                     .gpu_threads(ri, DeviceAPI::OpenCL);
             } break;
             case Backend::CUDA: {
-                // Can't prove associativity
+                // Can't prove associativity.
+                // Set override_associativity_test to true to remove the check.
                 RVar ro, ri;
-                hist.update(update_id).allow_race_conditions().atomic().split(r, ro, ri, 32)
+                hist.update(update_id).atomic(true /*override_associativity_test*/).split(r, ro, ri, 32)
                     .gpu_blocks(ro, DeviceAPI::CUDA)
                     .gpu_threads(ri, DeviceAPI::CUDA);
             } break;
@@ -399,8 +403,9 @@ void test_parallel_hist_tuple2(const Backend &backend) {
     hist.compute_root();
     switch(backend) {
         case Backend::CPU: {
-            // Halide cannot prove that this is associative. We override it using allow_race_conditions.
-            hist.update().allow_race_conditions().atomic().parallel(r);
+            // Halide cannot prove that this is associative.
+            // Set override_associativity_test to true to remove the check.
+            hist.update().atomic(true /*override_associativity_test*/).parallel(r);
         } break;
         default: {
             // All other backends do not support mutex locking.
@@ -456,7 +461,7 @@ void test_tuple_reduction(const Backend &backend) {
         case Backend::CPU: {
             // This is in fact not an associative reduction if
             // there is more than one winner.
-            arg_max.update().allow_race_conditions().atomic().parallel(r);
+            arg_max.update().atomic(true /*override_associativity_test*/).parallel(r);
         } break;
         default: {
             // All other backends do not support mutex locking.
@@ -511,13 +516,12 @@ void test_extern_func(const Backend &backend) {
     hist.compute_root();
     switch(backend) {
         case Backend::CPU: {
-            hist.update().allow_race_conditions().atomic().parallel(r);
+            hist.update().atomic(true /*override_associativity_test*/).parallel(r);
         } break;
         case Backend::CPUVectorize: {
             RVar ro, ri;
             hist.update()
-                .allow_race_conditions()
-                .atomic()
+                .atomic(true /*override_associativity_test*/)
                 .split(r, ro, ri, 8)
                 .parallel(ro)
                 .vectorize(ri);
@@ -570,14 +574,13 @@ void test_async(const Backend &backend) {
     switch(backend) {
         case Backend::CPU: {
             producer.compute_root().async();
-            consumer.update().allow_race_conditions().atomic().parallel(r);
+            consumer.update().atomic(true /*override_associativity_test*/).parallel(r);
         } break;
         case Backend::CPUVectorize: {
             producer.compute_root().async();
             RVar ro, ri;
             consumer.update()
-                    .allow_race_conditions()
-                    .atomic()
+                    .atomic(true /*override_associativity_test*/)
                     .split(r, ro, ri, 8)
                     .parallel(ro)
                     .vectorize(ri);
