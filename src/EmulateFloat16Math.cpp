@@ -173,27 +173,27 @@ class LowerFloat16Conversions : public IRMutator {
     Expr float16_to_float(Expr value) {
         Type f32_t = Float(32, value.type().lanes());
         Type u32_t = UInt(32, value.type().lanes());
-        Type i32_t = Int(32, value.type().lanes());
+        Type i32_t = UInt(32, value.type().lanes());
         Type u16_t = UInt(16, value.type().lanes());
+        Type i16_t = Int(16, value.type().lanes());
 
-        Expr f16_bits = cast(u32_t, reinterpret(u16_t, value));
+        Expr f16_bits = reinterpret(u16_t, value);
 
-        Expr magnitude = f16_bits & make_const(u32_t, 0x7fff);
-        Expr sign = f16_bits & make_const(u32_t, 0x8000);
-        Expr exponent_mantissa = magnitude;
+        Expr magnitude = f16_bits & make_const(u16_t, 0x7fff);
+        Expr sign = f16_bits & make_const(u16_t, 0x8000);
 
         // Fix denorms
-        Expr denorm_bits = count_leading_zeros(magnitude) - 21;
+        Expr denorm_bits = count_leading_zeros(magnitude) - 5;
         Expr correction = (denorm_bits << 10) - magnitude * ((1 << denorm_bits) - 1);
-        correction = select(reinterpret(i32_t, denorm_bits) <= 0, 0, correction);
-        exponent_mantissa -= correction;
+        correction = select(reinterpret(i16_t, denorm_bits) <= 0, 0, correction);
+        Expr exponent_mantissa = cast(u32_t, magnitude) - cast(i32_t, correction);
 
         // Fix extreme values
         exponent_mantissa = select(magnitude == 0, 0, // Map zero to zero
                                    magnitude >= 0x7c00, exponent_mantissa | 0x3f800, // Map infinity to infinity
                                    exponent_mantissa + 0x1c000); // Fix the exponent bias otherwise
 
-        Expr f32 = reinterpret(f32_t, (sign << 16) | (exponent_mantissa << 13));
+        Expr f32 = reinterpret(f32_t, (cast(u32_t, sign) << 16) | (exponent_mantissa << 13));
         return common_subexpression_elimination(f32);
     }
 
