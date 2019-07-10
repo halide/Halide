@@ -50,7 +50,7 @@ if [ -z ${PIPELINE} ]; then
 PIPELINE=demo
 fi
 
-SAMPLES=${PWD}/${SAMPLES_DIR}
+SAMPLES=${SAMPLES_DIR}
 mkdir -p ${SAMPLES}
 
 WEIGHTS=${SAMPLES}/weights
@@ -88,16 +88,17 @@ if [[ $TRAIN_ONLY != 1 ]]; then
   fi
 fi
 
-record_failed() {
+record_command() {
     BATCH=${1}
     SAMPLE_ID=${2}
     CMD=${3}
     TXT=${4}
+    FAILED=${5}
     BATCH_DIR=${SAMPLES}/${BATCH}
 
     echo $CMD > ${BATCH_DIR}/${SAMPLE_ID}/${TXT}.txt
 
-    if [[ -f ${BATCH_DIR}/${SAMPLE_ID}/sample.sample ]]; then
+    if [[ ${FAILED} == 1 && -f ${BATCH_DIR}/${SAMPLE_ID}/sample.sample ]]; then
         # Delete the .sample file so it doesn't get included in re-training
         rm -f ${BATCH_DIR}/${SAMPLE_ID}/sample.sample
     fi
@@ -125,7 +126,6 @@ make_sample() {
 
     echo "Compiling HL_SEED=${SEED} ${EXTRA_GENERATOR_ARGS}"
 
-    SUCCESS=1
     CMD="HL_PERMIT_FAILED_UNROLL=1 \
         HL_SEED=${SEED} \
         HL_SCHEDULE_FILE=${D}/schedule.txt \
@@ -145,10 +145,11 @@ make_sample() {
         ${EXTRA_GENERATOR_ARGS} \
         -p ${AUTOSCHED_BIN}/libauto_schedule.so 2> ${D}/compile_err.txt > ${D}/compile_log.txt"
 
-    eval $CMD || SUCCESS=0
-    if [[ $SUCCESS -eq 0 ]]; then
+    FAILED=0
+    eval $CMD || FAILED=1
+    record_command $BATCH $SAMPLE_ID "$CMD" "autoschedule_command" $FAILED
+    if [[ $FAILED == 1 ]]; then
         echo "Autoschedule failed or timed out for ${D}"
-        record_failed $BATCH $SAMPLE_ID "$CMD" "autoschedule_command"
         return
     fi
 
@@ -162,11 +163,12 @@ make_sample() {
         -ljpeg -ldl -lpthread -lz -lpng"
 
     eval $CMD
+    FAILED=0
     if [[ $? != 0 ]]; then
         echo "Compilation failed ${D}"
-        record_failed $BATCH $SAMPLE_ID "$CMD" "compile_command"
-        return
+        FAILED=1
     fi
+    record_command $BATCH $SAMPLE_ID "$CMD" "compile_command" $FAILED
 }
 
 # Benchmark one of the random samples
@@ -189,9 +191,15 @@ benchmark_sample() {
         --benchmarks=all"
 
     eval $CMD | tee ${D}/bench.txt
+    FAILED=0
     if [[ ! -s ${D}/bench.txt ]]; then
         echo "Benchmarking failed or timed out for ${D}"
-        record_failed $BATCH $SAMPLE_ID "$CMD" "benchmark_command"
+        FAILED=1
+    fi
+
+    record_command $BATCH $SAMPLE_ID "$CMD" "benchmark_command" $FAILED
+
+    if [[ ${FAILED} == 1 ]]; then
         return
     fi
 
@@ -202,10 +210,12 @@ benchmark_sample() {
 
     CMD="${AUTOSCHED_BIN}/augment_sample ${D}/sample.sample $R $P $S"
     eval $CMD
+    FAILED=0
     if [[ $? != 0 ]]; then
         echo "Augment sample failed for ${D}"
-        record_failed $BATCH $SAMPLE_ID "$CMD" "augment_command"
+        FAILED=1
     fi
+    record_command $BATCH $SAMPLE_ID "$CMD" "augment_command" $FAILED
 }
 
 if [[ $BATCH_ID == 0 ]]; then
@@ -236,7 +246,7 @@ for ((BATCH_ID=$((FIRST+1));BATCH_ID<$((FIRST+1+NUM_BATCHES));BATCH_ID++)); do
 
           # Copy the weights being used into the batch folder so that we can repro failures
           mkdir -p ${DIR}/weights_used/
-          cp ${WEIGHTS}/* ${DIR}/weights_used/
+          cp ${WEIGHTS}/*.data ${DIR}/weights_used/
 
           EXTRA_GENERATOR_ARGS=${GENERATOR_ARGS_SETS_ARRAY[EXTRA_ARGS_IDX]/;/ }
           if [ ! -z "${EXTRA_GENERATOR_ARGS}" ]; then
