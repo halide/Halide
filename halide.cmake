@@ -2,9 +2,6 @@ include(CMakeParseArguments)
 
 cmake_minimum_required(VERSION 3.3)
 
-# Allow VISIBILITY_INLINES_HIDDEN to work for static libraries as well as shared. Requires CMake 3.3+.
-cmake_policy(SET CMP0063 NEW)
-
 # ----------------------- Public Functions.
 # These are all documented in README_cmake.md.
 #
@@ -52,7 +49,7 @@ function(halide_generator NAME)
   # at least one source file, and this is the cheapest one we're going to have.
   add_executable("${NAME}_binary" "${HALIDE_TOOLS_DIR}/GenGen.cpp")
   _halide_set_cxx_options("${NAME}_binary")
-  target_include_directories("${NAME}_binary" PRIVATE "${HALIDE_TOOLS_DIR}")
+  target_include_directories("${NAME}_binary" PRIVATE "${HALIDE_INCLUDE_DIR}" "${HALIDE_TOOLS_DIR}")
   target_link_libraries("${NAME}_binary" PRIVATE ${HALIDE_SYSTEM_LIBS} ${CMAKE_DL_LIBS} ${CMAKE_THREAD_LIBS_INIT})
   if (MSVC)
     target_link_libraries("${NAME}_binary" PRIVATE Kernel32)
@@ -77,7 +74,8 @@ function(halide_generator NAME)
     _halide_force_link_library("${NAME}_binary" "${GENLIB}")
   endif()
 
-  if ("${HALIDE_LIBRARY_TYPE}" STREQUAL "STATIC")
+  get_target_property(TARGET_TYPE "${HALIDE_COMPILER_LIB}" TYPE)
+  if("${TARGET_TYPE}" STREQUAL "STATIC_LIBRARY")
     # Getting link order correct for static libraries is nearly impossible in CMake;
     # to avoid flakiness, always link libHalide via --whole-archive
     # when in static-library mode.

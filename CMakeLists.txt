@@ -57,10 +57,6 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 set(CMAKE_MACOSX_RPATH ON)
 
-# Allow VISIBILITY_INLINES_HIDDEN to work for static libraries as well as shared
-# (since these may later be linked into dynamic libraries). Requires CMake 3.3+.
-cmake_policy(SET CMP0063 NEW)
-
 # Export all symbols
 SET(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
 
@@ -336,7 +332,6 @@ function(add_halide_test TARGET)
   endforeach()
 
   set(BUILD_NAME "${TARGET}")
-  # add_custom_target("${BUILD_NAME}" DEPENDS "${TARGET}")
   set_target_properties("${BUILD_NAME}" PROPERTIES EXCLUDE_FROM_ALL TRUE)
   add_dependencies(build_tests "${BUILD_NAME}")
 
@@ -374,6 +369,7 @@ define_test_group(test_auto_schedule)
 define_test_group(test_correctness)
 define_test_group(test_error)
 define_test_group(test_generator)
+define_test_group(test_internal)
 define_test_group(test_opengl)
 define_test_group(test_performance)
 define_test_group(test_tutorial)
@@ -437,8 +433,7 @@ install(FILES
         "${CMAKE_BINARY_DIR}/include/Halide.h"
         "${CMAKE_BINARY_DIR}/include/HalideBuffer.h"
         ${FILES}
-        DESTINATION include
-        )
+        DESTINATION include)
 
 install(DIRECTORY tutorial
         DESTINATION .
@@ -471,7 +466,7 @@ file(GLOB FILES "${HALIDE_BASE_DIR}/*.md")
 install(FILES ${FILES}
         DESTINATION .)
 
-# ---- CMake
+# ---- halide.cmake
 file(GLOB FILES "${HALIDE_BASE_DIR}/*.cmake")
 install(FILES ${FILES}
         DESTINATION .)
