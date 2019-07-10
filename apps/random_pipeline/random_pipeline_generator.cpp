@@ -1217,8 +1217,9 @@ public:
 
         Var x("x"), y("y"), c("c");
 
+        Func clamped_input = Halide::BoundaryConditions::repeat_edge(input);
         Func first;
-        first(x, y, c) = input(x, y, c);
+        first(x, y, c) = clamped_input(x, y, c);
 
         vector<Stage> stages;
         // Assume input starts at ~2000x2000
