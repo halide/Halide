@@ -673,14 +673,16 @@ public:
         }
         return r;
     }
-    friend Vec operator<<(const Vec &a, const Vec &b) {
+    template <typename OtherElementType>
+    friend Vec operator<<(const Vec &a, const CppVector<OtherElementType, Lanes> &b) {
         Vec r(empty);
         for (size_t i = 0; i < Lanes; i++) {
             r.elements[i] = a[i] << b[i];
         }
         return r;
     }
-    friend Vec operator>>(const Vec &a, const Vec &b) {
+    template <typename OtherElementType>
+    friend Vec operator>>(const Vec &a, const CppVector<OtherElementType, Lanes> &b) {
         Vec r(empty);
         for (size_t i = 0; i < Lanes; i++) {
             r.elements[i] = a[i] >> b[i];
@@ -1110,10 +1112,12 @@ public:
     friend Vec operator%(const Vec &a, const Vec &b) {
         return Vec(from_native_vector, a.native_vector % b.native_vector);
     }
-    friend Vec operator<<(const Vec &a, const Vec &b) {
+    template <typename OtherElementType>
+    friend Vec operator<<(const Vec &a, const NativeVector<OtherElementType, Lanes> &b) {
         return Vec(from_native_vector, a.native_vector << b.native_vector);
     }
-    friend Vec operator>>(const Vec &a, const Vec &b) {
+    template <typename OtherElementType>
+    friend Vec operator>>(const Vec &a, const NativeVector<OtherElementType, Lanes> &b) {
         return Vec(from_native_vector, a.native_vector >> b.native_vector);
     }
     friend Vec operator&(const Vec &a, const Vec &b) {
