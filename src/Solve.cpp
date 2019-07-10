@@ -987,9 +987,9 @@ class SolveForInterval : public IRVisitor {
             }
         } else if (v && v->name == var) {
             if (target) {
-                result = Interval(Interval::neg_inf, le->b);
+                result = Interval(Interval::neg_inf(), le->b);
             } else {
-                result = Interval(le->b + 1, Interval::pos_inf);
+                result = Interval(le->b + 1, Interval::pos_inf());
             }
         } else if (const Max *max_a = le->a.as<Max>()) {
             // Rewrite (max(a, b) <= c) <==> (a <= c && (b <= c || a >= b))
@@ -1044,9 +1044,9 @@ class SolveForInterval : public IRVisitor {
             }
         } else if (v && v->name == var) {
             if (target) {
-                result = Interval(ge->b, Interval::pos_inf);
+                result = Interval(ge->b, Interval::pos_inf());
             } else {
-                result = Interval(Interval::neg_inf, ge->b - 1);
+                result = Interval(Interval::neg_inf(), ge->b - 1);
             }
         } else if (const Max *max_a = ge->a.as<Max>()) {
             // Rewrite (max(a, b) >= c) <==> (a >= c || (b >= c && a <= b))
@@ -1188,10 +1188,10 @@ class AndConditionOverDomain : public IRMutator {
             a = make_smaller(op->a);
             b = make_bigger(op->b);
         }
-        if (a.same_as(Interval::pos_inf) ||
-            b.same_as(Interval::pos_inf) ||
-            a.same_as(Interval::neg_inf) ||
-            b.same_as(Interval::neg_inf)) {
+        if (a.same_as(Interval::pos_inf()) ||
+            b.same_as(Interval::pos_inf()) ||
+            a.same_as(Interval::neg_inf()) ||
+            b.same_as(Interval::neg_inf())) {
             return fail();
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             return op;
@@ -1309,14 +1309,14 @@ class AndConditionOverDomain : public IRMutator {
             if (!value_bounds.has_lower_bound() ||
                 (is_const(value_bounds.min) && value_bounds.min.as<Variable>())) {
                 min_var = value_bounds.min;
-                value_bounds.min = Interval::neg_inf;
+                value_bounds.min = Interval::neg_inf();
             } else {
                 min_var = Variable::make(value_bounds.min.type(), min_name);
             }
             if (!value_bounds.has_upper_bound() ||
                 (is_const(value_bounds.max) && value_bounds.max.as<Variable>())) {
                 max_var = value_bounds.max;
-                value_bounds.max = Interval::pos_inf;
+                value_bounds.max = Interval::pos_inf();
             } else {
                 max_var = Variable::make(value_bounds.max.type(), max_name);
             }
@@ -1556,8 +1556,8 @@ void solve_test() {
     check_solve(4 > y*x, x*y < 4);
 
     // Now test solving for an interval
-    check_inner_interval(x > 0, 1, Interval::pos_inf);
-    check_inner_interval(x < 100, Interval::neg_inf, 99);
+    check_inner_interval(x > 0, 1, Interval::pos_inf());
+    check_inner_interval(x < 100, Interval::neg_inf(), 99);
     check_outer_interval(x > 0 && x < 100, 1, 99);
     check_inner_interval(x > 0 && x < 100, 1, 99);
 
@@ -1566,7 +1566,7 @@ void solve_test() {
     check_outer_interval(Let::make("c", x > 0, c && x < 100), 1, 99);
 
     check_outer_interval((x >= 10 && x <= 90) && sin(x) > 0.5f, 10, 90);
-    check_inner_interval((x >= 10 && x <= 90) && sin(x) > 0.6f, Interval::pos_inf, Interval::neg_inf);
+    check_inner_interval((x >= 10 && x <= 90) && sin(x) > 0.6f, Interval::pos_inf(), Interval::neg_inf());
 
     check_inner_interval(x == 10, 10, 10);
     check_outer_interval(x == 10, 10, 10);
@@ -1574,14 +1574,14 @@ void solve_test() {
     check_inner_interval(!(x != 10), 10, 10);
     check_outer_interval(!(x != 10), 10, 10);
 
-    check_inner_interval(3*x + 4 < 27, Interval::neg_inf, 7);
-    check_outer_interval(3*x + 4 < 27, Interval::neg_inf, 7);
+    check_inner_interval(3*x + 4 < 27, Interval::neg_inf(), 7);
+    check_outer_interval(3*x + 4 < 27, Interval::neg_inf(), 7);
 
     check_inner_interval(min(x, y) > 17, 18, y);
-    check_outer_interval(min(x, y) > 17, 18, Interval::pos_inf);
+    check_outer_interval(min(x, y) > 17, 18, Interval::pos_inf());
 
-    check_inner_interval(x/5 < 17, Interval::neg_inf, 84);
-    check_outer_interval(x/5 < 17, Interval::neg_inf, 84);
+    check_inner_interval(x/5 < 17, Interval::neg_inf(), 84);
+    check_outer_interval(x/5 < 17, Interval::neg_inf(), 84);
 
     // Test anding a condition over a domain
     check_and_condition(x > 0, const_true(), Interval(1, y));
