@@ -335,7 +335,7 @@ int main(int argc, char **argv) {
     string verbose_mode_str = getenv_safe("VERBOSE");
     bool verbose_mode = verbose_mode_str == "1";
 
-    string partition_schedules_mode_str = getenv_safe("partition_SCHEDULES");
+    string partition_schedules_mode_str = getenv_safe("PARTITION_SCHEDULES");
     bool partition_schedules_mode = partition_schedules_mode_str == "1";
 
     map<int, PipelineSample> samples;
