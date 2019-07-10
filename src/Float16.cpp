@@ -376,19 +376,25 @@ float16_t float16_t::make_from_bits(uint16_t bits) {
     return f;
 }
 
-float16_t float16_t::make_zero(bool positive) {
-    uint16_t bits = positive ? 0 : sign_mask;
-    return float16_t::make_from_bits(bits);
+
+float16_t float16_t::make_zero() {
+    return float16_t::make_from_bits(0);
 }
 
-float16_t float16_t::make_infinity(bool positive) {
-    uint16_t bits = exponent_mask | (positive ? 0 : sign_mask);
-    return float16_t::make_from_bits(bits);
+float16_t float16_t::make_negative_zero() {
+    return float16_t::make_from_bits(sign_mask);
+}
+
+float16_t float16_t::make_infinity() {
+    return float16_t::make_from_bits(exponent_mask);
+}
+
+float16_t float16_t::make_negative_infinity() {
+    return float16_t::make_from_bits(exponent_mask | sign_mask);
 }
 
 float16_t float16_t::make_nan() {
-    uint16_t bits = exponent_mask | mantissa_mask;
-    return float16_t::make_from_bits(bits);
+    return float16_t::make_from_bits(exponent_mask | mantissa_mask);
 }
 
 float16_t float16_t::operator-() const {
@@ -468,19 +474,24 @@ bfloat16_t bfloat16_t::make_from_bits(uint16_t bits) {
     return f;
 }
 
-bfloat16_t bfloat16_t::make_zero(bool positive) {
-    uint16_t bits = positive ? 0 : sign_mask;
-    return bfloat16_t::make_from_bits(bits);
+bfloat16_t bfloat16_t::make_zero() {
+    return bfloat16_t::make_from_bits(0);
 }
 
-bfloat16_t bfloat16_t::make_infinity(bool positive) {
-    uint16_t bits = exponent_mask | (positive ? 0 : sign_mask);
-    return bfloat16_t::make_from_bits(bits);
+bfloat16_t bfloat16_t::make_negative_zero() {
+    return bfloat16_t::make_from_bits(sign_mask);
+}
+
+bfloat16_t bfloat16_t::make_infinity() {
+    return bfloat16_t::make_from_bits(exponent_mask);
+}
+
+bfloat16_t bfloat16_t::make_negative_infinity() {
+    return bfloat16_t::make_from_bits(exponent_mask | sign_mask);
 }
 
 bfloat16_t bfloat16_t::make_nan() {
-    uint16_t bits = exponent_mask | mantissa_mask;
-    return bfloat16_t::make_from_bits(bits);
+    return bfloat16_t::make_from_bits(exponent_mask | mantissa_mask);
 }
 
 bfloat16_t bfloat16_t::operator-() const {

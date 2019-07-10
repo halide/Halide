@@ -48,32 +48,20 @@ struct float16_t {
     /** Cast to int */
     explicit operator int() const;
 
-    /** \name Convenience "constructors"
-     */
-    /**@{*/
-
-    /** Get a new float16_t that represents zero
-     * \param positive if true then returns positive zero otherwise returns
-     *        negative zero.
-     */
-    static float16_t make_zero(bool positive);
-
-    /** Get a new float16_t that represents infinity
-     * \param positive if true then returns positive infinity otherwise returns
-     *        negative infinity.
-     */
-    static float16_t make_infinity(bool positive);
-
-    /** Get a new float16_t that represents NaN (not a number) */
+    /** Get a new float16_t that represents a special value */
+    // @{
+    static float16_t make_zero();
+    static float16_t make_negative_zero();
+    static float16_t make_infinity();
+    static float16_t make_negative_infinity();
     static float16_t make_nan();
+    // @}
 
     /** Get a new float16_t with the given raw bits
      *
      * \param bits The bits conformant to IEEE754 binary16
      */
     static float16_t make_from_bits(uint16_t bits);
-
-    /**@}*/
 
     /** Return a new float16_t with a negated sign bit*/
     float16_t operator-() const;
@@ -144,6 +132,8 @@ struct bfloat16_t {
     static const uint16_t exponent_mask = 0x7f80;
     static const uint16_t mantissa_mask = 0x007f;
 
+    static const bfloat16_t zero, negative_zero, infinity, negative_infinity, nan;
+
     /// \name Constructors
     /// @{
 
@@ -171,32 +161,20 @@ struct bfloat16_t {
     /** Cast to int */
     explicit operator int() const;
 
-    /** \name Convenience "constructors"
-     */
-    /**@{*/
-
-    /** Get a new bfloat16_t that represents zero
-     * \param positive if true then returns positive zero otherwise returns
-     *        negative zero.
-     */
-    static bfloat16_t make_zero(bool positive);
-
-    /** Get a new float16_t that represents infinity
-     * \param positive if true then returns positive infinity otherwise returns
-     *        negative infinity.
-     */
-    static bfloat16_t make_infinity(bool positive);
-
-    /** Get a new bfloat16_t that represents NaN (not a number) */
+    /** Get a new bfloat16_t that represents a special value */
+    // @{
+    static bfloat16_t make_zero();
+    static bfloat16_t make_negative_zero();
+    static bfloat16_t make_infinity();
+    static bfloat16_t make_negative_infinity();
     static bfloat16_t make_nan();
+    // @}
 
     /** Get a new bfloat16_t with the given raw bits
      *
      * \param bits The bits conformant to IEEE754 binary16
      */
     static bfloat16_t make_from_bits(uint16_t bits);
-
-    /**@}*/
 
     /** Return a new bfloat16_t with a negated sign bit*/
     bfloat16_t operator-() const;
