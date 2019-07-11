@@ -1112,14 +1112,6 @@ public:
     friend Vec operator%(const Vec &a, const Vec &b) {
         return Vec(from_native_vector, a.native_vector % b.native_vector);
     }
-    template <typename OtherElementType>
-    friend Vec operator<<(const Vec &a, const NativeVector<OtherElementType, Lanes> &b) {
-        return Vec(from_native_vector, a.native_vector << b.native_vector);
-    }
-    template <typename OtherElementType>
-    friend Vec operator>>(const Vec &a, const NativeVector<OtherElementType, Lanes> &b) {
-        return Vec(from_native_vector, a.native_vector >> b.native_vector);
-    }
     friend Vec operator&(const Vec &a, const Vec &b) {
         return Vec(from_native_vector, a.native_vector & b.native_vector);
     }
@@ -1329,6 +1321,16 @@ public:
 private:
     template<typename, size_t> friend class NativeVector;
 
+    template <typename ElementType, typename OtherElementType, size_t Lanes>
+    friend NativeVector<ElementType, Lanes> operator<<(
+                    const NativeVector<ElementType, Lanes> &a,
+                    const NativeVector<OtherElementType, Lanes> &b);
+
+    template <typename ElementType, typename OtherElementType, size_t Lanes>
+    friend NativeVector<ElementType, Lanes> operator>>(
+                    const NativeVector<ElementType, Lanes> &a,
+                    const NativeVector<OtherElementType, Lanes> &b);
+
     NativeVectorType native_vector;
 
     // Leave vector uninitialized for cases where we overwrite every entry
@@ -1341,6 +1343,22 @@ private:
         native_vector = src;
     }
 };
+
+template <typename ElementType, typename OtherElementType, size_t Lanes>
+NativeVector<ElementType, Lanes> operator<<(const NativeVector<ElementType, Lanes> &a,
+                    const NativeVector<OtherElementType, Lanes> &b) {
+    return NativeVector<ElementType, Lanes>(
+                  NativeVector<ElementType, Lanes>::from_native_vector,
+                  a.native_vector << b.native_vector);
+}
+
+template <typename ElementType, typename OtherElementType, size_t Lanes>
+NativeVector<ElementType, Lanes> operator>>(const NativeVector<ElementType, Lanes> &a,
+                    const NativeVector<OtherElementType, Lanes> &b) {
+    return NativeVector<ElementType, Lanes>(
+                  NativeVector<ElementType, Lanes>::from_native_vector,
+                  a.native_vector >> b.native_vector);
+}
 #endif  // __has_attribute(ext_vector_type) || __has_attribute(vector_size)
 
 )INLINE_CODE";
