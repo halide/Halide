@@ -2,9 +2,6 @@ include(CMakeParseArguments)
 
 cmake_minimum_required(VERSION 3.3)
 
-# Allow VISIBILITY_INLINES_HIDDEN to work for static libraries as well as shared. Requires CMake 3.3+.
-cmake_policy(SET CMP0063 NEW)
-
 # ----------------------- Public Functions.
 # These are all documented in README_cmake.md.
 #
