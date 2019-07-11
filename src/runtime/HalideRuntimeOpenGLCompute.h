@@ -61,8 +61,6 @@ void *halide_opengl_get_proc_address(void *user_context, const char *name);
  */
 int halide_opengl_create_context(void *user_context);
 
-void halide_opengl_release_context(void *user_context);
-
 #ifdef __cplusplus
 } // End extern "C"
 #endif
