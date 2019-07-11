@@ -430,6 +430,8 @@ file(GLOB FILES "${CMAKE_BINARY_DIR}/include/HalideRuntime*.h")
 install(FILES
         "${CMAKE_BINARY_DIR}/include/Halide.h"
         "${CMAKE_BINARY_DIR}/include/HalideBuffer.h"
+        "${CMAKE_BINARY_DIR}/include/HalidePyTorchHelpers.h"
+        "${CMAKE_BINARY_DIR}/include/HalidePyTorchCudaHelpers.h"
         ${FILES}
         DESTINATION include
         )
