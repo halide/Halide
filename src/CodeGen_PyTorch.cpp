@@ -127,7 +127,7 @@ string type_to_c_type(Type type, bool include_space, bool c_plus_plus = true) {
     return oss.str();
 }
 
-string type_to_pytorch_tensor(Type type, bool isCuda) {
+string type_to_pytorch_tensor(Type type, bool is_cuda) {
     return "at::Tensor";
 }
 
@@ -147,7 +147,6 @@ CodeGen_PyTorch::CodeGen_PyTorch(ostream &s, Target t, OutputKind output_kind,
   if (target.has_feature(Target::CUDA)) {
     stream << "#include \"ATen/cuda/CUDAContext.h\"\n";  
     stream << "#include \"HalidePyTorchCudaHelpers.h\"\n";
-    // stream << "#undef HL_PT_CUDA\n";
   }
 
   std::vector<std::string> header_path = split_string(cpp_header, "/");
@@ -172,7 +171,7 @@ void CodeGen_PyTorch::compile(const Module &input) {
     }
 }
 
-void CodeGen_PyTorch::compile(const LoweredFunc &f, bool isCuda) {
+void CodeGen_PyTorch::compile(const LoweredFunc &f, bool is_cuda) {
   // Don't put non-external function declarations in headers.
   std::vector<std::string> namespaces;
   std::string simple_name = extract_namespaces(f.name, namespaces);
@@ -193,7 +192,7 @@ void CodeGen_PyTorch::compile(const LoweredFunc &f, bool isCuda) {
     } else if (args[i].is_buffer()) {
       buffer_args.push_back(args[i]);
       stream 
-        << type_to_pytorch_tensor(args[i].type, isCuda)
+        << type_to_pytorch_tensor(args[i].type, is_cuda)
         << " &"
         << print_name(args[i].name);
     } else {
@@ -209,7 +208,7 @@ void CodeGen_PyTorch::compile(const LoweredFunc &f, bool isCuda) {
   indent += 2;
 
   do_indent();
-  if (isCuda) {
+  if (is_cuda) {
     stream << "// Setup CUDA\n";
     do_indent();
     stream << "int device_id = at::cuda::current_device();\n";
@@ -235,7 +234,7 @@ void CodeGen_PyTorch::compile(const LoweredFunc &f, bool isCuda) {
       << "HLPT_CHECK_CONTIGUOUS("
       << print_name(buffer_args[i].name) 
       << ");\n";
-    if (isCuda) {
+    if (is_cuda) {
       do_indent();
       stream
         << "HLPT_CHECK_DEVICE("
@@ -281,7 +280,7 @@ void CodeGen_PyTorch::compile(const LoweredFunc &f, bool isCuda) {
   do_indent();
   stream << "AT_ASSERTM(err == 0, \"Halide call failed\");\n";
 
-  if (isCuda) {
+  if (is_cuda) {
     do_indent();
     stream << "// Make sure data is on device\n";
     for (size_t i = 0; i < buffer_args.size(); i++) {
@@ -307,7 +306,7 @@ void CodeGen_PyTorch::compile(const LoweredFunc &f, bool isCuda) {
   if (get_env_variable("FLUSH_MEMOIZE_CACHE") == "1") {
       do_indent();
       stream << "// Flush cache\n";
-      if (isCuda) {
+      if (is_cuda) {
           do_indent();
           stream << "halide_memoization_cache_cleanup(__user_context);\n";
       } else {
