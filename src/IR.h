@@ -496,7 +496,7 @@ struct Call : public ExprNode<Call> {
     // risking ambiguous initalization order; we use a typedef to simplify
     // declaration.
     typedef const char *const ConstString;
-    static ConstString debug_to_file,
+    HALIDE_EXPORT static ConstString debug_to_file,
         reinterpret,
         bitwise_and,
         bitwise_not,
