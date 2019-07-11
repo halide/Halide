@@ -188,7 +188,7 @@ class LowerFloat16Conversions : public IRMutator {
         Expr exponent_mantissa = cast(u32_t, magnitude) << 13;
         exponent_mantissa = select(magnitude == 0, 0, // Map zero to zero
                                    magnitude < 0x400, denorm, // denorms
-                                   magnitude >= 0x7c00, exponent_mantissa | 0x7f000000, // Map infinity to infinity
+                                   magnitude >= 0x7c00, exponent_mantissa | 0x7f800000, // Map infinity to infinity
                                    exponent_mantissa + 0x38000000); // Fix the exponent bias otherwise
 
         Expr f32 = reinterpret(f32_t, (cast(u32_t, sign) << 16) | exponent_mantissa);
