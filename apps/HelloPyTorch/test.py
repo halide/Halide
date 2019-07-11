@@ -37,12 +37,12 @@ class TestAdd(unittest.TestCase):
       self.b = self.b.double()
       self.gt = self.gt.double()
     if is_cuda:
-      print("Testing Halide Pytorch CUDA operator...")
+      print("Testing Halide PyTorch CUDA operator...")
       self.a = self.a.cuda()
       self.b = self.b.cuda()
       self.gt = self.gt.cuda()
     else:
-      print("Testing Halide Pytorch CPU operator...")
+      print("Testing Halide PyTorch CPU operator...")
 
     output = modules.Add()(self.a, self.b)
 

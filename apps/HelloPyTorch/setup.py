@@ -1,7 +1,7 @@
 import os
 import platform
 import re
-from setuptools import setup, find_packages
+from setuptools import setup, find_packages, Extension
 
 from torch.utils.cpp_extension import BuildExtension
 import torch as th
@@ -11,7 +11,7 @@ def generate_pybind_wrapper(path, headers, has_cuda):
   s = "#include <torch/extension.h>\n\n"
   if has_cuda:
     s += "#define HL_PT_CUDA\n"
-  s += "#include <HalidePytorchHelpers.h>\n"
+  s += "#include <HalidePyTorchHelpers.h>\n"
   for h in headers:
     s += "#include \"{}\"\n".format(os.path.splitext(h)[0]+".pytorch.h")
   if has_cuda:
@@ -20,12 +20,11 @@ def generate_pybind_wrapper(path, headers, has_cuda):
   s += "\nPYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {\n"
   for h in headers:
     name = os.path.splitext(h)[0]
-    s += "  m.def(\"{}\", &{}_th_, \"Pytorch wrapper of the Halide pipeline {}\");\n".format(
+    s += "  m.def(\"{}\", &{}_th_, \"PyTorch wrapper of the Halide pipeline {}\");\n".format(
       name, name, name)
   s += "}\n"
   with open(path, 'w') as fid:
     fid.write(s)
-
 
 if __name__ == "__main__":
   # This is where the generate Halide ops headers live. We also generate the .cpp
@@ -47,8 +46,8 @@ if __name__ == "__main__":
 
   include_dirs = [build_dir, os.path.join(halide_dir, "include")]
   compile_args = ["-std=c++11", "-g"]
-  if platform.system() == "Darwin":
-    compile_args += ["-stdlib=libc++"]  # on osx libstdc++ causes trouble
+  if platform.system() == "Darwin":  # on osx libstdc++ causes trouble
+    compile_args += ["-stdlib=libc++"]  
 
   re_cc = re.compile(r".*\.pytorch\.h")
   hl_srcs = [f for f in os.listdir(build_dir) if re_cc.match(f)]

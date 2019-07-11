@@ -19,11 +19,11 @@ endif
 
 all: test
 
-# Run the pytorch tests to verify the module is compiled correctly
+# Run the PyTorch tests to verify the module is compiled correctly
 test: .wrapper
 	@PYTHONPATH=lib:${PYTHONPATH} python test.py
 
-# Build the python pytorch extension that links against the Halide operators
+# Build the python PyTorch extension that links against the Halide operators
 .PHONY: wrapper
 .wrapper: $(OPS) $(CUDA_OPS)
 	@mkdir -p lib

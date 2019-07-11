@@ -142,14 +142,14 @@ CodeGen_PyTorch::CodeGen_PyTorch(ostream &s, Target t, OutputKind output_kind,
   // TODO(mgharbi): find a shallower integration with torch cuda, handle no GPU case
   stream << "#include <HalideBuffer.h>\n\n";
 
-  // Conditionally add CUDA features to the pytorch helper
+  // Conditionally add CUDA features to the PyTorch helper
   // if(target.has_feature(Target::CUDA)) {
   //   stream << "#define HL_PT_CUDA\n";
   // }
-  stream << "#include <HalidePytorchHelpers.h>\n";
+  stream << "#include <HalidePyTorchHelpers.h>\n";
   if(target.has_feature(Target::CUDA)) {
     stream << "#include <ATen/cuda/CUDAContext.h>\n";  
-    stream << "#include <HalidePytorchCudaHelpers.h>\n";
+    stream << "#include <HalidePyTorchCudaHelpers.h>\n";
     // stream << "#undef HL_PT_CUDA\n";
   }
 
@@ -227,12 +227,12 @@ void CodeGen_PyTorch::compile(const LoweredFunc &f, bool isCuda) {
     do_indent();
     stream << "CUresult res = cuCtxGetCurrent(&ctx);\n";
     do_indent();
-    // stream << "if(res != 0) throw Halide::Pytorch::CudaContextException();\n";
+    // stream << "if(res != 0) throw Halide::PyTorch::CudaContextException();\n";
     stream << "AT_ASSERTM(res == 0, \"Could not acquire CUDA context\");\n";
     do_indent();
     stream << "cudaStream_t stream = at::cuda::getCurrentCUDAStream(device_id);\n";
     do_indent();
-    stream << "Halide::Pytorch::UserContext user_ctx(device_id, &ctx, &stream);\n";
+    stream << "Halide::PyTorch::UserContext user_ctx(device_id, &ctx, &stream);\n";
     do_indent();
     stream << "void* __user_context = (void*) &user_ctx;\n\n";
   }
@@ -266,7 +266,7 @@ void CodeGen_PyTorch::compile(const LoweredFunc &f, bool isCuda) {
     stream
       << "Buffer<" << tp << "> "
       << print_name(buffer_args[i].name) 
-      << "_buffer = Halide::Pytorch::wrap<" << tp << ">("
+      << "_buffer = Halide::PyTorch::wrap<" << tp << ">("
       << print_name(buffer_args[i].name) 
       << ");\n"
       ;
@@ -357,7 +357,7 @@ void CodeGen_PyTorch::compile(const LoweredFunc &f, bool isCuda) {
   // indent += 2;
   // do_indent();
   // stream << "m.def(\"" << simple_name << "\", &" << simple_name 
-  //        << "_th_, \"Pytorch wrapper of the Halide pipeline " << simple_name << "\");\n";
+  //        << "_th_, \"PyTorch wrapper of the Halide pipeline " << simple_name << "\");\n";
   // indent -= 2;
   // stream << "}\n";
 

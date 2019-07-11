@@ -25,7 +25,7 @@
 
 
 namespace Halide {
-namespace Pytorch {
+namespace PyTorch {
 
 using Halide::Runtime::Buffer;
 
@@ -42,7 +42,7 @@ inline std::vector<int> getDims(const at::Tensor tensor) {
 
 template<class scalar_t>
 inline void check_type(at::Tensor &tensor) {
-  AT_ERROR("Scalar type ", tensor.scalar_type(), " not handled by Halide's Pytorch wrapper");
+  AT_ERROR("Scalar type ", tensor.scalar_type(), " not handled by Halide's PyTorch wrapper");
 }
 
 
@@ -81,7 +81,7 @@ inline Buffer<scalar_t> wrap(at::Tensor &tensor) {
   return buffer;
 }
 
-} // namespace Pytorch
+} // namespace PyTorch
 } // namespace Halide
 
 #endif  // HL_PYTORCH_WRAPPER_H
