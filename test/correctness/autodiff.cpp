@@ -1245,6 +1245,16 @@ void test_select_guard() {
     check(__LINE__, d_input_buf(1), -2.f + 0.5f - 0.5f + 1.f);
 }
 
+void test_param() {
+    Param<float> param(2.f);
+    Func f("f");
+    f() = 2.f * param * param;
+    Derivative d = propagate_adjoints(f);
+    Func d_param = d(param);
+    Buffer<float> d_param_buf = d_param.realize();
+    check(__LINE__, d_param_buf(), 8.f);
+}
+
 int main(int argc, char **argv) {
     test_scalar<float>();
     test_scalar<double>();
@@ -1280,6 +1290,7 @@ int main(int argc, char **argv) {
     test_rdom_predicate();
     test_reverse_scan();
     test_select_guard();
+    test_param();
     printf("[autodiff] Success!\n");
     return 0;
 }
