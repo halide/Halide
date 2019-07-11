@@ -497,5 +497,27 @@ void halide_toc_impl(const char *file, int line) {
     debug(0) << t1.file << ":" << t1.line << " ... " << f << ":" << line << " : " << diff.count() * 1000 << " ms\n";
 }
 
+std::string c_print_name(const std::string &name) {
+    ostringstream oss;
+
+    // Prefix an underscore to avoid reserved words (e.g. a variable named "while")
+    if (isalpha(name[0])) {
+        oss << '_';
+    }
+
+    for (size_t i = 0; i < name.size(); i++) {
+        if (name[i] == '.') {
+            oss << '_';
+        } else if (name[i] == '$') {
+            oss << "__";
+        } else if (name[i] != '_' && !isalnum(name[i])) {
+            oss << "___";
+        }
+        else oss << name[i];
+    }
+    return oss.str();
+}
+
+
 }  // namespace Internal
 }  // namespace Halide

@@ -9,6 +9,8 @@
 #include "Param.h"
 #include "Simplify.h"
 #include "Substitute.h"
+#include "Type.h"
+#include "Util.h"
 #include "Var.h"
 
 namespace Halide {
@@ -23,110 +25,7 @@ using std::vector;
 
 namespace {
 
-// Halide type to a C++ type
-string type_to_c_type(Type type, bool include_space, bool c_plus_plus = true) {
-    bool needs_space = true;
-    ostringstream oss;
-
-    if (type.is_float()) {
-        if (type.bits() == 32) {
-            oss << "float";
-        } else if (type.bits() == 64) {
-            oss << "double";
-        } else {
-            user_error << "Can't represent a float with this many bits in C: " << type << "\n";
-        }
-        if (type.is_vector()) {
-            oss << type.lanes();
-        }
-    } else if (type.is_handle()) {
-        needs_space = false;
-
-        // If there is no type info or is generating C (not C++) and
-        // the type is a class or in an inner scope, just use void *.
-        if (type.handle_type == NULL ||
-            (!c_plus_plus &&
-             (!type.handle_type->namespaces.empty() ||
-              !type.handle_type->enclosing_types.empty() ||
-              type.handle_type->inner_name.cpp_type_type == halide_cplusplus_type_name::Class))) {
-            oss << "void *";
-        } else {
-            if (type.handle_type->inner_name.cpp_type_type ==
-                halide_cplusplus_type_name::Struct) {
-                oss << "struct ";
-            }
-
-            if (!type.handle_type->namespaces.empty() ||
-                !type.handle_type->enclosing_types.empty()) {
-                oss << "::";
-                for (size_t i = 0; i < type.handle_type->namespaces.size(); i++) {
-                    oss << type.handle_type->namespaces[i] << "::";
-                }
-                for (size_t i = 0; i < type.handle_type->enclosing_types.size(); i++) {
-                    oss << type.handle_type->enclosing_types[i].name << "::";
-                }
-            }
-            oss << type.handle_type->inner_name.name;
-            if (type.handle_type->reference_type == halide_handle_cplusplus_type::LValueReference) {
-                oss << " &";
-            } else if (type.handle_type->reference_type == halide_handle_cplusplus_type::LValueReference) {
-                oss << " &&";
-            }
-            for (auto modifier : type.handle_type->cpp_type_modifiers) {
-                if (modifier & halide_handle_cplusplus_type::Const) {
-                    oss << " const";
-                }
-                if (modifier & halide_handle_cplusplus_type::Volatile) {
-                    oss << " volatile";
-                }
-                if (modifier & halide_handle_cplusplus_type::Restrict) {
-                    oss << " restrict";
-                }
-                if (modifier & halide_handle_cplusplus_type::Pointer) {
-                    oss << " *";
-                }
-            }
-        }
-    } else {
-        // This ends up using different type names than OpenCL does
-        // for the integer vector types. E.g. uint16x8_t rather than
-        // OpenCL's short8. Should be fine as CodeGen_C introduces
-        // typedefs for them and codegen always goes through this
-        // routine or its override in CodeGen_OpenCL to make the
-        // names. This may be the better bet as the typedefs are less
-        // likely to collide with built-in types (e.g. the OpenCL
-        // ones for a C compiler that decides to compile OpenCL).
-        // This code also supports arbitrary vector sizes where the
-        // OpenCL ones must be one of 2, 3, 4, 8, 16, which is too
-        // restrictive for already existing architectures.
-        switch (type.bits()) {
-        case 1:
-            // bool vectors are always emitted as uint8 in the C++ backend
-            if (type.is_vector()) {
-                oss << "uint8x" << type.lanes() << "_t";
-            } else {
-                oss << "bool";
-            }
-            break;
-        case 8: case 16: case 32: case 64:
-            if (type.is_uint()) {
-                oss << 'u';
-            }
-            oss << "int" << type.bits();
-            if (type.is_vector()) {
-                oss << "x" << type.lanes();
-            }
-            oss << "_t";
-            break;
-        default:
-            user_error << "Can't represent an integer with this many bits in C: " << type << "\n";
-        }
-    }
-    if (include_space && needs_space)
-        oss << " ";
-    return oss.str();
-}
-
+/** Type to PyTorch Tensor type */
 string type_to_pytorch_tensor(Type type, bool is_cuda) {
     return "at::Tensor";
 }
@@ -137,12 +36,10 @@ string type_to_pytorch_tensor(Type type, bool is_cuda) {
 CodeGen_PyTorch::CodeGen_PyTorch(ostream &s, Target t, std::string cpp_header) :
     IRPrinter(s), target(t), cpp_header(cpp_header)
 {
-  // TODO(mgharbi): header guard and header / implementation split
   stream << "#include \"torch/extension.h\"\n";
-  // TODO(mgharbi): find a shallower integration with torch cuda, handle no GPU case
   stream << "#include \"HalideBuffer.h\"\n\n";
-
   stream << "#include \"HalidePyTorchHelpers.h\"\n";
+
   if (target.has_feature(Target::CUDA)) {
     if (!target.has_feature(Target::UserContext)) {
       user_error << "Compile a PyTorch wrapper for a CUDA op requires the "
@@ -155,7 +52,6 @@ CodeGen_PyTorch::CodeGen_PyTorch(ostream &s, Target t, std::string cpp_header) :
 
   std::vector<std::string> header_path = split_string(cpp_header, "/");
   std::string header = header_path.back();
-  
 
   stream << "\n#include \"" << header << "\"\n\n";
   stream << "using Halide::Runtime::Buffer;\n\n";
@@ -198,11 +94,11 @@ void CodeGen_PyTorch::compile(const LoweredFunc &f, bool is_cuda) {
       stream 
         << type_to_pytorch_tensor(args[i].type, is_cuda)
         << " &"
-        << print_name(args[i].name);
+        << c_print_name(args[i].name);
     } else {
       stream
         << type_to_c_type(args[i].type, true)
-        << print_name(args[i].name);
+        << c_print_name(args[i].name);
     }
 
     if (i < args.size()-1) stream << ", ";
@@ -236,13 +132,13 @@ void CodeGen_PyTorch::compile(const LoweredFunc &f, bool is_cuda) {
     do_indent();
     stream
       << "HLPT_CHECK_CONTIGUOUS("
-      << print_name(buffer_args[i].name) 
+      << c_print_name(buffer_args[i].name) 
       << ");\n";
     if (is_cuda) {
       do_indent();
       stream
         << "HLPT_CHECK_DEVICE("
-        << print_name(buffer_args[i].name) 
+        << c_print_name(buffer_args[i].name) 
         << ", device_id);\n";
     }
   }
@@ -258,9 +154,9 @@ void CodeGen_PyTorch::compile(const LoweredFunc &f, bool is_cuda) {
     string tp = type_to_c_type(buffer_args[i].type, false);
     stream
       << "Buffer<" << tp << "> "
-      << print_name(buffer_args[i].name) 
+      << c_print_name(buffer_args[i].name) 
       << "_buffer = Halide::PyTorch::wrap<" << tp << ">("
-      << print_name(buffer_args[i].name) 
+      << c_print_name(buffer_args[i].name) 
       << ");\n"
       ;
   }
@@ -273,10 +169,10 @@ void CodeGen_PyTorch::compile(const LoweredFunc &f, bool is_cuda) {
   for (size_t i = 0; i < args.size(); i++) {
     if (args[i].is_buffer()) {
       stream 
-        << print_name(args[i].name)
+        << c_print_name(args[i].name)
         << "_buffer";
     } else {
-      stream << print_name(args[i].name);
+      stream << c_print_name(args[i].name);
     }
     if (i < args.size()-1) stream << ", ";
   }
@@ -292,14 +188,14 @@ void CodeGen_PyTorch::compile(const LoweredFunc &f, bool is_cuda) {
         do_indent();
         stream 
           << "AT_ASSERTM(!"
-          << print_name(buffer_args[i].name) << "_buffer.host_dirty(),"
+          << c_print_name(buffer_args[i].name) << "_buffer.host_dirty(),"
           << "\"device not synchronized for buffer "
-          << print_name(buffer_args[i].name)
+          << c_print_name(buffer_args[i].name)
           << ", make sure all update stages are excplicitly computed on GPU."
           <<"\");\n";
         do_indent();
         stream 
-          << print_name(buffer_args[i].name) << "_buffer"
+          << c_print_name(buffer_args[i].name) << "_buffer"
           << ".device_detach_native();\n";
       }
     }
@@ -332,27 +228,6 @@ void CodeGen_PyTorch::compile(const LoweredFunc &f, bool is_cuda) {
     }
     stream << "\n";
   }
-}
-
-string CodeGen_PyTorch::print_name(const string &name) {
-    ostringstream oss;
-
-    // Prefix an underscore to avoid reserved words (e.g. a variable named "while")
-    if (isalpha(name[0])) {
-        oss << '_';
-    }
-
-    for (size_t i = 0; i < name.size(); i++) {
-        if (name[i] == '.') {
-            oss << '_';
-        } else if (name[i] == '$') {
-            oss << "__";
-        } else if (name[i] != '_' && !isalnum(name[i])) {
-            oss << "___";
-        }
-        else oss << name[i];
-    }
-    return oss.str();
 }
 
 void CodeGen_PyTorch::test() {
