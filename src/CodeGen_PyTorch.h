@@ -28,8 +28,7 @@ namespace Internal {
  */
 class CodeGen_PyTorch : public IRPrinter {
 public:
-    CodeGen_PyTorch(
-        std::ostream &dest, Target target, std::string name);
+    CodeGen_PyTorch(std::ostream &dest, Target target, std::string name);
     ~CodeGen_PyTorch() = default;
 
     /** Emit the PyTorch C++ wrapper for the Halide pipeline. */

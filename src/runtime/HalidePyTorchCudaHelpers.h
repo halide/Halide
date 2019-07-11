@@ -3,7 +3,7 @@
 
 /** \file
  * Override Halide's CUDA hooks so that the Halide code called from PyTorch uses 
- * the correct device and stream.
+ * the correct GPU device and stream.
  */
 
 #ifdef HL_PT_CUDA
