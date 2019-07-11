@@ -1834,7 +1834,7 @@ void CodeGen_C::compile(const Buffer<> &buffer) {
 
     // Figure out the offset of the last pixel.
     size_t num_elems = 1;
-    for (int d = 0; b.dim[d].extent; d++) {
+    for (int d = 0; d < b.dimensions; d++) {
         num_elems += b.dim[d].stride * (b.dim[d].extent - 1);
     }
 

@@ -63,7 +63,7 @@ public:
         }
     }
 
-    IRCompareCache() {}
+    IRCompareCache() = default;
     IRCompareCache(int b) : bits(b), entries(static_cast<size_t>(1) << bits) {}
 };
 

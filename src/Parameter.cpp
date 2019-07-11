@@ -38,7 +38,7 @@ struct ParameterContents {
 };
 
 template<>
-RefCount &ref_count<Halide::Internal::ParameterContents>(const ParameterContents *p) {return p->ref_count;}
+RefCount &ref_count<Halide::Internal::ParameterContents>(const ParameterContents *p) noexcept {return p->ref_count;}
 
 template<>
 void destroy<Halide::Internal::ParameterContents>(const ParameterContents *p) {delete p;}

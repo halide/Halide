@@ -644,7 +644,7 @@ class LowerWarpShuffles : public IRMutator {
     }
 
 public:
-    LowerWarpShuffles() {}
+    LowerWarpShuffles() = default;
 };
 
 class HoistWarpShufflesFromSingleIfStmt : public IRMutator {

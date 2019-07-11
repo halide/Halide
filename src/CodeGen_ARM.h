@@ -46,7 +46,7 @@ protected:
                           NarrowArgs  ///< Match the pattern if the args can be losslessly narrowed
         };
         PatternType type;
-        Pattern() {}
+        Pattern() = default;
         Pattern(const std::string &i32, const std::string &i64, int l, Expr p, PatternType t = Simple) :
             intrin32("llvm.arm.neon." + i32),
             intrin64("llvm.aarch64.neon." + i64),

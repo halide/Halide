@@ -154,7 +154,7 @@ public:
 };
 
 template <>
-RefCount &ref_count<JITModuleContents>(const JITModuleContents *f) { return f->ref_count; }
+RefCount &ref_count<JITModuleContents>(const JITModuleContents *f) noexcept { return f->ref_count; }
 
 template <>
 void destroy<JITModuleContents>(const JITModuleContents *f) { delete f; }

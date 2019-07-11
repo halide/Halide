@@ -54,6 +54,16 @@ struct Derivative {
         return get(buffer);
     }
 
+    Func get(const Param<> &param) const {
+        auto it = adjoints.find(FuncKey{ param.name(), -1 });
+        internal_assert(it != adjoints.end()) << "Could not find Param " << param.name() << "\n";
+        return it->second;        
+    }
+
+    Func operator()(const Param<> &param) const {
+        return get(param);
+    }
+
     /** Get the entire chain of new synthesized Funcs that compute the
      * derivative of a given user-written Func for the purpose of
      * scheduling. */

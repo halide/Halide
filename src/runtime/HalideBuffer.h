@@ -1275,7 +1275,9 @@ public:
         return im;
     }
 
-    /** Crop an image in-place along the given dimension. */
+    /** Crop an image in-place along the given dimension. This does
+     * not move any data around in memory - it just changes the min
+     * and extent of the given dimension. */
     void crop(int d, int min, int extent) {
         // An optimization for non-device buffers. For the device case,
         // a temp buffer is required, so reuse the not-in-place version.
@@ -1309,7 +1311,10 @@ public:
         return im;
     }
 
-    /** Crop an image in-place along the first N dimensions. */
+    /** Crop an image in-place along the first N dimensions. This does
+     * not move any data around in memory, nor does it free memory. It
+     * just rewrites the min/extent of each dimension to refer to a
+     * subregion of the same allocation. */
     void crop(const std::vector<std::pair<int, int>> &rect) {
         // An optimization for non-device buffers. For the device case,
         // a temp buffer is required, so reuse the not-in-place version.
@@ -1332,7 +1337,8 @@ public:
         return im;
     }
 
-    /** Translate an image in-place along one dimension */
+    /** Translate an image in-place along one dimension by changing
+     * how it is indexed. Does not move any data around in memory. */
     void translate(int d, int delta) {
         assert(d >= 0 && d < this->dimensions());
         device_deallocate();
@@ -1347,7 +1353,8 @@ public:
         return im;
     }
 
-    /** Translate an image along the first N dimensions */
+    /** Translate an image along the first N dimensions by changing
+     * how it is indexed. Does not move any data around in memory. */
     void translate(const std::vector<int> &delta) {
         device_deallocate();
         assert(delta.size() <= std::numeric_limits<int>::max());
@@ -1358,7 +1365,7 @@ public:
         }
     }
 
-    /** Set the min coordinate of an image in the first N dimensions */
+    /** Set the min coordinate of an image in the first N dimensions. */
     // @{
     void set_min(const std::vector<int> &mins) {
         assert(mins.size() <= (size_t)dimensions());
@@ -1374,7 +1381,7 @@ public:
     }
     // @}
 
-    /** Test if a given coordinate is within the the bounds of an image */
+    /** Test if a given coordinate is within the the bounds of an image. */
     // @{
     bool contains(const std::vector<int> &coords) const {
         assert(coords.size() <= (size_t)dimensions());
@@ -1392,15 +1399,23 @@ public:
     }
     // @}
 
-    /** Make an image which refers to the same data using a different
-     * ordering of the dimensions. */
+    /** Make a buffer which refers to the same data in the same layout
+     * using a swapped indexing order for the dimensions given. So
+     * A = B.transposed(0, 1) means that A(i, j) == B(j, i), and more
+     * strongly that A.address_of(i, j) == B.address_of(j, i). */
     Buffer<T, D> transposed(int d1, int d2) const {
         Buffer<T, D> im = *this;
         im.transpose(d1, d2);
         return im;
     }
 
-    /** Transpose an image in-place */
+    /** Transpose a buffer in-place by changing how it is indexed. For
+     * example, transpose(0, 1) on a two-dimensional buffer means that
+     * the value referred to by coordinates (i, j) is now reached at
+     * the coordinates (j, i), and vice versa. This is done by
+     * reordering the per-dimension metadata rather than by moving
+     * data around in memory, so other views of the same memory will
+     * not see the data as having been transposed. */
     void transpose(int d1, int d2) {
         assert(d1 >= 0 && d1 < this->dimensions());
         assert(d2 >= 0 && d2 < this->dimensions());
@@ -1408,9 +1423,9 @@ public:
     }
 
     /** A generalized transpose: instead of swapping two dimensions,
-     * pass a vector that lists each dimension index exactly once, in the desired order.
-     * For instance, to transpose a 3-dimensional planar image to be interleaved,
-     * pass {2, 0, 1} for order */
+     * pass a vector that lists each dimension index exactly once, in
+     * the desired order. This does not move any data around in memory
+     * - it just permutes how it is indexed. */
     void transpose(const std::vector<int> &order) {
         assert((int) order.size() == dimensions());
         if (dimensions() < 2) {
@@ -1427,15 +1442,16 @@ public:
         }
     }
 
-    /** Make an image which refers to the same data using a different
-     * ordering of the dimensions. */
+    /** Make a buffer which refers to the same data in the same
+     * layout using a different ordering of the dimensions. */
     Buffer<T, D> transposed(const std::vector<int> &order) const {
         Buffer<T, D> im = *this;
         im.transpose(order);
         return im;
     }
 
-    /** Make a lower-dimensional image that refers to one slice of this image. */
+    /** Make a lower-dimensional buffer that refers to one slice of
+     * this buffer. */
     Buffer<T, D> sliced(int d, int pos) const {
         Buffer<T, D> im = *this;
 
@@ -1451,13 +1467,16 @@ public:
         return im;
     }
 
-    /** Make a lower-dimensional image that refers to one slice of this
-     * image at the dimension's minimum. */
+    /** Make a lower-dimensional buffer that refers to one slice of this
+     * buffer at the dimension's minimum. */
     inline Buffer<T, D> sliced(int d) const {
         return sliced(d, dim(d).min());
     }
 
-    /** Slice an image in-place */
+    /** Rewrite the buffer to refer to a single lower-dimensional
+     * slice of itself along the given dimension at the given
+     * coordinate. Does not move any data around or free the original
+     * memory, so other views of the same data are unaffected. */
     void slice(int d, int pos) {
         // An optimization for non-device buffers. For the device case,
         // a temp buffer is required, so reuse the not-in-place version.
@@ -1470,12 +1489,12 @@ public:
         }
     }
 
-    /** Slice an image in-place at the dimension's minimum. */
+    /** Slice a buffer in-place at the dimension's minimum. */
     inline void slice(int d) {
         slice(d, dim(d).min());
     }
 
-    /** Make a new image that views this image as a single slice in a
+    /** Make a new buffer that views this buffer as a single slice in a
      * higher-dimensional space. The new dimension has extent one and
      * the given min. This operation is the opposite of slice. As an
      * example, the following condition is true:
@@ -1491,7 +1510,7 @@ public:
         return im;
     }
 
-    /** Embed an image in-place, increasing the
+    /** Embed a buffer in-place, increasing the
      * dimensionality. */
     void embed(int d, int pos = 0) {
         assert(d >= 0 && d <= dimensions());

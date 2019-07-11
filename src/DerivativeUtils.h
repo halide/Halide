@@ -78,13 +78,13 @@ std::pair<bool, Expr> solve_inverse(Expr expr,
                                     const std::string &new_var,
                                     const std::string &var);
 /**
- * Find all calls to image buffers in the function
+ * Find all calls to image buffers and parameters in the function
  */
 struct BufferInfo {
     int dimension;
     Type type;
 };
-std::map<std::string, BufferInfo> find_buffer_calls(const Func &func);
+std::map<std::string, BufferInfo> find_buffer_param_calls(const Func &func);
 /**
  * Find all implicit variables in expr
  */
