@@ -1070,7 +1070,7 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
             if (i + native_elements > result_elements) {
                 // This is the last vector, and it has a few extra
                 // elements. Slice it down.
-                ret_i = slice_vector(ret_i, 0, i + native_elements - result_elements);
+                ret_i = slice_vector(ret_i, 0, result_elements - i);
             }
             ret.push_back(ret_i);
         }
