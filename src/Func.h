@@ -1533,7 +1533,53 @@ public:
      * different values at different times or on different machines. */
     Func &allow_race_conditions();
 
-    /** Issue atomic store for this Func. This allows parallelization on arbitrary RVars. */
+    /** Issue atomic updates for this Func. This allows parallelization
+     * on associative RVars. The function throws a compile error when
+     * Halide fails to prove associativity. Use override_associativity_test
+     * to disable the associativity test if you believe the function is
+     * associative or the order of reduction variable execution does not
+     * matter. Halide compiles this into atomic operations
+     * whenever possible, and falls back to a mutex lock per storage
+     * element if it is impossible to atomically update. For example:
+     *
+     * hist(x) = 0;
+     * hist(im(r)) += 1;
+     * hist.compute_root();
+     * hist.update().atomic().parallel();
+     *
+     * will be compiled to atomic add operations.
+     *
+     * hist(x) = 0;
+     * hist(im(r)) = min(hist(im(r)) + 1, 100);
+     * hist.compute_root();
+     * hist.update().atomic().parallel();
+     *
+     * will be compiled to compare-and-swap loops.
+     *
+     * arg_max() = {0, im(0)};
+     * Expr old_index = arg_max()[0];
+     * Expr old_max   = arg_max()[1];
+     * Expr new_index = select(old_max < im(r), r, old_index);
+     * Expr new_max   = max(im(r), old_max);
+     * arg_max() = {new_index, new_max};
+     * arg_max.compute_root();
+     * arg_max.update().atomic().parallel();
+     *
+     * will be compiled to updates guarded by a mutex lock,
+     * since it is impossible to atomically update two different locations.
+     *
+     * hist(x) = {0, 0};
+     * hist(im(r)) += {1, 1};
+     * hist.compute_root();
+     * hist.update().atomic().parallel();
+     *
+     * will be compiled to atomic add operations, since the tuple
+     * updates are independent to each other.
+     *
+     * If the backend target is GPU, and the update needs to be
+     * compiled to be guarded by mutex locks, this throws an error
+     * since per-thread mutex locks are not possible on GPUs.
+     */
     Func &atomic(bool override_associativity_test = false);
 
 
