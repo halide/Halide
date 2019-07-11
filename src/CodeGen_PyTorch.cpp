@@ -134,9 +134,8 @@ string type_to_pytorch_tensor(Type type, bool is_cuda) {
 } // ns anon
 
 
-CodeGen_PyTorch::CodeGen_PyTorch(ostream &s, Target t, OutputKind output_kind,
-    std::string cpp_header) :
-    IRPrinter(s), target(t), output_kind(output_kind), cpp_header(cpp_header)
+CodeGen_PyTorch::CodeGen_PyTorch(ostream &s, Target t, std::string cpp_header) :
+    IRPrinter(s), target(t), cpp_header(cpp_header)
 {
   // TODO(mgharbi): header guard and header / implementation split
   stream << "#include \"torch/extension.h\"\n";
