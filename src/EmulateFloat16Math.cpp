@@ -173,27 +173,25 @@ class LowerFloat16Conversions : public IRMutator {
     Expr float16_to_float(Expr value) {
         Type f32_t = Float(32, value.type().lanes());
         Type u32_t = UInt(32, value.type().lanes());
-        Type i32_t = UInt(32, value.type().lanes());
         Type u16_t = UInt(16, value.type().lanes());
-        Type i16_t = Int(16, value.type().lanes());
 
         Expr f16_bits = reinterpret(u16_t, value);
 
         Expr magnitude = f16_bits & make_const(u16_t, 0x7fff);
         Expr sign = f16_bits & make_const(u16_t, 0x8000);
 
-        // Fix denorms
-        Expr denorm_bits = count_leading_zeros(magnitude) - 5;
-        Expr correction = (denorm_bits << 10) - magnitude * ((1 << denorm_bits) - 1);
-        correction = select(reinterpret(i16_t, denorm_bits) <= 0, 0, correction);
-        Expr exponent_mantissa = cast(u32_t, magnitude) - cast(i32_t, correction);
+        float smallest_float16 = float(float16_t::make_from_bits(1));
 
-        // Fix extreme values
+        // Denorms are linearly spaced, so we should just use an int->float cast and then scale down
+        Expr denorm = reinterpret(u32_t, cast(f32_t, magnitude) * smallest_float16);
+
+        Expr exponent_mantissa = cast(u32_t, magnitude) << 13;
         exponent_mantissa = select(magnitude == 0, 0, // Map zero to zero
-                                   magnitude >= 0x7c00, exponent_mantissa | 0x3f800, // Map infinity to infinity
-                                   exponent_mantissa + 0x1c000); // Fix the exponent bias otherwise
+                                   magnitude < 0x400, denorm, // denorms
+                                   magnitude >= 0x7c00, exponent_mantissa | 0x7f000000, // Map infinity to infinity
+                                   exponent_mantissa + 0x38000000); // Fix the exponent bias otherwise
 
-        Expr f32 = reinterpret(f32_t, (cast(u32_t, sign) << 16) | (exponent_mantissa << 13));
+        Expr f32 = reinterpret(f32_t, (cast(u32_t, sign) << 16) | exponent_mantissa);
         return common_subexpression_elimination(f32);
     }
 
