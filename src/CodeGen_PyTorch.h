@@ -37,6 +37,8 @@ public:
     /** The target we're generating code for */
     const Target &get_target() const { return target; }
 
+    static void test();
+
 protected:
     virtual void compile(const LoweredFunc &func, bool is_cuda);
     virtual std::string print_name(const std::string &);

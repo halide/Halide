@@ -131,7 +131,7 @@ string type_to_pytorch_tensor(Type type, bool is_cuda) {
     return "at::Tensor";
 }
 
-} // ns anon
+} // namespace anon
 
 
 CodeGen_PyTorch::CodeGen_PyTorch(ostream &s, Target t, std::string cpp_header) :
@@ -144,6 +144,11 @@ CodeGen_PyTorch::CodeGen_PyTorch(ostream &s, Target t, std::string cpp_header) :
 
   stream << "#include \"HalidePyTorchHelpers.h\"\n";
   if (target.has_feature(Target::CUDA)) {
+    if (!target.has_feature(Target::UserContext)) {
+      user_error << "Compile a PyTorch wrapper for a CUDA op requires the "
+        "UserContext feature to properly manage the GPU memory. "
+        "Please add \"-user_context\" to the generator's target options.\n";
+    }
     stream << "#include \"ATen/cuda/CUDAContext.h\"\n";  
     stream << "#include \"HalidePyTorchCudaHelpers.h\"\n";
   }
@@ -350,5 +355,9 @@ string CodeGen_PyTorch::print_name(const string &name) {
     return oss.str();
 }
 
-} // ns Internal
-} // ns Halide
+void CodeGen_PyTorch::test() {
+    std::cout << "CodeGen_PyTorch test passed\n";
+}
+
+}  // namespace Internal
+}  // namespace Halide
