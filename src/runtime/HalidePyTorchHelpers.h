@@ -1,6 +1,11 @@
 #ifndef HL_PYTORCH_WRAPPER_H
 #define HL_PYTORCH_WRAPPER_H
 
+/** \file
+ * Set of utility functions to wrap PyTorch tensors into Halide buffers,
+ * making sure the data in on the correct device (CPU/GPU).
+ */
+
 #include <exception>
 #include <iostream>
 #include <string>

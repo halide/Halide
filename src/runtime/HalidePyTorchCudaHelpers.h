@@ -1,6 +1,11 @@
 #ifndef HL_PYTORCH_CUDA_HELPERS_H
 #define HL_PYTORCH_CUDA_HELPERS_H
 
+/** \file
+ * Override Halide's CUDA hooks so that the Halide code called from PyTorch uses 
+ * the correct device and stream.
+ */
+
 #ifdef HL_PT_CUDA
 #include "HalideRuntimeCuda.h"
 #include "cuda.h"
@@ -20,7 +25,8 @@ typedef struct UserContext {
 } // namespace PyTorch
 } // namespace Halide
 
-// Replace Halide weakly-linked cuda handles
+
+// Replace Halide weakly-linked CUDA handles
 extern "C" {
 
 WEAK int halide_cuda_acquire_context(void *user_context, CUcontext *ctx, bool create = true) {
@@ -33,6 +39,7 @@ WEAK int halide_cuda_acquire_context(void *user_context, CUcontext *ctx, bool cr
   return 0;
 }
 
+
 WEAK int halide_cuda_get_stream(void *user_context, CUcontext ctx, CUstream *stream) {
   if (user_context != NULL) {
     Halide::PyTorch::UserContext *user_ctx = (Halide::PyTorch::UserContext*) user_context;
@@ -43,6 +50,7 @@ WEAK int halide_cuda_get_stream(void *user_context, CUcontext ctx, CUstream *str
   return 0;
 }
 
+
 WEAK int halide_get_gpu_device(void *user_context) {
   if (user_context != NULL) {
     Halide::PyTorch::UserContext *user_ctx = (Halide::PyTorch::UserContext*) user_context;
@@ -51,6 +59,7 @@ WEAK int halide_get_gpu_device(void *user_context) {
     return 0;
   }
 }
+
 
 }  // extern "C"
 
