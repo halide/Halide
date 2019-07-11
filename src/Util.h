@@ -29,8 +29,11 @@
 #else
 #define HALIDE_EXPORT __declspec(dllimport)
 #endif
+// In MSVC, all data is hidden unless explicitly exported
+#define HALIDE_HIDDEN
 #else
 #define HALIDE_EXPORT
+#define HALIDE_HIDDEN __attribute__((visibility("hidden")))
 #endif
 #endif
 

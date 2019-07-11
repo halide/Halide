@@ -496,7 +496,7 @@ struct Call : public ExprNode<Call> {
     // risking ambiguous initalization order; we use a typedef to simplify
     // declaration.
     typedef const char *const ConstString;
-    HALIDE_EXPORT static ConstString debug_to_file,
+    static ConstString debug_to_file,
         reinterpret,
         bitwise_and,
         bitwise_not,
@@ -552,7 +552,9 @@ struct Call : public ExprNode<Call> {
     // We also declare some symbolic names for some of the runtime
     // functions that we want to construct Call nodes to here to avoid
     // magic string constants and the potential risk of typos.
-    HALIDE_EXPORT static ConstString
+    // (Note that none of these strings should ever be needed outside of libHalide,
+    // even for testing, so use HALIDE_HIDDEN.)
+    HALIDE_HIDDEN static ConstString
         buffer_get_dimensions,
         buffer_get_min,
         buffer_get_extent,
