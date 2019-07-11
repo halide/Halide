@@ -7,14 +7,14 @@
 #include <sstream>
 #include <vector>
 
-#include <torch/extension.h>
+#include "torch/extension.h"
 
-#include <HalideBuffer.h>
+#include "HalideBuffer.h"
 
 #ifdef HL_PT_CUDA
-#include <HalideRuntimeCuda.h>
-#include <cuda.h>
-#include <cuda_runtime.h>
+#include "HalideRuntimeCuda.h"
+#include "cuda.h"
+#include "cuda_runtime.h"
 #endif
 
 #define WEAK __attribute__((weak))
@@ -29,7 +29,7 @@ namespace PyTorch {
 
 using Halide::Runtime::Buffer;
 
-inline std::vector<int> getDims(const at::Tensor tensor) {
+inline std::vector<int> get_dims(const at::Tensor tensor) {
   int ndims = tensor.ndimension();
   std::vector<int> dims(ndims, 0);
   // PyTorch dim order is reverse of Halide
@@ -55,16 +55,15 @@ inline void check_type(at::Tensor &tensor) {
 #undef HL_PT_DEFINE_TYPECHECK
 
 
-// TODO(mgharbi): deal with const data in the buffer
 template<class scalar_t>
 inline Buffer<scalar_t> wrap(at::Tensor &tensor) {
   check_type<scalar_t>(tensor);
-  std::vector<int> dims = getDims(tensor);
+  std::vector<int> dims = get_dims(tensor);
   scalar_t* pData  = tensor.data<scalar_t>();
   Buffer<scalar_t> buffer;
 
   // TODO(mgharbi): force Halide to put input/output on GPU?
-  if(tensor.is_cuda()) {
+  if (tensor.is_cuda()) {
     #ifdef HL_PT_CUDA
     buffer = Buffer<scalar_t>(dims);
     const halide_device_interface_t* cuda_interface = halide_cuda_device_interface();

@@ -19,25 +19,22 @@ namespace Internal {
 /** 
  * 
  */
-class CodeGen_PyTorch : public IRPrinter{
+class CodeGen_PyTorch : public IRPrinter {
 public:
     enum OutputKind {
-        // PyTorchHeader,
         PyTorchImplementation,
     };
 
     CodeGen_PyTorch(
         std::ostream &dest, Target target,
         OutputKind output_kind, std::string name);
-    ~CodeGen_PyTorch();
+    ~CodeGen_PyTorch() = default;
 
     /** Emit the declarations contained in the module as C code. */
     void compile(const Module &module);
 
     /** The target we're generating code for */
     const Target &get_target() const { return target; }
-
-    // EXPORT static void test();
 
 protected:
     virtual void compile(const LoweredFunc &func, bool isCuda);

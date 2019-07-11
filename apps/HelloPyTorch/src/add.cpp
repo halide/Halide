@@ -16,7 +16,7 @@ public:
 
         Var tx("tx"), xy("xy"), cn("cn"), allvars("allvars");
 
-        if(get_target().has_gpu_feature()) {
+        if (get_target().has_gpu_feature()) {
             output
                 .fuse(x, y, xy)
                 .fuse(c, n, cn)
@@ -52,7 +52,7 @@ public:
 
         Var tx("tx"), xy("xy"), cn("cn"), allvars("allvars");
 
-        if(get_target().has_gpu_feature()) {
+        if (get_target().has_gpu_feature()) {
             d_input_a
                 .fuse(x, y, xy)
                 .fuse(c, n, cn)
