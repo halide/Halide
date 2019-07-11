@@ -3,7 +3,14 @@
 
 /** \file
  *
- * 
+ * Defines an IRPrinter that emits C++ code that:
+ * 1. wraps PyTorch's C++ tensor into Halide * buffers,
+ * 2. calls the corresponding Halide operator.
+ * 3. maps the output buffer back to a PyTorch tensor.
+ *
+ * The generated code checks for runtime errors and raises PyTorch exception
+ * accordingly. It also makes sure the GPU device and stream are consistent when
+ * the PyTorch input, when applicable.
  */
 
 #include "IRPrinter.h"
@@ -16,8 +23,8 @@ struct Argument;
 
 namespace Internal {
 
-/** 
- * 
+/** This class emits C++ code to wrap a Halide pipeline so that it can
+ * be used as a C++ extension operator in PyTorch. 
  */
 class CodeGen_PyTorch : public IRPrinter {
 public:
@@ -25,7 +32,7 @@ public:
         std::ostream &dest, Target target, std::string name);
     ~CodeGen_PyTorch() = default;
 
-    /** Emit the declarations contained in the module as C code. */
+    /** Emit the PyTorch C++ wrapper for the Halide pipeline. */
     void compile(const Module &module);
 
     /** The target we're generating code for */
