@@ -1,17 +1,17 @@
 import os
 import platform
 import re
-from setuptools import setup, find_packages, Extension
+from setuptools import setup, find_packages
 
 from torch.utils.cpp_extension import BuildExtension
 import torch as th
 
 
 def generate_pybind_wrapper(path, headers, has_cuda):
-  s = "#include <torch/extension.h>\n\n"
+  s = "#include \"torch/extension.h\"\n\n"
   if has_cuda:
     s += "#define HL_PT_CUDA\n"
-  s += "#include <HalidePyTorchHelpers.h>\n"
+  s += "#include \"HalidePyTorchHelpers.h\"\n"
   for h in headers:
     s += "#include \"{}\"\n".format(os.path.splitext(h)[0]+".pytorch.h")
   if has_cuda:
