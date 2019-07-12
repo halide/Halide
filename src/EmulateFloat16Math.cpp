@@ -151,7 +151,7 @@ class LowerFloat16Conversions : public IRMutator {
         // Denorms are linearly spaced, so we can handle them
         // by scaling up the input as a float and using the
         // existing int-conversion rounding instructions.
-        Expr denorm_bits = cast(u16_t, strict_float(round(reinterpret(f32_t, bits) * (1 << 24))));
+        Expr denorm_bits = cast(u16_t, round(reinterpret(f32_t, bits + 0x0c000000)));
         Expr inf_bits = make_const(u16_t, 0x7c00);
         Expr nan_bits = make_const(u16_t, 0x7fff);
 
@@ -184,13 +184,14 @@ class LowerFloat16Conversions : public IRMutator {
         Expr magnitude = f16_bits & make_const(u16_t, 0x7fff);
         Expr sign = f16_bits & make_const(u16_t, 0x8000);
 
-        float smallest_float16 = float(float16_t::make_from_bits(1));
-
-        // Denorms are linearly spaced, so we should just use an int->float cast and then scale down
-        Expr denorm = strict_float(reinterpret(u32_t, cast(f32_t, magnitude) * smallest_float16));
+        // Denorms are linearly spaced, so we should just use an
+        // int->float cast and then scale down by reducing the
+        // exponent.
+        Expr denorm = reinterpret(u32_t, cast(f32_t, magnitude)) - 0x0c000000;
 
         Expr exponent_mantissa = cast(u32_t, magnitude) << 13;
-        exponent_mantissa = select(magnitude < 0x0400, denorm, // denorms and zero
+        exponent_mantissa = select(magnitude == 0, 0, // zero
+                                   magnitude < 0x0400, denorm, // denorms
                                    magnitude >= 0x7c00, exponent_mantissa | 0x7f800000, // Map infinity to infinity
                                    exponent_mantissa + 0x38000000); // Fix the exponent bias otherwise
 
