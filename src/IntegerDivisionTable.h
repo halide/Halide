@@ -3,6 +3,8 @@
 
 #include <cstdint>
 
+#include "Util.h"
+
 /** \file
  * Tables telling us how to do integer division via fixed-point
  * multiplication for various small constants. This file is
@@ -11,18 +13,18 @@
 namespace Halide {
 namespace Internal {
 namespace IntegerDivision {
-extern const int64_t table_u8[256][4];
-extern const int64_t table_s8[256][4];
-extern const int64_t table_u16[256][4];
-extern const int64_t table_s16[256][4];
-extern const int64_t table_u32[256][4];
-extern const int64_t table_s32[256][4];
-extern const int64_t table_runtime_u8[256][4];
-extern const int64_t table_runtime_s8[256][4];
-extern const int64_t table_runtime_u16[256][4];
-extern const int64_t table_runtime_s16[256][4];
-extern const int64_t table_runtime_u32[256][4];
-extern const int64_t table_runtime_s32[256][4];
+extern HALIDE_HIDDEN const int64_t table_u8[256][4];
+extern HALIDE_HIDDEN const int64_t table_s8[256][4];
+extern HALIDE_HIDDEN const int64_t table_u16[256][4];
+extern HALIDE_HIDDEN const int64_t table_s16[256][4];
+extern HALIDE_HIDDEN const int64_t table_u32[256][4];
+extern HALIDE_HIDDEN const int64_t table_s32[256][4];
+extern HALIDE_HIDDEN const int64_t table_runtime_u8[256][4];
+extern HALIDE_HIDDEN const int64_t table_runtime_s8[256][4];
+extern HALIDE_HIDDEN const int64_t table_runtime_u16[256][4];
+extern HALIDE_HIDDEN const int64_t table_runtime_s16[256][4];
+extern HALIDE_HIDDEN const int64_t table_runtime_u32[256][4];
+extern HALIDE_HIDDEN const int64_t table_runtime_s32[256][4];
 }  // namespace IntegerDivision
 }  // namespace Internal
 }  // namespace Halide
