@@ -123,16 +123,16 @@ protected:
      * current module, function, context, builder, and most recently
      * generated llvm value. */
     //@{
-    static bool llvm_X86_enabled;
-    static bool llvm_ARM_enabled;
-    static bool llvm_Hexagon_enabled;
-    static bool llvm_AArch64_enabled;
-    static bool llvm_NVPTX_enabled;
-    static bool llvm_Mips_enabled;
-    static bool llvm_PowerPC_enabled;
-    static bool llvm_AMDGPU_enabled;
-    static bool llvm_WebAssembly_enabled;
-    static bool llvm_RISCV_enabled;
+    HALIDE_HIDDEN static bool llvm_X86_enabled;
+    HALIDE_HIDDEN static bool llvm_ARM_enabled;
+    HALIDE_HIDDEN static bool llvm_Hexagon_enabled;
+    HALIDE_HIDDEN static bool llvm_AArch64_enabled;
+    HALIDE_HIDDEN static bool llvm_NVPTX_enabled;
+    HALIDE_HIDDEN static bool llvm_Mips_enabled;
+    HALIDE_HIDDEN static bool llvm_PowerPC_enabled;
+    HALIDE_HIDDEN static bool llvm_AMDGPU_enabled;
+    HALIDE_HIDDEN static bool llvm_WebAssembly_enabled;
+    HALIDE_HIDDEN static bool llvm_RISCV_enabled;
 
     std::unique_ptr<llvm::Module> module;
     llvm::Function *function;
