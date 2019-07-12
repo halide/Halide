@@ -251,10 +251,12 @@ struct Test {
                     buf.as<double>().for_each_value([&](double &f) {f = (rng() & 0xfff) / 8.0 - 0xff;});
                 } else {
                     // Random bits is fine
-                    for (uint8_t *ptr = (uint8_t *)buf.data();
-                         ptr != (uint8_t *)buf.data() + buf.size_in_bytes();
+                    for (uint32_t *ptr = (uint32_t *)buf.data();
+                         ptr != (uint32_t *)buf.data() + buf.size_in_bytes() / 4;
                          ptr++) {
-                        *ptr = (uint8_t)rng();
+                        // Never use the top four bits, to avoid
+                        // signed integer overflow.
+                        *ptr = ((uint32_t)rng()) & 0x0fffffff;
                     }
                 }
 
