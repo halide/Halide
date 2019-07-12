@@ -226,10 +226,11 @@ struct Test {
 
         bool can_run_the_code = can_run_code();
         if (can_run_the_code) {
-            Target run_target = target;
-            run_target.set_feature(Target::NoRuntime, false);
-            run_target.set_feature(Target::NoAsserts, false);
-            run_target.set_feature(Target::NoBoundsQuery, false);
+            Target run_target = target
+                .without_feature(Target::NoRuntime)
+                .without_feature(Target::NoAsserts)
+                .without_feature(Target::NoBoundsQuery);
+
             error.compile_jit(run_target);
             for (auto p : image_params) {
                 p.reset();
