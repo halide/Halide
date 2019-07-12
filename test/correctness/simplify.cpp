@@ -233,7 +233,9 @@ void check_algebra() {
 
     check(0/max(x, 1), 0);
     check(x/1, x);
-    check(x/x, 1);
+    check(max(x, 1)/(max(x, 1)), 1);
+    check(min(x, -1)/(min(x, -1)), 1);
+    check((x*2+1)/(x*2+1), 1);
     check((-1)/(x*2 + 1), select(x < 0, 1, -1));
     check(Expr(7)/3, 2);
     check(Expr(6.0f)/2.0f, 3.0f);
