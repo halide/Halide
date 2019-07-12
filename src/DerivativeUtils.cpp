@@ -396,6 +396,16 @@ public:
         return buffer_calls;
     }
 
+    void visit(const Variable *op) override {
+        IRGraphVisitor::visit(op);
+        if (op->param.defined()) {
+            buffer_calls[op->name] = BufferInfo{
+                op->param.dimensions(),
+                op->type
+            };
+        }
+    }
+
     void visit(const Call *op) override {
         IRGraphVisitor::visit(op);
         if (op->call_type == Call::Image) {
@@ -417,7 +427,7 @@ public:
     map<string, BufferInfo> buffer_calls;
 };
 
-map<string, BufferInfo> find_buffer_calls(const Func &func) {
+map<string, BufferInfo> find_buffer_param_calls(const Func &func) {
     BufferDimensionsFinder finder;
     return finder.find(func);
 }

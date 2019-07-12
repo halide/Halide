@@ -9,9 +9,9 @@ option(WITH_TEST_AUTO_SCHEDULE "Build auto_schedule tests" ON)
 
 if (WITH_TEST_INTERNAL)
   message(STATUS "Internal tests enabled")
-  halide_project(test_internal internal internal.cpp)
-  add_halide_test(test_internal
-           GROUPS run_tests)
+  halide_project(_test_internal internal internal.cpp)
+  target_include_directories(_test_internal PRIVATE "${CMAKE_SOURCE_DIR}/src")
+  add_halide_test(_test_internal GROUPS test_internal run_tests)
 else()
   message(WARNING "Internal tests disabled")
 endif()
@@ -21,7 +21,7 @@ function(test_plain_c_includes)
   set(name "plain_c_includes")
   set(TEST_NAMES "${folder}_${name}")
   add_executable("${folder}_${name}" "${CMAKE_CURRENT_SOURCE_DIR}/${folder}/${name}.c")
-  target_include_directories("${folder}_${name}" PRIVATE "${CMAKE_BINARY_DIR}/include")
+  target_include_directories("${folder}_${name}" PRIVATE "${HALIDE_INCLUDE_DIR}")
   set(TEST_NAMES "${TEST_NAMES}" PARENT_SCOPE)
 endfunction(test_plain_c_includes)
 
@@ -35,12 +35,18 @@ function(tests folder)
     list(APPEND TEST_NAMES "${TARGET}")
 
     halide_project("${TARGET}" "${folder}" "${folder}/${file}")
-    target_include_directories("${TARGET}" PRIVATE "${CMAKE_SOURCE_DIR}")
     target_compile_definitions("${TARGET}"  PRIVATE "-DLLVM_VERSION=${LLVM_VERSION}")
 
+    target_include_directories("${TARGET}" PRIVATE "${HALIDE_INCLUDE_DIR}")
+    target_include_directories("${TARGET}" PRIVATE "${CMAKE_SOURCE_DIR}")
+    if("${folder}" STREQUAL "opengl")
+      target_include_directories("${TARGET}" PRIVATE "${CMAKE_SOURCE_DIR}/src")
+    endif()
+
     set(GROUPS "test_${folder}")
-    if("${folder}" STREQUAL "performance" OR "${folder}" STREQUAL "auto_schedule")
+    if("${folder}" STREQUAL "performance" OR "${folder}" STREQUAL "auto_schedule" OR "${folder}" STREQUAL "opengl")
       # These shouldn't be part of run_tests, since they must be run with -j for timing purposes
+      # Exception: opengl is excluded because Makefile excludes it too. Why?
     else()
       list(APPEND GROUPS run_tests)
     endif()

@@ -119,6 +119,8 @@ struct Target {
         DisableLLVMLoopUnroll = halide_target_feature_disable_llvm_loop_unroll,
         WasmSimd128 = halide_target_feature_wasm_simd128,
         WasmSignExt = halide_target_feature_wasm_signext,
+        SVE = halide_target_feature_sve,
+        SVE2 = halide_target_feature_sve2,
         FeatureEnd = halide_target_feature_end
     };
     Target() : os(OSUnknown), arch(ArchUnknown), bits(0) {}
