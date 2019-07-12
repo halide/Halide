@@ -41,7 +41,6 @@ public:
 
 protected:
     virtual void compile(const LoweredFunc &func, bool is_cuda);
-    // virtual std::string print_name(const std::string &);
 
     /** The target being generated for. */
     Target target;
