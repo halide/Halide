@@ -2064,12 +2064,12 @@ void CodeGen_C::visit(const IntImm *op) {
     if (op->type == Int(32)) {
         id = std::to_string(op->value);
     } else {
-        print_assignment(op->type, "(" + print_type(op->type) + ")(" + std::to_string(op->value) + ")");
+        print_assignment(op->type, "(" + print_type(op->type) + ")(" + std::to_string(op->value) + "ll)");
     }
 }
 
 void CodeGen_C::visit(const UIntImm *op) {
-    print_assignment(op->type, "(" + print_type(op->type) + ")(" + std::to_string(op->value) + ")");
+    print_assignment(op->type, "(" + print_type(op->type) + ")(" + std::to_string(op->value) + "ull)");
 }
 
 void CodeGen_C::visit(const StringImm *op) {
