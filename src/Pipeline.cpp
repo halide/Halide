@@ -1105,9 +1105,10 @@ void Pipeline::realize(RealizationArg outputs, const Target &t,
 }
 
 void Pipeline::infer_input_bounds(RealizationArg outputs, const ParamMap &param_map) {
-    Target target = get_jit_target_from_environment();
-
-    compile_jit(target);
+    if (!contents->jit_module.compiled()) {
+        Target target = get_jit_target_from_environment();
+        compile_jit(target);
+    }
 
     // This has to happen after a runtime has been compiled in compile_jit.
     JITFuncCallContext jit_context(jit_handlers());
@@ -1115,7 +1116,7 @@ void Pipeline::infer_input_bounds(RealizationArg outputs, const ParamMap &param_
 
     size_t args_size = contents->inferred_args.size() + outputs.size();
     JITCallArgs args(args_size);
-    prepare_jit_call_arguments(outputs, target, param_map,
+    prepare_jit_call_arguments(outputs, contents->jit_target, param_map,
                                &user_context_storage, true, args);
 
     struct TrackedBuffer {
@@ -1157,7 +1158,7 @@ void Pipeline::infer_input_bounds(RealizationArg outputs, const ParamMap &param_
         }
 
         Internal::debug(2) << "Calling jitted function\n";
-        int exit_status = call_jit_code(target, args);
+        int exit_status = call_jit_code(contents->jit_target, args);
         jit_context.report_if_error(exit_status);
         Internal::debug(2) << "Back from jitted function\n";
         bool changed = false;

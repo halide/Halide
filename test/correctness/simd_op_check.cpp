@@ -20,7 +20,6 @@ using std::string;
 // width and height of test images
 constexpr int W = 256*3;
 constexpr int H = 128;
-constexpr int PAD = 128;
 
 constexpr int max_i8  = 127;
 constexpr int max_i16 = 32767;
@@ -104,33 +103,6 @@ struct Test {
         use_power_arch_2_07 = target.has_feature(Target::POWER_ARCH_2_07);
 
         use_wasm_simd128 = target.has_feature(Target::WasmSimd128);
-
-        // We are going to call realize, i.e. we are going to JIT code.
-        // Not all platforms support JITting. One indirect yet quick
-        // way of identifying this is to see if we can run code on the
-        // host. This check is in no ways really a complete check, but
-        // it works for now.
-        const bool can_run = can_run_code();
-        for (auto p : image_params) {
-            p.set_host_alignment(128);
-            p.dim(0).set_min(-PAD).set_extent(W + 2 * PAD);
-            if (can_run) {
-                // Make a buffer filled with noise to use as a sample input.
-                Buffer<> b(p.type(), W + 2 * PAD);
-                b.set_min(-PAD);
-                Expr r;
-                if (p.type().is_float()) {
-                    r = cast(p.type(), random_float() * 1024 - 512);
-                } else {
-                    // Avoid cases where vector vs scalar do different things
-                    // on signed integer overflow by limiting ourselves to 28
-                    // bit numbers.
-                    r = cast(p.type(), random_int() / 4);
-                }
-                lambda(x, r).realize(b, target);
-                p.set(b);
-            }
-        }
     }
 
     bool can_run_code() const {
@@ -254,7 +226,40 @@ struct Test {
 
         bool can_run_the_code = can_run_code();
         if (can_run_the_code) {
-            Realization r = error.realize(target.without_feature(Target::NoRuntime));
+            Target run_target = target;
+            run_target.set_feature(Target::NoRuntime, false);
+            run_target.set_feature(Target::NoAsserts, false);
+            run_target.set_feature(Target::NoBoundsQuery, false);
+            error.compile_jit(run_target);
+            for (auto p : image_params) {
+                p.reset();
+            }
+            error.infer_input_bounds();
+            // Fill the inputs with noise
+            std::mt19937 rng(123);
+            for (auto p : image_params) {
+                Buffer<> buf = p.get();
+                if (!buf.defined()) continue;
+                assert(buf.data());
+                Type t = buf.type();
+                // For floats/doubles, we only use values that aren't
+                // subject to rounding error that may differ between
+                // vectorized and non-vectorized versions
+                if (t == Float(32)) {
+                    buf.as<float>().for_each_value([&](float &f) {f = (rng() & 0xfff) / 8.0f - 0xff;});
+                } else if (t == Float(64)) {
+                    buf.as<double>().for_each_value([&](double &f) {f = (rng() & 0xfff) / 8.0 - 0xff;});
+                } else {
+                    // Random bits is fine
+                    for (uint8_t *ptr = (uint8_t *)buf.data();
+                         ptr != (uint8_t *)buf.data() + buf.size_in_bytes();
+                         ptr++) {
+                        *ptr = (uint8_t)rng();
+                    }
+                }
+
+            }
+            Realization r = error.realize();
             double e = Buffer<double>(r[0])();
             // Use a very loose tolerance for floating point tests. The
             // kinds of bugs we're looking for are codegen bugs that
