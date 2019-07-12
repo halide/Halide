@@ -82,10 +82,12 @@ class LowerBFloatConversions : public IRMutator {
         e = cast(UInt(32, e.type().lanes()), e);
         e = e << 16;
         e = reinterpret(Float(32, e.type().lanes()), e);
+        e = strict_float(e);
         return e;
     }
 
     Expr float_to_bfloat(Expr e) {
+        e = strict_float(e);
         e = reinterpret(UInt(32, e.type().lanes()), e);
         // We want to round ties to even, so before truncating either
         // add 0x8000 (0.5) to odd numbers or 0x7fff (0.499999) to
@@ -132,6 +134,11 @@ class LowerFloat16Conversions : public IRMutator {
     using IRMutator::visit;
 
     Expr float_to_float16(Expr value) {
+        // We're about the sniff the bits of a float, so we should
+        // guard it with strict float to ensure we don't do things
+        // like assume it can't be denormal.
+        value = strict_float(value);
+
         Type f32_t = Float(32, value.type().lanes());
         Type f16_t = Float(16, value.type().lanes());
         Type u32_t = UInt(32, value.type().lanes());
@@ -196,7 +203,9 @@ class LowerFloat16Conversions : public IRMutator {
                                    exponent_mantissa + 0x38000000); // Fix the exponent bias otherwise
 
         Expr f32 = reinterpret(f32_t, (cast(u32_t, sign) << 16) | exponent_mantissa);
-        return common_subexpression_elimination(f32);
+        f32 = common_subexpression_elimination(f32);
+        // Here be bit-twiddling on floats
+        return strict_float(f32);
     }
 
     Expr visit(const Cast *op) override {
