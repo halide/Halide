@@ -233,6 +233,7 @@ struct Test {
             error.compile_jit(run_target);
             for (auto p : image_params) {
                 p.reset();
+                p.set_host_alignment(128);
             }
             error.infer_input_bounds();
             // Fill the inputs with noise
