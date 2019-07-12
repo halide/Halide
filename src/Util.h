@@ -29,12 +29,17 @@
 #else
 #define HALIDE_EXPORT __declspec(dllimport)
 #endif
-// In MSVC, all data is hidden unless explicitly exported
-#define HALIDE_HIDDEN
 #else
 #define HALIDE_EXPORT
-#define HALIDE_HIDDEN __attribute__((visibility("hidden")))
 #endif
+#endif
+
+#if defined(WIN32) || defined(_WIN32)
+    // On Windows, all data is hidden unless explicitly exported
+    // (this is also true for MinGW, not just for MSVC)
+    #define HALIDE_HIDDEN
+#else
+    #define HALIDE_HIDDEN __attribute__((visibility("hidden")))
 #endif
 
 // If we're in user code, we don't want certain functions to be inlined.
