@@ -334,10 +334,11 @@ float float16_to_float(const uint16_t& value) {
 
 // Similar routines for bfloat. It's somewhat simpler.
 uint16_t float_to_bfloat16(float f) {
-    uint16_t ret[2];
-    memcpy(ret, &f, sizeof(float));
-    // Assume little-endian floats
-    return ret[1];
+    uint32_t ret;
+    memcpy(&ret, &f, sizeof(float));
+    // Round towards even
+    ret += 0x7fff + ((ret >> 16) & 1);
+    return ret >> 16;
 }
 
 float bfloat16_to_float(uint16_t b) {

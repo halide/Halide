@@ -56,7 +56,7 @@ int main(int argc, char **argv) {
         b.set(bfloat16_t(2.75f));
         float result = evaluate<float>(cast<float>(a) + cast<float>(b));
         if (result != 4.25f) {
-            printf("Incorrect result: %f\n", result);
+            printf("Incorrect result: %f != 4.25f\n", result);
             return 1;
         }
     }
@@ -69,7 +69,7 @@ int main(int argc, char **argv) {
         c.set(float16_t(0));
         float16_t result = evaluate<float16_t>(lerp(a, b, c));
         if (float(result) != 24.062500f) {
-            printf("Incorrect result: %f\n", (float)result);
+            printf("Incorrect result: %f != 24.0625f\n", (float)result);
             return 1;
         }
     }
@@ -81,8 +81,52 @@ int main(int argc, char **argv) {
         c.set(bfloat16_t(0));
         bfloat16_t result = evaluate<bfloat16_t>(lerp(a, b, c));
         if (float(result) != 24.5f) {
-            printf("Incorrect result: %f\n", (float)result);
+            printf("Incorrect result: %f != 24.5f\n", (float)result);
             return 1;
+        }
+    }
+
+    // Check that ties round towards a zero last bit on narrowing conversions
+    {
+        bfloat16_t start = bfloat16_t(37.2789f);
+        for (uint16_t x = 0; x < 8; x++) {
+            bfloat16_t a = bfloat16_t::make_from_bits(start.to_bits() + x);
+            bfloat16_t b = bfloat16_t::make_from_bits(start.to_bits() + x + 1);
+            bfloat16_t ab = bfloat16_t(((float)a + (float)b)/2);
+
+            if (a > ab || ab > b) {
+                printf("Misordered: %x %x %x\n", a.to_bits(), ab.to_bits(), b.to_bits());
+            }
+
+            bool ok = (((a.to_bits() & 1) && (ab == b)) ||
+                       ((b.to_bits() & 1) && (ab == a)));
+
+            if (!ok) {
+                printf("Incorrect rounding: %x %x %x\n", a.to_bits(), ab.to_bits(), b.to_bits());
+                return -1;
+            }
+        }
+    }
+
+    // Check that ties round towards a zero last bit on narrowing conversions
+    {
+        float16_t start = float16_t(37.2789f);
+        for (uint16_t x = 0; x < 8; x++) {
+            float16_t a = float16_t::make_from_bits(start.to_bits() + x);
+            float16_t b = float16_t::make_from_bits(start.to_bits() + x + 1);
+            float16_t ab = float16_t(((float)a + (float)b)/2);
+
+            if (a > ab || ab > b) {
+                printf("Misordered: %x %x %x\n", a.to_bits(), ab.to_bits(), b.to_bits());
+            }
+
+            bool ok = (((a.to_bits() & 1) && (ab == b)) ||
+                       ((b.to_bits() & 1) && (ab == a)));
+
+            if (!ok) {
+                printf("Incorrect rounding: %x %x %x\n", a.to_bits(), ab.to_bits(), b.to_bits());
+                return -1;
+            }
         }
     }
 

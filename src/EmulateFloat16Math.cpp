@@ -87,7 +87,11 @@ class LowerBFloatConversions : public IRMutator {
 
     Expr float_to_bfloat(Expr e) {
         e = reinterpret(UInt(32, e.type().lanes()), e);
-        e = e >> 16;
+        // We want to round ties to even, so before truncating either
+        // add 0x8000 (0.5) to odd numbers or 0x7fff (0.499999) to
+        // even numbers.
+        e += 0x7fff + ((e >> 16) & 1);
+        e = (e >> 16);
         e = cast(UInt(16, e.type().lanes()), e);
         return e;
     }
@@ -147,7 +151,7 @@ class LowerFloat16Conversions : public IRMutator {
         // Denorms are linearly spaced, so we can handle them
         // by scaling up the input as a float and using the
         // existing int-conversion rounding instructions.
-        Expr denorm_bits = cast(u16_t, round(reinterpret(f32_t, bits) * (1 << 24)));
+        Expr denorm_bits = cast(u16_t, strict_float(round(reinterpret(f32_t, bits) * (1 << 24))));
         Expr inf_bits = make_const(u16_t, 0x7c00);
         Expr nan_bits = make_const(u16_t, 0x7fff);
 
@@ -183,11 +187,10 @@ class LowerFloat16Conversions : public IRMutator {
         float smallest_float16 = float(float16_t::make_from_bits(1));
 
         // Denorms are linearly spaced, so we should just use an int->float cast and then scale down
-        Expr denorm = reinterpret(u32_t, cast(f32_t, magnitude) * smallest_float16);
+        Expr denorm = strict_float(reinterpret(u32_t, cast(f32_t, magnitude) * smallest_float16));
 
         Expr exponent_mantissa = cast(u32_t, magnitude) << 13;
-        exponent_mantissa = select(magnitude == 0, 0, // Map zero to zero
-                                   magnitude < 0x400, denorm, // denorms
+        exponent_mantissa = select(magnitude < 0x0400, denorm, // denorms and zero
                                    magnitude >= 0x7c00, exponent_mantissa | 0x7f800000, // Map infinity to infinity
                                    exponent_mantissa + 0x38000000); // Fix the exponent bias otherwise
 
