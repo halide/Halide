@@ -221,6 +221,12 @@ struct device_handle {
     mtl_buffer *buf;
     uint64_t offset;
 };
+    
+struct cached_pipeline_state {
+    const char* function_name;
+    mtl_compute_pipeline_state *precompiled_pipeline_state;
+    cached_pipeline_state *next;
+};
 
 // Structure to hold the state of a module attached to the context.
 // Also used as a linked-list to keep track of all the different
@@ -228,6 +234,7 @@ struct device_handle {
 // when then context is released.
 struct module_state {
     mtl_library *library;
+    cached_pipeline_state *cached_pipeline_state_list;
     module_state *next;
 };
 WEAK module_state *state_list = NULL;
@@ -281,9 +288,6 @@ WEAK int halide_metal_acquire_context(void *user_context, mtl_device **device_re
     halide_assert(user_context, &thread_lock != NULL);
     while (__sync_lock_test_and_set(&thread_lock, 1)) { }
 
-#ifdef DEBUG_RUNTIME
-        halide_start_clock(user_context);
-#endif
 
     if (device == 0 && create) {
         debug(user_context) <<  "Metal - Allocating: MTLCreateSystemDefaultDevice\n";
@@ -341,6 +345,10 @@ public:
 
 WEAK void MetalContextHolder::save(void *user_context_arg, bool create) {
     user_context = user_context_arg;
+    #ifdef DEBUG_RUNTIME
+        halide_start_clock(user_context);
+    #endif
+    
     pool = create_autorelease_pool();
     error = halide_metal_acquire_context(user_context, &device, &queue, create);
 }
@@ -481,6 +489,7 @@ WEAK int halide_metal_initialize_kernels(void *user_context, void **state_ptr, c
     if (!(*state)) {
         *state = (module_state*)malloc(sizeof(module_state));
         (*state)->library = NULL;
+        (*state)->cached_pipeline_state_list = NULL;
         (*state)->next = state_list;
         state_list = *state;
     }
@@ -585,6 +594,17 @@ WEAK int halide_metal_device_release(void *user_context) {
                 release_ns_object(state->library);
                 state->library = NULL;
             }
+            
+            cached_pipeline_state *pipeline_state = state->cached_pipeline_state_list;
+            while (pipeline_state) {
+                if (pipeline_state->precompiled_pipeline_state) {
+                    debug(user_context) << "Metal - Releasing: cached pipeline state " << pipeline_state->precompiled_pipeline_state << "\n";
+                    release_ns_object(pipeline_state->precompiled_pipeline_state);
+                    pipeline_state->precompiled_pipeline_state = NULL;
+                }
+                pipeline_state = pipeline_state->next;
+            }
+            
             state = state->next;
         }
 
@@ -714,18 +734,42 @@ WEAK int halide_metal_run(void *user_context,
     halide_assert(user_context, state_ptr);
     module_state *state = (module_state*)state_ptr;
 
-    mtl_function *function = new_function_with_name(state->library, entry_name, strlen(entry_name));
-    if (function == 0) {
-        error(user_context) << "Metal: Could not get function " << entry_name << "from Metal library.\n";
-        return -1;
+    
+    cached_pipeline_state *cached_pipeline = state->cached_pipeline_state_list;
+    while (cached_pipeline != NULL && strcmp(cached_pipeline->function_name, entry_name) != 0) {
+        cached_pipeline = cached_pipeline->next;
     }
 
-    mtl_compute_pipeline_state *pipeline_state = new_compute_pipeline_state_with_function(metal_context.device, function);
-    if (pipeline_state == 0) {
-        error(user_context) << "Metal: Could not allocate pipeline state.\n";
-        return -1;
+    
+    if(!cached_pipeline){
+#ifdef DEBUG_RUNTIME
+        debug(user_context) << "Metal: Creating pipeline state for function " << entry_name << "\n";
+#endif
+        
+        mtl_function *function = new_function_with_name(state->library, entry_name, strlen(entry_name));
+        if (function == 0) {
+            error(user_context) << "Metal: Could not get function " << entry_name << "from Metal library.\n";
+            return -1;
+        }
+        
+        mtl_compute_pipeline_state *pipeline_state = new_compute_pipeline_state_with_function(metal_context.device, function);
+        if (pipeline_state == 0) {
+            error(user_context) << "Metal: Could not allocate pipeline state.\n";
+            return -1;
+        }
+ 
+        cached_pipeline_state *new_pipeline = (cached_pipeline_state*)malloc(sizeof(cached_pipeline_state));
+        new_pipeline->function_name = entry_name;
+        new_pipeline->precompiled_pipeline_state = pipeline_state;
+        new_pipeline->next = state->cached_pipeline_state_list;
+        state->cached_pipeline_state_list = new_pipeline;
+        
+        cached_pipeline = new_pipeline;
+    }else{
+         debug(user_context) << "Metal: Found cached pipeline state for function " << entry_name << "\n";
     }
-    set_compute_pipeline_state(encoder, pipeline_state);
+    
+    set_compute_pipeline_state(encoder, cached_pipeline->precompiled_pipeline_state);
 
     size_t total_args_size = 0;
     for (size_t i = 0; arg_sizes[i] != 0; i++) {
@@ -771,7 +815,6 @@ WEAK int halide_metal_run(void *user_context,
             args_buffer = new_buffer(metal_context.device, padded_args_size);
             if (args_buffer == 0) {
                 error(user_context) << "Metal: Could not allocate arguments buffer.\n";
-                release_ns_object(pipeline_state);
                 return -1;
             }
             args_ptr = (char *)buffer_contents(args_buffer);
@@ -825,10 +868,6 @@ WEAK int halide_metal_run(void *user_context,
 
     // We deliberately don't release the function here; this was causing
     // crashes on Mojave (issues #3395 and #3408).
-    // We're still releasing the pipeline state object, as that seems to not
-    // cause zombied objects.
-    release_ns_object(pipeline_state);
-
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
     debug(user_context) << "Time for halide_metal_device_run: " << (t_after - t_before) / 1.0e6 << " ms\n";
