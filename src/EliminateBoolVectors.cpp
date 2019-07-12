@@ -64,7 +64,7 @@ private:
     Expr visit(const GE *op) override { return visit_comparison(op); }
 
     template <typename T>
-    Expr visit_logical_binop(const T* op, const std::string& bitwise_op) {
+    Expr visit_logical_binop(const T* op, Call::IntrinsicOp bitwise_op) {
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
 

@@ -1661,8 +1661,8 @@ private:
                 // Ignore crops that apply to a different buffer than the one being looked for.
                 if (in_buf != nullptr && (in_buf->name == (func + ".buffer"))) {
                     internal_assert(mins_struct != nullptr && extents_struct != nullptr &&
-                                    mins_struct->name == Call::make_struct &&
-                                    extents_struct->name == Call::make_struct) << "BoxesTouched::box_from_extended_crop -- unexpected buffer_crop form.\n";
+                                    mins_struct->is_intrinsic(Call::make_struct) &&
+                                    extents_struct->is_intrinsic(Call::make_struct)) << "BoxesTouched::box_from_extended_crop -- unexpected buffer_crop form.\n";
                     b.resize(mins_struct->args.size());
                     b.used = const_true();
                     for (size_t i = 0; i < mins_struct->args.size(); i++) {
