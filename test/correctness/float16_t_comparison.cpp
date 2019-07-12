@@ -45,13 +45,13 @@ bool test() {
     h_assert(!(nanValue == nanValue), "NaN must not compare equal to itself");
 
     // +ve zero and -ve zero are comparable
-    const T zeroP = T::make_zero(/*positive=*/true);
-    const T zeroN = T::make_zero(/*positive=*/false);
+    const T zeroP = T::make_zero();
+    const T zeroN = T::make_negative_zero();
     h_assert(zeroP == zeroN, "+0 and -0 should be treated as equal");
 
     // Infinities are comparable
-    const T infinityP = T::make_infinity(/*positive=*/true);
-    const T infinityN = T::make_infinity(/*positive=*/false);
+    const T infinityP = T::make_infinity();
+    const T infinityN = T::make_negative_infinity();
     h_assert(infinityP > infinityN, "inf+ should be > inf-");
     h_assert(infinityN < infinityP, "inf- should be < inf+");
     h_assert(one < infinityP, "1.0 should be < inf+");
