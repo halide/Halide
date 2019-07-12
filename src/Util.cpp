@@ -470,6 +470,8 @@ bool mul_would_overflow(int bits, int64_t a, int64_t b) {
     }
 }
 
+namespace {
+
 struct TickStackEntry {
     std::chrono::time_point<std::chrono::high_resolution_clock> time;
     string file;
@@ -477,6 +479,8 @@ struct TickStackEntry {
 };
 
 vector<TickStackEntry> tick_stack;
+
+}  // namespace
 
 void halide_tic_impl(const char *file, int line) {
     string f = file;
