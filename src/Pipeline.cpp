@@ -1105,8 +1105,10 @@ void Pipeline::realize(RealizationArg outputs, const Target &t,
 }
 
 void Pipeline::infer_input_bounds(RealizationArg outputs, const ParamMap &param_map) {
-    if (!contents->jit_module.compiled()) {
+    if (!contents->jit_module.compiled() ||
+        contents->jit_target.has_feature(Target::NoBoundsQuery)) {
         Target target = get_jit_target_from_environment();
+        target.set_feature(Target::NoBoundsQuery, false);
         compile_jit(target);
     }
 
