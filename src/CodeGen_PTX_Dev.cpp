@@ -281,7 +281,7 @@ void CodeGen_PTX_Dev::visit(const Store *op) {
                     internal_assert(op->value.type().bits() == 64);
                     intrin = module->getFunction("llvm.nvvm.atomic.load.add.f64.p0f64");
                 }
-                internal_assert(intrin);
+                internal_assert(intrin) << "Could not find nvvm atomic intrinsics\n";
                 value = builder->CreateCall(intrin, {ptr, val});
                 return;
             }
