@@ -39,6 +39,7 @@ const string headers =
     "#include <math.h>\n"
     "#include <float.h>\n"
     "#include <assert.h>\n"
+    "#include <limits.h>\n"
     "#include <string.h>\n"
     "#include <stdio.h>\n"
     "#include <stdint.h>\n";
@@ -194,6 +195,14 @@ public:
     }
 };
 } // namespace
+
+#if LONG_MAX == 0x7fffffff
+#define ADD_INT64_T_SUFFIX(x) x##ll
+#define ADD_UINT64_T_SUFFIX(x) x##ull
+#else
+#define ADD_INT64_T_SUFFIX(x) x##l
+#define ADD_UINT64_T_SUFFIX(x) x##ul
+#endif
 
 )INLINE_CODE";
 }  // namespace
@@ -2064,12 +2073,12 @@ void CodeGen_C::visit(const IntImm *op) {
     if (op->type == Int(32)) {
         id = std::to_string(op->value);
     } else {
-        print_assignment(op->type, "(" + print_type(op->type) + ")(" + std::to_string(op->value) + "ll)");
+        print_assignment(op->type, "(" + print_type(op->type) + ")(ADD_INT64_T_SUFFIX(" + std::to_string(op->value) + "))");
     }
 }
 
 void CodeGen_C::visit(const UIntImm *op) {
-    print_assignment(op->type, "(" + print_type(op->type) + ")(" + std::to_string(op->value) + "ull)");
+    print_assignment(op->type, "(" + print_type(op->type) + ")(ADD_UINT64_T_SUFFIX(" + std::to_string(op->value) + "))");
 }
 
 void CodeGen_C::visit(const StringImm *op) {
