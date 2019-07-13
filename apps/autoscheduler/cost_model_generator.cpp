@@ -264,8 +264,9 @@ public:
         Expr idle_core_wastage = ceil(tasks_per_core) / max(1, tasks_per_core);
         compute_cost *= idle_core_wastage;
         // Ignore warp_lane_utilization and block_occupancy for inlined stages
-        compute_cost /= select(inlined_calls == 0, warp_lane_utilization, 1.f);
-        compute_cost /= select(inlined_calls == 0, block_occupancy, 1.f);
+        // Serial loops use a single thread
+        compute_cost /= select(inlined_calls == 0, max(warp_lane_utilization, 1.f / 32.f), 1.f);
+        compute_cost /= select(inlined_calls == 0, max(block_occupancy, 1.f / 1024.f), 1.f);
 
         Expr load_cost = (num_realizations * unique_lines_read_per_realization * relu1(5, w, n) +
                           num_realizations * unique_bytes_read_per_realization * relu1(6, w, n) +
