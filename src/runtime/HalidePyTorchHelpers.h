@@ -38,7 +38,7 @@ inline std::vector<int> get_dims(const at::Tensor tensor) {
   int ndims = tensor.ndimension();
   std::vector<int> dims(ndims, 0);
   // PyTorch dim order is reverse of Halide
-  for(int dim = 0; dim < ndims; ++dim) {
+  for (int dim = 0; dim < ndims; ++dim) {
     dims[dim] = tensor.size(ndims-1-dim);
   }
   return dims;
