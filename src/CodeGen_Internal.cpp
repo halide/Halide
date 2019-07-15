@@ -116,7 +116,7 @@ llvm::Type *llvm_type_of(LLVMContext *c, Halide::Type t) {
         if (t.is_float() && !t.is_bfloat()) {
             switch (t.bits()) {
             case 16:
-                return llvm::Type::getHalfTy(*c);
+                return llvm::Type::getIntNTy(*c, t.bits());
             case 32:
                 return llvm::Type::getFloatTy(*c);
             case 64:

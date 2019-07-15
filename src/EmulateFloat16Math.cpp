@@ -6,6 +6,105 @@
 namespace Halide {
 namespace Internal {
 
+Expr bfloat16_to_float32(Expr e) {
+    if (e.type().is_bfloat()) {
+        e = reinterpret(e.type().with_code(Type::UInt), e);
+    }
+    e = cast(UInt(32, e.type().lanes()), e);
+    e = e << 16;
+    e = reinterpret(Float(32, e.type().lanes()), e);
+    e = strict_float(e);
+    return e;
+}
+
+Expr float32_to_bfloat16(Expr e) {
+    e = strict_float(e);
+    e = reinterpret(UInt(32, e.type().lanes()), e);
+    // We want to round ties to even, so before truncating either
+    // add 0x8000 (0.5) to odd numbers or 0x7fff (0.499999) to
+    // even numbers.
+    e += 0x7fff + ((e >> 16) & 1);
+    e = (e >> 16);
+    e = cast(UInt(16, e.type().lanes()), e);
+    return e;
+}
+
+
+Expr float16_to_float32(Expr value) {
+    value = strict_float(value);
+    Type f32_t = Float(32, value.type().lanes());
+    Type u32_t = UInt(32, value.type().lanes());
+    Type u16_t = UInt(16, value.type().lanes());
+
+    Expr f16_bits = reinterpret(u16_t, value);
+
+    Expr magnitude = f16_bits & make_const(u16_t, 0x7fff);
+    Expr sign = f16_bits & make_const(u16_t, 0x8000);
+
+    // Denorms are linearly spaced, so we should just use an
+    // int->float cast and then scale down by reducing the
+    // exponent.
+    Expr denorm = reinterpret(u32_t, strict_float(cast(f32_t, magnitude))) - 0x0c000000;
+
+    Expr exponent_mantissa = cast(u32_t, magnitude) << 13;
+    exponent_mantissa = select(magnitude == 0, 0,
+                               magnitude < 0x0400, denorm, // denorms
+                               magnitude >= 0x7c00, exponent_mantissa | 0x7f800000, // Map infinity to infinity
+                               exponent_mantissa + 0x38000000); // Fix the exponent bias otherwise
+
+    Expr f32 = strict_float(reinterpret(f32_t, (cast(u32_t, sign) << 16) | exponent_mantissa));
+    f32 = common_subexpression_elimination(f32);
+    return f32;
+}
+
+Expr float32_to_float16(Expr value) {
+    // We're about the sniff the bits of a float, so we should
+    // guard it with strict float to ensure we don't do things
+    // like assume it can't be denormal.
+    value = strict_float(value);
+
+    Type f32_t = Float(32, value.type().lanes());
+    Type f16_t = Float(16, value.type().lanes());
+    Type u32_t = UInt(32, value.type().lanes());
+    Type u16_t = UInt(16, value.type().lanes());
+
+    // Test the endpoints
+    Expr bits = reinterpret(u32_t, value);
+
+    // Extract the sign bit
+    Expr sign = bits & make_const(u32_t, 0x80000000);
+    bits = bits ^ sign;
+
+    Expr is_denorm = (bits < make_const(u32_t, 0x38800000));
+    Expr is_inf = (bits == make_const(u32_t, 0x7f800000));
+    Expr is_nan = (bits > make_const(u32_t, 0x7f800000));
+
+    // Denorms are linearly spaced, so we can handle them
+    // by scaling up the input as a float and using the
+    // existing int-conversion rounding instructions.
+    Expr denorm_bits = cast(u16_t, strict_float(round(strict_float(reinterpret(f32_t, bits + 0x0c000000)))));
+    Expr inf_bits = make_const(u16_t, 0x7c00);
+    Expr nan_bits = make_const(u16_t, 0x7fff);
+
+    // We want to round to nearest even, so we add either
+    // 0.5 if the integer part is odd, or 0.4999999 if the
+    // integer part is even, then truncate.
+    bits += (bits >> 13) & 1;
+    bits += 0xfff;
+    bits = bits >> 13;
+    // Rebias the exponent
+    bits -= 0x1c000;
+    // Truncate the top bits of the exponent
+    bits = bits & 0x7fff;
+    bits = select(is_denorm, denorm_bits,
+                  is_inf, inf_bits,
+                  is_nan, nan_bits,
+                  cast(u16_t, bits));
+    // Recover the sign bit
+    bits = bits | cast(u16_t, sign >> 16);
+    return common_subexpression_elimination(reinterpret(f16_t, bits));
+}
+
 namespace {
 
 // Widen all (b)float16 math to float math
@@ -72,175 +171,11 @@ class WidenMath : public IRMutator {
     }
 };
 
-class LowerBFloatConversions : public IRMutator {
-    using IRMutator::visit;
-
-    Expr bfloat_to_float(Expr e) {
-        if (e.type().is_bfloat()) {
-            e = reinterpret(e.type().with_code(Type::UInt), e);
-        }
-        e = cast(UInt(32, e.type().lanes()), e);
-        e = e << 16;
-        e = reinterpret(Float(32, e.type().lanes()), e);
-        e = strict_float(e);
-        return e;
-    }
-
-    Expr float_to_bfloat(Expr e) {
-        e = strict_float(e);
-        e = reinterpret(UInt(32, e.type().lanes()), e);
-        // We want to round ties to even, so before truncating either
-        // add 0x8000 (0.5) to odd numbers or 0x7fff (0.499999) to
-        // even numbers.
-        e += 0x7fff + ((e >> 16) & 1);
-        e = (e >> 16);
-        e = cast(UInt(16, e.type().lanes()), e);
-        return e;
-    }
-
-    Expr visit(const Cast *op) override {
-        if (op->type.is_bfloat()) {
-            // Cast via float
-            return float_to_bfloat(mutate(cast(Float(32, op->type.lanes()), op->value)));
-        } else if (op->value.type().is_bfloat()) {
-            return cast(op->type, bfloat_to_float(mutate(op->value)));
-        } else {
-            return IRMutator::visit(op);
-        }
-    }
-
-    Expr visit(const Load *op) override {
-        if (op->type.is_bfloat()) {
-            // Load as uint
-            Type load_type = UInt(op->type.bits(), op->type.lanes());
-            Expr index = mutate(op->index);
-            return Load::make(load_type, op->name, index,
-                              op->image, op->param, mutate(op->predicate), op->alignment);
-        } else {
-            return IRMutator::visit(op);
-        }
-    }
-
-    Expr visit(const FloatImm *op) override {
-        if (op->type.is_bfloat()) {
-            return Expr(bfloat16_t(op->value).to_bits());
-        } else {
-            return op;
-        }
-    }
-};
-
-class LowerFloat16Conversions : public IRMutator {
-    using IRMutator::visit;
-
-    Expr float_to_float16(Expr value) {
-        // We're about the sniff the bits of a float, so we should
-        // guard it with strict float to ensure we don't do things
-        // like assume it can't be denormal.
-        value = strict_float(value);
-
-        Type f32_t = Float(32, value.type().lanes());
-        Type f16_t = Float(16, value.type().lanes());
-        Type u32_t = UInt(32, value.type().lanes());
-        Type u16_t = UInt(16, value.type().lanes());
-
-        // Test the endpoints
-        Expr bits = reinterpret(u32_t, value);
-
-        // Extract the sign bit
-        Expr sign = bits & make_const(u32_t, 0x80000000);
-        bits = bits ^ sign;
-
-        Expr is_denorm = (bits < make_const(u32_t, 0x38800000));
-        Expr is_inf = (bits == make_const(u32_t, 0x7f800000));
-        Expr is_nan = (bits > make_const(u32_t, 0x7f800000));
-
-        // Denorms are linearly spaced, so we can handle them
-        // by scaling up the input as a float and using the
-        // existing int-conversion rounding instructions.
-        Expr denorm_bits = cast(u16_t, round(reinterpret(f32_t, bits + 0x0c000000)));
-        Expr inf_bits = make_const(u16_t, 0x7c00);
-        Expr nan_bits = make_const(u16_t, 0x7fff);
-
-        // We want to round to nearest even, so we add either
-        // 0.5 if the integer part is odd, or 0.4999999 if the
-        // integer part is even, then truncate.
-        bits += (bits >> 13) & 1;
-        bits += 0xfff;
-        bits = bits >> 13;
-        // Rebias the exponent
-        bits -= 0x1c000;
-        // Truncate the top bits of the exponent
-        bits = bits & 0x7fff;
-        bits = select(is_denorm, denorm_bits,
-                      is_inf, inf_bits,
-                      is_nan, nan_bits,
-                      cast(u16_t, bits));
-        // Recover the sign bit
-        bits = bits | cast(u16_t, sign >> 16);
-        return common_subexpression_elimination(reinterpret(f16_t, bits));
-    }
-
-    Expr float16_to_float(Expr value) {
-        Type f32_t = Float(32, value.type().lanes());
-        Type u32_t = UInt(32, value.type().lanes());
-        Type u16_t = UInt(16, value.type().lanes());
-
-        Expr f16_bits = reinterpret(u16_t, value);
-
-        Expr magnitude = f16_bits & make_const(u16_t, 0x7fff);
-        Expr sign = f16_bits & make_const(u16_t, 0x8000);
-
-        // Denorms are linearly spaced, so we should just use an
-        // int->float cast and then scale down by reducing the
-        // exponent.
-        Expr denorm = reinterpret(u32_t, cast(f32_t, magnitude)) - 0x0c000000;
-
-        Expr exponent_mantissa = cast(u32_t, magnitude) << 13;
-        exponent_mantissa = select(magnitude == 0, 0, // zero
-                                   magnitude < 0x0400, denorm, // denorms
-                                   magnitude >= 0x7c00, exponent_mantissa | 0x7f800000, // Map infinity to infinity
-                                   exponent_mantissa + 0x38000000); // Fix the exponent bias otherwise
-
-        Expr f32 = reinterpret(f32_t, (cast(u32_t, sign) << 16) | exponent_mantissa);
-        f32 = common_subexpression_elimination(f32);
-        // Here be bit-twiddling on floats
-        return strict_float(f32);
-    }
-
-    Expr visit(const Cast *op) override {
-        if (op->type.element_of() == Float(16)) {
-            return float_to_float16(cast(op->type.with_bits(32), mutate(op->value)));
-        } else if (op->value.type().element_of() == Float(16)) {
-            return cast(op->type, float16_to_float(mutate(op->value)));
-        } else {
-            return IRMutator::visit(op);
-        }
-    }
-
-    Expr visit(const Load *op) override {
-        if (op->type.is_float() && op->type.bits() < 32) {
-            // Load as uint
-            Type load_type = UInt(op->type.bits(), op->type.lanes());
-            Expr index = mutate(op->index);
-            return Load::make(load_type, op->name, index,
-                              op->image, op->param, mutate(op->predicate), op->alignment);
-        } else {
-            return IRMutator::visit(op);
-        }
-    }
-};
-
 }  // anonymous namespace
 
 Stmt emulate_float16_math(const Stmt &stmt, const Target &t) {
     Stmt s = stmt;
     s = WidenMath().mutate(s);
-    s = LowerBFloatConversions().mutate(s);
-    // LLVM trunk as of 2/22/2019 has bugs in the lowering of float16 conversions math on avx512
-    //if (!t.has_feature(Target::F16C)) {
-    s = LowerFloat16Conversions().mutate(s);
-    //}
     return s;
 }
 

@@ -12,9 +12,16 @@ namespace Internal {
 
 /** Lower all (b)float16s and (b)float16 math to the floating point
  * equivalent. Each arithmetic op is done as float32, with the result
- * truncated back to float16 or bfloat16. Casts are implemented using
- * bitwise logic. */
+ * cast back to float16 or bfloat16. */
 Stmt emulate_float16_math(const Stmt &, const Target &);
+
+/** Cast to/from float and bfloat using bitwise math. */
+//@{
+Expr float32_to_bfloat16(Expr e);
+Expr float32_to_float16(Expr e);
+Expr float16_to_float32(Expr e);
+Expr bfloat16_to_float32(Expr e);
+//@}
 
 }
 }

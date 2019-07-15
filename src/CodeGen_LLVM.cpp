@@ -17,6 +17,7 @@
 #include "CodeGen_X86.h"
 #include "Debug.h"
 #include "Deinterleave.h"
+#include "EmulateFloat16Math.h"
 #include "ExprUsesVar.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
@@ -1462,6 +1463,8 @@ void CodeGen_LLVM::visit(const UIntImm *op) {
 void CodeGen_LLVM::visit(const FloatImm *op) {
     if (op->type.is_bfloat()) {
         value = ConstantInt::get(llvm_type_of(op->type), bfloat16_t(op->value).to_bits());
+    } else if (op->type.bits() == 16) {
+        value = ConstantInt::get(llvm_type_of(op->type), float16_t(op->value).to_bits());
     } else {
         value = ConstantFP::get(llvm_type_of(op->type), op->value);
     }
@@ -1475,10 +1478,29 @@ void CodeGen_LLVM::visit(const Cast *op) {
     Halide::Type src = op->value.type();
     Halide::Type dst = op->type;
 
-    value = codegen(op->value);
-
     llvm::Type *llvm_dst = llvm_type_of(dst);
 
+    if (src == dst) {
+        codegen(op->value);
+        return;
+    } else if (src.is_bfloat()) {
+        internal_assert(src.bits() == 16);
+        codegen(cast(dst, bfloat16_to_float32(op->value)));
+        return;
+    } else if (dst.is_bfloat()) {
+        internal_assert(dst.bits() == 16);
+        codegen(float32_to_bfloat16(cast(Float(32, src.lanes()), op->value)));
+        return;
+    } else if (src.is_float() && src.bits() == 16) {
+        codegen(cast(dst, float16_to_float32(op->value)));
+        return;
+    } else if (dst.is_float() && dst.bits() == 16) {
+        internal_assert(op->type.bits() == 16);
+        codegen(float32_to_float16(cast(Float(32, src.lanes()), op->value)));
+        return;
+    }
+
+    value = codegen(op->value);
     if (dst.is_handle() && src.is_handle()) {
         value = builder->CreateBitCast(value, llvm_dst);
     } else if (dst.is_handle() || src.is_handle()) {
@@ -2507,7 +2529,9 @@ void CodeGen_LLVM::visit(const Call *op) {
         value = codegen(op->args[0] + (op->args[1] - op->args[0])/2);
     } else if (op->is_intrinsic(Call::lerp)) {
         internal_assert(op->args.size() == 3);
-        value = codegen(lower_lerp(op->args[0], op->args[1], op->args[2]));
+        Expr e = lower_lerp(op->args[0], op->args[1], op->args[2]);
+        debug(0) << "LERP: " << e << "\n";
+        value = codegen(e);
     } else if (op->is_intrinsic(Call::popcount)) {
         internal_assert(op->args.size() == 1);
         std::vector<llvm::Type*> arg_type(1);
