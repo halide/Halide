@@ -1680,13 +1680,13 @@ void CodeGen_Hexagon::visit(const Call *op) {
     // Map Halide functions to Hexagon intrinsics, plus a boolean
     // indicating if the intrinsic has signed variants or not.
     static std::map<string, std::pair<string, bool>> functions = {
-        { Call::absd, { "halide.hexagon.absd", true } },
-        { Call::bitwise_and, { "halide.hexagon.and", false } },
-        { Call::bitwise_or, { "halide.hexagon.or", false } },
-        { Call::bitwise_xor, { "halide.hexagon.xor", false } },
-        { Call::bitwise_not, { "halide.hexagon.not", false } },
-        { Call::count_leading_zeros, { "halide.hexagon.clz", false } },
-        { Call::popcount, { "halide.hexagon.popcount", false } },
+        { Call::get_intrinsic_name(Call::absd), { "halide.hexagon.absd", true } },
+        { Call::get_intrinsic_name(Call::bitwise_and), { "halide.hexagon.and", false } },
+        { Call::get_intrinsic_name(Call::bitwise_or), { "halide.hexagon.or", false } },
+        { Call::get_intrinsic_name(Call::bitwise_xor), { "halide.hexagon.xor", false } },
+        { Call::get_intrinsic_name(Call::bitwise_not), { "halide.hexagon.not", false } },
+        { Call::get_intrinsic_name(Call::count_leading_zeros), { "halide.hexagon.clz", false } },
+        { Call::get_intrinsic_name(Call::popcount), { "halide.hexagon.popcount", false } },
     };
 
     if (is_native_interleave(op) || is_native_deinterleave(op)) {
@@ -1721,7 +1721,7 @@ void CodeGen_Hexagon::visit(const Call *op) {
                                 instr + type_suffix(op->args[0], b),
                                 {op->args[0], b});
             return;
-        } else if (op->is_intrinsic("dynamic_shuffle")) {
+        } else if (op->is_intrinsic(Call::dynamic_shuffle)) {
             internal_assert(op->args.size() == 4);
             const int64_t *min_index = as_const_int(op->args[2]);
             const int64_t *max_index = as_const_int(op->args[3]);
@@ -1821,7 +1821,7 @@ void CodeGen_Hexagon::visit(const Call *op) {
         return;
     }
 
-    if (op->is_intrinsic() && op->name == "gather") {
+    if (op->is_intrinsic(Call::gather)) {
         internal_assert(op->args.size() == 5);
         internal_assert(op->type.bits() == 16 || op->type.bits() == 32);
         int index_lanes = op->type.lanes();
@@ -1848,7 +1848,7 @@ void CodeGen_Hexagon::visit(const Call *op) {
             value = builder->CreateCall(fn, args);
         }
         return;
-    } else if (op->is_intrinsic() && (op->name == "scatter" || op->name == "scatter_acc")) {
+    } else if (op->is_intrinsic(Call::scatter) || op->is_intrinsic(Call::scatter_acc)) {
         internal_assert(op->args.size() == 4);
         internal_assert(op->type.bits() == 16 || op->type.bits() == 32);
         int index_lanes = op->type.lanes();
@@ -1874,7 +1874,7 @@ void CodeGen_Hexagon::visit(const Call *op) {
             value = builder->CreateCall(fn, args);
         }
         return;
-    } else if (op->is_intrinsic("scatter_release")) {
+    } else if (op->is_intrinsic(Call::scatter_release)) {
         internal_assert(op->args.size() == 1);
         Value *ptr = codegen(op->args[0]);
         llvm::Function *fn = module->getFunction("halide.hexagon.scatter.release");
