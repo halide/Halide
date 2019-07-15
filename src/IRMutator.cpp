@@ -355,7 +355,7 @@ Stmt IRMutator::visit(const Acquire *op) {
     }
 }
 
-Stmt IRGraphMutator2::mutate(const Stmt &s) {
+Stmt IRGraphMutator::mutate(const Stmt &s) {
     auto p = stmt_replacements.emplace(s, Stmt());
     if (p.second) {
         // N.B: Inserting into a map (as the recursive mutate call
@@ -365,7 +365,7 @@ Stmt IRGraphMutator2::mutate(const Stmt &s) {
     return p.first->second;
 }
 
-Expr IRGraphMutator2::mutate(const Expr &e) {
+Expr IRGraphMutator::mutate(const Expr &e) {
     auto p = expr_replacements.emplace(e, Expr());
     if (p.second) {
         p.first->second = IRMutator::mutate(e);

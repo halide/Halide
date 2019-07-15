@@ -27,9 +27,9 @@ using std::set;
 using std::string;
 using std::vector;
 
-class StripLets : public IRGraphMutator2 {
+class StripLets : public IRGraphMutator {
 public:
-    using IRGraphMutator2::visit;
+    using IRGraphMutator::visit;
     Expr visit(const Let *op) override {
         return mutate(op->body);
     }
