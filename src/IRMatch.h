@@ -1307,7 +1307,7 @@ constexpr uint32_t bitwise_or_reduce(uint32_t first, Args... rest) {
 template<typename... Args>
 struct Intrin {
     struct pattern_tag {};
-    Call::ConstString intrin;
+    Call::IntrinsicOp intrin;
     std::tuple<Args...> args;
 
     static constexpr uint32_t binds = bitwise_or_reduce((bindings<Args>::mask)...);
@@ -1373,7 +1373,7 @@ struct Intrin {
     constexpr static bool foldable = false;
 
     HALIDE_ALWAYS_INLINE
-    Intrin(Call::ConstString intrin, Args... args) noexcept : intrin(intrin), args(args...) {}
+    Intrin(Call::IntrinsicOp intrin, Args... args) noexcept : intrin(intrin), args(args...) {}
 };
 
 template<typename... Args>
@@ -1386,8 +1386,8 @@ std::ostream &operator<<(std::ostream &s, const Intrin<Args...> &op) {
 
 template<typename... Args>
 HALIDE_ALWAYS_INLINE
-auto intrin(Call::ConstString name, Args... args) noexcept -> Intrin<decltype(pattern_arg(args))...> {
-    return {name, pattern_arg(args)...};
+auto intrin(Call::IntrinsicOp intrinsic_op, Args... args) noexcept -> Intrin<decltype(pattern_arg(args))...> {
+    return {intrinsic_op, pattern_arg(args)...};
 }
 
 template<typename A>

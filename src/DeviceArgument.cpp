@@ -53,11 +53,11 @@ void HostClosure::visit(const Call *op) {
         ref.type = op->type;
         // TODO: do we need to set ref.dimensions?
 
-        if (op->name == Call::glsl_texture_load ||
-            op->name == Call::image_load) {
+        if (op->is_intrinsic(Call::glsl_texture_load) ||
+            op->is_intrinsic(Call::image_load)) {
             ref.read = true;
-        } else if (op->name == Call::glsl_texture_store ||
-                   op->name == Call::image_store) {
+        } else if (op->is_intrinsic(Call::glsl_texture_store) ||
+                   op->is_intrinsic(Call::image_store)) {
             ref.write = true;
         }
 
