@@ -12,7 +12,6 @@
 #include "Type.h"
 #include "Util.h"
 #include "Var.h"
-#include "Type.h"
 
 namespace Halide {
 namespace Internal {
