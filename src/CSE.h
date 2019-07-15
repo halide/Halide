@@ -29,6 +29,11 @@ Expr common_subexpression_elimination(const Expr &, bool lift_all = false);
  * statement. Does not introduce let statements. */
 Stmt common_subexpression_elimination(const Stmt &, bool lift_all = false);
 
+/** A version of common_subexpression_elimination that can be called before
+ * certain steps in lowering. Handles strict_float and certain issues of variable
+ * naming. */
+Expr common_subexpression_elimination_front_end(const Expr &, bool lift_all = false);
+  
 void cse_test();
 
 }  // namespace Internal

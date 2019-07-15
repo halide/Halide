@@ -6,6 +6,7 @@
 #include "IROperator.h"
 #include "Scope.h"
 #include "Simplify.h"
+#include "StrictifyFloat.h"
 
 namespace Halide {
 namespace Internal {
@@ -294,6 +295,9 @@ Stmt common_subexpression_elimination(const Stmt &s, bool lift_all) {
     return CSEEveryExprInStmt(lift_all).mutate(s);
 }
 
+Expr common_subexpression_elimination_front_end(const Expr &e_in, bool lift_all) {
+    return common_subexpression_elimination(strictify_float(e_in), lift_all);
+}
 
 // Testing code.
 

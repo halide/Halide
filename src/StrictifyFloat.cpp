@@ -6,14 +6,14 @@
 namespace Halide {
 namespace Internal {
 
-class StrictifyFloat : public IRMutator {
+class StrictifyFloat : public IRGraphMutator2 {
     bool strict_float_allowed;
     enum Strictness {
         FastMath,
         StrictFloat,
     } strictness;
 
-    using IRMutator::visit;
+    using IRGraphMutator2::visit;
 
     Expr visit(const Call *call) override {
         Strictness new_strictness = strictness;
@@ -26,16 +26,17 @@ class StrictifyFloat : public IRMutator {
 
         ScopedValue<Strictness> save_strictness(strictness, new_strictness);
 
-        return IRMutator::visit(call);
+        return IRGraphMutator2::visit(call);
     }
 
-    using IRMutator::mutate;
+    using IRGraphMutator2::mutate;
 
+public:
     Expr mutate(const Expr &expr) override {
         if (!expr.defined()) {
             return expr;
         }
-        Expr e = IRMutator::mutate(expr);
+        Expr e = IRGraphMutator2::mutate(expr);
         if (e.type().is_float()) {
             switch (strictness) {
             case FastMath:
@@ -47,7 +48,6 @@ class StrictifyFloat : public IRMutator {
         return e;
     }
 
-public:
     enum StrictnessMode {
         NotAllowed,
         Allowed,
@@ -80,5 +80,10 @@ bool strictify_float(std::map<std::string, Function> &env, const Target &t) {
     return any_strict_float;
 }
 
+Expr strictify_float(Expr e) {
+    StrictifyFloat strictify(StrictifyFloat::Allowed);
+    return strictify.mutate(e);
+}
+  
 }  // namespace Internal
 }  // namespace Halide
