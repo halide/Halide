@@ -4096,12 +4096,12 @@ void CodeGen_LLVM::visit(const Atomic *op) {
             " is lowered into a mutex lock, which does not support vectorization.\n";
         Value *ptr = codegen_buffer_pointer(op->mutex_name, mutex_type, index);
         llvm::Function *mutex_lock = module->getFunction("halide_mutex_lock");
-        internal_assert(mutex_lock) << "Did not find halide_mutex_lock in initial module.\n";
+        internal_assert(mutex_lock) << "Could not find halide_mutex_lock in initial module.\n";
         // There is a bug in LLVM where it would errorneously merge
         // two structurally identical structs when they are both
         // presented in the source and destination modules.
         // (see https://reviews.llvm.org/D18683)
-        // Current this causes the halide_mutex type being merged with halide_cond.
+        // Currently this causes the halide_mutex type being merged with halide_cond.
         // Since we are converting the pointer to the function
         // argument, we are fine here, but keep this in mind when debugging.
         internal_assert(mutex_lock->arg_begin() != mutex_lock->arg_end()) << "halide_mutex_lock has no arguments.\n";
