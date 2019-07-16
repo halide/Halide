@@ -335,6 +335,7 @@ CodeGen_C::CodeGen_C(ostream &s, Target t, OutputKind output_kind, const std::st
             << halide_internal_runtime_header_HalideRuntime_h << '\n'
             << halide_internal_initmod_inlined_c << '\n';
         add_common_macros(stream);
+        stream << '\n';
     }
 
     // Throw in a default (empty) definition of HALIDE_FUNCTION_ATTRS
@@ -519,7 +520,7 @@ void CodeGen_C::add_common_macros(std::ostream &dest) {
 #define ADD_INT64_T_SUFFIX(x) x##ll
 #define ADD_UINT64_T_SUFFIX(x) x##ull
 #endif
-        )INLINE_CODE";
+)INLINE_CODE";
     dest << macros;
 }
 
@@ -2961,17 +2962,20 @@ void CodeGen_C::test() {
     m.append(LoweredFunc("test1", args, s, LinkageType::External));
 
     ostringstream source;
+    ostringstream macros;
     {
         CodeGen_C cg(source, Target("host"), CodeGen_C::CImplementation);
         cg.compile(m);
+        cg.add_common_macros(macros);
     }
 
     string src = source.str();
     string correct_source =
         headers +
         globals +
-        string((const char *)halide_internal_runtime_header_HalideRuntime_h) + '\n' +
-        string((const char *)halide_internal_initmod_inlined_c) + R"GOLDEN_CODE(
+        string((const char *) halide_internal_runtime_header_HalideRuntime_h) + '\n' +
+        string((const char *) halide_internal_initmod_inlined_c) + '\n' +
+        macros.str() + R"GOLDEN_CODE(
 #ifndef HALIDE_FUNCTION_ATTRS
 #define HALIDE_FUNCTION_ATTRS
 #endif
