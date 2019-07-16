@@ -342,6 +342,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::add_kernel(Stmt s,
 void CodeGen_OpenGLCompute_Dev::init_module() {
     src_stream.str("");
     src_stream.clear();
+    glc.add_common_macros(src_stream);
     cur_kernel_name = "";
 }
 

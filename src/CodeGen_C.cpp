@@ -195,15 +195,6 @@ public:
     }
 };
 } // namespace
-
-#if LONG_MAX == 0x7fffffff
-#define ADD_INT64_T_SUFFIX(x) x##ll
-#define ADD_UINT64_T_SUFFIX(x) x##ull
-#else
-#define ADD_INT64_T_SUFFIX(x) x##l
-#define ADD_UINT64_T_SUFFIX(x) x##ul
-#endif
-
 )INLINE_CODE";
 }  // namespace
 
@@ -343,6 +334,7 @@ CodeGen_C::CodeGen_C(ostream &s, Target t, OutputKind output_kind, const std::st
             << globals
             << halide_internal_runtime_header_HalideRuntime_h << '\n'
             << halide_internal_initmod_inlined_c << '\n';
+        add_common_macros(stream);
     }
 
     // Throw in a default (empty) definition of HALIDE_FUNCTION_ATTRS
@@ -517,6 +509,19 @@ string type_to_c_type(Type type, bool include_space, bool c_plus_plus = true) {
 }
 
 }  // namespace
+
+void CodeGen_C::add_common_macros(std::ostream &dest) {
+    const char *macros = R"INLINE_CODE(
+#if defined __OPENCL_VERSION__
+#define ADD_INT64_T_SUFFIX(x) x##l
+#define ADD_UINT64_T_SUFFIX(x) x##ul
+#else
+#define ADD_INT64_T_SUFFIX(x) x##ll
+#define ADD_UINT64_T_SUFFIX(x) x##ull
+#endif
+        )INLINE_CODE";
+    dest << macros;
+}
 
 void CodeGen_C::add_vector_typedefs(const std::set<Type> &vector_types) {
     if (!vector_types.empty()) {
