@@ -192,6 +192,11 @@ struct Test {
         Func error("error_" + name);
         error() = cast<double>(maximum(absd(f(r.x, r.y), f_scalar(r.x, r.y))));
 
+        for (auto p : image_params) {
+            p.reset();
+            p.set_host_alignment(128);
+        }
+
         {
             // Compile just the vector Func to assembly.
             string asm_filename = output_directory + "check_" + name + ".s";
@@ -232,10 +237,6 @@ struct Test {
                 .without_feature(Target::NoBoundsQuery);
 
             error.compile_jit(run_target);
-            for (auto p : image_params) {
-                p.reset();
-                p.set_host_alignment(128);
-            }
             error.infer_input_bounds();
             // Fill the inputs with noise
             std::mt19937 rng(123);
