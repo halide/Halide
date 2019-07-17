@@ -140,8 +140,10 @@ benchmark_sample() {
         echo "Benchmarking failed or timed out for ${D}"
         FAILED=1
     fi
-
     record_command $BATCH $SAMPLE_ID "$CMD" "benchmark_command" $FAILED
+
+    NVPROF_CMD="HL_NUM_THREADS=32 nvprof --analysis-metrics -o ${BATCH}_${SAMPLE_ID}.nvprof ${D}/bench --output_extents=estimate --default_input_buffers=random:0:auto --default_input_scalars=estimate --benchmarks=all --benchmark_min_time=1 ${RUNGEN_ARGS}"
+    record_command $BATCH $SAMPLE_ID "$NVPROF_CMD" "nvprof_command" $FAILED
 
     if [[ ${FAILED} == 1 ]]; then
         return

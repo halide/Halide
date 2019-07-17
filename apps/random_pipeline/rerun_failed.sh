@@ -6,6 +6,7 @@
 # c => compile
 # b => benchmark
 # au => augment
+# p => profile
 if [ $# -ne 3 ]; then
   echo "Usage: $0 batch_id sample_id command"
   exit
@@ -23,6 +24,8 @@ elif [ $COMMAND == "b" ]; then
     COMMAND="benchmark"
 elif [ $COMMAND == "au" ]; then
     COMMAND="augment"
+elif [ $COMMAND == "p" ]; then
+    COMMAND="nvprof"
 else
     echo "Unknown command: ${COMMAND}"
     exit

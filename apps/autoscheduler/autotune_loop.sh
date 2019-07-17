@@ -199,6 +199,16 @@ benchmark_sample() {
 
     record_command $BATCH $SAMPLE_ID "$CMD" "benchmark_command" $FAILED
 
+    NVPROF_CMD="HL_NUM_THREADS=32 \
+        ${TIMEOUT_CMD} -k ${BENCHMARKING_TIMEOUT} ${BENCHMARKING_TIMEOUT} \
+        nvprof --analysis-metrics -o ${BATCH}_${SAMPLE_ID}.nvprof \
+        ${D}/bench \
+        --output_extents=estimate \
+        --default_input_buffers=random:0:estimate_then_auto \
+        --default_input_scalars=estimate \
+        --benchmarks=all"
+    record_command $BATCH $SAMPLE_ID "$NVPROF_CMD" "nvprof_command" $FAILED
+
     if [[ ${FAILED} == 1 ]]; then
         return
     fi
