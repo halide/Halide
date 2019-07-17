@@ -59,12 +59,12 @@ mkdir -p ${SAMPLES}
 
 # A batch of this many samples is built in parallel, and then
 # benchmarked serially. Set to number of cores.
-BATCH_SIZE=32
+BATCH_SIZE=40
 
 WEIGHTS_DIR=../autoscheduler/gpu_weights
 mkdir -p ${WEIGHTS_DIR}
 
-MAX_STAGES=5
+MAX_STAGES=20
 
 HL_TARGET=x86-64-avx2-disable_llvm_loop_vectorize-disable_llvm_loop_unroll-cuda
 
@@ -72,16 +72,17 @@ if [ $DEBUG_MODE == 1 ]; then
     HL_TARGET=${HL_TARGET}-debug
 fi
 
-record_failed() {
+record_command() {
     BATCH=${1}
     SAMPLE_ID=${2}
     CMD=${3}
     TXT=${4}
+    FAILED=${5}
     BATCH_DIR=${SAMPLES}/${BATCH}
 
     echo $CMD > ${BATCH_DIR}/${SAMPLE_ID}/${TXT}.txt
 
-    if [[ -f ${BATCH_DIR}/${SAMPLE_ID}/sample.sample ]]; then
+    if [[ ${FAILED} == 1 && -f ${BATCH_DIR}/${SAMPLE_ID}/sample.sample ]]; then
         # Delete the .sample file so it doesn't get included in training
         rm -f ${BATCH_DIR}/${SAMPLE_ID}/sample.sample
     fi
@@ -103,20 +104,22 @@ make_sample() {
     BATCH=${4}
     SAMPLE_ID=${5}
 
-    eval $CMD
-    if [[ $? != 0 ]]; then
+    FAILED=0
+    eval $CMD || FAILED=1
+    record_command $BATCH $SAMPLE_ID "$CMD" "autoschedule_command" $FAILED
+    if [[ $FAILED == 1 ]]; then
         echo "Autoschedule failed or timed out for ${D}"
-        record_failed $BATCH $SAMPLE_ID "$CMD" "autoschedule_command"
         return
     fi
 
     CMD="c++ -std=c++11 -I ../../include ../../tools/RunGenMain.cpp ${D}/*.registration.cpp ${D}/*.a -o ${D}/bench -ljpeg -ldl -lpthread -lz -lpng"
     eval $CMD
+    FAILED=0
     if [[ $? != 0 ]]; then
         echo "Compilation failed for ${D}"
-        record_failed $BATCH $SAMPLE_ID "$CMD" "compile_command"
-        return
+        FAILED=1
     fi
+    record_command $BATCH $SAMPLE_ID "$CMD" "compile_command" $FAILED
 }
 
 # Benchmark one of the random samples
@@ -132,9 +135,15 @@ benchmark_sample() {
     CMD="HL_NUM_THREADS=32 ${D}/bench --output_extents=estimate --default_input_buffers=random:0:auto --default_input_scalars=estimate --benchmarks=all --benchmark_min_time=1 ${RUNGEN_ARGS}"
 
     eval $CMD > ${D}/bench.txt 2>&1
+    FAILED=0
     if [[ $? != 0 ]]; then
         echo "Benchmarking failed or timed out for ${D}"
-        record_failed $BATCH $SAMPLE_ID "$CMD" "benchmark_command"
+        FAILED=1
+    fi
+
+    record_command $BATCH $SAMPLE_ID "$CMD" "benchmark_command" $FAILED
+
+    if [[ ${FAILED} == 1 ]]; then
         return
     fi
 
@@ -142,10 +151,13 @@ benchmark_sample() {
     R=$(cat ${D}/bench.txt | grep 'Benchmark for' | cut -d' ' -f8)
     CMD="./bin/augment_sample ${D}/sample.sample $R $3 $2"
     eval $CMD
+    FAILED=0
     if [[ $? != 0 ]]; then
         echo "Augment sample failed for ${D}"
-        record_failed $BATCH $SAMPLE_ID "$CMD" "augment_command"
+        FAILED=1
     fi
+
+    record_command $BATCH $SAMPLE_ID "$CMD" "augment_command" $FAILED
 }
 
 # Don't clobber existing samples
@@ -157,7 +169,7 @@ for ((i=$((FIRST+1));i<1000000;i++)); do
 
     # Copy the weights being used into the batch folder so that we can repro failures
     mkdir -p ${DIR}
-    cp ${WEIGHTS_DIR}/* ${SAMPLES}/batch_${i}/
+    cp ${WEIGHTS_DIR}/*.data ${SAMPLES}/batch_${i}/
 
     for ((b=0;b<${BATCH_SIZE};b++)); do
         S=$(printf "%d%02d" $i $b)
