@@ -513,9 +513,14 @@ string type_to_c_type(Type type, bool include_space, bool c_plus_plus = true) {
 
 void CodeGen_C::add_common_macros(std::ostream &dest) {
     const char *macros = R"INLINE_CODE(
+// ll suffix in OpenCL is reserver for 128-bit integers.
 #if defined __OPENCL_VERSION__
 #define ADD_INT64_T_SUFFIX(x) x##l
 #define ADD_UINT64_T_SUFFIX(x) x##ul
+// HLSL doesn't have any suffixes.
+#elif defined HLSL_VERSION
+#define ADD_INT64_T_SUFFIX(x) x
+#define ADD_UINT64_T_SUFFIX(x) x
 #else
 #define ADD_INT64_T_SUFFIX(x) x##ll
 #define ADD_UINT64_T_SUFFIX(x) x##ull
