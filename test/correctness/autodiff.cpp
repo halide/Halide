@@ -1246,7 +1246,8 @@ void test_select_guard() {
 }
 
 void test_param() {
-    Param<float> param(2.f);
+    // Give the parameter an illegal name to test the function renaming.
+    Param<float> param("param.0", 2.f);
     Func f("f");
     f() = 2.f * param * param;
     Derivative d = propagate_adjoints(f);

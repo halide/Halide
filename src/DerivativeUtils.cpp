@@ -398,7 +398,7 @@ public:
 
     void visit(const Variable *op) override {
         IRGraphVisitor::visit(op);
-        if (op->param.defined()) {
+        if (op->param.defined() && op->type.is_float()) {
             buffer_calls[op->name] = BufferInfo{
                 op->param.dimensions(),
                 op->type
@@ -408,7 +408,7 @@ public:
 
     void visit(const Call *op) override {
         IRGraphVisitor::visit(op);
-        if (op->call_type == Call::Image) {
+        if (op->call_type == Call::Image && op->type.is_float()) {
             if (op->image.defined()) {
                 buffer_calls[op->name] = BufferInfo{
                     op->image.dimensions(),
