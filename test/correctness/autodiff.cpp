@@ -1247,9 +1247,11 @@ void test_select_guard() {
 
 void test_param() {
     Param<float> param("param", 2.f);
-    Buffer<float> buffer(2, "buffer");
-    buffer(0) = 1.f;
-    buffer(1) = 0.f;
+    ImageParam buffer(Float(32), 1, "buffer");
+    Buffer<float> b(2);
+    b(0) = 1.f;
+    b(1) = 0.f;
+    buffer.set(b);
     Func f("f");
     // buffer.width() is a parameter, make sure we handle it correctly.
     f() = param * param * buffer.width() * buffer(Expr(0));
