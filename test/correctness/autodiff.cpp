@@ -1246,51 +1246,58 @@ void test_select_guard() {
 }
 
 void test_param() {
-    // Give the parameter an illegal name to test the function renaming.
-    Param<float> param("param.0", 2.f);
+    Param<float> param("param", 2.f);
+    Buffer<float> buffer(2, "buffer");
+    buffer(0) = 1.f;
+    buffer(1) = 0.f;
     Func f("f");
-    f() = 2.f * param * param;
+    // buffer.width() is a parameter, make sure we handle it correctly.
+    f() = param * param * buffer.width() * buffer(Expr(0));
     Derivative d = propagate_adjoints(f);
     Func d_param = d(param);
     Buffer<float> d_param_buf = d_param.realize();
     check(__LINE__, d_param_buf(), 8.f);
+    Func d_buffer = d(buffer);
+    Buffer<float> d_buffer_buf = d_buffer.realize(2);
+    check(__LINE__, d_buffer_buf(0), 8.f);
+    check(__LINE__, d_buffer_buf(1), 0.f);
 }
 
 int main(int argc, char **argv) {
-    test_scalar<float>();
-    test_scalar<double>();
-    test_1d_box_no_clamp();
-    test_1d_box();
-    test_2d_box();
-    test_update();
-    test_nonlinear_update();
-    test_rdom_conv();
-    test_horner_polynomial();
-    test_nonlinear_order_dependent_rdom();
-    test_1d_to_2d();
-    test_linear_resampling_1d();
-    test_linear_resampling_2d();
-    test_sparse_update();
-    test_histogram();
-    test_multiple_updates_histogram();
-    test_rdom_update();
-    test_repeat_edge();
-    test_constant_exterior();
-    test_repeat_image();
-    test_mirror_image();
-    test_mirror_interior();
-    test_second_order();
-    test_second_order_conv();
-    test_implicit_vars();
-    test_tuple();
-    test_floor_ceil();
-    test_downsampling();
-    test_upsampling();
-    test_transpose();
-    test_change_var();
-    test_rdom_predicate();
-    test_reverse_scan();
-    test_select_guard();
+    // test_scalar<float>();
+    // test_scalar<double>();
+    // test_1d_box_no_clamp();
+    // test_1d_box();
+    // test_2d_box();
+    // test_update();
+    // test_nonlinear_update();
+    // test_rdom_conv();
+    // test_horner_polynomial();
+    // test_nonlinear_order_dependent_rdom();
+    // test_1d_to_2d();
+    // test_linear_resampling_1d();
+    // test_linear_resampling_2d();
+    // test_sparse_update();
+    // test_histogram();
+    // test_multiple_updates_histogram();
+    // test_rdom_update();
+    // test_repeat_edge();
+    // test_constant_exterior();
+    // test_repeat_image();
+    // test_mirror_image();
+    // test_mirror_interior();
+    // test_second_order();
+    // test_second_order_conv();
+    // test_implicit_vars();
+    // test_tuple();
+    // test_floor_ceil();
+    // test_downsampling();
+    // test_upsampling();
+    // test_transpose();
+    // test_change_var();
+    // test_rdom_predicate();
+    // test_reverse_scan();
+    // test_select_guard();
     test_param();
     printf("[autodiff] Success!\n");
     return 0;
