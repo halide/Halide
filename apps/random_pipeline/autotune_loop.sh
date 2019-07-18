@@ -142,7 +142,11 @@ benchmark_sample() {
     fi
     record_command $BATCH $SAMPLE_ID "$CMD" "benchmark_command" $FAILED
 
-    NVPROF_CMD="HL_NUM_THREADS=32 nvprof --analysis-metrics -o ${BATCH}_${SAMPLE_ID}.nvprof ${D}/bench --output_extents=estimate --default_input_buffers=random:0:auto --default_input_scalars=estimate --benchmarks=all --benchmark_min_time=1 ${RUNGEN_ARGS}"
+    NVPROF_TIMELINE_CMD="HL_NUM_THREADS=32 nvprof --output-profile ${D}/timeline_${BATCH}_${SAMPLE_ID}.nvprof ${D}/bench --output_extents=estimate --default_input_buffers=random:0:auto --default_input_scalars=estimate --benchmarks=all --benchmark_min_time=1 ${RUNGEN_ARGS}"
+
+    NVPROF_METRICS_CMD="HL_NUM_THREADS=32 nvprof --analysis-metrics -o ${D}/metrics_${BATCH}_${SAMPLE_ID}.nvprof ${D}/bench --output_extents=estimate --default_input_buffers=random:0:auto --default_input_scalars=estimate --benchmarks=all --benchmark_min_time=1 ${RUNGEN_ARGS}"
+
+    NVPROF_CMD="${NVPROF_TIMELINE_CMD} && ${NVPROF_METRICS_CMD}"
     record_command $BATCH $SAMPLE_ID "$NVPROF_CMD" "nvprof_command" $FAILED
 
     if [[ ${FAILED} == 1 ]]; then
