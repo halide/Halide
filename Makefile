@@ -60,7 +60,6 @@ LLVM_COMPONENTS= $(shell $(LLVM_CONFIG) --components)
 # just use the major version. For historical reasons, we continue to multiply
 # by 10, to avoid changing all the ifdefs in our code.
 LLVM_VERSION = $(shell $(LLVM_CONFIG) --version | sed 's/\([0-9][0-9]*\)\.0.*/\10/')
-echo LLVM_VERSION is $(LLVM_VERSION)
 
 LLVM_FULL_VERSION = $(shell $(LLVM_CONFIG) --version)
 LLVM_BINDIR = $(shell $(LLVM_CONFIG) --bindir | sed -e 's/\\/\//g' -e 's/\([a-zA-Z]\):/\/\1/g')
