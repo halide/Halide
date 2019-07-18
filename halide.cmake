@@ -81,7 +81,7 @@ function(halide_generator NAME)
     # when in static-library mode.
     _halide_force_link_library("${NAME}_binary" "${HALIDE_COMPILER_LIB}")
   else()
-    target_link_libraries("${NAME}_binary" PRIVATE ${HALIDE_COMPILER_LIB})
+    target_link_libraries("${NAME}_binary" PRIVATE "${HALIDE_COMPILER_LIB}")
   endif()
 
   _halide_genfiles_dir(${BASENAME} GENFILES_DIR)
@@ -631,7 +631,8 @@ function(_halide_add_exec_generator_target EXEC_TARGET)
     add_custom_command(
       OUTPUT ${args_OUTPUTS}
       DEPENDS ${args_GENERATOR_BINARY}
-      COMMAND ${CMAKE_COMMAND} -E echo Running $<TARGET_FILE:${args_GENERATOR_BINARY}> ${args_GENERATOR_ARGS}
+      # Reduce noise during build; uncomment for debugging
+      # COMMAND ${CMAKE_COMMAND} -E echo Running $<TARGET_FILE:${args_GENERATOR_BINARY}> ${args_GENERATOR_ARGS}
       COMMAND ${RUN_WITHOUT_LEAKCHECK} $<TARGET_FILE:${args_GENERATOR_BINARY}> ${args_GENERATOR_ARGS}
       COMMENT "${EXTRA_OUTPUTS_COMMENT}"
     )
@@ -639,9 +640,11 @@ function(_halide_add_exec_generator_target EXEC_TARGET)
     add_custom_command(
       OUTPUT ${args_OUTPUTS}
       DEPENDS ${args_GENERATOR_BINARY}
-      COMMAND ${CMAKE_COMMAND} -E echo copying $<TARGET_FILE:${HALIDE_COMPILER_LIB}> to "$<TARGET_FILE_DIR:${args_GENERATOR_BINARY}>"
+      # Reduce noise during build; uncomment for debugging
+      # COMMAND ${CMAKE_COMMAND} -E echo copying $<TARGET_FILE:${HALIDE_COMPILER_LIB}> to "$<TARGET_FILE_DIR:${args_GENERATOR_BINARY}>"
       COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:${HALIDE_COMPILER_LIB}> "$<TARGET_FILE_DIR:${args_GENERATOR_BINARY}>"
-      COMMAND ${CMAKE_COMMAND} -E echo Running $<TARGET_FILE:${args_GENERATOR_BINARY}> ${args_GENERATOR_ARGS}
+      # Reduce noise during build; uncomment for debugging
+      # COMMAND ${CMAKE_COMMAND} -E echo Running $<TARGET_FILE:${args_GENERATOR_BINARY}> ${args_GENERATOR_ARGS}
       COMMAND ${RUN_WITHOUT_LEAKCHECK} $<TARGET_FILE:${args_GENERATOR_BINARY}> ${args_GENERATOR_ARGS}
       COMMENT "${EXTRA_OUTPUTS_COMMENT}"
     )

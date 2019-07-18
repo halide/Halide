@@ -88,7 +88,7 @@ protected:
 /** A mutator that caches and reapplies previously-done mutations, so
  * that it can handle graphs of IR that have not had CSE done to
  * them. */
-class IRGraphMutator2 : public IRMutator {
+class IRGraphMutator : public IRMutator {
 protected:
     std::map<Expr, Expr, ExprCompare> expr_replacements;
     std::map<Stmt, Stmt, Stmt::Compare> stmt_replacements;

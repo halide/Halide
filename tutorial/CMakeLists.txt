@@ -1,7 +1,5 @@
 include(CMakeParseArguments)
 
-include_directories("${CMAKE_BINARY_DIR}/tools")
-
 # Detect if we need supress -Wunused-but-set-variable warning.  This warning
 # might be emitted by gcc for the tutorials as they don't always use a result
 # when showing a demonstration of a computation in C code.
@@ -24,7 +22,7 @@ function(add_tutorial source_file)
   add_halide_test("${name}"
            GROUPS test_tutorial
            WORKING_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
-  target_include_directories(${name} PRIVATE "${CMAKE_SOURCE_DIR}/tools")
+  target_include_directories(${name} PRIVATE "${HALIDE_TOOLS_DIR}")
   if (SUPPORT_NO_UNUSED_BUT_SET_VARIABLE)
     target_compile_options(${name} PRIVATE "-Wno-unused-but-set-variable")
   endif()
@@ -92,7 +90,7 @@ if (BUILD_AOT_TUTORIAL)
   target_link_libraries(lesson_10_aot_compilation_run PRIVATE "${FILTER_DIR}/${FILTER_LIB}")
   target_include_directories(lesson_10_aot_compilation_run PRIVATE "${FILTER_DIR}")
   # Needed to find HalideBuffer.h
-  target_include_directories(lesson_10_aot_compilation_run PRIVATE "${CMAKE_BINARY_DIR}/include")
+  target_include_directories(lesson_10_aot_compilation_run PRIVATE "${HALIDE_INCLUDE_DIR}")
 
   if (NOT WIN32)
     target_link_libraries(lesson_10_aot_compilation_run PRIVATE dl pthread)
