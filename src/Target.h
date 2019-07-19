@@ -82,6 +82,7 @@ struct Target {
         CLHalf = halide_target_feature_cl_half,
         OpenGL = halide_target_feature_opengl,
         OpenGLCompute = halide_target_feature_openglcompute,
+        EGL = halide_target_feature_egl,
         UserContext = halide_target_feature_user_context,
         Matlab = halide_target_feature_matlab,
         Profile = halide_target_feature_profile,
@@ -118,6 +119,8 @@ struct Target {
         DisableLLVMLoopUnroll = halide_target_feature_disable_llvm_loop_unroll,
         WasmSimd128 = halide_target_feature_wasm_simd128,
         WasmSignExt = halide_target_feature_wasm_signext,
+        SVE = halide_target_feature_sve,
+        SVE2 = halide_target_feature_sve2,
         FeatureEnd = halide_target_feature_end
     };
     Target() : os(OSUnknown), arch(ArchUnknown), bits(0) {}

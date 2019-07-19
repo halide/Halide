@@ -110,6 +110,7 @@ void define_enums(py::module &m) {
         .value("CLHalf", Target::Feature::CLHalf)
         .value("OpenGL", Target::Feature::OpenGL)
         .value("OpenGLCompute", Target::Feature::OpenGLCompute)
+        .value("EGL", Target::Feature::EGL)
         .value("UserContext", Target::Feature::UserContext)
         .value("Matlab", Target::Feature::Matlab)
         .value("Profile", Target::Feature::Profile)
@@ -146,6 +147,8 @@ void define_enums(py::module &m) {
         .value("DisableLLVMLoopUnroll", Target::Feature::DisableLLVMLoopUnroll)
         .value("WasmSimd128", Target::Feature::WasmSimd128)
         .value("WasmSignExt", Target::Feature::WasmSignExt)
+        .value("SVE", Target::Feature::SVE)
+        .value("SVE2", Target::Feature::SVE2)
         .value("FeatureEnd", Target::Feature::FeatureEnd);
 
     py::enum_<halide_type_code_t>(m, "TypeCode")

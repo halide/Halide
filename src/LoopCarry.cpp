@@ -135,10 +135,10 @@ Expr scratch_index(int i, Type t) {
  * the next time step's version of some arbitrary Expr (which may be a
  * nasty graph). Variables that move non-linearly through time are
  * undefined Exprs in the scope. */
-class StepForwards : public IRGraphMutator2 {
+class StepForwards : public IRGraphMutator {
     const Scope<Expr> &linear;
 
-    using IRGraphMutator2::visit;
+    using IRGraphMutator::visit;
 
     Expr visit(const Variable *op) override {
         if (linear.contains(op->name)) {
