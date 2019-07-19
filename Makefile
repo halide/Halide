@@ -780,7 +780,6 @@ RUNTIME_CPP_COMPONENTS = \
   android_clock \
   android_host_cpu_count \
   android_io \
-  android_opengl_context \
   arm_cpu_features \
   buffer_t \
   cache \
@@ -805,7 +804,6 @@ RUNTIME_CPP_COMPONENTS = \
   ios_io \
   linux_clock \
   linux_host_cpu_count \
-  linux_opengl_context \
   linux_yield \
   matlab \
   metadata \
@@ -822,6 +820,8 @@ RUNTIME_CPP_COMPONENTS = \
   opencl \
   opengl \
   openglcompute \
+  opengl_egl_context \
+  opengl_glx_context \
   osx_clock \
   osx_get_symbol \
   osx_host_cpu_count \

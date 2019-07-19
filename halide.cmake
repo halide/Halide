@@ -468,6 +468,7 @@ function(_halide_runtime_target_name HALIDE_TARGET OUTVAR)
         cl_half
         opengl
         openglcompute
+        egl
         user_context
         matlab
         profile
