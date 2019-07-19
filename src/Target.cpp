@@ -330,6 +330,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"cl_half", Target::CLHalf},
     {"opengl", Target::OpenGL},
     {"openglcompute", Target::OpenGLCompute},
+    {"egl", Target::EGL},
     {"user_context", Target::UserContext},
     {"matlab", Target::Matlab},
     {"profile", Target::Profile},
