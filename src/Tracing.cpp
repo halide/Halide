@@ -321,7 +321,7 @@ public:
     RemoveRealizeOverOutput(const vector<Function> &o) : outputs(o) {}
 };
 
-Stmt inject_tracing(Stmt s, const string &pipeline_name,
+Stmt inject_tracing(Stmt s, const string &pipeline_name, bool trace_pipeline,
                     const map<string, Function> &env, const vector<Function> &outputs,
                     const Target &t) {
     Stmt original = s;
@@ -347,7 +347,7 @@ Stmt inject_tracing(Stmt s, const string &pipeline_name,
     // Strip off the dummy realize blocks
     s = RemoveRealizeOverOutput(outputs).mutate(s);
 
-    if (!s.same_as(original) || t.has_feature(Target::TracePipeline)) {
+    if (!s.same_as(original) || trace_pipeline || t.has_feature(Target::TracePipeline)) {
         // Add pipeline start and end events
         TraceEventBuilder builder;
         builder.func = pipeline_name;
