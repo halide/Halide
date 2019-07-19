@@ -347,7 +347,7 @@ Stmt inject_tracing(Stmt s, const string &pipeline_name,
     // Strip off the dummy realize blocks
     s = RemoveRealizeOverOutput(outputs).mutate(s);
 
-    if (!s.same_as(original)) {
+    if (!s.same_as(original) || t.has_feature(Target::TracePipeline)) {
         // Add pipeline start and end events
         TraceEventBuilder builder;
         builder.func = pipeline_name;

@@ -1255,6 +1255,7 @@ typedef enum halide_target_feature_t {
     halide_target_feature_trace_loads, ///< Trace all loads done by the pipeline. Equivalent to calling Func::trace_loads on every non-inlined Func.
     halide_target_feature_trace_stores, ///< Trace all stores done by the pipeline. Equivalent to calling Func::trace_stores on every non-inlined Func.
     halide_target_feature_trace_realizations, ///< Trace all realizations done by the pipeline. Equivalent to calling Func::trace_realizations on every non-inlined Func.
+    halide_target_feature_trace_pipeline, ///< Trace the pipeline.
     halide_target_feature_cuda_capability61,  ///< Enable CUDA compute capability 6.1 (Pascal)
     halide_target_feature_hvx_v65, ///< Enable Hexagon v65 architecture.
     halide_target_feature_hvx_v66, ///< Enable Hexagon v66 architecture.
