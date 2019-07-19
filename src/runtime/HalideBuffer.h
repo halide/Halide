@@ -1194,16 +1194,74 @@ public:
     }
 
 private:
+    template<typename T2, int D2>
+    struct CopyImplHelper {
+        template<typename MemType>
+        HALIDE_ALWAYS_INLINE static void copy_impl_typed(Buffer<const T2, D2> &src, Buffer<T2, D2> &dst) {
+            auto &typed_dst = (Buffer<MemType, D> &)dst;
+            auto &typed_src = (Buffer<const MemType, D> &)src;
+            typed_dst.for_each_value([&](MemType &dst, MemType src) {dst = src;}, typed_src);
+        }
+
+        template<int ElemSize>
+        static void copy_impl(Buffer<const T2, D2> &src, Buffer<T2, D2> &dst);
+
+        template<>
+        HALIDE_ALWAYS_INLINE static void copy_impl<1>(Buffer<const T2, D2> &src, Buffer<T2, D2> &dst) {
+            static_assert(sizeof(T2) == 1, "Wrong size");
+            copy_impl_typed<uint8_t>(src, dst);
+        }
+        template<>
+        HALIDE_ALWAYS_INLINE static void copy_impl<2>(Buffer<const T2, D2> &src, Buffer<T2, D2> &dst) {
+            static_assert(sizeof(T2) == 2, "Wrong size");
+            copy_impl_typed<uint16_t>(src, dst);
+        }
+        template<>
+        HALIDE_ALWAYS_INLINE static void copy_impl<4>(Buffer<const T2, D2> &src, Buffer<T2, D2> &dst) {
+            static_assert(sizeof(T2) == 4, "Wrong size");
+            copy_impl_typed<uint32_t>(src, dst);
+        }
+        template<>
+        HALIDE_ALWAYS_INLINE static void copy_impl<8>(Buffer<const T2, D2> &src, Buffer<T2, D2> &dst) {
+            static_assert(sizeof(T2) == 8, "Wrong size");
+            copy_impl_typed<uint64_t>(src, dst);
+        }
+    };
+
     // By far the most common case for copy_from() is to have matching, statically
     // known types; this allows us to avoid the runtime selection (and code expansion for
     // cases that will never be used) for those cases.
     template<typename T2, int D2>
     struct CopyImpl {
-        void operator()(Buffer<const T2, D2> &src, Buffer<T2, D2> &dst) {
+        HALIDE_ALWAYS_INLINE void operator()(Buffer<const T2, D2> &src, Buffer<T2, D2> &dst) {
+            // Default implementation, should only be handled by odd cases like Handle and bool
             dst.for_each_value([&](T2 &dst, T2 src) {dst = src;}, src);
         }
     };
 
+    // Specialize all the common cases to go thru a single instantiation per element *size*
+    #define HALIDE_SPECIALIZE_COPY_IMPL(TYPE, COPIER) \
+        template<int D2> \
+        struct CopyImpl<TYPE, D2> { \
+            HALIDE_ALWAYS_INLINE void operator()(Buffer<const TYPE, D2> &src, Buffer<TYPE, D2> &dst) { \
+                CopyImplHelper<TYPE, D2>::template copy_impl<sizeof(TYPE)>(src, dst); \
+            } \
+        };
+
+        HALIDE_SPECIALIZE_COPY_IMPL(uint8_t, copy_impl_1)
+        HALIDE_SPECIALIZE_COPY_IMPL(int8_t, copy_impl_1)
+        HALIDE_SPECIALIZE_COPY_IMPL(uint16_t, copy_impl_2)
+        HALIDE_SPECIALIZE_COPY_IMPL(int16_t, copy_impl_2)
+        HALIDE_SPECIALIZE_COPY_IMPL(uint32_t, copy_impl_4)
+        HALIDE_SPECIALIZE_COPY_IMPL(int32_t, copy_impl_4)
+        HALIDE_SPECIALIZE_COPY_IMPL(float, copy_impl_4)
+        HALIDE_SPECIALIZE_COPY_IMPL(uint64_t, copy_impl_8)
+        HALIDE_SPECIALIZE_COPY_IMPL(int64_t, copy_impl_8)
+        HALIDE_SPECIALIZE_COPY_IMPL(double, copy_impl_8)
+
+    #undef HALIDE_SPECIALIZE_COPY_IMPL
+
+    // Finally, specialize for the type-not-known-at-compile-time case.
     template<int D2>
     struct CopyImpl<void, D2> {
         void operator()(Buffer<const void, D2> &src, Buffer<void, D2> &dst) {
@@ -1214,25 +1272,13 @@ private:
             // appropriately-typed lambda. We're copying, so we only care
             // about the element size.
             if (t.bytes() == 1) {
-                using MemType = uint8_t;
-                auto &typed_dst = (Buffer<MemType, D> &)dst;
-                auto &typed_src = (Buffer<const MemType, D> &)src;
-                typed_dst.for_each_value([&](MemType &dst, MemType src) {dst = src;}, typed_src);
+                copy_1(src, dst);
             } else if (t.bytes() == 2) {
-                using MemType = uint16_t;
-                auto &typed_dst = (Buffer<MemType, D> &)dst;
-                auto &typed_src = (Buffer<const MemType, D> &)src;
-                typed_dst.for_each_value([&](MemType &dst, MemType src) {dst = src;}, typed_src);
+                copy_2(src, dst);
             } else if (t.bytes() == 4) {
-                using MemType = uint32_t;
-                auto &typed_dst = (Buffer<MemType, D> &)dst;
-                auto &typed_src = (Buffer<const MemType, D> &)src;
-                typed_dst.for_each_value([&](MemType &dst, MemType src) {dst = src;}, typed_src);
+                copy_4(src, dst);
             } else if (t.bytes() == 8) {
-                using MemType = uint64_t;
-                auto &typed_dst = (Buffer<MemType, D> &)dst;
-                auto &typed_src = (Buffer<const MemType, D> &)src;
-                typed_dst.for_each_value([&](MemType &dst, MemType src) {dst = src;}, typed_src);
+                copy_8(src, dst);
             } else {
                 assert(false && "type().bytes() must be 1, 2, 4, or 8");
             }
