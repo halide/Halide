@@ -266,8 +266,6 @@ void CodeGen_PyTorch::test() {
   }
   string src = source.str() + "\n" + source_cuda.str();
 
-  std::cout << "pt\n" << src << "\n";
-
   // The correct source concatenates CPU and GPU headers
   string correct_src = 
 R"GOLDEN_CODE(#include "torch/extension.h"
