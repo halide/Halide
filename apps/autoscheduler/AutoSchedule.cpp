@@ -147,8 +147,8 @@ bool may_subtile() {
     static bool b = get_may_subtile();
     return b;
 }
- 
-/** moves vectorized dimension first and also removes dimensions with size 1 
+
+/** moves vectorized dimension first and also removes dimensions with size 1
     to reflect actual thread dimensions when loop nests are lowered **/
 void lowered_dims(const vector<int64_t> &size, int vector_loop_i, vector<int64_t> &lowered_size) {
     if (vector_loop_i >= 0 && size[vector_loop_i] > 1) {
@@ -169,8 +169,8 @@ void lowered_dims(const vector<int64_t> &size, int vector_loop_i, vector<int64_t
 // threads_inner = True when we're generating block tilings, False when generating thread tilings
 // max_s hold max gpu_thread counts of all siblings in each dimension. Used to make sure union of
 // thread counts is under 1024 threshold.
-vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stage_sizes, 
-					     const vector<vector<int>> &pure_dims, 
+vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stage_sizes,
+					     const vector<vector<int>> &pure_dims,
 					     vector<int64_t> &max_s,
                int d, const vector<int> &vectorized_indices, bool threads_inner) {
     vector<vector<int64_t>> result;
@@ -201,7 +201,7 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stag
                 } else {
                     t.back() = threads_ext;
                 }
-                // for each complete tiling check that threads are within hardware limits 
+                // for each complete tiling check that threads are within hardware limits
                 if (d == ((int)(stage_sizes[0].size()) - 1)) {
                     vector<int64_t> lowered_size, thread_t;
                     if (threads_inner) {
@@ -224,7 +224,7 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stag
                             }
                         }
                         lowered_dims(stage_thread_t, vectorized_indices[stage], stage_lowered_size);
-                        // adjust max_size to account for other stages thread counts when we apply this tiling 
+                        // adjust max_size to account for other stages thread counts when we apply this tiling
                         for (size_t dim = 0; dim < stage_lowered_size.size(); dim++) {
                             if ( dim >= max_s.size() ) {
                                 max_s.push_back(stage_lowered_size[dim]);
@@ -232,7 +232,7 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stag
                                 max_s[dim] = std::max(max_s[dim], stage_lowered_size[dim]);
                             }
                         }
-                    }	
+                    }
                     int64_t total_threads_used = 1;
                     int64_t not_ext1 = 0;
                     int64_t union_threads;
@@ -248,11 +248,11 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stag
                         not_ext1 = not_ext1 + ( (union_threads > 1) ? 1 : 0 );
                         total_threads_used *= union_threads;
                     }
-                    if (total_threads_used > total_threads_limit || not_ext1 > 3) 
+                    if (total_threads_used > total_threads_limit || not_ext1 > 3)
                         break;
-                }		
+                }
                 result.push_back(t);
-            }   
+            }
 
             // The sequence above (in terms of the inner loop) goes
             // (32 64 128 256 512 ... ) x (1 2 4 8 16 ... )
@@ -264,7 +264,7 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stag
                     t.back() = other16;
                 else
                     t.back() = threads16;
-                // check that threads are within hardware limits 
+                // check that threads are within hardware limits
                 if (d == ((int)(stage_sizes[0].size()) - 1)) {
                     vector<int64_t> lowered_size, thread_t;
                     if (threads_inner) {
@@ -288,15 +288,15 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stag
                             }
                         }
                         lowered_dims(stage_thread_t, vectorized_indices[stage], stage_lowered_size);
-                        // adjust max_size to account for other stages thread counts when we apply this tiling 
+                        // adjust max_size to account for other stages thread counts when we apply this tiling
                         for (size_t dim = 0; dim < stage_lowered_size.size(); dim++) {
                             if ( dim >= max_s.size() ) {
                                 max_s.push_back(stage_lowered_size[dim]);
                             } else {
                                 max_s[dim] = std::max(max_s[dim], stage_lowered_size[dim]);
                             }
-                        }   
-                    }	
+                        }
+                    }
                     int64_t total_threads_used = 1;
                     int64_t not_ext1 = 0;
                     int64_t union_threads;
@@ -436,7 +436,7 @@ vector<vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, int fa
 
 template<typename T>
 using NodeMap = PerfectHashMap<FunctionDAG::Node, T>;
- 
+
 template<typename T>
 using StageMap = PerfectHashMap<FunctionDAG::Node::Stage, T>;
 
@@ -528,11 +528,11 @@ struct LoopNest {
         return max_size;
     }
 
-    // given a newly inserted node f into this LoopNest, gets the size of 
-    // all of f's stages and their pure_dim indices 
-    void get_stage_sizes(const FunctionDAG::Node *f, 
-        vector<vector<int64_t>> &stage_sizes, 
-			  vector<vector<int>> &pure_dims, 
+    // given a newly inserted node f into this LoopNest, gets the size of
+    // all of f's stages and their pure_dim indices
+    void get_stage_sizes(const FunctionDAG::Node *f,
+        vector<vector<int64_t>> &stage_sizes,
+			  vector<vector<int>> &pure_dims,
 			  vector<int> &vectorized_indices) {
         stage_sizes.resize(f->stages.size());
         pure_dims.resize(f->stages.size());
@@ -2253,7 +2253,7 @@ struct LoopNest {
         // once we enter a gpu block loop compute union thread counts to pass down
         if (gpu_label == block) {
 	    union_counts = get_union_thread_counts(f);
-        } 
+        }
         // HACK (when true)
         const bool force_only_output_compute_root = false;
 
@@ -2547,7 +2547,7 @@ struct LoopNest {
                 }
 
                 in_threads_loop |= (children[child]->gpu_label == thread);
-                // we must pass down union thread count constraints computed at block level when computing further in 
+                // we must pass down union thread count constraints computed at block level when computing further in
                 auto opts = children[child]->compute_in_tiles(f, this, params, target, v, store_here, in_threads_loop, union_counts);
                 for (IntrusivePtr<const LoopNest> &n : opts) {
                     // (Only valid if one child calls f) Push the
@@ -3601,7 +3601,7 @@ struct State {
                         // step 2) split all parallel loops for this node into to (blocks, thread) loop
                         //const vector<int64_t> *parallel_size = nullptr;
                         //int vectorized_loop_i = -1;
-    
+
                         vector<vector<int64_t>> stage_sizes;
 			                  vector<vector<int>> pure_dims;
 			                  vector<int> vectorized_indices;
