@@ -870,7 +870,7 @@ public:
                       "To construct an Buffer<void>, pass a halide_type_t as the first argument to the constructor");
         int extents[] = {first, second, rest...};
         buf.type = static_halide_type();
-        buf.dimensions = 2 + (int)(sizeof...(rest));;
+        buf.dimensions = 2 + (int)(sizeof...(rest));
         make_shape_storage();
         initialize_shape(extents);
         if (!Internal::any_zero(extents)) {
