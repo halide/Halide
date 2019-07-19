@@ -305,10 +305,9 @@ private:
         }
     }
 
-    /** Initialize the shape from a parameter pack of ints */
-    void initialize_shape(const int limit, const int *sizes) {
-        assert(limit <= buf.dimensions);
-        for (int i = 0; i < limit; i++) {
+    /** Initialize the shape from an array of ints */
+    void initialize_shape(const int *sizes) {
+        for (int i = 0; i < buf.dimensions; i++) {
             buf.dim[i].min = 0;
             buf.dim[i].extent = sizes[i];
             if (i == 0) {
@@ -321,8 +320,8 @@ private:
 
     /** Initialize the shape from a vector of extents */
     void initialize_shape(const std::vector<int> &sizes) {
-        assert(sizes.size() <= std::numeric_limits<int>::max());
-        initialize_shape((int)sizes.size(), sizes.data());
+        assert(buf.dimensions = (int)sizes.size());
+        initialize_shape(sizes.data());
     }
 
     /** Initialize the shape from the static shape of an array */
@@ -834,9 +833,9 @@ public:
         }
         int extents[] = {first, rest...};
         buf.type = t;
-        buf.dimensions = (int)(sizeof...(rest) + 1);
+        buf.dimensions = 1 + (int)(sizeof...(rest));
         make_shape_storage();
-        initialize_shape(buf.dimensions, extents);
+        initialize_shape(extents);
         if (!Internal::any_zero(extents)) {
             check_overflow();
             allocate();
@@ -857,7 +856,7 @@ public:
         buf.type = static_halide_type();
         buf.dimensions = 1;
         make_shape_storage();
-        initialize_shape(buf.dimensions, extents);
+        initialize_shape(extents);
         if (first != 0) {
             check_overflow();
             allocate();
@@ -871,9 +870,9 @@ public:
                       "To construct an Buffer<void>, pass a halide_type_t as the first argument to the constructor");
         int extents[] = {first, second, rest...};
         buf.type = static_halide_type();
-        buf.dimensions = (int)(sizeof...(rest) + 2);
+        buf.dimensions = 2 + (int)(sizeof...(rest));;
         make_shape_storage();
-        initialize_shape(buf.dimensions, extents);
+        initialize_shape(extents);
         if (!Internal::any_zero(extents)) {
             check_overflow();
             allocate();
@@ -946,10 +945,10 @@ public:
         }
         int extents[] = {first, rest...};
         buf.type = t;
-        buf.dimensions = (int)(sizeof...(rest) + 1);
+        buf.dimensions = 1 + (int)(sizeof...(rest));
         buf.host = (uint8_t *) const_cast<void *>(data);
         make_shape_storage();
-        initialize_shape(buf.dimensions, extents);
+        initialize_shape(extents);
     }
 
     /** Initialize an Buffer from a pointer and some sizes. Assumes
@@ -960,10 +959,10 @@ public:
     explicit Buffer(T *data, int first, Args&&... rest) {
         int extents[] = {first, rest...};
         buf.type = static_halide_type();
-        buf.dimensions = (int)(sizeof...(rest) + 1);
+        buf.dimensions = 1 + (int)(sizeof...(rest));
         buf.host = (uint8_t *) const_cast<typename std::remove_const<T>::type *>(data);
         make_shape_storage();
-        initialize_shape(buf.dimensions, extents);
+        initialize_shape(extents);
     }
 
     /** Initialize an Buffer from a pointer and a vector of
