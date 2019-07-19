@@ -899,8 +899,42 @@ struct LoopNest {
         return min_loads;
     }
 
-    std::pair<int, int> compute_warp_features(int64_t outer_loop_product, ScheduleFeatures& features) const {
+    // Assumes block, serial, thread or block, thread nesting
+    const LoopNest* get_enclosing_block(const LoopNest *parent, const LoopNest *grandparent) const {
+        internal_assert(gpu_label == thread);
+
+        if (parent->gpu_label == block && grandparent->is_root()) {
+            return parent;
+        }
+
+        if (parent->gpu_label == serial && grandparent->gpu_label == block) {
+            return grandparent;
+        }
+
+        internal_error << "Invalid nesting: " << parent->gpu_label << ", " << grandparent->gpu_label << "\n";
+        return nullptr;
+    }
+
+    std::pair<int, int> compute_warp_features(int64_t outer_loop_product, ScheduleFeatures& features, const LoopNest *parent, const LoopNest *grandparent) const {
+        const LoopNest* block = get_enclosing_block(parent, grandparent);
+
+        int max_threads[3] = {1024, 1024, 64};
+        auto max_thread_counts = block->get_union_thread_counts(nullptr);
+
+        int64_t num_threads_in_this_block = 1;
         int num_thread_loops = 0;
+        for (auto c : max_thread_counts) {
+            internal_assert(c <= max_threads[num_thread_loops]);
+
+            if (num_thread_loops >= 3 || num_threads_in_this_block * c > MAX_THREADS_PER_BLOCK) {
+                break;
+            }
+
+            num_threads_in_this_block *= c;
+            ++num_thread_loops;
+        }
+
+        num_thread_loops = 0;
         int64_t num_threads = 1;
 
         if (vectorized_loop_index != -1) {
@@ -914,16 +948,15 @@ struct LoopNest {
             }
 
             num_threads *= size[i];
-            num_thread_loops++;
+            ++num_thread_loops;
         }
 
         int num_full_warps = num_threads / 32;
-        features.warp_lane_utilization = 1;
+        features.warp_lane_utilization = (double)num_threads / (double)num_threads_in_this_block;
         features.num_warps = num_full_warps;
 
         int partial_warp_lanes = num_threads % 32;
         if (partial_warp_lanes != 0) {
-            features.warp_lane_utilization = (num_full_warps + partial_warp_lanes / 32.) / (num_full_warps + 1);
             features.num_warps++;
         }
 
@@ -1296,7 +1329,7 @@ struct LoopNest {
                 compute_loops.push_back(bounds->loops(stage_idx, i).extent());
             }
 
-            auto warp_features = compute_warp_features(instances, feat);
+            auto warp_features = compute_warp_features(instances, feat, parent, grandparent);
             num_full_warps = warp_features.first;
             num_partial_warp_lanes = warp_features.second;
         }
