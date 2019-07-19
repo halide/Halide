@@ -1245,13 +1245,13 @@ private:
             // appropriately-typed lambda. We're copying, so we only care
             // about the element size.
             if (t.bytes() == 1) {
-                copy_1(src, dst);
+                copy_impl_typed<uint8_t, void, D2>(src, dst);
             } else if (t.bytes() == 2) {
-                copy_2(src, dst);
+                copy_impl_typed<uint16_t, void, D2>(src, dst);
             } else if (t.bytes() == 4) {
-                copy_4(src, dst);
+                copy_impl_typed<uint32_t, void, D2>(src, dst);
             } else if (t.bytes() == 8) {
-                copy_8(src, dst);
+                copy_impl_typed<uint64_t, void, D2>(src, dst);
             } else {
                 assert(false && "type().bytes() must be 1, 2, 4, or 8");
             }
