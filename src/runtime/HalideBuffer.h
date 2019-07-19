@@ -1193,6 +1193,53 @@ public:
         return *this;
     }
 
+private:
+    // By far the most common case for copy_from() is to have matching, statically
+    // known types; this allows us to avoid the runtime selection (and code expansion for
+    // cases that will never be used) for those cases.
+    template<typename T2, int D2>
+    struct CopyImpl {
+        void operator()(Buffer<const T2, D2> &src, Buffer<T2, D2> &dst) {
+            dst.for_each_value([&](T2 &dst, T2 src) {dst = src;}, src);
+        }
+    };
+
+    template<int D2>
+    struct CopyImpl<void, D2> {
+        void operator()(Buffer<const void, D2> &src, Buffer<void, D2> &dst) {
+            const halide_type_t t = src.type();
+            assert(t == dst.type());
+
+            // If T is void, we need to do runtime dispatch to an
+            // appropriately-typed lambda. We're copying, so we only care
+            // about the element size.
+            if (t.bytes() == 1) {
+                using MemType = uint8_t;
+                auto &typed_dst = (Buffer<MemType, D> &)dst;
+                auto &typed_src = (Buffer<const MemType, D> &)src;
+                typed_dst.for_each_value([&](MemType &dst, MemType src) {dst = src;}, typed_src);
+            } else if (t.bytes() == 2) {
+                using MemType = uint16_t;
+                auto &typed_dst = (Buffer<MemType, D> &)dst;
+                auto &typed_src = (Buffer<const MemType, D> &)src;
+                typed_dst.for_each_value([&](MemType &dst, MemType src) {dst = src;}, typed_src);
+            } else if (t.bytes() == 4) {
+                using MemType = uint32_t;
+                auto &typed_dst = (Buffer<MemType, D> &)dst;
+                auto &typed_src = (Buffer<const MemType, D> &)src;
+                typed_dst.for_each_value([&](MemType &dst, MemType src) {dst = src;}, typed_src);
+            } else if (t.bytes() == 8) {
+                using MemType = uint64_t;
+                auto &typed_dst = (Buffer<MemType, D> &)dst;
+                auto &typed_src = (Buffer<const MemType, D> &)src;
+                typed_dst.for_each_value([&](MemType &dst, MemType src) {dst = src;}, typed_src);
+            } else {
+                assert(false && "type().bytes() must be 1, 2, 4, or 8");
+            }
+        }
+    };
+
+public:
     /** Fill a Buffer with the values at the same coordinates in
      * another Buffer. Restricts itself to coordinates contained
      * within the intersection of the two buffers. If the two Buffers
@@ -1208,8 +1255,8 @@ public:
         assert(!device_dirty() && "Cannot call Halide::Runtime::Buffer::copy_from on a device dirty destination.");
         assert(!other.device_dirty() && "Cannot call Halide::Runtime::Buffer::copy_from on a device dirty source.");
 
-        Buffer<const T, D> src(other);
-        Buffer<T, D> dst(*this);
+        Buffer<const not_const_T, D> src(other);
+        Buffer<not_const_T, D> dst(*this);
 
         assert(src.dimensions() == dst.dimensions());
 
@@ -1225,32 +1272,7 @@ public:
             src.crop(i, min_coord, max_coord - min_coord + 1);
         }
 
-        // If T is void, we need to do runtime dispatch to an
-        // appropriately-typed lambda. We're copying, so we only care
-        // about the element size.
-        if (type().bytes() == 1) {
-            using MemType = uint8_t;
-            auto &typed_dst = (Buffer<MemType, D> &)dst;
-            auto &typed_src = (Buffer<const MemType, D> &)src;
-            typed_dst.for_each_value([&](MemType &dst, MemType src) {dst = src;}, typed_src);
-        } else if (type().bytes() == 2) {
-            using MemType = uint16_t;
-            auto &typed_dst = (Buffer<MemType, D> &)dst;
-            auto &typed_src = (Buffer<const MemType, D> &)src;
-            typed_dst.for_each_value([&](MemType &dst, MemType src) {dst = src;}, typed_src);
-        } else if (type().bytes() == 4) {
-            using MemType = uint32_t;
-            auto &typed_dst = (Buffer<MemType, D> &)dst;
-            auto &typed_src = (Buffer<const MemType, D> &)src;
-            typed_dst.for_each_value([&](MemType &dst, MemType src) {dst = src;}, typed_src);
-        } else if (type().bytes() == 8) {
-            using MemType = uint64_t;
-            auto &typed_dst = (Buffer<MemType, D> &)dst;
-            auto &typed_src = (Buffer<const MemType, D> &)src;
-            typed_dst.for_each_value([&](MemType &dst, MemType src) {dst = src;}, typed_src);
-        } else {
-            assert(false && "type().bytes() must be 1, 2, 4, or 8");
-        }
+        CopyImpl<not_const_T, D>()(src, dst);
         set_host_dirty();
     }
 
