@@ -320,7 +320,7 @@ private:
 
     /** Initialize the shape from a vector of extents */
     void initialize_shape(const std::vector<int> &sizes) {
-        assert(buf.dimensions = (int)sizes.size());
+        assert(buf.dimensions == (int)sizes.size());
         initialize_shape(sizes.data());
     }
 
