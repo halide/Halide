@@ -1194,39 +1194,12 @@ public:
     }
 
 private:
-    template<typename T2, int D2>
-    struct CopyImplHelper {
-        template<typename MemType>
-        HALIDE_ALWAYS_INLINE static void copy_impl_typed(Buffer<const T2, D2> &src, Buffer<T2, D2> &dst) {
-            auto &typed_dst = (Buffer<MemType, D> &)dst;
-            auto &typed_src = (Buffer<const MemType, D> &)src;
-            typed_dst.for_each_value([&](MemType &dst, MemType src) {dst = src;}, typed_src);
-        }
-
-        template<int ElemSize>
-        static void copy_impl(Buffer<const T2, D2> &src, Buffer<T2, D2> &dst);
-
-        template<>
-        HALIDE_ALWAYS_INLINE static void copy_impl<1>(Buffer<const T2, D2> &src, Buffer<T2, D2> &dst) {
-            static_assert(sizeof(T2) == 1, "Wrong size");
-            copy_impl_typed<uint8_t>(src, dst);
-        }
-        template<>
-        HALIDE_ALWAYS_INLINE static void copy_impl<2>(Buffer<const T2, D2> &src, Buffer<T2, D2> &dst) {
-            static_assert(sizeof(T2) == 2, "Wrong size");
-            copy_impl_typed<uint16_t>(src, dst);
-        }
-        template<>
-        HALIDE_ALWAYS_INLINE static void copy_impl<4>(Buffer<const T2, D2> &src, Buffer<T2, D2> &dst) {
-            static_assert(sizeof(T2) == 4, "Wrong size");
-            copy_impl_typed<uint32_t>(src, dst);
-        }
-        template<>
-        HALIDE_ALWAYS_INLINE static void copy_impl<8>(Buffer<const T2, D2> &src, Buffer<T2, D2> &dst) {
-            static_assert(sizeof(T2) == 8, "Wrong size");
-            copy_impl_typed<uint64_t>(src, dst);
-        }
-    };
+    template<typename COPY_AS_TYPE, typename T2, int D2>
+    HALIDE_ALWAYS_INLINE static void copy_impl_typed(Buffer<const T2, D2> &src, Buffer<T2, D2> &dst) {
+        auto &typed_dst = (Buffer<COPY_AS_TYPE, D> &)dst;
+        auto &typed_src = (Buffer<const COPY_AS_TYPE, D> &)src;
+        typed_dst.for_each_value([&](COPY_AS_TYPE &dst, COPY_AS_TYPE src) {dst = src;}, typed_src);
+    }
 
     // By far the most common case for copy_from() is to have matching, statically
     // known types; this allows us to avoid the runtime selection (and code expansion for
@@ -1240,24 +1213,24 @@ private:
     };
 
     // Specialize all the common cases to go thru a single instantiation per element *size*
-    #define HALIDE_SPECIALIZE_COPY_IMPL(TYPE, COPIER) \
+    #define HALIDE_SPECIALIZE_COPY_IMPL(TYPE, COPY_AS_TYPE) \
         template<int D2> \
         struct CopyImpl<TYPE, D2> { \
             HALIDE_ALWAYS_INLINE void operator()(Buffer<const TYPE, D2> &src, Buffer<TYPE, D2> &dst) { \
-                CopyImplHelper<TYPE, D2>::template copy_impl<sizeof(TYPE)>(src, dst); \
+                copy_impl_typed<COPY_AS_TYPE, TYPE, D2>(src, dst); \
             } \
         };
 
-        HALIDE_SPECIALIZE_COPY_IMPL(uint8_t, copy_impl_1)
-        HALIDE_SPECIALIZE_COPY_IMPL(int8_t, copy_impl_1)
-        HALIDE_SPECIALIZE_COPY_IMPL(uint16_t, copy_impl_2)
-        HALIDE_SPECIALIZE_COPY_IMPL(int16_t, copy_impl_2)
-        HALIDE_SPECIALIZE_COPY_IMPL(uint32_t, copy_impl_4)
-        HALIDE_SPECIALIZE_COPY_IMPL(int32_t, copy_impl_4)
-        HALIDE_SPECIALIZE_COPY_IMPL(float, copy_impl_4)
-        HALIDE_SPECIALIZE_COPY_IMPL(uint64_t, copy_impl_8)
-        HALIDE_SPECIALIZE_COPY_IMPL(int64_t, copy_impl_8)
-        HALIDE_SPECIALIZE_COPY_IMPL(double, copy_impl_8)
+        HALIDE_SPECIALIZE_COPY_IMPL(uint8_t,  uint8_t)
+        HALIDE_SPECIALIZE_COPY_IMPL(int8_t,   uint8_t)
+        HALIDE_SPECIALIZE_COPY_IMPL(uint16_t, uint16_t)
+        HALIDE_SPECIALIZE_COPY_IMPL(int16_t,  uint16_t)
+        HALIDE_SPECIALIZE_COPY_IMPL(uint32_t, uint32_t)
+        HALIDE_SPECIALIZE_COPY_IMPL(int32_t,  uint32_t)
+        HALIDE_SPECIALIZE_COPY_IMPL(float,    uint32_t)
+        HALIDE_SPECIALIZE_COPY_IMPL(uint64_t, uint64_t)
+        HALIDE_SPECIALIZE_COPY_IMPL(int64_t,  uint64_t)
+        HALIDE_SPECIALIZE_COPY_IMPL(double,   uint64_t)
 
     #undef HALIDE_SPECIALIZE_COPY_IMPL
 
