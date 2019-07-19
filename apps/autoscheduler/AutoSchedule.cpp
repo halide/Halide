@@ -951,11 +951,11 @@ struct LoopNest {
             ++num_thread_loops;
         }
 
-        int num_full_warps = num_threads / 32;
+        int num_full_warps = num_threads_in_this_block / 32;
         features.warp_lane_utilization = (double)num_threads / (double)num_threads_in_this_block;
         features.num_warps = num_full_warps;
 
-        int partial_warp_lanes = num_threads % 32;
+        int partial_warp_lanes = num_threads_in_this_block % 32;
         if (partial_warp_lanes != 0) {
             features.num_warps++;
         }
