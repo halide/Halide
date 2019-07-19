@@ -39,6 +39,7 @@ const string headers =
     "#include <math.h>\n"
     "#include <float.h>\n"
     "#include <assert.h>\n"
+    "#include <limits.h>\n"
     "#include <string.h>\n"
     "#include <stdio.h>\n"
     "#include <stdint.h>\n";
@@ -194,7 +195,6 @@ public:
     }
 };
 } // namespace
-
 )INLINE_CODE";
 }  // namespace
 
@@ -334,6 +334,8 @@ CodeGen_C::CodeGen_C(ostream &s, Target t, OutputKind output_kind, const std::st
             << globals
             << halide_internal_runtime_header_HalideRuntime_h << '\n'
             << halide_internal_initmod_inlined_c << '\n';
+        add_common_macros(stream);
+        stream << '\n';
     }
 
     // Throw in a default (empty) definition of HALIDE_FUNCTION_ATTRS
@@ -508,6 +510,24 @@ string type_to_c_type(Type type, bool include_space, bool c_plus_plus = true) {
 }
 
 }  // namespace
+
+void CodeGen_C::add_common_macros(std::ostream &dest) {
+    const char *macros = R"INLINE_CODE(
+// ll suffix in OpenCL is reserver for 128-bit integers.
+#if defined __OPENCL_VERSION__
+#define ADD_INT64_T_SUFFIX(x) x##l
+#define ADD_UINT64_T_SUFFIX(x) x##ul
+// HLSL doesn't have any suffixes.
+#elif defined HLSL_VERSION
+#define ADD_INT64_T_SUFFIX(x) x
+#define ADD_UINT64_T_SUFFIX(x) x
+#else
+#define ADD_INT64_T_SUFFIX(x) x##ll
+#define ADD_UINT64_T_SUFFIX(x) x##ull
+#endif
+)INLINE_CODE";
+    dest << macros;
+}
 
 void CodeGen_C::add_vector_typedefs(const std::set<Type> &vector_types) {
     if (!vector_types.empty()) {
@@ -2064,12 +2084,12 @@ void CodeGen_C::visit(const IntImm *op) {
     if (op->type == Int(32)) {
         id = std::to_string(op->value);
     } else {
-        print_assignment(op->type, "(" + print_type(op->type) + ")(" + std::to_string(op->value) + ")");
+        print_assignment(op->type, "(" + print_type(op->type) + ")(ADD_INT64_T_SUFFIX(" + std::to_string(op->value) + "))");
     }
 }
 
 void CodeGen_C::visit(const UIntImm *op) {
-    print_assignment(op->type, "(" + print_type(op->type) + ")(" + std::to_string(op->value) + ")");
+    print_assignment(op->type, "(" + print_type(op->type) + ")(ADD_UINT64_T_SUFFIX(" + std::to_string(op->value) + "))");
 }
 
 void CodeGen_C::visit(const StringImm *op) {
@@ -2947,17 +2967,20 @@ void CodeGen_C::test() {
     m.append(LoweredFunc("test1", args, s, LinkageType::External));
 
     ostringstream source;
+    ostringstream macros;
     {
         CodeGen_C cg(source, Target("host"), CodeGen_C::CImplementation);
         cg.compile(m);
+        cg.add_common_macros(macros);
     }
 
     string src = source.str();
     string correct_source =
         headers +
         globals +
-        string((const char *)halide_internal_runtime_header_HalideRuntime_h) + '\n' +
-        string((const char *)halide_internal_initmod_inlined_c) + R"GOLDEN_CODE(
+        string((const char *) halide_internal_runtime_header_HalideRuntime_h) + '\n' +
+        string((const char *) halide_internal_initmod_inlined_c) + '\n' +
+        macros.str() + R"GOLDEN_CODE(
 #ifndef HALIDE_FUNCTION_ATTRS
 #define HALIDE_FUNCTION_ATTRS
 #endif

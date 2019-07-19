@@ -24,8 +24,17 @@ if("${HALIDE_REQUIRE_LLVM_VERSION}" STREQUAL "")
   find_package(LLVM REQUIRED CONFIG)
 else()
   # Find a specific version.
-  string(SUBSTRING "${HALIDE_REQUIRE_LLVM_VERSION}" 0 1 MAJOR)
-  string(SUBSTRING "${HALIDE_REQUIRE_LLVM_VERSION}" 1 1 MINOR)
+  string(REGEX REPLACE
+    "^([0-9]+)([0-9])$"
+    "\\1"
+    MAJOR
+    "${HALIDE_REQUIRE_LLVM_VERSION}")
+  string(REGEX REPLACE
+    "^([0-9]+)([0-9])$"
+    "\\2"
+    MINOR
+    "${HALIDE_REQUIRE_LLVM_VERSION}")
+  message("HALIDE_REQUIRE_LLVM_VERSION ${HALIDE_REQUIRE_LLVM_VERSION}")
   message("Looking for LLVM version ${MAJOR}.${MINOR}")
   find_package(LLVM "${MAJOR}.${MINOR}" REQUIRED CONFIG)
   if(NOT "${LLVM_VERSION_MAJOR}${LLVM_VERSION_MINOR}" STREQUAL "${MAJOR}${MINOR}")
@@ -113,11 +122,14 @@ check_tool_exists(llvm-nm "${LLVM_NM}")
 check_tool_exists(clang "${CLANG}")
 
 # Check reported LLVM version
-if (NOT "${LLVM_VERSION}" MATCHES "^[0-9][0-9]$")
-  message(FATAL_ERROR "LLVM_VERSION not specified correctly. Must be <major><minor> E.g. LLVM 7.0 is \"70\"")
+if (NOT "${LLVM_VERSION}" MATCHES "^[0-9]+$")
+  message(FATAL_ERROR "LLVM_VERSION not specified correctly, must be LLVM version times 10.")
 endif()
 if (LLVM_VERSION LESS 70)
   message(FATAL_ERROR "LLVM version must be 7.0 or newer")
+endif()
+if (LLVM_VERSION GREATER 100)
+  message(FATAL_ERROR "LLVM version must be 10.0 or older")
 endif()
 
 function(check_llvm_target TARGET HAS_TARGET)
