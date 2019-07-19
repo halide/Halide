@@ -170,9 +170,9 @@ void lowered_dims(const vector<int64_t> &size, int vector_loop_i, vector<int64_t
 // max_s hold max gpu_thread counts of all siblings in each dimension. Used to make sure union of
 // thread counts is under 1024 threshold.
 vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stage_sizes,
-					     const vector<vector<int>> &pure_dims,
-					     vector<int64_t> &max_s,
-               int d, const vector<int> &vectorized_indices, bool threads_inner) {
+        const vector<vector<int>> &pure_dims,
+        vector<int64_t> &max_s,
+        int d, const vector<int> &vectorized_indices, bool threads_inner) {
     vector<vector<int64_t>> result;
     if (d == -1) {
         result.push_back(vector<int64_t>());
@@ -315,7 +315,7 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stag
                     if (total_threads_used > total_threads_limit || not_ext1 > 3) {
                         continue;
                     }
-		            }
+                }
                 result.push_back(t);
             }
         }
@@ -532,21 +532,21 @@ struct LoopNest {
     // all of f's stages and their pure_dim indices
     void get_stage_sizes(const FunctionDAG::Node *f,
         vector<vector<int64_t>> &stage_sizes,
-			  vector<vector<int>> &pure_dims,
-			  vector<int> &vectorized_indices) {
+        vector<vector<int>> &pure_dims,
+        vector<int> &vectorized_indices) {
         stage_sizes.resize(f->stages.size());
         pure_dims.resize(f->stages.size());
         vectorized_indices.resize(f->stages.size());
         for (auto &c : children) {
             if (c->node == f && f->dimensions > 0) {
-		            vectorized_indices[c->stage->index] = c->vectorized_loop_index;
-		            stage_sizes[c->stage->index] = c->size;
-		            for (size_t i = 0; i < c->stage->loop.size(); i++) {
-		                pure_dims[c->stage->index].push_back(c->stage->loop[i].pure_dim);
-		            }
+                vectorized_indices[c->stage->index] = c->vectorized_loop_index;
+                stage_sizes[c->stage->index] = c->size;
+                for (size_t i = 0; i < c->stage->loop.size(); i++) {
+                    pure_dims[c->stage->index].push_back(c->stage->loop[i].pure_dim);
+                }
             }
         }
-	      /**
+        /**
         for (auto &c : children) {
             if (c->node == f && f->dimensions > 0) {
                 if (c->stage->index == 0) {
@@ -554,7 +554,7 @@ struct LoopNest {
                 }
             }
         }
-    	  **/
+        **/
     }
 
     // get the loop nests of a newly inserted node, f, that is marked GPU threads. Tiles
@@ -565,12 +565,12 @@ struct LoopNest {
                                 const Target &target,
                                 int v,
                                 vector<IntrusivePtr<const LoopNest>> &result,
-				vector<int64_t> max_size) {
+                                vector<int64_t> max_size) {
         vector<vector<int64_t>> stage_sizes;
         vector<vector<int>> pure_dims;
         vector<int> vectorized_indices;
         this->get_stage_sizes(f, stage_sizes, pure_dims, vectorized_indices);
-	      internal_assert(stage_sizes.size() != 0);
+        internal_assert(stage_sizes.size() != 0);
         //internal_assert(pure_size);
         auto tilings = generate_gpu_tilings(stage_sizes, pure_dims, max_size, (int)(stage_sizes[0].size() - 1), vectorized_indices, false);
 
@@ -2208,7 +2208,7 @@ struct LoopNest {
                                                           int v,
                                                           bool in_realization,
                                                           bool in_threads_loop,
-							  vector<int64_t> union_counts=vector<int64_t>()) const {
+                                                          vector<int64_t> union_counts=vector<int64_t>()) const {
         internal_assert(f);
 
         vector<IntrusivePtr<const LoopNest>> result;
@@ -2252,7 +2252,7 @@ struct LoopNest {
 
         // once we enter a gpu block loop compute union thread counts to pass down
         if (gpu_label == block) {
-	    union_counts = get_union_thread_counts(f);
+            union_counts = get_union_thread_counts(f);
         }
         // HACK (when true)
         const bool force_only_output_compute_root = false;
@@ -3603,10 +3603,10 @@ struct State {
                         //int vectorized_loop_i = -1;
 
                         vector<vector<int64_t>> stage_sizes;
-			                  vector<vector<int>> pure_dims;
-			                  vector<int> vectorized_indices;
-			                  parallel_root->get_stage_sizes(node, stage_sizes, pure_dims, vectorized_indices);
-			                  /**
+                        vector<vector<int>> pure_dims;
+                        vector<int> vectorized_indices;
+                        parallel_root->get_stage_sizes(node, stage_sizes, pure_dims, vectorized_indices);
+                        /**
                         for (auto &c : parallel_root->children) {
                             if (c->node == node) {
                                 if (c->stage->index == 0) {
@@ -3615,7 +3615,7 @@ struct State {
                                 }
                             }
                         }
-			                  **/
+                        **/
                         // at root level sibling thread counts are in separate blocks, extents are irrelevant
                         vector<int64_t> max_size((int)(stage_sizes[0].size()), 1);
 
