@@ -62,6 +62,17 @@ struct AllInts<float, Args...> : std::false_type {};
 template<typename ...Args>
 struct AllInts<double, Args...> : std::false_type {};
 
+// A helper to detect if there are any zeros in a container
+namespace Internal {
+template<typename Container>
+bool any_zero(const Container &c) {
+    for (int i : c) {
+        if (i == 0) return true;
+    }
+    return false;
+}
+}
+
 /** A struct acting as a header for allocations owned by the Buffer
  * class itself. */
 struct AllocationHeader {
@@ -294,21 +305,6 @@ private:
         }
     }
 
-    template<typename ...Args>
-    struct GatheredInts {
-        static constexpr int size = (int) sizeof...(Args);
-        const int values[sizeof...(Args)];
-
-        HALIDE_ALWAYS_INLINE explicit GatheredInts(Args... args) : values{args...} { }
-
-        bool any_zero() const {
-            for (int v : values) {
-                if (!v) return true;
-            }
-            return false;
-        }
-    };
-
     /** Initialize the shape from a parameter pack of ints */
     void initialize_shape(const int limit, const int *sizes) {
         assert(limit <= buf.dimensions);
@@ -367,13 +363,6 @@ private:
     template<typename T2>
     static halide_type_t scalar_type_of_array(const T2 &) {
         return halide_type_of<typename std::remove_cv<T2>::type>();
-    }
-
-    static bool any_zero(const std::vector<int> &v) {
-        for (int i : v) {
-            if (i == 0) return true;
-        }
-        return false;
     }
 
     /** Crop a single dimension without handling device allocation. */
@@ -843,12 +832,12 @@ public:
         if (!T_is_void) {
             assert(static_halide_type() == t);
         }
-        GatheredInts<int, Args...> extents(first, rest...);
+        int extents[] = {first, rest...};
         buf.type = t;
-        buf.dimensions = extents.size;
+        buf.dimensions = (int)(sizeof...(rest) + 1);
         make_shape_storage();
-        initialize_shape(extents.size, extents.values);
-        if (!extents.any_zero()) {
+        initialize_shape(buf.dimensions, extents);
+        if (!Internal::any_zero(extents)) {
             check_overflow();
             allocate();
         }
@@ -864,11 +853,11 @@ public:
     explicit Buffer(int first) {
         static_assert(!T_is_void,
                       "To construct an Buffer<void>, pass a halide_type_t as the first argument to the constructor");
-        GatheredInts<int> extents(first);
+        int extents[] = {first};
         buf.type = static_halide_type();
-        buf.dimensions = extents.size;
+        buf.dimensions = 1;
         make_shape_storage();
-        initialize_shape(extents.size, extents.values);
+        initialize_shape(buf.dimensions, extents);
         if (first != 0) {
             check_overflow();
             allocate();
@@ -880,12 +869,12 @@ public:
     Buffer(int first, int second, Args... rest) {
         static_assert(!T_is_void,
                       "To construct an Buffer<void>, pass a halide_type_t as the first argument to the constructor");
-        GatheredInts<int, int, Args...> extents(first, second, rest...);
+        int extents[] = {first, second, rest...};
         buf.type = static_halide_type();
-        buf.dimensions = extents.size;
+        buf.dimensions = (int)(sizeof...(rest) + 2);
         make_shape_storage();
-        initialize_shape(extents.size, extents.values);
-        if (!extents.any_zero()) {
+        initialize_shape(buf.dimensions, extents);
+        if (!Internal::any_zero(extents)) {
             check_overflow();
             allocate();
         }
@@ -901,7 +890,7 @@ public:
         buf.dimensions = (int)sizes.size();
         make_shape_storage();
         initialize_shape(sizes);
-        if (!any_zero(sizes)) {
+        if (!Internal::any_zero(sizes)) {
             check_overflow();
             allocate();
         }
@@ -955,12 +944,12 @@ public:
         if (!T_is_void) {
             assert(static_halide_type() == t);
         }
-        GatheredInts<int, Args...> extents(first, rest...);
+        int extents[] = {first, rest...};
         buf.type = t;
-        buf.dimensions = extents.size;
+        buf.dimensions = (int)(sizeof...(rest) + 1);
         buf.host = (uint8_t *) const_cast<void *>(data);
         make_shape_storage();
-        initialize_shape(extents.size, extents.values);
+        initialize_shape(buf.dimensions, extents);
     }
 
     /** Initialize an Buffer from a pointer and some sizes. Assumes
@@ -969,12 +958,12 @@ public:
     template<typename ...Args,
              typename = typename std::enable_if<AllInts<Args...>::value>::type>
     explicit Buffer(T *data, int first, Args&&... rest) {
-        GatheredInts<int, Args...> extents(first, rest...);
+        int extents[] = {first, rest...};
         buf.type = static_halide_type();
-        buf.dimensions = extents.size;
+        buf.dimensions = (int)(sizeof...(rest) + 1);
         buf.host = (uint8_t *) const_cast<typename std::remove_const<T>::type *>(data);
         make_shape_storage();
-        initialize_shape(extents.size, extents.values);
+        initialize_shape(buf.dimensions, extents);
     }
 
     /** Initialize an Buffer from a pointer and a vector of
