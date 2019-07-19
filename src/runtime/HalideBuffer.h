@@ -1381,7 +1381,7 @@ public:
     }
     // @}
 
-    /** Test if a given coordinate is within the the bounds of an image. */
+    /** Test if a given coordinate is within the bounds of an image. */
     // @{
     bool contains(const std::vector<int> &coords) const {
         assert(coords.size() <= (size_t)dimensions());

@@ -24,6 +24,7 @@
 
 #ifndef HALIDE_EXPORT
 #if defined(_MSC_VER)
+// Halide_EXPORTS is quietly defined by CMake when building a shared library
 #ifdef Halide_EXPORTS
 #define HALIDE_EXPORT __declspec(dllexport)
 #else

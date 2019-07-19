@@ -1158,6 +1158,8 @@ void CodeGen_D3D12Compute_Dev::init_module() {
 
     src_stream << '\n';
 
+    d3d12compute_c.add_common_macros(src_stream);
+
     cur_kernel_name = "";
 }
 

@@ -328,13 +328,13 @@ void queue_func_regions(map<FStage, DimBounds> &fs_bounds,
                         if (b_iter->second.has_lower_bound() && b.second.has_lower_bound()) {
                             b_iter->second.min = simplify(Interval::make_min(b_iter->second.min, b.second.min));
                         } else {
-                            b_iter->second.min = Interval::neg_inf;
+                            b_iter->second.min = Interval::neg_inf();
                         }
 
                         if (b_iter->second.has_upper_bound() && b.second.has_upper_bound()) {
                             b_iter->second.max = simplify(Interval::make_max(b_iter->second.max, b.second.max));
                         } else {
-                            b_iter->second.max = Interval::pos_inf;
+                            b_iter->second.max = Interval::pos_inf();
                         }
                     }
                 }

@@ -20,6 +20,6 @@ target_link_libraries(test_halide_blas
   PRIVATE
    halide_blas
    cblas # XXX fragile
-   Halide
+   ${HALIDE_COMPILER_LIB}
 )
 
