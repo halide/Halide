@@ -268,20 +268,17 @@ private:
         }
     }
 
-    void make_shape_storage() {
-        if (buf.dimensions <= D) {
-            buf.dim = shape;
-        } else {
-            buf.dim = new halide_dimension_t[buf.dimensions];
-        }
+    void make_shape_storage(const int dimensions) {
+        // This should usually be inlined, so if dimensions is statically known,
+        // we can skip the call to new
+        buf.dimensions = dimensions;
+        buf.dim = (dimensions <= D) ? shape : new halide_dimension_t[dimensions];
     }
 
     void copy_shape_from(const halide_buffer_t &other) {
         // All callers of this ensure that buf.dimensions == other.dimensions.
-        make_shape_storage();
-        for (int i = 0; i < buf.dimensions; i++) {
-            buf.dim[i] = other.dim[i];
-        }
+        make_shape_storage(other.dimensions);
+        std::copy(other.dim, other.dim + other.dimensions, buf.dim);
     }
 
     template<typename T2, int D2>
@@ -441,8 +438,7 @@ private:
         buf.type = t;
         int d;
         for (d = 0; d < 4 && old_buf.extent[d]; d++);
-        buf.dimensions = d;
-        make_shape_storage();
+        make_shape_storage(d);
         for (int i = 0; i < d; i++) {
             buf.dim[i].min = old_buf.min[i];
             buf.dim[i].extent = old_buf.extent[i];
@@ -574,7 +570,7 @@ public:
 
     Buffer() : shape() {
         buf.type = static_halide_type();
-        make_shape_storage();
+        make_shape_storage(0);
     }
 
     /** Make a Buffer from a halide_buffer_t */
@@ -833,8 +829,8 @@ public:
         }
         int extents[] = {first, (int)rest...};
         buf.type = t;
-        buf.dimensions = 1 + (int)(sizeof...(rest));
-        make_shape_storage();
+        constexpr int buf_dimensions = 1 + (int)(sizeof...(rest));
+        make_shape_storage(buf_dimensions);
         initialize_shape(extents);
         if (!Internal::any_zero(extents)) {
             check_overflow();
@@ -854,8 +850,8 @@ public:
                       "To construct an Buffer<void>, pass a halide_type_t as the first argument to the constructor");
         int extents[] = {first};
         buf.type = static_halide_type();
-        buf.dimensions = 1;
-        make_shape_storage();
+        constexpr int buf_dimensions = 1;
+        make_shape_storage(buf_dimensions);
         initialize_shape(extents);
         if (first != 0) {
             check_overflow();
@@ -870,8 +866,8 @@ public:
                       "To construct an Buffer<void>, pass a halide_type_t as the first argument to the constructor");
         int extents[] = {first, second, (int)rest...};
         buf.type = static_halide_type();
-        buf.dimensions = 2 + (int)(sizeof...(rest));
-        make_shape_storage();
+        constexpr int buf_dimensions = 2 + (int)(sizeof...(rest));
+        make_shape_storage(buf_dimensions);
         initialize_shape(extents);
         if (!Internal::any_zero(extents)) {
             check_overflow();
@@ -886,8 +882,7 @@ public:
             assert(static_halide_type() == t);
         }
         buf.type = t;
-        buf.dimensions = (int)sizes.size();
-        make_shape_storage();
+        make_shape_storage((int)sizes.size());
         initialize_shape(sizes);
         if (!Internal::any_zero(sizes)) {
             check_overflow();
@@ -926,10 +921,10 @@ public:
      * take ownership of the data, and does not set the host_dirty flag. */
     template<typename Array, size_t N>
     explicit Buffer(Array (&vals)[N]) {
-        buf.dimensions = dimensionality_of_array(vals);
+        const int buf_dimensions = dimensionality_of_array(vals);
         buf.type = scalar_type_of_array(vals);
         buf.host = (uint8_t *)vals;
-        make_shape_storage();
+        make_shape_storage(buf_dimensions);
         initialize_shape_from_array_shape(buf.dimensions - 1, vals);
     }
 
@@ -945,9 +940,9 @@ public:
         }
         int extents[] = {first, (int)rest...};
         buf.type = t;
-        buf.dimensions = 1 + (int)(sizeof...(rest));
+        constexpr int buf_dimensions = 1 + (int)(sizeof...(rest));
         buf.host = (uint8_t *) const_cast<void *>(data);
-        make_shape_storage();
+        make_shape_storage(buf_dimensions);
         initialize_shape(extents);
     }
 
@@ -959,9 +954,9 @@ public:
     explicit Buffer(T *data, int first, Args&&... rest) {
         int extents[] = {first, (int)rest...};
         buf.type = static_halide_type();
-        buf.dimensions = 1 + (int)(sizeof...(rest));
+        constexpr int buf_dimensions = 1 + (int)(sizeof...(rest));
         buf.host = (uint8_t *) const_cast<typename std::remove_const<T>::type *>(data);
-        make_shape_storage();
+        make_shape_storage(buf_dimensions);
         initialize_shape(extents);
     }
 
@@ -971,9 +966,8 @@ public:
      * host_dirty flag. */
     explicit Buffer(T *data, const std::vector<int> &sizes) {
         buf.type = static_halide_type();
-        buf.dimensions = (int)sizes.size();
         buf.host = (uint8_t *) const_cast<typename std::remove_const<T>::type *>(data);
-        make_shape_storage();
+        make_shape_storage((int)sizes.size());
         initialize_shape(sizes);
     }
 
@@ -986,9 +980,8 @@ public:
             assert(static_halide_type() == t);
         }
         buf.type = t;
-        buf.dimensions = (int)sizes.size();
         buf.host = (uint8_t *) const_cast<void *>(data);
-        make_shape_storage();
+        make_shape_storage((int)sizes.size());
         initialize_shape(sizes);
     }
 
@@ -1000,9 +993,8 @@ public:
             assert(static_halide_type() == t);
         }
         buf.type = t;
-        buf.dimensions = d;
         buf.host = (uint8_t *) const_cast<void *>(data);
-        make_shape_storage();
+        make_shape_storage(d);
         for (int i = 0; i < d; i++) {
             buf.dim[i] = shape[i];
         }
@@ -1020,9 +1012,8 @@ public:
      * data and does not set the host_dirty flag. */
     explicit Buffer(T *data, int d, const halide_dimension_t *shape) {
         buf.type = static_halide_type();
-        buf.dimensions = d;
         buf.host = (uint8_t *) const_cast<typename std::remove_const<T>::type *>(data);
-        make_shape_storage();
+        make_shape_storage(d);
         for (int i = 0; i < d; i++) {
             buf.dim[i] = shape[i];
         }
@@ -1523,7 +1514,7 @@ public:
             buf.dim = new_shape;
         } else if (dims == D) {
             // Transition from the in-class storage to the heap
-            make_shape_storage();
+            make_shape_storage(buf.dimensions);
             for (int i = 0; i < dims; i++) {
                 buf.dim[i] = shape[i];
             }
