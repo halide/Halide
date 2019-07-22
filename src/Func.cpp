@@ -1151,7 +1151,7 @@ Stage Stage::specialize(Expr condition) {
     // The user may be retrieving a reference to an existing
     // specialization.
     const vector<Specialization> &specializations = definition.specializations();
-    for (const auto & specialization : specializations) {
+    for (const auto &specialization : specializations) {
         if (equal(condition, specialization.condition)) {
             return Stage(function, specialization.definition, stage_index);
         }
