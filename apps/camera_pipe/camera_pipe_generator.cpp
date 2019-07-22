@@ -10,7 +10,7 @@ using namespace Halide;
 using namespace Halide::ConciseCasts;
 
 // Shared variables
-Var x, y, c, yi, yo, yii, xi;
+Var x{"x"}, y{"y"}, c{"c"}, yi{"yi"}, yo{"yo"}, yii{"yii"}, xi{"xi"};
 
 // Average two positive values rounding up
 Expr avg(Expr a, Expr b) {
