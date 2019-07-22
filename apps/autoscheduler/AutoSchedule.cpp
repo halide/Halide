@@ -1425,6 +1425,12 @@ struct LoopNest {
                 total_serial_loop_extents *= extent;
             }
 
+            if (parent->gpu_label == serial) {
+                for (auto c : parent->size) {
+                    total_serial_loop_extents *= c;
+                }
+            }
+
             if (!thread_info_map.count(this)) {
                 const LoopNest* block = get_enclosing_block(parent, grandparent);
                 auto max_thread_counts = block->get_union_thread_counts(nullptr);
