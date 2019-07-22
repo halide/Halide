@@ -433,6 +433,70 @@ vector<vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, int fa
     return result;
 }
 
+struct ThreadInfo {
+    ThreadInfo(int vectorized_loop_index, const vector<int64_t>& size, const vector<int64_t>& max_thread_counts) {
+        int max_threads[3] = {1024, 1024, 64};
+
+        int num_thread_loops = 0;
+        for (auto c : max_thread_counts) {
+            internal_assert(c <= max_threads[num_thread_loops]);
+
+            if (c == 1) {
+                continue;
+            }
+
+            if (num_thread_loops >= 3 || num_threads_in_this_block * c > MAX_THREADS_PER_BLOCK) {
+                break;
+            }
+
+            threads_in_this_block[num_thread_loops] = c;
+            num_threads_in_this_block *= c;
+            ++num_thread_loops;
+        }
+
+        num_thread_loops = 0;
+
+        if (vectorized_loop_index != -1) {
+            num_thread_loops = 1;
+            threads[num_thread_loops] = size[vectorized_loop_index];
+            num_threads *= size[vectorized_loop_index];
+        }
+
+        for (std::size_t i = 0; i < size.size() && num_thread_loops < 3; i++) {
+            if (size[i] == 1 || (int)i == vectorized_loop_index) {
+                continue;
+            }
+
+            threads[num_thread_loops] = size[i];
+            num_threads *= size[i];
+            ++num_thread_loops;
+        }
+
+        num_warps = num_threads_in_this_block / 32;
+        partial_warp_lanes = num_threads_in_this_block % 32;
+        if (partial_warp_lanes != 0) {
+            num_warps++;
+        }
+    }
+
+    double total_warp_lane_utilization() const {
+        return (double)num_threads / (double)num_threads_in_this_block;
+    }
+
+    double block_occupancy() const {
+        return (double)num_threads / MAX_THREADS_PER_BLOCK;
+    }
+
+    int num_warps;
+    int partial_warp_lanes;
+
+    int threads_in_this_block[3] = {1, 1, 1};
+    int64_t num_threads_in_this_block = 1;
+
+    int threads[3] = {1, 1, 1};
+    int64_t num_threads = 1;
+};
+
 
 template<typename T>
 using NodeMap = PerfectHashMap<FunctionDAG::Node, T>;
@@ -764,12 +828,12 @@ struct LoopNest {
         return true;
     }
 
-    int num_shared_mem_accesses_per_warp(const LoadJacobian& jac, const FunctionDAG::Node* node, const Bound& store_bounds, double num_threads, int innermost_dim) const {
+    int num_shared_mem_accesses(const LoadJacobian& jac, const FunctionDAG::Node* node, const Bound& store_bounds, const ThreadInfo& thread_info, int innermost_dim) const {
         double stride = storage_stride(jac, innermost_dim, node, store_bounds);
 
         // No bank conflicts when stride is 0
         if (stride == 0) {
-            return 1;
+            return thread_info.num_warps;
         }
 
         int num_bank_accesses[32] = {0};
@@ -781,60 +845,100 @@ struct LoopNest {
 
         // Each bank is 4 bytes so adjust the stride based
         // on width of data being loaded
-        int num_banks_per_access = (bytes / 4);
-        stride *= num_banks_per_access;
+        double bank_stride = (bytes / 4);
+        int num_banks_per_access = std::max(1.0, bank_stride);
+        stride *= bank_stride;
 
-        // Compute counts of which banks are accessed
-        // Multiple accesses to the same bank with different
-        // indices will be serialized
-        for (int i = 0; i < num_threads; i++) {
-            for (int j = 0; j < num_banks_per_access; j++) {
-                int index = (int)(i * stride) + j;
-                int bank = index % 32;
-                if (largest_index[bank] != index) {
-                    num_bank_accesses[bank]++;
+        int total_accesses = 0;
+
+        int i = 0;
+        for (int z = 0; z < thread_info.threads_in_this_block[2]; z++) {
+            for (int y = 0; y < thread_info.threads_in_this_block[1]; y++) {
+                for (int x = 0; x < thread_info.threads_in_this_block[0]; x++) {
+                    ++i;
+
+                    // Skip any threads in this loop nest with extent less than the
+                    // extents of the largest thread loops in this block
+                    // for thread.x in [0, 10]:
+                    //   ...
+                    // for thread.x in [0, 5]:
+                    //   ...
+                    // For the 2nd loop, skip threads with x id >= 5
+                    bool include = x < thread_info.threads[0]
+                        && y < thread_info.threads[1]
+                        && z < thread_info.threads[2];
+
+                    if (include) {
+                        // Compute counts of which banks are accessed
+                        // Multiple accesses to the same bank with different
+                        // indices will be serialized
+                        for (int j = 0; j < num_banks_per_access; j++) {
+                            int index = (int)(i * stride) + j;
+                            int bank = index % 32;
+                            if (largest_index[bank] != index) {
+                                num_bank_accesses[bank]++;
+                            }
+                            largest_index[bank] = index;
+                        }
+                    }
+
+                    // Accumulate accesses for this warp
+                    if (i % 32 == 0) {
+                        int max_accesses_this_warp = 0;
+                        for (int j = 0; j < 32; ++j) {
+                            num_bank_accesses[j] = 0;
+                            largest_index[j] = -1;
+                            max_accesses_this_warp = std::max(max_accesses_this_warp, num_bank_accesses[j]);
+                        }
+                        total_accesses += max_accesses_this_warp;
+                    }
                 }
-                largest_index[bank] = index;
             }
         }
 
-        int max_accesses = 0;
-        for (int i = 0; i < 32; i++) {
-            max_accesses = std::max(max_accesses, num_bank_accesses[i]);
-        }
-
-        return max_accesses;
-    };
-
-    double num_shared_mem_stores_per_warp(const LoadJacobian& jac, int consumer_innermost_dim, const FunctionDAG::Node* node, const Bound& consumer_store_bounds, int num_threads) const {
-        // Assume worst case serialized loads if the stride
-        // is unknown
-        if (!all_strides_exist(jac, node)) {
-            return num_threads;
-        }
-
-        return num_shared_mem_accesses_per_warp(jac, node, consumer_store_bounds, num_threads, consumer_innermost_dim);
+        return total_accesses;
     }
 
-    double num_shared_mem_loads_per_warp(const LoadJacobian& jac, int producer_innermost_dim, const FunctionDAG::Node* node, const Bound& producer_store_bounds, bool producer_has_been_scheduled, int num_threads) const {
+    int num_banks_per_access(const FunctionDAG::Node* node) const {
+        double bytes = node->bytes_per_point;
+        return std::max(1.0, bytes / 4);
+    }
+
+    std::pair<double, double> compute_shared_mem_stores(const LoadJacobian& jac, int consumer_innermost_dim, const FunctionDAG::Node* node, const Bound& consumer_store_bounds, const ThreadInfo& thread_info) const {
+        // Assume worst case serialized loads if the stride
+        // is unknown
+        double num_accesses = thread_info.num_threads;
+
+        if (all_strides_exist(jac, node)) {
+            num_accesses = num_shared_mem_accesses(jac, node, consumer_store_bounds, thread_info, consumer_innermost_dim);
+        }
+
+        double min_accesses = thread_info.num_warps * num_banks_per_access(node);
+        return {num_accesses, min_accesses / num_accesses};
+    }
+
+    std::pair<double, double> compute_shared_mem_load_features(const LoadJacobian& jac, int producer_innermost_dim, const FunctionDAG::Node* node, const Bound& producer_store_bounds, bool producer_has_been_scheduled, const ThreadInfo& thread_info) const {
+        double min_accesses = thread_info.num_warps * num_banks_per_access(node);
+
         // Assume worst case serialized loads if the stride
         // is unknown
         if (!all_strides_exist(jac, node)) {
-            return num_threads;
+            return {thread_info.num_threads, min_accesses};
         }
 
         if (producer_has_been_scheduled) {
-            return num_shared_mem_accesses_per_warp(jac, node, producer_store_bounds, num_threads, producer_innermost_dim);
+            int num_accesses = num_shared_mem_accesses(jac, node, producer_store_bounds, thread_info, producer_innermost_dim);
+            return {num_accesses, min_accesses};
         }
 
         // Assume best case if producer has not been scheduled: try all the
         // possible innermost dimensions and take the best
         int min_loads = 32;
         for (int i = 0; i < node->dimensions; i++) {
-            min_loads = std::min(min_loads, num_shared_mem_accesses_per_warp(jac, node, producer_store_bounds, num_threads, i));
+            min_loads = std::min(min_loads, num_shared_mem_accesses(jac, node, producer_store_bounds, thread_info, i));
         }
 
-        return min_loads;
+        return {min_loads, min_accesses};
     }
 
     int num_global_mem_accesses_per_warp(const LoadJacobian& jac, const FunctionDAG::Node* node, const Bound& store_bounds, int num_threads, int innermost_dim) const {
@@ -915,54 +1019,11 @@ struct LoopNest {
         return nullptr;
     }
 
-    std::pair<int, int> compute_warp_features(int64_t outer_loop_product, ScheduleFeatures& features, const LoopNest *parent, const LoopNest *grandparent) const {
-        const LoopNest* block = get_enclosing_block(parent, grandparent);
-
-        int max_threads[3] = {1024, 1024, 64};
-        auto max_thread_counts = block->get_union_thread_counts(nullptr);
-
-        int64_t num_threads_in_this_block = 1;
-        int num_thread_loops = 0;
-        for (auto c : max_thread_counts) {
-            internal_assert(c <= max_threads[num_thread_loops]);
-
-            if (num_thread_loops >= 3 || num_threads_in_this_block * c > MAX_THREADS_PER_BLOCK) {
-                break;
-            }
-
-            num_threads_in_this_block *= c;
-            ++num_thread_loops;
-        }
-
-        num_thread_loops = 0;
-        int64_t num_threads = 1;
-
-        if (vectorized_loop_index != -1) {
-            num_thread_loops = 1;
-            num_threads *= size[vectorized_loop_index];
-        }
-
-        for (std::size_t i = 0; i < size.size() && num_thread_loops < 3; i++) {
-            if (size[i] == 1 || (int)i == vectorized_loop_index) {
-                continue;
-            }
-
-            num_threads *= size[i];
-            ++num_thread_loops;
-        }
-
-        int num_full_warps = num_threads_in_this_block / 32;
-        features.warp_lane_utilization = (double)num_threads / (double)num_threads_in_this_block;
-        features.num_warps = num_full_warps;
-
-        int partial_warp_lanes = num_threads_in_this_block % 32;
-        if (partial_warp_lanes != 0) {
-            features.num_warps++;
-        }
-
+    void compute_warp_features(int64_t outer_loop_product, ScheduleFeatures& features, const ThreadInfo& thread_info) const {
+        features.warp_lane_utilization = thread_info.total_warp_lane_utilization();
+        features.num_warps = thread_info.num_warps;
         features.num_warps *= outer_loop_product;
-        features.block_occupancy = (double)num_threads / MAX_THREADS_PER_BLOCK;
-        return {num_full_warps, partial_warp_lanes};
+        features.block_occupancy = thread_info.block_occupancy();
     }
 
     void compute_features(const FunctionDAG &dag,
@@ -975,7 +1036,8 @@ struct LoopNest {
                           const LoopNest *grandparent,
                           const LoopNest &root,
                           int64_t *working_set,
-                          StageMap<ScheduleFeatures> *features) const {
+                          StageMap<ScheduleFeatures> *features,
+                          std::unordered_map<const LoopNest*, ThreadInfo>& thread_info_map) const {
 
         int64_t working_set_here = 0;
 
@@ -1062,7 +1124,7 @@ struct LoopNest {
         if (is_root()) {
             // TODO: This block of code is repeated below. Refactor
             for (const auto &c : children) {
-                c->compute_features(dag, params, target, sites, subinstances, parallelism, this, parent, root, &working_set_here, features);
+                c->compute_features(dag, params, target, sites, subinstances, parallelism, this, parent, root, &working_set_here, features, thread_info_map);
             }
 
             for (const auto *node : store_at) {
@@ -1264,7 +1326,7 @@ struct LoopNest {
 
         // Recurse inwards
         for (const auto &c : children) {
-            c->compute_features(dag, params, target, sites, subinstances, subparallelism, this, parent, root, &working_set_here, features);
+            c->compute_features(dag, params, target, sites, subinstances, subparallelism, this, parent, root, &working_set_here, features, thread_info_map);
         }
         for (const auto *node : store_at) {
             auto &feat = features->get(&(node->stages[0]));
@@ -1321,17 +1383,32 @@ struct LoopNest {
         double num_global_mem_loads = 0;
         int num_full_warps = 0;
         int num_partial_warp_lanes = 0;
+        int num_threads = 1;
+        int num_threads_in_this_block = 1;
         bool gpu_thread = target.has_gpu_feature() && gpu_label == thread;
         std::vector<int64_t> compute_loops;
+        int64_t total_serial_loop_extents = 1;
         if (gpu_thread) {
             const auto &bounds = get_bounds(stage->node);
             for (int i = 0; i < (int)stage->loop.size(); i++) {
-                compute_loops.push_back(bounds->loops(stage_idx, i).extent());
+                auto extent = bounds->loops(stage_idx, i).extent();
+                compute_loops.push_back(extent);
+                total_serial_loop_extents *= extent;
             }
 
-            auto warp_features = compute_warp_features(instances, feat, parent, grandparent);
-            num_full_warps = warp_features.first;
-            num_partial_warp_lanes = warp_features.second;
+            if (!thread_info_map.count(this)) {
+                const LoopNest* block = get_enclosing_block(parent, grandparent);
+                auto max_thread_counts = block->get_union_thread_counts(nullptr);
+                thread_info_map.emplace(this, ThreadInfo{vectorized_loop_index, size, max_thread_counts});
+            }
+
+            const auto& thread_info = thread_info_map.at(this);
+            compute_warp_features(instances, feat, thread_info);
+
+            num_full_warps = thread_info.num_warps;
+            num_partial_warp_lanes = thread_info.partial_warp_lanes;
+            num_threads = thread_info.num_threads;
+            num_threads_in_this_block = thread_info.num_threads_in_this_block;
         }
 
         if (innermost || at_production || gpu_thread) { // These are the sites at which we compute load footprints
@@ -1342,24 +1419,17 @@ struct LoopNest {
             if (gpu_thread) {
                 const auto& bounds = consumer_site.store->get_bounds(stage->node);
                 auto store_jac = *stage->store_jacobian * compute_loops;
+
                 if (consumer_site.store->gpu_label == block) {
-                    feat.num_shared_mem_stores = instances * num_full_warps * num_shared_mem_stores_per_warp(
+                    auto shared_mem_features = compute_shared_mem_stores(
                         store_jac,
                         vector_dim,
                         stage->node,
                         bounds,
-                        32
+                        thread_info_map.at(this)
                     );
 
-                    if (num_partial_warp_lanes > 0) {
-                        feat.num_shared_mem_stores += instances * num_shared_mem_stores_per_warp(
-                            store_jac,
-                            vector_dim,
-                            stage->node,
-                            bounds,
-                            num_partial_warp_lanes
-                        );
-                    }
+                    feat.num_shared_mem_stores = shared_mem_features.first * total_serial_loop_extents;
                 } else if (consumer_site.store->is_root()) {
                     feat.num_global_mem_stores = instances * num_full_warps * num_global_mem_stores_per_warp(
                         store_jac,
@@ -1595,25 +1665,15 @@ struct LoopNest {
                             n /= amortization;
 
                             if (is_shared_mem) {
-                                num_shared_mem_loads += instances * num_full_warps * n * num_shared_mem_loads_per_warp(
+                                auto shared_mem_features = compute_shared_mem_load_features(
                                     jac.first,
                                     producer_innermost_dim,
                                     e->producer,
                                     producer_store_bounds,
                                     producer_has_been_scheduled,
-                                    32
+                                    thread_info_map.at(this)
                                 );
-
-                                if (num_partial_warp_lanes > 0) {
-                                    num_shared_mem_loads += instances * n * num_shared_mem_loads_per_warp(
-                                        jac.first,
-                                        producer_innermost_dim,
-                                        e->producer,
-                                        producer_store_bounds,
-                                        producer_has_been_scheduled,
-                                        num_partial_warp_lanes
-                                    );
-                                }
+                                num_shared_mem_loads += n * shared_mem_features.first;
                             } else if (is_global_mem) {
                                 num_global_mem_loads += instances * num_full_warps * n * num_global_mem_loads_per_warp(
                                     jac.first,
@@ -3060,7 +3120,8 @@ struct State {
             }
         }
 
-        root->compute_features(dag, params, target, sites, 1, 1, nullptr, nullptr, *root, nullptr, features);
+        std::unordered_map<const LoopNest*, ThreadInfo> thread_info_map;
+        root->compute_features(dag, params, target, sites, 1, 1, nullptr, nullptr, *root, nullptr, features, thread_info_map);
 
         for (const auto &n : dag.nodes) {
             if (sites.get(&(n.stages[0])).produce == nullptr) {
