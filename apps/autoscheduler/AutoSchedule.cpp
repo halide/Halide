@@ -879,8 +879,6 @@ struct LoopNest {
         for (int z = 0; z < thread_info.threads_in_this_block[2]; z++) {
             for (int y = 0; y < thread_info.threads_in_this_block[1]; y++) {
                 for (int x = 0; x < thread_info.threads_in_this_block[0]; x++) {
-                    ++i;
-
                     // Skip any threads in this loop nest with extent less than the
                     // extents of the largest thread loops in this block
                     // for thread.x in [0, 10]:
@@ -906,13 +904,15 @@ struct LoopNest {
                         }
                     }
 
+                    ++i;
+
                     // Accumulate accesses for this warp
                     if (i % 32 == 0) {
                         int max_accesses_this_warp = 0;
                         for (int j = 0; j < 32; ++j) {
+                            max_accesses_this_warp = std::max(max_accesses_this_warp, num_bank_accesses[j]);
                             num_bank_accesses[j] = 0;
                             largest_index[j] = -1;
-                            max_accesses_this_warp = std::max(max_accesses_this_warp, num_bank_accesses[j]);
                         }
                         total_accesses += max_accesses_this_warp;
                     }
@@ -1458,6 +1458,7 @@ struct LoopNest {
                     );
 
                     feat.num_shared_mem_stores = shared_mem_features.first * total_serial_loop_extents;
+                    feat.shared_mem_store_efficiency = shared_mem_features.second;
                 } else if (consumer_site.store->is_root()) {
                     feat.num_global_mem_stores = instances * num_full_warps * num_global_mem_stores_per_warp(
                         store_jac,

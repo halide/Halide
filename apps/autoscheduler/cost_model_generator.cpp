@@ -251,6 +251,7 @@ public:
         Expr num_global_mem_loads = schedule_features(n, idx++, w);
         Expr num_shared_mem_stores = schedule_features(n, idx++, w);
         Expr num_global_mem_stores = schedule_features(n, idx++, w);
+        Expr shared_mem_store_efficiency = schedule_features(n, idx++, w);
         assert(idx == head2_w);
 
 
@@ -290,6 +291,7 @@ public:
                           num_shared_mem_loads * relu1(27, w, n) +
                           num_global_mem_loads * relu1(28, w, n));
 
+        load_cost /= shared_mem_store_efficiency;
 
 
         // Estimate the number of cache misses on the data that this writes to and their cost
