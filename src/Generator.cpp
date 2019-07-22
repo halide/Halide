@@ -7,7 +7,6 @@
 #endif
 #ifdef _WIN32
 #include <windows.h>
-#include <strsafe.h>
 #else
 #include <dlfcn.h>
 #endif
