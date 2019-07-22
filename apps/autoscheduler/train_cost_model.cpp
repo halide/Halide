@@ -3,13 +3,13 @@
 #include <set>
 #include <sstream>
 #include <string>
-#include <unistd.h>
 #include <vector>
 #include <map>
 #include <iostream>
 #include <fstream>
 #include <random>
 
+#include <HalideBuffer.h>
 #include "CostModel.h"
 #include "NetworkSize.h"
 

@@ -8,6 +8,8 @@
 #include <iostream>
 #include <map>
 #include <random>
+#include <string>
+#include <ctime>
 
 #include "HalideBuffer.h"
 #include "cost_model.h"
