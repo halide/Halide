@@ -31,6 +31,10 @@ if [ ${BUILD_SYSTEM} = 'CMAKE' ]; then
         -G "Unix Makefiles" \
         ../
 
+  # Under CMake, 'make distrib' ignores -j, apparently because
+  # CPack invokes an external command. Workaround for now
+  # is to make all first, then make distrib.
+  make ${MAKEFLAGS}
   make ${MAKEFLAGS} distrib
   make ${MAKEFLAGS} test_internal
 
