@@ -156,7 +156,6 @@ public:
         if (auto_schedule) {
             // blank
         } else if (get_target().has_gpu_feature()) {
-            Var xi, yi;
             for (Func f : intermediates) {
                 f.compute_at(intermed_compute_at).gpu_threads(x, y);
             }
@@ -234,25 +233,25 @@ public:
 
 private:
 
-    Func hot_pixel_suppression(Func input);
-    Func deinterleave(Func raw);
-    Func apply_curve(Func input);
-    Func color_correct(Func input);
-    Func sharpen(Func input);
+    Func hot_pixel_suppression(Func func_in);
+    Func deinterleave(const Func& raw);
+    Func apply_curve(Func func_in);
+    Func color_correct(Func func_in);
+    Func sharpen(Func func_in);
 };
 
-Func CameraPipe::hot_pixel_suppression(Func input) {
+Func CameraPipe::hot_pixel_suppression(Func func_in) {
 
-    Expr a = max(input(x - 2, y), input(x + 2, y),
-                 input(x, y - 2), input(x, y + 2));
+    Expr a = max(func_in(x - 2, y), func_in(x + 2, y),
+                 func_in(x, y - 2), func_in(x, y + 2));
 
     Func denoised;
-    denoised(x, y) = clamp(input(x, y), 0, a);
+    denoised(x, y) = clamp(func_in(x, y), 0, a);
 
     return denoised;
 }
 
-Func CameraPipe::deinterleave(Func raw) {
+Func CameraPipe::deinterleave(const Func& raw) {
     // Deinterleave the color channels
     Func deinterleaved("deinterleaved");
 
@@ -265,7 +264,7 @@ Func CameraPipe::deinterleave(Func raw) {
 
 
 
-Func CameraPipe::color_correct(Func input) {
+Func CameraPipe::color_correct(Func func_in) {
     // Get a color matrix by linearly interpolating between two
     // calibrated matrices using inverse kelvin.
     Expr kelvin = color_temp;
@@ -283,9 +282,9 @@ Func CameraPipe::color_correct(Func input) {
     }
 
     Func corrected;
-    Expr ir = cast<int32_t>(input(x, y, 0));
-    Expr ig = cast<int32_t>(input(x, y, 1));
-    Expr ib = cast<int32_t>(input(x, y, 2));
+    Expr ir = cast<int32_t>(func_in(x, y, 0));
+    Expr ig = cast<int32_t>(func_in(x, y, 1));
+    Expr ib = cast<int32_t>(func_in(x, y, 2));
 
     Expr r = matrix(3, 0) + matrix(0, 0) * ir + matrix(1, 0) * ig + matrix(2, 0) * ib;
     Expr g = matrix(3, 1) + matrix(0, 1) * ir + matrix(1, 1) * ig + matrix(2, 1) * ib;
@@ -301,7 +300,7 @@ Func CameraPipe::color_correct(Func input) {
     return corrected;
 }
 
-Func CameraPipe::apply_curve(Func input) {
+Func CameraPipe::apply_curve(Func func_in) {
     // copied from FCam
     Func curve("curve");
 
@@ -342,7 +341,6 @@ Func CameraPipe::apply_curve(Func input) {
         // It's a LUT, compute it once ahead of time.
         curve.compute_root();
         if (get_target().has_gpu_feature()) {
-            Var xi;
             curve.gpu_tile(x, xi, 32);
         }
     }
@@ -359,10 +357,10 @@ Func CameraPipe::apply_curve(Func input) {
 
     if (lutResample == 1) {
         // Use clamp to restrict size of LUT as allocated by compute_root
-        curved(x, y, c) = curve(clamp(input(x, y, c), 0, 1023));
+        curved(x, y, c) = curve(clamp(func_in(x, y, c), 0, 1023));
     } else {
         // Use linear interpolation to sample the LUT.
-        Expr in = input(x, y, c);
+        Expr in = func_in(x, y, c);
         Expr u0 = in/lutResample;
         Expr u = in%lutResample;
         Expr y0 = curve(clamp(u0, 0, 127));
@@ -373,7 +371,7 @@ Func CameraPipe::apply_curve(Func input) {
     return curved;
 }
 
-Func CameraPipe::sharpen(Func input) {
+Func CameraPipe::sharpen(Func func_in) {
     // Convert the sharpening strength to 2.5 fixed point. This allows sharpening in the range [0, 4].
     Func sharpen_strength_x32("sharpen_strength_x32");
     sharpen_strength_x32() = u8_sat(sharpen_strength * 32);
@@ -394,18 +392,18 @@ Func CameraPipe::sharpen(Func input) {
 
     // Make an unsharp mask by blurring in y, then in x.
     Func unsharp_y("unsharp_y");
-    unsharp_y(x, y, c) = blur121(input(x, y - 1, c), input(x, y, c), input(x, y + 1, c));
+    unsharp_y(x, y, c) = blur121(func_in(x, y - 1, c), func_in(x, y, c), func_in(x, y + 1, c));
 
     Func unsharp("unsharp");
     unsharp(x, y, c) = blur121(unsharp_y(x - 1, y, c), unsharp_y(x, y, c), unsharp_y(x + 1, y, c));
 
     Func mask("mask");
-    mask(x, y, c) = cast<int16_t>(input(x, y, c)) - cast<int16_t>(unsharp(x, y, c));
+    mask(x, y, c) = cast<int16_t>(func_in(x, y, c)) - cast<int16_t>(unsharp(x, y, c));
 
     // Weight the mask with the sharpening strength, and add it to the
     // input to get the sharpened result.
     Func sharpened("sharpened");
-    sharpened(x, y, c) = u8_sat(input(x, y, c) + (mask(x, y, c) * sharpen_strength_x32()) / 32);
+    sharpened(x, y, c) = u8_sat(func_in(x, y, c) + (mask(x, y, c) * sharpen_strength_x32()) / 32);
 
     return sharpened;
 }
@@ -468,7 +466,7 @@ void CameraPipe::generate() {
                 .bound(y, 0, (out_height / 2) * 2);
         }
 
-        Var xi, yi, xii, xio;
+        Var xii, xio;
 
         /* 1391us on a gtx 980. */
         processed.compute_root()
