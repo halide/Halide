@@ -1,16 +1,16 @@
 #include <cmath>
+#include <fstream>
 #include <iomanip>
+#include <iostream>
+#include <map>
+#include <random>
 #include <set>
 #include <sstream>
 #include <string>
 #include <vector>
-#include <map>
-#include <iostream>
-#include <fstream>
-#include <random>
 
-#include <HalideBuffer.h>
 #include "CostModel.h"
+#include "HalideBuffer.h"
 #include "NetworkSize.h"
 
 namespace {

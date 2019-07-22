@@ -4,19 +4,18 @@
 
 #include <algorithm>
 #include <cmath>
+#include <ctime>
 #include <fstream>
 #include <iostream>
 #include <map>
 #include <random>
 #include <string>
-#include <ctime>
-
-#include "HalideBuffer.h"
-#include "cost_model.h"
-#include "train_cost_model.h"
 
 #include "CostModel.h"
+#include "HalideBuffer.h"
 #include "NetworkSize.h"
+#include "cost_model.h"
+#include "train_cost_model.h"
 
 // These are weights embedded from the raw arrays in the weights
 // dir. The embedding is done using binary2cpp.
