@@ -223,6 +223,7 @@ struct ScheduleFeatures {
     double num_global_mem_stores = 0;
 
     double shared_mem_store_efficiency = 1;
+    double shared_mem_load_efficiency = 1;
 
     void dump() const {
         std::cerr << "    num_realizations:                      " << num_realizations << '\n'
@@ -275,7 +276,8 @@ struct ScheduleFeatures {
                   << "    num_global_mem_loads:                  " << num_global_mem_loads << '\n'
                   << "    num_shared_mem_stores:                 " << num_shared_mem_stores << '\n'
                   << "    num_global_mem_stores:                 " << num_global_mem_stores << '\n'
-                  << "    shared_mem_store_efficiency:           " << shared_mem_store_efficiency << '\n';
+                  << "    shared_mem_store_efficiency:           " << shared_mem_store_efficiency << '\n'
+                  << "    shared_mem_load_efficiency:            " << shared_mem_load_efficiency << '\n';
 
     }
 };

@@ -1408,6 +1408,7 @@ struct LoopNest {
         int64_t bytes_loaded = 0, lines_loaded = 0, allocation_bytes_loaded = 0;
         double num_dense_loads = 0, num_broadcasts = 0, num_gathers = 0, num_stride_2_loads = 0, num_stride_3_loads = 0, num_stride_4_loads = 0, num_loads = 0;
         double num_shared_mem_loads = 0;
+        double min_num_shared_mem_loads = 0;
         double num_global_mem_loads = 0;
         int num_full_warps = 0;
         int num_partial_warp_lanes = 0;
@@ -1702,7 +1703,8 @@ struct LoopNest {
                                     producer_has_been_scheduled,
                                     thread_info_map.at(this)
                                 );
-                                num_shared_mem_loads += n * shared_mem_features.first;
+                                num_shared_mem_loads += n * shared_mem_features.first * total_serial_loop_extents;
+                                min_num_shared_mem_loads += n * shared_mem_features.second * total_serial_loop_extents;
                             } else if (is_global_mem) {
                                 num_global_mem_loads += instances * num_full_warps * n * num_global_mem_loads_per_warp(
                                     jac.first,
@@ -1846,6 +1848,9 @@ struct LoopNest {
 
         if (gpu_thread) {
             feat.num_shared_mem_loads = num_shared_mem_loads;
+            if (min_num_shared_mem_loads > 0 && num_shared_mem_loads > 0) {
+                feat.shared_mem_load_efficiency = min_num_shared_mem_loads / num_shared_mem_loads;
+            }
             feat.num_global_mem_loads = num_global_mem_loads;
         }
 
