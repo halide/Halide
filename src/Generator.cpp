@@ -883,13 +883,14 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
         if (!LoadLibraryW(wide_lib.data())) {
             DWORD last_err = GetLastError();
             LPVOID last_err_msg;
-            FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM |
-                              FORMAT_MESSAGE_IGNORE_INSERTS,
-                          nullptr, last_err, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-                          reinterpret_cast<LPTSTR>(&last_err_msg), 0, nullptr);
-            cerr << "Failed to load: " << lib << "\n";
-            cerr << "LoadLibraryW failed with error " << last_err << ": "
-                 << std::string(static_cast<LPCTSTR>(last_err_msg)) << "\n";
+            FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM |
+                               FORMAT_MESSAGE_IGNORE_INSERTS,
+                           nullptr, last_err, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+                           reinterpret_cast<LPSTR>(&last_err_msg), 0, nullptr);
+            std::cerr << "Failed to load: " << lib << "\n";
+            std::cerr << "LoadLibraryW failed with error " << last_err << ": "
+                      << static_cast<char *>(last_err_msg) << "\n";
+            LocalFree(last_err_msg);
             return 1;
         }
 #else
