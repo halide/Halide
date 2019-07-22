@@ -31,7 +31,7 @@ if [ ${BUILD_SYSTEM} = 'CMAKE' ]; then
         -G "Unix Makefiles" \
         ../
 
-  make ${MAKEFLAGS} distrib
+  make ${MAKEFLAGS} package
   make ${MAKEFLAGS} test_internal
 
   if [ ${HALIDE_SHARED_LIBRARY} = 'ON' ]; then
