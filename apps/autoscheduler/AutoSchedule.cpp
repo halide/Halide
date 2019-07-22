@@ -467,6 +467,10 @@ struct ThreadInfo {
                 continue;
             }
 
+            if (num_threads * size[i] > MAX_THREADS_PER_BLOCK) {
+                break;
+            }
+
             threads[num_thread_loops] = size[i];
             num_threads *= size[i];
             ++num_thread_loops;
