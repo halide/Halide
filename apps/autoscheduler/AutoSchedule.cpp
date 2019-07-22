@@ -78,7 +78,7 @@
 
 #ifdef _WIN32
 #include <io.h>
-#define	_isatty isatty;
+#define _isatty isatty;
 #endif
 
 namespace Halide {
