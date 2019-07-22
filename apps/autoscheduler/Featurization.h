@@ -209,9 +209,9 @@ struct ScheduleFeatures {
     double working_set_at_root = 0;
 
     double num_warps = 0;
-    double block_occupancy = 0;
+    double block_occupancy = 1.0 / 1024.0;
 
-    double warp_lane_utilization = 0;
+    double warp_lane_utilization = 1.0 / 32.0;
     double warp_lane_utilization_at_block = 0;
     double warp_lane_utilization_at_block_x = 0;
     double warp_lane_utilization_at_block_y = 0;

@@ -270,8 +270,8 @@ public:
         compute_cost *= idle_core_wastage;
         // Ignore warp_lane_utilization and block_occupancy for inlined stages
         // Serial loops use a single thread
-        compute_cost /= select(inlined_calls == 0, max(block_occupancy, 1.f / 1024.f), 1.f);
-        compute_cost /= select(inlined_calls == 0, max(warp_lane_utilization, 1.f / 32.f), 1.f);
+        compute_cost /= select(inlined_calls == 0, block_occupancy, 1.f);
+        compute_cost /= select(inlined_calls == 0, warp_lane_utilization, 1.f);
         compute_cost /= select(inlined_calls == 0, warp_lane_utilization_at_block, 1.f);
         compute_cost /= select(inlined_calls == 0, warp_lane_utilization_at_block_x, 1.f);
         compute_cost /= select(inlined_calls == 0, warp_lane_utilization_at_block_y, 1.f);
