@@ -457,9 +457,9 @@ struct ThreadInfo {
         num_thread_loops = 0;
 
         if (vectorized_loop_index != -1) {
-            num_thread_loops = 1;
             threads[num_thread_loops] = size[vectorized_loop_index];
             num_threads *= size[vectorized_loop_index];
+            num_thread_loops = 1;
         }
 
         for (std::size_t i = 0; i < size.size() && num_thread_loops < 3; i++) {
@@ -483,8 +483,28 @@ struct ThreadInfo {
         }
     }
 
-    double total_warp_lane_utilization() const {
+    double warp_lane_utilization_at_block_x() const {
+        return warp_lane_utilization_at_block(0);
+    }
+
+    double warp_lane_utilization_at_block_y() const {
+        return warp_lane_utilization_at_block(1);
+    }
+
+    double warp_lane_utilization_at_block_z() const {
+        return warp_lane_utilization_at_block(2);
+    }
+
+    double warp_lane_utilization_at_block(std::size_t i) const {
+        return (double)threads[i] / (double)threads_in_this_block[i];
+    }
+
+    double total_warp_lane_utilization_at_block() const {
         return (double)num_threads / (double)num_threads_in_this_block;
+    }
+
+    double warp_lane_utilization() const {
+        return (double)num_threads / (double)(num_warps * 32);
     }
 
     double block_occupancy() const {
@@ -1024,7 +1044,11 @@ struct LoopNest {
     }
 
     void compute_warp_features(int64_t outer_loop_product, ScheduleFeatures& features, const ThreadInfo& thread_info) const {
-        features.warp_lane_utilization = thread_info.total_warp_lane_utilization();
+        features.warp_lane_utilization = thread_info.warp_lane_utilization();
+        features.warp_lane_utilization_at_block = thread_info.total_warp_lane_utilization_at_block();
+        features.warp_lane_utilization_at_block_x = thread_info.warp_lane_utilization_at_block_x();
+        features.warp_lane_utilization_at_block_y = thread_info.warp_lane_utilization_at_block_y();
+        features.warp_lane_utilization_at_block_z = thread_info.warp_lane_utilization_at_block_z();
         features.num_warps = thread_info.num_warps;
         features.num_warps *= outer_loop_product;
         features.block_occupancy = thread_info.block_occupancy();

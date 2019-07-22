@@ -211,6 +211,10 @@ struct ScheduleFeatures {
     double num_warps = 0;
     double block_occupancy = 0;
     double warp_lane_utilization = 0;
+    double warp_lane_utilization_at_block = 0;
+    double warp_lane_utilization_at_block_x = 0;
+    double warp_lane_utilization_at_block_y = 0;
+    double warp_lane_utilization_at_block_z = 0;
     double num_shared_mem_loads = 0;
     double num_global_mem_loads = 0;
     double num_shared_mem_stores = 0;
@@ -259,6 +263,10 @@ struct ScheduleFeatures {
                   << "    num_warps:                             " << num_warps << '\n'
                   << "    block_occupancy:                       " << block_occupancy << '\n'
                   << "    warp_lane_utilization:                 " << warp_lane_utilization << '\n'
+                  << "    warp_lane_utilization_at_block:        " << warp_lane_utilization_at_block << '\n'
+                  << "    warp_lane_utilization_at_block_x:      " << warp_lane_utilization_at_block_x << '\n'
+                  << "    warp_lane_utilization_at_block_y:      " << warp_lane_utilization_at_block_y << '\n'
+                  << "    warp_lane_utilization_at_block_z:      " << warp_lane_utilization_at_block_z << '\n'
                   << "    num_shared_mem_loads:                  " << num_shared_mem_loads << '\n'
                   << "    num_global_mem_loads:                  " << num_global_mem_loads << '\n'
                   << "    num_shared_mem_stores:                 " << num_shared_mem_stores << '\n'
