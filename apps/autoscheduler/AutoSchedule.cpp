@@ -517,10 +517,9 @@ struct ThreadInfo {
             ++num_thread_loops;
         }
 
-        num_warps = num_threads_in_this_block / 32;
-        partial_warp_lanes = num_threads_in_this_block % 32;
-        if (partial_warp_lanes != 0) {
-            num_warps++;
+        num_warps_per_block = num_threads_in_this_block / 32;
+        if (num_threads_in_this_block % 32 != 0) {
+            num_warps_per_block++;
         }
     }
 
@@ -545,15 +544,14 @@ struct ThreadInfo {
     }
 
     double warp_lane_utilization() const {
-        return (double)num_threads / (double)(num_warps * 32);
+        return (double)num_threads / (double)(num_warps_per_block * 32);
     }
 
     double block_occupancy() const {
         return (double)num_threads / MAX_THREADS_PER_BLOCK;
     }
 
-    int num_warps;
-    int partial_warp_lanes;
+    int num_warps_per_block;
 
     int threads_in_this_block[3] = {1, 1, 1};
     int64_t num_threads_in_this_block = 1;
@@ -898,7 +896,7 @@ struct LoopNest {
 
         // No bank conflicts when stride is 0
         if (stride == 0) {
-            return thread_info.num_warps;
+            return thread_info.num_warps_per_block;
         }
 
         int num_bank_accesses[32] = {0};
@@ -978,12 +976,12 @@ struct LoopNest {
             num_accesses = num_shared_mem_accesses(jac, node, consumer_store_bounds, thread_info, consumer_innermost_dim);
         }
 
-        double min_accesses = thread_info.num_warps * num_banks_per_access(node);
+        double min_accesses = thread_info.num_warps_per_block * num_banks_per_access(node);
         return {num_accesses, min_accesses / num_accesses};
     }
 
     std::pair<double, double> compute_shared_mem_load_features(const LoadJacobian& jac, int producer_innermost_dim, const FunctionDAG::Node* node, const Bound& producer_store_bounds, bool producer_has_been_scheduled, const ThreadInfo& thread_info) const {
-        double min_accesses = thread_info.num_warps * num_banks_per_access(node);
+        double min_accesses = thread_info.num_warps_per_block * num_banks_per_access(node);
 
         // Assume worst case serialized loads if the stride
         // is unknown
@@ -1010,7 +1008,7 @@ struct LoopNest {
         double stride = storage_stride(jac, innermost_dim, node, store_bounds);
 
         if (stride == 0) {
-            return {0, thread_info.num_warps};
+            return {0, thread_info.num_warps_per_block};
         }
 
         double bytes = node->bytes_per_point;
@@ -1076,7 +1074,7 @@ struct LoopNest {
         GlobalMemInfo info;
 
         // 4-byte transactions for L2 accesses
-        auto min_accesses = instances * 4 * thread_info.num_warps * num_words_per_access(node);
+        auto min_accesses = instances * 4 * thread_info.num_warps_per_block * num_words_per_access(node);
 
         // Assume worst case serialized loads if the stride
         // is unknown
@@ -1096,7 +1094,7 @@ struct LoopNest {
 
     void compute_global_mem_load_features(const LoadJacobian& jac, int producer_innermost_dim, const FunctionDAG::Node* node, const Bound& producer_store_bounds, bool producer_has_been_scheduled, const ThreadInfo& thread_info, GlobalMemInfo& global_mem, double instances) const {
         // 4-byte transactions for L2 accesses
-        auto min_accesses = instances * 4 * thread_info.num_warps * num_words_per_access(node);
+        auto min_accesses = instances * 4 * thread_info.num_warps_per_block * num_words_per_access(node);
         auto num_accesses = thread_info.num_threads;
 
         // Assume worst case serialized loads if the stride
@@ -1149,8 +1147,7 @@ struct LoopNest {
         features.warp_lane_utilization_at_block_x = thread_info.warp_lane_utilization_at_block_x();
         features.warp_lane_utilization_at_block_y = thread_info.warp_lane_utilization_at_block_y();
         features.warp_lane_utilization_at_block_z = thread_info.warp_lane_utilization_at_block_z();
-        features.num_warps = thread_info.num_warps;
-        features.num_warps *= outer_loop_product;
+        features.num_warps_per_block = thread_info.num_warps_per_block;
         features.block_occupancy = thread_info.block_occupancy();
     }
 
