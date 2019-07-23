@@ -353,8 +353,7 @@ std::string halide_type_to_c_type(const Type &t);
 
 /** generate_filter_main() is a convenient wrapper for GeneratorRegistry::create() +
  * compile_to_files(); it can be trivially wrapped by a "real" main() to produce a
- * command-line utility for ahead-of-time filter compilation.
- * Note that this function is not thread-safe because it resets global states.*/
+ * command-line utility for ahead-of-time filter compilation. */
 int generate_filter_main(int argc, char **argv, std::ostream &cerr);
 
 // select_type<> is to std::conditional as switch is to if:

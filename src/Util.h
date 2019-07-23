@@ -136,9 +136,6 @@ std::string unique_name(char prefix);
 std::string unique_name(const std::string &prefix);
 // @}
 
-/** Reset the unique name counters to zeros. */
-void reset_unique_name_counters();
-
 /** Test if the first string starts with the second string */
 bool starts_with(const std::string &str, const std::string &prefix);
 

@@ -831,7 +831,7 @@ public:
         if (!T_is_void) {
             assert(static_halide_type() == t);
         }
-        int extents[] = {first, rest...};
+        int extents[] = {first, (int)rest...};
         buf.type = t;
         buf.dimensions = 1 + (int)(sizeof...(rest));
         make_shape_storage();
@@ -868,7 +868,7 @@ public:
     Buffer(int first, int second, Args... rest) {
         static_assert(!T_is_void,
                       "To construct an Buffer<void>, pass a halide_type_t as the first argument to the constructor");
-        int extents[] = {first, second, rest...};
+        int extents[] = {first, second, (int)rest...};
         buf.type = static_halide_type();
         buf.dimensions = 2 + (int)(sizeof...(rest));
         make_shape_storage();
@@ -943,7 +943,7 @@ public:
         if (!T_is_void) {
             assert(static_halide_type() == t);
         }
-        int extents[] = {first, rest...};
+        int extents[] = {first, (int)rest...};
         buf.type = t;
         buf.dimensions = 1 + (int)(sizeof...(rest));
         buf.host = (uint8_t *) const_cast<void *>(data);
@@ -957,7 +957,7 @@ public:
     template<typename ...Args,
              typename = typename std::enable_if<AllInts<Args...>::value>::type>
     explicit Buffer(T *data, int first, Args&&... rest) {
-        int extents[] = {first, rest...};
+        int extents[] = {first, (int)rest...};
         buf.type = static_halide_type();
         buf.dimensions = 1 + (int)(sizeof...(rest));
         buf.host = (uint8_t *) const_cast<typename std::remove_const<T>::type *>(data);
@@ -1211,23 +1211,24 @@ public:
 
         // If T is void, we need to do runtime dispatch to an
         // appropriately-typed lambda. We're copying, so we only care
-        // about the element size.
-        if (type().bytes() == 1) {
+        // about the element size. (If not, this should optimize away
+        // into a static dispatch to the right-sized copy.)
+        if (T_is_void ? (type().bytes() == 1) : (sizeof(not_void_T) == 1)) {
             using MemType = uint8_t;
             auto &typed_dst = (Buffer<MemType, D> &)dst;
             auto &typed_src = (Buffer<const MemType, D> &)src;
             typed_dst.for_each_value([&](MemType &dst, MemType src) {dst = src;}, typed_src);
-        } else if (type().bytes() == 2) {
+        } else if (T_is_void ? (type().bytes() == 2) : (sizeof(not_void_T) == 2)) {
             using MemType = uint16_t;
             auto &typed_dst = (Buffer<MemType, D> &)dst;
             auto &typed_src = (Buffer<const MemType, D> &)src;
             typed_dst.for_each_value([&](MemType &dst, MemType src) {dst = src;}, typed_src);
-        } else if (type().bytes() == 4) {
+        } else if (T_is_void ? (type().bytes() == 4) : (sizeof(not_void_T) == 4)) {
             using MemType = uint32_t;
             auto &typed_dst = (Buffer<MemType, D> &)dst;
             auto &typed_src = (Buffer<const MemType, D> &)src;
             typed_dst.for_each_value([&](MemType &dst, MemType src) {dst = src;}, typed_src);
-        } else if (type().bytes() == 8) {
+        } else if (T_is_void ? (type().bytes() == 8) : (sizeof(not_void_T) == 8)) {
             using MemType = uint64_t;
             auto &typed_dst = (Buffer<MemType, D> &)dst;
             auto &typed_src = (Buffer<const MemType, D> &)src;
