@@ -292,6 +292,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::add_kernel(Stmt s,
     } else {
         stream << "#version 430\n";
     }
+    add_common_macros(stream);
     stream << "float float_from_bits(int x) { return intBitsToFloat(int(x)); }\n";
 
     for (size_t i = 0; i < args.size(); i++) {
@@ -344,7 +345,6 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::add_kernel(Stmt s,
 void CodeGen_OpenGLCompute_Dev::init_module() {
     src_stream.str("");
     src_stream.clear();
-    glc.add_common_macros(src_stream);
     cur_kernel_name = "";
 }
 
