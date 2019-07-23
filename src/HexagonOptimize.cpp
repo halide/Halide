@@ -1380,15 +1380,15 @@ class EliminateInterleaves : public IRMutator {
         // These calls can have interleaves moved from operands to the
         // result...
         static const set<string> interleavable = {
-            Call::bitwise_and,
-            Call::bitwise_not,
-            Call::bitwise_xor,
-            Call::bitwise_or,
-            Call::shift_left,
-            Call::shift_right,
-            Call::abs,
-            Call::absd,
-            Call::select_mask
+            Call::get_intrinsic_name(Call::bitwise_and),
+            Call::get_intrinsic_name(Call::bitwise_not),
+            Call::get_intrinsic_name(Call::bitwise_xor),
+            Call::get_intrinsic_name(Call::bitwise_or),
+            Call::get_intrinsic_name(Call::shift_left),
+            Call::get_intrinsic_name(Call::shift_right),
+            Call::get_intrinsic_name(Call::abs),
+            Call::get_intrinsic_name(Call::absd),
+            Call::get_intrinsic_name(Call::select_mask)
         };
         if (interleavable.count(op->name) != 0) return true;
 
@@ -1815,8 +1815,8 @@ public:
 };
 
 // Attempt to generate vtmpy instructions. This requires that all lets
-// be substituted prior to running, and so must be an IRGraphMutator2.
-class VtmpyGenerator : public IRGraphMutator2 {
+// be substituted prior to running, and so must be an IRGraphMutator.
+class VtmpyGenerator : public IRGraphMutator {
 private:
     using IRMutator::visit;
     typedef pair<Expr, size_t> LoadIndex;

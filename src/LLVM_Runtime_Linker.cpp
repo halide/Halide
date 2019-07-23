@@ -71,7 +71,6 @@ DECLARE_CPP_INITMOD(alignment_64)
 DECLARE_CPP_INITMOD(android_clock)
 DECLARE_CPP_INITMOD(android_host_cpu_count)
 DECLARE_CPP_INITMOD(android_io)
-DECLARE_CPP_INITMOD(android_opengl_context)
 DECLARE_CPP_INITMOD(buffer_t)
 DECLARE_CPP_INITMOD(cache)
 DECLARE_CPP_INITMOD(can_use_target)
@@ -98,7 +97,6 @@ DECLARE_CPP_INITMOD(hexagon_host)
 DECLARE_CPP_INITMOD(ios_io)
 DECLARE_CPP_INITMOD(linux_clock)
 DECLARE_CPP_INITMOD(linux_host_cpu_count)
-DECLARE_CPP_INITMOD(linux_opengl_context)
 DECLARE_CPP_INITMOD(linux_yield)
 DECLARE_CPP_INITMOD(matlab)
 DECLARE_CPP_INITMOD(metadata)
@@ -111,6 +109,8 @@ DECLARE_CPP_INITMOD(old_buffer_t)
 DECLARE_CPP_INITMOD(opencl)
 DECLARE_CPP_INITMOD(opengl)
 DECLARE_CPP_INITMOD(openglcompute)
+DECLARE_CPP_INITMOD(opengl_egl_context)
+DECLARE_CPP_INITMOD(opengl_glx_context)
 DECLARE_CPP_INITMOD(osx_clock)
 DECLARE_CPP_INITMOD(osx_get_symbol)
 DECLARE_CPP_INITMOD(osx_host_cpu_count)
@@ -1068,11 +1068,15 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
         if (t.has_feature(Target::OpenGL)) {
             modules.push_back(get_initmod_opengl(c, bits_64, debug));
             if (t.os == Target::Linux) {
-                modules.push_back(get_initmod_linux_opengl_context(c, bits_64, debug));
+                if (t.has_feature(Target::EGL)) {
+                    modules.push_back(get_initmod_opengl_egl_context(c, bits_64, debug));
+                } else {
+                    modules.push_back(get_initmod_opengl_glx_context(c, bits_64, debug));
+                }
             } else if (t.os == Target::OSX) {
                 modules.push_back(get_initmod_osx_opengl_context(c, bits_64, debug));
             } else if (t.os == Target::Android) {
-                modules.push_back(get_initmod_android_opengl_context(c, bits_64, debug));
+              modules.push_back(get_initmod_opengl_egl_context(c, bits_64, debug));
             } else {
                 // You're on your own to provide definitions of halide_opengl_get_proc_address and halide_opengl_create_context
             }
@@ -1081,9 +1085,13 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             modules.push_back(get_initmod_openglcompute(c, bits_64, debug));
             if (t.os == Target::Android) {
                 // Only platform that supports OpenGL Compute for now.
-                modules.push_back(get_initmod_android_opengl_context(c, bits_64, debug));
+                modules.push_back(get_initmod_opengl_egl_context(c, bits_64, debug));
             } else if (t.os == Target::Linux) {
-                modules.push_back(get_initmod_linux_opengl_context(c, bits_64, debug));
+                if (t.has_feature(Target::EGL)) {
+                    modules.push_back(get_initmod_opengl_egl_context(c, bits_64, debug));
+                } else {
+                    modules.push_back(get_initmod_opengl_glx_context(c, bits_64, debug));
+                }
             } else if (t.os == Target::OSX) {
                 modules.push_back(get_initmod_osx_opengl_context(c, bits_64, debug));
             } else {

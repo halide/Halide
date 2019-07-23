@@ -75,12 +75,6 @@ int main(int argc, char **files) {
     fprintf(stdout, "#ifndef HALIDE_H\n");
     fprintf(stdout, "#define HALIDE_H\n\n");
 
-    // If we're building on visual studio and Halide_SHARED is defined, we'd better
-    // also define it for clients so that dllimport gets used.
-    #if defined(_MSC_VER) && defined(Halide_SHARED)
-    fprintf(stdout, "#define Halide_SHARED\n");
-    #endif
-
     for (int i = 2; i < argc; i++) {
         dump_header(files[i]);
     }

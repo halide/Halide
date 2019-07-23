@@ -2490,7 +2490,7 @@ void CodeGen_LLVM::visit(const Call *op) {
                               Let::make(b_name, op->args[1],
                                         Select::make(a_var < b_var, b_var - a_var, a_var - b_var))));
         }
-    } else if (op->is_intrinsic("div_round_to_zero")) {
+    } else if (op->is_intrinsic(Call::div_round_to_zero)) {
         internal_assert(op->args.size() == 2);
         Value *a = codegen(op->args[0]);
         Value *b = codegen(op->args[1]);
@@ -2501,7 +2501,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         } else {
             internal_error << "div_round_to_zero of non-integer type.\n";
         }
-    } else if (op->is_intrinsic("mod_round_to_zero")) {
+    } else if (op->is_intrinsic(Call::mod_round_to_zero)) {
         internal_assert(op->args.size() == 2);
         Value *a = codegen(op->args[0]);
         Value *b = codegen(op->args[1]);

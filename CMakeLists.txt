@@ -1,6 +1,6 @@
 
 project(Halide)
-cmake_minimum_required(VERSION 3.2)
+cmake_minimum_required(VERSION 3.3)
 
 set(HALIDE_BASE_DIR   "${CMAKE_CURRENT_SOURCE_DIR}")
 
@@ -24,8 +24,17 @@ if("${HALIDE_REQUIRE_LLVM_VERSION}" STREQUAL "")
   find_package(LLVM REQUIRED CONFIG)
 else()
   # Find a specific version.
-  string(SUBSTRING "${HALIDE_REQUIRE_LLVM_VERSION}" 0 1 MAJOR)
-  string(SUBSTRING "${HALIDE_REQUIRE_LLVM_VERSION}" 1 1 MINOR)
+  string(REGEX REPLACE
+    "^([0-9]+)([0-9])$"
+    "\\1"
+    MAJOR
+    "${HALIDE_REQUIRE_LLVM_VERSION}")
+  string(REGEX REPLACE
+    "^([0-9]+)([0-9])$"
+    "\\2"
+    MINOR
+    "${HALIDE_REQUIRE_LLVM_VERSION}")
+  message("HALIDE_REQUIRE_LLVM_VERSION ${HALIDE_REQUIRE_LLVM_VERSION}")
   message("Looking for LLVM version ${MAJOR}.${MINOR}")
   find_package(LLVM "${MAJOR}.${MINOR}" REQUIRED CONFIG)
   if(NOT "${LLVM_VERSION_MAJOR}${LLVM_VERSION_MINOR}" STREQUAL "${MAJOR}${MINOR}")
@@ -113,11 +122,14 @@ check_tool_exists(llvm-nm "${LLVM_NM}")
 check_tool_exists(clang "${CLANG}")
 
 # Check reported LLVM version
-if (NOT "${LLVM_VERSION}" MATCHES "^[0-9][0-9]$")
-  message(FATAL_ERROR "LLVM_VERSION not specified correctly. Must be <major><minor> E.g. LLVM 7.0 is \"70\"")
+if (NOT "${LLVM_VERSION}" MATCHES "^[0-9]+$")
+  message(FATAL_ERROR "LLVM_VERSION not specified correctly, must be LLVM version times 10.")
 endif()
 if (LLVM_VERSION LESS 70)
   message(FATAL_ERROR "LLVM version must be 7.0 or newer")
+endif()
+if (LLVM_VERSION GREATER 100)
+  message(FATAL_ERROR "LLVM version must be 10.0 or older")
 endif()
 
 function(check_llvm_target TARGET HAS_TARGET)
@@ -169,8 +181,10 @@ option(HALIDE_USE_CODEMODEL_LARGE "Use the Large LLVM codemodel" OFF)
 
 if (HALIDE_SHARED_LIBRARY)
   set(HALIDE_LIBRARY_TYPE SHARED)
+  message(STATUS "Building Halide as a shared library")
 else()
   set(HALIDE_LIBRARY_TYPE STATIC)
+  message(STATUS "Building Halide as a static library")
 endif()
 
 if (HALIDE_ENABLE_RTTI AND NOT LLVM_ENABLE_RTTI)
@@ -195,7 +209,7 @@ function(halide_project name folder)
       target_compile_options("${name}" PUBLIC "-fno-rtti")
     endif()
   endif()
-  target_link_libraries("${name}" PRIVATE Halide ${CMAKE_DL_LIBS} ${CMAKE_THREAD_LIBS_INIT})
+  target_link_libraries("${name}" PRIVATE ${HALIDE_COMPILER_LIB} ${CMAKE_DL_LIBS} ${CMAKE_THREAD_LIBS_INIT})
   target_include_directories("${name}" PRIVATE "${HALIDE_BASE_DIR}/src")
   target_include_directories("${name}" PRIVATE "${HALIDE_BASE_DIR}/tools")
   set_target_properties("${name}" PROPERTIES FOLDER "${folder}")
@@ -330,7 +344,6 @@ function(add_halide_test TARGET)
   endforeach()
 
   set(BUILD_NAME "${TARGET}")
-  # add_custom_target("${BUILD_NAME}" DEPENDS "${TARGET}")
   set_target_properties("${BUILD_NAME}" PROPERTIES EXCLUDE_FROM_ALL TRUE)
   add_dependencies(build_tests "${BUILD_NAME}")
 
@@ -368,6 +381,7 @@ define_test_group(test_auto_schedule)
 define_test_group(test_correctness)
 define_test_group(test_error)
 define_test_group(test_generator)
+define_test_group(test_internal)
 define_test_group(test_opengl)
 define_test_group(test_performance)
 define_test_group(test_tutorial)
@@ -431,8 +445,7 @@ install(FILES
         "${CMAKE_BINARY_DIR}/include/Halide.h"
         "${CMAKE_BINARY_DIR}/include/HalideBuffer.h"
         ${FILES}
-        DESTINATION include
-        )
+        DESTINATION include)
 
 install(DIRECTORY tutorial
         DESTINATION .
@@ -465,7 +478,7 @@ file(GLOB FILES "${HALIDE_BASE_DIR}/*.md")
 install(FILES ${FILES}
         DESTINATION .)
 
-# ---- CMake
+# ---- halide.cmake
 file(GLOB FILES "${HALIDE_BASE_DIR}/*.cmake")
 install(FILES ${FILES}
         DESTINATION .)
@@ -480,17 +493,5 @@ foreach(F ${FILES})
           DESTINATION .)
 endforeach()
 
-if (NOT WIN32)
-  set(CPACK_PACKAGE_EXT "tar.gz")
-  set(DISTRIB_PACKAGE_EXT "tgz")
-else()
-  set(CPACK_PACKAGE_EXT "zip")
-  set(DISTRIB_PACKAGE_EXT ${CPACK_PACKAGE_EXT})
-endif()
-
 add_custom_target(distrib
-  COMMAND cmake --build . --config $<CONFIG> --target package
-  COMMAND cmake -E echo "${CPACK_PACKAGE_VENDOR}.${CPACK_PACKAGE_EXT} \"=>\" ${CPACK_PACKAGE_VENDOR}.${DISTRIB_PACKAGE_EXT}"
-  COMMAND cmake -E rename "${CPACK_PACKAGE_VENDOR}.${CPACK_PACKAGE_EXT}" "${CPACK_PACKAGE_VENDOR}.${DISTRIB_PACKAGE_EXT}"
-  BYPRODUCTS "${CPACK_PACKAGE_VENDOR}.${DISTRIB_PACKAGE_EXT}"
-  USES_TERMINAL)
+  COMMAND cmake -E echo "\\'make distrib\\' is not available under CMake. Use \\'make package\\' instead.")

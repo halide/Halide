@@ -287,9 +287,12 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::add_kernel(Stmt s,
     if (target.os == Target::Android) {
         stream << "#version 310 es\n"
                << "#extension GL_ANDROID_extension_pack_es31a : require\n";
+    } else if (target.has_feature(Target::EGL)) {
+        stream << "#version 310 es\n";
     } else {
         stream << "#version 430\n";
     }
+    add_common_macros(stream);
     stream << "float float_from_bits(int x) { return intBitsToFloat(int(x)); }\n";
 
     for (size_t i = 0; i < args.size(); i++) {
