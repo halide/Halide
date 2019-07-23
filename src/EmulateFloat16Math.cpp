@@ -170,7 +170,7 @@ class WidenMath : public IRMutator {
         if (op->call_type == Call::PureIntrinsic) {
             e = Call::make(t, op->name, mutated_args(), op->call_type,
                            op->func, op->value_index, op->image, op->param);
-        } else if (op->call_type == Call::PureExtern) {
+        } else if (op->call_type == Call::PureExtern && needs_widening(op->type)) {
             static const std::map<std::string, std::string> intrin_remapping =
                 {{"sin_f16", "sin_f32"},
                  {"asin_f16", "asin_f32"},
