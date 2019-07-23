@@ -1600,6 +1600,7 @@ struct LoopNest {
                     );
 
                     feat.num_global_mem_stores = global_mem_info.num_accesses();
+                    feat.global_mem_store_efficiency = global_mem_info.access_efficiency();
                     feat.global_mem_store_coalesce_efficiency = global_mem_info.coalesce_efficiency();
                 }
             }
