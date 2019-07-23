@@ -143,21 +143,59 @@ class WidenMath : public IRMutator {
     Expr visit(const Max *op) override { return visit_bin_op(op); }
 
     Expr visit(const Call *op) override {
-        if (op->call_type == Call::PureIntrinsic) {
-            std::vector<Expr> new_args(op->args.size());
+        Type t = op->type;
+        if (needs_widening(t)) {
+            t = Float(32, op->type.lanes());
+        }
 
-            // Mutate the args
+        auto mutated_args = [&]() {
+            std::vector<Expr> new_args(op->args.size());
             for (size_t i = 0; i < op->args.size(); i++) {
                 new_args[i] = widen(mutate(op->args[i]));
             }
+            return new_args;
+        };
 
-            Type t = op->type;
-            if (needs_widening(t)) {
-                t = Float(32, op->type.lanes());
+        Expr e;
+
+        if (op->call_type == Call::PureIntrinsic) {
+            e = Call::make(t, op->name, mutated_args(), op->call_type,
+                           op->func, op->value_index, op->image, op->param);
+        } else if (op->call_type == Call::PureExtern) {
+            static const std::map<std::string, std::string> intrin_remapping =
+                {{"sin_f16", "sin_f32"},
+                 {"asin_f16", "asin_f32"},
+                 {"cos_f16", "cos_f32"},
+                 {"acos_f16", "acos_f32"},
+                 {"tan_f16", "tan_f32"},
+                 {"atan_f16", "atan_f32"},
+                 {"atan2_f16", "atan2_f32"},
+                 {"sinh_f16", "sinh_f32"},
+                 {"asinh_f16", "asinh_f32"},
+                 {"cosh_f16", "cosh_f32"},
+                 {"acosh_f16", "acosh_f32"},
+                 {"tanh_f16", "tanh_f32"},
+                 {"atanh_f16", "atanh_f32"},
+                 {"sqrt_f16", "sqrt_f32"},
+                 {"exp_f16", "exp_f32"},
+                 {"log_f16", "log_f32"},
+                 {"pow_f16", "pow_f32"},
+                 {"floor_f16", "floor_f32"},
+                 {"ceil_f16", "ceil_f32"},
+                 {"round_f16", "round_f32"},
+                 {"trunc_f16", "trunc_f32"},
+                 {"is_nan_f16", "is_nan_f32"}};
+
+            auto it = intrin_remapping.find(op->name);
+            if (it != intrin_remapping.end()) {
+                e = Call::make(t, it->second, mutated_args(), op->call_type,
+                               op->func, op->value_index, op->image, op->param);
             }
-            Expr ret = Call::make(t, op->name, new_args, op->call_type,
-                                  op->func, op->value_index, op->image, op->param);
-            return cast(op->type, ret);
+        }
+
+        if (e.defined()) {
+            e = cast(op->type, e);
+            return e;
         } else {
             return IRMutator::visit(op);
         }
