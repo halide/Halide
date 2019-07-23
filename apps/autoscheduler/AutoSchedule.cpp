@@ -1464,7 +1464,8 @@ struct LoopNest {
                         thread_info_map.at(this)
                     );
 
-                    feat.num_shared_mem_stores = shared_mem_features.first * total_serial_loop_extents;
+                    feat.num_shared_mem_stores_per_block = shared_mem_features.first * total_serial_loop_extents;
+                    feat.num_shared_mem_stores = instances * feat.num_shared_mem_stores_per_block;
                     feat.shared_mem_store_efficiency = shared_mem_features.second;
                 } else if (consumer_site.store->is_root()) {
                     feat.num_global_mem_stores = instances * num_full_warps * num_global_mem_stores_per_warp(
@@ -1853,7 +1854,8 @@ struct LoopNest {
         }
 
         if (gpu_thread) {
-            feat.num_shared_mem_loads = num_shared_mem_loads;
+            feat.num_shared_mem_loads = instances * num_shared_mem_loads;
+            feat.num_shared_mem_loads_per_block = num_shared_mem_loads;
             if (min_num_shared_mem_loads > 0 && num_shared_mem_loads > 0) {
                 feat.shared_mem_load_efficiency = min_num_shared_mem_loads / num_shared_mem_loads;
             }
