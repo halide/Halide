@@ -304,7 +304,6 @@ public:
                           num_shared_mem_loads_per_block * relu1(31, w, n) +
                           num_global_mem_loads * relu1(28, w, n));
 
-        load_cost /= shared_mem_store_efficiency;
         load_cost /= shared_mem_load_efficiency;
 
 
@@ -328,6 +327,7 @@ public:
                           num_shared_mem_stores_per_block * relu1(32, w, n) +
                           num_global_mem_stores * relu1(30, w, n);
 
+        store_cost /= shared_mem_store_efficiency;
         store_cost /= global_mem_store_efficiency;
         store_cost /= global_mem_store_coalesce_efficiency;
 
