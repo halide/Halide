@@ -283,7 +283,7 @@ struct ScheduleFeatures {
                   << "    num_shared_mem_stores_per_block:       " << num_shared_mem_stores_per_block << '\n'
                   << "    num_global_mem_stores:                 " << num_global_mem_stores << '\n'
                   << "    shared_mem_store_efficiency:           " << shared_mem_store_efficiency << '\n'
-                  << "    shared_mem_load_efficiency:            " << shared_mem_load_efficiency << '\n';
+                  << "    shared_mem_load_efficiency:            " << shared_mem_load_efficiency << '\n'
                   << "    global_mem_store_coalesce_efficiency:  " << global_mem_store_coalesce_efficiency << '\n';
 
     }
