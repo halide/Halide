@@ -493,17 +493,5 @@ foreach(F ${FILES})
           DESTINATION .)
 endforeach()
 
-if (NOT WIN32)
-  set(CPACK_PACKAGE_EXT "tar.gz")
-  set(DISTRIB_PACKAGE_EXT "tgz")
-else()
-  set(CPACK_PACKAGE_EXT "zip")
-  set(DISTRIB_PACKAGE_EXT ${CPACK_PACKAGE_EXT})
-endif()
-
 add_custom_target(distrib
-  COMMAND cmake --build . --config $<CONFIG> --target package
-  COMMAND cmake -E echo "${CPACK_PACKAGE_VENDOR}.${CPACK_PACKAGE_EXT} \"=>\" ${CPACK_PACKAGE_VENDOR}.${DISTRIB_PACKAGE_EXT}"
-  COMMAND cmake -E rename "${CPACK_PACKAGE_VENDOR}.${CPACK_PACKAGE_EXT}" "${CPACK_PACKAGE_VENDOR}.${DISTRIB_PACKAGE_EXT}"
-  BYPRODUCTS "${CPACK_PACKAGE_VENDOR}.${DISTRIB_PACKAGE_EXT}"
-  USES_TERMINAL)
+  COMMAND cmake -E echo "\\'make distrib\\' is not available under CMake. Use \\'make package\\' instead.")
