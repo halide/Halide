@@ -1141,13 +1141,39 @@ struct LoopNest {
         return nullptr;
     }
 
-    void compute_warp_features(int64_t outer_loop_product, ScheduleFeatures& features, const ThreadInfo& thread_info) const {
+    std::pair<int64_t, int64_t> get_block_and_serial_extents(const LoopNest* block) const {
+        int max_blocks[3] = {2147483647, 65535, 65535};
+
+        std::vector<int64_t> lowered_size;
+        lowered_dims(block->size, block->vectorized_loop_index, lowered_size);
+
+        int64_t block_extents = 1;
+
+        int i = 0;
+        for (; i < 3; ++i) {
+            if (lowered_size[i] > max_blocks[i]) {
+                break;
+            }
+
+            block_extents *= lowered_size[i];
+        }
+
+        int64_t serial_extents = 1;
+        for (; i < (int)lowered_size.size(); ++i) {
+            serial_extents *= lowered_size[i];
+        }
+
+        return {block_extents, serial_extents};
+    }
+
+    void compute_warp_features(ScheduleFeatures& features, const ThreadInfo& thread_info, int64_t block_extents) const {
         features.warp_lane_utilization = thread_info.warp_lane_utilization();
         features.warp_lane_utilization_at_block = thread_info.total_warp_lane_utilization_at_block();
         features.warp_lane_utilization_at_block_x = thread_info.warp_lane_utilization_at_block_x();
         features.warp_lane_utilization_at_block_y = thread_info.warp_lane_utilization_at_block_y();
         features.warp_lane_utilization_at_block_z = thread_info.warp_lane_utilization_at_block_z();
         features.num_warps_per_block = thread_info.num_warps_per_block;
+        features.num_blocks = block_extents;
         features.block_occupancy = thread_info.block_occupancy();
     }
 
@@ -1524,14 +1550,18 @@ struct LoopNest {
                 }
             }
 
+            const LoopNest* block = get_enclosing_block(parent, grandparent);
+
+            auto block_and_serial_extents = get_block_and_serial_extents(block);
+            total_serial_loop_extents *= block_and_serial_extents.second;
+
             if (!thread_info_map.count(this)) {
-                const LoopNest* block = get_enclosing_block(parent, grandparent);
                 auto max_thread_counts = block->get_union_thread_counts(nullptr);
                 thread_info_map.emplace(this, ThreadInfo{vectorized_loop_index, size, max_thread_counts});
             }
 
             const auto& thread_info = thread_info_map.at(this);
-            compute_warp_features(instances, feat, thread_info);
+            compute_warp_features(feat, thread_info, block_and_serial_extents.first);
         }
 
         if (innermost || at_production || gpu_thread) { // These are the sites at which we compute load footprints
@@ -4003,17 +4033,18 @@ struct State {
 
     string schedule_source;
 
-    void mark_gpu_blocks(LoopNest::StageScheduleState* state, Stage& stage, const vector<VarOrRVar>& parallel_vars) {
+    void mark_gpu_blocks(LoopNest::StageScheduleState* state, Stage& stage, const vector<VarOrRVar>& parallel_vars, const vector<int64_t>& parallel_extents) {
+        int max_blocks[3] = {2147483647, 65535, 65535};
         uint8_t n_loops_tagged_gpu_blocks = 0;
 
         for (auto& v : parallel_vars) {
-            if (n_loops_tagged_gpu_blocks >= 3) {
+            if (n_loops_tagged_gpu_blocks >= 3 || parallel_extents[n_loops_tagged_gpu_blocks] > max_blocks[n_loops_tagged_gpu_blocks]) {
                 break;
             }
 
             state->schedule_source << "\n    .gpu_blocks(" << v.name() << ")";
             stage.gpu_blocks(v);
-            n_loops_tagged_gpu_blocks++;
+            ++n_loops_tagged_gpu_blocks;
         }
 
         if (n_loops_tagged_gpu_blocks > 0) {
@@ -4052,8 +4083,9 @@ struct State {
             total *= extent;
         }
 
-        // Max grid size
-        return total < 65535;
+        // Max grid size in x dimension
+        constexpr int64_t max_blocks = 2147483647;
+        return total < max_blocks;
     }
 
     void apply_schedule(const FunctionDAG &dag, const MachineParams &params, const Target &target) {
@@ -4154,8 +4186,8 @@ struct State {
 
             // Halide doesn't let you fuse an RVar with a Var, even if
             // they are both pure.
-            bool can_fuse = !(any_parallel_vars && any_parallel_rvars) && (!target.has_gpu_feature() || false /*can_fuse_gpu(parallel_extents)*/ );
-            if (can_fuse && (!target.has_gpu_feature() || can_fuse_gpu(parallel_extents))) {
+            bool can_fuse = !(any_parallel_vars && any_parallel_rvars) && (!target.has_gpu_feature() || false /* can_fuse_gpu(parallel_extents) */);
+            if (can_fuse) {
                 for (size_t i = 1; i < parallel_vars.size(); i++) {
                     // Outermost, and next outermost. Preserve the inner
                     // name to not invalidate any compute_ats.
@@ -4175,7 +4207,7 @@ struct State {
                 }
             } else {
                 if (target.has_gpu_feature()) {
-                    mark_gpu_blocks(p.second.get(), stage, parallel_vars);
+                    mark_gpu_blocks(p.second.get(), stage, parallel_vars, parallel_extents);
                 } else {
                     for (const auto &v : parallel_vars) {
                         p.second->schedule_source << "\n    .parallel(" << v.name() << ")";

@@ -208,6 +208,7 @@ struct ScheduleFeatures {
     double working_set_at_realization = 0;
     double working_set_at_root = 0;
 
+    double num_blocks = 1;
     double num_warps_per_block = 0;
     double block_occupancy = 1.0 / 1024.0;
 
@@ -269,6 +270,7 @@ struct ScheduleFeatures {
                   << "    working_set_at_production:             " << working_set_at_production << '\n'
                   << "    working_set_at_realization:            " << working_set_at_realization << '\n'
                   << "    working_set_at_root:                   " << working_set_at_root << '\n'
+                  << "    num_blocks:                            " << num_blocks << '\n'
                   << "    num_warps_per_block:                   " << num_warps_per_block << '\n'
                   << "    block_occupancy:                       " << block_occupancy << '\n'
                   << "    warp_lane_utilization:                 " << warp_lane_utilization << '\n'

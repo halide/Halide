@@ -240,6 +240,7 @@ public:
         Expr working_set_at_realization = schedule_features(n, idx++, w);
         Expr working_set_at_root = schedule_features(n, idx++, w);
 
+        Expr num_blocks = schedule_features(n, idx++, w);
         Expr num_warps_per_block = schedule_features(n, idx++, w);
         Expr block_occupancy = schedule_features(n, idx++, w);
 
@@ -271,7 +272,7 @@ public:
                                     num_scalars * relu1(1, w, n)),
                                    (vector_size * num_vectors * relu1(2, w, n) +
                                     num_scalars * relu1(3, w, n)));
-        compute_cost += num_warps_per_block * relu1(4, w, n);
+        compute_cost += num_warps_per_block * num_blocks * relu1(4, w, n);
 
         Expr num_tasks = max(1, inner_parallelism * outer_parallelism);
         Expr tasks_per_core = num_tasks / num_cores;
