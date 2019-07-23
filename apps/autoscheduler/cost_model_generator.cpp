@@ -259,6 +259,8 @@ public:
         Expr shared_mem_store_efficiency = schedule_features(n, idx++, w);
         Expr shared_mem_load_efficiency = schedule_features(n, idx++, w);
 
+        Expr global_mem_store_coalesce_efficiency = schedule_features(n, idx++, w);
+
         assert(idx == head2_w);
 
 
@@ -322,6 +324,8 @@ public:
                           num_shared_mem_stores * relu1(29, w, n) +
                           num_shared_mem_stores_per_block * relu1(32, w, n) +
                           num_global_mem_stores * relu1(30, w, n);
+
+        store_cost /= global_mem_store_coalesce_efficiency;
 
         // Now account for false sharing of cache lines. The
         // probability of a store hitting a cache line also hit by

@@ -227,6 +227,8 @@ struct ScheduleFeatures {
     double shared_mem_store_efficiency = 1;
     double shared_mem_load_efficiency = 1;
 
+    double global_mem_store_coalesce_efficiency = 1;
+
     void dump() const {
         std::cerr << "    num_realizations:                      " << num_realizations << '\n'
                   << "    num_productions:                       " << num_productions << '\n'
@@ -282,6 +284,7 @@ struct ScheduleFeatures {
                   << "    num_global_mem_stores:                 " << num_global_mem_stores << '\n'
                   << "    shared_mem_store_efficiency:           " << shared_mem_store_efficiency << '\n'
                   << "    shared_mem_load_efficiency:            " << shared_mem_load_efficiency << '\n';
+                  << "    global_mem_store_coalesce_efficiency:  " << global_mem_store_coalesce_efficiency << '\n';
 
     }
 };

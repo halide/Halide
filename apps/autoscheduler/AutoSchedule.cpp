@@ -1544,6 +1544,7 @@ struct LoopNest {
                     );
 
                     feat.num_global_mem_stores = global_mem_info.num_accesses * total_serial_loop_extents;
+                    feat.global_mem_store_coalesce_efficiency = global_mem_info.coalesce_efficiency();
                 }
             }
 
