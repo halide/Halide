@@ -831,7 +831,7 @@ public:
         if (!T_is_void) {
             assert(static_halide_type() == t);
         }
-        int extents[] = {first, rest...};
+        int extents[] = {first, (int)rest...};
         buf.type = t;
         buf.dimensions = 1 + (int)(sizeof...(rest));
         make_shape_storage();
@@ -868,7 +868,7 @@ public:
     Buffer(int first, int second, Args... rest) {
         static_assert(!T_is_void,
                       "To construct an Buffer<void>, pass a halide_type_t as the first argument to the constructor");
-        int extents[] = {first, second, rest...};
+        int extents[] = {first, second, (int)rest...};
         buf.type = static_halide_type();
         buf.dimensions = 2 + (int)(sizeof...(rest));
         make_shape_storage();
@@ -943,7 +943,7 @@ public:
         if (!T_is_void) {
             assert(static_halide_type() == t);
         }
-        int extents[] = {first, rest...};
+        int extents[] = {first, (int)rest...};
         buf.type = t;
         buf.dimensions = 1 + (int)(sizeof...(rest));
         buf.host = (uint8_t *) const_cast<void *>(data);
@@ -957,7 +957,7 @@ public:
     template<typename ...Args,
              typename = typename std::enable_if<AllInts<Args...>::value>::type>
     explicit Buffer(T *data, int first, Args&&... rest) {
-        int extents[] = {first, rest...};
+        int extents[] = {first, (int)rest...};
         buf.type = static_halide_type();
         buf.dimensions = 1 + (int)(sizeof...(rest));
         buf.host = (uint8_t *) const_cast<typename std::remove_const<T>::type *>(data);
