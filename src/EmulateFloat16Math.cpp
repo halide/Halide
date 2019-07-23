@@ -111,7 +111,16 @@ namespace {
 class WidenMath : public IRMutator {
     using IRMutator::visit;
 
+    bool float16_supported = false;
+    bool bfloat16_supported = false;
+
     bool needs_widening(Type t) {
+        if (float16_supported && t.element_of() == Float(16)) {
+            return false;
+        }
+        if (bfloat16_supported && t.element_of() == BFloat(16)) {
+            return false;
+        }
         return t.is_bfloat() || (t.is_float() && t.bits() < 32);
     }
 
@@ -202,18 +211,25 @@ class WidenMath : public IRMutator {
     }
 
     Stmt visit(const For *op) override {
-        // Check the device_api and only enter body if the device does
-        // not support native (b)float16 math. Currently no devices
-        // support (b)float16 math, so we always enter the body.
+        ScopedValue<bool> old(float16_supported, float16_supported ||
+                              (op->device_api == DeviceAPI::CUDA) ||
+                              (op->device_api == DeviceAPI::Metal) ||
+                              (op->device_api == DeviceAPI::OpenCL &&
+                               target.has_feature(Target::CLHalf)));
         return IRMutator::visit(op);
     }
+
+    const Target &target;
+
+public:
+    WidenMath(const Target &t) : target(t) {}
 };
 
 }  // anonymous namespace
 
 Stmt emulate_float16_math(const Stmt &stmt, const Target &t) {
     Stmt s = stmt;
-    s = WidenMath().mutate(s);
+    s = WidenMath(t).mutate(s);
     return s;
 }
 

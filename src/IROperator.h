@@ -975,9 +975,6 @@ inline Tuple tuple_select(const Expr &c0, const Tuple &v0, const Expr &c1, const
 // @}
 
 
-// TODO: Implement support for *_f16 external functions in various backends.
-// No backend supports these yet.
-
 /** Return the sine of a floating-point expression. If the argument is
  * not floating-point, it is cast to Float(32). Does not vectorize
  * well. */

@@ -410,13 +410,15 @@ string type_to_c_type(Type type, bool include_space, bool c_plus_plus = true) {
     bool needs_space = true;
     ostringstream oss;
 
-    if (type.is_float()) {
+    if (type.is_bfloat()) {
+        oss << "bfloat" << type.bits() << "_t";
+    } else if (type.is_float()) {
         if (type.bits() == 32) {
             oss << "float";
         } else if (type.bits() == 64) {
             oss << "double";
         } else {
-            user_error << "Can't represent a float with this many bits in C: " << type << "\n";
+            oss << "float" << type.bits() << "_t";
         }
         if (type.is_vector()) {
             oss << type.lanes();
