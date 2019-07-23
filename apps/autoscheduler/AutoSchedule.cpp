@@ -440,7 +440,11 @@ struct GlobalMemInfo {
     }
 
     double access_efficiency() const {
-        return total_min_accesses / total_num_accesses;
+        if (total_num_accesses > 0 && total_min_accesses) {
+            return total_min_accesses / total_num_accesses;
+        }
+
+        return 1;
     }
 
     double coalesce_efficiency() const {
@@ -470,8 +474,8 @@ struct GlobalMemInfo {
 
 private:
     std::vector<double> strides;
-    double total_num_accesses;
-    double total_min_accesses;
+    double total_num_accesses = 0;
+    double total_min_accesses = 0;
 };
 
 struct ThreadInfo {
@@ -1969,6 +1973,8 @@ struct LoopNest {
             }
 
             feat.num_global_mem_loads = global_mem_loads.num_accesses();
+            feat.global_mem_load_efficiency = global_mem_loads.access_efficiency();
+            feat.global_mem_load_coalesce_efficiency = global_mem_loads.coalesce_efficiency();
         }
 
         // Track features for inlined Funcs

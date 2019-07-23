@@ -229,8 +229,10 @@ struct ScheduleFeatures {
     double shared_mem_load_efficiency = 1;
 
     double global_mem_store_efficiency = 1;
+    double global_mem_load_efficiency = 1;
 
     double global_mem_store_coalesce_efficiency = 1;
+    double global_mem_load_coalesce_efficiency = 1;
 
     double working_set_at_thread = 0;
 
@@ -291,7 +293,9 @@ struct ScheduleFeatures {
                   << "    shared_mem_store_efficiency:           " << shared_mem_store_efficiency << '\n'
                   << "    shared_mem_load_efficiency:            " << shared_mem_load_efficiency << '\n'
                   << "    global_mem_store_efficiency:           " << global_mem_store_efficiency << '\n'
+                  << "    global_mem_load_efficiency:            " << global_mem_load_efficiency << '\n'
                   << "    global_mem_store_coalesce_efficiency:  " << global_mem_store_coalesce_efficiency << '\n'
+                  << "    global_mem_load_coalesce_efficiency:   " << global_mem_load_coalesce_efficiency << '\n'
                   << "    working_set_at_thread:                 " << working_set_at_thread << '\n';
 
     }

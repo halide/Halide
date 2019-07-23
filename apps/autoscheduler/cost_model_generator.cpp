@@ -261,8 +261,12 @@ public:
         Expr shared_mem_load_efficiency = schedule_features(n, idx++, w);
 
         Expr global_mem_store_efficiency = schedule_features(n, idx++, w);
+        Expr global_mem_load_efficiency = schedule_features(n, idx++, w);
 
         Expr global_mem_store_coalesce_efficiency = schedule_features(n, idx++, w);
+        Expr global_mem_load_coalesce_efficiency = schedule_features(n, idx++, w);
+
+        Expr working_set_at_thread = schedule_features(n, idx++, w);
 
         assert(idx == head2_w);
 
@@ -305,6 +309,8 @@ public:
                           num_global_mem_loads * relu1(28, w, n));
 
         load_cost /= shared_mem_load_efficiency;
+        load_cost /= global_mem_load_efficiency;
+        load_cost /= global_mem_load_coalesce_efficiency;
 
 
         // Estimate the number of cache misses on the data that this writes to and their cost
