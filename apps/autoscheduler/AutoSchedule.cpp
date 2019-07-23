@@ -1496,6 +1496,11 @@ struct LoopNest {
             }
         }
 
+        bool gpu_thread = target.has_gpu_feature() && gpu_label == thread;
+        if (gpu_thread) {
+            feat.working_set_at_thread = working_set_here;
+        }
+
         if (at_task) {
             set_working_set_at_task_feature(working_set_here, features);
         }
@@ -1533,7 +1538,6 @@ struct LoopNest {
         GlobalMemInfo global_mem_loads;
         double num_shared_mem_loads = 0;
         double min_num_shared_mem_loads = 0;
-        bool gpu_thread = target.has_gpu_feature() && gpu_label == thread;
         std::vector<int64_t> compute_loops;
         int64_t total_serial_loop_extents = 1;
         if (gpu_thread) {
