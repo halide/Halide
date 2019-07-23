@@ -415,6 +415,9 @@ string type_to_c_type(Type type, bool include_space, bool c_plus_plus = true) {
             oss << "float";
         } else if (type.bits() == 64) {
             oss << "double";
+        } else if (type.bits() == 16) {
+          // Since C++ doesn't support 16-bit floats, we pass it in as an unsigned 16
+          oss << "uint16_t";
         } else {
             user_error << "Can't represent a float with this many bits in C: " << type << "\n";
         }
