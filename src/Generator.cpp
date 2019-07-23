@@ -1038,10 +1038,6 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
             Outputs output_files = compute_outputs(targets[0], base_path, emit_options);
             auto module_producer = [&generator_name, &generator_args]
                 (const std::string &name, const Target &target) -> Module {
-                    // Reset the counters so the function/variable names look
-                    // consistent for different targets.
-                    reset_unique_name_counters();
-
                     auto sub_generator_args = generator_args;
                     sub_generator_args.erase("target");
                     // Must re-create each time since each instance will have a different Target.
