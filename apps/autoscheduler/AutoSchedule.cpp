@@ -965,66 +965,104 @@ struct LoopNest {
         return {min_loads, min_accesses};
     }
 
-    int num_global_mem_accesses_per_warp(const LoadJacobian& jac, const FunctionDAG::Node* node, const Bound& store_bounds, int num_threads, int innermost_dim) const {
+    int num_global_mem_accesses(const LoadJacobian& jac, const FunctionDAG::Node* node, const Bound& store_bounds, const ThreadInfo& thread_info, int innermost_dim) const {
         double stride = storage_stride(jac, innermost_dim, node, store_bounds);
 
         if (stride == 0) {
-            return 1;
+            return thread_info.num_warps;
         }
 
         double bytes = node->bytes_per_point;
 
         // Each words is 4 bytes so adjust the stride based
         // on width of data being loaded
-        int num_words_per_access = (bytes / 4);
+        double bank_stride = (bytes / 4);
+        int num_words_per_access = std::max(1.0, bank_stride);
         stride = std::abs(stride);
         stride *= num_words_per_access;
 
         int last_block_accessed = -1;
-        int num_accesses = 0;
-        for (int i = 0; i < num_threads; i++) {
-            for (int j = 0; j < num_words_per_access; j++) {
-                int index = (int)(i * stride) + j;
-                int block = index / 4;
-                if (block != last_block_accessed) {
-                    last_block_accessed = block;
-                    num_accesses++;
+        int total_accesses = 0;
+
+        int i = 0;
+        for (int z = 0; z < thread_info.threads_in_this_block[2]; z++) {
+            for (int y = 0; y < thread_info.threads_in_this_block[1]; y++) {
+                for (int x = 0; x < thread_info.threads_in_this_block[0]; x++) {
+                    // Skip any threads in this loop nest with extent less than the
+                    // extents of the largest thread loops in this block
+                    // for thread.x in [0, 10]:
+                    //   ...
+                    // for thread.x in [0, 5]:
+                    //   ...
+                    // For the 2nd loop, skip threads with x id >= 5
+                    bool include = x < thread_info.threads[0]
+                        && y < thread_info.threads[1]
+                        && z < thread_info.threads[2];
+
+                    if (include) {
+                        // Compute counts of which banks are accessed
+                        // Multiple accesses to the same bank with different
+                        // indices will be serialized
+                        for (int j = 0; j < num_words_per_access; j++) {
+                            int index = (int)(i * stride) + j;
+                            int block = index / 4;
+                            if (block != last_block_accessed) {
+                                last_block_accessed = block;
+                                total_accesses++;
+                            }
+                        }
+                    }
+
+                    ++i;
                 }
             }
         }
 
-        return num_accesses;
+        return total_accesses;
     }
 
-    double num_global_mem_stores_per_warp(const LoadJacobian& jac, int consumer_innermost_dim, const FunctionDAG::Node* node, const Bound& consumer_store_bounds, int num_threads) const {
+    int num_words_per_access(const FunctionDAG::Node* node) const {
+        double bytes = node->bytes_per_point;
+        return std::max(1.0, bytes / 4);
+    }
+
+    std::pair<double, double> compute_global_mem_store_features(const LoadJacobian& jac, int consumer_innermost_dim, const FunctionDAG::Node* node, const Bound& consumer_store_bounds, const ThreadInfo& thread_info) const {
         // Assume worst case serialized loads if the stride
         // is unknown
-        if (!all_strides_exist(jac, node)) {
-            return num_threads;
+        double num_accesses = thread_info.num_threads;
+
+        if (all_strides_exist(jac, node)) {
+            num_accesses = num_global_mem_accesses(jac, node, consumer_store_bounds, thread_info, consumer_innermost_dim);
         }
 
-        return num_global_mem_accesses_per_warp(jac, node, consumer_store_bounds, num_threads, consumer_innermost_dim);
+        // 4-byte transactions for L2 accesses
+        double min_accesses = 4 * thread_info.num_warps * num_words_per_access(node);
+        return {num_accesses, min_accesses / num_accesses};
     }
 
-    double num_global_mem_loads_per_warp(const LoadJacobian& jac, int producer_innermost_dim, const FunctionDAG::Node* node, const Bound& producer_store_bounds, bool producer_has_been_scheduled, int num_threads) const {
+    std::pair<double, double> compute_global_mem_load_features(const LoadJacobian& jac, int producer_innermost_dim, const FunctionDAG::Node* node, const Bound& producer_store_bounds, bool producer_has_been_scheduled, const ThreadInfo& thread_info) const {
+        // 4-byte transactions for L2 accesses
+        double min_accesses = 4 * thread_info.num_warps * num_words_per_access(node);
+
         // Assume worst case serialized loads if the stride
         // is unknown
         if (!all_strides_exist(jac, node)) {
-            return num_threads;
+            return {thread_info.num_threads, min_accesses};
         }
 
         if (producer_has_been_scheduled) {
-            return num_global_mem_accesses_per_warp(jac, node, producer_store_bounds, num_threads, producer_innermost_dim);
+            int num_accesses = num_global_mem_accesses(jac, node, producer_store_bounds, thread_info, producer_innermost_dim);
+            return {num_accesses, min_accesses};
         }
 
         // Assume best case if producer has not been scheduled: try all the
         // possible innermost dimensions and take the best
         int min_loads = 32;
         for (int i = 0; i < node->dimensions; i++) {
-            min_loads = std::min(min_loads, num_global_mem_accesses_per_warp(jac, node, producer_store_bounds, num_threads, i));
+            min_loads = std::min(min_loads, num_global_mem_accesses(jac, node, producer_store_bounds, thread_info, i));
         }
 
-        return min_loads;
+        return {min_loads, min_accesses};
     }
 
     // Assumes block, serial, thread or block, thread nesting
@@ -1410,10 +1448,6 @@ struct LoopNest {
         double num_shared_mem_loads = 0;
         double min_num_shared_mem_loads = 0;
         double num_global_mem_loads = 0;
-        int num_full_warps = 0;
-        int num_partial_warp_lanes = 0;
-        int num_threads = 1;
-        int num_threads_in_this_block = 1;
         bool gpu_thread = target.has_gpu_feature() && gpu_label == thread;
         std::vector<int64_t> compute_loops;
         int64_t total_serial_loop_extents = 1;
@@ -1439,11 +1473,6 @@ struct LoopNest {
 
             const auto& thread_info = thread_info_map.at(this);
             compute_warp_features(instances, feat, thread_info);
-
-            num_full_warps = thread_info.num_warps;
-            num_partial_warp_lanes = thread_info.partial_warp_lanes;
-            num_threads = thread_info.num_threads;
-            num_threads_in_this_block = thread_info.num_threads_in_this_block;
         }
 
         if (innermost || at_production || gpu_thread) { // These are the sites at which we compute load footprints
@@ -1468,23 +1497,15 @@ struct LoopNest {
                     feat.num_shared_mem_stores = instances * feat.num_shared_mem_stores_per_block;
                     feat.shared_mem_store_efficiency = shared_mem_features.second;
                 } else if (consumer_site.store->is_root()) {
-                    feat.num_global_mem_stores = instances * num_full_warps * num_global_mem_stores_per_warp(
+                    auto global_mem_features = compute_global_mem_store_features(
                         store_jac,
                         vector_dim,
                         stage->node,
                         bounds,
-                        32
+                        thread_info_map.at(this)
                     );
 
-                    if (num_partial_warp_lanes > 0) {
-                        feat.num_global_mem_stores = instances * num_global_mem_stores_per_warp(
-                            store_jac,
-                            vector_dim,
-                            stage->node,
-                            bounds,
-                            num_partial_warp_lanes
-                        );
-                    }
+                    feat.num_global_mem_stores = global_mem_features.first * total_serial_loop_extents;
                 }
             }
 
@@ -1713,25 +1734,17 @@ struct LoopNest {
                                 num_shared_mem_loads += n * shared_mem_features.first * total_serial_loop_extents;
                                 min_num_shared_mem_loads += n * shared_mem_features.second * total_serial_loop_extents;
                             } else if (is_global_mem) {
-                                num_global_mem_loads += instances * num_full_warps * n * num_global_mem_loads_per_warp(
+                                auto global_mem_features = compute_global_mem_load_features(
                                     jac.first,
                                     producer_innermost_dim,
                                     e->producer,
                                     producer_store_bounds,
                                     producer_has_been_scheduled,
-                                    32
+                                    thread_info_map.at(this)
                                 );
 
-                                if (num_partial_warp_lanes > 0) {
-                                    num_global_mem_loads += instances * n * num_global_mem_loads_per_warp(
-                                        jac.first,
-                                        producer_innermost_dim,
-                                        e->producer,
-                                        producer_store_bounds,
-                                        producer_has_been_scheduled,
-                                        num_partial_warp_lanes
-                                    );
-                                }
+                                num_global_mem_loads += n * global_mem_features.first * total_serial_loop_extents;
+
                             }
                         }
                     }
