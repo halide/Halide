@@ -591,7 +591,7 @@ struct Test {
             check(use_avx512 ? "vcvttpd2dq*ymm" : "vcvttpd2dqy", 8, i32(f64_1));
             check(use_avx512 ? "vcvtdq2pd*zmm" : "vcvtdq2pd*ymm", 8, f64(i32_1));
             check(use_avx512 ? "vcvtps2pd*zmm" : "vcvtps2pd*ymm", 8, f64(f32_1));
-            check(use_avx512 ? "vcvtpd2ps*ymm" : "vcvtpd2psy", 8, f32(f64_1));
+            check(use_avx512 ? "vcvtpd2ps*ymm" : "vcvtpd2ps*ymm", 8, f32(f64_1));
 
             // Newer llvms will just vpshufd straight from memory for reversed loads
             // check("vperm", 8, in_f32(100-x));
