@@ -59,7 +59,7 @@ $(AUTOSCHED_BIN)/libauto_schedule.so: $(AUTOSCHED_SRC)/AutoSchedule.cpp \
 							$(GENERATOR_DEPS) \
 							$(AUTOSCHED_BIN)/auto_schedule_runtime.a
 	@mkdir -p $(@D)
-	$(CXX) -shared $(USE_EXPORT_DYNAMIC) -fPIC $(CXXFLAGS) -g -I $(AUTOSCHED_BIN)/cost_model $(AUTOSCHED_SRC)/AutoSchedule.cpp $(AUTOSCHED_SRC)/DefaultCostModel.cpp $(AUTOSCHED_WEIGHT_OBJECTS) $(AUTOSCHED_COST_MODEL_LIBS) $(AUTOSCHED_BIN)/auto_schedule_runtime.a -O3 -o $@ $(HALIDE_SYSTEM_LIBS)
+	$(CXX) -shared $(USE_EXPORT_DYNAMIC) -fPIC $(CXXFLAGS) -g -I $(AUTOSCHED_BIN)/cost_model $(AUTOSCHED_SRC)/AutoSchedule.cpp $(AUTOSCHED_SRC)/DefaultCostModel.cpp $(AUTOSCHED_WEIGHT_OBJECTS) $(AUTOSCHED_COST_MODEL_LIBS) $(AUTOSCHED_BIN)/auto_schedule_runtime.a -O0 -o $@ $(HALIDE_SYSTEM_LIBS)
 
 $(AUTOSCHED_BIN)/train_cost_model: $(AUTOSCHED_SRC)/train_cost_model.cpp \
 						 $(AUTOSCHED_SRC)/DefaultCostModel.cpp \
@@ -75,6 +75,15 @@ $(AUTOSCHED_BIN)/augment_sample: $(AUTOSCHED_SRC)/augment_sample.cpp
 	@mkdir -p $(@D)
 	$(CXX) $< -O3 -o $@
 
+$(AUTOSCHED_BIN)/reset_weights: $(AUTOSCHED_SRC)/reset_weights.cpp \
+						 $(AUTOSCHED_SRC)/DefaultCostModel.cpp \
+						 $(AUTOSCHED_SRC)/CostModel.h \
+						 $(AUTOSCHED_SRC)/NetworkSize.h \
+						 $(AUTOSCHED_COST_MODEL_LIBS) \
+						 $(AUTOSCHED_WEIGHT_OBJECTS) \
+						 $(AUTOSCHED_BIN)/auto_schedule_runtime.a
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) -Wall -I $(AUTOSCHED_BIN)/cost_model -O3 $(filter-out %.h,$^) -o $@ $(LDFLAGS)
 
 # This is the value that machine_params defaults to if no custom value is specified;
 # see MachineParams::generic()

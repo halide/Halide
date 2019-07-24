@@ -40,6 +40,9 @@ $(BIN)/test: test.cpp $(AUTOSCHED_BIN)/libauto_schedule.so
 test: $(BIN)/test
 	HL_WEIGHTS_DIR=weights LD_LIBRARY_PATH=$(BIN) $(BIN)/test
 
+reset_gpu_weights: $(AUTOSCHED_BIN)/reset_weights
+	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu_weights $(BIN)/reset_weights
+
 clean:
 	rm -rf $(BIN)
 
