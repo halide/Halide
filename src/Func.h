@@ -78,23 +78,14 @@ class Stage {
     Stage &compute_with(LoopLevel loop_level, const std::map<std::string, LoopAlignStrategy> &align);
 
 public:
-    Stage(Internal::Function f, Internal::Definition d, size_t stage_index,
-          const std::vector<Var> &args)
-            : function(f), definition(d), stage_index(stage_index), dim_vars(args) {
-        internal_assert(definition.defined());
-        internal_assert(definition.args().size() == dim_vars.size());
-        definition.schedule().touched() = true;
-    }
-
-    Stage(Internal::Function f, Internal::Definition d, size_t stage_index,
-          const std::vector<std::string> &args)
-            : function(f), definition(d), stage_index(stage_index) {
+    Stage(Internal::Function f, Internal::Definition d, size_t stage_index)
+        : function(std::move(f)), definition(std::move(d)), stage_index(stage_index) {
         internal_assert(definition.defined());
         definition.schedule().touched() = true;
 
-        std::vector<Var> dim_vars(args.size());
-        for (size_t i = 0; i < args.size(); i++) {
-            dim_vars[i] = Var(args[i]);
+        dim_vars.reserve(function.args().size());
+        for (const auto &arg : function.args()) {
+            dim_vars.emplace_back(arg);
         }
         internal_assert(definition.args().size() == dim_vars.size());
     }

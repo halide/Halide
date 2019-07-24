@@ -55,7 +55,7 @@ WASM_SHELL ?= d8
 PREFIX ?= /usr/local
 LLVM_CONFIG ?= llvm-config
 LLVM_COMPONENTS= $(shell $(LLVM_CONFIG) --components)
-LLVM_VERSION = $(shell $(LLVM_CONFIG) --version | cut -b 1-3)
+LLVM_VERSION = $(shell $(LLVM_CONFIG) --version | sed 's/\([0-9][0-9]*\)\.\([0-9]\).*/\1.\2/')
 
 LLVM_FULL_VERSION = $(shell $(LLVM_CONFIG) --version)
 LLVM_BINDIR = $(shell $(LLVM_CONFIG) --bindir | sed -e 's/\\/\//g' -e 's/\([a-zA-Z]\):/\/\1/g')
@@ -99,7 +99,7 @@ endif
 
 COMMON_LD_FLAGS += $(SANITIZER_FLAGS)
 
-LLVM_VERSION_TIMES_10 = $(shell $(LLVM_CONFIG) --version | cut -b 1,3)
+LLVM_VERSION_TIMES_10 = $(shell $(LLVM_CONFIG) --version | sed 's/\([0-9][0-9]*\)\.\([0-9]\).*/\1\2/')
 
 LLVM_CXX_FLAGS += -DLLVM_VERSION=$(LLVM_VERSION_TIMES_10)
 
@@ -778,7 +778,6 @@ RUNTIME_CPP_COMPONENTS = \
   android_clock \
   android_host_cpu_count \
   android_io \
-  android_opengl_context \
   arm_cpu_features \
   buffer_t \
   cache \
@@ -803,7 +802,6 @@ RUNTIME_CPP_COMPONENTS = \
   ios_io \
   linux_clock \
   linux_host_cpu_count \
-  linux_opengl_context \
   linux_yield \
   matlab \
   metadata \
@@ -820,6 +818,8 @@ RUNTIME_CPP_COMPONENTS = \
   opencl \
   opengl \
   openglcompute \
+  opengl_egl_context \
+  opengl_glx_context \
   osx_clock \
   osx_get_symbol \
   osx_host_cpu_count \
@@ -2036,6 +2036,10 @@ ifneq (,$(findstring clang version 9.0,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
 
+ifneq (,$(findstring clang version 10.0,$(CLANG_VERSION)))
+CLANG_OK=yes
+endif
+
 ifneq (,$(findstring Apple LLVM version 5.0,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
@@ -2056,7 +2060,7 @@ $(BUILD_DIR)/clang_ok:
 	@exit 1
 endif
 
-ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 70 71 80 90))
+ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 70 71 80 90 100))
 LLVM_OK=yes
 endif
 
