@@ -1082,14 +1082,14 @@ struct LoopNest {
 
         // Assume worst case serialized loads if the stride
         // is unknown
-        auto num_accesses = thread_info.num_threads;
+        auto num_accesses = instances * thread_info.num_threads;
 
         double stride = 32.0;
 
         if (all_strides_exist(jac, node)) {
             auto result = num_global_mem_accesses(jac, node, consumer_store_bounds, thread_info, consumer_innermost_dim);
             stride = result.first;
-            num_accesses = result.second;
+            num_accesses = instances * result.second;
         }
 
         info.add_access_info(num_accesses, min_accesses, stride);
