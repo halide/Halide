@@ -76,6 +76,11 @@
 #include "NetworkSize.h"
 #include "AutoSchedule.h"
 
+#ifdef _WIN32
+#include <io.h>
+#define _isatty isatty;
+#endif
+
 namespace Halide {
 namespace Internal {
 namespace Autoscheduler {
