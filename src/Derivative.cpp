@@ -140,7 +140,8 @@ private:
         const std::string &name, // called function name
         const FunctionPtr &func_ptr, // pointer to halide function, is null if this is a call to buffer or param
         const std::vector<Expr> &call_args, // call arguments
-        int value_index // which element in the tuple
+        int value_index, // which element in the tuple
+        const Type &type // return type of the called function
     );
 
     // For each expression, we store the accumulated adjoints expression
@@ -521,7 +522,8 @@ void ReverseAccumulationVisitor::propagate_adjoints(
         called_buffers_or_param.insert(buffers.begin(), buffers.end());
     }
     for (const auto &it : called_buffers_or_param) {
-        Func adjoint_func(it.first + "_d__");
+        // Replace all the dots in the function names to make it legal.
+        Func adjoint_func(replace_all(it.first, ".", "_") + "_d__");
         vector<Var> args;
         for (int i = 0; i < it.second.dimension; i++) {
             args.push_back(Var());
@@ -857,7 +859,7 @@ void ReverseAccumulationVisitor::visit(const Variable *op) {
 
     if (op->param.defined()) {
         // This is a reference to a Parameter, propagate to the corresponding buffer
-        propagate_halide_function_call(adjoint, op->param.name(), FunctionPtr(), {}, 0);
+        propagate_halide_function_call(adjoint, op->param.name(), FunctionPtr(), {}, 0, op->type);
         return;
     }
 
@@ -1190,7 +1192,7 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
         }
     } else if (op->call_type == Call::Halide ||
                op->call_type == Call::Image) {  // Halide function call or Halid buffer
-        propagate_halide_function_call(adjoint, op->name, op->func, op->args, op->value_index);
+        propagate_halide_function_call(adjoint, op->name, op->func, op->args, op->value_index, op->type);
     } else {
         // TODO: let user provide derivatives for external functions
         internal_error << "Unknown call type of operation: " << op->name << "\n";
@@ -1199,7 +1201,12 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
 
 void ReverseAccumulationVisitor::propagate_halide_function_call(
         Expr adjoint, const std::string &name, const FunctionPtr &func_ptr,
-        const std::vector<Expr> &call_args, int value_index) {
+        const std::vector<Expr> &call_args, int value_index, const Type &type) {
+    if (!type.is_float()) {
+        // If the function call does not return continuous output,
+        // don't propagate to the function.
+        return;
+    }
     // Add Let expressions
     adjoint = add_let_expression(adjoint, let_var_mapping, let_variables);
     vector<Expr> lhs = call_args;

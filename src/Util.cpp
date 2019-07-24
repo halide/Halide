@@ -117,11 +117,6 @@ int unique_count(size_t h) {
 }
 }  // namespace
 
-void reset_unique_name_counters() {
-    for (int i = 0; i < num_unique_name_counters; ++i)
-        unique_name_counters[i].store(0);
-}
-
 // There are three possible families of names returned by the methods below:
 // 1) char pattern: (char that isn't '$') + number (e.g. v234)
 // 2) string pattern: (string without '$') + '$' + number (e.g. fr#nk82$42)
