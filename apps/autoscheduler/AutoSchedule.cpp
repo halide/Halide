@@ -971,7 +971,7 @@ struct LoopNest {
         return std::max(1.0, bytes / 4);
     }
 
-    std::pair<double, double> compute_shared_mem_stores(const LoadJacobian& jac, int consumer_innermost_dim, const FunctionDAG::Node* node, const Bound& consumer_store_bounds, const ThreadInfo& thread_info) const {
+    std::pair<double, double> compute_shared_mem_stores(const LoadJacobian& jac, int consumer_innermost_dim, const FunctionDAG::Node* node, const Bound& consumer_store_bounds, const ThreadInfo& thread_info, double serial_loop_extents) const {
         // Assume worst case serialized loads if the stride
         // is unknown
         double num_accesses = thread_info.num_threads;
@@ -980,7 +980,8 @@ struct LoopNest {
             num_accesses = num_shared_mem_accesses(jac, node, consumer_store_bounds, thread_info, consumer_innermost_dim);
         }
 
-        double min_accesses = thread_info.num_warps_per_block * num_banks_per_access(node);
+        double min_accesses = serial_loop_extents * thread_info.num_warps_per_block * num_banks_per_access(node);
+        num_accesses *= serial_loop_extents;
         return {num_accesses, min_accesses / num_accesses};
     }
 
@@ -1587,10 +1588,11 @@ struct LoopNest {
                         vector_dim,
                         stage->node,
                         bounds,
-                        thread_info_map.at(this)
+                        thread_info_map.at(this),
+                        total_serial_loop_extents
                     );
 
-                    feat.num_shared_mem_stores_per_block = shared_mem_features.first * total_serial_loop_extents;
+                    feat.num_shared_mem_stores_per_block = shared_mem_features.first;
                     feat.num_shared_mem_stores = instances * feat.num_shared_mem_stores_per_block;
                     feat.shared_mem_store_efficiency = shared_mem_features.second;
                 } else if (consumer_site.store->is_root()) {
@@ -1603,7 +1605,7 @@ struct LoopNest {
                         total_serial_loop_extents
                     );
 
-                    feat.num_global_mem_stores = global_mem_info.num_accesses();
+                    feat.num_global_mem_stores_per_block = global_mem_info.num_accesses();
                     feat.global_mem_store_efficiency = global_mem_info.access_efficiency();
                     feat.global_mem_store_coalesce_efficiency = global_mem_info.coalesce_efficiency();
                 }
@@ -1972,7 +1974,7 @@ struct LoopNest {
                 feat.shared_mem_load_efficiency = min_num_shared_mem_loads / num_shared_mem_loads;
             }
 
-            feat.num_global_mem_loads = global_mem_loads.num_accesses();
+            feat.num_global_mem_loads_per_block = global_mem_loads.num_accesses();
             feat.global_mem_load_efficiency = global_mem_loads.access_efficiency();
             feat.global_mem_load_coalesce_efficiency = global_mem_loads.coalesce_efficiency();
         }

@@ -252,10 +252,10 @@ public:
 
         Expr num_shared_mem_loads = schedule_features(n, idx++, w);
         Expr num_shared_mem_loads_per_block = schedule_features(n, idx++, w);
-        Expr num_global_mem_loads = schedule_features(n, idx++, w);
+        Expr num_global_mem_loads_per_block = schedule_features(n, idx++, w);
         Expr num_shared_mem_stores = schedule_features(n, idx++, w);
         Expr num_shared_mem_stores_per_block = schedule_features(n, idx++, w);
-        Expr num_global_mem_stores = schedule_features(n, idx++, w);
+        Expr num_global_mem_stores_per_block = schedule_features(n, idx++, w);
 
         Expr shared_mem_store_efficiency = schedule_features(n, idx++, w);
         Expr shared_mem_load_efficiency = schedule_features(n, idx++, w);
@@ -304,9 +304,8 @@ public:
                           num_vectors * unique_lines_read_per_vector * relu1(13, w, n) +
                           num_tasks * unique_bytes_read_per_task * relu1(14, w, n) +
                           num_tasks * unique_lines_read_per_task * relu1(15, w, n) +
-                          num_shared_mem_loads * relu1(27, w, n) +
-                          num_shared_mem_loads_per_block * relu1(31, w, n) +
-                          num_global_mem_loads * relu1(28, w, n));
+                          num_blocks * num_shared_mem_loads_per_block * relu1(27, w, n) +
+                          num_blocks * num_global_mem_loads_per_block * relu1(28, w, n));
 
         load_cost /= shared_mem_load_efficiency;
         load_cost /= global_mem_load_efficiency;
@@ -329,9 +328,8 @@ public:
 
         Expr store_cost = num_realizations * (lines_written_per_realization * alpha +
                                               bytes_at_realization * beta) +
-                          num_shared_mem_stores * relu1(29, w, n) +
-                          num_shared_mem_stores_per_block * relu1(32, w, n) +
-                          num_global_mem_stores * relu1(30, w, n);
+                          num_blocks * num_shared_mem_stores_per_block * relu1(29, w, n) +
+                          num_blocks * num_global_mem_stores_per_block * relu1(30, w, n);
 
         store_cost /= shared_mem_store_efficiency;
         store_cost /= global_mem_store_efficiency;
