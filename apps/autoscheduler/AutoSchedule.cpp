@@ -1096,23 +1096,31 @@ struct LoopNest {
 
         double bytes = node->bytes_per_point;
 
-        // Each words is 4 bytes so adjust the stride based
+        // Each word is 4 bytes so adjust the stride based
         // on width of data being accessed
         double word_stride = (bytes / 4);
         int words_per_access = std::max(1.0, word_stride);
         stride = std::abs(stride);
         stride *= words_per_access;
 
-        int last_word_accessed = -1;
+        // If the stride is larger than 8 words (32 bits), it is guaranteed to
+        // traverse at least one segment each iteration. Any stride larger than
+        // 2 segments will just traverse empty segments so we reduce it here to
+        // avoid potential overflow below
+        if (stride > 8.0) {
+            stride = 8.0 + std::fmod(stride, 8.0);
+        }
+
+        int last_segment_accessed = -1;
         int required_accesses = 0;
 
         thread_info.for_each_active_thread_id([&](int thread_id, bool is_last_thread) {
-            // Compute counts of which words are accessed
+            // Compute counts of which segments are accessed
             for (int j = 0; j < words_per_access; j++) {
-                int index = (int)(thread_id * stride) + j;
-                int word = index / 4;
-                if (word != last_word_accessed) {
-                    last_word_accessed = word;
+                int64_t index = (int64_t)(thread_id * stride) + j;
+                int segment = index / 8;
+                if (segment != last_segment_accessed) {
+                    last_segment_accessed = segment;
                     required_accesses++;
                 }
             }
@@ -1120,7 +1128,7 @@ struct LoopNest {
 
         auto num_active_warps_per_block = thread_info.num_active_warps_per_block;
 
-        // 4-byte transactions for L2 accesses
+        // 32-byte transactions for L2 accesses
         auto min_accesses = serial_loop_extents * 4 * num_active_warps_per_block * num_words_per_access(node);
 
         global_mem_info.add_access_info(serial_loop_extents * required_accesses, min_accesses, stride);
@@ -1133,7 +1141,7 @@ struct LoopNest {
             return 1;
         }
 
-        // 4-byte transactions for L2 accesses
+        // 32-byte transactions for L2 accesses
         return serial_loop_extents * 4 * thread_info.num_active_warps_per_block * num_words_per_access(node);
     }
 
