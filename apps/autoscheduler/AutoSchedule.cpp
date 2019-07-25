@@ -1228,7 +1228,7 @@ struct LoopNest {
         int64_t block_extents = 1;
 
         int i = 0;
-        for (; i < 3; ++i) {
+        for (int N = std::min(3, (int)lowered_size.size()); i < N; ++i) {
             if (lowered_size[i] > max_blocks[i]) {
                 break;
             }
