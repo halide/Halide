@@ -151,7 +151,7 @@ void load_samples(map<int, PipelineSample>& training_set, map<int, PipelineSampl
                     for (int y = 0; y < head1_h; y++) {
                         float f = scratch[i * features_per_stage + (x + 1) * 7 + y + head2_w];
                         if (f < 0 || std::isnan(f)) {
-                            std::cout << "Negative or NaN pipeline feature: " << x << " " << y << " " << i << " " << f << "\n";
+                            std::cout << "Negative or NaN pipeline feature: " << s << " " << x << " " << y << " " << i << " " << f << "\n";
                         }
                         p.pipeline_features(x, y, i) = f;
                     }
