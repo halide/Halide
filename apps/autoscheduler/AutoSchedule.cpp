@@ -434,47 +434,47 @@ vector<vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, int fa
 }
 
 struct GlobalMemInfo {
-
-    double num_accesses() const {
-        return total_num_accesses;
+    double required_accesses() const {
+        return total_required_accesses;
     }
 
     double access_efficiency() const {
-        if (total_num_accesses > 0 && total_min_accesses) {
-            return total_min_accesses / total_num_accesses;
+        if (total_required_accesses > 0 && total_min_accesses > 0) {
+            return total_min_accesses / total_required_accesses;
         }
 
         return 1;
     }
 
     double coalesce_efficiency() const {
+        double stride = average_stride();
+        if (stride == 0) {
+            return 1;
+        }
         constexpr double min_coalesce_efficiency = 1.0 / 32.0;
         constexpr double max_coalesce_efficiency = 1.0;
-        return std::max(min_coalesce_efficiency, std::min(max_coalesce_efficiency, 1.0 / average_stride()));
+        return std::max(min_coalesce_efficiency, std::min(max_coalesce_efficiency, 1.0 / stride));
     }
 
     double average_stride() const {
-        if (strides.empty()) {
+        if (num_strides == 0) {
             return 32.0;
         }
 
-        double total = 0.0;
-        for (auto s : strides) {
-            total += s;
-        }
-
-        return total / strides.size();
+        return total_strides / num_strides;
     }
 
-    void add_access_info(double num_accesses, double min_accesses, double stride) {
-        total_num_accesses += num_accesses;
+    void add_access_info(double required_accesses, double min_accesses, double stride) {
+        total_required_accesses += required_accesses;
         total_min_accesses += min_accesses;
-        strides.push_back(std::min(32.0, stride));
+        total_strides += std::min(32.0, stride);
+        num_strides += 1;
     }
 
 private:
-    std::vector<double> strides;
-    double total_num_accesses = 0;
+    int num_strides = 0;
+    double total_strides = 0;
+    double total_required_accesses = 0;
     double total_min_accesses = 0;
 };
 
@@ -1068,44 +1068,10 @@ struct LoopNest {
                 serial_loop_extents
             );
 
-            feat.num_global_mem_stores_per_block = global_mem_info.num_accesses();
+            feat.num_global_mem_stores_per_block = global_mem_info.required_accesses();
             feat.global_mem_store_efficiency = global_mem_info.access_efficiency();
             feat.global_mem_store_coalesce_efficiency = global_mem_info.coalesce_efficiency();
         }
-    }
-
-    std::pair<double, int> num_global_mem_accesses(const LoadJacobian& jac, const FunctionDAG::Node* node, const Bound& store_bounds, const ThreadInfo& thread_info, int innermost_dim) const {
-        double stride = storage_stride(jac, innermost_dim, node, store_bounds);
-
-        if (stride == 0) {
-            return {0, thread_info.num_active_warps_per_block};
-        }
-
-        double bytes = node->bytes_per_point;
-
-        // Each words is 4 bytes so adjust the stride based
-        // on width of data being loaded
-        double word_stride = (bytes / 4);
-        int num_words_per_access = std::max(1.0, word_stride);
-        stride = std::abs(stride);
-        stride *= num_words_per_access;
-
-        int last_word_accessed = -1;
-        int total_accesses = 0;
-
-        thread_info.for_each_active_thread_id([&](int thread_id, bool is_last_thread) {
-            // Compute counts of which words are accessed
-            for (int j = 0; j < num_words_per_access; j++) {
-                int index = (int)(thread_id * stride) + j;
-                int word = index / 4;
-                if (word != last_word_accessed) {
-                    last_word_accessed = word;
-                    total_accesses++;
-                }
-            }
-        });
-
-        return {stride, total_accesses};
     }
 
     int word_stride(const FunctionDAG::Node* node) const {
@@ -1118,59 +1084,115 @@ struct LoopNest {
         return std::max(1.0, bytes / 4);
     }
 
-    GlobalMemInfo compute_global_mem_store_features(const LoadJacobian& jac, int consumer_innermost_dim, const FunctionDAG::Node* node, const Bound& consumer_store_bounds, const ThreadInfo& thread_info, double serial_loop_extents) const {
-        GlobalMemInfo info;
+    void compute_num_global_mem_accesses_per_block(const LoadJacobian& jac, const FunctionDAG::Node* node, const Bound& store_bounds, const ThreadInfo& thread_info, int innermost_dim, double serial_loop_extents, GlobalMemInfo& global_mem_info) const {
+        double stride = storage_stride(jac, innermost_dim, node, store_bounds);
 
-        // 4-byte transactions for L2 accesses
-        auto min_accesses = serial_loop_extents * 4 * thread_info.num_active_warps_per_block * num_words_per_access(node);
-
-        // Assume worst case serialized loads if the stride
-        // is unknown
-        auto num_accesses = serial_loop_extents * thread_info.num_threads;
-
-        double stride = 32.0;
-
-        if (all_strides_exist(jac, node)) {
-            auto result = num_global_mem_accesses(jac, node, consumer_store_bounds, thread_info, consumer_innermost_dim);
-            stride = result.first;
-            num_accesses = serial_loop_extents * result.second;
+        if (stride == 0) {
+            // Only need a single access (optimistically assume that it remains
+            // cached across iterations)
+            global_mem_info.add_access_info(1, 1, stride);
+            return;
         }
 
-        info.add_access_info(num_accesses, min_accesses, stride);
-        return info;
+        double bytes = node->bytes_per_point;
+
+        // Each words is 4 bytes so adjust the stride based
+        // on width of data being accessed
+        double word_stride = (bytes / 4);
+        int words_per_access = std::max(1.0, word_stride);
+        stride = std::abs(stride);
+        stride *= words_per_access;
+
+        int last_word_accessed = -1;
+        int required_accesses = 0;
+
+        thread_info.for_each_active_thread_id([&](int thread_id, bool is_last_thread) {
+            // Compute counts of which words are accessed
+            for (int j = 0; j < words_per_access; j++) {
+                int index = (int)(thread_id * stride) + j;
+                int word = index / 4;
+                if (word != last_word_accessed) {
+                    last_word_accessed = word;
+                    required_accesses++;
+                }
+            }
+        });
+
+        auto num_active_warps_per_block = thread_info.num_active_warps_per_block;
+
+        // 4-byte transactions for L2 accesses
+        auto min_accesses = serial_loop_extents * 4 * num_active_warps_per_block * num_words_per_access(node);
+
+        global_mem_info.add_access_info(serial_loop_extents * required_accesses, min_accesses, stride);
     }
 
-    void compute_global_mem_load_features(const LoadJacobian& jac, int producer_innermost_dim, const FunctionDAG::Node* node, const Bound& producer_store_bounds, bool producer_has_been_scheduled, const ThreadInfo& thread_info, GlobalMemInfo& global_mem, double serial_loop_extents) const {
-        // 4-byte transactions for L2 accesses
-        auto min_accesses = serial_loop_extents * 4 * thread_info.num_active_warps_per_block * num_words_per_access(node);
-        auto num_accesses = thread_info.num_threads;
+    double min_global_mem_accesses(const FunctionDAG::Node* node, const ThreadInfo& thread_info, double serial_loop_extents, double stride) const {
+        if (stride == 0) {
+            // Only need a single access (optimistically assume that it remains
+            // cached across iterations)
+            return 1;
+        }
 
+        // 4-byte transactions for L2 accesses
+        return serial_loop_extents * 4 * thread_info.num_active_warps_per_block * num_words_per_access(node);
+    }
+
+    GlobalMemInfo compute_global_mem_store_features(const LoadJacobian& jac, int consumer_innermost_dim, const FunctionDAG::Node* node, const Bound& consumer_store_bounds, const ThreadInfo& thread_info, double serial_loop_extents) const {
+        GlobalMemInfo global_mem_info;
+
+        if (!all_strides_exist(jac, node)) {
+            double stride = 32.0;
+
+            // Assume worst case serialized loads if the stride
+            // is unknown
+            auto required_accesses = serial_loop_extents * thread_info.num_threads;
+
+            auto min_accesses = min_global_mem_accesses(node, thread_info, serial_loop_extents, stride);
+
+            global_mem_info.add_access_info(required_accesses, min_accesses, stride);
+            return global_mem_info;
+        }
+
+        compute_num_global_mem_accesses_per_block(jac, node, consumer_store_bounds, thread_info, consumer_innermost_dim, serial_loop_extents, global_mem_info);
+        return global_mem_info;
+    }
+
+    void compute_global_mem_load_features(const LoadJacobian& jac, int producer_innermost_dim, const FunctionDAG::Node* node, const Bound& producer_store_bounds, bool producer_has_been_scheduled, const ThreadInfo& thread_info, GlobalMemInfo& global_mem_info, double serial_loop_extents_and_load_count) const {
         // Assume worst case serialized loads if the stride
         // is unknown
         if (!all_strides_exist(jac, node)) {
-            global_mem.add_access_info(serial_loop_extents * num_accesses, min_accesses, 32.0);
+            double stride = 32.0;
+
+            auto required_accesses = serial_loop_extents_and_load_count * thread_info.num_threads;
+
+            auto min_accesses = min_global_mem_accesses(node, thread_info, serial_loop_extents_and_load_count, stride);
+
+            global_mem_info.add_access_info(required_accesses, min_accesses, stride);
             return;
         }
 
         if (producer_has_been_scheduled) {
-            auto result = num_global_mem_accesses(jac, node, producer_store_bounds, thread_info, producer_innermost_dim);
-            global_mem.add_access_info(serial_loop_extents * result.second, min_accesses, result.first);
+            compute_num_global_mem_accesses_per_block(jac, node, producer_store_bounds, thread_info, producer_innermost_dim, serial_loop_extents_and_load_count, global_mem_info);
+
             return;
         }
 
         // Assume best case if producer has not been scheduled: try all the
         // possible innermost dimensions and take the best
-        int min_loads = 32;
+        int min_required_accesses = serial_loop_extents_and_load_count * thread_info.num_threads;
         double stride = 32.0;
         for (int i = 0; i < node->dimensions; i++) {
-            auto result = num_global_mem_accesses(jac, node, producer_store_bounds, thread_info, i);
-            if (result.second < min_loads) {
-                min_loads = result.second;
-                stride = result.first;
+            GlobalMemInfo info;
+            compute_num_global_mem_accesses_per_block(jac, node, producer_store_bounds, thread_info, i, serial_loop_extents_and_load_count, info);
+            if (info.required_accesses() < min_required_accesses) {
+                min_required_accesses = info.required_accesses();
+                stride = info.average_stride();
             }
         }
 
-        global_mem.add_access_info(serial_loop_extents * min_loads, min_accesses, stride);
+        auto min_accesses = min_global_mem_accesses(node, thread_info, serial_loop_extents_and_load_count, stride);
+
+        global_mem_info.add_access_info(min_required_accesses, min_accesses, stride);
     }
 
     // Assumes block, serial, thread or block, thread nesting
@@ -2002,7 +2024,7 @@ struct LoopNest {
                 feat.shared_mem_load_efficiency = min_num_shared_mem_loads / num_shared_mem_loads;
             }
 
-            feat.num_global_mem_loads_per_block = global_mem_loads.num_accesses();
+            feat.num_global_mem_loads_per_block = global_mem_loads.required_accesses();
             feat.global_mem_load_efficiency = global_mem_loads.access_efficiency();
             feat.global_mem_load_coalesce_efficiency = global_mem_loads.coalesce_efficiency();
         }
