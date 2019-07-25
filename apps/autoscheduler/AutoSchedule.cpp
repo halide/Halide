@@ -552,6 +552,17 @@ struct ThreadInfo {
         }
     }
 
+    template <typename Fn>
+    void for_each_active_thread_id(const Fn& fn) const {
+        for_each_thread_id([&](int thread_id, bool is_active, bool is_last_thread) {
+            if (!is_active) {
+                return;
+            }
+
+            fn(thread_id, is_last_thread);
+        });
+    }
+
     void count_num_active_warps_per_block() {
         bool current_warp_is_active = false;
 
@@ -1066,54 +1077,32 @@ struct LoopNest {
         double stride = storage_stride(jac, innermost_dim, node, store_bounds);
 
         if (stride == 0) {
-            return {0, thread_info.num_warps_per_block};
+            return {0, thread_info.num_active_warps_per_block};
         }
 
         double bytes = node->bytes_per_point;
 
         // Each words is 4 bytes so adjust the stride based
         // on width of data being loaded
-        double bank_stride = (bytes / 4);
-        int num_words_per_access = std::max(1.0, bank_stride);
+        double word_stride = (bytes / 4);
+        int num_words_per_access = std::max(1.0, word_stride);
         stride = std::abs(stride);
         stride *= num_words_per_access;
 
-        int last_block_accessed = -1;
+        int last_word_accessed = -1;
         int total_accesses = 0;
 
-        int i = 0;
-        for (int z = 0; z < thread_info.threads_in_this_block[2]; z++) {
-            for (int y = 0; y < thread_info.threads_in_this_block[1]; y++) {
-                for (int x = 0; x < thread_info.threads_in_this_block[0]; x++) {
-                    // Skip any threads in this loop nest with extent less than the
-                    // extents of the largest thread loops in this block
-                    // for thread.x in [0, 10]:
-                    //   ...
-                    // for thread.x in [0, 5]:
-                    //   ...
-                    // For the 2nd loop, skip threads with x id >= 5
-                    bool include = x < thread_info.threads[0]
-                        && y < thread_info.threads[1]
-                        && z < thread_info.threads[2];
-
-                    if (include) {
-                        // Compute counts of which banks are accessed
-                        // Multiple accesses to the same bank with different
-                        // indices will be serialized
-                        for (int j = 0; j < num_words_per_access; j++) {
-                            int index = (int)(i * stride) + j;
-                            int block = index / 4;
-                            if (block != last_block_accessed) {
-                                last_block_accessed = block;
-                                total_accesses++;
-                            }
-                        }
-                    }
-
-                    ++i;
+        thread_info.for_each_active_thread_id([&](int thread_id, bool is_last_thread) {
+            // Compute counts of which words are accessed
+            for (int j = 0; j < num_words_per_access; j++) {
+                int index = (int)(thread_id * stride) + j;
+                int word = index / 4;
+                if (word != last_word_accessed) {
+                    last_word_accessed = word;
+                    total_accesses++;
                 }
             }
-        }
+        });
 
         return {stride, total_accesses};
     }
