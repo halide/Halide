@@ -618,7 +618,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
         }
     }
 
-    // Emit the function prototype
+    // Emit the function prototype.
     stream << "__kernel void " << name << "(\n";
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer) {
@@ -632,21 +632,40 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
             allocations.push(args[i].name, alloc);
         } else {
             Type t = args[i].type;
+            string name = args[i].name;
             // Bools are passed as a uint8.
             t = t.with_bits(t.bytes() * 8);
+            // float16 are passed as uints
+            if (t.is_float() && t.bits() < 32) {
+                t = t.with_code(halide_type_uint);
+                name += "_bits";
+            }
             stream << " const "
                    << print_type(t)
                    << " "
-                   << print_name(args[i].name);
+                   << print_name(name);
         }
 
         if (i < args.size()-1) stream << ",\n";
     }
     stream << ",\n" << " __address_space___shared int16* __shared";
-
     stream << ")\n";
 
     open_scope();
+
+    if (target.has_feature(Target::CLHalf)) {
+        // Reinterpret half args passed as uint16 back to half
+        for (size_t i = 0; i < args.size(); i++) {
+            if (!args[i].is_buffer &&
+                args[i].type.is_float() &&
+                args[i].type.bits() < 32) {
+                stream << " const " << print_type(args[i].type)
+                       << " " << print_name(args[i].name)
+                       << " = half_from_bits(" << print_name(args[i].name + "_bits") << ");\n";
+            }
+        }
+    }
+
     print(s);
     close_scope("kernel " + name);
 
@@ -741,10 +760,10 @@ void CodeGen_OpenCL_Dev::init_module() {
 
     if (target.has_feature(Target::CLHalf)) {
         src_stream << "#pragma OPENCL EXTENSION cl_khr_fp16 : enable\n"
-                   << "inline half half_from_bits(unsigned short x) {return as_half(x);}\n"
-                   << "inline half nan_f16() { return nan((unsigned short)0); }\n"
-                   << "inline half neg_inf_f16() { return -INFINITY; }\n"
-                   << "inline half inf_f16() { return INFINITY; }\n"
+                   << "inline half half_from_bits(unsigned short x) {return __builtin_astype(x, half);}\n"
+                   << "inline half nan_f16() { return half_from_bits(32767); }\n"
+                   << "inline half neg_inf_f16() { return half_from_bits(31744); }\n"
+                   << "inline half inf_f16() { return half_from_bits(64512); }\n"
                    << "bool is_nan_f16(half x) {return x != x; }\n"
                    << "#define sqrt_f16 sqrt\n"
                    << "#define sin_f16 sin\n"
