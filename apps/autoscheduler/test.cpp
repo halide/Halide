@@ -41,7 +41,7 @@ int main(int argc, char **argv) {
     }
 
     if (dlopen(lib.c_str(), RTLD_LAZY) == nullptr) {
-        cerr << "Failed to load: " << lib << ": " << dlerror() << "\n";
+        std::cerr << "Failed to load: " << lib << ": " << dlerror() << "\n";
         return 1;
     }
 #endif
