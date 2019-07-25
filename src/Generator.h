@@ -2989,6 +2989,10 @@ public:
         get_pipeline().add_requirement(condition, std::forward<Args>(args)...);
     }
 
+    void trace_pipeline() {
+        get_pipeline().trace_pipeline();
+    }
+
 protected:
     GeneratorBase(size_t size, const void *introspection_helper);
     void set_generator_names(const std::string &registered_name, const std::string &stub_name);

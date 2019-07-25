@@ -466,6 +466,9 @@ public:
      * in the order added. */
     void add_requirement(Expr condition, std::vector<Expr> &error);
 
+    /** Generate begin_pipeline and end_pipeline tracing calls for this pipeline. */
+    void trace_pipeline();
+
     template<typename ...Args>
     inline HALIDE_NO_USER_CODE_INLINE void add_requirement(Expr condition, Args&&... args) {
         std::vector<Expr> collected_args;

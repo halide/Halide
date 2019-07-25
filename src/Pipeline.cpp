@@ -97,8 +97,10 @@ struct PipelineContents {
 
     std::vector<Stmt> requirements;
 
+    bool trace_pipeline;
+
     PipelineContents() :
-        module("", Target()) {
+        module("", Target()), trace_pipeline(false) {
         user_context_arg.arg = Argument("__user_context", Argument::InputScalar, type_of<const void*>(), 0, ArgumentEstimates{});
         user_context_arg.param = Parameter(Handle(), false, 0, "__user_context");
     }
@@ -456,7 +458,8 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
         }
 
         contents->module = lower(contents->outputs, new_fn_name, target, lowering_args,
-                                 linkage_type, contents->requirements, custom_passes);
+                                 linkage_type, contents->requirements, contents->trace_pipeline,
+                                 custom_passes);
     }
 
     return contents->module;
@@ -710,6 +713,8 @@ Realization Pipeline::realize(const Target &target,
 }
 
 void Pipeline::add_requirement(Expr condition, std::vector<Expr> &error_args) {
+    user_assert(defined()) << "Pipeline is undefined\n";
+
     // It is an error for a requirement to reference a Func or a Var
     class Checker : public IRGraphVisitor {
         using IRGraphVisitor::visit;
@@ -736,6 +741,11 @@ void Pipeline::add_requirement(Expr condition, std::vector<Expr> &error_args) {
 
     Expr error = Internal::requirement_failed_error(condition, error_args);
     contents->requirements.emplace_back(Internal::AssertStmt::make(condition, error));
+}
+
+void Pipeline::trace_pipeline() {
+    user_assert(defined()) << "Pipeline is undefined\n";
+    contents->trace_pipeline = true;
 }
 
 namespace {
