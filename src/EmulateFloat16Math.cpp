@@ -2,6 +2,7 @@
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "CSE.h"
+#include "Simplify.h"
 
 namespace Halide {
 namespace Internal {
@@ -231,6 +232,31 @@ Stmt emulate_float16_math(const Stmt &stmt, const Target &t) {
     Stmt s = stmt;
     s = WidenMath(t).mutate(s);
     return s;
+}
+
+Expr lower_float16_cast(const Cast *op) {
+    Type src = op->value.type();
+    Type dst = op->type;
+    Type f32 = Float(32).with_lanes(dst.lanes());
+    Expr val = op->value;
+
+    if (src.is_bfloat()) {
+        internal_assert(src.bits() == 16);
+        val = bfloat16_to_float32(val);
+    } else if (src.is_float() && src.bits() < 32) {
+        internal_assert(src.bits() == 16);
+        val = float16_to_float32(val);
+    }
+
+    if (dst.is_bfloat()) {
+        internal_assert(dst.bits() == 16);
+        val = float32_to_bfloat16(cast(f32, val));
+    } else if (dst.is_float() && dst.bits() < 32) {
+        internal_assert(dst.bits() == 16);
+        val = float32_to_float16(cast(f32, val));
+    }
+
+    return simplify(val);
 }
 
 }  // namespace Internal

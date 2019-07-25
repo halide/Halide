@@ -5,6 +5,7 @@
 #include "CodeGen_OpenCL_Dev.h"
 #include "Debug.h"
 #include "EliminateBoolVectors.h"
+#include "EmulateFloat16Math.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 
@@ -24,7 +25,11 @@ string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_type(Type type, AppendSpaceIf
     ostringstream oss;
     if (type.is_float()) {
         if (type.bits() == 16) {
-            oss << "half";
+            if (target.has_feature(Target::CLHalf)) {
+                oss << "half";
+            } else {
+                oss << "ushort";
+            }
         } else if (type.bits() == 32) {
             oss << "float";
         } else if (type.bits() == 64) {
@@ -41,7 +46,7 @@ string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_type(Type type, AppendSpaceIf
             oss << "bool";
             break;
         case 8:
-          oss << "char";
+            oss << "char";
             break;
         case 16:
             oss << "short";
@@ -386,6 +391,14 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const GE *op) {
 }
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Cast *op) {
+    if (!target.has_feature(Target::CLHalf) &&
+        ((op->type.is_float() && op->type.bits() < 32) ||
+         (op->value.type().is_float() && op->value.type().bits() < 32))) {
+        Expr equiv = lower_float16_cast(op);
+        equiv.accept(this);
+        return;
+    }
+
     if (op->type.is_vector()) {
         print_assignment(op->type, "convert_" + print_type(op->type) + "(" + print_expr(op->value) + ")");
     } else {

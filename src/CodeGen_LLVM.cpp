@@ -1480,23 +1480,9 @@ void CodeGen_LLVM::visit(const Cast *op) {
 
     llvm::Type *llvm_dst = llvm_type_of(dst);
 
-    if (src == dst) {
-        codegen(op->value);
-        return;
-    } else if (src.is_bfloat()) {
-        internal_assert(src.bits() == 16);
-        codegen(cast(dst, bfloat16_to_float32(op->value)));
-        return;
-    } else if (dst.is_bfloat()) {
-        internal_assert(dst.bits() == 16);
-        codegen(float32_to_bfloat16(cast(Float(32, src.lanes()), op->value)));
-        return;
-    } else if (src.is_float() && src.bits() == 16) {
-        codegen(cast(dst, float16_to_float32(op->value)));
-        return;
-    } else if (dst.is_float() && dst.bits() == 16) {
-        internal_assert(op->type.bits() == 16);
-        codegen(float32_to_float16(cast(Float(32, src.lanes()), op->value)));
+    if ((src.is_float() && src.bits() < 32) ||
+        (dst.is_float() && dst.bits() < 32)) {
+        codegen(lower_float16_cast(op));
         return;
     }
 
