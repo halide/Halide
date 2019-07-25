@@ -525,7 +525,48 @@ struct ThreadInfo {
         if (num_threads_in_this_block % 32 != 0) {
             num_warps_per_block++;
         }
+
+        count_num_active_warps_per_block();
     }
+
+    template <typename Fn>
+    void for_each_thread_id(const Fn& fn) const {
+        int thread_id = 0;
+        for (int z = 0; z < threads_in_this_block[2]; z++) {
+            for (int y = 0; y < threads_in_this_block[1]; y++) {
+                for (int x = 0; x < threads_in_this_block[0]; x++) {
+                    // Skip any threads in this loop nest with extent less than the
+                    // extents of the largest thread loops in this block
+                    // for thread.x in [0, 10]:
+                    //   ...
+                    // for thread.x in [0, 5]:
+                    //   ...
+                    // For the 2nd loop, skip threads with x id >= 5
+                    bool active = x < threads[0]
+                        && y < threads[1]
+                        && z < threads[2];
+
+                    fn(thread_id, active, thread_id == num_threads_in_this_block - 1);
+                }
+            }
+        }
+    }
+
+    void count_num_active_warps_per_block() {
+        bool current_warp_is_active = false;
+
+        for_each_thread_id([&](int thread_id, bool is_active, bool is_last_thread) {
+            current_warp_is_active |= is_active;
+
+            if ((thread_id + 1) % 32 == 0 || is_last_thread) {
+                if (current_warp_is_active) {
+                    ++num_active_warps_per_block;
+                }
+                current_warp_is_active = false;
+            }
+        });
+    }
+
 
     double warp_lane_utilization_at_block_x() const {
         return warp_lane_utilization_at_block(0);
@@ -555,7 +596,9 @@ struct ThreadInfo {
         return (double)num_threads / MAX_THREADS_PER_BLOCK;
     }
 
-    int num_warps_per_block;
+    int num_warps_per_block = 0;
+    int num_active_warps_per_block = 0;
+    std::vector<bool> thread_ids;
 
     int threads_in_this_block[3] = {1, 1, 1};
     int64_t num_threads_in_this_block = 1;
@@ -900,7 +943,7 @@ struct LoopNest {
 
         // No bank conflicts when stride is 0
         if (stride == 0) {
-            return thread_info.num_warps_per_block;
+            return thread_info.num_active_warps_per_block;
         }
 
         int num_bank_accesses[32] = {0};
@@ -918,50 +961,31 @@ struct LoopNest {
 
         int total_accesses = 0;
 
-        int i = 0;
-        for (int z = 0; z < thread_info.threads_in_this_block[2]; z++) {
-            for (int y = 0; y < thread_info.threads_in_this_block[1]; y++) {
-                for (int x = 0; x < thread_info.threads_in_this_block[0]; x++) {
-                    // Skip any threads in this loop nest with extent less than the
-                    // extents of the largest thread loops in this block
-                    // for thread.x in [0, 10]:
-                    //   ...
-                    // for thread.x in [0, 5]:
-                    //   ...
-                    // For the 2nd loop, skip threads with x id >= 5
-                    bool include = x < thread_info.threads[0]
-                        && y < thread_info.threads[1]
-                        && z < thread_info.threads[2];
-
-                    if (include) {
-                        // Compute counts of which banks are accessed
-                        // Multiple accesses to the same bank with different
-                        // indices will be serialized
-                        for (int j = 0; j < num_banks_per_access; j++) {
-                            int index = (int)(i * stride) + j;
-                            int bank = index % 32;
-                            if (largest_index[bank] != index) {
-                                num_bank_accesses[bank]++;
-                            }
-                            largest_index[bank] = index;
-                        }
+        thread_info.for_each_thread_id([&](int thread_id, bool is_active, bool is_last_thread) {
+            if (is_active) {
+                // Compute counts of which banks are accessed
+                // Multiple accesses to the same bank with different
+                // indices will be serialized
+                for (int j = 0; j < num_banks_per_access; j++) {
+                    int index = (int)(thread_id * stride) + j;
+                    int bank = index % 32;
+                    if (largest_index[bank] != index) {
+                        num_bank_accesses[bank]++;
                     }
-
-                    ++i;
-
-                    // Accumulate accesses for this warp
-                    if (i % 32 == 0) {
-                        int max_accesses_this_warp = 0;
-                        for (int j = 0; j < 32; ++j) {
-                            max_accesses_this_warp = std::max(max_accesses_this_warp, num_bank_accesses[j]);
-                            num_bank_accesses[j] = 0;
-                            largest_index[j] = -1;
-                        }
-                        total_accesses += max_accesses_this_warp;
-                    }
+                    largest_index[bank] = index;
                 }
             }
-        }
+
+            if ((thread_id + 1) % 32 == 0 || is_last_thread) {
+                int max_accesses_this_warp = 0;
+                for (int j = 0; j < 32; ++j) {
+                    max_accesses_this_warp = std::max(max_accesses_this_warp, num_bank_accesses[j]);
+                    num_bank_accesses[j] = 0;
+                    largest_index[j] = -1;
+                }
+                total_accesses += max_accesses_this_warp;
+            }
+        });
 
         return total_accesses;
     }
@@ -980,13 +1004,13 @@ struct LoopNest {
             num_accesses = num_shared_mem_accesses(jac, node, consumer_store_bounds, thread_info, consumer_innermost_dim);
         }
 
-        double min_accesses = serial_loop_extents * thread_info.num_warps_per_block * num_banks_per_access(node);
+        double min_accesses = serial_loop_extents * thread_info.num_active_warps_per_block * num_banks_per_access(node);
         num_accesses *= serial_loop_extents;
         return {num_accesses, min_accesses / num_accesses};
     }
 
     std::pair<double, double> compute_shared_mem_load_features(const LoadJacobian& jac, int producer_innermost_dim, const FunctionDAG::Node* node, const Bound& producer_store_bounds, bool producer_has_been_scheduled, const ThreadInfo& thread_info) const {
-        double min_accesses = thread_info.num_warps_per_block * num_banks_per_access(node);
+        double min_accesses = thread_info.num_active_warps_per_block * num_banks_per_access(node);
 
         // Assume worst case serialized loads if the stride
         // is unknown
@@ -1007,6 +1031,35 @@ struct LoopNest {
         }
 
         return {min_loads, min_accesses};
+    }
+
+    void compute_gpu_store_features(const LoadJacobian& jac, int consumer_innermost_dim, const FunctionDAG::Node* node, const Bound& consumer_store_bounds, const ThreadInfo& thread_info, double serial_loop_extents, const Sites& consumer_site, ScheduleFeatures& feat) const {
+        if (consumer_site.store->gpu_label == block) {
+            auto shared_mem_features = compute_shared_mem_stores(
+                jac,
+                consumer_innermost_dim,
+                node,
+                consumer_store_bounds,
+                thread_info,
+                serial_loop_extents
+            );
+
+            feat.num_shared_mem_stores_per_block = shared_mem_features.first;
+            feat.shared_mem_store_efficiency = shared_mem_features.second;
+        } else if (consumer_site.store->is_root()) {
+            auto global_mem_info = compute_global_mem_store_features(
+                jac,
+                consumer_innermost_dim,
+                node,
+                consumer_store_bounds,
+                thread_info,
+                serial_loop_extents
+            );
+
+            feat.num_global_mem_stores_per_block = global_mem_info.num_accesses();
+            feat.global_mem_store_efficiency = global_mem_info.access_efficiency();
+            feat.global_mem_store_coalesce_efficiency = global_mem_info.coalesce_efficiency();
+        }
     }
 
     std::pair<double, int> num_global_mem_accesses(const LoadJacobian& jac, const FunctionDAG::Node* node, const Bound& store_bounds, const ThreadInfo& thread_info, int innermost_dim) const {
@@ -1075,43 +1128,43 @@ struct LoopNest {
         return std::max(1.0, bytes / 4);
     }
 
-    GlobalMemInfo compute_global_mem_store_features(const LoadJacobian& jac, int consumer_innermost_dim, const FunctionDAG::Node* node, const Bound& consumer_store_bounds, const ThreadInfo& thread_info, double instances) const {
+    GlobalMemInfo compute_global_mem_store_features(const LoadJacobian& jac, int consumer_innermost_dim, const FunctionDAG::Node* node, const Bound& consumer_store_bounds, const ThreadInfo& thread_info, double serial_loop_extents) const {
         GlobalMemInfo info;
 
         // 4-byte transactions for L2 accesses
-        auto min_accesses = instances * 4 * thread_info.num_warps_per_block * num_words_per_access(node);
+        auto min_accesses = serial_loop_extents * 4 * thread_info.num_active_warps_per_block * num_words_per_access(node);
 
         // Assume worst case serialized loads if the stride
         // is unknown
-        auto num_accesses = instances * thread_info.num_threads;
+        auto num_accesses = serial_loop_extents * thread_info.num_threads;
 
         double stride = 32.0;
 
         if (all_strides_exist(jac, node)) {
             auto result = num_global_mem_accesses(jac, node, consumer_store_bounds, thread_info, consumer_innermost_dim);
             stride = result.first;
-            num_accesses = instances * result.second;
+            num_accesses = serial_loop_extents * result.second;
         }
 
         info.add_access_info(num_accesses, min_accesses, stride);
         return info;
     }
 
-    void compute_global_mem_load_features(const LoadJacobian& jac, int producer_innermost_dim, const FunctionDAG::Node* node, const Bound& producer_store_bounds, bool producer_has_been_scheduled, const ThreadInfo& thread_info, GlobalMemInfo& global_mem, double instances) const {
+    void compute_global_mem_load_features(const LoadJacobian& jac, int producer_innermost_dim, const FunctionDAG::Node* node, const Bound& producer_store_bounds, bool producer_has_been_scheduled, const ThreadInfo& thread_info, GlobalMemInfo& global_mem, double serial_loop_extents) const {
         // 4-byte transactions for L2 accesses
-        auto min_accesses = instances * 4 * thread_info.num_warps_per_block * num_words_per_access(node);
+        auto min_accesses = serial_loop_extents * 4 * thread_info.num_active_warps_per_block * num_words_per_access(node);
         auto num_accesses = thread_info.num_threads;
 
         // Assume worst case serialized loads if the stride
         // is unknown
         if (!all_strides_exist(jac, node)) {
-            global_mem.add_access_info(instances * num_accesses, min_accesses, 32.0);
+            global_mem.add_access_info(serial_loop_extents * num_accesses, min_accesses, 32.0);
             return;
         }
 
         if (producer_has_been_scheduled) {
             auto result = num_global_mem_accesses(jac, node, producer_store_bounds, thread_info, producer_innermost_dim);
-            global_mem.add_access_info(instances * result.second, min_accesses, result.first);
+            global_mem.add_access_info(serial_loop_extents * result.second, min_accesses, result.first);
             return;
         }
 
@@ -1127,7 +1180,7 @@ struct LoopNest {
             }
         }
 
-        global_mem.add_access_info(instances * min_loads, min_accesses, stride);
+        global_mem.add_access_info(serial_loop_extents * min_loads, min_accesses, stride);
     }
 
     // Assumes block, serial, thread or block, thread nesting
@@ -1582,33 +1635,18 @@ struct LoopNest {
                 const auto& bounds = consumer_site.store->get_bounds(stage->node);
                 auto store_jac = *stage->store_jacobian * compute_loops;
 
-                if (consumer_site.store->gpu_label == block) {
-                    auto shared_mem_features = compute_shared_mem_stores(
-                        store_jac,
-                        vector_dim,
-                        stage->node,
-                        bounds,
-                        thread_info_map.at(this),
-                        total_serial_loop_extents
-                    );
+                compute_gpu_store_features(
+                    store_jac,
+                    vector_dim,
+                    stage->node,
+                    bounds,
+                    thread_info_map.at(this),
+                    total_serial_loop_extents,
+                    consumer_site,
+                    feat
+                );
 
-                    feat.num_shared_mem_stores_per_block = shared_mem_features.first;
-                    feat.num_shared_mem_stores = instances * feat.num_shared_mem_stores_per_block;
-                    feat.shared_mem_store_efficiency = shared_mem_features.second;
-                } else if (consumer_site.store->is_root()) {
-                    auto global_mem_info = compute_global_mem_store_features(
-                        store_jac,
-                        vector_dim,
-                        stage->node,
-                        bounds,
-                        thread_info_map.at(this),
-                        total_serial_loop_extents
-                    );
-
-                    feat.num_global_mem_stores_per_block = global_mem_info.num_accesses();
-                    feat.global_mem_store_efficiency = global_mem_info.access_efficiency();
-                    feat.global_mem_store_coalesce_efficiency = global_mem_info.coalesce_efficiency();
-                }
+                feat.num_shared_mem_stores = instances * feat.num_shared_mem_stores_per_block;
             }
 
             const auto *consumer_task_site = consumer_site.task;
