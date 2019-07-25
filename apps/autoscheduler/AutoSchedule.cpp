@@ -547,6 +547,7 @@ struct ThreadInfo {
                         && z < threads[2];
 
                     fn(thread_id, active, thread_id == num_threads_in_this_block - 1);
+                    ++thread_id;
                 }
             }
         }
