@@ -124,6 +124,8 @@ make_sample() {
         beam=1
     fi
 
+    HL_SHARED_MEMORY_LIMIT=48
+
     echo "Compiling HL_SEED=${SEED} ${EXTRA_GENERATOR_ARGS}"
 
     CMD="HL_PERMIT_FAILED_UNROLL=1 \
