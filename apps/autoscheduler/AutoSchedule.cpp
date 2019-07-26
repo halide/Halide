@@ -3521,7 +3521,7 @@ struct State {
             }
         }
 
-        if (exceeds_shared_memory_limit(features, target) || exceeds_serial_extents_limit(target)) {
+        if (exceeds_shared_memory_limit(features, target)) {
             return false;
         }
 
