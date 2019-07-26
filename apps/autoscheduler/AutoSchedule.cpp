@@ -911,6 +911,24 @@ struct LoopNest {
         }
     }
 
+    bool exceeds_serial_extents_limit(bool in_threads_loop) const {
+        if (gpu_label == serial && in_threads_loop) {
+            for (const auto s : size) {
+                if (s > 8) {
+                    return true;
+                }
+            }
+        }
+
+        for (const auto& c : children) {
+            if (c->exceeds_serial_extents_limit(in_threads_loop || c->gpu_label == thread)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     // Get the stride over "node's" storage for a unit increment in the vectorized loop's
     // index
     double storage_stride(const LoadJacobian& jac, int innermost_storage_dim, const FunctionDAG::Node* node, const Bound& store_bounds) const {
@@ -3457,6 +3475,14 @@ struct State {
         return {working_set_r, working_set_p};
     }
 
+    bool exceeds_serial_extents_limit(const Target &target) {
+        if (!target.has_gpu_feature()) {
+            return false;
+        }
+
+        return root->exceeds_serial_extents_limit(false);
+    }
+
     bool exceeds_shared_memory_limit(const StageMap<ScheduleFeatures>& features, const Target &target) {
         if (!target.has_gpu_feature()) {
             return false;
@@ -3495,7 +3521,7 @@ struct State {
             }
         }
 
-        if (exceeds_shared_memory_limit(features, target)) {
+        if (exceeds_shared_memory_limit(features, target) || exceeds_serial_extents_limit(target)) {
             return false;
         }
 
