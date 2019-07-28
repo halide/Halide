@@ -187,12 +187,16 @@ auto dynamic_type_dispatch(const halide_type_t &type, Args&&... args) ->
         HANDLE_CASE(halide_type_float, 64, double)
 #if _MSC_VER < 1900
         HANDLE_CASE(halide_type_int, 8, int8_t)
+#elif !defined(_WIN32)
+        HANDLE_CASE(halide_type_int, 8, int8_t)
 #endif
         HANDLE_CASE(halide_type_int, 16, int16_t)
         HANDLE_CASE(halide_type_int, 32, int32_t)
         HANDLE_CASE(halide_type_int, 64, int64_t)
         HANDLE_CASE(halide_type_uint, 1, bool)
 #if _MSC_VER < 1900
+        HANDLE_CASE(halide_type_uint, 8, uint8_t)
+#elif !defined(_WIN32)
         HANDLE_CASE(halide_type_uint, 8, uint8_t)
 #endif
         HANDLE_CASE(halide_type_uint, 16, uint16_t)
