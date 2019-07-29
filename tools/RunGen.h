@@ -500,7 +500,27 @@ private:
     void fill(Buffer<T2> &b, std::mt19937 &rng) {
         std::uniform_int_distribution<int> dis(0, 1);
         b.for_each_value([&rng, &dis](T2 &value) {
-            value = dis(rng);
+            value = reinterpret_cast<T2>(dis(rng));
+        });
+    }
+
+    // std::uniform_int_distribution<char> is UB in C++11,
+    // so special-case to avoid compiler variation
+    template<typename T2 = T, typename std::enable_if<std::is_same<T2, char>::value>::type * = nullptr>
+    void fill(Buffer<T2> &b, std::mt19937 &rng) {
+        std::uniform_int_distribution<int> dis(-128, 127);
+        b.for_each_value([&rng, &dis](T2 &value) {
+            value = reinterpret_cast<T2>(dis(rng));
+        });
+    }
+
+    // std::uniform_int_distribution<unsigned char> is UB in C++11,
+    // so special-case to avoid compiler variation
+    template<typename T2 = T, typename std::enable_if<std::is_same<T2, unsigned char>::value>::type * = nullptr>
+    void fill(Buffer<T2> &b, std::mt19937 &rng) {
+        std::uniform_int_distribution<int> dis(0, 255);
+        b.for_each_value([&rng, &dis](T2 &value) {
+            value = reinterpret_cast<T2>(dis(rng));
         });
     }
 
