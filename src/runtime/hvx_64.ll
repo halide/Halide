@@ -236,6 +236,12 @@ define weak_odr <64 x i8> @halide.hexagon.shl.vub.ub(<64 x i8> %a, i8 %b) nounwi
   ret <64 x i8> %r
 }
 
+define weak_odr <64 x i8> @halide.hexagon.shl.vb.b(<64 x i8> %a, i8 %b) nounwind uwtable readnone alwaysinline {
+  ; A shift left is the same whether it is signed or not.
+  %u = tail call <64 x i8> @halide.hexagon.shl.vub.ub(<64 x i8> %a, i8 %b)
+  ret <64 x i8> %u
+}
+
 define weak_odr <64 x i8> @halide.hexagon.shl.vb.ub(<64 x i8> %a, i8 %b) nounwind uwtable readnone alwaysinline {
   ; A shift left is the same whether it is signed or not.
   %u = tail call <64 x i8> @halide.hexagon.shl.vub.ub(<64 x i8> %a, i8 %b)
