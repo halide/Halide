@@ -1,7 +1,13 @@
 #ifndef ASLOG_H
 #define ASLOG_H
 
-#include "Halide.h"
+// This class is used by train_cost_model, which doesn't link to
+// libHalide, so (despite the namespace) we are better off not
+// including Halide.h, lest we reference something we won't have available 
+
+#include <cstdlib>
+#include <iostream>
+#include <utility>
 
 namespace Halide {
 namespace Internal {
