@@ -500,7 +500,7 @@ private:
     void fill(Buffer<T2> &b, std::mt19937 &rng) {
         std::uniform_int_distribution<int> dis(0, 1);
         b.for_each_value([&rng, &dis](T2 &value) {
-            value = reinterpret_cast<T2>(dis(rng));
+            value = static_cast<T2>(dis(rng));
         });
     }
 
@@ -510,7 +510,7 @@ private:
     void fill(Buffer<T2> &b, std::mt19937 &rng) {
         std::uniform_int_distribution<int> dis(-128, 127);
         b.for_each_value([&rng, &dis](T2 &value) {
-            value = reinterpret_cast<T2>(dis(rng));
+            value = static_cast<T2>(dis(rng));
         });
     }
 
@@ -520,7 +520,7 @@ private:
     void fill(Buffer<T2> &b, std::mt19937 &rng) {
         std::uniform_int_distribution<int> dis(0, 255);
         b.for_each_value([&rng, &dis](T2 &value) {
-            value = reinterpret_cast<T2>(dis(rng));
+            value = static_cast<T2>(dis(rng));
         });
     }
 
