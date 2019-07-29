@@ -1918,6 +1918,7 @@ time_compilation_generator_%: $(BIN_DIR)/%.generator
 
 TEST_APPS=\
 	HelloMatlab \
+	autoscheduler \
 	bilateral_grid \
 	blur \
 	c_backend \
