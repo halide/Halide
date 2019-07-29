@@ -480,7 +480,11 @@ public:
     }
 
 private:
-    template<typename T2 = T, typename std::enable_if<std::is_integral<T2>::value && !std::is_same<T2, bool>::value>::type * = nullptr>
+    template<typename T2 = T,
+            typename std::enable_if<std::is_integral<T2>::value
+            && !std::is_same<T2, bool>::value
+            && !std::is_same<T2, char>::value
+            && !std::is_same<T2, unsigned char>::value>::type * = nullptr>
     void fill(Buffer<T2> &b, std::mt19937 &rng) {
         std::uniform_int_distribution<T2> dis;
         b.for_each_value([&rng, &dis](T2 &value) {
