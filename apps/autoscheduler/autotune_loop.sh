@@ -82,13 +82,14 @@ if [ $(uname -s) = "Darwin" ] && ! which $TIMEOUT_CMD 2>&1 >/dev/null; then
     fi
 fi
 
-# Build a single sample of the pipeline with a random schedule
-make_sample() {
+# Build a single featurization of the pipeline with a random schedule
+make_featurization() {
     D=${1}
     SEED=${2}
     FNAME=${3}
     EXTRA_GENERATOR_ARGS=${4}
     mkdir -p ${D}
+    rm -f "${D}/${FNAME}.featurization"
     rm -f "${D}/${FNAME}.sample"
     if [[ $D == */0 ]]; then
         # Sample 0 in each batch is best effort beam search, with no randomness
@@ -146,7 +147,7 @@ benchmark_sample() {
     P=$3
     S=$2
     FNAME=$4
-    ${AUTOSCHED_BIN}/augment_sample ${D}/${FNAME}.sample $R $P $S || echo "Augment sample failed for ${D} (probably because benchmarking failed)"
+    ${AUTOSCHED_BIN}/featurization_to_sample ${D}/${FNAME}.featurization $R $P $S ${D}/${FNAME}.sample || echo "Augment sample failed for ${D} (probably because benchmarking failed)"
 }
 
 # Don't clobber existing samples
@@ -196,7 +197,7 @@ for ((BATCH_ID=$((FIRST+1));BATCH_ID<$((FIRST+1+NUM_BATCHES));BATCH_ID++)); do
 
             S=$(printf "%04d%04d" $BATCH_ID $SAMPLE_ID)
             FNAME=$(printf "%s_batch_%04d_sample_%04d" ${PIPELINE} $BATCH_ID $SAMPLE_ID)
-            make_sample "${DIR}/${SAMPLE_ID}" $S $FNAME "$EXTRA_GENERATOR_ARGS" &
+            make_featurization "${DIR}/${SAMPLE_ID}" $S $FNAME "$EXTRA_GENERATOR_ARGS" &
         done
         wait
 

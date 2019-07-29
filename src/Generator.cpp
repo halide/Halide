@@ -133,8 +133,7 @@ Outputs compute_outputs(const Target &target,
         output_files.schedule_name = base_path + get_extension(".schedule", options);
     }
     if (options.emit_featurization) {
-        // TODO: apparently we use '.sample' for featurization files?
-        output_files.featurization_name = base_path + get_extension(".sample", options);
+        output_files.featurization_name = base_path + get_extension(".featurization", options);
     }
     return output_files;
 }

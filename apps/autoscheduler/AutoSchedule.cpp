@@ -28,7 +28,8 @@
 
   HL_FEATURE_FILE -> output
   *** DEPRECATED *** use the 'featurization' output from Generator instead
-  Write out a training sample for the selected schedule into this file. Needs to be augmented with the runtime using augment_sample before it can be used to train.
+  Write out a training featurization for the selected schedule into this file.
+  Needs to be converted to a sample file with the runtime using featurization_to_sample before it can be used to train.
 
   HL_MACHINE_PARAMS
   An architecture description string. Used by Halide master to configure the cost model. We only use the first term. Set it to the number of cores to target.
