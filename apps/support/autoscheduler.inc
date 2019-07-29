@@ -59,6 +59,7 @@ $(AUTOSCHED_BIN)/libauto_schedule.so: $(AUTOSCHED_SRC)/AutoSchedule.cpp \
 	$(CXX) -shared $(USE_EXPORT_DYNAMIC) -fPIC $(CXXFLAGS) -g -I $(AUTOSCHED_BIN)/cost_model $(AUTOSCHED_SRC)/AutoSchedule.cpp $(AUTOSCHED_SRC)/ASLog.cpp $(AUTOSCHED_SRC)/DefaultCostModel.cpp $(AUTOSCHED_WEIGHT_OBJECTS) $(AUTOSCHED_COST_MODEL_LIBS) $(AUTOSCHED_BIN)/auto_schedule_runtime.a $(OPTIMIZE) -o $@ $(HALIDE_SYSTEM_LIBS)
 
 $(AUTOSCHED_BIN)/train_cost_model: $(AUTOSCHED_SRC)/train_cost_model.cpp \
+						$(AUTOSCHED_SRC)/ASLog.cpp \
 						 $(AUTOSCHED_SRC)/DefaultCostModel.cpp \
 						 $(AUTOSCHED_SRC)/CostModel.h \
 						 $(AUTOSCHED_SRC)/NetworkSize.h \
