@@ -55,11 +55,7 @@ WASM_SHELL ?= d8
 PREFIX ?= /usr/local
 LLVM_CONFIG ?= llvm-config
 LLVM_COMPONENTS= $(shell $(LLVM_CONFIG) --components)
-# Since LLVM5, the LLVM version always uses a major.zero.patch format
-# (ie there is no 'minor' version). We ignore the patch version and
-# just use the major version. For historical reasons, we continue to multiply
-# by 10, to avoid changing all the ifdefs in our code.
-LLVM_VERSION = $(shell $(LLVM_CONFIG) --version | sed 's/\([0-9][0-9]*\)\.0.*/\10/')
+LLVM_VERSION = $(shell $(LLVM_CONFIG) --version | sed 's/\([0-9][0-9]*\)\.\([0-9]\).*/\1.\2/')
 
 LLVM_FULL_VERSION = $(shell $(LLVM_CONFIG) --version)
 LLVM_BINDIR = $(shell $(LLVM_CONFIG) --bindir | sed -e 's/\\/\//g' -e 's/\([a-zA-Z]\):/\/\1/g')
@@ -103,7 +99,9 @@ endif
 
 COMMON_LD_FLAGS += $(SANITIZER_FLAGS)
 
-LLVM_CXX_FLAGS += -DLLVM_VERSION=$(LLVM_VERSION)
+LLVM_VERSION_TIMES_10 = $(shell $(LLVM_CONFIG) --version | sed 's/\([0-9][0-9]*\)\.\([0-9]\).*/\1\2/')
+
+LLVM_CXX_FLAGS += -DLLVM_VERSION=$(LLVM_VERSION_TIMES_10)
 
 # All WITH_* flags are either empty or not-empty. They do not behave
 # like true/false values in most languages.  To turn one off, either
@@ -2062,7 +2060,7 @@ $(BUILD_DIR)/clang_ok:
 	@exit 1
 endif
 
-ifneq (,$(findstring $(LLVM_VERSION), 70 80 90 100))
+ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 70 71 80 90 100))
 LLVM_OK=yes
 endif
 
