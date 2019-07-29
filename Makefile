@@ -55,11 +55,12 @@ WASM_SHELL ?= d8
 PREFIX ?= /usr/local
 LLVM_CONFIG ?= llvm-config
 LLVM_COMPONENTS= $(shell $(LLVM_CONFIG) --components)
-# Since LLVM5, the LLVM version always uses a major.zero.patch format
-# (ie there is no 'minor' version). We ignore the patch version and
-# just use the major version. For historical reasons, we continue to multiply
-# by 10, to avoid changing all the ifdefs in our code.
-LLVM_VERSION = $(shell $(LLVM_CONFIG) --version | sed 's/\([0-9][0-9]*\)\.0.*/\10/')
+# Since LLVM5, the LLVM version uses a major.minor.patch format
+# (in nonexceptional cases, the minor version is zero).
+# We ignore the minor and patch versions and just use the major version. For
+# historical reasons, we continue to multiply by 10, to avoid changing all the
+# ifdefs in our code.
+LLVM_VERSION = $(shell $(LLVM_CONFIG) --version | sed 's/\([0-9][0-9]*\)\.[0-9].*/\10/')
 
 LLVM_FULL_VERSION = $(shell $(LLVM_CONFIG) --version)
 LLVM_BINDIR = $(shell $(LLVM_CONFIG) --bindir | sed -e 's/\\/\//g' -e 's/\([a-zA-Z]\):/\/\1/g')
