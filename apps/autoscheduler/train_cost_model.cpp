@@ -355,7 +355,9 @@ int main(int argc, char **argv) {
                 float badness = 0;
             } worst_inversion;
 
+#if defined(_OPENMP)
             #pragma omp parallel for
+#endif
             for (int model = 0; model < models; model++) {
                 for (int train = 0; train < 2; train++) {
                     auto &tp = tpp[model];
