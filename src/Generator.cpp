@@ -132,6 +132,9 @@ Outputs compute_outputs(const Target &target,
     if (options.emit_schedule) {
         output_files.schedule_name = base_path + get_extension(".schedule", options);
     }
+    if (options.emit_featurization) {
+        output_files.featurization_name = base_path + get_extension(".featurization", options);
+    }
     return output_files;
 }
 
@@ -809,7 +812,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
         "\n"
         " -e  A comma separated list of files to emit. Accepted values are:\n"
         "     [assembly, bitcode, cpp, h, html, o, static_library,\n"
-        "      stmt, cpp_stub, schedule, registration].\n"
+        "      stmt, cpp_stub, schedule, registration, featurization].\n"
         "     If omitted, default value is [static_library, h, registration].\n"
         "\n"
         " -x  A comma separated list of file extension pairs to substitute during\n"
@@ -982,6 +985,8 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
                 emit_options.emit_cpp_stub = true;
             } else if (opt == "schedule") {
                 emit_options.emit_schedule = true;
+            } else if (opt == "featurization") {
+                emit_options.emit_featurization = true;
             } else if (opt == "registration") {
                 emit_options.emit_registration = true;
             } else if (!opt.empty()) {
@@ -1487,7 +1492,7 @@ Pipeline GeneratorBase::get_pipeline() {
 
 Module GeneratorBase::build_module(const std::string &function_name,
                                    const LinkageType linkage_type) {
-    std::string auto_schedule_result;
+    AutoSchedulerResults auto_schedule_result;
     call_configure();
     Pipeline pipeline = build_pipeline();
     if (get_auto_schedule()) {
@@ -1521,7 +1526,8 @@ Module GeneratorBase::build_module(const std::string &function_name,
         }
     }
 
-    result.set_auto_schedule(auto_schedule_result);
+    result.set_auto_schedule(auto_schedule_result.schedule_source);
+    result.set_featurization(auto_schedule_result.featurization);
 
     return result;
 }

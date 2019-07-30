@@ -69,7 +69,7 @@ $(AUTOSCHED_BIN)/train_cost_model: $(AUTOSCHED_SRC)/train_cost_model.cpp \
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -Wall -I $(AUTOSCHED_BIN)/cost_model $(OPTIMIZE) $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(USE_OPEN_MP)
 
-$(AUTOSCHED_BIN)/augment_sample: $(AUTOSCHED_SRC)/augment_sample.cpp
+$(AUTOSCHED_BIN)/featurization_to_sample: $(AUTOSCHED_SRC)/featurization_to_sample.cpp
 	@mkdir -p $(@D)
 	$(CXX) $< $(OPTIMIZE) -o $@
 

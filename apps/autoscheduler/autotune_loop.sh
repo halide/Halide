@@ -82,14 +82,15 @@ if [ $(uname -s) = "Darwin" ] && ! which $TIMEOUT_CMD 2>&1 >/dev/null; then
     fi
 fi
 
-# Build a single sample of the pipeline with a random schedule
-make_sample() {
+# Build a single featurization of the pipeline with a random schedule
+make_featurization() {
     D=${1}
     SEED=${2}
     FNAME=${3}
     EXTRA_GENERATOR_ARGS=${4}
     mkdir -p ${D}
-    rm -f "${D}/sample.sample"
+    rm -f "${D}/${FNAME}.featurization"
+    rm -f "${D}/${FNAME}.sample"
     if [[ $D == */0 ]]; then
         # Sample 0 in each batch is best effort beam search, with no randomness
         dropout=100
@@ -101,8 +102,6 @@ make_sample() {
     fi
     HL_PERMIT_FAILED_UNROLL=1 \
         HL_SEED=${SEED} \
-        HL_SCHEDULE_FILE=${D}/schedule.txt \
-        HL_FEATURE_FILE=${D}/sample.sample \
         HL_WEIGHTS_DIR=${WEIGHTS} \
         HL_RANDOM_DROPOUT=${dropout} \
         HL_BEAM_SIZE=${beam} \
@@ -112,13 +111,13 @@ make_sample() {
         -g ${PIPELINE} \
         -f ${FNAME} \
         -o ${D} \
-        -e stmt,assembly,static_library,h,registration \
+        -e stmt,assembly,static_library,h,registration,schedule,featurization \
         target=${HL_TARGET} \
         auto_schedule=true \
         ${EXTRA_GENERATOR_ARGS} \
         -p ${AUTOSCHED_BIN}/libauto_schedule.so \
           2> ${D}/compile_log.txt || echo "Compilation failed or timed out for ${D}"
-    
+
 
     c++ \
         -std=c++11 \
@@ -147,7 +146,8 @@ benchmark_sample() {
     R=$(cut -d' ' -f8 < ${D}/bench.txt)
     P=$3
     S=$2
-    ${AUTOSCHED_BIN}/augment_sample ${D}/sample.sample $R $P $S || echo "Augment sample failed for ${D} (probably because benchmarking failed)"
+    FNAME=$4
+    ${AUTOSCHED_BIN}/featurization_to_sample ${D}/${FNAME}.featurization $R $P $S ${D}/${FNAME}.sample || echo "Augment sample failed for ${D} (probably because benchmarking failed)"
 }
 
 # Don't clobber existing samples
@@ -181,7 +181,7 @@ for ((BATCH_ID=$((FIRST+1));BATCH_ID<$((FIRST+1+NUM_BATCHES));BATCH_ID++)); do
         fi
 
         echo ${EXTRA_GENERATOR_ARGS} > ${DIR}/extra_generator_args.txt
-    
+
         # Do parallel compilation in batches, so that machines with fewer than BATCH_SIZE cores
         # don't get swamped and timeout unnecessarily
         echo Compiling samples
@@ -195,21 +195,22 @@ for ((BATCH_ID=$((FIRST+1));BATCH_ID<$((FIRST+1+NUM_BATCHES));BATCH_ID++)); do
                 fi
             done
 
-            S=$(printf "%d%02d" $BATCH_ID $SAMPLE_ID)
-            FNAME=$(printf "%s_batch_%02d_sample_%02d" ${PIPELINE} $BATCH_ID $SAMPLE_ID)
-            make_sample "${DIR}/${SAMPLE_ID}" $S $FNAME "$EXTRA_GENERATOR_ARGS" &
+            S=$(printf "%04d%04d" $BATCH_ID $SAMPLE_ID)
+            FNAME=$(printf "%s_batch_%04d_sample_%04d" ${PIPELINE} $BATCH_ID $SAMPLE_ID)
+            make_featurization "${DIR}/${SAMPLE_ID}" $S $FNAME "$EXTRA_GENERATOR_ARGS" &
         done
         wait
 
         # benchmark them serially using rungen
         for ((SAMPLE_ID=0;SAMPLE_ID<${BATCH_SIZE};SAMPLE_ID++)); do
-            S=$(printf "%d%02d" $BATCH_ID $SAMPLE_ID)
-            benchmark_sample "${DIR}/${SAMPLE_ID}" $S $EXTRA_ARGS_IDX
+            S=$(printf "%04d%04d" $BATCH_ID $SAMPLE_ID)
+            FNAME=$(printf "%s_batch_%04d_sample_%04d" ${PIPELINE} $BATCH_ID $SAMPLE_ID)
+            benchmark_sample "${DIR}/${SAMPLE_ID}" $S $EXTRA_ARGS_IDX $FNAME
         done
 
         # retrain model weights on all samples seen so far
         echo Retraining model...
-        
+
         find samples | grep sample$ | \
             HL_NUM_THREADS=32 HL_WEIGHTS_DIR=${WEIGHTS} HL_BEST_SCHEDULE_FILE=${PWD}/samples/best.txt ${AUTOSCHED_BIN}/train_cost_model ${BATCH_SIZE} 0.0001
     done

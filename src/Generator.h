@@ -2843,6 +2843,7 @@ public:
         bool emit_static_library{true};
         bool emit_cpp_stub{false};
         bool emit_schedule{false};
+        bool emit_featurization{false};
         bool emit_registration{false};
 
         // This is an optional map used to replace the default extensions generated for

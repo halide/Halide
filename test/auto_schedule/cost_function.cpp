@@ -36,10 +36,11 @@ int main(int argc, char **argv) {
     // Auto-schedule the pipeline
     Target target = get_jit_target_from_environment();
     Pipeline p(stencils[num_stencils - 1]);
+    AutoSchedulerResults results = p.auto_schedule(target);
 
     std::cout << "\n\n******************************************\nSCHEDULE:\n"
               << "******************************************\n"
-              << p.auto_schedule(target)
+              << results.schedule_source
               << "\n******************************************\n\n";
 
     // Inspect the schedule
