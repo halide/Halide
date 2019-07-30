@@ -195,6 +195,7 @@ struct Test {
         for (auto p : image_params) {
             p.reset();
             p.set_host_alignment(128);
+            p.dim(0).set_min(0);
         }
 
         {
