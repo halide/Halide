@@ -484,7 +484,7 @@ private:
             typename std::enable_if<std::is_integral<T2>::value
             && !std::is_same<T2, bool>::value
             && !std::is_same<T2, char>::value
-			&& !std::is_same<T2, signed char>::value
+            && !std::is_same<T2, signed char>::value
             && !std::is_same<T2, unsigned char>::value>::type * = nullptr>
     void fill(Buffer<T2> &b, std::mt19937 &rng) {
         std::uniform_int_distribution<T2> dis;
