@@ -79,10 +79,7 @@ void define_pipeline(py::module &m) {
         .def("compile_to_module", &Pipeline::compile_to_module,
             py::arg("arguments"), py::arg("fn_name"), py::arg("target") = get_target_from_environment(), py::arg("linkage") = LinkageType::ExternalPlusMetadata)
 
-        .def("compile_jit", [](Pipeline &p, const Target &target) -> void {
-            (void) p.compile_jit();
-        }, py::arg("target") = get_jit_target_from_environment())
-
+        .def("compile_jit", &Pipeline::compile_jit, py::arg("target") = get_jit_target_from_environment())
 
         .def("realize", [](Pipeline &p, Buffer<> buffer, const Target &target, const ParamMap &param_map) -> void {
             p.realize(Realization(buffer), target);
