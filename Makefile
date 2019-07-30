@@ -1918,7 +1918,6 @@ time_compilation_generator_%: $(BIN_DIR)/%.generator
 
 TEST_APPS=\
 	HelloMatlab \
-	autoscheduler \
 	bilateral_grid \
 	blur \
 	c_backend \
@@ -1935,6 +1934,12 @@ TEST_APPS=\
 	resnet_50 \
 	stencil_chain \
 	wavelet
+
+# TODO: apps/autoscheduler doesn't yet build properly for MinGW
+# (see https://github.com/halide/Halide/issues/4069)
+ifneq ($(OS), Windows_NT)
+	TEST_APPS += autoscheduler
+endif
 
 .PHONY: test_apps
 test_apps: distrib
