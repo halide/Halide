@@ -73,9 +73,9 @@ void define_image_param(py::module &m) {
         .def("__getitem__", [](ImageParam &im, const std::vector<Var> &args) -> Expr {
             return im(args);
         })
-        .def("in", (Func (ImageParam::*)(const Func &)) &ImageParam::in)
-        .def("in", (Func (ImageParam::*)(const std::vector<Func> &)) &ImageParam::in)
-        .def("in", (Func (ImageParam::*)()) &ImageParam::in)
+        .def("in_", (Func (ImageParam::*)(const Func &)) &ImageParam::in)
+        .def("in_", (Func (ImageParam::*)(const std::vector<Func> &)) &ImageParam::in)
+        .def("in_", (Func (ImageParam::*)()) &ImageParam::in)
         .def("trace_loads", &ImageParam::trace_loads)
 
         .def("__repr__", [](const ImageParam &im) -> std::string {

@@ -277,9 +277,9 @@ void define_func(py::module &m) {
             f.infer_input_bounds(Realization(buffer), param_map);
         }, py::arg("dst"), py::arg("param_map") = ParamMap())
 
-        .def("in", (Func (Func::*)(const Func &)) &Func::in, py::arg("f"))
-        .def("in", (Func (Func::*)(const std::vector<Func> &fs)) &Func::in, py::arg("fs"))
-        .def("in", (Func (Func::*)()) &Func::in)
+        .def("in_", (Func (Func::*)(const Func &)) &Func::in, py::arg("f"))
+        .def("in_", (Func (Func::*)(const std::vector<Func> &fs)) &Func::in, py::arg("fs"))
+        .def("in_", (Func (Func::*)()) &Func::in)
 
         .def("clone_in", (Func (Func::*)(const Func &)) &Func::clone_in, py::arg("f"))
         .def("clone_in", (Func (Func::*)(const std::vector<Func> &fs)) &Func::clone_in, py::arg("fs"))

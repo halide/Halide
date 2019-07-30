@@ -20,6 +20,7 @@ in Python, only the second variant is provided.
 - No mechanism is provided for overriding any runtime functions from Python.
 - No mechanism is provided for supporting `Func::define_extern`.
 - `Buffer::for_each_value()` is hard to implement well in Python; it's omitted entirely for now.
+- `Func::in` and `ImageParam::in` are exposed as `Func.in_` and `ImageParam.in_`, since `in` is a reserved keyword in Python.
 
 ## Enhancements to the C++ API
 
