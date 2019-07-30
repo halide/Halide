@@ -103,13 +103,13 @@ class DefaultCostModel : public CostModel {
         load_weights();
     }
 
-    void set_pipeline_features(const Runtime::Buffer<float> &pipeline_feats, int n) {
+    void set_pipeline_features(const Runtime::Buffer<float> &pipeline_feats, int n) override {
         pipeline_feat_queue = pipeline_feats;
         assert(n > 0);
         num_cores = n;
     }
 
-    void enqueue(int ns, Runtime::Buffer<float> *schedule_feats, double *cost_ptr) {
+    void enqueue(int ns, Runtime::Buffer<float> *schedule_feats, double *cost_ptr) override {
         num_stages = ns;
 
         // We know the most stages that will ever be enqueued from the schedule features
@@ -156,7 +156,7 @@ class DefaultCostModel : public CostModel {
         conv1_filter_update, conv1_bias_update;
     int timestep = 0;
 
-    float backprop(const Runtime::Buffer<const float> &true_runtimes, float learning_rate) {
+    float backprop(const Runtime::Buffer<const float> &true_runtimes, float learning_rate) override {
         assert(cursor != 0);
         assert(pipeline_feat_queue.data());
         assert(schedule_feat_queue.data());
@@ -249,7 +249,7 @@ class DefaultCostModel : public CostModel {
         return loss();
     }
 
-    void evaluate_costs() {
+    void evaluate_costs() override {
         if (cursor == 0 || !schedule_feat_queue.data()) return;
 
         assert(pipeline_feat_queue.data());
@@ -322,7 +322,7 @@ class DefaultCostModel : public CostModel {
         }
     }
 
-    void save_weights() {
+    void save_weights() override {
         if (weights_out_dir.empty()) return;
 
         buffer_to_file(weights.head1_filter, weights_out_dir + "/head1_conv1_weight.data");
@@ -357,7 +357,7 @@ class DefaultCostModel : public CostModel {
     }
 
     // Discard any enqueued but unevaluated schedules
-    void reset() {
+    void reset() override {
         cursor = 0;
     }
 
