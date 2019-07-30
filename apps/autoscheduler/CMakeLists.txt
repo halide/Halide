@@ -18,6 +18,8 @@ endforeach()
 
 # train_cost_model
 add_executable(train_cost_model_process
+               ASLog.cpp
+               ASLog.h
                train_cost_model.cpp
                DefaultCostModel.cpp
                CostModel.h
@@ -51,6 +53,8 @@ add_dependencies(train_cost_model_process cost_model train_cost_model)
 # libauto_schedule
 add_library(libauto_schedule
             SHARED
+            ASLog.cpp
+            ASLog.h
             AutoSchedule.cpp
             DefaultCostModel.cpp
             FunctionDAG.h
