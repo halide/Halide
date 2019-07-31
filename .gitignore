@@ -3,6 +3,7 @@
 /apps/*/cmake_build
 /apps/HelloMatlab/blurred.png
 /apps/HelloMatlab/iir_blur.mex
+bazel-*
 bin/*
 python_bindings/bin/*
 build-64/*

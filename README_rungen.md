@@ -7,7 +7,7 @@ into a single executable that can be run directly from bash, without needing to
 wrap it in your own custom main() driver. It also implements a rudimentary
 benchmarking and memory-usage functionality.
 
-If you use the standard CMake rules for Generators, you get RunGen
+If you use the standard CMake (or Bazel) rules for Generators, you get RunGen
 functionality automatically. (If you use Make, you might need to add an extra
 rule or two to your Makefile; all the examples in `apps/` already have these
 rules.)

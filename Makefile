@@ -45,6 +45,8 @@ define alwayslink
 endef
 endif
 
+BAZEL ?= $(shell which bazel)
+
 SHELL = bash
 CXX ?= g++
 # EMCC is the tool that invokes Emscripten
@@ -1985,6 +1987,24 @@ benchmark_apps: $(BENCHMARK_APPS)
 			HL_TARGET=$(HL_TARGET) ; \
 	done
 
+# Bazel depends on the distrib archive being built
+.PHONY: test_bazel
+test_bazel: $(DISTRIB_DIR)/halide.tgz
+	# Only test bazeldemo if Bazel is installed
+	if [ -z "$(BAZEL)" ]; then echo "Bazel is not installed"; exit 1; fi
+	mkdir -p apps
+	# Make a local copy of the apps if we're building out-of-tree,
+	# because the app Makefiles are written to build in-tree
+	if [ "$(ROOT_DIR)" != "$(CURDIR)" ]; then \
+	  echo "Building out-of-tree, so making local copy of apps"; \
+	  cp -r $(ROOT_DIR)/apps/bazeldemo apps; \
+	  cp -r $(ROOT_DIR)/tools .; \
+	fi
+	cd apps/bazeldemo; \
+	CXX=`echo ${CXX} | sed 's/ccache //'` \
+	CC=`echo ${CC} | sed 's/ccache //'` \
+	bazel build --verbose_failures :all
+
 .PHONY: test_python2
 test_python2: distrib $(BIN_DIR)/host/runtime.a
 	make -C $(ROOT_DIR)/python_bindings \
@@ -2169,6 +2189,8 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
                            $(INCLUDE_DIR)/Halide.h \
                            $(RUNTIME_EXPORTED_INCLUDES) \
                            $(ROOT_DIR)/README*.md \
+                           $(ROOT_DIR)/bazel/* \
+                           $(BUILD_DIR)/halide_config.bzl \
                            $(BUILD_DIR)/halide_config.cmake \
                            $(BUILD_DIR)/halide_config.make \
                            $(ROOT_DIR)/halide.cmake
@@ -2203,6 +2225,10 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
 	cp $(ROOT_DIR)/tools/halide_malloc_trace.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_trace_config.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/README*.md $(DISTRIB_DIR)
+	cp $(ROOT_DIR)/bazel/BUILD $(DISTRIB_DIR)
+	cp $(ROOT_DIR)/bazel/halide.bzl $(DISTRIB_DIR)
+	cp $(ROOT_DIR)/bazel/README_bazel.md $(DISTRIB_DIR)
+	cp $(ROOT_DIR)/bazel/WORKSPACE $(DISTRIB_DIR)
 	cp $(BUILD_DIR)/halide_config.* $(DISTRIB_DIR)
 	cp $(ROOT_DIR)/halide.cmake $(DISTRIB_DIR)
 	ln -sf $(DISTRIB_DIR) halide
@@ -2216,7 +2242,9 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
 		halide/README*.md \
 		halide/halide_config.* \
 		halide/halide.* \
-		halide/WORKSPACE
+		halide/README_bazel.md \
+		halide/WORKSPACE \
+		halide/*.bzl
 	rm -rf halide
 	mv $(BUILD_DIR)/halide.tgz $(DISTRIB_DIR)/halide.tgz
 

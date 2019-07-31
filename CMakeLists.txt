@@ -330,6 +330,7 @@ define_test_group(run_tests)
 # TODO(srj): add test_aotcpp_generators support
 # TODO(srj): add test_valgrind variant
 # TODO(srj): add test_avx512 variant
+# TODO(srj): add test_bazel variant
 # TODO(srj): add test_python variant
 # TODO(srj): add test_apps variant
 function(add_halide_test TARGET)
@@ -478,7 +479,12 @@ file(GLOB FILES "${HALIDE_BASE_DIR}/*.md")
 install(FILES ${FILES}
         DESTINATION .)
 
-# ---- halide.cmake
+# ---- Bazel
+file(GLOB FILES "${HALIDE_BASE_DIR}/bazel/*")
+install(FILES ${FILES}
+        DESTINATION .)
+
+# ---- CMake
 file(GLOB FILES "${HALIDE_BASE_DIR}/*.cmake")
 install(FILES ${FILES}
         DESTINATION .)
