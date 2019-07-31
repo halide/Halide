@@ -3456,7 +3456,7 @@ Halide::ImageParam encode_as_image_param(
                 throw std::invalid_argument("Invalid shape for input " + input.name());
             }
             result.dim(i).set_bounds(0, dim_val);
-            result.dim(i).set_bounds_estimate(0, dim_val);
+            result.dim(i).set_estimate(0, dim_val);
             shape->push_back(static_cast<int>(dim_val));
             stride = stride * dim_val;
         } else {
@@ -3475,7 +3475,7 @@ Halide::ImageParam encode_as_image_param(
             stride = stride * shape->back();
 
             // Dimension is unknown, just make a guess.
-            result.dim(i).set_bounds_estimate(0, 1000);
+            result.dim(i).set_estimate(0, 1000);
         }
     }
 
@@ -3607,10 +3607,10 @@ Model convert_model(const onnx::ModelProto &model) {
             const int64_t *dim_value = Halide::Internal::as_const_int(dims[i]);
             if (dim_value) {
                 int dim = static_cast<int>(*dim_value);
-                f.estimate(args[i], 0, dim);
+                f.set_estimate(args[i], 0, dim);
             } else {
                 // Dimension is unknown, make a guess
-                f.estimate(args[i], 0, 1000);
+                f.set_estimate(args[i], 0, 1000);
             }
         }
         result.outputs[output.name()] = t_out;

@@ -262,8 +262,8 @@ void propagate_estimate_test() {
     p.set_estimate(10);
 
     ImageParam img(Int(32), 2);
-    img.dim(0).set_bounds_estimate(-3, 33);
-    img.dim(1).set_bounds_estimate(5, 55);
+    img.dim(0).set_estimate(-3, 33);
+    img.dim(1).set_estimate(5, 55);
 
     Var x("x"), y("y");
     check(p + x + y, x + y + 10);
