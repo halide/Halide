@@ -2212,9 +2212,11 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
 		halide/include \
 		halide/tools \
 		halide/tutorial \
+		halide/BUILD \
 		halide/README*.md \
 		halide/halide_config.* \
-		halide/halide.*
+		halide/halide.* \
+		halide/WORKSPACE
 	rm -rf halide
 	mv $(BUILD_DIR)/halide.tgz $(DISTRIB_DIR)/halide.tgz
 
