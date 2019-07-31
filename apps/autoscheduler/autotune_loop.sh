@@ -136,9 +136,7 @@ benchmark_sample() {
     HL_NUM_THREADS=32 \
         ${TIMEOUT_CMD} -k ${BENCHMARKING_TIMEOUT} ${BENCHMARKING_TIMEOUT} \
         ${D}/bench \
-        --output_extents=estimate \
-        --default_input_buffers=random:0:estimate_then_auto \
-        --default_input_scalars=estimate \
+        --estimate_all \
         --benchmarks=all \
             | tee ${D}/bench.txt || echo "Benchmarking failed or timed out for ${D}"
 

@@ -197,6 +197,11 @@ highly recommended you do testing with the `--verbose` flag (which will log the
 calculated sizes) to reality-check that you are getting what you expect,
 especially for benchmarking.
 
+A common case (especially for benchmarking) is to specify using estimates for
+all inputs and outputs; for this, you can specify `--estimate_all`, which is
+just a shortcut for `--default_input_buffers=estimate_then_auto --default_input_scalars=estimate --output_extents=estimate`.
+
+
 ## Benchmarking
 
 To run a benchmark, use the `--benchmarks=all` flag:

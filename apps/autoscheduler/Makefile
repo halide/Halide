@@ -20,7 +20,7 @@ $(BIN)/%/demo.rungen: $(BIN)/%/RunGenMain.o $(BIN)/%/demo.registration.cpp $(BIN
 
 # demonstrates single-shot use of the autoscheduler
 demo: $(BIN)/$(HL_TARGET)/demo.rungen
-	$^ --benchmarks=all --benchmark_min_time=1 --default_input_buffers=random:0:auto --output_extents=estimate --default_input_scalars=estimate
+	$^ --benchmarks=all --benchmark_min_time=1 --estimate_all
 
 # demonstrates an autotuning loop
 # (using $(AUTOSCHED_BIN) and $(AUTOSCHED_SRC) here seems overkill, but makes copy-n-paste elsewhere easier)
