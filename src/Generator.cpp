@@ -1843,11 +1843,11 @@ void GeneratorInputBase::set_inputs(const std::vector<StubInput> &inputs) {
     verify_internals();
 }
 
-void GeneratorInputBase::estimate_impl(Var var, Expr min, Expr extent) {
+void GeneratorInputBase::set_estimate_impl(Var var, Expr min, Expr extent) {
     internal_assert(exprs_.empty() && funcs_.size() > 0 && parameters_.size() == funcs_.size());
     for (size_t i = 0; i < funcs_.size(); ++i) {
         Func &f = funcs_[i];
-        f.estimate(var, min, extent);
+        f.set_estimate(var, min, extent);
         // Propagate the estimate into the Parameter as well, just in case
         // we end up compiling this for toplevel.
         std::vector<Var> args = f.args();
@@ -1862,6 +1862,21 @@ void GeneratorInputBase::estimate_impl(Var var, Expr min, Expr extent) {
         Parameter &p = parameters_[i];
         p.set_min_constraint_estimate(dim, min);
         p.set_extent_constraint_estimate(dim, extent);
+    }
+}
+
+void GeneratorInputBase::set_estimates_impl(const std::vector<std::pair<Expr, Expr>> &estimates) {
+    internal_assert(exprs_.empty() && funcs_.size() > 0 && parameters_.size() == funcs_.size());
+    for (size_t i = 0; i < funcs_.size(); ++i) {
+        Func &f = funcs_[i];
+        f.set_estimates(estimates);
+        // Propagate the estimate into the Parameter as well, just in case
+        // we end up compiling this for toplevel.
+        for (size_t dim = 0; dim < estimates.size(); ++dim) {
+            Parameter &p = parameters_[i];
+            p.set_min_constraint_estimate(dim, estimates[dim].first);
+            p.set_extent_constraint_estimate(dim, estimates[dim].second);
+        }
     }
 }
 

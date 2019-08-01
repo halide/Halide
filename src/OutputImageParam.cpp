@@ -89,4 +89,15 @@ OutputImageParam::operator ExternFuncArgument() const {
     return param;
 }
 
+OutputImageParam &OutputImageParam::set_estimates(const std::vector<std::pair<Expr, Expr>> &estimates) {
+    const int d = dimensions();
+    user_assert((int) estimates.size() == d)
+        << "ImageParam " << name() << " has " << d << " dimensions, "
+        << "but the estimates passed to set_estimates contains " << estimates.size() << " pairs.\n";
+    for (int i = 0; i < d; i++) {
+        dim(i).set_estimate(estimates[i].first, estimates[i].second);
+    }
+    return *this;
+}
+
 }  // namespace Halide

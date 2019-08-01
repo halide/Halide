@@ -1423,7 +1423,8 @@ protected:
 
     const char *input_or_output() const override { return "Input"; }
 
-    void estimate_impl(Var var, Expr min, Expr extent);
+    void set_estimate_impl(Var var, Expr min, Expr extent);
+    void set_estimates_impl(const std::vector<std::pair<Expr, Expr>> &estimates);
 
 public:
     ~GeneratorInputBase() override;
@@ -1587,9 +1588,18 @@ public:
         return ExternFuncArgument(this->parameters_.at(0));
     }
 
-    GeneratorInput_Buffer<T> &estimate(Var var, Expr min, Expr extent) {
+    GeneratorInput_Buffer<T> &set_estimate(Var var, Expr min, Expr extent) {
         this->check_gio_access();
-        this->estimate_impl(var, min, extent);
+        this->set_estimate_impl(var, min, extent);
+        return *this;
+    }
+
+    HALIDE_ATTRIBUTE_DEPRECATED("Use set_estimate() instead")
+    GeneratorInput_Buffer<T> &estimate(Var var, Expr min, Expr extent) { return set_estimate(var, min, extent); }
+
+    GeneratorInput_Buffer<T> &set_estimates(const std::vector<std::pair<Expr, Expr>> &estimates) {
+        this->check_gio_access();
+        this->set_estimates_impl(estimates);
         return *this;
     }
 
@@ -1741,9 +1751,18 @@ public:
         return ExternFuncArgument(this->parameters_.at(0));
     }
 
-    GeneratorInput_Func<T> &estimate(Var var, Expr min, Expr extent) {
+    GeneratorInput_Func<T> &set_estimate(Var var, Expr min, Expr extent) {
         this->check_gio_access();
-        this->estimate_impl(var, min, extent);
+        this->set_estimate_impl(var, min, extent);
+        return *this;
+    }
+
+    HALIDE_ATTRIBUTE_DEPRECATED("Use set_estimate() instead")
+    GeneratorInput_Func<T> &estimate(Var var, Expr min, Expr extent) { return set_estimate(var, min, extent); }
+
+    GeneratorInput_Func<T> &set_estimates(const std::vector<std::pair<Expr, Expr>> &estimates) {
+        this->check_gio_access();
+        this->set_estimates_impl(estimates);
         return *this;
     }
 
@@ -2041,6 +2060,12 @@ protected:
     }
 
 public:
+    HALIDE_ATTRIBUTE_DEPRECATED("Use set_estimate() instead")
+    GeneratorOutputBase &estimate(Var var, Expr min, Expr extent) {
+        this->as<Func>().set_estimate(var, min, extent);
+        return *this;
+    }
+
     /** Forward schedule-related methods to the underlying Func. */
     // @{
     HALIDE_FORWARD_METHOD(Func, add_trace_tag)
@@ -2057,7 +2082,6 @@ public:
     HALIDE_FORWARD_METHOD(Func, copy_to_host)
     HALIDE_FORWARD_METHOD(Func, define_extern)
     HALIDE_FORWARD_METHOD_CONST(Func, defined)
-    HALIDE_FORWARD_METHOD(Func, estimate)
     HALIDE_FORWARD_METHOD(Func, fold_storage)
     HALIDE_FORWARD_METHOD(Func, fuse)
     HALIDE_FORWARD_METHOD(Func, glsl)
@@ -2081,6 +2105,7 @@ public:
     HALIDE_FORWARD_METHOD(Func, reorder_storage)
     HALIDE_FORWARD_METHOD_CONST(Func, rvars)
     HALIDE_FORWARD_METHOD(Func, serial)
+    HALIDE_FORWARD_METHOD(Func, set_estimate)
     HALIDE_FORWARD_METHOD(Func, shader)
     HALIDE_FORWARD_METHOD(Func, specialize)
     HALIDE_FORWARD_METHOD(Func, specialize_fail)
@@ -2361,6 +2386,15 @@ public:
         return this->funcs_.at(0).output_buffer();
     }
 
+    // 'perfect forwarding' won't work with initializer lists,
+    // so hand-roll our own forwarding method for set_estimates,
+    // rather than using HALIDE_FORWARD_METHOD.
+    GeneratorOutput_Buffer<T> &set_estimates(const std::vector<std::pair<Expr, Expr>> &estimates) {
+        this->as<OutputImageParam>().set_estimates(estimates);
+        return *this;
+    }
+
+
     /** Forward methods to the OutputImageParam. */
     // @{
     HALIDE_FORWARD_METHOD(OutputImageParam, dim)
@@ -2433,11 +2467,23 @@ public:
         return Super::operator[](i);
     }
 
-    GeneratorOutput_Func<T> &estimate(Var var, Expr min, Expr extent) {
+    GeneratorOutput_Func<T> &set_estimate(Var var, Expr min, Expr extent) {
         this->check_gio_access();
         internal_assert(this->exprs_.empty() && this->funcs_.size() > 0);
         for (Func &f : this->funcs_) {
-            f.estimate(var, min, extent);
+            f.set_estimate(var, min, extent);
+        }
+        return *this;
+    }
+
+    HALIDE_ATTRIBUTE_DEPRECATED("Use set_estimate() instead")
+    GeneratorOutput_Func<T> &estimate(Var var, Expr min, Expr extent) { return set_estimate(var, min, extent); }
+
+    GeneratorOutput_Func<T> &set_estimates(const std::vector<std::pair<Expr, Expr>> &estimates) {
+        this->check_gio_access();
+        internal_assert(this->exprs_.empty() && this->funcs_.size() > 0);
+        for (Func &f : this->funcs_) {
+            f.set_estimates(estimates);
         }
         return *this;
     }
