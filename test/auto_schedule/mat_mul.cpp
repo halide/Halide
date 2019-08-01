@@ -38,7 +38,7 @@ double run_test(bool auto_schedule) {
 
     if (auto_schedule) {
         // Provide estimates on the pipeline output
-        out.estimate(x, 0, size).estimate(y, 0, size);
+        out.set_estimate(x, 0, size).set_estimate(y, 0, size);
         // Auto-schedule the pipeline
         p.auto_schedule(target);
     } else if (target.has_gpu_feature()) {

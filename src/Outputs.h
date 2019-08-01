@@ -58,6 +58,10 @@ struct Outputs {
      * output is desired. */
     std::string schedule_name;
 
+    /** The name of the emitted auto-schedule featurization file. Empty if no auto-schedule
+     * featurization output is desired. */
+    std::string featurization_name;
+
     /** The name of the emitted registration file. Empty if no registration
      * output is desired. */
     std::string registration_name;
@@ -147,6 +151,14 @@ struct Outputs {
     Outputs schedule(const std::string &schedule_name) const {
         Outputs updated = *this;
         updated.schedule_name = schedule_name;
+        return updated;
+    }
+
+    /** Make a new Outputs struct that emits everything this one does
+     * and also an auto-schedule featurization output file with the given name. */
+    Outputs featurization(const std::string &featurization_name) const {
+        Outputs updated = *this;
+        updated.featurization_name = featurization_name;
         return updated;
     }
 

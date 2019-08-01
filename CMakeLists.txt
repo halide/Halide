@@ -19,19 +19,22 @@ include(CPack)
 
 find_package(Threads QUIET)
 
-# HALIDE_REQUIRE_LLVM_VERSION is expected to be major-version-times-10,
-# ignoring any patch (ie, HALIDE_REQUIRE_LLVM_VERSION=70 would match LLVM 7.0.x)
 if("${HALIDE_REQUIRE_LLVM_VERSION}" STREQUAL "")
   # Find any version present.
   find_package(LLVM REQUIRED CONFIG)
 else()
   # Find a specific version.
   string(REGEX REPLACE
-    "^([0-9]+)0$"
+    "^([0-9]+)([0-9])$"
     "\\1"
     MAJOR
     "${HALIDE_REQUIRE_LLVM_VERSION}")
-  set(MINOR 0)
+  string(REGEX REPLACE
+    "^([0-9]+)([0-9])$"
+    "\\2"
+    MINOR
+    "${HALIDE_REQUIRE_LLVM_VERSION}")
+  message("HALIDE_REQUIRE_LLVM_VERSION ${HALIDE_REQUIRE_LLVM_VERSION}")
   message("Looking for LLVM version ${MAJOR}.${MINOR}")
   find_package(LLVM "${MAJOR}.${MINOR}" REQUIRED CONFIG)
   if(NOT "${LLVM_VERSION_MAJOR}${LLVM_VERSION_MINOR}" STREQUAL "${MAJOR}${MINOR}")

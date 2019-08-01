@@ -40,11 +40,9 @@ public:
             const int width = 1536;
             const int height = 2560;
             // Provide estimates on the input image
-            input.dim(0).set_bounds_estimate(0, width);
-            input.dim(1).set_bounds_estimate(0, height);
+            input.set_estimates({{0, width}, {0, height}});
             // Provide estimates on the pipeline output
-            output.estimate(x, 0, width)
-                  .estimate(y, 0, height);
+            output.set_estimates({{0, width}, {0, height}});
         }
 
         if (auto_schedule) {

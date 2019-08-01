@@ -97,6 +97,9 @@ public:
      * for that schedule. */
     const std::string &auto_schedule() const;
 
+    /** If this Module had featurization data from autoscheduling, this is it. */
+    const std::vector<uint8_t> &featurization() const;
+
     /** Return whether this module uses strict floating-point anywhere. */
     bool any_strict_float() const;
 
@@ -144,6 +147,10 @@ public:
     /** Set the auto_schedule text for the Module. It is an error to call this
      * multiple times for a given Module. */
     void set_auto_schedule(const std::string &auto_schedule);
+
+    /** Set the featurization data for the Module. It is an error to call this
+     * multiple times for a given Module. */
+    void set_featurization(const std::vector<uint8_t> &featurization);
 
     /** Set whether this module uses strict floating-point directives anywhere. */
     void set_any_strict_float(bool any_strict_float);

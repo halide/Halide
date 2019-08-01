@@ -165,6 +165,17 @@ Flags:
         Final output is emitted in an easy-to-parse output (one value per line),
         rather than easy-for-humans.
 
+    --estimate_all:
+        Request that all inputs and outputs are based on estimate,
+        and fill buffers with random values. This is exactly equivalent to
+        specifying
+
+            --default_input_buffers=estimate_then_auto
+            --default_input_scalars=estimate
+            --output_extents=estimate
+
+        and is a convenience for automated benchmarking.
+
 Known Issues:
 
     * Filters running on GPU (vs CPU) have not been tested.
@@ -456,6 +467,14 @@ int main(int argc, char **argv) {
                 }
             } else if (flag_name == "output_extents") {
                 user_specified_output_shape = flag_value;
+            } else if (flag_name == "estimate_all") {
+                // Equivalent to:
+                // --default_input_buffers=random:0:estimate_then_auto
+                // --default_input_scalars=estimate
+                // --output_extents=estimate
+                default_input_buffers = "random:0:estimate_then_auto";
+                default_input_scalars = "estimate";
+                user_specified_output_shape = "estimate";
             } else {
                 usage(argv[0]);
                 fail() << "Unknown flag: " << flag_name;

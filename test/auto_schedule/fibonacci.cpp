@@ -15,7 +15,7 @@ double run_test(bool auto_schedule) {
     g(x) = fib(x+10);
 
     // Provide estimates on the pipeline output
-    g.estimate(x, 0, 300);
+    g.set_estimate(x, 0, 300);
 
     Target target = get_jit_target_from_environment();
     Pipeline p(g);

@@ -159,24 +159,38 @@ vector<Func> Pipeline::outputs() const {
     return funcs;
 }
 
-std::function<std::string(Pipeline, const Target &, const MachineParams &)> *Pipeline::get_custom_auto_scheduler_ptr() {
-    static std::function<string(Pipeline, const Target &, const MachineParams &)> custom_auto_scheduler = nullptr;
+AutoSchedulerFn *Pipeline::get_custom_auto_scheduler_ptr() {
+    static AutoSchedulerFn custom_auto_scheduler = nullptr;
     return &custom_auto_scheduler;
 }
 
-string Pipeline::auto_schedule(const Target &target, const MachineParams &arch_params) {
+AutoSchedulerResults Pipeline::auto_schedule(const Target &target, const MachineParams &arch_params) {
+    AutoSchedulerResults results;
+
     auto custom_auto_scheduler = *get_custom_auto_scheduler_ptr();
     if (custom_auto_scheduler) {
-        return custom_auto_scheduler(*this, target, arch_params);
+        custom_auto_scheduler(*this, target, arch_params, &results);
+    } else {
+        user_assert(target.arch == Target::X86 || target.arch == Target::ARM ||
+                    target.arch == Target::POWERPC || target.arch == Target::MIPS)
+            << "Automatic scheduling is currently supported only on these architectures.";
+        results.schedule_source = generate_schedules(contents->outputs, target, arch_params);
+        // this autoscheduler has no featurization
     }
 
-    user_assert(target.arch == Target::X86 || target.arch == Target::ARM ||
-                target.arch == Target::POWERPC || target.arch == Target::MIPS)
-        << "Automatic scheduling is currently supported only on these architectures.";
-    return generate_schedules(contents->outputs, target, arch_params);
+    std::ostringstream s;
+    s << "// --- BEGIN machine-generated schedule\n"
+      << "// Target: " << target.to_string() << "\n"
+      << "// MachineParams: " << arch_params.to_string() << "\n"
+      << "\n"
+      << results.schedule_source
+      << "\n"
+      << "// --- END machine-generated schedule\n";
+    results.schedule_source = s.str();
+    return results;
 }
 
-void Pipeline::set_custom_auto_scheduler(std::function<string(Pipeline, const Target &, const MachineParams &)> auto_scheduler) {
+void Pipeline::set_custom_auto_scheduler(AutoSchedulerFn auto_scheduler) {
     *get_custom_auto_scheduler_ptr() = auto_scheduler;
 }
 

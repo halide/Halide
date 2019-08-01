@@ -45,7 +45,7 @@ GXX ?= g++
 OPTIMIZE ?= -O3
 
 CFLAGS += $(OPTIMIZE) -I $(HALIDE_DISTRIB_PATH)/include/ -I $(HALIDE_DISTRIB_PATH)/tools/ -I $(HALIDE_DISTRIB_PATH)/apps/support/
-CXXFLAGS += $(OPTIMIZE) -std=c++11 -I $(HALIDE_DISTRIB_PATH)/include/ -I $(HALIDE_DISTRIB_PATH)/tools/ $(SANITIZER_FLAGS) -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi
+CXXFLAGS += $(OPTIMIZE) -std=c++11 -I $(HALIDE_DISTRIB_PATH)/include/ -I $(HALIDE_DISTRIB_PATH)/tools/ $(SANITIZER_FLAGS) -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-psabi
 
 ifeq (0, $(HALIDE_RTTI))
 CXXFLAGS += -fno-rtti
@@ -207,7 +207,7 @@ $(BIN)/%.run: $(BIN)/%.rungen
 .PHONY: %.benchmark
 %.benchmark: $(BIN)/$(HL_TARGET)/%.rungen
 	@[[ "$(HL_TARGET)" != "wasm-32-wasmrt"* ]] || (echo "HL_TARGET must NOT begin with wasm-32-wasmrt for target $@" && exit 1)
-	@$^ --benchmarks=all --default_input_buffers --default_input_scalars --output_extents=estimate --parsable_output
+	@$^ --benchmarks=all --estimate_all --parsable_output
 
 # ------- wasm support
 
@@ -274,4 +274,4 @@ $(BIN)/%.rungen_wasm: $(BIN)/%.rungen.js
 .PHONY: %.benchmark_wasm
 %.benchmark_wasm: $(BIN)/$(HL_TARGET)/%.rungen.js
 	@[[ "$(HL_TARGET)" == "wasm-32-wasmrt"* ]] || (echo "HL_TARGET must begin with wasm-32-wasmrt for target $@" && exit 1)
-	@cd $(<D); $(WASM_SHELL) $(<F) $(WASM_SHELL_ARG_SEP) --benchmarks=all --default_input_buffers --default_input_scalars --output_extents=estimate --parsable_output
+	@cd $(<D); $(WASM_SHELL) $(<F) $(WASM_SHELL_ARG_SEP) --benchmarks=all --estimate_all --parsable_output

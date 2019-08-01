@@ -1465,7 +1465,16 @@ public:
      * generated schedules might break when the sizes of the dimensions are
      * very different from the estimates specified. These estimates are used
      * only by the auto scheduler if the function is a pipeline output. */
-    Func &estimate(Var var, Expr min, Expr extent);
+    Func &set_estimate(Var var, Expr min, Expr extent);
+
+    HALIDE_ATTRIBUTE_DEPRECATED("Use set_estimate() instead")
+    Func &estimate(Var var, Expr min, Expr extent) { return set_estimate(var, min, extent); }
+
+    /** Set (min, extent) estimates for all dimensions in the Func
+     * at once; this is equivalent to calling `set_estimate(args()[n], min, extent)`
+     * repeatedly, but slightly terser. The size of the estimates vector
+     * must match the dimensionality of the Func. */
+    Func &set_estimates(const std::vector<std::pair<Expr, Expr>> &estimates);
 
     /** Expand the region computed so that the min coordinates is
      * congruent to 'remainder' modulo 'modulus', and the extent is a
