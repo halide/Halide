@@ -1350,15 +1350,13 @@ $(BIN_DIR)/external_code.generator: $(BUILD_DIR)/GenGen.o $(BIN_DIR)/libHalide.$
 	@mkdir -p $(@D)
 	$(CXX) $(filter %.cpp %.o %.a,$^) $(TEST_LD_FLAGS) -o $@
 
-NAME_MANGLING_TARGET=$(NON_EMPTY_TARGET)-c_plus_plus_name_mangling
-
-GEN_AOT_OUTPUTS=-e static_library,h,cpp,registration
+GEN_AOT_OUTPUTS=-e static_library,h,cpp,registration,schedule
 
 # By default, %.a/.h are produced by executing %.generator. Runtimes are not included in these.
 # (We explicitly also generate .cpp output here as well, as additional test surface for the C++ backend.)
 $(FILTERS_DIR)/%.a: $(BIN_DIR)/%.generator
 	@mkdir -p $(@D)
-	$(CURDIR)/$< -g $* $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime
+	$(CURDIR)/$< -g $* $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime auto_schedule=true
 
 $(FILTERS_DIR)/%.h: $(FILTERS_DIR)/%.a
 	@echo $@ produced implicitly by $^
@@ -1381,7 +1379,7 @@ $(FILTERS_DIR)/cxx_mangling_externs.o: $(ROOT_DIR)/test/generator/cxx_mangling_e
 # custom rules: to pass the GeneratorParams, and to give a unique function and file name.
 $(FILTERS_DIR)/cxx_mangling.a: $(BIN_DIR)/cxx_mangling.generator $(FILTERS_DIR)/cxx_mangling_externs.o
 	@mkdir -p $(@D)
-	$(CURDIR)/$< -g cxx_mangling $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-c_plus_plus_name_mangling -f "HalideTest::AnotherNamespace::cxx_mangling"
+	$(CURDIR)/$< -g cxx_mangling $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-c_plus_plus_name_mangling auto_schedule=true -f "HalideTest::AnotherNamespace::cxx_mangling"
 	$(ROOT_DIR)/tools/makelib.sh $@ $@ $(FILTERS_DIR)/cxx_mangling_externs.o
 
 ifneq ($(TEST_CUDA), )
@@ -1472,7 +1470,7 @@ $(BIN_DIR)/$(TARGET)/generator_aotwasm_metadata_tester.js: $(FILTERS_DIR)/metada
 
 $(FILTERS_DIR)/multitarget.a: $(BIN_DIR)/multitarget.generator
 	@mkdir -p $(@D)
-	$(CURDIR)/$< -g multitarget -f "HalideTest::multitarget" $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-debug-no_runtime-c_plus_plus_name_mangling,$(TARGET)-no_runtime-c_plus_plus_name_mangling  -e assembly,bitcode,cpp,h,html,static_library,stmt
+	$(CURDIR)/$< -g multitarget -f "HalideTest::multitarget" $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-debug-no_runtime-c_plus_plus_name_mangling,$(TARGET)-no_runtime-c_plus_plus_name_mangling  -e assembly,bitcode,cpp,h,html,static_library,stmt,schedule
 
 $(FILTERS_DIR)/msan.a: $(BIN_DIR)/msan.generator
 	@mkdir -p $(@D)

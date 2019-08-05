@@ -771,7 +771,7 @@ struct AutoSchedule {
     // function handle
     string get_func_handle(const string &name) const {
         size_t index = get_element(topological_order, name);
-        return "get_pipeline().get_func(" + std::to_string(index) + ")";
+        return "pipeline.get_func(" + std::to_string(index) + ")";
     }
 
     friend std::ostream& operator<<(std::ostream &stream, const AutoSchedule &sched) {
