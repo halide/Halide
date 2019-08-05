@@ -14,13 +14,13 @@ $(BIN)/%/demo.a: $(GENERATOR_BIN)/demo.generator $(AUTOSCHED_BIN)/libauto_schedu
 	HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=weights \
 	$(GENERATOR_BIN)/demo.generator -g demo -o $(@D) -f demo target=$* auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so
 
-$(BIN)/%/demo.rungen: $(BIN)/%/RunGenMain.o $(BIN)/%/demo.registration.cpp $(BIN)/%/demo.a
+$(BIN)/%/demo.rungen: $(BIN)/%/RunGenMain.o $(BIN)/%/demo.registration.cpp
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -I$(BIN)/$* $^ -o $@ $(HALIDE_SYSTEM_LIBS) $(IMAGE_IO_FLAGS)
 
 # demonstrates single-shot use of the autoscheduler
 demo: $(BIN)/$(HL_TARGET)/demo.rungen $(AUTOSCHED_BIN)/libauto_schedule.so
-	$^ --benchmarks=all --benchmark_min_time=1 --estimate_all
+	$< --benchmarks=all --benchmark_min_time=1 --estimate_all
 
 # demonstrates an autotuning loop
 # (using $(AUTOSCHED_BIN) and $(AUTOSCHED_SRC) here seems overkill, but makes copy-n-paste elsewhere easier)
@@ -39,7 +39,7 @@ $(BIN)/test_perfect_hash_map: test_perfect_hash_map.cpp PerfectHashMap.h
 # Simple jit-based test
 $(BIN)/%/test: test.cpp $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) $< -o $@ $(LDFLAGS) $(LIB_HALIDE) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) $^ -o $@ $(LDFLAGS) $(LIB_HALIDE) $(HALIDE_SYSTEM_LIBS)
 
 test_perfect_hash_map: $(BIN)/test_perfect_hash_map
 	$^
