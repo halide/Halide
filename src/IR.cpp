@@ -578,10 +578,88 @@ Expr Call::make(Function func, const std::vector<Expr> &args, int idx) {
                 func.get_contents(), idx, Buffer<>(), Parameter());
 }
 
+namespace {
+
+const char *const intrinsic_op_names[] = {
+    "abs",
+    "absd",
+    "alloca",
+    "bitwise_and",
+    "bitwise_not",
+    "bitwise_or",
+    "bitwise_xor",
+    "bool_to_mask",
+    "call_cached_indirect_function",
+    "cast_mask",
+    "count_leading_zeros",
+    "count_trailing_zeros",
+    "debug_to_file",
+    "div_round_to_zero",
+    "dynamic_shuffle",
+    "extract_mask_element",
+    "gather",
+    "glsl_texture_load",
+    "glsl_texture_store",
+    "glsl_varying",
+    "gpu_thread_barrier",
+    "if_then_else",
+    "if_then_else_mask",
+    "image_load",
+    "image_store",
+    "indeterminate_expression",
+    "lerp",
+    "likely",
+    "likely_if_innermost",
+    "make_struct",
+    "memoize_expr",
+    "mod_round_to_zero",
+    "mulhi_shr",
+    "popcount",
+    "prefetch",
+    "quiet_div",
+    "quiet_mod",
+    "random",
+    "register_destructor",
+    "reinterpret",
+    "require",
+    "require_mask",
+    "return_second",
+    "rewrite_buffer",
+    "scatter",
+    "scatter_acc",
+    "scatter_release",
+    "select_mask",
+    "shift_left",
+    "shift_right",
+    "signed_integer_overflow",
+    "size_of_halide_buffer_t",
+    "sorted_avg",
+    "strict_float",
+    "stringify",
+    "undef",
+    "unsafe_promise_clamped"
+};
+
+static_assert(sizeof(intrinsic_op_names)/sizeof(intrinsic_op_names[0]) == Call::IntrinsicOpCount, "intrinsic_op_names needs attention");
+
+
+}  // namespace
+
+const char *Call::get_intrinsic_name(IntrinsicOp op) {
+    return intrinsic_op_names[op];
+}
+
+Expr Call::make(Type type, Call::IntrinsicOp op, const std::vector<Expr> &args, CallType call_type,
+                FunctionPtr func, int value_index,
+                Buffer<> image, Parameter param) {
+    internal_assert(call_type == Call::Intrinsic || call_type == Call::PureIntrinsic);
+    return Call::make(type, intrinsic_op_names[op], args, call_type, func, value_index, image, param);
+}
+
 Expr Call::make(Type type, const std::string &name, const std::vector<Expr> &args, CallType call_type,
                 FunctionPtr func, int value_index,
                 Buffer<> image, Parameter param) {
-    if (name == Call::prefetch && call_type == Call::Intrinsic) {
+    if (name == intrinsic_op_names[Call::prefetch] && call_type == Call::Intrinsic) {
         internal_assert(args.size() % 2 == 0)
             << "Number of args to a prefetch call should be even: {base, offset, extent0, stride0, extent1, stride1, ...}\n";
     }
@@ -866,56 +944,6 @@ template<> Stmt StmtNode<Evaluate>::mutate_stmt(IRMutator *v) const { return v->
 template<> Stmt StmtNode<Prefetch>::mutate_stmt(IRMutator *v) const { return v->visit((const Prefetch *)this); }
 template<> Stmt StmtNode<Acquire>::mutate_stmt(IRMutator *v) const { return v->visit((const Acquire *)this); }
 template<> Stmt StmtNode<Fork>::mutate_stmt(IRMutator *v) const { return v->visit((const Fork *)this); }
-
-Call::ConstString Call::debug_to_file = "debug_to_file";
-Call::ConstString Call::reinterpret = "reinterpret";
-Call::ConstString Call::bitwise_and = "bitwise_and";
-Call::ConstString Call::bitwise_not = "bitwise_not";
-Call::ConstString Call::bitwise_xor = "bitwise_xor";
-Call::ConstString Call::bitwise_or = "bitwise_or";
-Call::ConstString Call::shift_left = "shift_left";
-Call::ConstString Call::shift_right = "shift_right";
-Call::ConstString Call::abs = "abs";
-Call::ConstString Call::absd = "absd";
-Call::ConstString Call::lerp = "lerp";
-Call::ConstString Call::random = "random";
-Call::ConstString Call::popcount = "popcount";
-Call::ConstString Call::count_leading_zeros = "count_leading_zeros";
-Call::ConstString Call::count_trailing_zeros = "count_trailing_zeros";
-Call::ConstString Call::undef = "undef";
-Call::ConstString Call::return_second = "return_second";
-Call::ConstString Call::if_then_else = "if_then_else";
-Call::ConstString Call::if_then_else_mask = "if_then_else_mask";
-Call::ConstString Call::glsl_texture_load = "glsl_texture_load";
-Call::ConstString Call::glsl_texture_store = "glsl_texture_store";
-Call::ConstString Call::glsl_varying = "glsl_varying";
-Call::ConstString Call::image_load = "image_load";
-Call::ConstString Call::image_store = "image_store";
-Call::ConstString Call::make_struct = "make_struct";
-Call::ConstString Call::stringify = "stringify";
-Call::ConstString Call::memoize_expr = "memoize_expr";
-Call::ConstString Call::alloca = "alloca";
-Call::ConstString Call::likely = "likely";
-Call::ConstString Call::likely_if_innermost = "likely_if_innermost";
-Call::ConstString Call::register_destructor = "register_destructor";
-Call::ConstString Call::div_round_to_zero = "div_round_to_zero";
-Call::ConstString Call::mod_round_to_zero = "mod_round_to_zero";
-Call::ConstString Call::call_cached_indirect_function = "call_cached_indirect_function";
-Call::ConstString Call::prefetch = "prefetch";
-Call::ConstString Call::signed_integer_overflow = "signed_integer_overflow";
-Call::ConstString Call::indeterminate_expression = "indeterminate_expression";
-Call::ConstString Call::bool_to_mask = "bool_to_mask";
-Call::ConstString Call::cast_mask = "cast_mask";
-Call::ConstString Call::select_mask = "select_mask";
-Call::ConstString Call::extract_mask_element = "extract_mask_element";
-Call::ConstString Call::require = "require";
-Call::ConstString Call::require_mask = "require_mask";
-Call::ConstString Call::size_of_halide_buffer_t = "size_of_halide_buffer_t";
-Call::ConstString Call::strict_float = "strict_float";
-Call::ConstString Call::quiet_div = "quiet_div";
-Call::ConstString Call::quiet_mod = "quiet_mod";
-Call::ConstString Call::unsafe_promise_clamped = "unsafe_promise_clamped";
-Call::ConstString Call::gpu_thread_barrier = "gpu_thread_barrier";
 
 Call::ConstString Call::buffer_get_dimensions = "_halide_buffer_get_dimensions";
 Call::ConstString Call::buffer_get_min = "_halide_buffer_get_min";

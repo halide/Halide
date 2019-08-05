@@ -40,6 +40,14 @@ Expr Simplify::visit(const Div *op, ExprInfo *bounds) {
         const bool b_positive = b_bounds.min_defined && b_bounds.min > 0;
         const bool b_negative = b_bounds.max_defined && b_bounds.max < 0;
 
+        if ((b_positive && !b_bounds.max_defined) ||
+            (b_negative && !b_bounds.min_defined)) {
+            // Take limit as b -> +/- infinity
+            int64_t v = 0;
+            bounds->min = std::min(bounds->min, v);
+            bounds->max = std::max(bounds->max, v);
+        }
+
         bounds->min_defined = ((a_bounds.min_defined && b_positive) ||
                                (a_bounds.max_defined && b_negative));
         bounds->max_defined = ((a_bounds.max_defined && b_positive) ||
@@ -63,9 +71,20 @@ Expr Simplify::visit(const Div *op, ExprInfo *bounds) {
                 return make_signed_integer_overflow(op->type);
             }
         }
+        // Code downstream can use min/max in calculated-but-unused arithmetic
+        // that can lead to UB (and thus, flaky failures under ASAN/UBSAN)
+        // if we leave them set to INT64_MAX/INT64_MIN; normalize to zero to avoid this.
+        if (!bounds->min_defined) bounds->min = 0;
+        if (!bounds->max_defined) bounds->max = 0;
         bounds->alignment = a_bounds.alignment / b_bounds.alignment;
         bounds->trim_bounds_using_alignment();
     }
+
+    bool denominator_non_zero =
+        ((b_bounds.min_defined && b_bounds.min > 0) ||
+         (b_bounds.max_defined && b_bounds.max < 0) ||
+         (b_bounds.alignment.remainder != 0));
+
 
     if (may_simplify(op->type)) {
 
@@ -80,8 +99,9 @@ Expr Simplify::visit(const Div *op, ExprInfo *bounds) {
             rewrite(x / 1, x) ||
             (!op->type.is_float() &&
              rewrite(x / 0, IRMatcher::Indeterminate())) ||
-            rewrite(0 / x, 0) ||
-            rewrite(x / x, 1) ||
+            (denominator_non_zero &&
+             (rewrite(0 / x, 0) ||
+              rewrite(x / x, 1))) ||
             rewrite(c0 / c1, fold(c0 / c1))) {
             return rewrite.result;
         }

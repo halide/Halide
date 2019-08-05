@@ -17,7 +17,7 @@ public:
         output(x, y) = g(x, y);
 
         output.parallel(y);
-        output.trace_stores();
+        trace_pipeline();
 
         // This test won't work in the profiler, because the profiler
         // insists on calling malloc with nullptr user context.

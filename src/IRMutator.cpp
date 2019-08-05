@@ -355,25 +355,22 @@ Stmt IRMutator::visit(const Acquire *op) {
     }
 }
 
-
-Stmt IRGraphMutator2::mutate(const Stmt &s) {
-    auto iter = stmt_replacements.find(s);
-    if (iter != stmt_replacements.end()) {
-        return iter->second;
+Stmt IRGraphMutator::mutate(const Stmt &s) {
+    auto p = stmt_replacements.emplace(s, Stmt());
+    if (p.second) {
+        // N.B: Inserting into a map (as the recursive mutate call
+        // does), does not invalidate existing iterators.
+        p.first->second = IRMutator::mutate(s);
     }
-    Stmt new_s = IRMutator::mutate(s);
-    stmt_replacements[s] = new_s;
-    return new_s;
+    return p.first->second;
 }
 
-Expr IRGraphMutator2::mutate(const Expr &e) {
-    auto iter = expr_replacements.find(e);
-    if (iter != expr_replacements.end()) {
-        return iter->second;
+Expr IRGraphMutator::mutate(const Expr &e) {
+    auto p = expr_replacements.emplace(e, Expr());
+    if (p.second) {
+        p.first->second = IRMutator::mutate(e);
     }
-    Expr new_e = IRMutator::mutate(e);
-    expr_replacements[e] = new_e;
-    return new_e;
+    return p.first->second;
 }
 
 }  // namespace Internal

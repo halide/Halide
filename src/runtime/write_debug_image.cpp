@@ -123,6 +123,11 @@ struct ScopedFile {
 WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *filename,
                                              int32_t type_code, struct halide_buffer_t *buf) {
 
+    if (buf->is_bounds_query()) {
+        halide_error(user_context, "Bounds query buffer passed to halide_debug_to_file");
+        return -1;
+    }
+
     if (buf->dimensions > 4) {
         halide_error(user_context, "Can't debug_to_file a Func with more than four dimensions\n");
         return -1;

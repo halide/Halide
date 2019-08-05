@@ -1,10 +1,10 @@
 #ifndef HALIDE_LLVM_HEADERS_H
 #define HALIDE_LLVM_HEADERS_H
 
-#if LLVM_VERSION >= 60
+#if LLVM_VERSION >= 70
 // We're good to go
 #else
-#error "Compiling Halide requires LLVM 6.0 or newer"
+#error "Compiling Halide requires LLVM 7.0 or newer"
 #endif
 
 // This seems to be required by some LLVM header, which is likely an LLVM bug.
@@ -19,6 +19,10 @@
 #endif
 #ifdef __clang__
 #pragma clang system_header
+#endif
+
+#ifdef WITH_V8
+#include <lld/Common/Driver.h>
 #endif
 
 #include <llvm/ExecutionEngine/MCJIT.h>
@@ -41,13 +45,15 @@
 #include <llvm/Support/DynamicLibrary.h>
 #include <llvm/Support/DataExtractor.h>
 #include <llvm/Analysis/TargetLibraryInfo.h>
+#include <llvm/Passes/PassBuilder.h>
+#include <llvm/Transforms/IPO/Inliner.h>
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
 #include <llvm/Transforms/IPO.h>
 #include <llvm/Transforms/Utils/ModuleUtils.h>
 #include <llvm/Transforms/Utils/SymbolRewriter.h>
 #include <llvm/Transforms/Instrumentation.h>
 #if LLVM_VERSION >= 90
-#include "llvm/Transforms/Instrumentation/AddressSanitizer.h"
+#include <llvm/Transforms/Instrumentation/AddressSanitizer.h>
 #endif
 #if LLVM_VERSION >= 80
 #include <llvm/Transforms/Instrumentation/ThreadSanitizer.h>

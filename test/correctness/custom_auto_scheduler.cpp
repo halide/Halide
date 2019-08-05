@@ -4,12 +4,12 @@ using namespace Halide;
 
 int call_count = 0;
 
-std::string inline_everything(Pipeline,
-                              const Target &,
-                              const MachineParams &) {
+void inline_everything(Pipeline,
+                       const Target &,
+                       const MachineParams &,
+                       AutoSchedulerResults *) {
     call_count++;
     // Inlining everything is really easy.
-    return "";
 }
 
 int main(int argc, char **argv) {

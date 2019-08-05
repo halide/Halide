@@ -1,43 +1,53 @@
-#include <string>
-#include <stdint.h>
 #include <mutex>
 #include <set>
+#include <stdint.h>
+#include <string>
 
-#ifndef _WIN32
+#ifdef _WIN32
+#ifdef _MSC_VER
+#define NOMINMAX
+#endif
+#include <windows.h>
+#else
+#include <dlfcn.h>
 #include <sys/mman.h>
 #endif
 
 #include "CodeGen_Internal.h"
+#include "CodeGen_LLVM.h"
+#include "Debug.h"
 #include "JITModule.h"
 #include "LLVM_Headers.h"
-#include "LLVM_Runtime_Linker.h"
-#include "Debug.h"
 #include "LLVM_Output.h"
-#include "CodeGen_LLVM.h"
+#include "LLVM_Runtime_Linker.h"
 #include "Pipeline.h"
 
-
-#if defined(_MSC_VER) && !defined(NOMINMAX)
-#define NOMINMAX
-#endif
-#ifdef _WIN32
-#include <windows.h>
-static bool have_symbol(const char *s) {
-    return GetProcAddress(GetModuleHandle(nullptr), s) != nullptr;
-}
-#else
-#include <dlfcn.h>
-static bool have_symbol(const char *s) {
-    return dlsym(nullptr, s) != nullptr;
-}
-#endif
 
 namespace Halide {
 namespace Internal {
 
 using std::string;
 
+#ifdef _WIN32
+void *get_symbol_address(const char *s) {
+    return (void *) GetProcAddress(GetModuleHandle(nullptr), s);
+}
+#else
+void *get_symbol_address(const char *s) {
+    // Mac OS 10.11 fails to return a symbol address if nullptr or RTLD_DEFAULT
+    // is passed to dlsym. This seems to work.
+    void *handle = dlopen(nullptr, RTLD_LAZY);
+    void *result = dlsym(handle, s);
+    dlclose(handle);
+    return result;
+}
+#endif
+
 namespace {
+
+bool have_symbol(const char *s) {
+    return get_symbol_address(s) != nullptr;
+}
 
 typedef struct CUctx_st *CUcontext;
 
@@ -144,7 +154,7 @@ public:
 };
 
 template <>
-RefCount &ref_count<JITModuleContents>(const JITModuleContents *f) { return f->ref_count; }
+RefCount &ref_count<JITModuleContents>(const JITModuleContents *f) noexcept { return f->ref_count; }
 
 template <>
 void destroy<JITModuleContents>(const JITModuleContents *f) { delete f; }
@@ -155,12 +165,13 @@ namespace {
 JITModule::Symbol compile_and_get_function(ExecutionEngine &ee, const string &name) {
     debug(2) << "JIT Compiling " << name << "\n";
     llvm::Function *fn = ee.FindFunctionNamed(name.c_str());
-    void *f = (void *)ee.getFunctionAddress(name);
+    internal_assert(fn->getName() == name);
+    void *f = (void *) ee.getFunctionAddress(name);
     if (!f) {
         internal_error << "Compiling " << name << " returned nullptr\n";
     }
 
-    JITModule::Symbol symbol(f, fn->getFunctionType());
+    JITModule::Symbol symbol(f);
 
     debug(2) << "Function " << name << " is at " << f << "\n";
 
@@ -365,6 +376,34 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
     jit_module->name = function_name;
 }
 
+/*static*/
+JITModule JITModule::make_trampolines_module(const Target &target_arg,
+                                             const std::map<std::string, JITExtern> &externs,
+                                             const std::string &suffix,
+                                             const std::vector<JITModule> &deps) {
+    Target target = target_arg;
+    target.set_feature(Target::JIT);
+
+    JITModule result;
+    std::vector<std::pair<std::string, ExternSignature>> extern_signatures;
+    std::vector<std::string> requested_exports;
+    for (const std::pair<std::string, JITExtern> &e : externs) {
+        const std::string &callee_name = e.first;
+        const std::string wrapper_name = callee_name + suffix;
+        const ExternCFunction &extern_c = e.second.extern_c_function();
+        result.add_extern_for_export(callee_name, extern_c);
+        requested_exports.push_back(wrapper_name);
+        extern_signatures.push_back({callee_name, extern_c.signature()});
+    }
+
+    std::unique_ptr<llvm::Module> llvm_module = CodeGen_LLVM::compile_trampolines(
+        target, result.jit_module->context, suffix, extern_signatures);
+
+    result.compile_module(std::move(llvm_module), /*function_name*/ "", target, deps, requested_exports);
+
+    return result;
+}
+
 const std::map<std::string, JITModule::Symbol> &JITModule::exports() const {
     return jit_module->exports;
 }
@@ -424,40 +463,10 @@ void JITModule::add_symbol_for_export(const std::string &name, const Symbol &ext
     jit_module->exports[name] = extern_symbol;
 }
 
-JITModule::Symbol JITModule::add_extern_for_export(const std::string &name,
-                                                   const ExternCFunction &extern_c_function) {
-    Symbol symbol;
-    symbol.address = extern_c_function.address();
-
-    // Struct types are uniqued on the context, but the lookup API is only available
-    // on the Module, not the Context.
-    llvm::Module dummy_module("ThisIsRidiculous", jit_module->context);
-    llvm::Type *halide_buffer_t = dummy_module.getTypeByName("struct.halide_buffer_t");
-    if (halide_buffer_t == nullptr) {
-        halide_buffer_t = llvm::StructType::create(jit_module->context, "struct.halide_buffer_t");
-    }
-    llvm::Type *halide_buffer_t_star = llvm::PointerType::get(halide_buffer_t, 0);
-
-    llvm::Type *ret_type;
-    auto signature = extern_c_function.signature();
-    if (signature.is_void_return()) {
-        ret_type = llvm::Type::getVoidTy(jit_module->context);
-    } else {
-        ret_type = llvm_type_of(&jit_module->context, signature.ret_type());
-    }
-
-    std::vector<llvm::Type *> llvm_arg_types;
-    for (const Type &t : signature.arg_types()) {
-        if (t == type_of<struct halide_buffer_t *>()) {
-            llvm_arg_types.push_back(halide_buffer_t_star);
-        } else {
-            llvm_arg_types.push_back(llvm_type_of(&jit_module->context, t));
-        }
-    }
-
-    symbol.llvm_type = llvm::FunctionType::get(ret_type, llvm_arg_types, false);
+void JITModule::add_extern_for_export(const std::string &name,
+                                      const ExternCFunction &extern_c_function) {
+    Symbol symbol(extern_c_function.address());
     jit_module->exports[name] = symbol;
-    return symbol;
 }
 
 void JITModule::memoization_cache_set_size(int64_t size) const {

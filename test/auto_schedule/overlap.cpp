@@ -32,7 +32,7 @@ int main(int argc, char **argv) {
     }
 
     // Provide esitmates for pipeline outputs
-    up[num_levels - 1].estimate(x, 0, 1500).estimate(y, 0, 1500);
+    up[num_levels - 1].set_estimates({{0, 1500}, {0, 1500}});
 
     // Auto-schedule the pipeline
     Target target = get_jit_target_from_environment();

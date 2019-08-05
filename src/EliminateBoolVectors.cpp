@@ -64,7 +64,7 @@ private:
     Expr visit(const GE *op) override { return visit_comparison(op); }
 
     template <typename T>
-    Expr visit_logical_binop(const T* op, const std::string& bitwise_op) {
+    Expr visit_logical_binop(const T* op, Call::IntrinsicOp bitwise_op) {
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
 
@@ -123,7 +123,10 @@ private:
     }
 
     Stmt visit(const Store *op) override {
-        Expr predicate = mutate(op->predicate);
+        Expr predicate = op->predicate;
+        if (!is_one(predicate)) {
+            predicate = mutate(predicate);
+        }
         Expr value = op->value;
         if (op->value.type().is_bool()) {
             Type ty = UInt(8, op->value.type().lanes());
@@ -138,6 +141,21 @@ private:
             return op;
         } else {
             return Store::make(op->name, value, index, op->param, predicate, op->alignment);
+        }
+    }
+
+    Expr visit(const Load *op) override {
+        Expr predicate = op->predicate;
+        if (!is_one(predicate)) {
+            predicate = mutate(predicate);
+        }
+        Expr index = mutate(op->index);
+        if (predicate.same_as(op->predicate) && index.same_as(op->index)) {
+            return op;
+        } else {
+            return Load::make(op->type, op->name, std::move(index),
+                              op->image, op->param, std::move(predicate),
+                              op->alignment);
         }
     }
 

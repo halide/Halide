@@ -14,8 +14,7 @@ int main(int argc, char **argv) {
     g(x, y) = f(x+10, y) + 2;
 
     // Provide estimates for pipeline output
-    g.estimate(x, 0, 50);
-    g.estimate(y, 0, 50);
+    g.set_estimates({{0, 50}, {0, 50}});
 
     // Partially specify some schedules
     g.reorder(y, x);

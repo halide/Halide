@@ -28,6 +28,7 @@ int main(int argc, char **argv) {
         "x86-64-linux",
         "x86-64-osx",
         "x86-64-windows",
+        "wasm-32-wasmrt",
     };
 
     for (const std::string &t : targets) {

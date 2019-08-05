@@ -30,8 +30,6 @@ protected:
 
     int vector_lanes_for_slice(Type t) const;
 
-    Expr mulhi_shr(Expr a, Expr b, int shr) override;
-
     using CodeGen_Posix::visit;
 
     /** Nodes for which we want to emit specific sse/avx intrinsics */
@@ -39,6 +37,7 @@ protected:
     void visit(const Add *) override;
     void visit(const Sub *) override;
     void visit(const Cast *) override;
+    void visit(const Call *) override;
     void visit(const GT *) override;
     void visit(const LT *) override;
     void visit(const LE *) override;

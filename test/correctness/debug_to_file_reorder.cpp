@@ -6,6 +6,11 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
+    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
+        printf("Skipping test for WebAssembly as the wasm JIT does not yet support debug_to_file().\n");
+        return 0;
+    }
+
     const int size_x = 766;
     const int size_y = 311;
 

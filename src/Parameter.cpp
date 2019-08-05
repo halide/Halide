@@ -38,7 +38,7 @@ struct ParameterContents {
 };
 
 template<>
-RefCount &ref_count<Halide::Internal::ParameterContents>(const ParameterContents *p) {return p->ref_count;}
+RefCount &ref_count<Halide::Internal::ParameterContents>(const ParameterContents *p) noexcept {return p->ref_count;}
 
 template<>
 void destroy<Halide::Internal::ParameterContents>(const ParameterContents *p) {delete p;}
@@ -240,6 +240,10 @@ void Parameter::set_min_value(Expr e) {
             << " of type " << contents->type
             << " to have min value " << e
             << " of type " << e.type() << "\n";
+
+        user_assert(is_const(e))
+            << "Min value for parameter " << name()
+            << " must be constant: " << e << "\n";
     }
     contents->scalar_min = e;
 }
@@ -257,6 +261,10 @@ void Parameter::set_max_value(Expr e) {
             << " of type " << contents->type
             << " to have max value " << e
             << " of type " << e.type() << "\n";
+
+        user_assert(is_const(e))
+            << "Max value for parameter " << name()
+            << " must be constant: " << e << "\n";
     }
     contents->scalar_max = e;
 }

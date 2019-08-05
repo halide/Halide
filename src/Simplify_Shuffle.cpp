@@ -66,6 +66,14 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
             ExprInfo shuffled_index_info;
             shuffled_index = mutate(shuffled_index, &shuffled_index_info);
             if (shuffled_index.as<Ramp>()) {
+                ExprInfo base_info;
+                if (const Ramp *r = shuffled_index.as<Ramp>()) {
+                    mutate(r->base, &base_info);
+                }
+
+                ModulusRemainder alignment =
+                    ModulusRemainder::intersect(base_info.alignment, shuffled_index_info.alignment);
+
                 Expr shuffled_predicate;
                 if (unpredicated) {
                     shuffled_predicate = const_true(t.lanes());
@@ -76,7 +84,7 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
                 t = first_load->type;
                 t = t.with_lanes(op->indices.size());
                 return Load::make(t, first_load->name, shuffled_index, first_load->image,
-                                  first_load->param, shuffled_predicate, shuffled_index_info.alignment);
+                                  first_load->param, shuffled_predicate, alignment);
             }
         }
     }

@@ -110,6 +110,7 @@ Outputs add_suffixes(const Outputs &in, const std::string &suffix) {
     if (!in.stmt_name.empty()) out.stmt_name = add_suffix(in.stmt_name, suffix);
     if (!in.stmt_html_name.empty()) out.stmt_html_name = add_suffix(in.stmt_html_name, suffix);
     if (!in.schedule_name.empty()) out.schedule_name = add_suffix(in.schedule_name, suffix);
+    if (!in.featurization_name.empty()) out.featurization_name = add_suffix(in.featurization_name, suffix);
     if (!in.registration_name.empty()) out.registration_name = add_suffix(in.registration_name, suffix);
 
     return out;
@@ -203,6 +204,7 @@ static Registerer registerer;
 struct ModuleContents {
     mutable RefCount ref_count;
     std::string name, auto_schedule;
+    std::vector<uint8_t> featurization;
     Target target;
     std::vector<Buffer<>> buffers;
     std::vector<Internal::LoweredFunc> functions;
@@ -213,7 +215,7 @@ struct ModuleContents {
 };
 
 template<>
-RefCount &ref_count<ModuleContents>(const ModuleContents *t) {
+RefCount &ref_count<ModuleContents>(const ModuleContents *t) noexcept {
     return t->ref_count;
 }
 
@@ -255,6 +257,11 @@ void Module::set_auto_schedule(const std::string &auto_schedule) {
     contents->auto_schedule = auto_schedule;
 }
 
+void Module::set_featurization(const std::vector<uint8_t> &featurization) {
+    internal_assert(contents->featurization.empty());
+    contents->featurization = featurization;
+}
+
 void Module::set_any_strict_float(bool any_strict_float) {
     contents->any_strict_float = any_strict_float;
 }
@@ -269,6 +276,10 @@ const std::string &Module::name() const {
 
 const std::string &Module::auto_schedule() const {
     return contents->auto_schedule;
+}
+
+const std::vector<uint8_t> &Module::featurization() const {
+    return contents->featurization;
 }
 
 bool Module::any_strict_float() const {
@@ -346,7 +357,6 @@ Module link_modules(const std::string &name, const std::vector<Module> &modules)
 
     return output;
 }
-
 
 Buffer<uint8_t> Module::compile_to_buffer() const {
     // TODO: This Hexagon specific code should be removed as soon as possible.
@@ -535,10 +545,17 @@ void Module::compile(const Outputs &output_files_arg) const {
         debug(1) << "Module.compile(): schedule_name " << output_files.schedule_name << "\n";
         std::ofstream file(output_files.schedule_name);
         if (contents->auto_schedule.empty()) {
-           file << "// auto_schedule_outputs() was not called for this Generator.\n";
+           file << "// No autoscheduler has been run for this Generator.\n";
         } else {
            file << contents->auto_schedule;
         }
+    }
+    if (!output_files.featurization_name.empty()) {
+        debug(1) << "Module.compile(): featurization_name " << output_files.featurization_name << "\n";
+        // If the featurization data is empty, just write an empty file
+        std::ofstream binfile(output_files.featurization_name, std::ios::binary | std::ios_base::trunc);
+        binfile.write((const char *) contents->featurization.data(), contents->featurization.size());
+        binfile.close();
     }
     if (!output_files.registration_name.empty()) {
         debug(1) << "Module.compile(): registration_name " << output_files.registration_name << "\n";

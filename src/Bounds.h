@@ -53,7 +53,7 @@ struct Box {
     /** The bounds if it is touched. */
     std::vector<Interval> bounds;
 
-    Box() {}
+    Box() = default;
     Box(size_t sz) : bounds(sz) {}
     Box(const std::vector<Interval> &b) : bounds(b) {}
 

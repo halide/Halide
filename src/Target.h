@@ -22,7 +22,18 @@ struct Target {
     /** The operating system used by the target. Determines which
      * system calls to generate.
      * Corresponds to os_name_map in Target.cpp. */
-    enum OS {OSUnknown = 0, Linux, Windows, OSX, Android, IOS, QuRT, NoOS, Fuchsia} os;
+    enum OS {
+        OSUnknown = 0,
+        Linux,
+        Windows,
+        OSX,
+        Android,
+        IOS,
+        QuRT,
+        NoOS,
+        Fuchsia,
+        WebAssemblyRuntime
+    } os;
 
     /** The architecture used by the target. Determines the
      * instruction set to use.
@@ -34,6 +45,8 @@ struct Target {
         MIPS,
         Hexagon,
         POWERPC,
+        WebAssembly,
+        RISCV
     } arch;
 
     /** The bit-width of the target machine. Must be 0 for unknown, or 32 or 64. */
@@ -69,6 +82,7 @@ struct Target {
         CLHalf = halide_target_feature_cl_half,
         OpenGL = halide_target_feature_opengl,
         OpenGLCompute = halide_target_feature_openglcompute,
+        EGL = halide_target_feature_egl,
         UserContext = halide_target_feature_user_context,
         Matlab = halide_target_feature_matlab,
         Profile = halide_target_feature_profile,
@@ -94,6 +108,7 @@ struct Target {
         TraceLoads = halide_target_feature_trace_loads,
         TraceStores = halide_target_feature_trace_stores,
         TraceRealizations = halide_target_feature_trace_realizations,
+        TracePipeline = halide_target_feature_trace_pipeline,
         D3D12Compute = halide_target_feature_d3d12compute,
         StrictFloat = halide_target_feature_strict_float,
         LegacyBufferWrappers = halide_target_feature_legacy_buffer_wrappers,
@@ -103,6 +118,10 @@ struct Target {
         EmbedBitcode = halide_target_feature_embed_bitcode,
         DisableLLVMLoopVectorize = halide_target_feature_disable_llvm_loop_vectorize,
         DisableLLVMLoopUnroll = halide_target_feature_disable_llvm_loop_unroll,
+        WasmSimd128 = halide_target_feature_wasm_simd128,
+        WasmSignExt = halide_target_feature_wasm_signext,
+        SVE = halide_target_feature_sve,
+        SVE2 = halide_target_feature_sve2,
         FeatureEnd = halide_target_feature_end
     };
     Target() : os(OSUnknown), arch(ArchUnknown), bits(0) {}

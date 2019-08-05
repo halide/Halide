@@ -54,6 +54,7 @@ public:
         gp.untyped_buffer_output_type = int32_buffer_output.type();
         gp.intermediate_level.set(LoopLevel(calculated_output, Var("y")));
         gp.vectorize = true;
+        gp.str_param = "2 x * y +";
 
         // Stub outputs that are Output<Buffer> (rather than Output<Func>)
         // can really only be assigned to another Output<Buffer>; this is

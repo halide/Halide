@@ -24,6 +24,7 @@
 
 #ifndef HALIDE_EXPORT
 #if defined(_MSC_VER)
+// Halide_EXPORTS is quietly defined by CMake when building a shared library
 #ifdef Halide_EXPORTS
 #define HALIDE_EXPORT __declspec(dllexport)
 #else
@@ -134,9 +135,6 @@ std::string running_program_name();
 std::string unique_name(char prefix);
 std::string unique_name(const std::string &prefix);
 // @}
-
-/** Reset the unique name counters to zeros. */
-void reset_unique_name_counters();
 
 /** Test if the first string starts with the second string */
 bool starts_with(const std::string &str, const std::string &prefix);

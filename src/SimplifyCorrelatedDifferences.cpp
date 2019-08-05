@@ -29,16 +29,37 @@ class SimplifyCorrelatedDifferences : public IRMutator {
 
     template<typename LetStmtOrLet, typename StmtOrExpr>
     StmtOrExpr visit_let(const LetStmtOrLet *op) {
-        if (op->value.type() != Int(32) ||
-            !is_pure(op->value)) {
-            // We only care about pure index. They must be pure because we're going to substitute them inwards.
-            return IRMutator::visit(op);
+        // Visit an entire chain of lets in a single method to conserve stack space.
+        struct Frame {
+            const LetStmtOrLet *op;
+            ScopedBinding<Monotonic> binding;
+            Frame(const LetStmtOrLet *op, const string &loop_var, Scope<Monotonic> &scope) :
+                op(op),
+                binding(scope, op->name, is_monotonic(op->value, loop_var, scope)) {}
+            Frame(const LetStmtOrLet *op) : op(op) {}
+        };
+        std::vector<Frame> frames;
+        StmtOrExpr result;
+
+        do {
+            result = op->body;
+            if (op->value.type() == Int(32) && is_pure(op->value)) {
+                frames.emplace_back(op, loop_var, monotonic);
+                lets.emplace_back(op->name, op->value);
+            } else {
+                frames.emplace_back(op);
+            }
+        } while ((op = result.template as<LetStmtOrLet>()));
+
+        result = mutate(result);
+
+        for (auto it = frames.rbegin(); it != frames.rend(); it++) {
+            result = LetStmtOrLet::make(it->op->name, it->op->value, result);
+            if (it->binding.bound()) {
+                lets.pop_back();
+            }
         }
-        auto m = is_monotonic(op->value, loop_var, monotonic);
-        ScopedBinding<Monotonic> bind_monotonic(monotonic, op->name, m);
-        lets.emplace_back(op->name, op->value);
-        auto result = IRMutator::visit(op);
-        lets.pop_back();
+
         return result;
     }
 
@@ -94,9 +115,7 @@ class SimplifyCorrelatedDifferences : public IRMutator {
             (ma == Monotonic::Decreasing && mb == Monotonic::Increasing && std::is_same<T, Add>::value)) {
 
             for (auto it = lets.rbegin(); it != lets.rend(); it++) {
-                if (expr_uses_var(e, it->first)) {
-                    e = Let::make(it->first, it->second, e);
-                }
+                e = Let::make(it->first, it->second, e);
             }
             e = common_subexpression_elimination(e);
             e = solve_expression(e, loop_var).result;

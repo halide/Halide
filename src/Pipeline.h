@@ -7,6 +7,7 @@
  * pipeline.
  */
 
+#include <map>
 #include <vector>
 
 #include "AutoSchedule.h"
@@ -55,6 +56,15 @@ struct CustomLoweringPass {
 
 struct JITExtern;
 
+struct AutoSchedulerResults {
+    std::string schedule_source;
+    std::vector<uint8_t> featurization;
+};
+
+class Pipeline;
+
+using AutoSchedulerFn = std::function<void(Pipeline, const Target &, const MachineParams &, AutoSchedulerResults *outputs)>;
+
 /** A class representing a Halide pipeline. Constructed from the Func
  * or Funcs that it outputs. */
 class Pipeline {
@@ -102,7 +112,7 @@ public:
     static std::vector<Internal::JITModule> make_externs_jit_module(const Target &target,
                                                                     std::map<std::string, JITExtern> &externs_in_out);
 
-    static std::function<std::string(Pipeline, const Target &, const MachineParams &)> custom_auto_scheduler;
+    static AutoSchedulerFn *get_custom_auto_scheduler_ptr();
 
     int call_jit_code(const Target &target, const JITCallArgs &args);
 
@@ -123,14 +133,14 @@ public:
 
     /** Generate a schedule for the pipeline. */
     //@{
-    std::string auto_schedule(const Target &target,
-                              const MachineParams &arch_params = MachineParams::generic());
+    AutoSchedulerResults auto_schedule(const Target &target,
+                                       const MachineParams &arch_params = MachineParams::generic());
     //@}
 
     /** Globally set the autoscheduler method to use whenever
      * autoscheduling any Pipeline. Uses the built-in autoscheduler if
      * passed nullptr. */
-    static void set_custom_auto_scheduler(std::function<std::string(Pipeline, const Target &, const MachineParams &)> auto_scheduler);
+    static void set_custom_auto_scheduler(AutoSchedulerFn auto_scheduler);
 
     /** Return handle to the index-th Func within the pipeline based on the
      * topological order. */
@@ -465,6 +475,9 @@ public:
      * halide_error_code_requirement_failed. Requirements are checked
      * in the order added. */
     void add_requirement(Expr condition, std::vector<Expr> &error);
+
+    /** Generate begin_pipeline and end_pipeline tracing calls for this pipeline. */
+    void trace_pipeline();
 
     template<typename ...Args>
     inline HALIDE_NO_USER_CODE_INLINE void add_requirement(Expr condition, Args&&... args) {

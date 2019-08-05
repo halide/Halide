@@ -72,7 +72,6 @@ DECLARE_CPP_INITMOD(alignment_64)
 DECLARE_CPP_INITMOD(android_clock)
 DECLARE_CPP_INITMOD(android_host_cpu_count)
 DECLARE_CPP_INITMOD(android_io)
-DECLARE_CPP_INITMOD(android_opengl_context)
 DECLARE_CPP_INITMOD(buffer_t)
 DECLARE_CPP_INITMOD(cache)
 DECLARE_CPP_INITMOD(can_use_target)
@@ -99,7 +98,6 @@ DECLARE_CPP_INITMOD(hexagon_host)
 DECLARE_CPP_INITMOD(ios_io)
 DECLARE_CPP_INITMOD(linux_clock)
 DECLARE_CPP_INITMOD(linux_host_cpu_count)
-DECLARE_CPP_INITMOD(linux_opengl_context)
 DECLARE_CPP_INITMOD(linux_yield)
 DECLARE_CPP_INITMOD(matlab)
 DECLARE_CPP_INITMOD(metadata)
@@ -112,6 +110,8 @@ DECLARE_CPP_INITMOD(old_buffer_t)
 DECLARE_CPP_INITMOD(opencl)
 DECLARE_CPP_INITMOD(opengl)
 DECLARE_CPP_INITMOD(openglcompute)
+DECLARE_CPP_INITMOD(opengl_egl_context)
+DECLARE_CPP_INITMOD(opengl_glx_context)
 DECLARE_CPP_INITMOD(osx_clock)
 DECLARE_CPP_INITMOD(osx_get_symbol)
 DECLARE_CPP_INITMOD(osx_host_cpu_count)
@@ -244,6 +244,22 @@ DECLARE_NO_INITMOD(hvx_128)
 DECLARE_NO_INITMOD(hexagon_cpu_features)
 #endif  // WITH_HEXAGON
 
+#ifdef WITH_WEBASSEMBLY
+DECLARE_CPP_INITMOD(wasm_cpu_features)
+DECLARE_LL_INITMOD(wasm_math)
+#else
+DECLARE_NO_INITMOD(wasm_cpu_features)
+DECLARE_NO_INITMOD(wasm_math)
+#endif  // WITH_WEBASSEMBLY
+
+#ifdef WITH_RISCV
+//DECLARE_LL_INITMOD(riscv)
+DECLARE_CPP_INITMOD(riscv_cpu_features)
+#else
+//DECLARE_NO_INITMOD(riscv)
+DECLARE_NO_INITMOD(riscv_cpu_features)
+#endif  // WITH_RISCV
+
 namespace {
 
 llvm::DataLayout get_data_layout_for_target(Target target) {
@@ -312,6 +328,19 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
         return llvm::DataLayout(
             "e-m:e-p:32:32:32-a:0-n16:32-i64:64:64-i32:32:32-i16:16:16-i1:8:8"
             "-f32:32:32-f64:64:64-v32:32:32-v64:64:64-v512:512:512-v1024:1024:1024-v2048:2048:2048");
+    } else if (target.arch == Target::WebAssembly) {
+        if (target.bits == 32) {
+            return llvm::DataLayout("e-m:e-p:32:32-i64:64-n32:64-S128");
+        } else {
+            return llvm::DataLayout("e-m:e-p:64:64-i64:64-n32:64-S128");
+        }
+    } else if (target.arch == Target::RISCV) {
+        // TODO: Valdidate this data layout is correct for RISCV. Assumption is it is like MIPS.
+        if (target.bits == 32) {
+            return llvm::DataLayout("e-m:e-p:32:32-i64:64-n32-S128");
+        } else {
+            return llvm::DataLayout("e-m:e-p:64:64-i64:64-i128:128-n64-S128");
+        }
     } else {
         internal_error << "Bad target arch: " << target.arch << "\n";
         return llvm::DataLayout("unreachable");
@@ -370,7 +399,7 @@ llvm::Triple get_triple_for_target(const Target &target) {
             }
         } else {
             user_assert(target.bits == 64) << "Target bits must be 32 or 64\n";
-            #if (WITH_AARCH64)
+            #ifdef WITH_AARCH64
             triple.setArch(llvm::Triple::aarch64);
             #else
             user_error << "AArch64 llvm target not enabled in this build of Halide\n";
@@ -407,7 +436,7 @@ llvm::Triple get_triple_for_target(const Target &target) {
             user_error << "No mips support for this OS\n";
         }
     } else if (target.arch == Target::POWERPC) {
-        #if (WITH_POWERPC)
+        #ifdef WITH_POWERPC
         // Only ppc*-unknown-linux-gnu are supported for the time being.
         user_assert(target.os == Target::Linux) << "PowerPC target is Linux-only.\n";
         triple.setVendor(llvm::Triple::UnknownVendor);
@@ -427,6 +456,31 @@ llvm::Triple get_triple_for_target(const Target &target) {
         triple.setVendor(llvm::Triple::UnknownVendor);
         triple.setArch(llvm::Triple::hexagon);
         triple.setObjectFormat(llvm::Triple::ELF);
+    } else if (target.arch == Target::WebAssembly) {
+        triple.setVendor(llvm::Triple::UnknownVendor);
+        if (target.bits == 32) {
+            triple.setArch(llvm::Triple::wasm32);
+        } else {
+            triple.setArch(llvm::Triple::wasm64);
+        }
+        triple.setObjectFormat(llvm::Triple::Wasm);
+    } else if (target.arch == Target::RISCV) {
+        if (target.bits == 32) {
+            triple.setArch(llvm::Triple::riscv32);
+        } else {
+            user_assert(target.bits == 64) << "Target must be 32- or 64-bit.\n";
+            triple.setArch(llvm::Triple::riscv64);
+        }
+
+        if (target.os == Target::Linux) {
+            triple.setOS(llvm::Triple::Linux);
+            // TODO: Check what options there are here.
+            triple.setEnvironment(llvm::Triple::GNUEABIHF);
+        } else if (target.os == Target::NoOS) {
+            // for baremetal environment
+        } else {
+            user_error << "No RISCV support for this OS\n";
+        }
     } else {
         internal_error << "Bad target arch: " << target.arch << "\n";
     }
@@ -452,7 +506,7 @@ namespace {
 // Link all modules together and with the result in modules[0], all
 // other input modules are destroyed. Sets the datalayout and target
 // triple appropriately for the target.
-void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t) {
+void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t, bool make_weak_symbols_strong = false) {
 
     llvm::DataLayout data_layout = get_data_layout_for_target(t);
     llvm::Triple triple = Internal::get_triple_for_target(t);
@@ -513,7 +567,7 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t)
         internal_assert(!is_halide_extern_c_sym || f.isWeakForLinker() || f.isDeclaration())
             << " for function " << (std::string)f.getName() << "\n";
         can_strip = can_strip && !is_halide_extern_c_sym;
-        if (can_strip) {
+        if (can_strip || make_weak_symbols_strong) {
             Internal::convert_weak_to_strong(f);
         }
     }
@@ -621,6 +675,39 @@ void add_underscores_to_posix_calls_on_windows(llvm::Module *m) {
     }
 }
 
+std::unique_ptr<llvm::Module> link_with_wasm_jit_runtime(llvm::LLVMContext *c, const Target &t,
+                                                         std::unique_ptr<llvm::Module> extra_module) {
+    bool bits_64 = (t.bits == 64);
+    bool debug = t.has_feature(Target::Debug);
+
+    // We only need to include things that must be linked in as callable entrypoints;
+    // things that are 'alwaysinline' can be included here but are unnecessary.
+    vector<std::unique_ptr<llvm::Module>> modules;
+    modules.push_back(std::move(extra_module));
+    modules.push_back(get_initmod_fake_thread_pool(c, bits_64, debug));
+    modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
+    modules.push_back(get_initmod_buffer_t(c, bits_64, debug));
+    modules.push_back(get_initmod_destructors(c, bits_64, debug));
+    // These two aren't necessary, since they are 100% alwaysinline
+    // modules.push_back(get_initmod_posix_math_ll(c));
+    // modules.push_back(get_initmod_wasm_math_ll(c));
+    modules.push_back(get_initmod_tracing(c, bits_64, debug));
+    modules.push_back(get_initmod_cache(c, bits_64, debug));
+    modules.push_back(get_initmod_to_string(c, bits_64, debug));
+    modules.push_back(get_initmod_alignment_32(c, bits_64, debug));
+    modules.push_back(get_initmod_device_interface(c, bits_64, debug));
+    modules.push_back(get_initmod_metadata(c, bits_64, debug));
+    modules.push_back(get_initmod_float16_t(c, bits_64, debug));
+    modules.push_back(get_initmod_errors(c, bits_64, debug));
+    modules.push_back(get_initmod_posix_abort(c, bits_64, debug));
+    modules.push_back(get_initmod_msan_stubs(c, bits_64, debug));
+
+    // We don't want anything marked as weak for the wasm-jit runtime
+    link_modules(modules, t, /*make_weak_symbols_strong*/ true);
+
+    return std::move(modules[0]);
+}
+
 /** Create an llvm module containing the support code for a given target. */
 std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool for_shared_jit_runtime, bool just_gpu) {
     enum InitialModuleType {
@@ -676,6 +763,16 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                     modules.push_back(get_initmod_posix_threads(c, bits_64, debug));
                 }
                 modules.push_back(get_initmod_posix_get_symbol(c, bits_64, debug));
+            } else if (t.os == Target::WebAssemblyRuntime) {
+                modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
+                modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
+                modules.push_back(get_initmod_posix_print(c, bits_64, debug));
+                modules.push_back(get_initmod_posix_clock(c, bits_64, debug));
+                modules.push_back(get_initmod_posix_io(c, bits_64, debug));
+                modules.push_back(get_initmod_linux_host_cpu_count(c, bits_64, debug));
+                modules.push_back(get_initmod_linux_yield(c, bits_64, debug));
+                modules.push_back(get_initmod_fake_thread_pool(c, bits_64, debug));
+                modules.push_back(get_initmod_fake_get_symbol(c, bits_64, debug));
             } else if (t.os == Target::OSX) {
                 modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
@@ -903,7 +1000,11 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_x86_avx2_ll(c));
             }
             if (t.has_feature(Target::Profile)) {
+                user_assert(t.os != Target::WebAssemblyRuntime) << "The profiler cannot be used in a threadless environment.";
                 modules.push_back(get_initmod_profiler_inlined(c, bits_64, debug));
+            }
+            if (t.arch == Target::WebAssembly) {
+                modules.push_back(get_initmod_wasm_math_ll(c));
             }
         }
 
@@ -928,6 +1029,12 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             }
             if (t.arch == Target::Hexagon) {
                 modules.push_back(get_initmod_hexagon_cpu_features(c, bits_64, debug));
+            }
+            if (t.arch == Target::RISCV) {
+                modules.push_back(get_initmod_riscv_cpu_features(c, bits_64, debug));
+            }
+            if (t.arch == Target::WebAssembly) {
+                modules.push_back(get_initmod_wasm_cpu_features(c, bits_64, debug));
             }
         }
 
@@ -963,11 +1070,15 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
         if (t.has_feature(Target::OpenGL)) {
             modules.push_back(get_initmod_opengl(c, bits_64, debug));
             if (t.os == Target::Linux) {
-                modules.push_back(get_initmod_linux_opengl_context(c, bits_64, debug));
+                if (t.has_feature(Target::EGL)) {
+                    modules.push_back(get_initmod_opengl_egl_context(c, bits_64, debug));
+                } else {
+                    modules.push_back(get_initmod_opengl_glx_context(c, bits_64, debug));
+                }
             } else if (t.os == Target::OSX) {
                 modules.push_back(get_initmod_osx_opengl_context(c, bits_64, debug));
             } else if (t.os == Target::Android) {
-                modules.push_back(get_initmod_android_opengl_context(c, bits_64, debug));
+              modules.push_back(get_initmod_opengl_egl_context(c, bits_64, debug));
             } else {
                 // You're on your own to provide definitions of halide_opengl_get_proc_address and halide_opengl_create_context
             }
@@ -976,9 +1087,13 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             modules.push_back(get_initmod_openglcompute(c, bits_64, debug));
             if (t.os == Target::Android) {
                 // Only platform that supports OpenGL Compute for now.
-                modules.push_back(get_initmod_android_opengl_context(c, bits_64, debug));
+                modules.push_back(get_initmod_opengl_egl_context(c, bits_64, debug));
             } else if (t.os == Target::Linux) {
-                modules.push_back(get_initmod_linux_opengl_context(c, bits_64, debug));
+                if (t.has_feature(Target::EGL)) {
+                    modules.push_back(get_initmod_opengl_egl_context(c, bits_64, debug));
+                } else {
+                    modules.push_back(get_initmod_opengl_glx_context(c, bits_64, debug));
+                }
             } else if (t.os == Target::OSX) {
                 modules.push_back(get_initmod_osx_opengl_context(c, bits_64, debug));
             } else {

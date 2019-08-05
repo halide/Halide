@@ -51,7 +51,8 @@ Arguments:
         some_int=42 some_float=3.1415
 
     You can also use the text `default` or `estimate` to use the default or
-    estimate value of the given input.
+    estimate value of the given input, respectively. (You can join these by
+    commas to give default-then-estimate or estimate-then-default behaviors.)
 
     Buffer inputs and outputs are specified by pathname:
 
@@ -103,7 +104,7 @@ Arguments:
         the --output_extents flag.)
 
         In place of [NUM,NUM,...] for boundary, you may specify 'estimate';
-        this will use the esimated bounds specified in the code.
+        this will use the estimated bounds specified in the code.
 
 Flags:
 
@@ -153,11 +154,27 @@ Flags:
 
     --default_input_buffers=VALUE:
         Specify the value for all otherwise-unspecified buffer inputs, in the
-        same syntax in use above.
+        same syntax in use above. If you omit =VALUE, "zero:auto" will be used.
 
     --default_input_scalars=VALUE:
         Specify the value for all otherwise-unspecified scalar inputs, in the
-        same syntax in use above.
+        same syntax in use above. If you omit =VALUE, "estimate,default"
+        will be used.
+
+    --parsable_output:
+        Final output is emitted in an easy-to-parse output (one value per line),
+        rather than easy-for-humans.
+
+    --estimate_all:
+        Request that all inputs and outputs are based on estimate,
+        and fill buffers with random values. This is exactly equivalent to
+        specifying
+
+            --default_input_buffers=estimate_then_auto
+            --default_input_scalars=estimate
+            --output_extents=estimate
+
+        and is a convenience for automated benchmarking.
 
 Known Issues:
 
@@ -398,6 +415,15 @@ int main(int argc, char **argv) {
                     fail() << "Invalid value for flag: " << flag_name;
                 }
                 r.set_quiet(quiet);
+            } else if (flag_name == "parsable_output") {
+                if (flag_value.empty()) {
+                    flag_value = "true";
+                }
+                bool parsable_output;
+                if (!parse_scalar(flag_value, &parsable_output)) {
+                    fail() << "Invalid value for flag: " << flag_name;
+                }
+                r.set_parsable_output(parsable_output);
             } else if (flag_name == "describe") {
                 if (flag_value.empty()) {
                     flag_value = "true";
@@ -437,10 +463,18 @@ int main(int argc, char **argv) {
             } else if (flag_name == "default_input_scalars") {
                 default_input_scalars = flag_value;
                 if (default_input_scalars.empty()) {
-                    default_input_scalars = "default";
+                    default_input_scalars = "estimate,default";
                 }
             } else if (flag_name == "output_extents") {
                 user_specified_output_shape = flag_value;
+            } else if (flag_name == "estimate_all") {
+                // Equivalent to:
+                // --default_input_buffers=random:0:estimate_then_auto
+                // --default_input_scalars=estimate
+                // --output_extents=estimate
+                default_input_buffers = "random:0:estimate_then_auto";
+                default_input_scalars = "estimate";
+                user_specified_output_shape = "estimate";
             } else {
                 usage(argv[0]);
                 fail() << "Unknown flag: " << flag_name;

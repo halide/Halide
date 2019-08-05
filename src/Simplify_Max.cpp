@@ -115,7 +115,17 @@ Expr Simplify::visit(const Max *op, ExprInfo *bounds) {
              rewrite(max(max(x, c0), c1), max(x, fold(max(c0, c1)))) ||
 
              (no_overflow(op->type) &&
-              (rewrite(max(x + c0, c1), max(x, fold(c1 - c0)) + c0) ||
+              (rewrite(max(max(x, y) + c0, x), max(x, y + c0), c0 < 0) ||
+               rewrite(max(max(x, y) + c0, x), max(x, y) + c0, c0 > 0) ||
+               rewrite(max(max(y, x) + c0, x), max(y + c0, x), c0 < 0) ||
+               rewrite(max(max(y, x) + c0, x), max(y, x) + c0, c0 > 0) ||
+
+               rewrite(max(x, max(x, y) + c0), max(x, y + c0), c0 < 0) ||
+               rewrite(max(x, max(x, y) + c0), max(x, y) + c0, c0 > 0) ||
+               rewrite(max(x, max(y, x) + c0), max(x, y + c0), c0 < 0) ||
+               rewrite(max(x, max(y, x) + c0), max(x, y) + c0, c0 > 0) ||
+
+               rewrite(max(x + c0, c1), max(x, fold(c1 - c0)) + c0) ||
 
                rewrite(max(x + c0, y + c1), max(x, y + fold(c1 - c0)) + c0, c1 > c0) ||
                rewrite(max(x + c0, y + c1), max(x + fold(c0 - c1), y) + c1, c0 > c1) ||

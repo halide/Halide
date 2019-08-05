@@ -12,6 +12,8 @@
 #include "CodeGen_LLVM.h"
 #include "CodeGen_MIPS.h"
 #include "CodeGen_PowerPC.h"
+#include "CodeGen_RISCV.h"
+#include "CodeGen_WebAssembly.h"
 #include "CodeGen_X86.h"
 #include "Debug.h"
 #include "Deinterleave.h"
@@ -24,6 +26,7 @@
 #include "LLVM_Runtime_Linker.h"
 #include "Lerp.h"
 #include "MatlabWrapper.h"
+#include "Pipeline.h"
 #include "Simplify.h"
 #include "Util.h"
 
@@ -84,12 +87,6 @@ using std::vector;
         LLVMInitialize##target##AsmPrinter(); \
 
 // Override above empty init function with macro for supported targets.
-#ifdef WITH_X86
-#define InitializeX86Target()       InitializeTarget(X86)
-#define InitializeX86AsmParser()    InitializeAsmParser(X86)
-#define InitializeX86AsmPrinter()   InitializeAsmPrinter(X86)
-#endif
-
 #ifdef WITH_ARM
 #define InitializeARMTarget()       InitializeTarget(ARM)
 #define InitializeARMAsmParser()    InitializeAsmParser(ARM)
@@ -114,6 +111,12 @@ using std::vector;
 #define InitializeAArch64AsmPrinter()   InitializeAsmPrinter(AArch64)
 #endif
 
+#ifdef WITH_HEXAGON
+#define InitializeHexagonTarget()       InitializeTarget(Hexagon)
+#define InitializeHexagonAsmParser()    InitializeAsmParser(Hexagon)
+#define InitializeHexagonAsmPrinter()   InitializeAsmPrinter(Hexagon)
+#endif
+
 #ifdef WITH_MIPS
 #define InitializeMipsTarget()       InitializeTarget(Mips)
 #define InitializeMipsAsmParser()    InitializeAsmParser(Mips)
@@ -126,10 +129,22 @@ using std::vector;
 #define InitializePowerPCAsmPrinter()   InitializeAsmPrinter(PowerPC)
 #endif
 
-#ifdef WITH_HEXAGON
-#define InitializeHexagonTarget()       InitializeTarget(Hexagon)
-#define InitializeHexagonAsmParser()    InitializeAsmParser(Hexagon)
-#define InitializeHexagonAsmPrinter()   InitializeAsmPrinter(Hexagon)
+#ifdef WITH_RISCV
+#define InitializeRISCVTarget()       InitializeTarget(RISCV)
+#define InitializeRISCVAsmParser()    InitializeAsmParser(RISCV)
+#define InitializeRISCVAsmPrinter()   InitializeAsmPrinter(RISCV)
+#endif
+
+#ifdef WITH_X86
+#define InitializeX86Target()       InitializeTarget(X86)
+#define InitializeX86AsmParser()    InitializeAsmParser(X86)
+#define InitializeX86AsmPrinter()   InitializeAsmPrinter(X86)
+#endif
+
+#ifdef WITH_WEBASSEMBLY
+#define InitializeWebAssemblyTarget()       InitializeTarget(WebAssembly)
+#define InitializeWebAssemblyAsmParser()    InitializeAsmParser(WebAssembly)
+#define InitializeWebAssemblyAsmPrinter()   InitializeAsmPrinter(WebAssembly)
 #endif
 
 namespace {
@@ -309,7 +324,16 @@ CodeGen_LLVM *CodeGen_LLVM::new_for_target(const Target &target,
             return make_codegen<CodeGen_GPU_Host<CodeGen_PowerPC>>(target, context);
         }
 #endif
-
+#ifdef WITH_WEBASSEMBLY
+        if (target.arch == Target::WebAssembly) {
+            return make_codegen<CodeGen_GPU_Host<CodeGen_WebAssembly>>(target, context);
+        }
+#endif
+#ifdef WITH_RISCV
+        if (target.arch == Target::RISCV) {
+            return make_codegen<CodeGen_GPU_Host<CodeGen_RISCV>>(target, context);
+        }
+#endif
         user_error << "Invalid target architecture for GPU backend: "
                    << target.to_string() << "\n";
         return nullptr;
@@ -324,6 +348,10 @@ CodeGen_LLVM *CodeGen_LLVM::new_for_target(const Target &target,
         return make_codegen<CodeGen_PowerPC>(target, context);
     } else if (target.arch == Target::Hexagon) {
         return make_codegen<CodeGen_Hexagon>(target, context);
+    } else if (target.arch == Target::WebAssembly) {
+        return make_codegen<CodeGen_WebAssembly>(target, context);
+    } else if (target.arch == Target::RISCV) {
+        return make_codegen<CodeGen_RISCV>(target, context);
     }
 
     user_error << "Unknown target architecture: "
@@ -448,6 +476,8 @@ bool CodeGen_LLVM::llvm_NVPTX_enabled = false;
 bool CodeGen_LLVM::llvm_Mips_enabled = false;
 bool CodeGen_LLVM::llvm_PowerPC_enabled = false;
 bool CodeGen_LLVM::llvm_AMDGPU_enabled = false;
+bool CodeGen_LLVM::llvm_WebAssembly_enabled = false;
+bool CodeGen_LLVM::llvm_RISCV_enabled = false;
 
 namespace {
 
@@ -499,21 +529,57 @@ MangledNames get_mangled_names(const LoweredFunc &f, const Target &target) {
 
 }  // namespace
 
-std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
+llvm::FunctionType *CodeGen_LLVM::signature_to_type(const ExternSignature &signature) {
+    internal_assert(void_t != nullptr && buffer_t_type != nullptr);
+    llvm::Type *ret_type = signature.is_void_return()
+        ? void_t
+        : llvm_type_of(signature.ret_type());
+    std::vector<llvm::Type *> llvm_arg_types;
+    for (const Type &t : signature.arg_types()) {
+        if (t == type_of<struct halide_buffer_t *>()) {
+            llvm_arg_types.push_back(buffer_t_type->getPointerTo());
+        } else {
+            llvm_arg_types.push_back(llvm_type_of(t));
+        }
+    }
+
+    return llvm::FunctionType::get(ret_type, llvm_arg_types, false);
+}
+
+/*static*/
+std::unique_ptr<llvm::Module> CodeGen_LLVM::compile_trampolines(
+        const Target &target,
+        llvm::LLVMContext &context,
+        const std::string &suffix,
+        const std::vector<std::pair<std::string, ExternSignature>> &externs) {
+    std::unique_ptr<CodeGen_LLVM> codegen(new_for_target(target, context));
+    codegen->init_codegen("trampolines" + suffix);
+    for (const std::pair<std::string, ExternSignature> &e : externs) {
+        const std::string &callee_name = e.first;
+        const std::string wrapper_name = callee_name + suffix;
+        llvm::FunctionType *fn_type = codegen->signature_to_type(e.second);
+        llvm::Function *callee = llvm::Function::Create(fn_type,
+            llvm::Function::ExternalLinkage, callee_name, codegen->module.get());
+        codegen->add_argv_wrapper(callee, wrapper_name, /*result_in_argv*/ true);
+    }
+    return codegen->finish_codegen();
+}
+
+void CodeGen_LLVM::init_codegen(const std::string &name, bool any_strict_float) {
     init_module();
+
+    internal_assert(module && context);
 
     debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
 
-    module->setModuleIdentifier(input.name());
+    module->setModuleIdentifier(name);
 
     // Add some target specific info to the module as metadata.
     module->addModuleFlag(llvm::Module::Warning, "halide_use_soft_float_abi", use_soft_float_abi() ? 1 : 0);
     module->addModuleFlag(llvm::Module::Warning, "halide_mcpu", MDString::get(*context, mcpu()));
     module->addModuleFlag(llvm::Module::Warning, "halide_mattrs", MDString::get(*context, mattrs()));
-    module->addModuleFlag(llvm::Module::Warning, "halide_per_instruction_fast_math_flags", input.any_strict_float());
-
-    internal_assert(module && context && builder)
-        << "The CodeGen_LLVM subclass should have made an initial module before calling CodeGen_LLVM::compile\n";
+    module->addModuleFlag(llvm::Module::Warning, "halide_use_pic", use_pic() ? 1 : 0);
+    module->addModuleFlag(llvm::Module::Warning, "halide_per_instruction_fast_math_flags", any_strict_float);
 
     // Ensure some types we need are defined
     buffer_t_type = module->getTypeByName("struct.halide_buffer_t");
@@ -548,6 +614,13 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
 
     parallel_task_t_type = module->getTypeByName("struct.halide_parallel_task_t");
     internal_assert(parallel_task_t_type) << "Did not find halide_parallel_task_t in initial module";
+}
+
+std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
+    init_codegen(input.name(), input.any_strict_float());
+
+    internal_assert(module && context && builder)
+        << "The CodeGen_LLVM subclass should have made an initial module before calling CodeGen_LLVM::compile\n";
 
     add_external_code(input);
 
@@ -564,7 +637,7 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
         // If the Func is externally visible, also create the argv wrapper and metadata.
         // (useful for calling from JIT and other machine interfaces).
         if (f.linkage == LinkageType::ExternalPlusMetadata) {
-            llvm::Function *wrapper = add_argv_wrapper(names.argv_name);
+            llvm::Function *wrapper = add_argv_wrapper(function, names.argv_name);
             llvm::Function *metadata_getter = embed_metadata_getter(names.metadata_name,
                 names.simple_name, f.args, input.get_metadata_name_map());
 
@@ -576,6 +649,10 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
 
     debug(2) << module.get() << "\n";
 
+    return finish_codegen();
+}
+
+std::unique_ptr<llvm::Module> CodeGen_LLVM::finish_codegen() {
     // Verify the module is ok
     internal_assert(!verifyModule(*module, &llvm::errs()));
     debug(2) << "Done generating llvm bitcode\n";
@@ -940,18 +1017,25 @@ Constant* CodeGen_LLVM::embed_constant_expr(Expr e, llvm::Type *t) {
 
 // Make a wrapper to call the function with an array of pointer
 // args. This is easier for the JIT to call than a function with an
-// unknown (at compile time) argument list.
-llvm::Function *CodeGen_LLVM::add_argv_wrapper(const std::string &name) {
-    llvm::Type *args_t[] = {i8_t->getPointerTo()->getPointerTo()};
-    llvm::FunctionType *func_t = llvm::FunctionType::get(i32_t, args_t, false);
-    llvm::Function *wrapper = llvm::Function::Create(func_t, llvm::GlobalValue::ExternalLinkage, name, module.get());
-    llvm::BasicBlock *block = llvm::BasicBlock::Create(module->getContext(), "entry", wrapper);
-    builder->SetInsertPoint(block);
+// unknown (at compile time) argument list. If result_in_argv is false,
+// the internal function result is returned as the wrapper function
+// result; if result_in_argv is true, the internal function result
+// is stored as the last item in the argv list (which must be one
+// longer than the number of arguments), and the wrapper's actual
+// return type is always 'void'.
+llvm::Function *CodeGen_LLVM::add_argv_wrapper(llvm::Function *fn,
+                                               const std::string &name,
+                                               bool result_in_argv) {
+    llvm::Type *wrapper_result_type = result_in_argv ? void_t : i32_t;
+    llvm::Type *wrapper_args_t[] = {i8_t->getPointerTo()->getPointerTo()};
+    llvm::FunctionType *wrapper_func_t = llvm::FunctionType::get(wrapper_result_type, wrapper_args_t, false);
+    llvm::Function *wrapper_func = llvm::Function::Create(wrapper_func_t, llvm::GlobalValue::ExternalLinkage, name, module.get());
+    llvm::BasicBlock *wrapper_block = llvm::BasicBlock::Create(module->getContext(), "entry", wrapper_func);
+    builder->SetInsertPoint(wrapper_block);
 
-    llvm::Value *arg_array = iterator_to_pointer(wrapper->arg_begin());
-
+    llvm::Value *arg_array = iterator_to_pointer(wrapper_func->arg_begin());
     std::vector<llvm::Value *> wrapper_args;
-    for (llvm::Function::arg_iterator i = function->arg_begin(); i != function->arg_end(); i++) {
+    for (llvm::Function::arg_iterator i = fn->arg_begin(); i != fn->arg_end(); i++) {
         // Get the address of the nth argument
         llvm::Value *ptr = builder->CreateConstGEP1_32(arg_array, wrapper_args.size());
         ptr = builder->CreateLoad(ptr);
@@ -965,12 +1049,27 @@ llvm::Function *CodeGen_LLVM::add_argv_wrapper(const std::string &name) {
         }
     }
     debug(4) << "Creating call from wrapper to actual function\n";
-    llvm::CallInst *result = builder->CreateCall(function, wrapper_args);
+    llvm::CallInst *result = builder->CreateCall(fn, wrapper_args);
     // This call should never inline
     result->setIsNoInline();
-    builder->CreateRet(result);
-    internal_assert(!verifyFunction(*wrapper, &llvm::errs()));
-    return wrapper;
+
+    if (result_in_argv) {
+        llvm::Value *result_in_argv_ptr = builder->CreateConstGEP1_32(arg_array, wrapper_args.size());
+        if (fn->getReturnType() != void_t) {
+            result_in_argv_ptr = builder->CreateLoad(result_in_argv_ptr);
+            // Cast to the appropriate type and store
+            result_in_argv_ptr = builder->CreatePointerCast(result_in_argv_ptr, fn->getReturnType()->getPointerTo());
+            builder->CreateStore(result, result_in_argv_ptr);
+        }
+        builder->CreateRetVoid();
+    } else {
+        // We could probably support other types as return values,
+        // but int32 results are all that have actually been tested.
+        internal_assert(fn->getReturnType() == i32_t);
+        builder->CreateRet(result);
+    }
+    internal_assert(!verifyFunction(*wrapper_func, &llvm::errs()));
+    return wrapper_func;
 }
 
 llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_name,
@@ -1093,6 +1192,105 @@ void CodeGen_LLVM::optimize_module() {
         module->print(dbgs(), nullptr, false, true);
     }
 
+    std::unique_ptr<TargetMachine> tm = make_target_machine(*module);
+
+// Temporarily disabled, see https://github.com/halide/Halide/issues/3957
+// #if LLVM_VERSION >= 90
+#if 0
+    PipelineTuningOptions pto;
+    pto.LoopInterleaving = !get_target().has_feature(Target::DisableLLVMLoopUnroll);
+    pto.LoopVectorization = !get_target().has_feature(Target::DisableLLVMLoopVectorize);
+    pto.LoopUnrolling = pto.LoopInterleaving;
+    // Clear ScEv info for all loops. Certain Halide applications spend a very
+    // long time compiling in forgetLoop, and prefer to forget everything
+    // and rebuild SCEV (aka "Scalar Evolution") from scratch.
+    // Sample difference in compile time reduction at the time of this change was
+    // 21.04 -> 14.78 using current ToT release build. (See also https://reviews.llvm.org/rL358304)
+    pto.ForgetAllSCEVInLoopUnroll = true;
+
+    // Note: pto exists only for LLVM_VERSION >= 90
+    llvm::PassBuilder pb(tm.get(), pto);
+
+    bool debug_pass_manager = false;
+    // These analysis managers have to be declared in this order.
+    llvm::LoopAnalysisManager lam(debug_pass_manager);
+    llvm::FunctionAnalysisManager fam(debug_pass_manager);
+    llvm::CGSCCAnalysisManager cgam(debug_pass_manager);
+    llvm::ModuleAnalysisManager mam(debug_pass_manager);
+
+    llvm::AAManager aa = pb.buildDefaultAAPipeline();
+    fam.registerPass([&] { return std::move(aa); });
+
+    // Register all the basic analyses with the managers.
+    pb.registerModuleAnalyses(mam);
+    pb.registerCGSCCAnalyses(cgam);
+    pb.registerFunctionAnalyses(fam);
+    pb.registerLoopAnalyses(lam);
+    pb.crossRegisterProxies(lam, fam, cgam, mam);
+    ModulePassManager mpm(debug_pass_manager);
+
+    PassBuilder::OptimizationLevel level = PassBuilder::OptimizationLevel::O3;
+
+    if (get_target().has_feature(Target::ASAN)) {
+        pb.registerPipelineStartEPCallback([&](ModulePassManager &mpm) {
+            mpm.addPass(
+                RequireAnalysisPass<ASanGlobalsMetadataAnalysis, llvm::Module>());
+        });
+        bool recover = true;
+        bool use_after_scope = true;
+        pb.registerOptimizerLastEPCallback(
+            [recover, use_after_scope](FunctionPassManager &fpm,
+                                     PassBuilder::OptimizationLevel level) {
+                fpm.addPass(AddressSanitizerPass(
+                    /*CompileKernel=*/false, recover, use_after_scope));
+            });
+        bool module_use_after_scope = false;
+        bool use_odr_indicator = true;
+        pb.registerPipelineStartEPCallback(
+            [recover, module_use_after_scope,
+             use_odr_indicator](ModulePassManager &mpm) {
+                mpm.addPass(ModuleAddressSanitizerPass(
+                    /*CompileKernel=*/false, recover, module_use_after_scope,
+                    use_odr_indicator));
+            });
+    }
+
+    if (get_target().has_feature(Target::TSAN)) {
+        pb.registerOptimizerLastEPCallback(
+            [](FunctionPassManager &fpm, PassBuilder::OptimizationLevel level) {
+                fpm.addPass(ThreadSanitizerPass());
+            });
+    }
+
+    for (llvm::Module::iterator i = module->begin(); i != module->end(); i++) {
+        if (get_target().has_feature(Target::ASAN)) {
+            i->addFnAttr(Attribute::SanitizeAddress);
+        }
+        if (get_target().has_feature(Target::TSAN)) {
+            // Do not annotate any of Halide's low-level synchronization code as it has
+            // tsan interface calls to mark its behavior and is much faster if
+            // it is not analyzed instruction by instruction.
+            if (!(i->getName().startswith("_ZN6Halide7Runtime8Internal15Synchronization") ||
+                  // TODO: this is a benign data race that re-initializes the detected features;
+                  // we should really fix it properly inside the implementation, rather than disabling
+                  // it here as a band-aid.
+                  i->getName().startswith("halide_default_can_use_target_features") ||
+                  i->getName().startswith("halide_mutex_") ||
+                  i->getName().startswith("halide_cond_"))) {
+                i->addFnAttr(Attribute::SanitizeThread);
+            }
+        }
+    }
+
+    mpm = pb.buildPerModuleDefaultPipeline(level, debug_pass_manager);
+    mpm.run(*module, mam);
+
+    if (llvm::verifyModule(*module, &errs()))
+      report_fatal_error("Transformation resulted in an invalid module\n");
+
+#else
+    // Keep the legacy pass manager for LLVM < 90
+
     // We override PassManager::add so that we have an opportunity to
     // blacklist problematic LLVM passes.
     class MyFunctionPassManager : public legacy::FunctionPassManager {
@@ -1115,9 +1313,8 @@ void CodeGen_LLVM::optimize_module() {
     MyFunctionPassManager function_pass_manager(module.get());
     MyModulePassManager module_pass_manager;
 
-    std::unique_ptr<TargetMachine> TM = make_target_machine(*module);
-    module_pass_manager.add(createTargetTransformInfoWrapperPass(TM ? TM->getTargetIRAnalysis() : TargetIRAnalysis()));
-    function_pass_manager.add(createTargetTransformInfoWrapperPass(TM ? TM->getTargetIRAnalysis() : TargetIRAnalysis()));
+    module_pass_manager.add(createTargetTransformInfoWrapperPass(tm ? tm->getTargetIRAnalysis() : TargetIRAnalysis()));
+    function_pass_manager.add(createTargetTransformInfoWrapperPass(tm ? tm->getTargetIRAnalysis() : TargetIRAnalysis()));
 
     PassManagerBuilder b;
     b.OptLevel = 3;
@@ -1125,9 +1322,17 @@ void CodeGen_LLVM::optimize_module() {
     b.LoopVectorize = !get_target().has_feature(Target::DisableLLVMLoopVectorize);
     b.DisableUnrollLoops = get_target().has_feature(Target::DisableLLVMLoopUnroll);
     b.SLPVectorize = true;  // Note: SLP vectorization has no analogue in the Halide scheduling model
+#if LLVM_VERSION >= 90
+    // Clear ScEv info for all loops. Certain Halide applications spend a very
+    // long time compiling in forgetLoop, and prefer to forget everything
+    // and rebuild SCEV (aka "Scalar Evolution") from scratch.
+    // Sample difference in compile time reduction at the time of this change was
+    // 21.04 -> 14.78 using current ToT release build. (See also https://reviews.llvm.org/rL358304)
+    b.ForgetAllSCEVInLoopUnroll = true;
+#endif
 
-    if (TM) {
-        TM->adjustPassManager(b);
+    if (tm) {
+        tm->adjustPassManager(b);
     }
 
     if (get_target().has_feature(Target::ASAN)) {
@@ -1187,6 +1392,7 @@ void CodeGen_LLVM::optimize_module() {
     }
     function_pass_manager.doFinalization();
     module_pass_manager.run(*module);
+#endif
 
     debug(3) << "After LLVM optimizations:\n";
     if (debug::debug_level() >= 2) {
@@ -1350,28 +1556,9 @@ void CodeGen_LLVM::visit(const Mul *op) {
     }
 }
 
-Expr CodeGen_LLVM::mulhi_shr(Expr a, Expr b, int shr) {
-    Type ty = a.type();
-    Type wide_ty = ty.with_bits(ty.bits() * 2);
-
-    Expr p_wide = cast(wide_ty, a) * cast(wide_ty, b);
-    return cast(ty, p_wide >> (shr + ty.bits()));
-}
-
-Expr CodeGen_LLVM::sorted_avg(Expr a, Expr b) {
-    // b > a, so the following works without widening:
-    // a + (b - a)/2
-    return a + (b - a)/2;
-}
-
 void CodeGen_LLVM::visit(const Div *op) {
     user_assert(!is_zero(op->b)) << "Division by constant zero in expression: " << Expr(op) << "\n";
 
-    // Detect if it's a small int division
-    const int64_t *const_int_divisor = as_const_int(op->b);
-    const uint64_t *const_uint_divisor = as_const_uint(op->b);
-
-    int shift_amount;
     if (op->type.is_float()) {
         // Don't call codegen() multiple times within an argument list:
         // order-of-evaluation isn't guaranteed and can vary by compiler,
@@ -1380,117 +1567,16 @@ void CodeGen_LLVM::visit(const Div *op) {
         Value *a = codegen(op->a);
         Value *b = codegen(op->b);
         value = builder->CreateFDiv(a, b);
-    } else if (is_const_power_of_two_integer(op->b, &shift_amount) &&
-               (op->type.is_int() || op->type.is_uint())) {
-        value = codegen(op->a >> shift_amount);
-    } else if (const_int_divisor &&
-               op->type.is_int() &&
-               (op->type.bits() == 8 || op->type.bits() == 16 || op->type.bits() == 32) &&
-               *const_int_divisor > 1 &&
-               ((op->type.bits() > 8 && *const_int_divisor < 256) || *const_int_divisor < 128)) {
-
-        int64_t multiplier, shift;
-        if (op->type.bits() == 32) {
-            multiplier = IntegerDivision::table_s32[*const_int_divisor][2];
-            shift      = IntegerDivision::table_s32[*const_int_divisor][3];
-        } else if (op->type.bits() == 16) {
-            multiplier = IntegerDivision::table_s16[*const_int_divisor][2];
-            shift      = IntegerDivision::table_s16[*const_int_divisor][3];
-        } else {
-            // 8 bit
-            multiplier = IntegerDivision::table_s8[*const_int_divisor][2];
-            shift      = IntegerDivision::table_s8[*const_int_divisor][3];
-        }
-        Expr num = op->a;
-
-        // Make an all-ones mask if the numerator is negative
-        Expr sign = num >> make_const(op->type, op->type.bits() - 1);
-
-        // Flip the numerator bits if the mask is high.
-        num = cast(num.type().with_code(Type::UInt), num);
-        num = num ^ sign;
-
-        // Multiply and keep the high half of the
-        // result, and then apply the shift.
-        Expr mult = make_const(num.type(), multiplier);
-        num = mulhi_shr(num, mult, shift);
-
-        // Maybe flip the bits back again.
-        num = num ^ sign;
-
-        value = codegen(num);
-
-    } else if (const_uint_divisor &&
-               op->type.is_uint() &&
-               (op->type.bits() == 8 || op->type.bits() == 16 || op->type.bits() == 32) &&
-               *const_uint_divisor > 1 && *const_uint_divisor < 256) {
-
-        int64_t method, multiplier, shift;
-        if (op->type.bits() == 32) {
-            method     = IntegerDivision::table_u32[*const_uint_divisor][1];
-            multiplier = IntegerDivision::table_u32[*const_uint_divisor][2];
-            shift      = IntegerDivision::table_u32[*const_uint_divisor][3];
-        } else if (op->type.bits() == 16) {
-            method     = IntegerDivision::table_u16[*const_uint_divisor][1];
-            multiplier = IntegerDivision::table_u16[*const_uint_divisor][2];
-            shift      = IntegerDivision::table_u16[*const_uint_divisor][3];
-        } else {
-            method     = IntegerDivision::table_u8[*const_uint_divisor][1];
-            multiplier = IntegerDivision::table_u8[*const_uint_divisor][2];
-            shift      = IntegerDivision::table_u8[*const_uint_divisor][3];
-        }
-
-        internal_assert(method != 0)
-            << "method 0 division is for powers of two and should have been handled elsewhere\n";
-        Expr num = op->a;
-
-        // Widen, multiply, narrow
-        Expr mult = make_const(num.type(), multiplier);
-        Expr val = mulhi_shr(num, mult, method == 1 ? shift : 0);
-
-        if (method == 2) {
-            // Average with original numerator.
-            val = sorted_avg(val, num);
-
-            // Do the final shift
-            if (shift) {
-                val = val >> make_const(op->type, shift);
-            }
-        }
-
-        value = codegen(val);
     } else {
-        value = codegen(lower_euclidean_div(op->a, op->b));
+        value = codegen(lower_int_uint_div(op->a, op->b));
     }
 }
 
 void CodeGen_LLVM::visit(const Mod *op) {
-    // Detect if it's a small int modulus
-    const int64_t *const_int_divisor = as_const_int(op->b);
-    const uint64_t *const_uint_divisor = as_const_uint(op->b);
-
-    int bits;
     if (op->type.is_float()) {
         value = codegen(simplify(op->a - op->b * floor(op->a/op->b)));
-    } else if (is_const_power_of_two_integer(op->b, &bits)) {
-        value = codegen(op->a & (op->b - 1));
-    } else if (const_int_divisor &&
-               op->type.is_int() &&
-               (op->type.bits() == 8 || op->type.bits() == 16 || op->type.bits() == 32) &&
-               *const_int_divisor > 1 &&
-               ((op->type.bits() > 8 && *const_int_divisor < 256) || *const_int_divisor < 128)) {
-        // We can use our fast signed integer division
-        value = codegen(common_subexpression_elimination(op->a - (op->a / op->b) * op->b));
-    } else if (const_uint_divisor &&
-               op->type.is_uint() &&
-               (op->type.bits() == 8 || op->type.bits() == 16 || op->type.bits() == 32) &&
-               *const_uint_divisor > 1 && *const_uint_divisor < 256) {
-        // We can use our fast unsigned integer division
-        value = codegen(common_subexpression_elimination(op->a - (op->a / op->b) * op->b));
     } else {
-        // To match our definition of division, mod should be between 0
-        // and |b|.
-        value = codegen(lower_euclidean_mod(op->a, op->b));
+        value = codegen(lower_int_uint_mod(op->a, op->b));
     }
 }
 
@@ -2306,18 +2392,21 @@ void CodeGen_LLVM::visit(const Call *op) {
             }
 
         } else {
-            Value *a = codegen(op->args[0]);
-            value = builder->CreateBitCast(a, llvm_dst);
+            value = builder->CreateBitCast(value, llvm_dst);
         }
     } else if (op->is_intrinsic(Call::shift_left)) {
         internal_assert(op->args.size() == 2);
+        internal_assert(op->args[0].type().bits() == op->args[1].type().bits());
         Value *a = codegen(op->args[0]);
         Value *b = codegen(op->args[1]);
+        internal_assert(a->getType() == b->getType()) << "LLVM type mismatch on (" << op->args[0] << ") << (" << op->args[1] << ").\n";
         value = builder->CreateShl(a, b);
     } else if (op->is_intrinsic(Call::shift_right)) {
         internal_assert(op->args.size() == 2);
+        internal_assert(op->args[0].type().bits() == op->args[1].type().bits());
         Value *a = codegen(op->args[0]);
         Value *b = codegen(op->args[1]);
+        internal_assert(a->getType() == b->getType()) << "LLVM type mismatch on (" << op->args[0] << ") >> (" << op->args[1] << ").\n";
         if (op->type.is_int()) {
             value = builder->CreateAShr(a, b);
         } else {
@@ -2375,7 +2464,7 @@ void CodeGen_LLVM::visit(const Call *op) {
                               Let::make(b_name, op->args[1],
                                         Select::make(a_var < b_var, b_var - a_var, a_var - b_var))));
         }
-    } else if (op->is_intrinsic("div_round_to_zero")) {
+    } else if (op->is_intrinsic(Call::div_round_to_zero)) {
         internal_assert(op->args.size() == 2);
         Value *a = codegen(op->args[0]);
         Value *b = codegen(op->args[1]);
@@ -2386,7 +2475,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         } else {
             internal_error << "div_round_to_zero of non-integer type.\n";
         }
-    } else if (op->is_intrinsic("mod_round_to_zero")) {
+    } else if (op->is_intrinsic(Call::mod_round_to_zero)) {
         internal_assert(op->args.size() == 2);
         Value *a = codegen(op->args[0]);
         Value *b = codegen(op->args[1]);
@@ -2397,6 +2486,21 @@ void CodeGen_LLVM::visit(const Call *op) {
         } else {
             internal_error << "mod_round_to_zero of non-integer type.\n";
         }
+    } else if (op->is_intrinsic(Call::mulhi_shr)) {
+        internal_assert(op->args.size() == 3);
+
+        Type ty = op->type;
+        Type wide_ty = ty.with_bits(ty.bits() * 2);
+
+        Expr p_wide = cast(wide_ty, op->args[0]) * cast(wide_ty, op->args[1]);
+        const UIntImm *shift = op->args[2].as<UIntImm>();
+        internal_assert(shift != nullptr) << "Third argument to mulhi_shr intrinsic must be an unsigned integer immediate.\n";
+        value = codegen(cast(ty, p_wide >> (shift->value + ty.bits())));
+    } else if (op->is_intrinsic(Call::sorted_avg)) {
+        internal_assert(op->args.size() == 2);
+        // b > a, so the following works without widening:
+        // a + (b - a)/2
+        value = codegen(op->args[0] + (op->args[1] - op->args[0])/2);
     } else if (op->is_intrinsic(Call::lerp)) {
         internal_assert(op->args.size() == 3);
         value = codegen(lower_lerp(op->args[0], op->args[1], op->args[2]));
@@ -2849,7 +2953,18 @@ void CodeGen_LLVM::visit(const Call *op) {
         internal_assert(op->args.size() == 2);
         Expr x = op->args[0];
         Expr y = op->args[1];
-        Expr e = Internal::halide_exp(Internal::halide_log(x) * y);
+        Halide::Expr abs_x_pow_y = Internal::halide_exp(Internal::halide_log(abs(x)) * y);
+        Halide::Expr nan_expr = Call::make(x.type(), "nan_f32", {}, Call::PureExtern);
+        Expr iy = floor(y);
+        Expr one = make_one(x.type());
+        Expr zero = make_zero(x.type());
+        Expr e = select(x > 0, abs_x_pow_y,  // Strictly positive x
+                        y == 0.0f, one,  // x^0 == 1
+                        x == 0.0f, zero, // 0^y == 0
+                        y != iy, nan_expr,  // negative x to a non-integer power
+                        iy % 2 == 0, abs_x_pow_y,  // negative x to an even power
+                        -abs_x_pow_y);  // negative x to an odd power
+        e = common_subexpression_elimination(e);
         e.accept(this);
     } else if (op->call_type == Call::PureExtern && op->name == "log_f32") {
         internal_assert(op->args.size() == 1);
@@ -4061,6 +4176,10 @@ std::pair<llvm::Function *, int> CodeGen_LLVM::find_vector_runtime_function(cons
     }
 
     return { nullptr, 0 };
+}
+
+bool CodeGen_LLVM::use_pic() const {
+    return true;
 }
 
 }  // namespace Internal

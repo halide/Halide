@@ -33,6 +33,8 @@ struct VarOrRVar {
     VarOrRVar(const Var &v) : var(v), is_rvar(false) {}
     VarOrRVar(const RVar &r) : rvar(r), is_rvar(true) {}
     VarOrRVar(const RDom &r) : rvar(RVar(r)), is_rvar(true) {}
+    template<int N>
+    VarOrRVar(const ImplicitVar<N> &u) : var(u), is_rvar(false) {}
 
     const std::string &name() const {
         if (is_rvar) return rvar.name();
@@ -76,23 +78,14 @@ class Stage {
     Stage &compute_with(LoopLevel loop_level, const std::map<std::string, LoopAlignStrategy> &align);
 
 public:
-    Stage(Internal::Function f, Internal::Definition d, size_t stage_index,
-          const std::vector<Var> &args)
-            : function(f), definition(d), stage_index(stage_index), dim_vars(args) {
-        internal_assert(definition.defined());
-        internal_assert(definition.args().size() == dim_vars.size());
-        definition.schedule().touched() = true;
-    }
-
-    Stage(Internal::Function f, Internal::Definition d, size_t stage_index,
-          const std::vector<std::string> &args)
-            : function(f), definition(d), stage_index(stage_index) {
+    Stage(Internal::Function f, Internal::Definition d, size_t stage_index)
+        : function(std::move(f)), definition(std::move(d)), stage_index(stage_index) {
         internal_assert(definition.defined());
         definition.schedule().touched() = true;
 
-        std::vector<Var> dim_vars(args.size());
-        for (size_t i = 0; i < args.size(); i++) {
-            dim_vars[i] = Var(args[i]);
+        dim_vars.reserve(function.args().size());
+        for (const auto &arg : function.args()) {
+            dim_vars.emplace_back(arg);
         }
         internal_assert(definition.args().size() == dim_vars.size());
     }
@@ -755,6 +748,16 @@ public:
      Target t = get_jit_target_from_environment();
      Buffer<int32_t> result = f.realize(10, 10, t, { { p, 17 }, { img, arg_img } });
      \endcode
+     *
+     * If the Func cannot be realized into a buffer of the given size
+     * due to scheduling constraints on scattering update definitions,
+     * it will be realized into a larger buffer of the minimum size
+     * possible, and a cropped view at the requested size will be
+     * returned. It is thus not safe to assume the returned buffers
+     * are contiguous in memory. This behavior can be disabled with
+     * the NoBoundsQuery target flag, in which case an error about
+     * writing out of bounds on the output buffer will trigger
+     * instead.
      *
      */
     // @{
@@ -1462,7 +1465,16 @@ public:
      * generated schedules might break when the sizes of the dimensions are
      * very different from the estimates specified. These estimates are used
      * only by the auto scheduler if the function is a pipeline output. */
-    Func &estimate(Var var, Expr min, Expr extent);
+    Func &set_estimate(Var var, Expr min, Expr extent);
+
+    HALIDE_ATTRIBUTE_DEPRECATED("Use set_estimate() instead")
+    Func &estimate(Var var, Expr min, Expr extent) { return set_estimate(var, min, extent); }
+
+    /** Set (min, extent) estimates for all dimensions in the Func
+     * at once; this is equivalent to calling `set_estimate(args()[n], min, extent)`
+     * repeatedly, but slightly terser. The size of the estimates vector
+     * must match the dimensionality of the Func. */
+    Func &set_estimates(const std::vector<std::pair<Expr, Expr>> &estimates);
 
     /** Expand the region computed so that the min coordinates is
      * congruent to 'remainder' modulo 'modulus', and the extent is a
