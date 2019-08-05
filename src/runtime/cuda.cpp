@@ -222,8 +222,10 @@ public:
     }
 
     INLINE ~Context() {
-        CUcontext old;
-        cuCtxPopCurrent(&old);
+        if (error == 0) {
+            CUcontext old;
+            cuCtxPopCurrent(&old);
+        }
 
         halide_cuda_release_context(user_context);
     }
@@ -757,7 +759,10 @@ WEAK int halide_cuda_device_malloc(void *user_context, halide_buffer_t *buf) {
         return ctx.error;
     }
 
-    size_t size = quantize_allocation_size(buf->size_in_bytes());
+    size_t size = buf->size_in_bytes();
+    if (halide_can_reuse_device_allocations(user_context)) {
+        size = quantize_allocation_size(size);
+    }
     halide_assert(user_context, size != 0);
     if (buf->device) {
         // This buffer already has a device allocation
