@@ -1838,6 +1838,12 @@ extern double halide_float16_bits_to_double(uint16_t);
  * quite slow, so it can be beneficial to set this to true. The
  * default value for now is false.
  *
+ * Note that if enabled, the eviction policy is very simplistic. The
+ * 32 most-recently used allocations are preserved, regardless of
+ * their size. Additionally, if a call to cuMalloc results in an
+ * out-of-memory error, the entire cache is flushed and the allocation
+ * is retried. See https://github.com/halide/Halide/issues/4093
+ *
  * If set to false, releases all unused device allocations back to the
  * underlying device APIs. For finer-grained control, see specific
  * methods in each device api runtime. */
