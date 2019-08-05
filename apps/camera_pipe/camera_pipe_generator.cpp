@@ -435,22 +435,16 @@ void CameraPipe::generate() {
     /* ESTIMATES */
     // (This can be useful in conjunction with RunGen and benchmarks as well
     // as auto-schedule, so we do it in all cases.)
-    input.dim(0).set_bounds_estimate(0, 2592);
-    input.dim(1).set_bounds_estimate(0, 1968);
-    matrix_3200.dim(0).set_bounds_estimate(0, 4);
-    matrix_3200.dim(1).set_bounds_estimate(0, 3);
-    matrix_7000.dim(0).set_bounds_estimate(0, 4);
-    matrix_7000.dim(1).set_bounds_estimate(0, 3);
+    input.set_estimates({{0, 2592}, {0, 1968}});
+    matrix_3200.set_estimates({{0, 4}, {0, 3}});
+    matrix_7000.set_estimates({{0, 4}, {0, 3}});
     color_temp.set_estimate(3700);
     gamma.set_estimate(2.0);
     contrast.set_estimate(50);
     sharpen_strength.set_estimate(1.0);
     blackLevel.set_estimate(25);
     whiteLevel.set_estimate(1023);
-    processed
-        .estimate(c, 0, 3)
-        .estimate(x, 0, 2592)
-        .estimate(y, 0, 1968);
+    processed.set_estimates({{0, 2592}, {0, 1968}, {0, 3}});
 
     // Schedule
     if (auto_schedule) {

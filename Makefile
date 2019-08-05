@@ -55,11 +55,7 @@ WASM_SHELL ?= d8
 PREFIX ?= /usr/local
 LLVM_CONFIG ?= llvm-config
 LLVM_COMPONENTS= $(shell $(LLVM_CONFIG) --components)
-# Since LLVM5, the LLVM version always uses a major.zero.patch format
-# (ie there is no 'minor' version). We ignore the patch version and
-# just use the major version. For historical reasons, we continue to multiply
-# by 10, to avoid changing all the ifdefs in our code.
-LLVM_VERSION = $(shell $(LLVM_CONFIG) --version | sed 's/\([0-9][0-9]*\)\.0.*/\10/')
+LLVM_VERSION = $(shell $(LLVM_CONFIG) --version | sed 's/\([0-9][0-9]*\)\.\([0-9]\).*/\1.\2/')
 
 LLVM_FULL_VERSION = $(shell $(LLVM_CONFIG) --version)
 LLVM_BINDIR = $(shell $(LLVM_CONFIG) --bindir | sed -e 's/\\/\//g' -e 's/\([a-zA-Z]\):/\/\1/g')
@@ -103,7 +99,9 @@ endif
 
 COMMON_LD_FLAGS += $(SANITIZER_FLAGS)
 
-LLVM_CXX_FLAGS += -DLLVM_VERSION=$(LLVM_VERSION)
+LLVM_VERSION_TIMES_10 = $(shell $(LLVM_CONFIG) --version | sed 's/\([0-9][0-9]*\)\.\([0-9]\).*/\1\2/')
+
+LLVM_CXX_FLAGS += -DLLVM_VERSION=$(LLVM_VERSION_TIMES_10)
 
 # All WITH_* flags are either empty or not-empty. They do not behave
 # like true/false values in most languages.  To turn one off, either
@@ -1960,22 +1958,22 @@ BENCHMARK_APPS=\
 	nl_means \
 	stencil_chain
 
+$(BENCHMARK_APPS): distrib
+	$(eval SUFFIX=$(if $(findstring wasm-32-wasmrt,$(HL_TARGET)),_wasm,))
+	@echo Building $@ for ${HL_TARGET}...
+	@$(MAKE) -C $(ROOT_DIR)/apps/$@ \
+		$(CURDIR)/$(BIN_DIR)/apps/$@/bin/$(HL_TARGET)/$@.rungen${SUFFIX} \
+		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
+		BIN_DIR=$(CURDIR)/$(BIN_DIR)/apps/$@/bin \
+		HL_TARGET=$(HL_TARGET) \
+		> /dev/null \
+		|| exit 1
+
 # TODO: we deliberately leave out the `|| exit 1` (for now) when *running*
 # the benchmarks, as some will currently crash at runtime when running in
 # wasm + wasm_simd128 due to a known bug in V8 v7.5
-.PHONY: benchmark_apps
-benchmark_apps: distrib
-	$(eval SUFFIX=$(if $(findstring wasm-32-wasmrt,$(HL_TARGET)),_wasm,))
-	@for APP in $(BENCHMARK_APPS); do \
-		echo Building $${APP} for ${HL_TARGET}... ; \
-		$(MAKE) -C $(ROOT_DIR)/apps/$${APP} \
-		    $(CURDIR)/$(BIN_DIR)/apps/$${APP}/bin/$(HL_TARGET)/$${APP}.rungen${SUFFIX} \
-			HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
-			BIN_DIR=$(CURDIR)/$(BIN_DIR)/apps/$${APP}/bin \
-			HL_TARGET=$(HL_TARGET) \
-			> /dev/null \
-			|| exit 1 ; \
-	done
+.PHONY: benchmark_apps $(BENCHMARK_APPS)
+benchmark_apps: $(BENCHMARK_APPS)
 	@for APP in $(BENCHMARK_APPS); do \
 		echo ;\
 		echo Benchmarking $${APP} for ${HL_TARGET}... ; \
@@ -2068,7 +2066,7 @@ $(BUILD_DIR)/clang_ok:
 	@exit 1
 endif
 
-ifneq (,$(findstring $(LLVM_VERSION), 70 80 90 100))
+ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 70 71 80 90 100))
 LLVM_OK=yes
 endif
 

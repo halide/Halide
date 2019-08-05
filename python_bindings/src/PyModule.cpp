@@ -15,6 +15,7 @@ void define_module(py::module &m) {
         .def("target", &Module::target)
         .def("name", &Module::name)
         .def("auto_schedule", &Module::auto_schedule)
+        .def("featurization", &Module::featurization)
         .def("buffers", &Module::buffers)
         .def("submodules", &Module::submodules)
 
@@ -31,6 +32,7 @@ void define_module(py::module &m) {
         .def("get_metadata_name_map", &Module::get_metadata_name_map)
 
         .def("set_auto_schedule", &Module::set_auto_schedule)
+        .def("set_featurization", &Module::set_featurization)
 
         // TODO: ExternalCode-related methods deliberately skipped for now.
         // .def("append", (void (Module::*)(const ExternalCode &)) &Module::append, py::arg("external_code"))

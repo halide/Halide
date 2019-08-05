@@ -15,7 +15,8 @@ void define_outputs(py::module &m) {
                          const std::string &stmt_name,
                          const std::string &stmt_html_name,
                          const std::string &static_library_name,
-                         const std::string &schedule_name) -> Outputs {
+                         const std::string &schedule_name,
+                         const std::string &featurization_name) -> Outputs {
             Outputs o;
             o.object_name = object_name;
             o.assembly_name = assembly_name;
@@ -27,6 +28,7 @@ void define_outputs(py::module &m) {
             o.stmt_html_name = stmt_html_name;
             o.static_library_name = static_library_name;
             o.schedule_name = schedule_name;
+            o.featurization_name = featurization_name;
             return o;
         }),
             py::arg("object_name") = "",
@@ -38,7 +40,8 @@ void define_outputs(py::module &m) {
             py::arg("stmt_name") = "",
             py::arg("stmt_html_name") = "",
             py::arg("static_library_name") = "",
-            py::arg("schedule_name") = ""
+            py::arg("schedule_name") = "",
+            py::arg("featurization_name") = ""
         )
         .def_readwrite("object_name", &Outputs::object_name)
         .def_readwrite("assembly_name", &Outputs::assembly_name)
@@ -50,6 +53,7 @@ void define_outputs(py::module &m) {
         .def_readwrite("stmt_html_name", &Outputs::stmt_html_name)
         .def_readwrite("static_library_name", &Outputs::static_library_name)
         .def_readwrite("schedule_name", &Outputs::schedule_name)
+        .def_readwrite("featurization_name", &Outputs::featurization_name)
         .def("__repr__", [](const Outputs &o) -> std::string {
             return "<halide.Outputs>";
         })

@@ -626,7 +626,10 @@ bool Target::supported() const {
 #if !defined(WITH_HEXAGON)
     bad |= arch == Target::Hexagon;
 #endif
-#if !defined(WITH_WEBASSEMBLY)
+#if !defined(WITH_WEBASSEMBLY) || LLVM_VERSION < 90
+    // LLVM8 supports wasm, but there are fixes and improvements
+    // in trunk that may not be in 8 (or that we haven't tested with),
+    // so, for now, declare that wasm with LLVM < 9.0 is unsupported.
     bad |= arch == Target::WebAssembly;
 #endif
 #if !defined(WITH_RISCV)
@@ -646,12 +649,6 @@ bool Target::supported() const {
 #endif
 #if !defined(WITH_D3D12)
     bad |= has_feature(Target::D3D12Compute);
-#endif
-#if defined(WITH_WEBASSEMBLY) && LLVM_VERSION < 90
-    // LLVM8 supports wasm, but there are fixes and improvements
-    // in trunk that may not be in 8 (or that we haven't tested with),
-    // so, for now, declare that wasm with LLVM < 9.0 is unsupported.
-    bad = true;
 #endif
     return !bad;
 }

@@ -68,9 +68,9 @@ double run_test(bool auto_schedule) {
     Var tx, xi;
     if (auto_schedule) {
         // Provide estimates on the pipeline output
-        final.estimate(x, 0, in.width())
-            .estimate(y, 0, in.height())
-            .estimate(c, 0, in.channels());
+        final.set_estimate(x, 0, in.width())
+            .set_estimate(y, 0, in.height())
+            .set_estimate(c, 0, in.channels());
         // Auto-schedule the pipeline
         p.auto_schedule(target);
     } else if (target.has_gpu_feature()) {

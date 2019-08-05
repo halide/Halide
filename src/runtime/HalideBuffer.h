@@ -676,7 +676,7 @@ public:
         other.dev_ref_count = nullptr;
         other.alloc = nullptr;
         move_shape_from(std::forward<Buffer<T, D>>(other));
-        memset(&other.buf, 0, sizeof(other.buf));
+        other.buf = halide_buffer_t();
     }
 
     /** Move-construct a Buffer from a Buffer of different
@@ -690,7 +690,7 @@ public:
         other.dev_ref_count = nullptr;
         other.alloc = nullptr;
         move_shape_from(std::forward<Buffer<T2, D2>>(other));
-        memset(&other.buf, 0, sizeof(other.buf));
+        other.buf = halide_buffer_t();
     }
 
     /** Assign from another Buffer of possibly-different
@@ -741,7 +741,7 @@ public:
         free_shape_storage();
         buf = other.buf;
         move_shape_from(std::forward<Buffer<T2, D2>>(other));
-        memset(&other.buf, 0, sizeof(other.buf));
+        other.buf = halide_buffer_t();
         return *this;
     }
 
@@ -755,7 +755,7 @@ public:
         free_shape_storage();
         buf = other.buf;
         move_shape_from(std::forward<Buffer<T, D>>(other));
-        memset(&other.buf, 0, sizeof(other.buf));
+        other.buf = halide_buffer_t();
         return *this;
     }
 

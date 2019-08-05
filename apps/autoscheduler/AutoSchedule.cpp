@@ -27,7 +27,9 @@
   "Choose-your-own-schedule". If set to 1, lets you navigate the search tree by hand in the terminal. Whee! This is for debugging the autoscheduler.
 
   HL_FEATURE_FILE -> output
-  Write out a training sample for the selected schedule into this file. Needs to be augmented with the runtime using augment_sample before it can be used to train.
+  *** DEPRECATED *** use the 'featurization' output from Generator instead
+  Write out a training featurization for the selected schedule into this file.
+  Needs to be converted to a sample file with the runtime using featurization_to_sample before it can be used to train.
 
   HL_MACHINE_PARAMS
   An architecture description string. Used by Halide master to configure the cost model. We only use the first term. Set it to the number of cores to target.
@@ -36,7 +38,8 @@
   Set to 1 to tell Halide not to freak out if we try to unroll a loop that doesn't have a constant extent. Should generally not be necessary, but sometimes the autoscheduler's model for what will and will not turn into a constant during lowering is inaccurate, because Halide isn't perfect at constant-folding.
 
   HL_SCHEDULE_FILE
-  Write out a human-and-machine readable block of scheduling source code for the selected schedule into this file.
+    *** DEPRECATED *** use the 'schedule' output from Generator instead
+    Write out a human-and-machine readable block of scheduling source code for the selected schedule into this file.
 
   HL_RANDOM_DROPOUT
   percent chance of accepting each state in the beam. Normalized by the number of decisions made, so 5 would be there's a 5 percent chance of never rejecting any states.
@@ -2230,11 +2233,10 @@ struct State {
         }
     }
 
-    void save_featurization(const FunctionDAG &dag, const MachineParams &params, const std::string &feature_file) {
+    void save_featurization(const FunctionDAG &dag, const MachineParams &params, std::ostream &out) {
         StageMap<ScheduleFeatures> features;
         compute_featurization(dag, params, &features);
 
-        std::ofstream binfile(feature_file, std::ios::binary | std::ios_base::trunc);
         for (const auto &n : dag.nodes) {
             if (n.is_input) continue;
             for (size_t stage_idx = n.stages.size(); stage_idx > 0; stage_idx--) {
@@ -2253,11 +2255,9 @@ struct State {
                     buf[i + num_schedule_features] = s.features[i];
                 }
 
-                binfile.write((const char *)buf, sizeof(buf));
+                out.write((const char *)buf, sizeof(buf));
             }
         }
-        binfile.close();
-        internal_assert(!binfile.fail()) << "Failed to write " << feature_file;
     }
 
     bool calculate_cost(const FunctionDAG &dag, const MachineParams &params, CostModel *cost_model, bool verbose = false) {
@@ -3167,9 +3167,10 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
 }
 
 // The main entrypoint to generate a schedule for a pipeline.
-std::string generate_schedule(const std::vector<Function> &outputs,
+void generate_schedule(const std::vector<Function> &outputs,
                               const Target &target,
-                              const MachineParams &params) {
+                              const MachineParams &params,
+                              AutoSchedulerResults *auto_scheduler_results) {
     // Start a timer
     HALIDE_TIC;
 
@@ -3235,6 +3236,7 @@ std::string generate_schedule(const std::vector<Function> &outputs,
 
     string schedule_file = get_env_variable("HL_SCHEDULE_FILE");
     if (!schedule_file.empty()) {
+        user_warning << "HL_SCHEDULE_FILE is deprecated; use the featurization output from Generator instead\n";
         aslog(0) << "Writing schedule to " << schedule_file << "...\n";
         std::ofstream f(schedule_file);
         f << "// --- BEGIN machine-generated schedule\n"
@@ -3248,11 +3250,22 @@ std::string generate_schedule(const std::vector<Function> &outputs,
     // training data (once we've benchmarked it).
     string feature_file = get_env_variable("HL_FEATURE_FILE");
     if (!feature_file.empty()) {
-        optimal->save_featurization(dag, params, feature_file);
+        user_warning << "HL_FEATURE_FILE is deprecated; use the featurization output from Generator instead\n";
+        std::ofstream binfile(feature_file, std::ios::binary | std::ios_base::trunc);
+        optimal->save_featurization(dag, params, binfile);
+        binfile.close();
+        internal_assert(!binfile.fail()) << "Failed to write " << feature_file;
     }
 
-    // Return the schedule as a valid Halide source.
-    return optimal->schedule_source;
+    if (auto_scheduler_results) {
+        auto_scheduler_results->schedule_source = optimal->schedule_source;
+        {
+            std::ostringstream out;
+            optimal->save_featurization(dag, params, out);
+            auto_scheduler_results->featurization.resize(out.str().size());
+            memcpy(auto_scheduler_results->featurization.data(), out.str().data(), out.str().size());
+        }
+    }
 }
 
 // Halide uses a plugin architecture for registering custom
@@ -3264,12 +3277,12 @@ struct RegisterAutoscheduler {
         Pipeline::set_custom_auto_scheduler(*this);
     }
 
-    string operator()(Pipeline p, const Target &target, const MachineParams &params) {
+    void operator()(Pipeline p, const Target &target, const MachineParams &params, AutoSchedulerResults *results) {
         std::vector<Function> outputs;
         for (Func f : p.outputs()) {
             outputs.push_back(f.function());
         }
-        return Autoscheduler::generate_schedule(outputs, target, params);
+        Autoscheduler::generate_schedule(outputs, target, params, results);
     }
 } register_auto_scheduler;
 

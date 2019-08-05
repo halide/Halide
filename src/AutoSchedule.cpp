@@ -771,13 +771,10 @@ struct AutoSchedule {
     // function handle
     string get_func_handle(const string &name) const {
         size_t index = get_element(topological_order, name);
-        return "pipeline.get_func(" + std::to_string(index) + ")";
+        return "get_pipeline().get_func(" + std::to_string(index) + ")";
     }
 
     friend std::ostream& operator<<(std::ostream &stream, const AutoSchedule &sched) {
-        stream << "// Delete this line if not using Generator\n";
-        stream << "Pipeline pipeline = get_pipeline();\n\n";
-
         for (const auto &iter : sched.internal_vars) {
             if (iter.second.is_rvar) {
                 stream << "RVar ";
@@ -3514,9 +3511,6 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
     part.generate_cpu_schedule(target, sched);
 
     std::ostringstream oss;
-    oss << "// Target: " << target.to_string() << "\n";
-    oss << "// MachineParams: " << arch_params.to_string() << "\n";
-    oss << "\n";
     oss << sched;
     string sched_string = oss.str();
 
