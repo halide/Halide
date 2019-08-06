@@ -14,7 +14,7 @@ $(BIN)/%/demo.a: $(GENERATOR_BIN)/demo.generator $(AUTOSCHED_BIN)/libauto_schedu
 	HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=weights \
 	$(GENERATOR_BIN)/demo.generator -g demo -o $(@D) -f demo target=$* auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so
 
-$(BIN)/%/demo.rungen: $(BIN)/%/RunGenMain.o $(BIN)/%/demo.registration.cpp
+$(BIN)/%/demo.rungen: $(BIN)/%/RunGenMain.o $(BIN)/%/demo.registration.cpp $(BIN)/%/demo.a
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -I$(BIN)/$* $^ -o $@ $(HALIDE_SYSTEM_LIBS) $(IMAGE_IO_FLAGS)
 
