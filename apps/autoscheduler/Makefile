@@ -95,7 +95,6 @@ $(BIN)/%/included_schedule_file.rungen: $(BIN)/%/RunGenMain.o $(BIN)/%/included_
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -I$(BIN)/$* $^ -o $@ $(HALIDE_SYSTEM_LIBS) $(IMAGE_IO_FLAGS)
 
-# included_schedule_filenstrates single-shot use of the autoscheduler
 included_schedule_file: $(BIN)/$(HL_TARGET)/included_schedule_file.rungen
 	$^ --benchmarks=all --benchmark_min_time=1 --estimate_all
 
