@@ -149,10 +149,10 @@ void halide_register_argv_and_metadata(
 );
 }
 
-$NSOPEN$
+$NAMESPACEOPEN$
 extern int $SHORTNAME$_argv(void **args);
 extern const struct halide_filter_metadata_t *$SHORTNAME$_metadata();
-$NSCLOSE$
+$NAMESPACECLOSE$
 
 #ifdef HALIDE_REGISTER_EXTRA_KEY_VALUE_PAIRS_FUNC
 extern "C" const char * const *HALIDE_REGISTER_EXTRA_KEY_VALUE_PAIRS_FUNC();
@@ -190,9 +190,9 @@ static Registerer registerer;
                 nsclose = "}";
             }
             std::string nsreg = "halide_nsreg_" + replace_all(f.name, "::", "_");
-            std::string s = replace_all(registration_template, "$NSOPEN$", nsopen);
+            std::string s = replace_all(registration_template, "$NAMESPACEOPEN$", nsopen);
             s = replace_all(s, "$SHORTNAME$", simple_name);
-            s = replace_all(s, "$NSCLOSE$", nsclose);
+            s = replace_all(s, "$NAMESPACECLOSE$", nsclose);
             s = replace_all(s, "$FULLNAME$", f.name);
             s = replace_all(s, "$NREGS$", nsreg);
             stream << s;
@@ -230,7 +230,7 @@ void emit_schedule_file(const std::string &name,
 
 #include "Halide.h"
 
-$NSOPEN$
+$NAMESPACEOPEN$
 inline void apply_schedule_$SHORTNAME$(
     ::Halide::Pipeline pipeline,
     ::Halide::Target target
@@ -243,7 +243,7 @@ inline void apply_schedule_$SHORTNAME$(
 
 $BODY$
 }
-$NSCLOSE$
+$NAMESPACECLOSE$
 #endif  // $CLEANNAME$_SCHEDULE_H
 )INLINE_CODE";
 
@@ -262,10 +262,10 @@ $NSCLOSE$
     }
     std::string body_text = indent_string(body, "    ");
     s = replace_all(s, "$SCHEDULER$", scheduler_name);
-    s = replace_all(s, "$NSOPEN$", nsopen);
+    s = replace_all(s, "$NAMESPACEOPEN$", nsopen);
     s = replace_all(s, "$SHORTNAME$", simple_name);
     s = replace_all(s, "$CLEANNAME$", clean_name);
-    s = replace_all(s, "$NSCLOSE$", nsclose);
+    s = replace_all(s, "$NAMESPACECLOSE$", nsclose);
     s = replace_all(s, "$TARGET$", target_string);
     s = replace_all(s, "$BODY$", body_text);
     s = replace_all(s, "$MACHINEPARAMS$", machine_params_string);
