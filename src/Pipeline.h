@@ -57,8 +57,11 @@ struct CustomLoweringPass {
 struct JITExtern;
 
 struct AutoSchedulerResults {
-    std::string schedule_source;
-    std::vector<uint8_t> featurization;
+    std::string scheduler_name;         // name of the autoscheduler used
+    Target target;                      // Target specified to the autoscheduler
+    std::string machine_params_string;   // MachineParams specified to the autoscheduler (in string form)
+    std::string schedule_source;        // The C++ source code of the generated schedule
+    std::vector<uint8_t> featurization; // The featurization of the pipeline (if any)
 };
 
 class Pipeline;
