@@ -7,6 +7,7 @@
 static Halide::Expr div_up(Halide::Expr num, int denom) {
     return Halide::Internal::simplify((num + denom - 1) / denom);
 }
+
 static Halide::Expr div_down(Halide::Expr num, int denom) {
     return Halide::Internal::simplify(num / denom);
 }
@@ -2106,7 +2107,7 @@ Node convert_slice_node(
             Halide::Expr start = 0;
             Halide::Expr end = input.shape[i];
             Halide::Expr step = 1;
-            // Pick slice boundries or keep default values.
+            // Pick slice boundaries or keep default values.
             Halide::Expr slice_dim = Halide::Internal::const_false();
             for (int j = 0; j < num_slice_dims; ++j) {
                 start = select(i == axes[j], starts[j], start);
@@ -2831,9 +2832,7 @@ Node convert_shrink_node(
     return result;
 }
 
-Node convert_lrn_node(
-    const onnx::NodeProto &node,
-    const std::vector<Tensor> &inputs) {
+Node convert_lrn_node(const onnx::NodeProto &node, const std::vector<Tensor> &inputs) {
     if (inputs.size() != 1) {
         throw std::invalid_argument(
             "Expected exactly one input for lrn node " + node.name());
