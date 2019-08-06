@@ -247,6 +247,21 @@ $NAMESPACECLOSE$
 #endif  // $CLEANNAME$_SCHEDULE_H
 )INLINE_CODE";
 
+    // For logging in the comment, strip out features that are almost
+    // certainly irrelevant to scheduling issues, to make for easier reading
+    const Target::Feature irrelevant_features[] = {
+        Target::CPlusPlusMangling,
+        Target::DisableLLVMLoopVectorize,
+        Target::DisableLLVMLoopUnroll,
+        Target::LegacyBufferWrappers,
+        Target::NoAsserts,
+        Target::NoBoundsQuery,
+        Target::NoRuntime,
+        Target::Profile,
+        Target::StrictFloat,
+        Target::UserContext,
+    };
+
     std::vector<std::string> namespaces;
     std::string simple_name = extract_namespaces(name, namespaces);
     std::string nsopen, nsclose;
@@ -256,8 +271,11 @@ $NAMESPACECLOSE$
     }
     std::string clean_name = replace_all(name, "::", "_");
     std::string target_string;
-    for (auto t : targets) {
+    for (Target t : targets) {
         if (!target_string.empty()) target_string += ",";
+        for (auto f : irrelevant_features) {
+            t = t.without_feature(f);
+        }
         target_string += t.to_string();
     }
     std::string body_text = indent_string(body, "    ");
