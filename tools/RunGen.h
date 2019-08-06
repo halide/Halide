@@ -523,7 +523,7 @@ private:
     // so special-case to avoid compiler variation
     template<typename T2 = T, typename std::enable_if<std::is_same<T2, signed char>::value>::type * = nullptr>
     void fill(Buffer<T2> &b, std::mt19937 &rng) {
-        std::uniform_int_distribution<int> dis(0, 255);
+        std::uniform_int_distribution<int> dis(-128, 127);
         b.for_each_value([&rng, &dis](T2 &value) {
             value = static_cast<T2>(dis(rng));
         });
