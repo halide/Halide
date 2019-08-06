@@ -47,7 +47,7 @@ test_perfect_hash_map: $(BIN)/test_perfect_hash_map
 # Note that 'make test' is used by Halide buildbots to spot-check changes,
 # so it's important to try a little of each of the important paths here,
 # including single-shot and autotune-loop
-test: $(BIN)/$(HL_TARGET)/test test_perfect_hash_map demo autotune
+test: $(BIN)/$(HL_TARGET)/test test_perfect_hash_map demo autotune included_schedule_file
 	HL_WEIGHTS_DIR=weights LD_LIBRARY_PATH=$(AUTOSCHED_BIN) $<
 
 clean:
