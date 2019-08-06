@@ -1871,7 +1871,18 @@ public:
         return ExternFuncArgument(this->exprs().at(0));
     }
 
-    template <typename T2 = T, typename std::enable_if<!std::is_array<T2>::value>::type * = nullptr>
+    template <typename T2 = T, typename std::enable_if<std::is_pointer<T2>::value>::type * = nullptr>
+    void set_estimate(const TBase &value) {
+        this->check_gio_access();
+        user_assert(value == nullptr) << "nullptr is the only valid estimate for Input<PointerType>";
+        Expr e = reinterpret(type_of<T2>(), cast<uint64_t>(0));
+        for (Parameter &p : this->parameters_) {
+            p.set_estimate(e);
+        }
+    }
+
+
+    template <typename T2 = T, typename std::enable_if<!std::is_array<T2>::value && !std::is_pointer<T2>::value>::type * = nullptr>
     void set_estimate(const TBase &value) {
         this->check_gio_access();
         Expr e = Expr(value);
