@@ -262,6 +262,15 @@ struct Target {
     /** Was libHalide compiled with support for this target? */
     bool supported() const;
 
+    /** Return a bitset of the Featuress set in this Target (set = 1).
+     * Note that while this happens to be the current internal representation,
+     * that might not always be the case. */
+    const std::bitset<FeatureEnd> &get_features_bitset() const { return features; }
+
+    /** Return the name corresponding to a given Feature, in the form
+     * used to construct Target strings (e.g., Feature::Debug is "debug" and not "Debug"). */
+    static std::string feature_name(Target::Feature feature);
+
 private:
     /** A bitmask that stores the active features. */
     std::bitset<FeatureEnd> features;

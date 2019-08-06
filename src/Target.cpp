@@ -577,6 +577,16 @@ bool Target::validate_target_string(const std::string &s) {
     return merge_string(t, s);
 }
 
+std::string Target::feature_name(Target::Feature feature) {
+    for (const auto &feature_entry : feature_name_map) {
+        if (feature == feature_entry.second) {
+            return feature_entry.first;
+        }
+    }
+    internal_assert(false);
+    return "";
+}
+
 std::string Target::to_string() const {
     string result;
     for (const auto &arch_entry : arch_name_map) {

@@ -2667,7 +2667,7 @@ struct State {
         int i = (int)(dag.nodes.size() - 1);
         for (const auto &n : dag.nodes) {
             if (!n.is_input) {
-                src << "Func " << n.func.name() << " = get_pipeline().get_func(" << i << ");\n";
+                src << "Func " << n.func.name() << " = pipeline.get_func(" << i << ");\n";
             }
             i--;
         }
@@ -3236,7 +3236,7 @@ void generate_schedule(const std::vector<Function> &outputs,
 
     string schedule_file = get_env_variable("HL_SCHEDULE_FILE");
     if (!schedule_file.empty()) {
-        user_warning << "HL_SCHEDULE_FILE is deprecated; use the featurization output from Generator instead\n";
+        user_warning << "HL_SCHEDULE_FILE is deprecated; use the schedule output from Generator instead\n";
         aslog(0) << "Writing schedule to " << schedule_file << "...\n";
         std::ofstream f(schedule_file);
         f << "// --- BEGIN machine-generated schedule\n"
@@ -3258,6 +3258,7 @@ void generate_schedule(const std::vector<Function> &outputs,
     }
 
     if (auto_scheduler_results) {
+        auto_scheduler_results->scheduler_name = "apps/autoscheduler/AutoSchedule";  // TODO: find a better name (https://github.com/halide/Halide/issues/4057)
         auto_scheduler_results->schedule_source = optimal->schedule_source;
         {
             std::ostringstream out;
