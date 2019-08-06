@@ -14,24 +14,6 @@ import hashlib
 import datetime
 
 
-class WatchdogTimer(Exception):
-    def __init__(self, timeout=10*60):
-        self.timeout = timeout
-
-    def __enter__(self):
-        signal.signal(signal.SIGALRM, self.handler)
-        signal.alarm(self.timeout)
-
-    def __exit__(self, type, value, traceback):
-        signal.alarm(0)
-
-    def handler(self, signum, frame):
-        raise self
-
-    def __str__(self):
-        return "Timeout (%ds) exceeded, aborting" % self.timeout
-
-
 class HalideBackend(BackendBase):
     @classmethod
     def is_compatible(cls,
@@ -64,13 +46,12 @@ class HalideBackend(BackendBase):
         onnx.checker.check_model(model)
 
         prepared = halide_model.Model()
-        with WatchdogTimer(timeout=300):
-            prepared.BuildFromOnnxModel(model)
-            # Optimize the schedule of nontrivial models to make sure they
-            # complete in a reasonable amount of time
-            if len(model.graph.node) > 10:
-                prepared.OptimizeSchedule()
-            return prepared
+        prepared.BuildFromOnnxModel(model)
+        # Optimize the schedule of nontrivial models to make sure they
+        # complete in a reasonable amount of time
+        if len(model.graph.node) > 10:
+            prepared.OptimizeSchedule()
+        return prepared
 
     @classmethod
     def run_model(cls,
@@ -87,8 +68,7 @@ class HalideBackend(BackendBase):
         :returns: A list of numpy arrays (one for each model output).
         """
         prepared = cls.prepare(model, device, **kwargs)
-        with WatchdogTimer(timeout=300):
-            return prepared.run(inputs, device)
+        return prepared.run(inputs, device)
 
     @classmethod
     def run_node(cls,
