@@ -2960,6 +2960,8 @@ void CodeGen_LLVM::visit(const Call *op) {
         builder->setFastMathFlags(safe_flags);
         builder->setDefaultFPMathTag(strict_fp_math_md);
         value = codegen(op->args[0]);
+    } else if (is_float16_intrinsic(op)) {
+        value = codegen(lower_float16_intrinsics_to_float32_math(op));
     } else if (op->is_intrinsic()) {
         internal_error << "Unknown intrinsic: " << op->name << "\n";
     } else if (op->call_type == Call::PureExtern && op->name == "pow_f32") {

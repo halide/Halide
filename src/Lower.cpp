@@ -363,9 +363,9 @@ Module lower(const vector<Function> &output_funcs,
     s = lower_unsafe_promises(s, t);
     debug(2) << "Lowering after lowering unsafe promises:\n" << s << "\n\n";
 
-    debug(1) << "Emulating float16 math...\n";
-    s = emulate_float16_math(s, t);
-    debug(2) << "Lowering after emulating float16 math:\n" << s << "\n\n";
+    debug(1) << "Introducing intrinsics for float16 math...\n";
+    s = use_intrinsics_for_float16_math(s, t);
+    debug(2) << "Lowering after introducing intrinsics for float16 math:\n" << s << "\n\n";
 
     s = remove_dead_allocations(s);
     s = simplify(s);

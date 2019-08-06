@@ -502,8 +502,6 @@ struct Call : public ExprNode<Call> {
     // Note that these are only used in the API; inside the node, they are translated
     // into a name. (To recover the name, call get_intrinsic_name().)
     //
-    // Please keep this list sorted alphabetically; the specific enum values
-    // are *not* guaranteed to be stable across time.
     enum IntrinsicOp {
         abs,
         absd,
@@ -562,6 +560,20 @@ struct Call : public ExprNode<Call> {
         stringify,
         undef,
         unsafe_promise_clamped,
+
+        // half type math intrinsics. The Halide type of all things
+        // that would be 16-bit floating point types is instead uint16
+        add_f16, add_bf16,
+        sub_f16, sub_bf16,
+        mul_f16, mul_bf16,
+        div_f16, div_bf16,
+        mod_f16, mod_bf16,
+        max_f16, max_bf16,
+        min_f16, min_bf16,
+        eq_f16, eq_bf16, // distinct from integer equality to due rules around nan not equalling itself
+        lt_f16, lt_bf16,
+        to_float_f16, to_float_bf16,
+        from_float_f16, from_float_bf16,
 
         IntrinsicOpCount // Sentinel: keep last.
     };

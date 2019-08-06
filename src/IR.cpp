@@ -637,10 +637,23 @@ const char *const intrinsic_op_names[] = {
     "strict_float",
     "stringify",
     "undef",
-    "unsafe_promise_clamped"
+    "unsafe_promise_clamped",
+
+    "add_f16", "add_bf16",
+    "sub_f16", "sub_bf16",
+    "mul_f16", "mul_bf16",
+    "div_f16", "div_bf16",
+    "mod_f16", "mod_bf16",
+    "max_f16", "max_bf16",
+    "min_f16", "min_bf16",
+    "eq_f16", "eq_bf16",
+    "lt_f16", "lt_bf16",
+    "to_float_f16", "to_float_bf16",
+    "from_float_f16", "from_float_bf16",
 };
 
-static_assert(sizeof(intrinsic_op_names)/sizeof(intrinsic_op_names[0]) == Call::IntrinsicOpCount, "intrinsic_op_names needs attention");
+static_assert(sizeof(intrinsic_op_names)/sizeof(intrinsic_op_names[0]) == Call::IntrinsicOpCount,
+              "intrinsic_op_names needs attention");
 
 
 }  // namespace
