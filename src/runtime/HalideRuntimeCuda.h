@@ -59,6 +59,10 @@ extern int halide_cuda_detach_device_ptr(void *user_context, struct halide_buffe
  */
 extern uintptr_t halide_cuda_get_device_ptr(void *user_context, struct halide_buffer_t *buf);
 
+/** Release any currently-unused device allocations back to the cuda
+ * driver. See halide_reuse_device_allocations. */
+extern int halide_cuda_release_unused_device_allocations(void *user_context);
+
 #ifdef __cplusplus
 } // End extern "C"
 #endif
