@@ -484,6 +484,7 @@ private:
             typename std::enable_if<std::is_integral<T2>::value
             && !std::is_same<T2, bool>::value
             && !std::is_same<T2, char>::value
+            && !std::is_same<T2, signed char>::value
             && !std::is_same<T2, unsigned char>::value>::type * = nullptr>
     void fill(Buffer<T2> &b, std::mt19937 &rng) {
         std::uniform_int_distribution<T2> dis;
@@ -511,6 +512,16 @@ private:
     // std::uniform_int_distribution<char> is UB in C++11,
     // so special-case to avoid compiler variation
     template<typename T2 = T, typename std::enable_if<std::is_same<T2, char>::value>::type * = nullptr>
+    void fill(Buffer<T2> &b, std::mt19937 &rng) {
+        std::uniform_int_distribution<int> dis(-128, 127);
+        b.for_each_value([&rng, &dis](T2 &value) {
+            value = static_cast<T2>(dis(rng));
+        });
+    }
+
+    // std::uniform_int_distribution<signed char> is UB in C++11,
+    // so special-case to avoid compiler variation
+    template<typename T2 = T, typename std::enable_if<std::is_same<T2, signed char>::value>::type * = nullptr>
     void fill(Buffer<T2> &b, std::mt19937 &rng) {
         std::uniform_int_distribution<int> dis(-128, 127);
         b.for_each_value([&rng, &dis](T2 &value) {

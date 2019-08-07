@@ -27,6 +27,11 @@ int main(int argc, char **argv) {
     Buffer<float> input = load_and_convert_image(argv[1]);
     Buffer<float> output(input.width(), input.height());
 
+    // Let the Halide runtime hold onto GPU allocations for
+    // intermediates and reuse them instead of eagerly freeing
+    // them. cuMemAlloc/cuMemFree is slower than the algorithm!
+    halide_reuse_device_allocations(nullptr, true);
+
     bilateral_grid(input, r_sigma, output);
 
     // Timing code. Timing doesn't include copying the input data to
@@ -35,6 +40,7 @@ int main(int argc, char **argv) {
     // Manually-tuned version
     double min_t_manual = benchmark(timing_iterations, 10, [&]() {
         bilateral_grid(input, r_sigma, output);
+        output.device_sync();
     });
     printf("Manually-tuned time: %gms\n", min_t_manual * 1e3);
 
