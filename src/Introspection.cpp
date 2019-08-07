@@ -48,6 +48,12 @@ inline T load_misaligned(const T *p) {
     return result;
 }
 
+#if LLVM_VERSION >= 100
+typedef uint64_t off_t;
+#else
+typedef uint32_t off_t;
+#endif
+
 }
 
 class DebugSections {
@@ -993,7 +999,7 @@ private:
 
     }
 
-    void parse_debug_abbrev(const llvm::DataExtractor &e, uint32_t off = 0) {
+    void parse_debug_abbrev(const llvm::DataExtractor &e, off_t off = 0) {
         entry_formats.clear();
         while (1) {
             EntryFormat fmt;
@@ -1025,7 +1031,7 @@ private:
                           llvm::StringRef debug_str,
                           llvm::StringRef debug_ranges) {
         // Offset into the section
-        uint32_t off = 0;
+        off_t off = 0;
 
         llvm::StringRef debug_info = e.getData();
 
@@ -1900,7 +1906,7 @@ private:
     }
 
     void parse_debug_line(const llvm::DataExtractor &e) {
-        uint32_t off = 0;
+        off_t off = 0;
 
         // For every compilation unit
         while (1) {
@@ -1912,7 +1918,7 @@ private:
                 break;
             }
 
-            uint32_t unit_end = off + unit_length;
+            off_t unit_end = off + unit_length;
 
             debug(5) << "Parsing compilation unit from " << off << " to " << unit_end << "\n";
 
@@ -1920,7 +1926,7 @@ private:
             assert(version >= 2);
 
             uint32_t header_length = e.getU32(&off);
-            uint32_t end_header_off = off + header_length;
+            off_t end_header_off = off + header_length;
             uint8_t min_instruction_length = e.getU8(&off);
             uint8_t max_ops_per_instruction = 1;
             if (version >= 4) {
@@ -2011,9 +2017,9 @@ private:
 
                 if (opcode == 0) {
                     // Extended opcodes
-                    uint32_t ext_offset = off;
+                    off_t ext_offset = off;
                     uint64_t len = e.getULEB128(&off);
-                    uint32_t arg_size = len - (off - ext_offset);
+                    off_t arg_size = len - (off - ext_offset);
                     uint8_t sub_opcode = e.getU8(&off);
                     switch (sub_opcode) {
                     case 1: // end_sequence
