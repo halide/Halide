@@ -1518,8 +1518,6 @@ void CodeGen_LLVM::visit(const Cast *op) {
     Halide::Type src = op->value.type();
     Halide::Type dst = op->type;
 
-    llvm::Type *llvm_dst = llvm_type_of(dst);
-
     if (upgrade_type_for_arithmetic(src) != src ||
         upgrade_type_for_arithmetic(dst) != dst) {
         // Handle casts to and from types for which we don't have native support.
@@ -1538,6 +1536,8 @@ void CodeGen_LLVM::visit(const Cast *op) {
     }
 
     value = codegen(op->value);
+    llvm::Type *llvm_dst = llvm_type_of(dst);
+
     if (dst.is_handle() && src.is_handle()) {
         value = builder->CreateBitCast(value, llvm_dst);
     } else if (dst.is_handle() || src.is_handle()) {

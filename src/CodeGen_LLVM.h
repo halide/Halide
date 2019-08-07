@@ -418,10 +418,6 @@ protected:
      * current context. */
     llvm::Type *llvm_type_of(Type);
 
-    /** Get the llvm type used to store the given halide type in the
-     * current context. */
-    llvm::Type *llvm_storage_type_of(Type);
-
     /** Perform an alloca at the function entrypoint. Will be cleaned
      * on function exit. */
     llvm::Value *create_alloca_at_entry(llvm::Type *type, int n,
