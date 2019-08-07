@@ -19,7 +19,6 @@
 #include "DebugToFile.h"
 #include "Deinterleave.h"
 #include "EarlyFree.h"
-#include "EmulateFloat16Math.h"
 #include "FindCalls.h"
 #include "Func.h"
 #include "Function.h"
@@ -362,10 +361,6 @@ Module lower(const vector<Function> &output_funcs,
     debug(1) << "Lowering unsafe promises...\n";
     s = lower_unsafe_promises(s, t);
     debug(2) << "Lowering after lowering unsafe promises:\n" << s << "\n\n";
-
-    debug(1) << "Introducing intrinsics for float16 math...\n";
-    s = use_intrinsics_for_float16_math(s, t);
-    debug(2) << "Lowering after introducing intrinsics for float16 math:\n" << s << "\n\n";
 
     s = remove_dead_allocations(s);
     s = simplify(s);

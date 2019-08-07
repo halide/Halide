@@ -109,11 +109,13 @@ void CodeGen_X86::visit(const Sub *op) {
 }
 
 void CodeGen_X86::visit(const GT *op) {
-    if (op->type.is_vector()) {
+    Type t = op->a.type();
+
+    if (t.is_vector() &&
+        upgrade_type_for_arithmetic(t) == t) {
         // Non-native vector widths get legalized poorly by llvm. We
         // split it up ourselves.
 
-        Type t = op->a.type();
         int slice_size = vector_lanes_for_slice(t);
 
         Value *a = codegen(op->a), *b = codegen(op->b);
@@ -141,11 +143,13 @@ void CodeGen_X86::visit(const GT *op) {
 }
 
 void CodeGen_X86::visit(const EQ *op) {
-    if (op->type.is_vector()) {
+    Type t = op->a.type();
+
+    if (t.is_vector() &&
+        upgrade_type_for_arithmetic(t) == t) {
         // Non-native vector widths get legalized poorly by llvm. We
         // split it up ourselves.
 
-        Type t = op->a.type();
         int slice_size = vector_lanes_for_slice(t);
 
         Value *a = codegen(op->a), *b = codegen(op->b);

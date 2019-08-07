@@ -308,7 +308,7 @@ Stmt inject_profiling(Stmt s, string pipeline_name) {
 
     Expr profiler_token = Variable::make(Int(32), "profiler_token");
 
-    Expr stop_profiler = Call::make(Int(32), Call::register_destructor,
+    Expr stop_profiler = Call::make(Handle(), Call::register_destructor,
                                     {Expr("halide_profiler_pipeline_end"), get_state}, Call::Intrinsic);
 
     bool no_stack_alloc = profiling.func_stack_peak.empty();

@@ -119,6 +119,18 @@ protected:
     /** What's the natural vector bit-width to use for loads, stores, etc. */
     virtual int native_vector_bits() const = 0;
 
+    /** Return the type in which arithmetic should be done for the
+     * given storage type. */
+    virtual Type upgrade_type_for_arithmetic(Type t) const;
+
+    /** Return the type that a given Halide type should be
+     * stored/loaded from memory as. */
+    virtual Type upgrade_type_for_storage(Type t) const;
+
+    /** Return the type that a Halide type should be passed in and out
+     * of functions as. */
+    virtual Type upgrade_type_for_argument_passing(Type t) const;
+
     /** State needed by llvm for code generation, including the
      * current module, function, context, builder, and most recently
      * generated llvm value. */
@@ -405,6 +417,10 @@ protected:
     /** Get the llvm type equivalent to the given halide type in the
      * current context. */
     llvm::Type *llvm_type_of(Type);
+
+    /** Get the llvm type used to store the given halide type in the
+     * current context. */
+    llvm::Type *llvm_storage_type_of(Type);
 
     /** Perform an alloca at the function entrypoint. Will be cleaned
      * on function exit. */

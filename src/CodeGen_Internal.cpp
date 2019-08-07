@@ -116,8 +116,7 @@ llvm::Type *llvm_type_of(LLVMContext *c, Halide::Type t) {
         if (t.is_float() && !t.is_bfloat()) {
             switch (t.bits()) {
             case 16:
-                // TODO: Depends on calling context. OK in cuda kernels.
-                return llvm::Type::getIntNTy(*c, t.bits());
+                return llvm::Type::getHalfTy(*c);
             case 32:
                 return llvm::Type::getFloatTy(*c);
             case 64:

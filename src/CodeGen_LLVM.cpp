@@ -534,13 +534,13 @@ llvm::FunctionType *CodeGen_LLVM::signature_to_type(const ExternSignature &signa
     internal_assert(void_t != nullptr && buffer_t_type != nullptr);
     llvm::Type *ret_type = signature.is_void_return()
         ? void_t
-        : llvm_type_of(signature.ret_type());
+        : llvm_type_of(upgrade_type_for_argument_passing(signature.ret_type()));
     std::vector<llvm::Type *> llvm_arg_types;
     for (const Type &t : signature.arg_types()) {
         if (t == type_of<struct halide_buffer_t *>()) {
             llvm_arg_types.push_back(buffer_t_type->getPointerTo());
         } else {
-            llvm_arg_types.push_back(llvm_type_of(t));
+            llvm_arg_types.push_back(llvm_type_of(upgrade_type_for_argument_passing(t)));
         }
     }
 
@@ -681,7 +681,7 @@ void CodeGen_LLVM::begin_func(LinkageType linkage, const std::string& name,
         if (args[i].is_buffer()) {
             arg_types[i] = buffer_t_type->getPointerTo();
         } else {
-            arg_types[i] = llvm_type_of(args[i].type);
+            arg_types[i] = llvm_type_of(upgrade_type_for_argument_passing(args[i].type));
         }
     }
     FunctionType *func_t = FunctionType::get(i32_t, arg_types, false);
@@ -730,7 +730,13 @@ void CodeGen_LLVM::begin_func(LinkageType linkage, const std::string& name,
                 external_buffer.insert(args[i].name);
                 sym_push(args[i].name + ".buffer", &arg);
             } else {
-                sym_push(args[i].name, &arg);
+                Type passed_type = upgrade_type_for_argument_passing(args[i].type);
+                if (args[i].type != passed_type) {
+                    llvm::Value *a = builder->CreateBitCast(&arg, llvm_type_of(args[i].type));
+                    sym_push(args[i].name, a);
+                } else {
+                    sym_push(args[i].name, &arg);
+                }
             }
 
             i++;
@@ -1442,6 +1448,12 @@ Value *CodeGen_LLVM::codegen(Expr e) {
     value = nullptr;
     e.accept(this);
     internal_assert(value) << "Codegen of an expr did not produce an llvm value\n";
+    internal_assert(e.type().is_handle() ||
+                    value->getType()->isVoidTy() ||
+                    value->getType() == llvm_type_of(e.type()))
+        << "Codegen of Expr " << e
+        << " of type " << e.type()
+        << " did not produce llvm IR of the corresponding llvm type.\n";
     return value;
 }
 
@@ -1450,6 +1462,34 @@ void CodeGen_LLVM::codegen(Stmt s) {
     debug(3) << "Codegen: " << s << "\n";
     value = nullptr;
     s.accept(this);
+}
+
+Type CodeGen_LLVM::upgrade_type_for_arithmetic(Type t) const {
+    if (t.is_bfloat() || (t.is_float() && t.bits() < 32)) {
+        return Float(32, t.lanes());
+    } else {
+        return t;
+    }
+}
+
+Type CodeGen_LLVM::upgrade_type_for_argument_passing(Type t) const {
+    if (t.is_bfloat() || (t.is_float() && t.bits() < 32)) {
+        return t.with_code(halide_type_uint);
+    } else {
+        return t;
+    }
+}
+
+Type CodeGen_LLVM::upgrade_type_for_storage(Type t) const {
+    if (t.is_bfloat() || (t.is_float() && t.bits() < 32)) {
+        return t.with_code(halide_type_uint);
+    } else if (t.is_bool()) {
+        return t.with_bits(8);
+    } else if (t.is_handle()) {
+        return UInt(64, t.lanes());
+    } else {
+        return t;
+    }
 }
 
 void CodeGen_LLVM::visit(const IntImm *op) {
@@ -1462,9 +1502,9 @@ void CodeGen_LLVM::visit(const UIntImm *op) {
 
 void CodeGen_LLVM::visit(const FloatImm *op) {
     if (op->type.is_bfloat()) {
-        value = ConstantInt::get(llvm_type_of(op->type), bfloat16_t(op->value).to_bits());
+        codegen(reinterpret(BFloat(16), make_const(UInt(16), bfloat16_t(op->value).to_bits())));
     } else if (op->type.bits() == 16) {
-        value = ConstantInt::get(llvm_type_of(op->type), float16_t(op->value).to_bits());
+        codegen(reinterpret(Float(16), make_const(UInt(16), bfloat16_t(op->value).to_bits())));
     } else {
         value = ConstantFP::get(llvm_type_of(op->type), op->value);
     }
@@ -1480,9 +1520,20 @@ void CodeGen_LLVM::visit(const Cast *op) {
 
     llvm::Type *llvm_dst = llvm_type_of(dst);
 
-    if ((src.is_float() && src.bits() < 32) ||
-        (dst.is_float() && dst.bits() < 32)) {
-        codegen(lower_float16_cast(op));
+    if (upgrade_type_for_arithmetic(src) != src ||
+        upgrade_type_for_arithmetic(dst) != dst) {
+        // Handle casts to and from types for which we don't have native support.
+        debug(4) << "Emulating cast from " << src << " to " << dst << "\n";
+        if ((src.is_float() && src.bits() < 32) ||
+            (dst.is_float() && dst.bits() < 32)) {
+            Expr equiv = lower_float16_cast(op);
+            internal_assert(equiv.type() == op->type);
+            codegen(equiv);
+        } else {
+            internal_error << "Cast from type: " << src
+                           << " to " << dst
+                           << " unimplemented\n";
+        }
         return;
     }
 
@@ -1527,6 +1578,12 @@ void CodeGen_LLVM::visit(const Variable *op) {
 }
 
 void CodeGen_LLVM::visit(const Add *op) {
+    Type t = upgrade_type_for_arithmetic(op->type);
+    if (t != op->type) {
+        codegen(cast(op->type, Add::make(cast(t, op->a), cast(t, op->b))));
+        return;
+    }
+
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
     if (op->type.is_float()) {
@@ -1541,6 +1598,12 @@ void CodeGen_LLVM::visit(const Add *op) {
 }
 
 void CodeGen_LLVM::visit(const Sub *op) {
+    Type t = upgrade_type_for_arithmetic(op->type);
+    if (t != op->type) {
+        codegen(cast(op->type, Sub::make(cast(t, op->a), cast(t, op->b))));
+        return;
+    }
+
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
     if (op->type.is_float()) {
@@ -1555,6 +1618,12 @@ void CodeGen_LLVM::visit(const Sub *op) {
 }
 
 void CodeGen_LLVM::visit(const Mul *op) {
+    Type t = upgrade_type_for_arithmetic(op->type);
+    if (t != op->type) {
+        codegen(cast(op->type, Mul::make(cast(t, op->a), cast(t, op->b))));
+        return;
+    }
+
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
     if (op->type.is_float()) {
@@ -1571,6 +1640,12 @@ void CodeGen_LLVM::visit(const Mul *op) {
 void CodeGen_LLVM::visit(const Div *op) {
     user_assert(!is_zero(op->b)) << "Division by constant zero in expression: " << Expr(op) << "\n";
 
+    Type t = upgrade_type_for_arithmetic(op->type);
+    if (t != op->type) {
+        codegen(cast(op->type, Div::make(cast(t, op->a), cast(t, op->b))));
+        return;
+    }
+
     if (op->type.is_float()) {
         // Don't call codegen() multiple times within an argument list:
         // order-of-evaluation isn't guaranteed and can vary by compiler,
@@ -1585,6 +1660,12 @@ void CodeGen_LLVM::visit(const Div *op) {
 }
 
 void CodeGen_LLVM::visit(const Mod *op) {
+    Type t = upgrade_type_for_arithmetic(op->type);
+    if (t != op->type) {
+        codegen(cast(op->type, Mod::make(cast(t, op->a), cast(t, op->b))));
+        return;
+    }
+
     if (op->type.is_float()) {
         value = codegen(simplify(op->a - op->b * floor(op->a/op->b)));
     } else {
@@ -1593,6 +1674,12 @@ void CodeGen_LLVM::visit(const Mod *op) {
 }
 
 void CodeGen_LLVM::visit(const Min *op) {
+    Type t = upgrade_type_for_arithmetic(op->type);
+    if (t != op->type) {
+        codegen(cast(op->type, Min::make(cast(t, op->a), cast(t, op->b))));
+        return;
+    }
+
     string a_name = unique_name('a');
     string b_name = unique_name('b');
     Expr a = Variable::make(op->a.type(), a_name);
@@ -1603,6 +1690,12 @@ void CodeGen_LLVM::visit(const Min *op) {
 }
 
 void CodeGen_LLVM::visit(const Max *op) {
+    Type t = upgrade_type_for_arithmetic(op->type);
+    if (t != op->type) {
+        codegen(cast(op->type, Max::make(cast(t, op->a), cast(t, op->b))));
+        return;
+    }
+
     string a_name = unique_name('a');
     string b_name = unique_name('b');
     Expr a = Variable::make(op->a.type(), a_name);
@@ -1613,9 +1706,14 @@ void CodeGen_LLVM::visit(const Max *op) {
 }
 
 void CodeGen_LLVM::visit(const EQ *op) {
+    Type t = upgrade_type_for_arithmetic(op->a.type());
+    if (t != op->a.type()) {
+        codegen(EQ::make(cast(t, op->a), cast(t, op->b)));
+        return;
+    }
+
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
-    Halide::Type t = op->a.type();
     if (t.is_float()) {
         value = builder->CreateFCmpOEQ(a, b);
     } else {
@@ -1624,9 +1722,14 @@ void CodeGen_LLVM::visit(const EQ *op) {
 }
 
 void CodeGen_LLVM::visit(const NE *op) {
+    Type t = upgrade_type_for_arithmetic(op->a.type());
+    if (t != op->a.type()) {
+        codegen(NE::make(cast(t, op->a), cast(t, op->b)));
+        return;
+    }
+
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
-    Halide::Type t = op->a.type();
     if (t.is_float()) {
         value = builder->CreateFCmpONE(a, b);
     } else {
@@ -1635,9 +1738,14 @@ void CodeGen_LLVM::visit(const NE *op) {
 }
 
 void CodeGen_LLVM::visit(const LT *op) {
+    Type t = upgrade_type_for_arithmetic(op->a.type());
+    if (t != op->a.type()) {
+        codegen(LT::make(cast(t, op->a), cast(t, op->b)));
+        return;
+    }
+
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
-    Halide::Type t = op->a.type();
     if (t.is_float()) {
         value = builder->CreateFCmpOLT(a, b);
     } else if (t.is_int()) {
@@ -1648,9 +1756,14 @@ void CodeGen_LLVM::visit(const LT *op) {
 }
 
 void CodeGen_LLVM::visit(const LE *op) {
+    Type t = upgrade_type_for_arithmetic(op->a.type());
+    if (t != op->a.type()) {
+        codegen(LE::make(cast(t, op->a), cast(t, op->b)));
+        return;
+    }
+
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
-    Halide::Type t = op->a.type();
     if (t.is_float()) {
         value = builder->CreateFCmpOLE(a, b);
     } else if (t.is_int()) {
@@ -1661,9 +1774,15 @@ void CodeGen_LLVM::visit(const LE *op) {
 }
 
 void CodeGen_LLVM::visit(const GT *op) {
+    Type t = upgrade_type_for_arithmetic(op->a.type());
+    if (t != op->a.type()) {
+        codegen(GT::make(cast(t, op->a), cast(t, op->b)));
+        return;
+    }
+
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
-    Halide::Type t = op->a.type();
+
     if (t.is_float()) {
         value = builder->CreateFCmpOGT(a, b);
     } else if (t.is_int()) {
@@ -1674,9 +1793,14 @@ void CodeGen_LLVM::visit(const GT *op) {
 }
 
 void CodeGen_LLVM::visit(const GE *op) {
+    Type t = upgrade_type_for_arithmetic(op->a.type());
+    if (t != op->a.type()) {
+        codegen(GE::make(cast(t, op->a), cast(t, op->b)));
+        return;
+    }
+
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
-    Halide::Type t = op->a.type();
     if (t.is_float()) {
         value = builder->CreateFCmpOGE(a, b);
     } else if (t.is_int()) {
@@ -1858,9 +1982,10 @@ void CodeGen_LLVM::add_tbaa_metadata(llvm::Instruction *inst, string buffer, Exp
 }
 
 void CodeGen_LLVM::visit(const Load *op) {
-    // If it's a Handle, load it as a uint64_t and then cast
-    if (op->type.is_handle()) {
-        codegen(reinterpret(op->type, Load::make(UInt(64, op->type.lanes()), op->name,
+    // If the type should be stored as some other type, insert a reinterpret cast.
+    Type storage_type = upgrade_type_for_storage(op->type);
+    if (op->type != storage_type) {
+        codegen(reinterpret(op->type, Load::make(storage_type, op->name,
                                                  op->index, op->image,
                                                  op->param, op->predicate, op->alignment)));
         return;
@@ -2515,8 +2640,15 @@ void CodeGen_LLVM::visit(const Call *op) {
         value = codegen(op->args[0] + (op->args[1] - op->args[0])/2);
     } else if (op->is_intrinsic(Call::lerp)) {
         internal_assert(op->args.size() == 3);
-        Expr e = lower_lerp(op->args[0], op->args[1], op->args[2]);
-        value = codegen(e);
+        // If we need to upgrade the type, do the entire lerp in the
+        // upgraded type for better precision.
+        Type t = upgrade_type_for_arithmetic(op->type);
+        Type wt = upgrade_type_for_arithmetic(op->args[2].type());
+        Expr e = lower_lerp(cast(t, op->args[0]),
+                            cast(t, op->args[1]),
+                            cast(wt, op->args[2]));
+        e = cast(op->type, e);
+        codegen(e);
     } else if (op->is_intrinsic(Call::popcount)) {
         internal_assert(op->args.size() == 1);
         std::vector<llvm::Type*> arg_type(1);
@@ -2832,7 +2964,7 @@ void CodeGen_LLVM::visit(const Call *op) {
                 for (const auto &arg : function->args()) {
                      arg_types.push_back(arg.getType());
                 }
-                llvm::Type *result_type = llvm_type_of(op->type);
+                llvm::Type *result_type = llvm_type_of(upgrade_type_for_argument_passing(op->type));
                 FunctionType *func_t = FunctionType::get(result_type, arg_types, false);
                 sub_fn = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage,
                                                 extern_sub_fn_name, module.get());
@@ -2960,8 +3092,8 @@ void CodeGen_LLVM::visit(const Call *op) {
         builder->setFastMathFlags(safe_flags);
         builder->setDefaultFPMathTag(strict_fp_math_md);
         value = codegen(op->args[0]);
-    } else if (is_float16_intrinsic(op)) {
-        value = codegen(lower_float16_intrinsics_to_float32_math(op));
+    } else if (is_float16_transcendental(op)) {
+        value = codegen(lower_float16_transcendental_to_float32_equivalent(op));
     } else if (op->is_intrinsic()) {
         internal_error << "Unknown intrinsic: " << op->name << "\n";
     } else if (op->call_type == Call::PureExtern && op->name == "pow_f32") {
@@ -3039,7 +3171,7 @@ void CodeGen_LLVM::visit(const Call *op) {
 
         llvm::Function *fn = module->getFunction(name);
 
-        llvm::Type *result_type = llvm_type_of(op->type);
+        llvm::Type *result_type = llvm_type_of(upgrade_type_for_argument_passing(op->type));
 
         // Add a user context arg as needed. It's never a vector.
         bool takes_user_context = function_takes_user_context(op->name);
@@ -3734,10 +3866,10 @@ void CodeGen_LLVM::visit(const Fork *op) {
 }
 
 void CodeGen_LLVM::visit(const Store *op) {
-    // Even on 32-bit systems, Handles are treated as 64-bit in
-    // memory, so convert stores of handles to stores of uint64_ts.
-    if (op->value.type().is_handle()) {
-        Expr v = reinterpret(UInt(64, op->value.type().lanes()), op->value);
+    Halide::Type value_type = op->value.type();
+    Halide::Type storage_type = upgrade_type_for_storage(value_type);
+    if (value_type != storage_type) {
+        Expr v = reinterpret(storage_type, op->value);
         codegen(Store::make(op->name, v, op->index, op->param, op->predicate, op->alignment));
         return;
     }
@@ -3748,7 +3880,6 @@ void CodeGen_LLVM::visit(const Store *op) {
         return;
     }
 
-    Halide::Type value_type = op->value.type();
     Value *val = codegen(op->value);
     bool is_external = (external_buffer.find(op->name) != external_buffer.end());
     // Scalar
