@@ -349,7 +349,7 @@ private:
             }
         }
 
-        Stmt prefetch_call = Evaluate::make(Call::make(op->types[0], Call::prefetch, args, Call::Intrinsic));
+        Stmt prefetch_call = Evaluate::make(Call::make(Int(32), Call::prefetch, args, Call::Intrinsic));
         if (!is_one(condition)) {
             prefetch_call = IfThenElse::make(condition, prefetch_call);
         }
