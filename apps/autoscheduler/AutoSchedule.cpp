@@ -1158,7 +1158,7 @@ struct LoopNest {
         stride = std::abs(stride);
         stride *= words_per_access;
 
-        // If the stride is larger than 8 words (32 bits), it is guaranteed to
+        // If the stride is larger than 8 words (32 bytes), it is guaranteed to
         // traverse at least one segment each iteration. Any stride larger than
         // 2 segments will just traverse empty segments so we reduce it here to
         // avoid potential overflow below
@@ -1186,7 +1186,7 @@ struct LoopNest {
             }
         });
 
-        global_mem_info.add_access_info(serial_loop_extents * num_accesses[0], serial_loop_extents * num_accesses[0], stride);
+        global_mem_info.add_access_info(serial_loop_extents * num_accesses[0], serial_loop_extents * num_accesses[1], stride);
     }
 
     GlobalMemInfo compute_global_mem_store_features(const LoadJacobian& jac, int consumer_innermost_dim, const FunctionDAG::Node* node, const Bound& consumer_store_bounds, const ThreadInfo& thread_info, double serial_loop_extents) const {
