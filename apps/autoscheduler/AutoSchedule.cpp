@@ -171,7 +171,7 @@ void lowered_dims(const vector<int64_t> &size, int vector_loop_i, vector<int64_t
 // thread counts is under 1024 threshold.
 vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stage_sizes,
         const vector<vector<int>> &pure_dims,
-        vector<int64_t> &max_s,
+        const vector<int64_t> &max_s,
         int d, const vector<int> &vectorized_indices, bool threads_inner) {
     vector<vector<int64_t>> result;
     if (d == -1) {
@@ -181,6 +181,7 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stag
         int64_t max_threads_extent = 64, total_threads_limit = 1024; // less than 1024 to limit states
         int factor = 2;
         int warp_width = 32;
+        int max_serial_ext = 8;
 
         vector<vector<int64_t>> v;
         v = generate_gpu_tilings(stage_sizes, pure_dims, max_s, d - 1, vectorized_indices, threads_inner);
@@ -213,7 +214,8 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stag
                         thread_t = t;
                     }
                     lowered_dims(thread_t, vectorized_indices[0], lowered_size);
-                    // get tiling applied to other stages of this func
+                    // get tiling applied to other stages of this func and update max_s accordingly
+                    vector<int64_t> new_max_s = max_s;
                     for (size_t stage = 0; stage < pure_dims.size(); stage++) {
                         vector<int64_t> stage_thread_t, stage_lowered_size;
                         for (size_t i = 0; i < pure_dims[stage].size(); i++) {
@@ -227,29 +229,44 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stag
                         // adjust max_size to account for other stages thread counts when we apply this tiling
                         for (size_t dim = 0; dim < stage_lowered_size.size(); dim++) {
                             if ( dim >= max_s.size() ) {
-                                max_s.push_back(stage_lowered_size[dim]);
+                                new_max_s.push_back(stage_lowered_size[dim]);
                             } else {
-                                max_s[dim] = std::max(max_s[dim], stage_lowered_size[dim]);
+                                new_max_s[dim] = std::max(max_s[dim], stage_lowered_size[dim]);
                             }
                         }
                     }
                     int64_t total_threads_used = 1;
                     int64_t not_ext1 = 0;
                     int64_t union_threads;
-                    int max_dim = std::max((int)(max_s.size()), (int)(lowered_size.size()));
+                    int max_dim = std::max((int)(new_max_s.size()), (int)(lowered_size.size()));
                     for (int dim = 0; dim < max_dim; dim++) {
-                        if (dim >= (int)(max_s.size())) {
+                        if (dim >= (int)(new_max_s.size())) {
                             union_threads = lowered_size[dim];
                         } else if (dim >= (int)(lowered_size.size())) {
-                            union_threads = max_s[dim];
+                            union_threads = new_max_s[dim];
                         } else {
-                            union_threads = std::max(lowered_size[dim], max_s[dim]);
+                            union_threads = std::max(lowered_size[dim], new_max_s[dim]);
                         }
                         not_ext1 = not_ext1 + ( (union_threads > 1) ? 1 : 0 );
                         total_threads_used *= union_threads;
                     }
-                    if (total_threads_used > total_threads_limit || not_ext1 > 3)
+                    if (total_threads_used > total_threads_limit || not_ext1 > 3) {
                         break;
+                    }
+                    // make sure serial loops are not too large
+                    if (!threads_inner) {
+                        bool valid = true;
+                        for (int dd = 0; dd < (int)(stage_sizes[0].size()); dd++) {
+                            int64_t other_ext = (stage_sizes[0][dd] + t[dd] - 1) / t[dd];
+                            if (other_ext > max_serial_ext) {
+                                valid = false;
+                                break;  
+                            }             
+                        }
+                        if (!valid) {
+                            continue; // don't add this tiling to results
+                        }
+                    }
                 }
                 result.push_back(t);
             }
@@ -277,7 +294,8 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stag
                     }
                     lowered_dims(thread_t, vectorized_indices[0], lowered_size);
 
-                    // get tiling applied to other stages of this func
+                    // get tiling applied to other stages of this func and update max_s accordingly
+                    vector<int64_t> new_max_s = max_s;
                     for (size_t stage = 0; stage < pure_dims.size(); stage++) {
                         vector<int64_t> stage_thread_t, stage_lowered_size;
                         for (size_t i = 0; i < pure_dims[stage].size(); i++) {
@@ -291,29 +309,42 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stag
                         // adjust max_size to account for other stages thread counts when we apply this tiling
                         for (size_t dim = 0; dim < stage_lowered_size.size(); dim++) {
                             if ( dim >= max_s.size() ) {
-                                max_s.push_back(stage_lowered_size[dim]);
+                                new_max_s.push_back(stage_lowered_size[dim]);
                             } else {
-                                max_s[dim] = std::max(max_s[dim], stage_lowered_size[dim]);
+                                new_max_s[dim] = std::max(max_s[dim], stage_lowered_size[dim]);
                             }
                         }
                     }
                     int64_t total_threads_used = 1;
                     int64_t not_ext1 = 0;
                     int64_t union_threads;
-                    int max_dim = std::max((int)(max_s.size()), (int)(lowered_size.size()));
+                    int max_dim = std::max((int)(new_max_s.size()), (int)(lowered_size.size()));
                     for (int dim = 0; dim < max_dim; dim++) {
-                        if (dim >= (int)(max_s.size())) {
+                        if (dim >= (int)(new_max_s.size())) {
                             union_threads = lowered_size[dim];
                         } else if (dim >= (int)(lowered_size.size())) {
-                            union_threads = max_s[dim];
+                            union_threads = new_max_s[dim];
                         } else {
-                            union_threads = std::max(lowered_size[dim], max_s[dim]);
+                            union_threads = std::max(lowered_size[dim], new_max_s[dim]);
                         }
                         not_ext1 = not_ext1 + ( (union_threads > 1) ? 1 : 0 );
                         total_threads_used *= union_threads;
                     }
                     if (total_threads_used > total_threads_limit || not_ext1 > 3) {
                         continue;
+                    }
+                    if (!threads_inner) {
+                        bool valid = true;
+                        for (int dd = 0; dd < (int)(stage_sizes[0].size()); dd++) {
+                            int64_t other_ext = (stage_sizes[0][dd] + t[dd] - 1) / t[dd];
+                            if (other_ext > max_serial_ext) {
+                                valid = false;
+                                break;
+                            }
+                        }
+                        if (!valid) {
+                            continue; // don't add this thread tiling 
+                        }
                     }
                 }
                 result.push_back(t);
@@ -762,7 +793,16 @@ struct LoopNest {
         internal_assert(stage_sizes.size() != 0);
         //internal_assert(pure_size);
         auto tilings = generate_gpu_tilings(stage_sizes, pure_dims, max_size, (int)(stage_sizes[0].size() - 1), vectorized_indices, false);
-
+        /**
+        debug(0) << "tilings for " << f->func.name() << "\n";
+        // printing out tilings generated
+        for (const auto &t : tilings) {
+            for (size_t i = 0; i < t.size(); i++) {
+                debug(0) << t[i] << ",";
+            }
+            debug(0) << "\n";
+        }
+        **/
         bool made_child = false;
         for (const auto &t : tilings) {
             LoopNest *new_parent = new LoopNest;
