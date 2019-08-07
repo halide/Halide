@@ -60,9 +60,6 @@ void unpack_closure(const Closure &closure,
 /** Get the llvm type equivalent to a given halide type */
 llvm::Type *llvm_type_of(llvm::LLVMContext *context, Halide::Type t);
 
-/** Get the llvm type used for storage and argument passing for a given Halide type. */
-llvm::Type *llvm_storage_type_of(llvm::LLVMContext *context, Halide::Type t);
-
 /** Which built-in functions require a user-context first argument? */
 bool function_takes_user_context(const std::string &name);
 
