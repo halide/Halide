@@ -24,6 +24,12 @@ namespace Halide {
 namespace Internal {
 namespace Introspection {
 
+#if LLVM_VERSION >= 100
+using llvm_offset_t = uint64_t;
+#else
+using llvm_offset_t = uint32_t;
+#endif
+
 // All of this only works with DWARF debug info on linux and OS X. For
 // other platforms, WITH_INTROSPECTION should be off.
 #ifdef __APPLE__
@@ -993,7 +999,7 @@ private:
 
     }
 
-    void parse_debug_abbrev(const llvm::DataExtractor &e, uint32_t off = 0) {
+    void parse_debug_abbrev(const llvm::DataExtractor &e, llvm_offset_t off = 0) {
         entry_formats.clear();
         while (1) {
             EntryFormat fmt;
@@ -1025,7 +1031,7 @@ private:
                           llvm::StringRef debug_str,
                           llvm::StringRef debug_ranges) {
         // Offset into the section
-        uint32_t off = 0;
+        llvm_offset_t off = 0;
 
         llvm::StringRef debug_info = e.getData();
 
@@ -1900,7 +1906,7 @@ private:
     }
 
     void parse_debug_line(const llvm::DataExtractor &e) {
-        uint32_t off = 0;
+        llvm_offset_t off = 0;
 
         // For every compilation unit
         while (1) {
@@ -1920,7 +1926,7 @@ private:
             assert(version >= 2);
 
             uint32_t header_length = e.getU32(&off);
-            uint32_t end_header_off = off + header_length;
+            llvm_offset_t end_header_off = off + header_length;
             uint8_t min_instruction_length = e.getU8(&off);
             uint8_t max_ops_per_instruction = 1;
             if (version >= 4) {
