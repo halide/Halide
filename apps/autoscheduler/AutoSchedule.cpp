@@ -71,7 +71,7 @@ namespace Autoscheduler {
 // entirely unroll the thing. Sized for an architecture with 16 vector
 // registers.
 const int kUnrollLimit = 16;
-const vector<int> gpu_serial_sizes({1,2,4,8});
+//const vector<int> gpu_serial_sizes({1,2,4,8});
 
 namespace {
 
@@ -355,16 +355,30 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stag
 }
 
 // used for creating default serial loop tiling options inside gpu threads loop
-vector<vector<int64_t>> generate_serial_tilings(const vector<int64_t> &s, int d, const vector<int> &serial_sizes) {
+vector<vector<int64_t>> generate_serial_tilings(const vector<int64_t> &s, int d, 
+                                                int vectorized_index, 
+                                                const vector<int> &vec_dim_serial_sizes) {
     vector<vector<int64_t>> result;
     if (d == -1) {
         result.push_back(vector<int64_t>());
     } else {
         vector<vector<int64_t>> v;
-        v = generate_serial_tilings(s, d - 1, serial_sizes);
+        v = generate_serial_tilings(s, d - 1, vectorized_index, vec_dim_serial_sizes);
         for (auto t : v) {
             t.push_back(0);
-            for (int inner : serial_sizes) {
+            // include odd serial sizes that encourage multiples of 16 as thread tile size
+            if (vec_dim_serial_sizes.size() > 0 && d == vectorized_index) {
+                for (int inner : vec_dim_serial_sizes) {
+                    int outer = (s[d] + inner - 1) / inner;
+                    t.back() = outer;
+                    result.push_back(t);
+                }    
+            } 
+            // always consider the even tile sizes: 1, 2, 4, 8
+            for (int inner = 1; inner <= 8; inner *= 2) {
+                if (inner > s[d]) {
+                    break;
+                }
                 int outer = (s[d] + inner - 1) / inner;
                 t.back() = outer;
                 result.push_back(t);
@@ -776,6 +790,22 @@ struct LoopNest {
             }
         }
         **/
+    }
+
+    // given the loop nest of a stage to parallelize at root, figure out if using odd tile sizes
+    // for the vectorized dimension will allow the resulting thread tiles to be multiples of 32
+    // if so, we will include these in the serial loop sizes 
+    void generate_vec_dim_serial_tilings(vector<int> &serial_sizes) const {
+        // generate suggested tilings for vectorized dimension 
+        int warp_width = 32;
+        if (size[vectorized_loop_index] % warp_width == 0) {
+            int remaining_ext = size[vectorized_loop_index] / warp_width;
+            for (int s = 3; s < 8; s += 2) {
+                if (remaining_ext % s == 0) {
+                    serial_sizes.push_back(s);
+                }
+            }
+        }
     }
 
     // get the loop nests of a newly inserted node, f, that is marked GPU threads. Tiles
@@ -3956,11 +3986,14 @@ struct State {
         } else { // second phase, parallelize compute root funcs
             bool should_parallelize = false;
             const vector<int64_t> *pure_size = nullptr;
+            IntrusivePtr<const LoopNest> pure_stage;
+
             if (params.parallelism > 1) {
                 for (auto &c : root->children) {
                     if (c->node == node && node->dimensions > 0) {
                         if (c->stage->index == 0) {
                             pure_size = &(c->size);
+                            pure_stage = c;
                         }
                         should_parallelize = true;
                     }
@@ -3988,7 +4021,14 @@ struct State {
                 if (target.has_gpu_feature()) {
                     // When GPU scheduling we approach tiling differently and in two steps.
                     // step 1) convert (none, SIMD) loops to (parallel, serial, SIMD) loops with specialized serial sizes
-                    auto parallel_tilings = generate_serial_tilings(*pure_size, node->dimensions-1, gpu_serial_sizes);
+                    vector<int> vec_dim_serial_sizes;
+                    pure_stage->generate_vec_dim_serial_tilings(vec_dim_serial_sizes);
+                    
+                    auto parallel_tilings = generate_serial_tilings(*pure_size, 
+                                                                    node->dimensions-1, 
+                                                                    pure_stage->vectorized_loop_index, 
+                                                                    vec_dim_serial_sizes);
+
                     internal_assert(parallel_tilings.size() > 0) << " zero parallel tilings\n";
 
                     for (auto &parallel_t: parallel_tilings) {
@@ -4009,22 +4049,10 @@ struct State {
                         vector<vector<int>> pure_dims;
                         vector<int> vectorized_indices;
                         parallel_root->get_stage_sizes(node, stage_sizes, pure_dims, vectorized_indices);
-                        /**
-                        for (auto &c : parallel_root->children) {
-                            if (c->node == node) {
-                                if (c->stage->index == 0) {
-                                    parallel_size = &(c->size);
-                                    vectorized_loop_i = c->vectorized_loop_index;
-                                }
-                            }
-                        }
-                        **/
                         // at root level sibling thread counts are in separate blocks, extents are irrelevant
                         vector<int64_t> max_size((int)(stage_sizes[0].size()), 1);
 
                         auto block_tilings = generate_gpu_tilings(stage_sizes, pure_dims, max_size, node->dimensions-1, vectorized_indices, true);
-                            //generate_gpu_tilings(*parallel_size, max_size, node->dimensions-1,
-                            //                     vectorized_loop_i, true);
 
                         // If no options, create a thread tiling as large as possible with block size (1,1,1).
                         // This can happen if the loops are too small to generate desired gpu tiles.
