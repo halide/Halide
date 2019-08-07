@@ -254,11 +254,7 @@ $NAMESPACECLOSE$
         Target::DisableLLVMLoopVectorize,
         Target::DisableLLVMLoopUnroll,
         Target::LegacyBufferWrappers,
-        Target::NoAsserts,
-        Target::NoBoundsQuery,
         Target::NoRuntime,
-        Target::Profile,
-        Target::StrictFloat,
         Target::UserContext,
     };
 
