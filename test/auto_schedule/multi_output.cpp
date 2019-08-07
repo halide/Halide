@@ -25,8 +25,8 @@ int main(int argc, char **argv) {
     h(x, y) = (f(x, y) + f(x, y+1))/2;
 
     // Provide estimates on the pipeline output
-    g.estimate(x, 0, 1000).estimate(y, 0, 1000);
-    h.estimate(x, 0, 1000).estimate(y, 0, 1000);
+    g.set_estimate(x, 0, 1000).set_estimate(y, 0, 1000);
+    h.set_estimate(x, 0, 1000).set_estimate(y, 0, 1000);
 
     // Auto-schedule the pipeline
     std::vector<Func> outs;

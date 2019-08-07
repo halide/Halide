@@ -8,6 +8,10 @@ static Halide::Expr div_up(Halide::Expr num, int denom) {
     return Halide::Internal::simplify((num + denom - 1) / denom);
 }
 
+static Halide::Expr div_down(Halide::Expr num, int denom) {
+    return Halide::Internal::simplify(num / denom);
+}
+
 namespace {
 class FuncCallInliner : public Halide::Internal::IRMutator {
     Halide::Expr visit(const Halide::Internal::Call *op) override {
@@ -273,6 +277,10 @@ Tensor build_from_constant(
         BUILD_CONSTANT_EXPR(uint16_t, int32, name)
         break;
     }
+    case onnx::TensorProto_DataType_BOOL: {
+        BUILD_CONSTANT_EXPR(bool, int32, name)
+        break;
+    }
     default:
         throw std::domain_error("Unsupported data type for constant");
     }
@@ -484,6 +492,12 @@ Node convert_binary_op_node(
         out.rep(out_vars) = in1.rep(in1_vars) | in2.rep(in2_vars);
     } else if (node.op_type() == "Pow") {
         out.rep(out_vars) = Halide::pow(in1.rep(in1_vars), in2.rep(in2_vars));
+    } else if (node.op_type() == "PRelu") {
+        // input := in1.rep(in1_vars), alpha := in2.rep(in1_vars)
+        out.rep(out_vars) = Halide::select(
+            in1.rep(in1_vars) >= 0.0f,
+            in1.rep(in1_vars),
+            in2.rep(in2_vars) * in1.rep(in1_vars));
     } else if (node.op_type() == "Sub") {
         out.rep(out_vars) = in1.rep(in1_vars) - in2.rep(in2_vars);
     } else if (node.op_type() == "Xor") {
@@ -1421,7 +1435,7 @@ Node convert_tile_node(
 
     for (int i = 0; i < rank; ++i) {
         Halide::Expr dim_size = input.shape[i];
-        in_vars[i] = Halide::select(dim_size == 1, vars[i], vars[i] % dim_size);
+        in_vars[i] = vars[i] % dim_size;
     }
 
     result.outputs[0].rep(vars) = input.rep(in_vars);
@@ -1505,13 +1519,34 @@ Node convert_dropout_node(
             "Expected a single input for Dropout node " + node.name());
     }
 
+    // Onnx dropout at the moment is always operating as a simple pass through
+    ratio = 0.0f;
+
     Node result;
     result.inputs = inputs;
     result.outputs.resize(node.output_size());
-    if (node.output_size() == 1) {
+
+    result.outputs[0].shape = inputs[0].shape;
+    result.outputs[0].type = inputs[0].type;
+    result.outputs[0].rep = func_for_node_output(node, 0);
+    Halide::Func &output = result.outputs[0].rep;
+
+    Halide::Func filter;
+    if (node.output_size() == 2) {
+        result.outputs[1].shape = inputs[0].shape;
+        result.outputs[1].type = inputs[0].type;
+        filter = Halide::Func(func_for_node_output(node, 1));
+    } else {
+        filter = Halide::Func(name_for_node(node, "_filter"));
+    }
+
+    if (ratio == 0.0f) {
         // Simple pass through
-        result.outputs[0] = inputs[0];
-    } else if (node.output_size() == 2) {
+        output = inputs[0].rep;
+        const int rank = inputs[0].shape.size();
+        std::vector<Halide::Var> vars(rank);
+        filter(vars) = false;
+    } else {
         const int rank = inputs[0].shape.size();
         std::vector<Halide::Var> vars(rank);
         Halide::Expr expr = 0;
@@ -1520,19 +1555,13 @@ Node convert_dropout_node(
             expr += vars[i] * stride;
             stride *= inputs[0].shape[i];
         }
-        Halide::Func filter(name_for_node(node, "_filter"));
-        filter(vars) = Halide::random_float(expr) > ratio;
+        filter(vars) = Halide::random_float(expr) >= ratio;
+        output(vars) = inputs[0].rep(vars) * filter(vars) / ratio;
+    }
 
-        result.outputs[0].shape = inputs[0].shape;
-        result.outputs[0].type = inputs[0].type;
-        result.outputs[0].rep = func_for_node_output(node, 0);
-        result.outputs[0].rep(vars) = inputs[0].rep(vars) * filter(vars) / ratio;
-
-        result.outputs[1].shape = inputs[0].shape;
-        result.outputs[1].type = inputs[0].type;
-        result.outputs[1].rep = func_for_node_output(node, 1);
-        result.outputs[1].rep(vars) = filter(vars);
-    } else {
+    if (node.output_size() == 2) {
+        result.outputs[1].rep = filter;
+    } else if (node.output_size() != 1) {
         throw std::domain_error(
             "Invalid number of outputs for dropout node " + node.name());
     }
@@ -1593,12 +1622,12 @@ Node convert_pooling_node(
         }
     }
 
+    bool extented_count_needed = false;
     if (node.op_type() == "AveragePool" && !count_include_pad) {
         for (int pad : pads) {
             if (pad != 0) {
-                throw std::domain_error(
-                    "Unsupported type of padding for average pooling node " +
-                    node.name());
+                extented_count_needed = true;
+                break;
             }
         }
     }
@@ -1642,13 +1671,17 @@ Node convert_pooling_node(
         node.op_type() == "AveragePool" ||
         node.op_type() == "GlobalAveragePool") {
         Halide::Expr num_pooling_vals = 1;
-        for (Halide::Expr kernel_dim : kernel_shape) {
+        for (int i = 0; i < kernel_shape.size(); ++i) {
+            Halide::Expr kernel_dim = kernel_shape[i];
+            if (extented_count_needed) {
+                kernel_dim -= Halide::max(0, pads[i] - out_vars[i + 2]);
+                kernel_dim -= Halide::max(0, out_vars[i + 2] + kernel_shape[i] - (inputs[0].shape[i + 2] + pads[i]));
+            }
             num_pooling_vals *= kernel_dim;
         }
         basic_pool(out_vars) =
             Halide::sum(padded_input(x_vars), name_for_node(node, "_sum")) /
             num_pooling_vals;
-
     } else {
         throw std::domain_error(
             "Unsupported type of pooling " + node.op_type() + " for node " +
@@ -1806,6 +1839,7 @@ Node convert_concat_node(
     const Halide::Expr concatenated_size =
         concat_offset + inputs.back().shape[axis];
     result.outputs[0].shape[axis] = concatenated_size;
+
     return result;
 }
 
@@ -1892,102 +1926,206 @@ Node convert_split_node(
         }
         result.outputs[i].rep(out_vars) = result.inputs[0].rep(in_vars);
     }
+
     return result;
 }
 
 Node convert_slice_node(
     const onnx::NodeProto &node,
     const std::vector<Tensor> &inputs) {
-    if (inputs.size() != 1) {
+    bool version_9_op = false;
+    if (inputs.size() == 1) {
+        version_9_op = true;
+    } else if (inputs.size() < 3 || inputs.size() > 5) {
         throw std::invalid_argument(
             "Unexpected number of inputs for slice node " + node.name());
     }
-    const int num_dims = inputs[0].shape.size();
-
-    std::vector<int> axes;
-    std::vector<int> ends;
-    std::vector<int> starts;
-    for (const auto &attr : node.attribute()) {
-        if (attr.name() == "axes") {
-            for (int axis : attr.ints()) {
-                if (axis < 0) {
-                    axis += num_dims;
+    const Tensor &input = inputs[0];
+    const int num_dims = input.shape.size();
+    std::vector<Halide::Expr> starts;
+    std::vector<Halide::Expr> ends;
+    // Version-9 attributes.
+    std::unordered_map<int, std::pair<int, int>> extents;
+    int num_slice_dims;
+    Node result;
+    result.inputs = inputs;
+    if (version_9_op) {
+        std::vector<int> axes;
+        std::vector<int> ends;
+        std::vector<int> starts;
+        for (const auto &attr : node.attribute()) {
+            if (attr.name() == "axes") {
+                for (int axis : attr.ints()) {
+                    if (axis < 0) {
+                        axis += num_dims;
+                    }
+                    if (axis < 0 || axis >= num_dims) {
+                        throw std::invalid_argument(
+                            "Invalid axis for slice node " + node.name());
+                    }
+                    axes.push_back(axis);
                 }
-                if (axis < 0 || axis >= num_dims) {
-                    throw std::invalid_argument(
-                        "Invalid axis for slice node " + node.name());
+            }
+            if (attr.name() == "ends") {
+                for (int index : attr.ints()) {
+                    ends.push_back(index);
                 }
-                axes.push_back(axis);
+            }
+            if (attr.name() == "starts") {
+                for (int index : attr.ints()) {
+                    starts.push_back(index);
+                }
             }
         }
-        if (attr.name() == "ends") {
-            for (int index : attr.ints()) {
-                ends.push_back(index);
-            }
+
+        if (ends.size() != starts.size()) {
+            throw std::invalid_argument(
+                "Inconsistent starts/ends for slice node " + node.name());
         }
-        if (attr.name() == "starts") {
-            for (int index : attr.ints()) {
-                starts.push_back(index);
+        if (ends.size() > num_dims) {
+            throw std::invalid_argument(
+                "Too many ends for slice node " + node.name());
+        }
+        if (axes.empty()) {
+            for (int i = 0; i < starts.size(); ++i) {
+                axes.push_back(i);
             }
+        } else if (axes.size() != starts.size()) {
+            throw std::invalid_argument(
+                "Invalid axes/starts for slice node " + node.name());
+        }
+        for (int i = 0; i < axes.size(); ++i) {
+            int axis = axes[i];
+            std::pair<int, int> extent = std::make_pair(starts[i], ends[i]);
+            extents[axis] = extent;
+        }
+        num_slice_dims = axes.size();
+    } else {
+        const Tensor &starts_tensor = inputs[1];
+        const Tensor &ends_tensor = inputs[2];
+        const Halide::Expr starts_shape_expr =
+            Halide::Internal::simplify(starts_tensor.shape[0]);
+        const Halide::Expr ends_shape_expr =
+            Halide::Internal::simplify(ends_tensor.shape[0]);
+        const int64_t *starts_shape_dim_0 =
+            Halide::Internal::as_const_int(starts_shape_expr);
+        const int64_t *ends_shape_dim_0 =
+            Halide::Internal::as_const_int(ends_shape_expr);
+        if (starts_shape_dim_0 == nullptr && ends_shape_dim_0 == nullptr) {
+            throw std::invalid_argument(
+                "Can't statisticaly infer slice dim size for slice node " +
+                node.name());
+        } else {
+            result.requirements.push_back(starts_shape_expr == ends_shape_expr);
+        }
+        num_slice_dims =
+            starts_shape_dim_0 != nullptr ? *starts_shape_dim_0 : *ends_shape_dim_0;
+        if (num_slice_dims != *ends_shape_dim_0) {
+            throw std::invalid_argument(
+                "Starts and ends input tensor must have the same shape for "
+                "slice node " +
+                node.name());
+        }
+        for (int i = 0; i < num_slice_dims; ++i) {
+            starts.push_back(inputs[1].rep(i));
+            ends.push_back(inputs[2].rep(i));
         }
     }
 
-    if (ends.size() != starts.size()) {
-        throw std::invalid_argument(
-            "Inconsistent starts/ends for slice node " + node.name());
-    }
-    if (ends.size() > num_dims) {
-        throw std::invalid_argument("Too many ends for slice node " + node.name());
-    }
-    if (axes.empty()) {
-        for (int i = 0; i < starts.size(); ++i) {
+    std::vector<Halide::Expr> axes;
+    std::vector<Halide::Expr> steps(num_slice_dims, 1);
+
+    // Check if axes are explicitly provided.
+    if (inputs.size() > 3 && !node.input(3).empty()) {
+        const Tensor &axes_tensor = inputs[3];
+        const Halide::Expr axes_shape_expr =
+            Halide::Internal::simplify(axes_tensor.shape[0]);
+        const int64_t *axes_shape_dim_0 =
+            Halide::Internal::as_const_int(axes_shape_expr);
+        if (axes_shape_dim_0 != nullptr && *axes_shape_dim_0 != num_slice_dims) {
+            throw std::invalid_argument(
+                "Axes tensor must have the same shape as starts and ends for slice "
+                "node " +
+                node.name());
+        }
+        for (int i = 0; i < num_slice_dims; ++i) {
+            axes.push_back(axes_tensor.rep(i));
+        }
+    } else {
+        for (int i = 0; i < num_slice_dims; ++i) {
             axes.push_back(i);
         }
-    } else if (axes.size() != starts.size()) {
-        throw std::invalid_argument(
-            "Invalid axes/starts for slice node " + node.name());
     }
 
-    std::unordered_map<int, std::pair<int, int>> extents;
-    for (int i = 0; i < axes.size(); ++i) {
-        int axis = axes[i];
-        std::pair<int, int> extent = std::make_pair(starts[i], ends[i]);
-        extents[axis] = extent;
-    }
-
-    Node result;
-
-    result.inputs = inputs;
-    result.outputs.resize(1);
-    result.outputs[0].rep = func_for_node_output(node, 0);
-    std::vector<Halide::Var> tgt_indices;
-    tgt_indices.resize(num_dims);
-
-    std::vector<Halide::Expr> src_indices;
-    result.outputs[0].type = inputs[0].type;
-    result.outputs[0].shape = inputs[0].shape;
-
-    for (int i = 0; i < num_dims; ++i) {
-        if (extents.find(i) != extents.end()) {
-            int start = extents[i].first;
-            int end = extents[i].second;
-            Halide::Expr actual_end = end;
-            if (end < 0) {
-                actual_end = inputs[0].shape[i] + end;
-            }
-
-            Halide::Expr actual_start = Halide::min(start, inputs[0].shape[i]);
-            actual_end = Halide::min(actual_end, inputs[0].shape[i]);
-            src_indices.push_back(tgt_indices[i] + actual_start);
-
-            result.outputs[0].shape[i] =
-                Halide::Internal::simplify(actual_end - actual_start);
-        } else {
-            src_indices.push_back(tgt_indices[i]);
+    // Check if steps are explicitly provided.
+    if (inputs.size() > 4 && !node.input(4).empty()) {
+        const Tensor &steps_tensor = inputs[4];
+        const Halide::Expr steps_shape_expr =
+            Halide::Internal::simplify(steps_tensor.shape[0]);
+        const int64_t *steps_shape_dim_0 =
+            Halide::Internal::as_const_int(steps_shape_expr);
+        if (steps_shape_dim_0 != nullptr && *steps_shape_dim_0 != num_slice_dims) {
+            throw std::invalid_argument(
+                "Steps tensor must have the same shape as starts and ends for slice "
+                "node " +
+                node.name());
+        }
+        for (int i = 0; i < num_slice_dims; ++i) {
+            steps[i] = steps_tensor.rep(i);
         }
     }
-    result.outputs[0].rep(tgt_indices) = inputs[0].rep(src_indices);
 
+    result.outputs.resize(1);
+    result.outputs[0].rep = func_for_node_output(node, 0);
+    result.outputs[0].type = input.type;
+    result.outputs[0].shape = input.shape;
+
+    std::vector<Halide::Var> tgt_indices;
+    tgt_indices.resize(num_dims);
+    std::vector<Halide::Expr> src_indices;
+
+    for (int i = 0; i < num_dims; ++i) {
+        if (version_9_op) {
+            if (extents.find(i) != extents.end()) {
+                int start = extents[i].first;
+                int end = extents[i].second;
+                Halide::Expr actual_end = end;
+                if (end < 0) {
+                    actual_end = inputs[0].shape[i] + end;
+                }
+
+                Halide::Expr actual_start = Halide::min(start, inputs[0].shape[i]);
+                actual_end = Halide::min(actual_end, inputs[0].shape[i]);
+                src_indices.push_back(tgt_indices[i] + actual_start);
+
+                result.outputs[0].shape[i] =
+                    Halide::Internal::simplify(actual_end - actual_start);
+            } else {
+                src_indices.push_back(tgt_indices[i]);
+            }
+        } else {
+            Halide::Expr start = 0;
+            Halide::Expr end = input.shape[i];
+            Halide::Expr step = 1;
+            // Pick slice boundaries or keep default values.
+            Halide::Expr slice_dim = Halide::Internal::const_false();
+            for (int j = 0; j < num_slice_dims; ++j) {
+                start = select(i == axes[j], starts[j], start);
+                end = select(i == axes[j], ends[j], end);
+                step = select(i == axes[j], steps[j], step);
+                slice_dim = slice_dim || i == axes[j];
+            }
+            Halide::Expr dim_size = input.shape[i] - 1;
+            start = Halide::clamp(Halide::cast<int>(start), 0, dim_size);
+            end = Halide::select(end < 0, input.shape[i] - end, end);
+            step = Halide::cast<int>(step);
+            src_indices.push_back(Halide::select(
+                slice_dim, start + (tgt_indices[i] * step), tgt_indices[i]));
+            result.outputs[0].shape[i] = Halide::Internal::simplify(Halide::ceil(
+                Halide::cast<float>(Halide::abs(end - start)) / Halide::abs(step)));
+        }
+    }
+    result.outputs[0].rep(tgt_indices) = input.rep(src_indices);
     return result;
 }
 
@@ -2171,6 +2309,7 @@ Node convert_unsqueeze_node(
     result.outputs[0].type = inputs[0].type;
     result.outputs[0].rep = func_for_node_output(node, 0);
     result.outputs[0].rep(out_vars) = inputs[0].rep(in_vars);
+
     return result;
 }
 
@@ -2302,13 +2441,13 @@ Node convert_constant_fill_node(
     Node result;
     result.outputs.resize(1);
     result.outputs[0].rep = func_for_node_output(node, 0);
-    std::vector<int> shape;
+    int rank = 0;
     Halide::Expr value = 0.0f;
     int dtype = 1;
     for (const auto &attr : node.attribute()) {
         if (attr.name() == "shape") {
+            rank = attr.ints_size();
             for (int dim : attr.ints()) {
-                shape.push_back(dim);
                 result.outputs[0].shape.push_back(dim);
             }
         }
@@ -2317,7 +2456,6 @@ Node convert_constant_fill_node(
         }
         if (attr.name() == "dtype") {
             dtype = attr.i();
-            result.outputs[0].type = static_cast<onnx::TensorProto::DataType>(dtype);
         }
         if (attr.name() == "extra_shape" || attr.name() == "input_as_shape") {
             throw std::invalid_argument(
@@ -2326,30 +2464,42 @@ Node convert_constant_fill_node(
         }
     }
 
-    const int rank = shape.size();
-    if (rank == 0) {
-        throw std::invalid_argument(
-            "Attribute shape must be provided for node " + node.name());
-    }
+    result.outputs[0].type = static_cast<onnx::TensorProto::DataType>(dtype);
 
     std::vector<Halide::Var> vars(rank);
     switch (dtype) {
-    case 1:
+    case onnx::TensorProto_DataType_FLOAT:
         result.outputs[0].rep(vars) = value;
         break;
-    case 2:
+    case onnx::TensorProto_DataType_DOUBLE:
+        result.outputs[0].rep(vars) = Halide::cast<double>(value);
+        break;
+    case onnx::TensorProto_DataType_UINT8:
         result.outputs[0].rep(vars) = Halide::cast<uint8_t>(value);
-    case 3:
+        break;
+    case onnx::TensorProto_DataType_INT8:
         result.outputs[0].rep(vars) = Halide::cast<int8_t>(value);
         break;
-    case 4:
+    case onnx::TensorProto_DataType_UINT16:
         result.outputs[0].rep(vars) = Halide::cast<uint16_t>(value);
         break;
-    case 5:
+    case onnx::TensorProto_DataType_INT16:
+        result.outputs[0].rep(vars) = Halide::cast<int16_t>(value);
+        break;
+    case onnx::TensorProto_DataType_UINT32:
         result.outputs[0].rep(vars) = Halide::cast<uint32_t>(value);
         break;
-    case 6:
+    case onnx::TensorProto_DataType_INT32:
+        result.outputs[0].rep(vars) = Halide::cast<int32_t>(value);
+        break;
+    case onnx::TensorProto_DataType_UINT64:
+        result.outputs[0].rep(vars) = Halide::cast<uint64_t>(value);
+        break;
+    case onnx::TensorProto_DataType_INT64:
         result.outputs[0].rep(vars) = Halide::cast<int64_t>(value);
+        break;
+    case onnx::TensorProto_DataType_BOOL:
+        result.outputs[0].rep(vars) = Halide::cast<bool>(value);
         break;
     default:
         throw std::invalid_argument(
@@ -2682,6 +2832,114 @@ Node convert_shrink_node(
     return result;
 }
 
+Node convert_lrn_node(const onnx::NodeProto &node, const std::vector<Tensor> &inputs) {
+    if (inputs.size() != 1) {
+        throw std::invalid_argument(
+            "Expected exactly one input for lrn node " + node.name());
+    }
+    float alpha = 0.0001f;
+    float beta = 0.75f;
+    float bias = 1.0f;
+    bool found_size = false;
+    int size = 0;
+    for (const auto attr : node.attribute()) {
+        if (attr.name() == "alpha") {
+            alpha = attr.f();
+        } else if (attr.name() == "beta") {
+            beta = attr.f();
+        } else if (attr.name() == "bias") {
+            bias = attr.f();
+        } else if (attr.name() == "size") {
+            size = attr.i();
+            if (size <= 0) {
+                throw std::invalid_argument(
+                    "Attribute size should be > 0 but its " + std::to_string(size));
+            }
+            found_size = true;
+        }
+    }
+
+    if (!found_size) {
+        throw std::invalid_argument(
+            "Attribute size is required for lrn node " + node.name());
+    }
+
+    const Tensor &input = inputs[0];
+    Node result;
+    result.inputs = inputs;
+    result.outputs.resize(1);
+    result.outputs[0].shape = input.shape;
+    result.outputs[0].type = input.type;
+    result.outputs[0].rep = func_for_node_output(node, 0);
+
+    Halide::Var n("n"), c("c");
+    Halide::Func sum_squares(node.name() + "_sum_squares");
+
+    Halide::RDom r(-div_down(size - 1, 2), size);
+
+    if (input.shape.size() < 2) {
+        throw std::invalid_argument(
+            "Input rank must be at least 2 but its " +
+            std::to_string(input.shape.size()));
+    }
+
+    Halide::Expr c_size = input.shape[1];
+
+    sum_squares(n, c, Halide::_) = Halide::sum(Halide::select(
+        c + r < 0 || c + r >= c_size,
+        0,
+        input.rep(n, Halide::clamp((c + r), 0, c_size - 1), Halide::_) *
+            input.rep(n, Halide::clamp((c + r), 0, c_size - 1), Halide::_)));
+
+    result.outputs[0].rep(n, c, Halide::_) = input.rep(n, c, Halide::_) /
+                                             (Halide::pow(bias + (alpha / size) * sum_squares(n, c, Halide::_), beta));
+
+    return result;
+}
+
+Node convert_isinf_node(
+    const onnx::NodeProto &node,
+    const std::vector<Tensor> &inputs) {
+    if (inputs.size() != 1) {
+        throw std::invalid_argument(
+            "Expected exactly one input for isinf node " + node.name());
+    }
+
+    bool detect_negative = true;
+    bool detect_positive = true;
+    for (const auto &attr : node.attribute()) {
+        if (attr.name() == "detect_negative") {
+            detect_negative = attr.i();
+        } else if (attr.name() == "detect_positive") {
+            detect_positive = attr.i();
+        }
+    }
+
+    const Tensor &input = inputs[0];
+    Node result;
+    result.inputs = inputs;
+    result.outputs.resize(1);
+    result.outputs[0].shape = input.shape;
+    result.outputs[0].type = onnx::TensorProto_DataType_BOOL;
+    result.outputs[0].rep = func_for_node_output(node, 0);
+    if (input.type == onnx::TensorProto_DataType_FLOAT ||
+        input.type == onnx::TensorProto_DataType_DOUBLE) {
+        Halide::Expr inf_value = input.type == onnx::TensorProto_DataType_FLOAT
+                                     ? Halide::Expr(std::numeric_limits<float>::infinity())
+                                     : Halide::Expr(std::numeric_limits<double>::infinity());
+
+        Halide::Expr pos_inf = detect_positive && input.rep(Halide::_) == inf_value;
+        Halide::Expr neg_inf =
+            detect_negative && input.rep(Halide::_) == -inf_value;
+        // TODO(ataei): Fix Halide's mapping of const nanf into inf_f32.
+        result.outputs[0].rep(Halide::_) =
+            (pos_inf || neg_inf) && !Halide::is_nan(input.rep(Halide::_));
+    } else {
+        result.outputs[0].rep(Halide::_) = false;
+    }
+    return result;
+}
+
 Node convert_reshape_node(
     const onnx::NodeProto &node,
     const std::vector<Tensor> &inputs) {
@@ -2840,6 +3098,653 @@ Node convert_one_hot_node(
     }
     output_shape[axis] = Halide::Internal::simplify(depth.rep(0));
 
+    return result;
+}
+
+Node convert_gru_node(
+    const onnx::NodeProto &node,
+    const std::vector<Tensor> &inputs) {
+    int hidden_size = 1;
+    int linear_before_reset = 0;
+    bool input_forget = false;
+    std::string direction = "forward";
+    for (const auto &attr : node.attribute()) {
+        if (attr.name() == "hidden_size") {
+            hidden_size = attr.i();
+        } else if (attr.name() == "input_forget") {
+            input_forget = static_cast<bool>(attr.i());
+        } else if (attr.name() == "direction") {
+            direction = attr.s();
+        } else if (attr.name() == "linear_before_reset") {
+            linear_before_reset = attr.i();
+        } else if (
+            attr.name() == "clip" || attr.name() == "activation_alpha" ||
+            attr.name() == "activation_beta" || attr.name() == "activations") {
+            throw std::domain_error(attr.name() + " not supported yet");
+        }
+    }
+
+    // TBD: handle these cases
+    if (direction != "forward") {
+        throw std::domain_error("Unsupported direction");
+    }
+    if (input_forget) {
+        throw std::domain_error("input_forget not supported yet");
+    }
+    if (linear_before_reset != 0) {
+        throw std::domain_error("linear_before_reset not supported yet");
+    }
+
+    const int rank = inputs[0].shape.size();
+    if (rank != 3) {
+        throw std::domain_error("Invalid rank");
+    }
+
+    const Halide::Expr dim_expr = Halide::Internal::simplify(inputs[0].shape[0]);
+    const int64_t *dim = Halide::Internal::as_const_int(dim_expr);
+    if (!dim) {
+        throw std::domain_error("Unknown number of timesteps");
+    }
+    const int num_time_steps = *dim;
+    if (num_time_steps < 1) {
+        throw std::domain_error("At least one timestep is required");
+    }
+    // Build an onnx graph encoding the GRU computations
+    onnx::GraphProto gru_graph;
+    // TODO: generate unique prefixes in case there is more than 1 unnamed GRU
+    // node
+    const std::string prefix =
+        node.name().empty() ? std::string("gru") : node.name();
+    // Split input into timesteps
+    onnx::NodeProto *split_node = gru_graph.add_node();
+    split_node->set_name(prefix + "_split");
+    split_node->set_op_type("Split");
+    onnx::AttributeProto *attr = split_node->add_attribute();
+    attr->set_name("axis");
+    attr->set_i(0);
+    *split_node->add_input() = node.input(0);
+    for (int i = 0; i < num_time_steps; ++i) {
+        *split_node->add_output() = prefix + "_t" + std::to_string(i);
+    }
+
+    // Squeeze the first dim output the Xi, W and R tensors since we're only
+    // supporting unidirectional LSTM for now
+    onnx::NodeProto *W = gru_graph.add_node();
+    W->set_name(node.input(1) + "_squeezed");
+    W->set_op_type("Squeeze");
+    attr = W->add_attribute();
+    attr->set_name("axes");
+    attr->add_ints(0);
+    *W->add_input() = node.input(1);
+    *W->add_output() = W->name();
+
+    onnx::NodeProto *R = gru_graph.add_node();
+    R->set_name(node.input(2) + "_squeezed");
+    R->set_op_type("Squeeze");
+    attr = R->add_attribute();
+    attr->set_name("axes");
+    attr->add_ints(0);
+    *R->add_input() = node.input(2);
+    *R->add_output() = R->name();
+
+    // Rz, Rr, Rh
+    onnx::NodeProto *Rs = gru_graph.add_node();
+    Rs->set_name(R->name() + "_split");
+    Rs->set_op_type("Split");
+    attr = Rs->add_attribute();
+    attr->set_name("axis");
+    attr->set_i(0);
+    *Rs->add_input() = R->name();
+    *Rs->add_output() = Rs->name() + "_z";
+    *Rs->add_output() = Rs->name() + "_r";
+    *Rs->add_output() = Rs->name() + "_h";
+    // Bias B, if any
+    onnx::NodeProto *B = nullptr;
+    if (inputs.size() >= 4 && !node.input(3).empty()) {
+        // Preprocess the bias tensor, support only unidirectional for now
+        onnx::NodeProto *Bs = gru_graph.add_node();
+        Bs->set_name(node.input(3) + "_split");
+        Bs->set_op_type("Split");
+        attr = Bs->add_attribute();
+        attr->set_name("axis");
+        attr->set_i(1);
+        Bs->add_input(node.input(3));
+        Bs->add_output(Bs->name() + "_Wb");
+        Bs->add_output(Bs->name() + "_Rb");
+
+        B = gru_graph.add_node();
+        B->set_name(node.input(3) + "_sum");
+        B->set_op_type("Add");
+        B->add_input(Bs->output(0));
+        B->add_input(Bs->output(1));
+        B->add_output(B->name());
+
+    } else {
+        B = gru_graph.add_node();
+        B->set_name(prefix + "_zero");
+        B->set_op_type("ConstantFill");
+        attr = B->add_attribute();
+        attr->set_name("shape");
+        attr->add_ints(1);
+        B->add_output(B->name());
+    }
+
+    // seq_len
+    if (inputs.size() >= 5 && !node.input(4).empty()) {
+        throw std::domain_error("Unsupported prespecified seq_len");
+    }
+
+    // Initial state if any, unidirection for now
+    onnx::NodeProto *H_t = nullptr;
+    if (inputs.size() >= 6 && !node.input(5).empty()) {
+        H_t = gru_graph.add_node();
+        H_t->set_name(node.input(5) + "_squeezed");
+        H_t->set_op_type("Squeeze");
+        attr = H_t->add_attribute();
+        attr->set_name("axes");
+        attr->add_ints(0);
+        *H_t->add_input() = node.input(5);
+        *H_t->add_output() = H_t->name();
+    }
+
+    std::vector<onnx::NodeProto *> Xt;
+    for (int i = 0; i < num_time_steps; ++i) {
+        onnx::NodeProto *Xi = gru_graph.add_node();
+        Xi->set_name(split_node->output(i) + "_squeezed");
+        Xi->set_op_type("Squeeze");
+        attr = Xi->add_attribute();
+        attr->set_name("axes");
+        attr->add_ints(0);
+        *Xi->add_input() = split_node->output(i);
+        *Xi->add_output() = Xi->name();
+        Xt.push_back(Xi);
+    }
+
+    // Process each timestep
+    std::vector<onnx::NodeProto *> Hs;
+    for (int i = 0; i < num_time_steps; ++i) {
+        onnx::NodeProto *Xi = Xt[i];
+        onnx::NodeProto *Gi = gru_graph.add_node();
+        // Gi = dot(x, transpose(w)) + (B)
+        Gi->set_name(Xi->name() + "_gemm1_" + std::to_string(i));
+        Gi->set_op_type("Gemm");
+        attr = Gi->add_attribute();
+        attr->set_name("transB");
+        attr->set_i(1);
+        *Gi->add_input() = Xi->name();
+        *Gi->add_input() = W->name();
+        *Gi->add_input() = B->name();
+        *Gi->add_output() = Gi->name();
+
+        // S splits Gi into three input components for z, r, h gates
+        onnx::NodeProto *S = gru_graph.add_node();
+        S->set_name(Gi->name() + "_split");
+        S->set_op_type("Split");
+        attr = S->add_attribute();
+        attr->set_name("axis");
+        attr->set_i(1);
+        *S->add_input() = Gi->output(0);
+        *S->add_output() = S->name() + "_z";
+        *S->add_output() = S->name() + "_r";
+        *S->add_output() = S->name() + "_h";
+
+        onnx::NodeProto *z_t = nullptr;
+        onnx::NodeProto *r_t = nullptr;
+        onnx::NodeProto *h_t = nullptr;
+        onnx::NodeProto *H = nullptr;
+
+        onnx::NodeProto *One = gru_graph.add_node();
+        One->set_name(prefix + "_one");
+        One->set_op_type("ConstantFill");  // Constant of shape
+        attr = One->add_attribute();
+        attr->set_name("shape");
+        attr->add_ints(1);
+        attr = One->add_attribute();
+        attr->set_name("dtype");
+        attr->set_i(1);
+        attr = One->add_attribute();
+        attr->set_name("value");
+        attr->set_f(1.0f);
+        One->add_output(One->name());
+
+        if (H_t) {
+            onnx::NodeProto *G_z = gru_graph.add_node();
+            G_z->set_name(prefix + "_G_z_" + std::to_string(i));
+            G_z->set_op_type("Gemm");
+            attr = G_z->add_attribute();
+            attr->set_name("transB");
+            attr->set_i(1);
+            *G_z->add_input() = H_t->output(0);  // H_(t - 1)
+            *G_z->add_input() = Rs->output(0);  // Rz
+            *G_z->add_input() = S->output(0);  // Sz
+            *G_z->add_output() = G_z->name();
+
+            // z_t = f(.), f defaults Sigmoid
+            z_t = gru_graph.add_node();
+            z_t->set_name(prefix + "_zt_" + std::to_string(i));
+            z_t->set_op_type("Sigmoid");
+            *z_t->add_input() = G_z->output(0);
+            *z_t->add_output() = z_t->name();
+
+            onnx::NodeProto *NZ = gru_graph.add_node();
+            NZ->set_name(prefix + "_N_Z_" + std::to_string(i));
+            NZ->set_op_type("Sub");
+            *NZ->add_input() = One->output(0);
+            *NZ->add_input() = z_t->output(0);
+            *NZ->add_output() = NZ->name();
+
+            onnx::NodeProto *ZH = gru_graph.add_node();
+            ZH->set_name(prefix + "_Z_H_" + std::to_string(i));
+            ZH->set_op_type("Mul");
+            *ZH->add_input() = z_t->output(0);
+            *ZH->add_input() = H_t->output(0);
+            *ZH->add_output() = ZH->name();
+
+            onnx::NodeProto *G_r = gru_graph.add_node();
+            G_r->set_name(prefix + "_G_r_" + std::to_string(i));
+            G_r->set_op_type("Gemm");
+            attr = G_r->add_attribute();
+            attr->set_name("transB");
+            attr->set_i(1);
+            *G_r->add_input() = H_t->output(0);  // H_(t - 1)
+            *G_r->add_input() = Rs->output(1);  // Rz
+            *G_r->add_input() = S->output(1);  // Sz
+            *G_r->add_output() = G_r->name();
+
+            // r_t = f(.), f defaults Sigmoid
+            r_t = gru_graph.add_node();
+            r_t->set_name(prefix + "_rt_" + std::to_string(i));
+            r_t->set_op_type("Sigmoid");
+            *r_t->add_input() = G_r->output(0);
+            *r_t->add_output() = r_t->name();
+
+            onnx::NodeProto *RH = gru_graph.add_node();
+            RH->set_name(prefix + "_RH_" + std::to_string(i));
+            RH->set_op_type("Mul");
+            *RH->add_input() = r_t->output(0);
+            *RH->add_input() = H_t->output(0);
+            *RH->add_output() = RH->name();
+
+            onnx::NodeProto *G_h = gru_graph.add_node();
+            G_h->set_name(prefix + "_G_h_" + std::to_string(i));
+            G_h->set_op_type("Gemm");
+            attr = G_h->add_attribute();
+            attr->set_name("transB");
+            attr->set_i(1);
+            *G_h->add_input() = RH->name();  // H_(t - 1)
+            *G_h->add_input() = Rs->output(2);  // Rz
+            *G_h->add_input() = S->output(2);  // Sz
+            *G_h->add_output() = G_h->name();
+
+            // h_t = g(.), g defaults Tanh(.)
+            h_t = gru_graph.add_node();
+            h_t->set_name(prefix + "_ht_" + std::to_string(i));
+            h_t->set_op_type("Tanh");
+            *h_t->add_input() = G_h->output(0);
+            *h_t->add_output() = h_t->name();
+
+            onnx::NodeProto *NZH = gru_graph.add_node();
+            NZH->set_name(prefix + "_N_Z_H_" + std::to_string(i));
+            NZH->set_op_type("Mul");
+            *NZH->add_input() = NZ->output(0);
+            *NZH->add_input() = h_t->output(0);
+            *NZH->add_output() = NZH->name();
+
+            // H= (1-z) * H_t + z * H_(t-1)
+            H = gru_graph.add_node();
+            H->set_name(prefix + "_H_" + std::to_string(i));
+            H->set_op_type("Add");
+            *H->add_input() = NZH->output(0);
+            *H->add_input() = ZH->output(0);
+            *H->add_output() = H->name();
+        } else {
+            // z_t = f(.), f defaults Sigmoid
+            z_t = gru_graph.add_node();
+            z_t->set_name(prefix + "_zt_" + std::to_string(i));
+            z_t->set_op_type("Sigmoid");
+            *z_t->add_input() = S->output(0);
+            *z_t->add_output() = z_t->name();
+
+            onnx::NodeProto *NZ = gru_graph.add_node();
+            NZ->set_name(prefix + "_N_Z_" + std::to_string(i));
+            NZ->set_op_type("Sub");
+            *NZ->add_input() = One->output(0);
+            *NZ->add_input() = z_t->output(0);
+            *NZ->add_output() = NZ->name();
+
+            // r_t = f(.), f defaults Sigmoid
+            r_t = gru_graph.add_node();
+            r_t->set_name(prefix + "_rt_" + std::to_string(i));
+            r_t->set_op_type("Sigmoid");
+            *r_t->add_input() = S->output(1);
+            *r_t->add_output() = r_t->name();
+
+            // h_t = g(.), g defaults Tanh(.)
+            h_t = gru_graph.add_node();
+            h_t->set_name(prefix + "_rt_" + std::to_string(i));
+            h_t->set_op_type("Tanh");
+            *h_t->add_input() = S->output(2);
+            *h_t->add_output() = h_t->name();
+
+            // H = (1-z) * H_t
+            onnx::NodeProto *NZH = gru_graph.add_node();
+            NZH->set_name(prefix + "_N_Z_H_" + std::to_string(i));
+            NZH->set_op_type("Mul");
+            *NZH->add_input() = NZ->output(0);
+            *NZH->add_input() = h_t->output(0);
+            *NZH->add_output() = NZH->name();
+            H = NZH;
+        }
+
+        H_t = H;
+
+        onnx::NodeProto *Hu = gru_graph.add_node();
+        Hu->set_name(prefix + "_H_unsqueeze_" + std::to_string(i));
+        Hu->set_op_type("Unsqueeze");
+        attr = Hu->add_attribute();
+        attr->set_name("axes");
+        attr->add_ints(0);
+        *Hu->add_input() = H->output(0);
+        *Hu->add_output() = Hu->name();
+        Hs.push_back(Hu);
+    }
+
+    // Y: A tensor concating all the intermediate output values of the hidden.
+    // It has shape `[seq_length, num_directions, batch_size, hidden_size]`.
+    if (node.output_size() >= 1 && !node.output(0).empty()) {
+        // Hconcat: concat + unsqueeze
+        onnx::NodeProto *Hconcat = gru_graph.add_node();
+        Hconcat->set_name(node.output(0) + "_Concat");
+        Hconcat->set_op_type("Concat");
+        attr = Hconcat->add_attribute();
+        attr->set_name("axis");
+        attr->set_i(0);
+        for (const onnx::NodeProto *input : Hs) {
+            Hconcat->add_input(input->name());
+        }
+        Hconcat->add_output(Hconcat->name());
+        onnx::NodeProto *H = gru_graph.add_node();
+        H->set_name(node.output(1));
+        H->set_op_type("Unsqueeze");
+        attr = H->add_attribute();
+        attr->set_name("axes");
+        attr->add_ints(1);
+        H->add_input(Hconcat->output(0));
+        H->add_output(H->name());
+    }
+
+    // Y_h: The last output value of the hidden.
+    // It has shape `[num_directions, batch_size, hidden_size]`.
+    if (node.output_size() >= 2 && !node.output(1).empty()) {
+        onnx::NodeProto *Y_h = Hs.back();
+        Y_h->set_name(node.output(1));
+        Y_h->set_output(0, node.output(1));
+    }
+
+    // populate rep with inputs;
+    assert(node.input_size() == inputs.size());
+    std::unordered_map<std::string, Tensor> reps;
+    for (int i = 0; i < node.input_size(); ++i) {
+        const std::string &input_name = node.input(i);
+        const Tensor &t = inputs[i];
+        reps[input_name] = t;
+    }
+
+    Node result;
+    convert_subgraph(gru_graph, reps, result.requirements);
+
+    // extract outputs from reps;
+    result.inputs = inputs;
+    result.outputs.resize(node.output_size());
+    for (int i = 0; i < node.output_size(); ++i) {
+        if (!node.output(i).empty()) {
+            const Tensor &t = reps.at(node.output(i));
+            result.outputs[i] = t;
+        }
+    }
+    return result;
+}
+
+Node convert_rnn_node(
+    const onnx::NodeProto &node,
+    const std::vector<Tensor> &inputs) {
+    int hidden_size = 8;
+    bool input_forget = false;
+    std::string direction = "forward";
+    for (const auto &attr : node.attribute()) {
+        if (attr.name() == "hidden_size") {
+            hidden_size = attr.i();
+        } else if (attr.name() == "input_forget") {
+            input_forget = static_cast<bool>(attr.i());
+        } else if (attr.name() == "direction") {
+            direction = attr.s();
+        } else if (
+            attr.name() == "clip" || attr.name() == "activation_alpha" ||
+            attr.name() == "activation_beta" || attr.name() == "activations") {
+            throw std::domain_error(attr.name() + " not supported yet");
+        }
+    }
+
+    // TBD: handle these cases
+    if (direction != "forward") {
+        throw std::domain_error("Unsupported direction");
+    }
+    if (input_forget) {
+        throw std::domain_error("input_forget not supported yet");
+    }
+
+    const int rank = inputs[0].shape.size();
+    if (rank != 3) {
+        throw std::domain_error("Invalid rank");
+    }
+
+    const Halide::Expr dim_expr = Halide::Internal::simplify(inputs[0].shape[0]);
+    const int64_t *dim = Halide::Internal::as_const_int(dim_expr);
+    if (!dim) {
+        throw std::domain_error("Unknown number of timesteps");
+    }
+    const int num_time_steps = *dim;
+    if (num_time_steps < 1) {
+        throw std::domain_error("At least one timestep is required");
+    }
+
+    // Build an onnx graph encoding the RNN computations
+    onnx::GraphProto rnn_graph;
+    // TODO: generate unique prefixes in case there is more than 1 unnamed RNN
+    // node
+    const std::string prefix =
+        node.name().empty() ? std::string("rnn") : node.name();
+    // Split input into timesteps
+    onnx::NodeProto *split_node = rnn_graph.add_node();
+    split_node->set_name(prefix + "_split");
+    split_node->set_op_type("Split");
+    onnx::AttributeProto *attr = split_node->add_attribute();
+    attr->set_name("axis");
+    attr->set_i(0);
+    *split_node->add_input() = node.input(0);
+    for (int i = 0; i < num_time_steps; ++i) {
+        *split_node->add_output() = prefix + "_t" + std::to_string(i);
+    }
+
+    // Squeeze the first dim output the Xi, W and R tensors since we're only
+    // supporting unidirectional RNN for now
+    onnx::NodeProto *W = rnn_graph.add_node();
+    W->set_name(node.input(1) + "_squeezed");
+    W->set_op_type("Squeeze");
+    attr = W->add_attribute();
+    attr->set_name("axes");
+    attr->add_ints(0);
+    *W->add_input() = node.input(1);
+    *W->add_output() = W->name();
+
+    onnx::NodeProto *R = rnn_graph.add_node();
+    R->set_name(node.input(2) + "_squeezed");
+    R->set_op_type("Squeeze");
+    attr = R->add_attribute();
+    attr->set_name("axes");
+    attr->add_ints(0);
+    *R->add_input() = node.input(2);
+    *R->add_output() = R->name();
+
+    // Bias B, if any
+    onnx::NodeProto *B = nullptr;
+    if (inputs.size() >= 4 && !node.input(3).empty()) {
+        // Preprocess the bias tensor
+        onnx::NodeProto *Bs = rnn_graph.add_node();
+        Bs->set_name(node.input(3) + "_split");
+        Bs->set_op_type("Split");
+        attr = Bs->add_attribute();
+        attr->set_name("axis");
+        attr->set_i(1);
+        Bs->add_input(node.input(3));
+        Bs->add_output(Bs->name() + "_0");
+        Bs->add_output(Bs->name() + "_1");
+
+        B = rnn_graph.add_node();
+        B->set_name(node.input(3) + "_sum");
+        B->set_op_type("Add");
+        B->add_input(Bs->output(0));
+        B->add_input(Bs->output(1));
+        B->add_output(B->name());
+    } else {
+        B = rnn_graph.add_node();
+        B->set_name(prefix + "_zero");
+        B->set_op_type("ConstantFill");
+        attr = B->add_attribute();
+        attr->set_name("shape");
+        attr->add_ints(1);
+        B->add_output(B->name());
+    }
+
+    if (inputs.size() >= 5 && !node.input(4).empty()) {
+        throw std::domain_error("Unsupported prespecified seq_len");
+    }
+    // Initial state if any
+    onnx::NodeProto *H_t = nullptr;
+    if (inputs.size() >= 6 && !node.input(5).empty()) {
+        H_t = rnn_graph.add_node();
+        H_t->set_name(node.input(5) + "_squeezed");
+        H_t->set_op_type("Squeeze");
+        attr = H_t->add_attribute();
+        attr->set_name("axes");
+        attr->add_ints(0);
+        *H_t->add_input() = node.input(5);
+        *H_t->add_output() = H_t->name();
+    }
+    //  Ht = f(Xt*(Wi^T) + Ht-1*(Ri^T) + Wbi + Rbi); f Tanh default
+    std::vector<onnx::NodeProto *> Xt;
+    for (int i = 0; i < num_time_steps; ++i) {
+        onnx::NodeProto *Xi = rnn_graph.add_node();
+        Xi->set_name(split_node->output(i) + "_squeezed");
+        Xi->set_op_type("Squeeze");
+        attr = Xi->add_attribute();
+        attr->set_name("axes");
+        attr->add_ints(0);
+        *Xi->add_input() = split_node->output(i);
+        *Xi->add_output() = Xi->name();
+        Xt.push_back(Xi);
+    }
+
+    // Process each timestep
+    std::vector<onnx::NodeProto *> Hs;
+    for (int i = 0; i < num_time_steps; ++i) {
+        onnx::NodeProto *Xi = Xt[i];
+        onnx::NodeProto *Gi = rnn_graph.add_node();
+        // Gi = dot(x, transpose(w)) + bias
+        Gi->set_name(Xi->name() + "_gemm1_" + std::to_string(i));
+        Gi->set_op_type("Gemm");
+        attr = Gi->add_attribute();
+        attr->set_name("transB");
+        attr->set_i(1);
+        *Gi->add_input() = Xi->name();
+        *Gi->add_input() = W->name();
+        *Gi->add_input() = B->name();
+        *Gi->add_output() = Gi->name();
+
+        onnx::NodeProto *Gii = Gi;
+        if (H_t) {
+            // Gii = dot(H_t, transpose(R)) + Gi;
+            Gii = rnn_graph.add_node();
+            Gii->set_name(Xi->name() + "_gemm2_" + std::to_string(i));
+            Gii->set_op_type("Gemm");
+            attr = Gii->add_attribute();
+            attr->set_name("transB");
+            attr->set_i(1);
+            *Gii->add_input() = H_t->name();
+            *Gii->add_input() = R->name();
+            *Gii->add_input() = Gi->name();
+            *Gii->add_output() = Gii->name();
+        }
+
+        onnx::NodeProto *H = rnn_graph.add_node();
+        // activation of H, currently default: Tanh
+        H->set_name(prefix + "_H_" + std::to_string(i));
+        H->set_op_type("Tanh");
+        *H->add_input() = Gii->output(0);
+        *H->add_output() = H->name();
+
+        H_t = H;
+
+        onnx::NodeProto *Hu = rnn_graph.add_node();
+        Hu->set_name(prefix + "_H_unsqueeze_" + std::to_string(i));
+        Hu->set_op_type("Unsqueeze");
+        attr = Hu->add_attribute();
+        attr->set_name("axes");
+        attr->add_ints(0);
+        *Hu->add_input() = H->output(0);
+        *Hu->add_output() = Hu->name();
+        Hs.push_back(Hu);
+    }
+
+    // Output
+    // concat + unsqueeze
+    if (node.output_size() >= 1 && !node.output(0).empty()) {
+        onnx::NodeProto *Hconcat = rnn_graph.add_node();
+        Hconcat->set_name(node.output(0) + "_concat");
+        Hconcat->set_op_type("Concat");
+        attr = Hconcat->add_attribute();
+        attr->set_name("axis");
+        attr->set_i(0);
+        for (const onnx::NodeProto *input : Hs) {
+            Hconcat->add_input(input->name());
+        }
+        Hconcat->add_output(Hconcat->name());
+        onnx::NodeProto *H = rnn_graph.add_node();
+        H->set_name(node.output(0));
+        H->set_op_type("Unsqueeze");
+        attr = H->add_attribute();
+        attr->set_name("axes");
+        attr->add_ints(1);
+        H->add_input(Hconcat->output(0));
+        H->add_output(H->name());
+    }
+
+    if (node.output_size() >= 2 && !node.output(1).empty()) {
+        onnx::NodeProto *Y_h = Hs.back();
+        Y_h->set_name(node.output(1));
+        Y_h->set_output(0, node.output(1));
+    }
+
+    // populate rep with inputs;
+    assert(node.input_size() == inputs.size());
+    std::unordered_map<std::string, Tensor> reps;
+    for (int i = 0; i < node.input_size(); ++i) {
+        const std::string &input_name = node.input(i);
+        const Tensor &t = inputs[i];
+        reps[input_name] = t;
+    }
+    Node result;
+    convert_subgraph(rnn_graph, reps, result.requirements);
+
+    // extract outputs from reps;
+    result.inputs = inputs;
+    result.outputs.resize(node.output_size());
+    for (int i = 0; i < node.output_size(); ++i) {
+        if (!node.output(i).empty()) {
+            const Tensor &t = reps.at(node.output(i));
+            result.outputs[i] = t;
+        }
+    }
     return result;
 }
 
@@ -3017,7 +3922,7 @@ Node convert_lstm_node(
         onnx::NodeProto *Xi = Xt[i];
         onnx::NodeProto *Gi = lstm_graph.add_node();
         // Gi = dot(x, transpose(w)) + bias
-        Gi->set_name(Xi->name() + "_gemm_" + std::to_string(i));
+        Gi->set_name(Xi->name() + "_gemm1_" + std::to_string(i));
         Gi->set_op_type("Gemm");
         attr = Gi->add_attribute();
         attr->set_name("transB");
@@ -3041,7 +3946,7 @@ Node convert_lstm_node(
             *Gii->add_input() = Gi->name();
             *Gii->add_output() = Gii->name();
         }
-        // i, o, f, c = split(Gi, 4, -1)
+        // i, o, f, c = split(Gii, 4, -1)
         onnx::NodeProto *split_node = lstm_graph.add_node();
         split_node->set_name(prefix + "_split_" + std::to_string(i));
         split_node->set_op_type("Split");
@@ -3285,9 +4190,14 @@ Node convert_node(
         return convert_node(actual_node, inputs);
     }
     // Handle meta ops
-    // TODO: add support for RNN and GRU
+    if (node.op_type() == "RNN") {
+        return convert_rnn_node(node, inputs);
+    }
     if (node.op_type() == "LSTM") {
         return convert_lstm_node(node, inputs);
+    }
+    if (node.op_type() == "GRU") {
+        return convert_gru_node(node, inputs);
     }
     // Handle metadata operations
     if (node.op_type() == "Shape" || node.op_type() == "Size") {
@@ -3373,6 +4283,12 @@ Node convert_node(
     if (node.op_type() == "Shrink") {
         return convert_shrink_node(node, inputs);
     }
+    if (node.op_type() == "LRN") {
+        return convert_lrn_node(node, inputs);
+    }
+    if (node.op_type() == "IsInf") {
+        return convert_isinf_node(node, inputs);
+    }
 
     // Handle exponential linear units.
     if (node.op_type() == "Elu" || node.op_type() == "Selu" ||
@@ -3456,7 +4372,7 @@ Halide::ImageParam encode_as_image_param(
                 throw std::invalid_argument("Invalid shape for input " + input.name());
             }
             result.dim(i).set_bounds(0, dim_val);
-            result.dim(i).set_bounds_estimate(0, dim_val);
+            result.dim(i).set_estimate(0, dim_val);
             shape->push_back(static_cast<int>(dim_val));
             stride = stride * dim_val;
         } else {
@@ -3475,7 +4391,7 @@ Halide::ImageParam encode_as_image_param(
             stride = stride * shape->back();
 
             // Dimension is unknown, just make a guess.
-            result.dim(i).set_bounds_estimate(0, 1000);
+            result.dim(i).set_estimate(0, 1000);
         }
     }
 
@@ -3607,10 +4523,10 @@ Model convert_model(const onnx::ModelProto &model) {
             const int64_t *dim_value = Halide::Internal::as_const_int(dims[i]);
             if (dim_value) {
                 int dim = static_cast<int>(*dim_value);
-                f.estimate(args[i], 0, dim);
+                f.set_estimate(args[i], 0, dim);
             } else {
                 // Dimension is unknown, make a guess
-                f.estimate(args[i], 0, 1000);
+                f.set_estimate(args[i], 0, 1000);
             }
         }
         result.outputs[output.name()] = t_out;
@@ -3631,14 +4547,16 @@ Halide::Type get_halide_type(const Tensor &tensor) {
         return Halide::Int(16);
     case onnx::TensorProto_DataType_INT32:
         return Halide::Int(32);
+    case onnx::TensorProto_DataType_INT64:
+        return Halide::Int(64);
     case onnx::TensorProto_DataType_UINT8:
         return Halide::UInt(8);
     case onnx::TensorProto_DataType_UINT16:
         return Halide::UInt(16);
     case onnx::TensorProto_DataType_UINT32:
         return Halide::UInt(32);
-    case onnx::TensorProto_DataType_INT64:
-        return Halide::Int(64);
+    case onnx::TensorProto_DataType_UINT64:
+        return Halide::UInt(64);
     case onnx::TensorProto_DataType_BOOL:
         return Halide::Bool();
     default:

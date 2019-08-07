@@ -4,17 +4,19 @@
 
 #include <algorithm>
 #include <cmath>
+#include <ctime>
 #include <fstream>
 #include <iostream>
 #include <map>
 #include <random>
+#include <string>
 
+#include "ASLog.h"
+#include "CostModel.h"
 #include "HalideBuffer.h"
+#include "NetworkSize.h"
 #include "cost_model.h"
 #include "train_cost_model.h"
-
-#include "CostModel.h"
-#include "NetworkSize.h"
 
 // These are weights embedded from the raw arrays in the weights
 // dir. The embedding is done using binary2cpp.
@@ -41,6 +43,7 @@ extern "C" float weights_trunk_conv1_weight[];
 extern "C" int weights_trunk_conv1_weight_length;
 
 using namespace Halide;
+using Halide::Internal::aslog;
 
 Runtime::Buffer<float> buffer_from_file(const std::string &filename, const std::vector<int> &shape) {
     Runtime::Buffer<float> buf(shape);
@@ -52,7 +55,7 @@ Runtime::Buffer<float> buffer_from_file(const std::string &filename, const std::
     if (i.fail()) {
         auto seed = time(NULL);
         std::mt19937 rng((uint32_t) seed);
-        std::cerr << "Could not load buffer from file: " << filename << "\n Using random values with seed = " << seed << " instead.\n";
+        aslog(0) << "Could not load buffer from file: " << filename << "\n Using random values with seed = " << seed << " instead.\n";
         buf.for_each_value([&rng](float &f) {
                 f = ((float)rng()) / rng.max() - 0.5f;
             });
@@ -213,18 +216,18 @@ class DefaultCostModel : public CostModel {
             *(cost_ptrs(i)) = dst(i);
             if (std::isnan(dst(i))) {
                 any_nans = true;
-                std::cerr << "Prediction " << i << " is NaN. True runtime is " << true_runtimes(i) << "\n";
-                std::cerr << "Checking pipeline features for NaNs...\n";
+                aslog(0) << "Prediction " << i << " is NaN. True runtime is " << true_runtimes(i) << "\n";
+                aslog(0) << "Checking pipeline features for NaNs...\n";
                 pipeline_feat_queue.for_each_value([&](float f) { if (std::isnan(f)) abort(); });
-                std::cerr << "None found\n";
-                std::cerr << "Checking schedule features for NaNs...\n";
+                aslog(0) << "None found\n";
+                aslog(0) << "Checking schedule features for NaNs...\n";
                 schedule_feat_queue.for_each_value([&](float f) { if (std::isnan(f)) abort(); });
-                std::cerr << "None found\n";
-                std::cerr << "Checking network weights for NaNs...\n";
+                aslog(0) << "None found\n";
+                aslog(0) << "Checking network weights for NaNs...\n";
                 for_each_weight([&](const Runtime::Buffer<float> &buf) {
                         buf.for_each_value([&](float f) { if (std::isnan(f)) abort(); });
                     });
-                std::cerr << "None found\n";
+                aslog(0) << "None found\n";
             }
             assert(true_runtimes(i) > 0);
         }

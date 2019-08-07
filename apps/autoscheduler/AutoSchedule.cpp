@@ -27,7 +27,9 @@
   "Choose-your-own-schedule". If set to 1, lets you navigate the search tree by hand in the terminal. Whee! This is for debugging the autoscheduler.
 
   HL_FEATURE_FILE -> output
-  Write out a training sample for the selected schedule into this file. Needs to be augmented with the runtime using augment_sample before it can be used to train.
+  *** DEPRECATED *** use the 'featurization' output from Generator instead
+  Write out a training featurization for the selected schedule into this file.
+  Needs to be converted to a sample file with the runtime using featurization_to_sample before it can be used to train.
 
   HL_MACHINE_PARAMS
   An architecture description string. Used by Halide master to configure the cost model. We only use the first term. Set it to the number of cores to target.
@@ -36,7 +38,8 @@
   Set to 1 to tell Halide not to freak out if we try to unroll a loop that doesn't have a constant extent. Should generally not be necessary, but sometimes the autoscheduler's model for what will and will not turn into a constant during lowering is inaccurate, because Halide isn't perfect at constant-folding.
 
   HL_SCHEDULE_FILE
-  Write out a human-and-machine readable block of scheduling source code for the selected schedule into this file.
+    *** DEPRECATED *** use the 'schedule' output from Generator instead
+    Write out a human-and-machine readable block of scheduling source code for the selected schedule into this file.
 
   HL_RANDOM_DROPOUT
   percent chance of accepting each state in the beam. Normalized by the number of decisions made, so 5 would be there's a 5 percent chance of never rejecting any states.
@@ -53,6 +56,10 @@
   HL_NO_SUBTILING
   If set to 1, limits the search space to that of Mullapudi et al.
 
+  HL_DEBUG_AUTOSCHEDULE
+  If set, is used for the debug log level for auto-schedule generation (overriding the
+  value of HL_DEBUG_CODEGEN, if any).
+
   TODO: expose these settings by adding some means to pass args to
   generator plugins instead of environment vars.
 */
@@ -68,6 +75,7 @@
 #include <unordered_set>
 
 #include "Halide.h"
+#include "ASLog.h"
 #include "CostModel.h"
 #include "Featurization.h"
 #include "FunctionDAG.h"
@@ -75,6 +83,11 @@
 #include "Errors.h"
 #include "NetworkSize.h"
 #include "AutoSchedule.h"
+
+#ifdef _WIN32
+#include <io.h>
+#define _isatty isatty;
+#endif
 
 namespace Halide {
 namespace Internal {
@@ -1202,19 +1215,19 @@ struct LoopNest {
     // Recursively print a loop nest representation to stderr
     void dump(string prefix, const LoopNest *parent) const {
         if (!is_root()) {
-            debug(0) << prefix << node->func.name();
+            aslog(0) << prefix << node->func.name();
             prefix += " ";
 
             for (size_t i = 0; i < size.size(); i++) {
-                debug(0) << " " << size[i];
+                aslog(0) << " " << size[i];
                 // The vectorized loop gets a 'v' suffix
                 if (innermost && i == (size_t) vectorized_loop_index) {
-                    debug(0) << 'v';
+                    aslog(0) << 'v';
                 }
                 // Loops that have a known constant size get a
                 // 'c'. Useful for knowing what we can unroll.
                 if (parent->get_bounds(node)->loops(stage->index, i).constant_extent()) {
-                    debug(0) << 'c';
+                    aslog(0) << 'c';
                 }
             }
 
@@ -1223,31 +1236,31 @@ struct LoopNest {
             const auto &bounds = get_bounds(node);
             for (size_t i = 0; i < size.size(); i++) {
                 const auto &p = bounds->loops(stage->index, i);
-                debug(0) << " [" << p.first << ", " << p.second << "]";
+                aslog(0) << " [" << p.first << ", " << p.second << "]";
             }
             */
 
-            debug(0) << " (" << vectorized_loop_index << ", " << vector_dim << ")";
+            aslog(0) << " (" << vectorized_loop_index << ", " << vector_dim << ")";
         }
 
         if (tileable) {
-            debug(0) << " t";
+            aslog(0) << " t";
         }
         if (innermost) {
-            debug(0) << " *\n";
+            aslog(0) << " *\n";
         } else if (parallel) {
-            debug(0) << " p\n";
+            aslog(0) << " p\n";
         } else {
-            debug(0) << '\n';
+            aslog(0) << '\n';
         }
         for (auto p : store_at) {
-            debug(0) << prefix << "realize: " << p->func.name() << '\n';
+            aslog(0) << prefix << "realize: " << p->func.name() << '\n';
         }
         for (size_t i = children.size(); i > 0; i--) {
             children[i-1]->dump(prefix, this);
         }
         for (auto it = inlined.begin(); it != inlined.end(); it++) {
-            debug(0) << prefix << "inlined: " << it.key()->func.name() << " " << it.value() << '\n';
+            aslog(0) << prefix << "inlined: " << it.key()->func.name() << " " << it.value() << '\n';
         }
     }
 
@@ -1588,7 +1601,7 @@ struct LoopNest {
             auto tilings = generate_tilings(size, (int)(size.size() - 1), 2, !in_realization);
 
             if (tilings.size() > 10000) {
-                debug(0) << "Warning: lots of tilings: " << tilings.size() << "\n";
+                aslog(0) << "Warning: lots of tilings: " << tilings.size() << "\n";
             }
 
             for (auto t : tilings) {
@@ -2220,11 +2233,10 @@ struct State {
         }
     }
 
-    void save_featurization(const FunctionDAG &dag, const MachineParams &params, const std::string &feature_file) {
+    void save_featurization(const FunctionDAG &dag, const MachineParams &params, std::ostream &out) {
         StageMap<ScheduleFeatures> features;
         compute_featurization(dag, params, &features);
 
-        std::ofstream binfile(feature_file, std::ios::binary | std::ios_base::trunc);
         for (const auto &n : dag.nodes) {
             if (n.is_input) continue;
             for (size_t stage_idx = n.stages.size(); stage_idx > 0; stage_idx--) {
@@ -2243,11 +2255,9 @@ struct State {
                     buf[i + num_schedule_features] = s.features[i];
                 }
 
-                binfile.write((const char *)buf, sizeof(buf));
+                out.write((const char *)buf, sizeof(buf));
             }
         }
-        binfile.close();
-        internal_assert(!binfile.fail()) << "Failed to write " << feature_file;
     }
 
     bool calculate_cost(const FunctionDAG &dag, const MachineParams &params, CostModel *cost_model, bool verbose = false) {
@@ -2260,7 +2270,7 @@ struct State {
             for (auto it = features.begin(); it != features.end(); it++) {
                 auto &stage = *(it.key());
                 const auto &feat = it.value();
-                debug(0) << "Schedule features for " << stage.stage.name() << "\n";
+                aslog(0) << "Schedule features for " << stage.stage.name() << "\n";
                 feat.dump();
             }
         }
@@ -2376,7 +2386,7 @@ struct State {
             // We don't need to schedule nodes that represent inputs,
             // and there are no other decisions to be made about them
             // at this time.
-            // debug(0) << "Skipping over scheduling input node: " << node->func.name() << "\n";
+            // aslog(0) << "Skipping over scheduling input node: " << node->func.name() << "\n";
             auto child = make_child();
             child->num_decisions_made++;
             accept_child(std::move(child));
@@ -2384,14 +2394,14 @@ struct State {
         }
 
         if (!node->outgoing_edges.empty() && !root->calls(node)) {
-            debug(0) << "In state:\n";
+            aslog(0) << "In state:\n";
             dump();
-            debug(0) << node->func.name() << " is consumed by:\n";
+            aslog(0) << node->func.name() << " is consumed by:\n";
             for (const auto *e : node->outgoing_edges) {
-                debug(0) << e->consumer->name << "\n";
-                debug(0) << "Which in turn consumes:\n";
+                aslog(0) << e->consumer->name << "\n";
+                aslog(0) << "Which in turn consumes:\n";
                 for (const auto *e2 : e->consumer->incoming_edges) {
-                    debug(0) << "  " << e2->producer->func.name() << "\n";
+                    aslog(0) << "  " << e2->producer->func.name() << "\n";
                 }
             }
             internal_error << "Pipeline so far doesn't use next Func: " << node->func.name() << '\n';
@@ -2627,7 +2637,7 @@ struct State {
 
 
         if (num_children == 0) {
-            debug(0) << "Warning: Found no legal way to schedule "
+            aslog(0) << "Warning: Found no legal way to schedule "
                      << node->func.name() << " in the following State:\n";
             dump();
             // All our children died. Maybe other states have had
@@ -2637,9 +2647,9 @@ struct State {
     }
 
     void dump() const {
-        debug(0) << "State with cost " << cost << ":\n";
+        aslog(0) << "State with cost " << cost << ":\n";
         root->dump("", nullptr);
-        debug(0) << schedule_source;
+        aslog(0) << schedule_source;
     }
 
     string schedule_source;
@@ -2657,7 +2667,7 @@ struct State {
         int i = (int)(dag.nodes.size() - 1);
         for (const auto &n : dag.nodes) {
             if (!n.is_input) {
-                src << "Func " << n.func.name() << " = get_pipeline().get_func(" << i << ");\n";
+                src << "Func " << n.func.name() << " = pipeline.get_func(" << i << ");\n";
             }
             i--;
         }
@@ -2923,19 +2933,19 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
         const int bits = 11;
         if (counter & ((1 << bits) - 1)) return;
         progress *= 78;
-        debug(0) << '[';
+        aslog(0) << '[';
         for (int j = 0; j < 78; j++) {
             if (j < progress) {
-                debug(0) << '.';
+                aslog(0) << '.';
             } else if (j - 1 < progress) {
-                debug(0) << "/-\\|"[(counter >> bits) % 4];
+                aslog(0) << "/-\\|"[(counter >> bits) % 4];
             } else {
-                debug(0) << ' ';
+                aslog(0) << ' ';
             }
         }
-        debug(0) << ']';
+        aslog(0) << ']';
         for (int j = 0; j < 80; j++) {
-            debug(0) << '\b';
+            aslog(0) << '\b';
         }
     };
 
@@ -2944,7 +2954,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
     std::function<void(IntrusivePtr<State> &&)> enqueue_new_children =
         [&](IntrusivePtr<State> &&s) {
 
-        // debug(0) << "\n** Generated child: ";
+        // aslog(0) << "\n** Generated child: ";
         // s->dump();
         // s->calculate_cost(dag, params, nullptr, true);
 
@@ -2989,7 +2999,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
         }
 
         if ((int)pending.size() > beam_size * 10000) {
-            debug(0) << "Warning: Huge number of states generated (" << pending.size() << ").\n";
+            aslog(0) << "Warning: Huge number of states generated (" << pending.size() << ").\n";
         }
 
         expanded = 0;
@@ -3085,11 +3095,11 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
             // The user has set HL_CYOS, and wants to navigate the
             // search space manually.  Discard everything in the queue
             // except for the user-chosen option.
-            debug(0) << "\n--------------------\n";
-            debug(0) << "Select a schedule:\n";
+            aslog(0) << "\n--------------------\n";
+            aslog(0) << "Select a schedule:\n";
             for (int choice_label = (int)q.size() - 1; choice_label >= 0; choice_label--) {
                 auto state = q[choice_label];
-                debug(0) << "\n[" << choice_label << "]:\n";
+                aslog(0) << "\n[" << choice_label << "]:\n";
                 state->dump();
                 state->calculate_cost(dag, params, cost_model, true);
             }
@@ -3098,7 +3108,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
             // Select next partial schedule to expand.
             int selection = -1;
             while (selection < 0 || selection >= (int)q.size()) {
-                debug(0) << "\nEnter selection: ";
+                aslog(0) << "\nEnter selection: ";
                 std::cin >> selection;
             }
 
@@ -3141,7 +3151,7 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
     for (int i = 0; i < num_passes; i++) {
         auto pass = optimal_schedule_pass(dag, outputs, params, cost_model, rng, beam_size, i, num_passes, permitted_hashes);
 
-        debug(0) << "\nPass " << i << " result:\n";
+        aslog(0) << "\nPass " << i << " result:\n";
         pass->dump();
 
         if (i == 0 || pass->cost < best->cost) {
@@ -3151,15 +3161,16 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
         }
     }
 
-    debug(0) << "Best cost: " << best->cost << "\n";
+    aslog(0) << "Best cost: " << best->cost << "\n";
 
     return best;
 }
 
 // The main entrypoint to generate a schedule for a pipeline.
-std::string generate_schedule(const std::vector<Function> &outputs,
+void generate_schedule(const std::vector<Function> &outputs,
                               const Target &target,
-                              const MachineParams &params) {
+                              const MachineParams &params,
+                              AutoSchedulerResults *auto_scheduler_results) {
     // Start a timer
     HALIDE_TIC;
 
@@ -3172,7 +3183,7 @@ std::string generate_schedule(const std::vector<Function> &outputs,
     if (!seed_str.empty()) {
         seed = atoi(seed_str.c_str());
     }
-    debug(0) << "Dropout seed = " << seed << '\n';
+    aslog(0) << "Dropout seed = " << seed << '\n';
     std::mt19937 rng((uint32_t) seed);
 
     // Get the beam size
@@ -3209,10 +3220,10 @@ std::string generate_schedule(const std::vector<Function> &outputs,
 
     HALIDE_TOC;
 
-    debug(0) << "Cost evaluated this many times: " << State::cost_calculations << '\n';
+    aslog(0) << "Cost evaluated this many times: " << State::cost_calculations << '\n';
 
     // Dump the schedule found
-    debug(0) << "** Optimal schedule:\n";
+    aslog(0) << "** Optimal schedule:\n";
 
     // Just to get the debugging prints to fire
     optimal->calculate_cost(dag, params, cost_model.get(), true);
@@ -3225,7 +3236,8 @@ std::string generate_schedule(const std::vector<Function> &outputs,
 
     string schedule_file = get_env_variable("HL_SCHEDULE_FILE");
     if (!schedule_file.empty()) {
-        debug(0) << "Writing schedule to " << schedule_file << "...\n";
+        user_warning << "HL_SCHEDULE_FILE is deprecated; use the schedule output from Generator instead\n";
+        aslog(0) << "Writing schedule to " << schedule_file << "...\n";
         std::ofstream f(schedule_file);
         f << "// --- BEGIN machine-generated schedule\n"
           << optimal->schedule_source
@@ -3238,11 +3250,23 @@ std::string generate_schedule(const std::vector<Function> &outputs,
     // training data (once we've benchmarked it).
     string feature_file = get_env_variable("HL_FEATURE_FILE");
     if (!feature_file.empty()) {
-        optimal->save_featurization(dag, params, feature_file);
+        user_warning << "HL_FEATURE_FILE is deprecated; use the featurization output from Generator instead\n";
+        std::ofstream binfile(feature_file, std::ios::binary | std::ios_base::trunc);
+        optimal->save_featurization(dag, params, binfile);
+        binfile.close();
+        internal_assert(!binfile.fail()) << "Failed to write " << feature_file;
     }
 
-    // Return the schedule as a valid Halide source.
-    return optimal->schedule_source;
+    if (auto_scheduler_results) {
+        auto_scheduler_results->scheduler_name = "apps/autoscheduler/AutoSchedule";  // TODO: find a better name (https://github.com/halide/Halide/issues/4057)
+        auto_scheduler_results->schedule_source = optimal->schedule_source;
+        {
+            std::ostringstream out;
+            optimal->save_featurization(dag, params, out);
+            auto_scheduler_results->featurization.resize(out.str().size());
+            memcpy(auto_scheduler_results->featurization.data(), out.str().data(), out.str().size());
+        }
+    }
 }
 
 // Halide uses a plugin architecture for registering custom
@@ -3250,16 +3274,16 @@ std::string generate_schedule(const std::vector<Function> &outputs,
 // constructor.
 struct RegisterAutoscheduler {
     RegisterAutoscheduler() {
-        debug(0) << "Registering autoscheduler...\n";
+        aslog(0) << "Registering autoscheduler...\n";
         Pipeline::set_custom_auto_scheduler(*this);
     }
 
-    string operator()(Pipeline p, const Target &target, const MachineParams &params) {
+    void operator()(Pipeline p, const Target &target, const MachineParams &params, AutoSchedulerResults *results) {
         std::vector<Function> outputs;
         for (Func f : p.outputs()) {
             outputs.push_back(f.function());
         }
-        return Autoscheduler::generate_schedule(outputs, target, params);
+        Autoscheduler::generate_schedule(outputs, target, params, results);
     }
 } register_auto_scheduler;
 

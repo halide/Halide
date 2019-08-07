@@ -355,6 +355,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"trace_loads", Target::TraceLoads},
     {"trace_stores", Target::TraceStores},
     {"trace_realizations", Target::TraceRealizations},
+    {"trace_pipeline", Target::TracePipeline},
     {"d3d12compute", Target::D3D12Compute},
     {"strict_float", Target::StrictFloat},
     {"legacy_buffer_wrappers", Target::LegacyBufferWrappers},
@@ -576,6 +577,16 @@ bool Target::validate_target_string(const std::string &s) {
     return merge_string(t, s);
 }
 
+std::string Target::feature_name(Target::Feature feature) {
+    for (const auto &feature_entry : feature_name_map) {
+        if (feature == feature_entry.second) {
+            return feature_entry.first;
+        }
+    }
+    internal_assert(false);
+    return "";
+}
+
 std::string Target::to_string() const {
     string result;
     for (const auto &arch_entry : arch_name_map) {
@@ -625,7 +636,10 @@ bool Target::supported() const {
 #if !defined(WITH_HEXAGON)
     bad |= arch == Target::Hexagon;
 #endif
-#if !defined(WITH_WEBASSEMBLY)
+#if !defined(WITH_WEBASSEMBLY) || LLVM_VERSION < 90
+    // LLVM8 supports wasm, but there are fixes and improvements
+    // in trunk that may not be in 8 (or that we haven't tested with),
+    // so, for now, declare that wasm with LLVM < 9.0 is unsupported.
     bad |= arch == Target::WebAssembly;
 #endif
 #if !defined(WITH_RISCV)
@@ -645,12 +659,6 @@ bool Target::supported() const {
 #endif
 #if !defined(WITH_D3D12)
     bad |= has_feature(Target::D3D12Compute);
-#endif
-#if defined(WITH_WEBASSEMBLY) && LLVM_VERSION < 90
-    // LLVM8 supports wasm, but there are fixes and improvements
-    // in trunk that may not be in 8 (or that we haven't tested with),
-    // so, for now, declare that wasm with LLVM < 9.0 is unsupported.
-    bad = true;
 #endif
     return !bad;
 }
