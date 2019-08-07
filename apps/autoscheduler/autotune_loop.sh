@@ -124,7 +124,7 @@ make_sample() {
         beam=1
     fi
 
-    HL_SHARED_MEMORY_LIMIT=48
+    local -r shared_memory_limit=48
 
     echo "Compiling HL_SEED=${SEED} ${EXTRA_GENERATOR_ARGS}"
 
@@ -135,6 +135,7 @@ make_sample() {
         HL_WEIGHTS_DIR=${WEIGHTS} \
         HL_RANDOM_DROPOUT=${dropout} \
         HL_BEAM_SIZE=${beam} \
+        HL_SHARED_MEMORY_LIMIT=${shared_memory_limit} \
         HL_MACHINE_PARAMS=${HL_MACHINE_PARAMS} \
         ${TIMEOUT_CMD} -k ${COMPILATION_TIMEOUT} ${COMPILATION_TIMEOUT} \
         ${GENERATOR} \
