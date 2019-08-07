@@ -496,33 +496,32 @@ struct GlobalMemInfo {
     }
 
     double coalesce_efficiency() const {
-        double stride = average_stride();
-        if (stride == 0) {
-            return 1;
-        }
-        constexpr double min_coalesce_efficiency = 1.0 / 32.0;
         constexpr double max_coalesce_efficiency = 1.0;
-        return std::max(min_coalesce_efficiency, std::min(max_coalesce_efficiency, 1.0 / stride));
-    }
 
-    double average_stride() const {
-        if (num_strides == 0) {
-            return 32.0;
+        if (num_coalesce_entries == 0) {
+            return max_coalesce_efficiency;
         }
 
-        return total_strides / num_strides;
+        return total_coalesce_efficiency / num_coalesce_entries;
     }
 
     void add_access_info(double required_accesses, double min_accesses, double stride) {
         total_required_accesses += required_accesses;
         total_min_accesses += min_accesses;
-        total_strides += std::min(32.0, stride);
-        num_strides += 1;
+
+        constexpr double max_coalesce_efficiency = 1.0;
+        if (stride == 0) {
+            total_coalesce_efficiency += max_coalesce_efficiency;
+        } else {
+            total_coalesce_efficiency += max_coalesce_efficiency / std::min(32.0, stride);
+        }
+
+        ++num_coalesce_entries;
     }
 
 private:
-    int num_strides = 0;
-    double total_strides = 0;
+    int num_coalesce_entries = 0;
+    double total_coalesce_efficiency = 0;
     double total_required_accesses = 0;
     double total_min_accesses = 0;
 };
@@ -983,11 +982,12 @@ struct LoopNest {
 
     bool exceeds_serial_extents_limit(bool in_threads_loop) const {
         if (gpu_label == serial && in_threads_loop) {
+            int64_t serial_loop_extents = 1;
             for (const auto s : size) {
-                if (s > 8) {
-                    return true;
-                }
+                serial_loop_extents *= s;
             }
+
+            return serial_loop_extents > 16;
         }
 
         for (const auto& c : children) {
@@ -1228,7 +1228,7 @@ struct LoopNest {
         stride = std::abs(stride);
         stride *= words_per_access;
 
-        // If the stride is larger than 8 words (32 bits), it is guaranteed to
+        // If the stride is larger than 8 words (32 bytes), it is guaranteed to
         // traverse at least one segment each iteration. Any stride larger than
         // 2 segments will just traverse empty segments so we reduce it here to
         // avoid potential overflow below
@@ -1256,7 +1256,7 @@ struct LoopNest {
             }
         });
 
-        global_mem_info.add_access_info(serial_loop_extents * num_accesses[0], serial_loop_extents * num_accesses[0], stride);
+        global_mem_info.add_access_info(serial_loop_extents * num_accesses[0], serial_loop_extents * num_accesses[1], stride);
     }
 
     GlobalMemInfo compute_global_mem_store_features(const LoadJacobian& jac, int consumer_innermost_dim, const FunctionDAG::Node* node, const Bound& consumer_store_bounds, const ThreadInfo& thread_info, double serial_loop_extents) const {
@@ -1304,17 +1304,15 @@ struct LoopNest {
         int min_required_accesses = serial_loop_extents_and_load_count * thread_info.num_threads;
         int min_accesses = min_required_accesses;
         double stride = 32.0;
+        global_mem_info.add_access_info(min_required_accesses, min_accesses, stride);
+
         for (int i = 0; i < node->dimensions; i++) {
             GlobalMemInfo info;
             compute_num_global_mem_accesses_per_block(jac, node, producer_store_bounds, thread_info, i, serial_loop_extents_and_load_count, info);
             if (info.required_accesses() < min_required_accesses) {
-                min_required_accesses = info.required_accesses();
-                min_accesses = info.min_accesses();
-                stride = info.average_stride();
+                global_mem_info = info;
             }
         }
-
-        global_mem_info.add_access_info(min_required_accesses, min_accesses, stride);
     }
 
     // Assumes block, serial, thread or block, thread nesting

@@ -39,10 +39,11 @@ else
     exit
 fi
 
+BASE_DIR=${DIR}
 if [[ $EXTRA_GENERATOR_ARGS_ID -ge 0 ]]; then
-    DIR=${DIR}/batch_${BATCH_ID}_${EXTRA_GENERATOR_ARGS_ID}/${SAMPLE_ID}
+    DIR=${BASE_DIR}/batch_${BATCH_ID}_${EXTRA_GENERATOR_ARGS_ID}/${SAMPLE_ID}
 else
-    DIR=${DIR}/batch_${BATCH_ID}/${SAMPLE_ID}
+    DIR=${BASE_DIR}/batch_${BATCH_ID}/${SAMPLE_ID}
 fi
 
 if [[ ! -d $DIR ]]; then
@@ -62,7 +63,9 @@ else
     CMD=$(cat ${COMMAND_FILE})
 fi
 
+pushd ${BASE_DIR}/..
 echo "Running command in: ${COMMAND_FILE}"
 echo ${CMD}
 eval $CMD
+popd
 
