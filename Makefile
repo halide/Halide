@@ -1936,6 +1936,12 @@ TEST_APPS=\
 	stencil_chain \
 	wavelet
 
+# TODO: apps/autoscheduler doesn't yet build properly for MinGW
+# (see https://github.com/halide/Halide/issues/4069)
+ifneq ($(OS), Windows_NT)
+	TEST_APPS += autoscheduler
+endif
+
 .PHONY: test_apps
 test_apps: distrib
 	@for APP in $(TEST_APPS); do \

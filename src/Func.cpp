@@ -1839,6 +1839,7 @@ Func get_wrapper(Function wrapped_fn, string wrapper_name, const vector<Func> &f
     // have any wrappers. Otherwise, throw an error. If 'fs' is empty, then
     // it is a global wrapper.
     const map<string, FunctionPtr> &wrappers = wrapped_fn.wrappers();
+    wrapper_name += ("$" + std::to_string(wrappers.size()));
     const auto &iter = fs.empty() ? wrappers.find("") : wrappers.find(fs[0].name());
     if (iter == wrappers.end()) {
         // Make sure the other Funcs also don't have any wrappers
