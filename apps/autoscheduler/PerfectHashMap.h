@@ -2,6 +2,7 @@
 #define PERFECT_HASH_MAP_H
 
 #include <algorithm>
+#include <iostream>
 #include <vector>
 
 // Avoid a dependence on libHalide by defining a local variant we can use
