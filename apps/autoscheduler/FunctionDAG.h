@@ -133,7 +133,14 @@ public:
             // The producer is scalar, so all strides are zero.
             return {true, 0, 1};
         }
-        return coeffs[producer_storage_dim][consumer_loop_dim];
+        internal_assert(producer_storage_dim < coeffs.size());
+        const auto &p = coeffs[producer_storage_dim];
+        if (p.empty()) {
+            // The consumer is scalar, so all strides are zero.
+            return {true, 0, 1};
+        }
+        internal_assert(consumer_loop_dim < p.size());
+        return p[consumer_loop_dim];
     }
 
     // To avoid redundantly re-recording copies of the same
