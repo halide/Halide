@@ -2,9 +2,28 @@
 #define PERFECT_HASH_MAP_H
 
 #include <algorithm>
+#include <iostream>
 #include <vector>
 
-#include "Errors.h"
+// Avoid a dependence on libHalide by defining a local variant we can use
+struct PerfectHashMapAsserter {
+    const bool c;
+
+    PerfectHashMapAsserter(bool c) : c(c) {}
+
+    template<typename T>
+    PerfectHashMapAsserter &operator<<(T &&t) {
+        if (!c) {
+            std::cerr << t;
+        }
+        return *this;
+    }
+    ~PerfectHashMapAsserter() {
+        if (!c) {
+            exit(-1);
+        }
+    }
+};
 
 // A specialized hash map used in the autoscheduler. It can only grow,
 // and it requires a perfect hash in the form of "id" and "max_id"
@@ -13,8 +32,9 @@
 // think that might be happening, uncomment the assertions below for
 // some extra checking.
 
-template<typename K, typename T, int max_small_size = 4>
+template<typename K, typename T, int max_small_size = 4, typename phm_assert = PerfectHashMapAsserter>
 class PerfectHashMap {
+
     using storage_type = std::vector<std::pair<const K *, T>>;
 
     storage_type storage;
@@ -25,7 +45,7 @@ class PerfectHashMap {
     // to allow for bounds checks when debugging this.
     std::pair<const K *, T> &storage_bucket(int i) {
         /*
-        internal_assert(i >= 0 && i < (int)storage.size())
+        phm_assert(i >= 0 && i < (int)storage.size())
             << "Out of bounds access: " << i << " " << storage.size() << "\n";
         */
         return storage[i];
@@ -33,7 +53,7 @@ class PerfectHashMap {
 
     const std::pair<const K *, T> &storage_bucket(int i) const {
         /*
-        internal_assert(i >= 0 && i < (int)storage.size())
+        phm_assert(i >= 0 && i < (int)storage.size())
             << "Out of bounds access: " << i << " " << storage.size() << "\n";
         */
         return storage[i];
@@ -56,7 +76,7 @@ class PerfectHashMap {
     }
 
     void upgrade_from_small_to_large(int n) {
-        internal_assert(occupied <= max_small_size) << occupied << " " << max_small_size << "\n";
+        phm_assert(occupied <= max_small_size) << occupied << " " << max_small_size << "\n";
         storage_type tmp(n);
         state = Large;
         tmp.swap(storage);
@@ -77,12 +97,12 @@ class PerfectHashMap {
     }
 
     const T &get_empty(const K *n) const {
-        internal_error << "Calling get on an empty PerfectHashMap";
+        phm_assert(0) << "Calling get on an empty PerfectHashMap";
         return unreachable_value();
     }
 
     T &get_empty(const K *n) {
-        internal_error << "Calling get on an empty PerfectHashMap";
+        phm_assert(0) << "Calling get on an empty PerfectHashMap";
         return unreachable_value();
     }
 
@@ -180,9 +200,9 @@ class PerfectHashMap {
 
     void check_key(const K *n) const {
         /*
-        internal_assert(n->id >= 0 && n->id < n->max_id)
+        phm_assert(n->id >= 0 && n->id < n->max_id)
             << "Invalid hash key: " << n->id << " " << n->max_id << "\n";
-        internal_assert(state != Large || (int)storage.size() == n->max_id)
+        phm_assert(state != Large || (int)storage.size() == n->max_id)
             << "Inconsistent key count: " << n->max_id << " vs " << storage.size() << "\n";
         */
     }
@@ -343,7 +363,7 @@ public:
         it.iter = storage.data();
         it.end = it.iter + storage.size();
         if (it.key() == nullptr) it++;
-        internal_assert(it.iter == it.end || it.key());
+        phm_assert(it.iter == it.end || it.key());
         return it;
     }
 
@@ -359,7 +379,7 @@ public:
         it.iter = storage.data();
         it.end = it.iter + storage.size();
         if (it.key() == nullptr) it++;
-        internal_assert(it.iter == it.end || it.key());
+        phm_assert(it.iter == it.end || it.key());
         return it;
     }
 
