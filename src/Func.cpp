@@ -2009,7 +2009,7 @@ Func &Func::allow_race_conditions() {
 }
 
 Func &Func::atomic(bool override_associativity_test) {
-    Stage(func, func.definition(), 0, args()).atomic(override_associativity_test);
+    Stage(func, func.definition(), 0).atomic(override_associativity_test);
     return *this;
 }
 
