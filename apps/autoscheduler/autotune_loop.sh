@@ -21,7 +21,7 @@ HALIDE_DISTRIB_PATH=${6}
 # Read the generator-arg sets into an array. Each set is delimited
 # by space; multiple values within each set are are delimited with ;
 # e.g. "set1arg1=1;set1arg2=foo set2=bar set3arg1=3.14;set4arg2=42"
-if [ $# -ge 6 ]; then
+if [ $# -ge 7 ]; then
     IFS=' ' read -r -a GENERATOR_ARGS_SETS_ARRAY <<< "${7}"
 else
     declare -a GENERATOR_ARGS_SETS_ARRAY=
