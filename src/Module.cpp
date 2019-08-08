@@ -251,8 +251,6 @@ $NAMESPACECLOSE$
     // certainly irrelevant to scheduling issues, to make for easier reading
     const Target::Feature irrelevant_features[] = {
         Target::CPlusPlusMangling,
-        Target::DisableLLVMLoopVectorize,
-        Target::DisableLLVMLoopUnroll,
         Target::LegacyBufferWrappers,
         Target::NoRuntime,
         Target::UserContext,
