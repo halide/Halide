@@ -80,8 +80,7 @@ struct Test {
             .with_feature(Target::NoBoundsQuery)
             .with_feature(Target::NoAsserts)
             .with_feature(Target::NoRuntime)
-            .with_feature(Target::DisableLLVMLoopUnroll)
-            .with_feature(Target::DisableLLVMLoopVectorize);
+            .with_feature(Target::DisableLLVMLoopOpt);
         // We only test the skylake variant of avx512 here
         use_avx512 = (target.has_feature(Target::AVX512_Cannonlake) ||
                       target.has_feature(Target::AVX512_Skylake));

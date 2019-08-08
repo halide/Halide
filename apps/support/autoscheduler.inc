@@ -71,7 +71,7 @@ $(AUTOSCHED_BIN)/train_cost_model: $(AUTOSCHED_SRC)/train_cost_model.cpp \
 
 $(AUTOSCHED_BIN)/featurization_to_sample: $(AUTOSCHED_SRC)/featurization_to_sample.cpp
 	@mkdir -p $(@D)
-	$(CXX) $< $(OPTIMIZE) -o $@
+	$(CXX) $(CXXFLAGS) $< $(OPTIMIZE) -o $@
 
 
 # This is the value that machine_params defaults to if no custom value is specified;

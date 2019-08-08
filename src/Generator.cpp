@@ -130,7 +130,7 @@ Outputs compute_outputs(const Target &target,
         }
     }
     if (options.emit_schedule) {
-        output_files.schedule_name = base_path + get_extension(".schedule", options);
+        output_files.schedule_name = base_path + get_extension(".schedule.h", options);
     }
     if (options.emit_featurization) {
         output_files.featurization_name = base_path + get_extension(".featurization", options);
@@ -1492,11 +1492,11 @@ Pipeline GeneratorBase::get_pipeline() {
 
 Module GeneratorBase::build_module(const std::string &function_name,
                                    const LinkageType linkage_type) {
-    AutoSchedulerResults auto_schedule_result;
+    AutoSchedulerResults auto_schedule_results;
     call_configure();
     Pipeline pipeline = build_pipeline();
     if (get_auto_schedule()) {
-        auto_schedule_result = pipeline.auto_schedule(get_target(), get_machine_params());
+        auto_schedule_results = pipeline.auto_schedule(get_target(), get_machine_params());
     }
 
     GeneratorParamInfo &pi = param_info();
@@ -1526,8 +1526,7 @@ Module GeneratorBase::build_module(const std::string &function_name,
         }
     }
 
-    result.set_auto_schedule(auto_schedule_result.schedule_source);
-    result.set_featurization(auto_schedule_result.featurization);
+    result.set_auto_scheduler_results(auto_schedule_results);
 
     return result;
 }

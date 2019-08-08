@@ -60,9 +60,9 @@ else
     echo Copying starting weights from ${START_WEIGHTS_DIR} to ${WEIGHTS}
 fi
 
-# We could add these unconditionally, but it's easier to wade thru
+# We could add this unconditionally, but it's easier to wade thru
 # results if we only add if needed
-for F in disable_llvm_loop_unroll disable_llvm_loop_vectorize; do
+for F in disable_llvm_loop_opt; do
     if [[ ! ${HL_TARGET} =~ .*${F}.* ]]; then
         HL_TARGET="${HL_TARGET}-${F}"
     fi
@@ -119,14 +119,17 @@ make_featurization() {
           2> ${D}/compile_log.txt || echo "Compilation failed or timed out for ${D}"
 
 
+    # We don't need image I/O for this purpose,
+    # so leave out libpng and libjpeg
     c++ \
         -std=c++11 \
-        -I ../../include \
-        ../../tools/RunGenMain.cpp \
+        -I ${HALIDE_DISTRIB_PATH}/include \
+        ${HALIDE_DISTRIB_PATH}/tools/RunGenMain.cpp \
         ${D}/*.registration.cpp \
         ${D}/*.a \
         -o ${D}/bench \
-        -ljpeg -ldl -lpthread -lz -lpng
+        -DHALIDE_NO_PNG -DHALIDE_NO_JPEG \
+        -ldl -lpthread
 }
 
 # Benchmark one of the random samples
