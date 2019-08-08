@@ -1198,8 +1198,8 @@ void CodeGen_LLVM::optimize_module() {
 // #if LLVM_VERSION >= 90
 #if 0
     PipelineTuningOptions pto;
-    pto.LoopInterleaving = !get_target().has_feature(Target::DisableLLVMLoopUnroll);
-    pto.LoopVectorization = !get_target().has_feature(Target::DisableLLVMLoopVectorize);
+    pto.LoopInterleaving = !get_target().has_feature(Target::DisableLLVMLoopOpt);
+    pto.LoopVectorization = !get_target().has_feature(Target::DisableLLVMLoopOpt);
     pto.LoopUnrolling = pto.LoopInterleaving;
     // Clear ScEv info for all loops. Certain Halide applications spend a very
     // long time compiling in forgetLoop, and prefer to forget everything
@@ -1319,8 +1319,8 @@ void CodeGen_LLVM::optimize_module() {
     PassManagerBuilder b;
     b.OptLevel = 3;
     b.Inliner = createFunctionInliningPass(b.OptLevel, 0, false);
-    b.LoopVectorize = !get_target().has_feature(Target::DisableLLVMLoopVectorize);
-    b.DisableUnrollLoops = get_target().has_feature(Target::DisableLLVMLoopUnroll);
+    b.LoopVectorize = !get_target().has_feature(Target::DisableLLVMLoopOpt);
+    b.DisableUnrollLoops = get_target().has_feature(Target::DisableLLVMLoopOpt);
     b.SLPVectorize = true;  // Note: SLP vectorization has no analogue in the Halide scheduling model
 #if LLVM_VERSION >= 90
     // Clear ScEv info for all loops. Certain Halide applications spend a very
