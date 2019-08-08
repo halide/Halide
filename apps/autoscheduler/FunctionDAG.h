@@ -5,15 +5,16 @@
 #ifndef FUNCTION_DAG_H
 #define FUNCTION_DAG_H
 
-#include <stdint.h>
 #include <algorithm>
-#include <vector>
 #include <map>
+#include <stdint.h>
 #include <string>
+#include <vector>
 
-#include "Halide.h"
 #include "ASLog.h"
 #include "Errors.h"
+#include "Featurization.h"
+#include "Halide.h"
 
 namespace Halide {
 namespace Internal {

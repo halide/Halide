@@ -1,6 +1,8 @@
 #ifndef COST_MODEL_H
 #define COST_MODEL_H
 
+#include <string>
+
 #include "HalideBuffer.h"
 
 // An abstract base class for a cost model.
