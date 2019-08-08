@@ -2004,11 +2004,13 @@ Func &Func::rename(VarOrRVar old_name, VarOrRVar new_name) {
 }
 
 Func &Func::allow_race_conditions() {
+    invalidate_cache();
     Stage(func, func.definition(), 0).allow_race_conditions();
     return *this;
 }
 
 Func &Func::atomic(bool override_associativity_test) {
+    invalidate_cache();
     Stage(func, func.definition(), 0).atomic(override_associativity_test);
     return *this;
 }
