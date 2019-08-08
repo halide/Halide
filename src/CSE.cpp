@@ -174,10 +174,10 @@ public:
 };
 
 /** Rebuild an expression using a map of replacements. Works on graphs without exploding. */
-class Replacer : public IRGraphMutator2 {
+class Replacer : public IRGraphMutator {
 public:
     Replacer() = default;
-    Replacer(const map<Expr, Expr, ExprCompare> &r) : IRGraphMutator2() {
+    Replacer(const map<Expr, Expr, ExprCompare> &r) : IRGraphMutator() {
         expr_replacements = r;
     }
 
@@ -187,8 +187,8 @@ public:
 
 };
 
-class RemoveLets : public IRGraphMutator2 {
-    using IRGraphMutator2::visit;
+class RemoveLets : public IRGraphMutator {
+    using IRGraphMutator::visit;
 
     Scope<Expr> scope;
 

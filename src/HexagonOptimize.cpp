@@ -1815,8 +1815,8 @@ public:
 };
 
 // Attempt to generate vtmpy instructions. This requires that all lets
-// be substituted prior to running, and so must be an IRGraphMutator2.
-class VtmpyGenerator : public IRGraphMutator2 {
+// be substituted prior to running, and so must be an IRGraphMutator.
+class VtmpyGenerator : public IRGraphMutator {
 private:
     using IRMutator::visit;
     typedef pair<Expr, size_t> LoadIndex;

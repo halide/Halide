@@ -76,17 +76,13 @@ public:
         // (This can be useful in conjunction with RunGen and benchmarks as well
         // as auto-schedule, so we do it in all cases.)
         // Provide estimates on the input image
-        input.dim(0).set_bounds_estimate(0, 614);
-        input.dim(1).set_bounds_estimate(0, 1024);
-        input.dim(2).set_bounds_estimate(0, 3);
+        input.set_estimates({{0, 614}, {0, 1024}, {0, 3}});
         // Provide estimates on the parameters
         patch_size.set_estimate(7);
         search_area.set_estimate(7);
         sigma.set_estimate(0.12f);
         // Provide estimates on the output pipeline
-        non_local_means.estimate(x, 0, 614)
-            .estimate(y, 0, 1024)
-            .estimate(c, 0, 3);
+        non_local_means.set_estimates({{0, 614}, {0, 1024}, {0, 3}});
 
         if (auto_schedule) {
             // nothing

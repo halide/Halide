@@ -111,6 +111,7 @@ void define_enums(py::module &m) {
         .value("CLAtomics64", Target::Feature::CLAtomics64)
         .value("OpenGL", Target::Feature::OpenGL)
         .value("OpenGLCompute", Target::Feature::OpenGLCompute)
+        .value("EGL", Target::Feature::EGL)
         .value("UserContext", Target::Feature::UserContext)
         .value("Matlab", Target::Feature::Matlab)
         .value("Profile", Target::Feature::Profile)

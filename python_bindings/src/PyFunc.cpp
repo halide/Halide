@@ -288,8 +288,10 @@ void define_func(py::module &m) {
             py::arg("device_api") = DeviceAPI::Default_GPU)
         .def("copy_to_host", &Func::copy_to_host)
 
-        .def("estimate", &Func::estimate,
+        .def("set_estimate", &Func::set_estimate,
             py::arg("var"), py::arg("min"), py::arg("extent"))
+        .def("set_estimates", &Func::set_estimates,
+            py::arg("estimates"))
 
         .def("align_bounds", &Func::align_bounds,
             py::arg("var"), py::arg("modulus"), py::arg("remainder") = 0)

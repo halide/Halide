@@ -1,16 +1,16 @@
 #include <cmath>
+#include <fstream>
 #include <iomanip>
+#include <iostream>
+#include <map>
+#include <random>
 #include <set>
 #include <sstream>
 #include <string>
-#include <unistd.h>
 #include <vector>
-#include <map>
-#include <iostream>
-#include <fstream>
-#include <random>
 
 #include "CostModel.h"
+#include "HalideBuffer.h"
 #include "NetworkSize.h"
 
 namespace {
@@ -355,7 +355,9 @@ int main(int argc, char **argv) {
                 float badness = 0;
             } worst_inversion;
 
+#if defined(_OPENMP)
             #pragma omp parallel for
+#endif
             for (int model = 0; model < models; model++) {
                 for (int train = 0; train < 2; train++) {
                     auto &tp = tpp[model];

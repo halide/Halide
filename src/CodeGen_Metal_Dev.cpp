@@ -640,6 +640,8 @@ void CodeGen_Metal_Dev::init_module() {
                << "#define fast_inverse_sqrt_f32 rsqrt\n"
                << "}\n"; // close namespace
 
+    metal_c.add_common_macros(src_stream);
+
     // __shared always has address space threadgroup.
     src_stream << "#define __address_space___shared threadgroup\n";
 

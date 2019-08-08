@@ -130,6 +130,14 @@ Generator, and inits every element to zero:
 $ ./bin/local_laplacian.rungen --output_extents=[100,200,3] input=zero:[123,456,3] levels=8 alpha=1 beta=1 output=/tmp/out.png
 ```
 
+You can also specify arbitrary (nonzero) constants:
+
+```
+# Input is a 3-dimensional image with extent 123, 456, and 3,
+# filled with a constant value of 42
+$ ./bin/local_laplacian.rungen --output_extents=[100,200,3] input=constant:42:[123,456,3] levels=8 alpha=1 beta=1 output=/tmp/out.png
+```
+
 Similarly, you can create identity images where only the diagonal elements are
 1-s (rest are 0-s) by invoking `identity:[]`. Diagonal elements are defined as
 those whose first two coordinates are equal.
@@ -196,6 +204,11 @@ all dimensions; whether this is useful to you or not depends on the code. It's
 highly recommended you do testing with the `--verbose` flag (which will log the
 calculated sizes) to reality-check that you are getting what you expect,
 especially for benchmarking.
+
+A common case (especially for benchmarking) is to specify using estimates for
+all inputs and outputs; for this, you can specify `--estimate_all`, which is
+just a shortcut for `--default_input_buffers=estimate_then_auto --default_input_scalars=estimate --output_extents=estimate`.
+
 
 ## Benchmarking
 

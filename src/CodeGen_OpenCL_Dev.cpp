@@ -888,6 +888,8 @@ void CodeGen_OpenCL_Dev::init_module() {
 
     src_stream << '\n';
 
+    clc.add_common_macros(src_stream);
+
     // Add at least one kernel to avoid errors on some implementations for functions
     // without any GPU schedules.
     src_stream << "__kernel void _at_least_one_kernel(int x) { }\n";

@@ -46,6 +46,8 @@ public:
 
     static void test();
 
+    /**  Add common macros to be shared across all backends */
+    void add_common_macros(std::ostream &dest);
 protected:
 
     /** Emit a declaration. */

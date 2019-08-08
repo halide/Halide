@@ -36,6 +36,16 @@ function(tests folder)
 
     halide_project("${TARGET}" "${folder}" "${folder}/${file}")
     target_compile_definitions("${TARGET}"  PRIVATE "-DLLVM_VERSION=${LLVM_VERSION}")
+    # Tests are built with the equivalent of OPTIMIZE_FOR_BUILD_TIME (-O0 or /Od).
+    if(MSVC)
+        target_compile_options("${TARGET}" PRIVATE "$<$<CONFIG:RELEASE>:/Od>")
+    else()
+        target_compile_options("${TARGET}" PRIVATE "$<$<CONFIG:RELEASE>:-O0>")
+        # Also allow tests, via conditional compilation, to use the entire
+        # capability of the CPU being compiled on via -march=native. This
+        # presumes tests are run on the same machine they are compiled on.
+        target_compile_options("${TARGET}" PRIVATE "-march=native")
+    endif()
 
     target_include_directories("${TARGET}" PRIVATE "${HALIDE_INCLUDE_DIR}")
     target_include_directories("${TARGET}" PRIVATE "${CMAKE_SOURCE_DIR}")

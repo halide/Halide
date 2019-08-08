@@ -15,7 +15,7 @@ fi
 
 if [ ${BUILD_SYSTEM} = 'CMAKE' ]; then
   : ${HALIDE_SHARED_LIBRARY:?"HALIDE_SHARED_LIBRARY must be set"}
-  LLVM_VERSION_NO_DOT="$( echo ${LLVM_VERSION} | sed 's/\.//' | cut -b1,2 )"
+  LLVM_VERSION_NO_DOT="$( echo ${LLVM_VERSION} | sed 's/\([0-9][0-9]*\)\.\([0-9]\).*/\1\2/' )"
   mkdir -p build/ && cd build/
   # Require a specific version of LLVM, just in case the Travis instance has
   # an older clang/llvm version present
@@ -31,7 +31,7 @@ if [ ${BUILD_SYSTEM} = 'CMAKE' ]; then
         -G "Unix Makefiles" \
         ../
 
-  make ${MAKEFLAGS} distrib
+  make ${MAKEFLAGS} package
   make ${MAKEFLAGS} test_internal
 
   if [ ${HALIDE_SHARED_LIBRARY} = 'ON' ]; then

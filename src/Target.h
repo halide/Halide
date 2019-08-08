@@ -83,6 +83,7 @@ struct Target {
         CLAtomics64 = halide_target_feature_cl_atomic64,
         OpenGL = halide_target_feature_opengl,
         OpenGLCompute = halide_target_feature_openglcompute,
+        EGL = halide_target_feature_egl,
         UserContext = halide_target_feature_user_context,
         Matlab = halide_target_feature_matlab,
         Profile = halide_target_feature_profile,
@@ -108,6 +109,7 @@ struct Target {
         TraceLoads = halide_target_feature_trace_loads,
         TraceStores = halide_target_feature_trace_stores,
         TraceRealizations = halide_target_feature_trace_realizations,
+        TracePipeline = halide_target_feature_trace_pipeline,
         D3D12Compute = halide_target_feature_d3d12compute,
         StrictFloat = halide_target_feature_strict_float,
         LegacyBufferWrappers = halide_target_feature_legacy_buffer_wrappers,
@@ -260,6 +262,15 @@ struct Target {
 
     /** Was libHalide compiled with support for this target? */
     bool supported() const;
+
+    /** Return a bitset of the Featuress set in this Target (set = 1).
+     * Note that while this happens to be the current internal representation,
+     * that might not always be the case. */
+    const std::bitset<FeatureEnd> &get_features_bitset() const { return features; }
+
+    /** Return the name corresponding to a given Feature, in the form
+     * used to construct Target strings (e.g., Feature::Debug is "debug" and not "Debug"). */
+    static std::string feature_name(Target::Feature feature);
 
 private:
     /** A bitmask that stores the active features. */

@@ -60,9 +60,10 @@ const string &Func::name() const {
 /** Get the pure arguments. */
 std::vector<Var> Func::args() const {
     const std::vector<std::string> arg_names = func.args();
-    std::vector<Var> args(arg_names.size());
-    for (size_t i = 0; i < arg_names.size(); i++) {
-        args[i] = Var(arg_names[i]);
+    std::vector<Var> args;
+    args.reserve(arg_names.size());
+    for (const auto &arg_name : arg_names) {
+        args.emplace_back(arg_name);
     }
     return args;
 }
@@ -1171,9 +1172,9 @@ Stage Stage::specialize(Expr condition) {
     // The user may be retrieving a reference to an existing
     // specialization.
     const vector<Specialization> &specializations = definition.specializations();
-    for (size_t i = 0; i < specializations.size(); i++) {
-        if (equal(condition, specializations[i].condition)) {
-            return Stage(function, specializations[i].definition, stage_index, dim_vars);
+    for (const auto &specialization : specializations) {
+        if (equal(condition, specialization.condition)) {
+            return Stage(function, specialization.definition, stage_index);
         }
     }
 
@@ -1182,7 +1183,7 @@ Stage Stage::specialize(Expr condition) {
         << "Cannot add new specializations after specialize_fail().";
     const Specialization &s = definition.add_specialization(condition);
 
-    return Stage(function, s.definition, stage_index, dim_vars);
+    return Stage(function, s.definition, stage_index);
 }
 
 void Stage::specialize_fail(const std::string &message) {
@@ -1865,6 +1866,7 @@ Func get_wrapper(Function wrapped_fn, string wrapper_name, const vector<Func> &f
     // have any wrappers. Otherwise, throw an error. If 'fs' is empty, then
     // it is a global wrapper.
     const map<string, FunctionPtr> &wrappers = wrapped_fn.wrappers();
+    wrapper_name += ("$" + std::to_string(wrappers.size()));
     const auto &iter = fs.empty() ? wrappers.find("") : wrappers.find(fs[0].name());
     if (iter == wrappers.end()) {
         // Make sure the other Funcs also don't have any wrappers
@@ -1985,24 +1987,24 @@ Func Func::copy_to_host() {
 
 Func &Func::split(VarOrRVar old, VarOrRVar outer, VarOrRVar inner, Expr factor, TailStrategy tail) {
     invalidate_cache();
-    Stage(func, func.definition(), 0, args()).split(old, outer, inner, factor, tail);
+    Stage(func, func.definition(), 0).split(old, outer, inner, factor, tail);
     return *this;
 }
 
 Func &Func::fuse(VarOrRVar inner, VarOrRVar outer, VarOrRVar fused) {
     invalidate_cache();
-    Stage(func, func.definition(), 0, args()).fuse(inner, outer, fused);
+    Stage(func, func.definition(), 0).fuse(inner, outer, fused);
     return *this;
 }
 
 Func &Func::rename(VarOrRVar old_name, VarOrRVar new_name) {
     invalidate_cache();
-    Stage(func, func.definition(), 0, args()).rename(old_name, new_name);
+    Stage(func, func.definition(), 0).rename(old_name, new_name);
     return *this;
 }
 
 Func &Func::allow_race_conditions() {
-    Stage(func, func.definition(), 0, args()).allow_race_conditions();
+    Stage(func, func.definition(), 0).allow_race_conditions();
     return *this;
 }
 
@@ -2031,53 +2033,53 @@ Func &Func::async() {
 
 Stage Func::specialize(Expr c) {
     invalidate_cache();
-    return Stage(func, func.definition(), 0, args()).specialize(c);
+    return Stage(func, func.definition(), 0).specialize(c);
 }
 
 void Func::specialize_fail(const std::string &message) {
     invalidate_cache();
-    (void) Stage(func, func.definition(), 0, args()).specialize_fail(message);
+    (void) Stage(func, func.definition(), 0).specialize_fail(message);
 }
 
 Func &Func::serial(VarOrRVar var) {
     invalidate_cache();
-    Stage(func, func.definition(), 0, args()).serial(var);
+    Stage(func, func.definition(), 0).serial(var);
     return *this;
 }
 
 Func &Func::parallel(VarOrRVar var) {
     invalidate_cache();
-    Stage(func, func.definition(), 0, args()).parallel(var);
+    Stage(func, func.definition(), 0).parallel(var);
     return *this;
 }
 
 Func &Func::vectorize(VarOrRVar var) {
     invalidate_cache();
-    Stage(func, func.definition(), 0, args()).vectorize(var);
+    Stage(func, func.definition(), 0).vectorize(var);
     return *this;
 }
 
 Func &Func::unroll(VarOrRVar var) {
     invalidate_cache();
-    Stage(func, func.definition(), 0, args()).unroll(var);
+    Stage(func, func.definition(), 0).unroll(var);
     return *this;
 }
 
 Func &Func::parallel(VarOrRVar var, Expr factor, TailStrategy tail) {
     invalidate_cache();
-    Stage(func, func.definition(), 0, args()).parallel(var, factor, tail);
+    Stage(func, func.definition(), 0).parallel(var, factor, tail);
     return *this;
 }
 
 Func &Func::vectorize(VarOrRVar var, Expr factor, TailStrategy tail) {
     invalidate_cache();
-    Stage(func, func.definition(), 0, args()).vectorize(var, factor, tail);
+    Stage(func, func.definition(), 0).vectorize(var, factor, tail);
     return *this;
 }
 
 Func &Func::unroll(VarOrRVar var, Expr factor, TailStrategy tail) {
     invalidate_cache();
-    Stage(func, func.definition(), 0, args()).unroll(var, factor, tail);
+    Stage(func, func.definition(), 0).unroll(var, factor, tail);
     return *this;
 }
 
@@ -2105,12 +2107,12 @@ Func &Func::bound(Var var, Expr min, Expr extent) {
     // Propagate constant bounds into estimates as well.
     if (!is_const(min)) min = Expr();
     if (!is_const(extent)) extent = Expr();
-    estimate(var, min, extent);
+    set_estimate(var, min, extent);
 
     return *this;
 }
 
-Func &Func::estimate(Var var, Expr min, Expr extent) {
+Func &Func::set_estimate(Var var, Expr min, Expr extent) {
     invalidate_cache();
     bool found = func.is_pure_arg(var.name());
     user_assert(found)
@@ -2140,6 +2142,17 @@ Func &Func::estimate(Var var, Expr min, Expr extent) {
         if (extent.defined()) {
             param.set_extent_constraint_estimate(dim, extent);
         }
+    }
+    return *this;
+}
+
+Func &Func::set_estimates(const std::vector<std::pair<Expr, Expr>> &estimates) {
+    const std::vector<Var> a = args();
+    user_assert(estimates.size() == a.size())
+        << "Func " << name() << " has " << a.size() << " dimensions, "
+        << "but the estimates passed to set_estimates contains " << estimates.size() << " pairs.\n";
+    for (size_t i = 0; i < a.size(); i++) {
+        set_estimate(a[i], estimates[i].first, estimates[i].second);
     }
     return *this;
 }
@@ -2180,7 +2193,7 @@ Func &Func::tile(VarOrRVar x, VarOrRVar y,
                  Expr xfactor, Expr yfactor,
                  TailStrategy tail) {
     invalidate_cache();
-    Stage(func, func.definition(), 0, args()).tile(x, y, xo, yo, xi, yi, xfactor, yfactor, tail);
+    Stage(func, func.definition(), 0).tile(x, y, xo, yo, xi, yi, xfactor, yfactor, tail);
     return *this;
 }
 
@@ -2189,91 +2202,91 @@ Func &Func::tile(VarOrRVar x, VarOrRVar y,
                  Expr xfactor, Expr yfactor,
                  TailStrategy tail) {
     invalidate_cache();
-    Stage(func, func.definition(), 0, args()).tile(x, y, xi, yi, xfactor, yfactor, tail);
+    Stage(func, func.definition(), 0).tile(x, y, xi, yi, xfactor, yfactor, tail);
     return *this;
 }
 
 Func &Func::reorder(const std::vector<VarOrRVar> &vars) {
     invalidate_cache();
-    Stage(func, func.definition(), 0, args()).reorder(vars);
+    Stage(func, func.definition(), 0).reorder(vars);
     return *this;
 }
 
 Func &Func::gpu_threads(VarOrRVar tx, DeviceAPI device_api) {
     invalidate_cache();
-    Stage(func, func.definition(), 0, args()).gpu_threads(tx, device_api);
+    Stage(func, func.definition(), 0).gpu_threads(tx, device_api);
     return *this;
 }
 
 Func &Func::gpu_threads(VarOrRVar tx, VarOrRVar ty, DeviceAPI device_api) {
     invalidate_cache();
-    Stage(func, func.definition(), 0, args()).gpu_threads(tx, ty, device_api);
+    Stage(func, func.definition(), 0).gpu_threads(tx, ty, device_api);
     return *this;
 }
 
 Func &Func::gpu_threads(VarOrRVar tx, VarOrRVar ty, VarOrRVar tz, DeviceAPI device_api) {
     invalidate_cache();
-    Stage(func, func.definition(), 0, args()).gpu_threads(tx, ty, tz, device_api);
+    Stage(func, func.definition(), 0).gpu_threads(tx, ty, tz, device_api);
     return *this;
 }
 
 Func &Func::gpu_lanes(VarOrRVar tx, DeviceAPI device_api) {
     invalidate_cache();
-    Stage(func, func.definition(), 0, args()).gpu_lanes(tx, device_api);
+    Stage(func, func.definition(), 0).gpu_lanes(tx, device_api);
     return *this;
 }
 
 Func &Func::gpu_blocks(VarOrRVar bx, DeviceAPI device_api) {
     invalidate_cache();
-    Stage(func, func.definition(), 0, args()).gpu_blocks(bx, device_api);
+    Stage(func, func.definition(), 0).gpu_blocks(bx, device_api);
     return *this;
 }
 
 Func &Func::gpu_blocks(VarOrRVar bx, VarOrRVar by, DeviceAPI device_api) {
     invalidate_cache();
-    Stage(func, func.definition(), 0, args()).gpu_blocks(bx, by, device_api);
+    Stage(func, func.definition(), 0).gpu_blocks(bx, by, device_api);
     return *this;
 }
 
 Func &Func::gpu_blocks(VarOrRVar bx, VarOrRVar by, VarOrRVar bz, DeviceAPI device_api) {
     invalidate_cache();
-    Stage(func, func.definition(), 0, args()).gpu_blocks(bx, by, bz, device_api);
+    Stage(func, func.definition(), 0).gpu_blocks(bx, by, bz, device_api);
     return *this;
 }
 
 Func &Func::gpu_single_thread(DeviceAPI device_api) {
     invalidate_cache();
-    Stage(func, func.definition(), 0, args()).gpu_single_thread(device_api);
+    Stage(func, func.definition(), 0).gpu_single_thread(device_api);
     return *this;
 }
 
 Func &Func::gpu(VarOrRVar bx, VarOrRVar tx, DeviceAPI device_api) {
     invalidate_cache();
-    Stage(func, func.definition(), 0, args()).gpu(bx, tx, device_api);
+    Stage(func, func.definition(), 0).gpu(bx, tx, device_api);
     return *this;
 }
 
 Func &Func::gpu(VarOrRVar bx, VarOrRVar by, VarOrRVar tx, VarOrRVar ty, DeviceAPI device_api) {
     invalidate_cache();
-    Stage(func, func.definition(), 0, args()).gpu(bx, by, tx, ty, device_api);
+    Stage(func, func.definition(), 0).gpu(bx, by, tx, ty, device_api);
     return *this;
 }
 
 Func &Func::gpu(VarOrRVar bx, VarOrRVar by, VarOrRVar bz, VarOrRVar tx, VarOrRVar ty, VarOrRVar tz, DeviceAPI device_api) {
     invalidate_cache();
-    Stage(func, func.definition(), 0, args()).gpu(bx, by, bz, tx, ty, tz, device_api);
+    Stage(func, func.definition(), 0).gpu(bx, by, bz, tx, ty, tz, device_api);
     return *this;
 }
 
 Func &Func::gpu_tile(VarOrRVar x, VarOrRVar bx, VarOrRVar tx, Expr x_size, TailStrategy tail, DeviceAPI device_api) {
     invalidate_cache();
-    Stage(func, func.definition(), 0, args()).gpu_tile(x, bx, tx, x_size, tail, device_api);
+    Stage(func, func.definition(), 0).gpu_tile(x, bx, tx, x_size, tail, device_api);
     return *this;
 }
 
 Func &Func::gpu_tile(VarOrRVar x, VarOrRVar tx, Expr x_size, TailStrategy tail, DeviceAPI device_api) {
     invalidate_cache();
-    Stage(func, func.definition(), 0, args()).gpu_tile(x, tx, x_size, tail, device_api);
+    Stage(func, func.definition(), 0).gpu_tile(x, tx, x_size, tail, device_api);
     return *this;
 }
 
@@ -2284,7 +2297,7 @@ Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y,
                      TailStrategy tail,
                      DeviceAPI device_api) {
     invalidate_cache();
-    Stage(func, func.definition(), 0, args())
+    Stage(func, func.definition(), 0)
         .gpu_tile(x, y, bx, by, tx, ty, x_size, y_size, tail, device_api);
     return *this;
 }
@@ -2295,7 +2308,7 @@ Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y,
                      TailStrategy tail,
                      DeviceAPI device_api) {
     invalidate_cache();
-    Stage(func, func.definition(), 0, args())
+    Stage(func, func.definition(), 0)
         .gpu_tile(x, y, tx, ty, x_size, y_size, tail, device_api);
     return *this;
 }
@@ -2307,7 +2320,7 @@ Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                      TailStrategy tail,
                      DeviceAPI device_api) {
     invalidate_cache();
-    Stage(func, func.definition(), 0, args())
+    Stage(func, func.definition(), 0)
         .gpu_tile(x, y, z, bx, by, bz, tx, ty, tz, x_size, y_size, z_size, tail, device_api);
     return *this;
 }
@@ -2318,7 +2331,7 @@ Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                      TailStrategy tail,
                      DeviceAPI device_api) {
     invalidate_cache();
-    Stage(func, func.definition(), 0, args())
+    Stage(func, func.definition(), 0)
         .gpu_tile(x, y, z, tx, ty, tz, x_size, y_size, z_size, tail, device_api);
     return *this;
 }
@@ -2332,7 +2345,7 @@ Func &Func::shader(Var x, Var y, Var c, DeviceAPI device_api) {
 
     // TODO: Set appropriate constraints if this is the output buffer?
 
-    Stage(func, func.definition(), 0, args()).gpu_blocks(x, y, device_api);
+    Stage(func, func.definition(), 0).gpu_blocks(x, y, device_api);
 
     bool constant_bounds = false;
     FuncSchedule &sched = func.schedule();
@@ -2354,19 +2367,19 @@ Func &Func::glsl(Var x, Var y, Var c) {
 
 Func &Func::hexagon(VarOrRVar x) {
     invalidate_cache();
-    Stage(func, func.definition(), 0, args()).hexagon(x);
+    Stage(func, func.definition(), 0).hexagon(x);
     return *this;
 }
 
 Func &Func::prefetch(const Func &f, VarOrRVar var, Expr offset, PrefetchBoundStrategy strategy) {
     invalidate_cache();
-    Stage(func, func.definition(), 0, args()).prefetch(f, var, offset, strategy);
+    Stage(func, func.definition(), 0).prefetch(f, var, offset, strategy);
     return *this;
 }
 
 Func &Func::prefetch(const Internal::Parameter &param, VarOrRVar var, Expr offset, PrefetchBoundStrategy strategy) {
     invalidate_cache();
-    Stage(func, func.definition(), 0, args()).prefetch(param, var, offset, strategy);
+    Stage(func, func.definition(), 0).prefetch(param, var, offset, strategy);
     return *this;
 }
 
@@ -2461,25 +2474,25 @@ Func &Func::compute_at(Func f, Var var) {
 
 Func &Func::compute_with(Stage s, VarOrRVar var, const vector<pair<VarOrRVar, LoopAlignStrategy>> &align) {
     invalidate_cache();
-    Stage(func, func.definition(), 0, args()).compute_with(s, var, align);
+    Stage(func, func.definition(), 0).compute_with(s, var, align);
     return *this;
 }
 
 Func &Func::compute_with(Stage s, VarOrRVar var, LoopAlignStrategy align) {
     invalidate_cache();
-    Stage(func, func.definition(), 0, args()).compute_with(s, var, align);
+    Stage(func, func.definition(), 0).compute_with(s, var, align);
     return *this;
 }
 
 Func &Func::compute_with(LoopLevel loop_level, const std::vector<std::pair<VarOrRVar, LoopAlignStrategy>> &align) {
     invalidate_cache();
-    Stage(func, func.definition(), 0, args()).compute_with(loop_level, align);
+    Stage(func, func.definition(), 0).compute_with(loop_level, align);
     return *this;
 }
 
 Func &Func::compute_with(LoopLevel loop_level, LoopAlignStrategy align) {
     invalidate_cache();
-    Stage(func, func.definition(), 0, args()).compute_with(loop_level, align);
+    Stage(func, func.definition(), 0).compute_with(loop_level, align);
     return *this;
 }
 
@@ -2543,13 +2556,13 @@ Stage Func::update(int idx) {
       "Call to update with index larger than last defined update stage for Func \"" <<
       name() << "\".\n";
     invalidate_cache();
-    return Stage(func, func.update(idx), idx+1, args());
+    return Stage(func, func.update(idx), idx+1);
 }
 
 Func::operator Stage() const {
     user_assert(!func.has_extern_definition())
         << "Extern func \"" << name() << "\" cannot be converted into Stage\n";
-    return Stage(func, func.definition(), 0, args());
+    return Stage(func, func.definition(), 0);
 }
 
 namespace {
@@ -2671,12 +2684,12 @@ Stage FuncRef::operator=(const Tuple &e) {
             expanded_args_str[i] = v->name;
         }
         func.define(expanded_args_str, e.as_vector());
-        return Stage(func, func.definition(), 0, func.args());
+        return Stage(func, func.definition(), 0);
     } else {
         func.define_update(args, e.as_vector());
 
         size_t update_stage = func.updates().size() - 1;
-        return Stage(func, func.update(update_stage), update_stage, func.args());
+        return Stage(func, func.update(update_stage), update_stage);
     }
 }
 

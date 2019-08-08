@@ -72,7 +72,7 @@ double run_test(bool auto_schedule) {
     Func shifted("shifted");
     shifted(x, y) = harris(x + 2, y + 2);
 
-    shifted.estimate(x, 0, W).estimate(y, 0, H);
+    shifted.set_estimates({{0, W}, {0, H}});
 
     Target target = get_jit_target_from_environment();
     Pipeline p(shifted);
