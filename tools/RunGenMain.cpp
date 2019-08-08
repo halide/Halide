@@ -522,6 +522,10 @@ int main(int argc, char **argv) {
         tracker.install();
     }
 
+    // This is a single-purpose binary to benchmark this filter, so we
+    // shouldn't be eagerly returning device memory.
+    halide_reuse_device_allocations(nullptr, true);
+
     if (benchmark) {
         r.run_for_benchmark(benchmark_min_time, benchmark_min_iters, benchmark_max_iters);
     } else {
