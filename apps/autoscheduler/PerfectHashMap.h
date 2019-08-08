@@ -1,8 +1,10 @@
 #ifndef PERFECT_HASH_MAP_H
 #define PERFECT_HASH_MAP_H
 
-#include <vector>
 #include <algorithm>
+#include <vector>
+
+#include "Errors.h"
 
 // A specialized hash map used in the autoscheduler. It can only grow,
 // and it requires a perfect hash in the form of "id" and "max_id"
