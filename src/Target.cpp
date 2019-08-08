@@ -365,6 +365,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"hexagon_dma", Target::HexagonDma},
     {"embed_bitcode", Target::EmbedBitcode},
     {"disable_llvm_loop_opt", Target::DisableLLVMLoopOpt},
+    {"enable_llvm_loop_opt", Target::EnableLLVMLoopOpt},
     {"wasm_simd128", Target::WasmSimd128},
     {"wasm_signext", Target::WasmSignExt},
     {"sve", Target::SVE},

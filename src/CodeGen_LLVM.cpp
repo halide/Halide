@@ -1194,13 +1194,22 @@ void CodeGen_LLVM::optimize_module() {
 
     std::unique_ptr<TargetMachine> tm = make_target_machine(*module);
 
+    // At present, we default to *enabling* LLVM loop optimization,
+    // unless DisableLLVMLoopOpt is set; we're going to flip this to defaulting
+    // to *not* enabling these optimizations (and removing the DisableLLVMLoopOpt feature).
+    // See https://github.com/halide/Halide/issues/4113 for more info.
+    // (Note that setting EnableLLVMLoopOpt always enables loop opt, regardless
+    // of the setting of DisableLLVMLoopOpt.)
+    const bool do_loop_opt = !get_target().has_feature(Target::DisableLLVMLoopOpt) ||
+                              get_target().has_feature(Target::EnableLLVMLoopOpt);
+
 // Temporarily disabled, see https://github.com/halide/Halide/issues/3957
 // #if LLVM_VERSION >= 90
 #if 0
     PipelineTuningOptions pto;
-    pto.LoopInterleaving = !get_target().has_feature(Target::DisableLLVMLoopOpt);
-    pto.LoopVectorization = !get_target().has_feature(Target::DisableLLVMLoopOpt);
-    pto.LoopUnrolling = pto.LoopInterleaving;
+    pto.LoopInterleaving = do_loop_opt;
+    pto.LoopVectorization = do_loop_opt;
+    pto.LoopUnrolling = do_loop_opt;
     // Clear ScEv info for all loops. Certain Halide applications spend a very
     // long time compiling in forgetLoop, and prefer to forget everything
     // and rebuild SCEV (aka "Scalar Evolution") from scratch.
@@ -1319,8 +1328,8 @@ void CodeGen_LLVM::optimize_module() {
     PassManagerBuilder b;
     b.OptLevel = 3;
     b.Inliner = createFunctionInliningPass(b.OptLevel, 0, false);
-    b.LoopVectorize = !get_target().has_feature(Target::DisableLLVMLoopOpt);
-    b.DisableUnrollLoops = get_target().has_feature(Target::DisableLLVMLoopOpt);
+    b.LoopVectorize = do_loop_opt;
+    b.DisableUnrollLoops = !do_loop_opt;
     b.SLPVectorize = true;  // Note: SLP vectorization has no analogue in the Halide scheduling model
 #if LLVM_VERSION >= 90
     // Clear ScEv info for all loops. Certain Halide applications spend a very

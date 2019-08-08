@@ -502,6 +502,7 @@ function(_halide_runtime_target_name HALIDE_TARGET OUTVAR)
         hexagon_dma
         embed_bitcode
         disable_llvm_loop_opt
+        enable_llvm_loop_opt
         wasm_simd128
         wasm_signext
         sve
