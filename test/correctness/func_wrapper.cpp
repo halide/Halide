@@ -8,6 +8,7 @@ namespace {
 
 using std::map;
 using std::string;
+using std::vector;
 
 using namespace Halide;
 using namespace Halide::Internal;
@@ -572,6 +573,41 @@ int multi_folds_wrapper_test() {
     return 0;
 }
 
+int lots_of_wrappers_test() {
+    // This is a case that showed up in practice. It demonstrates that
+    // it's important that the different wrappers of a Func get
+    // different names.
+    Func common;
+    vector<Func> funcs;
+    Var x;
+    common(x) = x;
+    common.compute_root();
+
+    Func prev = common;
+    for (int i = 0; i < 100; i++) {
+        Func f;
+        f(x) = common(x) + prev(x);
+        prev = f;
+        funcs.push_back(f);
+
+        // Compute in groups of five, each with a local copy of the common func.
+        if (i % 5 == 4) {
+            vector<Func> group;
+            funcs[i].compute_root();
+            group.push_back(funcs[i]);
+            for (int j = i - 4; j < i; j++) {
+                funcs[j].compute_at(funcs[i], x);
+                group.push_back(funcs[j]);
+            }
+            common.in(group).compute_at(funcs[i], x);
+        }
+    }
+
+    // This used to crash
+    funcs.back().compile_jit();
+    return 0;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -632,6 +668,11 @@ int main(int argc, char **argv) {
 
     printf("Running multi folds wrapper test\n");
     if (multi_folds_wrapper_test() != 0) {
+        return -1;
+    }
+
+    printf("Running lots of wrappers test\n");
+    if (lots_of_wrappers_test() != 0) {
         return -1;
     }
 
