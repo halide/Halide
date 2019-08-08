@@ -25,11 +25,9 @@ string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_type(Type type, AppendSpaceIf
     ostringstream oss;
     if (type.is_float()) {
         if (type.bits() == 16) {
-            if (target.has_feature(Target::CLHalf)) {
-                oss << "half";
-            } else {
-                oss << "ushort";
-            }
+            user_assert(target.has_feature(Target::CLHalf))
+                << "OpenCL kernel uses half type, but CLHalf target flag not enabled\n";
+            oss << "half";
         } else if (type.bits() == 32) {
             oss << "float";
         } else if (type.bits() == 64) {
@@ -653,16 +651,14 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
 
     open_scope();
 
-    if (target.has_feature(Target::CLHalf)) {
-        // Reinterpret half args passed as uint16 back to half
-        for (size_t i = 0; i < args.size(); i++) {
-            if (!args[i].is_buffer &&
-                args[i].type.is_float() &&
-                args[i].type.bits() < 32) {
-                stream << " const " << print_type(args[i].type)
-                       << " " << print_name(args[i].name)
-                       << " = half_from_bits(" << print_name(args[i].name + "_bits") << ");\n";
-            }
+    // Reinterpret half args passed as uint16 back to half
+    for (size_t i = 0; i < args.size(); i++) {
+        if (!args[i].is_buffer &&
+            args[i].type.is_float() &&
+            args[i].type.bits() < 32) {
+            stream << " const " << print_type(args[i].type)
+                   << " " << print_name(args[i].name)
+                   << " = half_from_bits(" << print_name(args[i].name + "_bits") << ");\n";
         }
     }
 

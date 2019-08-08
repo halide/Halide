@@ -171,8 +171,10 @@ int main(int argc, char **argv) {
     }
 
     Target target = get_jit_target_from_environment();
-    if (target.has_gpu_feature()) {
-        // Check we can pass a float16 to a GPU kernel
+    if (target.has_feature(Target::CUDA) ||
+        target.has_feature(Target::Metal)) {
+        // Check we can pass a float16 to a GPU kernel. Skip OpenCL
+        // because support is spotty.
         Var x, y;
         ImageParam input(Float(16), 2);
         Param<float16_t> mul("mul");
