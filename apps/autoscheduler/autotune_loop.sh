@@ -119,14 +119,17 @@ make_featurization() {
           2> ${D}/compile_log.txt || echo "Compilation failed or timed out for ${D}"
 
 
+    # We don't need image I/O for this purpose,
+    # so leave out libpng and libjpeg
     c++ \
         -std=c++11 \
-        -I ../../include \
-        ../../tools/RunGenMain.cpp \
+        -I ${HALIDE_DISTRIB_PATH}/include \
+        ${HALIDE_DISTRIB_PATH}/tools/RunGenMain.cpp \
         ${D}/*.registration.cpp \
         ${D}/*.a \
         -o ${D}/bench \
-        -ljpeg -ldl -lpthread -lz -lpng
+        -DHALIDE_NO_PNG -DHALIDE_NO_JPEG \
+        -ldl -lpthread
 }
 
 # Benchmark one of the random samples
