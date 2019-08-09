@@ -104,16 +104,16 @@ def halide_opengl_linkopts():
 # (halide-target-base, cpus, android-cpu, ios-cpu)
 _HALIDE_TARGET_CONFIG_INFO = [
     # Android
-    ("arm-32-android", None, "armeabi-v7a", None),
-    ("arm-64-android", None, "arm64-v8a", None),
-    ("x86-32-android", None, "x86", None),
-    ("x86-64-android", None, "x86_64", None),
+    ("arm-32-android", ["arm"], "armeabi-v7a", None),
+    ("arm-64-android", ["arm"], "arm64-v8a", None),
+    ("x86-32-android", ["piii"], "x86", None),
+    ("x86-64-android", ["k8"], "x86_64", None),
     # iOS
     ("arm-32-ios", None, None, "armv7"),
     ("arm-64-ios", None, None, "arm64"),
     # OSX
-    ("x86-32-osx", None, None, "i386"),
-    ("x86-64-osx", None, None, "x86_64"),
+    ("x86-32-osx", ["darwin"], None, "i386"),
+    ("x86-64-osx", ["darwin_x86_64"], None, "x86_64"),
     # Linux
     ("arm-64-linux", ["arm"], None, None),
     ("powerpc-64-linux", ["ppc"], None, None),
@@ -192,28 +192,14 @@ def halide_config_settings():
         },
         visibility=["//visibility:public"])
   for base_target, _, android_cpu, ios_cpu in _HALIDE_TARGET_CONFIG_INFO:
-    if android_cpu == None:
-      # "armeabi" is the default value for --android_cpu and isn't considered legal
-      # here, so we use the value to assume we aren't building for Android.
-      android_cpu = "armeabi"
-    if ios_cpu == None:
-      # The default value for --ios_cpu is "x86_64", i.e. for the 64b OS X simulator.
-      # Assuming that the i386 version of the simulator will be used along side
-      # arm32 apps, we consider this value to mean the flag was unspecified; this
-      # won't work for 32 bit simulator builds for A6 or older phones.
-      ios_cpu = "x86_64"
     for n, cpu in _config_setting_names_and_cpus(base_target):
+      values = {}
       if cpu != None:
-        values = {
-            "cpu": cpu,
-            "android_cpu": android_cpu,
-            "ios_cpu": ios_cpu,
-        }
-      else:
-        values = {
-            "android_cpu": android_cpu,
-            "ios_cpu": ios_cpu,
-        }
+        values["cpu"] = cpu
+      if android_cpu != None:
+        values["android_cpu"] = android_cpu
+      if ios_cpu != None:
+        values["ios_cpu"] = ios_cpu
       native.config_setting(
           name=n,
           values=values,
