@@ -592,8 +592,8 @@ def _standard_library_runtime_names():
 
 def halide_library_runtimes():
   runtime_package = ""
-  if PACKAGE_NAME != runtime_package:
-    fail("halide_library_runtimes can only be used from package '%s' (this is %s)" % (runtime_package, PACKAGE_NAME))
+  if native.package_name() != runtime_package:
+    fail("halide_library_runtimes can only be used from package '%s' (this is %s)" % (runtime_package, native.package_name()))
   unused = [_define_halide_library_runtime(f) for f in _standard_library_runtime_features()]
   unused = unused  # unused variable
 
@@ -842,7 +842,7 @@ def halide_library_from_generator(name,
       name = "%s_RunGenStubs" % name,
       srcs = [ "@halide//:tools/RunGenStubs.cpp" ],
       cmd = "cat $(location @halide//:tools/RunGenStubs.cpp) | " +
-            "sed -e 's|HL_RUNGEN_FILTER_HEADER|\"%s%s%s.h\"|g' > $@" % (PACKAGE_NAME, "/" if PACKAGE_NAME else "", name),
+            "sed -e 's|HL_RUNGEN_FILTER_HEADER|\"%s%s%s.h\"|g' > $@" % (native.package_name(), "/" if native.package_name() else "", name),
       outs = [ "%s_RunGenStubs.cpp" % name, ],
       tags=["manual", "notap"] + tags,
       visibility=["//visibility:private"]
@@ -867,7 +867,7 @@ def halide_library_from_generator(name,
       visibility=["//visibility:private"])
 
   # Return the fully-qualified built target name.
-  return "//%s:%s" % (PACKAGE_NAME, name)
+  return "//%s:%s" % (native.package_name(), name)
 
 def halide_library(name,
                    srcs,
