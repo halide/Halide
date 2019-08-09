@@ -2,6 +2,7 @@
 #include <iostream>
 #include <random>
 
+#include "Featurization.h"
 #include "HalideBuffer.h"
 #include "NetworkSize.h"
 #include "Weights.h"
@@ -10,6 +11,8 @@ namespace Halide {
 namespace Internal {
 
 using Halide::Runtime::Buffer;
+
+constexpr uint32_t kSignature = 0x68776631;
 
 void Weights::randomize(uint32_t seed) {
     std::mt19937 rng(seed);
@@ -24,7 +27,9 @@ void Weights::randomize(uint32_t seed) {
 /*
     Structure of the .weights file format:
 
-    uint32 signature           always 0x68776631 ('hwf1')
+    uint32 signature                    always 0x68776631 ('hwf1')
+    uint32 PipelineFeatures::version
+    uint32 ScheduleFeatures::version
     uint32 buffer-count
         uint32 dimension-count
             uint32x(dimension-count) dimension-extent
@@ -36,33 +41,40 @@ void Weights::randomize(uint32_t seed) {
 bool Weights::load(std::istream &i) {
     uint32_t signature;
     i.read((char *)&signature, sizeof(signature));
-    if (i.fail() || signature != 0x68776631) return false;
+    if (i.fail() || signature != kSignature) return false;
+
+    i.read((char *)&pipeline_features_version, sizeof(pipeline_features_version));
+    if (i.fail()) return false;
+std::cerr<<"pipeline_features_version "<<pipeline_features_version<<"\n";
+    i.read((char *)&schedule_features_version, sizeof(schedule_features_version));
+    if (i.fail()) return false;
+std::cerr<<"schedule_features_version "<<schedule_features_version<<"\n";
 
     uint32_t buffer_count;
     i.read((char *)&buffer_count, sizeof(buffer_count));
     if (i.fail() || buffer_count != 6) return false;
+std::cerr<<"buffer_count "<<buffer_count<<"\n";
 
-    const auto load_one = [&i](Buffer<float> &buf, const std::vector<int> &shape) -> bool {
+    const auto load_one = [&i](Buffer<float> &buf) -> bool {
         uint32_t dimension_count;
         i.read((char *)&dimension_count, sizeof(dimension_count));
-        if (i.fail() || dimension_count != (uint32_t) shape.size()) return false;
+        if (i.fail() || dimension_count != (uint32_t) buf.dimensions()) return false;
         for (uint32_t d = 0; d < dimension_count; d++) {
             uint32_t extent;
             i.read((char *)&extent, sizeof(extent));
-            if (i.fail() || (int) extent != (int) shape[d]) return false;
+            if (i.fail() || (int) extent != (int) buf.extent(d)) return false;
         }
-        buf = Buffer<float>(shape);
         i.read((char *)(buf.data()), buf.size_in_bytes());
         if (i.fail()) return false;
         return true;
     };
 
-    if (!load_one(head1_filter, {head1_channels, head1_w, head1_h})) return false;
-    if (!load_one(head1_bias, {head1_channels})) return false;
-    if (!load_one(head2_filter, {head2_channels, head2_w})) return false;
-    if (!load_one(head2_bias, {head2_channels})) return false;
-    if (!load_one(conv1_filter, {conv1_channels, head1_channels + head2_channels})) return false;
-    if (!load_one(conv1_bias, {conv1_channels})) return false;
+    if (!load_one(head1_filter)) return false;
+    if (!load_one(head1_bias)) return false;
+    if (!load_one(head2_filter)) return false;
+    if (!load_one(head2_bias)) return false;
+    if (!load_one(conv1_filter)) return false;
+    if (!load_one(conv1_bias)) return false;
 
     return true;
 }
@@ -72,8 +84,14 @@ bool Weights::load_from_file(const std::string &filename) {
 }
 
 bool Weights::save(std::ostream &o) const {
-    const uint32_t signature = 0x68776631;
+    const uint32_t signature = kSignature;
     o.write((const char *)&signature, sizeof(signature));
+    if (o.fail()) return false;
+
+    o.write((const char *)&pipeline_features_version, sizeof(pipeline_features_version));
+    if (o.fail()) return false;
+
+    o.write((const char *)&schedule_features_version, sizeof(schedule_features_version));
     if (o.fail()) return false;
 
     const uint32_t buffer_count = 6;
@@ -110,8 +128,7 @@ bool Weights::save_to_file(const std::string &filename) const {
 }
 
 bool Weights::load_from_dir(const std::string &dir) {
-    const auto buffer_from_file = [](const std::string &filename, const std::vector<int> &shape, Buffer<float> &buf) -> bool {
-        buf = Buffer<float>(shape);
+    const auto buffer_from_file = [](const std::string &filename, Buffer<float> &buf) -> bool {
         std::ifstream i(filename, std::ios_base::binary);
         i.read((char *)(buf.data()), buf.size_in_bytes());
         i.close();
@@ -119,12 +136,17 @@ bool Weights::load_from_dir(const std::string &dir) {
         return true;
     };
 
-    if (!buffer_from_file(dir + "/head1_conv1_weight.data", {head1_channels, head1_w, head1_h}, head1_filter)) return false;
-    if (!buffer_from_file(dir + "/head1_conv1_bias.data", {head1_channels}, head1_bias)) return false;
-    if (!buffer_from_file(dir + "/head2_conv1_weight.data", {head2_channels, head2_w}, head2_filter)) return false;
-    if (!buffer_from_file(dir + "/head2_conv1_bias.data", {head2_channels}, head2_bias)) return false;
-    if (!buffer_from_file(dir + "/trunk_conv1_weight.data", {conv1_channels, head1_channels + head2_channels}, conv1_filter)) return false;
-    if (!buffer_from_file(dir + "/trunk_conv1_bias.data", {conv1_channels}, conv1_bias)) return false;
+    if (!buffer_from_file(dir + "/head1_conv1_weight.data", head1_filter)) return false;
+    if (!buffer_from_file(dir + "/head1_conv1_bias.data", head1_bias)) return false;
+    if (!buffer_from_file(dir + "/head2_conv1_weight.data", head2_filter)) return false;
+    if (!buffer_from_file(dir + "/head2_conv1_bias.data", head2_bias)) return false;
+    if (!buffer_from_file(dir + "/trunk_conv1_weight.data", conv1_filter)) return false;
+    if (!buffer_from_file(dir + "/trunk_conv1_bias.data", conv1_bias)) return false;
+
+    // Old style data doesn't record the versions, so just assume they are current
+    pipeline_features_version = PipelineFeatures::xversion();
+    schedule_features_version = ScheduleFeatures::zversion();
+
     return true;
 }
 

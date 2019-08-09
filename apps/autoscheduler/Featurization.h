@@ -17,7 +17,7 @@ struct PipelineFeatures {
         return sizeof(PipelineFeatures) / sizeof(int);
     }
 
-    static constexpr int version() {
+    static constexpr uint32_t version() {
         return 3;
     }
 
@@ -154,7 +154,7 @@ struct ScheduleFeatures {
         return sizeof(ScheduleFeatures) / sizeof(double);
     }
 
-    static constexpr int version() {
+    static constexpr uint32_t version() {
         return 3;
     }
 

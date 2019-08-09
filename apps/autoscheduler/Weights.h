@@ -2,21 +2,25 @@
 #include <iostream>
 #include <string>
 
+#include "Featurization.h"
 #include "HalideBuffer.h"
+#include "NetworkSize.h"
 
 namespace Halide {
 namespace Internal {
 
-
 struct Weights {
-    Halide::Runtime::Buffer<float> head1_filter;
-    Halide::Runtime::Buffer<float> head1_bias;
+    uint32_t pipeline_features_version = PipelineFeatures::xversion();
+    uint32_t schedule_features_version = ScheduleFeatures::zversion();
 
-    Halide::Runtime::Buffer<float> head2_filter;
-    Halide::Runtime::Buffer<float> head2_bias;
+    Halide::Runtime::Buffer<float> head1_filter{head1_channels, head1_w, head1_h};
+    Halide::Runtime::Buffer<float> head1_bias{head1_channels};
 
-    Halide::Runtime::Buffer<float> conv1_filter;
-    Halide::Runtime::Buffer<float> conv1_bias;
+    Halide::Runtime::Buffer<float> head2_filter{head2_channels, head2_w};
+    Halide::Runtime::Buffer<float> head2_bias{head2_channels};
+
+    Halide::Runtime::Buffer<float> conv1_filter{conv1_channels, head1_channels + head2_channels};
+    Halide::Runtime::Buffer<float> conv1_bias{conv1_channels};
 
     template<typename F>
     void for_each_buffer(F f) {

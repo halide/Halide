@@ -29,6 +29,8 @@ namespace {
 
 using Halide::Runtime::Buffer;
 using Halide::Internal::aslog;
+using Halide::Internal::PipelineFeatures;
+using Halide::Internal::ScheduleFeatures;
 using Halide::Internal::Weights;
 
 bool ends_with(const std::string &str, const std::string &suffix) {
@@ -253,14 +255,34 @@ class DefaultCostModel : public CostModel {
         } else if (ends_with(weights_in_path, ".weights")) {
             aslog(0) << "Loading weights from " << weights_in_path << " ...\n";
             if (!weights.load_from_file(weights_in_path)) {
+                // Emit to cout (rather than cerr) because the latter is hidden during the autotune loop,
+                // and we want this to be seen.
+                std::cout << "WARNING, error in reading weights from " << weights_in_path << ", randomizing...\n";
                 need_randomize = true;
             }
         } else {
             aslog(0) << "Loading weights from directory " << weights_in_path << " ...\n";
             std::cerr << "Loading weights from a directory is deprecated; please convert to a .weights file\n";
             if (!weights.load_from_dir(weights_in_path)) {
+                std::cout << "WARNING, error in reading weights from " << weights_in_path << ", randomizing...\n";
                 need_randomize = true;
             }
+        }
+
+        if (!need_randomize && weights.pipeline_features_version != PipelineFeatures::version()) {
+            // Emit to cout (rather than cerr) because the latter is hidden during the autotune loop,
+            // and we want this to be seen.
+            std::cout << "WARNING: loaded weights have pipeline_version = " << weights.pipeline_features_version
+                << " but current pipeline_version is " << PipelineFeatures::version() << "; the weights may be "
+                "invalid. Using anyway.\n";
+        }
+
+        if (!need_randomize && weights.schedule_features_version != ScheduleFeatures::version()) {
+            // Emit to cout (rather than cerr) because the latter is hidden during the autotune loop,
+            // and we want this to be seen.
+            std::cout << "WARNING: loaded weights have schedule_features_version = " << weights.schedule_features_version
+                << " but current schedule_features_version is " << ScheduleFeatures::version() << "; the weights may be "
+                "invalid. Using anyway.\n";
         }
 
         if (need_randomize) {
@@ -268,6 +290,10 @@ class DefaultCostModel : public CostModel {
             std::cout << "Randomizing weights using seed = " << seed << "\n";
             weights.randomize((uint32_t) seed);
         }
+
+        // Update so that any version of this we save will have the current version
+        weights.pipeline_features_version = PipelineFeatures::version();
+        weights.schedule_features_version = ScheduleFeatures::version();
     }
 
     void save_weights() override {
