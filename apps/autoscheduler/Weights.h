@@ -10,8 +10,8 @@ namespace Halide {
 namespace Internal {
 
 struct Weights {
-    uint32_t pipeline_features_version = PipelineFeatures::xversion();
-    uint32_t schedule_features_version = ScheduleFeatures::zversion();
+    uint32_t pipeline_features_version = PipelineFeatures::version();
+    uint32_t schedule_features_version = ScheduleFeatures::version();
 
     Halide::Runtime::Buffer<float> head1_filter{head1_channels, head1_w, head1_h};
     Halide::Runtime::Buffer<float> head1_bias{head1_channels};

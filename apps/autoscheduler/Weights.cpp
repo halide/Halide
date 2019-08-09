@@ -45,15 +45,13 @@ bool Weights::load(std::istream &i) {
 
     i.read((char *)&pipeline_features_version, sizeof(pipeline_features_version));
     if (i.fail()) return false;
-std::cerr<<"pipeline_features_version "<<pipeline_features_version<<"\n";
+
     i.read((char *)&schedule_features_version, sizeof(schedule_features_version));
     if (i.fail()) return false;
-std::cerr<<"schedule_features_version "<<schedule_features_version<<"\n";
 
     uint32_t buffer_count;
     i.read((char *)&buffer_count, sizeof(buffer_count));
     if (i.fail() || buffer_count != 6) return false;
-std::cerr<<"buffer_count "<<buffer_count<<"\n";
 
     const auto load_one = [&i](Buffer<float> &buf) -> bool {
         uint32_t dimension_count;
@@ -144,8 +142,8 @@ bool Weights::load_from_dir(const std::string &dir) {
     if (!buffer_from_file(dir + "/trunk_conv1_bias.data", conv1_bias)) return false;
 
     // Old style data doesn't record the versions, so just assume they are current
-    pipeline_features_version = PipelineFeatures::xversion();
-    schedule_features_version = ScheduleFeatures::zversion();
+    pipeline_features_version = PipelineFeatures::version();
+    schedule_features_version = ScheduleFeatures::version();
 
     return true;
 }
