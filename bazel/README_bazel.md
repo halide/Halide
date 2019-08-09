@@ -18,6 +18,58 @@ C++ class in which you define a Halide pipeline and schedule, as well as
 well-defined input and output parameters; it can be compiled into an executable 
 (often referred to as a *Filter*) that efficiently runs the Halide pipeline.
 
+## Building Halide for Bazel
+
+The Halide build process depends on having access to a prebuilt LLVM
+distribution. LLVM needs to be built with the same C++ standard library as
+the one used by Bazel. The Linux binary LLVM distributions are built
+against `libstdc++`, but the `apps/bazeldemo` example uses the
+[Grailbio](https://github.com/grailbio/bazel-toolchain) toolchain which
+is configured to use `libc++`. Building LLVM against `libc++` can be done
+like this:
+
+```sh
+#!/bin/bash
+set -e
+
+export BINARY_LLVM=clang+llvm-8.0.0-x86_64-linux-gnu-ubuntu-18.04
+wget http://releases.llvm.org/8.0.0/${BINARY_LLVM}.tar.xz
+tar Jxvf ${BINARY_LLVM}.tar.xz
+export BINARY_LLVM_DIR=$(pwd)/${BINARY_LLVM}
+
+svn co https://llvm.org/svn/llvm-project/llvm/branches/release_80 llvm8.0
+svn co https://llvm.org/svn/llvm-project/cfe/branches/release_80 llvm8.0/tools/clang
+
+cd llvm8.0
+mkdir build
+cd build
+CC=${BINARY_LLVM_DIR}/bin/clang \
+CXX=${BINARY_LLVM_DIR}/bin/clang++ \
+LD=${BINARY_LLVM_DIR}/bin/clang \
+AR=${BINARY_LLVM_DIR}/bin/llvm-ar \
+CXXFLAGS=-stdlib=libc++ \
+LDFLAGS="-stdlib=libc++" \
+cmake \
+  -GNinja \
+  -DLLVM_ENABLE_TERMINFO=OFF \
+  -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX;AArch64;Mips;PowerPC" \
+  -DLLVM_ENABLE_ASSERTIONS=ON \
+  -DCMAKE_BUILD_TYPE=Release ..
+LD_LIBRARY_PATH=${BINARY_LLVM_DIR}/lib ninja
+export LLVM_CONFIG=$(pwd)/bin/llvm-config
+```
+
+The script above downloads a binary LLVM distribution and the LLVM
+source and builds the source with the binary distribution. Once this
+is done, Halide can be built with
+
+```sh
+# Run this in the top level directory of the Halide repository.
+CXX="${BINARY_LLVM_DIR}/bin/clang++ -stdlib=libc++" \
+    LD_LIBRARY_PATH=${BINARY_LLVM_DIR}/lib \
+    make distrib
+```
+
 ## Halide Compilation Process
 
 The Halide compilation process is actually several steps:

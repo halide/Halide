@@ -1,4 +1,25 @@
-# Note that this requires you to have built the toplevel Halide 'distrib' folder via 'make distrib'
+load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+
+http_archive(
+    name = "com_grail_bazel_toolchain",
+    strip_prefix = "bazel-toolchain-70827ff77a4f1b283ea3ff40af262325f5d5c276",
+    urls = ["https://github.com/grailbio/bazel-toolchain/archive/70827ff77a4f1b283ea3ff40af262325f5d5c276.tar.gz"],
+    sha256 = "f77355c6eaf1428de05488690e5395646c23ce7f157aa6e6746c35e82c7efcc6",
+)
+
+load("@com_grail_bazel_toolchain//toolchain:rules.bzl", "llvm_toolchain")
+
+llvm_toolchain(
+    name = "llvm_toolchain",
+    llvm_version = "8.0.0",
+)
+
+load("@llvm_toolchain//:toolchains.bzl", "llvm_register_toolchains")
+
+llvm_register_toolchains()
+
+# Note that this requires you to have built the toplevel Halide 'distrib' folder.
+# For more information on how to do this, see README_bazel.md.
 local_repository(
   name = "halide",
   path = "../../distrib",
