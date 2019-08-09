@@ -1,8 +1,8 @@
 # Build the generator to autotune. This script will be autotuning the
 # autoscheduler's cost model training pipeline, which is large enough
 # to be interesting.
-if [ $# -lt 5 -o $# -gt 6 ]; then
-  echo "Usage: $0 /path/to/some.generator generatorname halide_target weights_dir autoschedule_bin_dir [generator_args_sets]"
+if [ $# -lt 6 -o $# -gt 7 ]; then
+  echo "Usage: $0 /path/to/some.generator generatorname halide_target weights_dir autoschedule_bin_dir halide_distrib_path [generator_args_sets]"
   exit
 fi
 
@@ -16,12 +16,13 @@ PIPELINE=${2}
 HL_TARGET=${3}
 START_WEIGHTS_DIR=${4}
 AUTOSCHED_BIN=${5}
+HALIDE_DISTRIB_PATH=${6}
 
 # Read the generator-arg sets into an array. Each set is delimited
 # by space; multiple values within each set are are delimited with ;
 # e.g. "set1arg1=1;set1arg2=foo set2=bar set3arg1=3.14;set4arg2=42"
-if [ $# -ge 6 ]; then
-    IFS=' ' read -r -a GENERATOR_ARGS_SETS_ARRAY <<< "${6}"
+if [ $# -ge 7 ]; then
+    IFS=' ' read -r -a GENERATOR_ARGS_SETS_ARRAY <<< "${7}"
 else
     declare -a GENERATOR_ARGS_SETS_ARRAY=
 fi
@@ -60,9 +61,9 @@ else
     echo Copying starting weights from ${START_WEIGHTS_DIR} to ${WEIGHTS}
 fi
 
-# We could add these unconditionally, but it's easier to wade thru
+# We could add this unconditionally, but it's easier to wade thru
 # results if we only add if needed
-for F in disable_llvm_loop_unroll disable_llvm_loop_vectorize; do
+for F in disable_llvm_loop_opt; do
     if [[ ! ${HL_TARGET} =~ .*${F}.* ]]; then
         HL_TARGET="${HL_TARGET}-${F}"
     fi

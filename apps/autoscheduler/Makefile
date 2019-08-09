@@ -30,7 +30,8 @@ autotune: $(GENERATOR_BIN)/demo.generator $(AUTOSCHED_BIN)/featurization_to_samp
 		demo \
 		x86-64-avx2 \
 		$(AUTOSCHED_SRC)/weights \
-		$(AUTOSCHED_BIN)
+		$(AUTOSCHED_BIN) \
+		$(HALIDE_DISTRIB_PATH)
 
 $(BIN)/test_perfect_hash_map: test_perfect_hash_map.cpp PerfectHashMap.h
 	@mkdir -p $(@D)
