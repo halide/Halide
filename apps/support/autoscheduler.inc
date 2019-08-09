@@ -2,12 +2,7 @@ AUTOSCHED_SRC ?= ../autoscheduler
 AUTOSCHED_BIN ?= $(AUTOSCHED_SRC)/bin
 
 AUTOSCHED_WEIGHT_OBJECTS=\
-$(AUTOSCHED_BIN)/weights_head1_conv1_weight.o \
-$(AUTOSCHED_BIN)/weights_head1_conv1_bias.o \
-$(AUTOSCHED_BIN)/weights_head2_conv1_weight.o \
-$(AUTOSCHED_BIN)/weights_head2_conv1_bias.o \
-$(AUTOSCHED_BIN)/weights_trunk_conv1_weight.o \
-$(AUTOSCHED_BIN)/weights_trunk_conv1_bias.o
+$(AUTOSCHED_BIN)/baseline_weights.o
 
 # TODO(srj): depending on something not in the distrib folder isn't strictly
 # kosher, but this is still experimental
@@ -15,11 +10,11 @@ $(AUTOSCHED_BIN)/binary2cpp: ../../tools/binary2cpp.cpp
 	@mkdir -p $(@D)
 	$(CXX) $< -o $@
 
-$(AUTOSCHED_BIN)/weights_%.cpp: $(AUTOSCHED_BIN)/binary2cpp
+$(AUTOSCHED_BIN)/baseline_weights.cpp: $(AUTOSCHED_BIN)/binary2cpp $(AUTOSCHED_SRC)/baseline.weights
 	@mkdir -p $(@D)
-	$(AUTOSCHED_BIN)/binary2cpp weights_$* < $(AUTOSCHED_SRC)/weights/$*.data > $@
+	$(AUTOSCHED_BIN)/binary2cpp baseline_weights < $(AUTOSCHED_SRC)/baseline.weights > $@
 
-$(AUTOSCHED_BIN)/weights_%.o: $(AUTOSCHED_BIN)/weights_%.cpp
+$(AUTOSCHED_BIN)/baseline_weights.o: $(AUTOSCHED_BIN)/baseline_weights.cpp
 	$(CXX) -c $< -o $@
 
 AUTOSCHED_COST_MODEL_LIBS=\
@@ -47,6 +42,7 @@ $(AUTOSCHED_BIN)/cost_model/%.a: $(AUTOSCHED_BIN)/cost_model.generator
 $(AUTOSCHED_BIN)/libauto_schedule.so: $(AUTOSCHED_SRC)/AutoSchedule.cpp \
 							$(AUTOSCHED_SRC)/ASLog.cpp \
 							$(AUTOSCHED_SRC)/DefaultCostModel.cpp \
+							$(AUTOSCHED_SRC)/Weights.cpp \
 							$(AUTOSCHED_SRC)/FunctionDAG.h \
 							$(AUTOSCHED_SRC)/Featurization.h \
 							$(AUTOSCHED_SRC)/CostModel.h \
@@ -56,11 +52,12 @@ $(AUTOSCHED_BIN)/libauto_schedule.so: $(AUTOSCHED_SRC)/AutoSchedule.cpp \
 							$(GENERATOR_DEPS) \
 							$(AUTOSCHED_BIN)/auto_schedule_runtime.a
 	@mkdir -p $(@D)
-	$(CXX) -shared $(USE_EXPORT_DYNAMIC) -fPIC $(CXXFLAGS) -g -I $(AUTOSCHED_BIN)/cost_model $(AUTOSCHED_SRC)/AutoSchedule.cpp $(AUTOSCHED_SRC)/ASLog.cpp $(AUTOSCHED_SRC)/DefaultCostModel.cpp $(AUTOSCHED_WEIGHT_OBJECTS) $(AUTOSCHED_COST_MODEL_LIBS) $(AUTOSCHED_BIN)/auto_schedule_runtime.a $(OPTIMIZE) -o $@ $(HALIDE_SYSTEM_LIBS)
+	$(CXX) -shared $(USE_EXPORT_DYNAMIC) -fPIC $(CXXFLAGS) -g -I $(AUTOSCHED_BIN)/cost_model $(AUTOSCHED_SRC)/AutoSchedule.cpp $(AUTOSCHED_SRC)/ASLog.cpp $(AUTOSCHED_SRC)/DefaultCostModel.cpp $(AUTOSCHED_SRC)/Weights.cpp $(AUTOSCHED_WEIGHT_OBJECTS) $(AUTOSCHED_COST_MODEL_LIBS) $(AUTOSCHED_BIN)/auto_schedule_runtime.a $(OPTIMIZE) -o $@ $(HALIDE_SYSTEM_LIBS)
 
 $(AUTOSCHED_BIN)/train_cost_model: $(AUTOSCHED_SRC)/train_cost_model.cpp \
 						$(AUTOSCHED_SRC)/ASLog.cpp \
 						 $(AUTOSCHED_SRC)/DefaultCostModel.cpp \
+						 $(AUTOSCHED_SRC)/Weights.cpp \
 						 $(AUTOSCHED_SRC)/CostModel.h \
 						 $(AUTOSCHED_SRC)/NetworkSize.h \
 						 $(AUTOSCHED_COST_MODEL_LIBS) \
@@ -73,6 +70,9 @@ $(AUTOSCHED_BIN)/featurization_to_sample: $(AUTOSCHED_SRC)/featurization_to_samp
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $< $(OPTIMIZE) -o $@
 
+$(AUTOSCHED_BIN)/weightsdir_to_weightsfile: $(AUTOSCHED_SRC)/weightsdir_to_weightsfile.cpp $(AUTOSCHED_SRC)/Weights.cpp
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) $^ $(OPTIMIZE) -o $@
 
 # This is the value that machine_params defaults to if no custom value is specified;
 # see MachineParams::generic()
