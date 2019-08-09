@@ -2,13 +2,10 @@
 
 ## Release Notes
 
-These build rules are known to work well for Linux and OSX systems. Windows 
-support is still a work-in-progress, and may require tweaking for now. These
-rules are intended to replace the experimental rules implementation provided 
-by https://github.com/halide/halide_bazel, which are now considered
-deprecated.
+These build rules are known to work well for Linux systems only. Mac and
+Windows support is still work-in-progress, and may require tweaking for now.
 
-Bazel 0.6 or later is required.
+Bazel 0.28 or later is required.
 
 ## Overview
 
