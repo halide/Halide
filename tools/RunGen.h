@@ -1322,8 +1322,8 @@ private:
                 filter_argv[arg.index] = const_cast<halide_scalar_value_t*>(&arg.scalar_value);
                 break;
             case halide_argument_kind_input_buffer:
-                // Make a Buffer<> that has the right dimension count and extent=0 for all of them
-                bounds_query_buffers[arg.index] = Buffer<>(arg.metadata->type, std::vector<int>(arg.metadata->dimensions, 0));
+                // Make a Buffer<> that has the right dimension count and extent=1 for all of them
+                bounds_query_buffers[arg.index] = Buffer<>(arg.metadata->type, std::vector<int>(arg.metadata->dimensions, 1));
                 filter_argv[arg.index] = bounds_query_buffers[arg.index].raw_buffer();
                 break;
             case halide_argument_kind_output_buffer:
