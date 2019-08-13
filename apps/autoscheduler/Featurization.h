@@ -95,7 +95,7 @@ struct PipelineFeatures {
             if (!types_in_use[i]) continue;
 
 
-            aslog(1)  << "    Featurization for type " << type_names[i] << '\n'
+            aslog(0)  << "    Featurization for type " << type_names[i] << '\n'
                       << "     Op histogram:\n"
                       << "      Constant:   " << op_histogram[(int)OpType::Const][i] << '\n'
                       << "      Cast:       " << op_histogram[(int)OpType::Cast][i] << '\n'
@@ -300,7 +300,7 @@ struct ScheduleFeatures {
     double working_set_at_root = 0;
 
     void dump() const {
-        aslog(1)  << "    num_realizations:                      " << num_realizations << '\n'
+        aslog(0)  << "    num_realizations:                      " << num_realizations << '\n'
                   << "    num_productions:                       " << num_productions << '\n'
                   << "    points_computed_per_realization:       " << points_computed_per_realization << '\n'
                   << "    points_computed_per_production:        " << points_computed_per_production << '\n'

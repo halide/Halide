@@ -185,24 +185,24 @@ public:
 
     void dump(const char *prefix) const {
         if (count() > 1) {
-            aslog(1) << prefix << count() << " x\n";
+            aslog(0) << prefix << count() << " x\n";
         }
         for (size_t i = 0; i < producer_storage_dims(); i++) {
-            aslog(1) << prefix << "  [";
+            aslog(0) << prefix << "  [";
 
             for (size_t j = 0; j < consumer_loop_dims(); j++) {
                 const auto &c = (*this)(i, j);
                 if (!c.exists) {
-                    aslog(1) << " _  ";
+                    aslog(0) << " _  ";
                 } else if (c.denominator == 1) {
-                    aslog(1) << " " << c.numerator << "  ";
+                    aslog(0) << " " << c.numerator << "  ";
                 } else {
-                    aslog(1) << c.numerator << "/" << c.denominator << " ";
+                    aslog(0) << c.numerator << "/" << c.denominator << " ";
                 }
             }
-            aslog(1) << "]\n";
+            aslog(0) << "]\n";
         }
-        aslog(1) << "\n";
+        aslog(0) << "\n";
     }
 };
 
@@ -305,11 +305,11 @@ struct BoundContents {
         for (int i = 0; i < layout->total_size; i++) {
             auto p = data()[i];
             if (p.max() < p.min()) {
-                aslog(1) << "Bad bounds object:\n";
+                aslog(0) << "Bad bounds object:\n";
                 for (int j = 0; j < layout->total_size; j++) {
-                    if (i == j) aslog(1) << "=> ";
-                    else aslog(1) << "   ";
-                    aslog(1) << j << ": " << data()[j].min() << ", " << data()[j].max() << "\n";
+                    if (i == j) aslog(0) << "=> ";
+                    else aslog(0) << "   ";
+                    aslog(0) << j << ": " << data()[j].min() << ", " << data()[j].max() << "\n";
                 }
                 internal_error << "Aborting";
             }
@@ -1493,39 +1493,39 @@ struct FunctionDAG {
 
     void dump() const {
         for (const Node &n : nodes) {
-            aslog(1) << "Node: " << n.func.name() << '\n'
+            aslog(0) << "Node: " << n.func.name() << '\n'
                      << "  Symbolic region required: \n";
             for (const Interval &i : n.region_required) {
-                aslog(1) << "    " << i.min << ", " << i.max << '\n';
+                aslog(0) << "    " << i.min << ", " << i.max << '\n';
             }
-            aslog(1) << "  Region computed: \n";
+            aslog(0) << "  Region computed: \n";
             for (const auto &i : n.region_computed) {
-                aslog(1) << "    " << i.in.min << ", " << i.in.max << '\n';
+                aslog(0) << "    " << i.in.min << ", " << i.in.max << '\n';
             }
             for (size_t i = 0; i < n.stages.size(); i++) {
-                aslog(1) << "  Stage " << i << ":\n";
+                aslog(0) << "  Stage " << i << ":\n";
                 for (const auto &l : n.stages[i].loop) {
-                    aslog(1) << "    " << l.var << " " << l.min << " " << l.max << '\n';
+                    aslog(0) << "    " << l.var << " " << l.min << " " << l.max << '\n';
                 }
                 n.stages[i].features.dump();
             }
-            aslog(1) << "  pointwise: " << n.is_pointwise
+            aslog(0) << "  pointwise: " << n.is_pointwise
                      << " boundary condition: " << n.is_boundary_condition
                      << " wrapper: " << n.is_wrapper
                      << " input: " << n.is_input
                      << " output: " << n.is_output << "\n";
         }
         for (const Edge &e : edges) {
-            aslog(1) << "Edge: " << e.producer->func.name() << " -> " << e.consumer->name << '\n'
+            aslog(0) << "Edge: " << e.producer->func.name() << " -> " << e.consumer->name << '\n'
                      << "  Footprint: \n";
             int j = 0;
             for (const auto &i : e.bounds) {
-                aslog(1) << "    Min " << j << ": " << i.first.expr << '\n';
-                aslog(1) << "    Max " << j << ": " << i.second.expr << '\n';
+                aslog(0) << "    Min " << j << ": " << i.first.expr << '\n';
+                aslog(0) << "    Max " << j << ": " << i.second.expr << '\n';
                 j++;
             }
 
-            aslog(1) << "  Load Jacobians:\n";
+            aslog(0) << "  Load Jacobians:\n";
             for (const auto &jac : e.load_jacobians) {
                 jac.dump("  ");
             }

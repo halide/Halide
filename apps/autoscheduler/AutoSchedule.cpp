@@ -1253,19 +1253,19 @@ struct LoopNest {
     // Recursively print a loop nest representation to stderr
     void dump(string prefix, const LoopNest *parent) const {
         if (!is_root()) {
-            aslog(1) << prefix << node->func.name();
+            aslog(0) << prefix << node->func.name();
             prefix += " ";
 
             for (size_t i = 0; i < size.size(); i++) {
-                aslog(1) << " " << size[i];
+                aslog(0) << " " << size[i];
                 // The vectorized loop gets a 'v' suffix
                 if (innermost && i == (size_t) vectorized_loop_index) {
-                    aslog(1) << 'v';
+                    aslog(0) << 'v';
                 }
                 // Loops that have a known constant size get a
                 // 'c'. Useful for knowing what we can unroll.
                 if (parent->get_bounds(node)->loops(stage->index, i).constant_extent()) {
-                    aslog(1) << 'c';
+                    aslog(0) << 'c';
                 }
             }
 
@@ -1274,31 +1274,31 @@ struct LoopNest {
             const auto &bounds = get_bounds(node);
             for (size_t i = 0; i < size.size(); i++) {
                 const auto &p = bounds->loops(stage->index, i);
-                aslog(1) << " [" << p.first << ", " << p.second << "]";
+                aslog(0) << " [" << p.first << ", " << p.second << "]";
             }
             */
 
-            aslog(1) << " (" << vectorized_loop_index << ", " << vector_dim << ")";
+            aslog(0) << " (" << vectorized_loop_index << ", " << vector_dim << ")";
         }
 
         if (tileable) {
-            aslog(1) << " t";
+            aslog(0) << " t";
         }
         if (innermost) {
-            aslog(1) << " *\n";
+            aslog(0) << " *\n";
         } else if (parallel) {
-            aslog(1) << " p\n";
+            aslog(0) << " p\n";
         } else {
-            aslog(1) << '\n';
+            aslog(0) << '\n';
         }
         for (auto p : store_at) {
-            aslog(1) << prefix << "realize: " << p->func.name() << '\n';
+            aslog(0) << prefix << "realize: " << p->func.name() << '\n';
         }
         for (size_t i = children.size(); i > 0; i--) {
             children[i-1]->dump(prefix, this);
         }
         for (auto it = inlined.begin(); it != inlined.end(); it++) {
-            aslog(1) << prefix << "inlined: " << it.key()->func.name() << " " << it.value() << '\n';
+            aslog(0) << prefix << "inlined: " << it.key()->func.name() << " " << it.value() << '\n';
         }
     }
 
@@ -1639,7 +1639,7 @@ struct LoopNest {
             auto tilings = generate_tilings(size, (int)(size.size() - 1), 2, !in_realization);
 
             if (tilings.size() > 10000) {
-                aslog(1) << "Warning: lots of tilings: " << tilings.size() << "\n";
+                aslog(0) << "Warning: lots of tilings: " << tilings.size() << "\n";
             }
 
             for (auto t : tilings) {
@@ -2241,7 +2241,9 @@ struct State {
                 const LoopNest *l = consumer_site.innermost;
                 if (!l) l = consumer_site.compute;
                 if (!l) {
-                    dump();
+                    if (aslog::aslog_level() > 0) {
+                        dump();
+                    }
                     internal_error << e->producer->func.name() << " -> " << e->consumer->name << "\n";
                 }
                 if (loop) {
@@ -2308,7 +2310,7 @@ struct State {
             for (auto it = features.begin(); it != features.end(); it++) {
                 auto &stage = *(it.key());
                 const auto &feat = it.value();
-                aslog(1) << "Schedule features for " << stage.stage.name() << "\n";
+                aslog(0) << "Schedule features for " << stage.stage.name() << "\n";
                 feat.dump();
             }
         }
@@ -2424,7 +2426,7 @@ struct State {
             // We don't need to schedule nodes that represent inputs,
             // and there are no other decisions to be made about them
             // at this time.
-            // aslog(1) << "Skipping over scheduling input node: " << node->func.name() << "\n";
+            // aslog(0) << "Skipping over scheduling input node: " << node->func.name() << "\n";
             auto child = make_child();
             child->num_decisions_made++;
             accept_child(std::move(child));
@@ -2432,14 +2434,14 @@ struct State {
         }
 
         if (!node->outgoing_edges.empty() && !root->calls(node)) {
-            aslog(1) << "In state:\n";
+            aslog(0) << "In state:\n";
             dump();
-            aslog(1) << node->func.name() << " is consumed by:\n";
+            aslog(0) << node->func.name() << " is consumed by:\n";
             for (const auto *e : node->outgoing_edges) {
-                aslog(1) << e->consumer->name << "\n";
-                aslog(1) << "Which in turn consumes:\n";
+                aslog(0) << e->consumer->name << "\n";
+                aslog(0) << "Which in turn consumes:\n";
                 for (const auto *e2 : e->consumer->incoming_edges) {
-                    aslog(1) << "  " << e2->producer->func.name() << "\n";
+                    aslog(0) << "  " << e2->producer->func.name() << "\n";
                 }
             }
             internal_error << "Pipeline so far doesn't use next Func: " << node->func.name() << '\n';
@@ -2675,7 +2677,7 @@ struct State {
 
 
         if (num_children == 0) {
-            aslog(1) << "Warning: Found no legal way to schedule "
+            aslog(0) << "Warning: Found no legal way to schedule "
                      << node->func.name() << " in the following State:\n";
             dump();
             // All our children died. Maybe other states have had
@@ -2685,9 +2687,9 @@ struct State {
     }
 
     void dump() const {
-        aslog(1) << "State with cost " << cost << ":\n";
+        aslog(0) << "State with cost " << cost << ":\n";
         root->dump("", nullptr);
-        aslog(1) << schedule_source;
+        aslog(0) << schedule_source;
     }
 
     string schedule_source;
@@ -2968,7 +2970,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
     std::function<void(IntrusivePtr<State> &&)> enqueue_new_children =
         [&](IntrusivePtr<State> &&s) {
 
-        // aslog(1) << "\n** Generated child: ";
+        // aslog(0) << "\n** Generated child: ";
         // s->dump();
         // s->calculate_cost(dag, params, nullptr, true);
 
@@ -3014,7 +3016,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
         }
 
         if ((int)pending.size() > beam_size * 10000) {
-            aslog(1) << "Warning: Huge number of states generated (" << pending.size() << ").\n";
+            aslog(0) << "Warning: Huge number of states generated (" << pending.size() << ").\n";
         }
 
         expanded = 0;
@@ -3174,7 +3176,7 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
         if (aslog::aslog_level() == 0) {
             aslog(0) << "Pass " << i << " of " << num_passes << ", cost: " << pass->cost << "\n";
         } else {
-            aslog(1) << "Pass " << i << " result: ";
+            aslog(0) << "Pass " << i << " result: ";
             pass->dump();
         }
 
@@ -3231,7 +3233,9 @@ void generate_schedule(const std::vector<Function> &outputs,
 
     // Analyse the Halide algorithm and construct our abstract representation of it
     FunctionDAG dag(outputs, params, target);
-    dag.dump();
+    if (aslog::aslog_level() > 0) {
+        dag.dump();
+    }
 
     // Construct a cost model to use to evaluate states. Currently we
     // just have the one, but it's an abstract interface, so others
@@ -3251,13 +3255,15 @@ void generate_schedule(const std::vector<Function> &outputs,
     aslog(1) << "** Optimal schedule:\n";
 
     // Just to get the debugging prints to fire
-    optimal->calculate_cost(dag, params, cost_model.get(), true);
+    optimal->calculate_cost(dag, params, cost_model.get(), aslog::aslog_level() > 0);
 
     // Apply the schedules to the pipeline
     optimal->apply_schedule(dag, params);
 
     // Print out the schedule
-    optimal->dump();
+    if (aslog::aslog_level() > 0) {
+        optimal->dump();
+    }
 
     string schedule_file = get_env_variable("HL_SCHEDULE_FILE");
     if (!schedule_file.empty()) {
