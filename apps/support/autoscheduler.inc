@@ -85,6 +85,12 @@ $(AUTOSCHED_BIN)/reset_weights: $(AUTOSCHED_SRC)/reset_weights.cpp \
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -Wall -I $(AUTOSCHED_BIN)/cost_model -O3 $(filter-out %.h,$^) -o $@ $(LDFLAGS)
 
+$(AUTOSCHED_BIN)/check_weights: $(AUTOSCHED_SRC)/check_weights.cpp \
+						 $(AUTOSCHED_SRC)/NetworkSize.h \
+						 $(AUTOSCHED_WEIGHT_OBJECTS)
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) -Wall -O3 $(filter-out %.h,$^) -o $@ $(LDFLAGS)
+
 # This is the value that machine_params defaults to if no custom value is specified;
 # see MachineParams::generic()
 HL_MACHINE_PARAMS ?= 80,25165824,160
