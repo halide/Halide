@@ -1,21 +1,59 @@
-HALIDE=$(dirname $0)/../../..
+#!/bin/bash
 
+if [[ $# -ne 2 && $# -ne 3 ]]; then
+    echo "Usage: $0 mode [greedy|beam_search] max_iterations app"
+    exit
+fi
+
+HALIDE=$(dirname $0)/../../..
 echo "Using Halide in " $HALIDE
+
+MODE=${1}
+MAX_ITERATIONS=${2}
+APP=${3}
+
+if [ $MODE == "greedy" ]; then
+    BEAM_SIZE=1
+    NUM_PASSES=1
+elif [ $MODE == "beam_search" ]; then
+    BEAM_SIZE=32
+    NUM_PASSES=5
+else
+    echo "Unknown mode: ${MODE}"
+    exit
+fi
+
+echo "Using ${MODE} mode with beam_size=${BEAM_SIZE} and num_passes=${NUM_PASSES}"
+
+export HL_BEAM_SIZE=${BEAM_SIZE}
+export HL_NUM_PASSES=${NUM_PASSES}
 
 export CXX="ccache c++"
 
-export HL_MACHINE_PARAMS=16,24000000,160
-export HL_PERMIT_FAILED_UNROLL=1
-export HL_WEIGHTS_DIR=${PWD}/${HALIDE}/apps/autoscheduler/weights
-export HL_TARGET=x86-64-avx2
+export HL_MACHINE_PARAMS=80,24000000,160
 
-#export HL_BEAM_SIZE=1
-#export HL_NUM_PASSES=1
-export HL_BEAM_SIZE=32
-export HL_NUM_PASSES=5
+export HL_PERMIT_FAILED_UNROLL=1
+export HL_WEIGHTS_DIR=${HALIDE}/apps/autoscheduler/gpu_weights
+export HL_TARGET=host-cuda
+
+# no random dropout
 export HL_RANDOM_DROPOUT=100
 
-APPS="resnet_50_blockwise bgu bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate_generator conv_layer mat_mul_generator iir_blur_generator"
+if [ -z $APP ]; then
+    APPS="resnet_50_blockwise bgu bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate_generator conv_layer mat_mul_generator iir_blur_generator"
+else
+    APPS=$APP
+fi
+
+NUM_APPS=0
+for app in $APPS; do
+    NUM_APPS=$((NUM_APPS + 1))
+done
+echo "Autotuning on $APPS for $MAX_ITERATIONS iteration(s)"
+
+MAX_ITERATIONS=$((MAX_ITERATIONS * NUM_APPS))
+
+ITERATIONS=0
 
 while [ 1 ]; do
     for app in $APPS; do
@@ -23,6 +61,12 @@ while [ 1 ]; do
         # 15 mins of autotuning per app, round robin
         while [[ SECONDS -lt 900 ]]; do
             make -C ${HALIDE}/apps/${app} autotune
+
+            if [[ $MAX_ITERATIONS -ne 0 && $ITERATIONS -ge $MAX_ITERATIONS ]]; then
+                exit
+            fi
+
+            ITERATIONS=$((ITERATIONS + 1))
         done
     done
 done
