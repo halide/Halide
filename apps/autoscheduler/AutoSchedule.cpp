@@ -107,6 +107,41 @@ using std::map;
 using std::set;
 using std::pair;
 
+struct ProgressBar {
+    void set(double progress) {
+        if (!draw_progress_bar) return;
+        counter++;
+        const int bits = 11;
+        if (counter & ((1 << bits) - 1)) return;
+        const int pos = (int) (progress * 78);
+        aslog(0) << '[';
+        for (int j = 0; j < 78; j++) {
+            if (j < pos) {
+                aslog(0) << '.';
+            } else if (j - 1 < pos) {
+                aslog(0) << "/-\\|"[(counter >> bits) % 4];
+            } else {
+                aslog(0) << ' ';
+            }
+        }
+        aslog(0) << ']';
+        for (int j = 0; j < 80; j++) {
+            aslog(0) << '\b';
+        }
+    }
+
+    void clear() {
+        if (counter) {
+            for (int j = 0; j < 80; j++) aslog(0) << ' ';
+            for (int j = 0; j < 80; j++) aslog(0) << '\b';
+        }
+    }
+private:
+    uint32_t counter = 0;
+    const bool draw_progress_bar = isatty(2);
+};
+
+
 // Get the HL_RANDOM_DROPOUT environment variable. Purpose of this is described above.
 uint32_t get_dropout_threshold() {
     string random_dropout_str = get_env_variable("HL_RANDOM_DROPOUT");
@@ -1217,20 +1252,32 @@ struct LoopNest {
 
     // Recursively print a loop nest representation to stderr
     void dump(string prefix, const LoopNest *parent) const {
+        if (aslog::aslog_level() == 0) {
+            aslog(0) << prefix << "realize: ";
+            bool comma = false;
+            for (auto p : store_at) {
+                if (comma) aslog(0) << ", ";
+                aslog(0) << p->func.name();
+                comma = true;
+            }
+            aslog(0) << '\n';
+            return;
+        }
+
         if (!is_root()) {
-            aslog(0) << prefix << node->func.name();
+            aslog(1) << prefix << node->func.name();
             prefix += " ";
 
             for (size_t i = 0; i < size.size(); i++) {
-                aslog(0) << " " << size[i];
+                aslog(1) << " " << size[i];
                 // The vectorized loop gets a 'v' suffix
                 if (innermost && i == (size_t) vectorized_loop_index) {
-                    aslog(0) << 'v';
+                    aslog(1) << 'v';
                 }
                 // Loops that have a known constant size get a
                 // 'c'. Useful for knowing what we can unroll.
                 if (parent->get_bounds(node)->loops(stage->index, i).constant_extent()) {
-                    aslog(0) << 'c';
+                    aslog(1) << 'c';
                 }
             }
 
@@ -1239,31 +1286,31 @@ struct LoopNest {
             const auto &bounds = get_bounds(node);
             for (size_t i = 0; i < size.size(); i++) {
                 const auto &p = bounds->loops(stage->index, i);
-                aslog(0) << " [" << p.first << ", " << p.second << "]";
+                aslog(1) << " [" << p.first << ", " << p.second << "]";
             }
             */
 
-            aslog(0) << " (" << vectorized_loop_index << ", " << vector_dim << ")";
+            aslog(1) << " (" << vectorized_loop_index << ", " << vector_dim << ")";
         }
 
         if (tileable) {
-            aslog(0) << " t";
+            aslog(1) << " t";
         }
         if (innermost) {
-            aslog(0) << " *\n";
+            aslog(1) << " *\n";
         } else if (parallel) {
-            aslog(0) << " p\n";
+            aslog(1) << " p\n";
         } else {
-            aslog(0) << '\n';
+            aslog(1) << '\n';
         }
         for (auto p : store_at) {
-            aslog(0) << prefix << "realize: " << p->func.name() << '\n';
+            aslog(1) << prefix << "realize: " << p->func.name() << '\n';
         }
         for (size_t i = children.size(); i > 0; i--) {
             children[i-1]->dump(prefix, this);
         }
         for (auto it = inlined.begin(); it != inlined.end(); it++) {
-            aslog(0) << prefix << "inlined: " << it.key()->func.name() << " " << it.value() << '\n';
+            aslog(1) << prefix << "inlined: " << it.key()->func.name() << " " << it.value() << '\n';
         }
     }
 
@@ -1604,7 +1651,7 @@ struct LoopNest {
             auto tilings = generate_tilings(size, (int)(size.size() - 1), 2, !in_realization);
 
             if (tilings.size() > 10000) {
-                aslog(0) << "Warning: lots of tilings: " << tilings.size() << "\n";
+                aslog(1) << "Warning: lots of tilings: " << tilings.size() << "\n";
             }
 
             for (auto t : tilings) {
@@ -2273,7 +2320,7 @@ struct State {
             for (auto it = features.begin(); it != features.end(); it++) {
                 auto &stage = *(it.key());
                 const auto &feat = it.value();
-                aslog(0) << "Schedule features for " << stage.stage.name() << "\n";
+                aslog(1) << "Schedule features for " << stage.stage.name() << "\n";
                 feat.dump();
             }
         }
@@ -2389,7 +2436,7 @@ struct State {
             // We don't need to schedule nodes that represent inputs,
             // and there are no other decisions to be made about them
             // at this time.
-            // aslog(0) << "Skipping over scheduling input node: " << node->func.name() << "\n";
+            // aslog(1) << "Skipping over scheduling input node: " << node->func.name() << "\n";
             auto child = make_child();
             child->num_decisions_made++;
             accept_child(std::move(child));
@@ -2397,14 +2444,14 @@ struct State {
         }
 
         if (!node->outgoing_edges.empty() && !root->calls(node)) {
-            aslog(0) << "In state:\n";
+            aslog(1) << "In state:\n";
             dump();
-            aslog(0) << node->func.name() << " is consumed by:\n";
+            aslog(1) << node->func.name() << " is consumed by:\n";
             for (const auto *e : node->outgoing_edges) {
-                aslog(0) << e->consumer->name << "\n";
-                aslog(0) << "Which in turn consumes:\n";
+                aslog(1) << e->consumer->name << "\n";
+                aslog(1) << "Which in turn consumes:\n";
                 for (const auto *e2 : e->consumer->incoming_edges) {
-                    aslog(0) << "  " << e2->producer->func.name() << "\n";
+                    aslog(1) << "  " << e2->producer->func.name() << "\n";
                 }
             }
             internal_error << "Pipeline so far doesn't use next Func: " << node->func.name() << '\n';
@@ -2640,7 +2687,7 @@ struct State {
 
 
         if (num_children == 0) {
-            aslog(0) << "Warning: Found no legal way to schedule "
+            aslog(1) << "Warning: Found no legal way to schedule "
                      << node->func.name() << " in the following State:\n";
             dump();
             // All our children died. Maybe other states have had
@@ -2650,9 +2697,21 @@ struct State {
     }
 
     void dump() const {
-        aslog(0) << "State with cost " << cost << ":\n";
+        if (aslog::aslog_level() == 0) {
+            aslog(0) << " State with cost " << cost << ", stored at:";
+            bool comma = false;
+            for (auto p : root->store_at) {
+                if (comma) aslog(0) << ',';
+                aslog(0) << ' ' << p->func.name();
+                comma = true;
+            }
+            aslog(0) << '\n';
+            return;
+        }
+
+        aslog(0) << "\nState with cost " << cost << ":\n";
         root->dump("", nullptr);
-        aslog(0) << schedule_source;
+        aslog(1) << schedule_source;
     }
 
     string schedule_source;
@@ -2912,6 +2971,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
                                           int beam_size,
                                           int pass_idx,
                                           int num_passes,
+                                          ProgressBar &tick,
                                           std::unordered_set<uint64_t> &permitted_hashes) {
 
     if (cost_model) {
@@ -2927,37 +2987,12 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
         q.emplace(std::move(initial));
     }
 
-    // A progress bar.
-    uint32_t counter = 0;
-    bool draw_progress_bar = isatty(2);
-    auto tick = [&](double progress) {
-        if (!draw_progress_bar) return;
-        counter++;
-        const int bits = 11;
-        if (counter & ((1 << bits) - 1)) return;
-        progress *= 78;
-        aslog(0) << '[';
-        for (int j = 0; j < 78; j++) {
-            if (j < progress) {
-                aslog(0) << '.';
-            } else if (j - 1 < progress) {
-                aslog(0) << "/-\\|"[(counter >> bits) % 4];
-            } else {
-                aslog(0) << ' ';
-            }
-        }
-        aslog(0) << ']';
-        for (int j = 0; j < 80; j++) {
-            aslog(0) << '\b';
-        }
-    };
-
     int expanded = 0;
 
     std::function<void(IntrusivePtr<State> &&)> enqueue_new_children =
         [&](IntrusivePtr<State> &&s) {
 
-        // aslog(0) << "\n** Generated child: ";
+        // aslog(1) << "\n** Generated child: ";
         // s->dump();
         // s->calculate_cost(dag, params, nullptr, true);
 
@@ -2968,7 +3003,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
         size_t max_progress = dag.nodes.size() * beam_size * 2;
 
         // Update the progress bar
-        tick(double(progress) / max_progress);
+        tick.set(double(progress) / max_progress);
         s->penalized = false;
 
         // Add the state to the list of states to evaluate
@@ -2995,6 +3030,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
                                              beam_size * 2,
                                              pass_idx,
                                              num_passes,
+                                             tick,
                                              permitted_hashes);
             } else {
                 internal_error << "Ran out of legal states with beam size " << beam_size << "\n";
@@ -3002,7 +3038,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
         }
 
         if ((int)pending.size() > beam_size * 10000) {
-            aslog(0) << "Warning: Huge number of states generated (" << pending.size() << ").\n";
+            aslog(1) << "Warning: Huge number of states generated (" << pending.size() << ").\n";
         }
 
         expanded = 0;
@@ -3098,11 +3134,11 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
             // The user has set HL_CYOS, and wants to navigate the
             // search space manually.  Discard everything in the queue
             // except for the user-chosen option.
-            aslog(0) << "\n--------------------\n";
-            aslog(0) << "Select a schedule:\n";
+            aslog(1) << "\n--------------------\n";
+            aslog(1) << "Select a schedule:\n";
             for (int choice_label = (int)q.size() - 1; choice_label >= 0; choice_label--) {
                 auto state = q[choice_label];
-                aslog(0) << "\n[" << choice_label << "]:\n";
+                aslog(1) << "\n[" << choice_label << "]:\n";
                 state->dump();
                 state->calculate_cost(dag, params, cost_model, true);
             }
@@ -3111,7 +3147,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
             // Select next partial schedule to expand.
             int selection = -1;
             while (selection < 0 || selection >= (int)q.size()) {
-                aslog(0) << "\nEnter selection: ";
+                aslog(1) << "\nEnter selection: ";
                 std::cin >> selection;
             }
 
@@ -3152,9 +3188,14 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
     }
 
     for (int i = 0; i < num_passes; i++) {
-        auto pass = optimal_schedule_pass(dag, outputs, params, cost_model, rng, beam_size, i, num_passes, permitted_hashes);
+        ProgressBar tick;
 
-        aslog(0) << "\nPass " << i << " result:\n";
+        auto pass = optimal_schedule_pass(dag, outputs, params, cost_model,
+            rng, beam_size, i, num_passes, tick, permitted_hashes);
+
+        tick.clear();
+
+        aslog(0) << "Pass " << i << " result: ";
         pass->dump();
 
         if (i == 0 || pass->cost < best->cost) {
@@ -3164,7 +3205,7 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
         }
     }
 
-    aslog(0) << "Best cost: " << best->cost << "\n";
+    aslog(1) << "Best cost: " << best->cost << "\n";
 
     return best;
 }
@@ -3186,7 +3227,7 @@ void generate_schedule(const std::vector<Function> &outputs,
     if (!seed_str.empty()) {
         seed = atoi(seed_str.c_str());
     }
-    aslog(0) << "Dropout seed = " << seed << '\n';
+    aslog(1) << "Dropout seed = " << seed << '\n';
     std::mt19937 rng((uint32_t) seed);
 
     // Get the beam size
@@ -3222,10 +3263,10 @@ void generate_schedule(const std::vector<Function> &outputs,
 
     HALIDE_TOC;
 
-    aslog(0) << "Cost evaluated this many times: " << State::cost_calculations << '\n';
+    aslog(1) << "Cost evaluated this many times: " << State::cost_calculations << '\n';
 
     // Dump the schedule found
-    aslog(0) << "** Optimal schedule:\n";
+    aslog(1) << "** Optimal schedule:\n";
 
     // Just to get the debugging prints to fire
     optimal->calculate_cost(dag, params, cost_model.get(), true);
@@ -3239,7 +3280,7 @@ void generate_schedule(const std::vector<Function> &outputs,
     string schedule_file = get_env_variable("HL_SCHEDULE_FILE");
     if (!schedule_file.empty()) {
         user_warning << "HL_SCHEDULE_FILE is deprecated; use the schedule output from Generator instead\n";
-        aslog(0) << "Writing schedule to " << schedule_file << "...\n";
+        aslog(1) << "Writing schedule to " << schedule_file << "...\n";
         std::ofstream f(schedule_file);
         f << "// --- BEGIN machine-generated schedule\n"
           << optimal->schedule_source
@@ -3276,7 +3317,7 @@ void generate_schedule(const std::vector<Function> &outputs,
 // constructor.
 struct RegisterAutoscheduler {
     RegisterAutoscheduler() {
-        aslog(0) << "Registering autoscheduler...\n";
+        aslog(1) << "Registering autoscheduler...\n";
         Pipeline::set_custom_auto_scheduler(*this);
     }
 

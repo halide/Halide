@@ -185,7 +185,7 @@ for ((BATCH_ID=$((FIRST+1));BATCH_ID<$((FIRST+1+NUM_BATCHES));BATCH_ID++)); do
 
         # Do parallel compilation in batches, so that machines with fewer than BATCH_SIZE cores
         # don't get swamped and timeout unnecessarily
-        echo Compiling samples
+        echo -n Compiling ${BATCH_SIZE} samples
         for ((SAMPLE_ID=0;SAMPLE_ID<${BATCH_SIZE};SAMPLE_ID++)); do
             while [[ 1 ]]; do
                 RUNNING=$(jobs -r | wc -l)
@@ -199,8 +199,10 @@ for ((BATCH_ID=$((FIRST+1));BATCH_ID<$((FIRST+1+NUM_BATCHES));BATCH_ID++)); do
             S=$(printf "%04d%04d" $BATCH_ID $SAMPLE_ID)
             FNAME=$(printf "%s_batch_%04d_sample_%04d" ${PIPELINE} $BATCH_ID $SAMPLE_ID)
             make_featurization "${DIR}/${SAMPLE_ID}" $S $FNAME "$EXTRA_GENERATOR_ARGS" &
+            echo -n .
         done
         wait
+        echo  done.
 
         # benchmark them serially using rungen
         for ((SAMPLE_ID=0;SAMPLE_ID<${BATCH_SIZE};SAMPLE_ID++)); do
