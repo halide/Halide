@@ -1252,18 +1252,6 @@ struct LoopNest {
 
     // Recursively print a loop nest representation to stderr
     void dump(string prefix, const LoopNest *parent) const {
-        if (aslog::aslog_level() == 0) {
-            aslog(0) << prefix << "realize: ";
-            bool comma = false;
-            for (auto p : store_at) {
-                if (comma) aslog(0) << ", ";
-                aslog(0) << p->func.name();
-                comma = true;
-            }
-            aslog(0) << '\n';
-            return;
-        }
-
         if (!is_root()) {
             aslog(1) << prefix << node->func.name();
             prefix += " ";
@@ -2697,19 +2685,7 @@ struct State {
     }
 
     void dump() const {
-        if (aslog::aslog_level() == 0) {
-            aslog(0) << " State with cost " << cost << ", stored at:";
-            bool comma = false;
-            for (auto p : root->store_at) {
-                if (comma) aslog(0) << ',';
-                aslog(0) << ' ' << p->func.name();
-                comma = true;
-            }
-            aslog(0) << '\n';
-            return;
-        }
-
-        aslog(0) << "\nState with cost " << cost << ":\n";
+        aslog(1) << "State with cost " << cost << ":\n";
         root->dump("", nullptr);
         aslog(1) << schedule_source;
     }
@@ -3195,8 +3171,12 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
 
         tick.clear();
 
-        aslog(0) << "Pass " << i << " result: ";
-        pass->dump();
+        if (aslog::aslog_level() == 0) {
+            aslog(0) << "Pass " << i << " of " << num_passes << ", cost: " << pass->cost << "\n";
+        } else {
+            aslog(1) << "Pass " << i << " result: ";
+            pass->dump();
+        }
 
         if (i == 0 || pass->cost < best->cost) {
             // Track which pass produced the lowest-cost state. It's
@@ -3205,7 +3185,7 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
         }
     }
 
-    aslog(1) << "Best cost: " << best->cost << "\n";
+    aslog(0) << "Best cost: " << best->cost << "\n";
 
     return best;
 }
