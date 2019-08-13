@@ -1,8 +1,8 @@
 # Build the generator to autotune. This script will be autotuning the
 # autoscheduler's cost model training pipeline, which is large enough
 # to be interesting.
-if [ $# -lt 5 -o $# -gt 6 ]; then
-  echo "Usage: $0 /path/to/some.generator generatorname halide_target weights_dir autoschedule_bin_dir [generator_args_sets]"
+if [ $# -lt 6 -o $# -gt 7 ]; then
+  echo "Usage: $0 /path/to/some.generator generatorname halide_target weights_file autoschedule_bin_dir halide_distrib_path [generator_args_sets]"
   exit
 fi
 
@@ -14,14 +14,15 @@ set -eu
 GENERATOR=${1}
 PIPELINE=${2}
 HL_TARGET=${3}
-START_WEIGHTS_DIR=${4}
+START_WEIGHTS_FILE=${4}
 AUTOSCHED_BIN=${5}
+HALIDE_DISTRIB_PATH=${6}
 
 # Read the generator-arg sets into an array. Each set is delimited
 # by space; multiple values within each set are are delimited with ;
 # e.g. "set1arg1=1;set1arg2=foo set2=bar set3arg1=3.14;set4arg2=42"
-if [ $# -ge 6 ]; then
-    IFS=' ' read -r -a GENERATOR_ARGS_SETS_ARRAY <<< "${6}"
+if [ $# -ge 7 ]; then
+    IFS=' ' read -r -a GENERATOR_ARGS_SETS_ARRAY <<< "${7}"
 else
     declare -a GENERATOR_ARGS_SETS_ARRAY=
 fi
@@ -49,20 +50,19 @@ fi
 SAMPLES=${PWD}/samples
 mkdir -p ${SAMPLES}
 
-WEIGHTS=${SAMPLES}/weights
-if [[ -d ${WEIGHTS} ]]; then
-    echo Using existing weights in ${WEIGHTS}
+WEIGHTS=${SAMPLES}/updated.weights
+if [[ -f ${WEIGHTS} ]]; then
+    echo Using existing weights "${WEIGHTS}"
 else
     # Only copy over the weights if we don't have any already,
     # so that restarted jobs can continue from where they left off
-    mkdir -p ${WEIGHTS}
-    cp ${START_WEIGHTS_DIR}/*.data ${WEIGHTS}/
-    echo Copying starting weights from ${START_WEIGHTS_DIR} to ${WEIGHTS}
+    cp ${START_WEIGHTS_FILE} ${WEIGHTS}
+    echo Copying starting weights from ${START_WEIGHTS_FILE} to ${WEIGHTS}
 fi
 
-# We could add these unconditionally, but it's easier to wade thru
+# We could add this unconditionally, but it's easier to wade thru
 # results if we only add if needed
-for F in disable_llvm_loop_unroll disable_llvm_loop_vectorize; do
+for F in disable_llvm_loop_opt; do
     if [[ ! ${HL_TARGET} =~ .*${F}.* ]]; then
         HL_TARGET="${HL_TARGET}-${F}"
     fi
@@ -119,14 +119,17 @@ make_featurization() {
           2> ${D}/compile_log.txt || echo "Compilation failed or timed out for ${D}"
 
 
+    # We don't need image I/O for this purpose,
+    # so leave out libpng and libjpeg
     c++ \
         -std=c++11 \
-        -I ../../include \
-        ../../tools/RunGenMain.cpp \
+        -I ${HALIDE_DISTRIB_PATH}/include \
+        ${HALIDE_DISTRIB_PATH}/tools/RunGenMain.cpp \
         ${D}/*.registration.cpp \
         ${D}/*.a \
         -o ${D}/bench \
-        -ljpeg -ldl -lpthread -lz -lpng
+        -DHALIDE_NO_PNG -DHALIDE_NO_JPEG \
+        -ldl -lpthread
 }
 
 # Benchmark one of the random samples
@@ -170,8 +173,8 @@ for ((BATCH_ID=$((FIRST+1));BATCH_ID<$((FIRST+1+NUM_BATCHES));BATCH_ID++)); do
         DIR=${SAMPLES}/batch_${BATCH_ID}_${EXTRA_ARGS_IDX}
 
         # Copy the weights being used into the batch folder so that we can repro failures
-        mkdir -p ${DIR}/weights_used/
-        cp ${WEIGHTS}/* ${DIR}/weights_used/
+        mkdir -p ${DIR}/
+        cp ${WEIGHTS} ${DIR}/used.weights
 
         EXTRA_GENERATOR_ARGS=${GENERATOR_ARGS_SETS_ARRAY[EXTRA_ARGS_IDX]/;/ }
         if [ ! -z "${EXTRA_GENERATOR_ARGS}" ]; then

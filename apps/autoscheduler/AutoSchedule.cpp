@@ -48,10 +48,12 @@
   Random seed used by the random dropout.
 
   HL_WEIGHTS_DIR
-  When training or schedule, read weights from this directory
+  When training or schedule, read weights from this directory or file
+  (if path ends in `.weights` it is written as a single file, otherwise a directory of files)
 
   HL_WEIGHTS_OUT_DIR
   When training, output updated weights here
+  (if path ends in `.weights` it is written as a single file, otherwise a directory of files)
 
   HL_NO_SUBTILING
   If set to 1, limits the search space to that of Mullapudi et al.
@@ -77,6 +79,7 @@
 #include "Halide.h"
 #include "ASLog.h"
 #include "CostModel.h"
+#include "DefaultCostModel.h"
 #include "Featurization.h"
 #include "FunctionDAG.h"
 #include "PerfectHashMap.h"
@@ -2667,7 +2670,7 @@ struct State {
         int i = (int)(dag.nodes.size() - 1);
         for (const auto &n : dag.nodes) {
             if (!n.is_input) {
-                src << "Func " << n.func.name() << " = get_pipeline().get_func(" << i << ");\n";
+                src << "Func " << n.func.name() << " = pipeline.get_func(" << i << ");\n";
             }
             i--;
         }
@@ -3194,10 +3197,10 @@ void generate_schedule(const std::vector<Function> &outputs,
         beam_size = atoi(beam_size_str.c_str());
     }
 
-    string weights_in_dir = get_env_variable("HL_WEIGHTS_DIR");
-    string weights_out_dir = get_env_variable("HL_WEIGHTS_OUT_DIR");
-    if (weights_out_dir.empty()) {
-        weights_out_dir = weights_in_dir;
+    string weights_in_path = get_env_variable("HL_WEIGHTS_DIR");
+    string weights_out_path = get_env_variable("HL_WEIGHTS_OUT_DIR");
+    if (weights_out_path.empty()) {
+        weights_out_path = weights_in_path;
     }
 
     string randomize_weights_str = get_env_variable("HL_RANDOMIZE_WEIGHTS");
@@ -3210,8 +3213,7 @@ void generate_schedule(const std::vector<Function> &outputs,
     // Construct a cost model to use to evaluate states. Currently we
     // just have the one, but it's an abstract interface, so others
     // can be slotted in for experimentation.
-    std::unique_ptr<CostModel> cost_model;
-    cost_model = CostModel::make_default(weights_in_dir, weights_out_dir, randomize_weights);
+    std::unique_ptr<CostModel> cost_model = make_default_cost_model(weights_in_path, weights_out_path, randomize_weights);
 
     IntrusivePtr<State> optimal;
 
@@ -3236,7 +3238,7 @@ void generate_schedule(const std::vector<Function> &outputs,
 
     string schedule_file = get_env_variable("HL_SCHEDULE_FILE");
     if (!schedule_file.empty()) {
-        user_warning << "HL_SCHEDULE_FILE is deprecated; use the featurization output from Generator instead\n";
+        user_warning << "HL_SCHEDULE_FILE is deprecated; use the schedule output from Generator instead\n";
         aslog(0) << "Writing schedule to " << schedule_file << "...\n";
         std::ofstream f(schedule_file);
         f << "// --- BEGIN machine-generated schedule\n"
@@ -3258,6 +3260,7 @@ void generate_schedule(const std::vector<Function> &outputs,
     }
 
     if (auto_scheduler_results) {
+        auto_scheduler_results->scheduler_name = "apps/autoscheduler/AutoSchedule";  // TODO: find a better name (https://github.com/halide/Halide/issues/4057)
         auto_scheduler_results->schedule_source = optimal->schedule_source;
         {
             std::ostringstream out;

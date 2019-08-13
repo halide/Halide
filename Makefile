@@ -774,6 +774,7 @@ RUNTIME_CPP_COMPONENTS = \
   aarch64_cpu_features \
   alignment_128 \
   alignment_32 \
+  allocation_cache \
   alignment_64 \
   android_clock \
   android_host_cpu_count \
@@ -1932,6 +1933,12 @@ TEST_APPS=\
 	resnet_50 \
 	stencil_chain \
 	wavelet
+
+# TODO: apps/autoscheduler doesn't yet build properly for MinGW
+# (see https://github.com/halide/Halide/issues/4069)
+ifneq ($(OS), Windows_NT)
+	TEST_APPS += autoscheduler
+endif
 
 .PHONY: test_apps
 test_apps: distrib

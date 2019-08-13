@@ -333,8 +333,7 @@ std::vector<py::array> run(
     }
     Halide::Realization real(outputs);
     Halide::Target tgt;
-    tgt.set_feature(Halide::Target::DisableLLVMLoopUnroll);
-    tgt.set_feature(Halide::Target::DisableLLVMLoopVectorize);
+    tgt.set_feature(Halide::Target::DisableLLVMLoopOpt);
     if (device == "CUDA") {
         tgt.set_feature(Halide::Target::CUDA);
     }
@@ -429,8 +428,7 @@ double benchmark(const HalideModel &pipeline, int num_iters, const std::string &
 
     Halide::Realization real(outputs);
     Halide::Target tgt;
-    tgt.set_feature(Halide::Target::DisableLLVMLoopUnroll);
-    tgt.set_feature(Halide::Target::DisableLLVMLoopVectorize);
+    tgt.set_feature(Halide::Target::DisableLLVMLoopOpt);
     if (device == "CUDA") {
         tgt.set_feature(Halide::Target::CUDA);
     }
