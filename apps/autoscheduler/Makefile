@@ -43,6 +43,9 @@ test: $(BIN)/test
 reset_gpu_weights: $(AUTOSCHED_BIN)/reset_weights
 	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu_weights $(BIN)/reset_weights
 
+check_gpu_weights: $(AUTOSCHED_BIN)/check_weights
+	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu_weights $(BIN)/check_weights
+
 clean:
 	rm -rf $(BIN)
 
