@@ -3195,7 +3195,8 @@ void generate_schedule(const std::vector<Function> &outputs,
                               const Target &target,
                               const MachineParams &params,
                               AutoSchedulerResults *auto_scheduler_results) {
-    aslog(0) << "generate_schedule for target=" << target << "\n";
+    aslog(0) << "generate_schedule for target=" << target.to_string() << "\n";
+
     // Start a timer
     HALIDE_TIC;
 
