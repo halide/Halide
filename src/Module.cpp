@@ -207,7 +207,7 @@ std::string indent_string(const std::string &src, const std::string &indent) {
         const char c = src[i];
         const bool is_newline = (c == '\n');
         if (prev_was_newline && !is_newline) {
-          o << indent;
+            o << indent;
         }
         o << c;
         prev_was_newline = is_newline;
