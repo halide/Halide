@@ -3110,11 +3110,11 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
             // The user has set HL_CYOS, and wants to navigate the
             // search space manually.  Discard everything in the queue
             // except for the user-chosen option.
-            aslog(1) << "\n--------------------\n";
-            aslog(1) << "Select a schedule:\n";
+            aslog(0) << "\n--------------------\n";
+            aslog(0) << "Select a schedule:\n";
             for (int choice_label = (int)q.size() - 1; choice_label >= 0; choice_label--) {
                 auto state = q[choice_label];
-                aslog(1) << "\n[" << choice_label << "]:\n";
+                aslog(0) << "\n[" << choice_label << "]:\n";
                 state->dump();
                 state->calculate_cost(dag, params, cost_model, true);
             }
@@ -3123,7 +3123,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
             // Select next partial schedule to expand.
             int selection = -1;
             while (selection < 0 || selection >= (int)q.size()) {
-                aslog(1) << "\nEnter selection: ";
+                aslog(0) << "\nEnter selection: ";
                 std::cin >> selection;
             }
 
