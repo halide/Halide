@@ -49,7 +49,15 @@ class FuncCallInliner : public Halide::Internal::IRMutator {
 
 Halide::Expr inline_func_call(Halide::Expr e) {
     FuncCallInliner inliner;
-    Halide::Expr r = inliner.mutate(e);
+
+    Halide::Expr r_old = Halide::Internal::simplify(e);
+    Halide::Expr r = inliner.mutate(r_old);
+
+    while (!r.same_as(r_old)) {
+        r_old = Halide::Internal::simplify(r);
+        r = inliner.mutate(r_old);
+    }
+
     return r;
 }
 
@@ -1026,7 +1034,6 @@ Node convert_conv_node(
             for (int axis : attr.ints()) {
                 kernel_shape.push_back(axis);
             }
-
         } else if (attr.name() == "pads") {
             for (int axis : attr.ints()) {
                 pads.push_back(axis);
@@ -1119,7 +1126,7 @@ Node convert_conv_node(
     Halide::Func padded_input = generate_padding_expr(X.rep, X.shape, 0, pads);
 
     // Convolve the input with the kernel
-    Halide::Func basic_conv(X.rep.name() + "_conv");
+    Halide::Func basic_conv;
     if (can_use_winograd) {
         if (m[0] == 4 && m[1] == 4) {
             basic_conv = winograd_conv<4, 3>(W, padded_input);
@@ -1152,14 +1159,13 @@ Node convert_conv_node(
         conv_no_bias = basic_conv;
     }
 
-    result.outputs[0].rep = func_for_node_output(node, 0);
-
     // Return the result after applying the bias if any.
     if (inputs.size() == 3) {
+        result.outputs[0].rep = func_for_node_output(node, 0);
         result.outputs[0].rep(out_vars) =
             inputs[2].rep(out_vars[1]) + conv_no_bias(out_vars);
     } else {
-        result.outputs[0].rep(out_vars) = conv_no_bias(out_vars);
+        result.outputs[0].rep = conv_no_bias;
     }
 
     return result;
@@ -1203,8 +1209,9 @@ Node convert_reduction_node(
     std::vector<std::pair<Halide::Expr, Halide::Expr>> extents;
     for (int i = 0; i < input_shape.size(); ++i) {
         if (reduction_axes.find(i) != reduction_axes.end()) {
-            extents.emplace_back(0, input_shape[i]);
-            num_reduced_elems *= input_shape[i];
+            Halide::Expr in_dim = inline_func_call(input_shape[i]);
+            extents.emplace_back(0, in_dim);
+            num_reduced_elems *= in_dim;
         }
     }
 
@@ -1663,7 +1670,7 @@ Node convert_pooling_node(
         x_vars[i] = out_vars[i] + rdom[i - 2];
     }
 
-    Halide::Func basic_pool;
+    Halide::Func basic_pool(func_for_node_output(node, 0));
     if (node.op_type() == "MaxPool" || node.op_type() == "GlobalMaxPool") {
         basic_pool(out_vars) =
             Halide::maximum(padded_input(x_vars), name_for_node(node, "_maximum"));
@@ -1675,7 +1682,10 @@ Node convert_pooling_node(
             Halide::Expr kernel_dim = kernel_shape[i];
             if (extented_count_needed) {
                 kernel_dim -= Halide::max(0, pads[i] - out_vars[i + 2]);
-                kernel_dim -= Halide::max(0, out_vars[i + 2] + kernel_shape[i] - (inputs[0].shape[i + 2] + pads[i]));
+                kernel_dim -= Halide::max(
+                    0,
+                    out_vars[i + 2] + kernel_shape[i] -
+                        (inputs[0].shape[i + 2] + pads[i]));
             }
             num_pooling_vals *= kernel_dim;
         }
@@ -1705,6 +1715,7 @@ Node convert_pooling_node(
     }
     Halide::Func pool;
     if (has_strides) {
+        pool = Halide::Func(name_for_node(node, "_strided"));
         pool(out2_vars) = basic_pool(stride_vars);
     } else {
         pool = basic_pool;
@@ -1714,8 +1725,7 @@ Node convert_pooling_node(
     result.inputs = inputs;
     result.outputs.resize(1);
     result.outputs[0].type = inputs[0].type;
-    result.outputs[0].rep = func_for_node_output(node, 0);
-    result.outputs[0].rep(Halide::_) = pool(Halide::_);
+    result.outputs[0].rep = pool;
 
     // Determine the shape of the output
     result.outputs[0].shape = inputs[0].shape;
@@ -1822,7 +1832,7 @@ Node convert_concat_node(
     concat_funcs[0](tgt_indices) = inputs[0].rep(tgt_indices);
     Halide::Expr concat_offset = 0;
     for (int i = 1; i < inputs.size(); ++i) {
-        concat_offset += inputs[i - 1].shape[axis];
+        concat_offset += inline_func_call(inputs[i - 1].shape[axis]);
 
         src1_indices[axis] = Halide::min(tgt_indices[axis], concat_offset - 1);
         src2_indices[axis] = Halide::max(tgt_indices[axis] - concat_offset, 0);
@@ -1838,7 +1848,7 @@ Node convert_concat_node(
     result.outputs[0].shape = inputs[0].shape;
     const Halide::Expr concatenated_size =
         concat_offset + inputs.back().shape[axis];
-    result.outputs[0].shape[axis] = concatenated_size;
+    result.outputs[0].shape[axis] = Halide::Internal::simplify(concatenated_size);
 
     return result;
 }
