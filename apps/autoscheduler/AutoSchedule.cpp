@@ -260,8 +260,8 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stag
                             int64_t other_ext = (stage_sizes[0][dd] + t[dd] - 1) / t[dd];
                             if (other_ext > max_serial_ext) {
                                 valid = false;
-                                break;  
-                            }             
+                                break;
+                            }
                         }
                         if (!valid) {
                             continue; // don't add this tiling to results
@@ -343,7 +343,7 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stag
                             }
                         }
                         if (!valid) {
-                            continue; // don't add this thread tiling 
+                            continue; // don't add this thread tiling
                         }
                     }
                 }
@@ -355,8 +355,8 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stag
 }
 
 // used for creating default serial loop tiling options inside gpu threads loop
-vector<vector<int64_t>> generate_serial_tilings(const vector<int64_t> &s, int d, 
-                                                int vectorized_index, 
+vector<vector<int64_t>> generate_serial_tilings(const vector<int64_t> &s, int d,
+                                                int vectorized_index,
                                                 const vector<int> &vec_dim_serial_sizes) {
     vector<vector<int64_t>> result;
     if (d == -1) {
@@ -372,8 +372,8 @@ vector<vector<int64_t>> generate_serial_tilings(const vector<int64_t> &s, int d,
                     int outer = (s[d] + inner - 1) / inner;
                     t.back() = outer;
                     result.push_back(t);
-                }    
-            } 
+                }
+            }
             // always consider the even tile sizes: 1, 2, 4, 8
             for (int inner = 1; inner <= 8; inner *= 2) {
                 if (inner > s[d]) {
@@ -527,27 +527,15 @@ private:
 };
 
 struct ThreadInfo {
+    ThreadInfo(const vector<int64_t>& max_thread_counts) {
+        init_threads_in_this_block(max_thread_counts);
+        count_num_active_warps_per_block();
+    }
+
     ThreadInfo(int vectorized_loop_index, const vector<int64_t>& size, const vector<int64_t>& max_thread_counts) {
-        int max_threads[3] = {1024, 1024, 64};
+        init_threads_in_this_block(max_thread_counts);
 
         int num_thread_loops = 0;
-        for (auto c : max_thread_counts) {
-            internal_assert(c <= max_threads[num_thread_loops]);
-
-            if (c == 1) {
-                continue;
-            }
-
-            if (num_thread_loops >= 3 || num_threads_in_this_block * c > MAX_THREADS_PER_BLOCK) {
-                break;
-            }
-
-            threads_in_this_block[num_thread_loops] = c;
-            num_threads_in_this_block *= c;
-            ++num_thread_loops;
-        }
-
-        num_thread_loops = 0;
 
         if (vectorized_loop_index != -1) {
             threads[num_thread_loops] = size[vectorized_loop_index];
@@ -567,11 +555,6 @@ struct ThreadInfo {
             threads[num_thread_loops] = size[i];
             num_threads *= size[i];
             ++num_thread_loops;
-        }
-
-        num_warps_per_block = num_threads_in_this_block / 32;
-        if (num_threads_in_this_block % 32 != 0) {
-            num_warps_per_block++;
         }
 
         count_num_active_warps_per_block();
@@ -612,22 +595,6 @@ struct ThreadInfo {
         });
     }
 
-    void count_num_active_warps_per_block() {
-        bool current_warp_is_active = false;
-
-        for_each_thread_id([&](int thread_id, bool is_active, bool is_last_thread) {
-            current_warp_is_active |= is_active;
-
-            if ((thread_id + 1) % 32 == 0 || is_last_thread) {
-                if (current_warp_is_active) {
-                    ++num_active_warps_per_block;
-                }
-                current_warp_is_active = false;
-            }
-        });
-    }
-
-
     double warp_lane_utilization_at_block_x() const {
         return warp_lane_utilization_at_block(0);
     }
@@ -658,13 +625,54 @@ struct ThreadInfo {
 
     int num_warps_per_block = 0;
     int num_active_warps_per_block = 0;
-    std::vector<bool> thread_ids;
 
     int threads_in_this_block[3] = {1, 1, 1};
     int64_t num_threads_in_this_block = 1;
 
     int threads[3] = {1, 1, 1};
     int64_t num_threads = 1;
+
+private:
+    void init_threads_in_this_block(const vector<int64_t>& max_thread_counts) {
+        int max_threads[3] = {1024, 1024, 64};
+
+        int num_thread_loops = 0;
+        for (auto c : max_thread_counts) {
+            internal_assert(c <= max_threads[num_thread_loops]);
+
+            if (c == 1) {
+                continue;
+            }
+
+            if (num_thread_loops >= 3 || num_threads_in_this_block * c > MAX_THREADS_PER_BLOCK) {
+                break;
+            }
+
+            threads_in_this_block[num_thread_loops] = c;
+            num_threads_in_this_block *= c;
+            ++num_thread_loops;
+        }
+
+        num_warps_per_block = num_threads_in_this_block / 32;
+        if (num_threads_in_this_block % 32 != 0) {
+            num_warps_per_block++;
+        }
+    }
+
+    void count_num_active_warps_per_block() {
+        bool current_warp_is_active = false;
+
+        for_each_thread_id([&](int thread_id, bool is_active, bool is_last_thread) {
+            current_warp_is_active |= is_active;
+
+            if ((thread_id + 1) % 32 == 0 || is_last_thread) {
+                if (current_warp_is_active) {
+                    ++num_active_warps_per_block;
+                }
+                current_warp_is_active = false;
+            }
+        });
+    }
 };
 
 
@@ -793,9 +801,9 @@ struct LoopNest {
 
     // given the loop nest of a stage to parallelize at root, figure out if using odd tile sizes
     // for the vectorized dimension will allow the resulting thread tiles to be multiples of 32
-    // if so, we will include these in the serial loop sizes 
+    // if so, we will include these in the serial loop sizes
     void generate_vec_dim_serial_tilings(vector<int> &serial_sizes) const {
-        // generate suggested tilings for vectorized dimension 
+        // generate suggested tilings for vectorized dimension
         int warp_width = 32;
         if (size[vectorized_loop_index] % warp_width == 0) {
             int remaining_ext = size[vectorized_loop_index] / warp_width;
@@ -1354,6 +1362,24 @@ struct LoopNest {
         }
 
         return {block_extents, serial_extents};
+    }
+
+    bool has_thread_loop_descendant() const {
+        if (gpu_label == thread) {
+            return true;
+        }
+
+        for (const auto &c : children) {
+            if (c->node != node) {
+                continue;
+            }
+
+            if (c->has_thread_loop_descendant()) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     void compute_warp_features(ScheduleFeatures& features, const ThreadInfo& thread_info, int64_t block_extents) const {
@@ -2171,6 +2197,28 @@ struct LoopNest {
             }
             inlined_feat.inner_parallelism = 1;
             inlined_feat.outer_parallelism = parallelism;
+        }
+
+        // If this node does not have any thread loops, then it operates with a
+        // single thread
+        if (parent && parent->gpu_label == block && !has_thread_loop_descendant()) {
+            int64_t total_serial_loop_extents = 1;
+
+            const auto &bounds = parent->get_bounds(stage->node);
+            for (int i = 0; i < (int)parent->stage->loop.size(); i++) {
+                auto extent = bounds->loops(stage_idx, i).extent();
+                total_serial_loop_extents *= extent;
+            }
+
+            const LoopNest* block = parent;
+
+            auto block_and_serial_extents = get_block_and_serial_extents(block);
+            total_serial_loop_extents *= block_and_serial_extents.second;
+
+            auto max_thread_counts = block->get_union_thread_counts(nullptr);
+
+            const auto& thread_info = ThreadInfo{max_thread_counts};
+            compute_warp_features(feat, thread_info, block_and_serial_extents.first);
         }
     }
 
@@ -4021,10 +4069,10 @@ struct State {
                     // step 1) convert (none, SIMD) loops to (parallel, serial, SIMD) loops with specialized serial sizes
                     vector<int> vec_dim_serial_sizes;
                     pure_stage->generate_vec_dim_serial_tilings(vec_dim_serial_sizes);
-                    
-                    auto parallel_tilings = generate_serial_tilings(*pure_size, 
-                                                                    node->dimensions-1, 
-                                                                    pure_stage->vectorized_loop_index, 
+
+                    auto parallel_tilings = generate_serial_tilings(*pure_size,
+                                                                    node->dimensions-1,
+                                                                    pure_stage->vectorized_loop_index,
                                                                     vec_dim_serial_sizes);
 
                     internal_assert(parallel_tilings.size() > 0) << " zero parallel tilings\n";
