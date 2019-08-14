@@ -107,6 +107,41 @@ using std::map;
 using std::set;
 using std::pair;
 
+struct ProgressBar {
+    void set(double progress) {
+        if (!draw_progress_bar) return;
+        counter++;
+        const int bits = 11;
+        if (counter & ((1 << bits) - 1)) return;
+        const int pos = (int) (progress * 78);
+        aslog(0) << '[';
+        for (int j = 0; j < 78; j++) {
+            if (j < pos) {
+                aslog(0) << '.';
+            } else if (j - 1 < pos) {
+                aslog(0) << "/-\\|"[(counter >> bits) % 4];
+            } else {
+                aslog(0) << ' ';
+            }
+        }
+        aslog(0) << ']';
+        for (int j = 0; j < 80; j++) {
+            aslog(0) << '\b';
+        }
+    }
+
+    void clear() {
+        if (counter) {
+            for (int j = 0; j < 80; j++) aslog(0) << ' ';
+            for (int j = 0; j < 80; j++) aslog(0) << '\b';
+        }
+    }
+private:
+    uint32_t counter = 0;
+    const bool draw_progress_bar = isatty(2);
+};
+
+
 // Get the HL_RANDOM_DROPOUT environment variable. Purpose of this is described above.
 uint32_t get_dropout_threshold() {
     string random_dropout_str = get_env_variable("HL_RANDOM_DROPOUT");
@@ -2206,7 +2241,9 @@ struct State {
                 const LoopNest *l = consumer_site.innermost;
                 if (!l) l = consumer_site.compute;
                 if (!l) {
-                    dump();
+                    if (aslog::aslog_level() > 0) {
+                        dump();
+                    }
                     internal_error << e->producer->func.name() << " -> " << e->consumer->name << "\n";
                 }
                 if (loop) {
@@ -2912,6 +2949,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
                                           int beam_size,
                                           int pass_idx,
                                           int num_passes,
+                                          ProgressBar &tick,
                                           std::unordered_set<uint64_t> &permitted_hashes) {
 
     if (cost_model) {
@@ -2926,31 +2964,6 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
         initial->root = new LoopNest;
         q.emplace(std::move(initial));
     }
-
-    // A progress bar.
-    uint32_t counter = 0;
-    bool draw_progress_bar = isatty(2);
-    auto tick = [&](double progress) {
-        if (!draw_progress_bar) return;
-        counter++;
-        const int bits = 11;
-        if (counter & ((1 << bits) - 1)) return;
-        progress *= 78;
-        aslog(0) << '[';
-        for (int j = 0; j < 78; j++) {
-            if (j < progress) {
-                aslog(0) << '.';
-            } else if (j - 1 < progress) {
-                aslog(0) << "/-\\|"[(counter >> bits) % 4];
-            } else {
-                aslog(0) << ' ';
-            }
-        }
-        aslog(0) << ']';
-        for (int j = 0; j < 80; j++) {
-            aslog(0) << '\b';
-        }
-    };
 
     int expanded = 0;
 
@@ -2968,7 +2981,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
         size_t max_progress = dag.nodes.size() * beam_size * 2;
 
         // Update the progress bar
-        tick(double(progress) / max_progress);
+        tick.set(double(progress) / max_progress);
         s->penalized = false;
 
         // Add the state to the list of states to evaluate
@@ -2995,6 +3008,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
                                              beam_size * 2,
                                              pass_idx,
                                              num_passes,
+                                             tick,
                                              permitted_hashes);
             } else {
                 internal_error << "Ran out of legal states with beam size " << beam_size << "\n";
@@ -3152,10 +3166,19 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
     }
 
     for (int i = 0; i < num_passes; i++) {
-        auto pass = optimal_schedule_pass(dag, outputs, params, cost_model, rng, beam_size, i, num_passes, permitted_hashes);
+        ProgressBar tick;
 
-        aslog(0) << "\nPass " << i << " result:\n";
-        pass->dump();
+        auto pass = optimal_schedule_pass(dag, outputs, params, cost_model,
+            rng, beam_size, i, num_passes, tick, permitted_hashes);
+
+        tick.clear();
+
+        if (aslog::aslog_level() == 0) {
+            aslog(0) << "Pass " << i << " of " << num_passes << ", cost: " << pass->cost << "\n";
+        } else {
+            aslog(0) << "Pass " << i << " result: ";
+            pass->dump();
+        }
 
         if (i == 0 || pass->cost < best->cost) {
             // Track which pass produced the lowest-cost state. It's
@@ -3174,6 +3197,8 @@ void generate_schedule(const std::vector<Function> &outputs,
                               const Target &target,
                               const MachineParams &params,
                               AutoSchedulerResults *auto_scheduler_results) {
+    aslog(0) << "generate_schedule for target=" << target.to_string() << "\n";
+
     // Start a timer
     HALIDE_TIC;
 
@@ -3186,7 +3211,7 @@ void generate_schedule(const std::vector<Function> &outputs,
     if (!seed_str.empty()) {
         seed = atoi(seed_str.c_str());
     }
-    aslog(0) << "Dropout seed = " << seed << '\n';
+    aslog(1) << "Dropout seed = " << seed << '\n';
     std::mt19937 rng((uint32_t) seed);
 
     // Get the beam size
@@ -3208,7 +3233,9 @@ void generate_schedule(const std::vector<Function> &outputs,
 
     // Analyse the Halide algorithm and construct our abstract representation of it
     FunctionDAG dag(outputs, params, target);
-    dag.dump();
+    if (aslog::aslog_level() > 0) {
+        dag.dump();
+    }
 
     // Construct a cost model to use to evaluate states. Currently we
     // just have the one, but it's an abstract interface, so others
@@ -3222,24 +3249,26 @@ void generate_schedule(const std::vector<Function> &outputs,
 
     HALIDE_TOC;
 
-    aslog(0) << "Cost evaluated this many times: " << State::cost_calculations << '\n';
+    aslog(1) << "Cost evaluated this many times: " << State::cost_calculations << '\n';
 
     // Dump the schedule found
-    aslog(0) << "** Optimal schedule:\n";
+    aslog(1) << "** Optimal schedule:\n";
 
     // Just to get the debugging prints to fire
-    optimal->calculate_cost(dag, params, cost_model.get(), true);
+    optimal->calculate_cost(dag, params, cost_model.get(), aslog::aslog_level() > 0);
 
     // Apply the schedules to the pipeline
     optimal->apply_schedule(dag, params);
 
     // Print out the schedule
-    optimal->dump();
+    if (aslog::aslog_level() > 0) {
+        optimal->dump();
+    }
 
     string schedule_file = get_env_variable("HL_SCHEDULE_FILE");
     if (!schedule_file.empty()) {
         user_warning << "HL_SCHEDULE_FILE is deprecated; use the schedule output from Generator instead\n";
-        aslog(0) << "Writing schedule to " << schedule_file << "...\n";
+        aslog(1) << "Writing schedule to " << schedule_file << "...\n";
         std::ofstream f(schedule_file);
         f << "// --- BEGIN machine-generated schedule\n"
           << optimal->schedule_source
@@ -3276,7 +3305,7 @@ void generate_schedule(const std::vector<Function> &outputs,
 // constructor.
 struct RegisterAutoscheduler {
     RegisterAutoscheduler() {
-        aslog(0) << "Registering autoscheduler...\n";
+        aslog(1) << "Registering autoscheduler...\n";
         Pipeline::set_custom_auto_scheduler(*this);
     }
 

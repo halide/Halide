@@ -242,7 +242,7 @@ class DefaultCostModel : public CostModel {
         bool need_randomize = randomize_weights;
 
         if (weights_in_path.empty()) {
-            aslog(0) << "Loading weights from built-in data...\n";
+            aslog(1) << "Loading weights from built-in data...\n";
             // This copy shouldn't be necessary, but std::istream in C++ doesn't seem
             // to have a convenient wrap-around-constant-data variant... and since
             // this isn't much data, just copy it.
@@ -253,7 +253,7 @@ class DefaultCostModel : public CostModel {
                 assert(0);
             }
         } else if (ends_with(weights_in_path, ".weights")) {
-            aslog(0) << "Loading weights from " << weights_in_path << " ...\n";
+            aslog(1) << "Loading weights from " << weights_in_path << " ...\n";
             if (!weights.load_from_file(weights_in_path)) {
                 // Emit to cout (rather than cerr) because the latter is hidden during the autotune loop,
                 // and we want this to be seen.
@@ -261,7 +261,7 @@ class DefaultCostModel : public CostModel {
                 need_randomize = true;
             }
         } else {
-            aslog(0) << "Loading weights from directory " << weights_in_path << " ...\n";
+            aslog(1) << "Loading weights from directory " << weights_in_path << " ...\n";
             std::cerr << "Loading weights from a directory is deprecated; please convert to a .weights file\n";
             if (!weights.load_from_dir(weights_in_path)) {
                 std::cout << "WARNING, error in reading weights from " << weights_in_path << ", randomizing...\n";
