@@ -416,7 +416,7 @@ protected:
 
     /** Get the llvm type equivalent to the given halide type in the
      * current context. */
-    llvm::Type *llvm_type_of(Type);
+    virtual llvm::Type *llvm_type_of(Type) const;
 
     /** Perform an alloca at the function entrypoint. Will be cleaned
      * on function exit. */

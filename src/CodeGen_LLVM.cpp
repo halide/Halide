@@ -1188,7 +1188,7 @@ llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_
     return metadata_getter;
 }
 
-llvm::Type *CodeGen_LLVM::llvm_type_of(Type t) {
+llvm::Type *CodeGen_LLVM::llvm_type_of(Type t) const {
     return Internal::llvm_type_of(context, t);
 }
 
@@ -1875,13 +1875,7 @@ Value *CodeGen_LLVM::codegen_buffer_pointer(Value *base_address, Halide::Type ty
         index = promote_64(index);
     }
 
-    // Handles are always indexed as 64-bit.
-    if (type.is_handle()) {
-        return codegen_buffer_pointer(base_address, UInt(64, type.lanes()), index);
-    } else {
-        Value *i = codegen(index);
-        return codegen_buffer_pointer(base_address, type, i);
-    }
+    return codegen_buffer_pointer(base_address, type, codegen(index));
 }
 
 Value *CodeGen_LLVM::codegen_buffer_pointer(string buffer, Halide::Type type, Value *index) {
@@ -1893,6 +1887,8 @@ Value *CodeGen_LLVM::codegen_buffer_pointer(string buffer, Halide::Type type, Va
 Value *CodeGen_LLVM::codegen_buffer_pointer(Value *base_address, Halide::Type type, Value *index) {
     llvm::Type *base_address_type = base_address->getType();
     unsigned address_space = base_address_type->getPointerAddressSpace();
+
+    type = upgrade_type_for_storage(type);
 
     llvm::Type *load_type = llvm_type_of(type)->getPointerTo(address_space);
 

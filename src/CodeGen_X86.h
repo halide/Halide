@@ -30,6 +30,8 @@ protected:
 
     int vector_lanes_for_slice(Type t) const;
 
+    virtual llvm::Type *llvm_type_of(Type t) const override;
+
     using CodeGen_Posix::visit;
 
     /** Nodes for which we want to emit specific sse/avx intrinsics */

@@ -508,5 +508,18 @@ int CodeGen_X86::vector_lanes_for_slice(Type t) const {
     return slice_bits / t.bits();
 }
 
+llvm::Type *CodeGen_X86::llvm_type_of(Type t) const {
+    if (t.is_float() && t.bits() < 32) {
+        // LLVM as of August 2019 has all sorts of issues in the x86
+        // backend for half types. It injects expensive calls to
+        // convert between float and half for seemingly no reason
+        // (e.g. to do a select), and bitcasting to int16 doesn't
+        // help, because it simplifies away the bitcast for you.
+        return llvm_type_of(t.with_code(halide_type_uint));
+    } else {
+        return CodeGen_Posix::llvm_type_of(t);
+    }
+}
+
 }  // namespace Internal
 }  // namespace Halide
