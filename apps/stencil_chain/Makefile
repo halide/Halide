@@ -52,12 +52,13 @@ test: $(BIN)/out.png
 
 BATCH_ID ?= 0
 TRAIN_ONLY ?= 0
+SAMPLES_DIR ?= autotuned_samples
 autotune: $(BIN)/stencil_chain.generator $(AUTOSCHED_BIN)/augment_sample $(AUTOSCHED_BIN)/train_cost_model $(AUTOSCHED_BIN)/libauto_schedule.so $(AUTOSCHED_SRC)/autotune_loop.sh
 	HL_TARGET=host-cuda \
 	HL_MACHINE_PARAMS=80,1,1 \
-	SAMPLES_DIR=autotuned_samples \
+	SAMPLES_DIR=$(SAMPLES_DIR) \
 	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu_weights \
-	HL_DEBUG_CODEGEN=1 \
+	HL_DEBUG_CODEGEN=0 \
 	HL_SHARED_MEMORY_LIMIT=48 \
 	bash $(AUTOSCHED_SRC)/autotune_loop.sh \
 		$(BIN)/stencil_chain.generator \
