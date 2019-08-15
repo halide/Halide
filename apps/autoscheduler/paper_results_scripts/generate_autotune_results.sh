@@ -5,8 +5,7 @@ if [[ $# -ne 2 && $# -ne 3 ]]; then
     exit
 fi
 
-HALIDE=$(dirname $0)/../../..
-echo "Using Halide in " $HALIDE
+HALIDE=$(cd $(dirname $0)/../../..; pwd)
 
 MODE=${1}
 MAX_ITERATIONS=${2}
@@ -55,12 +54,21 @@ MAX_ITERATIONS=$((MAX_ITERATIONS * NUM_APPS))
 
 ITERATIONS=0
 
+SAMPLES_DIR="${HALIDE}/apps/${app}/autotuned_samples_${MODE}"
+OUTPUT_FILE="${SAMPLES_DIR}/autotune_out.txt"
+
+for app in $APPS; do
+    mkdir -p ${SAMPLES_DIR}
+    touch ${OUTPUT_FILE}
+done
+
 while [ 1 ]; do
     for app in $APPS; do
         SECONDS=0
         # 15 mins of autotuning per app, round robin
         while [[ SECONDS -lt 900 ]]; do
-            make -C ${HALIDE}/apps/${app} autotune
+            echo ${SAMPLES_DIR}
+            SAMPLES_DIR=${SAMPLES_DIR} make -C ${HALIDE}/apps/${app} autotune | tee -a ${OUTPUT_FILE}
 
             if [[ $MAX_ITERATIONS -ne 0 && $ITERATIONS -ge $MAX_ITERATIONS ]]; then
                 exit
