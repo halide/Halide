@@ -76,19 +76,19 @@ struct Distribution<bool> {
     typedef typename std::uniform_int_distribution<uint8_t> Type;
 };
 
-template<typename HalideBufferType, typename T, bool Random>
+template<typename T, bool Random>
 void prepare_image_param(
     Halide::ImageParam &image_param,
     const std::vector<int> &shape,
-    const py::array_t<T> *np_data) {
+    const py::array *np_data) {
     if (Random) {
-        Halide::Buffer<HalideBufferType> values(shape);
+        Halide::Buffer<T> values(shape);
 
-        typename Distribution<HalideBufferType>::Type distrib;
+        typename Distribution<T>::Type distrib;
         std::mt19937 generator;
 
         values.for_each_value(
-            [&](HalideBufferType &val) { val = distrib(generator); });
+            [&](T &val) { val = distrib(generator); });
         image_param.set(values);
     } else {
         int stride = 1;
@@ -99,8 +99,8 @@ void prepare_image_param(
         }
         std::reverse(np_strides.begin(), np_strides.end());
 
-        const T *raw_data = np_data->data();
-        Halide::Buffer<HalideBufferType> values(shape);
+        const T *raw_data = static_cast<const T *>(np_data->data());
+        Halide::Buffer<T> values(shape, image_param.name() + "_buf");
         values.for_each_element([&](const int *halide_coords) {
             int np_index = 0;
             for (int i = 0; i < shape.size(); i++) {
@@ -110,62 +110,6 @@ void prepare_image_param(
         });
         image_param.set(values);
     }
-}
-
-template<typename T, bool Random = false>
-void prepare_input(
-    const HalideModel &pipeline,
-    const std::string &input_name,
-    const std::vector<int> &input_shape,
-    const py::array_t<T> &input_array) {
-    Halide::ImageParam &input = pipeline.model->inputs.at(input_name);
-    const int input_type = pipeline.input_types.at(input_name);
-    switch (input_type) {
-    case onnx::TensorProto::BOOL:
-        prepare_image_param<bool, T, Random>(input, input_shape, &input_array);
-        break;
-    case onnx::TensorProto::INT8:
-        prepare_image_param<int8_t, T, Random>(input, input_shape, &input_array);
-        break;
-    case onnx::TensorProto::INT16:
-        prepare_image_param<int16_t, T, Random>(input, input_shape, &input_array);
-        break;
-    case onnx::TensorProto::INT32:
-        prepare_image_param<int32_t, T, Random>(input, input_shape, &input_array);
-        break;
-    case onnx::TensorProto::INT64:
-        prepare_image_param<int64_t, T, Random>(input, input_shape, &input_array);
-        break;
-    case onnx::TensorProto::UINT8:
-        prepare_image_param<uint8_t, T, Random>(input, input_shape, &input_array);
-        break;
-    case onnx::TensorProto::UINT16:
-        prepare_image_param<uint8_t, T, Random>(input, input_shape, &input_array);
-        break;
-    case onnx::TensorProto::UINT32:
-        prepare_image_param<uint32_t, T, Random>(input, input_shape, &input_array);
-        break;
-    case onnx::TensorProto::UINT64:
-        prepare_image_param<uint64_t, T, Random>(input, input_shape, &input_array);
-        break;
-    case onnx::TensorProto::FLOAT:
-        prepare_image_param<float, T, Random>(input, input_shape, &input_array);
-        break;
-    case onnx::TensorProto::DOUBLE:
-        prepare_image_param<double, T, Random>(input, input_shape, &input_array);
-        break;
-    default:
-        throw std::domain_error("Unsupported input type");
-    }
-}
-
-template<typename T>
-void prepare_input(
-    const HalideModel &pipeline,
-    const std::string &input_name,
-    const std::vector<int> &input_shape) {
-    py::array_t<T> rand_array;
-    prepare_input<T, true>(pipeline, input_name, input_shape, rand_array);
 }
 
 void prepare_py_array_input(
@@ -178,31 +122,30 @@ void prepare_py_array_input(
         input_shape.push_back(ndarray.shape(i));
     }
 
-    if (ndarray.dtype().is(py::dtype::of<bool>())) {
-        prepare_input<bool>(pipeline, input_name, input_shape, ndarray);
-    } else if (ndarray.dtype().is(py::dtype::of<int8_t>())) {
-        prepare_input<int8_t>(pipeline, input_name, input_shape, ndarray);
-    } else if (ndarray.dtype().is(py::dtype::of<int16_t>())) {
-        prepare_input<int16_t>(pipeline, input_name, input_shape, ndarray);
-    } else if (ndarray.dtype().is(py::dtype::of<int32_t>())) {
-        prepare_input<int32_t>(pipeline, input_name, input_shape, ndarray);
-    } else if (ndarray.dtype().is(py::dtype::of<int64_t>())) {
-        prepare_input<int64_t>(pipeline, input_name, input_shape, ndarray);
-    } else if (ndarray.dtype().is(py::dtype::of<uint8_t>())) {
-        prepare_input<uint8_t>(pipeline, input_name, input_shape, ndarray);
-    } else if (ndarray.dtype().is(py::dtype::of<uint64_t>())) {
-        prepare_input<uint16_t>(pipeline, input_name, input_shape, ndarray);
-    } else if (ndarray.dtype().is(py::dtype::of<uint32_t>())) {
-        prepare_input<uint32_t>(pipeline, input_name, input_shape, ndarray);
-    } else if (ndarray.dtype().is(py::dtype::of<uint64_t>())) {
-        prepare_input<uint64_t>(pipeline, input_name, input_shape, ndarray);
-    } else if (ndarray.dtype().is(py::dtype::of<float>())) {
-        prepare_input<float>(pipeline, input_name, input_shape, ndarray);
-    } else if (ndarray.dtype().is(py::dtype::of<double>())) {
-        prepare_input<double>(pipeline, input_name, input_shape, ndarray);
-    } else if (ndarray.dtype().kind() == 'i') {
-        // TODO : Figure out why static type casting doesn't work for signed intger!
-        prepare_input<int>(pipeline, input_name, input_shape, ndarray);
+    Halide::ImageParam &input = pipeline.model->inputs.at(input_name);
+
+    if (py::isinstance<py::array_t<bool>>(ndarray)) {
+        prepare_image_param<bool, false>(input, input_shape, &ndarray);
+    } else if (py::isinstance<py::array_t<std::int8_t>>(ndarray)) {
+        prepare_image_param<std::int8_t, false>(input, input_shape, &ndarray);
+    } else if (py::isinstance<py::array_t<std::int16_t>>(ndarray)) {
+        prepare_image_param<std::int16_t, false>(input, input_shape, &ndarray);
+    } else if (py::isinstance<py::array_t<std::int32_t>>(ndarray)) {
+        prepare_image_param<std::int32_t, false>(input, input_shape, &ndarray);
+    } else if (py::isinstance<py::array_t<std::int64_t>>(ndarray)) {
+        prepare_image_param<std::int64_t, false>(input, input_shape, &ndarray);
+    } else if (py::isinstance<py::array_t<std::uint8_t>>(ndarray)) {
+        prepare_image_param<std::uint8_t, false>(input, input_shape, &ndarray);
+    } else if (py::isinstance<py::array_t<std::uint16_t>>(ndarray)) {
+        prepare_image_param<std::uint16_t, false>(input, input_shape, &ndarray);
+    } else if (py::isinstance<py::array_t<std::uint32_t>>(ndarray)) {
+        prepare_image_param<std::uint32_t, false>(input, input_shape, &ndarray);
+    } else if (py::isinstance<py::array_t<std::uint64_t>>(ndarray)) {
+        prepare_image_param<std::uint64_t, false>(input, input_shape, &ndarray);
+    } else if (py::isinstance<py::array_t<float>>(ndarray)) {
+        prepare_image_param<float, false>(input, input_shape, &ndarray);
+    } else if (py::isinstance<py::array_t<double>>(ndarray)) {
+        prepare_image_param<double, false>(input, input_shape, &ndarray);
     } else {
         throw std::invalid_argument(
             std::string("Unsupported type ") + ndarray.dtype().kind() +
@@ -224,49 +167,52 @@ void prepare_random_input(
         input_shape.push_back(*dim);
     }
 
+    py::array rand_array;
+    Halide::ImageParam &input = pipeline.model->inputs.at(input_name);
+
     switch (t.type) {
     case onnx::TensorProto::BOOL: {
-        prepare_input<bool>(pipeline, input_name, input_shape);
+        prepare_image_param<bool, true>(input, input_shape, &rand_array);
         break;
     }
     case onnx::TensorProto::INT8: {
-        prepare_input<int8_t>(pipeline, input_name, input_shape);
+        prepare_image_param<std::int8_t, true>(input, input_shape, &rand_array);
         break;
     }
     case onnx::TensorProto::INT16: {
-        prepare_input<int16_t>(pipeline, input_name, input_shape);
+        prepare_image_param<std::int16_t, true>(input, input_shape, &rand_array);
         break;
     }
     case onnx::TensorProto::INT32: {
-        prepare_input<int32_t>(pipeline, input_name, input_shape);
+        prepare_image_param<std::int32_t, true>(input, input_shape, &rand_array);
         break;
     }
     case onnx::TensorProto::INT64: {
-        prepare_input<int64_t>(pipeline, input_name, input_shape);
+        prepare_image_param<std::int64_t, true>(input, input_shape, &rand_array);
         break;
     }
     case onnx::TensorProto::UINT8: {
-        prepare_input<uint8_t>(pipeline, input_name, input_shape);
+        prepare_image_param<std::uint8_t, true>(input, input_shape, &rand_array);
         break;
     }
     case onnx::TensorProto::UINT16: {
-        prepare_input<uint16_t>(pipeline, input_name, input_shape);
+        prepare_image_param<std::uint16_t, true>(input, input_shape, &rand_array);
         break;
     }
     case onnx::TensorProto::UINT32: {
-        prepare_input<uint32_t>(pipeline, input_name, input_shape);
+        prepare_image_param<std::uint32_t, true>(input, input_shape, &rand_array);
         break;
     }
     case onnx::TensorProto::UINT64: {
-        prepare_input<uint64_t>(pipeline, input_name, input_shape);
+        prepare_image_param<std::uint64_t, true>(input, input_shape, &rand_array);
         break;
     }
     case onnx::TensorProto::FLOAT: {
-        prepare_input<float>(pipeline, input_name, input_shape);
+        prepare_image_param<float, true>(input, input_shape, &rand_array);
         break;
     }
     case onnx::TensorProto::DOUBLE: {
-        prepare_input<double>(pipeline, input_name, input_shape);
+        prepare_image_param<double, true>(input, input_shape, &rand_array);
         break;
     }
     default: {
