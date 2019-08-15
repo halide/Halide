@@ -3858,10 +3858,10 @@ void CodeGen_LLVM::codegen_asserts(const vector<const AssertStmt *> &asserts) {
 
     // Now switch on the bitmask to the correct failure
     Expr case_idx = cast<int32_t>(count_trailing_zeros(bitmask));
-    llvm::SmallVector<uint32_t, 32> weights;
+    llvm::SmallVector<uint32_t, 64> weights;
     weights.push_back(1<<30);
     for (int i = 0; i < (int) asserts.size(); i++) {
-      weights.push_back(0);
+        weights.push_back(0);
     }
     llvm::MDBuilder md_builder(*context);
     llvm::MDNode *switch_very_likely_branch = md_builder.createBranchWeights(weights);
