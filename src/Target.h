@@ -156,6 +156,10 @@ struct Target {
 
     bool has_feature(Feature f) const;
 
+    inline bool has_feature(halide_target_feature_t f) const {
+        return has_feature((Feature) f);
+    }
+
     bool features_any_of(std::vector<Feature> test_features) const;
 
     bool features_all_of(std::vector<Feature> test_features) const;
