@@ -1508,6 +1508,62 @@ void check_overflow() {
         internal_assert(is_const(simplify(e)))
             << "Non-everflowing expression should have simplified: " << e << "\n";
     }
+
+    // We also risk 64-bit overflow when computing the constant bounds of subexpressions
+    Expr x = Variable::make(halide_type_of<int64_t>(), "x");
+    Expr y = Variable::make(halide_type_of<int64_t>(), "y");
+
+    Expr zero = make_const(Int(64), 0);
+    Expr two_32 = make_const(Int(64), (int64_t)1 << 32);
+    Expr neg_two_32 = make_const(Int(64), -((int64_t)1 << 32));
+    Expr min_64 = make_const(Int(64), INT64_MIN);
+    Expr max_64 = make_const(Int(64), INT64_MAX);
+    for (int x_pos = 0; x_pos <= 1; x_pos++) {
+        for (int y_pos = 0; y_pos <= 1; y_pos++) {
+            // Mul
+            {
+                Scope<Interval> scope;
+                if (x_pos) {
+                    scope.push("x", {zero, two_32});
+                } else {
+                    scope.push("x", {neg_two_32, zero});
+                }
+                if (y_pos) {
+                    scope.push("y", {zero, two_32});
+                } else {
+                    scope.push("y", {neg_two_32, zero});
+                }
+                if (x_pos == y_pos) {
+                    internal_assert(!is_const(simplify((x * y) < two_32, true, scope)));
+                } else {
+                    internal_assert(!is_const(simplify((x * y) > neg_two_32, true, scope)));
+                }
+            }
+            // Add/Sub
+            {
+                Scope<Interval> scope;
+                if (x_pos) {
+                    scope.push("x", {zero, max_64});
+                } else {
+                    scope.push("x", {min_64, zero});
+                }
+                if (y_pos) {
+                    scope.push("y", {zero, max_64});
+                } else {
+                    scope.push("y", {min_64, zero});
+                }
+                if (x_pos && y_pos) {
+                    internal_assert(!is_const(simplify((x + y) < two_32, true, scope)));
+                } else if (x_pos && !y_pos) {
+                    internal_assert(!is_const(simplify((x - y) < two_32, true, scope)));
+                } else if (!x_pos && y_pos) {
+                    internal_assert(!is_const(simplify((x - y) > neg_two_32, true, scope)));
+                } else {
+                    internal_assert(!is_const(simplify((x + y) > neg_two_32, true, scope)));
+                }
+            }
+        }
+    }
 }
 
 template<typename T>
