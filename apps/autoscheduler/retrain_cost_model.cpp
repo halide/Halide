@@ -568,7 +568,7 @@ int main(int argc, char **argv) {
 
             if (kModels > 1) std::cout << "\n";
             if (samples.count(worst_miss_pipeline_id)) {
-                std::cout << " Worst: " << worst_miss << " " << samples[worst_miss_pipeline_id].schedules[worst_miss_schedule_id].filename << "\n";
+                std::cout << " Worst: " << worst_miss << " " << leaf(samples[worst_miss_pipeline_id].schedules[worst_miss_schedule_id].filename) << "\n";
                 // samples[worst_miss_pipeline_id].schedules.erase(worst_miss_schedule_id);
             } else {
                 std::cout << "\n";
