@@ -1370,10 +1370,6 @@ struct LoopNest {
         }
 
         for (const auto &c : children) {
-            if (c->node != node) {
-                continue;
-            }
-
             if (c->has_thread_loop_descendant()) {
                 return true;
             }
@@ -2197,28 +2193,6 @@ struct LoopNest {
             }
             inlined_feat.inner_parallelism = 1;
             inlined_feat.outer_parallelism = parallelism;
-        }
-
-        // If this node does not have any thread loops, then it operates with a
-        // single thread
-        if (parent && parent->gpu_label == block && !has_thread_loop_descendant()) {
-            int64_t total_serial_loop_extents = 1;
-
-            const auto &bounds = parent->get_bounds(stage->node);
-            for (int i = 0; i < (int)parent->stage->loop.size(); i++) {
-                auto extent = bounds->loops(stage_idx, i).extent();
-                total_serial_loop_extents *= extent;
-            }
-
-            const LoopNest* block = parent;
-
-            auto block_and_serial_extents = get_block_and_serial_extents(block);
-            total_serial_loop_extents *= block_and_serial_extents.second;
-
-            auto max_thread_counts = block->get_union_thread_counts(nullptr);
-
-            const auto& thread_info = ThreadInfo{max_thread_counts};
-            compute_warp_features(feat, thread_info, block_and_serial_extents.first);
         }
     }
 
@@ -3441,20 +3415,42 @@ struct State {
         return nullptr;
     }
 
-    void deep_copy_loop_nest(LoopNest* new_loop_nest, const IntrusivePtr<const LoopNest> current_loop_nest) const {
-        new_loop_nest->copy_from(*current_loop_nest);
+    template <typename PostCreateMutator>
+    void deep_copy_loop_nest(LoopNest* new_loop_nest, const LoopNest* new_loop_nest_parent, const IntrusivePtr<const LoopNest>& existing_loop_nest, const PostCreateMutator& post_create_mutator) const {
+        new_loop_nest->copy_from(*existing_loop_nest);
 
-        for (auto& child : new_loop_nest->children) {
+        for (std::size_t i = 0, N = new_loop_nest->children.size(); i < N; ++i) {
             LoopNest* new_child = new LoopNest;
-            deep_copy_loop_nest(new_child, child);
-            child = new_child;
+            new_loop_nest->children[i] = new_child;
+            deep_copy_loop_nest(new_child, new_loop_nest, existing_loop_nest->children[i], post_create_mutator);
         }
+
+        post_create_mutator(new_loop_nest);
     }
 
-    LoopNest* deep_copy_loop_nest() const {
+    // We use the post_create_mutator so that the loop nests can be modified
+    // before they become IntrusivePtr<const LoopNest> as children and cannot be modified
+    template <typename PostCreateMutator>
+    LoopNest* deep_copy_loop_nest(const PostCreateMutator& post_create_mutator) const {
         LoopNest* new_root = new LoopNest;
-        deep_copy_loop_nest(new_root, root);
+        deep_copy_loop_nest(new_root, nullptr, root, post_create_mutator);
         return new_root;
+    }
+
+    bool has_loop_nest_without_thread_loops() const {
+        for (const auto& c : root->children) {
+            if (c->gpu_label != block) {
+                continue;
+            }
+
+            for (const auto& block_c : c->children) {
+                if (!block_c->has_thread_loop_descendant()) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     bool has_compute_root_loops_without_blocks() const {
@@ -3467,13 +3463,29 @@ struct State {
         return false;
     }
 
-    // In phase 2, any compute_root loop marked 'none' will be split into
-    // blocks, threads, and serial loops. To enable the cost model to make a
-    // meaningful prediction on these pre-split loops, we assume a split into
-    // blocks and threads with a single full warp (if possible)
-    void split_compute_root_loops(LoopNest* root, const MachineParams &params, const Target& target) const {
-        for (auto& c : root->children) {
-            if (c->gpu_label == none) {
+    struct FeatureLoopNestMutator {
+        const MachineParams& params;
+        const Target& target;
+
+        void operator()(LoopNest* new_loop_nest) const {
+            split_compute_root_loops(new_loop_nest);
+            add_outer_thread_loops(new_loop_nest);
+        }
+
+        // In phase 2, any compute_root loop marked 'none' will be split into
+        // blocks, threads, and serial loops. To enable the cost model to make a
+        // meaningful prediction on these pre-split loops, we assume a split into
+        // blocks and threads with a single full warp (if possible)
+        void split_compute_root_loops(LoopNest* loop_nest) const {
+            if (!loop_nest || !loop_nest->is_root()) {
+                return;
+            }
+
+            for (auto& c : loop_nest->children) {
+                if (c->gpu_label != none) {
+                    continue;
+                }
+
                 vector<int64_t> tiling = c->size;
 
                 int vectorized_loop_index = std::max(c->vectorized_loop_index, 0);
@@ -3483,25 +3495,51 @@ struct State {
                 int64_t inner_extent = std::min(c->size[vectorized_loop_index], (int64_t)32);
                 tiling[vectorized_loop_index] = (c->size[vectorized_loop_index] + inner_extent - 1) / inner_extent;
 
-                // Make as parallelized so this loop is split into blocks and threads
+                // Mark as 'parallelized' so this loop is split into blocks and threads
                 c->gpu_label = parallelized;
-                c = c->parallelize_in_tiles(params, tiling, root, target);
+                c = c->parallelize_in_tiles(params, tiling, loop_nest, target);
             }
         }
-    }
+
+        // If a loop nest does not have thread loops, split the outermost serial
+        // loops to create thread loops with extents 1
+        void add_outer_thread_loops(LoopNest* loop_nest) const {
+            if (!loop_nest || loop_nest->gpu_label != block) {
+                return;
+            }
+
+            for (auto& c : loop_nest->children) {
+                if (c->has_thread_loop_descendant()) {
+                    continue;
+                }
+
+                internal_assert(c->gpu_label == serial);
+
+                // We want outer thread loops with extents 1
+                vector<int64_t> tiling(c->size.size(), 1);
+
+                // Mark as 'thread' so this loop is split into threads
+                c->gpu_label = thread;
+                c = c->parallelize_in_tiles(params, tiling, loop_nest, target);
+            }
+        }
+    };
 
     IntrusivePtr<const LoopNest> get_root_for_features(const MachineParams &params, const Target& target) {
-        if (!has_compute_root_loops_without_blocks()) {
+        if (!has_compute_root_loops_without_blocks() && !has_loop_nest_without_thread_loops()) {
             return root;
         }
 
-        // If the current loop nest has compute root loops without blocks (it is
-        // in phase 1 and the outer loops are marked 'none'), then copy the loop
-        // nest and create block splits so we can compute meaningful features
-        auto new_root = deep_copy_loop_nest();
-        root->dump("", nullptr);
-        split_compute_root_loops(new_root, params, target);
-        new_root->dump("", nullptr);
+        FeatureLoopNestMutator mutator{params, target};
+
+        // We copy the loop nest in 2 cases:
+        // - If the current loop nest has compute root loops without blocks (it is
+        // in phase 1 and the outer loops are marked 'none'), we split the loop into blocks and threads so we can compute meaningful features
+        // - If there are serial loops inside blocks without a surrounding
+        // thread loop nest, we create a surrounding thread loop nest with
+        // extents 1 (which Halide will do when the schedule is compiled) so
+        // that we can more easily compute features
+        auto new_root = deep_copy_loop_nest(mutator);
         return new_root;
     }
 
