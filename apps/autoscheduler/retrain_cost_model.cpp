@@ -26,22 +26,22 @@ using std::map;
 using std::set;
 
 struct Flags {
-    int epochs = 0;
-    std::vector<float> rates = {0.0001f};
-    string weights_path;
-    string weights_out_path;
-    int num_cores = 32;
-    bool randomize_weights = false;
-    string best_benchmark_path;
-    string best_schedule_path;
+    int                 epochs = 0;
+    std::vector<float>  rates = {0.0001f};
+    string              initial_weights_path;
+    string              weights_out_path;
+    int                 num_cores = 32;
+    bool                randomize_weights = false;
+    string              best_benchmark_path;
+    string              best_schedule_path;
 
     Flags(int argc, char **argv) {
         struct option long_options[] = {
             { "epochs", required_argument,  nullptr, 'e' },
             { "rates", required_argument,  nullptr, 't' },
-            { "weights", required_argument,  nullptr, 'w' },
-            { "weights_out", required_argument,  nullptr, 'o' },
-            { "randomize_weights", required_argument, nullptr, 'r' },
+            { "initial_weights", required_argument,  nullptr, 'i' },
+            { "weights_out", required_argument,  nullptr, 'w' },
+            { "randomize_weights", optional_argument, nullptr, 'r' },
             { "num_cores", required_argument, nullptr, 'n' },
             { "best_benchmark", required_argument,  nullptr, 'b' },
             { "best_schedule", required_argument,  nullptr, 's' },
@@ -61,9 +61,9 @@ struct Flags {
             switch (c) {
             case 'e': epochs = atoi(optarg); break;
             case 't': rates = parse_floats(optarg); break;
-            case 'w': weights_path = optarg; break;
-            case 'o': weights_out_path = optarg; break;
-            case 'r': randomize_weights = atoi(optarg) == 1; break;
+            case 'i': initial_weights_path = optarg; break;
+            case 'w': weights_out_path = optarg; break;
+            case 'r': randomize_weights = optarg ? (atoi(optarg) == 1) : true; break;
             case 'n': num_cores = atoi(optarg); break;
             case 'b': best_benchmark_path = optarg; break;
             case 's': best_schedule_path = optarg; break;
@@ -75,12 +75,13 @@ struct Flags {
             std::cerr << "--epochs must be specified and > 0.\n";
             usage(argc, argv);
         }
-        if (weights_path.empty()) {
-            std::cerr << "--weights must be specified.\n";
+        if ((!initial_weights_path.empty()) == randomize_weights) {
+            std::cerr << "You must specify exactly one of --initial_weights or --randomize_weights.\n";
             usage(argc, argv);
         }
         if (weights_out_path.empty()) {
-            weights_out_path = weights_path;
+            std::cerr << "--weights_out must be specified.\n";
+            usage(argc, argv);
         }
         if (rates.empty()) {
             std::cerr << "--rates cannot be empty.\n";
@@ -380,7 +381,7 @@ int main(int argc, char **argv) {
     // Iterate through the pipelines
     vector<std::unique_ptr<CostModel>> tpp;
     for (int i = 0; i < kModels; i++) {
-        tpp.emplace_back(make_default_cost_model(flags.weights_path, flags.weights_out_path, flags.randomize_weights));
+        tpp.emplace_back(make_default_cost_model(flags.initial_weights_path, flags.weights_out_path, flags.randomize_weights));
     }
 
     std::cout.setf(std::ios::fixed, std::ios::floatfield);

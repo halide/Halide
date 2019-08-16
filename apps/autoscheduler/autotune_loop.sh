@@ -219,7 +219,8 @@ for ((BATCH_ID=$((FIRST+1));BATCH_ID<$((FIRST+1+NUM_BATCHES));BATCH_ID++)); do
                 --epochs=${BATCH_SIZE} \
                 --rates="0.0001" \
                 --num_cores=32 \
-                --weights=${WEIGHTS} \
+                --initial_weights=${WEIGHTS} \
+                --weights_out=${WEIGHTS} \
                 --best_benchmark=${PWD}/samples/best.${PIPELINE}.benchmark.txt \
                 --best_schedule=${PWD}/samples/best.${PIPELINE}.schedule.h
     done
