@@ -55,7 +55,7 @@ $(AUTOSCHED_BIN)/libauto_schedule.so: $(AUTOSCHED_SRC)/AutoSchedule.cpp \
 	@mkdir -p $(@D)
 	$(CXX) -shared $(USE_EXPORT_DYNAMIC) -fPIC $(CXXFLAGS) -g $(OPTIMIZE) -I $(AUTOSCHED_BIN)/cost_model $(filter-out %.h,$^) -o $@ $(HALIDE_SYSTEM_LIBS)
 
-$(AUTOSCHED_BIN)/train_cost_model: $(AUTOSCHED_SRC)/train_cost_model.cpp \
+$(AUTOSCHED_BIN)/retrain_cost_model: $(AUTOSCHED_SRC)/retrain_cost_model.cpp \
 									$(AUTOSCHED_SRC)/ASLog.cpp \
 									$(AUTOSCHED_SRC)/DefaultCostModel.h \
 									$(AUTOSCHED_SRC)/DefaultCostModel.cpp \
