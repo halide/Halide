@@ -348,7 +348,7 @@ map<int, PipelineSample> load_samples(const Flags &flags) {
     std::cout << "Distinct pipelines: " << result.size() << "\n";
 
     std::ostringstream o;
-    o << "Best runtime is " << best_runtime << ", from schedule id "<< best << " in file " << best_path << "\n";
+    o << "Best runtime is " << best_runtime << " msec, from schedule id "<< best << " in file " << best_path << "\n";
     std::cout << o.str();
     if (!flags.best_benchmark_path.empty()) {
         std::ofstream f(flags.best_benchmark_path, std::ios_base::trunc);
