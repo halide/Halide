@@ -3441,12 +3441,78 @@ struct State {
         return nullptr;
     }
 
+    void deep_copy_loop_nest(LoopNest* new_loop_nest, const IntrusivePtr<const LoopNest> current_loop_nest) const {
+        new_loop_nest->copy_from(*current_loop_nest);
+
+        for (auto& child : new_loop_nest->children) {
+            LoopNest* new_child = new LoopNest;
+            deep_copy_loop_nest(new_child, child);
+            child = new_child;
+        }
+    }
+
+    LoopNest* deep_copy_loop_nest() const {
+        LoopNest* new_root = new LoopNest;
+        deep_copy_loop_nest(new_root, root);
+        return new_root;
+    }
+
+    bool has_compute_root_loops_without_blocks() const {
+        for (const auto& c : root->children) {
+            if (c->gpu_label == none) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // In phase 2, any compute_root loop marked 'none' will be split into
+    // blocks, threads, and serial loops. To enable the cost model to make a
+    // meaningful prediction on these pre-split loops, we assume a split into
+    // blocks and threads with a single full warp (if possible)
+    void split_compute_root_loops(LoopNest* root, const MachineParams &params, const Target& target) const {
+        for (auto& c : root->children) {
+            if (c->gpu_label == none) {
+                vector<int64_t> tiling = c->size;
+
+                int vectorized_loop_index = std::max(c->vectorized_loop_index, 0);
+
+                // Make the vectorized dimension of the inner loop 32 (or as
+                // close as possible)
+                int64_t inner_extent = std::min(c->size[vectorized_loop_index], (int64_t)32);
+                tiling[vectorized_loop_index] = (c->size[vectorized_loop_index] + inner_extent - 1) / inner_extent;
+
+                // Make as parallelized so this loop is split into blocks and threads
+                c->gpu_label = parallelized;
+                c = c->parallelize_in_tiles(params, tiling, root, target);
+            }
+        }
+    }
+
+    IntrusivePtr<const LoopNest> get_root_for_features(const MachineParams &params, const Target& target) {
+        if (!has_compute_root_loops_without_blocks()) {
+            return root;
+        }
+
+        // If the current loop nest has compute root loops without blocks (it is
+        // in phase 1 and the outer loops are marked 'none'), then copy the loop
+        // nest and create block splits so we can compute meaningful features
+        auto new_root = deep_copy_loop_nest();
+        root->dump("", nullptr);
+        split_compute_root_loops(new_root, params, target);
+        new_root->dump("", nullptr);
+        return new_root;
+    }
+
     void compute_featurization(const FunctionDAG &dag, const MachineParams &params, const Target& target, StageMap<ScheduleFeatures> *features) {
+        auto feature_root = get_root_for_features(params, target);
+
         StageMap<LoopNest::Sites> sites;
         sites.make_large(dag.nodes[0].stages[0].max_id);
         features->make_large(dag.nodes[0].stages[0].max_id);
-        internal_assert(root.defined());
-        root->get_sites(sites);
+        internal_assert(feature_root.defined());
+        feature_root->get_sites(sites);
 
         // For the input nodes and unscheduled outputs, the compute
         // and store sites are root, and the produce and innermost
@@ -3456,8 +3522,8 @@ struct State {
                 for (const auto &stage : n.stages) {
                     auto &s = sites.get_or_create(&stage);
                     if (s.compute == nullptr) {
-                        s.compute = root.get();
-                        s.store = root.get();
+                        s.compute = feature_root.get();
+                        s.store = feature_root.get();
                     }
                 }
             }
@@ -3467,7 +3533,7 @@ struct State {
         // could possibly be. We'll ignore the possibility of inlining
         // them for now.
         map<const LoopNest *, pair<const LoopNest *, int>> parent;
-        compute_loop_nest_parents(parent, root.get(), 0);
+        compute_loop_nest_parents(parent, feature_root.get(), 0);
         for (const auto &n : dag.nodes) {
             if (sites.contains(&(n.stages[0]))) {
                 continue;
@@ -3498,7 +3564,7 @@ struct State {
         }
 
         std::unordered_map<const LoopNest*, ThreadInfo> thread_info_map;
-        root->compute_features(dag, params, target, sites, 1, 1, nullptr, nullptr, *root, nullptr, features, thread_info_map);
+        feature_root->compute_features(dag, params, target, sites, 1, 1, nullptr, nullptr, *feature_root, nullptr, features, thread_info_map);
 
         for (const auto &n : dag.nodes) {
             if (sites.get(&(n.stages[0])).produce == nullptr) {
