@@ -1194,13 +1194,22 @@ void CodeGen_LLVM::optimize_module() {
 
     std::unique_ptr<TargetMachine> tm = make_target_machine(*module);
 
+    // At present, we default to *enabling* LLVM loop optimization,
+    // unless DisableLLVMLoopOpt is set; we're going to flip this to defaulting
+    // to *not* enabling these optimizations (and removing the DisableLLVMLoopOpt feature).
+    // See https://github.com/halide/Halide/issues/4113 for more info.
+    // (Note that setting EnableLLVMLoopOpt always enables loop opt, regardless
+    // of the setting of DisableLLVMLoopOpt.)
+    const bool do_loop_opt = !get_target().has_feature(Target::DisableLLVMLoopOpt) ||
+                              get_target().has_feature(Target::EnableLLVMLoopOpt);
+
 // Temporarily disabled, see https://github.com/halide/Halide/issues/3957
 // #if LLVM_VERSION >= 90
 #if 0
     PipelineTuningOptions pto;
-    pto.LoopInterleaving = !get_target().has_feature(Target::DisableLLVMLoopUnroll);
-    pto.LoopVectorization = !get_target().has_feature(Target::DisableLLVMLoopVectorize);
-    pto.LoopUnrolling = pto.LoopInterleaving;
+    pto.LoopInterleaving = do_loop_opt;
+    pto.LoopVectorization = do_loop_opt;
+    pto.LoopUnrolling = do_loop_opt;
     // Clear ScEv info for all loops. Certain Halide applications spend a very
     // long time compiling in forgetLoop, and prefer to forget everything
     // and rebuild SCEV (aka "Scalar Evolution") from scratch.
@@ -1319,8 +1328,8 @@ void CodeGen_LLVM::optimize_module() {
     PassManagerBuilder b;
     b.OptLevel = 3;
     b.Inliner = createFunctionInliningPass(b.OptLevel, 0, false);
-    b.LoopVectorize = !get_target().has_feature(Target::DisableLLVMLoopVectorize);
-    b.DisableUnrollLoops = get_target().has_feature(Target::DisableLLVMLoopUnroll);
+    b.LoopVectorize = do_loop_opt;
+    b.DisableUnrollLoops = !do_loop_opt;
     b.SLPVectorize = true;  // Note: SLP vectorization has no analogue in the Halide scheduling model
 #if LLVM_VERSION >= 90
     // Clear ScEv info for all loops. Certain Halide applications spend a very
@@ -3849,7 +3858,14 @@ void CodeGen_LLVM::codegen_asserts(const vector<const AssertStmt *> &asserts) {
 
     // Now switch on the bitmask to the correct failure
     Expr case_idx = cast<int32_t>(count_trailing_zeros(bitmask));
-    auto *switch_inst = builder->CreateSwitch(codegen(case_idx), no_errors_bb, asserts.size(), very_likely_branch);
+    llvm::SmallVector<uint32_t, 64> weights;
+    weights.push_back(1<<30);
+    for (int i = 0; i < (int) asserts.size(); i++) {
+        weights.push_back(0);
+    }
+    llvm::MDBuilder md_builder(*context);
+    llvm::MDNode *switch_very_likely_branch = md_builder.createBranchWeights(weights);
+    auto *switch_inst = builder->CreateSwitch(codegen(case_idx), no_errors_bb, asserts.size(), switch_very_likely_branch);
     for (int i = 0; i < (int) asserts.size(); i++) {
         BasicBlock *fail_bb = BasicBlock::Create(*context, "assert_failed", function);
         switch_inst->addCase(ConstantInt::get(IntegerType::get(*context, 32), i), fail_bb);

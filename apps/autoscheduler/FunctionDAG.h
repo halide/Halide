@@ -5,14 +5,16 @@
 #ifndef FUNCTION_DAG_H
 #define FUNCTION_DAG_H
 
-#include <stdint.h>
 #include <algorithm>
-#include <vector>
 #include <map>
+#include <stdint.h>
 #include <string>
+#include <vector>
 
-#include "Halide.h"
+#include "ASLog.h"
 #include "Errors.h"
+#include "Featurization.h"
+#include "Halide.h"
 
 namespace Halide {
 namespace Internal {
@@ -131,7 +133,14 @@ public:
             // The producer is scalar, so all strides are zero.
             return {true, 0, 1};
         }
-        return coeffs[producer_storage_dim][consumer_loop_dim];
+        internal_assert(producer_storage_dim < (int) coeffs.size());
+        const auto &p = coeffs[producer_storage_dim];
+        if (p.empty()) {
+            // The consumer is scalar, so all strides are zero.
+            return {true, 0, 1};
+        }
+        internal_assert(consumer_loop_dim < (int) p.size());
+        return p[consumer_loop_dim];
     }
 
     // To avoid redundantly re-recording copies of the same
@@ -176,24 +185,24 @@ public:
 
     void dump(const char *prefix) const {
         if (count() > 1) {
-            debug(0) << prefix << count() << " x\n";
+            aslog(0) << prefix << count() << " x\n";
         }
         for (size_t i = 0; i < producer_storage_dims(); i++) {
-            debug(0) << prefix << "  [";
+            aslog(0) << prefix << "  [";
 
             for (size_t j = 0; j < consumer_loop_dims(); j++) {
                 const auto &c = (*this)(i, j);
                 if (!c.exists) {
-                    debug(0) << " _  ";
+                    aslog(0) << " _  ";
                 } else if (c.denominator == 1) {
-                    debug(0) << " " << c.numerator << "  ";
+                    aslog(0) << " " << c.numerator << "  ";
                 } else {
-                    debug(0) << c.numerator << "/" << c.denominator << " ";
+                    aslog(0) << c.numerator << "/" << c.denominator << " ";
                 }
             }
-            debug(0) << "]\n";
+            aslog(0) << "]\n";
         }
-        debug(0) << "\n";
+        aslog(0) << "\n";
     }
 };
 
@@ -296,11 +305,11 @@ struct BoundContents {
         for (int i = 0; i < layout->total_size; i++) {
             auto p = data()[i];
             if (p.max() < p.min()) {
-                debug(0) << "Bad bounds object:\n";
+                aslog(0) << "Bad bounds object:\n";
                 for (int j = 0; j < layout->total_size; j++) {
-                    if (i == j) debug(0) << "=> ";
-                    else debug(0) << "   ";
-                    debug(0) << j << ": " << data()[j].min() << ", " << data()[j].max() << "\n";
+                    if (i == j) aslog(0) << "=> ";
+                    else aslog(0) << "   ";
+                    aslog(0) << j << ": " << data()[j].min() << ", " << data()[j].max() << "\n";
                 }
                 internal_error << "Aborting";
             }
@@ -650,10 +659,10 @@ struct FunctionDAG {
                         }
                     }
                     internal_assert(consumer_dim >= 0) << "Could not find consumer loop variable: " << var->name << "\n";
-                    debug(2) << "Bound is affine: " << e << " == " << var->name << " * " << coeff << " + " << constant << "\n";
+                    aslog(2) << "Bound is affine: " << e << " == " << var->name << " * " << coeff << " + " << constant << "\n";
                 } else {
                     affine = false;
-                    debug(2) << "Bound is non-affine: " << e << "\n";
+                    aslog(2) << "Bound is non-affine: " << e << "\n";
                 }
             }
         };
@@ -1484,39 +1493,39 @@ struct FunctionDAG {
 
     void dump() const {
         for (const Node &n : nodes) {
-            debug(0) << "Node: " << n.func.name() << '\n'
+            aslog(0) << "Node: " << n.func.name() << '\n'
                      << "  Symbolic region required: \n";
             for (const Interval &i : n.region_required) {
-                debug(0) << "    " << i.min << ", " << i.max << '\n';
+                aslog(0) << "    " << i.min << ", " << i.max << '\n';
             }
-            debug(0) << "  Region computed: \n";
+            aslog(0) << "  Region computed: \n";
             for (const auto &i : n.region_computed) {
-                debug(0) << "    " << i.in.min << ", " << i.in.max << '\n';
+                aslog(0) << "    " << i.in.min << ", " << i.in.max << '\n';
             }
             for (size_t i = 0; i < n.stages.size(); i++) {
-                debug(0) << "  Stage " << i << ":\n";
+                aslog(0) << "  Stage " << i << ":\n";
                 for (const auto &l : n.stages[i].loop) {
-                    debug(0) << "    " << l.var << " " << l.min << " " << l.max << '\n';
+                    aslog(0) << "    " << l.var << " " << l.min << " " << l.max << '\n';
                 }
                 n.stages[i].features.dump();
             }
-            debug(0) << "  pointwise: " << n.is_pointwise
+            aslog(0) << "  pointwise: " << n.is_pointwise
                      << " boundary condition: " << n.is_boundary_condition
                      << " wrapper: " << n.is_wrapper
                      << " input: " << n.is_input
                      << " output: " << n.is_output << "\n";
         }
         for (const Edge &e : edges) {
-            debug(0) << "Edge: " << e.producer->func.name() << " -> " << e.consumer->name << '\n'
+            aslog(0) << "Edge: " << e.producer->func.name() << " -> " << e.consumer->name << '\n'
                      << "  Footprint: \n";
             int j = 0;
             for (const auto &i : e.bounds) {
-                debug(0) << "    Min " << j << ": " << i.first.expr << '\n';
-                debug(0) << "    Max " << j << ": " << i.second.expr << '\n';
+                aslog(0) << "    Min " << j << ": " << i.first.expr << '\n';
+                aslog(0) << "    Max " << j << ": " << i.second.expr << '\n';
                 j++;
             }
 
-            debug(0) << "  Load Jacobians:\n";
+            aslog(0) << "  Load Jacobians:\n";
             for (const auto &jac : e.load_jacobians) {
                 jac.dump("  ");
             }

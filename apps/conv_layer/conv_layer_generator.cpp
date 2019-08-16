@@ -32,23 +32,10 @@ public:
 
         if (auto_schedule) {
             // Provide estimates on the input image
-            input.dim(0).set_bounds_estimate(0, 131);
-            input.dim(1).set_bounds_estimate(0, 131);
-            input.dim(2).set_bounds_estimate(0, 64);
-            input.dim(3).set_bounds_estimate(0, 4);
-
-            filter.dim(0).set_bounds_estimate(0, 3);
-            filter.dim(1).set_bounds_estimate(0, 3);
-            filter.dim(2).set_bounds_estimate(0, 64);
-            filter.dim(3).set_bounds_estimate(0, 64);
-
-            bias.dim(0).set_bounds_estimate(0, 64);
-
-            // Provide estimates on the pipeline f_ReLU
-            f_ReLU.estimate(x, 0, 128)
-                .estimate(y, 0, 128)
-                .estimate(z, 0, 64)
-                .estimate(n, 0, 4);
+            input.set_estimates({{0, 131}, {0, 131}, {0, 64}, {0, 4}});
+            filter.set_estimates({{0, 3}, {0, 3}, {0, 64}, {0, 64}});
+            bias.set_estimates({{0, 64}});
+            f_ReLU.set_estimates({{0, 128}, {0, 128}, {0, 64}, {0, 4}});
 
         } /*else if (get_target().has_gpu_feature()) {
             // TODO: Turn off the manual GPU schedule for now.

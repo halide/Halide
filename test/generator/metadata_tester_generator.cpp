@@ -135,14 +135,14 @@ public:
         dim_only_output_buffer.compute_with(Func(typed_output_buffer), x);
 
         // Provide some bounds estimates for a Buffer input
-        typed_input_buffer.estimate(Halide::_0, 0, 2592);
-        typed_input_buffer.dim(1).set_bounds_estimate(42, 1968);
+        typed_input_buffer.set_estimate(Halide::_0, 0, 2592);
+        typed_input_buffer.dim(1).set_estimate(42, 1968);
 
         // Provide some bounds estimates for a Func input
         input
-            .estimate(Halide::_0, 10, 2592)
-            .estimate(Halide::_1, 20, 1968)
-            .estimate(Halide::_2, 0, 3);
+            .set_estimate(Halide::_0, 10, 2592)
+            .set_estimate(Halide::_1, 20, 1968)
+            .set_estimate(Halide::_2, 0, 3);
 
         // Provide some scalar estimates.
         b.set_estimate(false);
@@ -154,15 +154,15 @@ public:
         // Provide some bounds estimates for an Output<Func>.
         // Note that calling bound() implicitly calls estimate() as well.
         output
-            .estimate(x, 10, 2592)
-            .estimate(y, 20, 1968)
+            .set_estimate(x, 10, 2592)
+            .set_estimate(y, 20, 1968)
             .bound(c, 0, 3);
 
         // Provide partial bounds estimates for an Output<Buffer>
-        typed_output_buffer.estimate(x, 10, 2592);
-        typed_output_buffer.dim(1).set_bounds_estimate(20, 1968);
+        typed_output_buffer.set_estimate(x, 10, 2592);
+        typed_output_buffer.dim(1).set_estimate(20, 1968);
 
-        // Note that calling set_bounds()/bound() implicitly calls set_bounds_estimate()/estimate() as well.
+        // Note that calling set_bounds()/bound() implicitly calls set_estimate()/estimate() as well.
         type_only_output_buffer.dim(1).set_bounds(0, 32);
         type_only_output_buffer.bound(c, 0, 3);
     }

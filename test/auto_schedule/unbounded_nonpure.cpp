@@ -20,11 +20,10 @@ void run_test() {
     g(x, y) = f(cast<int>(Halide::sin(x)) + x, y);
 
     // Provide estimates on the pipeline output
-    g.estimate(x, 0, 1000).estimate(y, 0, 1000);
+    g.set_estimates({{0, 1000}, {0, 1000}});
 
     // Provide estimates on the ImageParam
-    input.dim(0).set_bounds_estimate(0, 1000);
-    input.dim(1).set_bounds_estimate(0, 1000);
+    input.set_estimates({{0, 1000}, {0, 1000}});
 
     // Auto-schedule the pipeline
     Target target = get_jit_target_from_environment();

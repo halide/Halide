@@ -20,7 +20,6 @@ using std::string;
 // width and height of test images
 constexpr int W = 256*3;
 constexpr int H = 128;
-constexpr int PAD = 128;
 
 constexpr int max_i8  = 127;
 constexpr int max_i16 = 32767;
@@ -81,8 +80,7 @@ struct Test {
             .with_feature(Target::NoBoundsQuery)
             .with_feature(Target::NoAsserts)
             .with_feature(Target::NoRuntime)
-            .with_feature(Target::DisableLLVMLoopUnroll)
-            .with_feature(Target::DisableLLVMLoopVectorize);
+            .with_feature(Target::DisableLLVMLoopOpt);
         // We only test the skylake variant of avx512 here
         use_avx512 = (target.has_feature(Target::AVX512_Cannonlake) ||
                       target.has_feature(Target::AVX512_Skylake));
@@ -104,33 +102,6 @@ struct Test {
         use_power_arch_2_07 = target.has_feature(Target::POWER_ARCH_2_07);
 
         use_wasm_simd128 = target.has_feature(Target::WasmSimd128);
-
-        // We are going to call realize, i.e. we are going to JIT code.
-        // Not all platforms support JITting. One indirect yet quick
-        // way of identifying this is to see if we can run code on the
-        // host. This check is in no ways really a complete check, but
-        // it works for now.
-        const bool can_run = can_run_code();
-        for (auto p : image_params) {
-            p.set_host_alignment(128);
-            p.dim(0).set_min(-PAD).set_extent(W + 2 * PAD);
-            if (can_run) {
-                // Make a buffer filled with noise to use as a sample input.
-                Buffer<> b(p.type(), W + 2 * PAD);
-                b.set_min(-PAD);
-                Expr r;
-                if (p.type().is_float()) {
-                    r = cast(p.type(), random_float() * 1024 - 512);
-                } else {
-                    // Avoid cases where vector vs scalar do different things
-                    // on signed integer overflow by limiting ourselves to 28
-                    // bit numbers.
-                    r = cast(p.type(), random_int() / 4);
-                }
-                lambda(x, r).realize(b, target);
-                p.set(b);
-            }
-        }
     }
 
     bool can_run_code() const {
@@ -220,6 +191,11 @@ struct Test {
         Func error("error_" + name);
         error() = cast<double>(maximum(absd(f(r.x, r.y), f_scalar(r.x, r.y))));
 
+        for (auto p : image_params) {
+            p.reset();
+            p.set_host_alignment(128);
+        }
+
         {
             // Compile just the vector Func to assembly.
             string asm_filename = output_directory + "check_" + name + ".s";
@@ -254,7 +230,40 @@ struct Test {
 
         bool can_run_the_code = can_run_code();
         if (can_run_the_code) {
-            Realization r = error.realize(target.without_feature(Target::NoRuntime));
+            Target run_target = target
+                .without_feature(Target::NoRuntime)
+                .without_feature(Target::NoAsserts)
+                .without_feature(Target::NoBoundsQuery);
+
+            error.compile_jit(run_target);
+            error.infer_input_bounds();
+            // Fill the inputs with noise
+            std::mt19937 rng(123);
+            for (auto p : image_params) {
+                Buffer<> buf = p.get();
+                if (!buf.defined()) continue;
+                assert(buf.data());
+                Type t = buf.type();
+                // For floats/doubles, we only use values that aren't
+                // subject to rounding error that may differ between
+                // vectorized and non-vectorized versions
+                if (t == Float(32)) {
+                    buf.as<float>().for_each_value([&](float &f) {f = (rng() & 0xfff) / 8.0f - 0xff;});
+                } else if (t == Float(64)) {
+                    buf.as<double>().for_each_value([&](double &f) {f = (rng() & 0xfff) / 8.0 - 0xff;});
+                } else {
+                    // Random bits is fine
+                    for (uint32_t *ptr = (uint32_t *)buf.data();
+                         ptr != (uint32_t *)buf.data() + buf.size_in_bytes() / 4;
+                         ptr++) {
+                        // Never use the top four bits, to avoid
+                        // signed integer overflow.
+                        *ptr = ((uint32_t)rng()) & 0x0fffffff;
+                    }
+                }
+
+            }
+            Realization r = error.realize();
             double e = Buffer<double>(r[0])();
             // Use a very loose tolerance for floating point tests. The
             // kinds of bugs we're looking for are codegen bugs that
@@ -578,10 +587,10 @@ struct Test {
 
             check("vcvttps2dq*ymm", 8, i32(f32_1));
             check("vcvtdq2ps*ymm", 8, f32(i32_1));
-            check(use_avx512 ? "vcvttpd2dq*ymm" : "vcvttpd2dqy", 8, i32(f64_1));
+            check(use_avx512 ? "vcvttpd2dq*ymm" : "vcvttpd2dq*xmm", 8, i32(f64_1));
             check(use_avx512 ? "vcvtdq2pd*zmm" : "vcvtdq2pd*ymm", 8, f64(i32_1));
             check(use_avx512 ? "vcvtps2pd*zmm" : "vcvtps2pd*ymm", 8, f64(f32_1));
-            check(use_avx512 ? "vcvtpd2ps*ymm" : "vcvtpd2psy", 8, f32(f64_1));
+            check(use_avx512 ? "vcvtpd2ps*ymm" : "vcvtpd2ps*xmm", 8, f32(f64_1));
 
             // Newer llvms will just vpshufd straight from memory for reversed loads
             // check("vperm", 8, in_f32(100-x));

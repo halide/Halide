@@ -473,7 +473,15 @@ void JITModule::memoization_cache_set_size(int64_t size) const {
     std::map<std::string, Symbol>::const_iterator f =
         exports().find("halide_memoization_cache_set_size");
     if (f != exports().end()) {
-        return (reinterpret_bits<void (*)(int64_t)>(f->second.address))(size);
+        (reinterpret_bits<void (*)(int64_t)>(f->second.address))(size);
+    }
+}
+
+void JITModule::reuse_device_allocations(bool b) const {
+    std::map<std::string, Symbol>::const_iterator f =
+        exports().find("halide_reuse_device_allocations");
+    if (f != exports().end()) {
+        (reinterpret_bits<int (*)(void *, bool)>(f->second.address))(nullptr, b);
     }
 }
 
@@ -951,6 +959,11 @@ void JITSharedRuntime::memoization_cache_set_size(int64_t size) {
         default_cache_size = size;
         shared_runtimes(MainShared).memoization_cache_set_size(size);
     }
+}
+
+void JITSharedRuntime::reuse_device_allocations(bool b) {
+    std::lock_guard<std::mutex> lock(shared_runtimes_mutex);
+    shared_runtimes(MainShared).reuse_device_allocations(b);
 }
 
 }  // namespace Internal

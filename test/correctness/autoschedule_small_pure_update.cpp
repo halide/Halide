@@ -14,8 +14,8 @@ int main(int argc, char **argv) {
 
     h(x, y) = in_param(x, y) + g(x);
 
-    h.estimate(x, 0, 13).estimate(y, 0, 17);
-    in_param.dim(0).set_bounds_estimate(0, 13).dim(1).set_bounds_estimate(0, 17);
+    h.set_estimates({{0, 13}, {0, 17}});
+    in_param.set_estimates({{0, 13}, {0, 17}});
 
     Pipeline p(h);
     p.auto_schedule(Target("host"));

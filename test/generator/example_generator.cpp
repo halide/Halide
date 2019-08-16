@@ -77,20 +77,25 @@ public:
     }
 
     void schedule() {
-        output
-            .bound(c, 0, channels)
-            .reorder(c, x, y)
-            .unroll(c);
-        // Note that we can use the Generator method natural_vector_size()
-        // here; this produces the width of the SIMD vector being targeted
-        // divided by the width of the data type.
-        const int v = natural_vector_size(output.type());
-        if (parallelize && vectorize) {
-            output.parallel(y).vectorize(x, v);
-        } else if (parallelize) {
-            output.parallel(y);
-        } else if (vectorize) {
-            output.vectorize(x, v);
+        runtime_factor.set_estimate(1);
+        output.set_estimates({{0, 32}, {0, 32}, {0, 3}});
+
+        if (!auto_schedule) {
+            output
+                .bound(c, 0, channels)
+                .reorder(c, x, y)
+                .unroll(c);
+            // Note that we can use the Generator method natural_vector_size()
+            // here; this produces the width of the SIMD vector being targeted
+            // divided by the width of the data type.
+            const int v = natural_vector_size(output.type());
+            if (parallelize && vectorize) {
+                output.parallel(y).vectorize(x, v);
+            } else if (parallelize) {
+                output.parallel(y);
+            } else if (vectorize) {
+                output.vectorize(x, v);
+            }
         }
     }
 

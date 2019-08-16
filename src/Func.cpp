@@ -1839,6 +1839,7 @@ Func get_wrapper(Function wrapped_fn, string wrapper_name, const vector<Func> &f
     // have any wrappers. Otherwise, throw an error. If 'fs' is empty, then
     // it is a global wrapper.
     const map<string, FunctionPtr> &wrappers = wrapped_fn.wrappers();
+    wrapper_name += ("$" + std::to_string(wrappers.size()));
     const auto &iter = fs.empty() ? wrappers.find("") : wrappers.find(fs[0].name());
     if (iter == wrappers.end()) {
         // Make sure the other Funcs also don't have any wrappers
@@ -2074,12 +2075,12 @@ Func &Func::bound(Var var, Expr min, Expr extent) {
     // Propagate constant bounds into estimates as well.
     if (!is_const(min)) min = Expr();
     if (!is_const(extent)) extent = Expr();
-    estimate(var, min, extent);
+    set_estimate(var, min, extent);
 
     return *this;
 }
 
-Func &Func::estimate(Var var, Expr min, Expr extent) {
+Func &Func::set_estimate(Var var, Expr min, Expr extent) {
     invalidate_cache();
     bool found = func.is_pure_arg(var.name());
     user_assert(found)
@@ -2109,6 +2110,17 @@ Func &Func::estimate(Var var, Expr min, Expr extent) {
         if (extent.defined()) {
             param.set_extent_constraint_estimate(dim, extent);
         }
+    }
+    return *this;
+}
+
+Func &Func::set_estimates(const std::vector<std::pair<Expr, Expr>> &estimates) {
+    const std::vector<Var> a = args();
+    user_assert(estimates.size() == a.size())
+        << "Func " << name() << " has " << a.size() << " dimensions, "
+        << "but the estimates passed to set_estimates contains " << estimates.size() << " pairs.\n";
+    for (size_t i = 0; i < a.size(); i++) {
+        set_estimate(a[i], estimates[i].first, estimates[i].second);
     }
     return *this;
 }

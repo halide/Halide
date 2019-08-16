@@ -485,11 +485,11 @@ void halide_toc_impl(const char *file, int line) {
     std::chrono::duration<double> diff = t2 - t1.time;
     tick_stack.pop_back();
     for (size_t i = 0; i < tick_stack.size(); i++) {
-        debug(0) << "  ";
+        debug(1) << "  ";
     }
     string f = file;
     f = split_string(f, "/").back();
-    debug(0) << t1.file << ":" << t1.line << " ... " << f << ":" << line << " : " << diff.count() * 1000 << " ms\n";
+    debug(1) << t1.file << ":" << t1.line << " ... " << f << ":" << line << " : " << diff.count() * 1000 << " ms\n";
 }
 
 std::string c_print_name(const std::string &name) {
