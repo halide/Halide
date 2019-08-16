@@ -3754,7 +3754,7 @@ struct State {
                 if (!it.key()->node->is_wrapper) { // It's OK to repeatedly stage data
                     if (feat.points_computed_total + feat.inlined_calls > 8 * feat.points_computed_minimum) {
                         cost = 1e50;
-                        return true; //false;
+                        return false;
                     } else if (false && feat.points_computed_total + feat.inlined_calls < feat.points_computed_minimum) {
                         // Some kind of shift-invariance failure
                         // probably. The representative loop iteration
