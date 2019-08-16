@@ -29,7 +29,7 @@ typedef struct UserContext {
 // Replace Halide weakly-linked CUDA handles
 extern "C" {
 
-HLPT_WEAK int halide_cuda_acquire_context(void *user_context, CUcontext *ctx, bool create = true) {
+int halide_cuda_acquire_context(void *user_context, CUcontext *ctx, bool create = true) {
     if (user_context != NULL) {
         Halide::PyTorch::UserContext *user_ctx = (Halide::PyTorch::UserContext*) user_context;
         *ctx = *user_ctx->cuda_context;
@@ -40,7 +40,7 @@ HLPT_WEAK int halide_cuda_acquire_context(void *user_context, CUcontext *ctx, bo
 }
 
 
-HLPT_WEAK int halide_cuda_get_stream(void *user_context, CUcontext ctx, CUstream *stream) {
+int halide_cuda_get_stream(void *user_context, CUcontext ctx, CUstream *stream) {
     if (user_context != NULL) {
         Halide::PyTorch::UserContext *user_ctx = (Halide::PyTorch::UserContext*) user_context;
         *stream = *user_ctx->stream;
@@ -51,7 +51,7 @@ HLPT_WEAK int halide_cuda_get_stream(void *user_context, CUcontext ctx, CUstream
 }
 
 
-HLPT_WEAK int halide_get_gpu_device(void *user_context) {
+int halide_get_gpu_device(void *user_context) {
     if (user_context != NULL) {
         Halide::PyTorch::UserContext *user_ctx = (Halide::PyTorch::UserContext*) user_context;
         return user_ctx->device_id;
