@@ -43,7 +43,9 @@ $(BIN)/%/add_float32.a: $(GENERATOR_BIN)/add.generator
 $(BIN)/%/add_grad_float32.a: $(GENERATOR_BIN)/add.generator
 	@mkdir -p $(@D)
 	@echo Producing CPU gradient
-	@$^ -g add_grad d_input_a.type=float32 d_input_b.type=float32 \
+	@$^ -g add_grad \
+		input_a.type=float32 input_b.type=float32 \
+		d_input_a.type=float32 d_input_b.type=float32 \
 		d_output.type=float32 -f add_grad_float32 \
 		-e static_library,h,pytorch_wrapper -o $(@D) \
 		target=$* auto_schedule=false
@@ -59,7 +61,9 @@ $(BIN)/%/add_float64.a: $(GENERATOR_BIN)/add.generator
 $(BIN)/%/add_grad_float64.a: $(GENERATOR_BIN)/add.generator
 	@mkdir -p $(@D)
 	@echo "Producing CPU (double) gradient"
-	@$^ -g add_grad d_input_a.type=float64 d_input_b.type=float64 \
+	@$^ -g add_grad \
+		input_a.type=float64 input_b.type=float64 \
+		d_input_a.type=float64 d_input_b.type=float64 \
 		d_output.type=float64 -f add_grad_float64 \
 		-e static_library,h,pytorch_wrapper -o $(@D) \
 		target=$* auto_schedule=false

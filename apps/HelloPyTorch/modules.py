@@ -53,6 +53,8 @@ class AddFunction(th.autograd.Function):
     assert tp == input_b.dtype, "inputs should have the same type"
     assert cuda == input_b.is_cuda, "inputs should be on the same device (cpu/gpu)"
 
+    ctx.save_for_backward(input_a, input_b)
+
     fn_ = _dispatch("add", optype=tp, cuda=cuda)
 
     # Create an output tensor with the proper dimensions
@@ -67,6 +69,9 @@ class AddFunction(th.autograd.Function):
     tp = d_out.dtype
     cuda = d_out.is_cuda
 
+    input_a = ctx.saved_tensors[0]
+    input_b = ctx.saved_tensors[1]
+
     # Fetch the correct Halide operator for the type/device used
     fn_ = _dispatch("add_grad", optype=tp, cuda=cuda)
 
@@ -74,7 +79,8 @@ class AddFunction(th.autograd.Function):
     d_input_b = d_out.new()
     d_input_a.resize_(d_out.shape)
     d_input_b.resize_(d_out.shape)
-    fn_(d_out.contiguous(), d_input_a, d_input_b)
+    bs, c, h, w = d_out.shape
+    fn_(input_a, input_b, d_out.contiguous(), w, h, c, bs, d_input_a, d_input_b)
     return d_input_a, d_input_b
 
 
