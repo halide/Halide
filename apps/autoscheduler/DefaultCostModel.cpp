@@ -169,6 +169,7 @@ class DefaultCostModel : public CostModel {
                          conv1_filter_update, conv1_bias_update,
                          dst,
                          loss);
+        (void) result;
         assert(result == 0);
 
         bool any_nans = false;
@@ -230,6 +231,7 @@ class DefaultCostModel : public CostModel {
                    weights.conv1_filter, weights.conv1_bias,
                    0.0f, 0, 0, nullptr,
                    dst, loss);
+        (void) result;
         assert(result == 0);
 
         for (int i = 0; i < cursor; i++) {
