@@ -1,3 +1,4 @@
+"""Synthesizes the cpp wrapper code and builds dynamic Python extension."""
 import os
 import platform
 import re
