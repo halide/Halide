@@ -148,7 +148,7 @@ benchmark_sample() {
     P=$3
     S=$2
     FNAME=$4
-    ${AUTOSCHED_BIN}/featurization_to_sample ${D}/${FNAME}.featurization $R $P $S ${D}/${FNAME}.sample || echo "Augment sample failed for ${D} (probably because benchmarking failed)"
+    ${AUTOSCHED_BIN}/featurization_to_sample ${D}/${FNAME}.featurization $R $P $S ${D}/${FNAME}.sample || echo "featurization_to_sample failed for ${D} (probably because benchmarking failed)"
 }
 
 # Don't clobber existing samples
