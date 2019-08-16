@@ -53,6 +53,12 @@ class TestAdd(unittest.TestCase):
 
     diff = (output-self.gt).sum().item()
     assert diff == 0.0, "Test failed: sum should be 4, got %f" % diff
+
+    # Test the gradient is correct
+    self.a.requires_grad = True
+    self.b.requires_grad = True
+    res = th.autograd.gradcheck(modules.Add(), [self.a, self.b], eps=1e-2)
+
     print("  Test ran successfully: difference is", diff)
 
 
