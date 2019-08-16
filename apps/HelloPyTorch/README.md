@@ -4,8 +4,9 @@ PyTorch wrapper around Halide ops using the internal Generator target.
 The demo op takes two 4D tensors as input, `a` and `b` and outputs their
 pointwise sum.
 
-The application builds float32 and float64 version of the op for CPU and CUDA (is a device and `nvcc` compiler is
-detected, see `Makefile`).
+The application builds float32 and float64 version of the op for CPU and CUDA
+(provided that a GPU is present and the `nvcc` compiler is installed and in the
+path, see `Makefile`).
 
 The build proceeds in four steps:
 1. Build the Halide generator
@@ -17,9 +18,10 @@ The build proceeds in four steps:
 4. Synthesize and compile a Python extension that links togethers the various
    operator libraries and exposes them to Python (see `setup.py`).
 
-
-The build requires Python 3 and PyTorch. Please follow the instructions here to
-install PyTorch:
+Building only requires Python 3 and PyTorch. Please follow these instructions to
+install the latest PyTorch:
     https://pytorch.org/
 
 If everything is setup correctly, running `make test` should build the PyTorch extension and runs a simple test (`test.py`).
+
+Tested with Python 3.7.4 and PyTorch 1.2.0

@@ -56,7 +56,7 @@ inline void check_type(at::Tensor &tensor) {
   inline void check_type<ctype>(at::Tensor &tensor) { \
     AT_ASSERTM(tensor.scalar_type() == at::ScalarType::ttype, "scalar type do not match"); \
   }
-  AT_FORALL_SCALAR_TYPES_EXCEPT_HALF(HL_PT_DEFINE_TYPECHECK)
+  AT_FORALL_SCALAR_TYPES_WITH_COMPLEX(HL_PT_DEFINE_TYPECHECK);
 #undef HL_PT_DEFINE_TYPECHECK
 
 
