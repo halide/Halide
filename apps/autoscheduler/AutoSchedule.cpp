@@ -4906,6 +4906,13 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
             q.resort();
         }
 
+        for (size_t j = 0; j < q.size(); j++) {
+            if (std::isinf(q[j]->cost)) {
+                debug(0) << "Infinite cost on intermediate state: " << q[j]->cost << "\n";
+                q[j]->dump();
+            }
+        }
+
         if (cyos_str == "1") {
             // Manually discard everything in the queue except for the user-chosen option
             // Print user choices.
