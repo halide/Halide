@@ -214,8 +214,14 @@ for ((BATCH_ID=$((FIRST+1));BATCH_ID<$((FIRST+1+NUM_BATCHES));BATCH_ID++)); do
         # retrain model weights on all samples seen so far
         echo Retraining model...
 
-        find samples | grep sample$ | \
-            HL_NUM_THREADS=32 HL_WEIGHTS_DIR=${WEIGHTS} HL_BEST_SCHEDULE_FILE=${PWD}/samples/best.txt ${AUTOSCHED_BIN}/train_cost_model ${BATCH_SIZE} 0.0001
+        find ${SAMPLES} -name "*.sample" | \
+            ${AUTOSCHED_BIN}/train_cost_model \
+                --epochs=${BATCH_SIZE} \
+                --rates="0.0001" \
+                --num_cores=32 \
+                --weights=${WEIGHTS} \
+                --best_benchmark=${PWD}/samples/best.${PIPELINE}.benchmark.txt \
+                --best_schedule=${PWD}/samples/best.${PIPELINE}.schedule.h
     done
 
     echo Batch ${BATCH_ID} took ${SECONDS} seconds to compile, benchmark, and retrain

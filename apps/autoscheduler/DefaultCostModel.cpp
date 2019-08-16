@@ -153,7 +153,7 @@ class DefaultCostModel : public CostModel {
             }
         }
 
-        train_cost_model(num_stages,
+        int result = train_cost_model(num_stages,
                          cursor,
                          num_cores,
                          pipeline_feat_queue,
@@ -169,6 +169,7 @@ class DefaultCostModel : public CostModel {
                          conv1_filter_update, conv1_bias_update,
                          dst,
                          loss);
+        assert(result == 0);
 
         bool any_nans = false;
         for (int i = 0; i < cursor; i++) {
@@ -219,7 +220,7 @@ class DefaultCostModel : public CostModel {
 
         auto loss = Buffer<float>::make_scalar();
 
-        cost_model(num_stages,
+        int result = cost_model(num_stages,
                    cursor,
                    num_cores,
                    pipeline_feat_queue,
@@ -229,6 +230,7 @@ class DefaultCostModel : public CostModel {
                    weights.conv1_filter, weights.conv1_bias,
                    0.0f, 0, 0, nullptr,
                    dst, loss);
+        assert(result == 0);
 
         for (int i = 0; i < cursor; i++) {
             assert(cost_ptrs(i));
