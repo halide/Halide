@@ -163,13 +163,14 @@ struct Outputs {
     Outputs pytorch_wrapper(const std::string &pytorch_wrapper_name) const {
         Outputs updated = *this;
         updated.pytorch_wrapper_name = pytorch_wrapper_name;
+        return updated;
+    }
 
     /** Make a new Outputs struct that emits everything this one does
      * and also an auto-schedule featurization output file with the given name. */
     Outputs featurization(const std::string &featurization_name) const {
         Outputs updated = *this;
         updated.featurization_name = featurization_name;
-
         return updated;
     }
 
