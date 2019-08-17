@@ -75,6 +75,7 @@ done
 # A batch of this many samples is built in parallel, and then
 # benchmarked serially.
 BATCH_SIZE=32
+NUM_CORES=80
 
 if [[ $TRAIN_ONLY != 1 ]]; then
   TIMEOUT_CMD="timeout"
@@ -186,7 +187,7 @@ benchmark_sample() {
     fi
 
     sleep 1 # Give CPU clocks a chance to spin back up if we're thermally throttling
-    CMD="HL_NUM_THREADS=32 \
+    CMD="HL_NUM_THREADS=${NUM_CORES} \
         ${TIMEOUT_CMD} -k ${BENCHMARKING_TIMEOUT} ${BENCHMARKING_TIMEOUT} \
         ${D}/bench \
         --output_extents=estimate \
@@ -203,7 +204,7 @@ benchmark_sample() {
 
     record_command $BATCH $SAMPLE_ID "$CMD" "benchmark_command" $FAILED
 
-    NVPROF_TIMELINE_CMD="HL_NUM_THREADS=32 \
+    NVPROF_TIMELINE_CMD="HL_NUM_THREADS=${NUM_CORES} \
         ${TIMEOUT_CMD} -k ${BENCHMARKING_TIMEOUT} ${BENCHMARKING_TIMEOUT} \
         nvprof --output-profile ${D}/timeline_${BATCH}_${SAMPLE_ID}.nvprof \
         ${D}/bench \
@@ -212,7 +213,7 @@ benchmark_sample() {
         --default_input_scalars=estimate \
         --benchmarks=all"
 
-    NVPROF_METRICS_CMD="HL_NUM_THREADS=32 \
+    NVPROF_METRICS_CMD="HL_NUM_THREADS=${NUM_CORES} \
         ${TIMEOUT_CMD} -k ${BENCHMARKING_TIMEOUT} ${BENCHMARKING_TIMEOUT} \
         nvprof --analysis-metrics -o ${D}/metrics_${BATCH}_${SAMPLE_ID}.nvprof \
         ${D}/bench \
@@ -309,7 +310,7 @@ for ((BATCH_ID=$((FIRST+1));BATCH_ID<$((FIRST+1+NUM_BATCHES));BATCH_ID++)); do
 
     # retrain model weights on all samples seen so far
     echo Retraining model...
-    find ${SAMPLES} | grep sample$ | HL_NUM_THREADS=32 HL_WEIGHTS_DIR=${WEIGHTS} HL_BEST_SCHEDULE_FILE=${SAMPLES}/best.txt ${AUTOSCHED_BIN}/train_cost_model ${BATCH_SIZE} 0.0001
+    find ${SAMPLES} | grep sample$ | HL_NUM_THREADS=${NUM_CORES} HL_WEIGHTS_DIR=${WEIGHTS} HL_BEST_SCHEDULE_FILE=${SAMPLES}/best.txt ${AUTOSCHED_BIN}/train_cost_model ${BATCH_SIZE} 0.0001
 
     if [[ $TRAIN_ONLY == 1 ]]; then
       echo Batch ${BATCH_ID} took ${SECONDS} seconds to retrain

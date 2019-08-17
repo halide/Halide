@@ -364,6 +364,7 @@ int main(int argc, char **argv) {
     }
 
     int num_cores = atoi(getenv_safe("HL_NUM_THREADS").c_str());
+    std::cout << "Using num cores = " << num_cores << "\n";
 
     int epochs = atoi(argv[1]);
 

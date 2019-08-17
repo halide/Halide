@@ -280,7 +280,7 @@ public:
                                     num_scalars * relu1(3, w, n)));
         compute_cost += num_warps_per_block * num_blocks * relu1(4, w, n);
 
-        Expr num_tasks = max(1, inner_parallelism * outer_parallelism);
+        Expr num_tasks = num_blocks;
         Expr tasks_per_core = num_tasks / num_cores;
         Expr idle_core_wastage = ceil(tasks_per_core) / max(1, tasks_per_core);
         compute_cost *= idle_core_wastage;
@@ -461,7 +461,7 @@ public:
         head2_bias.set_shape(head2_channels);
         filter1.set_shape(conv1_channels, head1_channels + head2_channels);
         bias1.set_shape(conv1_channels);
-        num_cores.set_estimate(32);
+        num_cores.set_estimate(80);
 
         reference.set_estimate(0);
         batch_size.set_estimate(80);
