@@ -338,6 +338,8 @@ void save_predictions(const map<int, PipelineSample>& samples, const string& fil
     file << out.str();
     file.close();
     assert(!file.fail());
+
+    std::cout << "Predictions saved to: " << filename << "\n";
 }
 
 
