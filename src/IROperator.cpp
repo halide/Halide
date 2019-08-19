@@ -6,6 +6,7 @@
 #include "CSE.h"
 #include "Debug.h"
 #include "IREquality.h"
+#include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "Var.h"
