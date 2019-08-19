@@ -73,6 +73,10 @@ $(AUTOSCHED_BIN)/featurization_to_sample: $(AUTOSCHED_SRC)/featurization_to_samp
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $< $(OPTIMIZE) -o $@
 
+$(AUTOSCHED_BIN)/get_host_target: $(AUTOSCHED_SRC)/get_host_target.cpp $(LIB_HALIDE) $(HALIDE_DISTRIB_PATH)/include/Halide.h
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) $(OPTIMIZE) -o $@
+
 $(AUTOSCHED_BIN)/weightsdir_to_weightsfile: $(AUTOSCHED_SRC)/weightsdir_to_weightsfile.cpp $(AUTOSCHED_SRC)/Weights.cpp
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $^ $(OPTIMIZE) -o $@

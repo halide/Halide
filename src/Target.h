@@ -273,7 +273,12 @@ struct Target {
 
     /** Return the name corresponding to a given Feature, in the form
      * used to construct Target strings (e.g., Feature::Debug is "debug" and not "Debug"). */
-    static std::string feature_name(Target::Feature feature);
+    static std::string feature_to_name(Target::Feature feature);
+
+    /** Return the feature corresponding to a given name, in the form
+     * used to construct Target strings (e.g., Feature::Debug is "debug" and not "Debug").
+     * If the string is not a known feature name, return FeatureEnd. */
+    static Target::Feature feature_from_name(const std::string &name);
 
 private:
     /** A bitmask that stores the active features. */

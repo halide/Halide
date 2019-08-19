@@ -1936,14 +1936,8 @@ TEST_APPS=\
 
 # TODO: apps/autoscheduler doesn't yet build properly for MinGW
 # (see https://github.com/halide/Halide/issues/4069)
-# ifneq ($(OS), Windows_NT)
-# 	TEST_APPS += autoscheduler
-# endif
-
-# TODO: apps/autoscheduler currently requires AVX2, and our Mac buildbot is AVX1.
-# Just special-case to Linux-only for now, alas.
-ifeq ($(UNAME), Linux)
- 	TEST_APPS += autoscheduler
+ifneq ($(OS), Windows_NT)
+	TEST_APPS += autoscheduler
 endif
 
 .PHONY: test_apps

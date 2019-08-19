@@ -36,8 +36,11 @@ COMPILATION_TIMEOUT=600s
 BENCHMARKING_TIMEOUT=60s
 
 if [ -z ${HL_TARGET} ]; then
-HL_TARGET=x86-64-avx2
+# Use the host target -- but remove features that we don't want to train
+# for by default, at least not yet (most notably, AVX512).
+HL_TARGET=`${AUTOSCHED_BIN}/get_host_target avx512 avx512_knl avx512_skylake avx512_cannonlake`
 fi
+echo Training target is: ${HL_TARGET}
 
 if [ -z ${GENERATOR} ]; then
 GENERATOR=./bin/demo.generator
