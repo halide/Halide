@@ -615,7 +615,9 @@ int main(int argc, char **argv) {
         }
     }
 
-    save_predictions(samples, predictions_file);
+    if (predict_only) {
+        save_predictions(samples, predictions_file);
+    }
 
     // tpp.save_weights();
 
