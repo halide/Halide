@@ -7,6 +7,7 @@
 
 // An abstract base class for a cost model.
 namespace Halide {
+
 class CostModel {
 public:
     virtual ~CostModel() = default;
@@ -29,11 +30,8 @@ public:
 
     // Save the model weights to disk.
     virtual void save_weights() = 0;
-
-    static std::unique_ptr<CostModel> make_default(const std::string &weights_in_dir = "",
-                                                   const std::string &weights_out_dir = "",
-                                                   bool randomize_weights = false);
 };
-}
 
-#endif
+}  // namespace Halide
+
+#endif  // COST_MODEL_H

@@ -5,111 +5,71 @@
 #include <algorithm>
 #include <cmath>
 #include <ctime>
-#include <fstream>
-#include <iostream>
 #include <map>
 #include <random>
 #include <string>
+#include <sstream>
 
 #include "ASLog.h"
-#include "CostModel.h"
+#include "DefaultCostModel.h"
 #include "HalideBuffer.h"
 #include "NetworkSize.h"
+#include "Weights.h"
 #include "cost_model.h"
 #include "train_cost_model.h"
 
-// These are weights embedded from the raw arrays in the weights
-// dir. The embedding is done using binary2cpp.
-extern "C" float weights_pipeline_mean[];
-extern "C" int weights_pipeline_mean_length;
-extern "C" float weights_pipeline_std[];
-extern "C" int weights_pipeline_std_length;
-extern "C" float weights_schedule_mean[];
-extern "C" int weights_schedule_mean_length;
-extern "C" float weights_schedule_std[];
-extern "C" int weights_schedule_std_length;
+// This is an embedded version of `baseline.weights`.
+// The embedding is done using binary2cpp.
 
-extern "C" float weights_head1_conv1_bias[];
-extern "C" int weights_head1_conv1_bias_length;
-extern "C" float weights_head1_conv1_weight[];
-extern "C" int weights_head1_conv1_weight_length;
-extern "C" float weights_head2_conv1_bias[];
-extern "C" int weights_head2_conv1_bias_length;
-extern "C" float weights_head2_conv1_weight[];
-extern "C" int weights_head2_conv1_weight_length;
-extern "C" float weights_trunk_conv1_bias[];
-extern "C" int weights_trunk_conv1_bias_length;
-extern "C" float weights_trunk_conv1_weight[];
-extern "C" int weights_trunk_conv1_weight_length;
+extern "C" unsigned char baseline_weights[];
+extern "C" int baseline_weights_length;
 
-using namespace Halide;
+namespace Halide {
+namespace {
+
+using Halide::Runtime::Buffer;
 using Halide::Internal::aslog;
+using Halide::Internal::PipelineFeatures;
+using Halide::Internal::ScheduleFeatures;
+using Halide::Internal::Weights;
 
-Runtime::Buffer<float> buffer_from_file(const std::string &filename, const std::vector<int> &shape) {
-    Runtime::Buffer<float> buf(shape);
-
-    std::ifstream i(filename, std::ios_base::binary);
-    i.read((char *)(buf.data()), buf.size_in_bytes());
-    i.close();
-
-    if (i.fail()) {
-        auto seed = time(NULL);
-        std::mt19937 rng((uint32_t) seed);
-        aslog(0) << "Could not load buffer from file: " << filename << "\n Using random values with seed = " << seed << " instead.\n";
-        buf.for_each_value([&rng](float &f) {
-                f = ((float)rng()) / rng.max() - 0.5f;
-            });
+bool ends_with(const std::string &str, const std::string &suffix) {
+    if (str.size() < suffix.size()) return false;
+    size_t off = str.size() - suffix.size();
+    for (size_t i = 0; i < suffix.size(); i++) {
+        if (str[off+i] != suffix[i]) return false;
     }
-
-    return buf;
+    return true;
 }
-
-void buffer_to_file(const Runtime::Buffer<float> &buf, const std::string &filename) {
-    std::ofstream o(filename, std::ios_base::trunc | std::ios_base::binary);
-    o.write((const char *)(buf.data()), buf.size_in_bytes());
-    o.close();
-    assert(!o.fail());
-}
-
-struct Weights {
-    Runtime::Buffer<float> head1_filter;
-    Runtime::Buffer<float> head1_bias;
-
-    Runtime::Buffer<float> head2_filter;
-    Runtime::Buffer<float> head2_bias;
-
-    Runtime::Buffer<float> conv1_filter;
-    Runtime::Buffer<float> conv1_bias;
-};
 
 class DefaultCostModel : public CostModel {
     Weights weights;
-    Runtime::Buffer<float> schedule_feat_queue, pipeline_feat_queue, costs;
-    Runtime::Buffer<double *> cost_ptrs;
+    Buffer<float> schedule_feat_queue, pipeline_feat_queue, costs;
+    Buffer<double *> cost_ptrs;
     int cursor, num_stages, num_cores;
 
-    const std::string weights_in_dir, weights_out_dir;
+    const std::string weights_in_path, weights_out_path;
     const bool randomize_weights;
 
  public:
 
-    DefaultCostModel(const std::string &weights_in_dir,
-                     const std::string &weights_out_dir,
+    DefaultCostModel(const std::string &weights_in_path,
+                     const std::string &weights_out_path,
                      bool randomize_weights) :
-        weights_in_dir(weights_in_dir),
-        weights_out_dir(weights_out_dir),
+        weights_in_path(weights_in_path),
+        weights_out_path(weights_out_path),
         randomize_weights(randomize_weights) {
 
         load_weights();
     }
 
-    void set_pipeline_features(const Runtime::Buffer<float> &pipeline_feats, int n) {
+    void set_pipeline_features(const Buffer<float> &pipeline_feats, int n) override {
         pipeline_feat_queue = pipeline_feats;
         assert(n > 0);
         num_cores = n;
     }
 
-    void enqueue(int ns, Runtime::Buffer<float> *schedule_feats, double *cost_ptr) {
+    void enqueue(int ns, Buffer<float> *schedule_feats, double *cost_ptr) override {
         num_stages = ns;
 
         // We know the most stages that will ever be enqueued from the schedule features
@@ -126,11 +86,11 @@ class DefaultCostModel : public CostModel {
         if (!schedule_feat_queue.data() ||
             schedule_feat_queue.dim(2).extent() < max_num_stages) {
             assert(cursor == 0);
-            schedule_feat_queue = Runtime::Buffer<float>(batch_size, head2_w, max_num_stages);
+            schedule_feat_queue = Buffer<float>(batch_size, head2_w, max_num_stages);
             if (!costs.data()) {
                 assert(!cost_ptrs.data());
-                costs = Runtime::Buffer<float>(batch_size);
-                cost_ptrs = Runtime::Buffer<double *>(batch_size);
+                costs = Buffer<float>(batch_size);
+                cost_ptrs = Buffer<double *>(batch_size);
             }
         }
 
@@ -150,27 +110,27 @@ class DefaultCostModel : public CostModel {
     // 0) is the new weight, buf(_, 1) is the ADAM running average of
     // the first moment, and buf(_, 2) is the ADAM running average of
     // the second moment.
-    Runtime::Buffer<float>
+    Buffer<float>
         head1_filter_update, head1_bias_update,
         head2_filter_update, head2_bias_update,
         conv1_filter_update, conv1_bias_update;
     int timestep = 0;
 
-    float backprop(const Runtime::Buffer<const float> &true_runtimes, float learning_rate) {
+    float backprop(const Buffer<const float> &true_runtimes, float learning_rate) override {
         assert(cursor != 0);
         assert(pipeline_feat_queue.data());
         assert(schedule_feat_queue.data());
 
-        auto loss = Runtime::Buffer<float>::make_scalar();
+        auto loss = Buffer<float>::make_scalar();
 
         if (!head1_filter_update.data()) {
-            auto weight_update_buffer = [](const Runtime::Buffer<float> &w) {
+            auto weight_update_buffer = [](const Buffer<float> &w) {
                 std::vector<int> size;
                 for (int i = 0; i < w.dimensions(); i++) {
                     size.push_back(w.dim(i).extent());
                 }
                 size.push_back(4);
-                auto buf = Runtime::Buffer<float>(size);
+                auto buf = Buffer<float>(size);
                 buf.fill(0.0f);
                 return buf;
             };
@@ -184,7 +144,7 @@ class DefaultCostModel : public CostModel {
             timestep = 0;
         }
 
-        Runtime::Buffer<float> dst = costs.cropped(0, 0, cursor);
+        Buffer<float> dst = costs.cropped(0, 0, cursor);
 
         int fastest_idx = 0;
         for (int i = 0; i < cursor; i++) {
@@ -224,9 +184,9 @@ class DefaultCostModel : public CostModel {
                 schedule_feat_queue.for_each_value([&](float f) { if (std::isnan(f)) abort(); });
                 aslog(0) << "None found\n";
                 aslog(0) << "Checking network weights for NaNs...\n";
-                for_each_weight([&](const Runtime::Buffer<float> &buf) {
-                        buf.for_each_value([&](float f) { if (std::isnan(f)) abort(); });
-                    });
+                weights.for_each_buffer([&](const Buffer<float> &buf) {
+                    buf.for_each_value([&](float f) { if (std::isnan(f)) abort(); });
+                });
                 aslog(0) << "None found\n";
             }
             assert(true_runtimes(i) > 0);
@@ -234,7 +194,7 @@ class DefaultCostModel : public CostModel {
         if (any_nans) abort();
 
         // Update weights locally
-        auto update_weight = [](const Runtime::Buffer<float> &src, Runtime::Buffer<float> &dst) {
+        auto update_weight = [](const Buffer<float> &src, Buffer<float> &dst) {
             dst.copy_from(src.sliced(src.dimensions()-1, 0));
         };
         update_weight(head1_filter_update, weights.head1_filter);
@@ -249,15 +209,15 @@ class DefaultCostModel : public CostModel {
         return loss();
     }
 
-    void evaluate_costs() {
+    void evaluate_costs() override {
         if (cursor == 0 || !schedule_feat_queue.data()) return;
 
         assert(pipeline_feat_queue.data());
         assert(schedule_feat_queue.data());
 
-        Runtime::Buffer<float> dst = costs.cropped(0, 0, cursor);
+        Buffer<float> dst = costs.cropped(0, 0, cursor);
 
-        auto loss = Runtime::Buffer<float>::make_scalar();
+        auto loss = Buffer<float>::make_scalar();
 
         cost_model(num_stages,
                    cursor,
@@ -279,95 +239,93 @@ class DefaultCostModel : public CostModel {
     }
 
     void load_weights() {
+        bool need_randomize = randomize_weights;
 
-        if (weights_in_dir.empty()) {
-            weights.head1_filter = Runtime::Buffer<float>(weights_head1_conv1_weight, head1_channels, head1_w, head1_h);
-            assert(weights_head1_conv1_weight_length == (int)weights.head1_filter.size_in_bytes());
-
-            weights.head1_bias = Runtime::Buffer<float>(weights_head1_conv1_bias, head1_channels);
-            assert(weights_head1_conv1_bias_length == (int)weights.head1_bias.size_in_bytes());
-
-            weights.head2_filter = Runtime::Buffer<float>(weights_head2_conv1_weight, head2_channels, head2_w);
-            assert(weights_head2_conv1_weight_length == (int)weights.head2_filter.size_in_bytes());
-
-            weights.head2_bias = Runtime::Buffer<float>(weights_head2_conv1_bias, head2_channels);
-            assert(weights_head2_conv1_bias_length == (int)weights.head2_bias.size_in_bytes());
-
-            weights.conv1_filter = Runtime::Buffer<float>(weights_trunk_conv1_weight, conv1_channels, head1_channels + head2_channels);
-            assert(weights_trunk_conv1_weight_length == (int)weights.conv1_filter.size_in_bytes());
-
-            weights.conv1_bias = Runtime::Buffer<float>(weights_trunk_conv1_bias, conv1_channels);
-            assert(weights_trunk_conv1_bias_length == (int)weights.conv1_bias.size_in_bytes());
+        if (weights_in_path.empty()) {
+            aslog(1) << "Loading weights from built-in data...\n";
+            // This copy shouldn't be necessary, but std::istream in C++ doesn't seem
+            // to have a convenient wrap-around-constant-data variant... and since
+            // this isn't much data, just copy it.
+            const std::string baseline_weights_data((const char*) &baseline_weights[0], baseline_weights_length);
+            std::istringstream i(baseline_weights_data);
+            if (!weights.load(i)) {
+                std::cerr << "The built-in baseline weights should never fail to load\n";
+                assert(0);
+            }
+        } else if (ends_with(weights_in_path, ".weights")) {
+            aslog(1) << "Loading weights from " << weights_in_path << " ...\n";
+            if (!weights.load_from_file(weights_in_path)) {
+                // Emit to cout (rather than cerr) because the latter is hidden during the autotune loop,
+                // and we want this to be seen.
+                std::cout << "WARNING, error in reading weights from " << weights_in_path << ", randomizing...\n";
+                need_randomize = true;
+            }
         } else {
-            weights.head1_filter = buffer_from_file(weights_in_dir + "/head1_conv1_weight.data", {head1_channels, head1_w, head1_h});
-            weights.head1_bias = buffer_from_file(weights_in_dir + "/head1_conv1_bias.data", {head1_channels});
-
-            weights.head2_filter = buffer_from_file(weights_in_dir + "/head2_conv1_weight.data", {head2_channels, head2_w});
-            weights.head2_bias = buffer_from_file(weights_in_dir + "/head2_conv1_bias.data", {head2_channels});
-
-            weights.conv1_filter = buffer_from_file(weights_in_dir + "/trunk_conv1_weight.data", {conv1_channels, head1_channels + head2_channels});
-            weights.conv1_bias = buffer_from_file(weights_in_dir + "/trunk_conv1_bias.data", {conv1_channels});
+            aslog(1) << "Loading weights from directory " << weights_in_path << " ...\n";
+            std::cerr << "Loading weights from a directory is deprecated; please convert to a .weights file\n";
+            if (!weights.load_from_dir(weights_in_path)) {
+                std::cout << "WARNING, error in reading weights from " << weights_in_path << ", randomizing...\n";
+                need_randomize = true;
+            }
         }
 
-        if (randomize_weights) {
+        if (!need_randomize && weights.pipeline_features_version != PipelineFeatures::version()) {
+            // Emit to cout (rather than cerr) because the latter is hidden during the autotune loop,
+            // and we want this to be seen.
+            std::cout << "WARNING: loaded weights have pipeline_version = " << weights.pipeline_features_version
+                << " but current pipeline_version is " << PipelineFeatures::version() << "; the weights may be "
+                "invalid. Using anyway.\n";
+        }
+
+        if (!need_randomize && weights.schedule_features_version != ScheduleFeatures::version()) {
+            // Emit to cout (rather than cerr) because the latter is hidden during the autotune loop,
+            // and we want this to be seen.
+            std::cout << "WARNING: loaded weights have schedule_features_version = " << weights.schedule_features_version
+                << " but current schedule_features_version is " << ScheduleFeatures::version() << "; the weights may be "
+                "invalid. Using anyway.\n";
+        }
+
+        if (need_randomize) {
             auto seed = time(NULL);
             std::cout << "Randomizing weights using seed = " << seed << "\n";
-            std::mt19937 rng((uint32_t) seed);
-            // Fill the weights with random values
-            for_each_weight([&rng](Runtime::Buffer<float> &w) {
-                    w.for_each_value([&rng](float &f) {
-                            f = ((float)rng()) / rng.max() - 0.5f;
-                        });
-                });
+            weights.randomize((uint32_t) seed);
         }
+
+        // Update so that any version of this we save will have the current version
+        weights.pipeline_features_version = PipelineFeatures::version();
+        weights.schedule_features_version = ScheduleFeatures::version();
     }
 
-    void save_weights() {
-        if (weights_out_dir.empty()) return;
+    void save_weights() override {
+        if (weights_out_path.empty()) return;
 
-        buffer_to_file(weights.head1_filter, weights_out_dir + "/head1_conv1_weight.data");
-        buffer_to_file(weights.head1_bias, weights_out_dir + "/head1_conv1_bias.data");
-        buffer_to_file(weights.head2_filter, weights_out_dir + "/head2_conv1_weight.data");
-        buffer_to_file(weights.head2_bias, weights_out_dir + "/head2_conv1_bias.data");
-        buffer_to_file(weights.conv1_filter, weights_out_dir + "/trunk_conv1_weight.data");
-        buffer_to_file(weights.conv1_bias, weights_out_dir + "/trunk_conv1_bias.data");
-    }
-
-    template<typename F>
-    void for_each_weight(F f) {
-        f(weights.head1_filter);
-        f(weights.head1_bias);
-        f(weights.head2_filter);
-        f(weights.head2_bias);
-        f(weights.conv1_filter);
-        f(weights.conv1_bias);
-    }
-
-    template<typename F>
-    void for_each_gradient(F f) {
-        auto slice_and_call_f = [&](const Runtime::Buffer<float> &buf) {
-            f(buf.sliced(buf.dimensions()-1, 3));
-        };
-        slice_and_call_f(head1_filter_update);
-        slice_and_call_f(head1_bias_update);
-        slice_and_call_f(head2_filter_update);
-        slice_and_call_f(head2_bias_update);
-        slice_and_call_f(conv1_filter_update);
-        slice_and_call_f(conv1_bias_update);
+        if (ends_with(weights_out_path, ".weights")) {
+            if (!weights.save_to_file(weights_out_path)) {
+                std::cerr << "Unable to save weights to file: " << weights_out_path << "\n";
+                assert(0);
+            }
+        } else {
+            std::cerr << "Saving weights to a directory is deprecated; please convert to a .weights file\n";
+            if (!weights.save_to_dir(weights_out_path)) {
+                std::cerr << "Unable to save weights to file: " << weights_out_path << "\n";
+                assert(0);
+            }
+        }
     }
 
     // Discard any enqueued but unevaluated schedules
-    void reset() {
+    void reset() override {
         cursor = 0;
     }
 
 };
 
+}  // namespace
 
-
-
-std::unique_ptr<CostModel> CostModel::make_default(const std::string &weights_in_dir,
-                                                   const std::string &weights_out_dir,
+std::unique_ptr<CostModel> make_default_cost_model(const std::string &weights_in_path,
+                                                   const std::string &weights_out_path,
                                                    bool randomize_weights) {
-    return std::unique_ptr<CostModel>(new DefaultCostModel(weights_in_dir, weights_out_dir, randomize_weights));
+    return std::unique_ptr<CostModel>(new DefaultCostModel(weights_in_path, weights_out_path, randomize_weights));
 }
+
+}  // namespace Halide

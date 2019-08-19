@@ -202,13 +202,15 @@ static Registerer registerer;
 
 std::string indent_string(const std::string &src, const std::string &indent) {
     std::ostringstream o;
-    o << indent;
+    bool prev_was_newline = true;
     for (size_t i = 0; i < src.size(); i++) {
         const char c = src[i];
-        o << c;
-        if (c == '\n' && i != src.size() - 1) {
+        const bool is_newline = (c == '\n');
+        if (prev_was_newline && !is_newline) {
             o << indent;
         }
+        o << c;
+        prev_was_newline = is_newline;
     }
     return o.str();
 }
@@ -219,8 +221,7 @@ void emit_schedule_file(const std::string &name,
                         const std::string &machine_params_string,
                         const std::string &body,
                         std::ostream &stream) {
-    std::string s = R"INLINE_CODE(
-#ifndef $CLEANNAME$_SCHEDULE_H
+    std::string s = R"INLINE_CODE(#ifndef $CLEANNAME$_SCHEDULE_H
 #define $CLEANNAME$_SCHEDULE_H
 
 // MACHINE GENERATED -- DO NOT EDIT
@@ -240,7 +241,6 @@ inline void apply_schedule_$SHORTNAME$(
     using ::Halide::RVar;
     using ::Halide::TailStrategy;
     using ::Halide::Var;
-
 $BODY$
 }
 $NAMESPACECLOSE$
@@ -530,7 +530,6 @@ void Module::compile(const Outputs &output_files_arg) const {
         Internal::print_to_html(output_files.stmt_html_name, *this);
         output_files.stmt_html_name.clear();
     }
-
 
     // If there are submodules, recursively lower submodules to
     // buffers on a copy of the module being compiled, then compile

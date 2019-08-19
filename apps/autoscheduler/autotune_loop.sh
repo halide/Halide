@@ -2,7 +2,7 @@
 # autoscheduler's cost model training pipeline, which is large enough
 # to be interesting.
 if [ $# -lt 6 -o $# -gt 7 ]; then
-  echo "Usage: $0 /path/to/some.generator generatorname halide_target weights_dir autoschedule_bin_dir halide_distrib_path [generator_args_sets]"
+  echo "Usage: $0 /path/to/some.generator generatorname halide_target weights_file autoschedule_bin_dir halide_distrib_path [generator_args_sets]"
   exit
 fi
 
@@ -14,7 +14,7 @@ set -eu
 GENERATOR=${1}
 PIPELINE=${2}
 HL_TARGET=${3}
-START_WEIGHTS_DIR=${4}
+START_WEIGHTS_FILE=${4}
 AUTOSCHED_BIN=${5}
 HALIDE_DISTRIB_PATH=${6}
 
@@ -50,15 +50,14 @@ fi
 SAMPLES=${PWD}/samples
 mkdir -p ${SAMPLES}
 
-WEIGHTS=${SAMPLES}/weights
-if [[ -d ${WEIGHTS} ]]; then
-    echo Using existing weights in ${WEIGHTS}
+WEIGHTS=${SAMPLES}/updated.weights
+if [[ -f ${WEIGHTS} ]]; then
+    echo Using existing weights "${WEIGHTS}"
 else
     # Only copy over the weights if we don't have any already,
     # so that restarted jobs can continue from where they left off
-    mkdir -p ${WEIGHTS}
-    cp ${START_WEIGHTS_DIR}/*.data ${WEIGHTS}/
-    echo Copying starting weights from ${START_WEIGHTS_DIR} to ${WEIGHTS}
+    cp ${START_WEIGHTS_FILE} ${WEIGHTS}
+    echo Copying starting weights from ${START_WEIGHTS_FILE} to ${WEIGHTS}
 fi
 
 # We could add this unconditionally, but it's easier to wade thru
@@ -174,8 +173,8 @@ for ((BATCH_ID=$((FIRST+1));BATCH_ID<$((FIRST+1+NUM_BATCHES));BATCH_ID++)); do
         DIR=${SAMPLES}/batch_${BATCH_ID}_${EXTRA_ARGS_IDX}
 
         # Copy the weights being used into the batch folder so that we can repro failures
-        mkdir -p ${DIR}/weights_used/
-        cp ${WEIGHTS}/* ${DIR}/weights_used/
+        mkdir -p ${DIR}/
+        cp ${WEIGHTS} ${DIR}/used.weights
 
         EXTRA_GENERATOR_ARGS=${GENERATOR_ARGS_SETS_ARRAY[EXTRA_ARGS_IDX]/;/ }
         if [ ! -z "${EXTRA_GENERATOR_ARGS}" ]; then
@@ -186,7 +185,7 @@ for ((BATCH_ID=$((FIRST+1));BATCH_ID<$((FIRST+1+NUM_BATCHES));BATCH_ID++)); do
 
         # Do parallel compilation in batches, so that machines with fewer than BATCH_SIZE cores
         # don't get swamped and timeout unnecessarily
-        echo Compiling samples
+        echo -n Compiling ${BATCH_SIZE} samples
         for ((SAMPLE_ID=0;SAMPLE_ID<${BATCH_SIZE};SAMPLE_ID++)); do
             while [[ 1 ]]; do
                 RUNNING=$(jobs -r | wc -l)
@@ -200,8 +199,10 @@ for ((BATCH_ID=$((FIRST+1));BATCH_ID<$((FIRST+1+NUM_BATCHES));BATCH_ID++)); do
             S=$(printf "%04d%04d" $BATCH_ID $SAMPLE_ID)
             FNAME=$(printf "%s_batch_%04d_sample_%04d" ${PIPELINE} $BATCH_ID $SAMPLE_ID)
             make_featurization "${DIR}/${SAMPLE_ID}" $S $FNAME "$EXTRA_GENERATOR_ARGS" &
+            echo -n .
         done
         wait
+        echo  done.
 
         # benchmark them serially using rungen
         for ((SAMPLE_ID=0;SAMPLE_ID<${BATCH_SIZE};SAMPLE_ID++)); do

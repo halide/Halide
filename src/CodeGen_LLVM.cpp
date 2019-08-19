@@ -4003,7 +4003,14 @@ void CodeGen_LLVM::codegen_asserts(const vector<const AssertStmt *> &asserts) {
 
     // Now switch on the bitmask to the correct failure
     Expr case_idx = cast<int32_t>(count_trailing_zeros(bitmask));
-    auto *switch_inst = builder->CreateSwitch(codegen(case_idx), no_errors_bb, asserts.size(), very_likely_branch);
+    llvm::SmallVector<uint32_t, 64> weights;
+    weights.push_back(1<<30);
+    for (int i = 0; i < (int) asserts.size(); i++) {
+        weights.push_back(0);
+    }
+    llvm::MDBuilder md_builder(*context);
+    llvm::MDNode *switch_very_likely_branch = md_builder.createBranchWeights(weights);
+    auto *switch_inst = builder->CreateSwitch(codegen(case_idx), no_errors_bb, asserts.size(), switch_very_likely_branch);
     for (int i = 0; i < (int) asserts.size(); i++) {
         BasicBlock *fail_bb = BasicBlock::Create(*context, "assert_failed", function);
         switch_inst->addCase(ConstantInt::get(IntegerType::get(*context, 32), i), fail_bb);
