@@ -270,6 +270,10 @@ template<> inline double div_imp<double>(double a, double b) {
     return a/b;
 }
 
+/** Return an Expr that is identical to the input Expr, but with
+ * all calls to likely() and likely_if_innermost() removed. */
+Expr remove_likelies(Expr e);
+
 } // namespace Internal
 
 /** Cast an expression to the halide type corresponding to the C++ type T. */

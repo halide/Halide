@@ -11,18 +11,6 @@ using std::pair;
 namespace Halide {
 namespace Internal {
 
-struct RemoveLikelies : public IRMutator {
-    using IRMutator::visit;
-    Expr visit(const Call *op) override {
-        if (op->is_intrinsic(Call::likely) ||
-            op->is_intrinsic(Call::likely_if_innermost)) {
-            return mutate(op->args[0]);
-        } else {
-            return IRMutator::visit(op);
-        }
-    }
-};
-
 class UnrollLoops : public IRMutator {
     using IRMutator::visit;
 
@@ -52,7 +40,7 @@ class UnrollLoops : public IRMutator {
                 for (auto it = lets.rbegin(); it != lets.rend(); it++) {
                     extent = graph_substitute(it->first, it->second, extent);
                 }
-                extent = RemoveLikelies().mutate(extent);
+                extent = remove_likelies(extent);
                 extent = simplify(common_subexpression_elimination(extent));
                 e = extent.as<IntImm>();
             }

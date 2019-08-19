@@ -819,6 +819,21 @@ Expr strided_ramp_base(Expr e, int stride) {
     return Expr();
 }
 
+Expr remove_likelies(Expr e) {
+    struct RemoveLikelies : public IRMutator {
+        using IRMutator::visit;
+        Expr visit(const Call *op) override {
+            if (op->is_intrinsic(Call::likely) ||
+                op->is_intrinsic(Call::likely_if_innermost)) {
+                return mutate(op->args[0]);
+            } else {
+                return IRMutator::visit(op);
+            }
+        }
+    };
+    return RemoveLikelies().mutate(e);
+}
+
 }  // namespace Internal
 
 Expr fast_log(Expr x) {
