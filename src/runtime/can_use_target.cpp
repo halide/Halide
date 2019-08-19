@@ -1,9 +1,15 @@
 #include "HalideRuntime.h"
 #include "cpu_features.h"
 #include "printer.h"
+#include "scoped_mutex_lock.h"
 
 namespace Halide { namespace Runtime { namespace Internal {
 WEAK halide_can_use_target_features_t custom_can_use_target_features = halide_default_can_use_target_features;
+
+WEAK uint64_t halide_cpu_features_storage[sizeof(CpuFeatures)/sizeof(uint64_t)] = {0};
+WEAK bool halide_cpu_features_initialized = 0;
+WEAK halide_mutex halide_cpu_features_initialized_lock;
+
 }}}
 
 extern "C" {
@@ -28,13 +34,15 @@ WEAK int halide_default_can_use_target_features(int count, const uint64_t *featu
     // on some systems (MSVC) because our runtime is a special beast. We'll
     // work around this by using a sentinel for the initialization flag and
     // some horribleness with memcpy (which we can do since CpuFeatures is still POD).
-    static bool initialized = false;
-    static uint64_t cpu_features_storage[sizeof(CpuFeatures)/sizeof(uint64_t)] = {0};
-    fake_static_assert(sizeof(cpu_features_storage) == sizeof(CpuFeatures));
-    if (!initialized) {
-        CpuFeatures tmp = halide_get_cpu_features();
-        memcpy(&cpu_features_storage, &tmp, sizeof(tmp));
-        initialized = true;
+    {
+        ScopedMutexLock lock(&halide_cpu_features_initialized_lock);
+
+        fake_static_assert(sizeof(halide_cpu_features_storage) == sizeof(CpuFeatures));
+        if (!halide_cpu_features_initialized) {
+            CpuFeatures tmp = halide_get_cpu_features();
+            memcpy(&halide_cpu_features_storage, &tmp, sizeof(tmp));
+            halide_cpu_features_initialized = true;
+        }
     }
 
     if (count != CpuFeatures::kWordCount) {
@@ -44,7 +52,7 @@ WEAK int halide_default_can_use_target_features(int count, const uint64_t *featu
 #endif
         halide_error(NULL, "Internal error: wrong structure size passed to halide_can_use_target_features()\n");
     }
-    const CpuFeatures* cpu_features = reinterpret_cast<const CpuFeatures*>(&cpu_features_storage[0]);
+    const CpuFeatures* cpu_features = reinterpret_cast<const CpuFeatures*>(&halide_cpu_features_storage[0]);
     for (int i = 0; i < CpuFeatures::kWordCount; ++i) {
         uint64_t m;
         if ((m = (features[i] & cpu_features->known[i])) != 0) {
