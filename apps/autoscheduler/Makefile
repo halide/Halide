@@ -11,7 +11,7 @@ $(GENERATOR_BIN)/demo.generator: demo_generator.cpp $(GENERATOR_DEPS)
 # To use the autoscheduler, set a few environment variables and use the -p flag to the generator to load the autoscheduler as a plugin
 $(BIN)/%/demo.a: $(GENERATOR_BIN)/demo.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
-	HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/baseline.weights \
+	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/baseline.weights \
 	$(GENERATOR_BIN)/demo.generator -g demo -o $(@D) -f demo target=$* auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so
 
 $(BIN)/%/demo.rungen: $(BIN)/%/RunGenMain.o $(BIN)/%/demo.registration.cpp $(BIN)/%/demo.a
@@ -75,7 +75,7 @@ $(GENERATOR_BIN)/included_schedule_file_none.generator: included_schedule_file_g
 # the Generator so that it can skip producing other outputs.)
 $(BIN)/%/included_schedule_file.schedule.h: $(GENERATOR_BIN)/included_schedule_file_none.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
-	HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/baseline.weights \
+	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/baseline.weights \
 	$< -g included_schedule_file -o $(@D) -f included_schedule_file target=$* auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so -e schedule
 
 # Note that this depends on included_schedule_file.schedule.h rather than $(BIN)/%/included_schedule_file.schedule.h --
