@@ -75,13 +75,13 @@ Expr float32_to_float16(Expr value) {
     Type u32_t = UInt(32, value.type().lanes());
     Type u16_t = UInt(16, value.type().lanes());
 
-    // Test the endpoints
     Expr bits = reinterpret(u32_t, value);
 
     // Extract the sign bit
     Expr sign = bits & make_const(u32_t, 0x80000000);
     bits = bits ^ sign;
 
+    // Test the endpoints
     Expr is_denorm = (bits < make_const(u32_t, 0x38800000));
     Expr is_inf = (bits == make_const(u32_t, 0x7f800000));
     Expr is_nan = (bits > make_const(u32_t, 0x7f800000));
