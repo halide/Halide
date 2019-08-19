@@ -350,7 +350,9 @@ struct Test {
             check("paddusw", 4*w, u16(min(u32(u16_1) + u32(u16_2), max_u16)));
             check("psubusw", 4*w, u16(max(i32(u16_1) - i32(u16_2), 0)));
             check("pmulhw",  4*w, i16((i32(i16_1) * i32(i16_2)) / (256*256)));
-            check("pmulhw",  4*w, i16((i32(i16_1) * i32(i16_2)) >> 16));
+            check("pmulhw",  4*w, i16((i32(i16_1) * i32(i16_2)) >> cast<unsigned>(16)));
+            check("pmulhw",  4*w, i16((i32(i16_1) * i32(i16_2)) >> cast<int>(16)));
+            check("pmulhw",  4*w, i16((i32(i16_1) * i32(i16_2)) << cast<int>(-16)));
 
             // Add a test with a constant as there was a bug on this.
             check("pmulhw",  4*w, i16((3 * i32(i16_2)) / (256*256)));
@@ -403,8 +405,10 @@ struct Test {
             check("pminub", 8*w, min(u8_1, u8_2));
 
             const char *check_pmulhuw = (use_avx2 && w > 3) ? "vpmulhuw*ymm" : "pmulhuw";
-            check(check_pmulhuw, 4*w, u16((u32(u16_1) * u32(u16_2))/(256*256)));
-            check(check_pmulhuw, 4*w, u16((u32(u16_1) * u32(u16_2))>>16));
+            check(check_pmulhuw, 4*w, u16((u32(u16_1) * u32(u16_2)) / (256*256)));
+            check(check_pmulhuw, 4*w, u16((u32(u16_1) * u32(u16_2)) >> cast<unsigned>(16)));
+            check(check_pmulhuw, 4*w, u16((u32(u16_1) * u32(u16_2)) >> cast<int>(16)));
+            check(check_pmulhuw, 4*w, u16((u32(u16_1) * u32(u16_2)) << cast<int>(-16)));
             check(check_pmulhuw, 4*w, u16_1 / 15);
 
             check("cmpeqps", 2*w, select(f32_1 == f32_2, 1.0f, 2.0f));
@@ -614,7 +618,9 @@ struct Test {
             check("vpaddd*ymm", 8, i32_1 + i32_2);
             check("vpsubd*ymm", 8, i32_1 - i32_2);
             check("vpmulhw*ymm", 16, i16((i32(i16_1) * i32(i16_2)) / (256*256)));
-            check("vpmulhw*ymm", 16, i16((i32(i16_1) * i32(i16_2)) >> 16));
+            check("vpmulhw*ymm", 16, i16((i32(i16_1) * i32(i16_2)) >> cast<unsigned>(16)));
+            check("vpmulhw*ymm", 16, i16((i32(i16_1) * i32(i16_2)) >> cast<int>(16)));
+            check("vpmulhw*ymm", 16, i16((i32(i16_1) * i32(i16_2)) << cast<int>(-16)));
             check("vpmullw*ymm", 16, i16_1 * i16_2);
 
             check("vpcmp*b*ymm", 32, select(u8_1 == u8_2, u8(1), u8(2)));
@@ -799,10 +805,16 @@ struct Test {
             check(arm32 ? "vadd.i64" : "add", 2*w, u64_1 + u64_2);
 
             // VADDHN   I       -       Add and Narrow Returning High Half
-            check(arm32 ? "vaddhn.i16" : "addhn", 8*w, i8((i16_1 + i16_2)/256));
-            check(arm32 ? "vaddhn.i16" : "addhn", 8*w, u8((u16_1 + u16_2)/256));
-            check(arm32 ? "vaddhn.i32" : "addhn", 4*w, i16((i32_1 + i32_2)/65536));
-            check(arm32 ? "vaddhn.i32" : "addhn", 4*w, u16((u32_1 + u32_2)/65536));
+            check(arm32 ? "vaddhn.i16" : "addhn", 8*w, i8((i16_1 + i16_2) / 256));
+            check(arm32 ? "vaddhn.i16" : "addhn", 8*w, u8((u16_1 + u16_2) / 256));
+            check(arm32 ? "vaddhn.i32" : "addhn", 4*w, i16((i32_1 + i32_2) / 65536));
+            check(arm32 ? "vaddhn.i32" : "addhn", 4*w, i16((i32_1 + i32_2) >> cast<unsigned>(16)));
+            check(arm32 ? "vaddhn.i32" : "addhn", 4*w, i16((i32_1 + i32_2) >> cast<int>(16)));
+            check(arm32 ? "vaddhn.i32" : "addhn", 4*w, i16((i32_1 + i32_2) << cast<int>(-16)));
+            check(arm32 ? "vaddhn.i32" : "addhn", 4*w, u16((u32_1 + u32_2) / 65536));
+            check(arm32 ? "vaddhn.i32" : "addhn", 4*w, u16((u32_1 + u32_2) >> cast<unsigned>(16)));
+            check(arm32 ? "vaddhn.i32" : "addhn", 4*w, u16((u32_1 + u32_2) >> cast<int>(16)));
+            check(arm32 ? "vaddhn.i32" : "addhn", 4*w, u16((u32_1 + u32_2) << cast<int>(-16)));
 
             // VADDL    I       -       Add Long
             check(arm32 ? "vaddl.s8"  : "saddl", 8*w, i16(i8_1) + i16(i8_2));
@@ -1679,10 +1691,18 @@ struct Test {
         check("vpacko(v*.h,v*.h)", hvx_width/1, u8(i16_1 >> 8));
         check("vpacko(v*.h,v*.h)", hvx_width/1, i8(u16_1 >> 8));
         check("vpacko(v*.h,v*.h)", hvx_width/1, i8(i16_1 >> 8));
-        check("vpacko(v*.w,v*.w)", hvx_width/2, u16(u32_1 >> 16));
-        check("vpacko(v*.w,v*.w)", hvx_width/2, u16(i32_1 >> 16));
-        check("vpacko(v*.w,v*.w)", hvx_width/2, i16(u32_1 >> 16));
-        check("vpacko(v*.w,v*.w)", hvx_width/2, i16(i32_1 >> 16));
+        check("vpacko(v*.w,v*.w)", hvx_width/2, u16(u32_1 >> cast<unsigned>(16)));
+        check("vpacko(v*.w,v*.w)", hvx_width/2, u16(u32_1 >> cast<int>(16)));
+        check("vpacko(v*.w,v*.w)", hvx_width/2, u16(u32_1 << cast<int>(-16)));
+        check("vpacko(v*.w,v*.w)", hvx_width/2, u16(i32_1 >> cast<unsigned>(16)));
+        check("vpacko(v*.w,v*.w)", hvx_width/2, u16(i32_1 >> cast<int>(16)));
+        check("vpacko(v*.w,v*.w)", hvx_width/2, u16(i32_1 << cast<int>(-16)));
+        check("vpacko(v*.w,v*.w)", hvx_width/2, i16(u32_1 >> cast<unsigned>(16)));
+        check("vpacko(v*.w,v*.w)", hvx_width/2, i16(u32_1 >> cast<int>(16)));
+        check("vpacko(v*.w,v*.w)", hvx_width/2, i16(u32_1 << cast<int>(-16)));
+        check("vpacko(v*.w,v*.w)", hvx_width/2, i16(i32_1 >> cast<unsigned>(16)));
+        check("vpacko(v*.w,v*.w)", hvx_width/2, i16(i32_1 >> cast<int>(16)));
+        check("vpacko(v*.w,v*.w)", hvx_width/2, i16(i32_1 << cast<int>(-16)));
 
         // vpack doesn't interleave its inputs, which means it doesn't
         // simplify with widening. This is preferable for when the
@@ -1703,10 +1723,18 @@ struct Test {
         check("vshuffo(v*.b,v*.b)", hvx_width/1, u8((i16(i8_1) * 63) >> 8));
         check("vshuffo(v*.b,v*.b)", hvx_width/1, i8((u16(u8_1) * 127) >> 8));
         check("vshuffo(v*.b,v*.b)", hvx_width/1, i8((i16(i8_1) * 63) >> 8));
-        check("vshuffo(v*.h,v*.h)", hvx_width/2, u16((u32(u16_1) * 32767) >> 16));
-        check("vshuffo(v*.h,v*.h)", hvx_width/2, u16((i32(i16_1) * 16383) >> 16));
-        check("vshuffo(v*.h,v*.h)", hvx_width/2, i16((u32(u16_1) * 32767) >> 16));
-        check("vshuffo(v*.h,v*.h)", hvx_width/2, i16((i32(i16_1) * 16383) >> 16));
+        check("vshuffo(v*.h,v*.h)", hvx_width/2, u16((u32(u16_1) * 32767) >> cast<unsigned>(16)));
+        check("vshuffo(v*.h,v*.h)", hvx_width/2, u16((u32(u16_1) * 32767) >> cast<int>(16)));
+        check("vshuffo(v*.h,v*.h)", hvx_width/2, u16((u32(u16_1) * 32767) << cast<int>(-16)));
+        check("vshuffo(v*.h,v*.h)", hvx_width/2, u16((i32(i16_1) * 16383) >> cast<unsigned>(16)));
+        check("vshuffo(v*.h,v*.h)", hvx_width/2, u16((i32(i16_1) * 16383) >> cast<int>(16)));
+        check("vshuffo(v*.h,v*.h)", hvx_width/2, u16((i32(i16_1) * 16383) << cast<int>(-16)));
+        check("vshuffo(v*.h,v*.h)", hvx_width/2, i16((u32(u16_1) * 32767) >> cast<unsigned>(16)));
+        check("vshuffo(v*.h,v*.h)", hvx_width/2, i16((u32(u16_1) * 32767) >> cast<int>(16)));
+        check("vshuffo(v*.h,v*.h)", hvx_width/2, i16((u32(u16_1) * 32767) << cast<int>(-16)));
+        check("vshuffo(v*.h,v*.h)", hvx_width/2, i16((i32(i16_1) * 16383) >> cast<unsigned>(16)));
+        check("vshuffo(v*.h,v*.h)", hvx_width/2, i16((i32(i16_1) * 16383) >> cast<int>(16)));
+        check("vshuffo(v*.h,v*.h)", hvx_width/2, i16((i32(i16_1) * 16383) << cast<int>(-16)));
 
         check("vpacke(v*.h,v*.h)", hvx_width/1, in_u8(2*x));
         check("vpacke(v*.w,v*.w)", hvx_width/2, in_u16(2*x));
