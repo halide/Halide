@@ -23,7 +23,6 @@ using Halide::Runtime::Buffer;
 using std::vector;
 using std::string;
 using std::map;
-using std::set;
 
 struct Flags {
     int                 epochs = 0;
