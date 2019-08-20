@@ -515,6 +515,7 @@ llvm::Type *CodeGen_X86::llvm_type_of(Type t) const {
         // convert between float and half for seemingly no reason
         // (e.g. to do a select), and bitcasting to int16 doesn't
         // help, because it simplifies away the bitcast for you.
+        // See: https://bugs.llvm.org/show_bug.cgi?id=43065
         return llvm_type_of(t.with_code(halide_type_uint));
     } else {
         return CodeGen_Posix::llvm_type_of(t);
