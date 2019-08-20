@@ -14,8 +14,18 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
         // remutate to recalculate the bounds.
         bounds->min_defined = a_bounds.min_defined && b_bounds.max_defined;
         bounds->max_defined = a_bounds.max_defined && b_bounds.min_defined;
-        bounds->min = a_bounds.min - b_bounds.max;
-        bounds->max = a_bounds.max - b_bounds.min;
+        if (sub_would_overflow(64, a_bounds.min, b_bounds.max)) {
+            bounds->min_defined = false;
+            bounds->min = 0;
+        } else {
+            bounds->min = a_bounds.min - b_bounds.max;
+        }
+        if (sub_would_overflow(64, a_bounds.max, b_bounds.min)) {
+            bounds->max_defined = false;
+            bounds->max = 0;
+        } else {
+            bounds->max = a_bounds.max - b_bounds.min;
+        }
         bounds->alignment = a_bounds.alignment - b_bounds.alignment;
         bounds->trim_bounds_using_alignment();
     }

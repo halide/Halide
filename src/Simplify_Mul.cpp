@@ -3,6 +3,20 @@
 namespace Halide {
 namespace Internal {
 
+namespace {
+int64_t saturating_mul(int64_t a, int64_t b) {
+    if (mul_would_overflow(64, a, b)) {
+        if ((a > 0) == (b > 0)) {
+            return INT64_MAX;
+        } else {
+            return INT64_MIN;
+        }
+    } else {
+        return a * b;
+    }
+}
+}
+
 Expr Simplify::visit(const Mul *op, ExprInfo *bounds) {
     ExprInfo a_bounds, b_bounds;
     Expr a = mutate(op->a, &a_bounds);
@@ -16,20 +30,32 @@ Expr Simplify::visit(const Mul *op, ExprInfo *bounds) {
 
         if (a_bounded && b_bounded) {
             bounds->min_defined = bounds->max_defined = true;
-            int64_t v1 = a_bounds.min * b_bounds.min;
-            int64_t v2 = a_bounds.min * b_bounds.max;
-            int64_t v3 = a_bounds.max * b_bounds.min;
-            int64_t v4 = a_bounds.max * b_bounds.max;
+            int64_t v1 = saturating_mul(a_bounds.min, b_bounds.min);
+            int64_t v2 = saturating_mul(a_bounds.min, b_bounds.max);
+            int64_t v3 = saturating_mul(a_bounds.max, b_bounds.min);
+            int64_t v4 = saturating_mul(a_bounds.max, b_bounds.max);
             bounds->min = std::min(std::min(v1, v2), std::min(v3, v4));
             bounds->max = std::max(std::max(v1, v2), std::max(v3, v4));
         } else if ((a_bounds.max_defined && b_bounded && b_positive) ||
                    (b_bounds.max_defined && a_bounded && a_positive)) {
             bounds->max_defined = true;
-            bounds->max = a_bounds.max * b_bounds.max;
+            bounds->max = saturating_mul(a_bounds.max, b_bounds.max);
         } else if ((a_bounds.min_defined && b_bounded && b_positive) ||
                    (b_bounds.min_defined && a_bounded && a_positive)) {
             bounds->min_defined = true;
-            bounds->min = a_bounds.min * b_bounds.min;
+            bounds->min = saturating_mul(a_bounds.min, b_bounds.min);
+        }
+
+        if (bounds->max_defined && bounds->max == INT64_MAX) {
+            // Assume it saturated to avoid overflow. This gives up a
+            // single representable value at the top end of the range
+            // to represent infinity.
+            bounds->max_defined = false;
+            bounds->max = 0;
+        }
+        if (bounds->min_defined && bounds->min == INT64_MIN) {
+            bounds->min_defined = false;
+            bounds->min = 0;
         }
 
         bounds->alignment = a_bounds.alignment * b_bounds.alignment;
