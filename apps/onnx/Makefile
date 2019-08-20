@@ -76,11 +76,11 @@ test: $(BIN)/$(HL_TARGET)/onnx_converter_test $(BIN)/$(HL_TARGET)/onnx_converter
 	LD_LIBRARY_PATH=$(BIN) $(BIN)/$(HL_TARGET)/onnx_converter_test
 	LD_LIBRARY_PATH=$(BIN) $(BIN)/$(HL_TARGET)/onnx_converter_generator_test
 
-PYTHON ?= python3
-PYBIND11_CFLAGS = $(shell $(PYTHON) -m pybind11 --includes) -frtti
+PYTHON ?= python
+PYBIND11_CFLAGS = $(shell $(PYTHON)-config --includes) -frtti -undefined dynamic_lookup 
 PY_EXT = $(shell $(PYTHON)-config --extension-suffix)
 PY_MODEL_EXT = model_cpp$(PY_EXT)
-PYCXXFLAGS =  $(CXXFLAGS) $(PYBIND11_CFLAGS)
+PYCXXFLAGS =  $(CXXFLAGS) $(PYBIND11_CFLAGS) -Wno-deprecated-register -Wno-deprecated-declarations
 
 # Python extension for HalideModel
 $(BIN)/%/$(PY_MODEL_EXT): model.cpp $(BIN)/%/oclib.a
