@@ -40,6 +40,7 @@ class UnrollLoops : public IRMutator {
                 for (auto it = lets.rbegin(); it != lets.rend(); it++) {
                     extent = graph_substitute(it->first, it->second, extent);
                 }
+                extent = remove_likelies(extent);
                 extent = simplify(common_subexpression_elimination(extent));
                 e = extent.as<IntImm>();
             }
@@ -59,6 +60,7 @@ class UnrollLoops : public IRMutator {
             if (e == nullptr && permit_failed_unroll) {
                 // Still no luck, but we're allowed to fail. Rewrite
                 // to a serial loop.
+                user_warning << "HL_PERMIT_FAILED_UNROLL is allowing us to unroll a non-constant loop into a serial loop. Did you mean to do this?\n";
                 body = mutate(body);
                 return For::make(for_loop->name, for_loop->min, for_loop->extent,
                                  ForType::Serial, for_loop->device_api, std::move(body));
