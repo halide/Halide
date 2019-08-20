@@ -36,8 +36,11 @@ COMPILATION_TIMEOUT=600s
 BENCHMARKING_TIMEOUT=60s
 
 if [ -z ${HL_TARGET} ]; then
-HL_TARGET=x86-64-avx2
+# Use the host target -- but remove features that we don't want to train
+# for by default, at least not yet (most notably, AVX512).
+HL_TARGET=`${AUTOSCHED_BIN}/get_host_target avx512 avx512_knl avx512_skylake avx512_cannonlake`
 fi
+echo Training target is: ${HL_TARGET}
 
 if [ -z ${GENERATOR} ]; then
 GENERATOR=./bin/demo.generator
@@ -147,7 +150,7 @@ benchmark_sample() {
     P=$3
     S=$2
     FNAME=$4
-    ${AUTOSCHED_BIN}/featurization_to_sample ${D}/${FNAME}.featurization $R $P $S ${D}/${FNAME}.sample || echo "Augment sample failed for ${D} (probably because benchmarking failed)"
+    ${AUTOSCHED_BIN}/featurization_to_sample ${D}/${FNAME}.featurization $R $P $S ${D}/${FNAME}.sample || echo "featurization_to_sample failed for ${D} (probably because benchmarking failed)"
 }
 
 # Don't clobber existing samples
@@ -213,8 +216,15 @@ for ((BATCH_ID=$((FIRST+1));BATCH_ID<$((FIRST+1+NUM_BATCHES));BATCH_ID++)); do
         # retrain model weights on all samples seen so far
         echo Retraining model...
 
-        find samples | grep sample$ | \
-            HL_NUM_THREADS=32 HL_WEIGHTS_DIR=${WEIGHTS} HL_BEST_SCHEDULE_FILE=${PWD}/samples/best.txt ${AUTOSCHED_BIN}/train_cost_model ${BATCH_SIZE} 0.0001
+        find ${SAMPLES} -name "*.sample" | \
+            ${AUTOSCHED_BIN}/retrain_cost_model \
+                --epochs=${BATCH_SIZE} \
+                --rates="0.0001" \
+                --num_cores=32 \
+                --initial_weights=${WEIGHTS} \
+                --weights_out=${WEIGHTS} \
+                --best_benchmark=${PWD}/samples/best.${PIPELINE}.benchmark.txt \
+                --best_schedule=${PWD}/samples/best.${PIPELINE}.schedule.h
     done
 
     echo Batch ${BATCH_ID} took ${SECONDS} seconds to compile, benchmark, and retrain
