@@ -908,7 +908,7 @@ void compile_multitarget(const std::string &fn_name,
                         condition << " &&\n    ";
                     }
                     condition << "target.has_feature(halide_target_feature_"
-                              << Target::feature_name((Target::Feature) i) << ")";
+                              << Target::feature_to_name((Target::Feature) i) << ")";
                 }
                 body << "if (" << condition.str() << ") {\n";
             }

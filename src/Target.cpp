@@ -578,7 +578,7 @@ bool Target::validate_target_string(const std::string &s) {
     return merge_string(t, s);
 }
 
-std::string Target::feature_name(Target::Feature feature) {
+std::string Target::feature_to_name(Target::Feature feature) {
     for (const auto &feature_entry : feature_name_map) {
         if (feature == feature_entry.second) {
             return feature_entry.first;
@@ -586,6 +586,14 @@ std::string Target::feature_name(Target::Feature feature) {
     }
     internal_assert(false);
     return "";
+}
+
+Target::Feature Target::feature_from_name(const std::string &name) {
+    Target::Feature feature;
+    if (lookup_feature(name, feature)) {
+        return feature;
+    }
+    return Target::FeatureEnd;
 }
 
 std::string Target::to_string() const {
