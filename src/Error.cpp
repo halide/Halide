@@ -63,41 +63,29 @@ InternalError _internal_error("");
 }  // namespace
 
 ErrorReport::ErrorReport(const char *file, int line, const char *condition_string, int flags) : flags(flags) {
-
+    // Note that we deliberately put the entire message into a single line
+    // (aside from newlines inserted by user code) to make it easy to filter
+    // specific warnings or messages via (e.g.) grep.
     const std::string &source_loc = Introspection::get_source_location();
-
+    const char *what = (flags & Warning) ? "Warning" : "Error";
     if (flags & User) {
         // Only mention where inside of libHalide the error tripped if we have debug level > 0
         debug(1) << "User error triggered at " << file << ":" << line << "\n";
         if (condition_string) {
             debug(1) << "Condition failed: " << condition_string << "\n";
         }
-        if (flags & Warning) {
-            msg << "Warning";
-        } else {
-            msg << "Error";
-        }
-        if (source_loc.empty()) {
-            msg << ":\n";
-        } else {
-            msg << " at " << source_loc << ":\n";
-        }
-
-    } else {
-        msg << "Internal ";
-        if (flags & Warning) {
-            msg << "warning";
-        } else {
-            msg << "error";
-        }
-        msg << " at " << file << ":" << line;
+        msg << what << ": ";
         if (!source_loc.empty()) {
-            msg << " triggered by user code at " << source_loc << ":\n";
-        } else {
-            msg << "\n";
+            msg << "at " << source_loc << ": ";
         }
+    } else {
+        msg << "Internal " << what << ": at " << file << ":" << line;
+        if (!source_loc.empty()) {
+            msg << " triggered by user code at " << source_loc << ": ";
+        }
+        msg << ": ";
         if (condition_string) {
-            msg << "Condition failed: " << condition_string << "\n";
+            msg << "Condition failed: " << condition_string << ": ";
         }
     }
 }
