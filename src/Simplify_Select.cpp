@@ -76,6 +76,34 @@ Expr Simplify::visit(const Select *op, ExprInfo *bounds) {
              rewrite(select(x, z / y, w / y), select(x, z, w) / y) ||
              rewrite(select(x, z % y, w % y), select(x, z, w) % y) ||
 
+             rewrite(select(x, (y + z) + u, y + w), y + select(x, z + u, w)) ||
+             rewrite(select(x, (y + z) - u, y + w), y + select(x, z - u, w)) ||
+             rewrite(select(x, u + (y + z), y + w), y + select(x, u + z, w)) ||
+             rewrite(select(x, y + z, (y + w) + u), y + select(x, z, w + u)) ||
+             rewrite(select(x, y + z, (y + w) - u), y + select(x, z, w - u)) ||
+             rewrite(select(x, y + z, u + (y + w)), y + select(x, z, u + w)) ||
+
+             rewrite(select(x, (y + z) + u, w + y), y + select(x, z + u, w)) ||
+             rewrite(select(x, (y + z) - u, w + y), y + select(x, z - u, w)) ||
+             rewrite(select(x, u + (y + z), w + y), y + select(x, u + z, w)) ||
+             rewrite(select(x, y + z, (w + y) + u), y + select(x, z, w + u)) ||
+             rewrite(select(x, y + z, (w + y) - u), y + select(x, z, w - u)) ||
+             rewrite(select(x, y + z, u + (w + y)), y + select(x, z, u + w)) ||
+
+             rewrite(select(x, (z + y) + u, y + w), y + select(x, z + u, w)) ||
+             rewrite(select(x, (z + y) - u, y + w), y + select(x, z - u, w)) ||
+             rewrite(select(x, u + (z + y), y + w), y + select(x, u + z, w)) ||
+             rewrite(select(x, z + y, (y + w) + u), y + select(x, z, w + u)) ||
+             rewrite(select(x, z + y, (y + w) - u), y + select(x, z, w - u)) ||
+             rewrite(select(x, z + y, u + (y + w)), y + select(x, z, u + w)) ||
+
+             rewrite(select(x, (z + y) + u, w + y), select(x, z + u, w) + y) ||
+             rewrite(select(x, (z + y) - u, w + y), select(x, z - u, w) + y) ||
+             rewrite(select(x, u + (z + y), w + y), select(x, u + z, w) + y) ||
+             rewrite(select(x, z + y, (w + y) + u), select(x, z, w + u) + y) ||
+             rewrite(select(x, z + y, (w + y) - u), select(x, z, w - u) + y) ||
+             rewrite(select(x, z + y, u + (w + y)), select(x, z, u + w) + y) ||
+
              rewrite(select(x < y, x, y), min(x, y)) ||
              rewrite(select(x < y, y, x), max(x, y)) ||
 
