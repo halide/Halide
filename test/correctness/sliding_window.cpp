@@ -201,6 +201,26 @@ int main(int argc, char **argv) {
         }
     }
 
+    {
+        // Sliding with an unrolled producer
+        Var x, xi;
+        Func f, g;
+
+        f(x) = call_counter(x, 0) + x*x;
+        g(x) = f(x) + f(x-1);
+
+        g.split(x, x, xi, 10);
+        f.store_root().compute_at(g, x).unroll(x);
+
+        count = 0;
+        Buffer<int> im = g.realize(100);
+
+        if (count != 101) {
+            printf("f was called %d times instead of %d times\n", count, 101);
+            return -1;
+        }
+    }
+
     printf("Success!\n");
     return 0;
 }
