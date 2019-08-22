@@ -247,8 +247,8 @@ Expr replace_pattern(Expr x, const vector<Expr> &matches, const Pattern &p) {
 }
 
 bool is_double_vector(Expr x, const Target &target) {
-    int native_vector_bits = target.natural_vector_size(Int(8)) * 8;
-    return (x.type().lanes() / ( native_vector_bits / x.type().bits()) >= 2);
+    int native_vector_lanes = target.natural_vector_size(x.type());
+    return x.type().lanes() % (2 * native_vector_lanes) == 0;
 }
 
 // Attempt to apply one of the patterns to x. If a match is
@@ -263,11 +263,6 @@ Expr apply_patterns(Expr x, const vector<Pattern> &patterns, const Target &targe
             continue;
         }
 
-        // Don't apply pattern if it involves an
-        // interleave of less than double vector width.
-        if ((p.flags & Pattern::InterleaveResult) && !is_double_vector(x, target))
-            continue;
-
         if (expr_match(p.pattern, x, matches)) {
             debug(3) << "matched " << p.pattern << "\n";
             debug(3) << "matches:\n";
@@ -279,6 +274,11 @@ Expr apply_patterns(Expr x, const vector<Pattern> &patterns, const Target &targe
                 continue;
             }
 
+            // Don't apply pattern if it does not involve an
+            // interleave of double vector width.
+            if ((p.flags & Pattern::InterleaveResult) && !is_double_vector(x, target)) {
+                continue;
+            }
             // Mutate the operands with the given mutator.
             for (Expr &op : matches) {
                 op = op_mutator->mutate(op);

@@ -1690,9 +1690,7 @@ void CodeGen_Hexagon::visit(const Call *op) {
     };
 
     if (is_native_interleave(op) || is_native_deinterleave(op)) {
-        user_assert(op->type.lanes() % (native_vector_bits() * 2 / op->type.bits()) == 0)
-            << "Interleave or deinterleave will result in miscompilation, "
-            << "see https://github.com/halide/Halide/issues/1582\n" << Expr(op) << "\n";
+        internal_assert(op->type.lanes() % (native_vector_bits() * 2 / op->type.bits()) == 0);
     }
 
     if (starts_with(op->name, "halide.hexagon.")) {
