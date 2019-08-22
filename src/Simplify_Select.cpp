@@ -106,6 +106,8 @@ Expr Simplify::visit(const Select *op, ExprInfo *bounds) {
 
              rewrite(select(x < y, x, y), min(x, y)) ||
              rewrite(select(x < y, y, x), max(x, y)) ||
+             rewrite(select(x < 0, x * y, 0), min(x, 0) * y) ||
+             rewrite(select(x < 0, 0, x * y), max(x, 0) * y) ||
 
              (no_overflow_int(op->type) &&
               (rewrite(select(x, y * c0, c1), select(x, y, fold(c1 / c0)) * c0, c1 % c0 == 0) ||

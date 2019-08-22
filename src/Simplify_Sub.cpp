@@ -99,6 +99,10 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
              rewrite(((y + x) + z) - x, y + z) ||
              rewrite((z + (x + y)) - x, z + y) ||
              rewrite((z + (y + x)) - x, z + y) ||
+
+             rewrite((x - y) - (x + z), 0 - y - z) ||
+             rewrite((x - y) - (z + x), 0 - y - z) ||
+
              (no_overflow(op->type) &&
               (rewrite(max(x, y) - x, max(0, y - x)) ||
                rewrite(min(x, y) - x, min(0, y - x)) ||
