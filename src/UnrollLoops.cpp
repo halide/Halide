@@ -38,10 +38,11 @@ class UnrollLoops : public IRMutator {
                 // We're about to hard fail. Get really aggressive
                 // with the simplifier.
                 for (auto it = lets.rbegin(); it != lets.rend(); it++) {
-                    extent = graph_substitute(it->first, it->second, extent);
+                    extent = Let::make(it->first, it->second, extent);
                 }
                 extent = remove_likelies(extent);
-                extent = simplify(common_subexpression_elimination(extent));
+                extent = substitute_in_all_lets(extent);
+                extent = simplify(extent);
                 e = extent.as<IntImm>();
             }
 
