@@ -301,18 +301,21 @@ class DefaultCostModel : public CostModel {
     }
 
     void save_weights() override {
-        if (weights_out_path.empty()) return;
+        if (weights_out_path.empty()) {
+            std::cerr << "Unable to save weights: no output path specified\n";
+            abort();
+        }
 
         if (ends_with(weights_out_path, ".weights")) {
             if (!weights.save_to_file(weights_out_path)) {
                 std::cerr << "Unable to save weights to file: " << weights_out_path << "\n";
-                assert(0);
+                abort();
             }
         } else {
             std::cerr << "Saving weights to a directory is deprecated; please convert to a .weights file\n";
             if (!weights.save_to_dir(weights_out_path)) {
                 std::cerr << "Unable to save weights to file: " << weights_out_path << "\n";
-                assert(0);
+                abort();
             }
         }
     }
