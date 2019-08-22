@@ -2,6 +2,13 @@
 
 #include <signal.h>
 
+#ifdef _MSC_VER
+#include <io.h>
+inline int isatty(int fd) { return _isatty(fd); }
+#else
+#include <unistd.h>
+#endif
+
 namespace Halide {
 
 namespace {
@@ -63,9 +70,17 @@ InternalError _internal_error("");
 }  // namespace
 
 ErrorReport::ErrorReport(const char *file, int line, const char *condition_string, int flags) : flags(flags) {
-    // Note that we deliberately put the entire message into a single line
+    // Note that we deliberately try to put the entire message into a single line
     // (aside from newlines inserted by user code) to make it easy to filter
-    // specific warnings or messages via (e.g.) grep.
+    // specific warnings or messages via (e.g.) grep.... unless we are likely to be
+    // outputting to a proper terminal, in which case newlines are used to improve readability.
+    #if defined(WITH_EXCEPTIONS)
+    const bool use_newlines = false;
+    #else
+    const bool use_newlines = (custom_error_reporter == nullptr) && isatty(2);
+    #endif
+    const char sep = use_newlines ? '\n' : ' ';
+
     const std::string &source_loc = Introspection::get_source_location();
     const char *what = (flags & Warning) ? "Warning" : "Error";
     if (flags & User) {
@@ -74,18 +89,19 @@ ErrorReport::ErrorReport(const char *file, int line, const char *condition_strin
         if (condition_string) {
             debug(1) << "Condition failed: " << condition_string << "\n";
         }
-        msg << what << ": ";
+        msg << what << ":";
         if (!source_loc.empty()) {
-            msg << "at " << source_loc << ": ";
+            msg << " (at " << source_loc << ")";
         }
+        msg << sep;
     } else {
-        msg << "Internal " << what << ": at " << file << ":" << line;
-        if (!source_loc.empty()) {
-            msg << " triggered by user code at " << source_loc << ": ";
+        msg << "Internal " << what << " at " << file << ":" << line;
+        if (source_loc.empty()) {
+            msg << " triggered by user code at " << source_loc << ":";
         }
-        msg << ": ";
+        msg << sep;
         if (condition_string) {
-            msg << "Condition failed: " << condition_string << ": ";
+            msg << "Condition failed: " << condition_string << ":" << sep;
         }
     }
 }
