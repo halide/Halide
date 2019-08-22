@@ -496,7 +496,7 @@ int CodeGen_X86::native_vector_bits() const {
     }
 }
 
-int CodeGen_X86::vector_lanes_for_slice(Type t) const {
+int CodeGen_X86::vector_lanes_for_slice(const Type &t) const {
     // We don't want to pad all the way out to natural_vector_size,
     // because llvm generates crappy code. Better to use a smaller
     // type if we can.
@@ -508,7 +508,7 @@ int CodeGen_X86::vector_lanes_for_slice(Type t) const {
     return slice_bits / t.bits();
 }
 
-llvm::Type *CodeGen_X86::llvm_type_of(Type t) const {
+llvm::Type *CodeGen_X86::llvm_type_of(const Type &t) const {
     if (t.is_float() && t.bits() < 32) {
         // LLVM as of August 2019 has all sorts of issues in the x86
         // backend for half types. It injects expensive calls to

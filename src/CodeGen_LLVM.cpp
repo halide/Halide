@@ -1188,7 +1188,7 @@ llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_
     return metadata_getter;
 }
 
-llvm::Type *CodeGen_LLVM::llvm_type_of(Type t) const {
+llvm::Type *CodeGen_LLVM::llvm_type_of(const Type &t) const {
     return Internal::llvm_type_of(context, t);
 }
 
@@ -1473,7 +1473,7 @@ void CodeGen_LLVM::codegen(Stmt s) {
     s.accept(this);
 }
 
-Type CodeGen_LLVM::upgrade_type_for_arithmetic(Type t) const {
+Type CodeGen_LLVM::upgrade_type_for_arithmetic(const Type &t) const {
     if (t.is_bfloat() || (t.is_float() && t.bits() < 32)) {
         return Float(32, t.lanes());
     } else {
@@ -1481,7 +1481,7 @@ Type CodeGen_LLVM::upgrade_type_for_arithmetic(Type t) const {
     }
 }
 
-Type CodeGen_LLVM::upgrade_type_for_argument_passing(Type t) const {
+Type CodeGen_LLVM::upgrade_type_for_argument_passing(const Type &t) const {
     if (t.is_bfloat() || (t.is_float() && t.bits() < 32)) {
         return t.with_code(halide_type_uint);
     } else {
@@ -1489,7 +1489,7 @@ Type CodeGen_LLVM::upgrade_type_for_argument_passing(Type t) const {
     }
 }
 
-Type CodeGen_LLVM::upgrade_type_for_storage(Type t) const {
+Type CodeGen_LLVM::upgrade_type_for_storage(const Type &t) const {
     if (t.is_bfloat() || (t.is_float() && t.bits() < 32)) {
         return t.with_code(halide_type_uint);
     } else if (t.is_bool()) {
@@ -4132,7 +4132,7 @@ Value *CodeGen_LLVM::get_user_context() const {
     return ctx;
 }
 
-Value *CodeGen_LLVM::call_intrin(Type result_type, int intrin_lanes,
+Value *CodeGen_LLVM::call_intrin(const Type &result_type, int intrin_lanes,
                                  const string &name, vector<Expr> args) {
     vector<Value *> arg_values(args.size());
     for (size_t i = 0; i < args.size(); i++) {
