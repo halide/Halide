@@ -624,7 +624,7 @@ void Module::compile(const Outputs &output_files_arg) const {
         std::string machine_params = r  ? r->machine_params_string : "(None)";
         std::string body = r && !r->schedule_source.empty()
             ? r->schedule_source
-            : "// No autoscheduler has been run for this Generator.";
+            : "// No autoscheduler has been run for this Generator.\n";
         emit_schedule_file(name(), {target()}, scheduler, machine_params, body, file);
     }
     if (!output_files.featurization_name.empty()) {
@@ -886,38 +886,40 @@ void compile_multitarget(const std::string &fn_name,
         }
 
         // Find the features that are unique to each stage (vs the baseline case).
-        const auto &baseline_features = auto_scheduler_results.back().target.get_features_bitset();
+        const auto &baseline_target = auto_scheduler_results.back().target;
+        const auto &baseline_features = baseline_target.get_features_bitset();
 
         // Autoscheduling should be all-or-none across the subtargets;
         // if code tries to somehow only autoschedule some subtargets,
         // this code may break, and that's ok.
         std::ostringstream body;
-        for (size_t i = 0; i < auto_scheduler_results.size(); i++) {
-            const auto &a = auto_scheduler_results[i];
-            body << "\n\n";
-            if (i == auto_scheduler_results.size() - 1) {
-                body << "// default schedule\n";
-                body << "{\n";
-            } else {
-                auto cur_features = a.target.get_features_bitset() & ~baseline_features;
-                user_assert(cur_features.count() > 0) << "Multitarget subtargets must be distinct";
-                std::ostringstream condition;
-                for (int i = 0; i < Target::FeatureEnd; ++i) {
-                    if (!cur_features[i]) continue;
-                    if (!condition.str().empty()) {
-                        condition << " &&\n    ";
-                    }
-                    condition << "target.has_feature(halide_target_feature_"
-                              << Target::feature_to_name((Target::Feature) i) << ")";
-                }
-                body << "if (" << condition.str() << ") {\n";
+        if (baseline_target.os == Target::OSUnknown && baseline_target.arch == Target::ArchUnknown) {
+            body << "// No autoscheduler has been run for this Generator.";
+        } else {
+            for (size_t i = 0; i < auto_scheduler_results.size(); i++) {
+              const auto &a = auto_scheduler_results[i];
+              body << "\n\n";
+              if (i == auto_scheduler_results.size() - 1) {
+                  body << "// default schedule\n";
+                  body << "{\n";
+              } else {
+                  auto cur_features = a.target.get_features_bitset() & ~baseline_features;
+                  user_assert(cur_features.count() > 0) << "Multitarget subtargets must be distinct";
+                  std::ostringstream condition;
+                  for (int i = 0; i < Target::FeatureEnd; ++i) {
+                      if (!cur_features[i]) continue;
+                      if (!condition.str().empty()) {
+                          condition << " &&\n    ";
+                      }
+                      condition << "target.has_feature(halide_target_feature_"
+                                << Target::feature_to_name((Target::Feature) i) << ")";
+                  }
+                  body << "if (" << condition.str() << ") {\n";
+              }
+              body << indent_string(a.schedule_source, "    ");
+              body << "    return;\n";
+              body << "}";
             }
-            const auto s = a.schedule_source.empty()
-                ? "// No autoscheduler has been run for this Generator."
-                : a.schedule_source;
-            body << indent_string(s, "    ");
-            body << "    return;\n";
-            body << "}";
         }
 
         std::ofstream file(output_files.schedule_name);
