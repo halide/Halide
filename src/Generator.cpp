@@ -135,6 +135,9 @@ Outputs compute_outputs(const Target &target,
     if (options.emit_featurization) {
         output_files.featurization_name = base_path + get_extension(".featurization", options);
     }
+    if (options.emit_pytorch_wrapper) {
+        output_files.pytorch_wrapper_name = base_path + get_extension(".pytorch", options);
+    }
     return output_files;
 }
 
@@ -812,7 +815,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
         "\n"
         " -e  A comma separated list of files to emit. Accepted values are:\n"
         "     [assembly, bitcode, cpp, h, html, o, static_library,\n"
-        "      stmt, cpp_stub, schedule, registration, featurization].\n"
+        "      stmt, cpp_stub, schedule, registration, featurization, pytorch_wrapper].\n"
         "     If omitted, default value is [static_library, h, registration].\n"
         "\n"
         " -x  A comma separated list of file extension pairs to substitute during\n"
@@ -985,13 +988,15 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
                 emit_options.emit_cpp_stub = true;
             } else if (opt == "schedule") {
                 emit_options.emit_schedule = true;
+            } else if (opt == "pytorch_wrapper") {
+                emit_options.emit_pytorch_wrapper = true;
             } else if (opt == "featurization") {
                 emit_options.emit_featurization = true;
             } else if (opt == "registration") {
                 emit_options.emit_registration = true;
             } else if (!opt.empty()) {
                 cerr << "Unrecognized emit option: " << opt
-                     << " not one of [assembly, bitcode, cpp, h, html, o, static_library, stmt, cpp_stub, registration], ignoring.\n";
+                     << " not one of [assembly, bitcode, cpp, h, html, o, static_library, stmt, cpp_stub, registration, pytorch_wrapper], ignoring.\n";
             }
         }
     }

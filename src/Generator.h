@@ -2902,6 +2902,7 @@ public:
         bool emit_schedule{false};
         bool emit_featurization{false};
         bool emit_registration{false};
+        bool emit_pytorch_wrapper{false};
 
         // This is an optional map used to replace the default extensions generated for
         // a file: if an key matches an output extension, emit those files with the

@@ -58,6 +58,10 @@ struct Outputs {
      * output is desired. */
     std::string schedule_name;
 
+    /** The name of the emitted pytorch wrapper file. Empty if no pytorch wrapper
+     * is desired. */
+    std::string pytorch_wrapper_name;
+
     /** The name of the emitted auto-schedule featurization file. Empty if no auto-schedule
      * featurization output is desired. */
     std::string featurization_name;
@@ -151,6 +155,14 @@ struct Outputs {
     Outputs schedule(const std::string &schedule_name) const {
         Outputs updated = *this;
         updated.schedule_name = schedule_name;
+        return updated;
+    }
+
+    /** Make a new Outputs struct that emits everything this one does
+     * and also a pytorch wrapper with the given name. */
+    Outputs pytorch_wrapper(const std::string &pytorch_wrapper_name) const {
+        Outputs updated = *this;
+        updated.pytorch_wrapper_name = pytorch_wrapper_name;
         return updated;
     }
 

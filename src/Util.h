@@ -50,6 +50,7 @@
 namespace Halide {
 namespace Internal {
 
+
 /** Some numeric conversions are UB if the value won't fit in the result;
  * safe_numeric_cast<>() is meant as a drop-in replacement for a C/C++ cast
  * that adds well-defined behavior for the UB cases, attempting to mimic
@@ -435,6 +436,10 @@ struct IsRoundtrippable {
         return true;
     }
 };
+
+/** Emit a version of a string that is a valid identifier in C (. is replaced with _) */
+std::string c_print_name(const std::string &name);
+
 
 }  // namespace Internal
 }  // namespace Halide
