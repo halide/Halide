@@ -1479,7 +1479,7 @@ struct FunctionDAG {
                 Definition def = node.func.definition();
                 if (stage_idx > 0) def = node.func.updates()[stage_idx - 1];
 
-                memset(&stage.features, 0, sizeof(stage.features));
+                stage.features = PipelineFeatures();
 
                 for (auto v : def.values()) {
                     featurizer.visit_store_args(node.func.name(), v.type(), def.args());
