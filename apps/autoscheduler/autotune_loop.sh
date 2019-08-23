@@ -142,11 +142,17 @@ benchmark_sample() {
         ${TIMEOUT_CMD} -k ${BENCHMARKING_TIMEOUT} ${BENCHMARKING_TIMEOUT} \
         ${D}/bench \
         --estimate_all \
+        --parsable_output \
         --benchmarks=all \
-            | tee ${D}/bench.txt || echo "Benchmarking failed or timed out for ${D}"
+            > ${D}/bench.txt || echo "Benchmarking failed or timed out for ${D}"
 
     # Add the runtime, pipeline id, and schedule id to the feature file
-    R=$(cut -d' ' -f8 < ${D}/bench.txt)
+
+    # Find the line we need
+    LINE=$(grep BEST_TIME_MSEC_PER_ITER ${D}/bench.txt)
+    # Extract the final column
+    R=${LINE##* }
+
     P=$3
     S=$2
     FNAME=$4

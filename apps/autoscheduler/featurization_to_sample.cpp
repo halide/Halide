@@ -25,9 +25,9 @@ int main(int argc, char **argv) {
 
     dst << src.rdbuf();
 
-    // Input runtime value is presumed to be in seconds,
-    // but sample file stores times in milliseconds.
-    float r = atof(argv[2]) * 1000.f;
+    // Input runtime value is presumed to be in milliseconds,
+    // and sample file also stores times in milliseconds.
+    float r = atof(argv[2]);
     int32_t pid = atoi(argv[3]);
     int32_t sid = atoi(argv[4]);
 
